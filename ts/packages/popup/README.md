@@ -200,3 +200,13 @@ WebRTC application constructor closes over its own signaling and ICE
 configuration. Its popup-side factory eagerly consumes package-owned navigation
 metadata and returns the later constructor without starting RTC. Callers do not
 manage carrier selection, replacement, or lifetime.
+
+## Testing
+
+`pnpm test` runs the unit suite in Node over real `MessageChannel` ports.
+`pnpm test:e2e` builds the package and its worker entry, serves three
+cross-site HTTPS origins, and drives the Playwright matrix (Chromium, Firefox,
+WebKit, mobile Chrome, mobile WebKit) through both creation paths, isolation
+round trips over one preserved port, port expiry, and every fail-closed path.
+[TEST_PLAN.md](TEST_PLAN.md) records which rows each layer covers and which
+remain deferred or manual.

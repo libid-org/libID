@@ -3,6 +3,23 @@
 These tests qualify popup lifecycle, connection, carriers, continuity, and
 control independently of any protocol transported by the package.
 
+Coverage status:
+
+- **Unit** (`pnpm test`, vitest in Node over real `MessageChannel` ports with
+  in-memory window and worker-scope fakes): every API, WINDOW, CONTROL,
+  CONNECTION, PORT, KEEPER, and DIAGNOSTIC row except the clauses below.
+- **Browser** (`pnpm test:e2e`, Playwright on Chromium, Firefox, WebKit,
+  mobile Chrome, and mobile WebKit emulation over three cross-site HTTPS
+  origins): popup creation on both paths, opener authentication, connected
+  navigation into and out of a COOP-isolated document over one preserved
+  port, close after the opener is severed, port expiry across a
+  non-participating hop, and every fail-closed path.
+- **Deferred**: every POPUP-RTC row; no WebRTC carrier exists yet.
+- **Manual**: POPUP-BROWSER-001/002, the delayed-activation clause of
+  POPUP-WINDOW-003 (Playwright runs no popup blocker), the suspension clause
+  of POPUP-CONNECTION-006, and the suspension and process-loss clauses of
+  POPUP-KEEPER-003.
+
 ## API and message delivery
 
 | ID | Assertion |
@@ -53,6 +70,8 @@ control independently of any protocol transported by the package.
 
 ## WebRTC fallback
 
+Deferred until the WebRTC carrier is implemented; no row below is claimed.
+
 | ID | Assertion |
 |---|---|
 | POPUP-RTC-001 | `connect` invokes the application fallback exactly once and starts bounded one-use answerer round zero before the first popup navigation. It keeps that round armed across any number of MessagePort-selected documents until consumed, failed, abandoned, or connection closure; no later fallback invocation can restart round zero. The destination popup constructor creates the offerer only after fallback selection. Each RTC replacement creates fresh peers, offer, answer, and ICE state under the same logical connection ID and exactly incremented round. |
@@ -65,6 +84,9 @@ control independently of any protocol transported by the package.
 | POPUP-RTC-008 | Preparing and consuming `__libid_popup=rtc1.<round>.<had-fragment>` round-trips targets with no fragment, an empty fragment, ordinary fields, duplicate fields, preserved field order, mixed percent-escape spelling, encoded separators, and trailing separators without changing one caller byte. A caller-owned raw `__libid_popup` component rejects before navigation; invalid destination metadata clears the fragment and rejects before carrier selection. |
 
 ## Browser qualification
+
+Real-device gates; the Playwright projects are emulation only and do not
+satisfy these rows.
 
 | ID | Assertion |
 |---|---|

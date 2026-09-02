@@ -247,6 +247,14 @@ of it. Worker loss or a failed `keep` acknowledgement prevents navigation with
 live state. No `BroadcastChannel`, cookie, IndexedDB record, request, or URL
 carries the port.
 
+Each operation carries its own reply `MessagePort` and waits at most
+`KEEPER_REPLY_TIMEOUT_MS = 2_000` for the worker's answer. The popup resolves
+the matching registration when it needs it rather than once at construction:
+the host may register the worker in the same document after `accept` has
+started, so preservation waits up to the reply deadline for a worker that is
+still installing and fails closed if none activates. A claim only ever asks
+an already active worker, since only that worker can hold a port.
+
 ## API
 
 The application starts listening before the popup endpoint is ready:
