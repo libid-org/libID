@@ -1,0 +1,43 @@
+{
+  "name": "@libid/popup",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Own one popup browsing context and connect it to an application page across origins, isolation, and popup-document replacement, carrying caller-defined messages.",
+  "license": "(MIT OR Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libid-org/libid.git",
+    "directory": "ts/packages/popup"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "default": "./dist/worker.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node build/check-exports.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.0"
+  }
+}
