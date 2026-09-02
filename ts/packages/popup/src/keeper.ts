@@ -41,6 +41,32 @@ export interface KeeperWorker {
   postMessage(message: unknown, transfer: Transferable[]): void
 }
 
+/**
+ * The registration's active worker, waiting briefly for one still
+ * installing (the host registers in the first participating document).
+ */
+export function activeWorker(
+  registration: ServiceWorkerRegistration,
+  timeoutMs = KEEPER_REPLY_TIMEOUT_MS,
+): Promise<ServiceWorker | null> {
+  if (registration.active) return Promise.resolve(registration.active)
+  const worker = registration.installing ?? registration.waiting
+  if (!worker) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const finish = (value: ServiceWorker | null): void => {
+      clearTimeout(timer)
+      worker.removeEventListener('statechange', onChange)
+      resolve(value)
+    }
+    const onChange = (): void => {
+      if (worker.state === 'activated') finish(worker)
+      else if (worker.state === 'redundant') finish(null)
+    }
+    const timer = setTimeout(() => finish(null), timeoutMs)
+    worker.addEventListener('statechange', onChange)
+  })
+}
+
 export class PortKeeper {
   constructor(private readonly worker: KeeperWorker) {}
 

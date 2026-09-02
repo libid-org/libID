@@ -221,18 +221,15 @@ document is not required to message that worker.
 declare function installPortKeeper(): void
 
 declare class PortKeeper {
-  constructor(
-    registration: ServiceWorkerRegistration,
-    connectionVersion: ConnectionVersion,
-  )
+  constructor(worker: ServiceWorker)
 
   keep(connectionId: string, port: MessagePort): Promise<void>
   claim(connectionId: string): Promise<MessagePort | null>
 }
 ```
 
-The constructor fixes the active registration and connection version for both
-operations. `keep` resolves only after the worker owns the exact port, after
+The constructor fixes the active worker for both operations; the connection
+version is the package constant. `keep` resolves only after the worker owns the exact port, after
 which connection may replace the source document. `claim` atomically returns
 and removes the unchanged port, or returns `null` when no entry exists. `null`
 authenticates and selects nothing; popup construction continues with its
@@ -257,21 +254,25 @@ The application starts listening before the popup endpoint is ready:
 ```ts
 declare function listenForPopupPorts(
   options: {
-    popupWindow: PopupWindow
+    view: Window
+    source: WindowProxy | null // retained handle, or null until native-anchor binding
+    onBind: (source: WindowProxy) => void
     allowedPopupOrigins: readonly string[]
-    connectionVersion: ConnectionVersion
     connectionId: string
-    signal: AbortSignal
   },
-  onPort: (port: MessagePort) => void,
+  handlers: {
+    onPort: (port: MessagePort) => void
+    onFail: () => void
+  },
 ): () => void
 
-declare function connectPopupMessagePort(options: {
+declare function requestApplicationPort(options: {
+  view: Window
   opener: WindowProxy
-  allowedApplicationOrigins: readonly string[]
-  connectionVersion: ConnectionVersion
+  allowedOrigins: readonly string[]
   connectionId: string
   signal: AbortSignal
+  timeoutMs?: number
 }): Promise<MessagePort>
 
 declare class PortCarrier implements Carrier {
@@ -293,7 +294,7 @@ supersedes one still awaiting its echo. This replacement is private connection
 machinery; callers continue using the same `PopupConnection`.
 
 When the popup endpoint is ready, it calls and awaits
-`connectPopupMessagePort`. It sends the handshake request; the listening
+`requestApplicationPort`. It sends the handshake request; the listening
 application validates it, creates the channel, and sends the response with the
 popup endpoint. The popup validates that response, sends the same handshake
 record over the transferred port, and resolves with that endpoint. A handshake

@@ -71,7 +71,7 @@ function acceptPopup(
   const view = opts.opener === false ? { ...pair.popupWindow, opener: null } : pair.popupWindow
   const popup = new CurrentWindow(
     view as Window,
-    opts.worker === undefined ? Promise.resolve(undefined) : registrationWith(opts.worker),
+    opts.worker === undefined ? () => Promise.resolve(undefined) : registrationWith(opts.worker),
   )
   const connection = PopupConnection.accept<Messages>(popup, {
     connectionId: ID,
@@ -99,7 +99,7 @@ describe('validation [POPUP-CONNECTION-007]', () => {
       PopupConnection.connect(popup, { connectionId: ID, popupOrigin: `${POPUP_ORIGIN}/` }),
     ).toThrow(TypeError)
     expect(pair.appView.listeners.size).toBe(0)
-    const current = new CurrentWindow(pair.popupWindow, Promise.resolve(undefined))
+    const current = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
     await expect(
       PopupConnection.accept(current, {
         connectionId: 'nope',
@@ -115,7 +115,7 @@ describe('validation [POPUP-CONNECTION-007]', () => {
   it('requires the matching PopupWindow kind and one connect per object', () => {
     const pair = fakePair()
     const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
-    const current = new CurrentWindow(pair.popupWindow, Promise.resolve(undefined))
+    const current = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
     expect(() =>
       PopupConnection.connect(current, { connectionId: ID, popupOrigin: POPUP_ORIGIN }),
     ).toThrow(TypeError)
@@ -430,8 +430,7 @@ describe('fallback seam [POPUP-CONNECTION-002/004/005] [POPUP-DIAGNOSTIC-003]', 
     const pair = fakePair()
     const [appCarrier, popupCarrier] = carrierPair()
     const fallback = vi.fn(() => Promise.resolve(popupCarrier))
-    const popup = new CurrentWindow(
-      { ...pair.popupWindow, opener: null } as Window,
+    const popup = new CurrentWindow({ ...pair.popupWindow, opener: null } as Window, () =>
       Promise.resolve(undefined),
     )
     const events: PopupDiagnostic[] = []

@@ -12,7 +12,7 @@ import {
   type Reporter,
   reportUndeliverable,
 } from './diagnostics.js'
-import { PortKeeper } from './keeper.js'
+import { activeWorker, PortKeeper } from './keeper.js'
 import {
   canonicalOrigin,
   type Carrier,
@@ -290,7 +290,6 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
   private constructor(
     private readonly popup: CurrentWindow,
     private readonly connectionId: string,
-    private readonly keeper: PortKeeper | null,
     report: Reporter,
   ) {
     super(report)
@@ -312,12 +311,12 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
     }
 
     const controller = new AbortController()
-    let keeper: PortKeeper | null = null
     let carrier: Carrier | null = null
 
-    const registration = await popup.registration
+    // A preserved port can only be held by an already active worker.
+    const registration = await popup.registration()
     if (registration?.active) {
-      keeper = new PortKeeper(registration.active)
+      const keeper = new PortKeeper(registration.active)
       const port = await keeper.claim(connectionId).catch((error: unknown) => {
         report('claim-failed')
         throw error
@@ -364,7 +363,7 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
       report('carrier-fallback')
     }
 
-    const endpoint = new PopupEndpoint<M>(popup, connectionId, keeper, report)
+    const endpoint = new PopupEndpoint<M>(popup, connectionId, report)
     endpoint.install(carrier)
     return endpoint
   }
@@ -394,14 +393,16 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
 
   /** Preserves the port through the keeper, then replaces this document. */
   private async replaceDocument(url: string): Promise<void> {
-    if (!(this.carrier instanceof PortCarrier) || !this.keeper) {
+    const registration = await this.popup.registration()
+    const worker = registration ? await activeWorker(registration) : null
+    if (this.closed || !(this.carrier instanceof PortCarrier) || !worker) {
       this.fail('continuity-unsupported')
       throw failure('continuity-unsupported')
     }
     const port = this.carrier.detach()
     const startedAt = performance.now()
     try {
-      await this.keeper.keep(this.connectionId, port)
+      await new PortKeeper(worker).keep(this.connectionId, port)
     } catch {
       this.fail('keep-failed')
       throw failure('keep-failed')

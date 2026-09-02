@@ -29,9 +29,9 @@ value.
 | Area | Measurements |
 |---|---|
 | Popup window | `window-opened`, `window-blocked`, `window-bound` |
-| Connection | `handshake-rejected`, `carrier-message-port`, `carrier-restored`, `carrier-fallback`, `fallback-unavailable`, `popup-unavailable`, `send-unavailable`, `connection-closed` and `connection-failed` with `durationMs` since construction |
+| Connection | `handshake-rejected`, `opener-timeout`, `carrier-message-port`, `carrier-restored`, `carrier-fallback`, `fallback-unavailable`, `popup-unavailable`, `send-unavailable`, `connection-closed` and `connection-failed` with `durationMs` since construction |
 | Message delivery | `decode-rejected`; MessagePort adds no encoding or clock, so no size or latency measurement exists |
-| Continuity | `keep-acknowledged` with `durationMs`, `keep-failed`, `claim-empty`, `continuity-unsupported` |
+| Continuity | `keep-acknowledged` with `durationMs`, `keep-failed`, `claim-empty`, `claim-failed`, `continuity-unsupported` |
 | Control | `control-direct`, `control-connected`, `control-rejected`; never remote success |
 | WebRTC | signaling-path class, offer publication, answer pickup, candidate class, selected-pair class, ICE checks, DTLS, data-channel open, and terminal failure |
 

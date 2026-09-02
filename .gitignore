@@ -15,3 +15,8 @@ ts/apps/demo/public/
 
 # Harness runtime output
 harness/.env
+
+# @libid/popup e2e bundles and Playwright output
+ts/packages/popup/e2e/dist/
+ts/packages/*/test-results/
+ts/packages/*/playwright-report/

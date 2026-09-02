@@ -24,11 +24,11 @@ export class PopupWindow {
 
   /** Adopts the current popup document; creates nothing. */
   static current(): PopupWindow {
-    const registration =
+    return new CurrentWindow(window, () =>
       typeof navigator !== 'undefined' && navigator.serviceWorker
         ? navigator.serviceWorker.getRegistration().catch(() => undefined)
-        : Promise.resolve(undefined)
-    return new CurrentWindow(window, registration)
+        : Promise.resolve(undefined),
+    )
   }
 
   get opened(): boolean {
@@ -81,7 +81,8 @@ export class OpenedWindow extends PopupWindow {
 export class CurrentWindow extends PopupWindow {
   constructor(
     readonly view: Window,
-    readonly registration: Promise<ServiceWorkerRegistration | undefined>,
+    /** The registration whose scope matches this document, resolved per use. */
+    readonly registration: () => Promise<ServiceWorkerRegistration | undefined>,
   ) {
     super()
   }

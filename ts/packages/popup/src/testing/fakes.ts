@@ -144,5 +144,5 @@ export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
   }
 }
 
-export const registrationWith = (worker: KeeperWorker | null) =>
+export const registrationWith = (worker: KeeperWorker | null) => () =>
   Promise.resolve({ active: worker } as unknown as ServiceWorkerRegistration)
