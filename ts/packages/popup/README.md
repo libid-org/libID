@@ -141,6 +141,28 @@ control, must initiate its own departure. `close` uses an
 available retained handle and otherwise uses popup control, then releases both
 the connection and popup.
 
+### Transitions that carry a reply
+
+Delivery on one carrier is ordered, and a `navigate` control is delivered in
+that same order. So a transition that must not lose the application's reply
+is driven by the side that has finished talking:
+
+```ts
+// application
+connection.on(OAuthReturn, (result) => {
+  connection.send(new Decision(result))       // ordered before the control
+  void connection.navigate(walletUrl)         // the popup acts on this after Decision
+})
+```
+
+The popup's handler runs on `Decision` before the popup leaves, whether the
+destination is same-origin or cross-origin. When the popup must choose the
+destination itself, it navigates only after it has received the reply. Do not
+`send` and then `navigateAway` from the application: direct navigation does
+not wait for the port, and the reply may be lost. Likewise, anything the
+application sends after its `navigate` control cannot reach the departing
+document; send what the destination needs once it announces itself.
+
 ### Define and exchange messages
 
 Each caller-owned message class supplies its discriminator and decoder:

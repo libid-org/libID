@@ -456,6 +456,20 @@ control over an active carrier. It is idempotent and closes both the logical
 connection and its popup. Internal failure cleanup releases resources without
 invoking either operation or controlling popup lifetime.
 
+Caller messages sent over a carrier before a `Navigate` control are delivered
+to the popup's handlers before the popup acts on the control, on every
+destination. A transition that must carry the application's reply is
+therefore application-driven: the application replies, then navigates. When
+the popup selects the destination, it navigates only after receiving the
+reply. An application-side `navigateAway` issued immediately after a `send`
+does not wait for the port and can lose the reply; the popup initiates that
+departure instead. After the application sends `Navigate`, ordinary messages
+it sends cannot reach the departing document: on a same-origin transition
+they wait in the preserved port and reach the destination once it accepts,
+provided the destination registered their handlers before yielding; on a
+cross-origin transition they are lost. Send what the destination needs only
+after it announces itself.
+
 `navigate` accepts a caller-selected opaque URL. It does not select the route or
 interpret caller-owned fields:
 

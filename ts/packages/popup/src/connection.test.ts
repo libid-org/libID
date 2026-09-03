@@ -411,6 +411,34 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
   })
 })
 
+describe('ordering across a transition [POPUP-CONNECTION-010]', () => {
+  it('delivers a reply sent before navigate to the popup before it leaves cross-origin', async () => {
+    const pair = fakePair()
+    const events: PopupDiagnostic[] = []
+    const popupWindow = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    const app = PopupConnection.connect<Messages>(popupWindow, {
+      connectionId: ID,
+      allowedPopupOrigins: [POPUP_ORIGIN, 'https://popup-b.example'],
+      onDiagnostic: (e) => void events.push(e),
+    })
+    // Application-driven transition: reply, then navigate.
+    app.on(Ready, () => {
+      app.send(new Start())
+      void app.navigate('https://popup-b.example/p')
+    })
+    const side = acceptPopup(pair)
+    const order: string[] = []
+    side.endpoint.on(Start, () => void order.push('start'))
+    const popup = await side.connection
+    await tick()
+    popup.send(new Ready(1))
+    await tick(20)
+    expect(order).toEqual(['start'])
+    expect(pair.popupProxy.replaced).toEqual(['https://popup-b.example/p'])
+    expect(codes(events).at(-1)).toBe('control-connected')
+  })
+})
+
 describe('cross-origin replacement [POPUP-CONNECTION-008/009]', () => {
   const OTHER_POPUP = 'https://popup-b.example'
 

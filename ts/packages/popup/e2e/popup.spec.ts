@@ -360,3 +360,33 @@ test("[POPUP-CONNECTION-009] a popup deployed with '*' accepts an unlisted appli
   await expectPong(page, 10)
   expect(await diag(popup)).toEqual(['carrier-message-port'])
 })
+
+test('[POPUP-CONNECTION-010] a reply sent before navigate reaches the popup before it leaves cross-site', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  // Application-driven transition: on the popup's message, reply first, then
+  // navigate the popup to another site. The reply and the control share one
+  // ordered port, so the popup answers the reply before it leaves.
+  await page.evaluate(
+    ([url]) => {
+      const w = window as unknown as {
+        __onPong?: (pong: { n: number }) => void
+        __conn: { send(v: unknown): void; navigate(u: string): Promise<void> }
+      }
+      w.__onPong = (pong) => {
+        if (pong.n !== 1) return
+        w.__conn.send({ type: 'ping', n: 42 })
+        void w.__conn.navigate(url)
+      }
+    },
+    [`${POPUP_B}/p#c=${id}`],
+  )
+  await nextDocument(popup, () => ping(page, 1))
+  // The popup replied to ping 42 from the first document before it left.
+  expect(await expectPong(page, 42)).toMatchObject({ path: '/p' })
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(popup.url()).toContain(POPUP_B)
+  expect(await diag(popup)).toEqual(['carrier-message-port'])
+})

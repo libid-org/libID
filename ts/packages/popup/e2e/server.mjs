@@ -54,7 +54,10 @@ const appPage = html(`
         allowedPopupOrigins: ['${ORIGINS.popup}', '${ORIGINS.popupB}'],
         onDiagnostic,
       })
-      connection.on(Pong, (pong) => window.__events.push(pong))
+      connection.on(Pong, (pong) => {
+        window.__events.push(pong)
+        window.__onPong?.(pong)
+      })
       window.__conn = connection
       window.__popupWindow = popupWindow
       connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
