@@ -175,19 +175,27 @@ abstract class Endpoint<Out extends Message, In extends Message>
   private receive(value: unknown): void {
     if (this.ended) return
     const type = routingType(value)
-    if (type === null) return this.fail('decode-rejected')
+    if (type === null) {
+      this.fail('decode-rejected')
+      return
+    }
     if (isReservedType(type)) {
       const control = decodeControl(value as Record<string, unknown>)
-      if (!control) return this.fail('control-rejected')
-      return this.onControl(control)
+      if (control) this.onControl(control)
+      else this.fail('control-rejected')
+      return
     }
     const registration = this.registrations.get(type)
-    if (!registration) return this.fail('decode-rejected')
+    if (!registration) {
+      this.fail('decode-rejected')
+      return
+    }
     let message: In
     try {
       message = registration.decode(value)
     } catch {
-      return this.fail('decode-rejected')
+      this.fail('decode-rejected')
+      return
     }
     registration.handler(message)
   }
