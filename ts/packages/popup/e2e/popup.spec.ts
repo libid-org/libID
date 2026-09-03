@@ -56,6 +56,15 @@ const ping = (page: Page, n: number) =>
     ;(window as unknown as { __conn: { send(v: unknown): void } }).__conn.send({ type: 'ping', n })
   }, n)
 
+const navigateAway = (page: Page, url: string) =>
+  page.evaluate(
+    (url) =>
+      (
+        window as unknown as { __conn: { navigateAway(u: string): Promise<void> } }
+      ).__conn.navigateAway(url),
+    url,
+  )
+
 const navigate = (page: Page, url: string) =>
   page.evaluate(
     (url) =>
@@ -301,4 +310,53 @@ test('[POPUP-CONNECTION-008] a cross-site isolated destination needs a fallback'
   await nextDocument(popup, () => navigate(page, `${POPUP_B}/isolated#c=${id}`))
   await expect(popup.locator('#status')).toHaveText('failed: fallback-unavailable')
   expect(await diag(popup)).toEqual(['fallback-unavailable'])
+})
+
+test('[POPUP-CONTROL-005] navigateAway leaves for a provider page directly and the return re-handshakes', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
+  await nextDocument(popup, () => navigateAway(page, `${POPUP}/external?delay=200&next=${next}`))
+  expect((await diag(page)).at(-1)).toBe('control-direct')
+  await nextDocument(popup)
+  await expect(popup.locator('#status')).toHaveText('connected')
+  // Nothing was kept: the returning document found no port and used its opener.
+  expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
+  await ping(page, 9)
+  await expectPong(page, 9)
+  expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(2)
+})
+
+test('[POPUP-CONTROL-005] popup-side navigateAway keeps no port', async ({ page }) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
+  await nextDocument(popup, () =>
+    page.evaluate(
+      (url) =>
+        (window as unknown as { __conn: { send(v: unknown): void } }).__conn.send({
+          type: 'away',
+          url,
+        }),
+      `${POPUP}/external?delay=200&next=${next}`,
+    ),
+  )
+  await nextDocument(popup)
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
+})
+
+test("[POPUP-CONNECTION-009] a popup deployed with '*' accepts an unlisted application origin", async ({
+  page,
+}) => {
+  const id = freshId()
+  const { popup } = await open(page, { app: APP_B, id, href: `${POPUP}/p-any#c=${id}` })
+  await expect(popup.locator('#status')).toHaveText('connected')
+  await ping(page, 10)
+  await expectPong(page, 10)
+  expect(await diag(popup)).toEqual(['carrier-message-port'])
 })

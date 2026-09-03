@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canonicalOrigin,
   decodeControl,
+  isAllowedOrigin,
   isCanonicalHttpsUrl,
   isConnectionId,
   isReservedType,
@@ -131,5 +132,15 @@ describe('origin sets [POPUP-CONNECTION-009]', () => {
     ]) {
       expect(() => requireOrigins(bad, 'x'), JSON.stringify(bad)).toThrow(TypeError)
     }
+  })
+})
+
+describe('wildcard allowlist [POPUP-CONNECTION-009]', () => {
+  it("accepts any canonical HTTPS origin under '*' and nothing else", () => {
+    expect(isAllowedOrigin('https://any.example', '*')).toBe(true)
+    for (const bad of ['null', 'http://any.example', 'https://any.example/', '', 'file://']) {
+      expect(isAllowedOrigin(bad, '*'), bad).toBe(false)
+    }
+    expect(isAllowedOrigin('https://any.example', ['https://other.example'])).toBe(false)
   })
 })

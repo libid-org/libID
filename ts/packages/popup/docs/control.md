@@ -49,8 +49,9 @@ owns the generic message bound.
 
 ## Execution
 
-`PopupConnection.navigate(url)` is available on both endpoints.
-`PopupConnection.close()` is the application-facing lifetime operation.
+`PopupConnection.navigate(url)` and `PopupConnection.navigateAway(url)` are
+available on both endpoints. `PopupConnection.close()` is the
+application-facing lifetime operation.
 
 While native-anchor binding is pending, `navigate` performs no browser
 operation and leaves that same activation's default navigation intact. With an
@@ -62,7 +63,15 @@ preserves a same-origin transferable carrier, releases it for cross-origin
 rebind including across sites, or prepares a nontransferable replacement as
 required, then calls `location.replace(url)`. Replacement avoids adding the
 current document to popup history and creates no browsing context. Failure to
-preserve or prepare a carrier rejects before navigation. A cross-origin rebind
+preserve or prepare a carrier rejects before navigation.
+
+`navigateAway` never sends `Navigate`. On the application side it navigates
+the exact retained `WindowProxy` while that is non-null and not closed,
+retires the current carrier without preservation, and leaves the application
+endpoint armed for the next participating document; it rejects once the handle
+is unusable. On the popup side it releases the carrier and calls
+`location.replace(url)` without preparing continuity. It exists for
+non-participating destinations, where preservation would only expire. A cross-origin rebind
 may fail only after the destination loads; that failure releases no caller
 value and selects no weaker carrier. The caller commits its state and clears
 sensitive inputs before requesting navigation.

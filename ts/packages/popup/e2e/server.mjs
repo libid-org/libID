@@ -30,6 +30,7 @@ const protocol = `
   const Ping = message('ping', (v) => { if (typeof v.n !== 'number') throw new Error('ping'); return v })
   const Pong = message('pong', (v) => { if (typeof v.n !== 'number') throw new Error('pong'); return v })
   const Go = message('go', (v) => { if (typeof v.url !== 'string') throw new Error('go'); return v })
+  const Away = message('away', (v) => { if (typeof v.url !== 'string') throw new Error('away'); return v })
   window.__events = []
   window.__diag = []
   const onDiagnostic = (d) => window.__diag.push(d.code)
@@ -69,10 +70,12 @@ const popupPage = html(`
     ${protocol}
     const id = new URLSearchParams(location.hash.slice(1)).get('c') ?? ''
     window.__isolated = crossOriginIsolated
+    // /p-any is the same document deployed for any opener origin.
+    const allowedApplicationOrigins = location.pathname === '/p-any' ? '*' : ['${ORIGINS.appA}']
     // Accept first: the claim must run before any other network work.
     const accepting = PopupConnection.accept(PopupWindow.current(), {
       connectionId: id,
-      allowedApplicationOrigins: ['${ORIGINS.appA}'],
+      allowedApplicationOrigins,
       onDiagnostic,
     })
     // The host registers the worker in every participating document.
@@ -86,6 +89,9 @@ const popupPage = html(`
       })
       connection.on(Go, (go) => {
         connection.navigate(go.url).catch((error) => window.__events.push({ type: 'error', code: error.message }))
+      })
+      connection.on(Away, (away) => {
+        connection.navigateAway(away.url).catch((error) => window.__events.push({ type: 'error', code: error.message }))
       })
       connection.send({ type: 'pong', n: 0, path: location.pathname, isolated: crossOriginIsolated })
       document.getElementById('status').textContent = 'connected'
@@ -130,6 +136,7 @@ function popupHandler(req, res) {
     case '/sw.js':
       return send(res, 200, { ...JS, 'Service-Worker-Allowed': '/' }, workerModule)
     case '/p':
+    case '/p-any':
       return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'unsafe-none' }, popupPage)
     case '/isolated':
       return send(res, 200, { ...HTML, ...ISOLATED }, popupPage)

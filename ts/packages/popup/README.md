@@ -64,11 +64,17 @@ connection:
 const popupWindow = PopupWindow.current()
 const connection = await PopupConnection.accept<Messages>(popupWindow, {
   connectionId,
-  allowedApplicationOrigins,
+  allowedApplicationOrigins, // readonly string[] | '*'
   fallback,
   onDiagnostic,
 })
 ```
+
+`allowedApplicationOrigins` is an explicit list of canonical HTTPS origins or
+`'*'`, which accepts any canonical HTTPS origin the browser observed on the
+opener's handshake while still binding that exact origin and source. An
+empty list remains invalid. The application's `allowedPopupOrigins` is always
+explicit.
 
 The caller supplies a fresh `crypto.randomUUID()` value for each logical
 connection; the exact accepted grammar and non-reuse rule are defined by the
@@ -92,13 +98,19 @@ interface PopupConnection<M extends Message> {
     handler: (message: N) => void,
   ): () => void
   navigate(url: string): Promise<void>
+  navigateAway(url: string): Promise<void>
   close(): Promise<void>
 }
 ```
 
 Before carrier selection, `navigate` uses the retained popup handle when
 available. Once a carrier is active, the application endpoint sends navigation
-control over it; popup-endpoint navigation acts locally. `close` uses an
+control over it; popup-endpoint navigation acts locally. `navigateAway` is for
+non-participating destinations such as an identity platform's consent page:
+the application endpoint navigates its retained handle directly and retires
+the current carrier without preserving it, staying ready for the next
+participating document; the popup endpoint replaces its own document without
+keeping its port. `close` uses an
 available retained handle and otherwise uses popup control, then releases both
 the connection and popup.
 

@@ -467,6 +467,124 @@ describe('cross-origin replacement [POPUP-CONNECTION-008/009]', () => {
   })
 })
 
+describe('navigateAway [POPUP-CONTROL-005]', () => {
+  it('navigates the handle directly, retires the carrier, and stays open for the next document', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const scope = fakeScope()
+    const first = acceptPopup(pair, { worker: scope.worker })
+    const popup = await first.connection
+    await tick()
+
+    await app.connection.navigateAway('https://provider.example/consent')
+    expect(pair.popupProxy.replaced).toEqual(['https://provider.example/consent'])
+    expect(codes(app.events).at(-1)).toBe('control-direct')
+    expect(scope.pending).toHaveLength(0) // nothing kept
+    expect(() => app.connection.send(new Start())).toThrow('send-unavailable')
+    await tick()
+    // The popup document is gone with the provider page; its endpoint saw no control.
+    expect(codes(first.events)).not.toContain('connection-closed')
+    void popup
+
+    // The provider returns to a participating document: a fresh handshake.
+    pair.relocate(POPUP_ORIGIN)
+    const readies: number[] = []
+    app.connection.on(Ready, (r) => void readies.push(r.version))
+    const next = await acceptPopup(pair).connection
+    await tick()
+    expect(codes(app.events).filter((c) => c === 'carrier-message-port')).toHaveLength(2)
+    next.send(new Ready(9))
+    await tick()
+    expect(readies).toEqual([9])
+  })
+
+  it('rejects without direct control and is a no-op while anchor binding is pending', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    await acceptPopup(pair).connection
+    await tick()
+    pair.popupProxy.closed = true
+    await expect(app.connection.navigateAway('https://provider.example/')).rejects.toThrow(
+      'popup-unavailable',
+    )
+    expect(pair.popupProxy.replaced).toEqual([])
+
+    const blocked = connectApp(fakePair(), { blocked: true })
+    await expect(
+      blocked.connection.navigateAway('https://provider.example/'),
+    ).resolves.toBeUndefined()
+    await expect(blocked.connection.navigateAway('http://provider.example/')).rejects.toThrow(
+      TypeError,
+    )
+  })
+
+  it('on the popup side replaces the document without keeping the port', async () => {
+    const pair = fakePair()
+    connectApp(pair)
+    const scope = fakeScope()
+    const side = acceptPopup(pair, { worker: scope.worker })
+    const popup = await side.connection
+    await tick()
+    await popup.navigateAway('https://provider.example/consent')
+    expect(pair.popupProxy.replaced).toEqual(['https://provider.example/consent'])
+    expect(scope.pending).toHaveLength(0)
+    expect(codes(side.events).at(-1)).toBe('connection-closed')
+    await expect(popup.navigate('https://popup.example/p')).rejects.toThrow('connection-closed')
+  })
+})
+
+describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
+  it("accepts any HTTPS opener origin under '*' and binds it exactly", async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const events: PopupDiagnostic[] = []
+    const popup = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+    const connection = await PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: '*',
+      onDiagnostic: (e) => void events.push(e),
+    })
+    await tick()
+    expect(codes(events)).toEqual(['carrier-message-port'])
+    const starts = vi.fn()
+    connection.on(Start, starts)
+    app.connection.send(new Start())
+    await tick()
+    expect(starts).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects an opaque or non-HTTPS observed origin even under '*'", async () => {
+    for (const origin of ['null', 'http://app.example']) {
+      const pair = fakePair()
+      const popup = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+      const pending = PopupConnection.accept<Messages>(popup, {
+        connectionId: ID,
+        allowedApplicationOrigins: '*',
+      })
+      await tick()
+      pair.popupView.dispatch({
+        data: { type: 'message-port', connectionVersion: 1, connectionId: ID },
+        origin,
+        source: pair.appProxy,
+        ports: [new MessageChannel().port1],
+      })
+      await expect(pending).rejects.toThrow('handshake-rejected')
+    }
+  })
+
+  it('keeps an empty list invalid and never accepts a wildcard on the application side', async () => {
+    const pair = fakePair()
+    const popup = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+    await expect(
+      PopupConnection.accept(popup, { connectionId: ID, allowedApplicationOrigins: [] }),
+    ).rejects.toThrow(TypeError)
+    const opened = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    expect(() =>
+      PopupConnection.connect(opened, { connectionId: ID, allowedPopupOrigins: '*' as never }),
+    ).toThrow(TypeError)
+  })
+})
+
 describe('fallback seam [POPUP-CONNECTION-002/004/005] [POPUP-DIAGNOSTIC-003]', () => {
   it('fails closed with fallback-unavailable exactly once when no opener and no constructor', async () => {
     const pair = fakePair()

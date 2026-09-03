@@ -7,7 +7,8 @@ Coverage status:
 
 - **Unit** (`pnpm test`, vitest in Node over real `MessageChannel` ports with
   in-memory window and worker-scope fakes): every API, WINDOW, CONTROL,
-  CONNECTION, PORT, KEEPER, and DIAGNOSTIC row except the clauses below.
+  CONNECTION, PORT, KEEPER, and DIAGNOSTIC row except the clauses below,
+  including `navigateAway` and the popup-side wildcard.
 - **Browser** (`pnpm test:e2e`, Playwright on Chromium, Firefox, WebKit,
   mobile Chrome, and mobile WebKit emulation over three cross-site HTTPS
   origins): popup creation on both paths, opener authentication, connected
@@ -43,6 +44,7 @@ Coverage status:
 | POPUP-CONTROL-002 | With an active carrier, application-endpoint `navigate` sends one exact canonical-HTTPS `Navigate` even while its retained handle appears usable; popup-endpoint `navigate` sends no control. Either popup-side path invokes replacement only after carrier continuity is preserved or prepared; malformed, credentialed, noncanonical, relative, non-HTTPS, and unpreparable navigations fail before browser navigation. Real-engine tests confirm a COOP-severed retained handle reports `closed`. |
 | POPUP-CONTROL-003 | `close` uses a non-null, non-closed retained handle directly regardless of carrier state and otherwise sends one `ClosePopup` over an active carrier. It closes local resources, is idempotent, and is accepted only for a package-created script-closable popup. |
 | POPUP-CONTROL-004 | Controls carry no version field because they travel only over a version-authenticated carrier. They are application-to-popup, one-shot per receiving document, unacknowledged, connection-bound, and private; wrong-direction, duplicate, replayed, unknown, and post-terminal controls perform no browser operation. `Navigate` may continue the logical connection in its destination, while `ClosePopup` terminates it. |
+| POPUP-CONTROL-005 | `navigateAway` never sends `Navigate`. The application endpoint navigates a non-null, non-closed retained handle directly, retires its carrier without `keep`, and accepts the next participating document's handshake; it rejects once the handle is unusable and performs no browser operation while native-anchor binding is pending. The popup endpoint releases its carrier and replaces itself without `keep`. Malformed destinations fail before any browser operation. |
 
 ## Carrier authentication and selection
 
@@ -56,7 +58,7 @@ Coverage status:
 | POPUP-CONNECTION-006 | Carrier loss, endpoint loss, popup closure, background suspension, and continuity loss are never delivery, cancellation, success, or recovery. Resumed delivery preserves order. While the popup is non-participating after a connected navigation, every `send` and `navigate` succeeds locally and delivers nothing. |
 | POPUP-CONNECTION-007 | Both constructors accept an exact lowercase RFC 4122 UUIDv4 `connectionId` and reject uppercase, noncanonical, malformed, wrong-version, and wrong-variant strings before carrier, keeper, or signaling work. Caller integration generates a different `crypto.randomUUID()` value for every logical connection and never reuses a retired value. |
 | POPUP-CONNECTION-008 | `PopupConnection.navigate()` directly between same-origin participating documents preserves a MessagePort or prepares a nontransferable carrier. Across origins, including across sites, it never gives a MessagePort to the source origin's worker: it retires that popup endpoint and the allowed destination establishes a fresh carrier through its opener or fallback. A navigation outside that API loses the current carrier. A later participating document may establish the first RTC carrier from the still-unused initial fallback without round metadata; after RTC is active, an unmanaged navigation terminates the logical connection without restarting round zero. |
-| POPUP-CONNECTION-009 | `connect` and `accept` copy nonempty, duplicate-free sets of canonical HTTPS `allowedPopupOrigins` and `allowedApplicationOrigins`, respectively. Every initial, native-anchor, replacement, MessagePort, and RTC participant binds one exact browser-observed member of the peer's set. Sequential popup participants may use different admitted origins without changing the logical connection ID or caller registrations. An empty set or duplicate, malformed, noncanonical, credentialed, or unapproved origin fails before selection or caller delivery. |
+| POPUP-CONNECTION-009 | `connect` and `accept` copy nonempty, duplicate-free sets of canonical HTTPS `allowedPopupOrigins` and `allowedApplicationOrigins`, respectively. Every initial, native-anchor, replacement, MessagePort, and RTC participant binds one exact browser-observed member of the peer's set. Sequential popup participants may use different admitted origins without changing the logical connection ID or caller registrations. `accept` alone also takes `'*'`, which binds any canonical HTTPS browser-observed origin and rejects an opaque or non-HTTPS one; `connect` rejects a wildcard. An empty set or duplicate, malformed, noncanonical, credentialed, or unapproved origin fails before selection or caller delivery. |
 
 ## MessagePort and navigation continuity
 

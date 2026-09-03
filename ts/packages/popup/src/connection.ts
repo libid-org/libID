@@ -23,6 +23,7 @@ import {
   type Message,
   type MessageType,
   type Navigate,
+  type OriginAllowlist,
   type PopupControl,
   requireOrigins,
   routingType,
@@ -38,7 +39,14 @@ import { CurrentWindow, OpenedWindow, type PopupWindow } from './window.js'
 export interface PopupConnection<M extends Message> {
   send(message: M): void
   on<N extends M>(message: MessageType<N>, handler: (message: N) => void): () => void
+  /** Continuity-preserving navigation between participating documents. */
   navigate(url: string): Promise<void>
+  /**
+   * Navigation to a non-participating document: retires the current carrier
+   * without preserving it and leaves the application endpoint ready for the
+   * next participating document.
+   */
+  navigateAway(url: string): Promise<void>
   close(): Promise<void>
 }
 
@@ -51,7 +59,8 @@ export interface ConnectOptions {
 
 export interface AcceptOptions {
   connectionId: string
-  allowedApplicationOrigins: readonly string[]
+  /** Explicit origins, or `'*'` for any HTTPS origin the browser observed. */
+  allowedApplicationOrigins: OriginAllowlist
   fallback?: CarrierConstructor
   onDiagnostic?: (event: PopupDiagnostic) => void
 }
@@ -150,6 +159,7 @@ abstract class Endpoint<M extends Message> implements PopupConnection<M> {
   }
 
   abstract navigate(url: string): Promise<void>
+  abstract navigateAway(url: string): Promise<void>
   abstract close(): Promise<void>
 
   /** Installs the selected carrier; the class is reported when it was chosen here. */
@@ -272,6 +282,21 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
     throw failure('popup-unavailable')
   }
 
+  async navigateAway(url: string): Promise<void> {
+    if (this.closed) throw failure('connection-closed')
+    requireHttpsUrl(url, this.report)
+    if (!this.popup.opened) return
+    if (!this.popup.direct) {
+      this.report('popup-unavailable')
+      throw failure('popup-unavailable')
+    }
+    // Retire the carrier; the window listener stays armed for the next
+    // participating document.
+    this.dropCarrier()
+    this.popup.replace(url)
+    this.report('control-direct')
+  }
+
   async close(): Promise<void> {
     if (this.closed) return
     if (this.popup.direct) {
@@ -310,10 +335,10 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
   ): Promise<PopupEndpoint<M>> {
     const report = createReporter(options.onDiagnostic)
     const connectionId = requireConnectionId(options.connectionId)
-    const allowedOrigins = requireOrigins(
-      options.allowedApplicationOrigins,
-      'allowedApplicationOrigins',
-    )
+    const allowedOrigins: OriginAllowlist =
+      options.allowedApplicationOrigins === '*'
+        ? '*'
+        : requireOrigins(options.allowedApplicationOrigins, 'allowedApplicationOrigins')
 
     const controller = new AbortController()
     let carrier: Carrier | null = null
@@ -389,6 +414,15 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
     if (this.controlsDone) throw failure('popup-unavailable')
     this.controlsDone = true
     await this.replaceDocument(url)
+  }
+
+  async navigateAway(url: string): Promise<void> {
+    if (this.closed) throw failure('connection-closed')
+    requireHttpsUrl(url, this.report)
+    if (this.controlsDone) throw failure('popup-unavailable')
+    this.controlsDone = true
+    this.release('connection-closed')
+    this.popup.view.location.replace(url)
   }
 
   async close(): Promise<void> {

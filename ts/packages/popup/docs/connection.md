@@ -177,11 +177,14 @@ signaling resources normally.
 `connect` copies `allowedPopupOrigins`, and `accept` copies
 `allowedApplicationOrigins`. Both must be nonempty, duplicate-free sets of
 canonical HTTPS origins; either constructor rejects an invalid member or
-duplicate. Every initial or later participating popup document must authenticate
-from one exact popup-origin member, and each popup endpoint binds one exact
-observed application-origin member. The sets admit participants; they neither
-select navigation destinations nor turn an external document into a
-participant.
+duplicate. `accept` alone also takes the literal `'*'`, which admits any
+canonical HTTPS origin the browser stamps on the opener's handshake; an
+opaque or non-HTTPS origin is still rejected, and the exact observed origin
+and source are still bound. `connect` never accepts a wildcard. Every initial
+or later participating popup document must authenticate from one exact
+popup-origin member, and each popup endpoint binds one exact observed
+application origin. The sets admit participants; they neither select
+navigation destinations nor turn an external document into a participant.
 
 There is no public role field or per-operation role branch. Callers never
 supply a keeper, route, or phase.
@@ -295,6 +298,7 @@ interface PopupConnection<M extends Message> {
     handler: (message: N) => void,
   ): () => void
   navigate(url: string): Promise<void>
+  navigateAway(url: string): Promise<void>
   close(): Promise<void>
 }
 
@@ -325,7 +329,7 @@ declare const PopupConnection: {
     popupWindow: PopupWindow,
     options: {
       connectionId: string
-      allowedApplicationOrigins: readonly string[]
+      allowedApplicationOrigins: readonly string[] | '*'
       fallback?: CarrierConstructor
       onDiagnostic?: (event: PopupDiagnostic) => void
     },
@@ -418,7 +422,15 @@ in the connection; the handler still enforces state and order.
 always sends the private control defined by [popup control](control.md) when a
 carrier is active. Without one, it uses its exact retained `WindowProxy` only
 while the handle is non-null and not closed. The popup endpoint prepares
-continuity and replaces its own document without sending that control. `close`
+continuity and replaces its own document without sending that control.
+`navigateAway` is the operation for a non-participating destination: the
+application endpoint navigates its retained `WindowProxy` directly, never
+sends the destination over the carrier, retires the current carrier without
+preserving it, and keeps its listener armed for the next participating
+document; it rejects while the handle is absent or reports closed and performs
+no browser operation while native-anchor binding is pending. The popup
+endpoint's `navigateAway` releases its carrier and replaces its own document
+without invoking the keeper. `close`
 uses a non-null, non-closed retained handle directly and otherwise sends its
 control over an active carrier. It is idempotent and closes both the logical
 connection and its popup. Internal failure cleanup releases resources without

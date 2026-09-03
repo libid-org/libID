@@ -6,7 +6,14 @@
 
 import type { Reporter } from './diagnostics.js'
 import { failure } from './diagnostics.js'
-import { type Carrier, hasExactKeys, isRecord, type Message } from './message.js'
+import {
+  type Carrier,
+  hasExactKeys,
+  isAllowedOrigin,
+  isRecord,
+  type Message,
+  type OriginAllowlist,
+} from './message.js'
 import type { View } from './window.js'
 
 export const CONNECTION_VERSION = 1 as const
@@ -129,7 +136,7 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
 export interface RequestOptions {
   view: View
   opener: WindowProxy
-  allowedOrigins: readonly string[]
+  allowedOrigins: OriginAllowlist
   connectionId: string
   signal: AbortSignal
   timeoutMs?: number
@@ -155,7 +162,7 @@ export function requestApplicationPort(options: RequestOptions): Promise<Message
       if (!isAttempt(event.data, connectionId)) return
       if (
         event.source !== opener ||
-        !allowedOrigins.includes(event.origin) ||
+        !isAllowedOrigin(event.origin, allowedOrigins) ||
         !isExactHandshake(event.data, connectionId) ||
         event.ports.length !== 1
       ) {

@@ -106,6 +106,14 @@ export function canonicalOrigin(value: unknown): string | null {
   }
 }
 
+/** Either an explicit allowlist or any canonical HTTPS origin the browser observed. */
+export type OriginAllowlist = readonly string[] | '*'
+
+export function isAllowedOrigin(origin: string, allowlist: OriginAllowlist): boolean {
+  if (allowlist === '*') return origin.startsWith('https://') && canonicalOrigin(origin) === origin
+  return allowlist.includes(origin)
+}
+
 /**
  * A nonempty, duplicate-free set of canonical HTTPS origins, frozen.
  * Throws `TypeError` naming the option otherwise.
