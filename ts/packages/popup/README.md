@@ -62,13 +62,20 @@ connection:
 
 ```ts
 const popupWindow = PopupWindow.current()
-const connection = await PopupConnection.accept<Messages>(popupWindow, {
+const connection = PopupConnection.accept<Messages>(popupWindow, {
   connectionId,
   allowedApplicationOrigins, // readonly string[] | '*'
   fallback,
   onDiagnostic,
 })
+connection.on(Start, start => { /* ... */ })
+await connection.ready
 ```
+
+`accept` returns synchronously and selects its carrier afterwards, so
+handlers registered before the caller yields precede every delivery; `ready`
+settles once a carrier is selected and rejects with a `PopupError` if the
+endpoint failed first.
 
 `allowedApplicationOrigins` is an explicit list of canonical HTTPS origins or
 `'*'`, which accepts any canonical HTTPS origin the browser observed on the
@@ -91,9 +98,11 @@ A cross-origin destination whose isolation policy severs its opener therefore
 requires a fallback constructor; without one, the connection fails closed.
 
 ```ts
-interface PopupConnection<M extends Message> {
-  send(message: M): void
-  on<N extends M>(
+interface PopupConnection<Out extends Message, In extends Message = Out> {
+  readonly ready: Promise<void>
+  readonly closed: Promise<ConnectionEnd>
+  send(message: Out): void
+  on<N extends In>(
     message: MessageType<N>,
     handler: (message: N) => void,
   ): () => void
@@ -101,7 +110,22 @@ interface PopupConnection<M extends Message> {
   navigateAway(url: string): Promise<void>
   close(): Promise<void>
 }
+
+type ConnectionEnd =
+  | { outcome: 'closed' }
+  | { outcome: 'failed'; code: PopupErrorCode }
+
+class PopupError extends Error {
+  readonly code: PopupErrorCode
+}
 ```
+
+`Out` is what this endpoint sends and `In` what it receives; a single union
+serves both when the protocol is symmetric. `closed` settles exactly once,
+with the stable code when the connection failed closed, so a protocol can wait
+on it instead of polling `send`. Every rejection or throw the package raises
+for a transport failure is a `PopupError` whose `code` is one of the same
+codes; invalid caller input throws `TypeError`.
 
 Before carrier selection, `navigate` uses the retained popup handle when
 available. Once a carrier is active, the application endpoint sends navigation
@@ -110,7 +134,10 @@ non-participating destinations such as an identity platform's consent page:
 the application endpoint navigates its retained handle directly and retires
 the current carrier without preserving it, staying ready for the next
 participating document; the popup endpoint replaces its own document without
-keeping its port. `close` uses an
+keeping its port. The destination of `navigateAway` never crosses a carrier:
+it stays private to the endpoint that performs it, which is why no control
+exists for it and why an isolated popup, whose application has lost direct
+control, must initiate its own departure. `close` uses an
 available retained handle and otherwise uses popup control, then releases both
 the connection and popup.
 
@@ -151,9 +178,11 @@ connection.send(new PopupReady(1))
 
 Higher-level popup logic combines these classes into its own union and supplies
 that union to `PopupConnection`. Lifecycle controls remain internal and never
-reach caller handlers. Register handlers synchronously after `connect` returns
-or `accept` resolves: inbound values dispatch as later tasks, and a value with
-no registered handler closes the connection. `send` throws synchronously
+reach caller handlers. Register handlers before yielding to the event loop
+after `connect` or `accept` returns: inbound values dispatch as later tasks,
+and a value with no registered handler closes the connection. An exception a
+handler throws is the caller's own and propagates untouched; it neither
+closes the connection nor reaches diagnostics. `send` throws synchronously
 without an active carrier or after closure; nothing is queued.
 
 ### Diagnostics

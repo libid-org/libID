@@ -64,12 +64,15 @@ The carrier neither interprets those values nor persists or recovers them.
   application's retained endpoint. After
   validating that response, the popup echoes the same handshake record over the
   transferred port; the application does not select the port before that echo.
-- Any handshake attempt which fails those checks rejects the binding and closes
-  every reachable port. The application's window listener lives for the
-  connection; an accepted handshake discards only that attempt's state, and a
-  later handshake from the bound source starts a new attempt. The popup removes
-  its own window listener after acceptance; later window traffic there is
-  inert.
+- An attempt from any window other than the expected peer, or from an origin
+  outside the allowlist, is not an attempt on this connection and is ignored
+  without state change; nothing that merely knows the connection ID can end a
+  connection. An attempt from the expected peer which fails the remaining
+  checks rejects the binding and closes every reachable port. The
+  application's window listener lives for the connection; an accepted
+  handshake discards only that attempt's state, and a later handshake from the
+  bound source starts a new attempt. The popup removes its own window listener
+  after acceptance; later window traffic there is inert.
 - After binding, possession of the entangled port authenticates the peer.
   Application-level values travel only over that port; the carrier preserves
   their order and shape without interpreting them.
@@ -210,7 +213,9 @@ knows what it carries.
 The worker itself is host-owned. The host is the deployment serving the popup
 documents. A Service Worker script must be served from that origin, so the host
 registers one for its popup documents and calls `installPortKeeper()` from
-that script. The handler is exported from the `@libid/popup/worker` subpath
+that script. The handler acts only on its own keep and claim records and
+leaves every other message and its ports to the host; installation, update,
+and claiming policy stay the host's. The handler is exported from the `@libid/popup/worker` subpath
 only, so worker-global types never enter the main package declaration. The
 package registers nothing and `PopupWindow.current()` resolves the active
 registration whose scope matches the current document; control of the
@@ -221,7 +226,7 @@ document is not required to message that worker.
 declare function installPortKeeper(): void
 
 declare class PortKeeper {
-  constructor(worker: ServiceWorker)
+  constructor(worker: Pick<ServiceWorker, 'postMessage'>)
 
   keep(connectionId: string, port: MessagePort): Promise<void>
   claim(connectionId: string): Promise<MessagePort | null>
@@ -231,7 +236,10 @@ declare class PortKeeper {
 The constructor fixes the active worker for both operations; the connection
 version is the package constant. `keep` resolves only after the worker owns the exact port, after
 which connection may replace the source document. `claim` atomically returns
-and removes the unchanged port, or returns `null` when no entry exists. `null`
+and removes the unchanged port, or returns `null` when no entry exists. A
+worker that does not answer within the reply deadline is treated as holding
+nothing, so an unrelated worker on the origin never blocks a fresh handshake;
+a malformed answer is a failure. `null`
 authenticates and selects nothing; popup construction continues with its
 available browser resources. A returned port is the selected carrier endpoint.
 
@@ -270,22 +278,22 @@ declare function listenForPopupPorts(
   },
   handlers: {
     onPort: (port: MessagePort) => void
-    onFail: () => void
+    onFail: () => void // the expected peer sent a malformed record
   },
 ): () => void
 
 declare function requestApplicationPort(options: {
   view: Window
   opener: WindowProxy
-  allowedOrigins: readonly string[]
+  allowedOrigins: readonly string[] | '*'
   connectionId: string
   signal: AbortSignal
   timeoutMs?: number
-}): Promise<MessagePort>
+}): Promise<MessagePort | null> // null when the opener stays silent
 
 declare class PortCarrier implements Carrier {
   constructor(port: MessagePort)
-  /** Hands the port to `PortKeeper.keep` and closes this carrier. */
+  /** Surrenders the port for `PortKeeper.keep`; this carrier is closed afterwards. */
   detach(): MessagePort
 }
 ```
@@ -307,7 +315,8 @@ application validates it, creates the channel, and sends the response with the
 popup endpoint. The popup validates that response, sends the same handshake
 record over the transferred port, and resolves with that endpoint. A handshake
 attempt from the opener that fails authentication rejects immediately; abort
-and the `OPENER_HANDSHAKE_TIMEOUT_MS` deadline also reject. Every rejection
+rejects; the `OPENER_HANDSHAKE_TIMEOUT_MS` deadline resolves null so the
+endpoint commits its fallback. Every rejection
 removes the window listener and closes every reachable port. The concrete
 error type is private. `PortCarrier` starts the port, forwards unchanged
 structured-clone values, closes idempotently, and `detach` surrenders the

@@ -57,6 +57,7 @@ const appPage = html(`
       connection.on(Pong, (pong) => window.__events.push(pong))
       window.__conn = connection
       window.__popupWindow = popupWindow
+      connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
       void connection.navigate(anchor.href).catch((error) => window.__events.push({ type: 'error', code: error.message }))
       if (popupWindow.opened) event.preventDefault()
     })
@@ -72,17 +73,18 @@ const popupPage = html(`
     window.__isolated = crossOriginIsolated
     // /p-any is the same document deployed for any opener origin.
     const allowedApplicationOrigins = location.pathname === '/p-any' ? '*' : ['${ORIGINS.appA}']
-    // Accept first: the claim must run before any other network work.
-    const accepting = PopupConnection.accept(PopupWindow.current(), {
+    // Accept first: the claim must run before any other network work, and
+    // handlers registered before yielding precede every delivery.
+    const connection = PopupConnection.accept(PopupWindow.current(), {
       connectionId: id,
       allowedApplicationOrigins,
       onDiagnostic,
     })
+    window.__conn = connection
+    connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
     // The host registers the worker in every participating document.
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {})
     try {
-      const connection = await accepting
-      window.__conn = connection
       connection.on(Ping, (ping) => {
         window.__events.push(ping)
         connection.send({ type: 'pong', n: ping.n, path: location.pathname, isolated: crossOriginIsolated })
@@ -93,6 +95,7 @@ const popupPage = html(`
       connection.on(Away, (away) => {
         connection.navigateAway(away.url).catch((error) => window.__events.push({ type: 'error', code: error.message }))
       })
+      await connection.ready
       connection.send({ type: 'pong', n: 0, path: location.pathname, isolated: crossOriginIsolated })
       document.getElementById('status').textContent = 'connected'
     } catch (error) {

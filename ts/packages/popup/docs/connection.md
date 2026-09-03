@@ -144,12 +144,13 @@ const applicationConnection = PopupConnection.connect<Messages>(openedWindow, {
 })
 
 const currentWindow = PopupWindow.current()
-const popupConnection = await PopupConnection.accept<Messages>(currentWindow, {
+const popupConnection = PopupConnection.accept<Messages>(currentWindow, {
   connectionId,
   allowedApplicationOrigins,
   fallback,
   onDiagnostic,
 })
+await popupConnection.ready
 ```
 
 Messages are caller-owned classes registered independently. The connection
@@ -291,15 +292,25 @@ declare class PopupWindow {
   static current(): PopupWindow
 }
 
-interface PopupConnection<M extends Message> {
-  send(message: M): void
-  on<N extends M>(
+interface PopupConnection<Out extends Message, In extends Message = Out> {
+  readonly ready: Promise<void>
+  readonly closed: Promise<ConnectionEnd>
+  send(message: Out): void
+  on<N extends In>(
     message: MessageType<N>,
     handler: (message: N) => void,
   ): () => void
   navigate(url: string): Promise<void>
   navigateAway(url: string): Promise<void>
   close(): Promise<void>
+}
+
+type ConnectionEnd =
+  | { outcome: 'closed' }
+  | { outcome: 'failed'; code: PopupErrorCode }
+
+class PopupError extends Error {
+  readonly code: PopupErrorCode
 }
 
 type CarrierConstructor = (signal: AbortSignal) => Promise<Carrier>
@@ -315,7 +326,7 @@ interface PopupDiagnostic {
 declare function installPortKeeper(): void
 
 declare const PopupConnection: {
-  connect<M extends Message>(
+  connect<Out extends Message, In extends Message = Out>(
     popupWindow: PopupWindow,
     options: {
       connectionId: string
@@ -323,9 +334,9 @@ declare const PopupConnection: {
       fallback?: CarrierConstructor
       onDiagnostic?: (event: PopupDiagnostic) => void
     },
-  ): PopupConnection<M>
+  ): PopupConnection<Out, In>
 
-  accept<M extends Message>(
+  accept<Out extends Message, In extends Message = Out>(
     popupWindow: PopupWindow,
     options: {
       connectionId: string
@@ -333,7 +344,7 @@ declare const PopupConnection: {
       fallback?: CarrierConstructor
       onDiagnostic?: (event: PopupDiagnostic) => void
     },
-  ): Promise<PopupConnection<M>>
+  ): PopupConnection<Out, In>
 }
 ```
 
@@ -409,14 +420,20 @@ control discriminators, the connection does not revalidate trusted local input.
 
 `on` registers one message class and handler by `message.type` and returns an
 unsubscribe function. Duplicate or reserved registrations throw synchronously.
-Callers register handlers synchronously after `connect` returns or `accept`
-resolves; inbound values dispatch as later tasks. For each inbound carrier
+Both constructors return synchronously and select carriers afterwards, so
+handlers registered before the caller yields precede every delivery; `ready`
+settles once a carrier is selected and rejects with the failure code if the
+endpoint failed first. `closed` settles exactly once with the connection's
+terminal outcome, the only channel through which a failure without an
+invoking operation reaches the caller. For each inbound carrier
 value, the connection reads only a bounded string `type` from a plain record,
 selects the registered `MessageType`, calls `decode` exactly once, and invokes
 that handler. An unknown or unregistered type, malformed routing discriminator,
-or thrown decode closes the connection and delivers no message. The registered
-set therefore enforces participant direction without hardcoding protocol types
-in the connection; the handler still enforces state and order.
+or thrown decode closes the connection and delivers no message. An exception
+the handler itself throws is the caller's, propagates to the event loop, and
+changes no connection state. The registered set therefore enforces participant
+direction without hardcoding protocol types in the connection; the handler
+still enforces state and order.
 
 `navigate` is available on both connection endpoints. The application endpoint
 always sends the private control defined by [popup control](control.md) when a
@@ -430,7 +447,10 @@ preserving it, and keeps its listener armed for the next participating
 document; it rejects while the handle is absent or reports closed and performs
 no browser operation while native-anchor binding is pending. The popup
 endpoint's `navigateAway` releases its carrier and replaces its own document
-without invoking the keeper. `close`
+without invoking the keeper. The destination of `navigateAway` is private to
+the endpoint that performs it and never crosses a carrier, which is why no
+control exists for it and why an isolated popup must initiate its own
+departure. `close`
 uses a non-null, non-closed retained handle directly and otherwise sends its
 control over an active carrier. It is idempotent and closes both the logical
 connection and its popup. Internal failure cleanup releases resources without

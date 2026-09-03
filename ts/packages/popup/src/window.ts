@@ -4,7 +4,7 @@
 // Everything but `opened` is package-internal and reached through
 // PopupConnection so continuity and control rules always apply.
 
-/** The listening surface of a Window, injectable for unit tests. */
+/** @internal The listening surface of a Window, injectable for unit tests. */
 export interface View {
   addEventListener(type: 'message', listener: (event: MessageEvent) => void): void
   removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void
@@ -20,7 +20,6 @@ function usable(handle: WindowProxy | null): handle is WindowProxy {
 }
 
 export class PopupWindow {
-  /** @internal */
   protected constructor() {}
 
   /** Synchronously attempts `window.open('about:blank', target)`. */

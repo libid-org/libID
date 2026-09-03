@@ -3,9 +3,10 @@
 
 export {
   type AcceptOptions,
+  type ConnectionEnd,
   type ConnectOptions,
   PopupConnection,
 } from './connection.js'
-export type { PopupDiagnostic } from './diagnostics.js'
+export { type PopupDiagnostic, PopupError, type PopupErrorCode } from './diagnostics.js'
 export type { Carrier, CarrierConstructor, Message, MessageType } from './message.js'
 export { PopupWindow } from './window.js'

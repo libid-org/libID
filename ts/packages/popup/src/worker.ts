@@ -1,7 +1,9 @@
 // @libid/popup/worker — the Service Worker half of the continuity bridge.
-// The host serves and registers the worker; this handler gives a port a
-// temporary owner across one popup document replacement. It never reads the
-// port, keeps no durable record, and holds nothing past the claim deadline.
+// The host serves and registers the worker and owns its update policy; this
+// handler only gives a port a temporary owner across one popup document
+// replacement. It touches nothing but its own keep and claim records, never
+// reads the port, keeps no durable record, and holds nothing past the claim
+// deadline.
 
 import { CARRIER_CLAIM_TIMEOUT_MS, decodeKeeperRequest, KEEP } from './keeper.js'
 
@@ -10,23 +12,26 @@ interface Held {
   release: () => void
 }
 
-/** @internal Installs the handlers on an explicit scope; tests inject a fake. */
+function clientOrigin(source: ExtendableMessageEvent['source']): string | null {
+  if (!source || !('url' in source)) return null
+  try {
+    return new URL(source.url).origin
+  } catch {
+    return null
+  }
+}
+
+/** @internal Installs the handler on an explicit scope; tests inject a fake. */
 export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
   const held = new Map<string, Held>()
 
-  scope.addEventListener('install', () => void scope.skipWaiting())
-  scope.addEventListener('activate', (event) => event.waitUntil(scope.clients.claim()))
   scope.addEventListener('message', (event) => {
+    const request = decodeKeeperRequest(event.data)
+    if (!request) return // not ours: the host's own traffic passes untouched
     const closeAll = (): void => {
       for (const port of event.ports) port.close()
     }
-    const source = event.source
-    if (!source || !('url' in source) || new URL(source.url).origin !== scope.location.origin) {
-      closeAll()
-      return
-    }
-    const request = decodeKeeperRequest(event.data)
-    if (!request) {
+    if (clientOrigin(event.source) !== scope.location.origin) {
       closeAll()
       return
     }

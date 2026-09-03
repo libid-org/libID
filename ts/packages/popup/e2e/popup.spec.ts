@@ -127,7 +127,7 @@ test('[POPUP-WINDOW-003] a noopener anchor never binds and the popup fails close
 }) => {
   const { popup } = await open(page, { blocked: true, rel: 'noopener' })
   await expect(popup.locator('#status')).toHaveText('failed: fallback-unavailable')
-  expect(await diag(popup)).toEqual(['fallback-unavailable'])
+  expect(await diag(popup)).toEqual(['fallback-unavailable', 'connection-failed'])
   await page.waitForTimeout(300)
   expect(await diag(page)).toEqual(['window-blocked'])
 })
@@ -256,7 +256,7 @@ test('[POPUP-CONNECTION-002] [POPUP-CONNECTION-005] direct navigation into isola
   const id = freshId()
   const { popup } = await open(page, { id, href: `${POPUP}/isolated#c=${id}` })
   await expect(popup.locator('#status')).toHaveText('failed: fallback-unavailable')
-  expect(await diag(popup)).toEqual(['fallback-unavailable'])
+  expect(await diag(popup)).toEqual(['fallback-unavailable', 'connection-failed'])
   await page.waitForTimeout(300)
   expect(await diag(page)).toEqual(['window-opened', 'control-direct'])
 })
@@ -309,7 +309,7 @@ test('[POPUP-CONNECTION-008] a cross-site isolated destination needs a fallback'
   await popup.evaluate(() => navigator.serviceWorker.ready)
   await nextDocument(popup, () => navigate(page, `${POPUP_B}/isolated#c=${id}`))
   await expect(popup.locator('#status')).toHaveText('failed: fallback-unavailable')
-  expect(await diag(popup)).toEqual(['fallback-unavailable'])
+  expect(await diag(popup)).toEqual(['fallback-unavailable', 'connection-failed'])
 })
 
 test('[POPUP-CONTROL-005] navigateAway leaves for a provider page directly and the return re-handshakes', async ({

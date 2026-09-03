@@ -1,14 +1,14 @@
 // The logical connection (docs/connection.md, docs/control.md): one
 // application endpoint that may see several popup documents, and one popup
-// endpoint per document. Both share the handler registry; the popup side
-// additionally consumes the two reserved controls.
+// endpoint per document. Both share registration, routing, and closure; the
+// popup side additionally consumes the two reserved controls.
 
 import {
-  codeOf,
   createReporter,
   type DiagnosticCode,
-  failure,
   type PopupDiagnostic,
+  PopupError,
+  type PopupErrorCode,
   type Reporter,
   reportUndeliverable,
 } from './diagnostics.js'
@@ -28,23 +28,26 @@ import {
   requireOrigins,
   routingType,
 } from './message.js'
-import {
-  listenForPopupPorts,
-  OPENER_HANDSHAKE_TIMEOUT_MS,
-  PortCarrier,
-  requestApplicationPort,
-} from './port.js'
+import { listenForPopupPorts, PortCarrier, requestApplicationPort } from './port.js'
 import { CurrentWindow, OpenedWindow, type PopupWindow } from './window.js'
 
-export interface PopupConnection<M extends Message> {
-  send(message: M): void
-  on<N extends M>(message: MessageType<N>, handler: (message: N) => void): () => void
+/** How a logical connection ended. */
+export type ConnectionEnd = { outcome: 'closed' } | { outcome: 'failed'; code: PopupErrorCode }
+
+export interface PopupConnection<Out extends Message, In extends Message = Out> {
+  /** Settles when this endpoint has selected its first carrier, or rejects if it failed first. */
+  readonly ready: Promise<void>
+  /** Settles exactly once, when the logical connection ends; never rejects. */
+  readonly closed: Promise<ConnectionEnd>
+  send(message: Out): void
+  on<N extends In>(message: MessageType<N>, handler: (message: N) => void): () => void
   /** Continuity-preserving navigation between participating documents. */
   navigate(url: string): Promise<void>
   /**
-   * Navigation to a non-participating document: retires the current carrier
-   * without preserving it and leaves the application endpoint ready for the
-   * next participating document.
+   * Navigation to a non-participating document. The destination never
+   * crosses any carrier: the application navigates its retained handle
+   * directly and the popup replaces itself locally. The current carrier is
+   * retired, not preserved.
    */
   navigateAway(url: string): Promise<void>
   close(): Promise<void>
@@ -59,8 +62,8 @@ export interface ConnectOptions {
 
 export interface AcceptOptions {
   connectionId: string
-  /** Explicit origins, or `'*'` for any HTTPS origin the browser observed. */
-  allowedApplicationOrigins: OriginAllowlist
+  /** Explicit origins, or `'*'` for any canonical HTTPS origin the browser observed. */
+  allowedApplicationOrigins: readonly string[] | '*'
   fallback?: CarrierConstructor
   onDiagnostic?: (event: PopupDiagnostic) => void
 }
@@ -75,65 +78,46 @@ function requireConnectionId(value: string): string {
 function requireHttpsUrl(url: string, report: Reporter): void {
   if (!isCanonicalHttpsUrl(url)) {
     report('control-rejected')
-    throw new TypeError('navigate requires a canonical absolute HTTPS URL without credentials')
+    throw new TypeError('navigation requires a canonical absolute HTTPS URL without credentials')
   }
 }
 
-/** Caller registrations plus routing of every inbound carrier value. */
-class Handlers<M extends Message> {
-  private readonly entries = new Map<
-    string,
-    { decode: (value: unknown) => M; handler: (message: M) => void }
-  >()
+const stripFragment = (url: string): string => url.split('#', 1)[0]
 
-  on<N extends M>(message: MessageType<N>, handler: (message: N) => void): () => void {
-    const { type } = message
-    if (isReservedType(type)) throw new TypeError(`"${type}" is a reserved discriminator`)
-    if (this.entries.has(type)) throw new TypeError(`"${type}" is already registered`)
-    const entry = { decode: (value: unknown) => message.decode(value), handler }
-    this.entries.set(type, entry as never)
-    return () => {
-      if (this.entries.get(type) === (entry as never)) this.entries.delete(type)
-    }
-  }
-
-  /**
-   * Dispatches one caller value, or returns a decoded control for the
-   * endpoint. Throws `decode-rejected` or `control-rejected` otherwise.
-   */
-  deliver(value: unknown): PopupControl | null {
-    const type = routingType(value)
-    if (type === null) throw failure('decode-rejected')
-    if (isReservedType(type)) {
-      const control = decodeControl(value as Record<string, unknown>)
-      if (!control) throw failure('control-rejected')
-      return control
-    }
-    const entry = this.entries.get(type)
-    if (!entry) throw failure('decode-rejected')
-    let message: M
-    try {
-      message = entry.decode(value)
-    } catch {
-      throw failure('decode-rejected')
-    }
-    entry.handler(message)
-    return null
-  }
+interface Registration<In extends Message> {
+  decode: (value: unknown) => In
+  handler: (message: In) => void
 }
 
-/** Shared endpoint state: registry, carrier subscription, closure. */
-abstract class Endpoint<M extends Message> implements PopupConnection<M> {
-  protected readonly handlers = new Handlers<M>()
+/** Shared endpoint state: registrations, carrier subscription, lifecycle. */
+abstract class Endpoint<Out extends Message, In extends Message>
+  implements PopupConnection<Out, In>
+{
+  readonly ready: Promise<void>
+  readonly closed: Promise<ConnectionEnd>
   protected readonly controller = new AbortController()
   protected carrier: Carrier | null = null
-  protected closed = false
+  protected ended = false
+  private readonly registrations = new Map<string, Registration<In>>()
   private unsubscribe: (() => void) | null = null
   private readonly startedAt = performance.now()
+  private resolveReady!: () => void
+  private rejectReady!: (error: PopupError) => void
+  private settleClosed!: (end: ConnectionEnd) => void
 
-  protected constructor(protected readonly report: Reporter) {}
+  protected constructor(protected readonly report: Reporter) {
+    this.ready = new Promise((resolve, reject) => {
+      this.resolveReady = resolve
+      this.rejectReady = reject
+    })
+    this.closed = new Promise((resolve) => {
+      this.settleClosed = resolve
+    })
+    // A consumer that only awaits `closed` must not see an unhandled rejection.
+    this.ready.catch(() => {})
+  }
 
-  send(message: M): void {
+  send(message: Out): void {
     if (isReservedType(message.type)) {
       throw new TypeError(`"${message.type}" is a reserved discriminator`)
     }
@@ -142,20 +126,30 @@ abstract class Endpoint<M extends Message> implements PopupConnection<M> {
 
   /** Sends over the active carrier; a carrier that rejects the value fails the connection. */
   protected transmit(value: Message): void {
-    if (this.closed || !this.carrier) {
+    if (this.ended || !this.carrier) {
       this.report('send-unavailable')
-      throw failure('send-unavailable')
+      throw new PopupError('send-unavailable')
     }
     try {
       this.carrier.send(value)
     } catch (error) {
-      this.release('connection-failed')
+      this.fail('send-unavailable', true)
       throw error
     }
   }
 
-  on<N extends M>(message: MessageType<N>, handler: (message: N) => void): () => void {
-    return this.handlers.on(message, handler)
+  on<N extends In>(message: MessageType<N>, handler: (message: N) => void): () => void {
+    const { type } = message
+    if (isReservedType(type)) throw new TypeError(`"${type}" is a reserved discriminator`)
+    if (this.registrations.has(type)) throw new TypeError(`"${type}" is already registered`)
+    const registration: Registration<In> = {
+      decode: (value) => message.decode(value),
+      handler: handler as (message: In) => void,
+    }
+    this.registrations.set(type, registration)
+    return () => {
+      if (this.registrations.get(type) === registration) this.registrations.delete(type)
+    }
   }
 
   abstract navigate(url: string): Promise<void>
@@ -168,20 +162,34 @@ abstract class Endpoint<M extends Message> implements PopupConnection<M> {
     this.carrier = carrier
     this.unsubscribe = carrier.on((value) => this.receive(value))
     if (code) this.report(code)
+    this.resolveReady()
   }
 
   protected abstract onControl(control: PopupControl): void
 
+  /**
+   * Routes one inbound value. Transport-level rejection fails the
+   * connection; an exception thrown by a caller handler is the caller's and
+   * propagates to the event loop untouched.
+   */
   private receive(value: unknown): void {
-    if (this.closed) return
-    let control: PopupControl | null
-    try {
-      control = this.handlers.deliver(value)
-    } catch (error) {
-      this.fail(codeOf(error) ?? 'decode-rejected')
-      return
+    if (this.ended) return
+    const type = routingType(value)
+    if (type === null) return this.fail('decode-rejected')
+    if (isReservedType(type)) {
+      const control = decodeControl(value as Record<string, unknown>)
+      if (!control) return this.fail('control-rejected')
+      return this.onControl(control)
     }
-    if (control) this.onControl(control)
+    const registration = this.registrations.get(type)
+    if (!registration) return this.fail('decode-rejected')
+    let message: In
+    try {
+      message = registration.decode(value)
+    } catch {
+      return this.fail('decode-rejected')
+    }
+    registration.handler(message)
   }
 
   protected dropCarrier(): void {
@@ -191,21 +199,37 @@ abstract class Endpoint<M extends Message> implements PopupConnection<M> {
     this.carrier = null
   }
 
-  protected fail(code: DiagnosticCode): void {
-    if (this.closed) return
-    this.release('connection-failed')
-    reportUndeliverable(this.report, code)
+  /**
+   * Fails the connection closed. A failure reached through a caller
+   * operation reports through that operation; any other is undeliverable
+   * and gets the one sanitized console line.
+   */
+  protected fail(code: PopupErrorCode, viaOperation = false): void {
+    if (this.ended) return
+    if (viaOperation) this.report(code)
+    else reportUndeliverable(this.report, code)
+    this.end({ outcome: 'failed', code })
   }
 
-  protected release(code: 'connection-closed' | 'connection-failed'): void {
-    this.closed = true
+  protected release(): void {
+    if (this.ended) return
+    this.end({ outcome: 'closed' })
+  }
+
+  private end(end: ConnectionEnd): void {
+    this.ended = true
     this.controller.abort()
     this.dropCarrier()
-    this.report(code, { durationMs: performance.now() - this.startedAt })
+    this.report(
+      end.outcome === 'closed' ? 'connection-closed' : 'connection-failed',
+      performance.now() - this.startedAt,
+    )
+    if (end.outcome === 'failed') this.rejectReady(new PopupError(end.code))
+    this.settleClosed(end)
   }
 }
 
-class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
+class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpoint<Out, In> {
   private readonly stopListening: () => void
 
   constructor(
@@ -229,7 +253,6 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
         },
         allowedPopupOrigins,
         connectionId,
-        report: this.report,
       },
       {
         onPort: (port) => this.install(new PortCarrier(port), 'carrier-message-port'),
@@ -239,15 +262,10 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
 
     if (options.fallback) {
       // Armed exactly once for the logical connection; observed, never awaited.
-      let pending: Promise<Carrier>
-      try {
-        pending = Promise.resolve(options.fallback(this.controller.signal))
-      } catch (error) {
-        pending = Promise.reject(error)
-      }
-      pending.then(
+      const { fallback } = options
+      new Promise<Carrier>((resolve) => resolve(fallback(this.controller.signal))).then(
         (carrier) => {
-          if (this.closed) carrier.close()
+          if (this.ended) carrier.close()
           else this.install(carrier, 'carrier-fallback')
         },
         () => {
@@ -263,7 +281,7 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
   }
 
   async navigate(url: string): Promise<void> {
-    if (this.closed) throw failure('connection-closed')
+    if (this.ended) throw new PopupError('connection-closed')
     requireHttpsUrl(url, this.report)
     if (this.carrier) {
       const control: Navigate = { type: 'navigate', url }
@@ -279,16 +297,16 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
     // Native-anchor binding pending: the activation's own navigation proceeds.
     if (!this.popup.opened) return
     this.report('popup-unavailable')
-    throw failure('popup-unavailable')
+    throw new PopupError('popup-unavailable')
   }
 
   async navigateAway(url: string): Promise<void> {
-    if (this.closed) throw failure('connection-closed')
+    if (this.ended) throw new PopupError('connection-closed')
     requireHttpsUrl(url, this.report)
     if (!this.popup.opened) return
     if (!this.popup.direct) {
       this.report('popup-unavailable')
-      throw failure('popup-unavailable')
+      throw new PopupError('popup-unavailable')
     }
     // Retire the carrier; the window listener stays armed for the next
     // participating document.
@@ -298,7 +316,7 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
   }
 
   async close(): Promise<void> {
-    if (this.closed) return
+    if (this.ended) return
     if (this.popup.direct) {
       this.popup.closeHandle()
     } else if (this.carrier) {
@@ -308,184 +326,181 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
         // A dead carrier cannot carry the control; local release still runs.
       }
     }
-    this.release('connection-closed')
+    this.release()
   }
 
-  protected override release(code: 'connection-closed' | 'connection-failed'): void {
+  protected override release(): void {
+    if (this.ended) return
     this.stopListening()
-    super.release(code)
+    super.release()
+  }
+
+  protected override fail(code: PopupErrorCode, viaOperation = false): void {
+    if (this.ended) return
+    this.stopListening()
+    super.fail(code, viaOperation)
   }
 }
 
-class PopupEndpoint<M extends Message> extends Endpoint<M> {
+class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Out, In> {
   /** The first accepted control is terminal for this document. */
   private controlsDone = false
+  private readonly connectionId: string
 
-  private constructor(
+  constructor(
     private readonly popup: CurrentWindow,
-    private readonly connectionId: string,
-    report: Reporter,
-  ) {
-    super(report)
-  }
-
-  static async accept<M extends Message>(
-    popup: CurrentWindow,
     options: AcceptOptions,
-  ): Promise<PopupEndpoint<M>> {
-    const report = createReporter(options.onDiagnostic)
-    const connectionId = requireConnectionId(options.connectionId)
+  ) {
+    super(createReporter(options.onDiagnostic))
+    this.connectionId = requireConnectionId(options.connectionId)
     const allowedOrigins: OriginAllowlist =
       options.allowedApplicationOrigins === '*'
         ? '*'
         : requireOrigins(options.allowedApplicationOrigins, 'allowedApplicationOrigins')
+    void this.select(allowedOrigins, options.fallback)
+  }
 
-    const controller = new AbortController()
-    let carrier: Carrier | null = null
-
-    // A preserved port can only be held by an already active worker.
-    const registration = await popup.registration()
-    if (registration?.active) {
-      const keeper = new PortKeeper(registration.active)
-      const port = await keeper.claim(connectionId).catch((error: unknown) => {
-        report('claim-failed')
-        throw error
-      })
-      if (port) {
-        carrier = new PortCarrier(port)
-        report('carrier-restored')
-      } else {
-        report('claim-empty')
+  /**
+   * Selects this document's one carrier: a preserved port, then the opener
+   * handshake, then the fallback. Runs after construction returns, so
+   * registrations the caller makes synchronously precede the first delivery.
+   */
+  private async select(
+    allowedOrigins: OriginAllowlist,
+    fallback: CarrierConstructor | undefined,
+  ): Promise<void> {
+    try {
+      // A preserved port can only be held by an already active worker.
+      const registration = await this.popup.registration()
+      if (registration?.active) {
+        const port = await new PortKeeper(registration.active).claim(this.connectionId)
+        if (this.ended) return port?.close()
+        if (port) return this.install(new PortCarrier(port), 'carrier-restored')
+        this.report('claim-empty')
       }
-    }
-
-    if (!carrier) {
-      const opener = popup.opener
+      const opener = this.popup.opener
       if (opener) {
-        try {
-          const port = await requestApplicationPort({
-            view: popup.view,
-            opener,
-            allowedOrigins,
-            connectionId,
-            signal: controller.signal,
-            timeoutMs: OPENER_HANDSHAKE_TIMEOUT_MS,
-          })
-          carrier = new PortCarrier(port)
-          report('carrier-message-port')
-        } catch (error) {
-          const code = codeOf(error)
-          if (code !== 'opener-timeout') {
-            report('handshake-rejected')
-            throw error
-          }
-          report('opener-timeout')
-        }
+        const port = await requestApplicationPort({
+          view: this.popup.view,
+          opener,
+          allowedOrigins,
+          connectionId: this.connectionId,
+          signal: this.controller.signal,
+        })
+        if (this.ended) return port?.close()
+        if (port) return this.install(new PortCarrier(port), 'carrier-message-port')
+        this.report('opener-timeout')
       }
+      if (!fallback) return this.fail('fallback-unavailable', true)
+      const carrier = await fallback(this.controller.signal)
+      if (this.ended) return carrier.close()
+      this.install(carrier, 'carrier-fallback')
+    } catch (error) {
+      if (this.ended) return
+      this.fail(error instanceof PopupError ? error.code : 'fallback-failed', true)
     }
-
-    if (!carrier) {
-      if (!options.fallback) {
-        report('fallback-unavailable')
-        throw failure('fallback-unavailable')
-      }
-      carrier = await options.fallback(controller.signal)
-      report('carrier-fallback')
-    }
-
-    const endpoint = new PopupEndpoint<M>(popup, connectionId, report)
-    endpoint.install(carrier)
-    return endpoint
   }
 
   protected onControl(control: PopupControl): void {
     if (this.controlsDone) return
     this.controlsDone = true
     if (control.type === 'navigate') {
-      void this.replaceDocument(control.url).catch(() => {})
+      void this.replaceDocument(control.url, false).catch(() => {})
     } else {
-      this.closePopup('connection-closed')
+      this.closePopup()
     }
   }
 
   async navigate(url: string): Promise<void> {
-    if (this.closed) throw failure('connection-closed')
+    if (this.ended) throw new PopupError('connection-closed')
     requireHttpsUrl(url, this.report)
-    if (this.controlsDone) throw failure('popup-unavailable')
+    if (stripFragment(url) === stripFragment(this.popup.view.location.href)) {
+      // A fragment navigation keeps this document; there is nothing to preserve.
+      throw new TypeError('navigation requires a different document')
+    }
+    if (this.controlsDone) throw new PopupError('popup-unavailable')
     this.controlsDone = true
-    await this.replaceDocument(url)
+    await this.replaceDocument(url, true)
   }
 
   async navigateAway(url: string): Promise<void> {
-    if (this.closed) throw failure('connection-closed')
+    if (this.ended) throw new PopupError('connection-closed')
     requireHttpsUrl(url, this.report)
-    if (this.controlsDone) throw failure('popup-unavailable')
+    if (this.controlsDone) throw new PopupError('popup-unavailable')
     this.controlsDone = true
-    this.release('connection-closed')
+    this.release()
     this.popup.view.location.replace(url)
   }
 
   async close(): Promise<void> {
-    if (this.closed) return
-    this.closePopup('connection-closed')
+    if (this.ended) return
+    this.closePopup()
   }
 
   /**
    * Replaces this document. A same-origin target keeps the port through the
    * worker first; a cross-origin target cannot, so the endpoint retires and
    * the destination authenticates a fresh carrier through its opener or
-   * fallback.
+   * fallback. Failure is reported through the invoking operation when there
+   * is one, otherwise as undeliverable.
    */
-  private async replaceDocument(url: string): Promise<void> {
-    if (new URL(url).origin !== this.popup.view.location.origin) {
-      this.release('connection-closed')
-      this.popup.view.location.replace(url)
+  private async replaceDocument(url: string, viaOperation: boolean): Promise<void> {
+    const { location } = this.popup.view
+    if (new URL(url).origin !== location.origin) {
+      this.release()
+      location.replace(url)
       return
+    }
+    const failed = (code: PopupErrorCode): never => {
+      this.fail(code, viaOperation)
+      throw new PopupError(code)
     }
     const registration = await this.popup.registration()
     const worker = registration ? await activeWorker(registration) : null
-    if (this.closed || !(this.carrier instanceof PortCarrier) || !worker) {
-      this.fail('continuity-unsupported')
-      throw failure('continuity-unsupported')
-    }
+    if (this.ended) throw new PopupError('connection-closed')
+    if (!(this.carrier instanceof PortCarrier) || !worker) return failed('continuity-unsupported')
     const port = this.carrier.detach()
     const startedAt = performance.now()
     try {
       await new PortKeeper(worker).keep(this.connectionId, port)
     } catch {
-      this.fail('keep-failed')
-      throw failure('keep-failed')
+      port.close() // a no-op once transferred; releases a port the worker never took
+      return failed('keep-failed')
     }
-    this.report('keep-acknowledged', { durationMs: performance.now() - startedAt })
-    this.popup.view.location.replace(url)
+    if (this.ended) throw new PopupError('connection-closed')
+    this.report('keep-acknowledged', performance.now() - startedAt)
+    location.replace(url)
   }
 
-  private closePopup(code: 'connection-closed'): void {
-    this.release(code)
+  private closePopup(): void {
+    this.release()
     this.popup.view.close()
   }
 }
 
 export const PopupConnection = {
-  connect<M extends Message>(
+  connect<Out extends Message, In extends Message = Out>(
     popupWindow: PopupWindow,
     options: ConnectOptions,
-  ): PopupConnection<M> {
+  ): PopupConnection<Out, In> {
     if (!(popupWindow instanceof OpenedWindow)) {
       throw new TypeError('connect requires the PopupWindow returned by PopupWindow.open')
     }
-    return new ApplicationEndpoint<M>(popupWindow, options)
+    return new ApplicationEndpoint<Out, In>(popupWindow, options)
   },
 
-  accept<M extends Message>(
+  /**
+   * Constructs the popup endpoint synchronously so handlers registered before
+   * the caller yields precede every delivery; `ready` settles once a carrier
+   * is selected.
+   */
+  accept<Out extends Message, In extends Message = Out>(
     popupWindow: PopupWindow,
     options: AcceptOptions,
-  ): Promise<PopupConnection<M>> {
+  ): PopupConnection<Out, In> {
     if (!(popupWindow instanceof CurrentWindow)) {
-      return Promise.reject(
-        new TypeError('accept requires the PopupWindow returned by PopupWindow.current'),
-      )
+      throw new TypeError('accept requires the PopupWindow returned by PopupWindow.current')
     }
-    return PopupEndpoint.accept<M>(popupWindow, options)
+    return new PopupEndpoint<Out, In>(popupWindow, options)
   },
 }

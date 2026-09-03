@@ -71,7 +71,10 @@ retires the current carrier without preservation, and leaves the application
 endpoint armed for the next participating document; it rejects once the handle
 is unusable. On the popup side it releases the carrier and calls
 `location.replace(url)` without preparing continuity. It exists for
-non-participating destinations, where preservation would only expire. A cross-origin rebind
+non-participating destinations, where preservation would only expire, and it
+keeps the destination private: no `navigate-away` control exists because the
+URL must never cross a carrier, so an isolated popup leaves on its own
+initiative. A cross-origin rebind
 may fail only after the destination loads; that failure releases no caller
 value and selects no weaker carrier. The caller commits its state and clears
 sensitive inputs before requesting navigation.

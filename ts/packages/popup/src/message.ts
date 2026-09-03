@@ -1,6 +1,10 @@
-// The wire leaf: the caller-owned message contract, the carrier seam, the
-// two reserved controls, and the validators every other module shares.
-// Nothing here touches a browser global.
+// The wire leaf: the transport version, the caller-owned message contract,
+// the carrier seam, the two reserved controls, and the validators every
+// other module shares. Nothing here touches a browser global.
+
+/** Exact-matched in every private transport record; never negotiated. */
+export const CONNECTION_VERSION = 1 as const
+export type ConnectionVersion = typeof CONNECTION_VERSION
 
 export interface Message {
   readonly type: string
@@ -39,6 +43,7 @@ export function isReservedType(type: string): boolean {
   return RESERVED_TYPES.has(type)
 }
 
+/** A plain record: what structured clone produces for any object value. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const prototype = Object.getPrototypeOf(value)

@@ -6,7 +6,7 @@ describe('diagnostics [POPUP-DIAGNOSTIC-001/002]', () => {
     const events: PopupDiagnostic[] = []
     const report = createReporter((event) => void events.push(event))
     report('window-opened')
-    report('keep-acknowledged', { durationMs: -3 })
+    report('keep-acknowledged', -3)
     expect(Object.keys(events[0])).toEqual(['code', 'timestamp'])
     expect(events[0].timestamp).toBeGreaterThan(performance.timeOrigin)
     expect(events[1]).toMatchObject({ code: 'keep-acknowledged', durationMs: 0 })

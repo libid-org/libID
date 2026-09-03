@@ -1,5 +1,6 @@
 // Sanitized local diagnostics (METRICS.md): a stable code, a timestamp, and
-// at most a duration or count. Never an origin, URL, id, payload, or error.
+// at most a duration. Never an origin, URL, id, payload, or error. Failures
+// cross the API as PopupError carrying the same stable code.
 
 export interface PopupDiagnostic {
   readonly code: string
@@ -8,39 +9,54 @@ export interface PopupDiagnostic {
   readonly count?: number
 }
 
-export type DiagnosticCode =
-  | 'window-opened'
-  | 'window-blocked'
-  | 'window-bound'
+/** The codes an operation or the connection's terminal outcome can carry. */
+export type PopupErrorCode =
   | 'handshake-rejected'
   | 'opener-timeout'
-  | 'carrier-message-port'
-  | 'carrier-restored'
-  | 'carrier-fallback'
   | 'fallback-unavailable'
+  | 'fallback-failed'
   | 'decode-rejected'
   | 'control-rejected'
-  | 'control-direct'
-  | 'control-connected'
   | 'continuity-unsupported'
-  | 'keep-acknowledged'
   | 'keep-failed'
-  | 'claim-empty'
   | 'claim-failed'
   | 'popup-unavailable'
   | 'send-unavailable'
   | 'connection-closed'
+
+export type DiagnosticCode =
+  | PopupErrorCode
+  | 'window-opened'
+  | 'window-blocked'
+  | 'window-bound'
+  | 'carrier-message-port'
+  | 'carrier-restored'
+  | 'carrier-fallback'
+  | 'control-direct'
+  | 'control-connected'
+  | 'keep-acknowledged'
+  | 'claim-empty'
   | 'connection-failed'
 
-export type Reporter = (code: DiagnosticCode, extra?: { durationMs?: number }) => void
+export class PopupError extends Error {
+  readonly code: PopupErrorCode
+
+  constructor(code: PopupErrorCode) {
+    super(code)
+    this.name = 'PopupError'
+    this.code = code
+  }
+}
+
+export type Reporter = (code: DiagnosticCode, durationMs?: number) => void
 
 export function createReporter(onDiagnostic?: (event: PopupDiagnostic) => void): Reporter {
   if (!onDiagnostic) return () => {}
-  return (code, extra) => {
+  return (code, durationMs) => {
     const event: PopupDiagnostic = {
       code,
       timestamp: performance.timeOrigin + performance.now(),
-      ...(extra?.durationMs !== undefined && { durationMs: Math.max(0, extra.durationMs) }),
+      ...(durationMs !== undefined && { durationMs: Math.max(0, durationMs) }),
     }
     try {
       onDiagnostic(event)
@@ -58,13 +74,4 @@ export function reportUndeliverable(report: Reporter, code: DiagnosticCode): voi
     // Console failure is inert.
   }
   report(code)
-}
-
-/** Errors cross the API as plain `Error` whose message is the code. */
-export function failure(code: DiagnosticCode): Error {
-  return new Error(code)
-}
-
-export function codeOf(error: unknown): DiagnosticCode | null {
-  return error instanceof Error ? (error.message as DiagnosticCode) : null
 }

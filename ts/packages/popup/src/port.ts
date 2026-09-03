@@ -4,10 +4,10 @@
 // port as the final acknowledgement. The entangled ports carry caller values
 // unchanged.
 
-import type { Reporter } from './diagnostics.js'
-import { failure } from './diagnostics.js'
+import { PopupError } from './diagnostics.js'
 import {
   type Carrier,
+  CONNECTION_VERSION,
   hasExactKeys,
   isAllowedOrigin,
   isRecord,
@@ -16,16 +16,13 @@ import {
 } from './message.js'
 import type { View } from './window.js'
 
-export const CONNECTION_VERSION = 1 as const
-export type ConnectionVersion = typeof CONNECTION_VERSION
-
 export const OPENER_HANDSHAKE_TIMEOUT_MS = 30_000
 
 const HANDSHAKE = 'message-port'
 
 interface Handshake {
   type: typeof HANDSHAKE
-  connectionVersion: ConnectionVersion
+  connectionVersion: typeof CONNECTION_VERSION
   connectionId: string
 }
 
@@ -48,6 +45,10 @@ function isExactHandshake(data: unknown, connectionId: string): boolean {
   )
 }
 
+function isWindow(source: MessageEventSource | null): source is WindowProxy {
+  return source !== null && 'postMessage' in source && 'closed' in source
+}
+
 export interface ListenOptions {
   view: View
   /** The retained handle, or null until native-anchor binding. */
@@ -55,23 +56,24 @@ export interface ListenOptions {
   onBind: (source: WindowProxy) => void
   allowedPopupOrigins: readonly string[]
   connectionId: string
-  report: Reporter
 }
 
 export interface ListenHandlers {
   /** The application's authenticated endpoint for one popup document. */
   onPort: (port: MessagePort) => void
-  /** An attempt from the expected source failed authentication. */
+  /** The expected peer sent a malformed handshake or acknowledgement. */
   onFail: () => void
 }
 
 /**
  * Application side. One window listener for the connection lifetime: each
  * accepted handshake yields one port; per-attempt state is discarded on
- * acceptance, supersession, or stop.
+ * acceptance, supersession, or stop. An attempt from any window or origin
+ * other than the expected peer is not an attempt on this connection and is
+ * ignored, so nothing that merely knows the connection ID can end it.
  */
 export function listenForPopupPorts(options: ListenOptions, handlers: ListenHandlers): () => void {
-  const { view, allowedPopupOrigins, connectionId, report } = options
+  const { view, allowedPopupOrigins, connectionId } = options
   let source = options.source
   let pending: MessagePort | null = null
 
@@ -85,14 +87,9 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
 
   const listener = (event: MessageEvent): void => {
     if (!isAttempt(event.data, connectionId)) return
-    if (
-      !allowedPopupOrigins.includes(event.origin) ||
-      (source !== null && event.source !== source) ||
-      (source === null && (event.source === null || !('postMessage' in event.source))) ||
-      !isExactHandshake(event.data, connectionId) ||
-      event.ports.length !== 0
-    ) {
-      report('handshake-rejected')
+    if (!allowedPopupOrigins.includes(event.origin)) return
+    if (source !== null ? event.source !== source : !isWindow(event.source)) return
+    if (!isExactHandshake(event.data, connectionId) || event.ports.length !== 0) {
       dropPending()
       handlers.onFail()
       return
@@ -108,7 +105,6 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
     port.onmessage = (ack: MessageEvent): void => {
       if (pending !== port) return
       if (!isExactHandshake(ack.data, connectionId) || ack.ports.length !== 0) {
-        report('handshake-rejected')
         dropPending()
         handlers.onFail()
         return
@@ -144,30 +140,30 @@ export interface RequestOptions {
 
 /**
  * Popup side. Sends the handshake to the exact opener and resolves the
- * transferred, acknowledged port. Rejects with `handshake-rejected` on an
- * authentication failure, `opener-timeout` on silence, and
- * `connection-closed` on abort; every rejection closes reachable ports.
+ * transferred, acknowledged port, or null when the opener stays silent past
+ * the deadline (the caller then commits its fallback). Rejects with
+ * `handshake-rejected` when the opener answers wrongly and `connection-closed`
+ * on abort; every rejection closes reachable ports.
  */
-export function requestApplicationPort(options: RequestOptions): Promise<MessagePort> {
+export function requestApplicationPort(options: RequestOptions): Promise<MessagePort | null> {
   const { view, opener, allowedOrigins, connectionId, signal } = options
   return new Promise((resolve, reject) => {
-    const finish = (error: Error | null, port?: MessagePort): void => {
+    const finish = (error: Error | null, port: MessagePort | null = null): void => {
       view.removeEventListener('message', listener)
       clearTimeout(timer)
       signal.removeEventListener('abort', onAbort)
       if (error) reject(error)
-      else resolve(port as MessagePort)
+      else resolve(port)
     }
     const listener = (event: MessageEvent): void => {
-      if (!isAttempt(event.data, connectionId)) return
+      if (!isAttempt(event.data, connectionId) || event.source !== opener) return
       if (
-        event.source !== opener ||
         !isAllowedOrigin(event.origin, allowedOrigins) ||
         !isExactHandshake(event.data, connectionId) ||
         event.ports.length !== 1
       ) {
         for (const port of event.ports) port.close()
-        finish(failure('handshake-rejected'))
+        finish(new PopupError('handshake-rejected'))
         return
       }
       const port = event.ports[0]
@@ -175,16 +171,13 @@ export function requestApplicationPort(options: RequestOptions): Promise<Message
         port.postMessage(handshake(connectionId))
       } catch {
         port.close()
-        finish(failure('handshake-rejected'))
+        finish(new PopupError('handshake-rejected'))
         return
       }
       finish(null, port)
     }
-    const onAbort = (): void => finish(failure('connection-closed'))
-    const timer = setTimeout(
-      () => finish(failure('opener-timeout')),
-      options.timeoutMs ?? OPENER_HANDSHAKE_TIMEOUT_MS,
-    )
+    const onAbort = (): void => finish(new PopupError('connection-closed'))
+    const timer = setTimeout(() => finish(null), options.timeoutMs ?? OPENER_HANDSHAKE_TIMEOUT_MS)
     if (signal.aborted) {
       onAbort()
       return
@@ -194,7 +187,7 @@ export function requestApplicationPort(options: RequestOptions): Promise<Message
     try {
       opener.postMessage(handshake(connectionId), '*')
     } catch {
-      finish(failure('handshake-rejected'))
+      finish(new PopupError('handshake-rejected'))
     }
   })
 }
@@ -208,7 +201,7 @@ export class PortCarrier implements Carrier {
   }
 
   send(value: Message): void {
-    if (!this.port) throw failure('send-unavailable')
+    if (!this.port) throw new PopupError('send-unavailable')
     try {
       this.port.postMessage(value)
     } catch (error) {
@@ -233,18 +226,19 @@ export class PortCarrier implements Carrier {
   }
 
   close(): void {
-    const port = this.port
-    if (!port) return
-    this.port = null
-    port.onmessage = null
-    port.onmessageerror = null
-    port.close()
+    this.take()?.close()
   }
 
   /** Surrenders the port for preservation; this carrier is closed afterwards. */
   detach(): MessagePort {
+    const port = this.take()
+    if (!port) throw new PopupError('send-unavailable')
+    return port
+  }
+
+  private take(): MessagePort | null {
     const port = this.port
-    if (!port) throw failure('send-unavailable')
+    if (!port) return null
     this.port = null
     port.onmessage = null
     port.onmessageerror = null

@@ -7,7 +7,7 @@ import {
   KEEPER_REPLY_TIMEOUT_MS,
   PortKeeper,
 } from './keeper.js'
-import { CONNECTION_VERSION } from './port.js'
+import { CONNECTION_VERSION } from './message.js'
 import { fakeScope, ID, OTHER_ID, tick } from './testing/fakes.js'
 
 const nextMessage = (port: MessagePort): Promise<unknown> =>
@@ -56,15 +56,30 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
     await expect(scope.pending[0]).resolves.toBeUndefined()
   })
 
-  it(
-    'ignores a client from another origin',
-    async () => {
+  it('ignores a client from another origin, which the keeper treats as absent', async () => {
+    vi.useFakeTimers()
+    try {
       const scope = fakeScope()
-      const foreign = new PortKeeper(scope.foreignWorker)
-      await expect(foreign.claim(ID)).rejects.toThrow('claim-failed')
-    },
-    KEEPER_REPLY_TIMEOUT_MS + 500,
-  )
+      const claim = new PortKeeper(scope.foreignWorker).claim(ID)
+      await vi.advanceTimersByTimeAsync(KEEPER_REPLY_TIMEOUT_MS + 1)
+      expect(await claim).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("leaves the host's own worker traffic and its ports untouched", async () => {
+    const scope = fakeScope()
+    const channel = new MessageChannel()
+    scope.postRaw({ type: 'host-message' }, [channel.port1])
+    await tick()
+    const received = new Promise((resolve) => {
+      channel.port2.onmessage = (e) => resolve(e.data)
+    })
+    channel.port1.postMessage('still open')
+    expect(await received).toBe('still open')
+    expect(scope.pending).toHaveLength(0)
+  })
 
   it('decodes exact requests only', () => {
     const ok = { type: KEEP, connectionVersion: CONNECTION_VERSION, connectionId: ID }

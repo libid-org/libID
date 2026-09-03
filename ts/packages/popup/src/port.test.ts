@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { DiagnosticCode } from './diagnostics.js'
-import {
-  CONNECTION_VERSION,
-  listenForPopupPorts,
-  PortCarrier,
-  requestApplicationPort,
-} from './port.js'
+import { CONNECTION_VERSION } from './message.js'
+import { listenForPopupPorts, PortCarrier, requestApplicationPort } from './port.js'
 import {
   APP_ORIGIN,
   fakePair,
@@ -26,13 +21,12 @@ interface Harness {
   pair: FakePair
   ports: MessagePort[]
   fails: number
-  codes: DiagnosticCode[]
   bound: unknown[]
   stop: () => void
 }
 
 function listen(source: 'handle' | null = 'handle', pair = fakePair()): Harness {
-  const h: Harness = { pair, ports: [], fails: 0, codes: [], bound: [], stop: () => {} }
+  const h: Harness = { pair, ports: [], fails: 0, bound: [], stop: () => {} }
   h.stop = listenForPopupPorts(
     {
       view: pair.appView,
@@ -40,7 +34,6 @@ function listen(source: 'handle' | null = 'handle', pair = fakePair()): Harness 
       onBind: (s) => void h.bound.push(s),
       allowedPopupOrigins: [POPUP_ORIGIN],
       connectionId: ID,
-      report: (code) => void h.codes.push(code),
     },
     { onPort: (port) => void h.ports.push(port), onFail: () => void h.fails++ },
   )
@@ -61,6 +54,12 @@ const request = (
     ...overrides,
   })
 
+const requestPort = async (pair: FakePair, overrides = {}): Promise<MessagePort> => {
+  const port = await request(pair, overrides)
+  if (!port) throw new Error('expected a port')
+  return port
+}
+
 async function roundTrip(app: MessagePort, popup: MessagePort): Promise<unknown[]> {
   const received: unknown[] = []
   popup.onmessage = (e) => void received.push(e.data)
@@ -72,7 +71,7 @@ async function roundTrip(app: MessagePort, popup: MessagePort): Promise<unknown[
 describe('MessagePort handshake [POPUP-PORT-001]', () => {
   it('authenticates both endpoints and resolves entangled ports after the echo', async () => {
     const h = listen()
-    const popupPort = await request(h.pair)
+    const popupPort = await requestPort(h.pair)
     await tick()
     expect(h.ports).toHaveLength(1)
     expect(h.fails).toBe(0)
@@ -106,11 +105,10 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
     await tick()
     expect(h.ports).toHaveLength(0)
     expect(h.fails).toBe(1)
-    expect(h.codes).toEqual(['handshake-rejected'])
 
     // A second echo after acceptance is an ordinary value, not a re-selection.
     const h2 = listen()
-    const popupPort = await request(h2.pair)
+    const popupPort = await requestPort(h2.pair)
     await tick()
     popupPort.postMessage(handshake())
     await tick()
@@ -127,39 +125,37 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
     h.pair.appProxy.postMessage('string', '*')
     await tick()
     expect(h.fails).toBe(0)
-    expect(h.codes).toEqual([])
     h.stop()
   })
 
-  it('rejects an attempt with a wrong origin, version, shape, or extra port', async () => {
-    for (const bad of [
-      { event: { data: handshake(), origin: 'https://evil.example', source: 'handle' } },
-      {
-        event: {
-          data: { ...handshake(), connectionVersion: 2 },
-          origin: POPUP_ORIGIN,
-          source: 'handle',
-        },
-      },
-      { event: { data: { ...handshake(), extra: 1 }, origin: POPUP_ORIGIN, source: 'handle' } },
-      {
-        event: {
-          data: handshake(),
-          origin: POPUP_ORIGIN,
-          source: 'handle',
-          ports: [new MessageChannel().port1],
-        },
-      },
-      { event: { data: handshake(), origin: POPUP_ORIGIN, source: 'other' } },
+  it('ignores an attempt from a wrong origin or source; rejects a malformed one from the peer', async () => {
+    for (const ignored of [
+      { data: handshake(), origin: 'https://evil.example', source: 'handle' },
+      { data: handshake(), origin: POPUP_ORIGIN, source: 'other' },
     ]) {
       const h = listen()
       h.pair.appView.dispatch({
-        ...bad.event,
-        source: bad.event.source === 'handle' ? h.pair.popupProxy : {},
+        ...ignored,
+        source: ignored.source === 'handle' ? h.pair.popupProxy : {},
       })
       await tick()
+      expect(h.fails, JSON.stringify(ignored)).toBe(0)
+      expect(h.ports).toHaveLength(0)
+      // Still live: a proper handshake succeeds afterwards.
+      await requestPort(h.pair)
+      await tick()
+      expect(h.ports).toHaveLength(1)
+      h.stop()
+    }
+    for (const bad of [
+      { data: { ...handshake(), connectionVersion: 2 } },
+      { data: { ...handshake(), extra: 1 } },
+      { data: handshake(), ports: [new MessageChannel().port1] },
+    ]) {
+      const h = listen()
+      h.pair.appView.dispatch({ origin: POPUP_ORIGIN, ...bad, source: h.pair.popupProxy })
+      await tick()
       expect(h.fails, JSON.stringify(bad)).toBe(1)
-      expect(h.codes).toEqual(['handshake-rejected'])
       expect(h.ports).toHaveLength(0)
       h.stop()
     }
@@ -167,10 +163,10 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
 
   it('accepts sequential handshakes over one listener, superseding a pending attempt', async () => {
     const h = listen()
-    const first = await request(h.pair)
+    const first = await requestPort(h.pair)
     await tick()
     // A second document handshakes; the first port is not disturbed by us.
-    const second = await request(h.pair)
+    const second = await requestPort(h.pair)
     await tick()
     expect(h.ports).toHaveLength(2)
     expect(await roundTrip(h.ports[1], second)).toHaveLength(1)
@@ -178,7 +174,7 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
     // A pending attempt (no echo yet) is superseded by a newer accepted one.
     h.pair.appProxy.postMessage(handshake(), '*')
     await tick()
-    const third = await request(h.pair)
+    const third = await requestPort(h.pair)
     await tick()
     expect(h.ports).toHaveLength(3)
     expect(await roundTrip(h.ports[2], third)).toHaveLength(1)
@@ -187,15 +183,15 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
 
   it('binds the native-anchor source once and pins it [POPUP-WINDOW-002]', async () => {
     const h = listen(null)
-    const port = await request(h.pair)
+    const port = await requestPort(h.pair)
     await tick()
     expect(h.bound).toEqual([h.pair.popupProxy])
     expect(h.ports).toHaveLength(1)
     port.close()
-    // A handshake from another source is now an attempt from the wrong source.
+    // A handshake from another window is not an attempt on this connection.
     h.pair.appView.dispatch({ data: handshake(), origin: POPUP_ORIGIN, source: {} })
     await tick()
-    expect(h.fails).toBe(1)
+    expect(h.fails).toBe(0)
     expect(h.bound).toHaveLength(1)
     h.stop()
   })
@@ -211,11 +207,10 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
 })
 
 describe('popup request', () => {
-  it('rejects a response from a wrong source, origin, shape, or port count', async () => {
+  it('rejects a response from the opener with a wrong origin, shape, or port count', async () => {
     const pair = fakePair()
     const cases: Array<{ data: unknown; origin: string; source: unknown; ports?: MessagePort[] }> =
       [
-        { data: handshake(), origin: APP_ORIGIN, source: {}, ports: [new MessageChannel().port1] },
         {
           data: handshake(),
           origin: 'https://evil.example',
@@ -238,7 +233,7 @@ describe('popup request', () => {
     expect(pair.popupView.listeners.size).toBe(0)
   })
 
-  it('ignores unrelated traffic and times out into opener-timeout', async () => {
+  it('ignores unrelated traffic and another window, then resolves null when the opener stays silent', async () => {
     const pair = fakePair()
     const pending = request(pair, { timeoutMs: 30 })
     pair.popupView.dispatch({ data: { type: 'noise' }, origin: APP_ORIGIN, source: pair.appProxy })
@@ -247,7 +242,14 @@ describe('popup request', () => {
       origin: APP_ORIGIN,
       source: pair.appProxy,
     })
-    await expect(pending).rejects.toThrow('opener-timeout')
+    pair.popupView.dispatch({
+      data: handshake(),
+      origin: APP_ORIGIN,
+      source: {},
+      ports: [new MessageChannel().port1],
+    })
+    await expect(pending).resolves.toBeNull()
+    expect(pair.popupView.listeners.size).toBe(0)
   })
 
   it('rejects on abort', async () => {

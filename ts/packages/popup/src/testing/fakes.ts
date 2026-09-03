@@ -41,7 +41,7 @@ export function fakeView(): FakeView {
 export interface FakeProxy {
   closed: boolean
   postMessage(message: unknown, targetOrigin: string, transfer?: Transferable[]): void
-  location: { origin: string; replace(url: string): void }
+  location: { origin: string; href: string; replace(url: string): void }
   close(): void
   replaced: string[]
 }
@@ -86,6 +86,9 @@ export function fakePair(popupOrigin = POPUP_ORIGIN): FakePair {
       location: {
         get origin() {
           return targetOrigin()
+        },
+        get href() {
+          return `${targetOrigin()}/p`
         },
         replace: (url) => void proxy.replaced.push(url),
       },
@@ -140,6 +143,8 @@ export interface FakeScope {
   /** Post as a client from another origin. */
   foreignWorker: KeeperWorker
   pending: Promise<unknown>[]
+  /** The host's own traffic through the same worker. */
+  postRaw(message: unknown, ports: MessagePort[]): void
 }
 
 /** The real worker handler on a fake ServiceWorkerGlobalScope. */
@@ -170,6 +175,7 @@ export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
     worker: post(`${origin}/p`),
     foreignWorker: post('https://evil.example/p'),
     pending,
+    postRaw: (message, ports) => post(`${origin}/p`).postMessage(message, ports),
   }
 }
 
