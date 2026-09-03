@@ -85,6 +85,7 @@ function acceptPopup(
   })
   // Resolves with the endpoint once its carrier is selected; rejects as `ready` does.
   const connection = endpoint.ready.then(() => endpoint)
+  connection.catch(() => {}) // tests that only inspect `endpoint` must not leak a rejection
   return { connection, endpoint, ...side }
 }
 
