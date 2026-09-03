@@ -38,7 +38,7 @@ function listen(source: 'handle' | null = 'handle', pair = fakePair()): Harness 
       view: pair.appView,
       source: source === 'handle' ? (pair.popupProxy as unknown as WindowProxy) : null,
       onBind: (s) => void h.bound.push(s),
-      popupOrigin: POPUP_ORIGIN,
+      allowedPopupOrigins: [POPUP_ORIGIN],
       connectionId: ID,
       report: (code) => void h.codes.push(code),
     },

@@ -51,7 +51,7 @@ function connectApp(pair: FakePair, opts: { blocked?: boolean; fallback?: Carrie
   )
   const connection = PopupConnection.connect<Messages>(popup, {
     connectionId: ID,
-    popupOrigin: POPUP_ORIGIN,
+    allowedPopupOrigins: [POPUP_ORIGIN],
     onDiagnostic: (e) => void side.events.push(e),
     ...(opts.fallback && { fallback: () => Promise.resolve(opts.fallback as Carrier) }),
   })
@@ -93,10 +93,16 @@ describe('validation [POPUP-CONNECTION-007]', () => {
     const pair = fakePair()
     const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
     expect(() =>
-      PopupConnection.connect(popup, { connectionId: ID.toUpperCase(), popupOrigin: POPUP_ORIGIN }),
+      PopupConnection.connect(popup, {
+        connectionId: ID.toUpperCase(),
+        allowedPopupOrigins: [POPUP_ORIGIN],
+      }),
     ).toThrow(TypeError)
     expect(() =>
-      PopupConnection.connect(popup, { connectionId: ID, popupOrigin: `${POPUP_ORIGIN}/` }),
+      PopupConnection.connect(popup, {
+        connectionId: ID,
+        allowedPopupOrigins: [`${POPUP_ORIGIN}/`],
+      }),
     ).toThrow(TypeError)
     expect(pair.appView.listeners.size).toBe(0)
     const current = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
@@ -117,11 +123,11 @@ describe('validation [POPUP-CONNECTION-007]', () => {
     const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
     const current = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
     expect(() =>
-      PopupConnection.connect(current, { connectionId: ID, popupOrigin: POPUP_ORIGIN }),
+      PopupConnection.connect(current, { connectionId: ID, allowedPopupOrigins: [POPUP_ORIGIN] }),
     ).toThrow(TypeError)
-    PopupConnection.connect(popup, { connectionId: ID, popupOrigin: POPUP_ORIGIN })
+    PopupConnection.connect(popup, { connectionId: ID, allowedPopupOrigins: [POPUP_ORIGIN] })
     expect(() =>
-      PopupConnection.connect(popup, { connectionId: ID, popupOrigin: POPUP_ORIGIN }),
+      PopupConnection.connect(popup, { connectionId: ID, allowedPopupOrigins: [POPUP_ORIGIN] }),
     ).toThrow('already connected')
   })
 
@@ -239,7 +245,7 @@ describe('MessagePort selection and delivery', () => {
     const eventsB: PopupDiagnostic[] = []
     const connB = PopupConnection.connect<Messages>(appB, {
       connectionId: OTHER_ID,
-      popupOrigin: POPUP_ORIGIN,
+      allowedPopupOrigins: [POPUP_ORIGIN],
       onDiagnostic: (e) => void eventsB.push(e),
     })
     const readyA = vi.fn()
@@ -399,6 +405,68 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
   })
 })
 
+describe('cross-origin replacement [POPUP-CONNECTION-008/009]', () => {
+  const OTHER_POPUP = 'https://popup-b.example'
+
+  /** An application admitting two popup origins over a pair on the given one. */
+  function connectMulti(pair: FakePair) {
+    const events: PopupDiagnostic[] = []
+    const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    const connection = PopupConnection.connect<Messages>(popup, {
+      connectionId: ID,
+      allowedPopupOrigins: [POPUP_ORIGIN, OTHER_POPUP],
+      onDiagnostic: (e) => void events.push(e),
+    })
+    return { connection, popup, events }
+  }
+
+  it('retires the popup endpoint instead of keeping the port, then the next origin re-handshakes', async () => {
+    const pair = fakePair()
+    const app = connectMulti(pair)
+    const scope = fakeScope()
+    const first = acceptPopup(pair, { worker: scope.worker })
+    const popup = await first.connection
+    await tick()
+
+    await app.connection.navigate(`${OTHER_POPUP}/p`)
+    await tick(20)
+    expect(scope.pending).toHaveLength(0) // no keep
+    expect(pair.popupProxy.replaced).toEqual([`${OTHER_POPUP}/p`])
+    expect(codes(first.events).at(-1)).toBe('connection-closed')
+    expect(() => popup.send(new Ready(1))).toThrow('send-unavailable')
+
+    // The destination document on the other origin authenticates afresh over
+    // the same opener; the application accepts it under the same connection.
+    pair.relocate(OTHER_POPUP)
+    const readies: number[] = []
+    app.connection.on(Ready, (r) => void readies.push(r.version))
+    const nextSide = acceptPopup(pair)
+    const nextConnection = await nextSide.connection
+    await tick()
+    expect(codes(nextSide.events)).toEqual(['carrier-message-port'])
+    expect(codes(app.events).filter((c) => c === 'carrier-message-port')).toHaveLength(2)
+    nextConnection.send(new Ready(5))
+    await tick()
+    expect(readies).toEqual([5])
+  })
+
+  it('fails the connection on a handshake from an origin outside the set', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const pair = fakePair()
+    const app = connectMulti(pair)
+    pair.appView.dispatch({
+      data: { type: 'message-port', connectionVersion: 1, connectionId: ID },
+      origin: 'https://evil.example',
+      source: pair.popupProxy,
+    })
+    await tick()
+    expect(codes(app.events)).toContain('handshake-rejected')
+    expect(codes(app.events)).toContain('connection-failed')
+    expect(codes(app.events)).not.toContain('carrier-message-port')
+    error.mockRestore()
+  })
+})
+
 describe('fallback seam [POPUP-CONNECTION-002/004/005] [POPUP-DIAGNOSTIC-003]', () => {
   it('fails closed with fallback-unavailable exactly once when no opener and no constructor', async () => {
     const pair = fakePair()
@@ -431,7 +499,7 @@ describe('fallback seam [POPUP-CONNECTION-002/004/005] [POPUP-DIAGNOSTIC-003]', 
     const events: PopupDiagnostic[] = []
     const connection = PopupConnection.connect<Messages>(popup, {
       connectionId: ID,
-      popupOrigin: POPUP_ORIGIN,
+      allowedPopupOrigins: [POPUP_ORIGIN],
       fallback,
       onDiagnostic: (e) => void events.push(e),
     })

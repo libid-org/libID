@@ -8,6 +8,7 @@ import { expect, type Page, test } from '@playwright/test'
 const APP_A = 'https://app-a.lvh.me:4581'
 const APP_B = 'https://app-b.local.gd:4582'
 const POPUP = 'https://popup.localtest.me:4583'
+const POPUP_B = 'https://popup-b.lvh.me:4584'
 
 const freshId = () => crypto.randomUUID()
 
@@ -265,4 +266,39 @@ test('[POPUP-CONTROL-002] malformed navigation fails before any browser operatio
   }
   expect(popup.url()).toContain('/p#')
   expect((await diag(page)).filter((c) => c === 'control-rejected')).toHaveLength(3)
+})
+
+test('[POPUP-CONNECTION-008] [POPUP-CONNECTION-009] a cross-site participating hop re-handshakes over the opener', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+
+  await nextDocument(popup, () => navigate(page, `${POPUP_B}/p#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(popup.url()).toContain(POPUP_B)
+  // No registration on the new origin yet: no claim, a fresh opener handshake.
+  expect(await diag(popup)).toEqual(['carrier-message-port'])
+  await ping(page, 7)
+  expect(await expectPong(page, 7)).toMatchObject({ path: '/p' })
+
+  // Back to the first origin: its worker holds nothing for this id.
+  await nextDocument(popup, () => navigate(page, `${POPUP}/p#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
+  await ping(page, 8)
+  await expectPong(page, 8)
+  expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(3)
+})
+
+test('[POPUP-CONNECTION-008] a cross-site isolated destination needs a fallback', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  await nextDocument(popup, () => navigate(page, `${POPUP_B}/isolated#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('failed: fallback-unavailable')
+  expect(await diag(popup)).toEqual(['fallback-unavailable'])
 })

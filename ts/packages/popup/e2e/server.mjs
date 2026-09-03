@@ -10,10 +10,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { makeCertificate } from './tls.mjs'
 
+// Two popup origins on different sites so a participating document can be
+// replaced by one on another site.
 export const ORIGINS = {
   appA: 'https://app-a.lvh.me:4581',
   appB: 'https://app-b.local.gd:4582',
   popup: 'https://popup.localtest.me:4583',
+  popupB: 'https://popup-b.lvh.me:4584',
 }
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), 'dist')
@@ -47,7 +50,7 @@ const appPage = html(`
       const popupWindow = PopupWindow.open(anchor.target)
       const connection = PopupConnection.connect(popupWindow, {
         connectionId: window.__id,
-        popupOrigin: '${ORIGINS.popup}',
+        allowedPopupOrigins: ['${ORIGINS.popup}', '${ORIGINS.popupB}'],
         onDiagnostic,
       })
       connection.on(Pong, (pong) => window.__events.push(pong))
@@ -118,7 +121,7 @@ const ISOLATED = {
 }
 
 function popupHandler(req, res) {
-  const url = new URL(req.url, ORIGINS.popup)
+  const url = new URL(req.url, 'https://popup.invalid')
   switch (url.pathname) {
     case '/health':
       return send(res, 200, {}, 'ok')
@@ -147,6 +150,7 @@ function appHandler(req, res) {
 const tls = makeCertificate(Object.values(ORIGINS).map((origin) => new URL(origin).hostname))
 for (const [origin, handler] of [
   [ORIGINS.popup, popupHandler],
+  [ORIGINS.popupB, popupHandler],
   [ORIGINS.appA, appHandler],
   [ORIGINS.appB, appHandler],
 ]) {

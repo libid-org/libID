@@ -105,3 +105,21 @@ export function canonicalOrigin(value: unknown): string | null {
     return null
   }
 }
+
+/**
+ * A nonempty, duplicate-free set of canonical HTTPS origins, frozen.
+ * Throws `TypeError` naming the option otherwise.
+ */
+export function requireOrigins(value: unknown, option: string): readonly string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError(`${option} must list at least one origin`)
+  }
+  const origins = value.map((origin) => canonicalOrigin(origin))
+  if (origins.some((origin) => origin === null || !origin.startsWith('https://'))) {
+    throw new TypeError(`${option} must contain canonical HTTPS origins`)
+  }
+  if (new Set(origins).size !== origins.length) {
+    throw new TypeError(`${option} must not repeat an origin`)
+  }
+  return Object.freeze(origins as string[])
+}

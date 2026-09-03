@@ -14,7 +14,6 @@ import {
 } from './diagnostics.js'
 import { activeWorker, PortKeeper } from './keeper.js'
 import {
-  canonicalOrigin,
   type Carrier,
   type CarrierConstructor,
   decodeControl,
@@ -25,6 +24,7 @@ import {
   type MessageType,
   type Navigate,
   type PopupControl,
+  requireOrigins,
   routingType,
 } from './message.js'
 import {
@@ -44,7 +44,7 @@ export interface PopupConnection<M extends Message> {
 
 export interface ConnectOptions {
   connectionId: string
-  popupOrigin: string
+  allowedPopupOrigins: readonly string[]
   fallback?: CarrierConstructor
   onDiagnostic?: (event: PopupDiagnostic) => void
 }
@@ -204,8 +204,7 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
   ) {
     super(createReporter(options.onDiagnostic))
     const connectionId = requireConnectionId(options.connectionId)
-    const popupOrigin = canonicalOrigin(options.popupOrigin)
-    if (!popupOrigin) throw new TypeError('popupOrigin must be a canonical origin')
+    const allowedPopupOrigins = requireOrigins(options.allowedPopupOrigins, 'allowedPopupOrigins')
     if (popup.connected) throw new Error('PopupWindow is already connected')
     popup.connected = true
 
@@ -218,7 +217,7 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
           popup.bind(source)
           this.report('window-bound')
         },
-        popupOrigin,
+        allowedPopupOrigins,
         connectionId,
         report: this.report,
       },
@@ -311,14 +310,10 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
   ): Promise<PopupEndpoint<M>> {
     const report = createReporter(options.onDiagnostic)
     const connectionId = requireConnectionId(options.connectionId)
-    const origins = options.allowedApplicationOrigins
-    if (!Array.isArray(origins) || origins.length === 0) {
-      throw new TypeError('allowedApplicationOrigins must list at least one origin')
-    }
-    const allowedOrigins = Object.freeze([...new Set(origins.map(canonicalOrigin))])
-    if (allowedOrigins.some((origin) => origin === null)) {
-      throw new TypeError('allowedApplicationOrigins must contain canonical origins')
-    }
+    const allowedOrigins = requireOrigins(
+      options.allowedApplicationOrigins,
+      'allowedApplicationOrigins',
+    )
 
     const controller = new AbortController()
     let carrier: Carrier | null = null
@@ -346,7 +341,7 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
           const port = await requestApplicationPort({
             view: popup.view,
             opener,
-            allowedOrigins: allowedOrigins as string[],
+            allowedOrigins,
             connectionId,
             signal: controller.signal,
             timeoutMs: OPENER_HANDSHAKE_TIMEOUT_MS,
@@ -401,8 +396,18 @@ class PopupEndpoint<M extends Message> extends Endpoint<M> {
     this.closePopup('connection-closed')
   }
 
-  /** Preserves the port through the keeper, then replaces this document. */
+  /**
+   * Replaces this document. A same-origin target keeps the port through the
+   * worker first; a cross-origin target cannot, so the endpoint retires and
+   * the destination authenticates a fresh carrier through its opener or
+   * fallback.
+   */
   private async replaceDocument(url: string): Promise<void> {
+    if (new URL(url).origin !== this.popup.view.location.origin) {
+      this.release('connection-closed')
+      this.popup.view.location.replace(url)
+      return
+    }
     const registration = await this.popup.registration()
     const worker = registration ? await activeWorker(registration) : null
     if (this.closed || !(this.carrier instanceof PortCarrier) || !worker) {

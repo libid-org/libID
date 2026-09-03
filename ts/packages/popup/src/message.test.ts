@@ -6,6 +6,7 @@ import {
   isConnectionId,
   isReservedType,
   MAX_TYPE_LENGTH,
+  requireOrigins,
   routingType,
 } from './message.js'
 
@@ -108,6 +109,27 @@ describe('origins', () => {
       1,
     ]) {
       expect(canonicalOrigin(bad)).toBeNull()
+    }
+  })
+})
+
+describe('origin sets [POPUP-CONNECTION-009]', () => {
+  it('copies a nonempty, duplicate-free set of canonical HTTPS origins', () => {
+    const set = requireOrigins(['https://a.example', 'https://b.example:8443'], 'x')
+    expect(set).toEqual(['https://a.example', 'https://b.example:8443'])
+    expect(Object.isFrozen(set)).toBe(true)
+    for (const bad of [
+      [],
+      ['https://a.example', 'https://a.example'],
+      ['http://a.example'],
+      ['https://a.example/'],
+      ['https://u:p@a.example'],
+      ['HTTPS://a.example'],
+      ['null'],
+      'https://a.example',
+      undefined,
+    ]) {
+      expect(() => requireOrigins(bad, 'x'), JSON.stringify(bad)).toThrow(TypeError)
     }
   })
 })

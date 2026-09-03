@@ -41,7 +41,7 @@ export function fakeView(): FakeView {
 export interface FakeProxy {
   closed: boolean
   postMessage(message: unknown, targetOrigin: string, transfer?: Transferable[]): void
-  location: { replace(url: string): void }
+  location: { origin: string; replace(url: string): void }
   close(): void
   replaced: string[]
 }
@@ -56,15 +56,18 @@ export interface FakePair {
   appProxy: FakeProxy
   /** The popup document as a Window for CurrentWindow. */
   popupWindow: Window
+  /** Replace the popup document with one on another origin; proxies keep identity. */
+  relocate(origin: string): void
 }
 
-export function fakePair(): FakePair {
+export function fakePair(popupOrigin = POPUP_ORIGIN): FakePair {
   const appView = fakeView()
   const popupView = fakeView()
+  const state = { popupOrigin }
   const makeProxy = (
     target: FakeView,
-    targetOrigin: string,
-    stampedOrigin: string,
+    targetOrigin: () => string,
+    stampedOrigin: () => string,
     self: () => FakeProxy,
   ): FakeProxy => {
     const proxy: FakeProxy = {
@@ -72,15 +75,20 @@ export function fakePair(): FakePair {
       replaced: [],
       postMessage(message, origin, transfer = []) {
         if (proxy.closed) return
-        if (origin !== '*' && origin !== targetOrigin) return
+        if (origin !== '*' && origin !== targetOrigin()) return
         target.dispatch({
           data: structuredClone(message),
-          origin: stampedOrigin,
+          origin: stampedOrigin(),
           source: self(),
           ports: transfer as MessagePort[],
         })
       },
-      location: { replace: (url) => void proxy.replaced.push(url) },
+      location: {
+        get origin() {
+          return targetOrigin()
+        },
+        replace: (url) => void proxy.replaced.push(url),
+      },
       close: () => {
         proxy.closed = true
       },
@@ -90,8 +98,19 @@ export function fakePair(): FakePair {
   // Each proxy stamps the *sender's* identity as `source`.
   let appProxy!: FakeProxy
   let popupProxy!: FakeProxy
-  popupProxy = makeProxy(popupView, POPUP_ORIGIN, APP_ORIGIN, () => appProxy)
-  appProxy = makeProxy(appView, APP_ORIGIN, POPUP_ORIGIN, () => popupProxy)
+  const popupOriginNow = () => state.popupOrigin
+  popupProxy = makeProxy(
+    popupView,
+    popupOriginNow,
+    () => APP_ORIGIN,
+    () => appProxy,
+  )
+  appProxy = makeProxy(
+    appView,
+    () => APP_ORIGIN,
+    popupOriginNow,
+    () => popupProxy,
+  )
 
   const popupWindow = {
     addEventListener: popupView.addEventListener,
@@ -102,7 +121,17 @@ export function fakePair(): FakePair {
     location: popupProxy.location,
     close: popupProxy.close,
   } as unknown as Window
-  return { appView, popupView, popupProxy, appProxy, popupWindow }
+  return {
+    appView,
+    popupView,
+    popupProxy,
+    appProxy,
+    popupWindow,
+    relocate(origin) {
+      state.popupOrigin = origin
+      popupView.listeners.clear()
+    },
+  }
 }
 
 export interface FakeScope {

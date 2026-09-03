@@ -46,7 +46,7 @@ export interface ListenOptions {
   /** The retained handle, or null until native-anchor binding. */
   source: WindowProxy | null
   onBind: (source: WindowProxy) => void
-  popupOrigin: string
+  allowedPopupOrigins: readonly string[]
   connectionId: string
   report: Reporter
 }
@@ -64,7 +64,7 @@ export interface ListenHandlers {
  * acceptance, supersession, or stop.
  */
 export function listenForPopupPorts(options: ListenOptions, handlers: ListenHandlers): () => void {
-  const { view, popupOrigin, connectionId, report } = options
+  const { view, allowedPopupOrigins, connectionId, report } = options
   let source = options.source
   let pending: MessagePort | null = null
 
@@ -79,7 +79,7 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
   const listener = (event: MessageEvent): void => {
     if (!isAttempt(event.data, connectionId)) return
     if (
-      event.origin !== popupOrigin ||
+      !allowedPopupOrigins.includes(event.origin) ||
       (source !== null && event.source !== source) ||
       (source === null && (event.source === null || !('postMessage' in event.source))) ||
       !isExactHandshake(event.data, connectionId) ||
@@ -111,7 +111,8 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
       handlers.onPort(port)
     }
     try {
-      source.postMessage(handshake(connectionId), popupOrigin, [channel.port2])
+      // The response targets the exact origin the browser stamped on the request.
+      source.postMessage(handshake(connectionId), event.origin, [channel.port2])
     } catch {
       // A discarded popup context cannot be answered; the attempt lapses.
       dropPending()

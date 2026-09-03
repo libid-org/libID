@@ -12,7 +12,8 @@ Coverage status:
   mobile Chrome, and mobile WebKit emulation over three cross-site HTTPS
   origins): popup creation on both paths, opener authentication, connected
   navigation into and out of a COOP-isolated document over one preserved
-  port, close after the opener is severed, port expiry across a
+  port, a cross-site hop between participating documents that re-handshakes
+  over the opener, close after the opener is severed, port expiry across a
   non-participating hop, and every fail-closed path.
 - **Deferred**: every POPUP-RTC row; no WebRTC carrier exists yet.
 - **Manual**: POPUP-BROWSER-001/002, the delayed-activation clause of
