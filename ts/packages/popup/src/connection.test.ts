@@ -130,6 +130,26 @@ describe('validation [POPUP-CONNECTION-007]', () => {
       expect(() => PopupWindow.open(target)).toThrow(TypeError)
     }
   })
+
+  it('PopupWindow.current rejects an embedded document', () => {
+    const frame = { top: {} }
+    vi.stubGlobal('window', frame)
+    expect(() => PopupWindow.current()).toThrow('top-level popup')
+    vi.unstubAllGlobals()
+  })
+
+  it('treats inaccessible popup handles and openers as absent', () => {
+    const inaccessible = Object.defineProperty({}, 'closed', {
+      get: () => {
+        throw new DOMException('discarded')
+      },
+    }) as WindowProxy
+    expect(new OpenedWindow(inaccessible, fakePair().appView).direct).toBe(false)
+    expect(
+      new CurrentWindow({ opener: inaccessible } as Window, () => Promise.resolve(undefined))
+        .opener,
+    ).toBeNull()
+  })
 })
 
 describe('MessagePort selection and delivery', () => {
@@ -171,6 +191,18 @@ describe('MessagePort selection and delivery', () => {
     const app = connectApp(pair)
     expect(() => app.connection.send(new Start())).toThrow('send-unavailable')
     expect(codes(app.events)).toContain('send-unavailable')
+  })
+
+  it('closes the logical connection when its active carrier rejects a send', async () => {
+    const pair = fakePair()
+    connectApp(pair)
+    const side = acceptPopup(pair)
+    const popup = await side.connection
+    await tick()
+
+    expect(() => popup.send({ type: 'start', uncloneable: () => {} } as never)).toThrow()
+    expect(codes(side.events)).toContain('connection-failed')
+    expect(() => popup.send(new Start())).toThrow('send-unavailable')
   })
 
   it('closes on unknown, malformed, or decoder-rejected input [POPUP-API-003]', async () => {

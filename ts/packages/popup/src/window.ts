@@ -10,6 +10,15 @@ export interface View {
   removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void
 }
 
+function usable(handle: WindowProxy | null): handle is WindowProxy {
+  if (handle === null) return false
+  try {
+    return !handle.closed
+  } catch {
+    return false
+  }
+}
+
 export class PopupWindow {
   /** @internal */
   protected constructor() {}
@@ -24,6 +33,7 @@ export class PopupWindow {
 
   /** Adopts the current popup document; creates nothing. */
   static current(): PopupWindow {
+    if (window.top !== window) throw new TypeError('current requires a top-level popup document')
     return new CurrentWindow(window, () =>
       typeof navigator !== 'undefined' && navigator.serviceWorker
         ? navigator.serviceWorker.getRegistration().catch(() => undefined)
@@ -56,7 +66,7 @@ export class OpenedWindow extends PopupWindow {
 
   /** Direct control: a retained handle that does not report closed. */
   get direct(): boolean {
-    return this.handle !== null && !this.handle.closed
+    return usable(this.handle)
   }
 
   bind(source: WindowProxy): void {
@@ -94,6 +104,6 @@ export class CurrentWindow extends PopupWindow {
   /** The opener while it is usable; a closed opener counts as absent. */
   get opener(): WindowProxy | null {
     const opener = this.view.opener as WindowProxy | null
-    return opener !== null && !opener.closed ? opener : null
+    return usable(opener) ? opener : null
   }
 }

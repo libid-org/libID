@@ -128,11 +128,21 @@ abstract class Endpoint<M extends Message> implements PopupConnection<M> {
     if (isReservedType(message.type)) {
       throw new TypeError(`"${message.type}" is a reserved discriminator`)
     }
+    this.transmit(message)
+  }
+
+  /** Sends over the active carrier; a carrier that rejects the value fails the connection. */
+  protected transmit(value: Message): void {
     if (this.closed || !this.carrier) {
       this.report('send-unavailable')
       throw failure('send-unavailable')
     }
-    this.carrier.send(message)
+    try {
+      this.carrier.send(value)
+    } catch (error) {
+      this.release('connection-failed')
+      throw error
+    }
   }
 
   on<N extends M>(message: MessageType<N>, handler: (message: N) => void): () => void {
@@ -248,7 +258,7 @@ class ApplicationEndpoint<M extends Message> extends Endpoint<M> {
     requireHttpsUrl(url, this.report)
     if (this.carrier) {
       const control: Navigate = { type: 'navigate', url }
-      this.carrier.send(control)
+      this.transmit(control)
       this.report('control-connected')
       return
     }

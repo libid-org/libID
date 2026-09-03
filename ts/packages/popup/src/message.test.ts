@@ -78,6 +78,7 @@ describe('controls [POPUP-CONTROL-004]', () => {
 describe('routing type', () => {
   it('reads a bounded string type from a plain record', () => {
     expect(routingType({ type: 'ready' })).toBe('ready')
+    expect(routingType(Object.assign(Object.create(null), { type: 'ready' }))).toBe('ready')
     expect(routingType({ type: 'x'.repeat(MAX_TYPE_LENGTH) })).toHaveLength(MAX_TYPE_LENGTH)
     for (const bad of [
       { type: 'x'.repeat(MAX_TYPE_LENGTH + 1) },
@@ -85,6 +86,8 @@ describe('routing type', () => {
       { type: 1 },
       {},
       [],
+      new Date(),
+      Object.assign(Object.create({ type: 'ready' }), { type: 'ready' }),
       null,
       'ready',
     ]) {
