@@ -48,7 +48,7 @@ const appPage = html(`
     window.open = (...args) => (window.__handle = realOpen(...args))
     const anchor = document.getElementById('go')
     anchor.addEventListener('click', (event) => {
-      const popupWindow = PopupWindow.open(anchor.target)
+      const popupWindow = PopupWindow.open(anchor.target, 'width=480,height=720')
       const connection = PopupConnection.connect(popupWindow, {
         connectionId: window.__id,
         allowedPopupOrigins: ['${ORIGINS.popup}', '${ORIGINS.popupB}'],

@@ -157,8 +157,12 @@ Messages are caller-owned classes registered independently. The connection
 requires unique discriminators but defines no protocol namespace, closed union,
 or caller message type.
 
-`PopupWindow.open(target)` creates the application-side lifecycle object and
-synchronously attempts `window.open('about:blank', target)`.
+`PopupWindow.open(target, features?)` creates the application-side lifecycle
+object and synchronously attempts `window.open('about:blank', target,
+'popup,…')`: the popup is always requested as a separate window, and the
+optional `features` string adds only size or position; a string carrying
+`noopener` or `noreferrer` is rejected because the MessagePort carrier needs
+the opener.
 It rejects an empty target and every name beginning with `_` before invoking
 the browser, matching the HTML
 [valid navigable target name](https://html.spec.whatwg.org/multipage/document-sequences.html#valid-navigable-target-name-or-keyword)
@@ -247,8 +251,8 @@ function activate(event: MouseEvent) {
 }
 ```
 
-`PopupWindow.open(target)` is one-shot and always attempts
-`window.open('about:blank', target)`.
+`PopupWindow.open(target, features?)` is one-shot and always attempts
+`window.open('about:blank', target, 'popup,…')`.
 When the browser returns a usable handle, `PopupWindow` retains the exact
 `WindowProxy` and the caller prevents native anchor navigation; only a later
 `navigate(url)` chooses
@@ -288,7 +292,7 @@ declare class PopupWindow {
   /** @internal PopupConnection.connect calls this after exact validation. */
   bind(source: WindowProxy): void
 
-  static open(target: string): PopupWindow
+  static open(target: string, features?: string): PopupWindow
   static current(): PopupWindow
 }
 

@@ -33,9 +33,12 @@ void connection.navigate(anchor.href)
 if (popupWindow.opened) event.preventDefault()
 ```
 
-`PopupWindow.open(target)` synchronously attempts
-`window.open('about:blank', target)` and returns a wrapper even when the browser
-returns no handle. It throws `TypeError` before opening for an empty target or
+`PopupWindow.open(target, features?)` synchronously attempts
+`window.open('about:blank', target, 'popup,…')` and returns a wrapper even when
+the browser returns no handle. The popup is always requested as a separate
+window; `features` may add size or position (`width=480,height=720`) and must
+not contain `noopener` or `noreferrer`. The native-anchor fallback and mobile
+browsers present a tab instead, which changes no rule. It throws `TypeError` before opening for an empty target or
 one beginning with `_`. When no handle is returned, the connection binds the
 popup created by the same action's real anchor. See [popup creation and
 native-anchor fallback](docs/connection.md#popup-creation-and-native-anchor-fallback).
@@ -44,7 +47,7 @@ native-anchor fallback](docs/connection.md#popup-creation-and-native-anchor-fall
 declare class PopupWindow {
   readonly opened: boolean
 
-  static open(target: string): PopupWindow
+  static open(target: string, features?: string): PopupWindow
   static current(): PopupWindow
 }
 ```

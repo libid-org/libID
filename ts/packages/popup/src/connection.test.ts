@@ -144,6 +144,23 @@ describe('validation [POPUP-CONNECTION-007]', () => {
     }
   })
 
+  it('PopupWindow.open always requests a separate window and keeps the opener [POPUP-WINDOW-001]', () => {
+    const open = vi.fn(() => null)
+    vi.stubGlobal('window', { open })
+    try {
+      PopupWindow.open('libid-popup')
+      PopupWindow.open('libid-popup', 'width=480,height=720')
+      expect(open.mock.calls).toEqual([
+        ['about:blank', 'libid-popup', 'popup'],
+        ['about:blank', 'libid-popup', 'popup,width=480,height=720'],
+      ])
+      expect(() => PopupWindow.open('libid-popup', 'noopener')).toThrow(TypeError)
+      expect(() => PopupWindow.open('libid-popup', 'width=1,NoReferrer')).toThrow(TypeError)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('PopupWindow.current rejects an embedded document', () => {
     const frame = { top: {} }
     vi.stubGlobal('window', frame)

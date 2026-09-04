@@ -107,11 +107,16 @@ test('[POPUP-WINDOW-001] [POPUP-PORT-001] scripted open connects over MessagePor
   expect(await expectPong(page, 1)).toMatchObject({ path: '/p', isolated: false })
   expect(await diag(page)).toEqual(['window-opened', 'control-direct', 'carrier-message-port'])
   expect(await diag(popup)).toEqual(['carrier-message-port'])
+  // A separate window, not a tab: the requested size took effect. (Chromium
+  // drops the BarProp flags after a cross-origin navigation; size persists.)
+  expect(await popup.evaluate(() => window.outerWidth)).toBe(480)
 })
 
 test('[POPUP-WINDOW-002] blocked scripted open binds the native anchor popup', async ({ page }) => {
   const { popup } = await open(page, { blocked: true })
   await expect(popup.locator('#status')).toHaveText('connected')
+  // An anchor carries no features, so the fallback popup is a tab.
+  expect(await popup.evaluate(() => window.toolbar.visible)).toBe(true)
   await ping(page, 1)
   await expectPong(page, 1)
   expect(await diag(page)).toEqual(['window-blocked', 'window-bound', 'carrier-message-port'])

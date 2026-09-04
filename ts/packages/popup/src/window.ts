@@ -22,12 +22,20 @@ function usable(handle: WindowProxy | null): handle is WindowProxy {
 export class PopupWindow {
   protected constructor() {}
 
-  /** Synchronously attempts `window.open('about:blank', target)`. */
-  static open(target: string): PopupWindow {
+  /**
+   * Synchronously attempts `window.open('about:blank', target, 'popup,…')`.
+   * The popup is always requested as a separate window; `features` may add
+   * size or position and MUST NOT sever the opener.
+   */
+  static open(target: string, features = ''): PopupWindow {
     if (target === '' || target.startsWith('_')) {
       throw new TypeError('popup target must be a nonempty name not beginning with "_"')
     }
-    return new OpenedWindow(window.open('about:blank', target), window)
+    if (/\b(noopener|noreferrer)\b/i.test(features)) {
+      throw new TypeError('popup features must not sever the opener')
+    }
+    const windowFeatures = features === '' ? 'popup' : `popup,${features}`
+    return new OpenedWindow(window.open('about:blank', target, windowFeatures), window)
   }
 
   /** Adopts the current popup document; creates nothing. */
