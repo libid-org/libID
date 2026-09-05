@@ -43,7 +43,8 @@ protocol-version field. Unknown controls fail closed.
 Both records are application-to-popup only. The receiver exact-validates a
 plain record, discriminator, and field set before acting. They travel only over
 an already version-authenticated carrier. A navigation
-URL must equal the serialization of an absolute HTTPS URL with no credentials.
+URL must equal the serialization of an absolute HTTPS URL with no credentials;
+it may carry a fragment, which is the application's serialized fragment fields.
 Relative, non-HTTPS, malformed, and noncanonical URLs fail closed. Connection
 owns the generic message bound.
 

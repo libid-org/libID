@@ -38,8 +38,13 @@ export class PopupWindow {
     return new OpenedWindow(window.open('about:blank', target, windowFeatures), window)
   }
 
-  /** Adopts the current popup document; creates nothing. */
-  static current(): PopupWindow {
+  /**
+   * Adopts the current popup document; creates nothing. `fragment` is the
+   * document's URL fragment as the host captured it, for a bootstrap that
+   * clears the URL before importing the package; it defaults to the current
+   * `location.hash`. The package treats it as opaque and keeps a snapshot.
+   */
+  static current(fragment?: string): PopupWindow {
     if (window.top !== window) throw new TypeError('current requires a top-level popup document')
     const container = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined
     return new CurrentWindow(
@@ -48,6 +53,7 @@ export class PopupWindow {
       // `ready` settles only once a matching registration is active; the
       // caller bounds the wait.
       () => container?.ready.catch(() => undefined) ?? new Promise(() => {}),
+      fragment ?? window.location.hash,
     )
   }
 
@@ -106,9 +112,14 @@ export class CurrentWindow extends PopupWindow {
     /** Settles once a matching registration is active; may never settle. */
     readonly readyRegistration: () => Promise<ServiceWorkerRegistration | undefined> = () =>
       Promise.resolve(undefined),
+    fragment = '',
   ) {
     super()
+    this.fragment = fragment.startsWith('#') ? fragment.slice(1) : fragment
   }
+
+  /** The captured fragment without its `#`; immutable once adopted. */
+  readonly fragment: string
 
   override get opened(): boolean {
     return true

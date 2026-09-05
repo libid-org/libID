@@ -30,6 +30,8 @@ const protocol = `
   const message = (type, decode) => ({ type, decode })
   const Ping = message('ping', (v) => { if (typeof v.n !== 'number') throw new Error('ping'); return v })
   const Pong = message('pong', (v) => { if (typeof v.n !== 'number') throw new Error('pong'); return v })
+  // Go and Away carry a fragment-free url plus serialized opaque fragment
+  // fields; the popup rebuilds URLSearchParams for the structured API.
   const Go = message('go', (v) => { if (typeof v.url !== 'string') throw new Error('go'); return v })
   const Away = message('away', (v) => { if (typeof v.url !== 'string') throw new Error('away'); return v })
   window.__events = []
@@ -65,7 +67,10 @@ const appPage = html(`
       window.__conn = connection
       window.__popupWindow = popupWindow
       connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
-      void connection.navigate(anchor.href).catch((error) => window.__events.push({ type: 'error', code: error.message }))
+      // The anchor keeps its fragment for the native path; the scripted path
+      // passes fragment fields through the structured argument.
+      const [base, hash = ''] = anchor.href.split('#')
+      void connection.navigate(base, new URLSearchParams(hash)).catch((error) => window.__events.push({ type: 'error', code: error.message }))
       if (popupWindow.opened) event.preventDefault()
     })
   </script>
@@ -76,7 +81,11 @@ const popupPage = html(`
   <script type="module">
     import { PopupConnection, PopupWindow } from '/popup.js'
     ${protocol}
-    const id = new URLSearchParams(location.hash.slice(1)).get('c') ?? ''
+    // Capture the fragment and clear it from the URL before the package
+    // sees it; the captured value is handed to PopupWindow.current().
+    const captured = location.hash
+    history.replaceState(null, '', location.pathname + location.search)
+    const id = new URLSearchParams(captured.slice(1)).get('c') ?? ''
     window.__isolated = crossOriginIsolated
     // /p-any is the same document deployed for any opener origin. /dip and
     // /dip-broken require isolation and name their COOP fallback.
@@ -88,7 +97,7 @@ const popupPage = html(`
         : undefined
     // Accept first: the claim must run before any other network work, and
     // handlers registered before yielding precede every delivery.
-    const connection = PopupConnection.accept(PopupWindow.current(), {
+    const connection = PopupConnection.accept(PopupWindow.current(captured), {
       connectionId: id,
       allowedApplicationOrigins,
       isolationFallbackUrl,
@@ -104,10 +113,10 @@ const popupPage = html(`
         connection.send({ type: 'pong', n: ping.n, path: location.pathname, isolated: crossOriginIsolated })
       })
       connection.on(Go, (go) => {
-        connection.navigate(go.url).catch((error) => window.__events.push({ type: 'error', code: error.message }))
+        connection.navigate(go.url, new URLSearchParams(go.fragment ?? '')).catch((error) => window.__events.push({ type: 'error', code: error.message }))
       })
       connection.on(Away, (away) => {
-        connection.navigateAway(away.url).catch((error) => window.__events.push({ type: 'error', code: error.message }))
+        connection.navigateAway(away.url, new URLSearchParams(away.fragment ?? '')).catch((error) => window.__events.push({ type: 'error', code: error.message }))
       })
       await connection.ready
       connection.send({ type: 'pong', n: 0, path: location.pathname, isolated: crossOriginIsolated })

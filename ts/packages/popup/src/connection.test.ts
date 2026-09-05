@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { PopupConnection } from './connection.js'
 import { PopupError } from './diagnostics.js'
 import { PortKeeper } from './keeper.js'
+import { noRegistration } from './testing/fakes.js'
 import type { PopupDiagnostic } from './diagnostics.js'
 import type { Carrier, CarrierConstructor, Message } from './message.js'
 import { PortCarrier } from './port.js'
@@ -9,6 +10,7 @@ import {
   APP_ORIGIN,
   fakePair,
   type FakePair,
+  type FakeProxy,
   fakeScope,
   ID,
   OTHER_ID,
@@ -654,6 +656,8 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     const popup = new CurrentWindow(
       view as Window,
       opts.worker === undefined ? () => Promise.resolve(undefined) : registrationWith(opts.worker),
+      undefined,
+      pair.popupWindow.location.hash, // captured as the host bootstrap would
     )
     const endpoint = PopupConnection.accept<Messages>(popup, {
       connectionId: ID,
@@ -752,19 +756,37 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     expect(pair.popupView.listeners.size).toBe(0)
   })
 
-  it('inherits the fragment unless the fallback spells its own, including an empty one', async () => {
-    for (const [given, expected] of [
-      ['/f', `${POPUP_ORIGIN}/f#c=1`],
-      ['/f#own', `${POPUP_ORIGIN}/f#own`],
-      ['/f#', `${POPUP_ORIGIN}/f#`],
-    ] as const) {
-      const pair = fakePair()
-      pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
-      connectApp(pair)
-      const side = acceptIsolating(pair, { worker: fakeScope().worker, fallback: given })
-      await tick(20)
-      expect(pair.popupProxy.replaced, given).toEqual([expected])
-      expect(codes(side.events)).toContain('keep-acknowledged')
+  it('carries the captured fragment to the fallback and rejects one spelled inline', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1&x=y%20z')
+    connectApp(pair)
+    // The bootstrap cleared the URL after capturing; the snapshot still travels.
+    const captured = pair.popupWindow.location.hash
+    pair.relocate(POPUP_ORIGIN, '/prover', '')
+    const popup = new CurrentWindow(
+      pair.popupWindow,
+      registrationWith(fakeScope().worker),
+      undefined,
+      captured,
+    )
+    const events: PopupDiagnostic[] = []
+    PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: [APP_ORIGIN],
+      isolationFallbackUrl: '/f',
+      onDiagnostic: (e) => void events.push(e),
+    })
+    await tick(20)
+    expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}/f#c=1&x=y%20z`])
+    expect(codes(events)).toContain('keep-acknowledged')
+    for (const bad of ['/f#own', '/f#']) {
+      expect(() =>
+        PopupConnection.accept(new CurrentWindow(pair.popupWindow, noRegistration), {
+          connectionId: ID,
+          allowedApplicationOrigins: [APP_ORIGIN],
+          isolationFallbackUrl: bad,
+        }),
+      ).toThrow(TypeError)
     }
   })
 
@@ -806,6 +828,79 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     await side.connection
     expect(codes(side.events)).toEqual(['carrier-message-port'])
     expect(pair.popupProxy.replaced).toEqual([])
+  })
+})
+
+describe('structured fragments [POPUP-CONNECTION-013]', () => {
+  it('serializes fragment fields into the Navigate control and direct navigation', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const params = new URLSearchParams({ c: ID, next: 'a b&c' })
+    // Direct control before any carrier: the handle receives the composed URL.
+    await app.connection.navigate('https://popup.example/p', params)
+    expect(pair.popupProxy.replaced).toEqual([`https://popup.example/p#${params.toString()}`])
+    // Over the carrier the control carries the same serialization.
+    const side = acceptPopup(pair)
+    await side.connection
+    await tick()
+    const snapshot = params.toString()
+    await app.connection.navigate('https://popup-b.example/p', params)
+    params.set('next', 'mutated after the call')
+    await tick(20)
+    expect(pair.popupProxy.replaced.at(-1)).toBe(`https://popup-b.example/p#${snapshot}`)
+    // An empty fragment adds nothing.
+    const bare = connectApp(fakePair())
+    await bare.connection.navigate('https://popup.example/p', new URLSearchParams())
+    expect(bare.popup.handle && (bare.popup.handle as unknown as FakeProxy).replaced).toEqual([
+      'https://popup.example/p',
+    ])
+  })
+
+  it('rejects an inline fragment in every public URL argument, including an empty one', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const side = acceptPopup(pair)
+    const popup = await side.connection
+    await tick()
+    for (const bad of ['https://popup.example/x#c=1', 'https://popup.example/x#']) {
+      await expect(app.connection.navigate(bad)).rejects.toThrow(TypeError)
+      await expect(app.connection.navigateAway(bad)).rejects.toThrow(TypeError)
+      await expect(popup.navigate(bad)).rejects.toThrow(TypeError)
+      await expect(popup.navigateAway(bad)).rejects.toThrow(TypeError)
+    }
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(() => popup.send(new Ready(1))).not.toThrow()
+  })
+
+  it('keeps a popup-initiated destination and fragment private to the popup', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const scope = fakeScope()
+    const side = acceptPopup(pair, { worker: scope.worker })
+    const popup = await side.connection
+    await tick()
+    const before = codes(app.events).length
+    await popup.navigate(`${POPUP_ORIGIN}/next`, new URLSearchParams({ secret: 'value' }))
+    await tick(20)
+    expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}/next#secret=value`])
+    // The application saw no control, no diagnostic, and no message.
+    expect(codes(app.events)).toHaveLength(before)
+    expect(scope.pending).toHaveLength(1) // continuity only; the keeper carries no URL
+  })
+
+  it('adopts the captured fragment from a bootstrap that cleared the URL', () => {
+    const view = { top: null as unknown, location: { hash: '#c=1' } }
+    view.top = view
+    vi.stubGlobal('window', view)
+    vi.stubGlobal('navigator', {})
+    try {
+      const captured = PopupWindow.current('#c=1&t=2') as CurrentWindow
+      view.location.hash = ''
+      expect(captured.fragment).toBe('c=1&t=2')
+      expect((PopupWindow.current() as CurrentWindow).fragment).toBe('')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 
@@ -1062,7 +1157,9 @@ describe('selection order at accept level [POPUP-CONNECTION-002]', () => {
     const side = acceptPopup(pair, { worker: fakeScope().worker })
     const popup = await side.connection
     await tick()
-    await expect(popup.navigate(`${POPUP_ORIGIN}/p#other`)).rejects.toThrow(TypeError)
+    await expect(popup.navigate(`${POPUP_ORIGIN}/p`, new URLSearchParams('other'))).rejects.toThrow(
+      TypeError,
+    )
     expect(() => popup.send(new Ready(1))).not.toThrow()
   })
 })

@@ -29,9 +29,17 @@ const connection = PopupConnection.connect<Messages>(popupWindow, {
   onDiagnostic,
 })
 
-void connection.navigate(anchor.href)
+const [href, fragment = ''] = anchor.href.split('#')
+void connection.navigate(href, new URLSearchParams(fragment))
 if (popupWindow.opened) event.preventDefault()
 ```
+
+Navigation takes a fragment-free URL and, separately, the fragment fields as
+`URLSearchParams`. The package serializes them at the call and treats them as
+opaque protocol data: no field is reserved, parsed, or tied to the connection
+ID. A URL that spells its own fragment, even an empty `#`, is rejected. The
+anchor keeps its fragment because the native-anchor path navigates it as
+written.
 
 `PopupWindow.open(target, features?)` synchronously attempts
 `window.open('about:blank', target, 'popup,…')` and returns a wrapper even when
@@ -48,7 +56,7 @@ declare class PopupWindow {
   readonly opened: boolean
 
   static open(target: string, features?: string): PopupWindow
-  static current(): PopupWindow
+  static current(fragment?: string): PopupWindow
 }
 ```
 
@@ -109,8 +117,8 @@ interface PopupConnection<Out extends Message, In extends Message = Out> {
     message: MessageType<N>,
     handler: (message: N) => void,
   ): () => void
-  navigate(url: string): Promise<void>
-  navigateAway(url: string): Promise<void>
+  navigate(url: string, fragment?: URLSearchParams): Promise<void>
+  navigateAway(url: string, fragment?: URLSearchParams): Promise<void>
   close(): Promise<void>
 }
 
@@ -230,8 +238,15 @@ interface PopupDiagnostic {
 
 A participating document that needs cross-origin isolation passes
 `isolationFallbackUrl`. Its presence requires isolation and names a
-same-origin fallback, resolved against the current document; the fragment is
-inherited unless the value spells its own, including an empty `#`.
+same-origin fallback, resolved against the current document and carrying the
+document's captured fragment unchanged; the value itself must not spell a
+fragment.
+
+`PopupWindow.current(fragment?)` takes the fragment as the host captured it,
+so a bootstrap may read `location.hash`, clear the URL, and only then import
+the package; it defaults to the current `location.hash`. The package keeps a
+snapshot, so later clearing or mutation changes nothing, and never puts the
+value in the worker, storage, or a diagnostic.
 
 ```ts
 PopupConnection.accept(popupWindow, {

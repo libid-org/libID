@@ -41,15 +41,19 @@ export interface PopupConnection<Out extends Message, In extends Message = Out> 
   readonly closed: Promise<ConnectionEnd>
   send(message: Out): void
   on<N extends In>(message: MessageType<N>, handler: (message: N) => void): () => void
-  /** Continuity-preserving navigation between participating documents. */
-  navigate(url: string): Promise<void>
+  /**
+   * Continuity-preserving navigation between participating documents. `url`
+   * carries no fragment; `fragment` supplies one as opaque protocol data,
+   * serialized at the call.
+   */
+  navigate(url: string, fragment?: URLSearchParams): Promise<void>
   /**
    * Navigation to a non-participating document. The destination never
    * crosses any carrier: the application navigates its retained handle
    * directly and the popup replaces itself locally. The current carrier is
    * retired, not preserved.
    */
-  navigateAway(url: string): Promise<void>
+  navigateAway(url: string, fragment?: URLSearchParams): Promise<void>
   close(): Promise<void>
 }
 
@@ -67,8 +71,8 @@ export interface AcceptOptions {
   /**
    * Requires cross-origin isolation. A document that is not isolated keeps
    * its carrier through the worker and replaces itself with this same-origin
-   * destination, resolved against the current document; the fragment is
-   * inherited unless the value spells its own, including an empty `#`.
+   * destination, resolved against the current document and carrying the
+   * document's captured fragment. It must not spell a fragment itself.
    */
   isolationFallbackUrl?: string
   fallback?: CarrierConstructor
@@ -82,11 +86,19 @@ function requireConnectionId(value: string): string {
   return value
 }
 
-function requireHttpsUrl(url: string, report: Reporter): void {
-  if (!isCanonicalHttpsUrl(url)) {
+/**
+ * The navigation target from a fragment-free URL and optional opaque
+ * parameters, serialized now so later mutation of `fragment` is invisible.
+ */
+function destination(url: string, fragment: URLSearchParams | undefined, report: Reporter): string {
+  if (!isCanonicalHttpsUrl(url) || url.includes('#')) {
     report('control-rejected')
-    throw new TypeError('navigation requires a canonical absolute HTTPS URL without credentials')
+    throw new TypeError(
+      'navigation requires a canonical absolute HTTPS URL without credentials or fragment',
+    )
   }
+  const serialized = fragment?.toString() ?? ''
+  return serialized === '' ? url : `${url}#${serialized}`
 }
 
 const stripFragment = (url: string): string => url.split('#', 1)[0]
@@ -97,18 +109,18 @@ const sameDocument = (url: URL, location: Location): boolean =>
   url.pathname === location.pathname &&
   url.search === location.search
 
-/** The same-origin HTTPS fallback, with the current fragment carried over. */
-function resolveFallback(value: string, location: Location): URL {
+/** The same-origin HTTPS fallback, carrying the captured fragment. */
+function resolveFallback(value: string, location: Location, fragment: string): URL {
   let url: URL
   try {
     url = new URL(value, location.href)
   } catch {
     throw new TypeError('isolationFallbackUrl must be a URL')
   }
-  if (url.protocol !== 'https:' || url.origin !== location.origin) {
-    throw new TypeError('isolationFallbackUrl must be a same-origin HTTPS URL')
+  if (url.protocol !== 'https:' || url.origin !== location.origin || value.includes('#')) {
+    throw new TypeError('isolationFallbackUrl must be a same-origin HTTPS URL without fragment')
   }
-  if (!value.includes('#')) url.hash = location.hash
+  url.hash = fragment
   return url
 }
 
@@ -180,8 +192,8 @@ abstract class Endpoint<Out extends Message, In extends Message>
     }
   }
 
-  abstract navigate(url: string): Promise<void>
-  abstract navigateAway(url: string): Promise<void>
+  abstract navigate(url: string, fragment?: URLSearchParams): Promise<void>
+  abstract navigateAway(url: string, fragment?: URLSearchParams): Promise<void>
   abstract close(): Promise<void>
 
   /** Installs the selected carrier; the class is reported when it was chosen here. */
@@ -316,17 +328,17 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
     this.fail('control-rejected')
   }
 
-  async navigate(url: string): Promise<void> {
+  async navigate(url: string, fragment?: URLSearchParams): Promise<void> {
     if (this.ended) throw new PopupError('connection-closed')
-    requireHttpsUrl(url, this.report)
+    const target = destination(url, fragment, this.report)
     if (this.carrier) {
-      const control: Navigate = { type: 'navigate', url }
+      const control: Navigate = { type: 'navigate', url: target }
       this.transmit(control)
       this.report('control-connected')
       return
     }
     if (this.popup.direct) {
-      this.popup.replace(url)
+      this.popup.replace(target)
       this.report('control-direct')
       return
     }
@@ -336,9 +348,9 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
     throw new PopupError('popup-unavailable')
   }
 
-  async navigateAway(url: string): Promise<void> {
+  async navigateAway(url: string, fragment?: URLSearchParams): Promise<void> {
     if (this.ended) throw new PopupError('connection-closed')
-    requireHttpsUrl(url, this.report)
+    const target = destination(url, fragment, this.report)
     if (!this.popup.opened) return
     if (!this.popup.direct) {
       this.report('popup-unavailable')
@@ -347,7 +359,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
     // Retire the carrier; the window listener stays armed for the next
     // participating document.
     this.dropCarrier()
-    this.popup.replace(url)
+    this.popup.replace(target)
     this.report('control-direct')
   }
 
@@ -397,7 +409,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     this.isolationFallback =
       options.isolationFallbackUrl === undefined
         ? null
-        : resolveFallback(options.isolationFallbackUrl, popup.view.location)
+        : resolveFallback(options.isolationFallbackUrl, popup.view.location, popup.fragment)
     void this.select(allowedOrigins, options.fallback)
   }
 
@@ -490,25 +502,27 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     }
   }
 
-  async navigate(url: string): Promise<void> {
+  async navigate(url: string, fragment?: URLSearchParams): Promise<void> {
     if (this.ended) throw new PopupError('connection-closed')
-    requireHttpsUrl(url, this.report)
-    if (stripFragment(url) === stripFragment(this.popup.view.location.href)) {
+    const target = destination(url, fragment, this.report)
+    if (url === stripFragment(this.popup.view.location.href)) {
       // A fragment navigation keeps this document; there is nothing to preserve.
       throw new TypeError('navigation requires a different document')
     }
     if (this.controlsDone) throw new PopupError('popup-unavailable')
     this.controlsDone = true
-    await this.replaceDocument(url, true)
+    // Acts locally: the destination and its fragment reach no control,
+    // diagnostic, or signal.
+    await this.replaceDocument(target, true)
   }
 
-  async navigateAway(url: string): Promise<void> {
+  async navigateAway(url: string, fragment?: URLSearchParams): Promise<void> {
     if (this.ended) throw new PopupError('connection-closed')
-    requireHttpsUrl(url, this.report)
+    const target = destination(url, fragment, this.report)
     if (this.controlsDone) throw new PopupError('popup-unavailable')
     this.controlsDone = true
     this.release()
-    this.popup.view.location.replace(url)
+    this.popup.view.location.replace(target)
   }
 
   async close(): Promise<void> {

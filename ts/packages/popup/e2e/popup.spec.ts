@@ -75,22 +75,30 @@ const ping = (page: Page, n: number) =>
     ;(window as unknown as { __conn: { send(v: unknown): void } }).__conn.send({ type: 'ping', n })
   }, n)
 
+/** Split a test URL written with an inline fragment into the structured pair. */
+const split = (url: string): [string, string] => {
+  const [base, hash = ''] = url.split('#')
+  return [base, hash]
+}
+
 const navigateAway = (page: Page, url: string) =>
   page.evaluate(
-    (url) =>
+    ([base, hash]) =>
       (
-        window as unknown as { __conn: { navigateAway(u: string): Promise<void> } }
-      ).__conn.navigateAway(url),
-    url,
+        window as unknown as {
+          __conn: { navigateAway(u: string, f: URLSearchParams): Promise<void> }
+        }
+      ).__conn.navigateAway(base, new URLSearchParams(hash)),
+    split(url),
   )
 
 const navigate = (page: Page, url: string) =>
   page.evaluate(
-    (url) =>
-      (window as unknown as { __conn: { navigate(u: string): Promise<void> } }).__conn.navigate(
-        url,
-      ),
-    url,
+    ([base, hash]) =>
+      (
+        window as unknown as { __conn: { navigate(u: string, f: URLSearchParams): Promise<void> } }
+      ).__conn.navigate(base, new URLSearchParams(hash)),
+    split(url),
   )
 
 /** Run an action that replaces the popup document and wait for the new one. */
@@ -231,7 +239,8 @@ test('[POPUP-CONNECTION-008] popup-initiated navigation preserves the port', asy
       (url) =>
         (window as unknown as { __conn: { send(v: unknown): void } }).__conn.send({
           type: 'go',
-          url,
+          url: url.split('#')[0],
+          fragment: url.split('#')[1] ?? '',
         }),
       `${POPUP}/isolated#c=${id}`,
     ),
@@ -297,7 +306,7 @@ test('[POPUP-CONTROL-002] malformed navigation fails before any browser operatio
   ]) {
     await expect(navigate(page, bad)).rejects.toThrow()
   }
-  expect(popup.url()).toContain('/p#')
+  expect(new URL(popup.url()).pathname).toBe('/p')
   expect((await diag(page)).filter((c) => c === 'control-rejected')).toHaveLength(3)
 })
 
@@ -364,7 +373,8 @@ test('[POPUP-CONTROL-005] popup-side navigateAway keeps no port', async ({ page 
       (url) =>
         (window as unknown as { __conn: { send(v: unknown): void } }).__conn.send({
           type: 'away',
-          url,
+          url: url.split('#')[0],
+          fragment: url.split('#')[1] ?? '',
         }),
       `${POPUP}/external?delay=200&next=${next}`,
     ),
@@ -397,12 +407,12 @@ test('[POPUP-CONNECTION-010] a reply sent before navigate reaches the popup befo
     ([url]) => {
       const w = window as unknown as {
         __onPong?: (pong: { n: number }) => void
-        __conn: { send(v: unknown): void; navigate(u: string): Promise<void> }
+        __conn: { send(v: unknown): void; navigate(u: string, f: URLSearchParams): Promise<void> }
       }
       w.__onPong = (pong) => {
         if (pong.n !== 1) return
         w.__conn.send({ type: 'ping', n: 42 })
-        void w.__conn.navigate(url)
+        void w.__conn.navigate(url.split('#')[0], new URLSearchParams(url.split('#')[1] ?? ''))
       }
     },
     [`${POPUP_B}/p#c=${id}`],

@@ -187,8 +187,9 @@ keeps its still-unstarted port through the worker, so every value the
 application already sent stays queued inside it, settles `closed` as closed,
 and replaces itself with the fallback; the fallback restores the port and
 becomes ready. The fallback is resolved against the current document, must be
-same-origin HTTPS, and inherits the current fragment unless it spells its own,
-including an empty `#`. Because the host may register its worker in the same
+same-origin HTTPS without a fragment of its own, and always carries the
+document's captured fragment, the value `PopupWindow.current` was given or
+read at adoption. Because the host may register its worker in the same
 document, the endpoint waits up to the keeper reply deadline for that
 registration to become active before it keeps the port. A document that
 already is the fallback, compared by origin, path, and query, and remains
@@ -266,7 +267,8 @@ function activate(event: MouseEvent) {
     allowedPopupOrigins,
   })
 
-  void connection.navigate(anchor.href)
+  const [href, fragment = ''] = anchor.href.split('#')
+  void connection.navigate(href, new URLSearchParams(fragment))
   if (popupWindow.opened) event.preventDefault()
 }
 ```
@@ -313,7 +315,7 @@ declare class PopupWindow {
   bind(source: WindowProxy): void
 
   static open(target: string, features?: string): PopupWindow
-  static current(): PopupWindow
+  static current(fragment?: string): PopupWindow
 }
 
 interface PopupConnection<Out extends Message, In extends Message = Out> {
@@ -324,8 +326,8 @@ interface PopupConnection<Out extends Message, In extends Message = Out> {
     message: MessageType<N>,
     handler: (message: N) => void,
   ): () => void
-  navigate(url: string): Promise<void>
-  navigateAway(url: string): Promise<void>
+  navigate(url: string, fragment?: URLSearchParams): Promise<void>
+  navigateAway(url: string, fragment?: URLSearchParams): Promise<void>
   close(): Promise<void>
 }
 
@@ -494,6 +496,18 @@ they wait in the preserved port and reach the destination once it accepts,
 provided the destination registered their handlers before yielding; on a
 cross-origin transition they are lost. Send what the destination needs only
 after it announces itself.
+
+`navigate` and `navigateAway` take a fragment-free canonical HTTPS URL and,
+separately, optional fragment fields as `URLSearchParams`. The endpoint
+serializes the fields at the call, so later mutation of the object is
+invisible, appends them as the fragment, and treats them as opaque protocol
+data: no field is reserved, parsed, or related to the connection ID. A URL
+spelling its own fragment, even an empty `#`, is rejected. Ordinary navigation
+may cross origins and carry a fragment; destination selection and disclosure
+policy belong to the calling protocol. Popup-initiated navigation acts locally
+and discloses neither destination nor fragment to the application through any
+control, diagnostic, or signal; application-initiated navigation carries the
+serialized destination in the existing `Navigate` control.
 
 `navigate` accepts a caller-selected opaque URL. It does not select the route or
 interpret caller-owned fields:
