@@ -12,7 +12,7 @@ import {
   type Reporter,
   reportUndeliverable,
 } from './diagnostics.js'
-import { activeWorker, PortKeeper } from './keeper.js'
+import { activeWorker, bounded, PortKeeper } from './keeper.js'
 import {
   type Carrier,
   type CarrierConstructor,
@@ -64,6 +64,13 @@ export interface AcceptOptions {
   connectionId: string
   /** Explicit origins, or `'*'` for any canonical HTTPS origin the browser observed. */
   allowedApplicationOrigins: readonly string[] | '*'
+  /**
+   * Requires cross-origin isolation. A document that is not isolated keeps
+   * its carrier through the worker and replaces itself with this same-origin
+   * destination, resolved against the current document; the fragment is
+   * inherited unless the value spells its own, including an empty `#`.
+   */
+  isolationFallbackUrl?: string
   fallback?: CarrierConstructor
   onDiagnostic?: (event: PopupDiagnostic) => void
 }
@@ -83,6 +90,27 @@ function requireHttpsUrl(url: string, report: Reporter): void {
 }
 
 const stripFragment = (url: string): string => url.split('#', 1)[0]
+
+/** Same origin, path, and query; fragments do not distinguish documents. */
+const sameDocument = (url: URL, location: Location): boolean =>
+  url.origin === location.origin &&
+  url.pathname === location.pathname &&
+  url.search === location.search
+
+/** The same-origin HTTPS fallback, with the current fragment carried over. */
+function resolveFallback(value: string, location: Location): URL {
+  let url: URL
+  try {
+    url = new URL(value, location.href)
+  } catch {
+    throw new TypeError('isolationFallbackUrl must be a URL')
+  }
+  if (url.protocol !== 'https:' || url.origin !== location.origin) {
+    throw new TypeError('isolationFallbackUrl must be a same-origin HTTPS URL')
+  }
+  if (!value.includes('#')) url.hash = location.hash
+  return url
+}
 
 interface Registration<In extends Message> {
   decode: (value: unknown) => In
@@ -354,6 +382,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   /** The first accepted control is terminal for this document. */
   private controlsDone = false
   private readonly connectionId: string
+  private readonly isolationFallback: URL | null
 
   constructor(
     private readonly popup: CurrentWindow,
@@ -365,6 +394,10 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       options.allowedApplicationOrigins === '*'
         ? '*'
         : requireOrigins(options.allowedApplicationOrigins, 'allowedApplicationOrigins')
+    this.isolationFallback =
+      options.isolationFallbackUrl === undefined
+        ? null
+        : resolveFallback(options.isolationFallbackUrl, popup.view.location)
     void this.select(allowedOrigins, options.fallback)
   }
 
@@ -383,7 +416,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       if (registration?.active) {
         const port = await new PortKeeper(registration.active).claim(this.connectionId)
         if (this.ended) return port?.close()
-        if (port) return this.install(new PortCarrier(port), 'carrier-restored')
+        if (port) return this.admit(port, 'carrier-restored')
         this.report('claim-empty')
       }
       const opener = this.popup.opener
@@ -396,17 +429,55 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
           signal: this.controller.signal,
         })
         if (this.ended) return port?.close()
-        if (port) return this.install(new PortCarrier(port), 'carrier-message-port')
+        if (port) return this.admit(port, 'carrier-message-port')
         this.report('opener-timeout')
       }
       if (!fallback) return this.fail('fallback-unavailable', true)
       const carrier = await fallback(this.controller.signal)
       if (this.ended) return carrier.close()
+      if (this.isolationFallback && !this.popup.isolated) {
+        // Only a MessagePort can be preserved into the isolated replacement.
+        carrier.close()
+        return this.fail('continuity-unsupported', true)
+      }
       this.install(carrier, 'carrier-fallback')
     } catch (error) {
       if (this.ended) return
       this.fail(error instanceof PopupError ? error.code : 'fallback-failed', true)
     }
+  }
+
+  /**
+   * Installs an authenticated port, unless this document must be isolated
+   * and is not: then the port, still unstarted so every value the
+   * application already sent stays queued inside it, is kept through the
+   * worker and the document replaces itself with the isolated fallback.
+   * `ready` stays pending here; the replacement becomes ready instead.
+   */
+  private async admit(
+    port: MessagePort,
+    code: 'carrier-restored' | 'carrier-message-port',
+  ): Promise<void> {
+    const { location } = this.popup.view
+    if (!this.isolationFallback || this.popup.isolated) {
+      return this.install(new PortCarrier(port), code)
+    }
+    this.report(code)
+    if (sameDocument(this.isolationFallback, location)) {
+      // Already the fallback and still not isolated: the host's policy is
+      // not taking effect. Never loop.
+      port.close()
+      return this.fail('isolation-unavailable', true)
+    }
+    this.controlsDone = true
+    this.report('isolation-fallback')
+    try {
+      await this.keepThrough(port, true)
+    } catch {
+      return // already failed through `ready`
+    }
+    this.release()
+    location.replace(this.isolationFallback.href)
   }
 
   protected onControl(control: PopupControl): void {
@@ -459,25 +530,40 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       location.replace(url)
       return
     }
-    const failed = (code: PopupErrorCode): never => {
+    if (!(this.carrier instanceof PortCarrier)) {
+      this.fail('continuity-unsupported', viaOperation)
+      throw new PopupError('continuity-unsupported')
+    }
+    await this.keepThrough(this.carrier.detach(), viaOperation)
+    location.replace(url)
+  }
+
+  /**
+   * Hands one port to the worker for the next same-origin document. Fails
+   * the endpoint and throws when no worker is active, the keep is refused,
+   * or the connection ended meanwhile.
+   */
+  private async keepThrough(port: MessagePort, viaOperation: boolean): Promise<void> {
+    const failed: (code: PopupErrorCode) => never = (code) => {
+      port.close() // a no-op once transferred; releases a port the worker never took
       this.fail(code, viaOperation)
       throw new PopupError(code)
     }
+    // The host may still be registering in this very document: when no
+    // worker is attached yet, wait briefly for the registration to activate.
     const registration = await this.popup.registration()
-    const worker = registration ? await activeWorker(registration) : null
-    if (this.ended) throw new PopupError('connection-closed')
-    if (!(this.carrier instanceof PortCarrier) || !worker) return failed('continuity-unsupported')
-    const port = this.carrier.detach()
+    let worker = registration ? await activeWorker(registration) : null
+    if (!worker) worker = (await bounded(this.popup.readyRegistration()))?.active ?? null
+    if (this.ended) failed('connection-closed')
+    if (!worker) failed('continuity-unsupported')
     const startedAt = performance.now()
     try {
       await new PortKeeper(worker).keep(this.connectionId, port)
     } catch {
-      port.close() // a no-op once transferred; releases a port the worker never took
-      return failed('keep-failed')
+      failed('keep-failed')
     }
     if (this.ended) throw new PopupError('connection-closed')
     this.report('keep-acknowledged', performance.now() - startedAt)
-    location.replace(url)
   }
 
   private closePopup(): void {

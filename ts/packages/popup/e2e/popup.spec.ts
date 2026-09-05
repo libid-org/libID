@@ -5,10 +5,10 @@
 
 import { expect, type Page, test } from '@playwright/test'
 
-const APP_A = 'https://app-a.lvh.me:4581'
-const APP_B = 'https://app-b.local.gd:4582'
-const POPUP = 'https://popup.localtest.me:4583'
-const POPUP_B = 'https://popup-b.lvh.me:4584'
+const APP_A = 'https://app-a.localhost:4581'
+const APP_B = 'https://app-b.localhost:4582'
+const POPUP = 'https://popup.localhost:4583'
+const POPUP_B = 'https://popup-b.localhost:4584'
 
 const freshId = () => crypto.randomUUID()
 
@@ -26,24 +26,43 @@ const diag = (page: Page) => page.evaluate(() => (window as unknown as { __diag:
 /** Arm the application page and click its anchor for one connection id. */
 async function open(
   page: Page,
-  options: { app?: string; id?: string; href?: string; blocked?: boolean; rel?: string } = {},
+  options: {
+    app?: string
+    id?: string
+    href?: string
+    blocked?: boolean
+    rel?: string
+    /** Send this ping the instant the application's handshake completes. */
+    pingOnHandshake?: number
+  } = {},
 ): Promise<{ id: string; popup: Page }> {
   const id = options.id ?? freshId()
   await page.goto(options.app ?? APP_A)
   await page.evaluate(
-    ([id, href, blocked, rel]) => {
-      const w = window as unknown as { __id: string; open: unknown }
+    ([id, href, blocked, rel, ping]) => {
+      const w = window as unknown as {
+        __id: string
+        open: unknown
+        __onDiag?: (code: string) => void
+        __conn: { send(v: unknown): void }
+      }
       w.__id = id
       const anchor = document.getElementById('go') as HTMLAnchorElement
       anchor.href = href
       if (rel) anchor.rel = rel
       if (blocked) w.open = () => null
+      if (ping !== null) {
+        w.__onDiag = (code) => {
+          if (code === 'carrier-message-port') w.__conn.send({ type: 'ping', n: ping })
+        }
+      }
     },
     [
       id,
       options.href ?? `${POPUP}/p#c=${id}`,
       options.blocked ?? false,
       options.rel ?? '',
+      options.pingOnHandshake ?? null,
     ] as const,
   )
   const popupPromise = page.context().waitForEvent('page')
@@ -282,7 +301,7 @@ test('[POPUP-CONTROL-002] malformed navigation fails before any browser operatio
   expect((await diag(page)).filter((c) => c === 'control-rejected')).toHaveLength(3)
 })
 
-test('[POPUP-CONNECTION-008] [POPUP-CONNECTION-009] a cross-site participating hop re-handshakes over the opener', async ({
+test('[POPUP-CONNECTION-008] [POPUP-CONNECTION-009] a cross-origin participating hop re-handshakes over the opener', async ({
   page,
 }) => {
   const { id, popup } = await open(page)
@@ -306,7 +325,7 @@ test('[POPUP-CONNECTION-008] [POPUP-CONNECTION-009] a cross-site participating h
   expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(3)
 })
 
-test('[POPUP-CONNECTION-008] a cross-site isolated destination needs a fallback', async ({
+test('[POPUP-CONNECTION-008] a cross-origin isolated destination needs a fallback', async ({
   page,
 }) => {
   const { id, popup } = await open(page)
@@ -366,7 +385,7 @@ test("[POPUP-CONNECTION-009] a popup deployed with '*' accepts an unlisted appli
   expect(await diag(popup)).toEqual(['carrier-message-port'])
 })
 
-test('[POPUP-CONNECTION-010] a reply sent before navigate reaches the popup before it leaves cross-site', async ({
+test('[POPUP-CONNECTION-010] a reply sent before navigate reaches the popup before it leaves cross-origin', async ({
   page,
 }) => {
   const { id, popup } = await open(page)
@@ -394,4 +413,44 @@ test('[POPUP-CONNECTION-010] a reply sent before navigate reaches the popup befo
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(popup.url()).toContain(POPUP_B)
   expect(await diag(popup)).toEqual(['carrier-message-port'])
+})
+
+test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or by its COOP fallback, delivering once', async ({
+  page,
+}) => {
+  const id = freshId()
+  // Send the instant the handshake completes: the value must reach the
+  // isolated document exactly once whichever path the engine takes.
+  const { popup } = await open(page, { id, href: `${POPUP}/dip#c=${id}`, pingOnHandshake: 77 })
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(await popup.evaluate(() => crossOriginIsolated)).toBe(true)
+  expect(await expectPong(page, 77)).toMatchObject({ isolated: true })
+  await page.waitForTimeout(300)
+  expect((await events(page)).filter((e) => (e as Pong).n === 77)).toHaveLength(1)
+  const popupDiag = await diag(popup)
+  const viaFallback = popup.url().includes('/dip/fallback')
+  expect(popupDiag).toEqual(viaFallback ? ['carrier-restored'] : ['carrier-message-port'])
+  // The application saw exactly one carrier for the whole transition.
+  expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(1)
+  await ping(page, 78)
+  await expectPong(page, 78)
+})
+
+test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed without looping', async ({
+  page,
+}) => {
+  const id = freshId()
+  const { popup } = await open(page, { id, href: `${POPUP}/dip-broken#c=${id}` })
+  await expect(popup.locator('#status')).toHaveText(/connected|failed/)
+  test.skip(
+    await popup.evaluate(() => crossOriginIsolated),
+    'engine isolates by DIP; no fallback runs',
+  )
+  await expect(popup.locator('#status')).toHaveText('failed: isolation-unavailable')
+  expect(popup.url()).toContain('/dip-broken/fallback')
+  expect(await diag(popup)).toEqual([
+    'carrier-restored',
+    'isolation-unavailable',
+    'connection-failed',
+  ])
 })

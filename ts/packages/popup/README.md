@@ -226,6 +226,34 @@ interface PopupDiagnostic {
 `code` is one of the stable identifiers catalogued in
 [metrics and diagnostics](METRICS.md); the set grows with new carriers.
 
+### Isolation
+
+A participating document that needs cross-origin isolation passes
+`isolationFallbackUrl`. Its presence requires isolation and names a
+same-origin fallback, resolved against the current document; the fragment is
+inherited unless the value spells its own, including an empty `#`.
+
+```ts
+PopupConnection.accept(popupWindow, {
+  connectionId,
+  allowedApplicationOrigins,
+  isolationFallbackUrl: '/prover/fallback',
+})
+```
+
+The host serves `/prover` with `Document-Isolation-Policy: isolate-and-require-corp`,
+`Cross-Origin-Opener-Policy: unsafe-none`, and no COEP, and `/prover/fallback`
+with `Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`. Both pass the option. Where the
+engine honours DIP, `/prover` is isolated and keeps its opener, so nothing
+else happens. Where it does not, `/prover` establishes its carrier, keeps the
+still-unstarted port through the worker so every value already sent travels
+with it, and replaces itself with the fallback, whose COOP isolates it; the
+fallback restores the port and becomes ready. The departing endpoint never
+becomes ready and delivers nothing. A fallback that is itself not isolated
+fails with `isolation-unavailable` instead of looping. The package assigns no
+meaning to the paths; the application observes one connection throughout.
+
 ### Continuity worker
 
 Connected same-origin navigation between participating popup documents
@@ -270,8 +298,8 @@ manage carrier selection, replacement, or lifetime.
 ## Testing
 
 `pnpm test` runs the unit suite in Node over real `MessageChannel` ports.
-`pnpm test:e2e` builds the package and its worker entry, serves three
-cross-site HTTPS origins, and drives the Playwright matrix (Chromium, Firefox,
+`pnpm test:e2e` builds the package and its worker entry, serves four
+cross-origin HTTPS documents, and drives the Playwright matrix (Chromium, Firefox,
 WebKit, mobile Chrome, mobile WebKit) through both creation paths, isolation
 round trips over one preserved port, port expiry, and every fail-closed path.
 [TEST_PLAN.md](TEST_PLAN.md) records which rows each layer covers and which

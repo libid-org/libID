@@ -20,6 +20,7 @@ export type PopupErrorCode =
   | 'continuity-unsupported'
   | 'keep-failed'
   | 'claim-failed'
+  | 'isolation-unavailable'
   | 'popup-unavailable'
   | 'send-unavailable'
   | 'connection-closed'
@@ -36,6 +37,7 @@ export type DiagnosticCode =
   | 'control-connected'
   | 'keep-acknowledged'
   | 'claim-empty'
+  | 'isolation-fallback'
   | 'connection-failed'
 
 export class PopupError extends Error {

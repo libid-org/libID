@@ -41,7 +41,14 @@ export function fakeView(): FakeView {
 export interface FakeProxy {
   closed: boolean
   postMessage(message: unknown, targetOrigin: string, transfer?: Transferable[]): void
-  location: { origin: string; href: string; replace(url: string): void }
+  location: {
+    origin: string
+    href: string
+    pathname: string
+    search: string
+    hash: string
+    replace(url: string): void
+  }
   close(): void
   replaced: string[]
 }
@@ -56,14 +63,16 @@ export interface FakePair {
   appProxy: FakeProxy
   /** The popup document as a Window for CurrentWindow. */
   popupWindow: Window
-  /** Replace the popup document with one on another origin; proxies keep identity. */
-  relocate(origin: string): void
+  /** Replace the popup document; proxies keep identity. */
+  relocate(origin: string, path?: string, hash?: string): void
+  /** What `crossOriginIsolated` reports in the popup document. */
+  setIsolated(isolated: boolean): void
 }
 
 export function fakePair(popupOrigin = POPUP_ORIGIN): FakePair {
   const appView = fakeView()
   const popupView = fakeView()
-  const state = { popupOrigin }
+  const state = { popupOrigin, path: '/p', hash: '', isolated: false }
   const makeProxy = (
     target: FakeView,
     targetOrigin: () => string,
@@ -88,7 +97,14 @@ export function fakePair(popupOrigin = POPUP_ORIGIN): FakePair {
           return targetOrigin()
         },
         get href() {
-          return `${targetOrigin()}/p`
+          return `${targetOrigin()}${state.path}${state.hash}`
+        },
+        get pathname() {
+          return state.path
+        },
+        search: '',
+        get hash() {
+          return state.hash
         },
         replace: (url) => void proxy.replaced.push(url),
       },
@@ -123,6 +139,9 @@ export function fakePair(popupOrigin = POPUP_ORIGIN): FakePair {
     },
     location: popupProxy.location,
     close: popupProxy.close,
+    get crossOriginIsolated() {
+      return state.isolated
+    },
   } as unknown as Window
   return {
     appView,
@@ -130,9 +149,14 @@ export function fakePair(popupOrigin = POPUP_ORIGIN): FakePair {
     popupProxy,
     appProxy,
     popupWindow,
-    relocate(origin) {
+    relocate(origin, path = '/p', hash = '') {
       state.popupOrigin = origin
+      state.path = path
+      state.hash = hash
       popupView.listeners.clear()
+    },
+    setIsolated(isolated) {
+      state.isolated = isolated
     },
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PopupConnection } from './connection.js'
 import { PopupError } from './diagnostics.js'
+import { PortKeeper } from './keeper.js'
 import type { PopupDiagnostic } from './diagnostics.js'
 import type { Carrier, CarrierConstructor, Message } from './message.js'
 import { PortCarrier } from './port.js'
@@ -633,6 +634,178 @@ describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
     expect(() =>
       PopupConnection.connect(opened, { connectionId: ID, allowedPopupOrigins: '*' as never }),
     ).toThrow(TypeError)
+  })
+})
+
+describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
+  const FALLBACK = '/prover/fallback'
+
+  /** A popup endpoint on `path` with the fallback option, over a pair. */
+  function acceptIsolating(
+    pair: FakePair,
+    opts: {
+      worker?: Parameters<typeof registrationWith>[0]
+      fallback?: string
+      opener?: boolean
+    } = {},
+  ) {
+    const events: PopupDiagnostic[] = []
+    const view = opts.opener === false ? { ...pair.popupWindow, opener: null } : pair.popupWindow
+    const popup = new CurrentWindow(
+      view as Window,
+      opts.worker === undefined ? () => Promise.resolve(undefined) : registrationWith(opts.worker),
+    )
+    const endpoint = PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: [APP_ORIGIN],
+      isolationFallbackUrl: opts.fallback ?? FALLBACK,
+      onDiagnostic: (e) => void events.push(e),
+    })
+    return { endpoint, events }
+  }
+
+  it('installs without navigating when the document is already isolated', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    pair.setIsolated(true)
+    const app = connectApp(pair)
+    const side = acceptIsolating(pair)
+    await side.endpoint.ready
+    await tick() // the application installs its carrier on the echo, one task later
+    expect(codes(side.events)).toEqual(['carrier-message-port'])
+    expect(pair.popupProxy.replaced).toEqual([])
+    const starts = vi.fn()
+    side.endpoint.on(Start, starts)
+    app.connection.send(new Start())
+    await tick()
+    expect(starts).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the port before navigating, with ready pending and nothing delivered', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    const app = connectApp(pair)
+    const scope = fakeScope()
+    const side = acceptIsolating(pair, { worker: scope.worker })
+    const starts = vi.fn()
+    side.endpoint.on(Start, starts)
+    await tick(20)
+    // The application already sent into the handshake port; it must travel.
+    app.connection.send(new Start())
+    await tick(20)
+    expect(starts).not.toHaveBeenCalled()
+    expect(scope.pending).toHaveLength(1)
+    expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}${FALLBACK}#c=1`])
+    expect(codes(side.events)).toEqual([
+      'claim-empty',
+      'carrier-message-port',
+      'isolation-fallback',
+      'keep-acknowledged',
+      'connection-closed',
+    ])
+    let settled = false
+    void side.endpoint.ready.then(
+      () => (settled = true),
+      () => (settled = true),
+    )
+    await tick()
+    expect(settled).toBe(false)
+    expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
+
+    // The isolated fallback document restores the port and receives the value once.
+    pair.relocate(POPUP_ORIGIN, FALLBACK, '#c=1')
+    pair.setIsolated(true)
+    const next = acceptIsolating(pair, { worker: scope.worker })
+    const restored = vi.fn()
+    next.endpoint.on(Start, restored)
+    await next.endpoint.ready
+    await tick()
+    expect(codes(next.events)).toEqual(['carrier-restored'])
+    expect(restored).toHaveBeenCalledTimes(1)
+    expect(pair.popupProxy.replaced).toHaveLength(1)
+    // Still one application carrier throughout.
+    expect(codes(app.events).filter((c) => c === 'carrier-message-port')).toHaveLength(1)
+  })
+
+  it('fails without looping when the fallback itself is not isolated', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, FALLBACK, '#c=1')
+    connectApp(pair)
+    const side = acceptIsolating(pair, { worker: fakeScope().worker })
+    await expect(side.endpoint.ready).rejects.toThrow('isolation-unavailable')
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(await side.endpoint.closed).toEqual({ outcome: 'failed', code: 'isolation-unavailable' })
+  })
+
+  it('rejects an invalid, non-HTTPS, or cross-origin fallback synchronously', () => {
+    const pair = fakePair()
+    for (const bad of ['http://popup.example/x', 'https://other.example/x', 'https://:bad']) {
+      const popup = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+      expect(() =>
+        PopupConnection.accept(popup, {
+          connectionId: ID,
+          allowedApplicationOrigins: [APP_ORIGIN],
+          isolationFallbackUrl: bad,
+        }),
+      ).toThrow(TypeError)
+    }
+    expect(pair.popupView.listeners.size).toBe(0)
+  })
+
+  it('inherits the fragment unless the fallback spells its own, including an empty one', async () => {
+    for (const [given, expected] of [
+      ['/f', `${POPUP_ORIGIN}/f#c=1`],
+      ['/f#own', `${POPUP_ORIGIN}/f#own`],
+      ['/f#', `${POPUP_ORIGIN}/f#`],
+    ] as const) {
+      const pair = fakePair()
+      pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+      connectApp(pair)
+      const side = acceptIsolating(pair, { worker: fakeScope().worker, fallback: given })
+      await tick(20)
+      expect(pair.popupProxy.replaced, given).toEqual([expected])
+      expect(codes(side.events)).toContain('keep-acknowledged')
+    }
+  })
+
+  it('aborts on close during the hop and reports a refused keep as failure', async () => {
+    /** A worker holding nothing that answers keeps as told, or never. */
+    const worker = (keepReply: { ok: boolean } | null) => ({
+      postMessage(message: unknown, transfer: Transferable[]) {
+        const reply = transfer[transfer.length - 1] as MessagePort
+        const { type } = message as { type: string }
+        if (type === 'libid-popup-claim') reply.postMessage({ port: false })
+        else if (keepReply) reply.postMessage(keepReply)
+      },
+    })
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    connectApp(pair)
+    const refused = acceptIsolating(pair, { worker: worker({ ok: false }) })
+    await expect(refused.endpoint.ready).rejects.toThrow('keep-failed')
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(await refused.endpoint.closed).toEqual({ outcome: 'failed', code: 'keep-failed' })
+
+    const pair2 = fakePair()
+    pair2.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    connectApp(pair2)
+    const closing = acceptIsolating(pair2, { worker: worker(null) })
+    await tick(20) // handshake done; the keep is now waiting on the silent worker
+    expect(codes(closing.events)).toContain('isolation-fallback')
+    await closing.endpoint.close()
+    expect(await closing.endpoint.closed).toEqual({ outcome: 'closed' })
+    await tick()
+    expect(pair2.popupProxy.replaced).toEqual([])
+  })
+
+  it('leaves behavior unchanged when the option is absent', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    connectApp(pair)
+    const side = acceptPopup(pair)
+    await side.connection
+    expect(codes(side.events)).toEqual(['carrier-message-port'])
+    expect(pair.popupProxy.replaced).toEqual([])
   })
 })
 

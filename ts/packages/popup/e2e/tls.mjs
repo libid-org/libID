@@ -1,5 +1,5 @@
 // Per-run self-signed certificate covering every e2e hostname, so the
-// multi-origin topology is genuinely cross-site over HTTPS (the only way
+// multi-origin topology is genuinely cross-origin over HTTPS (the only way
 // COOP and opener severing behave realistically). Playwright runs with
 // ignoreHTTPSErrors; nothing here is a production artifact.
 

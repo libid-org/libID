@@ -179,6 +179,26 @@ connection ID before selecting a new carrier. A matching entry restores its
 native port; no entry leaves the fresh endpoint to use its available opener or
 signaling resources normally.
 
+`accept` may also take `isolationFallbackUrl`, which requires cross-origin
+isolation of the accepting document. After selecting its carrier and before
+installing delivery or settling `ready`, the endpoint checks
+`crossOriginIsolated`. An isolated document proceeds. A non-isolated document
+keeps its still-unstarted port through the worker, so every value the
+application already sent stays queued inside it, settles `closed` as closed,
+and replaces itself with the fallback; the fallback restores the port and
+becomes ready. The fallback is resolved against the current document, must be
+same-origin HTTPS, and inherits the current fragment unless it spells its own,
+including an empty `#`. Because the host may register its worker in the same
+document, the endpoint waits up to the keeper reply deadline for that
+registration to become active before it keeps the port. A document that
+already is the fallback, compared by origin, path, and query, and remains
+non-isolated fails with
+`isolation-unavailable`; a refused keep or missing worker fails as it does for
+`navigate`. Only a MessagePort carrier can be preserved this way; a fallback
+carrier under the option fails with `continuity-unsupported`. This is what lets
+a host serve one document with Document-Isolation-Policy for engines that
+honour it and a COOP fallback for the rest, with no protocol change.
+
 `connect` copies `allowedPopupOrigins`, and `accept` copies
 `allowedApplicationOrigins`. Both must be nonempty, duplicate-free sets of
 canonical HTTPS origins; either constructor rejects an invalid member or
@@ -345,6 +365,7 @@ declare const PopupConnection: {
     options: {
       connectionId: string
       allowedApplicationOrigins: readonly string[] | '*'
+      isolationFallbackUrl?: string
       fallback?: CarrierConstructor
       onDiagnostic?: (event: PopupDiagnostic) => void
     },

@@ -41,10 +41,13 @@ export class PopupWindow {
   /** Adopts the current popup document; creates nothing. */
   static current(): PopupWindow {
     if (window.top !== window) throw new TypeError('current requires a top-level popup document')
-    return new CurrentWindow(window, () =>
-      typeof navigator !== 'undefined' && navigator.serviceWorker
-        ? navigator.serviceWorker.getRegistration().catch(() => undefined)
-        : Promise.resolve(undefined),
+    const container = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined
+    return new CurrentWindow(
+      window,
+      () => container?.getRegistration().catch(() => undefined) ?? Promise.resolve(undefined),
+      // `ready` settles only once a matching registration is active; the
+      // caller bounds the wait.
+      () => container?.ready.catch(() => undefined) ?? new Promise(() => {}),
     )
   }
 
@@ -100,12 +103,20 @@ export class CurrentWindow extends PopupWindow {
     readonly view: Window,
     /** The registration whose scope matches this document, resolved per use. */
     readonly registration: () => Promise<ServiceWorkerRegistration | undefined>,
+    /** Settles once a matching registration is active; may never settle. */
+    readonly readyRegistration: () => Promise<ServiceWorkerRegistration | undefined> = () =>
+      Promise.resolve(undefined),
   ) {
     super()
   }
 
   override get opened(): boolean {
     return true
+  }
+
+  /** Whether this document is cross-origin isolated, by any policy. */
+  get isolated(): boolean {
+    return this.view.crossOriginIsolated === true
   }
 
   /** The opener while it is usable; a closed opener counts as absent. */

@@ -11,7 +11,7 @@ export default defineConfig({
   use: { ignoreHTTPSErrors: true },
   webServer: {
     command: 'node e2e/build.mjs && node e2e/server.mjs',
-    url: 'https://popup.localtest.me:4583/health',
+    url: 'https://popup.localhost:4583/health',
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
   },

@@ -1,5 +1,5 @@
-// Three genuinely cross-site origins: an allowed application, an unlisted
-// application, and the popup origin with a participating page, an isolated
+// Four cross-origin documents: an allowed application, an unlisted
+// application, and two popup origins with a participating page, an isolated
 // participating page, a non-participating page, and the worker script.
 // The page scripts are the smallest caller protocol that exercises every
 // documented path; they own nothing the package cares about.
@@ -10,13 +10,14 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { makeCertificate } from './tls.mjs'
 
-// Two popup origins on different sites so a participating document can be
-// replaced by one on another site.
+// Four distinct origins under `.localhost`, which every engine resolves
+// locally without DNS. They are cross-origin, which is what the transport's
+// rules depend on; site-level behavior is not exercised here.
 export const ORIGINS = {
-  appA: 'https://app-a.lvh.me:4581',
-  appB: 'https://app-b.local.gd:4582',
-  popup: 'https://popup.localtest.me:4583',
-  popupB: 'https://popup-b.lvh.me:4584',
+  appA: 'https://app-a.localhost:4581',
+  appB: 'https://app-b.localhost:4582',
+  popup: 'https://popup.localhost:4583',
+  popupB: 'https://popup-b.localhost:4584',
 }
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), 'dist')
@@ -33,7 +34,10 @@ const protocol = `
   const Away = message('away', (v) => { if (typeof v.url !== 'string') throw new Error('away'); return v })
   window.__events = []
   window.__diag = []
-  const onDiagnostic = (d) => window.__diag.push(d.code)
+  const onDiagnostic = (d) => {
+    window.__diag.push(d.code)
+    window.__onDiag?.(d.code)
+  }
 `
 
 const html = (body) => `<!doctype html><meta charset="utf-8"><title>popup e2e</title>${body}`
@@ -74,13 +78,20 @@ const popupPage = html(`
     ${protocol}
     const id = new URLSearchParams(location.hash.slice(1)).get('c') ?? ''
     window.__isolated = crossOriginIsolated
-    // /p-any is the same document deployed for any opener origin.
+    // /p-any is the same document deployed for any opener origin. /dip and
+    // /dip-broken require isolation and name their COOP fallback.
     const allowedApplicationOrigins = location.pathname === '/p-any' ? '*' : ['${ORIGINS.appA}']
+    const isolationFallbackUrl = location.pathname.startsWith('/dip-broken')
+      ? '/dip-broken/fallback'
+      : location.pathname.startsWith('/dip')
+        ? '/dip/fallback'
+        : undefined
     // Accept first: the claim must run before any other network work, and
     // handlers registered before yielding precede every delivery.
     const connection = PopupConnection.accept(PopupWindow.current(), {
       connectionId: id,
       allowedApplicationOrigins,
+      isolationFallbackUrl,
       onDiagnostic,
     })
     window.__conn = connection
@@ -131,6 +142,11 @@ const ISOLATED = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',
 }
+// Isolation without COOP: the opener survives where the engine supports DIP.
+const DIP = {
+  'Cross-Origin-Opener-Policy': 'unsafe-none',
+  'Document-Isolation-Policy': 'isolate-and-require-corp',
+}
 
 function popupHandler(req, res) {
   const url = new URL(req.url, 'https://popup.invalid')
@@ -145,7 +161,14 @@ function popupHandler(req, res) {
     case '/p-any':
       return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'unsafe-none' }, popupPage)
     case '/isolated':
+    case '/dip/fallback':
       return send(res, 200, { ...HTML, ...ISOLATED }, popupPage)
+    case '/dip':
+    case '/dip-broken':
+      return send(res, 200, { ...HTML, ...DIP }, popupPage)
+    case '/dip-broken/fallback':
+      // COOP without COEP: never isolated, so the fallback must not loop.
+      return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'same-origin' }, popupPage)
     case '/external':
       return send(res, 200, HTML, externalPage)
     default:

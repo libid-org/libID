@@ -40,6 +40,26 @@ export interface KeeperWorker {
   postMessage(message: unknown, transfer: Transferable[]): void
 }
 
+/** Resolves to undefined once the deadline passes. */
+export function bounded<T>(
+  promise: Promise<T>,
+  timeoutMs = KEEPER_REPLY_TIMEOUT_MS,
+): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      () => {
+        clearTimeout(timer)
+        resolve(undefined)
+      },
+    )
+  })
+}
+
 /**
  * The registration's active worker, waiting briefly for one still
  * installing (the host registers in the first participating document).

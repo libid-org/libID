@@ -10,10 +10,10 @@ Coverage status:
   CONNECTION, PORT, KEEPER, and DIAGNOSTIC row except the clauses below,
   including `navigateAway` and the popup-side wildcard.
 - **Browser** (`pnpm test:e2e`, Playwright on Chromium, Firefox, WebKit,
-  mobile Chrome, and mobile WebKit emulation over three cross-site HTTPS
-  origins): popup creation on both paths, opener authentication, connected
+  mobile Chrome, and mobile WebKit emulation over four cross-origin HTTPS
+  documents): popup creation on both paths, opener authentication, connected
   navigation into and out of a COOP-isolated document over one preserved
-  port, a cross-site hop between participating documents that re-handshakes
+  port, a cross-origin hop between participating documents that re-handshakes
   over the opener, close after the opener is severed, port expiry across a
   non-participating hop, and every fail-closed path.
 - **Deferred**: every POPUP-RTC row; no WebRTC carrier exists yet.
@@ -60,6 +60,8 @@ Coverage status:
 | POPUP-CONNECTION-008 | `PopupConnection.navigate()` directly between same-origin participating documents preserves a MessagePort or prepares a nontransferable carrier. Across origins, including across sites, it never gives a MessagePort to the source origin's worker: it retires that popup endpoint and the allowed destination establishes a fresh carrier through its opener or fallback. A navigation outside that API loses the current carrier. A later participating document may establish the first RTC carrier from the still-unused initial fallback without round metadata; after RTC is active, an unmanaged navigation terminates the logical connection without restarting round zero. |
 | POPUP-CONNECTION-009 | `connect` and `accept` copy nonempty, duplicate-free sets of canonical HTTPS `allowedPopupOrigins` and `allowedApplicationOrigins`, respectively. Every initial, native-anchor, replacement, MessagePort, and RTC participant binds one exact browser-observed member of the peer's set. Sequential popup participants may use different admitted origins without changing the logical connection ID or caller registrations. `accept` alone also takes `'*'`, which binds any canonical HTTPS browser-observed origin and rejects an opaque or non-HTTPS one; `connect` rejects a wildcard. An empty set or duplicate, malformed, noncanonical, credentialed, or unapproved origin fails before selection or caller delivery. |
 | POPUP-CONNECTION-010 | Caller messages sent over a carrier before a `Navigate` control are delivered to the popup's handlers before the popup acts on the control, for same-origin and cross-origin destinations alike. A transition that needs the application's reply is therefore application-driven (reply, then `navigate`) or the popup navigates only after receiving the reply; an application-side `navigateAway` immediately after a send does not wait for the port. |
+| POPUP-CONNECTION-011 | With `isolationFallbackUrl`, an isolated document installs normally. A non-isolated document keeps its unstarted port through the worker before `ready` settles or any value is delivered, settles `closed` as closed, and replaces itself with the same-origin fallback, which restores the port, becomes ready, and delivers every value the application sent meanwhile exactly once. The application observes one carrier. The fallback resolves against the current document, must be same-origin HTTPS, and inherits the fragment unless it spells its own, including an empty one. |
+| POPUP-CONNECTION-012 | A document that already is the fallback, by origin, path, and query, and remains non-isolated fails with `isolation-unavailable` and never navigates again. Invalid, non-HTTPS, or cross-origin fallbacks reject synchronously. Close during the hop aborts without navigating; a refused keep or missing worker fails `ready`. Without the option, behavior is unchanged. |
 
 ## MessagePort and navigation continuity
 
