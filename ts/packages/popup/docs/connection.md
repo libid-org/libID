@@ -195,8 +195,18 @@ registration to become active before it keeps the port. A document that
 already is the fallback, compared by origin, path, and query, and remains
 non-isolated fails with
 `isolation-unavailable`; a refused keep or missing worker fails as it does for
-`navigate`. Only a MessagePort carrier can be preserved this way; a fallback
-carrier under the option fails with `continuity-unsupported`. This is what lets
+`navigate`. Only a MessagePort is preserved. A carrier that cannot cross the
+replacement, such as one established through the fallback constructor after
+the opener was severed, first prepares its successor through its package-
+private `prepareNavigation` hook, is then retired, and the isolated
+destination establishes a fresh carrier through its own fallback constructor;
+the application installs the successor its carrier reports through
+`onReplacement` and never reuses the retired one. The intermediate
+non-isolated document never becomes ready and delivers nothing. Between the
+retirement and the successor's authentication nothing the application sends
+reaches any document: those values succeed locally and are lost, and the
+transport neither queues nor replays them. A carrier with neither hook fails
+with `continuity-unsupported`. This is what lets
 a host serve one document with Document-Isolation-Policy for engines that
 honour it and a COOP fallback for the rest, with no protocol change.
 

@@ -195,6 +195,8 @@ export function requestApplicationPort(options: RequestOptions): Promise<Message
 /** Adapts one authenticated MessagePort to the carrier operations. */
 export class PortCarrier implements Carrier {
   private port: MessagePort | null
+  /** Whether handlers were ever installed; assigning them starts the port. */
+  private started = false
 
   constructor(port: MessagePort) {
     this.port = port
@@ -214,6 +216,7 @@ export class PortCarrier implements Carrier {
   on(handler: (value: unknown) => void): () => void {
     const port = this.port
     if (!port) return () => {}
+    this.started = true
     port.onmessage = (event: MessageEvent): void => handler(event.data)
     port.onmessageerror = (): void => this.close()
     port.start()
@@ -236,12 +239,19 @@ export class PortCarrier implements Carrier {
     return port
   }
 
+  /**
+   * Gives up the port. Handlers are cleared only if they were installed:
+   * assigning `onmessage`, even to null, starts the port and would dispatch
+   * queued values into the void before a transfer.
+   */
   private take(): MessagePort | null {
     const port = this.port
     if (!port) return null
     this.port = null
-    port.onmessage = null
-    port.onmessageerror = null
+    if (this.started) {
+      port.onmessage = null
+      port.onmessageerror = null
+    }
     return port
   }
 }

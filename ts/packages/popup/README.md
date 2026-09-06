@@ -269,6 +269,13 @@ becomes ready and delivers nothing. A fallback that is itself not isolated
 fails with `isolation-unavailable` instead of looping. The package assigns no
 meaning to the paths; the application observes one connection throughout.
 
+The same works when the opener was already severed and the carrier came from
+the fallback constructor: the non-isolated document prepares the carrier's
+successor, retires it, and the isolated fallback establishes a fresh carrier
+through its own constructor while the application installs the successor.
+Values the application sends between that retirement and the successor's
+authentication are lost, not queued.
+
 ### Continuity worker
 
 Connected same-origin navigation between participating popup documents

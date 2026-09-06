@@ -24,6 +24,27 @@ export interface Carrier {
 
 export type CarrierConstructor = (signal: AbortSignal) => Promise<Carrier>
 
+/**
+ * Package-private lifecycle hooks of a carrier that cannot be transferred
+ * across a document replacement (docs/connection.md, Carrier API). The popup
+ * side prepares the next round before navigating; the application side
+ * reports the resulting replacement carrier. The connection drives both and
+ * never exposes them to callers.
+ */
+export const prepareNavigation: unique symbol = Symbol('prepareNavigation')
+export const onReplacement: unique symbol = Symbol('onReplacement')
+
+export interface NavigationCarrier extends Carrier {
+  /** Arms the replacement for `target` and resolves the exact URL to navigate to. */
+  [prepareNavigation](target: string): Promise<string>
+  /** Reports each pending authenticated replacement carrier; returns an unsubscribe. */
+  [onReplacement](handler: (carrier: Promise<Carrier>) => void): () => void
+}
+
+export function isNavigationCarrier(carrier: Carrier): carrier is NavigationCarrier {
+  return prepareNavigation in carrier && onReplacement in carrier
+}
+
 export interface Navigate {
   readonly type: 'navigate'
   readonly url: string

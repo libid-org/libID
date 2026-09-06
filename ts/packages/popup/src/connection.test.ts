@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { PopupConnection } from './connection.js'
 import { PopupError } from './diagnostics.js'
 import { PortKeeper } from './keeper.js'
-import { noRegistration } from './testing/fakes.js'
+import { fakeSignaling, noRegistration } from './testing/fakes.js'
 import type { PopupDiagnostic } from './diagnostics.js'
 import type { Carrier, CarrierConstructor, Message } from './message.js'
 import { PortCarrier } from './port.js'
@@ -901,6 +901,149 @@ describe('structured fragments [POPUP-CONNECTION-013]', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-014]', () => {
+  const PROVER = 'https://popup-b.example'
+
+  /** Application with a signaling-backed fallback, popup with its opener severed. */
+  function severedPair(hub: ReturnType<typeof fakeSignaling>) {
+    const pair = fakePair()
+    pair.appProxy.closed = true // the popup's opener is gone
+    const events: PopupDiagnostic[] = []
+    const popupWindow = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    const app = PopupConnection.connect<Messages>(popupWindow, {
+      connectionId: ID,
+      allowedPopupOrigins: [POPUP_ORIGIN, PROVER],
+      fallback: hub.application,
+      onDiagnostic: (e) => void events.push(e),
+    })
+    return { pair, app, events }
+  }
+
+  function acceptWith(
+    pair: FakePair,
+    hub: ReturnType<typeof fakeSignaling>,
+    isolationFallbackUrl?: string,
+  ) {
+    const events: PopupDiagnostic[] = []
+    const popup = new CurrentWindow(
+      pair.popupWindow,
+      noRegistration,
+      undefined,
+      pair.popupWindow.location.hash,
+    )
+    const endpoint = PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: [APP_ORIGIN],
+      fallback: hub.popup,
+      ...(isolationFallbackUrl && { isolationFallbackUrl }),
+      onDiagnostic: (e) => void events.push(e),
+    })
+    return { endpoint, events }
+  }
+
+  it('reconnects through the fallback constructor after a cross-origin hop into isolation', async () => {
+    const hub = fakeSignaling()
+    const { pair, app, events } = severedPair(hub)
+    const first = acceptWith(pair, hub)
+    await first.endpoint.ready
+    await app.ready
+    expect(codes(events)).toContain('carrier-fallback')
+
+    // Cross-origin navigation over the fallback carrier prepares round two,
+    // retires the popup side, and the application installs its new side.
+    await app.navigate(`${PROVER}/prover`, new URLSearchParams('c=1'))
+    await tick(20)
+    expect(pair.popupProxy.replaced).toEqual([`${PROVER}/prover#c=1`])
+    expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(2)
+    expect(await first.endpoint.closed).toEqual({ outcome: 'closed' })
+
+    // The non-isolated destination: fresh carrier, then the isolation fallback.
+    pair.relocate(PROVER, '/prover', '#c=1')
+    const second = acceptWith(pair, hub, '/prover/fallback')
+    const leaked = vi.fn()
+    second.endpoint.on(Start, leaked)
+    await tick(20)
+    expect(pair.popupProxy.replaced.at(-1)).toBe(`${PROVER}/prover/fallback#c=1`)
+    expect(codes(second.events)).toEqual([
+      'carrier-fallback',
+      'isolation-fallback',
+      'connection-closed',
+    ])
+    expect(leaked).not.toHaveBeenCalled()
+    expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(3)
+    let settled = false
+    void second.endpoint.ready.then(
+      () => (settled = true),
+      () => (settled = true),
+    )
+    await tick()
+    expect(settled).toBe(false)
+
+    // The isolated fallback authenticates its own carrier and both directions work.
+    pair.relocate(PROVER, '/prover/fallback', '#c=1')
+    pair.setIsolated(true)
+    const third = acceptWith(pair, hub, '/prover/fallback')
+    const starts = vi.fn()
+    third.endpoint.on(Start, starts)
+    await third.endpoint.ready
+    expect(codes(third.events)).toEqual(['carrier-fallback'])
+    const readies: number[] = []
+    app.on(Ready, (r) => void readies.push(r.version))
+    app.send(new Start())
+    third.endpoint.send(new Ready(4))
+    await tick()
+    expect(starts).toHaveBeenCalledTimes(1)
+    expect(readies).toEqual([4])
+    expect(codes(events)).not.toContain('connection-closed')
+    expect(codes(events)).not.toContain('connection-failed')
+  })
+
+  it('cancels a replacement in flight without navigating', async () => {
+    const hub = fakeSignaling()
+    const { pair } = severedPair(hub)
+    hub.holdPrepare = true
+    const side = acceptWith(pair, hub, '/prover/fallback')
+    await tick(20)
+    expect(codes(side.events)).toContain('isolation-fallback')
+    await side.endpoint.close()
+    hub.releasePrepare()
+    await tick()
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
+  })
+
+  it('reports a failed reconnection through the destination only', async () => {
+    const hub = fakeSignaling()
+    const { pair, app, events } = severedPair(hub)
+    const first = acceptWith(pair, hub, '/prover/fallback')
+    await tick(20) // prepared and left for the fallback
+    expect(pair.popupProxy.replaced).toHaveLength(1)
+    void first
+    pair.relocate(POPUP_ORIGIN, '/prover/fallback', '')
+    pair.setIsolated(true)
+    hub.failNext = true
+    const second = acceptWith(pair, hub, '/prover/fallback')
+    await expect(second.endpoint.ready).rejects.toThrow('fallback-failed')
+    // The application is not told: it holds its prepared side and its sends
+    // succeed locally and are lost, the documented window.
+    let appEnded = false
+    void app.closed.then(() => (appEnded = true))
+    await tick()
+    expect(appEnded).toBe(false)
+    expect(() => app.send(new Start())).not.toThrow()
+    expect(codes(events)).not.toContain('connection-failed')
+  })
+
+  it('fails without looping when the fallback document stays non-isolated', async () => {
+    const hub = fakeSignaling()
+    const { pair } = severedPair(hub)
+    pair.relocate(POPUP_ORIGIN, '/prover/fallback', '')
+    const side = acceptWith(pair, hub, '/prover/fallback')
+    await expect(side.endpoint.ready).rejects.toThrow('isolation-unavailable')
+    expect(pair.popupProxy.replaced).toEqual([])
   })
 })
 

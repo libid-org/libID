@@ -4,6 +4,14 @@
 // MessageChannel ports flow through unchanged, so port semantics are real.
 
 import type { KeeperWorker } from '../keeper.js'
+import {
+  type Carrier,
+  type CarrierConstructor,
+  type Message,
+  type NavigationCarrier,
+  onReplacement,
+  prepareNavigation,
+} from '../message.js'
 import type { View } from '../window.js'
 import { installPortKeeperOn } from '../worker.js'
 
@@ -207,3 +215,91 @@ export const registrationWith = (worker: KeeperWorker | null) => () =>
   Promise.resolve({ active: worker } as unknown as ServiceWorkerRegistration)
 
 export const noRegistration = () => Promise.resolve(undefined)
+
+/**
+ * A stand-in for a non-transferable carrier and its signaling service. Each
+ * round is one MessageChannel; the popup side prepares the next round
+ * before navigating, the application side reports it through the
+ * replacement hook, and the next popup document constructs its end.
+ */
+export interface FakeSignaling {
+  application: CarrierConstructor
+  popup: CarrierConstructor
+  /** Every carrier ever handed out, in order, for inspection. */
+  carriers: Carrier[]
+  /** Reject the next popup-side construction. */
+  failNext: boolean
+  /** Hold the next preparation open until released. */
+  holdPrepare: boolean
+  releasePrepare: () => void
+}
+
+export function fakeSignaling(): FakeSignaling {
+  const hub: FakeSignaling = {
+    application: () => new Promise((resolve) => (resolveInitial = resolve)),
+    popup: async () => {
+      if (hub.failNext) {
+        hub.failNext = false
+        throw new Error('signaling failed')
+      }
+      const round = prepared ?? newRound(resolveInitial)
+      prepared = null
+      return round.popupSide
+    },
+    carriers: [],
+    failNext: false,
+    holdPrepare: false,
+    releasePrepare: () => {},
+  }
+  let resolveInitial: (carrier: Carrier) => void = () => {}
+  let prepared: { popupSide: Carrier } | null = null
+
+  const replacementHandlers = new Set<(c: Promise<Carrier>) => void>()
+  function endpoint(
+    port: MessagePort,
+    replacements: Set<(c: Promise<Carrier>) => void>,
+  ): NavigationCarrier {
+    let open = true
+    const carrier: NavigationCarrier = {
+      send: (value: Message) => {
+        if (!open) throw new Error('retired')
+        port.postMessage(value)
+      },
+      on: (handler) => {
+        port.onmessage = (e) => handler(e.data)
+        port.start()
+        return () => {
+          port.onmessage = null
+        }
+      },
+      close: () => {
+        open = false
+        port.close()
+      },
+      [prepareNavigation]: async (target) => {
+        if (hub.holdPrepare) await new Promise<void>((r) => (hub.releasePrepare = r))
+        // Arm the next round: the application learns its side now, the next
+        // popup document constructs its side later.
+        const round = newRound(null)
+        prepared = { popupSide: round.popupSide }
+        for (const handler of replacementHandlers) handler(round.applicationSide)
+        return target
+      },
+      [onReplacement]: (handler) => {
+        replacements.add(handler)
+        return () => replacements.delete(handler)
+      },
+    }
+    hub.carriers.push(carrier)
+    return carrier
+  }
+
+  function newRound(resolveApplication: ((c: Carrier) => void) | null) {
+    const channel = new MessageChannel()
+    const applicationCarrier = endpoint(channel.port1, replacementHandlers)
+    const popupSide = endpoint(channel.port2, new Set())
+    resolveApplication?.(applicationCarrier)
+    return { applicationSide: Promise.resolve(applicationCarrier), popupSide }
+  }
+  return hub
+}

@@ -19,12 +19,15 @@ import {
   decodeControl,
   isCanonicalHttpsUrl,
   isConnectionId,
+  isNavigationCarrier,
   isReservedType,
   type Message,
   type MessageType,
   type Navigate,
+  onReplacement,
   type OriginAllowlist,
   type PopupControl,
+  prepareNavigation,
   requireOrigins,
   routingType,
 } from './message.js'
@@ -279,6 +282,7 @@ abstract class Endpoint<Out extends Message, In extends Message>
 
 class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpoint<Out, In> {
   private readonly stopListening: () => void
+  private stopReplacement: (() => void) | null = null
 
   constructor(
     private readonly popup: OpenedWindow,
@@ -326,6 +330,34 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
   protected onControl(): void {
     // Controls are application-to-popup only.
     this.fail('control-rejected')
+  }
+
+  /**
+   * A carrier that cannot cross a document replacement reports its own
+   * replacement, prepared by the popup before it navigated; the application
+   * installs the authenticated result under the same logical connection.
+   */
+  protected override install(carrier: Carrier, code?: DiagnosticCode): void {
+    super.install(carrier, code)
+    if (!isNavigationCarrier(carrier)) return
+    this.stopReplacement = carrier[onReplacement]((pending) => {
+      pending.then(
+        (next) => {
+          if (this.ended || this.carrier !== carrier) next.close()
+          else this.install(next, 'carrier-fallback')
+        },
+        () => {
+          // A failed replacement leaves the retired carrier in place; the
+          // destination reports the failure through its own readiness.
+        },
+      )
+    })
+  }
+
+  protected override dropCarrier(): void {
+    this.stopReplacement?.()
+    this.stopReplacement = null
+    super.dropCarrier()
   }
 
   async navigate(url: string, fragment?: URLSearchParams): Promise<void> {
@@ -428,7 +460,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       if (registration?.active) {
         const port = await new PortKeeper(registration.active).claim(this.connectionId)
         if (this.ended) return port?.close()
-        if (port) return this.admit(port, 'carrier-restored')
+        if (port) return this.admit(new PortCarrier(port), 'carrier-restored')
         this.report('claim-empty')
       }
       const opener = this.popup.opener
@@ -441,18 +473,13 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
           signal: this.controller.signal,
         })
         if (this.ended) return port?.close()
-        if (port) return this.admit(port, 'carrier-message-port')
+        if (port) return this.admit(new PortCarrier(port), 'carrier-message-port')
         this.report('opener-timeout')
       }
       if (!fallback) return this.fail('fallback-unavailable', true)
       const carrier = await fallback(this.controller.signal)
       if (this.ended) return carrier.close()
-      if (this.isolationFallback && !this.popup.isolated) {
-        // Only a MessagePort can be preserved into the isolated replacement.
-        carrier.close()
-        return this.fail('continuity-unsupported', true)
-      }
-      this.install(carrier, 'carrier-fallback')
+      return this.admit(carrier, 'carrier-fallback')
     } catch (error) {
       if (this.ended) return
       this.fail(error instanceof PopupError ? error.code : 'fallback-failed', true)
@@ -460,36 +487,36 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   }
 
   /**
-   * Installs an authenticated port, unless this document must be isolated
-   * and is not: then the port, still unstarted so every value the
-   * application already sent stays queued inside it, is kept through the
-   * worker and the document replaces itself with the isolated fallback.
-   * `ready` stays pending here; the replacement becomes ready instead.
+   * Installs an authenticated carrier, unless this document must be isolated
+   * and is not: then the document replaces itself with the isolated fallback
+   * and the carrier continues there. A MessagePort, still unstarted so every
+   * value the application already sent stays queued inside it, is kept
+   * through the worker. Any other carrier cannot cross the replacement: it
+   * prepares its successor where it can, is retired, and the destination
+   * establishes a fresh carrier through its own constructor. `ready` stays
+   * pending here; the replacement becomes ready instead.
    */
   private async admit(
-    port: MessagePort,
-    code: 'carrier-restored' | 'carrier-message-port',
+    carrier: Carrier,
+    code: 'carrier-restored' | 'carrier-message-port' | 'carrier-fallback',
   ): Promise<void> {
     const { location } = this.popup.view
-    if (!this.isolationFallback || this.popup.isolated) {
-      return this.install(new PortCarrier(port), code)
-    }
+    if (!this.isolationFallback || this.popup.isolated) return this.install(carrier, code)
     this.report(code)
     if (sameDocument(this.isolationFallback, location)) {
       // Already the fallback and still not isolated: the host's policy is
       // not taking effect. Never loop.
-      port.close()
+      carrier.close()
       return this.fail('isolation-unavailable', true)
     }
     this.controlsDone = true
     this.report('isolation-fallback')
+    this.carrier = carrier // retired by release(), never started for delivery
     try {
-      await this.keepThrough(port, true)
+      await this.leaveFor(this.isolationFallback.href, true)
     } catch {
-      return // already failed through `ready`
+      // already failed through `ready`
     }
-    this.release()
-    location.replace(this.isolationFallback.href)
   }
 
   protected onControl(control: PopupControl): void {
@@ -539,17 +566,47 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
    */
   private async replaceDocument(url: string, viaOperation: boolean): Promise<void> {
     const { location } = this.popup.view
-    if (new URL(url).origin !== location.origin) {
+    const carrier = this.carrier
+    if (new URL(url).origin !== location.origin && !(carrier && isNavigationCarrier(carrier))) {
+      // Nothing crosses an origin: the destination authenticates afresh.
       this.release()
       location.replace(url)
       return
     }
-    if (!(this.carrier instanceof PortCarrier)) {
+    await this.leaveFor(url, viaOperation)
+  }
+
+  /**
+   * Leaves this document for `url` with continuity: a port is kept through
+   * the worker; a navigation carrier prepares its replacement first and is
+   * then retired; any other carrier cannot continue. Failure is reported
+   * through the invoking operation when there is one and rethrown.
+   */
+  private async leaveFor(url: string, viaOperation: boolean): Promise<void> {
+    const { location } = this.popup.view
+    const carrier = this.carrier
+    if (carrier instanceof PortCarrier) {
+      await this.keepThrough(carrier.detach(), viaOperation)
+      this.release() // the port is the worker's now; this endpoint is done
+      location.replace(url)
+      return
+    }
+    if (!carrier || !isNavigationCarrier(carrier)) {
       this.fail('continuity-unsupported', viaOperation)
       throw new PopupError('continuity-unsupported')
     }
-    await this.keepThrough(this.carrier.detach(), viaOperation)
-    location.replace(url)
+    let target: string
+    try {
+      target = await carrier[prepareNavigation](url)
+    } catch {
+      this.fail('continuity-unsupported', viaOperation)
+      throw new PopupError('continuity-unsupported')
+    }
+    if (this.ended) throw new PopupError('connection-closed')
+    // Retire before leaving; nothing the application sends from here on
+    // reaches a document until the destination authenticates its successor.
+    this.release()
+    location.replace(target)
   }
 
   /**
