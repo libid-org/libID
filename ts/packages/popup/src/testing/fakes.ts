@@ -20,7 +20,14 @@ export const POPUP_ORIGIN = 'https://popup.example'
 export const ID = '1c037b6a-2f08-4b17-9f9e-0d9a6a5b3c2d'
 export const OTHER_ID = '2d148c7b-3f19-4c28-8a0f-1e0b7b6c4d3e'
 
-export const tick = (ms = 5): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+/**
+ * Lets pending deliveries land. Fake window dispatch is synchronous; real
+ * MessagePort values arrive in the event loop's poll phase, which a timer
+ * firing after a stall can precede, so two further loop turns follow it.
+ */
+export const tick = async (ms = 5): Promise<void> => {
+  for (const delay of [ms, 0, 0]) await new Promise((resolve) => setTimeout(resolve, delay))
+}
 
 type Listener = (event: MessageEvent) => void
 
