@@ -212,7 +212,7 @@ their causal lifecycle remains a platform-ceremony-version change.
 Each platform/version's lightweight `assets` leaf composes its pinned circuit
 and shared integration resources into its selected-profile set. Shared bb.js,
 notarization, and circuit declarations are referenced, not copied between
-platforms; [resource ownership and collection](../../../build/docs/distribution.md#source-declarations)
+platforms; [resource ownership and collection](../../../docs/distribution.md#source-declarations)
 define the import boundary. A ceremony fetches only its composed set and emitted
 execution dependencies. X and GitHub reuse the notarization client and
 `bearer-link` circuit; Google fetches neither when it does not need them.
@@ -224,7 +224,7 @@ configuration. The build owns local toolchain worker/WASM locations and pins
 bb.js's native external common reference string (CRS) requests. No runtime
 configuration can replace those dependencies.
 
-The [CCDP Distribution](../../../build/docs/distribution.md#proving-assets) serves companion chunks, spawner
+The [CCDP Distribution](../../../docs/distribution.md#proving-assets) serves companion chunks, spawner
 and nested worker modules, WASM, and circuits from immutable same-origin paths.
 The resource table currently marks CRS as `external`: those bodies are
 prefetched and fetched directly from Aztec's CDNs using bb.js's native URLs and
@@ -398,7 +398,7 @@ See [Prefetch and cache lifecycle](../../prefetch/docs/prefetch.md).
 ## Execution isolation
 
 [CCDP](../../ccdp/documents/docs/documents.md#documents-and-routes) owns the Prover's isolated execution
-context; the [CCDP Distribution contract](../../../build/docs/distribution.md#protocol-resources) owns its HTTP
+context; the [CCDP Distribution contract](../../../docs/distribution.md#protocol-resources) owns its HTTP
 policy and declared local/external resource graph. No request parameter selects a document
 role, asset, or CSP. `AppStartProver` carries the Application's frozen
 `redirectUri`; its origin selects the OAuth Bridge for GitHub's fixed token

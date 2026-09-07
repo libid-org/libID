@@ -75,7 +75,7 @@ The browser distribution exposes `tlsn_wasm.js` and its sibling
 `tlsn_wasm_bg.wasm`; the worker bootstrap is embedded in the module. The global
 notarization module pins both immutable asset paths. Each remains a normal,
 independently cached response; the browser never downloads or unpacks a release
-archive. The [CCDP Distribution contract](../../../build/docs/distribution.md#proving-assets) owns their
+archive. The [CCDP Distribution contract](../../../docs/distribution.md#proving-assets) owns their
 serving.
 Neither an application nor `AppStartProver` selects a notary, circuit, or
 bb.js version.

@@ -2,7 +2,7 @@
 
 This plan tests the `@libid/ceremony` package architecture in
 [ARCHITECTURE.md](architecture.md) and its browser protocol in
-[CCDP.md](../src/ccdp/docs/protocol.md), its deployment in [CCDP_DISTRIBUTION.md](../build/docs/distribution.md), its
+[CCDP.md](../src/ccdp/docs/protocol.md), its deployment in [CCDP_DISTRIBUTION.md](distribution.md), its
 proof-generation subsystem in [PROVING.md](../src/prover/docs/proving.md), and the [OAuth bridge
 contract](oauth-bridge.md).
 Generic popup creation, connection, carrier, continuity, control, and local

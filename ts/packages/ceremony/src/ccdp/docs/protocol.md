@@ -9,7 +9,7 @@ platform-proof, and final-proof semantics are defined by the normative
 
 An authenticated, ordered, bidirectional popup connection carries CCDP
 messages unchanged. CCDP requires that connection but does not prescribe its
-implementation. [CCDP_DISTRIBUTION.md](../../../build/docs/distribution.md) defines the static
+implementation. [CCDP_DISTRIBUTION.md](../../../docs/distribution.md) defines the static
 distribution and HTTP contract for the CCDP origin.
 
 ## Actors and origins

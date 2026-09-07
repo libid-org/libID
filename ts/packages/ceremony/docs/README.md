@@ -1,8 +1,8 @@
 # Ceremony documentation
 
 Start with the [package guide](../README.md) and [architecture](architecture.md).
-The detailed contracts live with their owning modules; each directory README links
-the contract to its implementation.
+Package-wide contracts live here; module contracts live beside their implementations.
+Each directory README links to the relevant contract.
 
 | Area | Guide and contract |
 |---|---|
@@ -13,7 +13,7 @@ the contract to its implementation.
 | Proving | [Proof engine](../src/prover/README.md) · [proving contract](../src/prover/docs/proving.md) |
 | Notarization | [TLSNotary adapter](../src/prover/notarization/README.md) · [notarization contract](../src/prover/notarization/docs/notarization.md) |
 | Prefetch | [Worker and cache](../src/prefetch/README.md) · [cache lifecycle](../src/prefetch/docs/prefetch.md) |
-| Static distribution | [Build](../build/README.md) · [distribution contract](../build/docs/distribution.md) |
+| Static distribution | [Build](../build/README.md) · [distribution contract](distribution.md) |
 | OAuth Bridge | [External server contract](oauth-bridge.md) |
 | Metrics | [Measurement contract](metrics.md); completeness is deferred |
 | Verification | [Test requirements](test-plan.md) · [traceability](traceability.md) · [qualification and blockers](qualification.md) |

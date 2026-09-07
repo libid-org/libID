@@ -24,7 +24,7 @@ activation so later prover documents use the selected release rather than a
 stale controller. Activation does not proactively delete reusable immutable
 Cache Storage entries or bb.js CRS data. Immutable URLs keep already loaded
 documents pinned; a live ceremony may still fail closed across deployment
-rotation as defined by the [CCDP Distribution contract](../../../build/docs/distribution.md#protocol-resources).
+rotation as defined by the [CCDP Distribution contract](../../../docs/distribution.md#protocol-resources).
 
 The Prefetch bootstrap accepts only the closed, cleared profile selected by its
 fragment and selects its resolved resource set from the lightweight catalog.

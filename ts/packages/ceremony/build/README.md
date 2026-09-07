@@ -3,7 +3,7 @@
 Compiles the versioned documents and their dependency graph into a static distribution
 with immutable resources and generated response policies.
 
-- [Distribution contract](docs/distribution.md): routes, headers, source declarations and publication.
+- [Distribution contract](../docs/distribution.md): routes, headers, source declarations and publication.
 - [Build and serve](../README.md#build-and-serve): commands and Docker image.
 - [Exact dependency requests](../src/prover/docs/proving.md#dependency-asset-resolution): native external CRS behavior.
 
