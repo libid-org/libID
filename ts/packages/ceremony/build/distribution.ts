@@ -162,10 +162,21 @@ try {
   }
   document('/ccdp/v1/prover', primary.code, 'prover')
   document('/ccdp/v1/prover/fallback', primary.code, 'proverFallback')
-  const callback = await bundle('src/ccdp/documents/callback.ts', data, { selfContained: true })
+  const callback = await bundle('src/ccdp/documents/callback.ts', data, {
+    selfContained: true,
+    invoke: 'startCallback',
+  })
   for (const item of callback.output) {
     if (item.type !== 'chunk' || !item.isEntry) throw new Error('Callback must be self-contained')
-    put('/ccdp/v1/callback.js', item.code, 'callback')
+    if (item.imports.length || item.dynamicImports.length || item.referencedFiles.length)
+      throw new Error('Callback must have no external dependencies')
+    const code = item.code.replace(/<\/script/gi, '<\\/script')
+    put(
+      '/ccdp/callback.html',
+      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>libID</title><body><main id="libid-root"></main><script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script></body></html>`,
+      'callback',
+      responseHeaders('callback', { ...options, inline: [code] }),
+    )
   }
   const prefetch = await bundle('src/ccdp/documents/prefetch.ts', data, { invoke: 'startPrefetch' })
   for (const item of prefetch.output) {

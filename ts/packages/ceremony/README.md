@@ -126,7 +126,9 @@ The image contains only `public/` and generated `sws.toml`. Place it behind a
 transparent HTTPS ingress on a dedicated cookie-free origin. Preserve exact paths,
 headers and Brotli negotiation. Configure the independently deployed OAuth Bridge
 according to [OAUTH_BRIDGE.md](docs/oauth-bridge.md); ceremony supplies no production
-Bridge server. Callback's self-contained module executes under the Bridge's CSP.
+Bridge server. The Bridge inserts deployment JSON into `/ccdp/callback.html` and serves the
+complete document with matching CSP hashes; Callback owns URL clearing and bundled
+version selection, with no browser entry-script request.
 
 Optional opener-independent fallback belongs to `@libid/popup`. A distribution
 integrator may set the code-owned `build/popup.ts` adapter module and its connect

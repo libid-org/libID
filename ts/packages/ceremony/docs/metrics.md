@@ -143,7 +143,7 @@ performance qualification compares the post-OAuth and proof-request spans.
 | Measurement | Boundaries or facts |
 |---|---|
 | callback bootstrap | document start through bounded copy and immediate URL clearing |
-| package load | callback entrypoint import and initialization |
+| callback initialization | URL clearing through deployment-input validation and entry into the bundled CCDP implementation; there is no callback entry-script fetch |
 | proof handoff | authenticated Callback departure through Prover activation and `ProverReady`; measure locally without exporting navigation data |
 
 OAuth query/fragment lengths may be reported only as coarse, code-defined

@@ -14,3 +14,9 @@ provide the opt-in proof/notary runtime lane on port 4686. The
 [manual consent walkthrough](../../../qualification/ceremony/walkthrough.mjs) installs
 no OAuth mocks. Synthetic exchanges and mobile emulation are not real-platform or
 physical-device qualification.
+
+[callback.ts](callback.ts) demonstrates data-only insertion into the emitted
+Callback HTML and composes its hash-only script policy. It is deliberately a
+harness helper, not the production Bridge refresh/cache lifecycle. Its
+`connect-src 'none'` tests the deployment without an optional fallback adapter;
+configured fallback connectivity requires separate qualification.

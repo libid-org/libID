@@ -400,7 +400,12 @@ view requires no new reveals and creates no additional notary or ledger field.
 Malformed signed data, range ordering, coverage, commitment correlation,
 same-channel framing, cancellation, or a partial result rejects final completion
 and invalidates any speculative witness or proof built from the early material.
-Authoritative signature and platform-profile acceptance remains the Ledger Verifier's
-responsibility.
+Neither this adapter, the platform Prover, nor the Ceremony Client verifies
+notary signatures locally. Exact signature length/encoding, canonical decoding,
+request bindings, and commitment/opening correlation remain required at their
+existing owners; they do not establish signature authenticity. A structurally
+valid forgery can survive browser checks, so delivery and convenience views
+remain unverified. The Ledger Verifier's trusted-notary signature and
+platform-profile checks remain mandatory over the original signed bytes.
 
 [TEST_PLAN.md](../../../../docs/test-plan.md) owns the executable notarization requirements.

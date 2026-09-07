@@ -24,7 +24,7 @@ the distinction is immaterial.
 | Actor | Browser authority | Responsibility |
 |---|---|---|
 | Application | application origin | hosts the application document, owns the operation and ceremony state, and drives the protocol |
-| OAuth Bridge | OAuth bridge origin | publishes ceremony configuration, hosts the callback shell, owns OAuth registrations, and performs enabled confidential OAuth exchanges |
+| OAuth Bridge | OAuth bridge origin | publishes ceremony configuration, serves the complete Callback document obtained from the Distribution with bridge-owned inputs, owns OAuth registrations, and performs enabled confidential OAuth exchanges |
 | CCDP Distribution | CCDP origin | contains the versioned [resources](../documents/docs/documents.md#documents-and-routes) and proving assets used by any number of OAuth Bridges; it may be the canonical libID distribution or an operator-selected replacement |
 | OAuth Platform | OAuth-platform origin set | hosts authorization/login documents and issues the OAuth return |
 
@@ -35,10 +35,11 @@ none of those relationships. Browser authority is always established against
 an exact origin. A composition which continues the live popup connection after
 CCDP has the additional requirements below.
 
-The OAuth Bridge owns the registered callback shell because the OAuth redirect
-URI must terminate on the bridge origin. After clearing the OAuth return, that
-shell dynamically loads CCDP's versioned Callback module from the configured
-CCDP origin.
+The OAuth redirect URI terminates on the bridge origin. The OAuth Bridge serves
+CCDP's self-contained Callback artifact with its deployment inputs already
+inserted; artifact retrieval happens server-side, independently of OAuth
+requests. Callback captures and clears the OAuth return, then selects its
+bundled CCDP implementation without another browser request.
 
 Multiple independently operated OAuth Bridges may select the same CCDP
 Distribution through its `ccdpOrigin`. The Distribution keeps no Bridge
@@ -223,7 +224,7 @@ path and remains local.
 The protocol advances one named ceremony popup through
 [Prefetch](../documents/docs/documents.md#prefetch-get-prefetch),
 [Authorization](../documents/docs/documents.md#authorization-get-platformauthorizationurl),
-[Callback](../documents/docs/documents.md#callback-get-callbackjs), and
+[Callback](../documents/docs/documents.md#callback-get-redirecturi), and
 [Prover](../documents/docs/documents.md#prover-get-prover). Those route sections own each participant's
 inputs, context, and role; [Messages](#messages) owns the records crossing the
 popup connection. The phases below own their sequencing, entry conditions, and
@@ -293,9 +294,9 @@ are reported locally and release no protocol message.
 This phase begins when [Authorization](../documents/docs/documents.md#authorization-get-platformauthorizationurl)
 loads. The OAuth Platform owns the popup and initiates browser navigation to
 the frozen `redirectUri` after approval or denial; neither CCDP endpoint
-initiates that transition. The OAuth Bridge shell captures and clears the
-return, selects the CCDP version from `state`, and dynamically imports the
-matching [Callback](../documents/docs/documents.md#callback-get-callbackjs) module in the same document. The
+initiates that transition. The Bridge serves the complete
+[Callback](../documents/docs/documents.md#callback-get-redirecturi), which captures and clears the return and
+enters its bundled CCDP implementation selected by `state`. The
 [OAuth Bridge contract](../../../docs/oauth-bridge.md#callback-document) exclusively defines
 ingress.
 
@@ -306,7 +307,7 @@ no OAuth-return message. Connection acceptance permits the Prover transition.
 
 #### 3. Callback to Prover
 
-The popup-side [Callback](../documents/docs/documents.md#callback-get-callbackjs) endpoint asks its connection
+The popup-side [Callback](../documents/docs/documents.md#callback-get-redirecturi) endpoint asks its connection
 to navigate to the frozen [Prover](../documents/docs/documents.md#prover-get-prover) location, supplying the
 ceremony ID and captured query/fragment as that route's structured fragment.
 Callback owns this transition to keep the return private from Application and
@@ -376,7 +377,7 @@ sequenceDiagram
     Note over A,P: Phase 2 - Authorization to Callback
     Note over P: User completes login and consent in Authorization
     P->>P: OAuth Platform redirects to redirectUri
-    P->>P: OAuth Bridge loads Callback
+    P->>P: Callback starts and selects its bundled version
     P->>P: Callback accepts authenticated connection
     break Callback fails after connection acceptance
         P-->>A: AbortCeremony

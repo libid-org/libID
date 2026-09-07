@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { makeCertificate } from './tls.mjs'
 import { packageDir } from '../build/release.ts'
-import { scriptHash } from '../build/profiles.ts'
+import { prepareCallback } from './callback.ts'
 const app = 'https://localhost:4681',
   bridge = 'https://localhost:4682',
   ccdp = 'https://localhost:4683'
@@ -14,8 +14,13 @@ const graph = JSON.parse(readFileSync(join(packageDir, '.cache/distribution-grap
   cert = makeCertificate(['localhost'])
 const html = (body) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ceremony qualification</title><body>${body}</body></html>`
-const bootstrap = `(()=>{const input={query:location.search,fragment:location.hash};history.replaceState(null,'',location.pathname);try{if(input.query.length+input.fragment.length>32768)throw new Error();const states=[...new URLSearchParams(input.query).getAll('state'),...new URLSearchParams(input.fragment.slice(1)).getAll('state')];if(states.length!==1||!/^v1\\.[0-9a-f-]+$/.test(states[0]))throw new Error();Object.freeze(input);import('${ccdp}/ccdp/v1/callback.js').then(m=>m.startCallback(input,Object.freeze(['${app}']),'${ccdp}')).catch(fail)}catch{fail()}function fail(){document.getElementById('libid-root').textContent='Unable to continue.'}})()`
-const callbackPolicy = `default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; script-src ${scriptHash(bootstrap)} ${ccdp}/ccdp/v1/callback.js; style-src 'unsafe-inline'; frame-src ${ccdp}`
+// Prepared once, independently of OAuth requests; both bytes and policy change together.
+const callback = prepareCallback(
+  readFileSync(join(packageDir, 'dist-artifacts/public/ccdp/callback.html'), 'utf8'),
+  graph.headers['/ccdp/callback.html'],
+  { defaultInputs: [[app], ccdp], inputOverrides: {} },
+  ccdp,
+)
 for (const port of [4681, 4682, 4683])
   createServer(cert, async (req, res) => {
     const path = new URL(req.url, 'https://localhost').pathname
@@ -70,13 +75,7 @@ for (const port of [4681, 4682, 4683])
             }),
             { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
           )
-        if (path === '/callback')
-          return send(html(`<main id="libid-root"></main><script>${bootstrap}</script>`), {
-            'Content-Security-Policy': callbackPolicy,
-            'Cross-Origin-Opener-Policy': 'unsafe-none',
-            'Referrer-Policy': 'no-referrer',
-            'X-Content-Type-Options': 'nosniff',
-          })
+        if (path === '/callback') return send(callback.body, callback.headers)
       }
       if (port === 4683) {
         if (path === '/qualification-control') {

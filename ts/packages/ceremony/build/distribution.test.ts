@@ -61,3 +61,50 @@ test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018]', {
   }
   assert.equal((await fetch(`${process.env.CEREMONY_SWS_URL}/ccdp/v99/prover`)).status, 404)
 })
+
+test('aggregate Callback insertion preserves executable hashes and rejects malformed artifacts [KIT-009] [KIT-010] [CSP-007]', async () => {
+  const { prepareCallback } = await import('../e2e/callback.ts')
+  const path = '/ccdp/callback.html'
+  const html = readFileSync(join(out, 'public', path), 'utf8')
+  const headers = graph.headers[path]
+  const a = prepareCallback(
+    html,
+    headers,
+    { defaultInputs: [['https://app.test'], 'https://ccdp.test'], inputOverrides: {} },
+    'https://ccdp.test',
+  )
+  const b = prepareCallback(
+    html,
+    headers,
+    {
+      defaultInputs: [['https://other.test'], 'https://ccdp.test'],
+      inputOverrides: {},
+      hostile: '</script><script>alert(1)</script>$&',
+    },
+    'https://ccdp.test',
+  )
+  assert.equal(a.headers['Content-Security-Policy'], b.headers['Content-Security-Policy'])
+  assert.ok(b.body.includes('\\u003c/script>'))
+  assert.ok(b.body.includes('$&'))
+  assert.equal(a.headers['Cache-Control'], 'no-store')
+  assert.equal(new Headers(a.headers).has('ETag'), false)
+  assert.equal(new Headers(a.headers).has('Content-Encoding'), false)
+  assert.equal(new Headers(a.headers).has('Access-Control-Allow-Origin'), false)
+  assert.equal(headers['Cache-Control'], 'no-cache')
+  for (const broken of [
+    html.replace('__LIBID_CALLBACK_CONFIG__', ''),
+    `${html}__LIBID_CALLBACK_CONFIG__`,
+    `${html}<script src="https://evil.test"></script>`,
+    html.replace('type="module">', 'type="module">void 0;'),
+  ])
+    assert.throws(() => prepareCallback(broken, headers, {}, 'https://ccdp.test'))
+  assert.throws(() =>
+    prepareCallback(
+      html,
+      { ...headers, 'Content-Security-Policy': "script-src 'self'" },
+      {},
+      'https://ccdp.test',
+    ),
+  )
+  assert.equal(Object.hasOwn(graph.headers, '/ccdp/v1/callback.js'), false)
+})

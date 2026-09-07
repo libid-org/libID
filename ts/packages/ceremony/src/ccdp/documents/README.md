@@ -6,7 +6,7 @@ from the top-level ceremony modules.
 - [Document contract](docs/documents.md): routes, fragments and origin policy.
 - [Protocol phases](../docs/protocol.md#phases): readiness, navigation and delivery ordering.
 - [Distribution policy](../../../docs/distribution.md): emitted resources and isolation headers.
-- [Bridge callback shell](../../../docs/oauth-bridge.md#callback-document): capture and clear the OAuth return.
+- [Callback artifact](../../../docs/distribution.md#callback-artifact): package-owned URL clearing, version dispatch, and startup; the Bridge inserts deployment data.
 
 [callback.ts](callback.ts) authenticates the Application and privately forwards the
 return. [prefetch.ts](prefetch.ts) is the dual-context Prefetch/Worker entrypoint and

@@ -1,22 +1,68 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { AbortCeremony } from '../index.js'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
-import { CancelCeremony, origin } from '../index.js'
-import { ceremonyIdFromState, proverFragment, route, type OAuthReturn } from '../navigation.js'
+import { CancelCeremony, origin, UUID } from '../index.js'
+import { proverFragment, route, type OAuthReturn } from '../navigation.js'
 import { hasExactKeys, isRecord } from '../../primitives.js'
 import { view } from '../../ui.js'
-export function callbackState(input: OAuthReturn): string {
-  const states = [
-    ...new URLSearchParams(input.query).getAll('state'),
-    ...new URLSearchParams(input.fragment.slice(1)).getAll('state'),
-  ]
-  if (states.length !== 1) throw new Error('Invalid OAuth state')
-  return ceremonyIdFromState(states[0])
+/** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
+export function startCallback(): void {
+  try {
+    const oversized = location.search.length + location.hash.length > 32768
+    const input = oversized
+      ? undefined
+      : Object.freeze({ query: location.search, fragment: location.hash })
+    history.replaceState(null, '', location.origin + location.pathname)
+    if (!input) throw new TypeError('OAuth return too large')
+    const states = [
+      ...new URLSearchParams(input.query).getAll('state'),
+      ...new URLSearchParams(input.fragment.slice(1)).getAll('state'),
+    ]
+    const state = states.length === 1 ? /^v([1-9][0-9]*)\.(.+)$/.exec(states[0]) : null
+    if (!state || !UUID.test(state[2])) throw new TypeError('Invalid OAuth state')
+    // This closed dispatch retains only implementations supported by this artifact.
+    if (state[1] !== '1') {
+      view('This ceremony version is no longer supported. Update the application and try again.')
+      return
+    }
+    const config: unknown = JSON.parse(
+      document.getElementById('libid-callback-config')?.textContent ?? '',
+    )
+    if (
+      !isRecord(config) ||
+      !hasExactKeys(config, ['defaultInputs', 'inputOverrides']) ||
+      !Array.isArray(config.defaultInputs) ||
+      !isRecord(config.inputOverrides) ||
+      Object.keys(config.inputOverrides).some((version) => !/^[1-9][0-9]*$/.test(version))
+    )
+      throw new TypeError('Invalid Callback configuration')
+    const inputs: unknown = config.inputOverrides[state[1]] ?? config.defaultInputs
+    if (!Array.isArray(inputs) || inputs.length !== 2)
+      throw new TypeError('Invalid Callback inputs')
+    const [allowedApplicationOrigins, ccdpOrigin] = inputs
+    if (
+      !Array.isArray(allowedApplicationOrigins) ||
+      !allowedApplicationOrigins.length ||
+      new Set(allowedApplicationOrigins).size !== allowedApplicationOrigins.length ||
+      allowedApplicationOrigins.some((o) => !origin(o)) ||
+      !origin(ccdpOrigin)
+    )
+      throw new TypeError('Invalid Callback inputs')
+    const frozen = Object.freeze([
+      Object.freeze([...allowedApplicationOrigins]),
+      ccdpOrigin,
+    ] as const)
+    callbackV1(input, state[2], ...frozen)
+  } catch {
+    view('Unable to continue. Return to your application.')
+  }
 }
-export function startCallback(
-  ...args: [input: OAuthReturn, allowedApplicationOrigins: readonly string[], ccdpOrigin: string]
+function callbackV1(
+  input: OAuthReturn,
+  id: string,
+  allowedApplicationOrigins: readonly string[],
+  ccdpOrigin: string,
 ): void {
-  const [input, allowedApplicationOrigins, ccdpOrigin] = args
   let connection: PopupConnection<Message> | undefined,
     ended = false,
     retained: OAuthReturn | undefined
@@ -33,24 +79,7 @@ export function startCallback(
     } catch {}
   }
   try {
-    if (
-      args.length !== 3 ||
-      !isRecord(input) ||
-      !hasExactKeys(input, ['query', 'fragment']) ||
-      typeof input.query !== 'string' ||
-      typeof input.fragment !== 'string' ||
-      input.query.length + input.fragment.length > 32768 ||
-      (input.query !== '' && !input.query.startsWith('?')) ||
-      (input.fragment !== '' && !input.fragment.startsWith('#')) ||
-      !Array.isArray(allowedApplicationOrigins) ||
-      !allowedApplicationOrigins.length ||
-      new Set(allowedApplicationOrigins).size !== allowedApplicationOrigins.length ||
-      allowedApplicationOrigins.some((o) => !origin(o)) ||
-      !origin(ccdpOrigin)
-    )
-      throw new TypeError('Invalid Callback inputs')
-    retained = { ...input }
-    const id = callbackState(retained)
+    retained = input
     view('Returning to your application')
     connection = PopupConnection.accept(PopupWindow.current(), {
       fallback,

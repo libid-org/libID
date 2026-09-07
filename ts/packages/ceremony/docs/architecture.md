@@ -127,7 +127,7 @@ Launch publishes one `@libid/ceremony` package:
 ├── ccdp
 │   ├── index         ceremony records, directional codecs, and protocol version
 │   └── documents
-│       ├── callback  source entrypoint for the versioned CCDP Callback implementation
+│       ├── callback  bundled Callback versions, URL clearing, and startup
 │       ├── prefetch  dual-context Prefetch document and Worker entrypoint
 │       └── prover    source entrypoint for the isolated Prover document
 ├── client      CeremonyConfig fetch, application-side API, and orchestration
@@ -268,7 +268,7 @@ The package-facing API surface is:
 | `@libid/ceremony` | `PlatformId`, `PlatformCeremonyVersion`, `supportedPlatforms`, `ProofByPlatformVersion`, `OAuthProof`, `Identity`, and `IdentityResult`, derived from the closed platform/version catalog |
 | `@libid/ceremony/ccdp` | internal CCDP record types, per-record decoder companions, protocol version, and direction/order checks; no application export |
 | `@libid/ceremony/client` | `CeremonyConfig` fetch/validation, application-scoped `CeremonyClient`, stateful `Ceremony` orchestration, and public catalog/result re-exports |
-| `@libid/ceremony/callback` | [browser entrypoint](../src/ccdp/documents/docs/documents.md#callback-get-callbackjs) served from the CCDP origin as the versioned Callback implementation |
+| `@libid/ceremony/callback` | [browser entrypoint](../src/ccdp/documents/docs/documents.md#callback-get-redirecturi) bundled into the complete Callback artifact; the OAuth Bridge retrieves it from the CCDP Distribution, inserts deployment data, and serves it without a separate browser script fetch |
 | `@libid/ceremony/prefetch` | dual-context browser entrypoint embedded by the versioned Prefetch document and served at the versioned Worker path |
 | `@libid/ceremony/prover` | [browser entrypoint](../src/ccdp/documents/docs/documents.md#prover-get-prover) embedded by the versioned isolated Prover document |
 

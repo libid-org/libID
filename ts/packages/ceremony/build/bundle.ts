@@ -144,6 +144,8 @@ export async function bundle(
       if (id === 'virtual:ceremony-entry') return `\0${id}`
     },
     load(id) {
+      if (id === '\0virtual:ceremony-entry' && selfContained)
+        return `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};${invoke}()`
       if (id === '\0virtual:ceremony-entry')
         return `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};if(typeof window!=='undefined'&&Object.hasOwn(window,'__libidCeremonyInput')){const fragment=window.__libidCeremonyInput;delete window.__libidCeremonyInput;void ${invoke}(fragment)}`
     },

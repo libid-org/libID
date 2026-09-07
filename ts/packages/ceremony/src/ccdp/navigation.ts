@@ -3,16 +3,9 @@ export interface OAuthReturn {
   query: string
   fragment: string
 }
-export const route = (
-  name: 'prefetch' | 'prover' | 'prover/fallback' | 'worker.js' | 'callback.js',
-) => `/ccdp/v${CCDP_VERSION}/${name}`
+export const route = (name: 'prefetch' | 'prover' | 'prover/fallback' | 'worker.js') =>
+  `/ccdp/v${CCDP_VERSION}/${name}`
 export const oauthState = (ceremonyId: string) => `v${CCDP_VERSION}.${ceremonyId}`
-export function ceremonyIdFromState(state: string): string {
-  const id = state.slice(3)
-  if (!state.startsWith(`v${CCDP_VERSION}.`) || !UUID.test(id))
-    throw new TypeError('Invalid OAuth state')
-  return id
-}
 function fields(fragment: string, keys: string[]): URLSearchParams {
   const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment
   if (raw.length > 65536) throw new TypeError('Navigation input too large')

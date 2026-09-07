@@ -10,7 +10,8 @@ build, and deployment contract.
 One CCDP Distribution is served from one canonical HTTPS `ccdpOrigin`. Explicit
 loopback development is the only HTTP exception. It contains:
 
-- every protocol resource for each supported CCDP version; and
+- every protocol resource for each supported CCDP version, including one
+  self-contained Callback artifact containing its supported implementations; and
 - their bundled JavaScript, workers, WASM, circuits, and libID-owned assets.
 
 The resource graph distinguishes distributed assets from external assets.
@@ -21,8 +22,10 @@ requests and cache behavior are defined in
 [PROVING.md](../src/prover/docs/proving.md#dependency-asset-resolution).
 
 The OAuth Bridge separately serves ceremony configuration, the registered
-callback shell, and enabled confidential platform endpoints. Requests to the
-OAuth Platform, OAuth Bridge, Notary Service, and public platform APIs are
+Callback document, and enabled confidential platform endpoints. It retrieves
+the public Callback artifact server-side and inserts its deployment data before
+serving it; this does not change the document's OAuth Bridge origin. Requests
+to the OAuth Platform, OAuth Bridge, Notary Service, and public platform APIs are
 protocol traffic rather than CCDP assets.
 
 The Distribution may be the canonical libID release or an operator-selected
@@ -47,11 +50,14 @@ The Distribution exposes the exact versioned
 [resources](../src/ccdp/documents/docs/documents.md#documents-and-routes) defined by CCDP. Their fragments,
 roles, and execution contexts remain CCDP rules.
 
-Prefetch and Prover contain their clearing bootstrap and entry code
-directly, with no browser-visible manifest or second entry-script request. They
-may load implementation-private immutable chunks and expose only an empty mount
-point to package-owned presentation. Callback remains a separate ES module
-because the OAuth Bridge shell loads the version selected from OAuth `state`.
+Prefetch and Prover contain their clearing bootstrap and entry code directly,
+with no browser-visible manifest or second entry-script request. They may load
+implementation-private immutable chunks and expose only an empty mount point
+to package-owned presentation.
+
+The aggregate [Callback artifact](#callback-artifact) is retrieved server-side
+by OAuth Bridges; the contract below defines its configuration slot, embedded
+startup, and the response they serve.
 
 Each supported path has one decoded representation and response policy.
 `Accept-Encoding` may select only the Brotli transfer representation defined
@@ -66,9 +72,12 @@ methods execute no CCDP code.
 The not-found response is static HTML containing no script, style, link, form,
 redirect, or protocol data.
 
-Versioned protocol resources use `Cache-Control: no-cache` and an ETag so one
-path may receive compatible implementation updates. A breaking protocol change
-publishes a new CCDP-version path.
+Versioned protocol resources and the aggregate Callback artifact use
+`Cache-Control: no-cache` and an ETag so a path may receive compatible
+implementation updates. A breaking protocol change publishes new versioned
+routes and adds its implementation to the Callback artifact. The Bridge serves
+its configured Callback response with `no-store`, independently of its own
+upstream artifact cache.
 
 All protocol resources send their exact media type and
 `X-Content-Type-Options: nosniff`. Top-level documents additionally send
@@ -82,7 +91,7 @@ source or styling customization input.
 
 | Resource | Form | Additional response contract |
 |---|---|---|
-| Callback | ES module loaded by the OAuth Bridge shell | `text/javascript; charset=utf-8`, noncredentialed `Access-Control-Allow-Origin: *`, and `Cross-Origin-Resource-Policy: cross-origin`. The OAuth Bridge owns the containing document and its CSP. |
+| [Callback artifact](#callback-artifact) | self-contained HTML template at `/ccdp/callback.html`, retrieved server-side by OAuth Bridges | `text/html; charset=utf-8`, `no-cache` and ETag, with exact executable hashes in CSP. No browser CORS permission is needed for this retrieval. The configured response follows [Served response](#served-response). |
 | Prefetch | top-level non-isolated HTML | `Cross-Origin-Opener-Policy: unsafe-none` and no COEP. Script/worker sources remain same-origin; `connect-src` admits local assets and the pinned Aztec CRS origins. |
 | Prover | top-level HTML | `Document-Isolation-Policy: isolate-and-require-corp`, `Cross-Origin-Opener-Policy: unsafe-none`, and no COEP. |
 | Prover isolation fallback | top-level HTML at `/ccdp/v{CCDPVersion}/prover/fallback` | `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Same Prover entrypoint, fragment contract, and non-isolation response rules. |
@@ -128,6 +137,135 @@ compartmentalization. Prover derives GitHub's fixed token route only from the
 validated `redirectUri` frozen by the Application; no message supplies another
 Bridge endpoint. Compromised Prover code can use every network class admitted
 by the response.
+
+### Callback artifact
+
+`GET /ccdp/callback.html` supplies a complete Callback document for
+[OAuth Bridges](oauth-bridge.md#callback-document) to configure and serve at
+their registered redirect URI. It executes on that Bridge's origin, without
+a separate shell, HTTP redirect, or browser-side entry-script fetch.
+
+The artifact bundles the supported CCDP Callback implementations and their
+dependencies. Its version-independent path lets the browser select a bundled
+implementation from OAuth `state`, including Google fragment returns which
+the Bridge cannot see. It contains no Bridge configuration and cannot accept
+a connection until configured; a direct visit clears URL input and fails
+locally on the missing deployment data.
+
+#### Configuration insertion
+
+The artifact contains the semantic equivalent of:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>libID</title>
+  </head>
+  <body>
+    <main id="libid-root"></main>
+    <script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script>
+    <script type="module">/* complete bundled Callback code */</script>
+  </body>
+</html>
+```
+
+The build produces exactly one configuration marker, in this non-executable
+data block. The bridge substitutes serialized deployment data there, never
+JavaScript source. Serialization escapes `<` as `\u003c` so data cannot terminate
+the script element or introduce markup. Missing or repeated markers reject the
+artifact. No callback request value participates in substitution.
+
+The configuration contains one current default input tuple and optional
+per-CCDP-version overrides. Version 1 uses:
+
+```json
+{
+  "defaultInputs": [
+    ["https://app.example"],
+    "https://lib.id"
+  ],
+  "inputOverrides": {}
+}
+```
+
+The bridge does not dispatch on OAuth `state` or interpret the tuple while
+composing the document. Each bundled Callback implementation defines and
+exact-validates its own inputs; version 1 requires a nonempty, duplicate-free
+canonical HTTPS application allowlist and the configured canonical HTTPS CCDP
+origin. It receives a deeply frozen copy of
+`inputOverrides[version] ?? defaultInputs`. An override is needed only when a
+still-supported version requires an older input shape. Neither URL input nor
+an upstream artifact supplies deployment configuration.
+
+This is a data-insertion contract, not a UI template or renderer API. Callback
+owns all code, markup, styles, and the inline libID logo. Its dependencies are
+bundled into this HTML rather than loaded relative to the bridge or fetched
+from the Distribution by the browser.
+
+#### Browser entry
+
+URL clearing, version dispatch, and startup/failure UI are built and tested
+with the bundled Callback implementations, not implemented by the Bridge.
+A live document keeps the code and configuration it received.
+
+The embedded Callback code, before rendering, storage, error reporting, or any
+network use:
+
+1. bounds and copies the raw query and fragment, then clears both with
+   `history.replaceState` while retaining the same path;
+2. requires exactly one routing `state` and reads its `v<version>.` prefix;
+3. rejects a malformed version or one absent from its bundled implementations;
+4. reads the embedded deployment data, selects the default or override, and
+   exact-validates and freezes the input tuple and captured location; and
+5. enters the selected Callback implementation once, without dynamic import.
+
+Oversized or malformed input is cleared and renders only fixed failure text.
+A version absent from the bundle, including a retired version, displays a
+package-owned message such as **This ceremony version is no longer supported.
+Update the application and try again.** It establishes no connection, emits no
+protocol message, and never substitutes another version. No retired transport
+or abort-message implementation is retained for this screen. Applications need
+no version-specific failure UI and receive no protocol notification of this
+local failure; their ordinary cancellation/connection-failure handling remains.
+
+No platform credential is parsed here. The selected Callback
+authenticates the Application against its configured allowlist before the
+captured return can leave this document, then follows
+[CCDP](../src/ccdp/documents/docs/documents.md#callback-get-redirecturi).
+
+#### Served response
+
+For one active artifact/configuration pair, HTML and headers are invariant
+across requests. Nothing is derived from request `Origin`, `Referer`, query,
+fragment, platform, or ceremony. The completed response uses:
+
+- `Cross-Origin-Opener-Policy: unsafe-none`, without COEP;
+- `Content-Type: text/html; charset=utf-8`, `X-Content-Type-Options: nosniff`,
+  `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`;
+- CSP beginning with `default-src 'none'`, `object-src 'none'`,
+  `base-uri 'none'`, `form-action 'none'`, and `frame-ancestors 'none'`;
+- `frame-src` admitting only the exact configured CCDP origin;
+- `connect-src` admitting only fixed sources required by the configured popup
+  fallback;
+- `style-src 'unsafe-inline'` for package-owned inline styles; and
+- `script-src` containing only the build-generated hashes for the bundled
+  executable code, with no external script source, JavaScript
+  `'unsafe-inline'`, or `'unsafe-eval'`.
+
+The bridge combines the artifact's executable hashes with its own
+deployment-specific policy, not an upstream policy permitting arbitrary
+sources. Data substitution does not change executable bytes. Artifact and
+matching policy update atomically; compatible UI changes require no manual
+stylesheet hash, theme, or styling configuration.
+
+The Bridge accepts only a successful HTML artifact with the required unique
+data slot and hash-only executable script policy. It performs substitution on
+the decoded body and composes the final HTML and headers as one unit. Upstream
+cache and transfer headers are not copied: the source artifact is revalidated,
+while the configured browser response is non-cacheable.
 
 ### Prover isolation
 
@@ -253,7 +391,7 @@ import { assetsByPlatform } from './platforms/assets'
 
 const resources = {
   callback: {
-    route: `/ccdp/v${version}/callback.js`,
+    route: '/ccdp/callback.html',
     entry: callbackEntry,
     profile: 'callback',
   },
@@ -352,6 +490,18 @@ const responseProfiles = {
 } as const
 ```
 
+The Callback entry bundles the closed implementation set once across supported
+CCDP versions, sharing dependencies where possible. The same build selection
+drives the bundled dispatch table and corresponding versioned resources;
+no manually maintained bridge-side version table exists. Retiring a version
+after its compatibility window removes its implementation, not the generic
+local unsupported-version screen, and retains no transport just to report that
+retirement. Its configuration marker is a build-owned constant shared with
+the bridge composition contract, not a generated filename or per-version
+script URL. Callback dependencies must be inlined, even where other documents
+can use immutable chunks. A missing implementation or split Callback entry
+dependency fails artifact generation.
+
 Profiles contain fixed isolation, cache, framing, media-type, and CSP rules but
 no generated filenames. The build fills body-dependent values such as inline
 script hashes, generated resource URLs, external asset origins, and the
@@ -360,15 +510,15 @@ to reconstruct policy.
 
 ### Generation
 
-For each supported CCDP version, the pipeline:
+Across the supported CCDP versions, the pipeline:
 
 1. gives the declared entrypoints to the compiler/bundler;
 2. reads emitted filenames and dependency edges from its output API;
 3. materializes `distributed` dependencies under immutable paths and retains
    `external` request URLs without downloading their bodies into the output;
 4. resolves each platform/version's prefetch and loader locations from those
-   declarations and emitted dependencies, then renders protocol bodies using
-   the paths and response profiles;
+   declarations and emitted dependencies, then renders versioned protocol bodies
+   and the aggregate Callback artifact using the paths and response profiles;
 5. emits a Brotli sidecar for each unencoded public body only when it is
    smaller; and
 6. validates local graph completeness and the declared external request set
@@ -404,7 +554,7 @@ emits:
 ```text
 <directory>/
 ├── public/
-│   ├── ccdp/v{CCDPVersion}/callback.js
+│   ├── ccdp/callback.html
 │   ├── ccdp/v{CCDPVersion}/prefetch
 │   ├── ccdp/v{CCDPVersion}/prover/index.html
 │   ├── ccdp/v{CCDPVersion}/prover/fallback
