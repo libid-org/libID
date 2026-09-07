@@ -5,9 +5,9 @@ OAuth bridge used by `@libid/ceremony`. The bridge publishes platform
 configuration, serves the OAuth callback document, and performs the one
 confidential platform exchange required by GitHub.
 
-The package API is defined in [ARCHITECTURE.md](ARCHITECTURE.md), the callback
-participant in [CCDP](CCDP.md#callback-get-callbackjs), and proof generation in
-[PROVING.md](PROVING.md). The normative libID specification owns authorization,
+The package API is defined in [ARCHITECTURE.md](architecture.md), the callback
+participant in [CCDP](../src/ccdp/documents/docs/documents.md#callback-get-callbackjs), and proof generation in
+[PROVING.md](../src/prover/docs/proving.md). The normative libID specification owns authorization,
 platform-return, token-exchange, and proof semantics; this document fixes only
 the bridge's public transport and deployment boundary.
 
@@ -26,7 +26,7 @@ The OAuth bridge owns:
 CCDP owns and serves the versioned Callback implementation. The bridge serves
 only the registered callback shell, which loads that implementation from its
 configured CCDP origin. The bridge does not serve CCDP
-[resources](CCDP.md#documents-and-routes), prover modules, circuits,
+[resources](../src/ccdp/documents/docs/documents.md#documents-and-routes), prover modules, circuits,
 notarization client, or proving toolchain. It owns no ceremony Job and keeps no
 ceremony progress, OAuth return, proof, retry, cancellation, or recovery state.
 Google and X require no confidential bridge route.
@@ -56,7 +56,7 @@ One bridge deployment has these inputs:
 | CCDP origin | One canonical HTTPS origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Callback path | Developer-configurable fixed path whose default is `/auth/callback`; registered as every enabled platform's OAuth `redirect_uri` |
 | Platform profiles | Public OAuth client ID and supported ceremony versions for each enabled platform |
-| Callback shell | Supported CCDP versions, current default input tuple, optional per-version input overrides, and response-policy sources required to load [Callback](CCDP.md#callback-get-callbackjs) from the configured CCDP origin |
+| Callback shell | Supported CCDP versions, current default input tuple, optional per-version input overrides, and response-policy sources required to load [Callback](../src/ccdp/documents/docs/documents.md#callback-get-callbackjs) from the configured CCDP origin |
 | GitHub settings | Client secret, redirect URI, token endpoint settings, and server-side notary settings when GitHub is enabled |
 
 `allowedAppOrigins` has no protocol maximum. A duplicate or invalid member is a
@@ -158,7 +158,7 @@ The application-scoped `CeremonyClient` fetches and validates this record once
 at creation using `credentials: 'omit'`. It freezes the selected client ID,
 redirect URI, CCDP origin, and mutually supported platform ceremony version
 in each live ceremony. CCDP
-[resources](CCDP.md#documents-and-routes) never fetch bridge configuration.
+[resources](../src/ccdp/documents/docs/documents.md#documents-and-routes) never fetch bridge configuration.
 
 ## Callback document
 
@@ -176,7 +176,7 @@ The OAuth Bridge owns the shell's input handling, clearing, version selection,
 response policy, and module invocation. It embeds only the closed
 supported-version map, optional input overrides, `allowedAppOrigins`, the
 configured CCDP origin and fixed CSP sources. CCDP owns the
-invoked [Callback](CCDP.md#callback-get-callbackjs) behavior.
+invoked [Callback](../src/ccdp/documents/docs/documents.md#callback-get-callbackjs) behavior.
 
 ### Shell document
 
@@ -316,7 +316,7 @@ The callback response uses:
 - no broad scheme, JavaScript `'unsafe-inline'`, or `'unsafe-eval'` source.
 
 The CCDP Distribution's Callback module uses its
-[protocol-resource response profile](CCDP_DISTRIBUTION.md#protocol-resources).
+[protocol-resource response profile](../build/docs/distribution.md#protocol-resources).
 Markup, styles, and logo remain package-owned. There is no styling customization
 input, template, or theme contract. Compatible Callback UI changes require no
 Bridge update; inline styling permission does not permit inline JavaScript.
@@ -402,4 +402,4 @@ A live page keeps its loaded callback module and embedded configuration. A
 breaking JSON request or response changes the bridge API version. CCDP,
 platform ceremony, prover release, and popup connection versions remain
 independent as defined in
-[ARCHITECTURE.md](ARCHITECTURE.md#versioning-and-compatibility).
+[ARCHITECTURE.md](architecture.md#versioning-and-compatibility).
