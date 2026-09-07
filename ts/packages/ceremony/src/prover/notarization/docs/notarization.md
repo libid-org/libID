@@ -3,13 +3,13 @@
 This document defines the browser-side `prover/notarization` module: how it
 runs a TLSNotary session, applies platform-selected transcript disclosures, and
 returns a byte-exact attestation with its decoded view plus private commitment
-openings. The enclosing pipeline is defined in [PROVING.md](PROVING.md), browser placement in
-[CCDP.md](CCDP.md), asset serving in [CCDP_DISTRIBUTION.md](CCDP_DISTRIBUTION.md#proving-assets),
+openings. The enclosing pipeline is defined in [PROVING.md](../../docs/proving.md), browser placement in
+[CCDP.md](../../../ccdp/docs/protocol.md), asset serving in [CCDP_DISTRIBUTION.md](../../../../build/docs/distribution.md#proving-assets),
 and GitHub's confidential exchange in
-[OAUTH_BRIDGE.md](OAUTH_BRIDGE.md#github-token-endpoint). Exact proof semantics
+[OAUTH_BRIDGE.md](../../../../docs/oauth-bridge.md#github-token-endpoint). Exact proof semantics
 remain normative in the
-[common ceremony rules](../../../specs/ceremony-common.md) and
-[identity-platform ceremonies](../../../specs/platform-ceremonies.md).
+[common ceremony rules](../../../../../../../specs/ceremony-common.md) and
+[identity-platform ceremonies](../../../../../../../specs/platform-ceremonies.md).
 
 ## Boundary and rationale
 
@@ -240,7 +240,7 @@ The implementation test copies those exact bytes and checks this `keccak256`:
 ```
 
 The decoded values and every malformed variant are asserted by the
-[conformance plan](TEST_PLAN.md).
+[conformance plan](../../../../docs/test-plan.md).
 
 ## Session lifecycle
 
@@ -384,7 +384,7 @@ exists.
 
 GitHub's confidential token exchange is server-side and does not use this
 browser module. Its HTTP contract is defined in
-[OAUTH_BRIDGE.md](OAUTH_BRIDGE.md#github-token-endpoint), while the GitHub platform module
+[OAUTH_BRIDGE.md](../../../../docs/oauth-bridge.md#github-token-endpoint), while the GitHub platform module
 owns browser-side response validation and subsequent `/user` orchestration.
 
 ## Attestation handoff
@@ -403,4 +403,4 @@ and invalidates any speculative witness or proof built from the early material.
 Authoritative signature and platform-profile acceptance remains the Ledger Verifier's
 responsibility.
 
-[TEST_PLAN.md](TEST_PLAN.md) owns the executable notarization requirements.
+[TEST_PLAN.md](../../../../docs/test-plan.md) owns the executable notarization requirements.
