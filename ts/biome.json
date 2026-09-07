@@ -7,7 +7,12 @@
       "!**/dist",
       "!**/node_modules",
       "!apps/demo/public",
-      "!packages/claim-full/assets"
+      "!packages/claim-full/assets",
+      "!packages/ceremony/.cache",
+      "!packages/ceremony/dist-artifacts",
+      "!packages/ceremony/test-results",
+      "!packages/ceremony/playwright-report",
+      "!qualification/ceremony/results"
     ]
   },
   "formatter": {

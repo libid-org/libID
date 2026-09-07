@@ -1,0 +1,73 @@
+{
+  "name": "@libid/ceremony",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser OAuth identity ceremonies using an externally supplied popup connection.",
+  "license": "(MIT OR Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libid-org/libid.git",
+    "directory": "ts/packages/ceremony"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ccdp": {
+      "types": "./dist/ccdp/index.d.ts",
+      "default": "./dist/ccdp/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    },
+    "./prover": {
+      "types": "./dist/prover/index.d.ts",
+      "default": "./dist/prover/index.js"
+    },
+    "./callback": {
+      "types": "./dist/callback/index.d.ts",
+      "default": "./dist/callback/index.js"
+    },
+    "./prefetch": {
+      "types": "./dist/prefetch/index.d.ts",
+      "default": "./dist/prefetch/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts",
+    "build",
+    "ccdp.Dockerfile"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
+    "test:e2e:install": "playwright install chromium firefox webkit",
+    "build:ccdp-artifacts": "node build/distribution.mjs",
+    "test:distribution": "node --test build/*.test.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.0.0",
+    "smol-toml": "^1.8.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.0"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "5.2.0",
+    "@libid/popup": "workspace:^",
+    "@noble/hashes": "^2.3.0",
+    "@noir-lang/acvm_js": "1.0.0-beta.25",
+    "@noir-lang/noir_js": "1.0.0-beta.25",
+    "@noir-lang/noirc_abi": "1.0.0-beta.25"
+  },
+  "sideEffects": false
+}
