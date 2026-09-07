@@ -1,33 +1,50 @@
-import { popupPlugin } from './popup.mjs'
+import { dirname, join, posix } from 'node:path'
+import type { Node } from 'estree'
+import type { ChunkMetadata, Plugin, Rollup } from 'vite'
 import { build, transformWithEsbuild } from 'vite'
-import { join, dirname, posix } from 'node:path'
-import { packageDir } from './release.mjs'
-import { assetPlugin } from './assets.mjs'
+import type { ResolvedAssets } from './assets.ts'
+import { assetPlugin } from './assets.ts'
+import { popupPlugin } from './popup.ts'
+import { packageDir } from './release.ts'
+
+type Edit = readonly [start: number, end: number, replacement: string]
+// Rollup supplies offsets on every parsed node; ESTree's base types omit them.
+function replacement(node: Node, text: string): Edit {
+  const { start, end } = node as Node & { start: number; end: number }
+  return [start, end, text]
+}
+export type BundleNode = {
+  entry: string | null
+  modules: string[]
+  dependencies: string[]
+}
+type ViteChunk = Rollup.OutputChunk & { viteMetadata?: ChunkMetadata }
 /** Compiler AST rewriting keeps inline module imports rooted at the distribution. */
-function absoluteImports() {
+function absoluteImports(): Plugin {
   return {
     name: 'ceremony-absolute-imports',
     renderChunk(code, chunk) {
-      const edits = []
-      const walk = (node) => {
-        if (!node || typeof node !== 'object') return
+      const edits: Edit[] = []
+      const walk = (value: unknown) => {
+        if (!value || typeof value !== 'object') return
+        const node = value as Node
         if (
-          [
-            'ImportDeclaration',
-            'ExportNamedDeclaration',
-            'ExportAllDeclaration',
-            'ImportExpression',
-          ].includes(node.type) &&
+          (node.type === 'ImportDeclaration' ||
+            node.type === 'ExportNamedDeclaration' ||
+            node.type === 'ExportAllDeclaration' ||
+            node.type === 'ImportExpression') &&
           node.source?.type === 'Literal' &&
+          typeof node.source.value === 'string' &&
           /^\.\.?\//.test(node.source.value)
         )
-          edits.push([
-            node.source.start,
-            node.source.end,
-            JSON.stringify(
-              `/${posix.normalize(posix.join(posix.dirname(chunk.fileName), node.source.value))}`,
+          edits.push(
+            replacement(
+              node.source,
+              JSON.stringify(
+                `/${posix.normalize(posix.join(posix.dirname(chunk.fileName), node.source.value))}`,
+              ),
             ),
-          ])
+          )
         for (const v of Object.values(node))
           if (Array.isArray(v)) v.forEach(walk)
           else if (v && typeof v === 'object') walk(v)
@@ -40,7 +57,7 @@ function absoluteImports() {
   }
 }
 /** Make native Worker URL dependencies ordinary bundler edges, including dependency workers. */
-function workerImports() {
+function workerImports(): Plugin {
   return {
     name: 'ceremony-worker-imports',
     enforce: 'pre',
@@ -49,22 +66,29 @@ function workerImports() {
       const code = id.endsWith('.ts')
         ? (await transformWithEsbuild(source, id, { loader: 'ts', target: 'es2022' })).code
         : source
-      let ast
+      let ast: ReturnType<Rollup.PluginContext['parse']>
       try {
         ast = this.parse(code)
       } catch {
         return
       }
-      const edits = [],
-        imports = []
-      const walk = (node) => {
-        if (!node || typeof node !== 'object') return
-        if (node.type === 'NewExpression' && node.callee?.name === 'Worker') {
+      const edits: Edit[] = [],
+        imports: string[] = []
+      const walk = (value: unknown) => {
+        if (!value || typeof value !== 'object') return
+        const node = value as Node
+        if (
+          node.type === 'NewExpression' &&
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'Worker'
+        ) {
           const url = node.arguments[0]
           if (
             url?.type === 'NewExpression' &&
-            url.callee?.name === 'URL' &&
+            url.callee.type === 'Identifier' &&
+            url.callee.name === 'URL' &&
             url.arguments[0]?.type === 'Literal' &&
+            typeof url.arguments[0].value === 'string' &&
             url.arguments[1]?.type === 'MemberExpression' &&
             url.arguments[1].object?.type === 'MetaProperty'
           ) {
@@ -72,7 +96,7 @@ function workerImports() {
             imports.push(
               `import ${name} from ${JSON.stringify(`${join(dirname(id), url.arguments[0].value)}?worker&url`)};`,
             )
-            edits.push([url.start, url.end, name])
+            edits.push(replacement(url, name))
           }
         }
         for (const v of Object.values(node))
@@ -88,10 +112,14 @@ function workerImports() {
     },
   }
 }
-export async function bundle(entry, data, { selfContained = false, invoke } = {}) {
-  const graph = new Map(),
-    workerFiles = new Set()
-  const record = (worker) => ({
+export async function bundle(
+  entry: string,
+  data: ResolvedAssets,
+  { selfContained = false, invoke }: { selfContained?: boolean; invoke?: string } = {},
+) {
+  const graph = new Map<string, BundleNode>(),
+    workerFiles = new Set<string>()
+  const record = (worker: boolean): Plugin => ({
     name: 'ceremony-emitted-graph',
     generateBundle(_, output) {
       for (const item of Object.values(output)) {
@@ -104,13 +132,13 @@ export async function bundle(entry, data, { selfContained = false, invoke } = {}
               ...item.imports,
               ...item.dynamicImports,
               ...item.referencedFiles,
-              ...(item.viteMetadata?.importedAssets ?? []),
+              ...((item as ViteChunk).viteMetadata?.importedAssets ?? []),
             ],
           })
       }
     },
   })
-  const entryPlugin = {
+  const entryPlugin: Plugin = {
     name: 'ceremony-entry',
     resolveId(id) {
       if (id === 'virtual:ceremony-entry') return `\0${id}`
@@ -120,7 +148,7 @@ export async function bundle(entry, data, { selfContained = false, invoke } = {}
         return `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};if(typeof window!=='undefined'&&Object.hasOwn(window,'__libidCeremonyInput')){const fragment=window.__libidCeremonyInput;delete window.__libidCeremonyInput;void ${invoke}(fragment)}`
     },
   }
-  const plugins = (worker) => [
+  const plugins = (worker: boolean) => [
     workerImports(),
     entryPlugin,
     popupPlugin(),
@@ -128,7 +156,7 @@ export async function bundle(entry, data, { selfContained = false, invoke } = {}
     absoluteImports(),
     record(worker),
   ]
-  const assetName = (asset) => {
+  const assetName = (asset: Rollup.PreRenderedAsset) => {
     const owned = Object.entries(data.bodyHashes ?? {}).find(
       ([, hash]) => hash === data.hashBody?.(asset.source),
     )
@@ -191,5 +219,9 @@ export async function bundle(entry, data, { selfContained = false, invoke } = {}
         node.dependencies.push(child[0])
       }
     }
-  return { output: (Array.isArray(result) ? result[0] : result).output, graph, workerFiles }
+  return {
+    output: ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output,
+    graph,
+    workerFiles,
+  }
 }

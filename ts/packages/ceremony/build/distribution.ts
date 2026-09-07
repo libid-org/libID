@@ -1,11 +1,20 @@
-import { parse } from 'smol-toml'
-import { mkdirSync, writeFileSync, readFileSync, renameSync, rmSync, existsSync } from 'node:fs'
-import { join, dirname, resolve, basename } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import { brotliCompressSync, brotliDecompressSync, constants } from 'node:zlib'
-import { resolveAssets } from './assets.mjs'
-import { bundle } from './bundle.mjs'
-import { packageDir, hash } from './release.mjs'
-import { responseHeaders } from './profiles.mjs'
+import { parse } from 'smol-toml'
+import type { Rollup } from 'vite'
+import type { AssetRequest } from '../src/assets.js'
+import type { ResolvedAssets } from './assets.ts'
+import { resolveAssets } from './assets.ts'
+import type { BundleNode } from './bundle.ts'
+import { bundle } from './bundle.ts'
+import type { ResponseProfile } from './profiles.ts'
+import { responseHeaders } from './profiles.ts'
+import { hash, packageDir } from './release.ts'
+export type DistributionMetadata = Pick<ResolvedAssets, 'requestsByProfile' | 'allowedRequests'> & {
+  headers: Record<string, Record<string, string>>
+  graph: Record<string, BundleNode>
+}
 const index = process.argv.indexOf('--out-dir'),
   out = resolve(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
 if (out === packageDir || !out.startsWith(`${resolve(packageDir, '../../..')}/`))
@@ -16,8 +25,8 @@ mkdirSync(join(staging, 'public'), { recursive: true })
 const publicDir = join(staging, 'public')
 try {
   const data = await resolveAssets(publicDir),
-    records = new Map(),
-    workerFiles = new Set()
+    records = new Map<string, { bytes: Buffer; headers: Record<string, string> }>(),
+    workerFiles = new Set<string>()
   const options = {
     externalOrigins: [
       ...new Set(
@@ -29,7 +38,12 @@ try {
     ],
     notaryAddress: data.notaryAddress,
   }
-  const put = (path, body, profile, headers = {}) => {
+  const put = (
+    path: string,
+    body: string | Uint8Array,
+    profile: ResponseProfile,
+    headers: Record<string, string> = {},
+  ) => {
     const bytes = Buffer.from(body),
       old = records.get(path)
     if (old && !old.bytes.equals(bytes)) throw new Error(`Conflicting output: ${path}`)
@@ -71,13 +85,13 @@ try {
   const emitted = await bundle('src/ccdp/documents/prover.ts', data, { invoke: 'startProver' })
   for (const path of emitted.workerFiles) workerFiles.add(path)
   const graph = emitted.graph
-  const workerProfile = (file) => {
+  const workerProfile = (file: string): ResponseProfile => {
     const modules = graph.get(file)?.modules ?? []
     if (modules.some((m) => m.includes('/notarization/'))) return 'executionWorker'
     return modules.some((m) => m.endsWith('?worker&url')) ? 'proofWorker' : 'leafWorker'
   }
   for (const item of emitted.output) {
-    if (!item.isEntry)
+    if (item.type !== 'chunk' || !item.isEntry)
       put(
         `/${item.fileName}`,
         item.type === 'chunk' ? item.code : item.source,
@@ -86,7 +100,7 @@ try {
           : 'asset',
       )
   }
-  const walk = (file, set = new Set()) => {
+  const walk = (file: string, set = new Set<string>()): Set<string> => {
     if (set.has(file)) return set
     set.add(file)
     for (const next of graph.get(file)?.dependencies ?? []) walk(next.replace(/^\//, ''), set)
@@ -98,13 +112,13 @@ try {
         v.entry?.endsWith(`/platforms/${platform}/1/prover.ts`),
       )?.[0]
     if (!entry) throw new Error(`Missing emitted platform entry: ${profile}`)
-    const requests = assets.map((a) =>
+    const requests: AssetRequest[] = assets.map((a) =>
       a.mode === 'external'
         ? { url: a.urls[0], range: a.range, bytes: a.bytes }
         : {
             url: data.urls[a.id],
             bytes: data.sizes[data.urls[a.id]],
-            mime: records.get(data.urls[a.id]).headers['Content-Type'].split(';')[0],
+            mime: records.get(data.urls[a.id])!.headers['Content-Type'].split(';')[0],
           },
     )
     for (const file of walk(entry)) {
@@ -131,8 +145,11 @@ try {
       ].map((r) => [`${r.url}\n${r.range ?? ''}`, r]),
     ).values(),
   ]
-  const primary = emitted.output.find((o) => o.type === 'chunk' && o.isEntry)
-  const document = (path, code, profile) => {
+  const primary = emitted.output.find(
+    (o): o is Rollup.OutputChunk => o.type === 'chunk' && o.isEntry,
+  )
+  if (!primary) throw new Error('Missing Prover entry')
+  const document = (path: string, code: string, profile: ResponseProfile) => {
     const capture = `(()=>{const query=location.search,fragment=location.hash,path=location.pathname;history.replaceState(null,'',path);if(query||path!==${JSON.stringify(path)}||fragment.length>65536){document.getElementById('libid-root').textContent='Unable to continue. Return to your application.';return}Object.defineProperty(window,'__libidCeremonyInput',{value:fragment,configurable:true})})()`
     const entry = code
     const scripts = [capture, entry].map((s) => s.replace(/<\/script/gi, '<\\/script'))
@@ -152,7 +169,7 @@ try {
   }
   const prefetch = await bundle('src/ccdp/documents/prefetch.ts', data, { invoke: 'startPrefetch' })
   for (const item of prefetch.output) {
-    if (item.isEntry) {
+    if (item.type === 'chunk' && item.isEntry) {
       document('/ccdp/v1/prefetch', item.code, 'prefetch')
       put('/ccdp/v1/worker.js', item.code, 'worker')
     } else put(`/${item.fileName}`, item.type === 'chunk' ? item.code : item.source, 'asset')
@@ -166,7 +183,9 @@ try {
   // Carry previous immutable responses forward, including their original policies.
   // Mutable route entries always come from this build. No runtime manifest is emitted.
   if (existsSync(join(out, 'sws.toml'))) {
-    const previous = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
+    const previous = parse(readFileSync(join(out, 'sws.toml'), 'utf8')) as {
+      advanced?: { headers?: { source: string; headers: Record<string, string> }[] }
+    }
     for (const entry of previous.advanced?.headers ?? []) {
       const source = entry.source
       if (typeof source !== 'string' || !source.startsWith('/ccdp/assets/')) continue
@@ -222,7 +241,7 @@ try {
       allowedRequests: data.allowedRequests,
       headers: Object.fromEntries([...records].map(([p, r]) => [p, r.headers])),
       graph: Object.fromEntries(graph),
-    }),
+    } satisfies DistributionMetadata),
   )
   if (existsSync(out)) {
     const previous = `${out}.previous`

@@ -1,7 +1,7 @@
 import https from 'node:https'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { packageDir } from '../build/release.mjs'
+import { packageDir } from '../build/release.ts'
 import { makeCertificate } from './tls.mjs'
 const root = join(packageDir, '.cache/smoke')
 https

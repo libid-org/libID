@@ -73,6 +73,9 @@ importers:
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
+      '@types/estree':
+        specifier: ^1.0.8
+        version: 1.0.9
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1

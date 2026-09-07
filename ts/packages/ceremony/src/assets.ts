@@ -1,3 +1,9 @@
+export interface AssetRequest {
+  url: string
+  range?: string
+  bytes: number
+  mime?: string
+}
 import { urls } from 'virtual:ceremony-assets'
 export interface DistributedAsset {
   id: string
