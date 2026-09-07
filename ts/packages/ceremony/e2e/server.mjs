@@ -18,7 +18,7 @@ const html = (body) =>
 const callback = prepareCallback(
   readFileSync(join(packageDir, 'dist-artifacts/public/ccdp/callback.html'), 'utf8'),
   graph.headers['/ccdp/callback.html'],
-  { defaultInputs: [[app], ccdp], inputOverrides: {} },
+  { versionedInputs: { 1: [[app], ccdp] } },
   ccdp,
 )
 for (const port of [4681, 4682, 4683])
