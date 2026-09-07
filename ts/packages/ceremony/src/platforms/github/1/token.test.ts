@@ -156,24 +156,41 @@ const response = (
 })
 
 describe('GitHub TokenRequest codec', () => {
-  it('encodes the exact bounded UTF-8 JSON request', () => {
+  it.each([
+    'https://notary.lib.id',
+    'https://testnet.notary.lib.id',
+    'https://development.test:8443',
+  ])('forwards the resolved notary address unchanged: %s [KIT-013]', (notaryAddress) => {
     expect(
-      new TextDecoder().decode(encodeTokenRequest({ code: 'github-code', codeVerifier: VERIFIER })),
-    ).toBe(`{"code":"github-code","codeVerifier":"${VERIFIER}"}`)
+      JSON.parse(
+        new TextDecoder().decode(
+          encodeTokenRequest({ code: 'github-code', codeVerifier: VERIFIER, notaryAddress }),
+        ),
+      ),
+    ).toEqual({ code: 'github-code', codeVerifier: VERIFIER, notaryAddress })
   })
-
   it('rejects missing, extra, wrongly typed, and out-of-bounds fields', () => {
-    for (const value of [
-      {},
-      { code: 'a', codeVerifier: VERIFIER, extra: true },
-      { code: 1, codeVerifier: VERIFIER },
-      { code: '', codeVerifier: VERIFIER },
-      { code: 'a b', codeVerifier: VERIFIER },
-      { code: 'a'.repeat(1025), codeVerifier: VERIFIER },
-      { code: 'a', codeVerifier: `${'a'.repeat(42)}+` },
-    ]) {
-      expect(() => encodeTokenRequest(value), JSON.stringify(value)).toThrow()
-    }
+    const valid = { code: 'a', codeVerifier: VERIFIER, notaryAddress: 'https://notary.lib.id' }
+    for (const patch of [
+      { code: undefined },
+      { extra: true },
+      { code: 1 },
+      { code: '' },
+      { code: 'a b' },
+      { code: 'a'.repeat(1025) },
+      { codeVerifier: `${'a'.repeat(42)}+` },
+      ...[
+        undefined,
+        null,
+        0,
+        'http://notary.test',
+        'https://notary.test/',
+        'https://user@notary.test',
+        'https://notary.test/path',
+      ].map((notaryAddress) => ({ notaryAddress })),
+      { isTestnet: false },
+    ])
+      expect(() => encodeTokenRequest({ ...valid, ...patch })).toThrow()
   })
 })
 

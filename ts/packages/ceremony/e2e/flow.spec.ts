@@ -34,7 +34,7 @@ for (const native of [false, true])
         body: `<!doctype html><script>location.replace(${JSON.stringify(`${bridge}/callback#error=access_denied&state=${state}`)})</script>`,
       })
     })
-    await page.goto(app)
+    await page.goto(`${app}?ledger=${native ? 'test:mainnet' : 'test:testnet'}`)
     await page.waitForFunction(() => window.ready)
     if (native)
       await page.evaluate(() => {
@@ -90,7 +90,10 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
   request,
 }) => {
   const graph = JSON.parse(
-    readFileSync(new URL('../.cache/distribution-graph.json', import.meta.url), 'utf8'),
+    readFileSync(
+      new URL('../.cache/qualification-artifacts/distribution-graph.json', import.meta.url),
+      'utf8',
+    ),
   )
   const asset = graph.requestsByProfile['google/1'].find((r: { url: string }) =>
     r.url.endsWith('/oidc_google.json'),
