@@ -70,15 +70,14 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   const a = prepareCallback(
     html,
     headers,
-    { defaultInputs: [['https://app.test'], 'https://ccdp.test'], inputOverrides: {} },
+    { versionedInputs: { 1: [['https://app.test'], 'https://ccdp.test'] } },
     'https://ccdp.test',
   )
   const b = prepareCallback(
     html,
     headers,
     {
-      defaultInputs: [['https://other.test'], 'https://ccdp.test'],
-      inputOverrides: {},
+      versionedInputs: { 1: [['https://other.test'], 'https://ccdp.test'] },
       hostile: '</script><script>alert(1)</script>$&',
     },
     'https://ccdp.test',

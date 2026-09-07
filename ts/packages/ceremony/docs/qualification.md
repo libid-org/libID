@@ -11,7 +11,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Input | Pin |
 |---|---|
 | Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `d42c0c403b83bd51bbaa27afbe4d724a62a02431`; eight source documents reorganized into module-owned docs; package composition updated for grouped CCDP documents |
+| Architecture PR #13 | `8d5f46bd710f2c226e228cf1e7511da08ec7c4cb`; eight source documents reorganized into module-owned docs; package composition updated for grouped CCDP documents |
 | Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
 | Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |

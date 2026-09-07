@@ -44,7 +44,7 @@ One bridge deployment has these inputs:
 | CCDP origin | One canonical HTTPS origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Callback path | Developer-configurable fixed path whose default is `/auth/callback`; registered as every enabled platform's OAuth `redirect_uri` |
 | Platform profiles | Public OAuth client ID and supported ceremony versions for each enabled platform |
-| Callback inputs | Default input tuple, optional per-version overrides, and deployment-policy sources specified by the [artifact contract](distribution.md#callback-artifact) |
+| Callback inputs | `versionedInputs` with an explicit tuple for each supported CCDP version, and deployment-policy sources specified by the [artifact contract](distribution.md#callback-artifact) |
 | GitHub settings | Client secret, redirect URI, token endpoint settings, and server-side notary settings when GitHub is enabled |
 
 `allowedAppOrigins` has no protocol maximum. A duplicate or invalid member is a

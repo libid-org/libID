@@ -30,13 +30,12 @@ export function startCallback(): void {
     )
     if (
       !isRecord(config) ||
-      !hasExactKeys(config, ['defaultInputs', 'inputOverrides']) ||
-      !Array.isArray(config.defaultInputs) ||
-      !isRecord(config.inputOverrides) ||
-      Object.keys(config.inputOverrides).some((version) => !/^[1-9][0-9]*$/.test(version))
+      !hasExactKeys(config, ['versionedInputs']) ||
+      !isRecord(config.versionedInputs) ||
+      Object.keys(config.versionedInputs).some((version) => !/^[1-9][0-9]*$/.test(version))
     )
       throw new TypeError('Invalid Callback configuration')
-    const inputs: unknown = config.inputOverrides[state[1]] ?? config.defaultInputs
+    const inputs: unknown = config.versionedInputs[state[1]]
     if (!Array.isArray(inputs) || inputs.length !== 2)
       throw new TypeError('Invalid Callback inputs')
     const [allowedApplicationOrigins, ccdpOrigin] = inputs
