@@ -178,16 +178,18 @@ JavaScript source. Serialization escapes `<` as `\u003c` so data cannot terminat
 the script element or introduce markup. Missing or repeated markers reject the
 artifact. No callback request value participates in substitution.
 
-The configuration contains one current default input tuple and optional
-per-CCDP-version overrides. Version 1 uses:
+The configuration contains a `versionedInputs` map with an explicit input tuple
+for each supported CCDP version, keyed by its decimal version string. Version 1
+uses:
 
 ```json
 {
-  "defaultInputs": [
-    ["https://app.example"],
-    "https://lib.id"
-  ],
-  "inputOverrides": {}
+  "versionedInputs": {
+    "1": [
+      ["https://app.example"],
+      "https://lib.id"
+    ]
+  }
 }
 ```
 
@@ -195,10 +197,10 @@ The bridge does not dispatch on OAuth `state` or interpret the tuple while
 composing the document. Each bundled Callback implementation defines and
 exact-validates its own inputs; version 1 requires a nonempty, duplicate-free
 canonical HTTPS application allowlist and the configured canonical HTTPS CCDP
-origin. It receives a deeply frozen copy of
-`inputOverrides[version] ?? defaultInputs`. An override is needed only when a
-still-supported version requires an older input shape. Neither URL input nor
-an upstream artifact supplies deployment configuration.
+origin. It receives a deeply frozen copy of `versionedInputs[version]`.
+There is no default or fallback to another version's inputs. A missing entry
+fails locally before connection setup. Neither URL input nor an upstream
+artifact supplies deployment configuration.
 
 This is a data-insertion contract, not a UI template or renderer API. Callback
 owns all code, markup, styles, and the inline libID logo. Its dependencies are
@@ -218,8 +220,8 @@ network use:
    `history.replaceState` while retaining the same path;
 2. requires exactly one routing `state` and reads its `v<version>.` prefix;
 3. rejects a malformed version or one absent from its bundled implementations;
-4. reads the embedded deployment data, selects the default or override, and
-   exact-validates and freezes the input tuple and captured location; and
+4. requires the selected version's entry in `versionedInputs`, then
+   exact-validates and freezes its input tuple and captured location; and
 5. enters the selected Callback implementation once, without dynamic import.
 
 Oversized or malformed input is cleared and renders only fixed failure text.
@@ -230,6 +232,9 @@ protocol message, and never substitutes another version. No retired transport
 or abort-message implementation is retained for this screen. Applications need
 no version-specific failure UI and receive no protocol notification of this
 local failure; their ordinary cancellation/connection-failure handling remains.
+
+Missing or malformed inputs for a bundled version likewise render fixed local
+failure text without establishing a connection or emitting a protocol message.
 
 No platform credential is parsed here. The selected Callback
 authenticates the Application against its configured allowlist before the

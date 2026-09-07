@@ -11,12 +11,12 @@ vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
 vi.mock('@libid/popup', () => ({ PopupConnection: { accept }, PopupWindow: { current } }))
 vi.mock('../../ui.js', () => ({ view }))
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
-const defaults = [['https://app.test'], 'https://ccdp.test']
+const v1Inputs = [['https://app.test'], 'https://ccdp.test']
 let config: unknown,
   locationInput: { search: string; hash: string; pathname: string; origin: string }
 beforeEach(() => {
   vi.clearAllMocks()
-  config = { defaultInputs: defaults, inputOverrides: {} }
+  config = { versionedInputs: { 1: v1Inputs } }
   locationInput = {
     search: '',
     hash: `#state=v1.${id}&error=access_denied`,
@@ -43,8 +43,7 @@ afterEach(() => vi.unstubAllGlobals())
 it('clears before acceptance and preserves exact private return with selected deployment inputs [KIT-006] [KIT-010]', async () => {
   const original = locationInput.hash
   config = {
-    defaultInputs: [],
-    inputOverrides: { 1: [['https://other-app.test'], 'https://other-ccdp.test'] },
+    versionedInputs: { 1: [['https://other-app.test'], 'https://other-ccdp.test'], 2: v1Inputs },
   }
   startCallback()
   await Promise.resolve()
@@ -88,16 +87,13 @@ it.each([
 it.each([
   null,
   {},
-  { defaultInputs: defaults },
-  { defaultInputs: defaults, inputOverrides: {}, extra: 1 },
-  { defaultInputs: defaults, inputOverrides: { '01': defaults } },
-  { defaultInputs: [[], 'https://ccdp.test'], inputOverrides: {} },
-  {
-    defaultInputs: [['https://app.test', 'https://app.test'], 'https://ccdp.test'],
-    inputOverrides: {},
-  },
-  { defaultInputs: [['https://app.test'], 'https://ccdp.test/path'], inputOverrides: {} },
-  { defaultInputs: defaults, inputOverrides: { 1: ['wrong'] } },
+  { defaultInputs: v1Inputs, inputOverrides: {} },
+  { versionedInputs: { 1: v1Inputs }, extra: 1 },
+  { versionedInputs: { '01': v1Inputs } },
+  { versionedInputs: { 1: [[], 'https://ccdp.test'] } },
+  { versionedInputs: { 1: [['https://app.test', 'https://app.test'], 'https://ccdp.test'] } },
+  { versionedInputs: { 1: [['https://app.test'], 'https://ccdp.test/path'] } },
+  { versionedInputs: { 1: ['wrong'] } },
 ])('rejects malformed deployment data before connection setup [KIT-010]', (input) => {
   config = input
   startCallback()
@@ -111,3 +107,15 @@ it('clears a double-slash callback path without treating it as another host [CSP
   expect(history.replaceState).toHaveBeenCalledWith(null, '', 'https://bridge.test//auth/callback')
   expect(accept).toHaveBeenCalledOnce()
 })
+
+it.each([{}, { 2: v1Inputs }, { 1: null, 2: v1Inputs }])(
+  'requires the selected version entry without falling back [LIBID-ASSET-015] [KIT-010]',
+  (versionedInputs) => {
+    config = { versionedInputs }
+    startCallback()
+    expect(view).toHaveBeenCalledWith('Unable to continue. Return to your application.')
+    expect(current).not.toHaveBeenCalled()
+    expect(accept).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+  },
+)
