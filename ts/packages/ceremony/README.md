@@ -7,8 +7,11 @@ happens after the result. Ceremony owns its UI and has no styling API.
 
 **This implementation is not launch-qualified.** Real proof generation and
 static-distribution checks are separate from real OAuth, matched-notary concurrency
-and device qualification. See [QUALIFICATION.md](QUALIFICATION.md) for evidence,
-remaining prerequisites and the complete [requirement index](TEST_PLAN.md).
+and device qualification. See [QUALIFICATION.md](docs/qualification.md) for evidence,
+remaining prerequisites and the complete [requirement index](docs/test-plan.md).
+
+See the [documentation index](docs/README.md) and [source guide](src/README.md) for
+module ownership and contracts.
 
 ## Application use
 
@@ -74,16 +77,16 @@ inputs. Original attested bytes and signatures are preserved for downstream chec
 
 | Path | Owner |
 |---|---|
-| `src/client/` | Configuration, frozen construction, one-shot application state |
-| `src/ccdp/` | Seven message companions and navigation-fragment codecs |
-| `src/platforms/<platform>/1/` | Authorization, proof type, asset set and proof pipeline |
-| `src/prover/engine*` | Dedicated Noir/bb.js proof worker |
-| `src/prover/notarization/` | Browser TLSNotary sessions, canonical decoding and correlation |
-| `src/prefetch/` | Root Service Worker, byte caches and pending-fetch joins |
-| `src/ccdp/documents/` | Callback, Prefetch and Prover page entrypoints |
+| [src/client/](src/client/README.md) | Configuration, frozen construction, one-shot application state |
+| [src/ccdp/](src/ccdp/README.md) | Seven message companions and navigation-fragment codecs |
+| [src/platforms/](src/platforms/README.md) | Authorization, proof type, asset set and proof pipeline |
+| [src/prover/](src/prover/README.md) | Dedicated Noir/bb.js proof worker |
+| [src/prover/notarization/](src/prover/notarization/README.md) | Browser TLSNotary sessions, canonical decoding and correlation |
+| [src/prefetch/](src/prefetch/README.md) | Root Service Worker, byte caches and pending-fetch joins |
+| [src/ccdp/documents/](src/ccdp/documents/README.md) | Callback, Prefetch and Prover page entrypoints |
 | `src/ui.ts` | Native, package-owned DOM and progress |
-| `build/` | Compiler-owned graph and static response policies |
-| `e2e/` | Independent HTTPS origins and actual-popup browser checks |
+| [build/](build/README.md) | Compiler-owned graph and static response policies |
+| [e2e/](e2e/README.md) | Independent HTTPS origins and actual-popup browser checks |
 
 The asset catalog imports only data/type declarations. Execution imports those
 same declarations. Compiler output adds actual chunks and nested-worker edges.
@@ -122,7 +125,7 @@ docker run --rm -p 8080:80 libid-ccdp
 The image contains only `public/` and generated `sws.toml`. Place it behind a
 transparent HTTPS ingress on a dedicated cookie-free origin. Preserve exact paths,
 headers and Brotli negotiation. Configure the independently deployed OAuth Bridge
-according to [OAUTH_BRIDGE.md](OAUTH_BRIDGE.md); ceremony supplies no production
+according to [OAUTH_BRIDGE.md](docs/oauth-bridge.md); ceremony supplies no production
 Bridge server. Callback's self-contained module executes under the Bridge's CSP.
 
 Optional opener-independent fallback belongs to `@libid/popup`. A distribution
@@ -147,4 +150,4 @@ code; `CEREMONY_SWS_URL` forwards CCDP requests to the real image. Without it, t
 harness serves emitted bodies/policies directly and does not qualify SWS. Tests
 include controlled real Google proofs verified in a separate Node process against
 the released key. They do not automate real consent. Live consent and devices use
-the opt-in walkthrough in [QUALIFICATION.md](QUALIFICATION.md).
+the opt-in walkthrough in [QUALIFICATION.md](docs/qualification.md).
