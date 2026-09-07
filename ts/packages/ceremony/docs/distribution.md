@@ -1,7 +1,7 @@
 # CCDP Distribution
 
 This document defines the static browser resources and proving assets required
-by [CCDP](../../src/ccdp/documents/docs/documents.md#documents-and-routes). CCDP owns the protocol routes,
+by [CCDP](../src/ccdp/documents/docs/documents.md#documents-and-routes). CCDP owns the protocol routes,
 fragments, roles, navigations, and versions; this document owns their HTTP,
 build, and deployment contract.
 
@@ -18,7 +18,7 @@ Browsers prefetch and fetch external resources at their declared absolute
 URLs; the static build does not download or mirror them. The current bb.js CRS
 resources use that mode with the native Aztec URLs. The exact dependency
 requests and cache behavior are defined in
-[PROVING.md](../../src/prover/docs/proving.md#dependency-asset-resolution).
+[PROVING.md](../src/prover/docs/proving.md#dependency-asset-resolution).
 
 The OAuth Bridge separately serves ceremony configuration, the registered
 callback shell, and enabled confidential platform endpoints. Requests to the
@@ -44,7 +44,7 @@ templating, source resolution, archive extraction, or remote asset fetch.
 ### Protocol resources
 
 The Distribution exposes the exact versioned
-[resources](../../src/ccdp/documents/docs/documents.md#documents-and-routes) defined by CCDP. Their fragments,
+[resources](../src/ccdp/documents/docs/documents.md#documents-and-routes) defined by CCDP. Their fragments,
 roles, and execution contexts remain CCDP rules.
 
 Prefetch and Prover contain their clearing bootstrap and entry code
@@ -131,7 +131,7 @@ by the response.
 
 ### Prover isolation
 
-CCDP has one logical [Prover](../../src/ccdp/documents/docs/documents.md#prover-get-prover), reached by ordinary
+CCDP has one logical [Prover](../src/ccdp/documents/docs/documents.md#prover-get-prover), reached by ordinary
 `connection.navigate(proverUrl, fragment)`. The Distribution supplies two static responses
 for that participant, not another protocol step or application-level choice.
 
@@ -377,7 +377,7 @@ For each supported CCDP version, the pipeline:
 The pipeline rejects a missing body, unindexed dependency, malformed external
 pin, mutable asset path, sidecar which does not decode to the original, or
 partial graph. Pinned source releases are cached by immutable identity rather
-than fetched on every build. The [dependency upgrade checks](../../src/prover/docs/proving.md#dependency-asset-resolution)
+than fetched on every build. The [dependency upgrade checks](../src/prover/docs/proving.md#dependency-asset-resolution)
 detect changed upstream loader requests; live CDN qualification runs before
 release, not on every local build.
 

@@ -5,7 +5,7 @@ from the top-level ceremony modules.
 
 - [Document contract](docs/documents.md): routes, fragments and origin policy.
 - [Protocol phases](../docs/protocol.md#phases): readiness, navigation and delivery ordering.
-- [Distribution policy](../../../build/docs/distribution.md): emitted resources and isolation headers.
+- [Distribution policy](../../../docs/distribution.md): emitted resources and isolation headers.
 - [Bridge callback shell](../../../docs/oauth-bridge.md#callback-document): capture and clear the OAuth return.
 
 [callback.ts](callback.ts) authenticates the Application and privately forwards the

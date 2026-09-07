@@ -9,7 +9,7 @@ authoritative until ledger verification.
 This document defines the package boundary, public application API and
 configuration, and result lifecycle. The package's browser protocol is defined
 in [CCDP.md](../src/ccdp/docs/protocol.md), and its static distribution contract in
-[CCDP_DISTRIBUTION.md](../build/docs/distribution.md); popup lifecycle and communication
+[CCDP_DISTRIBUTION.md](distribution.md); popup lifecycle and communication
 are supplied by
 [`@libid/popup`](../../popup/README.md). Proof-generation internals are defined in
 [PROVING.md](../src/prover/docs/proving.md). Browser TLSNotary sessions and
@@ -107,7 +107,7 @@ the ceremony restarts with fresh OAuth. Downstream application work may remain
 resumable independently.
 
 Prover is one logical CCDP participant. Its [isolation response
-contract](../build/docs/distribution.md#prover-isolation) and `@libid/popup` own any
+contract](distribution.md#prover-isolation) and `@libid/popup` own any
 browser-dependent document replacement; the ceremony client and CCDP handlers
 do not branch on it.
 
@@ -223,7 +223,7 @@ Execution modules import their asset declarations, never the reverse. This is
 an explicit dependency boundary, not a reliance on tree-shaking. The build
 checks that the asset catalog covers exactly the supported platform/version
 pairs and resolves the same declarations for prefetch and execution; the
-[Distribution's source declarations](../build/docs/distribution.md#source-declarations)
+[Distribution's source declarations](distribution.md#source-declarations)
 define collection and resource modes.
 
 OAuth Bridge implementations are outside the package. The GitHub version's
@@ -284,7 +284,7 @@ See [Client API and lifecycle](../src/client/docs/client.md).
 ## Proof-generation subsystem
 
 [PROVING.md](../src/prover/docs/proving.md) defines pipelines, asset use, workers, caching, and
-proof delivery; [CCDP_DISTRIBUTION.md](../build/docs/distribution.md) defines asset deployment. After
+proof delivery; [CCDP_DISTRIBUTION.md](distribution.md) defines asset deployment. After
 `ProverReady`, the client sends one `AppStartProver`, validates the returned
 platform proof's structure, and assembles `OAuthProof`.
 
@@ -328,6 +328,6 @@ namespace remains independent. The popup package's
 [`ConnectionVersion`](../../popup/docs/connection.md) independently versions private
 connection controls. Local Job schema versioning
 remains owned by the client store, while immutable asset revisioning remains a
-[CCDP Distribution](../build/docs/distribution.md#proving-assets) release concern. A Job which has
+[CCDP Distribution](distribution.md#proving-assets) release concern. A Job which has
 already committed OAuthProof has left the ceremony and remains usable under its
 composition's own compatibility rules.

@@ -316,7 +316,7 @@ The callback response uses:
 - no broad scheme, JavaScript `'unsafe-inline'`, or `'unsafe-eval'` source.
 
 The CCDP Distribution's Callback module uses its
-[protocol-resource response profile](../build/docs/distribution.md#protocol-resources).
+[protocol-resource response profile](distribution.md#protocol-resources).
 Markup, styles, and logo remain package-owned. There is no styling customization
 input, template, or theme contract. Compatible Callback UI changes require no
 Bridge update; inline styling permission does not permit inline JavaScript.

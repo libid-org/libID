@@ -5,7 +5,7 @@ fetch sharing. Pre-OAuth work warms bytes, not initialized proof or TLSNotary ru
 
 - [Prefetch and cache contract](docs/prefetch.md): dispatch acknowledgement, caching and lifecycle.
 - [Dependency loaders](../prover/docs/proving.md#dependency-asset-resolution): exact native URLs and ranges.
-- [Distribution graph](../../build/docs/distribution.md#source-declarations): one owner declaration per resource.
+- [Distribution graph](../../docs/distribution.md#source-declarations): one owner declaration per resource.
 
 [registration.ts](registration.ts) resolves root ownership and dispatches selected
 profiles. [worker.ts](worker.ts) composes popup continuity with [cache.ts](cache.ts).
