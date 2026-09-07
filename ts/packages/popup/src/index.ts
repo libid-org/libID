@@ -17,4 +17,4 @@ export {
   onReplacement,
   prepareNavigation,
 } from './message.js'
-export { PopupWindow } from './window.js'
+export { type CurrentOptions, PopupWindow } from './window.js'

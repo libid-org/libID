@@ -97,7 +97,7 @@ const popupPage = html(`
         : undefined
     // Accept first: the claim must run before any other network work, and
     // handlers registered before yielding precede every delivery.
-    const connection = PopupConnection.accept(PopupWindow.current(captured), {
+    const connection = PopupConnection.accept(PopupWindow.current(captured, { scope: '/' }), {
       connectionId: id,
       allowedApplicationOrigins,
       isolationFallbackUrl,
@@ -105,7 +105,10 @@ const popupPage = html(`
     })
     window.__conn = connection
     connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
-    // The host registers the worker in every participating document.
+    // The host registers the worker in every participating document. A
+    // nested registration of the same script controls this document too;
+    // continuity must ignore it and use the root scope named above.
+    navigator.serviceWorker.register('/sw.js', { scope: location.pathname }).catch(() => {})
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {})
     try {
       connection.on(Ping, (ping) => {

@@ -56,15 +56,16 @@ declare class PopupWindow {
   readonly opened: boolean
 
   static open(target: string, features?: string): PopupWindow
-  static current(fragment?: string): PopupWindow
+  static current(fragment?: string, options?: { scope?: string }): PopupWindow
 }
 ```
 
 `PopupWindow` exposes no direct navigation or closure; both go through
 `PopupConnection` so continuity and control rules always apply.
 `PopupWindow.current()` wraps the current popup document, its opener, and the
-active Service Worker registration whose scope matches that document. It
-adopts the existing popup and cannot create another one.
+Service Worker registration continuity goes through: by default the one
+controlling that document, or the exact `scope` given. It adopts the existing
+popup and cannot create another one.
 
 ### Connect from the popup
 
@@ -292,9 +293,19 @@ import { installPortKeeper } from '@libid/popup/worker'
 installPortKeeper()
 ```
 
-`accept` claims a preserved port from the active registration matching the
-current document as its first step, so the host calls it before any other
-network work. See [continuity across navigations](docs/message-port.md#continuity-across-navigations).
+`accept` claims a preserved port from that registration as its first step, so
+the host calls it before any other network work. A host whose origin carries
+more than one registration, say a root `/` and a nested one for a
+sub-application sharing the same script URL, names the one it keeps ports in:
+
+```ts
+PopupWindow.current(captured, { scope: '/' })
+```
+
+Only a registration with exactly that scope is used, never another that
+happens to control the document; it may still be registering, or not exist
+yet, when `current` runs, and a hop waits up to the keeper reply deadline for
+it to activate. See [continuity across navigations](docs/message-port.md#continuity-across-navigations).
 
 ### Fallback carrier
 

@@ -229,7 +229,6 @@ export interface FakeSignaling {
   carriers: Carrier[]
   /** Reject the next popup-side construction. */
   failNext: boolean
-  /** Hold the next preparation open until released. */
 }
 
 export function fakeSignaling(): FakeSignaling {

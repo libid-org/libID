@@ -85,6 +85,28 @@ export function activeWorker(
   })
 }
 
+/**
+ * The registration `lookup` names once it exists and is active, or undefined
+ * past the keeper reply deadline. The host may register in this very
+ * document, so an absent registration, or one the engine already exposes
+ * before attaching its installing worker, is polled for rather than refused.
+ */
+export async function activeRegistration(
+  lookup: () => Promise<ServiceWorkerRegistration | undefined>,
+): Promise<ServiceWorkerRegistration | undefined> {
+  const deadline = Date.now() + KEEPER_REPLY_TIMEOUT_MS
+  const attached = (r?: ServiceWorkerRegistration): boolean =>
+    !!r && (r.active ?? r.installing ?? r.waiting) !== null
+  let registration = await lookup()
+  while (!attached(registration) && Date.now() < deadline) {
+    // ponytail: nothing announces a new registration; poll until the deadline.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    registration = await lookup()
+  }
+  if (!registration) return undefined
+  return (await activeWorker(registration)) ? registration : undefined
+}
+
 export class PortKeeper {
   constructor(private readonly worker: KeeperWorker) {}
 

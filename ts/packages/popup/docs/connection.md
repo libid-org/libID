@@ -171,8 +171,12 @@ rule and excluding reserved keywords such as `_blank`, `_self`, `_parent`, and
 `PopupConnection.connect` composes over that exact object, synchronously arms
 fallback binding, and never accepts a caller-supplied `WindowProxy`. It never
 constructs a `PortKeeper`. `PopupWindow.current()` captures the popup document,
-its opener, and the host-registered active Service Worker registration whose
-scope matches that document.
+its opener, and the host-registered Service Worker registration continuity
+goes through: the one controlling the document, or, with `scope`, the
+registration with exactly that same-origin scope and no other, even when a
+nested registration of the same script controls the document. That
+registration may not exist yet when `current` runs; the claim treats it as
+absent and a keep waits up to the keeper reply deadline for it to activate.
 `PopupConnection.accept` composes over that object. When an active registration is
 available, it privately constructs a keeper and attempts `claim` for the
 connection ID before selecting a new carrier. A matching entry restores its
@@ -322,7 +326,7 @@ declare class PopupWindow {
   bind(source: WindowProxy): void
 
   static open(target: string, features?: string): PopupWindow
-  static current(fragment?: string): PopupWindow
+  static current(fragment?: string, options?: { scope?: string }): PopupWindow
 }
 
 interface PopupConnection<Out extends Message, In extends Message = Out> {
