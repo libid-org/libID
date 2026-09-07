@@ -4,7 +4,7 @@ This document defines the browser-side `prover/notarization` module: how it
 runs a TLSNotary session, applies platform-selected transcript disclosures, and
 returns a byte-exact attestation with its decoded view plus private commitment
 openings. The enclosing pipeline is defined in [PROVING.md](../../docs/proving.md), browser placement in
-[CCDP.md](../../../ccdp/docs/protocol.md), asset serving in [CCDP_DISTRIBUTION.md](../../../../build/docs/distribution.md#proving-assets),
+[CCDP.md](../../../ccdp/docs/protocol.md), asset serving in [CCDP_DISTRIBUTION.md](../../../../docs/distribution.md#proving-assets),
 and GitHub's confidential exchange in
 [OAUTH_BRIDGE.md](../../../../docs/oauth-bridge.md#github-token-endpoint). Exact proof semantics
 remain normative in the
