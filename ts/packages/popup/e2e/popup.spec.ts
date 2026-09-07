@@ -270,6 +270,23 @@ test('[POPUP-KEEPER-003] [POPUP-CONNECTION-003] a long non-participating hop exp
   expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(2)
 })
 
+test('[POPUP-KEEPER-005] an explicit root scope keeps and claims through the root registration', async ({
+  page,
+}) => {
+  const id = freshId()
+  const { popup } = await open(page, { id, href: `${POPUP}/p?scope=/#c=${id}` })
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  await nextDocument(popup, () => navigate(page, `${POPUP}/isolated?scope=/#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(await diag(popup)).toEqual(['carrier-restored'])
+  await nextDocument(popup, () => navigate(page, `${POPUP}/p?scope=/#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(await diag(popup)).toEqual(['carrier-restored'])
+  await ping(page, 8)
+  expect(await expectPong(page, 8)).toMatchObject({ path: '/p' })
+})
+
 test('[POPUP-KEEPER-003] a short non-participating hop keeps the port', async ({ page }) => {
   const { id, popup } = await open(page)
   await expectPong(page, 0)

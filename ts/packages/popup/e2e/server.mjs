@@ -97,7 +97,9 @@ const popupPage = html(`
         : undefined
     // Accept first: the claim must run before any other network work, and
     // handlers registered before yielding precede every delivery.
-    const connection = PopupConnection.accept(PopupWindow.current(captured, { scope: '/' }), {
+    // ?scope=/ pins continuity to the root registration, as Ceremony does.
+    const scope = new URLSearchParams(location.search).get('scope') ?? undefined
+    const connection = PopupConnection.accept(PopupWindow.current(captured, { scope }), {
       connectionId: id,
       allowedApplicationOrigins,
       isolationFallbackUrl,
@@ -106,8 +108,8 @@ const popupPage = html(`
     window.__conn = connection
     connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
     // The host registers the worker in every participating document. A
-    // nested registration of the same script controls this document too;
-    // continuity must ignore it and use the root scope named above.
+    // stale nested registration of the same script controls this document
+    // too; continuity must still go through the root one.
     navigator.serviceWorker.register('/sw.js', { scope: location.pathname }).catch(() => {})
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {})
     try {

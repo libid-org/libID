@@ -75,7 +75,7 @@ function acceptPopup(
   const view = opts.opener === false ? { ...pair.popupWindow, opener: null } : pair.popupWindow
   const popup = new CurrentWindow(
     view as Window,
-    opts.worker === undefined ? () => Promise.resolve(undefined) : registrationWith(opts.worker),
+    opts.worker === undefined ? noRegistration : registrationWith(opts.worker),
   )
   const { fallback } = opts
   const endpoint = PopupConnection.accept<Messages>(popup, {
@@ -115,7 +115,7 @@ describe('validation [POPUP-CONNECTION-007]', () => {
       }),
     ).toThrow(TypeError)
     expect(pair.appView.listeners.size).toBe(0)
-    const current = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+    const current = new CurrentWindow(pair.popupWindow, noRegistration)
     expect(() =>
       PopupConnection.accept(current, {
         connectionId: 'nope',
@@ -131,7 +131,7 @@ describe('validation [POPUP-CONNECTION-007]', () => {
   it('requires the matching PopupWindow kind and one connect per object', () => {
     const pair = fakePair()
     const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
-    const current = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+    const current = new CurrentWindow(pair.popupWindow, noRegistration)
     expect(() =>
       PopupConnection.connect(current, { connectionId: ID, allowedPopupOrigins: [POPUP_ORIGIN] }),
     ).toThrow(TypeError)
@@ -178,10 +178,7 @@ describe('validation [POPUP-CONNECTION-007]', () => {
       },
     }) as WindowProxy
     expect(new OpenedWindow(inaccessible, fakePair().appView).direct).toBe(false)
-    expect(
-      new CurrentWindow({ opener: inaccessible } as Window, () => Promise.resolve(undefined))
-        .opener,
-    ).toBeNull()
+    expect(new CurrentWindow({ opener: inaccessible } as Window, noRegistration).opener).toBeNull()
   })
 })
 
@@ -360,6 +357,34 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     connection.send(new Ready(2))
     await tick()
     expect(readies).toEqual([2])
+  })
+
+  it('claims from every registration on the origin [POPUP-KEEPER-005]', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const stale = fakeScope()
+    const root = fakeScope()
+    await acceptPopup(pair, { worker: root.worker }).connection
+    await tick()
+    await app.connection.navigate('https://popup.example/isolated')
+    await tick(20)
+    expect(root.pending).toHaveLength(1)
+    // The destination is controlled by a stale nested registration holding
+    // nothing; the port is still found in the root worker.
+    const events: PopupDiagnostic[] = []
+    const endpoint = PopupConnection.accept<Messages>(
+      new CurrentWindow(
+        { ...pair.popupWindow, opener: null } as Window,
+        registrationWith(stale.worker, root.worker),
+      ),
+      {
+        connectionId: ID,
+        allowedApplicationOrigins: [APP_ORIGIN],
+        onDiagnostic: (e) => void events.push(e),
+      },
+    )
+    await endpoint.ready
+    expect(codes(events)).toEqual(['carrier-restored'])
   })
 
   it('fails closed without continuity instead of navigating', async () => {
@@ -591,7 +616,7 @@ describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
     const pair = fakePair()
     const app = connectApp(pair)
     const events: PopupDiagnostic[] = []
-    const popup = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+    const popup = new CurrentWindow(pair.popupWindow, noRegistration)
     const connection = PopupConnection.accept<Messages>(popup, {
       connectionId: ID,
       allowedApplicationOrigins: '*',
@@ -610,7 +635,7 @@ describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
   it("rejects an opaque or non-HTTPS observed origin even under '*'", async () => {
     for (const origin of ['null', 'http://app.example']) {
       const pair = fakePair()
-      const popup = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+      const popup = new CurrentWindow(pair.popupWindow, noRegistration)
       const pending = PopupConnection.accept<Messages>(popup, {
         connectionId: ID,
         allowedApplicationOrigins: '*',
@@ -628,7 +653,7 @@ describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
 
   it('keeps an empty list invalid and never accepts a wildcard on the application side', async () => {
     const pair = fakePair()
-    const popup = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+    const popup = new CurrentWindow(pair.popupWindow, noRegistration)
     expect(() =>
       PopupConnection.accept(popup, { connectionId: ID, allowedApplicationOrigins: [] }),
     ).toThrow(TypeError)
@@ -655,8 +680,7 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     const view = opts.opener === false ? { ...pair.popupWindow, opener: null } : pair.popupWindow
     const popup = new CurrentWindow(
       view as Window,
-      opts.worker === undefined ? () => Promise.resolve(undefined) : registrationWith(opts.worker),
-      undefined,
+      opts.worker === undefined ? noRegistration : registrationWith(opts.worker),
       pair.popupWindow.location.hash, // captured as the host bootstrap would
     )
     const endpoint = PopupConnection.accept<Messages>(popup, {
@@ -744,7 +768,7 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
   it('rejects an invalid, non-HTTPS, or cross-origin fallback synchronously', () => {
     const pair = fakePair()
     for (const bad of ['http://popup.example/x', 'https://other.example/x', 'https://:bad']) {
-      const popup = new CurrentWindow(pair.popupWindow, () => Promise.resolve(undefined))
+      const popup = new CurrentWindow(pair.popupWindow, noRegistration)
       expect(() =>
         PopupConnection.accept(popup, {
           connectionId: ID,
@@ -766,7 +790,6 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     const popup = new CurrentWindow(
       pair.popupWindow,
       registrationWith(fakeScope().worker),
-      undefined,
       captured,
     )
     const events: PopupDiagnostic[] = []
@@ -931,7 +954,6 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     const popup = new CurrentWindow(
       pair.popupWindow,
       noRegistration,
-      undefined,
       pair.popupWindow.location.hash,
     )
     const endpoint = PopupConnection.accept<Messages>(popup, {
@@ -1110,9 +1132,7 @@ describe('fallback seam [POPUP-CONNECTION-002/004/005] [POPUP-DIAGNOSTIC-003]', 
     const pair = fakePair()
     const [appCarrier, popupCarrier] = carrierPair()
     const fallback = vi.fn(() => Promise.resolve(popupCarrier))
-    const popup = new CurrentWindow({ ...pair.popupWindow, opener: null } as Window, () =>
-      Promise.resolve(undefined),
-    )
+    const popup = new CurrentWindow({ ...pair.popupWindow, opener: null } as Window, noRegistration)
     const events: PopupDiagnostic[] = []
     const connection = PopupConnection.accept<Messages>(popup, {
       connectionId: ID,
@@ -1202,9 +1222,7 @@ describe('lifecycle outcome [POPUP-CONNECTION-006] [POPUP-DIAGNOSTIC-002]', () =
       close: () => {},
     }
     const pair = fakePair()
-    const popup = new CurrentWindow({ ...pair.popupWindow, opener: null } as Window, () =>
-      Promise.resolve(undefined),
-    )
+    const popup = new CurrentWindow({ ...pair.popupWindow, opener: null } as Window, noRegistration)
     const events: PopupDiagnostic[] = []
     const connection = PopupConnection.accept<Messages>(popup, {
       connectionId: ID,

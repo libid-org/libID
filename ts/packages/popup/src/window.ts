@@ -4,14 +4,12 @@
 // Everything but `opened` is package-internal and reached through
 // PopupConnection so continuity and control rules always apply.
 
-import { activeRegistration } from './keeper.js'
-
 export interface CurrentOptions {
   /**
-   * The exact scope of the host's continuity worker registration, resolved
-   * against the current document and same-origin. Without it the
-   * registration controlling the document is used, which on an origin with
-   * nested registrations may not be the one the host keeps ports in.
+   * The exact scope of the registration continuity goes through, resolved
+   * against the current document and same-origin. Without it the departing
+   * document keeps into the registration that will control its destination
+   * and a document claims from every registration on the origin.
    */
   scope?: string
 }
@@ -55,32 +53,33 @@ export class PopupWindow {
    * document's URL fragment as the host captured it, for a bootstrap that
    * clears the URL before importing the package; it defaults to the current
    * `location.hash`. The package treats it as opaque and keeps a snapshot.
-   * `scope` selects the exact registration continuity goes through; it need
-   * not exist yet.
+   * `scope` pins continuity to one registration, which need not exist yet.
    */
   static current(fragment?: string, options: CurrentOptions = {}): PopupWindow {
     if (window.top !== window) throw new TypeError('current requires a top-level popup document')
     const container = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined
-    let scope: string | undefined
-    if (options.scope !== undefined) {
-      const resolved = new URL(options.scope, window.location.href)
-      if (resolved.origin !== window.location.origin) {
+    const controlling = (url: string): Promise<ServiceWorkerRegistration | undefined> =>
+      container?.getRegistration(url).catch(() => undefined) ?? Promise.resolve(undefined)
+    let registrations: (url?: string) => Promise<readonly ServiceWorkerRegistration[]>
+    if (options.scope === undefined) {
+      registrations = async (url) => {
+        if (url === undefined) return container?.getRegistrations().catch(() => []) ?? []
+        const found = await controlling(url)
+        return found ? [found] : []
+      }
+    } else {
+      const scope = new URL(options.scope, window.location.href)
+      if (scope.origin !== window.location.origin) {
         throw new TypeError('worker scope must be same-origin')
       }
-      scope = resolved.href
+      // getRegistration answers with the registration controlling the scope
+      // URL; a shorter scope that merely contains it does not count.
+      registrations = async () => {
+        const found = await controlling(scope.href)
+        return found?.scope === scope.href ? [found] : []
+      }
     }
-    // getRegistration answers with the registration controlling the given
-    // URL; only the exact scope counts, never a shorter one that also matches.
-    const registration = async (): Promise<ServiceWorkerRegistration | undefined> => {
-      const found = await container?.getRegistration(scope).catch(() => undefined)
-      return found && (scope === undefined || found.scope === scope) ? found : undefined
-    }
-    return new CurrentWindow(
-      window,
-      registration,
-      () => activeRegistration(registration),
-      fragment ?? window.location.hash,
-    )
+    return new CurrentWindow(window, registrations, fragment ?? window.location.hash)
   }
 
   get opened(): boolean {
@@ -133,11 +132,11 @@ export class OpenedWindow extends PopupWindow {
 export class CurrentWindow extends PopupWindow {
   constructor(
     readonly view: Window,
-    /** The registration whose scope matches this document, resolved per use. */
-    readonly registration: () => Promise<ServiceWorkerRegistration | undefined>,
-    /** Settles once a matching registration is active; may never settle. */
-    readonly readyRegistration: () => Promise<ServiceWorkerRegistration | undefined> = () =>
-      Promise.resolve(undefined),
+    /**
+     * The registrations a document claims from, or with `url` the one a
+     * departing document keeps into for that destination; resolved per use.
+     */
+    readonly registrations: (url?: string) => Promise<readonly ServiceWorkerRegistration[]>,
     fragment = '',
   ) {
     super()

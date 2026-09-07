@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { activeRegistration } from './keeper.js'
 import { type CurrentWindow, PopupWindow } from './window.js'
 
 const ORIGIN = 'https://popup.example'
 const DOCUMENT = `${ORIGIN}/prover/x`
+const NEXT = `${ORIGIN}/next`
 
 /** A fake ServiceWorker that activates on demand. */
 function worker(state: 'installing' | 'activated') {
@@ -18,11 +20,10 @@ function worker(state: 'installing' | 'activated') {
   }
 }
 
-/** A container with the same script registered at any number of scopes. */
+/** A container with one script registered at any number of scopes. */
 function container() {
   const registrations = new Map<string, { scope: string; active: unknown; installing: unknown }>()
   return {
-    registrations,
     add(scope: string, w: ReturnType<typeof worker> | null) {
       const registration = {
         scope: `${ORIGIN}${scope}`,
@@ -46,6 +47,9 @@ function container() {
       }
       return best
     },
+    async getRegistrations() {
+      return [...registrations.values()]
+    },
   }
 }
 
@@ -54,7 +58,7 @@ function current(sw: ReturnType<typeof container>, scope?: string): CurrentWindo
   view.top = view
   vi.stubGlobal('window', view)
   vi.stubGlobal('navigator', { serviceWorker: sw })
-  return PopupWindow.current('', scope === undefined ? {} : { scope }) as CurrentWindow
+  return PopupWindow.current('', { scope }) as CurrentWindow
 }
 
 describe('registration selection [POPUP-KEEPER-005]', () => {
@@ -63,39 +67,42 @@ describe('registration selection [POPUP-KEEPER-005]', () => {
     vi.useRealTimers()
   })
 
-  it('defaults to the registration controlling the document', async () => {
+  it('by default claims from every registration and keeps into the destination controller', async () => {
     const sw = container()
-    sw.add('/', worker('activated'))
-    sw.add('/prover/', worker('activated'))
-    expect((await current(sw).registration())?.scope).toBe(`${ORIGIN}/prover/`)
+    const root = sw.add('/', worker('activated'))
+    const nested = sw.add('/prover/', worker('activated'))
+    const popup = current(sw)
+    expect(await popup.registrations()).toEqual([root, nested])
+    expect(await popup.registrations(NEXT)).toEqual([root])
+    expect(await popup.registrations(DOCUMENT)).toEqual([nested])
   })
 
-  it('uses exactly the named scope even when a nested registration controls the document', async () => {
+  it('with a scope uses exactly that registration for both, even under a nested controller', async () => {
     const sw = container()
     const root = sw.add('/', worker('activated'))
     sw.add('/prover/', worker('activated'))
     const popup = current(sw, '/')
-    expect(await popup.registration()).toBe(root)
-    expect(await popup.readyRegistration()).toBe(root)
+    expect(await popup.registrations()).toEqual([root])
+    expect(await popup.registrations(DOCUMENT)).toEqual([root])
   })
 
-  it('never falls back to another scope', async () => {
+  it('with a scope substitutes nothing for a missing registration', async () => {
     vi.useFakeTimers()
     const sw = container()
     sw.add('/prover/', worker('activated'))
     const popup = current(sw, '/')
-    expect(await popup.registration()).toBeUndefined()
-    const ready = popup.readyRegistration()
+    expect(await popup.registrations()).toEqual([])
+    const ready = activeRegistration(async () => (await popup.registrations(NEXT))[0])
     await vi.advanceTimersByTimeAsync(2_500)
     expect(await ready).toBeUndefined()
   })
 
-  it('waits for a root registered and activated after construction', async () => {
+  it('waits for a root registered and activated after the hop begins', async () => {
     vi.useFakeTimers()
     const sw = container()
     sw.add('/prover/', worker('activated'))
     const popup = current(sw, '/')
-    const ready = popup.readyRegistration()
+    const ready = activeRegistration(async () => (await popup.registrations(NEXT))[0])
     await vi.advanceTimersByTimeAsync(300)
     // Firefox exposes the registration before attaching its worker.
     const root = sw.add('/', null)
@@ -109,7 +116,6 @@ describe('registration selection [POPUP-KEEPER-005]', () => {
     expect(settled).toBe(false) // found, still installing
     installing.activate()
     expect(await ready).toBe(root)
-    expect(await popup.registration()).toBe(root)
   })
 
   it('rejects a cross-origin scope', () => {

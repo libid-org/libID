@@ -12,7 +12,7 @@ import {
   type Reporter,
   reportUndeliverable,
 } from './diagnostics.js'
-import { activeWorker, bounded, PortKeeper } from './keeper.js'
+import { activeRegistration, bounded, PortKeeper } from './keeper.js'
 import {
   type Carrier,
   type CarrierConstructor,
@@ -456,9 +456,9 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   ): Promise<void> {
     try {
       // A preserved port can only be held by an already active worker.
-      const registration = await this.popup.registration()
-      if (registration?.active) {
-        const port = await new PortKeeper(registration.active).claim(this.connectionId)
+      const workers = (await this.popup.registrations()).flatMap((r) => r.active ?? [])
+      if (workers.length > 0) {
+        const port = await this.claimFrom(workers)
         if (this.ended) return port?.close()
         if (port) return this.admit(new PortCarrier(port), 'carrier-restored')
         this.report('claim-empty')
@@ -497,6 +497,14 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       if (this.ended) return
       this.fail(error instanceof PopupError ? error.code : 'fallback-failed', true)
     }
+  }
+
+  /** Asks every worker at once; at most one holds this connection's port. */
+  private async claimFrom(workers: ServiceWorker[]): Promise<MessagePort | null> {
+    const ports = await Promise.all(workers.map((w) => new PortKeeper(w).claim(this.connectionId)))
+    const [port = null, ...extra] = ports.filter((p) => p !== null)
+    for (const p of extra) p.close()
+    return port
   }
 
   /**
@@ -597,7 +605,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     const { location } = this.popup.view
     const carrier = this.carrier
     if (carrier instanceof PortCarrier) {
-      await this.keepThrough(carrier.detach(), viaOperation)
+      await this.keepThrough(carrier.detach(), url, viaOperation)
       this.release() // the port is the worker's now; this endpoint is done
       location.replace(url)
       return
@@ -621,21 +629,23 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   }
 
   /**
-   * Hands one port to the worker for the next same-origin document. Fails
-   * the endpoint and throws when no worker is active, the keep is refused,
-   * or the connection ended meanwhile.
+   * Hands one port to the worker for the next same-origin document at `url`.
+   * Fails the endpoint and throws when no worker is active, the keep is
+   * refused, or the connection ended meanwhile.
    */
-  private async keepThrough(port: MessagePort, viaOperation: boolean): Promise<void> {
+  private async keepThrough(port: MessagePort, url: string, viaOperation: boolean): Promise<void> {
     const failed: (code: PopupErrorCode) => never = (code) => {
       port.close() // a no-op once transferred; releases a port the worker never took
       this.fail(code, viaOperation)
       throw new PopupError(code)
     }
-    // The host may still be registering in this very document: when no
-    // worker is attached yet, wait briefly for the registration to activate.
-    const registration = await this.popup.registration()
-    let worker = registration ? await activeWorker(registration) : null
-    if (!worker) worker = (await bounded(this.popup.readyRegistration()))?.active ?? null
+    // The registration that will control the destination is the one its
+    // document claims from, whichever one controls this document. The host
+    // may still be registering it here, so wait briefly for it to activate.
+    const registration = await bounded(
+      activeRegistration(async () => (await this.popup.registrations(url))[0]),
+    )
+    const worker = registration?.active ?? null
     if (this.ended) failed('connection-closed')
     if (!worker) failed('continuity-unsupported')
     const startedAt = performance.now()

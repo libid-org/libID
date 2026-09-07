@@ -171,12 +171,15 @@ rule and excluding reserved keywords such as `_blank`, `_self`, `_parent`, and
 `PopupConnection.connect` composes over that exact object, synchronously arms
 fallback binding, and never accepts a caller-supplied `WindowProxy`. It never
 constructs a `PortKeeper`. `PopupWindow.current()` captures the popup document,
-its opener, and the host-registered Service Worker registration continuity
-goes through: the one controlling the document, or, with `scope`, the
-registration with exactly that same-origin scope and no other, even when a
-nested registration of the same script controls the document. That
-registration may not exist yet when `current` runs; the claim treats it as
-absent and a keep waits up to the keeper reply deadline for it to activate.
+its opener, and the origin's host-registered Service Worker registrations. By
+default a keep uses the registration that will control the destination URL and
+a claim asks every registration on the origin at once, so the port is found
+whichever registration controls the claiming document, including after a
+non-participating hop. With `scope`, keep and claim use the registration with
+exactly that same-origin scope and no other. In both modes the registration
+may not exist yet when the hop begins; the keep waits up to the keeper reply
+deadline for it to activate, including through the interval an engine exposes
+it without a worker.
 `PopupConnection.accept` composes over that object. When an active registration is
 available, it privately constructs a keeper and attempts `claim` for the
 connection ID before selecting a new carrier. A matching entry restores its

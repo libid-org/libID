@@ -63,9 +63,8 @@ declare class PopupWindow {
 `PopupWindow` exposes no direct navigation or closure; both go through
 `PopupConnection` so continuity and control rules always apply.
 `PopupWindow.current()` wraps the current popup document, its opener, and the
-Service Worker registration continuity goes through: by default the one
-controlling that document, or the exact `scope` given. It adopts the existing
-popup and cannot create another one.
+origin's Service Worker registrations. It adopts the existing popup and cannot
+create another one.
 
 ### Connect from the popup
 
@@ -293,19 +292,22 @@ import { installPortKeeper } from '@libid/popup/worker'
 installPortKeeper()
 ```
 
-`accept` claims a preserved port from that registration as its first step, so
-the host calls it before any other network work. A host whose origin carries
-more than one registration, say a root `/` and a nested one for a
-sub-application sharing the same script URL, names the one it keeps ports in:
+`accept` claims a preserved port as its first step, so the host calls it
+before any other network work. By default a departing document keeps the port
+into the registration that will control its destination and a document claims
+from every registration on the origin, so a root registration next to a
+nested one for a sub-application needs no configuration as long as both run
+the keeper. A host that wants one registration and no other, say because an
+unrelated worker shares the origin, names it:
 
 ```ts
 PopupWindow.current(captured, { scope: '/' })
 ```
 
-Only a registration with exactly that scope is used, never another that
-happens to control the document; it may still be registering, or not exist
-yet, when `current` runs, and a hop waits up to the keeper reply deadline for
-it to activate. See [continuity across navigations](docs/message-port.md#continuity-across-navigations).
+Then keep and claim use exactly that same-origin scope and never another. In
+both modes the registration may still be installing, or not exist yet, when
+the hop begins; the hop waits up to the keeper reply deadline for it to
+activate. See [continuity across navigations](docs/message-port.md#continuity-across-navigations).
 
 ### Fallback carrier
 

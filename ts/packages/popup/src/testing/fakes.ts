@@ -218,10 +218,12 @@ export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
   }
 }
 
-export const registrationWith = (worker: KeeperWorker | null) => () =>
-  Promise.resolve({ active: worker } as unknown as ServiceWorkerRegistration)
+export const registrationWith =
+  (...workers: (KeeperWorker | null)[]) =>
+  () =>
+    Promise.resolve(workers.map((active) => ({ active }) as unknown as ServiceWorkerRegistration))
 
-export const noRegistration = () => Promise.resolve(undefined)
+export const noRegistration = () => Promise.resolve([])
 
 /**
  * A stand-in for a non-transferable carrier and its signaling service. Each
