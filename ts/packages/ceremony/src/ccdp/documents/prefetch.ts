@@ -1,11 +1,11 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { AbortCeremony } from '../ccdp/index.js'
+import { AbortCeremony } from '../index.js'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
-import { readPrefetch } from '../ccdp/navigation.js'
+import { readPrefetch } from '../navigation.js'
 import { profiles } from 'virtual:ceremony-assets'
-import { view } from '../ui.js'
-import { rootWorker, dispatchPrefetch } from './registration.js'
-import { startWorker } from './worker.js'
+import { view } from '../../ui.js'
+import { rootWorker, dispatchPrefetch } from '../../prefetch/registration.js'
+import { startWorker } from '../../prefetch/worker.js'
 export async function startPrefetch(fragment: string): Promise<void> {
   let connection: PopupConnection<Message> | undefined
   try {

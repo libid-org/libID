@@ -68,7 +68,7 @@ try {
               : 'application/octet-stream',
       },
     )
-  const emitted = await bundle('src/prover/index.ts', data, { invoke: 'startProver' })
+  const emitted = await bundle('src/ccdp/documents/prover.ts', data, { invoke: 'startProver' })
   for (const path of emitted.workerFiles) workerFiles.add(path)
   const graph = emitted.graph
   const workerProfile = (file) => {
@@ -145,12 +145,12 @@ try {
   }
   document('/ccdp/v1/prover', primary.code, 'prover')
   document('/ccdp/v1/prover/fallback', primary.code, 'proverFallback')
-  const callback = await bundle('src/callback/index.ts', data, { selfContained: true })
+  const callback = await bundle('src/ccdp/documents/callback.ts', data, { selfContained: true })
   for (const item of callback.output) {
     if (item.type !== 'chunk' || !item.isEntry) throw new Error('Callback must be self-contained')
     put('/ccdp/v1/callback.js', item.code, 'callback')
   }
-  const prefetch = await bundle('src/prefetch/index.ts', data, { invoke: 'startPrefetch' })
+  const prefetch = await bundle('src/ccdp/documents/prefetch.ts', data, { invoke: 'startPrefetch' })
   for (const item of prefetch.output) {
     if (item.isEntry) {
       document('/ccdp/v1/prefetch', item.code, 'prefetch')

@@ -1,23 +1,18 @@
-import { claimRootWorker } from '../prefetch/registration.js'
+import { claimRootWorker } from '../../prefetch/registration.js'
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { AbortCeremony } from '../ccdp/index.js'
+import { AbortCeremony } from '../index.js'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
-import {
-  AppStartProver,
-  CancelCeremony,
-  ProverNotifyEvent,
-  ProverDeliverProof,
-} from '../ccdp/index.js'
-import { readProver, route } from '../ccdp/navigation.js'
-import { progressView, view } from '../ui.js'
-import type { ProverContext } from './context.js'
+import { AppStartProver, CancelCeremony, ProverNotifyEvent, ProverDeliverProof } from '../index.js'
+import { readProver, route } from '../navigation.js'
+import { progressView, view } from '../../ui.js'
+import type { ProverContext } from '../../prover/context.js'
 const implementations: Record<
   string,
   () => Promise<{ prove(context: ProverContext): Promise<unknown | null> }>
 > = {
-  google: () => import('../platforms/google/1/prover.js'),
-  x: () => import('../platforms/x/1/prover.js'),
-  github: () => import('../platforms/github/1/prover.js'),
+  google: () => import('../../platforms/google/1/prover.js'),
+  x: () => import('../../platforms/x/1/prover.js'),
+  github: () => import('../../platforms/github/1/prover.js'),
 }
 export async function startProver(fragment: string): Promise<void> {
   let connection: PopupConnection<Message> | undefined,
