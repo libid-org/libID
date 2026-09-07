@@ -374,6 +374,15 @@ and the selected platform identity; it does not parse attestation bytes,
 derive identity, repeat prover-side evidence checks, recompute the retained
 digest, or cryptographically verify the proof. Prover-side platform code owns
 canonical evidence parsing and configured-client checks.
+Neither endpoint performs a separate Google nonce-versus-expected-digest
+comparison or local notary-signature verification. The Prover still parses the
+nonce canonically, the Google circuit still verifies RS256 and binds that
+nonce to its public input, and the notarization/platform code still performs
+its documented structural, request-binding, and commitment/opening checks.
+Early digest-mismatch and structurally valid attestation-forgery detection are
+omitted; downstream verification must still reject them using the recomputed
+authorization digest and trusted signing keys. The expected digest is not an
+`AppStartProver` input.
 `status: 'accepted'` means the Prover reported successful OAuth/proving and the
 Client accepted the result shape, not that the Client authenticated its
 contents. UI and diagnostics may use the extracted fields as unverified

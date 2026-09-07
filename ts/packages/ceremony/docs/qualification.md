@@ -11,7 +11,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Input | Pin |
 |---|---|
 | Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `109371854a303ac2e8449d1a1c63163285cbd6a6`; eight source documents reorganized into module-owned docs; package composition updated for grouped CCDP documents |
+| Architecture PR #13 | `d42c0c403b83bd51bbaa27afbe4d724a62a02431`; eight source documents reorganized into module-owned docs; package composition updated for grouped CCDP documents |
 | Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
 | Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
@@ -99,13 +99,17 @@ transcripts, openings and witnesses are never qualification artifacts.
    Vanadium, background scheduling/memory pressure and corresponding optional
    fallback adapters/signaling were unavailable. Desktop engines and mobile
    emulation cannot satisfy these gates. No replacement WebRTC code is supplied.
-6. **Normative amendments:** the user-approved absence of local expected-nonce and
-   notary-signature checks and the released bounds are implemented. Corresponding
-   upstream normative working-file amendments have not all been committed. Their
-   inspected SHA-256 values are `694f3abb1d49f9697c68b57edc07b213434d9e3f2595eabcf858e9e6163d6af9`
-   (`ceremony-common.md`) and `a3e2f6a0570415af76f1fa85c2a0ddab00985e5a4b8b8010aef441d370fac76f`
-   (`platform-ceremonies.md`). Reconcile these sources before merging; historical
-   verification prose is not silently treated as satisfied.
+The nonce/signature-check and released-bound normative amendments are now committed
+in architecture PR #13 at `5cfbf47` (included in the pinned documentation head).
+They are no longer an uncommitted-source prerequisite.
+
+Callback now ships as `/ccdp/callback.html`, including clearing, bundled version
+selection, local unsupported-version UI, and all dependencies. The test Bridge
+prepares the HTML and hash-only CSP from this artifact with escaped deployment
+JSON. Production Bridge refresh, conditional revalidation, redirect rejection,
+compressed-source handling, atomic replacement/last-good retention, and ingress
+log redaction still require external deployment qualification; the harness loads
+the emitted source at startup and does not implement that server lifecycle.
 
 Complete metrics transport, timing coverage and the full documented diagnostic-span
 catalog are deferred by user instruction. Coarse package-owned progress, worker
