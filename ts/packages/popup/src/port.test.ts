@@ -92,16 +92,15 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
   it('rejects a mismatched echo and ignores a duplicate one', async () => {
     const h = listen()
     // Intercept the application's response to capture the transferred port.
-    let transferred: MessagePort | undefined
-    const observer = (event: MessageEvent) => {
-      transferred = event.ports[0]
-    }
-    h.pair.popupView.addEventListener('message', observer)
-    h.pair.appProxy.postMessage(handshake(), '*')
-    await tick()
-    h.pair.popupView.removeEventListener('message', observer)
-    expect(transferred).toBeDefined()
-    ;(transferred as MessagePort).postMessage({ ...handshake(), connectionVersion: 2 })
+    const transferred = await new Promise<MessagePort>((resolve) => {
+      const observer = (event: MessageEvent) => {
+        h.pair.popupView.removeEventListener('message', observer)
+        resolve(event.ports[0])
+      }
+      h.pair.popupView.addEventListener('message', observer)
+      h.pair.appProxy.postMessage(handshake(), '*')
+    })
+    transferred.postMessage({ ...handshake(), connectionVersion: 2 })
     await tick()
     expect(h.ports).toHaveLength(0)
     expect(h.fails).toBe(1)
