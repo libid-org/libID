@@ -99,15 +99,23 @@ execution starts once both inputs and backend are ready. No TLSNotary session
 is created for Google.
 
 The semantic groups flatten to exactly 56 bb.js public-input fields. The module
-derives the candidate authorization digest from the signed nonce; the circuit
-re-encodes it as the exact unpadded base64url nonce and verifies the RS256
+requires a canonical unpadded base64url nonce encoding exactly 32 bytes and
+uses those bytes as the candidate authorization digest. Neither Prover nor
+Client compares that candidate to the Application's separately constructed
+digest; `AppStartProver` carries no expected-digest field. The circuit
+re-encodes the candidate as the exact nonce and verifies the RS256
 signature and signed claims. The module then generates one proof and returns it
 with the exact signed audience, subject, email and expiry plus the selected JWK
 modulus as `GoogleProofV1`, with no attestation or flattened public-input array.
 The Prover builds `identity` with `platformId: 'google'`, `oauthClientId` from
 `aud`, `userId` from `sub`, and `userName` from `email`, without normalization.
 The Ceremony Client checks result structure and wraps it; only Ledger Verifier
-verification makes these fields authoritative.
+verification makes these fields authoritative. An otherwise valid token for
+another digest can reach proof delivery, but its proof fails downstream
+verification against the recomputed authorization digest. A valid circuit
+proof under an untrusted signing modulus likewise fails the downstream trusted
+Google signing-key check. Omitting early comparison changes when a mismatch is
+detected, not either ledger verification requirement.
 
 ### X
 
@@ -155,9 +163,11 @@ canonical unpadded base64url encoding of the token session's exact 16-byte
 TLSNotary blinder. The
 browser exact-validates the selected version's token response, attestation
 encoding and correlation, request bindings, and bearer opening before using
-the bearer in its own fixed `/user` TLSNotary session. Local verification of
-the notary signature is optional defense in depth; the downstream Platform
-Verifier remains authoritative. That session commits the bearer and reveals the
+the bearer in its own fixed `/user` TLSNotary session. Neither Prover nor Client
+verifies notary signatures locally; downstream verification remains mandatory.
+A structurally valid forgery can survive these early checks and waste browser
+work, but cannot pass ledger signature verification under the trusted notary
+keys. That session commits the bearer and reveals the
 canonical `id` and `login` ranges. The OAuth bridge route is defined in
 [OAUTH_BRIDGE.md](../../../docs/oauth-bridge.md#github-token-endpoint).
 

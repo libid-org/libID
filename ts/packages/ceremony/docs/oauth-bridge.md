@@ -1,12 +1,12 @@
 # OAuth Bridge Server
 
-This document defines the HTTP and deployment contract for the OAuth-owning
-OAuth bridge used by `@libid/ceremony`. The bridge publishes platform
+This document defines the HTTP and deployment contract for the OAuth bridge
+used by `@libid/ceremony`. The bridge publishes platform
 configuration, serves the OAuth callback document, and performs the one
 confidential platform exchange required by GitHub.
 
 The package API is defined in [ARCHITECTURE.md](architecture.md), the callback
-participant in [CCDP](../src/ccdp/documents/docs/documents.md#callback-get-callbackjs), and proof generation in
+participant in [CCDP](../src/ccdp/documents/docs/documents.md#callback-get-redirecturi), and proof generation in
 [PROVING.md](../src/prover/docs/proving.md). The normative libID specification owns authorization,
 platform-return, token-exchange, and proof semantics; this document fixes only
 the bridge's public transport and deployment boundary.
@@ -23,27 +23,15 @@ The OAuth bridge owns:
 - GitHub's confidential token exchange and token attestation when GitHub is
   enabled.
 
-CCDP owns and serves the versioned Callback implementation. The bridge serves
-only the registered callback shell, which loads that implementation from its
-configured CCDP origin. The bridge does not serve CCDP
-[resources](../src/ccdp/documents/docs/documents.md#documents-and-routes), prover modules, circuits,
-notarization client, or proving toolchain. It owns no ceremony Job and keeps no
-ceremony progress, OAuth return, proof, retry, cancellation, or recovery state.
-Google and X require no confidential bridge route.
+For Callback, the bridge is a configuration-inserting, cached proxy to the
+[CCDP Distribution](distribution.md#callback-artifact). It neither
+implements the document nor requires a TypeScript build. It serves no other
+CCDP resources and stores no ceremony state. Google and X require no
+confidential bridge route.
 
-Loading Callback from the CCDP Distribution adds no credential authority: the
-same distribution supplies Prover, which receives the captured OAuth return
-through Callback's private fragment handoff. Keeping Callback there avoids making the bridge republish
-CCDP implementation artifacts.
-
-The OAuth Bridge and CCDP origin may be cross-origin or cross-site. The bridge
-origin is a code-supply-chain boundary for the callback shell and public
-configuration; the CCDP origin is an independent code-supply-chain boundary
-for Callback behavior and proof generation. Supplying the bridge origin to the
-prover at runtime does not make the prover response deployment-specific.
-Any number of independently operated Bridges may select the same public CCDP
-Distribution; it does not register them or receive their application
-allowlists.
+The bridge and Distribution may be cross-site and independently operated;
+both are code-supply-chain trust boundaries. The Distribution requires no
+Bridge registration and receives no application allowlists.
 
 ## Deployment configuration
 
@@ -56,7 +44,7 @@ One bridge deployment has these inputs:
 | CCDP origin | One canonical HTTPS origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Callback path | Developer-configurable fixed path whose default is `/auth/callback`; registered as every enabled platform's OAuth `redirect_uri` |
 | Platform profiles | Public OAuth client ID and supported ceremony versions for each enabled platform |
-| Callback shell | Supported CCDP versions, current default input tuple, optional per-version input overrides, and response-policy sources required to load [Callback](../src/ccdp/documents/docs/documents.md#callback-get-callbackjs) from the configured CCDP origin |
+| Callback inputs | Default input tuple, optional per-version overrides, and deployment-policy sources specified by the [artifact contract](distribution.md#callback-artifact) |
 | GitHub settings | Client secret, redirect URI, token endpoint settings, and server-side notary settings when GitHub is enabled |
 
 `allowedAppOrigins` has no protocol maximum. A duplicate or invalid member is a
@@ -66,9 +54,10 @@ inferred from a request's `Origin`, `Referer`, query, fragment, or body.
 
 The CCDP origin is likewise deployment data. It is returned to the
 application in public configuration and embedded into the callback document so
-Callback can navigate the popup to Prover. It does not identify an
-artifact, circuit, or notary endpoint. Omitting it selects the canonical
-`https://lib.id` Distribution.
+Callback can navigate the popup to Prover. The bridge also resolves the fixed
+Callback artifact path against it; no separate artifact, circuit, or notary
+URL is configured. Omitting it selects the canonical `https://lib.id`
+Distribution.
 
 One platform configuration generates both the public profile entries and the
 OAuth registrations used by the callback. The bridge advertises only
@@ -84,7 +73,7 @@ The bridge exposes only:
 | Method | Route | Availability | Purpose | Origin enforcement |
 |---|---|---|---|---|
 | `GET` | `/api/v1/ceremony/config` | always | public platform and CCDP configuration | exact allowed browser origin; absent `Origin` accepted only by the same-origin rule below |
-| `GET` | configured callback path, default `/auth/callback` | always | registered OAuth callback shell | none at HTTP ingress; callback authenticates its popup connection after clearing its input |
+| `GET` | configured callback path, default `/auth/callback` | always | complete OAuth Callback document | none at HTTP ingress; callback authenticates its popup connection after clearing its input |
 | `OPTIONS`, `POST` | `/api/v1/ceremony/github-token` | only when GitHub is enabled | confidential GitHub token exchange and token attestation | exact request `Origin` equal to the configured CCDP origin; exact noncredentialed CORS |
 
 Top-level navigation may omit `Origin`, and an OAuth-platform callback may
@@ -93,15 +82,15 @@ authority input. The callback document is therefore public and
 request-invariant; its browser protocol authenticates the application after it
 loads.
 
-No Callback implementation, prover, proving-asset, preparation, continuation,
+No separate Callback script, prover, proving-asset, preparation, continuation,
 polling, status, result, cancellation, browser TLS bridge, or proof-recovery
 route exists on the OAuth bridge. Unsupported methods fail without route work.
 Except for the OAuth-platform-mandated callback query and the GitHub JSON
 request, bridge routes accept no query or request body.
 
 The `v1` in `/api/v1/ceremony/...` versions the bridge's JSON API.
-The configured callback path is a browser protocol document; its shell selects
-`CCDPVersion` from OAuth `state`.
+The configured callback path is a browser protocol document; its embedded code
+selects `CCDPVersion` from OAuth `state`.
 `PlatformCeremonyVersion` independently versions one platform ceremony. There
 is no request-time version negotiation.
 
@@ -157,169 +146,33 @@ alter the response record.
 The application-scoped `CeremonyClient` fetches and validates this record once
 at creation using `credentials: 'omit'`. It freezes the selected client ID,
 redirect URI, CCDP origin, and mutually supported platform ceremony version
-in each live ceremony. CCDP
-[resources](../src/ccdp/documents/docs/documents.md#documents-and-routes) never fetch bridge configuration.
+in each live ceremony. CCDP browser [resources](../src/ccdp/documents/docs/documents.md#documents-and-routes)
+never fetch bridge configuration; server-side Callback artifact retrieval is
+separate.
 
 ## Callback document
 
-The configured callback path serves one deployment-generated callback document.
-Each enabled OAuth application registers the same URL as its `redirect_uri`.
-There is no callback alias or HTTP redirect.
+The registered `redirect_uri` serves Callback on the bridge origin, without
+an HTTP redirect. Its [artifact contract](distribution.md#callback-artifact)
+owns the HTML, configuration slot, response policy, browser startup, version
+selection, and failure UI. The bridge only:
 
-The response is invariant across requests. Its HTML, headers, supported-version map, CSP,
-embedded `allowedAppOrigins`, and CCDP origin do not depend on request
-`Origin`, `Referer`, query, fragment, platform, or ceremony. The document is
-top-level, non-isolated, and non-frameable so it preserves the application
-opener whenever OAuth-platform policy permits.
+- retrieves `{ccdpOrigin}/ccdp/callback.html` at startup and revalidates it
+  independently of callback requests, rejecting upstream redirects;
+- sends no callback query, OAuth return, incoming request headers, cookies, or
+  credentials upstream; the configured source never depends on a request;
+- validates and inserts trusted deployment data using the artifact contract,
+  then publishes the completed HTML and matching response headers atomically;
+- serves the cached result until a valid replacement is ready; a failed
+  refresh retains the last valid result, or returns an inert unavailable
+  response when none exists; and
+- suppresses or redacts callback query strings throughout its ingress proxies,
+  access logs, traces, analytics, metrics labels, and errors.
 
-The OAuth Bridge owns the shell's input handling, clearing, version selection,
-response policy, and module invocation. It embeds only the closed
-supported-version map, optional input overrides, `allowedAppOrigins`, the
-configured CCDP origin and fixed CSP sources. CCDP owns the
-invoked [Callback](../src/ccdp/documents/docs/documents.md#callback-get-callbackjs) behavior.
-
-### Shell document
-
-The response contains only the semantic equivalent of:
-
-```html
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>libID</title>
-  </head>
-  <body>
-    <main id="libid-root"></main>
-    <script type="module">/* deployment-generated bootstrap */</script>
-  </body>
-</html>
-```
-
-The exact bootstrap is inline so it can clear credentials before requesting any
-subresource. Its CSP hash is generated from its exact deployment bytes. The
-document contains no external config script, preload, analytics, application
-markup, or request-derived interpolation. The Callback implementation owns all
-later UI. Its cross-origin module request carries no credentials and follows
-only the configured CCDP origin and selected version.
-
-The bootstrap embeds one current default input tuple, a closed list of supported
-CCDP versions, and optional per-version input overrides. The implementation URL
-is derived only after the version is found in that list. Version 1 is equivalent
-to:
-
-```ts
-const ccdpOrigin = 'https://lib.id'
-const defaultInputs = deepFreeze([
-  ['https://app.example'],
-  ccdpOrigin,
-])
-
-const supportedCCDPVersions = Object.freeze([1])
-const callbackInputOverrides: Readonly<
-  Partial<Record<number, readonly unknown[]>>
-> = Object.freeze({})
-```
-
-Neither URL input nor a network response can add a supported version or input
-override.
-
-### Stable implementation input
-
-After selecting and importing an implementation, the bootstrap calls its sole
-entrypoint with the captured location followed by its override or the deeply
-frozen default inputs:
-
-```ts
-interface CallbackLocationInput {
-  query: string
-  fragment: string
-}
-
-const moduleUrl = new URL(
-  `/ccdp/v${version}/callback.js`,
-  ccdpOrigin,
-).href
-const callback = await import(moduleUrl)
-callback.startCallback(
-  locationInput,
-  ...(callbackInputOverrides[version] ?? defaultInputs),
-)
-```
-
-`query` and `fragment` are the bounded byte-for-byte OAuth-return URL components
-captured before clearing, including their leading delimiter when nonempty. The
-implementation exact-validates the selected shape, including unknown fields,
-before using it and copies the origin list again before popup acceptance. For
-CCDP version 1, the implementation defines and exact-validates this signature:
-
-```ts
-declare function startCallback(
-  locationInput: CallbackLocationInput,
-  allowedApplicationOrigins: readonly string[],
-  ccdpOrigin: string,
-): void
-```
-
-The shell-to-implementation contract is deliberately unversioned and fixed.
-URL input is always the raw query/fragment pair, while both default and overridden `inputs`
-are opaque to the shell. Each CCDP Callback implementation defines and
-exact-validates its own argument tuple. Implementations use the latest deployment
-values by default. Before changing the tuple incompatibly, the deployment pins
-the previous tuple only on versions that still require it. This changes neither
-the shell algorithm nor the browser URL. Neither URL input nor a network
-response may supply arguments.
-
-### Bootstrap algorithm
-
-Before module import, rendering, storage, error reporting, or other network use,
-the inline bootstrap:
-
-1. bounds and copies the raw query and fragment;
-2. clears both with `history.replaceState` while retaining the same path;
-3. accepts only an OAuth-platform return containing exactly one routing `state`;
-4. reads only the `v<version>.` prefix from OAuth `state` and rejects malformed
-   or unsupported values;
-5. selects the corresponding version and its optional input override;
-6. deeply freezes the captured location and resolved inputs; and
-7. imports `{ccdpOrigin}/ccdp/v{CCDPVersion}/callback.js` and invokes its
-   `startCallback` entrypoint once with the resolved inputs.
-
-Any failure imports no other implementation and renders only fixed text after
-clearing.
-The bootstrap never parses a platform credential, selects a prover asset, or
-uses `Origin` or `Referer` as configuration.
-
-Google returns its credential in the fragment, which is never sent to the
-bridge. X and GitHub return OAuth-platform-mandated callback parameters in the query.
-The bridge and every upstream proxy suppress or redact callback query strings
-from access logs, traces, analytics, metrics labels, and error reports. No
-later request URL carries the captured return. Callback may forward it only
-through the private Prover fragment defined by CCDP, after authenticating the
-Application; every receiving document captures and clears it before use.
-
-The callback response uses:
-
-- `Cross-Origin-Opener-Policy: unsafe-none`;
-- `Content-Type: text/html`, `X-Content-Type-Options: nosniff`,
-  `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`;
-- CSP beginning with `default-src 'none'`, `object-src 'none'`,
-  `base-uri 'none'`, `form-action 'none'`, and `frame-ancestors 'none'`;
-- `frame-src` admitting only the exact configured CCDP origin;
-- `connect-src` admitting only fixed sources required by the configured popup
-  fallback;
-- `style-src 'unsafe-inline'` for package-owned inline styles, with no external
-  stylesheet sources or Bridge-pinned stylesheet hash;
-- one exact hash for the inline clearing bootstrap and only the exact supported
-  Callback implementation URLs on the configured CCDP origin; and
-- no broad scheme, JavaScript `'unsafe-inline'`, or `'unsafe-eval'` source.
-
-The CCDP Distribution's Callback module uses its
-[protocol-resource response profile](distribution.md#protocol-resources).
-Markup, styles, and logo remain package-owned. There is no styling customization
-input, template, or theme contract. Compatible Callback UI changes require no
-Bridge update; inline styling permission does not permit inline JavaScript.
+Compatible artifact updates require no bridge rebuild. The bridge neither
+parses OAuth state nor selects a CCDP implementation, generates browser code,
+or handles protocol errors. Google fragments never reach this server;
+platform-mandated callback queries are not forwarded to the Distribution.
 
 ## GitHub token endpoint
 
@@ -370,9 +223,11 @@ The returned fields are one correlated result: the uniquely framed bearer
 commitment in `tokenAttestation.attestedData` equals
 `SHA256(accessToken || bearerOpening)`. The bridge preserves signed attestation
 bytes exactly. Before its dependent identity notarization, the prover validates
-the response encoding, correlation, and open request bindings. Local notary
-signature verification remains optional; downstream proof verification is
-authoritative.
+the response encoding, correlation, and open request bindings. Neither Prover
+nor Client performs local notary-signature verification. A structurally valid
+forged signature is not detected by these checks alone; downstream verification
+of the original bytes against trusted notary keys remains authoritative and
+mandatory.
 
 The endpoint contract is:
 
@@ -398,8 +253,7 @@ lost response requires a fresh ceremony.
 
 ## Compatibility
 
-A live page keeps its loaded callback module and embedded configuration. A
-breaking JSON request or response changes the bridge API version. CCDP,
+A breaking JSON request or response changes the bridge API version. CCDP,
 platform ceremony, prover release, and popup connection versions remain
 independent as defined in
 [ARCHITECTURE.md](architecture.md#versioning-and-compatibility).

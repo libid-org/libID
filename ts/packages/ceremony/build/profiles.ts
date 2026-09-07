@@ -32,16 +32,16 @@ export function responseHeaders(
     'Cache-Control': ['asset', 'executionWorker', 'proofWorker', 'leafWorker'].includes(profile)
       ? 'public, max-age=31536000, immutable'
       : 'no-cache',
-    'Content-Type':
-      profile === 'prefetch' || profile === 'prover' || profile === 'proverFallback'
-        ? 'text/html; charset=utf-8'
-        : 'text/javascript; charset=utf-8',
+    'Content-Type': ['callback', 'prefetch', 'prover', 'proverFallback'].includes(profile)
+      ? 'text/html; charset=utf-8'
+      : 'text/javascript; charset=utf-8',
   }
   if (profile === 'callback')
     return {
       ...headers,
-      'Access-Control-Allow-Origin': '*',
-      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'`,
+      'Cross-Origin-Opener-Policy': 'unsafe-none',
+      'Referrer-Policy': 'no-referrer',
     }
   headers['Cross-Origin-Resource-Policy'] = 'same-origin'
   if (profile === 'asset') return headers

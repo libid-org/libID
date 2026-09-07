@@ -14,6 +14,18 @@ for (const native of [false, true])
     context,
   }) => {
     const errors: string[] = []
+    const callbackScripts: string[] = []
+    await context.route('**/*', async (route) => {
+      const request = route.request()
+      if (
+        request.resourceType() === 'script' &&
+        !request.serviceWorker() &&
+        new URL(request.frame().url()).origin === bridge
+      ) {
+        callbackScripts.push(new URL(request.url()).pathname)
+        await route.abort()
+      } else await route.fallback()
+    })
     context.on('page', (p) => p.on('pageerror', (e) => errors.push(e.message)))
     await context.route('https://accounts.google.com/**', async (route) => {
       const state = new URL(route.request().url()).searchParams.get('state')
@@ -48,6 +60,7 @@ for (const native of [false, true])
     await page.evaluate(() => window.after())
     await expect.poll(() => page.evaluate(() => window.afterReady)).toBe(true)
     expect(errors).toEqual([])
+    expect(callbackScripts).toEqual([])
   })
 test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async ({ request }) => {
   for (const path of [
@@ -55,7 +68,7 @@ test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async
     '/ccdp/v1/prover',
     '/ccdp/v1/prover/fallback',
     '/ccdp/v1/worker.js',
-    '/ccdp/v1/callback.js',
+    '/ccdp/callback.html',
   ]) {
     const a = await request.get(ccdp + path),
       b = await request.get(`${ccdp + path}?not-a-config=1`)
@@ -273,4 +286,39 @@ test('two independently supplied connections cannot replace each other [LIBID-BR
     { status: 'denied' },
     { status: 'denied' },
   ])
+})
+
+test('Callback clears unsupported versions and unconfigured direct visits locally [KIT-010] [CSP-007]', async ({
+  page,
+}) => {
+  const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+  const outbound: string[] = []
+  await page.route('**/*', async (route) => {
+    if (new URL(route.request().url()).pathname === '//auth/callback')
+      await route.fulfill({ response: await page.request.get(`${bridge}/callback`) })
+    else if (route.request().isNavigationRequest()) await route.continue()
+    else {
+      outbound.push(route.request().resourceType())
+      await route.abort()
+    }
+  })
+  for (const path of [
+    `/callback?state=v99.${id}`,
+    `/callback#state=v99.${id}`,
+    `//auth/callback?state=v99.${id}`,
+  ]) {
+    // A hash-only navigation in the previous Callback document does not rerun its entry.
+    await page.goto('about:blank')
+    await page.goto(bridge + path)
+    await expect(page.getByRole('status')).toHaveText(
+      'This ceremony version is no longer supported. Update the application and try again.',
+    )
+    await expect(page).toHaveURL(bridge + path.split(/[?#]/)[0])
+  }
+  await page.goto(`${ccdp}/ccdp/callback.html#state=v1.${id}`)
+  await expect(page.getByRole('status')).toHaveText(
+    'Unable to continue. Return to your application.',
+  )
+  expect(page.url()).toBe(`${ccdp}/ccdp/callback.html`)
+  expect(outbound).toEqual([])
 })
