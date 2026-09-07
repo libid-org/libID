@@ -1,6 +1,6 @@
 # Qualification and release prerequisites
 
-Status: **implementation review complete; launch qualification incomplete**.
+Status: **launch qualification incomplete**.
 Security/correctness, API ergonomics and simplicity were independently reviewed.
 Reasonable findings were fixed and targeted checks rerun. No predecessor review
 ledger or completion state is inherited. [TRACEABILITY.md](traceability.md) accounts
@@ -11,7 +11,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Input | Pin |
 |---|---|
 | Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `8d5f46bd710f2c226e228cf1e7511da08ec7c4cb`; eight source documents reorganized into module-owned docs; package composition updated for grouped CCDP documents |
+| Architecture PR #13 | `b078fa33039a73c194ade24d266c69752e911fcd`; eight source documents reorganized into module-owned docs; package composition updated for grouped CCDP documents |
 | Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
 | Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
@@ -61,10 +61,29 @@ contract and is not an acceptable substitute.
   digest: this is runtime/key compatibility, not real consent or authorization for
   the harness transaction. Public-input mutation must fail independent verification.
 
+The ledger-integration run passed 180 ceremony units, 3 ledger units and all 7
+artifact/loader/actual-SWS checks. The five-profile browser matrix passed 44/45
+cases, including every real Google proof and independent verification. WebKit's
+two-concurrent-popup case observed only one completion before its 15-second test
+deadline. Five immediate focused repetitions passed. The cause is unresolved;
+these repetitions do not establish a consistently passing concurrency gate.
+
 The executable matrix is `e2e/flow.spec.ts` plus `playwright.config.ts`. Final run
 counts and browser versions are recorded in the PR; ignored local reports carry
 controlled fixture outputs. Real OAuth traces, callback URLs, credentials,
 transcripts, openings and witnesses are never qualification artifacts.
+
+## Ledger fixture scope
+
+The real `@libid/ledger` package supplies the public interface and production decoder;
+real ledger definitions are intentionally deferred by user instruction. Production
+`decode` rejects every identifier, including testing identities. The shared testing
+entrypoint exercises encode/decode, immutable hash bytes and code-owned network
+classification with synthetic values only. Ceremony unit tests and the local browser
+harness alias that same fixture into Client and Prover. `build:qualification-artifacts`
+restricts these builds to `.cache/`; normal production builds use the real package.
+This verifies ceremony integration, not real-ledger support or Chain Profile vectors.
+A real ledger definition is required before a production ceremony can be constructed.
 
 ## Actual blockers and unqualified boundaries
 
@@ -76,6 +95,9 @@ transcripts, openings and witnesses are never qualification artifacts.
    documented 32-KiB acceptance ceiling. This is no evidence of real TLSN concurrency
    or a qualified X/GitHub ceremony. Reestablish a matched service/bundle, then run
    the real profiles and correlate every final output.
+   These historical probes used the development override address, not the newly
+   documented `https://testnet.notary.lib.id`. Both fixed network selections and
+   matched browser/Bridge sessions remain unqualified against live services.
 2. **X request deadline:** REQ-PLAT-33 / LIBID-BROWSER-010 require complete request
    receipt at X before its 30-second authorization-code deadline. The documents do
    not define a browser-observable issuance anchor. The pinned SDK exposes
@@ -94,7 +116,11 @@ transcripts, openings and witnesses are never qualification artifacts.
    Admission implements the current hidden-header, separately disclosed field
    profile. Its tests use a synthetic canonical-bincode record, not a signed
    released GitHub service vector. The obsolete fully revealed request-head layout
-   is rejected. Obtain a matching service/profile vector and real `/user` evidence.
+   is rejected. Obtain a matching service/profile vector and real `/user` evidence. The Bridge
+   must use the Prover-supplied canonical `notaryAddress` unchanged, with no second
+   mapping/override, and reject redirects and forbidden internal destinations,
+   including DNS-resolved destinations. Unit origin validation is not server egress
+   protection; those service controls and both network selections remain unqualified.
 5. **Devices and optional carrier:** real iOS/Android devices, native platform apps,
    Vanadium, background scheduling/memory pressure and corresponding optional
    fallback adapters/signaling were unavailable. Desktop engines and mobile
@@ -120,6 +146,10 @@ insufficient launch capacity. Negative browser-proof SRS-floor execution and the
 complete cache/update fault matrix are not claimed; their remaining properties are retained in the index.
 
 ## Implementation deviations with consequences
+
+- `LIBID-OAUTH-003` in the pinned source still names raw `chainId` input, conflicting
+  with its updated `LIBID-MOD-014/015` and Client API. The local requirement row keeps
+  its ID but names `LedgerId` and a decoder-derived hash, matching the current API.
 
 - SWS 2.44 requires boolean `text-charset = false`; the document's empty-string
   value fails configuration parsing. Its header matcher appends the resolved file

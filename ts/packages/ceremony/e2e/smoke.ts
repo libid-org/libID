@@ -1,3 +1,5 @@
+import { LedgerId } from '@libid/ledger'
+import { resolveNotaryAddress } from '../src/prover/notary.js'
 import { ProofEngine } from '../src/prover/engine.js'
 import { assetUrl } from '../src/assets.js'
 import { circuit as google } from '../src/platforms/google/1/assets.js'
@@ -46,7 +48,11 @@ Object.assign(window, {
       const results = await Promise.all(
         Array.from({ length: count }, async () => {
           const url = 'https://api.x.com/2/users/me',
-            session = await prepareNotarization(url, abort.signal)
+            session = await prepareNotarization(
+              url,
+              resolveNotaryAddress(LedgerId.decode('test:testnet')),
+              abort.signal,
+            )
           const transcript = await session.send({
             url,
             method: 'GET',

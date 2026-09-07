@@ -20,3 +20,11 @@ Callback HTML and composes its hash-only script policy. It is deliberately a
 harness helper, not the production Bridge refresh/cache lifecycle. Its
 `connect-src 'none'` tests the deployment without an optional fallback adapter;
 configured fallback connectivity requires separate qualification.
+
+Build `pnpm --filter @libid/ceremony build:qualification-artifacts` before this
+harness. It reads `.cache/qualification-artifacts`, where the test build aliases
+`@libid/ledger` to the shared [testing fixture](../../ledger/README.md#shared-test-fixture).
+The app and Prover use the same decoder. No real ledger is implied; normal production
+builds exclude the fixture. For actual SWS tests, build the image from this test
+artifact and set `CEREMONY_ARTIFACT_DIR` to its absolute path when running
+`test:distribution`, alongside `CEREMONY_SWS_URL`.

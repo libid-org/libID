@@ -64,9 +64,11 @@ export async function prove(context: ProverContext): Promise<XProofV1 | null> {
       codeVerifier: request.codeVerifier,
     }
     const tokenRequest = buildTokenRequest(input)
-    const tokenSession = observe(prepareNotarization(tokenRequest.url, controller.signal))
+    const tokenSession = observe(
+      prepareNotarization(tokenRequest.url, context.notaryAddress, controller.signal),
+    )
     const identitySession = observe(
-      prepareNotarization('https://api.x.com/2/users/me', controller.signal),
+      prepareNotarization('https://api.x.com/2/users/me', context.notaryAddress, controller.signal),
     )
     const session = await tokenSession
     const transcript = await progress.step('token-session', () => session.send(tokenRequest))

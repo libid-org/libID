@@ -1,3 +1,4 @@
+import { LedgerId } from '@libid/ledger'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
 import { createCeremonyClient } from '../src/client/index.js'
 const bridge = 'https://localhost:4682',
@@ -38,7 +39,7 @@ anchor.addEventListener('click', (event) => {
   connection.closed.then((closed) => Object.assign(window, { ceremonyClosed: closed }))
   const ceremony = client.new(id, {
     connection,
-    chainId: new Uint8Array(32),
+    ledgerId: LedgerId.decode(new URL(location.href).searchParams.get('ledger') ?? 'test:testnet'),
     operationDomain: new Uint8Array(32),
     transactionData: new Uint8Array([1]),
     platformId: 'google',

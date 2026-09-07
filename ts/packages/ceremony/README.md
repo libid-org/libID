@@ -34,7 +34,7 @@ const connection = PopupConnection.connect(popup, {
 const ceremony = client.new(id, {
   connection,
   platformId: 'google',
-  chainId,          // 32-byte hash from application composition
+  ledgerId,        // LedgerId from @libid/ledger (encode/hash/isTestnet)
   operationDomain, // 32-byte hash from application composition
   transactionData, // exact application-owned transaction bytes
 })
@@ -53,6 +53,10 @@ try {
   off()
 }
 ```
+
+**Real ledger definitions are deferred.** The shared [ledger package](../ledger/README.md)
+currently has no supported production identifiers. The test harness uses its explicit
+synthetic fixture; normal builds reject those identifiers.
 
 Construct the client once per application configuration lifetime. It fetches and
 validates public Bridge configuration once; `enabledPlatforms` is a frozen catalog
@@ -101,6 +105,7 @@ From the TypeScript workspace, using Node 22.18+ on 22.x or Node 24+:
 ```sh
 pnpm install --frozen-lockfile
 pnpm --filter @libid/popup build
+pnpm --filter @libid/ledger build
 pnpm --filter @libid/ceremony build
 LIBID_TLSN_BUNDLE=/absolute/path/to/matched-bundle \
   pnpm --filter @libid/ceremony build:ccdp-artifacts
@@ -109,8 +114,13 @@ LIBID_TLSN_BUNDLE=/absolute/path/to/matched-bundle \
 `LIBID_TLSN_BUNDLE` must contain the hash-pinned `tlsn_wasm.js` and
 `tlsn_wasm_bg.wasm` pair. It is read, never modified. Circuit downloads are
 hash-checked and cached under `.cache/`. `LIBID_NOTARY_ADDRESS` optionally replaces
-`https://notary.lib.id` at build time and changes the emitted execution policy.
-No browser input can change these locations. `--out-dir` selects another dedicated
+both fixed addresses at build time and changes the emitted execution policy.
+Without an override, Prover decodes the frozen ledger encoding and its classification selects
+`https://notary.lib.id` or `https://testnet.notary.lib.id`; both share the same
+assets and response. Prover forwards the resolved `notaryAddress` to the GitHub
+Bridge for the token session and uses that same address for its identity session.
+The Bridge owns egress/DNS protections for this request-controlled destination.
+There is no Bridge-side network mapping or second override. `--out-dir` selects another dedicated
 output directory inside the checkout. Rebuilding into an existing artifact retains
 its previous immutable responses and headers; use that accumulated artifact for
 compatible promotion. Preserve it across CI jobs. Do not discard old immutable
@@ -147,7 +157,12 @@ CEREMONY_SWS_URL=http://127.0.0.1:8080 pnpm --filter @libid/ceremony test:distri
 CEREMONY_SWS_URL=http://127.0.0.1:8080 pnpm --filter @libid/ceremony test:e2e
 ```
 
-Build artifacts first. Browser checks use HTTPS ports 4681–4683 and actual popup
+Browser tests require `build:qualification-artifacts`, which aliases the shared
+ledger testing entrypoint in both Client and Prover and emits
+`.cache/qualification-artifacts`. Build the test SWS image from that directory and
+set `CEREMONY_ARTIFACT_DIR` to its absolute path for `test:distribution`. This is
+separate from the normal `dist-artifacts` build, which contains no fixture decoder.
+Browser checks use HTTPS ports 4681–4683 and actual popup
 code; `CEREMONY_SWS_URL` forwards CCDP requests to the real image. Without it, the
 harness serves emitted bodies/policies directly and does not qualify SWS. Tests
 include controlled real Google proofs verified in a separate Node process against

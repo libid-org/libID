@@ -9,7 +9,13 @@ import { packageDir } from './release.ts'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
 const graph: DistributionMetadata = JSON.parse(
-  readFileSync(join(packageDir, '.cache/distribution-graph.json'), 'utf8'),
+  readFileSync(
+    join(
+      process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
+      'distribution-graph.json',
+    ),
+    'utf8',
+  ),
 )
 const requests = graph.requestsByProfile['google/1']
 const originalFetch = globalThis.fetch

@@ -12,3 +12,7 @@ selective disclosures and correlation with canonical final attestations.
 attested bytes, and [notarize.ts](notarize.ts) correlates transcripts and openings.
 Original attestations and signatures are preserved; local signature verification is
 outside the adapter's responsibility.
+
+[notary.ts](../notary.ts) selects one build-owned notary address from the decoded
+ledger. X uses it for both sessions; GitHub sends it unchanged to the Bridge and
+uses it for the browser identity session. The ledger package contains no endpoints.

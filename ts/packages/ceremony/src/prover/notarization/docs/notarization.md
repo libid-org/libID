@@ -27,19 +27,35 @@ churn from platform code. It ships inside the selected versioned prover root; th
 separately fetched notarization client is the pinned `tlsn_wasm.js` module and
 its deterministic sibling `tlsn_wasm_bg.wasm`.
 
-The module pins the one shared browser Notary Service address:
+### Notary address
+
+Prover resolves one Notary Service address per ceremony from the decoded
+`LedgerId`, using two code-pinned defaults:
 
 ```ts
-const NOTARY_ADDRESS = 'https://notary.lib.id'
+const notaryAddress = ledgerId.isTestnet()
+  ? 'https://testnet.notary.lib.id'
+  : 'https://notary.lib.id'
 ```
 
-The build may replace this default only through `LIBID_NOTARY_ADDRESS`, which
-must be a canonical HTTPS origin. The resulting value is compiled into the
-static Prover distribution and its response policy. Applications, runtime
-deployment configuration, ceremony inputs, OAuth responses, and CCDP messages
-cannot replace it or select an OAuth-platform request, disclosure layout, or
-Notary Service behavior. The address is only network routing; Ledger Verifier
-governance independently decides which notary signatures are authoritative.
+X uses the resolved address for both browser sessions. GitHub passes that
+address in its Bridge token request and uses it locally for identity
+notarization. The Bridge neither classifies ledgers nor remaps the address;
+failure never switches to the other network. Google uses neither address.
+
+For local development, `LIBID_NOTARY_ADDRESS` overrides the resolved address
+for either network. It must be a canonical HTTPS origin and is read
+when building the static Prover distribution, never from browser runtime
+inputs. The build emits the effective WebSocket origins in the response policy.
+The same resolved override reaches GitHub through its token request; no second
+Bridge override or profile configuration exists. Asset declarations,
+prefetch, and proof formats are identical for both networks.
+
+Applications supply a supported ledger identity, not an arbitrary endpoint,
+OAuth-platform request, disclosure layout, or Notary Service behavior. The
+address is only network routing; Ledger Verifier governance independently
+decides which notary signatures are authoritative. No browser signature check
+or notary-key input is introduced by this selection.
 
 ## Internal contract
 
@@ -94,12 +110,15 @@ interface NotarizationSession {
 
 declare function prepareNotarization(
   url: string,
+  notaryAddress: string,
   signal: AbortSignal,
 ): Promise<NotarizationSession>
 ```
 
-The platform leaf supplies its code-owned canonical HTTPS request URL before
-preparation. It contains no credentials or fragment. The adapter derives the
+The platform leaf supplies its code-owned canonical HTTPS request URL and the
+ceremony's resolved notary address before preparation. The latter is a canonical
+HTTPS origin, distinct from the platform target; all sessions reuse it unchanged.
+The request URL contains no credentials or fragment. The adapter derives the
 TLS server name and port from it before constructing the TLSNotary prover and
 performing setup; it neither accepts a separate hostname nor follows redirects.
 `send` requires the exact prepared URL, while headers and body may wait for the
@@ -246,12 +265,15 @@ The decoded values and every malformed variant are asserted by the
 
 ### Network transport
 
-The adapter changes `NOTARY_ADDRESS` only from `https` to `wss` and opens the
-exact `/notarize-proxy` path with no query:
+The adapter validates the already resolved [notary address](#notary-address),
+changes only its scheme from `https` to `wss`, and opens the exact
+`/notarize-proxy` path with no query:
 
 ```text
 https://notary.lib.id
     -> wss://notary.lib.id/notarize-proxy
+https://testnet.notary.lib.id
+    -> wss://testnet.notary.lib.id/notarize-proxy
 ```
 
 The same WebSocket carries the complete TLSNotary Proxy byte stream and the
@@ -296,7 +318,7 @@ sequenceDiagram
     participant N as Notary Service
     participant P as Platform HTTPS server
 
-    M->>T: prepareNotarization(url, signal)
+    M->>T: prepareNotarization(url, notaryAddress, signal)
     T->>N: Open wss://<notary-origin>/notarize-proxy
     T->>W: setup(IoChannel)
     W->>N: TLSNotary setup messages (Proxy profile)

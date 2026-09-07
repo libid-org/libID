@@ -1,3 +1,4 @@
+import { LedgerId } from '@libid/ledger'
 import { hasExactKeys, isRecord } from '../primitives.js'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import {
@@ -41,7 +42,7 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
 }
 interface Input<P extends PlatformId> {
   connection: PopupConnection<Message>
-  chainId: Uint8Array
+  ledgerId: LedgerId
   platformId: P
   operationDomain: Uint8Array
   transactionData: Uint8Array
@@ -71,7 +72,7 @@ export function clientFromConfig(config: CeremonyConfig): CeremonyClient {
         !isRecord(input) ||
         !hasExactKeys(input, [
           'connection',
-          'chainId',
+          'ledgerId',
           'platformId',
           'operationDomain',
           'transactionData',
@@ -80,16 +81,23 @@ export function clientFromConfig(config: CeremonyConfig): CeremonyClient {
         throw new TypeError('Invalid ceremony input')
       if (typeof id !== 'string' || !UUID.test(id) || !enabledPlatforms.includes(input.platformId))
         throw new TypeError('Invalid ceremony selection')
-      for (const bytes of [input.chainId, input.operationDomain])
-        if (!(bytes instanceof Uint8Array) || bytes.length !== 32)
-          throw new TypeError('Authorization hashes must be 32 bytes')
+      const { ledgerId, ...operation } = input
+      if (!ledgerId || typeof ledgerId.encode !== 'function')
+        throw new TypeError('Invalid ledger identity')
+      const encodedLedgerId = ledgerId.encode()
+      const hash = LedgerId.decode(encodedLedgerId).hash()
+      if (!(hash instanceof Uint8Array) || hash.length !== 32)
+        throw new TypeError('Ledger hash must be 32 bytes')
+      const chainId = Uint8Array.from(hash)
+      if (!(input.operationDomain instanceof Uint8Array) || input.operationDomain.length !== 32)
+        throw new TypeError('Operation domain must be 32 bytes')
       if (
         !(input.transactionData instanceof Uint8Array) ||
         input.transactionData.length > 0xffffffff
       )
         throw new TypeError('Invalid transaction bytes')
       if (liveIds.has(id)) throw new TypeError('Ceremony ID is already live')
-      const run = new Run(id, input, config, () => {
+      const run = new Run(id, { ...operation, chainId, ledgerId: encodedLedgerId }, config, () => {
         liveIds.delete(id)
       })
       liveIds.add(id)
@@ -134,7 +142,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private binding: Binding | undefined
   constructor(
     id: string,
-    input: Input<P>,
+    input: Omit<Input<P>, 'ledgerId'> & { chainId: Uint8Array; ledgerId: string },
     config: CeremonyConfig,
     private readonly releaseId: () => void,
   ) {
@@ -143,13 +151,13 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     const platform = config.platforms[this.platform]
     this.version = greatestCommonVersion(this.platform, platform.ceremonyVersions)
     this.retained = {
-      operationDomain: input.operationDomain.slice(),
+      operationDomain: Uint8Array.from(input.operationDomain),
       authorizationNonce: crypto.getRandomValues(new Uint8Array(32)),
-      transactionData: input.transactionData.slice(),
+      transactionData: Uint8Array.from(input.transactionData),
     }
     const digest = deriveAuthorizationDigest({
       ...this.retained,
-      chainId: input.chainId.slice(),
+      chainId: input.chainId,
       platformCeremonyVersion: this.version,
     })
     const implementation = implementationFor(this.platform, this.version)
@@ -170,6 +178,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       clientId: platform.clientId,
       redirectUri: config.redirectUri,
       codeVerifier,
+      ledgerId: input.ledgerId,
     }
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)

@@ -1,3 +1,4 @@
+import { origin } from '../../../ccdp/index.js'
 import { parseJson } from '../../../prover/json.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { sha256 } from '@noble/hashes/sha2.js'
@@ -23,6 +24,7 @@ const QUOTE = new Uint8Array([0x22])
 export interface TokenRequest {
   code: string
   codeVerifier: string
+  notaryAddress: string
 }
 
 export interface TokenResponse {
@@ -49,15 +51,20 @@ function invalid(reason: string): never {
 
 /** Encode the exact bounded browser-to-server request. */
 export function encodeTokenRequest(value: unknown): Uint8Array {
-  if (!isRecord(value) || !hasExactKeys(value, ['code', 'codeVerifier'])) {
+  if (!isRecord(value) || !hasExactKeys(value, ['code', 'codeVerifier', 'notaryAddress'])) {
     return invalid('request shape')
   }
+  if (!origin(value.notaryAddress)) return invalid('notary origin')
   if (typeof value.code !== 'string' || !CODE.test(value.code)) return invalid('code')
   if (typeof value.codeVerifier !== 'string' || !CODE_VERIFIER.test(value.codeVerifier)) {
     return invalid('code verifier')
   }
   return new TextEncoder().encode(
-    JSON.stringify({ code: value.code, codeVerifier: value.codeVerifier }),
+    JSON.stringify({
+      code: value.code,
+      codeVerifier: value.codeVerifier,
+      notaryAddress: value.notaryAddress,
+    }),
   )
 }
 

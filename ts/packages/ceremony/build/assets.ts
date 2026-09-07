@@ -10,6 +10,15 @@ import type { ReleaseFiles } from './release.ts'
 import { circuitRelease, hash, packageDir } from './release.ts'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
+/** Compiled into the browser and shared response policy; never read from browser inputs. */
+export function resolveNotaryAddresses(
+  override?: string,
+): readonly [mainnet: string, testnet: string] {
+  if (override === undefined) return ['https://notary.lib.id', 'https://testnet.notary.lib.id']
+  if (new URL(override).origin !== override || !override.startsWith('https://'))
+    throw new Error('Invalid notary origin')
+  return [override, override]
+}
 export async function resolveAssets(outDir: string) {
   const result = await build({
     configFile: false,
@@ -39,14 +48,12 @@ export async function resolveAssets(outDir: string) {
     unique.set(asset.id, asset)
   }
   const assets = [...unique.values()]
-  const notaryAddress = process.env.LIBID_NOTARY_ADDRESS || 'https://notary.lib.id'
-  if (new URL(notaryAddress).origin !== notaryAddress || !notaryAddress.startsWith('https://'))
-    throw new Error('Invalid notary origin')
+  const notaryAddresses = resolveNotaryAddresses(process.env.LIBID_NOTARY_ADDRESS)
   // Immutable worker URLs identify both their bytes and execution policy.
   const policyId = hash(
     JSON.stringify(
       (['executionWorker', 'proofWorker', 'leafWorker'] as const).map((p) =>
-        responseHeaders(p, { notaryAddress }),
+        responseHeaders(p, { notaryAddresses }),
       ),
     ),
   ).slice(0, 12)
@@ -119,7 +126,7 @@ export async function resolveAssets(outDir: string) {
     moduleUrls,
     profiles,
     local: Object.values(urls),
-    notaryAddress,
+    notaryAddresses,
     bodyHashes,
     sizes,
     hashBody: hash,

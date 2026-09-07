@@ -1,3 +1,5 @@
+import { LedgerId } from '@libid/ledger'
+import { resolveNotaryAddress } from '../../prover/notary.js'
 import { claimRootWorker } from '../../prefetch/registration.js'
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { AbortCeremony } from '../index.js'
@@ -62,9 +64,18 @@ export async function startProver(fragment: string): Promise<void> {
         fail()
         return
       }
+      let ledgerId: LedgerId
+      try {
+        ledgerId = LedgerId.decode(request.ledgerId)
+      } catch {
+        fail()
+        return
+      }
       started = true
       const context: ProverContext = {
         request,
+        ledgerId,
+        notaryAddress: resolveNotaryAddress(ledgerId),
         ceremonyId: retained!.ceremonyId,
         oauthReturn: retained!.oauthReturn,
         signal: controller.signal,

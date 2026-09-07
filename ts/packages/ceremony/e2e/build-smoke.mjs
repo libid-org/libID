@@ -33,6 +33,7 @@ await build({
   configFile: false,
   root: packageDir,
   base: '/',
+  resolve: { alias: { '@libid/ledger': join(packageDir, '../ledger/src/testing.ts') } },
   plugins: [assetPlugin(assets), diagnostics],
   worker: { format: 'es', plugins: () => [assetPlugin(assets), diagnostics] },
   build: {

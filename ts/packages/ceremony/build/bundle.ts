@@ -168,6 +168,12 @@ export async function bundle(
     configFile: false,
     root: packageDir,
     base: '/',
+    resolve: {
+      alias:
+        process.env.LIBID_LEDGER_FIXTURE === '1'
+          ? { '@libid/ledger': join(packageDir, '../ledger/src/testing.ts') }
+          : {},
+    },
     logLevel: 'warn',
     plugins: plugins(false),
     worker: {

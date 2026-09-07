@@ -1,6 +1,5 @@
-import { notaryAddress } from 'virtual:ceremony-assets'
 import { assetUrl } from '../../assets.js'
-import { httpsUrl } from '../../ccdp/index.js'
+import { httpsUrl, origin } from '../../ccdp/index.js'
 import type { NotaryAttestation } from '../../platforms/types.js'
 import type { ByteRange } from './notarize.js'
 import { tlsnModule, tlsnWasm } from './assets.js'
@@ -32,9 +31,11 @@ export interface NotarizationSession {
 }
 export async function prepareNotarization(
   url: string,
+  notaryAddress: string,
   signal: AbortSignal,
 ): Promise<NotarizationSession> {
   signal.throwIfAborted()
+  if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
   if (!httpsUrl(url) || new URL(url).hash || new URL(url).port)
     throw new TypeError('Invalid notarization target')
   const worker = new Worker(new URL('./session.worker.ts', import.meta.url), { type: 'module' })

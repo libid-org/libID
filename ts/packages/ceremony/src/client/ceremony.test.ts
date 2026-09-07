@@ -1,3 +1,6 @@
+import { LedgerId } from '@libid/ledger'
+import { deriveAuthorizationDigest } from '../platforms/authorization.js'
+import { b64urlEncode } from '../primitives.js'
 import { describe, expect, it, vi } from 'vitest'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import { clientFromConfig } from './ceremony.js'
@@ -7,7 +10,7 @@ class Connection implements PopupConnection<Message> {
   closed = new Promise<never>(() => {})
   send = vi.fn()
   navigate = vi.fn(async (_url: string, _fragment?: URLSearchParams) => {})
-  navigateAway = vi.fn(async () => {})
+  navigateAway = vi.fn(async (_url: string) => {})
   close = vi.fn(async () => {})
   handlers = new Map<string, (v: unknown) => void>()
   on<M extends Message>(type: MessageType<M>, handler: (m: M) => void) {
@@ -32,7 +35,7 @@ function setup() {
   const data = new Uint8Array([1, 2])
   const ceremony = clientFromConfig(config).new(id, {
     connection,
-    chainId: new Uint8Array(32),
+    ledgerId: LedgerId.decode('test:testnet'),
     platformId: 'google',
     operationDomain: new Uint8Array(32),
     transactionData: data,
@@ -63,6 +66,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       clientId: 'client',
       redirectUri: config.redirectUri,
       codeVerifier: null,
+      ledgerId: 'test:testnet',
     })
     c.receive({ type: 'prover-deliver-proof', proof })
     const result = await pending
@@ -109,7 +113,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     c.handlers.clear()
     const next = clientFromConfig(config).new(id, {
       connection: c,
-      chainId: new Uint8Array(32),
+      ledgerId: LedgerId.decode('test:testnet'),
       platformId: 'google',
       operationDomain: new Uint8Array(32),
       transactionData: new Uint8Array(),
@@ -150,7 +154,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
   const client = clientFromConfig(config),
     input = {
       connection: new Connection(),
-      chainId: new Uint8Array(32),
+      ledgerId: LedgerId.decode('test:testnet'),
       platformId: 'google' as const,
       operationDomain: new Uint8Array(32),
       transactionData: new Uint8Array(),
@@ -177,4 +181,111 @@ it('rejects changed form serialization for X/GitHub client IDs, not signed Googl
       'https://bridge.test',
     ),
   ).not.toThrow()
+})
+
+it.each(['test:mainnet', 'test:testnet'])(
+  'captures the encoded ledger once and derives its hash from the shared decoder: %s [LIBID-MOD-015]',
+  async (encoded) => {
+    const ledgerId = {
+      encode: vi.fn(() => encoded),
+      hash: vi.fn(() => {
+        throw new Error('must use the shared decoder')
+      }),
+      isTestnet: vi.fn(() => {
+        throw new Error('must use the shared decoder')
+      }),
+    }
+    const connection = new Connection()
+    const ceremony = clientFromConfig(config).new(id, {
+      connection,
+      ledgerId,
+      platformId: 'google',
+      operationDomain: new Uint8Array(32),
+      transactionData: new Uint8Array([1, 2]),
+    })
+    expect(ledgerId.encode).toHaveBeenCalledOnce()
+    expect(ledgerId.hash).not.toHaveBeenCalled()
+    expect(ledgerId.isTestnet).not.toHaveBeenCalled()
+    ledgerId.encode.mockImplementation(() => {
+      throw new Error('must not reread')
+    })
+    const pending = ceremony.proveUserIdentity()
+    connection.receive({ type: 'prefetch-started' })
+    const authorization = new URL(connection.navigateAway.mock.calls[0][0])
+    connection.receive({ type: 'prover-ready' })
+    expect(connection.send.mock.calls[0][0]).toMatchObject({ ledgerId: encoded })
+    expect(connection.send.mock.calls[0][0]).not.toHaveProperty('isTestnet')
+    expect(connection.send.mock.calls[0][0]).not.toHaveProperty('chainId')
+    connection.receive({ type: 'prover-deliver-proof', proof })
+    const result = await pending
+    if (result.status !== 'accepted') throw new Error('Expected proof')
+    expect(authorization.searchParams.get('nonce')).toBe(
+      b64urlEncode(
+        deriveAuthorizationDigest({
+          chainId: LedgerId.decode(encoded).hash(),
+          operationDomain: new Uint8Array(32),
+          transactionData: new Uint8Array([1, 2]),
+          platformCeremonyVersion: 1,
+          authorizationNonce: result.oauthProof.authorizationNonce,
+        }),
+      ),
+    )
+    expect(result.oauthProof).not.toHaveProperty('isTestnet')
+  },
+)
+it('rejects malformed ledger encodings and extra routing inputs before OAuth [LIBID-MOD-014]', () => {
+  const connection = new Connection()
+  const input = {
+    connection,
+    ledgerId: LedgerId.decode('test:mainnet'),
+    platformId: 'google' as const,
+    operationDomain: new Uint8Array(32),
+    transactionData: new Uint8Array(),
+  }
+  const client = clientFromConfig(config)
+  for (const ledgerId of [
+    null,
+    {},
+    { encode: 1 },
+    ...[null, undefined, 1, {}, '', 'test:MAINNET', 'unknown:1'].map((value) => ({
+      encode: () => value,
+    })),
+    {
+      encode: () => {
+        throw new Error('encoding failure')
+      },
+    },
+  ])
+    expect(() => client.new(id, { ...input, ledgerId: ledgerId as LedgerId })).toThrow()
+  for (const extra of [
+    { chainId: new Uint8Array(32) },
+    { isTestnet: true },
+    { notaryAddress: 'https://other.test' },
+  ])
+    expect(() => client.new(id, { ...input, ...extra })).toThrow()
+  expect(connection.navigate).not.toHaveBeenCalled()
+  expect(connection.navigateAway).not.toHaveBeenCalled()
+})
+
+it('rejects malformed decoded hashes before OAuth [LIBID-MOD-014]', () => {
+  const connection = new Connection(),
+    ledgerId = LedgerId.decode('test:mainnet')
+  const decode = vi.spyOn(LedgerId, 'decode')
+  try {
+    for (const hash of [null, [], new Uint8Array(31), new Uint8Array(33)]) {
+      decode.mockReturnValueOnce({ ...ledgerId, hash: () => hash } as LedgerId)
+      expect(() =>
+        clientFromConfig(config).new(id, {
+          connection,
+          ledgerId,
+          platformId: 'google',
+          operationDomain: new Uint8Array(32),
+          transactionData: new Uint8Array(),
+        }),
+      ).toThrow('Ledger hash must be 32 bytes')
+    }
+    expect(connection.navigate).not.toHaveBeenCalled()
+  } finally {
+    decode.mockRestore()
+  }
 })

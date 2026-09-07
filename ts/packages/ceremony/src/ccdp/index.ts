@@ -93,6 +93,7 @@ export interface AppStartProver {
   clientId: string
   redirectUri: string
   codeVerifier: string | null
+  ledgerId: string
 }
 export const AppStartProver = {
   type: 'app-start-prover',
@@ -103,6 +104,7 @@ export const AppStartProver = {
       'clientId',
       'redirectUri',
       'codeVerifier',
+      'ledgerId',
     ])
     if (
       typeof value.platformId !== 'string' ||
@@ -110,6 +112,7 @@ export const AppStartProver = {
       !uint(value.platformCeremonyVersion, 65535) ||
       !text(value.clientId, 512) ||
       !redirect(value.redirectUri) ||
+      typeof value.ledgerId !== 'string' ||
       !(
         value.codeVerifier === null ||
         (typeof value.codeVerifier === 'string' &&

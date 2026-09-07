@@ -22,6 +22,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         clientId: 'client',
         redirectUri: 'https://bridge.test/callback',
         codeVerifier: null,
+        ledgerId: 'test:mainnet',
       },
     ],
     [CancelCeremony, { type: 'cancel-ceremony' }],
@@ -44,6 +45,21 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
       expect(() => codec.decode({ ...value, type: 'other' })).toThrow()
       expect(() => codec.decode(Object.assign(new Date(), value))).toThrow()
     })
+  it('checks ledger string structure and leaves semantic decoding to Prover [LIBID-OAUTH-021]', () => {
+    const message = samples[1][1]
+    for (const ledgerId of ['test:mainnet', 'test:testnet', 'unknown:1']) {
+      const value = { ...message, ledgerId }
+      expect(AppStartProver.decode(value)).toBe(value)
+    }
+    for (const ledgerId of [undefined, null, 0, true, {}, new String('test:mainnet')])
+      expect(() => AppStartProver.decode({ ...message, ledgerId })).toThrow()
+    for (const extra of [
+      { isTestnet: false },
+      { chainId: new Uint8Array(32) },
+      { notaryAddress: 'https://other.test' },
+    ])
+      expect(() => AppStartProver.decode({ ...message, ...extra })).toThrow()
+  })
   it('rejects malformed progress without coercion', () => {
     const message = samples[5][1]
     for (const progress of [NaN, Infinity, -1, 1, '0'])

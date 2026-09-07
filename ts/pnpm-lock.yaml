@@ -54,6 +54,9 @@ importers:
       '@aztec/bb.js':
         specifier: 5.2.0
         version: 5.2.0
+      '@libid/ledger':
+        specifier: workspace:^
+        version: link:../ledger
       '@libid/popup':
         specifier: workspace:^
         version: link:../popup
@@ -135,6 +138,15 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/ledger:
+    devDependencies:
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
