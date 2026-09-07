@@ -1,12 +1,16 @@
-import { validateCircuitCapacity } from './circuits.mjs'
-import { responseHeaders } from './profiles.mjs'
-import { build } from 'vite'
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { join, dirname } from 'node:path'
-import { hash, circuitRelease, packageDir } from './release.mjs'
+import { dirname, join } from 'node:path'
+import type { Plugin, Rollup } from 'vite'
+import { build } from 'vite'
+import type { Asset, AssetRequest } from '../src/assets.js'
+import { validateCircuitCapacity } from './circuits.ts'
+import { responseHeaders } from './profiles.ts'
+import type { ReleaseFiles } from './release.ts'
+import { circuitRelease, hash, packageDir } from './release.ts'
+
 const require = createRequire(new URL('../package.json', import.meta.url))
-export async function resolveAssets(outDir) {
+export async function resolveAssets(outDir: string) {
   const result = await build({
     configFile: false,
     logLevel: 'silent',
@@ -16,14 +20,18 @@ export async function resolveAssets(outDir) {
       lib: { entry: join(packageDir, 'src/platforms/assets.ts'), formats: ['es'] },
     },
   })
-  const { assetsByPlatform } = await import(
+  const {
+    assetsByPlatform,
+  }: { assetsByPlatform: Record<string, Record<number, readonly Asset[]>> } = await import(
     'data:text/javascript;base64,' +
       Buffer.from(
-        (Array.isArray(result) ? result[0] : result).output.find((o) => o.type === 'chunk').code,
+        ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output.find(
+          (o) => o.type === 'chunk',
+        )!.code,
       ).toString('base64')
   )
   const declarations = Object.values(assetsByPlatform).flatMap((v) => Object.values(v).flat()),
-    unique = new Map()
+    unique = new Map<string, Asset>()
   for (const asset of declarations) {
     const old = unique.get(asset.id)
     if (old && JSON.stringify(old) !== JSON.stringify(asset))
@@ -37,19 +45,19 @@ export async function resolveAssets(outDir) {
   // Immutable worker URLs identify both their bytes and execution policy.
   const policyId = hash(
     JSON.stringify(
-      ['executionWorker', 'proofWorker', 'leafWorker'].map((p) =>
+      (['executionWorker', 'proofWorker', 'leafWorker'] as const).map((p) =>
         responseHeaders(p, { notaryAddress }),
       ),
     ),
   ).slice(0, 12)
-  const urls = {},
-    moduleUrls = {},
-    bodyHashes = {},
-    sizes = {},
-    releases = new Map()
+  const urls: Record<string, string> = {},
+    moduleUrls: Record<string, string> = {},
+    bodyHashes: Record<string, string> = {},
+    sizes: Record<string, number> = {},
+    releases = new Map<string, ReleaseFiles>()
   for (const asset of assets) {
     if (asset.mode === 'external') continue
-    let bytes, filename
+    let bytes: Buffer, filename: string
     const source = asset.source
     if (source.startsWith('npm:')) {
       const path = source.slice(4),
@@ -65,12 +73,12 @@ export async function resolveAssets(outDir) {
         directory = parent
       }
       bytes = readFileSync(join(directory, path.slice(pkg.length + 1)))
-      filename = path.split('/').at(-1)
+      filename = path.split('/').at(-1)!
     } else if (source.startsWith('circuit:')) {
       const name = source.slice(8, -5)
       if (!releases.has(name)) releases.set(name, await circuitRelease(name))
       filename = source.slice(8)
-      bytes = releases.get(name)[filename]
+      bytes = releases.get(name)![filename]
     } else {
       if (!process.env.LIBID_TLSN_BUNDLE)
         throw new Error('LIBID_TLSN_BUNDLE must name the matched TLSNotary bundle')
@@ -84,7 +92,7 @@ export async function resolveAssets(outDir) {
       ? hash(
           Buffer.concat(
             ['tlsn_wasm.js', 'tlsn_wasm_bg.wasm'].map((name) =>
-              readFileSync(join(process.env.LIBID_TLSN_BUNDLE, name)),
+              readFileSync(join(process.env.LIBID_TLSN_BUNDLE!, name)),
             ),
           ),
         )
@@ -97,7 +105,8 @@ export async function resolveAssets(outDir) {
     sizes[path] = bytes.length
     for (const module of asset.bundledUrlModules ?? []) moduleUrls[module] = path
   }
-  const g1 = assets.find((asset) => asset.id === 'g1')
+  const g1 = assets.find((asset) => asset.mode === 'external' && asset.id === 'g1')
+  if (g1?.mode !== 'external') throw new Error('Missing G1 resource')
   await validateCircuitCapacity(releases, g1.bytes / 32)
   const profiles = Object.fromEntries(
     Object.entries(assetsByPlatform).flatMap(([p, vs]) =>
@@ -114,11 +123,13 @@ export async function resolveAssets(outDir) {
     bodyHashes,
     sizes,
     hashBody: hash,
-    requestsByProfile: {},
-    allowedRequests: [],
+    requestsByProfile: {} as Record<string, AssetRequest[]>,
+    allowedRequests: [] as AssetRequest[],
   }
 }
-export function assetPlugin(data) {
+export type ResolvedAssets = Awaited<ReturnType<typeof resolveAssets>>
+
+export function assetPlugin(data: ResolvedAssets): Plugin {
   return {
     name: 'ceremony-assets',
     resolveId(id) {

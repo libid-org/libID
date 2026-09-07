@@ -46,16 +46,18 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm typecheck:build",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
     "test:e2e:install": "playwright install chromium firefox webkit",
-    "build:ccdp-artifacts": "node build/distribution.mjs",
-    "test:distribution": "node --test build/*.test.mjs"
+    "build:ccdp-artifacts": "node build/distribution.ts",
+    "test:distribution": "node --test build/*.test.ts",
+    "typecheck:build": "tsc -p tsconfig.scripts.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@types/estree": "^1.0.8",
     "@types/node": "^22.0.0",
     "smol-toml": "^1.8.0",
     "typescript": "^5.9.0",

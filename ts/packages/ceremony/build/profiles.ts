@@ -1,13 +1,33 @@
-import { popupFallback } from './popup.mjs'
+export type ResponseProfile =
+  | 'prefetch'
+  | 'prover'
+  | 'proverFallback'
+  | 'callback'
+  | 'worker'
+  | 'executionWorker'
+  | 'proofWorker'
+  | 'leafWorker'
+  | 'asset'
+
 import { createHash } from 'node:crypto'
-export const scriptHash = (code) => `'sha256-${createHash('sha256').update(code).digest('base64')}'`
+import { popupFallback } from './popup.ts'
+export const scriptHash = (code: string) =>
+  `'sha256-${createHash('sha256').update(code).digest('base64')}'`
 const base =
   "default-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 export function responseHeaders(
-  profile,
-  { inline = [], externalOrigins = [], notaryAddress } = {},
-) {
-  const headers = {
+  profile: ResponseProfile,
+  {
+    inline = [],
+    externalOrigins = [],
+    notaryAddress,
+  }: {
+    inline?: string[]
+    externalOrigins?: string[]
+    notaryAddress: string
+  },
+): Record<string, string> {
+  const headers: Record<string, string> = {
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': ['asset', 'executionWorker', 'proofWorker', 'leafWorker'].includes(profile)
       ? 'public, max-age=31536000, immutable'

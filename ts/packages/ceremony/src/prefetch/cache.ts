@@ -1,10 +1,5 @@
+import type { AssetRequest } from '../assets.js'
 import { readBody } from '../response.js'
-export interface AssetRequest {
-  url: string
-  range?: string
-  bytes: number
-  mime?: string
-}
 const CACHE = 'libid-ceremony-assets-v1',
   PREFIX = '/__libid_ceremony_cache__/'
 /** Cache bodies are stored as 200 responses; partial responses are reconstructed. */

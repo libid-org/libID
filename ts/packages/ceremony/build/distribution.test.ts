@@ -1,15 +1,19 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { test } from 'node:test'
 import { brotliDecompressSync } from 'node:zlib'
-import { parse } from 'smol-toml'
-import { packageDir, hash } from './release.mjs'
+import { parse, type TomlTable } from 'smol-toml'
+import type { DistributionMetadata } from './distribution.ts'
+import { hash, packageDir } from './release.ts'
+
 const out = join(packageDir, 'dist-artifacts'),
-  graph = JSON.parse(readFileSync(join(packageDir, '.cache/distribution-graph.json')))
+  graph: DistributionMetadata = JSON.parse(
+    readFileSync(join(packageDir, '.cache/distribution-graph.json'), 'utf8'),
+  )
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
-  assert.equal(config.general['text-charset'], false)
+  assert.equal((config.general as TomlTable)['text-charset'], false)
   for (const [path, headers] of Object.entries(graph.headers)) {
     const physical = path === '/ccdp/v1/prover' ? `${path}/index.html` : path,
       body = readFileSync(join(out, 'public', physical))

@@ -1,8 +1,8 @@
 import { build } from 'vite'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { packageDir } from '../build/release.mjs'
-import { resolveAssets, assetPlugin } from '../build/assets.mjs'
+import { packageDir } from '../build/release.ts'
+import { resolveAssets, assetPlugin } from '../build/assets.ts'
 const outDir = join(packageDir, '.cache/smoke')
 mkdirSync(outDir, { recursive: true })
 const assets = await resolveAssets(outDir)

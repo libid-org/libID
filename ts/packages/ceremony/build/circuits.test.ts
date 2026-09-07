@@ -1,7 +1,8 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { circuitRelease } from './release.mjs'
-import { validateCircuitCapacity } from './circuits.mjs'
+import { test } from 'node:test'
+import { validateCircuitCapacity } from './circuits.ts'
+import { circuitRelease } from './release.ts'
+
 test('released circuit statistics fit the fixed launch SRS [LIBID-ASSET-013]', async () => {
   const bearer = await circuitRelease('bearer_link'),
     google = await circuitRelease('oidc_google')
