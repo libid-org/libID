@@ -96,7 +96,7 @@ Prefetch warms bytes only and acknowledges dispatch before downloads finish.
 
 ## Build and serve
 
-From the TypeScript workspace:
+From the TypeScript workspace, using Node 22.18+ on 22.x or Node 24+:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -129,7 +129,7 @@ according to [OAUTH_BRIDGE.md](docs/oauth-bridge.md); ceremony supplies no produ
 Bridge server. Callback's self-contained module executes under the Bridge's CSP.
 
 Optional opener-independent fallback belongs to `@libid/popup`. A distribution
-integrator may set the code-owned `build/popup.mjs` adapter module and its connect
+integrator may set the code-owned `build/popup.ts` adapter module and its connect
 sources, and supply the corresponding constructor on the application side. There
 is no WebRTC implementation or browser-selected carrier configuration here.
 

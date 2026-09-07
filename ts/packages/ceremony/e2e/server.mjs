@@ -2,8 +2,8 @@ import { createServer } from 'node:https'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { makeCertificate } from './tls.mjs'
-import { packageDir } from '../build/release.mjs'
-import { scriptHash } from '../build/profiles.mjs'
+import { packageDir } from '../build/release.ts'
+import { scriptHash } from '../build/profiles.ts'
 const app = 'https://localhost:4681',
   bridge = 'https://localhost:4682',
   ccdp = 'https://localhost:4683'

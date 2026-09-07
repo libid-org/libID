@@ -1,17 +1,25 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createRequire } from 'node:module'
-import { dirname, resolve, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { readFileSync } from 'node:fs'
-import { packageDir } from './release.mjs'
+import { createRequire } from 'node:module'
+import { dirname, join, resolve } from 'node:path'
+import { test } from 'node:test'
+import { pathToFileURL } from 'node:url'
+import type { DistributionMetadata } from './distribution.ts'
+import { packageDir } from './release.ts'
+
 const require = createRequire(new URL('../package.json', import.meta.url))
-const graph = JSON.parse(readFileSync(join(packageDir, '.cache/distribution-graph.json')))
+const graph: DistributionMetadata = JSON.parse(
+  readFileSync(join(packageDir, '.cache/distribution-graph.json'), 'utf8'),
+)
 const requests = graph.requestsByProfile['google/1']
 const originalFetch = globalThis.fetch
-const observations = []
+const observations: { url: string; range?: string; method: string; cache: RequestCache }[] = []
 let failPrimary = false
-const select = (name) => requests.find((r) => r.url.endsWith(`/${name}`))
+const select = (name: string) => {
+  const request = requests.find((r) => r.url.endsWith(`/${name}`))
+  assert.ok(request, `Missing ${name}`)
+  return request
+}
 const external = requests.filter((r) => r.url.startsWith('https:'))
 // These observing stubs never contact external hosts. They test the dependency
 // loaders, not proving: only the standalone browser qualification uses real CRS.
@@ -48,21 +56,20 @@ test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASS
       ['@noir-lang/acvm_js', 'acvm_js.js', 'acvm_js_bg.wasm'],
       ['@noir-lang/noirc_abi', 'noirc_abi_wasm.js', 'noirc_abi_wasm_bg.wasm'],
     ]) {
-      const module = await import(
-        pathToFileURL(resolve(dirname(require.resolve(pkg)), '../web', file))
-      )
+      const module: typeof import('@noir-lang/acvm_js') | typeof import('@noir-lang/noirc_abi') =
+        await import(pathToFileURL(resolve(dirname(require.resolve(pkg)), '../web', file)).href)
       await module.default({ module_or_path: select(wasm).url })
     }
     const bb = resolve(dirname(require.resolve('@aztec/bb.js')), '../browser')
     const { fetchCode } = await import(
-      pathToFileURL(join(bb, 'barretenberg_wasm/fetch_code/browser/index.js'))
+      pathToFileURL(join(bb, 'barretenberg_wasm/fetch_code/browser/index.js')).href
     )
     const wasm = select('barretenberg-threads.wasm.gz').url
     assert.equal(
       WebAssembly.validate(await fetchCode(true, wasm.replace('-threads.wasm.gz', '.wasm.gz'))),
       true,
     )
-    const { NetCrs, NetGrumpkinCrs } = await import(pathToFileURL(join(bb, 'crs/net_crs.js')))
+    const { NetCrs, NetGrumpkinCrs } = await import(pathToFileURL(join(bb, 'crs/net_crs.js')).href)
     for (const fallback of [false, true]) {
       failPrimary = fallback
       const start = observations.length

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
-import { circuitRelease } from '../../packages/ceremony/build/release.mjs'
+import { circuitRelease } from '../../packages/ceremony/build/release.ts'
 const require = createRequire(new URL('../../packages/ceremony/package.json', import.meta.url))
 export async function verifyBrowserProof(name, result) {
   const { Barretenberg, UltraHonkVerifierBackend } = require('@aztec/bb.js')
