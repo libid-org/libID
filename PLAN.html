@@ -1,0 +1,298 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="source-sha256" content="7ddfeadb70ebb39871b7e50d117409bb28e1cefc3b58d6e5af000c1b2de04db0"><title>Ceremony rebuild · libID</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#faf9f6;color:#252837;font:16px/1.65 system-ui,sans-serif}header{padding:2rem 4vw;border-bottom:1px solid #d8d7d2}header span{color:#6250a1;font-weight:700}header p{margin:.3rem 0;color:#656575}.layout{display:grid;grid-template-columns:220px minmax(0,1000px);gap:3rem;max-width:1360px;margin:auto;padding:2rem 4vw}nav{position:sticky;top:1rem;align-self:start}nav a{display:block;padding:.35rem 0;font-size:.9rem}a{color:#58448e;text-underline-offset:3px}h1,h2,h3{line-height:1.25;scroll-margin-top:1rem}h1{font-size:2.15rem}h2{margin-top:2.8rem}p{max-width:85ch}pre{overflow:auto;padding:1.2rem;background:#efede8;border-radius:8px}code{font-size:.87em;overflow-wrap:anywhere}table{display:block;overflow:auto;border-collapse:collapse;width:100%;font-size:.9rem}th,td{border:1px solid #d8d7d2;padding:.7rem;vertical-align:top;text-align:left}th{background:#efede8}footer{padding:2rem 4vw;border-top:1px solid #d8d7d2;color:#656575}@media(max-width:850px){.layout{display:block}nav{position:static;border-bottom:1px solid #d8d7d2;padding-bottom:1rem}nav a{display:inline-block;margin-right:1rem}h1{font-size:1.8rem}}@media(prefers-color-scheme:dark){body{background:#181a21;color:#e7e7ed}header,footer,th,td{border-color:#444650}pre,th{background:#252833}a,header span{color:#b8a5f1}header p,footer{color:#aaaab7}}</style><header><span>libID / Ceremony rebuild</span><p>Approved plan · implementation source audit · qualification boundaries</p><a href="PLAN.md">Markdown source</a></header><div class="layout"><nav aria-label="Contents"><a href="#baseline-and-dependencies">Baseline and dependencies</a><a href="#package-map">Package map</a><a href="#one-asset-declaration-two-resource-kinds">One asset declaration, two resource kinds</a><a href="#bottom-up-batches-and-verification-gates">Bottom-up batches and verification gates</a><a href="#reuse-assessment">Reuse assessment</a><a href="#decisions-deviations-and-blockers">Decisions, deviations and blockers</a><a href="#testing-deployment-and-publication">Testing, deployment and publication</a></nav><main><h1 id="ceremony-rebuild-implementation-plan-and-source-audit">Ceremony rebuild: implementation plan and source audit</h1>
+<p>Updated 2026-09-07. The initial plan was approved for full implementation. The user
+removed the old continuous-review protocol and requested three final reviews before
+push: security/correctness, API ergonomics, and simplicity. Those reviews ran and
+reasonable findings were fixed. Nothing is to be merged. The implementation PR is
+stacked on the popup prerequisite; launch qualification remains explicitly incomplete.</p>
+<p>The readable package guide is <a href="ts/packages/ceremony/README.md">README</a>, with exact
+<a href="ts/packages/ceremony/QUALIFICATION.md">evidence and blockers</a> and a
+<a href="ts/packages/ceremony/TRACEABILITY.md">148-ID requirement map</a>. This plan is working
+notes, not a replacement protocol specification.</p>
+<h2 id="baseline-and-dependencies">Baseline and dependencies</h2>
+<p>Assigned worktree: <code>/home/wondertan/src/libid/worktrees/ceremony-rebuild-plan</code>.
+Branch: <code>feat/ceremony-rebuild-plan</code>. The suggested <code>ceremony-rebuild</code> path already
+belonged to another agent and was not modified. Initial creation used latest fetched
+main, not the old ceremony branch. Existing reference worktrees remained read-only;
+all builds, dependencies, container storage and reports are local to this worktree.</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Exact revision / state</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>origin/main</code></td>
+<td><code>4f205fdf733e3c137543f5f4a8f7281f74377d02</code></td>
+<td>Initial workspace baseline; unchanged at final remote refresh</td>
+</tr>
+<tr>
+<td>Architecture PR #13</td>
+<td><code>109371854a303ac2e8449d1a1c63163285cbd6a6</code>, <code>docs/ceremony-browser-architecture</code></td>
+<td>Latest remote; all eight documents read and imported unchanged</td>
+</tr>
+<tr>
+<td>Popup PR #25</td>
+<td><code>1c5b78c6f9d783f7b5c536f6018d724b3ced9132</code>, <code>feat/popup-package</code></td>
+<td>Latest remote; exact tracked package consumed, with no replacement machinery</td>
+</tr>
+<tr>
+<td>Circuits main</td>
+<td><code>b25bc5b89e595f5bb6049c50446a0edcde47da58</code></td>
+<td>Latest checked source; only README changes after release</td>
+</tr>
+<tr>
+<td>Circuits v0.3.0</td>
+<td><code>91bc3446eeaa50ab2056d88dd9941374aa4fa34c</code></td>
+<td>Hash-checked circuits and released verification keys; Noir beta.25 / bb.js 5.2.0</td>
+</tr>
+<tr>
+<td>Canonical attestation encoder</td>
+<td><code>libid-rs</code> <code>239a4bb426ac72591fe30006f22660e164a98d96</code></td>
+<td>Big-endian fixed-width bincode fixture and authority encoding</td>
+</tr>
+<tr>
+<td>Matched TLSN source</td>
+<td><code>0f82f54968b36738eacebf7c8ac7728003918b72</code></td>
+<td>Existing browser JS/WASM pair; hashes in package qualification record</td>
+</tr>
+<tr>
+<td>libID notary fork PR #6</td>
+<td><code>e1b9b80fa718beeaf187f2ec9f32392efaee2e63</code>, TLSN <code>816cebcf89480ebf55f58983ec6bab176ea08345</code></td>
+<td>Inspected successor candidate, not silently mixed with the selected bundle</td>
+</tr>
+<tr>
+<td>Old ceremony</td>
+<td>HEAD <code>683af7137e58a6581367df2ee1e1ec96482f6a29</code> plus dirty/untracked work</td>
+<td>Individual reuse candidates only</td>
+</tr>
+<tr>
+<td>Browser reference</td>
+<td>HEAD <code>8b4dcdebc7702ac8e70329f9d1330bc3dcd6b511</code> plus dirty/untracked work</td>
+<td>Executed-path evidence and matched proving integration</td>
+</tr>
+</tbody>
+</table>
+<p>The eight package authorities are ARCHITECTURE, CCDP, CCDP_DISTRIBUTION,
+OAUTH_BRIDGE, PROVING, NOTARIZATION, METRICS and TEST_PLAN. The adjacent normative
+working files contain the user's newer corrections and are not clean committed
+PR contents. Their inspected SHA-256 values are:</p>
+<ul>
+<li><code>ceremony-common.md</code>: <code>694f3abb1d49f9697c68b57edc07b213434d9e3f2595eabcf858e9e6163d6af9</code>.</li>
+<li><code>platform-ceremonies.md</code>: <code>a3e2f6a0570415af76f1fa85c2a0ddab00985e5a4b8b8010aef441d370fac76f</code>.</li>
+</ul>
+<p>Do not present those amendments as merged. Do not copy unrelated old specifications
+over main. The implementation follows the user-approved Prover/Client boundary,
+absence of local expected-nonce/signature verification, and current released bounds;
+remaining source reconciliation is recorded explicitly.</p>
+<p>Popup's new default chooses continuity registrations automatically and retains an
+exact-scope override. Ceremony receives the application-created connection; it does
+not configure application window construction. Its CCDP-owned document entrypoints
+pass <code>/</code> internally. Popup owns navigation, anchor fallback, authentication,
+isolation replacement, MessagePort continuity and closure. Optional WebRTC remains
+an external constructor integration.</p>
+<h2 id="package-map">Package map</h2>
+<pre><code class="language-text">ts/packages/ceremony/
+  src/
+    primitives.ts, response.ts          small native byte/response leaves
+    ccdp/                              seven messages and private fragment codecs
+    platforms/
+      authorization.ts                 canonical digest and PKCE vectors
+      index.ts, types.ts               closed typed catalog and structural results
+      assets.ts                        data-only asset catalog
+      google/1/                        client, types, assets, token/input/prover
+      x/1/                             client, types, assets, transcript/prover
+      github/1/                        client, types, assets, exchange/transcript/prover
+    client/                            public config and one-shot supplied-connection flow
+    callback/                          allowlisted private navigation to Prover
+    prefetch/                          root SW, raw-byte cache and pending joins
+    prover/
+      engine.ts, engine.worker.ts      real dedicated Noir/bb.js backend
+      notarization/                    native TLSN worker, framing, decode/correlation
+      progress.ts, http.ts, json.ts     shared Prover leaves
+      index.ts                         one logical isolated participant
+    ui.ts                              fixed native accessible UI
+  build/                               emitted graph, release pins, response policies
+  e2e/                                 three HTTPS origins, actual popup and real proofs
+  ccdp.Dockerfile                       pinned SWS static image
+  README.md, QUALIFICATION.md, TRACEABILITY.md
+</code></pre>
+<p>Dependency spine: pure encodings/types → platform client leaves → catalog/client;
+asset declarations/cache + engine/notarization → platform prover leaves → Prover.
+Callback and Prefetch are independent roots. No shared <code>evidence</code> package, iframe
+coordinator, second prover popup, wallet, transaction submitter or recovery service.</p>
+<p>Prover owns token parsing, attestation decoding/correlation and identity extraction.
+Client validates structure and wraps copied authorization inputs; it does not repeat
+that work. <code>accepted</code> is Prover-reported success, not proof authenticity. The ledger
+verifier remains authoritative. The separate verifier harness uses released keys;
+no on-chain verifier, Solidity generation, RPC or EVM dependency is required.</p>
+<h2 id="one-asset-declaration-two-resource-kinds">One asset declaration, two resource kinds</h2>
+<p>Each integration owns its non-imported resources. Each platform/version composes
+those shared declarations with its circuit exactly once. Execution imports them;
+the lightweight metadata catalog never imports execution. Compiler output adds the
+real module and nested-worker graph. Prefetch and execution therefore resolve the
+same URLs without a second manually maintained first-party filename list.</p>
+<ul>
+<li>Distributed scripts/workers/WASM/circuits are immutable CCDP resources.</li>
+<li>External CRS remains at the native bb.js Aztec hosts with exact ranges and fallback.
+It is not rehosted. Installed-loader probes guard these reviewed upstream requests.</li>
+<li>Pre-OAuth work fetches bytes only. Navigation waits for dispatch acknowledgment,
+not completed downloads, initialized WASM, processed CRS or TLSN sessions.</li>
+<li>Cache identity includes exact URL and Range. Cache Storage stores bodies as 200
+responses and reconstructs ranged responses. Pending joiners receive clones.</li>
+<li>Native bb.js processed-CRS IndexedDB behavior stays inside backend initialization.</li>
+<li>Code owns <code>verifierTarget: 'evm'</code>, 2^18 SRS and resource locations. Build-time real
+circuit statistics reject incompatible capacity/toolchain changes.</li>
+</ul>
+<h2 id="bottom-up-batches-and-verification-gates">Bottom-up batches and verification gates</h2>
+<table>
+<thead>
+<tr>
+<th>Batch</th>
+<th>Bounded work</th>
+<th>Gate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Pure codecs, canonical authorization/attestation leaves and platform types</td>
+<td>Canonical vectors, malformed/boundary cases, closed catalog typechecking</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Config and supplied-connection Client</td>
+<td>Frozen input/config, one-shot sequencing, cancellation, late traffic, generic API checks</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Shared resource declarations, byte cache, engine and notary adapter</td>
+<td>Exact loader probes, readable single flights, actual returned transcript ceilings, frame/EOF tests, real engine proof</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Google/X/GitHub Prover leaves</td>
+<td>Pinned witness/public-input vectors, GitHub admission, deterministic transcript selection, overlap/final correlation; real service gates stay explicit</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Callback, Prefetch, Prover and fixed UI</td>
+<td>Actual-popup private handoff/isolation, authenticated failure, connection continuation, UI timer and concurrent ceremonies</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Static compiler graph, policies and accumulated artifact</td>
+<td>Real circuit capacity, immutable retention, complete bodies, Brotli, actual built-image HTTP checks</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Browser/device/service qualification and final reviews</td>
+<td>Chromium/Firefox/WebKit, mobile emulation, released-key real proofs; separate real consent/device/notary gates; three reviews before push</td>
+</tr>
+</tbody>
+</table>
+<p>Pure leaves and Client precede the distribution so the build emits actual runtime
+modules. The static-distribution phase is not artificially split into a phase per
+helper. No old ledger status is inherited. Full launch claims require the external
+qualification gates; a passing mock is never substituted for them.</p>
+<h2 id="reuse-assessment">Reuse assessment</h2>
+<table>
+<thead>
+<tr>
+<th>Candidate</th>
+<th>Decision and reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Old bytes/authorization</td>
+<td>Reuse small synchronous native/noble helpers and vectors; revalidate current encoding and widths</td>
+</tr>
+<tr>
+<td>Old attestation decoder</td>
+<td>Adapt read-only canonical decoding; retain upstream digest fixture and preserve u64 timestamps as decimal text</td>
+</tr>
+<tr>
+<td>Old Google witness/public-input helpers</td>
+<td>Adapt to released beta.25/v0.3.0 bounds and separate Prover ownership; actual released-key verification</td>
+</tr>
+<tr>
+<td>Old progress accounting</td>
+<td>Adapt the small weighted tracker; retain monotonicity and terminal cleanup, defer complete metrics</td>
+</tr>
+<tr>
+<td>Old engine</td>
+<td>Adapt dedicated-worker integration; explicit ACVM/ABI/WASM URLs, pinned proof mode, observed threads; static Noir import fixes WebKit module re-entry</td>
+</tr>
+<tr>
+<td>Old GitHub exchange admission</td>
+<td>Replace obsolete full-header disclosure; current hidden-header layout and fresh synthetic canonical fixtures</td>
+</tr>
+<tr>
+<td>Old orchestration/protocol/popup/deployment</td>
+<td>Replace entirely from current documents and existing popup boundary</td>
+</tr>
+<tr>
+<td>Browser reference asset/proving integration</td>
+<td>Reuse concrete loader, CRS, TLSN and overlap lessons; no wholesale port or production fetch interceptor</td>
+</tr>
+<tr>
+<td>Browser reference GitHub</td>
+<td>Simulated protocol evidence only; no claim of a real qualified ceremony</td>
+</tr>
+</tbody>
+</table>
+<h2 id="decisions-deviations-and-blockers">Decisions, deviations and blockers</h2>
+<p>Resolved: no local expected-nonce comparison, no notary-signature verification or
+trust-key prefetch, no chain-specific verifier dependency, no styling API, no
+complete metrics transport now, no continuous batch-review ledger.</p>
+<p>Justified implementation choices include self-contained Callback code; native DOM;
+compiler-visible worker edges; exact legacy SW migration and root control before
+execution; immutable policy hashes and retained assets; SWS 2.44 boolean/matcher
+adaptations checked through real HTTP; and a bounded final-frame EOF wait. Detailed
+consequences are in the package qualification record, not hidden in this plan.</p>
+<p>Actual unresolved prerequisites:</p>
+<ul>
+<li>Matched TLSN/service probes stall in setup, even for one session. Reestablish a
+matching pair before claiming concurrent X/GitHub notarization.</li>
+<li>X's 30-second deadline lacks a browser-observable issuance anchor and a matched
+request-direction completion hook. A response timeout is not equivalent.</li>
+<li>TLSN's HashMap header interface cannot promise the documented exact ordering.</li>
+<li>Real GitHub service/profile vector, external fallback/signaling, real OAuth
+registrations/accounts and physical devices still require qualification.</li>
+<li>Commit/reconcile the updated normative amendments without importing stale prose.</li>
+</ul>
+<p>The complete requirement matrix retains further compound fault/cache/update/device
+checks. These are not silently omitted or marked green. The resulting PR must
+remain explicitly unqualified for launch while these gates are open.</p>
+<h2 id="testing-deployment-and-publication">Testing, deployment and publication</h2>
+<p>Use workspace pnpm/Vite/Vitest/Playwright and native browser APIs. Keep generated
+artifacts in the assigned worktree. HTTPS browser harness ports are 4681–4683;
+SWS uses local 4685; the isolated engine probe uses 4686. Reference servers are not
+started, rebuilt or modified. Container storage and browser binaries are worktree-local.</p>
+<p>The build emits <code>public/</code> plus <code>sws.toml</code>; the pinned SWS image copies only these.
+Promote through transparent HTTPS ingress on a dedicated cookie-free origin and
+retain prior immutable assets throughout the compatibility window. The Bridge is
+an independent deployment; its secrets, CORS and callback shell remain outside the
+production ceremony package.</p>
+<p>The opt-in headed walkthrough installs no OAuth mocks and pauses for real consent,
+foreground/suspension and outcome checkpoints. Logs/reports exclude OAuth returns,
+credentials, transcripts, openings and witnesses. Real devices remain mandatory
+where emulation cannot establish behavior.</p>
+<p>Commit with the configured human identity, matching DCO sign-off and
+<code>Assisted-by: GPT-6</code>. GPG may be disabled as explicitly authorized. Run the three
+requested reviews and fix reasonable findings before pushing. Rebase the isolated
+implementation onto the exact popup prerequisite without merging shared branches,
+then create a stacked PR. Do not merge any PR.</p>
+<h3 id="read-only-working-source-locations">Read-only working-source locations</h3>
+<ul>
+<li>Architecture: <code>/home/wondertan/src/rust/dyaka/worktrees/libid-ceremony-architecture-pr13</code>.</li>
+<li>Popup: <code>/home/wondertan/src/rust/dyaka/worktrees/libid-popup-impl</code>.</li>
+<li>Browser evidence: <code>/home/wondertan/src/rust/dyaka/worktrees/ceremony-browser-architecture</code>.</li>
+<li>TLSN source: <code>/home/wondertan/src/rust/dyaka/worktrees/tlsn-reclaimed-io</code>.</li>
+<li>Old ceremony: <code>/home/wondertan/src/libid/libid/ts/packages/ceremony</code>.</li>
+</ul>
+<p>These historical research paths belong only in working notes, not package guides.</p>
+</main></div><footer>Standalone artifact. No external fonts, scripts, analytics or network dependencies.</footer></html>
