@@ -3,8 +3,8 @@ import { CONNECTION_VERSION } from './message.js'
 import { listenForPopupPorts, PortCarrier, requestApplicationPort } from './port.js'
 import {
   APP_ORIGIN,
-  fakePair,
   type FakePair,
+  fakePair,
   ID,
   OTHER_ID,
   POPUP_ORIGIN,

@@ -24,8 +24,8 @@ import {
   type Message,
   type MessageType,
   type Navigate,
-  onReplacement,
   type OriginAllowlist,
+  onReplacement,
   type PopupControl,
   prepareNavigation,
   requireOrigins,
@@ -477,9 +477,22 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
         this.report('opener-timeout')
       }
       if (!fallback) return this.fail('fallback-unavailable', true)
+      if (this.isolationFallback && !this.popup.isolated) {
+        if (this.ended) return
+        // Nothing exists to preserve yet, so the hop precedes the carrier:
+        // the destination establishes the only one from the same still-
+        // unused round, and no connection is spent on this document.
+        if (sameDocument(this.isolationFallback, this.popup.view.location)) {
+          return this.fail('isolation-unavailable', true)
+        }
+        this.report('isolation-fallback')
+        this.release()
+        this.popup.view.location.replace(this.isolationFallback.href)
+        return
+      }
       const carrier = await fallback(this.controller.signal)
       if (this.ended) return carrier.close()
-      return this.admit(carrier, 'carrier-fallback')
+      return this.install(carrier, 'carrier-fallback')
     } catch (error) {
       if (this.ended) return
       this.fail(error instanceof PopupError ? error.code : 'fallback-failed', true)
@@ -487,18 +500,16 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   }
 
   /**
-   * Installs an authenticated carrier, unless this document must be isolated
-   * and is not: then the document replaces itself with the isolated fallback
-   * and the carrier continues there. A MessagePort, still unstarted so every
-   * value the application already sent stays queued inside it, is kept
-   * through the worker. Any other carrier cannot cross the replacement: it
-   * prepares its successor where it can, is retired, and the destination
-   * establishes a fresh carrier through its own constructor. `ready` stays
-   * pending here; the replacement becomes ready instead.
+   * Installs an authenticated port, unless this document must be isolated
+   * and is not: then the port, still unstarted so every value the
+   * application already sent stays queued inside it, is kept through the
+   * worker and the document replaces itself with the isolated fallback,
+   * where the port continues. `ready` stays pending here; the replacement
+   * becomes ready instead.
    */
   private async admit(
-    carrier: Carrier,
-    code: 'carrier-restored' | 'carrier-message-port' | 'carrier-fallback',
+    carrier: PortCarrier,
+    code: 'carrier-restored' | 'carrier-message-port',
   ): Promise<void> {
     const { location } = this.popup.view
     if (!this.isolationFallback || this.popup.isolated) return this.install(carrier, code)

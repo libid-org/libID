@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PopupConnection } from './connection.js'
-import { PopupError } from './diagnostics.js'
-import { PortKeeper } from './keeper.js'
-import { fakeSignaling, noRegistration } from './testing/fakes.js'
 import type { PopupDiagnostic } from './diagnostics.js'
+import { PopupError } from './diagnostics.js'
 import type { Carrier, CarrierConstructor, Message } from './message.js'
 import { PortCarrier } from './port.js'
 import {
   APP_ORIGIN,
-  fakePair,
   type FakePair,
   type FakeProxy,
+  fakePair,
   fakeScope,
+  fakeSignaling,
   ID,
+  noRegistration,
   OTHER_ID,
   POPUP_ORIGIN,
   registrationWith,
@@ -944,7 +944,7 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     return { endpoint, events }
   }
 
-  it('reconnects through the fallback constructor after a cross-origin hop into isolation', async () => {
+  it('hops before establishing a carrier and connects the destination from the unused round', async () => {
     const hub = fakeSignaling()
     const { pair, app, events } = severedPair(hub)
     const first = acceptWith(pair, hub)
@@ -959,21 +959,21 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     expect(pair.popupProxy.replaced).toEqual([`${PROVER}/prover#c=1`])
     expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(2)
     expect(await first.endpoint.closed).toEqual({ outcome: 'closed' })
+    const rounds = hub.carriers.length
 
-    // The non-isolated destination: fresh carrier, then the isolation fallback.
+    // The non-isolated destination hops without spending a connection: no
+    // constructor call, no new round, nothing delivered.
     pair.relocate(PROVER, '/prover', '#c=1')
     const second = acceptWith(pair, hub, '/prover/fallback')
     const leaked = vi.fn()
     second.endpoint.on(Start, leaked)
     await tick(20)
     expect(pair.popupProxy.replaced.at(-1)).toBe(`${PROVER}/prover/fallback#c=1`)
-    expect(codes(second.events)).toEqual([
-      'carrier-fallback',
-      'isolation-fallback',
-      'connection-closed',
-    ])
+    expect(codes(second.events)).toEqual(['isolation-fallback', 'connection-closed'])
+    expect(hub.carriers).toHaveLength(rounds)
     expect(leaked).not.toHaveBeenCalled()
-    expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(3)
+    expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(2)
+    expect(() => app.send(new Start())).not.toThrow() // the prepared side is live
     let settled = false
     void second.endpoint.ready.then(
       () => (settled = true),
@@ -982,7 +982,7 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     await tick()
     expect(settled).toBe(false)
 
-    // The isolated fallback authenticates its own carrier and both directions work.
+    // The isolated fallback consumes the prepared round and both directions work.
     pair.relocate(PROVER, '/prover/fallback', '#c=1')
     pair.setIsolated(true)
     const third = acceptWith(pair, hub, '/prover/fallback')
@@ -990,28 +990,26 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     third.endpoint.on(Start, starts)
     await third.endpoint.ready
     expect(codes(third.events)).toEqual(['carrier-fallback'])
+    expect(hub.carriers).toHaveLength(rounds)
     const readies: number[] = []
     app.on(Ready, (r) => void readies.push(r.version))
     app.send(new Start())
     third.endpoint.send(new Ready(4))
     await tick()
-    expect(starts).toHaveBeenCalledTimes(1)
+    expect(starts).toHaveBeenCalledTimes(2) // the pre-hop send was queued in the round, not lost
     expect(readies).toEqual([4])
     expect(codes(events)).not.toContain('connection-closed')
     expect(codes(events)).not.toContain('connection-failed')
   })
 
-  it('cancels a replacement in flight without navigating', async () => {
+  it('closes before the hop without navigating', async () => {
     const hub = fakeSignaling()
     const { pair } = severedPair(hub)
-    hub.holdPrepare = true
     const side = acceptWith(pair, hub, '/prover/fallback')
-    await tick(20)
-    expect(codes(side.events)).toContain('isolation-fallback')
     await side.endpoint.close()
-    hub.releasePrepare()
-    await tick()
+    await tick(20)
     expect(pair.popupProxy.replaced).toEqual([])
+    expect(codes(side.events)).not.toContain('isolation-fallback')
     expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
   })
 
@@ -1019,21 +1017,22 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     const hub = fakeSignaling()
     const { pair, app, events } = severedPair(hub)
     const first = acceptWith(pair, hub, '/prover/fallback')
-    await tick(20) // prepared and left for the fallback
+    await tick(20) // left for the fallback without a carrier
     expect(pair.popupProxy.replaced).toHaveLength(1)
+    expect(hub.carriers).toHaveLength(0)
     void first
     pair.relocate(POPUP_ORIGIN, '/prover/fallback', '')
     pair.setIsolated(true)
     hub.failNext = true
     const second = acceptWith(pair, hub, '/prover/fallback')
     await expect(second.endpoint.ready).rejects.toThrow('fallback-failed')
-    // The application is not told: it holds its prepared side and its sends
-    // succeed locally and are lost, the documented window.
+    // The application is not told and still awaits its first carrier, so it
+    // cannot send into a gap: there is none.
     let appEnded = false
     void app.closed.then(() => (appEnded = true))
     await tick()
     expect(appEnded).toBe(false)
-    expect(() => app.send(new Start())).not.toThrow()
+    expect(() => app.send(new Start())).toThrow('send-unavailable')
     expect(codes(events)).not.toContain('connection-failed')
   })
 
@@ -1044,6 +1043,7 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     const side = acceptWith(pair, hub, '/prover/fallback')
     await expect(side.endpoint.ready).rejects.toThrow('isolation-unavailable')
     expect(pair.popupProxy.replaced).toEqual([])
+    expect(hub.carriers).toHaveLength(0)
   })
 })
 

@@ -230,8 +230,6 @@ export interface FakeSignaling {
   /** Reject the next popup-side construction. */
   failNext: boolean
   /** Hold the next preparation open until released. */
-  holdPrepare: boolean
-  releasePrepare: () => void
 }
 
 export function fakeSignaling(): FakeSignaling {
@@ -248,8 +246,6 @@ export function fakeSignaling(): FakeSignaling {
     },
     carriers: [],
     failNext: false,
-    holdPrepare: false,
-    releasePrepare: () => {},
   }
   let resolveInitial: (carrier: Carrier) => void = () => {}
   let prepared: { popupSide: Carrier } | null = null
@@ -277,7 +273,6 @@ export function fakeSignaling(): FakeSignaling {
         port.close()
       },
       [prepareNavigation]: async (target) => {
-        if (hub.holdPrepare) await new Promise<void>((r) => (hub.releasePrepare = r))
         // Arm the next round: the application learns its side now, the next
         // popup document constructs its side later.
         const round = newRound(null)

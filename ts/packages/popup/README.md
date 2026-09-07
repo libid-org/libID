@@ -269,12 +269,13 @@ becomes ready and delivers nothing. A fallback that is itself not isolated
 fails with `isolation-unavailable` instead of looping. The package assigns no
 meaning to the paths; the application observes one connection throughout.
 
-The same works when the opener was already severed and the carrier came from
-the fallback constructor: the non-isolated document prepares the carrier's
-successor, retires it, and the isolated fallback establishes a fresh carrier
-through its own constructor while the application installs the successor.
-Values the application sends between that retirement and the successor's
-authentication are lost, not queued.
+When the opener was already severed, only the fallback constructor remains,
+and that carrier could not cross the replacement, so the non-isolated document
+does not construct it: it replaces itself first, and the isolated fallback
+establishes the only carrier through its own constructor from the same
+still-unused signaling round. No connection is spent on the intermediate
+document, and the application, which holds no carrier until then, cannot send
+into the gap.
 
 ### Continuity worker
 
