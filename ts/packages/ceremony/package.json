@@ -53,7 +53,8 @@
     "test:e2e:install": "playwright install chromium firefox webkit",
     "build:ccdp-artifacts": "node build/distribution.ts",
     "test:distribution": "node --test build/*.test.ts",
-    "typecheck:build": "tsc -p tsconfig.scripts.json"
+    "typecheck:build": "tsc -p tsconfig.scripts.json",
+    "build:qualification-artifacts": "LIBID_LEDGER_FIXTURE=1 node build/distribution.ts --out-dir .cache/qualification-artifacts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
@@ -70,7 +71,8 @@
     "@noble/hashes": "^2.3.0",
     "@noir-lang/acvm_js": "1.0.0-beta.25",
     "@noir-lang/noir_js": "1.0.0-beta.25",
-    "@noir-lang/noirc_abi": "1.0.0-beta.25"
+    "@noir-lang/noirc_abi": "1.0.0-beta.25",
+    "@libid/ledger": "workspace:^"
   },
   "sideEffects": false
 }

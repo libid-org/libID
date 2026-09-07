@@ -7,16 +7,17 @@ import { prepareCallback } from './callback.ts'
 const app = 'https://localhost:4681',
   bridge = 'https://localhost:4682',
   ccdp = 'https://localhost:4683'
+const artifactDir = join(packageDir, '.cache/qualification-artifacts')
 const counts = new Map(),
   holds = new Map(),
   failures = new Set()
-const graph = JSON.parse(readFileSync(join(packageDir, '.cache/distribution-graph.json'))),
+const graph = JSON.parse(readFileSync(join(artifactDir, 'distribution-graph.json'))),
   cert = makeCertificate(['localhost'])
 const html = (body) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ceremony qualification</title><body>${body}</body></html>`
 // Prepared once, independently of OAuth requests; both bytes and policy change together.
 const callback = prepareCallback(
-  readFileSync(join(packageDir, 'dist-artifacts/public/ccdp/callback.html'), 'utf8'),
+  readFileSync(join(artifactDir, 'public/ccdp/callback.html'), 'utf8'),
   graph.headers['/ccdp/callback.html'],
   { versionedInputs: { 1: [[app], ccdp] } },
   ccdp,
@@ -123,10 +124,7 @@ for (const port of [4681, 4682, 4683])
             return send(Buffer.from(await response.arrayBuffer()), headers, response.status)
           }
           const physical = path === '/ccdp/v1/prover' ? `${path}/index.html` : path
-          return send(
-            readFileSync(join(packageDir, 'dist-artifacts/public', physical)),
-            graph.headers[path],
-          )
+          return send(readFileSync(join(artifactDir, 'public', physical)), graph.headers[path])
         }
       }
     } catch {}

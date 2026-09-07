@@ -108,7 +108,10 @@ Both Prover responses close script and worker sources to the build-generated
 same-origin graph and toolchain-required `blob:` workers. Asset fetches are
 not restricted to the CCDP origin: their `connect-src https:` admits bb.js's
 Aztec CRS downloads as well as validated third-party OAuth Bridges. The build
-additionally pins the Notary Service's exact WebSocket origin.
+additionally admits the two exact Notary Service WebSocket origins selected by
+[`LedgerId.isTestnet()`](../src/prover/notarization/docs/notarization.md#notary-address), or the single development
+override origin when built with `LIBID_NOTARY_ADDRESS`. The response is
+identical for either network; selection changes no asset or cache key.
 
 Every context which fetches or prefetches CRS, including the Service Worker
 and dedicated proof workers, admits both `https://crs.aztec-cdn.foundation`
@@ -510,7 +513,7 @@ dependency fails artifact generation.
 Profiles contain fixed isolation, cache, framing, media-type, and CSP rules but
 no generated filenames. The build fills body-dependent values such as inline
 script hashes, generated resource URLs, external asset origins, and the
-build-pinned Notary Service origin. It does not parse this Markdown or ask SWS
+build-pinned Notary Service origins. It does not parse this Markdown or ask SWS
 to reconstruct policy.
 
 ### Generation

@@ -55,6 +55,7 @@ export async function prove(context: ProverContext): Promise<GitHubProofV1 | nul
         body: encodeTokenRequest({
           code: returned.code,
           codeVerifier: request.codeVerifier,
+          notaryAddress: context.notaryAddress,
         }).slice().buffer,
         credentials: 'omit',
         redirect: 'error',
@@ -75,7 +76,11 @@ export async function prove(context: ProverContext): Promise<GitHubProofV1 | nul
       redirectUri: request.redirectUri,
       codeVerifier: request.codeVerifier,
     })
-    const session = await prepareNotarization('https://api.github.com/user', controller.signal)
+    const session = await prepareNotarization(
+      'https://api.github.com/user',
+      context.notaryAddress,
+      controller.signal,
+    )
     const transcript = await progress.step('identity-session', () =>
       session.send(identityRequest(token.accessToken)),
     )

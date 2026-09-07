@@ -7,9 +7,9 @@ import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { hash, packageDir } from './release.ts'
 
-const out = join(packageDir, 'dist-artifacts'),
+const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
   graph: DistributionMetadata = JSON.parse(
-    readFileSync(join(packageDir, '.cache/distribution-graph.json'), 'utf8'),
+    readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
   )
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
@@ -106,4 +106,12 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
     ),
   )
   assert.equal(Object.hasOwn(graph.headers, '/ccdp/v1/callback.js'), false)
+})
+
+test('production and fixture ledger modules remain separate', () => {
+  const modules = Object.values(graph.graph).flatMap((node) => node.modules)
+  const fixture = modules.some((path) => path.endsWith('/ledger/src/testing.ts'))
+  assert.equal(fixture, graph.ledgerFixture)
+  if (fixture) assert.ok(out.startsWith(`${join(packageDir, '.cache')}/`))
+  assert.ok(fixture || modules.some((path) => path.endsWith('/ledger/dist/index.js')))
 })

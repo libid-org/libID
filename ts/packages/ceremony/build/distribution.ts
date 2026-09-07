@@ -12,6 +12,7 @@ import type { ResponseProfile } from './profiles.ts'
 import { responseHeaders } from './profiles.ts'
 import { hash, packageDir } from './release.ts'
 export type DistributionMetadata = Pick<ResolvedAssets, 'requestsByProfile' | 'allowedRequests'> & {
+  ledgerFixture: boolean
   headers: Record<string, Record<string, string>>
   graph: Record<string, BundleNode>
 }
@@ -19,6 +20,10 @@ const index = process.argv.indexOf('--out-dir'),
   out = resolve(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
 if (out === packageDir || !out.startsWith(`${resolve(packageDir, '../../..')}/`))
   throw new Error('Output must be a dedicated directory inside this worktree')
+if (process.env.LIBID_LEDGER_FIXTURE === '1') {
+  if (!out.startsWith(`${join(packageDir, '.cache')}/`))
+    throw new Error('Ledger fixtures are restricted to qualification output under .cache')
+}
 const staging = `${out}.building`
 if (existsSync(staging)) throw new Error('Build staging directory already exists')
 mkdirSync(join(staging, 'public'), { recursive: true })
@@ -36,7 +41,7 @@ try {
           .flatMap((a) => a.urls.map((u) => new URL(u).origin)),
       ),
     ],
-    notaryAddress: data.notaryAddress,
+    notaryAddresses: data.notaryAddresses,
   }
   const put = (
     path: string,
@@ -243,11 +248,11 @@ try {
         .join('')
   }
   writeFileSync(join(staging, 'sws.toml'), config)
-  // Qualification metadata stays outside the public artifact and is not a runtime manifest.
-  mkdirSync(join(packageDir, '.cache'), { recursive: true })
+  // Qualification metadata belongs to this output, outside public/ and the deployment image.
   writeFileSync(
-    join(packageDir, '.cache/distribution-graph.json'),
+    join(staging, 'distribution-graph.json'),
     JSON.stringify({
+      ledgerFixture: process.env.LIBID_LEDGER_FIXTURE === '1',
       requestsByProfile: data.requestsByProfile,
       allowedRequests: data.allowedRequests,
       headers: Object.fromEntries([...records].map(([p, r]) => [p, r.headers])),
