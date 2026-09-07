@@ -4,30 +4,60 @@ Part of the [libID protocol specification](libid.md).
 
 ## 1. Scope
 
-This document is the normative owner of the Chain Profiles libID publishes.
-A Chain Profile fixes, for one family of Consumer Chains, the four things
-[common](ceremony-common.md) REQ-COMMON-01C, REQ-COMMON-01D and
-REQ-COMMON-01F leave to it: the Chain ID, how the chain authenticates the
-Transaction Author, how it supplies Block Time, and how Authorized
-Transaction Data is encoded.
+This document holds one profile per family of Consumer Chains. [Common](ceremony-common.md)
+§2 defines what a Chain Profile is, and REQ-COMMON-01C, REQ-COMMON-01D and
+REQ-COMMON-01F say what one owes. §2 below is what holds across every
+profile; each later section answers those duties for one family. EVM chains
+are §3; a family that identifies, authenticates, or encodes differently —
+Solana, Move — takes a section of its own here rather than a document of its
+own.
 
-A Chain Profile defines no ceremony construction. It says what the values a
+A profile defines no ceremony construction. It says what the values a
 ceremony already commits are on one chain, so that a Canonical Runtime
-composing a ceremony for a destination and the Platform Verifier deployed
-there commit the same bytes. Selecting one is destination selection, not
-proof authority.
+composing for a destination and the Platform Verifier deployed there commit
+the same bytes. Selecting one is destination selection, not proof authority.
 
-## 2. Terminology
+## 2. What every profile fixes
 
-EVM Consumer Chain: A Consumer Chain whose execution environment reports an
-   EIP-155 chain identifier, a block timestamp, and an immediate caller to
-   the Consumer.
+| duty | required by |
+|---|---|
+| the canonical Chain Identifier, and the exact bytes it contributes | REQ-COMMON-01C |
+| how the chain authenticates the Transaction Author | REQ-COMMON-01D |
+| how the chain supplies Block Time | REQ-COMMON-01D |
+| how Authorized Transaction Data is encoded | REQ-COMMON-01F |
 
-Chain Identifier: The value a Consumer Chain names itself by, before hashing.
-   The Chain ID of common §2 is the keccak256 of the exact bytes this profile
-   fixes for it.
+- REQ-CHAIN-01 (upholds SP-BIND-01):
+  A Chain Profile MUST answer all four duties for exactly one family of
+  Consumer Chains, and MUST leave none of them to an implementation.
+  Necessity: the Canonical Runtime and the Platform Verifier derive these
+  independently, so an answer left open is two answers, and they disagree
+  only as a digest the destination rebuilds differently.
+- REQ-CHAIN-02 (upholds SP-REPLAY-01):
+  A Chain Profile MUST state the preimage shape it claims in §2.1, and MUST
+  NOT claim a shape another Chain Profile claims. Necessity: REQ-COMMON-01C
+  supplies no chain-identifier registry and leaves separation to profile
+  authors; two profiles taking one shape give two Consumer Chains one Chain
+  ID, and a digest authorized for either is spendable on both.
+- REQ-CHAIN-03 (upholds SP-BIND-01):
+  A Chain Profile MUST define one reading by which a composition obtains a
+  destination's exact 32-byte Chain ID from that destination. Necessity:
+  REQ-COMMON-01C has the composition supply the Chain ID to the Canonical
+  Runtime, and a value derived a second time from an identifier the
+  composition believes the destination has is a guess that fails only after
+  the ceremony completes.
+
+### 2.1 Claimed preimages
+
+| profile | canonical Chain Identifier | canonical bytes |
+|---|---|---|
+| EVM (§3) | the EIP-155 chain identifier | `U256BE`, exactly 32 bytes |
+
+Each profile adds its own row. A shape absent from this table is unclaimed.
 
 ## 3. The EVM Chain Profile
+
+An EVM Consumer Chain is one whose execution environment reports an EIP-155
+chain identifier, a block timestamp, and an immediate caller to the Consumer.
 
 ### 3.1 Chain ID
 
@@ -37,31 +67,23 @@ canonicalBytes  = U256BE(chainIdentifier)          // exactly 32 bytes
 chainId         = keccak256(canonicalBytes)
 ```
 
-- REQ-EVM-01 (upholds SP-BIND-01, SP-REPLAY-01):
-  An EVM Consumer Chain's canonical Chain Identifier is its EIP-155 chain
-  identifier, and the exact bytes it contributes are that value's unsigned
-  256-bit big-endian encoding. The Chain ID is the keccak256 of exactly those
-  32 bytes. Necessity: EIP-155 identifiers are already unique across the
-  chains that honor them, and a fixed width leaves no encoding a second
-  implementation could choose differently.
-- REQ-EVM-01A (upholds SP-BIND-01):
+- REQ-CHAIN-04 (upholds SP-BIND-01, SP-REPLAY-01):
+  The canonical Chain Identifier is the EIP-155 chain identifier, and the
+  exact bytes it contributes are that value's unsigned 256-bit big-endian
+  encoding. The Chain ID is the keccak256 of exactly those 32 bytes.
+  Necessity: EIP-155 identifiers are already unique across the chains that
+  honor them, and a fixed width leaves no encoding a second implementation
+  could choose differently.
+- REQ-CHAIN-04A (upholds SP-BIND-01):
   The Platform Verifier MUST take the Chain Identifier from its own execution
   environment, and its digest recomputation MUST accept none as an argument.
   Necessity: REQ-COMMON-01C, restated where it is implemented — a
   recomputation that takes the identifier can be handed another chain's.
-- REQ-EVM-01B (upholds SP-BIND-01):
-  The Proof Verifier MUST expose its Chain ID for reading. Necessity:
-  REQ-COMMON-01C has the composition supply the Chain ID to the Canonical
-  Runtime, and this is where it can read the exact 32 bytes the destination
-  will recompute against, instead of deriving them a second time from a
-  chain identifier it believes the destination has.
-- REQ-EVM-01C (upholds SP-REPLAY-01):
-  A Chain Profile other than this one MUST NOT derive its Chain ID as the
-  keccak256 of a bare unsigned 256-bit big-endian integer. Necessity:
-  REQ-COMMON-01C supplies no chain-identifier registry and leaves separation
-  to profile authors; this profile takes the unnamespaced integer preimage,
-  and a second profile taking it too would give two Consumer Chains one Chain
-  ID and forfeit replay separation between them.
+- REQ-CHAIN-04B (upholds SP-BIND-01):
+  The reading REQ-CHAIN-03 requires is the Proof Verifier, which MUST expose
+  its Chain ID. Necessity: it is the one component every Consumer on the
+  chain already routes through, so the bytes a composition reads are the
+  bytes that will be recomputed against.
 
 Conformance vectors:
 
@@ -73,21 +95,21 @@ chainIdentifier = 11155111     chainId = 0x4679aa19497ce87eb9ffd768757c9397680da
 
 ### 3.2 Transaction Author
 
-- REQ-EVM-02 (upholds SP-BIND-01):
+- REQ-CHAIN-05 (upholds SP-BIND-01):
   The Transaction Author is the account the execution environment reports as
   the Consumer's immediate caller. The Consumer MUST authenticate it from
   that report alone.
-- REQ-EVM-02A (upholds SP-BIND-01):
+- REQ-CHAIN-05A (upholds SP-BIND-01):
   The Consumer MUST NOT read the Transaction Author from the account that
   originated and pays for the transaction. Necessity: that account is the
   Transaction Submitter of REQ-COMMON-04, which this profile does not
-  authenticate as the same principal — anything it reaches through an
+  authenticate as the same principal — anything reached through an
   intermediate would authorize under the submitter's identity rather than the
   caller's.
 
 ### 3.3 Block Time
 
-- REQ-EVM-03 (upholds SP-FRESH-01):
+- REQ-CHAIN-06 (upholds SP-FRESH-01):
   Block Time is the block timestamp the execution environment reports, in
   whole seconds, bounded by an unsigned 64-bit integer. The Consumer MUST
   read it from that environment and never from the Submission or the
@@ -95,7 +117,7 @@ chainIdentifier = 11155111     chainId = 0x4679aa19497ce87eb9ffd768757c9397680da
 
 ### 3.4 Authorized Transaction Data
 
-- REQ-EVM-04 (upholds SP-BIND-01):
+- REQ-CHAIN-07 (upholds SP-BIND-01):
   Authorized Transaction Data is the EVM ABI encoding of the transaction
   kind's argument tuple. The Consumer's protocol fixes that tuple for each
   transaction kind it accepts, and the Consumer MUST decode with a strict
@@ -104,14 +126,19 @@ chainIdentifier = 11155111     chainId = 0x4679aa19497ce87eb9ffd768757c9397680da
 
 ## 4. Conformance tests
 
-- TEST-EVM-01 (exercises REQ-EVM-01, REQ-EVM-01A, REQ-EVM-01B):
-  The §3.1 vectors reproduce; the digest recomputation takes no Chain
-  Identifier argument; and the Chain ID the Proof Verifier exposes equals the
-  one that recomputation commits.
-- TEST-EVM-02 (exercises REQ-EVM-02, REQ-EVM-02A):
+- TEST-CHAIN-01 (exercises REQ-CHAIN-01, REQ-CHAIN-02):
+  Every profile in this document answers all four duties of §2, and no two
+  claim one preimage shape in §2.1. Verification: inspection.
+- TEST-CHAIN-02 (exercises REQ-CHAIN-03, REQ-CHAIN-04, REQ-CHAIN-04B):
+  The §3.1 vectors reproduce, and the Chain ID read from the destination
+  equals the one its digest recomputation commits.
+- TEST-CHAIN-03 (exercises REQ-CHAIN-04A):
+  The digest recomputation takes no Chain Identifier argument, and moving the
+  chain under an unchanged Submission moves the digest.
+- TEST-CHAIN-04 (exercises REQ-CHAIN-05, REQ-CHAIN-05A):
   A Consumer reached through an intermediate account authorizes on that
   account and rejects a call that only the originating account's identity
   would satisfy.
-- TEST-EVM-03 (exercises REQ-EVM-04):
+- TEST-CHAIN-05 (exercises REQ-CHAIN-07):
   Authorized Transaction Data carrying trailing bytes past its argument tuple
   is rejected.
