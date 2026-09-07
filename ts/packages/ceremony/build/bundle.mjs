@@ -174,7 +174,7 @@ export async function bundle(entry, data, { selfContained = false, invoke } = {}
                 if (
                   id.includes('/src/') &&
                   !id.includes('/platforms/') &&
-                  !id.includes('/src/prover/index.ts') &&
+                  !id.includes('/src/ccdp/documents/prover.ts') &&
                   !id.includes('/popup/')
                 )
                   return 'shared'
