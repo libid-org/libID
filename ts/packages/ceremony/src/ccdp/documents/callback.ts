@@ -1,10 +1,10 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { AbortCeremony } from '../ccdp/index.js'
+import { AbortCeremony } from '../index.js'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
-import { CancelCeremony, origin } from '../ccdp/index.js'
-import { ceremonyIdFromState, proverFragment, route, type OAuthReturn } from '../ccdp/navigation.js'
-import { hasExactKeys, isRecord } from '../primitives.js'
-import { view } from '../ui.js'
+import { CancelCeremony, origin } from '../index.js'
+import { ceremonyIdFromState, proverFragment, route, type OAuthReturn } from '../navigation.js'
+import { hasExactKeys, isRecord } from '../../primitives.js'
+import { view } from '../../ui.js'
 export function callbackState(input: OAuthReturn): string {
   const states = [
     ...new URLSearchParams(input.query).getAll('state'),

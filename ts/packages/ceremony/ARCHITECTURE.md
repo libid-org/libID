@@ -125,12 +125,15 @@ Launch publishes one `@libid/ceremony` package:
 ```text
 @libid/ceremony
 ├── ccdp
-│   └── index         ceremony records, directional codecs, and protocol version
+│   ├── index         ceremony records, directional codecs, and protocol version
+│   └── documents
+│       ├── callback  source entrypoint for the versioned CCDP Callback implementation
+│       ├── prefetch  dual-context Prefetch document and Worker entrypoint
+│       └── prover    source entrypoint for the isolated Prover document
 ├── client      CeremonyConfig fetch, application-side API, and orchestration
-├── callback    source entrypoint for the versioned CCDP Callback implementation
-├── prefetch    source entrypoint for Prefetch, the shared worker, and asset cache
+├── prefetch    shared worker, registration, and asset cache implementation
 ├── prover
-│   ├── index          source entrypoint for the isolated Prover and WASM proving
+│   ├── engine        WASM proving and dedicated proof worker
 │   ├── bb             shared bb.js integration and resource declarations
 │   └── notarization  internal TLSNotary session and attestation adapter
 └── platforms
@@ -141,6 +144,10 @@ Launch publishes one `@libid/ceremony` package:
     ├── x/<version>/{assets,client,types,prover}
     └── github/<version>/{assets,client,types,prover}
 ```
+
+The public `@libid/ceremony/{callback,prefetch,prover}` subpaths resolve directly
+to `ccdp/documents`. The Prover document imports platform pipelines and shared
+proving code from the top-level `platforms` and `prover` modules.
 
 `ccdp/index` is the pure protocol leaf imported by client, callback,
 prefetch, and prover. It performs no platform dispatch, browser work, storage,

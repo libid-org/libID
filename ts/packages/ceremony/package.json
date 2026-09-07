@@ -24,16 +24,16 @@
       "default": "./dist/client/index.js"
     },
     "./prover": {
-      "types": "./dist/prover/index.d.ts",
-      "default": "./dist/prover/index.js"
+      "types": "./dist/ccdp/documents/prover.d.ts",
+      "default": "./dist/ccdp/documents/prover.js"
     },
     "./callback": {
-      "types": "./dist/callback/index.d.ts",
-      "default": "./dist/callback/index.js"
+      "types": "./dist/ccdp/documents/callback.d.ts",
+      "default": "./dist/ccdp/documents/callback.js"
     },
     "./prefetch": {
-      "types": "./dist/prefetch/index.d.ts",
-      "default": "./dist/prefetch/index.js"
+      "types": "./dist/ccdp/documents/prefetch.d.ts",
+      "default": "./dist/ccdp/documents/prefetch.js"
     }
   },
   "files": [

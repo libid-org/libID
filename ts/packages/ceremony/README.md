@@ -80,7 +80,7 @@ inputs. Original attested bytes and signatures are preserved for downstream chec
 | `src/prover/engine*` | Dedicated Noir/bb.js proof worker |
 | `src/prover/notarization/` | Browser TLSNotary sessions, canonical decoding and correlation |
 | `src/prefetch/` | Root Service Worker, byte caches and pending-fetch joins |
-| `src/callback/`, `src/prover/index.ts` | Authenticated document entrypoints |
+| `src/ccdp/documents/` | Callback, Prefetch and Prover page entrypoints |
 | `src/ui.ts` | Native, package-owned DOM and progress |
 | `build/` | Compiler-owned graph and static response policies |
 | `e2e/` | Independent HTTPS origins and actual-popup browser checks |
