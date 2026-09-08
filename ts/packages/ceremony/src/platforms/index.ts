@@ -1,4 +1,5 @@
-import type { ProverDeliverProof } from '../ccdp/index.js'
+import type { Identity } from './types.js'
+import type { ProverIdentityProof } from '../ccdp/index.js'
 import * as googleV1 from './google/1/client.js'
 import * as xV1 from './x/1/client.js'
 import * as githubV1 from './github/1/client.js'
@@ -27,47 +28,47 @@ export const supportedPlatforms: readonly PlatformId[] = Object.freeze(
 export type OAuthProof<P extends PlatformId = PlatformId> = {
   [K in P]: {
     [V in SupportedCeremonyVersion<K>]: {
-      platformId: K
       platformCeremonyVersion: V
-      operationDomain: Uint8Array
       authorizationNonce: Uint8Array
-      transactionData: Uint8Array
       proof: ProofByPlatformVersion[K][V]
     }
   }[SupportedCeremonyVersion<K>]
 }[P]
 export type IdentityResult<P extends PlatformId = PlatformId> =
-  | { status: 'accepted'; oauthProof: OAuthProof<P> }
+  | { [K in P]: { status: 'accepted'; identity: Identity<K>; oauthProof: OAuthProof<K> } }[P]
   | { status: 'denied' }
 export function validateProofMessage<P extends PlatformId, V extends SupportedCeremonyVersion<P>>(
   platformId: P,
   version: V,
-  message: ProverDeliverProof,
-): ProverDeliverProof & { proof: ProofByPlatformVersion[P][V] } {
+  message: ProverIdentityProof,
+): ProverIdentityProof & { identity: Identity<P>; proof: ProofByPlatformVersion[P][V] } {
   const implementation = platforms[platformId]?.versions[version as 1]
   if (!implementation) throw new TypeError('Unsupported platform version')
+  implementation.validateIdentity(message.identity)
   implementation.validateProof(message.proof)
-  return message as ProverDeliverProof & { proof: ProofByPlatformVersion[P][V] }
+  return message as ProverIdentityProof & {
+    identity: Identity<P>
+    proof: ProofByPlatformVersion[P][V]
+  }
 }
-export function assembleProof<P extends PlatformId>(
+export function assembleResult<P extends PlatformId>(
   platformId: P,
   version: SupportedCeremonyVersion<P>,
-  message: ProverDeliverProof,
-  retained: {
-    operationDomain: Uint8Array
-    authorizationNonce: Uint8Array
-    transactionData: Uint8Array
-  },
-): OAuthProof<P> {
-  const { proof } = validateProofMessage(platformId, version, message)
+  message: ProverIdentityProof,
+  clientId: string,
+  authorizationNonce: Uint8Array,
+): IdentityResult<P> {
+  const { identity, proof } = validateProofMessage(platformId, version, message)
+  if (identity.oauthClientId !== clientId) throw new TypeError('OAuth client ID mismatch')
   return {
-    platformId,
-    platformCeremonyVersion: version,
-    operationDomain: retained.operationDomain.slice(),
-    authorizationNonce: retained.authorizationNonce.slice(),
-    transactionData: retained.transactionData.slice(),
-    proof,
-  } as OAuthProof<P>
+    status: 'accepted',
+    identity,
+    oauthProof: {
+      platformCeremonyVersion: version,
+      authorizationNonce: authorizationNonce.slice(),
+      proof,
+    },
+  } as IdentityResult<P>
 }
 // Version choice stays behind the same closed, validated catalog boundary.
 export function greatestCommonVersion<P extends PlatformId>(

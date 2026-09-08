@@ -108,8 +108,8 @@ Client compares that candidate to the Application's separately constructed
 digest; `AppStartProver` carries no expected-digest field. The circuit
 re-encodes the candidate as the exact nonce and verifies the RS256
 signature and signed claims. The module then generates one proof and returns it
-with the exact signed audience, subject, email and expiry plus the selected JWK
-modulus as `GoogleProofV1`, with no attestation or flattened public-input array.
+with the signed expiry and selected JWK modulus as `GoogleProofV1`, with no
+attestation or flattened public-input array.
 The Prover builds `identity` with `platformId: 'google'`, `oauthClientId` from
 `aud`, `userId` from `sub`, and `userName` from `email`, without normalization.
 The Ceremony Client checks result structure and wraps it; only Ledger Verifier
@@ -180,9 +180,10 @@ canonical `id` and `login` ranges. The OAuth bridge route is defined in
 The module then runs the same `bearer-link` circuit with the token-exchange and
 identity blinders. Its public-input count and order are identical to X: 64
 fields representing token commitment then identity commitment. Delivery
-contains `bearerLinkProof`, the token-exchange and identity attestations with
-their decoded views, and `identity` with `platformId: 'github'`, the attested
-token-request client identifier, and `/user`'s `id` and `login`. The browser
+contains a `proof` with `bearerLinkProof` and the token-exchange and identity
+attestations with their decoded views, beside `identity` with
+`platformId: 'github'`, the attested token-request client identifier, and
+`/user`'s `id` and `login`. The browser
 decodes the server-returned token attestation itself; the bridge's JSON response
 does not gain a `decoded` field. GitHub-specific server exchange and transcript
 construction therefore remain platform code; no GitHub-specific proving

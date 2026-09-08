@@ -42,32 +42,34 @@ later Prover.
 The prover does not receive the operation domain, chain ID, transaction data,
 authorization nonce, or expected Authorization Digest. Google exposes the
 signed token nonce as a proof public input; X and GitHub expose the attested
-code verifier. The Ledger Verifier matches that binding to the
-Authorization Digest it recomputes from `OAuthProof`.
+code verifier. The Ledger Verifier matches that binding to the Authorization
+Digest it recomputes from the composition's submitted operation inputs and
+the returned ceremony version and authorization nonce.
 
-The prover constructs each platform proof's shared `Identity` and complete
-decoded attestation views from its evidence. It does not assemble or verify
-`OAuthProof`, call a Ledger Verifier, or persist credential-bearing state. The
-Ceremony Client structurally validates the selected delivery variant and wraps
-it with retained ceremony fields; it does not repeat evidence parsing or
-identity extraction. Prover inputs, workers, witnesses,
+The prover constructs a shared `Identity` beside the platform proof, and complete
+decoded views inside its attestations, from its evidence. It does not assemble
+or verify `OAuthProof`, call a Ledger Verifier, or persist credential-bearing state. The
+Ceremony Client structurally validates the identity and selected proof variant,
+then returns `identity` and `oauthProof` separately; it does not repeat evidence
+parsing or identity extraction. Prover inputs, workers, witnesses,
 and outputs are cleared after delivery, `CancelCeremony`, `AbortCeremony`, failure, or context
 destruction.
 
 ## Proof delivery
 
-Google delivers `identityProof`, a shared `identity` containing the exact signed
-audience, subject, and email, the signed expiry, and the selected JWK modulus
-as `GoogleProofV1`. It delivers no attestation. The Prover matches the signed
-audience to the request's frozen client identifier. The Ceremony Client adds
-the common authorization fields to assemble `OAuthProof<'google'>`.
-The Google adapter flattens the named values into the circuit's 56 public-input
+Google delivers `GoogleProofV1` containing `identityProof`, the signed expiry,
+and the selected JWK modulus, beside a shared `identity` containing the exact
+signed audience, subject, and email. It delivers no attestation. The Prover
+matches the signed audience to the request's frozen client identifier. The Ceremony Client adds
+only the selected ceremony version and retained authorization nonce to assemble
+`OAuthProof<'google'>`. The Google adapter takes the separate identity and
+platform proof and flattens their named values into the circuit's 56 public-input
 fields only at the verifier/transaction-encoding boundary; the Ceremony Client
 does not verify the proof.
 
-For X, `ProverDeliverProof.proof` is `XProofV1`; for GitHub it is `GitHubProofV1`.
-Each independently contains `identity`, `bearerLinkProof`, and the named
-`tokenAttestation` and `identityAttestation`.
+For X, `ProverIdentityProof.proof` is `XProofV1`; for GitHub it is `GitHubProofV1`.
+Each independently contains `bearerLinkProof` and the named `tokenAttestation`
+and `identityAttestation`; the shared `identity` is a sibling message field.
 Each attestation preserves the byte-exact attested-data serialization and its
 associated signature as produced by the pinned notary client. The signature
 covers exactly those attested-data bytes, including server identity, evidence
@@ -97,28 +99,33 @@ binds the token exchange to the Authorization Digest outside the circuit.
 The platform delivery-to-output mapping is closed, but CCDP treats `proof` as
 an unknown logical value:
 
-| Platform | Prover delivery | Ceremony Client additions | OAuth proof |
+| Platform | `ProverIdentityProof.proof` (identity is separate) | Ceremony Client additions | OAuth proof |
 |---|---|---|---|
-| Google | `GoogleProofV1 { identity, identityProof, tokenExpiresAt, signingKeyModulus }` | common fields | `OAuthProof<'google'>` with ceremony version `1` |
-| X | `XProofV1 { identity, bearerLinkProof, tokenAttestation, identityAttestation }` | common fields | `OAuthProof<'x'>` with ceremony version `1` |
-| GitHub | `GitHubProofV1 { identity, bearerLinkProof, tokenAttestation, identityAttestation }` | common fields | `OAuthProof<'github'>` with ceremony version `1` |
+| Google | `GoogleProofV1 { identityProof, tokenExpiresAt, signingKeyModulus }` | version and nonce | `OAuthProof<'google'>` with ceremony version `1` |
+| X | `XProofV1 { bearerLinkProof, tokenAttestation, identityAttestation }` | version and nonce | `OAuthProof<'x'>` with ceremony version `1` |
+| GitHub | `GitHubProofV1 { bearerLinkProof, tokenAttestation, identityAttestation }` | version and nonce | `OAuthProof<'github'>` with ceremony version `1` |
 
 Each platform/version `prover` leaf constructs its exact proof object. Its
 side-effect-free `types` leaf owns the matching runtime validator dispatched by
 `platforms/index`. The
 validator is selected from the live Ceremony's platform and ceremony version,
 not from a discriminator inside the nested value. It rejects unknown fields, malformed arrays and bytes, and
-profile-bound violations and a mismatched `identity.platformId`, then returns a
-typed `ProverDeliverProof`. It checks the decoded view's structure, not its
+profile-bound violations. The result validator also checks the separate
+`identity` against the selected platform and frozen client, then returns a
+typed `ProverIdentityProof`. It checks the decoded view's structure, not its
 agreement with signed bytes; that decoding belongs to the Prover. CCDP never
 changes when another platform proof type is added.
 
-The common fields are platform ID, platform ceremony version, operation domain,
-authorization nonce, and transaction data. The
+The only common `OAuthProof` fields are platform ceremony version and
+authorization nonce, alongside the platform-specific `proof`. The
 exact records are defined in the
 [package architecture](client.md#result-and-lifecycle). The Ceremony
-Client adds no chain ID, Authorization Digest, second identity copy, code
-verifier, evidence-time summary, verifier address, or verification-key field.
+Client returns `Identity` separately and adds no repeated platform ID or
+caller-supplied operation domain/transaction data. The composition retains
+those inputs and combines them with `IdentityResult` for ledger submission;
+Google's verifier input adapter also consumes the separate identity. The Client
+adds no chain ID, Authorization Digest, second identity copy, code verifier,
+evidence-time summary, verifier address, or verification-key field.
 
 The platform pipelines request the profile's exact reveals and commitments.
 Attestation authenticity, authority, method and path, request grammar,
@@ -199,7 +206,7 @@ positive closed total. Every emitted event carries
 `progress = 0.95 * completedWeight / totalWeight`; a `started` event changes the
 label and shimmer but retains the last completed weight, while a `completed`
 event advances the monotonic target. Parallel completion order therefore cannot
-move progress backwards. `ProverDeliverProof`, outside `PlatformStep`, alone
+move progress backwards. `ProverIdentityProof`, outside `PlatformStep`, alone
 makes the renderer show `1`.
 
 Weights improve the rough visual distribution of milestones but make no time

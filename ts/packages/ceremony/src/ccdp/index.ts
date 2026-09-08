@@ -159,17 +159,29 @@ export const ProverNotifyEvent = {
     return value as unknown as ProverNotifyEvent
   },
 } as const satisfies MessageType<ProverNotifyEvent>
-export interface ProverDeliverProof {
-  type: 'prover-deliver-proof'
+export interface ProverIdentityProof {
+  type: 'prover-identity-proof'
+  identity: { platformId: string; oauthClientId: string; userId: string; userName: string }
   proof: unknown
 }
-export const ProverDeliverProof = {
-  type: 'prover-deliver-proof',
-  decode(value: unknown): ProverDeliverProof {
-    assertMessage(value, this.type, ['proof'])
-    return value as unknown as ProverDeliverProof
+export const ProverIdentityProof = {
+  type: 'prover-identity-proof',
+  decode(value: unknown): ProverIdentityProof {
+    assertMessage(value, this.type, ['identity', 'proof'])
+    const identity = value.identity
+    if (
+      !isRecord(identity) ||
+      !hasExactKeys(identity, ['platformId', 'oauthClientId', 'userId', 'userName']) ||
+      typeof identity.platformId !== 'string' ||
+      !PLATFORM.test(identity.platformId) ||
+      !text(identity.oauthClientId, 512) ||
+      !text(identity.userId, 255) ||
+      !text(identity.userName, 255)
+    )
+      throw new TypeError('Invalid identity')
+    return value as unknown as ProverIdentityProof
   },
-} as const satisfies MessageType<ProverDeliverProof>
+} as const satisfies MessageType<ProverIdentityProof>
 export type CCDPMessage =
   | PrefetchStarted
   | ProverReady
@@ -177,4 +189,4 @@ export type CCDPMessage =
   | AbortCeremony
   | AppStartProver
   | ProverNotifyEvent
-  | ProverDeliverProof
+  | ProverIdentityProof

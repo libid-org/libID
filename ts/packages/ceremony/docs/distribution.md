@@ -181,12 +181,12 @@ JavaScript source. Serialization escapes `<` as `\u003c` so data cannot terminat
 the script element or introduce markup. Missing or repeated markers reject the
 artifact. No callback request value participates in substitution.
 
-The inserted data is one unversioned JSON list, `[allowedAppOrigins, ccdpOrigin]`,
-derived directly from the Bridge's existing validated configuration:
+The inserted data is one unversioned JSON list, `[allowedOrigins, ccdpOrigin]`,
+using the Bridge's [effective allowlist](oauth-bridge.md#deployment-configuration):
 
 ```json
 [
-  ["https://app.example"],
+  ["https://app.example", "https://lib.id"],
   "https://lib.id"
 ]
 ```
@@ -194,10 +194,10 @@ derived directly from the Bridge's existing validated configuration:
 There is no version-keyed wrapper, input-declaration block, or Bridge-side
 CCDP version list. Every bundled Callback implementation receives a deeply
 frozen copy of the same list. The first two positions require a nonempty,
-duplicate-free canonical HTTPS application allowlist and the configured
-canonical HTTPS CCDP origin, exactly matching the values used for configuration
-CORS and public `CeremonyConfig`. The list contains no secrets. Neither URL
-input nor an upstream artifact supplies deployment values.
+duplicate-free canonical HTTPS allowlist containing the configured canonical
+HTTPS CCDP origin, and that origin itself. These match the effective admission
+set and public `CeremonyConfig` respectively. The list contains no secrets.
+Neither URL input nor an upstream artifact supplies deployment values.
 
 Compatible evolution preserves existing positions, types, and meanings. New
 optional trailing inputs may be defaulted when absent by newer implementations

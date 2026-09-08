@@ -1,3 +1,4 @@
+import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { isRecord } from '../../../primitives.js'
@@ -25,7 +26,9 @@ const spans = [
   { code: 'attestations', label: 'Completing identity evidence', weight: 5 },
   ...PROOF_ENGINE_SPANS,
 ]
-export async function prove(context: ProverContext): Promise<XProofV1 | null> {
+export async function prove(
+  context: ProverContext,
+): Promise<{ identity: Identity<'x'>; proof: XProofV1 } | null> {
   const { request, onProgress } = context
   context.signal.throwIfAborted()
   if (!isFormClientId(request.clientId)) throw new Error('Invalid profile client identifier')
@@ -141,9 +144,11 @@ export async function prove(context: ProverContext): Promise<XProofV1 | null> {
         userId: extracted.userId,
         userName: extracted.handle,
       },
-      bearerLinkProof: raw.proof,
-      tokenAttestation,
-      identityAttestation,
+      proof: {
+        bearerLinkProof: raw.proof,
+        tokenAttestation,
+        identityAttestation,
+      },
     }
   } finally {
     context.signal.removeEventListener('abort', abort)

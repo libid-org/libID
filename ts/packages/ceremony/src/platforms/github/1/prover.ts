@@ -1,3 +1,4 @@
+import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { isRecord } from '../../../primitives.js'
@@ -21,7 +22,9 @@ const spans = [
   { code: 'attestation', label: 'Completing identity evidence', weight: 5 },
   ...PROOF_ENGINE_SPANS,
 ]
-export async function prove(context: ProverContext): Promise<GitHubProofV1 | null> {
+export async function prove(
+  context: ProverContext,
+): Promise<{ identity: Identity<'github'>; proof: GitHubProofV1 } | null> {
   const { request, onProgress, signal } = context
   signal.throwIfAborted()
   if (!isFormClientId(request.clientId)) throw new Error('Invalid profile client identifier')
@@ -118,9 +121,11 @@ export async function prove(context: ProverContext): Promise<GitHubProofV1 | nul
         userId: selected.userId,
         userName: selected.userName,
       },
-      bearerLinkProof: raw.proof,
-      tokenAttestation: { ...token.tokenAttestation, decoded: admitted.decoded },
-      identityAttestation,
+      proof: {
+        bearerLinkProof: raw.proof,
+        tokenAttestation: { ...token.tokenAttestation, decoded: admitted.decoded },
+        identityAttestation,
+      },
     }
   } finally {
     signal.removeEventListener('abort', abort)

@@ -142,7 +142,7 @@ describe('[LIBID-PROVER-002] Google v1 witness and verifier fields', () => {
       ),
     ).toBe(true)
 
-    const { inputs, proofFields } = buildGoogleWitness(fixture.idToken, fixture.jwk)
+    const { inputs, identity, proofFields } = buildGoogleWitness(fixture.idToken, fixture.jwk)
     expect(Object.keys(inputs)).toEqual(ABI_KEYS)
     expect(inputs.signing_input_len).toBe('412')
     expect(inputs.header_b64_len).toBe('72')
@@ -179,7 +179,7 @@ describe('[LIBID-PROVER-002] Google v1 witness and verifier fields', () => {
     expect(recompose(inputs.redc)).toBe((1n << 4102n) / modulus)
 
     const proof = { identityProof: new Uint8Array([1]), ...proofFields }
-    expect(buildGooglePublicInputs(digest, proof)).toEqual(BB_PUBLIC_INPUTS)
+    expect(buildGooglePublicInputs(digest, identity, proof)).toEqual(BB_PUBLIC_INPUTS)
   })
 
   it('rejects malformed token and JWK values before witness construction', () => {
@@ -237,20 +237,22 @@ describe('[LIBID-PROVER-002] Google v1 witness and verifier fields', () => {
   })
 
   it('rejects wrong-length, wrong-order, wrong-type, and one-byte-changed public inputs', () => {
-    const { proofFields } = buildGoogleWitness(fixture.idToken, fixture.jwk)
+    const { identity, proofFields } = buildGoogleWitness(fixture.idToken, fixture.jwk)
     const proof = { identityProof: new Uint8Array([1]), ...proofFields }
-    expect(validateGooglePublicInputs(BB_PUBLIC_INPUTS, digest, proof)).toBe(true)
-    expect(validateGooglePublicInputs(BB_PUBLIC_INPUTS.slice(1), digest, proof)).toBe(false)
+    expect(validateGooglePublicInputs(BB_PUBLIC_INPUTS, digest, identity, proof)).toBe(true)
+    expect(validateGooglePublicInputs(BB_PUBLIC_INPUTS.slice(1), digest, identity, proof)).toBe(
+      false,
+    )
     const reordered = [...BB_PUBLIC_INPUTS]
     const first = reordered[0]
     reordered[0] = reordered[1]
     reordered[1] = first
-    expect(validateGooglePublicInputs(reordered, digest, proof)).toBe(false)
+    expect(validateGooglePublicInputs(reordered, digest, identity, proof)).toBe(false)
     const mistyped: unknown[] = [...BB_PUBLIC_INPUTS]
     mistyped[0] = 0xb3
-    expect(validateGooglePublicInputs(mistyped, digest, proof)).toBe(false)
+    expect(validateGooglePublicInputs(mistyped, digest, identity, proof)).toBe(false)
     const changed = [...BB_PUBLIC_INPUTS]
     changed[55] = `${changed[55].slice(0, -2)}bc`
-    expect(validateGooglePublicInputs(changed, digest, proof)).toBe(false)
+    expect(validateGooglePublicInputs(changed, digest, identity, proof)).toBe(false)
   })
 })
