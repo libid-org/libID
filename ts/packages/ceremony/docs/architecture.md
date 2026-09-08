@@ -2,8 +2,8 @@
 
 `@libid/ceremony` runs an identity-proof ceremony in the browser. An
 application supplies an operation to authorize; the package obtains and proves
-platform identity evidence, then returns an `OAuthProof` with prover-extracted
-identity details for the downstream Ledger Verifier. Those details are not
+platform identity evidence, then returns an `IdentityResult` with separate
+`identity` and `oauthProof` fields. Those identity details are not
 authoritative until ledger verification.
 
 This document defines the package boundary, public application API and
@@ -40,7 +40,7 @@ connection but is not a ceremony-protocol participant.
 
 ## System boundary
 
-One ceremony turns an application-owned operation into an `OAuthProof`:
+One ceremony returns identity and proof for an application-owned operation:
 
 ```mermaid
 sequenceDiagram
@@ -71,9 +71,9 @@ sequenceDiagram
         R-->>C: CancelCeremony
         C-->>A: IdentityResult denied
     else User approved
-        R-->>C: Progress and generated proof through connection
+        R-->>C: Progress, then ProverIdentityProof
         C->>C: Validate result shape and assemble OAuthProof
-        C-->>A: IdentityResult accepted with OAuthProof
+        C-->>A: IdentityResult accepted with identity and oauthProof
         A->>A: Commit Job successor before downstream use
     end
 ```
@@ -86,7 +86,8 @@ server status service.
 
 External-wallet and native libID wallet compositions use the same ceremony.
 They encode their operation into opaque `transactionData` before the ceremony
-and interpret it only after the ceremony returns `OAuthProof`. A native wallet
+and combine those retained inputs with the accepted `IdentityResult` for
+downstream submission. A native wallet
 may run key preparation before the ceremony and wallet confirmation afterward;
 those sessions do not extend the browser message protocol.
 
@@ -165,21 +166,24 @@ field types and bounds. Decoding returns the received object without coercion,
 normalization, defaults, field removal, or replacement allocation.
 
 ```ts
-const ProverDeliverProof = {
-  type: 'prover-deliver-proof',
+const ProverIdentityProof = {
+  type: 'prover-identity-proof',
 
-  decode(value: unknown): ProverDeliverProof {
-    assertMessage(value, this.type, ['proof'])
+  decode(value: unknown): ProverIdentityProof {
+    assertMessage(value, this.type, ['identity', 'proof'])
+    assertIdentity(value.identity)
     return value
   },
-} as const satisfies MessageType<ProverDeliverProof>
+} as const satisfies MessageType<ProverIdentityProof>
 ```
 
 Each endpoint registers only its permitted inbound companions with its popup
 connection. The connection dispatches by the companion discriminator, invokes
 that decoder once, and gives the handler the narrowed record. Direction and
 ceremony state remain handler checks. The platform proof stays opaque at this
-layer and is validated by the selected platform/version module. There is no
+layer and is validated by the selected platform/version module. The shared
+identity record is structurally decoded here; the selected module then checks
+its platform and profile-specific encodings. There is no
 aggregate runtime decoder, global registration, import-time registration, or
 plugin API; any aggregate TypeScript union exists only for compile-time
 connection typing.
@@ -295,7 +299,7 @@ See [Client API and lifecycle](client.md).
 [PROVING.md](proving.md) defines pipelines, asset use, workers, caching, and
 proof delivery; [CCDP_DISTRIBUTION.md](distribution.md) defines asset deployment. After
 `ProverReady`, the client sends one `AppStartProver`, validates the returned
-platform proof's structure, and assembles `OAuthProof`.
+identity and platform proof's structure, and assembles `IdentityResult`.
 
 ## Progress, cancellation, and recovery
 
@@ -338,5 +342,5 @@ namespace remains independent. The popup package's
 connection controls. Local Job schema versioning
 remains owned by the client store, while immutable asset revisioning remains a
 [CCDP Distribution](distribution.md#proving-assets) release concern. A Job which has
-already committed OAuthProof has left the ceremony and remains usable under its
+already committed `IdentityResult` with its operation inputs has left the ceremony and remains usable under its
 composition's own compatibility rules.

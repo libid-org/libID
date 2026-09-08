@@ -11,7 +11,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Input | Pin |
 |---|---|
 | Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `32e8217dab0f5925ad255950884efa3c6c0536ef`; eight source documents consolidated with implementation guides in the package docs directory; package composition updated for grouped CCDP documents |
+| Architecture PR #13 | `a73e31fac2cddc960f42220efdf5790727dc298a`; eight source documents consolidated with implementation guides in the package docs directory; package composition updated for grouped CCDP documents |
 | Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
 | Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
@@ -55,6 +55,14 @@ SWS v3 is currently a prerelease; the exact image is pinned in `ccdp.Dockerfile`
   test; proof assets still use their real native loaders. The fixture uses its own known
   digest: this is runtime/key compatibility, not real consent or authorization for
   the harness transaction. Public-input mutation must fail independent verification.
+
+The positional API and separate identity/proof update passed 197 unit tests,
+15 build/loader/native-SWS checks, 50 actual-popup browser cases and five additional
+Bridge origin-admission checks across the five profiles. All 20 dev frontend
+cases passed. Each profile generated a real Google fixture proof through the new
+CCDP result message and independently verified it against the released key.
+Security/correctness, API and simplicity reviews found only stale qualification
+wording, now corrected. Production Bridge admission remains externally qualified.
 
 The asset API/SWS v3 update passed 184 ceremony unit tests, all 15 build/loader/
 actual-SWS checks, and all 50 browser cases across Chromium, Firefox, WebKit,
@@ -117,9 +125,9 @@ A real ledger definition is required before a production ceremony can be constru
    profile. Its tests use a synthetic canonical-bincode record, not a signed
    released GitHub service vector. The obsolete fully revealed request-head layout
    is rejected. Obtain a matching service/profile vector and real `/user` evidence. The Bridge
-   must admit exactly one valid `Origin` equal to `ccdpOrigin` independently on
-   every preflight and POST, before DNS or session work; application-allowlist
-   membership grants no admission to this route. It must use the Prover-supplied canonical `notaryAddress` unchanged, with no second
+   must admit exactly one valid `Origin` matching its effective `allowedOrigins`
+   independently on every preflight and POST, before DNS or session work. This
+   admits configured application origins and the resolved CCDP origin. It must use the Prover-supplied canonical `notaryAddress` unchanged, with no second
    mapping/override, and reject redirects and forbidden internal destinations,
    including DNS-resolved destinations. Unit origin validation is not server egress
    protection; those service controls and both network selections remain unqualified.

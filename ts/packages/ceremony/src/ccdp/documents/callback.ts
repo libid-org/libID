@@ -41,7 +41,8 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     !allowedApplicationOrigins.length ||
     new Set(allowedApplicationOrigins).size !== allowedApplicationOrigins.length ||
     allowedApplicationOrigins.some((o) => !origin(o)) ||
-    !origin(ccdpOrigin)
+    !origin(ccdpOrigin) ||
+    !allowedApplicationOrigins.includes(ccdpOrigin)
   )
     throw new TypeError('Invalid Callback inputs')
   let connection: PopupConnection<Message> | undefined,

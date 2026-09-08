@@ -11,7 +11,7 @@ vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
 vi.mock('@libid/popup', () => ({ PopupConnection: { accept }, PopupWindow: { current } }))
 vi.mock('../../ui.js', () => ({ view }))
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
-const v1Inputs = [['https://app.test'], 'https://ccdp.test']
+const v1Inputs = [['https://app.test', 'https://ccdp.test'], 'https://ccdp.test']
 let config: unknown,
   locationInput: { search: string; hash: string; pathname: string; origin: string }
 beforeEach(() => {
@@ -42,13 +42,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010]', async () => {
   const original = locationInput.hash
-  config = [['https://other-app.test'], 'https://other-ccdp.test']
+  config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']
   startCallback()
   await Promise.resolve()
   expect(accept).toHaveBeenCalledWith(undefined, {
     fallback: undefined,
     connectionId: id,
-    allowedApplicationOrigins: ['https://other-app.test'],
+    allowedApplicationOrigins: ['https://other-app.test', 'https://other-ccdp.test'],
   })
   expect(navigate).toHaveBeenCalledWith(
     'https://other-ccdp.test/ccdp/v1/prover',
@@ -90,6 +90,7 @@ it.each(
     [],
     [['https://app.test']],
     [[], 'https://ccdp.test'],
+    [['https://app.test'], 'https://ccdp.test'], // Missing effective CCDP admission.
     [['https://app.test', 'https://app.test'], 'https://ccdp.test'],
     [['https://app.test/path'], 'https://ccdp.test'],
     [['https://app.test'], 'https://ccdp.test/path'],
@@ -129,7 +130,7 @@ it.each([[], [null], [{ optional: { nested: [1, 2] } }]].map((trailing) => ({ tr
       expect(accept).toHaveBeenCalledWith(
         undefined,
         expect.objectContaining({
-          allowedApplicationOrigins: ['https://app.test'],
+          allowedApplicationOrigins: ['https://app.test', 'https://ccdp.test'],
         }),
       )
       expect(navigate).toHaveBeenCalledWith(

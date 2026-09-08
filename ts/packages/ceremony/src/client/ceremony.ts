@@ -6,7 +6,7 @@ import {
   type AppStartProver,
   CancelCeremony,
   PrefetchStarted,
-  ProverDeliverProof,
+  ProverIdentityProof,
   ProverNotifyEvent,
   ProverReady,
   UUID,
@@ -19,7 +19,7 @@ import {
   deriveCodeVerifier,
 } from '../platforms/authorization.js'
 import {
-  assembleProof,
+  assembleResult,
   implementationFor,
   greatestCommonVersion,
   platforms,
@@ -42,14 +42,22 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
 }
 interface Input<P extends PlatformId> {
   connection: PopupConnection<Message>
-  ledgerId: LedgerId
+  ledgerId: string
+  chainId: Uint8Array
   platformId: P
   operationDomain: Uint8Array
   transactionData: Uint8Array
 }
 export interface CeremonyClient {
   readonly enabledPlatforms: readonly PlatformId[]
-  new: <P extends PlatformId>(ceremonyId: string, input: Input<P>) => Ceremony<P>
+  new: <P extends PlatformId>(
+    conn: PopupConnection<Message>,
+    ceremonyId: string,
+    ledgerId: LedgerId,
+    platformId: P,
+    operationDomain: Uint8Array,
+    transactionData: Uint8Array,
+  ) => Ceremony<P>
 }
 export async function createCeremonyClient(options: {
   oauthBridge: string
@@ -67,21 +75,16 @@ export function clientFromConfig(config: CeremonyConfig): CeremonyClient {
   )
   return Object.freeze({
     enabledPlatforms,
-    new<P extends PlatformId>(id: string, input: Input<P>): Ceremony<P> {
-      if (
-        !isRecord(input) ||
-        !hasExactKeys(input, [
-          'connection',
-          'ledgerId',
-          'platformId',
-          'operationDomain',
-          'transactionData',
-        ])
-      )
-        throw new TypeError('Invalid ceremony input')
-      if (typeof id !== 'string' || !UUID.test(id) || !enabledPlatforms.includes(input.platformId))
+    new<P extends PlatformId>(
+      conn: PopupConnection<Message>,
+      id: string,
+      ledgerId: LedgerId,
+      platformId: P,
+      operationDomain: Uint8Array,
+      transactionData: Uint8Array,
+    ): Ceremony<P> {
+      if (typeof id !== 'string' || !UUID.test(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
-      const { ledgerId, ...operation } = input
       if (!ledgerId || typeof ledgerId.encode !== 'function')
         throw new TypeError('Invalid ledger identity')
       const encodedLedgerId = ledgerId.encode()
@@ -89,17 +92,26 @@ export function clientFromConfig(config: CeremonyConfig): CeremonyClient {
       if (!(hash instanceof Uint8Array) || hash.length !== 32)
         throw new TypeError('Ledger hash must be 32 bytes')
       const chainId = Uint8Array.from(hash)
-      if (!(input.operationDomain instanceof Uint8Array) || input.operationDomain.length !== 32)
+      if (!(operationDomain instanceof Uint8Array) || operationDomain.length !== 32)
         throw new TypeError('Operation domain must be 32 bytes')
-      if (
-        !(input.transactionData instanceof Uint8Array) ||
-        input.transactionData.length > 0xffffffff
-      )
+      if (!(transactionData instanceof Uint8Array) || transactionData.length > 0xffffffff)
         throw new TypeError('Invalid transaction bytes')
       if (liveIds.has(id)) throw new TypeError('Ceremony ID is already live')
-      const run = new Run(id, { ...operation, chainId, ledgerId: encodedLedgerId }, config, () => {
-        liveIds.delete(id)
-      })
+      const run = new Run(
+        id,
+        {
+          connection: conn,
+          platformId,
+          operationDomain,
+          transactionData,
+          chainId,
+          ledgerId: encodedLedgerId,
+        },
+        config,
+        () => {
+          liveIds.delete(id)
+        },
+      )
       liveIds.add(id)
       return run
     },
@@ -142,7 +154,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private binding: Binding | undefined
   constructor(
     id: string,
-    input: Omit<Input<P>, 'ledgerId'> & { chainId: Uint8Array; ledgerId: string },
+    input: Input<P>,
     config: CeremonyConfig,
     private readonly releaseId: () => void,
   ) {
@@ -264,10 +276,17 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         this.progress = m.platformStep.progress
         this.emit(m.platformStep, m.timestamp)
       })
-      this.listen(ProverDeliverProof, (m) => {
+      this.listen(ProverIdentityProof, (m) => {
         this.expect('proving')
-        const oauthProof = assembleProof(this.platform, this.version, m, this.retained)
-        this.resolve?.({ status: 'accepted', oauthProof })
+        this.resolve?.(
+          assembleResult(
+            this.platform,
+            this.version,
+            m,
+            this.start.clientId,
+            this.retained.authorizationNonce,
+          ),
+        )
         this.cleanup()
       })
       this.listen(CancelCeremony, () => {

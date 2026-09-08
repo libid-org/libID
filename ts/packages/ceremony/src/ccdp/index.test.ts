@@ -6,7 +6,7 @@ import {
   PrefetchStarted,
   ProverReady,
   ProverNotifyEvent,
-  ProverDeliverProof,
+  ProverIdentityProof,
 } from './index.js'
 import { readPrefetch, readProver, proverFragment, prefetchFragment } from './navigation.js'
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
@@ -36,7 +36,14 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         timestamp: 1,
       },
     ],
-    [ProverDeliverProof, { type: 'prover-deliver-proof', proof: { arbitrary: true } }],
+    [
+      ProverIdentityProof,
+      {
+        type: 'prover-identity-proof',
+        identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
+        proof: { arbitrary: true },
+      },
+    ],
   ] as const
   for (const [codec, value] of samples)
     it(codec.type, () => {
@@ -87,4 +94,22 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
       expect(() => readProver(String(proverFragment(id, input)) + extra)).toThrow()
     expect(() => readProver(`ceremonyId=${id}&oauthQuery=%FF&oauthFragment=`)).toThrow()
   })
+})
+
+it.each([
+  null,
+  {},
+  { platformId: 'google', oauthClientId: 'client', userId: 1, userName: 'a' },
+  { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a', extra: true },
+  { platformId: 'google', oauthClientId: 'client', userId: '1', userName: '\n' },
+])('rejects malformed shared identities [LIBID-MOD-016]', (identity) => {
+  expect(() =>
+    ProverIdentityProof.decode({ type: 'prover-identity-proof', identity, proof: null }),
+  ).toThrow()
+})
+it('rejects the retired delivery message and embedded-identity shape', () => {
+  expect(() => ProverIdentityProof.decode({ type: 'prover-deliver-proof', proof: {} })).toThrow()
+  expect(() =>
+    ProverIdentityProof.decode({ type: 'prover-identity-proof', proof: { identity: {} } }),
+  ).toThrow()
 })

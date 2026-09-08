@@ -3,9 +3,9 @@ import type { IdentityResult } from '../src/index.js'
 declare global {
   interface Window {
     ready: boolean
-    completed: IdentityResult[]
+    completed: IdentityResult<'google'>[]
     testProgress: { update(value: number, label: string): void; stop(): void }
-    result: IdentityResult | { status: 'failed' } | undefined
+    result: IdentityResult<'google'> | { status: 'failed' } | undefined
     events: CeremonyEvent[]
     ceremonyClosed: unknown
     afterReady: boolean

@@ -1,8 +1,9 @@
+import type { PlatformId } from './index.js'
 import { text, uint } from '../ccdp/index.js'
 import { hasExactKeys, isRecord } from '../primitives.js'
 import type { DecodedAttestedData, DecodedDirection } from '../prover/notarization/decode.js'
 export type { DecodedAttestedData, DecodedDirection } from '../prover/notarization/decode.js'
-export interface Identity<P extends string = string> {
+export interface Identity<P extends PlatformId = PlatformId> {
   platformId: P
   oauthClientId: string
   userId: string
@@ -17,7 +18,7 @@ export const proofBytes = (v: unknown): v is Uint8Array =>
   v instanceof Uint8Array && v.length > 0 && v.length <= 4 * 1024 * 1024
 export const fixedBytes = (v: unknown, n: number): v is Uint8Array =>
   v instanceof Uint8Array && v.length === n
-export function isIdentity<P extends string>(
+export function isIdentity<P extends PlatformId>(
   v: unknown,
   platform: P,
   limits = [512, 255, 255],
@@ -88,3 +89,6 @@ export function isAttestation(v: unknown): v is NotaryAttestation {
     direction(d.received)
   )
 }
+
+export const isUserId = (value: string): boolean =>
+  /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 0xffffffffffffffffn

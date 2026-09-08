@@ -74,9 +74,12 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   const path = '/ccdp/callback.html'
   const html = readFileSync(join(out, 'public', path), 'utf8')
   const headers = graph.headers[path]
-  const a = prepareCallback(html, headers, [['https://app.test'], 'https://ccdp.test'])
+  const a = prepareCallback(html, headers, [
+    ['https://app.test', 'https://ccdp.test'],
+    'https://ccdp.test',
+  ])
   const b = prepareCallback(html, headers, [
-    ['https://other.test'],
+    ['https://other.test', 'https://ccdp.test'],
     'https://ccdp.test',
     { hostile: '</script><script>alert(1)</script>$&' },
   ])
@@ -95,7 +98,10 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
     html.replace('type="module">', 'type="module">void 0;'),
   ])
     assert.throws(() =>
-      prepareCallback(broken, headers, [['https://app.test'], 'https://ccdp.test']),
+      prepareCallback(broken, headers, [
+        ['https://app.test', 'https://ccdp.test'],
+        'https://ccdp.test',
+      ]),
     )
   assert.throws(() =>
     prepareCallback(html, { ...headers, 'Content-Security-Policy': "script-src 'self'" }, [
