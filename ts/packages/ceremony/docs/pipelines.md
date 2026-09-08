@@ -75,11 +75,11 @@ The browser distribution exposes `tlsn_wasm.js` and its sibling
 `tlsn_wasm_bg.wasm`; the worker bootstrap is embedded in the module. The global
 notarization module pins both immutable asset paths. Each remains a normal,
 independently cached response; the browser never downloads or unpacks a release
-archive. The [CCDP Distribution contract](../../../docs/distribution.md#proving-assets) owns their
+archive. The [CCDP Distribution contract](distribution.md#proving-assets) owns their
 serving.
 Prover decodes `AppStartProver.ledgerId` through `@libid/ledger` and uses
 `isTestnet()` to resolve the code-pinned
-[notary address](../../prover/notarization/docs/notarization.md#notary-address). The ledger input cannot supply
+[notary address](notarization.md#notary-address). The ledger input cannot supply
 an arbitrary endpoint or select a circuit or bb.js version. Both networks use the same assets
 and prefetch graph; Google does not use a notary.
 
@@ -175,7 +175,7 @@ A structurally valid forgery can survive these early checks and waste browser
 work, but cannot pass ledger signature verification under the trusted notary
 keys. That session commits the bearer and reveals the
 canonical `id` and `login` ranges. The OAuth bridge route is defined in
-[OAUTH_BRIDGE.md](../../../docs/oauth-bridge.md#github-token-endpoint).
+[OAUTH_BRIDGE.md](oauth-bridge.md#github-token-endpoint).
 
 The module then runs the same `bearer-link` circuit with the token-exchange and
 identity blinders. Its public-input count and order are identical to X: 64
@@ -187,3 +187,26 @@ decodes the server-returned token attestation itself; the bridge's JSON response
 does not gain a `decoded` field. GitHub-specific server exchange and transcript
 construction therefore remain platform code; no GitHub-specific proving
 circuit or proving engine exists.
+
+## Implementation guide
+
+Each platform/version owns authorization, the proof shape, asset declarations and
+its Prover pipeline. The catalog is closed and client-safe.
+
+- [Versioning](architecture.md#versioning-and-compatibility): ceremony compatibility.
+- [Result contract](client.md#result-and-lifecycle): identity and OAuth proof assembly.
+- [Normative platform profiles](../../../../specs/platform-ceremonies.md): encodings and proof statements.
+
+[index.ts](../src/platforms/index.ts) derives the public types and dispatches structural validation.
+[authorization.ts](../src/platforms/authorization.ts) provides shared digest/PKCE helpers;
+[assets.ts](../src/platforms/assets.ts) aggregates data-only declarations.
+
+| Platform | Client leaf | Prover leaf | Pipeline contract |
+|---|---|---|---|
+| Google v1 | [client](../src/platforms/google/1/client.ts) | [prover](../src/platforms/google/1/prover.ts) | [Google](pipelines.md#google) |
+| X v1 | [client](../src/platforms/x/1/client.ts) | [prover](../src/platforms/x/1/prover.ts) | [X](pipelines.md#x) |
+| GitHub v1 | [client](../src/platforms/github/1/client.ts) | [prover](../src/platforms/github/1/prover.ts) | [GitHub](pipelines.md#github) |
+
+Execution imports its asset declarations; declarations never import execution.
+See the [qualification record](qualification.md) before treating a pipeline
+as a qualified real OAuth ceremony.

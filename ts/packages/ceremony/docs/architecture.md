@@ -8,12 +8,12 @@ authoritative until ledger verification.
 
 This document defines the package boundary, public application API and
 configuration, and result lifecycle. The package's browser protocol is defined
-in [CCDP.md](../src/ccdp/docs/protocol.md), and its static distribution contract in
+in [CCDP.md](protocol.md), and its static distribution contract in
 [CCDP_DISTRIBUTION.md](distribution.md); popup lifecycle and communication
 are supplied by
 [`@libid/popup`](../../popup/README.md). Proof-generation internals are defined in
-[PROVING.md](../src/prover/docs/proving.md). Browser TLSNotary sessions and
-signed-attestation handoff are defined in [NOTARIZATION.md](../src/prover/notarization/docs/notarization.md).
+[PROVING.md](proving.md). Browser TLSNotary sessions and
+signed-attestation handoff are defined in [NOTARIZATION.md](notarization.md).
 The OAuth bridge's routes, deployment inputs, and callback response policy are
 defined in [OAUTH_BRIDGE.md](oauth-bridge.md). The package's measurement and
 export boundary is defined in [METRICS.md](metrics.md). This document and the
@@ -32,10 +32,10 @@ scope.
 Package acceptance requirements are indexed by [TEST_PLAN.md](test-plan.md).
 
 The specification's **Ceremony Client** role maps to this package's closed
-client, platform implementation, and CCDP [resources](../src/ccdp/documents/docs/documents.md#documents-and-routes)
+client, platform implementation, and CCDP [resources](documents.md#documents-and-routes)
 as a whole. Its
 **Ceremony Popup** is the auxiliary browser window containing the CCDP
-[documents](../src/ccdp/documents/docs/documents.md#documents-and-routes). `@libid/popup` owns the window and
+[documents](documents.md#documents-and-routes). `@libid/popup` owns the window and
 connection but is not a ceremony-protocol participant.
 
 ## System boundary
@@ -113,7 +113,7 @@ do not branch on it.
 
 ## Ceremony Cross-Document Protocol
 
-[CCDP.md](../src/ccdp/docs/protocol.md) defines the protocol between the Application, Callback,
+[CCDP.md](protocol.md) defines the protocol between the Application, Callback,
 and isolated Prover, including each participant's local lifecycle and
 UI. [`@libid/popup`](../../popup/README.md) carries it. This document owns only the
 package and public client contracts around them.
@@ -269,29 +269,29 @@ The package-facing API surface is:
 | `@libid/ceremony` | catalog-derived `PlatformId`, `PlatformCeremonyVersion`, `supportedPlatforms`, `ProofByPlatformVersion`, `OAuthProof`, `Identity`, and `IdentityResult` |
 | `@libid/ceremony/ccdp` | internal CCDP record types, per-record decoder companions, protocol version, and direction/order checks; no application export |
 | `@libid/ceremony/client` | `CeremonyConfig` fetch/validation, application-scoped `CeremonyClient`, stateful `Ceremony` orchestration, and public catalog/result re-exports |
-| `@libid/ceremony/callback` | [browser entrypoint](../src/ccdp/documents/docs/documents.md#callback-get-redirecturi) bundled into the complete Callback artifact; the OAuth Bridge retrieves it from the CCDP Distribution, inserts deployment data, and serves it without a separate browser script fetch |
+| `@libid/ceremony/callback` | [browser entrypoint](documents.md#callback-get-redirecturi) bundled into the complete Callback artifact; the OAuth Bridge retrieves it from the CCDP Distribution, inserts deployment data, and serves it without a separate browser script fetch |
 | `@libid/ceremony/prefetch` | dual-context browser entrypoint embedded by the versioned Prefetch document and served at the versioned Worker path |
-| `@libid/ceremony/prover` | [browser entrypoint](../src/ccdp/documents/docs/documents.md#prover-get-prover) embedded by the versioned isolated Prover document |
+| `@libid/ceremony/prover` | [browser entrypoint](documents.md#prover-get-prover) embedded by the versioned isolated Prover document |
 
-The API below and the [CCDP records](../src/ccdp/docs/protocol.md#messages)
+The API below and the [CCDP records](protocol.md#messages)
 are the launch surface.
 Implementation-private helpers may change without changing authority or wire
 behavior.
 
 ## Application integration
 
-See [Client API and lifecycle](../src/client/docs/client.md).
+See [Client API and lifecycle](client.md).
 
 ## Proof-generation subsystem
 
-[PROVING.md](../src/prover/docs/proving.md) defines pipelines, asset use, workers, caching, and
+[PROVING.md](proving.md) defines pipelines, asset use, workers, caching, and
 proof delivery; [CCDP_DISTRIBUTION.md](distribution.md) defines asset deployment. After
 `ProverReady`, the client sends one `AppStartProver`, validates the returned
 platform proof's structure, and assembles `OAuthProof`.
 
 ## Progress, cancellation, and recovery
 
-See [Client API and lifecycle](../src/client/docs/client.md).
+See [Client API and lifecycle](client.md).
 
 ## Versioning and compatibility
 
@@ -320,8 +320,8 @@ output-shape versions. A proof change normally changes the assembled
 public compatibility axis. One package release may retain older platform-version
 validators during its compatibility window.
 
-[`CCDPVersion`](../src/ccdp/documents/docs/documents.md#paths-and-versioning) independently versions CCDP
-[resources](../src/ccdp/documents/docs/documents.md#documents-and-routes), navigation, fragments, and browser
+[`CCDPVersion`](documents.md#paths-and-versioning) independently versions CCDP
+[resources](documents.md#documents-and-routes), navigation, fragments, and browser
 messages.
 CCDP paths and OAuth `state` select it before protocol code runs;
 messages do not repeat it. The OAuth bridge API

@@ -1,15 +1,15 @@
 # Ceremony Cross-Document Protocol (CCDP)
 
 This document defines the closed browser protocol across the Application and
-the [documents](../documents/docs/documents.md#documents-and-routes) it uses. It owns ceremony locations,
+the [documents](documents.md#documents-and-routes) it uses. It owns ceremony locations,
 navigations, messages, ordering, and compatibility. Authorization,
 platform-proof, and final-proof semantics are defined by the normative
-[common ceremony](../../../../../../specs/ceremony-common.md) and
-[platform ceremony](../../../../../../specs/platform-ceremonies.md) specifications.
+[common ceremony](../../../../specs/ceremony-common.md) and
+[platform ceremony](../../../../specs/platform-ceremonies.md) specifications.
 
 An authenticated, ordered, bidirectional popup connection carries CCDP
 messages unchanged. CCDP requires that connection but does not prescribe its
-implementation. [CCDP_DISTRIBUTION.md](../../../docs/distribution.md) defines the static
+implementation. [CCDP_DISTRIBUTION.md](distribution.md) defines the static
 distribution and HTTP contract for the CCDP origin.
 
 ## Actors and origins
@@ -25,7 +25,7 @@ the distinction is immaterial.
 |---|---|---|
 | Application | application origin | hosts the application document, owns the operation and ceremony state, and drives the protocol |
 | OAuth Bridge | OAuth bridge origin | publishes ceremony configuration, serves the complete Callback document obtained from the Distribution with bridge-owned inputs, owns OAuth registrations, and performs enabled confidential OAuth exchanges |
-| CCDP Distribution | CCDP origin | contains the versioned [resources](../documents/docs/documents.md#documents-and-routes) and proving assets used by any number of OAuth Bridges; it may be the canonical libID distribution or an operator-selected replacement |
+| CCDP Distribution | CCDP origin | contains the versioned [resources](documents.md#documents-and-routes) and proving assets used by any number of OAuth Bridges; it may be the canonical libID distribution or an operator-selected replacement |
 | OAuth Platform | OAuth-platform origin set | hosts authorization/login documents and issues the OAuth return |
 
 The Application and OAuth Bridge may be operated together or independently;
@@ -58,7 +58,7 @@ origin shares one browser authority and must therefore be mutually trusted.
 
 ## Documents and Routes
 
-See [CCDP documents and navigation](../documents/docs/documents.md).
+See [CCDP documents and navigation](documents.md).
 
 ## Messages
 
@@ -66,13 +66,13 @@ The following table is the complete CCDP version-1 message set.
 
 | Message | Direction | Accepted after | Cardinality and effect |
 |---|---|---|---|
-| [`PrefetchStarted`](#prefetchstarted) | Prefetch → Application | connection acceptance and selected-profile dispatch | exactly once; permits navigation to Authorization |
-| [`ProverReady`](#proverready) | Prover → Application | Prover connection acceptance and cross-origin isolation | exactly once; permits `AppStartProver` |
-| [`AppStartProver`](#appstartprover) | Application → Prover | `ProverReady` | exactly once; selects the profile for OAuth validation and proof execution |
-| [`ProverNotifyEvent`](#provernotifyevent) | Prover → Application | `AppStartProver` and valid OAuth acceptance | zero or more; advisory only |
-| [`ProverDeliverProof`](#proverdeliverproof) | Prover → Application | `AppStartProver` and valid OAuth acceptance | at most once; ends the Prover run |
-| [`CancelCeremony`](#cancelceremony) | Application → Callback or Prover; Prover → Application | active connection for Application cancellation; `AppStartProver` and valid OAuth denial for Prover cancellation | at most once; ends the run without a technical error |
-| [`AbortCeremony`](#abortceremony) | Prefetch, Callback, or Prover → Application | connection acceptance | at most once; reports technical failure and ends the run |
+| [`PrefetchStarted`](protocol.md#prefetchstarted) | Prefetch → Application | connection acceptance and selected-profile dispatch | exactly once; permits navigation to Authorization |
+| [`ProverReady`](protocol.md#proverready) | Prover → Application | Prover connection acceptance and cross-origin isolation | exactly once; permits `AppStartProver` |
+| [`AppStartProver`](protocol.md#appstartprover) | Application → Prover | `ProverReady` | exactly once; selects the profile for OAuth validation and proof execution |
+| [`ProverNotifyEvent`](protocol.md#provernotifyevent) | Prover → Application | `AppStartProver` and valid OAuth acceptance | zero or more; advisory only |
+| [`ProverDeliverProof`](protocol.md#proverdeliverproof) | Prover → Application | `AppStartProver` and valid OAuth acceptance | at most once; ends the Prover run |
+| [`CancelCeremony`](protocol.md#cancelceremony) | Application → Callback or Prover; Prover → Application | active connection for Application cancellation; `AppStartProver` and valid OAuth denial for Prover cancellation | at most once; ends the run without a technical error |
+| [`AbortCeremony`](protocol.md#abortceremony) | Prefetch, Callback, or Prover → Application | connection acceptance | at most once; reports technical failure and ends the run |
 
 Every recipient requires a plain record with the exact fields, types, and bounds
 defined below. Unknown fields, coercion, normalization, defaults, and
@@ -131,7 +131,7 @@ mean that proof generation has
 already begun.
 
 `ledgerId` is the frozen encoding of the target ledger, using the shared
-[ledger identity contract](../../../../ledger/README.md). Prover decodes and validates
+[ledger identity contract](../../ledger/README.md). Prover decodes and validates
 it before credential use. Its code-owned classification selects the notary
 address; no separate testnet flag, hash, or caller-selected notary URL is
 accepted. Google makes no notary request. This routing choice changes no proof
@@ -231,11 +231,11 @@ path and remains local.
 ## Protocol
 
 The protocol advances one named ceremony popup through
-[Prefetch](../documents/docs/documents.md#prefetch-get-prefetch),
-[Authorization](../documents/docs/documents.md#authorization-get-platformauthorizationurl),
-[Callback](../documents/docs/documents.md#callback-get-redirecturi), and
-[Prover](../documents/docs/documents.md#prover-get-prover). Those route sections own each participant's
-inputs, context, and role; [Messages](#messages) owns the records crossing the
+[Prefetch](documents.md#prefetch-get-prefetch),
+[Authorization](documents.md#authorization-get-platformauthorizationurl),
+[Callback](documents.md#callback-get-redirecturi), and
+[Prover](documents.md#prover-get-prover). Those route sections own each participant's
+inputs, context, and role; [Messages](protocol.md#messages) owns the records crossing the
 popup connection. The phases below own their sequencing, entry conditions, and
 exit conditions. Navigation retires the source document, and no later message
 can reactivate an earlier phase.
@@ -275,16 +275,16 @@ can reactivate an earlier phase.
 #### 1. Prefetch to Authorization
 
 The protocol enters this phase on user activation. The Application initiates
-one named popup's first navigation to [Prefetch](../documents/docs/documents.md#prefetch-get-prefetch) and
+one named popup's first navigation to [Prefetch](documents.md#prefetch-get-prefetch) and
 establishes its connection there. A scripted opener may first reserve the
 popup at `about:blank`; if that fails, the same activation's real anchor
 navigates it directly to Prefetch.
 
 Prefetch clears and validates its fragment, accepts the connection, registers
 the Worker, and dispatches the selected profile's fetches. It then sends
-[`PrefetchStarted`](#prefetchstarted). Only after accepting that message, the
+[`PrefetchStarted`](protocol.md#prefetchstarted). Only after accepting that message, the
 Application endpoint navigates the retained popup to
-[Authorization](../documents/docs/documents.md#authorization-get-platformauthorizationurl) at the frozen
+[Authorization](documents.md#authorization-get-platformauthorizationurl) at the frozen
 `platformAuthorizationUrl`. The Application owns this transition because it
 alone retains that URL; neither the URL nor a navigation command crosses the
 carrier. Authorization is not a participating document, so the navigation
@@ -300,13 +300,13 @@ are reported locally and release no protocol message.
 
 #### 2. Authorization to Callback
 
-This phase begins when [Authorization](../documents/docs/documents.md#authorization-get-platformauthorizationurl)
+This phase begins when [Authorization](documents.md#authorization-get-platformauthorizationurl)
 loads. The OAuth Platform owns the popup and initiates browser navigation to
 the frozen `redirectUri` after approval or denial; neither CCDP endpoint
 initiates that transition. The Bridge serves the complete
-[Callback](../documents/docs/documents.md#callback-get-redirecturi), which captures and clears the return and
+[Callback](documents.md#callback-get-redirecturi), which captures and clears the return and
 enters its bundled CCDP implementation selected by `state`. The
-[OAuth Bridge contract](../../../docs/oauth-bridge.md#callback-document) exclusively defines
+[OAuth Bridge contract](oauth-bridge.md#callback-document) exclusively defines
 ingress.
 
 Callback accepts the Application connection using the ceremony ID extracted
@@ -316,37 +316,37 @@ no OAuth-return message. Connection acceptance permits the Prover transition.
 
 #### 3. Callback to Prover
 
-The popup-side [Callback](../documents/docs/documents.md#callback-get-redirecturi) endpoint asks its connection
-to navigate to the frozen [Prover](../documents/docs/documents.md#prover-get-prover) location, supplying the
+The popup-side [Callback](documents.md#callback-get-redirecturi) endpoint asks its connection
+to navigate to the frozen [Prover](documents.md#prover-get-prover) location, supplying the
 ceremony ID and captured query/fragment as that route's structured fragment.
 Callback owns this transition to keep the return private from Application and
 because the OAuth Platform may have severed Application's direct popup handle.
 
 Prover captures and clears the fragment, then accepts the same logical
-Application connection. It sends [`ProverReady`](#proverready) only after
+Application connection. It sends [`ProverReady`](protocol.md#proverready) only after
 cross-origin isolation is established and its CCDP handlers are installed.
 Connection establishment and any internal isolation transition are below CCDP:
 neither introduces another participant, message, or phase. The captured
 parameters survive that transition without passing through Application.
 
 Application accepts one `ProverReady` and sends one
-[`AppStartProver`](#appstartprover) using its frozen configuration and code
+[`AppStartProver`](protocol.md#appstartprover) using its frozen configuration and code
 verifier. It does not receive or parse the OAuth return. On receiving
 `AppStartProver`, the selected platform/version validates the retained return
 before credential use. A valid denial sends
-[`CancelCeremony`](#cancelceremony); malformed or mismatched input sends
-[`AbortCeremony`](#abortceremony). Both end the run in this phase, as does
+[`CancelCeremony`](protocol.md#cancelceremony); malformed or mismatched input sends
+[`AbortCeremony`](protocol.md#abortceremony). Both end the run in this phase, as does
 Application cancellation. Only valid OAuth acceptance enters Phase 4.
 
 #### 4. Prover execution
 
-This phase begins only after [Prover](../documents/docs/documents.md#prover-get-prover) has validated and
+This phase begins only after [Prover](documents.md#prover-get-prover) has validated and
 accepted the OAuth return in Phase 3. It performs the selected profile's token
 exchange, notarization, and proof-generation steps as applicable. It sends zero or more
-[`ProverNotifyEvent`](#provernotifyevent) messages followed by one
-[`ProverDeliverProof`](#proverdeliverproof), unless it sends
-[`AbortCeremony`](#abortceremony) or receives
-[`CancelCeremony`](#cancelceremony). The first terminal outcome—proof
+[`ProverNotifyEvent`](protocol.md#provernotifyevent) messages followed by one
+[`ProverDeliverProof`](protocol.md#proverdeliverproof), unless it sends
+[`AbortCeremony`](protocol.md#abortceremony) or receives
+[`CancelCeremony`](protocol.md#cancelceremony). The first terminal outcome—proof
 delivery, abort, or cancellation—ends the phase; later messages have no effect.
 
 ### Terminal outcomes
@@ -361,7 +361,7 @@ abort rejects the live ceremony; a failure before connection acceptance is
 rendered locally. CCDP
 initiates no further navigation: the Application composition alone decides
 whether to retain, navigate, or close the popup because any subsequent flow is
-outside CCDP. Terminal cleanup follows the [invariants](#invariants).
+outside CCDP. Terminal cleanup follows the [invariants](protocol.md#invariants).
 
 ### Successful sequence
 
@@ -419,5 +419,17 @@ sequenceDiagram
 ```
 
 Terminal exits are shown without their cleanup details, which follow
-[Terminal outcomes](#terminal-outcomes) and the [message contracts](#messages).
+[Terminal outcomes](protocol.md#terminal-outcomes) and the [message contracts](protocol.md#messages).
 Carrier mechanics and proof-generation internals are omitted.
+
+## Implementation guide
+
+Pure message types, decoder companions and navigation encodings shared by the Client
+and document entrypoints. The public `@libid/ceremony/ccdp` export stays browser-free.
+
+- [Documents](documents.md#implementation-guide): Callback, Prefetch and Prover entrypoints.
+- [Routes and fragments](documents.md): versioned locations and private handoff.
+
+[index.ts](../src/ccdp/index.ts) defines the seven message companions. [navigation.ts](../src/ccdp/navigation.ts)
+owns fragment codecs and state routing. `@libid/popup` supplies authenticated delivery,
+window lifecycle and continuity; CCDP owns no carrier implementation.

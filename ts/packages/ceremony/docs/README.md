@@ -1,25 +1,26 @@
 # Ceremony documentation
 
-Start with the [package guide](../README.md) and [architecture](architecture.md).
-Package-wide contracts live here; module contracts live beside their implementations.
-Each directory README links to the relevant contract.
+All package documentation lives in this directory.
 
-| Area | Guide and contract |
-|---|---|
-| Application API | [Client](../src/client/README.md) · [client contract](../src/client/docs/client.md) |
-| Cross-document protocol | [CCDP](../src/ccdp/README.md) · [messages and ordering](../src/ccdp/docs/protocol.md) |
-| Popup documents | [Entrypoints](../src/ccdp/documents/README.md) · [routes and navigation](../src/ccdp/documents/docs/documents.md) |
-| Platform implementations | [Platforms](../src/platforms/README.md) · [proof pipelines](../src/platforms/docs/pipelines.md) |
-| Proving | [Proof engine](../src/prover/README.md) · [proving contract](../src/prover/docs/proving.md) |
-| Notarization | [TLSNotary adapter](../src/prover/notarization/README.md) · [notarization contract](../src/prover/notarization/docs/notarization.md) |
-| Prefetch | [Worker and cache](../src/prefetch/README.md) · [cache lifecycle](../src/prefetch/docs/prefetch.md) |
-| Static distribution | [Build](../build/README.md) · [distribution contract](distribution.md) |
-| OAuth Bridge | [External server contract](oauth-bridge.md) |
-| Metrics | [Measurement contract](metrics.md); completeness is deferred |
-| Verification | [Test requirements](test-plan.md) · [traceability](traceability.md) · [qualification and blockers](qualification.md) |
+- [Package guide](overview.md): application usage, package layout, build and checks.
+- [Architecture](architecture.md): ownership, public boundaries and versioning.
+- [Source guide](source.md): implementation map.
+- [Client](client.md): configuration, construction, results and lifecycle.
+- [CCDP](protocol.md): messages, ordering and terminal outcomes.
+- [Documents](documents.md): Callback, Prefetch and Prover entrypoints and navigation.
+- [Platform pipelines](pipelines.md): Google, X and GitHub execution.
+- [Proving](proving.md): proof workers, toolchain and dependency loaders.
+- [Notarization](notarization.md): TLSNotary sessions and attestation contracts.
+- [Prefetch](prefetch.md): root Service Worker, byte caching and pending requests.
+- [Distribution](distribution.md): static artifacts, routes and response policies.
+- [Build](build.md): compiler and deployment tooling.
+- [OAuth Bridge](oauth-bridge.md): external server contract.
+- [Metrics](metrics.md): measurement contract; completeness is deferred.
+- [Browser tests](browser-tests.md): HTTPS harness and proving qualification.
+- [Test requirements](test-plan.md), [traceability](traceability.md), and
+  [qualification](qualification.md): required coverage, evidence and remaining gaps.
 
-These contracts originate in architecture PR #13 at
-`412df215b93473f79fae75df602f6b0be42b13a9`. Sections were moved into their owning
-modules, with cross-links and the package map updated. Requirement IDs are unchanged.
-[Qualification](qualification.md) records implementation deviations and remaining qualification gaps. The upstream nonce/signature and bound amendments
-are committed in this source revision.
+The architecture contracts originate in PR #13 at
+`412df215b93473f79fae75df602f6b0be42b13a9`, reorganized here with implementation
+guides. Requirement IDs are unchanged. [Qualification](qualification.md) records
+implementation deviations and remaining qualification gaps.
