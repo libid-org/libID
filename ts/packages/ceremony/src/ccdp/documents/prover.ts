@@ -4,13 +4,15 @@ import { claimRootWorker } from '../../prefetch/registration.js'
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { AbortCeremony } from '../index.js'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
-import { AppStartProver, CancelCeremony, ProverNotifyEvent, ProverDeliverProof } from '../index.js'
+import { AppStartProver, CancelCeremony, ProverNotifyEvent, ProverIdentityProof } from '../index.js'
 import { readProver, route } from '../navigation.js'
 import { progressView, view } from '../../ui.js'
 import type { ProverContext } from '../../prover/context.js'
 const implementations: Record<
   string,
-  () => Promise<{ prove(context: ProverContext): Promise<unknown | null> }>
+  () => Promise<{
+    prove(context: ProverContext): Promise<Omit<ProverIdentityProof, 'type'> | null>
+  }>
 > = {
   google: () => import('../../platforms/google/1/prover.js'),
   x: () => import('../../platforms/x/1/prover.js'),
@@ -99,15 +101,15 @@ export async function startProver(fragment: string): Promise<void> {
       retained = undefined
       void implementations[request.platformId as keyof typeof implementations]()
         .then((module) => module.prove(context))
-        .then((proof) => {
+        .then((result) => {
           if (ended) return
-          if (proof === null) {
+          if (result === null) {
             connection!.send({ type: 'cancel-ceremony' })
             cleanup()
             view('Authorization declined. Return to your application.')
             return
           }
-          connection!.send(ProverDeliverProof.decode({ type: 'prover-deliver-proof', proof }))
+          connection!.send(ProverIdentityProof.decode({ type: 'prover-identity-proof', ...result }))
           ui!.update(1, 'Proof delivered')
           cleanup()
         })

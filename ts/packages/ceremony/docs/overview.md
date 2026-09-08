@@ -31,13 +31,9 @@ const connection = PopupConnection.connect(popup, {
   connectionId: id,
   allowedPopupOrigins: ['https://bridge.example', 'https://proofs.example'],
 })
-const ceremony = client.new(id, {
-  connection,
-  platformId: 'google',
-  ledgerId,        // LedgerId from @libid/ledger (encode/hash/isTestnet)
-  operationDomain, // 32-byte hash from application composition
-  transactionData, // exact application-owned transaction bytes
-})
+const ceremony = client.new(
+  connection, id, ledgerId, 'google', operationDomain, transactionData,
+)
 anchor.href = ceremony.launchUrl
 if (popup.opened) event.preventDefault() // otherwise allow the real anchor
 const off = ceremony.onEvent(({ stage, platformStep }) => {
@@ -46,7 +42,8 @@ const off = ceremony.onEvent(({ stage, platformStep }) => {
 try {
   const result = await ceremony.proveUserIdentity()
   if (result.status === 'accepted') {
-    // Submit result.oauthProof through the application's chosen ledger adapter.
+    // Pass result.identity, result.oauthProof and the original operation inputs
+    // to the application's chosen ledger adapter.
     // Accepted means structurally accepted Prover output, not ledger verification.
   }
 } finally {
@@ -74,8 +71,8 @@ The browser does not verify final proofs or notary signatures. Google nonce pars
 and circuit binding remain; no expected-digest field crosses from Client to Prover.
 GitHub token admission checks canonical structure, profile/request bindings and
 opening correlation before using the bearer. Identity extraction stays in Prover;
-Client only validates the selected proof's structure and wraps retained authorization
-inputs. Original attested bytes and signatures are preserved for downstream checks.
+Client validates the separate identity and proof structures, matches the OAuth client
+identifier, and wraps the proof with its selected version and authorization nonce. Original attested bytes and signatures are preserved for downstream checks.
 
 ## Package layout
 

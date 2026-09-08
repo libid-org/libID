@@ -1,3 +1,4 @@
+import type { Identity } from '../../types.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { b64urlDecode, isRecord } from '../../../primitives.js'
 import { decodeGoogleHeader, decodeGoogleIdToken, type DecodedGoogleIdToken } from './token.js'
@@ -48,6 +49,7 @@ export interface GoogleCircuitInputs extends Record<string, unknown> {
 
 export interface BuiltGoogleWitness {
   inputs: GoogleCircuitInputs
+  identity: Identity<'google'>
   proofFields: Omit<GoogleProofV1, 'identityProof'>
 }
 
@@ -186,8 +188,8 @@ function buildWitness(token: ParsedGoogleIdToken, jwk: unknown): BuiltGoogleWitn
       exp: expString,
       modulus: limbs(modulusInteger),
     },
+    identity: { platformId: 'google', oauthClientId: aud, userId: sub, userName: email },
     proofFields: {
-      identity: { platformId: 'google', oauthClientId: aud, userId: sub, userName: email },
       tokenExpiresAt: exp,
       signingKeyModulus: modulus,
     },

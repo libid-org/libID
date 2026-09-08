@@ -1,5 +1,6 @@
+import type { Identity } from '../../types.js'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { RSA_MODULUS_BYTES, type GoogleProofV1, validateProof } from './types.js'
+import { RSA_MODULUS_BYTES, type GoogleProofV1, validateProof, validateIdentity } from './types.js'
 
 const encoder = new TextEncoder()
 
@@ -30,20 +31,21 @@ function modulusLimbs(modulus: Uint8Array): string[] {
 /** Flatten Google v1's named proof values into the exact 56 verifier fields. */
 export function buildGooglePublicInputs(
   authorizationDigest: Uint8Array,
+  identity: Identity<'google'>,
   value: GoogleProofV1,
 ): string[] {
   const proof = validateProof(value)
-  if (!proof) throw new Error('invalid Google proof')
+  validateIdentity(identity)
   if (authorizationDigest.length !== 32) {
     throw new Error('authorizationDigest must be exactly 32 bytes')
   }
-  const audienceHash = sha256(encoder.encode(proof.identity.oauthClientId))
+  const audienceHash = sha256(encoder.encode(identity.oauthClientId))
   return [
     ...Array.from(authorizationDigest, field),
     field(integer(audienceHash.subarray(0, 16))),
     field(integer(audienceHash.subarray(16))),
-    ...packed(proof.identity.userId, 1),
-    ...packed(proof.identity.userName, 2),
+    ...packed(identity.userId, 1),
+    ...packed(identity.userName, 2),
     field(proof.tokenExpiresAt),
     ...modulusLimbs(proof.signingKeyModulus),
   ]
@@ -53,9 +55,10 @@ export function buildGooglePublicInputs(
 export function validateGooglePublicInputs(
   value: unknown,
   authorizationDigest: Uint8Array,
+  identity: Identity<'google'>,
   proof: GoogleProofV1,
 ): value is string[] {
   if (!Array.isArray(value)) return false
-  const expected = buildGooglePublicInputs(authorizationDigest, proof)
+  const expected = buildGooglePublicInputs(authorizationDigest, identity, proof)
   return value.length === expected.length && value.every((item, index) => item === expected[index])
 }

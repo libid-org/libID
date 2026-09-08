@@ -37,13 +37,14 @@ anchor.addEventListener('click', (event) => {
     () => Object.assign(window, { afterReady: true }),
   )
   connection.closed.then((closed) => Object.assign(window, { ceremonyClosed: closed }))
-  const ceremony = client.new(id, {
+  const ceremony = client.new(
     connection,
-    ledgerId: LedgerId.decode(new URL(location.href).searchParams.get('ledger') ?? 'test:testnet'),
-    operationDomain: new Uint8Array(32),
-    transactionData: new Uint8Array([1]),
-    platformId: 'google',
-  })
+    id,
+    LedgerId.decode(new URL(location.href).searchParams.get('ledger') ?? 'test:testnet'),
+    'google',
+    new Uint8Array(32),
+    new Uint8Array([1]),
+  )
   anchor.href = ceremony.launchUrl
   Object.assign(window, { cancel: () => ceremony.cancel(), ceremony })
   ceremony.onEvent((event) => (window as unknown as { events: unknown[] }).events.push(event))

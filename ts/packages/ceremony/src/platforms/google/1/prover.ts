@@ -1,3 +1,4 @@
+import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { isRecord } from '../../../primitives.js'
@@ -18,7 +19,9 @@ const spans = [
   { code: 'circuit-inputs', label: 'Preparing proof inputs', weight: 2 },
   ...PROOF_ENGINE_SPANS,
 ]
-export async function prove(context: ProverContext): Promise<GoogleProofV1 | null> {
+export async function prove(
+  context: ProverContext,
+): Promise<{ identity: Identity<'google'>; proof: GoogleProofV1 } | null> {
   const { request, signal, onProgress } = context
   signal.throwIfAborted()
   const returned = parseOAuthReturn(context.oauthReturn)
@@ -76,11 +79,12 @@ export async function prove(context: ProverContext): Promise<GoogleProofV1 | nul
       !validateGooglePublicInputs(
         raw.publicInputs,
         new Uint8Array(built.inputs.authorization_digest),
+        built.identity,
         proof,
       )
     )
       throw new Error('Google public input mismatch')
-    return proof
+    return { identity: built.identity, proof }
   } finally {
     engine.destroy()
     progress.failActive()

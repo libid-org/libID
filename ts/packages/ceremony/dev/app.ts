@@ -79,13 +79,14 @@ launch.addEventListener('click', (event) => {
       allowedPopupOrigins: [...new Set([settings.bridge, settings.ccdp])],
     })
     connection = current
-    ceremony = client.new(id, {
-      connection: current,
-      ledgerId: LedgerId.decode('test:testnet'),
-      platformId: platform.value as PlatformId,
-      operationDomain: sha256(new TextEncoder().encode('libid/ceremony/dev')),
-      transactionData: new TextEncoder().encode('Ceremony development walkthrough'),
-    })
+    ceremony = client.new(
+      current,
+      id,
+      LedgerId.decode('test:testnet'),
+      platform.value as PlatformId,
+      sha256(new TextEncoder().encode('libid/ceremony/dev')),
+      new TextEncoder().encode('Ceremony development walkthrough'),
+    )
   } catch {
     event.preventDefault()
     status.textContent = 'Could not start the ceremony. Close any remaining popup and retry.'

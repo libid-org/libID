@@ -193,17 +193,18 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
     .toBe('accepted')
   const result = await page.evaluate(() => {
     const result = window.result
-    if (result?.status !== 'accepted' || result.oauthProof.platformId !== 'google')
+    if (result?.status !== 'accepted' || result.identity.platformId !== 'google')
       throw new Error('Missing Google proof')
     const proof = result.oauthProof.proof
     return {
+      identity: result.identity,
       ...proof,
       identityProof: Array.from(proof.identityProof),
       signingKeyModulus: Array.from(proof.signingKeyModulus),
     }
   })
   const proof: GoogleProofV1 = {
-    ...result,
+    tokenExpiresAt: result.tokenExpiresAt,
     identityProof: Uint8Array.from(result.identityProof),
     signingKeyModulus: Uint8Array.from(result.signingKeyModulus),
   }
@@ -216,7 +217,7 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
     output,
     JSON.stringify({
       proof: result.identityProof,
-      publicInputs: buildGooglePublicInputs(digest, proof),
+      publicInputs: buildGooglePublicInputs(digest, result.identity, proof),
     }),
   )
   execFileSync(

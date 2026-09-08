@@ -1,6 +1,6 @@
 import { parseJson } from '../../../prover/json.js'
 import { b64urlDecode } from '../../../primitives.js'
-import { MAX_AUD_BYTES, MAX_EMAIL_BYTES, MAX_SUB_BYTES } from './types.js'
+import { MAX_AUD_BYTES, MAX_EMAIL_BYTES, MAX_SUB_BYTES, printableWithoutQuote } from './types.js'
 
 export interface GoogleIdTokenClaims {
   iss: string
@@ -22,7 +22,6 @@ export interface DecodedGoogleIdToken {
 }
 
 const text = new TextDecoder('utf-8', { fatal: true })
-const printableWithoutQuote = /^[\x20-\x21\x23-\x7e]+$/
 
 function json(bytes: Uint8Array): Record<string, unknown> | null {
   try {

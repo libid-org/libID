@@ -56,8 +56,11 @@ export declare function validateProofMessage<
 >(
   platformId: P,
   platformCeremonyVersion: V,
-  message: ProverDeliverProof,
-): ProverDeliverProof & { proof: ProofByPlatformVersion[P][V] }
+  message: ProverIdentityProof,
+): ProverIdentityProof & {
+  identity: Identity<P>
+  proof: ProofByPlatformVersion[P][V]
+}
 
 export const supportedPlatforms: readonly PlatformId[] = Object.freeze(
   Object.keys(platforms) as PlatformId[],
@@ -66,14 +69,12 @@ export const supportedPlatforms: readonly PlatformId[] = Object.freeze(
 interface CeremonyClient {
   readonly enabledPlatforms: readonly PlatformId[]
   new: <P extends PlatformId>(
+    conn: PopupConnection<Message>,
     ceremonyId: string,
-    input: {
-      connection: PopupConnection<Message>
-      ledgerId: LedgerId
-      platformId: P
-      operationDomain: Uint8Array
-      transactionData: Uint8Array
-    },
+    ledgerId: LedgerId,
+    platformId: P,
+    operationDomain: Uint8Array,
+    transactionData: Uint8Array,
   ) => Ceremony<P>
 }
 ```
@@ -126,8 +127,9 @@ values before constructing OAuth or allowing OAuth-platform navigation. Client
 initialization has already fetched and validated `CeremonyConfig`, so `new`
 does only local synchronous work.
 
-`CeremonyClient.new(ceremonyId, input)` accepts a plain string which must be a
-lowercase UUIDv4. A composition normally generates one value and calls it
+`CeremonyClient.new` takes six positional arguments in the order shown above;
+there is no separate input object. `ceremonyId` is a plain string which must be
+a lowercase UUIDv4. A composition normally generates one value and calls it
 `jobId` in its Job API and `ceremonyId` in this API. The equality is a
 composition invariant, not a shared branded type. The identifier is not chain
 authorization, but its unpredictability and one-use handling provide browser
@@ -188,13 +190,14 @@ function activate(event: MouseEvent) {
     connectionId: ceremonyId,
     allowedPopupOrigins: [ccdpOrigin, new URL(redirectUri).origin],
   })
-  const ceremony = ceremonies.new(ceremonyId, {
+  const ceremony = ceremonies.new(
     connection,
+    ceremonyId,
     ledgerId,
     platformId,
     operationDomain,
     transactionData,
-  })
+  )
 
   anchor.href = ceremony.launchUrl
   anchor.target = target
@@ -214,9 +217,10 @@ the CCDP version, and the authenticated connection's ceremony ID. A valid
 OAuth denial sends `CancelCeremony`, making the client resolve a denied
 `IdentityResult`. Malformed returns and technical failures use
 `AbortCeremony` and reject. Only accepted OAuth proceeds to proof execution.
-On proof delivery the client structurally validates the selected platform/version
-proof, wraps it with retained authorization fields, and resolves an accepted
-`IdentityResult`. A locally canceled ceremony ignores any later remote result.
+On proof delivery the client structurally validates the separate identity and
+selected platform/version proof, adds the version and retained authorization
+nonce to `OAuthProof`, and resolves an accepted `IdentityResult`. A locally
+canceled ceremony ignores any later remote result.
 
 The ceremony never closes its popup. The application composition owns whether
 to retain, navigate, or close the window after any result, cancellation, or
@@ -254,21 +258,18 @@ interface Identity<P extends PlatformId = PlatformId> {
 }
 
 interface GoogleProofV1 {
-  identity: Identity<'google'>
   identityProof: Uint8Array
   tokenExpiresAt: number        // exact signed exp
   signingKeyModulus: Uint8Array
 }
 
 interface XProofV1 {
-  identity: Identity<'x'>
   bearerLinkProof: Uint8Array
   tokenAttestation: NotaryAttestation
   identityAttestation: NotaryAttestation
 }
 
 interface GitHubProofV1 {
-  identity: Identity<'github'>
   bearerLinkProof: Uint8Array
   tokenAttestation: NotaryAttestation
   identityAttestation: NotaryAttestation
@@ -277,18 +278,21 @@ interface GitHubProofV1 {
 type OAuthProof<P extends PlatformId = PlatformId> = {
   [K in P]: {
     [V in SupportedCeremonyVersion<K>]: {
-      platformId: K
       platformCeremonyVersion: V
-      operationDomain: Uint8Array      // exactly 32 bytes
       authorizationNonce: Uint8Array   // exactly 32 bytes
-      transactionData: Uint8Array      // bounded opaque bytes
       proof: ProofByPlatformVersion[K][V]
     }
   }[SupportedCeremonyVersion<K>]
 }[P]
 
 type IdentityResult<P extends PlatformId = PlatformId> =
-  | { status: 'accepted'; oauthProof: OAuthProof<P> }
+  | {
+      [K in P]: {
+        status: 'accepted'
+        identity: Identity<K>
+        oauthProof: OAuthProof<K>
+      }
+    }[P]
   | { status: 'denied' }
 
 ```
@@ -296,27 +300,30 @@ type IdentityResult<P extends PlatformId = PlatformId> =
 The platform type selected in `CeremonyClient.new` flows through `Ceremony`,
 `IdentityResult`, and `OAuthProof`. A literal platform input therefore returns
 the corresponding `proof` type; a dynamic `PlatformId` returns the platform
-proof union. The mapped-union form preserves the relationship between each
-`platformId`, `platformCeremonyVersion`, and proof type when a dynamic result is
-narrowed. Adding a platform or version extends the closed catalog, not
-`OAuthProof` or CCDP.
+proof union. The mapped unions preserve the relationship between
+`identity.platformId`, `oauthProof.platformCeremonyVersion`, and the proof type.
+A nested `identity.platformId` check alone does not narrow the sibling
+`oauthProof` in TypeScript; dynamic callers use a platform/version result guard
+when they need platform-specific fields. Adding a platform or version extends
+the closed catalog, not `OAuthProof` or CCDP.
 
 Callers do not supply a generic explicitly. A static platform literal flows
 through `new` and `proveUserIdentity()`:
 
 ```ts
-const ceremony = ceremonies.new(jobId, {
+const ceremony = ceremonies.new(
   connection,
+  jobId,
   ledgerId,
-  platformId: 'google',
+  'google',
   operationDomain,
   transactionData,
-})
+)
 
 const result = await ceremony.proveUserIdentity()
 if (result.status === 'accepted') {
-  result.oauthProof.proof.identity.userName // Google's exact signed email
-  result.oauthProof.proof.identityProof     // GoogleProofV1
+  result.identity.userName             // Google's exact signed email
+  result.oauthProof.proof.identityProof // GoogleProofV1
 }
 ```
 
@@ -330,9 +337,9 @@ construction, OAuth request and return handling, platform proof construction,
 and assembly of the final `OAuthProof`. It does not version a chain, Registry,
 or verifier contract; multiple chain-specific Consumers may accept the same
 ceremony output.
-The selected `PlatformCeremonyVersion` is also the proof-shape discriminator in
-`OAuthProof`; there is no independent proof or contract-verifier version. Each
-current platform has only version `1`. A new ceremony version must add its own
+Together with `Identity.platformId`, the selected `PlatformCeremonyVersion`
+identifies the proof shape; there is no independent proof or contract-verifier
+version. Each current platform has only version `1`. A new ceremony version must add its own
 version slice, proof type, and validator, even when it deliberately retains the
 same fields. The caller cannot select a version directly.
 `authorizationNonce` is exactly 32 cryptographically random bytes. For X and
@@ -343,8 +350,11 @@ retains the nonce until the token exchange has completed. The accepted
 reproduce the binding. Exact authorization and PKCE encoding are delegated to
 the normative ceremony specification.
 
-`OAuthProof<P>` is the single exact wrapper assembled by the Ceremony Client;
-its nested `proof` varies by platform and ceremony version. Each version's
+`OAuthProof<P>` contains only the internally selected ceremony version,
+client-generated authorization nonce, and platform-specific `proof`.
+`IdentityResult` carries `identity` beside it, not inside the platform proof.
+`platformId` is already in `Identity`; `operationDomain` and `transactionData`
+are caller-owned ceremony inputs and are not returned. Each version's
 `types` leaf owns that proof type and structural validator. Each platform
 retains its own proof type even when fields coincide. Proof-byte names describe
 the statement: Google's `identityProof` proves its signed identity claims;
@@ -366,30 +376,34 @@ decoder or WASM.
 
 `GoogleProofV1` names the circuit's semantic public values rather than exposing
 bb.js's ordered field array. The Google adapter's pure
-`buildGooglePublicInputs(authorizationDigest, proof)` helper hashes and packs
-those values, including `identity.oauthClientId`, `identity.userId`, and
+`buildGooglePublicInputs(authorizationDigest, identity, proof)` helper hashes and packs
+those values from the separate identity and platform proof, including
+`identity.oauthClientId`, `identity.userId`, and
 `identity.userName`, into the circuit's exact 56-field verifier input only at the
 verifier/transaction-encoding boundary. The Ceremony Client does not call it to
 verify the proof. Google has no attestation from which the Platform Verifier
 could recover these values, so they remain proof inputs. For X and GitHub,
 the Platform Verifiers reconstruct the bearer commitments, client identifier,
-identity, and evidence time from verified attestation bytes. Their browser
-`identity` and `decoded` fields are convenience views for UI and diagnostics,
-not additional verifier inputs.
+identity, and evidence time from verified attestation bytes. Their separate
+browser `identity` and attestation `decoded` fields are convenience views for
+UI and diagnostics, not additional verifier inputs.
 
 Neither `OAuthProof` nor its platform proof contains chain ID or Authorization
 Digest: the Proof Verifier observes the former from its chain environment and
 recomputes the latter. No proof record adds a verifier address, verification
-key, caller-selected validity bound, or normalized handle. Ledger serialization
-omits the attestation `decoded` views and X/GitHub's convenience `identity`;
-it passes the original signed bytes unchanged. Changing a convenience view
+key, caller-selected validity bound, or normalized handle. The composition
+assembles ledger submission from its original operation inputs and the accepted
+`IdentityResult`; the reduced `OAuthProof` alone is not a complete submission.
+Ledger serialization omits the attestation `decoded` views and X/GitHub's
+convenience `identity`; it passes the original signed bytes unchanged. Changing a convenience view
 cannot change authoritative ledger identity or evidence time.
 
 The Ceremony Client calls `validateProofMessage` with its retained platform and
-version, then constructs `OAuthProof` from the typed value and its retained
-authorization fields. Validation checks exact shapes, field types, bounds,
-and the selected platform identity; it does not parse attestation bytes,
-derive identity, repeat prover-side evidence checks, recompute the retained
+version, returns the decoded `identity` separately, and constructs `OAuthProof`
+from the typed platform proof, selected version, and retained authorization nonce.
+Validation checks exact shapes, field types, bounds, the selected platform, and
+the identity's OAuth client identifier against the frozen client; it does not
+parse attestation bytes, derive identity, repeat prover-side evidence checks, recompute the retained
 digest, or cryptographically verify the proof. Prover-side platform code owns
 canonical evidence parsing and configured-client checks.
 Neither endpoint performs a separate Google nonce-versus-expected-digest
@@ -410,15 +424,15 @@ The live `Ceremony` privately retains its ID, copied operation inputs, selected
 platform and ceremony version, authorization nonce and digest, OAuth client and
 redirect, derived code verifier, and supplied popup connection. A restart creates a fresh Ceremony
 with a fresh nonce, digest, and verifier. After proof acceptance, the Job may
-store the accepted `IdentityResult` and its public `OAuthProof` fields. Before
+store the accepted `IdentityResult` alongside its original operation inputs. Before
 acceptance, no Job or IndexedDB index stores the authorization nonce or digest,
 code verifier, OAuth-platform credential, or private witness. No separate OAuth-state
 value or pre-proof checkpoint is ever persisted.
 
 The ceremony receives no action kind, job revision, chain RPC, Registry client,
 wallet key, threshold, fee, connector, transaction submitter, database,
-`CryptoKey`, or arbitrary callback. Its output contains the exact `OAuthProof`
-but no live bearer credential, private witness, wallet signature, fee quote,
+`CryptoKey`, or arbitrary callback. Its output contains separate `Identity`
+and `OAuthProof` but no live bearer credential, private witness, wallet signature, fee quote,
 or transaction submission capability.
 
 All records are exact-shape and bounds validated without coercion. Ceremony IDs are

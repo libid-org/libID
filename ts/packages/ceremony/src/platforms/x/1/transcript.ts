@@ -1,10 +1,9 @@
+import { isUserId } from '../../types.js'
+import { isUserName } from './types.js'
 import { findUnique, quotedRange, decodePrintable } from '../../../prover/transcript.js'
 import { bytesEqual } from '../../../primitives.js'
 import type { ByteRange, RevealRanges, Transcript } from '../../../prover/notarization/notarize.js'
 import type { ExactHttpRequest } from '../../../prover/notarization/session.js'
-const isXUserId = (value: string) =>
-  /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 0xffffffffffffffffn
-const isXHandle = (value: string) => /^[A-Za-z0-9_]{1,15}$/.test(value)
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
 const TOKEN_LINE = encoder.encode('POST /2/oauth2/token HTTP/1.1\r\n')
@@ -137,7 +136,7 @@ export function identityFromReveals(reveals: readonly Uint8Array[]): {
     if (bytesEqual(reveal.subarray(0, USER_ID.length), USER_ID) && reveal.at(-1) === 0x22) {
       if (userId !== null) return invalid('identity id reveal is duplicated')
       const value = decodePrintable(reveal.subarray(USER_ID.length, -1), 'identity id', 20)
-      if (!isXUserId(value)) return invalid('identity id is not canonical')
+      if (!isUserId(value)) return invalid('identity id is not canonical')
       userId = value
     } else if (
       bytesEqual(reveal.subarray(0, USERNAME.length), USERNAME) &&
@@ -145,7 +144,7 @@ export function identityFromReveals(reveals: readonly Uint8Array[]): {
     ) {
       if (handle !== null) return invalid('identity username reveal is duplicated')
       const value = decodePrintable(reveal.subarray(USERNAME.length, -1), 'identity username', 15)
-      if (!isXHandle(value)) return invalid('identity username is not canonical')
+      if (!isUserName(value)) return invalid('identity username is not canonical')
       handle = value
     } else {
       return invalid('identity response contains an unexpected reveal')

@@ -66,13 +66,13 @@ The following table is the complete CCDP version-1 message set.
 
 | Message | Direction | Accepted after | Cardinality and effect |
 |---|---|---|---|
-| [`PrefetchStarted`](protocol.md#prefetchstarted) | Prefetch → Application | connection acceptance and selected-profile dispatch | exactly once; permits navigation to Authorization |
-| [`ProverReady`](protocol.md#proverready) | Prover → Application | Prover connection acceptance and cross-origin isolation | exactly once; permits `AppStartProver` |
-| [`AppStartProver`](protocol.md#appstartprover) | Application → Prover | `ProverReady` | exactly once; selects the profile for OAuth validation and proof execution |
-| [`ProverNotifyEvent`](protocol.md#provernotifyevent) | Prover → Application | `AppStartProver` and valid OAuth acceptance | zero or more; advisory only |
-| [`ProverDeliverProof`](protocol.md#proverdeliverproof) | Prover → Application | `AppStartProver` and valid OAuth acceptance | at most once; ends the Prover run |
-| [`CancelCeremony`](protocol.md#cancelceremony) | Application → Callback or Prover; Prover → Application | active connection for Application cancellation; `AppStartProver` and valid OAuth denial for Prover cancellation | at most once; ends the run without a technical error |
-| [`AbortCeremony`](protocol.md#abortceremony) | Prefetch, Callback, or Prover → Application | connection acceptance | at most once; reports technical failure and ends the run |
+| [`PrefetchStarted`](#prefetchstarted) | Prefetch → Application | connection acceptance and selected-profile dispatch | exactly once; permits navigation to Authorization |
+| [`ProverReady`](#proverready) | Prover → Application | Prover connection acceptance and cross-origin isolation | exactly once; permits `AppStartProver` |
+| [`AppStartProver`](#appstartprover) | Application → Prover | `ProverReady` | exactly once; selects the profile for OAuth validation and proof execution |
+| [`ProverNotifyEvent`](#provernotifyevent) | Prover → Application | `AppStartProver` and valid OAuth acceptance | zero or more; advisory only |
+| [`ProverIdentityProof`](#proveridentityproof) | Prover → Application | `AppStartProver` and valid OAuth acceptance | at most once; ends the Prover run |
+| [`CancelCeremony`](#cancelceremony) | Application → Callback or Prover; Prover → Application | active connection for Application cancellation; `AppStartProver` and valid OAuth denial for Prover cancellation | at most once; ends the run without a technical error |
+| [`AbortCeremony`](#abortceremony) | Prefetch, Callback, or Prover → Application | connection acceptance | at most once; reports technical failure and ends the run |
 
 Every recipient requires a plain record with the exact fields, types, and bounds
 defined below. Unknown fields, coercion, normalization, defaults, and
@@ -177,18 +177,29 @@ nonnegative `performance.timeOrigin + performance.now()` value in milliseconds.
 It permits same-browser ordering and duration diagnostics but grants no
 authority.
 
-### ProverDeliverProof
+### ProverIdentityProof
 
 ```ts
-interface ProverDeliverProof {
-  type: 'prover-deliver-proof'
+interface ProverIdentityProof {
+  type: 'prover-identity-proof'
+  identity: {
+    platformId: string
+    oauthClientId: string
+    userId: string
+    userName: string
+  }
   proof: unknown
 }
 ```
 
-`proof` is the exact value defined by the selected platform ceremony version.
-CCDP treats it as opaque and the selected platform validator checks it; adding a
-platform does not change this message.
+`identity` is a separate, exact-shaped record of prover-extracted strings:
+platform identifier, OAuth client identifier, user identifier, and user name
+(the signed email for Google). The selected platform validator checks their
+encodings and the platform/client binding to `AppStartProver`.
+`proof` is the exact value defined by that platform ceremony version, without
+a nested identity copy. CCDP treats the proof as opaque; adding a platform does
+not change this message. Neither browser endpoint cryptographically verifies
+the delivered result; identity is non-authoritative until ledger verification.
 
 ### CancelCeremony
 
@@ -343,10 +354,10 @@ Application cancellation. Only valid OAuth acceptance enters Phase 4.
 This phase begins only after [Prover](documents.md#prover-get-prover) has validated and
 accepted the OAuth return in Phase 3. It performs the selected profile's token
 exchange, notarization, and proof-generation steps as applicable. It sends zero or more
-[`ProverNotifyEvent`](protocol.md#provernotifyevent) messages followed by one
-[`ProverDeliverProof`](protocol.md#proverdeliverproof), unless it sends
-[`AbortCeremony`](protocol.md#abortceremony) or receives
-[`CancelCeremony`](protocol.md#cancelceremony). The first terminal outcome—proof
+[`ProverNotifyEvent`](#provernotifyevent) messages followed by one
+[`ProverIdentityProof`](#proveridentityproof), unless it sends
+[`AbortCeremony`](#abortceremony) or receives
+[`CancelCeremony`](#cancelceremony). The first terminal outcome—proof
 delivery, abort, or cancellation—ends the phase; later messages have no effect.
 
 ### Terminal outcomes
@@ -415,7 +426,7 @@ sequenceDiagram
     break Prover fails
         P-->>A: AbortCeremony
     end
-    P-->>A: ProverDeliverProof
+    P-->>A: ProverIdentityProof
 ```
 
 Terminal exits are shown without their cleanup details, which follow

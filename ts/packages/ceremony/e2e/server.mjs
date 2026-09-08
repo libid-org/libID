@@ -9,6 +9,7 @@ import { makeCertificate } from './tls.mjs'
 const app = 'https://localhost:4681',
   bridge = 'https://localhost:4682',
   ccdp = 'https://localhost:4683'
+const allowedOrigins = [app, ccdp]
 const sws = process.env.CEREMONY_SWS_URL
 if (!sws)
   throw new Error(
@@ -26,7 +27,7 @@ const html = (body) =>
 const callback = prepareCallback(
   readFileSync(join(artifactDir, 'public/ccdp/callback.html'), 'utf8'),
   graph.headers['/ccdp/callback.html'],
-  [[app], ccdp],
+  [allowedOrigins, ccdp],
 )
 for (const port of [4681, 4682, 4683])
   createServer(cert, async (req, res) => {
@@ -68,7 +69,8 @@ for (const port of [4681, 4682, 4683])
           )
       }
       if (port === 4682) {
-        if (path === '/api/v1/ceremony/config')
+        if (path === '/api/v1/ceremony/config') {
+          if (!allowedOrigins.includes(req.headers.origin)) return send('Forbidden', {}, 403)
           return send(
             JSON.stringify({
               ccdpOrigin: ccdp,
@@ -80,8 +82,13 @@ for (const port of [4681, 4682, 4683])
                 },
               },
             }),
-            { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+            {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': req.headers.origin,
+              Vary: 'Origin',
+            },
           )
+        }
         if (path === '/callback') return send(callback.body, callback.headers)
       }
       if (port === 4683) {

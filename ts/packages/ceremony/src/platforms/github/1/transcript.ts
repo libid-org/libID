@@ -1,3 +1,5 @@
+import { isUserId } from '../../types.js'
+import { isUserName } from './types.js'
 import { findUnique, quotedRange, decodePrintable } from '../../../prover/transcript.js'
 import type { Transcript, ExactHttpRequest } from '../../../prover/notarization/session.js'
 const encoder = new TextEncoder()
@@ -45,16 +47,11 @@ export function selectIdentity(transcript: Transcript, bearer: string) {
   let end = valueStart
   while (transcript.received[end] >= 48 && transcript.received[end] <= 57) end++
   const userId = new TextDecoder().decode(transcript.received.slice(valueStart, end))
-  if (
-    !/^[1-9][0-9]{0,19}$/.test(userId) ||
-    BigInt(userId) > 0xffffffffffffffffn ||
-    ![44, 125].includes(transcript.received[end])
-  )
+  if (!isUserId(userId) || ![44, 125].includes(transcript.received[end]))
     throw new Error('Invalid GitHub id')
   const login = quotedRange(transcript.received, encoder.encode('"login":"'), 'identity login'),
     userName = decodePrintable(login.value, 'identity login', 39)
-  if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(userName) || userName.includes('--'))
-    throw new Error('Invalid GitHub login')
+  if (!isUserName(userName)) throw new Error('Invalid GitHub login')
   return {
     userId,
     userName,

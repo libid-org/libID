@@ -40,17 +40,25 @@ One bridge deployment has these inputs:
 | Input | Contract |
 |---|---|
 | Bridge origin | Canonical HTTPS origin used by every bridge route and the configured OAuth redirect URI; explicit loopback development is the only HTTP exception |
-| `allowedAppOrigins` | Nonempty, duplicate-free set of canonical HTTPS application origins admitted to fetch configuration and authenticate the callback popup connection |
+| `allowedAppOrigins` | Nonempty, duplicate-free set of canonical HTTPS application origins admitted by the bridge |
 | CCDP origin | One canonical HTTPS origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Callback path | Developer-configurable fixed path whose default is `/auth/callback`; registered as every enabled platform's OAuth `redirect_uri` |
 | Platform profiles | Public OAuth client ID and supported ceremony versions for each enabled platform |
-| Callback inputs | One unversioned list `[allowedAppOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
+| Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
 | GitHub settings | Client secret, redirect URI, and token endpoint settings when GitHub is enabled |
 
 `allowedAppOrigins` has no protocol maximum. A duplicate or invalid member is a
-deployment error rather than something the bridge normalizes. The set drives
-configuration CORS and is embedded into the callback document. It is never
-inferred from a request's `Origin`, `Referer`, query, fragment, or body.
+deployment error rather than something the bridge normalizes. After resolving
+the default or configured `ccdpOrigin`, the bridge derives one effective set:
+`allowedOrigins = allowedAppOrigins ∪ {ccdpOrigin}`. Adding an already-listed
+CCDP origin does not duplicate it. When `ccdpOrigin` is omitted, this adds
+`https://lib.id`; when overridden, only the replacement is added automatically.
+`https://lib.id` then remains allowed only if explicitly listed.
+
+The effective set governs configuration GET, callback connection authentication,
+and GitHub preflight/POST admission. It is embedded into Callback, not separately
+configured, and never inferred from a request's `Origin`, `Referer`, query,
+fragment, or body.
 
 The CCDP origin is likewise deployment data. It is returned to the
 application in public configuration and embedded into the callback document so
@@ -69,9 +77,8 @@ contract actually becomes incompatible, not for an ordinary CCDP version bump.
 One platform configuration generates both the public profile entries and the
 OAuth registrations used by the callback. The bridge advertises only
 platform/version pairs supported by its selected CCDP Distribution. Selecting
-a shared Distribution requires no reciprocal configuration; when GitHub is
-enabled, this Bridge independently admits its exact CCDP origin at the
-confidential token endpoint.
+a shared Distribution requires no reciprocal configuration; the effective
+allowlist automatically admits its origin at this Bridge's GitHub endpoint.
 
 ## Route surface
 
@@ -79,9 +86,9 @@ The bridge exposes only:
 
 | Method | Route | Availability | Purpose | Origin enforcement |
 |---|---|---|---|---|
-| `GET` | `/api/v1/ceremony/config` | always | public platform and CCDP configuration | exact `Origin` in `allowedAppOrigins`; absent `Origin` accepted only by the same-origin rule below |
+| `GET` | `/api/v1/ceremony/config` | always | public platform and CCDP configuration | exact `Origin` in `allowedOrigins`; absent `Origin` accepted only by the same-origin rule below |
 | `GET` | configured callback path, default `/auth/callback` | always | complete OAuth Callback document | none at HTTP ingress; callback authenticates its popup connection after clearing its input |
-| `OPTIONS`, `POST` | `/api/v1/ceremony/github-token` | only when GitHub is enabled | confidential GitHub token exchange and token attestation | exact request `Origin` equal to `ccdpOrigin` only, checked on every request; exact noncredentialed CORS |
+| `OPTIONS`, `POST` | `/api/v1/ceremony/github-token` | only when GitHub is enabled | confidential GitHub token exchange and token attestation | exact request `Origin` in `allowedOrigins`, checked on every request; exact noncredentialed CORS |
 
 Top-level navigation may omit `Origin`, and an OAuth-platform callback may
 identify the platform rather than the application. `Referer` is never an
@@ -132,15 +139,15 @@ The response rules are:
 - Unknown fields, malformed URLs, and unsupported numeric representations are
   invalid. A platform absent from the client's closed local catalog is ignored;
   known entries remain exact-validated before use.
-- The record contains no secret, `allowedAppOrigins`, artifact URL, CSP source,
+- The record contains no secret, allowlist, artifact URL, CSP source,
   notary setting, platform display metadata, or application-specific value.
 
-When present, `Origin` must exactly match an `allowedAppOrigins` member. A
+When present, `Origin` must exactly match an `allowedOrigins` member. A
 successful cross-origin response sets that exact origin in
 `Access-Control-Allow-Origin`, permits no credentials, and never uses `*`.
 A same-origin browser GET may omit `Origin`: accept that case only when
 `Sec-Fetch-Site` is `same-origin` and the Bridge's configured public origin is
-itself in `allowedAppOrigins`. It needs no CORS response header. Do not infer
+itself in `allowedOrigins`. It needs no CORS response header. Do not infer
 admission from `Referer`, the request host, or absent Fetch Metadata; an explicit
 invalid, `null`, or unlisted `Origin` always fails.
 
@@ -189,10 +196,10 @@ retains no state. The prover derives this fixed route from the origin of the
 Ceremony Client's frozen `redirectUri` in `AppStartProver`; the prover document
 does not embed it.
 
-The browser caller is Prover on `ccdpOrigin`, not the Application. This route
-therefore admits only that configured origin, not the union with
-`allowedAppOrigins`. An application origin is admitted only if it is also
-exactly `ccdpOrigin`; the requested `notaryAddress` grants no caller admission.
+The ceremony's browser caller is Prover on `ccdpOrigin`, but this route uses the
+same `allowedOrigins` rule as configuration and Callback: configured application
+origins are also admitted. The requested `notaryAddress` grants no caller
+admission.
 
 The bridge API version implements GitHub ceremony version `1` only. The request
 carries no ceremony-version field, and configuration must not advertise a
@@ -260,8 +267,8 @@ mandatory.
 The endpoint contract is:
 
 - the query is empty and the request media type is exactly `application/json`;
-- every preflight and POST carries one valid `Origin` exactly equal to
-  `ccdpOrigin`; missing, `null`, malformed, multiple, or different origins
+- every preflight and POST carries one valid `Origin` exactly matching an
+  `allowedOrigins` member; missing, `null`, malformed, multiple, or unlisted origins
   reject before notary resolution, connection, or token exchange. Successful
   preflight never substitutes for checking the actual POST;
 - successful preflight admits only `POST` and `Content-Type`, uses no
