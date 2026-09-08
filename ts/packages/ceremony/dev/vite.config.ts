@@ -1,23 +1,22 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { defineConfig, loadEnv } from 'vite'
-import { makeCertificate } from '../e2e/tls.mjs'
+import { localhostTls } from './tls.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const env = { ...loadEnv(mode, root, 'CEREMONY_'), ...process.env }
   const directory = join(root, '../.cache/dev')
   mkdirSync(directory, { recursive: true })
   if (!!env.CEREMONY_TLS_CERT !== !!env.CEREMONY_TLS_KEY)
     throw new Error('Set both CEREMONY_TLS_CERT and CEREMONY_TLS_KEY')
-  const cert = env.CEREMONY_TLS_CERT ?? join(directory, 'cert.pem')
-  const key = env.CEREMONY_TLS_KEY ?? join(directory, 'key.pem')
-  if (!env.CEREMONY_TLS_CERT && (!existsSync(cert) || !existsSync(key))) {
-    const generated = makeCertificate(['localhost'], 365)
-    writeFileSync(cert, generated.cert)
-    writeFileSync(key, generated.key, { mode: 0o600 })
-  }
+  const https =
+    command !== 'serve'
+      ? undefined
+      : env.CEREMONY_TLS_CERT
+        ? { cert: readFileSync(env.CEREMONY_TLS_CERT), key: readFileSync(env.CEREMONY_TLS_KEY!) }
+        : localhostTls(directory)
   const origin = (value: string) => {
     const url = new URL(value)
     if (url.protocol !== 'https:' || url.origin !== value)
@@ -44,7 +43,7 @@ export default defineConfig(({ mode }) => {
       host: 'localhost',
       port: Number(env.CEREMONY_APP_PORT ?? 4691),
       strictPort: true,
-      https: { cert: readFileSync(cert), key: readFileSync(key) },
+      https,
     },
     build: { outDir: join(directory, 'app'), emptyOutDir: true },
   }
