@@ -11,17 +11,17 @@ needed. `pnpm typecheck:build` checks them with strict NodeNext resolution and
 Only type imports cross into browser modules. The build reuses the shared asset
 contracts, Vite's plugin/output types and ESTree's AST types.
 
-- [Distribution contract](../docs/distribution.md): routes, headers, source declarations and publication.
-- [Build and serve](../README.md#build-and-serve): commands and Docker image.
-- [Exact dependency requests](../src/prover/docs/proving.md#dependency-asset-resolution): native external CRS behavior.
+- [Distribution contract](distribution.md): routes, headers, source declarations and publication.
+- [Build and serve](overview.md#build-and-serve): commands and Docker image.
+- [Exact dependency requests](proving.md#dependency-asset-resolution): native external CRS behavior.
 
-[distribution.ts](distribution.ts) assembles and promotes the artifact;
-[bundle.ts](bundle.ts) records compiler dependencies. [assets.ts](assets.ts) resolves
-owner declarations, [release.ts](release.ts) checks pinned downloads, and
-[circuits.ts](circuits.ts) checks circuit capacity. [profiles.ts](profiles.ts)
-owns response policies; [popup.ts](popup.ts) integrates the optional external carrier.
+[distribution.ts](../build/distribution.ts) assembles and promotes the artifact;
+[bundle.ts](../build/bundle.ts) records compiler dependencies. [assets.ts](../build/assets.ts) resolves
+owner declarations, [release.ts](../build/release.ts) checks pinned downloads, and
+[circuits.ts](../build/circuits.ts) checks circuit capacity. [profiles.ts](../build/profiles.ts)
+owns response policies; [popup.ts](../build/popup.ts) integrates the optional external carrier.
 
 The build never rehosts native external CRS resources. `test:distribution` exercises
 real dependency loaders and emitted responses; set `CEREMONY_SWS_URL` to check the
-actual server. [Qualification](../docs/qualification.md) separates these checks from
+actual server. [Qualification](qualification.md) separates these checks from
 real consent and device evidence.

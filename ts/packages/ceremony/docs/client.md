@@ -97,7 +97,7 @@ stable discovery order, not a product ranking; applications may present
 another order. Neither array contains OAuth clients, ceremony versions, server
 configuration, or display metadata.
 
-The composition supplies a [`LedgerId`](../../../../ledger/README.md) from
+The composition supplies a [`LedgerId`](../../ledger/README.md) from
 `@libid/ledger`, an exact 32-byte `operationDomain` hash, and bounded opaque
 `transactionData`. The ledger package owns encoding/decoding, the canonical
 Chain Profile hash used by the Ledger Verifier, and code-owned testnet
@@ -114,7 +114,7 @@ not a hash of the ledger's transport encoding.
 `AppStartProver` carries the encoded ledger string. Prover first validates the
 message, then reconstructs the same value with `LedgerId.decode`; the message
 decoder itself still returns the original record. `isTestnet()` determines the
-fixed [notary address](../../prover/notarization/docs/notarization.md#notary-address). Callers supply neither a
+fixed [notary address](notarization.md#notary-address). Callers supply neither a
 separate network flag nor a notary URL, and neither encoding nor classification
 adds a field to the authorization digest or `OAuthProof`.
 
@@ -139,7 +139,7 @@ second authorization secret.
 nonce, derives the code verifier from it and the Authorization Digest by the
 normative Proof Key for Code Exchange (PKCE) construction where required, and
 constructs the authorization request with the [CCDP-defined OAuth
-state](../../ccdp/documents/docs/documents.md#documents-and-routes), and returns the `Ceremony` with its launch
+state](documents.md#documents-and-routes), and returns the `Ceremony` with its launch
 URL ready. OAuth `state` carries the CCDP
 routing version plus `ceremonyId`; it is not a second identifier:
 
@@ -239,9 +239,9 @@ no-ceremony-recovery launch scope.
 ### OAuth Bridge configuration
 
 The client fetches and validates the origin-controlled
-[`CeremonyConfig`](../../../docs/oauth-bridge.md#public-configuration) once, then freezes
+[`CeremonyConfig`](oauth-bridge.md#public-configuration) once, then freezes
 the chosen platform, version, client ID, redirect URI, and CCDP origin. CCDP
-[resources](../../ccdp/documents/docs/documents.md#documents-and-routes) never fetch it.
+[resources](documents.md#documents-and-routes) never fetch it.
 
 ## Result and lifecycle
 
@@ -356,7 +356,7 @@ email, X's username, or GitHub's login, not a display name or normalized handle.
 `platformId` must match the selected platform. No observation time, expiry,
 signing key, digest, or proof bytes belong in this shared view.
 
-[`NotaryAttestation`](../../prover/notarization/docs/notarization.md#internal-contract) contains the original
+[`NotaryAttestation`](notarization.md#internal-contract) contains the original
 `attestedData` and `signature` bytes plus their complete `decoded` view. The
 Prover attaches that view from its existing decoder; the Client does not
 decode the bytes again. Signed evidence time remains in each attestation's
@@ -471,5 +471,17 @@ errors.
 
 `CeremonyEvent` is advisory. The application may project it into broader Job
 progress, but confirmation, submission, and finality remain outside this
-package. [CCDP](../../ccdp/docs/protocol.md#4-prover-execution) defines authenticated
+package. [CCDP](protocol.md#4-prover-execution) defines authenticated
 connection delivery ordering.
+
+## Implementation guide
+
+Owns one-time Bridge configuration, frozen ceremony construction and the one-shot
+Application lifecycle over a caller-supplied `PopupConnection`.
+
+- [Public configuration](oauth-bridge.md#public-configuration): Bridge response contract.
+- [CCDP protocol](protocol.md): messages and ordering.
+
+[config.ts](../src/client/config.ts) validates configuration; [ceremony.ts](../src/client/ceremony.ts) owns state
+and handlers. Identity extraction stays in the platform Provers. Wallet operations,
+submission and post-ceremony actions belong to the Application.

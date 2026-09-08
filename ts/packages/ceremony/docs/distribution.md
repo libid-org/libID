@@ -1,7 +1,7 @@
 # CCDP Distribution
 
 This document defines the static browser resources and proving assets required
-by [CCDP](../src/ccdp/documents/docs/documents.md#documents-and-routes). CCDP owns the protocol routes,
+by [CCDP](documents.md#documents-and-routes). CCDP owns the protocol routes,
 fragments, roles, navigations, and versions; this document owns their HTTP,
 build, and deployment contract.
 
@@ -19,7 +19,7 @@ Browsers prefetch and fetch external resources at their declared absolute
 URLs; the static build does not download or mirror them. The current bb.js CRS
 resources use that mode with the native Aztec URLs. The exact dependency
 requests and cache behavior are defined in
-[PROVING.md](../src/prover/docs/proving.md#dependency-asset-resolution).
+[PROVING.md](proving.md#dependency-asset-resolution).
 
 The OAuth Bridge separately serves ceremony configuration, the registered
 Callback document, and enabled confidential platform endpoints. It retrieves
@@ -47,7 +47,7 @@ templating, source resolution, archive extraction, or remote asset fetch.
 ### Protocol resources
 
 The Distribution exposes the exact versioned
-[resources](../src/ccdp/documents/docs/documents.md#documents-and-routes) defined by CCDP. Their fragments,
+[resources](documents.md#documents-and-routes) defined by CCDP. Their fragments,
 roles, and execution contexts remain CCDP rules.
 
 Prefetch and Prover contain their clearing bootstrap and entry code directly,
@@ -55,7 +55,7 @@ with no browser-visible manifest or second entry-script request. They may load
 implementation-private immutable chunks and expose only an empty mount point
 to package-owned presentation.
 
-The aggregate [Callback artifact](#callback-artifact) is retrieved server-side
+The aggregate [Callback artifact](distribution.md#callback-artifact) is retrieved server-side
 by OAuth Bridges; the contract below defines its configuration slot, embedded
 startup, and the response they serve.
 
@@ -91,7 +91,7 @@ source or styling customization input.
 
 | Resource | Form | Additional response contract |
 |---|---|---|
-| [Callback artifact](#callback-artifact) | self-contained HTML template at `/ccdp/callback.html`, retrieved server-side by OAuth Bridges | `text/html; charset=utf-8`, `no-cache` and ETag, with exact executable hashes in CSP. No browser CORS permission is needed for this retrieval. The configured response follows [Served response](#served-response). |
+| [Callback artifact](distribution.md#callback-artifact) | self-contained HTML template at `/ccdp/callback.html`, retrieved server-side by OAuth Bridges | `text/html; charset=utf-8`, `no-cache` and ETag, with exact executable hashes in CSP. No browser CORS permission is needed for this retrieval. The configured response follows [Served response](distribution.md#served-response). |
 | Prefetch | top-level non-isolated HTML | `Cross-Origin-Opener-Policy: unsafe-none` and no COEP. Script/worker sources remain same-origin; `connect-src` admits local assets and the pinned Aztec CRS origins. |
 | Prover | top-level HTML | `Document-Isolation-Policy: isolate-and-require-corp`, `Cross-Origin-Opener-Policy: unsafe-none`, and no COEP. |
 | Prover isolation fallback | top-level HTML at `/ccdp/v{CCDPVersion}/prover/fallback` | `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Same Prover entrypoint, fragment contract, and non-isolation response rules. |
@@ -109,7 +109,7 @@ same-origin graph and toolchain-required `blob:` workers. Asset fetches are
 not restricted to the CCDP origin: their `connect-src https:` admits bb.js's
 Aztec CRS downloads as well as validated third-party OAuth Bridges. The build
 additionally admits the two exact Notary Service WebSocket origins selected by
-[`LedgerId.isTestnet()`](../src/prover/notarization/docs/notarization.md#notary-address), or the single development
+[`LedgerId.isTestnet()`](notarization.md#notary-address), or the single development
 override origin when built with `LIBID_NOTARY_ADDRESS`. The response is
 identical for either network; selection changes no asset or cache key.
 
@@ -243,7 +243,7 @@ failure text without establishing a connection or emitting a protocol message.
 No platform credential is parsed here. The selected Callback
 authenticates the Application against its configured allowlist before the
 captured return can leave this document, then follows
-[CCDP](../src/ccdp/documents/docs/documents.md#callback-get-redirecturi).
+[CCDP](documents.md#callback-get-redirecturi).
 
 #### Served response
 
@@ -278,7 +278,7 @@ while the configured browser response is non-cacheable.
 
 ### Prover isolation
 
-CCDP has one logical [Prover](../src/ccdp/documents/docs/documents.md#prover-get-prover), reached by ordinary
+CCDP has one logical [Prover](documents.md#prover-get-prover), reached by ordinary
 `connection.navigate(proverUrl, fragment)`. The Distribution supplies two static responses
 for that participant, not another protocol step or application-level choice.
 
@@ -485,7 +485,7 @@ only its owner-defined pin. No generated-source scrape or deployment template
 maintains another copy.
 
 One response-profile table is the executable source for the policies under
-[HTTP contract](#http-contract):
+[HTTP contract](distribution.md#http-contract):
 
 ```ts
 const responseProfiles = {
@@ -537,7 +537,7 @@ Across the supported CCDP versions, the pipeline:
 The pipeline rejects a missing body, unindexed dependency, malformed external
 pin, mutable asset path, sidecar which does not decode to the original, or
 partial graph. Pinned source releases are cached by immutable identity rather
-than fetched on every build. The [dependency upgrade checks](../src/prover/docs/proving.md#dependency-asset-resolution)
+than fetched on every build. The [dependency upgrade checks](proving.md#dependency-asset-resolution)
 detect changed upstream loader requests; live CDN qualification runs before
 release, not on every local build.
 
@@ -609,7 +609,7 @@ without overlap. Those rules are compiled from the response-profile table; SWS d
 not reconstruct policy. They set exact media, cache, isolation, framing, CORS,
 CSP, and `Service-Worker-Allowed` headers. The generator rejects overlapping
 patterns, an omitted profile, an unrepresented file, or any SWS option that
-could weaken the [HTTP contract](#http-contract).
+could weaken the [HTTP contract](distribution.md#http-contract).
 
 The checked-in container recipe is fixed apart from the SWS image digest:
 

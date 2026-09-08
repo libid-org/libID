@@ -11,7 +11,7 @@ Worker. Authorization is an external document, not a CCDP resource.
 |---|---|
 | Parameters | <table><tr><th>Name</th><td><code>#ceremonyId</code></td><td><code>#platformId</code></td><td><code>#ceremonyVersion</code></td></tr><tr><th>Values</th><td>lowercase UUIDv4</td><td>exact identifier from the selected platform profile</td><td>unsigned 16-bit platform ceremony version</td></tr></table> |
 | Location and context | CCDP origin; versioned, top-level, and non-isolated ceremony-popup document |
-| Role | Starts the selected profile's fetches before the Application continues through [Prefetch to Authorization](../../docs/protocol.md#1-prefetch-to-authorization). It receives no authorization URL, OAuth return, or proof input. |
+| Role | Starts the selected profile's fetches before the Application continues through [Prefetch to Authorization](protocol.md#1-prefetch-to-authorization). It receives no authorization URL, OAuth return, or proof input. |
 
 ### Authorization `GET platformAuthorizationUrl`
 
@@ -19,7 +19,7 @@ Worker. Authorization is an external document, not a CCDP resource.
 |---|---|
 | Parameters | The complete frozen URL is opaque to CCDP. The selected platform ceremony version owns its parameters. |
 | Location and context | Selected OAuth Platform; top-level ceremony-popup document |
-| Role | Owns login and consent during [Authorization to Callback](../../docs/protocol.md#2-authorization-to-callback). No CCDP participant runs and no CCDP message or popup connection is exposed to this document. |
+| Role | Owns login and consent during [Authorization to Callback](protocol.md#2-authorization-to-callback). No CCDP participant runs and no CCDP message or popup connection is exposed to this document. |
 | External policy | Controlled entirely by the OAuth Platform. CCDP assumes nothing about its markup, scripts, headers, or origin transitions; it may sever the opener or browsing-context group. Callback reconnects without assuming direct window continuity. The selected platform ceremony version owns authorization request and return semantics. |
 
 ### Callback `GET redirectUri`
@@ -27,7 +27,7 @@ Worker. Authorization is an external document, not a CCDP resource.
 | Property | Contract |
 |---|---|
 | Location and context | OAuth Bridge origin at its configured registered callback path, default `/auth/callback`; top-level, non-isolated document with complete bundled Callback code and bridge-owned deployment inputs |
-| Role | Authenticates the Application during [Authorization to Callback](../../docs/protocol.md#2-authorization-to-callback), then privately carries the captured OAuth return in popup navigation to Prover during [Callback to Prover](../../docs/protocol.md#3-callback-to-prover). It installs no Service Worker, retains no state across navigation, and does not classify, prefetch, prove, verify, persist a checkpoint, or close the popup. |
+| Role | Authenticates the Application during [Authorization to Callback](protocol.md#2-authorization-to-callback), then privately carries the captured OAuth return in popup navigation to Prover during [Callback to Prover](protocol.md#3-callback-to-prover). It installs no Service Worker, retains no state across navigation, and does not classify, prefetch, prove, verify, persist a checkpoint, or close the popup. |
 | Presentation and cleanup | Renders fixed transition and failure views with an inline libID logo and accepts no Application markup or renderer. Terminal cleanup clears retained OAuth-return bytes, removes listeners, and releases unneeded references. Failure before connection acceptance is rendered locally and cannot release the return; observable failure after acceptance uses `AbortCeremony`. |
 
 ### Prover `GET /prover`
@@ -36,7 +36,7 @@ Worker. Authorization is an external document, not a CCDP resource.
 |---|---|
 | Parameters | <table><tr><th>Name</th><td><code>#ceremonyId</code></td><td><code>#oauthQuery</code></td><td><code>#oauthFragment</code></td></tr><tr><th>Values</th><td>lowercase UUIDv4</td><td>captured OAuth query, including leading <code>?</code> when nonempty</td><td>captured OAuth fragment, including leading <code>#</code> when nonempty</td></tr></table> |
 | Location and context | CCDP origin; versioned, top-level ceremony-popup participant; cross-origin isolated before protocol readiness |
-| Role | Accepts the logical Application connection during [Callback to Prover](../../docs/protocol.md#3-callback-to-prover), then validates the retained OAuth return under the Application-selected profile and runs [Prover execution](../../docs/protocol.md#4-prover-execution). [PROVING.md](../../../prover/docs/proving.md) defines proof-generation pipelines, asset use, notarization, and caching. |
+| Role | Accepts the logical Application connection during [Callback to Prover](protocol.md#3-callback-to-prover), then validates the retained OAuth return under the Application-selected profile and runs [Prover execution](protocol.md#4-prover-execution). [PROVING.md](proving.md) defines proof-generation pipelines, asset use, notarization, and caching. |
 | Presentation and cleanup | Renders a persistent inline libID logo and one accessible milestone progress bar. It begins at **Preparing proof**, advances only from valid platform events, and reaches 100% only on proof delivery. After `SLOW_PROVING_HINT_MS = 15_000`, it adds a nonblocking **Still proving** notice which may suggest enabling JavaScript JIT in Vanadium site controls. It accepts no Application markup or renderer, presents no ETA, and clears inputs, workers, timers, and listeners without closing or navigating the popup. |
 
 ### Worker `GET /worker.js`
@@ -143,3 +143,19 @@ The public Callback artifact contains no Bridge policy; the serving Bridge
 inserts its trusted configuration. Server-side artifact retrieval does not
 replace Callback's credential-release check. Asset caching and popup-connection
 construction are outside CCDP.
+
+## Implementation guide
+
+The browser-facing entrypoints share one directory and import their execution logic
+from the top-level ceremony modules.
+
+- [Protocol phases](protocol.md#phases): readiness, navigation and delivery ordering.
+- [Distribution policy](distribution.md): emitted resources and isolation headers.
+- [Callback artifact](distribution.md#callback-artifact): package-owned URL clearing, version dispatch, and startup; the Bridge inserts deployment data.
+
+[callback.ts](../src/ccdp/documents/callback.ts) authenticates the Application and privately forwards the
+return. [prefetch.ts](../src/ccdp/documents/prefetch.ts) is the dual-context Prefetch/Worker entrypoint and
+imports the [cache implementation](prefetch.md#implementation-guide). [prover.ts](../src/ccdp/documents/prover.ts)
+handles readiness, UI, cancellation and delivery while dispatching the
+[platform pipelines](pipelines.md#implementation-guide). Proving machinery stays in
+[prover/](proving.md#implementation-guide).

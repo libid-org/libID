@@ -3,13 +3,13 @@
 This document defines the browser-side `prover/notarization` module: how it
 runs a TLSNotary session, applies platform-selected transcript disclosures, and
 returns a byte-exact attestation with its decoded view plus private commitment
-openings. The enclosing pipeline is defined in [PROVING.md](../../docs/proving.md), browser placement in
-[CCDP.md](../../../ccdp/docs/protocol.md), asset serving in [CCDP_DISTRIBUTION.md](../../../../docs/distribution.md#proving-assets),
+openings. The enclosing pipeline is defined in [PROVING.md](proving.md), browser placement in
+[CCDP.md](protocol.md), asset serving in [CCDP_DISTRIBUTION.md](distribution.md#proving-assets),
 and GitHub's confidential exchange in
-[OAUTH_BRIDGE.md](../../../../docs/oauth-bridge.md#github-token-endpoint). Exact proof semantics
+[OAUTH_BRIDGE.md](oauth-bridge.md#github-token-endpoint). Exact proof semantics
 remain normative in the
-[common ceremony rules](../../../../../../../specs/ceremony-common.md) and
-[identity-platform ceremonies](../../../../../../../specs/platform-ceremonies.md).
+[common ceremony rules](../../../../specs/ceremony-common.md) and
+[identity-platform ceremonies](../../../../specs/platform-ceremonies.md).
 
 ## Boundary and rationale
 
@@ -259,13 +259,13 @@ The implementation test copies those exact bytes and checks this `keccak256`:
 ```
 
 The decoded values and every malformed variant are asserted by the
-[conformance plan](../../../../docs/test-plan.md).
+[conformance plan](test-plan.md).
 
 ## Session lifecycle
 
 ### Network transport
 
-The adapter validates the already resolved [notary address](#notary-address),
+The adapter validates the already resolved [notary address](notarization.md#notary-address),
 changes only its scheme from `https` to `wss`, and opens the exact
 `/notarize-proxy` path with no query:
 
@@ -406,7 +406,7 @@ exists.
 
 GitHub's confidential token exchange is server-side and does not use this
 browser module. Its HTTP contract is defined in
-[OAUTH_BRIDGE.md](../../../../docs/oauth-bridge.md#github-token-endpoint), while the GitHub platform module
+[OAUTH_BRIDGE.md](oauth-bridge.md#github-token-endpoint), while the GitHub platform module
 owns browser-side response validation and subsequent `/user` orchestration.
 
 ## Attestation handoff
@@ -430,4 +430,22 @@ valid forgery can survive browser checks, so delivery and convenience views
 remain unverified. The Ledger Verifier's trusted-notary signature and
 platform-profile checks remain mandatory over the original signed bytes.
 
-[TEST_PLAN.md](../../../../docs/test-plan.md) owns the executable notarization requirements.
+[TEST_PLAN.md](test-plan.md) owns the executable notarization requirements.
+
+## Implementation guide
+
+Shared TLSNotary adapter for X and GitHub: exact HTTP requests, bounded transcripts,
+selective disclosures and correlation with canonical final attestations.
+
+- [Platform pipelines](pipelines.md): token/identity overlap and delivery dependencies.
+- [Qualification blockers](qualification.md#actual-blockers-and-unqualified-boundaries): matched service, timing and profile gaps.
+
+[session.ts](../src/prover/notarization/session.ts) controls a dedicated [session.worker.ts](../src/prover/notarization/session.worker.ts).
+[transport.ts](../src/prover/notarization/transport.ts) frames final output, [decode.ts](../src/prover/notarization/decode.ts) reads canonical
+attested bytes, and [notarize.ts](../src/prover/notarization/notarize.ts) correlates transcripts and openings.
+Original attestations and signatures are preserved; local signature verification is
+outside the adapter's responsibility.
+
+[notary.ts](../src/prover/notary.ts) selects one build-owned notary address from the decoded
+ledger. X uses it for both sessions; GitHub sends it unchanged to the Bridge and
+uses it for the browser identity session. The ledger package contains no endpoints.

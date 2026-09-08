@@ -24,7 +24,7 @@ activation so later prover documents use the selected release rather than a
 stale controller. Activation does not proactively delete reusable immutable
 Cache Storage entries or bb.js CRS data. Immutable URLs keep already loaded
 documents pinned; a live ceremony may still fail closed across deployment
-rotation as defined by the [CCDP Distribution contract](../../../docs/distribution.md#protocol-resources).
+rotation as defined by the [CCDP Distribution contract](distribution.md#protocol-resources).
 
 The Prefetch bootstrap accepts only the closed, cleared profile selected by its
 fragment and selects its resolved resource set from the lightweight catalog.
@@ -118,3 +118,15 @@ benefit estimates work completed before proving, not a measured counterfactual
 speedup. The active path skips local cryptographic proof verification; a PoC
 UI label saying “verified proof” does not establish otherwise. Ledger Verifier
 acceptance remains authoritative.
+
+## Implementation guide
+
+Owns root Service Worker registration, immutable cached response bodies and pending
+fetch sharing. Pre-OAuth work warms bytes, not initialized proof or TLSNotary runtimes.
+
+- [Dependency loaders](proving.md#dependency-asset-resolution): exact native URLs and ranges.
+- [Distribution graph](distribution.md#source-declarations): one owner declaration per resource.
+
+[registration.ts](../src/prefetch/registration.ts) resolves root ownership and dispatches selected
+profiles. [worker.ts](../src/prefetch/worker.ts) composes popup continuity with [cache.ts](../src/prefetch/cache.ts).
+The browser/worker entrypoint lives in [ccdp/documents/prefetch.ts](../src/ccdp/documents/prefetch.ts).

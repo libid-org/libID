@@ -6,8 +6,8 @@ configuration, serves the OAuth callback document, and performs the one
 confidential platform exchange required by GitHub.
 
 The package API is defined in [ARCHITECTURE.md](architecture.md), the callback
-participant in [CCDP](../src/ccdp/documents/docs/documents.md#callback-get-redirecturi), and proof generation in
-[PROVING.md](../src/prover/docs/proving.md). The normative libID specification owns authorization,
+participant in [CCDP](documents.md#callback-get-redirecturi), and proof generation in
+[PROVING.md](proving.md). The normative libID specification owns authorization,
 platform-return, token-exchange, and proof semantics; this document fixes only
 the bridge's public transport and deployment boundary.
 
@@ -153,7 +153,7 @@ alter the response record.
 The application-scoped `CeremonyClient` fetches and validates this record once
 at creation using `credentials: 'omit'`. It freezes the selected client ID,
 redirect URI, CCDP origin, and mutually supported platform ceremony version
-in each live ceremony. CCDP browser [resources](../src/ccdp/documents/docs/documents.md#documents-and-routes)
+in each live ceremony. CCDP browser [resources](documents.md#documents-and-routes)
 never fetch bridge configuration; server-side Callback artifact retrieval is
 separate.
 
@@ -226,7 +226,7 @@ not normalize either value.
 
 `notaryAddress` is a required canonical HTTPS origin with no credentials, path,
 query, or fragment. Prover supplies its already
-[resolved address](../src/prover/notarization/docs/notarization.md#notary-address), including any development
+[resolved address](notarization.md#notary-address), including any development
 override, and uses that same address for identity notarization. The Bridge
 derives the fixed `/notarize-proxy` WebSocket endpoint from it; it neither
 classifies ledgers nor maintains a profile mapping or second override.
