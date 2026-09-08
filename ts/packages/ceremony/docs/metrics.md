@@ -5,7 +5,7 @@ This document defines the measurements needed to understand one
 does not define product progress, protocol authority, retry policy, or an
 application analytics product.
 
-The public [`CeremonyEvent`](../src/client/docs/client.md#progress-cancellation-and-recovery) stream remains the small,
+The public [`CeremonyEvent`](client.md#progress-cancellation-and-recovery) stream remains the small,
 stable product-progress surface. Diagnostics are a separate, opt-in stream
 with finer spans, facts, counters, and terminal outcomes. A diagnostic record
 is never evidence that a ceremony succeeded and never drives ceremony state.
@@ -188,7 +188,7 @@ never affect cache or ceremony behavior.
 ### Platform and proof engine
 
 The exact platform/version span catalogs and causal rules are owned by
-[PROVING.md](../src/prover/docs/proving.md#platform-progress). Diagnostics reuse those codes rather
+[PROVING.md](proving.md#platform-progress). Diagnostics reuse those codes rather
 than create a second list. They include readiness, every Google/X/GitHub
 platform step, and the proof-engine phases from worker bootstrap through
 backend destruction.

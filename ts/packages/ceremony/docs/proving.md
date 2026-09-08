@@ -6,17 +6,17 @@ proving toolchain, prefetch/cache behavior, and worker graph. CCDP owns the
 browser documents, routes, isolation, presentation, messages, and navigation.
 
 The package API and result lifecycle are defined in
-[ARCHITECTURE.md](../../../docs/architecture.md). The browser boundary and its input/output
-messages are defined by [CCDP](../../ccdp/documents/docs/documents.md#prover-get-prover). This document owns only the
+[ARCHITECTURE.md](architecture.md). The browser boundary and its input/output
+messages are defined by [CCDP](documents.md#prover-get-prover). This document owns only the
 proof-generation implementation and its pinned asset selection; the CCDP Distribution
 serves local proving resources from an origin independent of the
-[OAuth bridge](../../../docs/oauth-bridge.md), while declared external resources retain their
+[OAuth bridge](oauth-bridge.md), while declared external resources retain their
 upstream URLs.
 TLSNotary sessions, transcript disclosure, and attestation delivery are defined
-in [NOTARIZATION.md](../notarization/docs/notarization.md).
+in [NOTARIZATION.md](notarization.md).
 Normative proof relations and authorization semantics remain in the
-[common ceremony rules](../../../../../../specs/ceremony-common.md) and
-[identity-platform ceremonies](../../../../../../specs/platform-ceremonies.md).
+[common ceremony rules](../../../../specs/ceremony-common.md) and
+[identity-platform ceremonies](../../../../specs/platform-ceremonies.md).
 
 ## Execution boundary
 
@@ -73,7 +73,7 @@ associated signature as produced by the pinned notary client. The signature
 covers exactly those attested-data bytes, including server identity, evidence
 time, transcript lengths, reveals, and commitments. Each attestation also
 contains the existing decoder's complete `decoded` view, defined in
-[NOTARIZATION.md](../notarization/docs/notarization.md#canonical-attested-data-decoder). It preserves
+[NOTARIZATION.md](notarization.md#canonical-attested-data-decoder). It preserves
 authority, creation time, transcript lengths, every reveal, and every
 commitment; it does not add hidden bearer bytes, commitment openings, or
 witnesses. The prover never normalizes or reserializes the signed bytes or
@@ -116,7 +116,7 @@ changes when another platform proof type is added.
 The common fields are platform ID, platform ceremony version, operation domain,
 authorization nonce, and transaction data. The
 exact records are defined in the
-[package architecture](../../client/docs/client.md#result-and-lifecycle). The Ceremony
+[package architecture](client.md#result-and-lifecycle). The Ceremony
 Client adds no chain ID, Authorization Digest, second identity copy, code
 verifier, evidence-time summary, verifier address, or verification-key field.
 
@@ -137,11 +137,11 @@ request, response parser, and transcript layout; the adapter owns the shared
 session, reveal, reclaimed-channel, attestation-delivery, and
 commitment-correlation mechanics. The full boundary, disclosure model, three
 browser call sites, and attestation handoff are defined in
-[NOTARIZATION.md](../notarization/docs/notarization.md).
+[NOTARIZATION.md](notarization.md).
 
 ## Platform pipelines
 
-See [Platform proof pipelines](../../platforms/docs/pipelines.md).
+See [Platform proof pipelines](pipelines.md).
 
 ## Platform progress
 
@@ -153,7 +153,7 @@ work, such as **Loading proving assets**, **Connecting to notary**, **Preparing
 proof inputs**, or **Generating proof**; they never contain a credential,
 identity, URL, caller value, raw exception, or raw service error.
 Collection, privacy, aggregation, and optional export are defined in
-[METRICS.md](../../../docs/metrics.md).
+[METRICS.md](metrics.md).
 
 Every profile includes these spans:
 
@@ -212,7 +212,7 @@ their causal lifecycle remains a platform-ceremony-version change.
 Each platform/version's lightweight `assets` leaf composes its pinned circuit
 and shared integration resources into its selected-profile set. Shared bb.js,
 notarization, and circuit declarations are referenced, not copied between
-platforms; [resource ownership and collection](../../../docs/distribution.md#source-declarations)
+platforms; [resource ownership and collection](distribution.md#source-declarations)
 define the import boundary. A ceremony fetches only its composed set and emitted
 execution dependencies. X and GitHub reuse the notarization client and
 `bearer-link` circuit; Google fetches neither when it does not need them.
@@ -224,7 +224,7 @@ configuration. The build owns local toolchain worker/WASM locations and pins
 bb.js's native external common reference string (CRS) requests. No runtime
 configuration can replace those dependencies.
 
-The [CCDP Distribution](../../../docs/distribution.md#proving-assets) serves companion chunks, spawner
+The [CCDP Distribution](distribution.md#proving-assets) serves companion chunks, spawner
 and nested worker modules, WASM, and circuits from immutable same-origin paths.
 The resource table currently marks CRS as `external`: those bodies are
 prefetched and fetched directly from Aztec's CDNs using bb.js's native URLs and
@@ -393,12 +393,12 @@ upstream links and headers that an offline loader test cannot detect.
 
 ## Prefetch and cache lifecycle
 
-See [Prefetch and cache lifecycle](../../prefetch/docs/prefetch.md).
+See [Prefetch and cache lifecycle](prefetch.md).
 
 ## Execution isolation
 
-[CCDP](../../ccdp/documents/docs/documents.md#documents-and-routes) owns the Prover's isolated execution
-context; the [CCDP Distribution contract](../../../docs/distribution.md#protocol-resources) owns its HTTP
+[CCDP](documents.md#documents-and-routes) owns the Prover's isolated execution
+context; the [CCDP Distribution contract](distribution.md#protocol-resources) owns its HTTP
 policy and declared local/external resource graph. No request parameter selects a document
 role, asset, or CSP. `AppStartProver` carries the Application's frozen
 `redirectUri`; its origin selects the OAuth Bridge for GitHub's fixed token
@@ -416,4 +416,19 @@ proof output.
 A live prover pins its loaded modules and assets. Proof-semantic changes use
 `PlatformCeremonyVersion`; host, cache, and equivalent SRS-fetch changes do not.
 All version axes are defined in
-[ARCHITECTURE.md](../../../docs/architecture.md#versioning-and-compatibility).
+[ARCHITECTURE.md](architecture.md#versioning-and-compatibility).
+
+## Implementation guide
+
+Owns the shared proof engine, worker runtime, input helpers and notarization adapter.
+The browser page itself lives in [ccdp/documents/prover.ts](../src/ccdp/documents/prover.ts).
+
+- [Platform pipelines](pipelines.md): provider-specific execution order.
+- [Notarization](notarization.md#implementation-guide): TLSNotary sessions and canonical attestations.
+- [Prefetch](prefetch.md#implementation-guide): byte caching before execution.
+
+[engine.ts](../src/prover/engine.ts) controls [engine.worker.ts](../src/prover/engine.worker.ts); [bb/assets.ts](../src/prover/bb/assets.ts)
+owns shared backend resources. [bearerLink.ts](../src/prover/bearerLink.ts) constructs the common
+bearer-link witness. [progress.ts](../src/prover/progress.ts) accounts for completed work. The browser
+performs no final cryptographic proof verification; qualification uses released keys
+in a separate harness.
