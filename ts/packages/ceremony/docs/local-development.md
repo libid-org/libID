@@ -32,12 +32,21 @@ defaults do not match your local services:
 Only the two public origins enter the browser bundle. OAuth client IDs come from
 Bridge configuration. Client secrets belong exclusively to the Bridge.
 
-For manual testing, configure an already trusted localhost certificate/key using
-absolute paths, and trust the Bridge/CCDP certificates too. The automatic self-signed
-certificate is a convenience for frontend development, retained across restarts and
-valid for one year. It is not automatically trusted; replace it with a trusted
-certificate before real OAuth/device qualification. Nothing modifies your system
-trust store. Both certificate settings must be supplied together.
+Install `mkcert` first (`brew install mkcert` with Homebrew; Firefox on macOS also
+needs `brew install nss`). On the first `dev` startup, the script runs `mkcert -install`
+and generates a trusted localhost certificate. Installation may ask for your
+administrator password. **Restart your browser once if it still shows a warning.**
+
+The CA is reused across projects on this machine. The issued certificate and key
+are kept in `.cache/dev/localhost.pem` and `localhost-key.pem` across dev sessions;
+restarting the server does not regenerate them or reinstall trust. Missing or expired
+certificates are regenerated. The older self-signed `cert.pem` is no longer used.
+If you remove the CA from your trust store, run `mkcert -install` to restore trust.
+
+The same localhost certificate can serve Bridge and CCDP on different ports. Other
+machines/devices need their own trust setup. To use existing certificates instead,
+set both `CEREMONY_TLS_CERT` and `CEREMONY_TLS_KEY` to absolute paths; this skips
+mkcert entirely. `build:dev` does not generate certificates or install trust.
 
 Configure the Bridge to allow the application's exact origin and publish the same
 CCDP origin as the app's popup allowlist. Register the Bridge callback URL with the
