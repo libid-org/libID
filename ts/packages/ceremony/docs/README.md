@@ -16,6 +16,7 @@ All package documentation lives in this directory.
 - [Build](build.md): compiler and deployment tooling.
 - [OAuth Bridge](oauth-bridge.md): external server contract.
 - [Metrics](metrics.md): measurement contract; completeness is deferred.
+- [Local development app](local-development.md): frontend startup and real Bridge integration.
 - [Browser tests](browser-tests.md): HTTPS harness and proving qualification.
 - [Test requirements](test-plan.md), [traceability](traceability.md), and
   [qualification](qualification.md): required coverage, evidence and remaining gaps.
