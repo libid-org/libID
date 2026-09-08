@@ -67,21 +67,12 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   const path = '/ccdp/callback.html'
   const html = readFileSync(join(out, 'public', path), 'utf8')
   const headers = graph.headers[path]
-  const a = prepareCallback(
-    html,
-    headers,
-    { versionedInputs: { 1: [['https://app.test'], 'https://ccdp.test'] } },
+  const a = prepareCallback(html, headers, [['https://app.test'], 'https://ccdp.test'])
+  const b = prepareCallback(html, headers, [
+    ['https://other.test'],
     'https://ccdp.test',
-  )
-  const b = prepareCallback(
-    html,
-    headers,
-    {
-      versionedInputs: { 1: [['https://other.test'], 'https://ccdp.test'] },
-      hostile: '</script><script>alert(1)</script>$&',
-    },
-    'https://ccdp.test',
-  )
+    { hostile: '</script><script>alert(1)</script>$&' },
+  ])
   assert.equal(a.headers['Content-Security-Policy'], b.headers['Content-Security-Policy'])
   assert.ok(b.body.includes('\\u003c/script>'))
   assert.ok(b.body.includes('$&'))
@@ -96,14 +87,14 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
     `${html}<script src="https://evil.test"></script>`,
     html.replace('type="module">', 'type="module">void 0;'),
   ])
-    assert.throws(() => prepareCallback(broken, headers, {}, 'https://ccdp.test'))
+    assert.throws(() =>
+      prepareCallback(broken, headers, [['https://app.test'], 'https://ccdp.test']),
+    )
   assert.throws(() =>
-    prepareCallback(
-      html,
-      { ...headers, 'Content-Security-Policy': "script-src 'self'" },
-      {},
+    prepareCallback(html, { ...headers, 'Content-Security-Policy': "script-src 'self'" }, [
+      ['https://app.test'],
       'https://ccdp.test',
-    ),
+    ]),
   )
   assert.equal(Object.hasOwn(graph.headers, '/ccdp/v1/callback.js'), false)
 })

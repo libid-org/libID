@@ -16,7 +16,7 @@ let config: unknown,
   locationInput: { search: string; hash: string; pathname: string; origin: string }
 beforeEach(() => {
   vi.clearAllMocks()
-  config = { versionedInputs: { 1: v1Inputs } }
+  config = v1Inputs
   locationInput = {
     search: '',
     hash: `#state=v1.${id}&error=access_denied`,
@@ -40,11 +40,9 @@ beforeEach(() => {
   })
 })
 afterEach(() => vi.unstubAllGlobals())
-it('clears before acceptance and preserves exact private return with selected deployment inputs [KIT-006] [KIT-010]', async () => {
+it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010]', async () => {
   const original = locationInput.hash
-  config = {
-    versionedInputs: { 1: [['https://other-app.test'], 'https://other-ccdp.test'], 2: v1Inputs },
-  }
+  config = [['https://other-app.test'], 'https://other-ccdp.test']
   startCallback()
   await Promise.resolve()
   expect(accept).toHaveBeenCalledWith(undefined, {
@@ -84,17 +82,22 @@ it.each([
   expect(view).toHaveBeenCalledWith('Unable to continue. Return to your application.')
   expect(accept).not.toHaveBeenCalled()
 })
-it.each([
-  null,
-  {},
-  { defaultInputs: v1Inputs, inputOverrides: {} },
-  { versionedInputs: { 1: v1Inputs }, extra: 1 },
-  { versionedInputs: { '01': v1Inputs } },
-  { versionedInputs: { 1: [[], 'https://ccdp.test'] } },
-  { versionedInputs: { 1: [['https://app.test', 'https://app.test'], 'https://ccdp.test'] } },
-  { versionedInputs: { 1: [['https://app.test'], 'https://ccdp.test/path'] } },
-  { versionedInputs: { 1: ['wrong'] } },
-])('rejects malformed deployment data before connection setup [KIT-010]', (input) => {
+it.each(
+  [
+    null,
+    {},
+    { versionedInputs: { 1: v1Inputs } },
+    [],
+    [['https://app.test']],
+    [[], 'https://ccdp.test'],
+    [['https://app.test', 'https://app.test'], 'https://ccdp.test'],
+    [['https://app.test/path'], 'https://ccdp.test'],
+    [['https://app.test'], 'https://ccdp.test/path'],
+    ['https://app.test', 'https://ccdp.test'],
+    [[null], 'https://ccdp.test'],
+    [['https://app.test'], null],
+  ].map((input) => ({ input })),
+)('rejects malformed deployment data before connection setup [KIT-010]', ({ input }) => {
   config = input
   startCallback()
   expect(view).toHaveBeenCalledWith('Unable to continue. Return to your application.')
@@ -108,14 +111,33 @@ it('clears a double-slash callback path without treating it as another host [CSP
   expect(accept).toHaveBeenCalledOnce()
 })
 
-it.each([{}, { 2: v1Inputs }, { 1: null, 2: v1Inputs }])(
-  'requires the selected version entry without falling back [LIBID-ASSET-015] [KIT-010]',
-  (versionedInputs) => {
-    config = { versionedInputs }
-    startCallback()
-    expect(view).toHaveBeenCalledWith('Unable to continue. Return to your application.')
-    expect(current).not.toHaveBeenCalled()
-    expect(accept).not.toHaveBeenCalled()
-    expect(send).not.toHaveBeenCalled()
+it.each([[], [null], [{ optional: { nested: [1, 2] } }]].map((trailing) => ({ trailing })))(
+  'ignores optional trailing inputs and deeply freezes the parsed list [LIBID-ASSET-015] [KIT-010]',
+  async ({ trailing }) => {
+    config = [...v1Inputs, ...trailing]
+    const parse = vi.spyOn(JSON, 'parse')
+    try {
+      startCallback()
+      await Promise.resolve()
+      const inputs = parse.mock.results[0].value
+      expect(Object.isFrozen(inputs)).toBe(true)
+      expect(Object.isFrozen(inputs[0])).toBe(true)
+      if (inputs[2]?.optional) {
+        expect(Object.isFrozen(inputs[2].optional.nested)).toBe(true)
+        expect(() => inputs[2].optional.nested.push(3)).toThrow()
+      }
+      expect(accept).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({
+          allowedApplicationOrigins: ['https://app.test'],
+        }),
+      )
+      expect(navigate).toHaveBeenCalledWith(
+        'https://ccdp.test/ccdp/v1/prover',
+        expect.any(URLSearchParams),
+      )
+    } finally {
+      parse.mockRestore()
+    }
   },
 )
