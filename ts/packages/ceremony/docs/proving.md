@@ -214,8 +214,12 @@ and shared integration resources into its selected-profile set. Shared bb.js,
 notarization, and circuit declarations are referenced, not copied between
 platforms; [resource ownership and collection](distribution.md#source-declarations)
 define the import boundary. A ceremony fetches only its composed set and emitted
-execution dependencies. X and GitHub reuse the notarization client and
-`bearer-link` circuit; Google fetches neither when it does not need them.
+execution dependencies. Archive members retain their build-resolved full paths;
+integration code obtains explicit asset locations through `assets.resolve()`,
+not duplicated filenames or runtime archive globs. External declarations retain
+the same URL and request options for prefetch and execution. X and GitHub reuse
+the notarization client and `bearer-link` circuit; Google fetches neither when
+it does not need them.
 
 The ceremony package pins the compatible Noir and bb.js dependencies in code.
 Their JavaScript is bundled into the static prover distribution, not imported
@@ -226,7 +230,7 @@ configuration can replace those dependencies.
 
 The [CCDP Distribution](distribution.md#proving-assets) serves companion chunks, spawner
 and nested worker modules, WASM, and circuits from immutable same-origin paths.
-The resource table currently marks CRS as `external`: those bodies are
+The bb asset declarations use `assets.external()` for CRS: those bodies are
 prefetched and fetched directly from Aztec's CDNs using bb.js's native URLs and
 ranges. Resource resolution, not platform code, distinguishes local and
 external locations. Prefetch uses the same resolved request as execution. The

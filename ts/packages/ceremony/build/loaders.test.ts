@@ -46,7 +46,7 @@ test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASS
       throw new Error('Primary intentionally blocked')
     const body = url.startsWith('/')
       ? readFileSync(join(out, 'public', url))
-      : new Uint8Array(spec.bytes)
+      : new Uint8Array(spec.bytes!)
     return new Response(body, {
       status: range ? 206 : 200,
       headers: { 'Content-Type': spec.mime ?? 'application/octet-stream' },

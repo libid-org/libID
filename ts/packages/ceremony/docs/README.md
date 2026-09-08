@@ -21,6 +21,6 @@ All package documentation lives in this directory.
   [qualification](qualification.md): required coverage, evidence and remaining gaps.
 
 The architecture contracts originate in PR #13 at
-`412df215b93473f79fae75df602f6b0be42b13a9`, reorganized here with implementation
+`32e8217dab0f5925ad255950884efa3c6c0536ef`, reorganized here with implementation
 guides. Requirement IDs are unchanged. [Qualification](qualification.md) records
 implementation deviations and remaining qualification gaps.

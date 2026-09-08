@@ -1,13 +1,20 @@
-import { createServer } from 'node:https'
 import { readFileSync } from 'node:fs'
+import { request as proxyRequest } from 'node:http'
+import { createServer } from 'node:https'
 import { join } from 'node:path'
-import { makeCertificate } from './tls.mjs'
 import { packageDir } from '../build/release.ts'
 import { prepareCallback } from './callback.ts'
+import { makeCertificate } from './tls.mjs'
+
 const app = 'https://localhost:4681',
   bridge = 'https://localhost:4682',
   ccdp = 'https://localhost:4683'
-const artifactDir = join(packageDir, '.cache/qualification-artifacts')
+const sws = process.env.CEREMONY_SWS_URL
+if (!sws)
+  throw new Error(
+    'CEREMONY_SWS_URL must point to the pinned SWS serving the qualification artifact',
+  )
+const artifactDir = join(packageDir, '.cache/qualification-assets')
 const counts = new Map(),
   holds = new Map(),
   failures = new Set()
@@ -113,18 +120,25 @@ for (const port of [4681, 4682, 4683])
         if (Object.hasOwn(graph.headers, path)) {
           counts.set(path, (counts.get(path) ?? 0) + 1)
           if (holds.has(path)) await new Promise((resolve) => holds.get(path).push(resolve))
-          if (process.env.CEREMONY_SWS_URL) {
-            const response = await fetch(process.env.CEREMONY_SWS_URL + req.url, {
-              headers: { 'Accept-Encoding': 'identity' },
-            })
-            const headers = Object.fromEntries(response.headers)
-            delete headers['content-length']
-            delete headers['transfer-encoding']
-            return send(Buffer.from(await response.arrayBuffer()), headers, response.status)
-          }
-          const physical = path === '/ccdp/v1/prover' ? `${path}/index.html` : path
-          return send(readFileSync(join(artifactDir, 'public', physical)), graph.headers[path])
         }
+        // Transparent HTTPS ingress to the real static server, including HEAD/ranges/304.
+        const upstream = proxyRequest(
+          new URL(req.url, sws),
+          {
+            method: req.method,
+            headers: { ...req.headers, host: new URL(sws).host },
+          },
+          (response) => {
+            res.writeHead(response.statusCode, response.headers)
+            response.pipe(res)
+          },
+        )
+        upstream.on('error', () => {
+          if (!res.headersSent) res.writeHead(502)
+          res.end()
+        })
+        req.pipe(upstream)
+        return
       }
     } catch {}
     send(

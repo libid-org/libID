@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
-import fixture from '../test-fixtures/google-v1.json' with { type: 'json' }
-import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { test, expect } from '@playwright/test'
+import { fileURLToPath } from 'node:url'
+import { expect, test } from '@playwright/test'
+import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
+import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
+import fixture from '../test-fixtures/google-v1.json' with { type: 'json' }
+
 const app = 'https://localhost:4681',
   bridge = 'https://localhost:4682',
   ccdp = 'https://localhost:4683'
@@ -91,7 +92,7 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
 }) => {
   const graph = JSON.parse(
     readFileSync(
-      new URL('../.cache/qualification-artifacts/distribution-graph.json', import.meta.url),
+      new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
       'utf8',
     ),
   )
@@ -324,4 +325,69 @@ test('Callback clears unsupported versions and unconfigured direct visits locall
   )
   expect(page.url()).toBe(`${ccdp}/ccdp/callback.html`)
   expect(outbound).toEqual([])
+})
+
+// Real RC WASM and its nested module workers; no simulated SDK initialization.
+test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASSET-017]', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(90000)
+  const graph = JSON.parse(
+    readFileSync(
+      new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
+      'utf8',
+    ),
+  )
+  const resources = graph.requestsByProfile['x/1'] as { url: string }[]
+  const moduleUrl = ccdp + resources.find((r) => r.url.endsWith('/tlsn_wasm.js'))!.url
+  const wasmUrl = ccdp + resources.find((r) => r.url.endsWith('/tlsn_wasm_bg.wasm'))!.url
+  const snippet = resources.find((r) =>
+    /\/snippets\/web-spawn-[^/]+\/js\/spawn\.js$/.test(r.url),
+  )!.url
+  const count = async () =>
+    (
+      await (
+        await context.request.get(
+          `${ccdp}/qualification-control?asset=${encodeURIComponent(snippet)}`,
+        )
+      ).json()
+    ).count
+  const before = await count()
+  await page.goto(`${ccdp}/ccdp/v1/prover/fallback`)
+  const result = await page.evaluate(
+    async ({ moduleUrl, wasmUrl }) => {
+      const code = `try{const {default:init,initialize}=await import(${JSON.stringify(moduleUrl)});await init({module_or_path:${JSON.stringify(wasmUrl)}});await initialize(null,2);postMessage('ready')}catch(e){postMessage(String(e))}`
+      const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))
+      try {
+        return await Promise.all(
+          [0, 1].map(
+            () =>
+              new Promise<string>((resolve, reject) => {
+                const worker = new Worker(url, { type: 'module' })
+                const timeout = setTimeout(() => {
+                  worker.terminate()
+                  reject(new Error('TLSN initialization timed out'))
+                }, 60000)
+                worker.onmessage = (event) => {
+                  clearTimeout(timeout)
+                  worker.terminate()
+                  resolve(event.data)
+                }
+                worker.onerror = (event) => {
+                  clearTimeout(timeout)
+                  worker.terminate()
+                  reject(new Error(`TLSN worker failed: ${event.message}`))
+                }
+              }),
+          ),
+        )
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+    },
+    { moduleUrl, wasmUrl },
+  )
+  expect(result).toEqual(['ready', 'ready'])
+  expect(await count()).toBeGreaterThan(before)
 })

@@ -10,11 +10,11 @@ export type ResponseProfile =
   | 'asset'
 
 import { createHash } from 'node:crypto'
+import * as shared from '../src/ccdp/headers.ts'
 import { popupFallback } from './popup.ts'
 export const scriptHash = (code: string) =>
   `'sha256-${createHash('sha256').update(code).digest('base64')}'`
-const base =
-  "default-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+const base = shared.csp.base
 export function responseHeaders(
   profile: ResponseProfile,
   {
@@ -28,7 +28,12 @@ export function responseHeaders(
   },
 ): Record<string, string> {
   const headers: Record<string, string> = {
-    'X-Content-Type-Options': 'nosniff',
+    ...(['callback', 'prefetch', 'prover', 'proverFallback'].includes(profile)
+      ? shared.document
+      : shared.javascript),
+    ...(profile === 'asset' || ['executionWorker', 'proofWorker', 'leafWorker'].includes(profile)
+      ? shared.immutable
+      : { 'X-Content-Type-Options': 'nosniff' }),
     'Cache-Control': ['asset', 'executionWorker', 'proofWorker', 'leafWorker'].includes(profile)
       ? 'public, max-age=31536000, immutable'
       : 'no-cache',
@@ -70,7 +75,7 @@ export function responseHeaders(
   headers['Referrer-Policy'] = 'no-referrer'
   headers['Cross-Origin-Opener-Policy'] =
     profile === 'proverFallback' ? 'same-origin' : 'unsafe-none'
-  if (profile === 'prover') headers['Document-Isolation-Policy'] = 'isolate-and-require-corp'
-  if (profile === 'proverFallback') headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+  if (profile === 'prover') Object.assign(headers, shared.dip)
+  if (profile === 'proverFallback') Object.assign(headers, shared.isolated)
   return headers
 }

@@ -11,24 +11,19 @@ for every stable requirement ID, including partial, external and deferred covera
 | Input | Pin |
 |---|---|
 | Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `412df215b93473f79fae75df602f6b0be42b13a9`; eight source documents consolidated with implementation guides in the package docs directory; package composition updated for grouped CCDP documents |
+| Architecture PR #13 | `32e8217dab0f5925ad255950884efa3c6c0536ef`; eight source documents consolidated with implementation guides in the package docs directory; package composition updated for grouped CCDP documents |
 | Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
 | Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
 | Noir/Nargo and bb.js | `1.0.0-beta.25`, `5.2.0`; generation and independent verification explicitly use `verifierTarget: 'evm'` |
-| Circuit manifest SHA-256 | `ac57707b323e507848916b723073bce319df6cb09115c86fea5b6eb2c13e1ab9` |
 | Canonical attestation encoder | `libid-rs` `239a4bb426ac72591fe30006f22660e164a98d96` |
-| TLSNotary bundle source | `0f82f54968b36738eacebf7c8ac7728003918b72` |
-| TLSNotary JS SHA-256 | `4c852975717036cc9f5b3dff3b07f610b36ee01c05fa84003bb6034580898db2` |
-| TLSNotary WASM SHA-256 | `fcfe23bdbaab4bf8349229e8fb9cefdfacea687543bed9072d5fdfb2c93a133e` |
-| SWS | `2.44.0`; image digest in `ccdp.Dockerfile` |
+| TLSNotary bundle | `libid-org/notary` v0.3.0-rc.1, commit `d2372e9fc38d49d1cbc5d55be1288410954e7bfb`; snippet member selected with a directory wildcard |
+| SWS | `3.0.0-beta.1`; image digest in `ccdp.Dockerfile` |
 
-The separate libID notary fork PR #6 at
-`e1b9b80fa718beeaf187f2ec9f32392efaee2e63` and its TLSN dependency
-`816cebcf89480ebf55f58983ec6bab176ea08345` are successor candidates, not interchangeable
-with this bundle. Qualify a matched pair before replacing either member. The older
-published notary v0.2.0 browser bundle lacks the required reclaimed-channel finish
-contract and is not an acceptable substitute.
+The RC replaces the former local TLSNotary bundle. Its exported call shape and
+real browser WASM initialization are checked, but those checks do not establish
+matched-service protocol compatibility or successful concurrent notarizations.
+SWS v3 is currently a prerelease; the exact image is pinned in `ccdp.Dockerfile`.
 
 ## Evidence obtained
 
@@ -40,7 +35,7 @@ contract and is not an acceptable substitute.
 - Native installed ACVM/ABI WASM loaders, bb.js WASM loader and primary/fallback CRS
   loaders run with an observing fetch stub and external hosts blocked. This checks
   request methods, cache modes, URLs, ranges and primary/fallback ordering; synthetic CRS bodies in this probe are never proof evidence.
-- Generated body hashes, exact per-platform sets, retained immutable responses and
+- Exact per-platform sets, retained immutable responses and
   Brotli roundtrips. Every emitted HTTP response is checked against actual SWS.
   The deployment image was built and used behind the HTTPS browser harness; only
   its local listening port was changed to accommodate rootless host networking.
@@ -61,17 +56,13 @@ contract and is not an acceptable substitute.
   digest: this is runtime/key compatibility, not real consent or authorization for
   the harness transaction. Public-input mutation must fail independent verification.
 
-The ledger-integration run passed 180 ceremony units, 3 ledger units and all 7
-artifact/loader/actual-SWS checks. The five-profile browser matrix passed 44/45
-cases, including every real Google proof and independent verification. WebKit's
-two-concurrent-popup case observed only one completion before its 15-second test
-deadline. Five immediate focused repetitions passed. The cause is unresolved;
-these repetitions do not establish a consistently passing concurrency gate.
-
-The subsequent Callback input-list update passed 183 ceremony units, all 7
-artifact/loader/actual-SWS checks, and 15 targeted Callback/private-return browser
-cases across all five profiles. Loader tests now read metadata and bodies from the
-same selected artifact directory; no matching production build is required.
+The asset API/SWS v3 update passed 184 ceremony unit tests, all 15 build/loader/
+actual-SWS checks, and all 50 browser cases across Chromium, Firefox, WebKit,
+Android emulation and iOS emulation. Every profile generated a real Google fixture
+proof and verified it independently against the released key. Two concurrent
+notary RC WASM runtimes initialized in each profile; this does not qualify live
+TLSNotary sessions. An earlier WebKit concurrent-popup timeout was not reproduced
+in this full run; one passing run does not establish absence of intermittent faults.
 
 The executable matrix is `e2e/flow.spec.ts` plus `playwright.config.ts`. Final run
 counts and browser versions are recorded in the PR; ignored local reports carry
@@ -100,7 +91,11 @@ A real ledger definition is required before a production ceremony can be constru
    documented 32-KiB acceptance ceiling. This is no evidence of real TLSN concurrency
    or a qualified X/GitHub ceremony. Reestablish a matched service/bundle, then run
    the real profiles and correlate every final output.
-   These historical probes used the development override address, not the newly
+   A fresh single-session probe with v0.3.0-rc.1 also expired after 120 seconds
+   against that development endpoint; the probe does not establish the failing
+   protocol stage. The rebuilt standalone Chromium bearer proof passed independent
+   released-key verification in the same harness.
+   These probes used the development override address, not the newly
    documented `https://testnet.notary.lib.id`. Both fixed network selections and
    matched browser/Bridge sessions remain unqualified against live services.
 2. **X request deadline:** REQ-PLAT-33 / LIBID-BROWSER-010 require complete request
@@ -158,14 +153,12 @@ complete cache/update fault matrix are not claimed; their remaining properties a
   with its updated `LIBID-MOD-014/015` and Client API. The local requirement row keeps
   its ID but names `LedgerId` and a decoder-derived hash, matching the current API.
 
-- SWS 2.44 requires boolean `text-charset = false`; the document's empty-string
-  value fails configuration parsing. Its header matcher appends the resolved file
-  basename to the request path, even for files. The compiler emits matching rules;
-  actual public routes and policies are unchanged. See the upstream
-  [configuration](https://static-web-server.net/v2/configuration/config-file/) and
-  [header implementation](https://github.com/static-web-server/static-web-server/blob/v2.44.0/src/custom_headers.rs).
-  Explicit SHA-256 ETags are emitted because this server does not generate them.
-  Conditional-GET/304 behavior is not claimed.
+- The pinned SWS v3 beta uses boolean `text-charset = false`. With trailing-slash
+  redirects disabled, its header matcher appends the resolved file basename even
+  for files; generated exact header rules account for this. Native SWS owns weak
+  ETags, conditional responses and encoded representation selection. Compressed
+  and range responses may use chunked framing; tests verify body bytes and any
+  supplied length instead of requiring a redundant Content-Length.
 - Execution workers explicitly carry `Cross-Origin-Embedder-Policy: require-corp`.
   A real Firefox proof otherwise fails before worker bootstrap; the isolated engine
   harness had already supplied this header. The generated policy and immutable URL
@@ -225,3 +218,14 @@ request and records lengths only; it diagnoses runtime concurrency and cannot
 replace real X token/identity or GitHub profile qualification. The independent
 verifier consumes the released key, never a key recomputed by the proving backend.
 No chain, contract deployment, RPC, wallet or local browser verifier is required.
+
+## Asset API implementation choices
+
+- `archive(source, mount)` uses positional arguments by explicit user decision;
+  the upstream document's object-shaped example is not retained.
+- `file(source, mount, headers)` covers installed standalone WASM. External range
+  sizes are derived from Range; full-resource byte counts may be supplied where
+  known (G2 is 128 bytes). Unknown full-resource sizes do not become fictitious totals.
+- Native SWS may stream a representation with chunked transfer instead of emitting
+  Content-Length. Qualification checks actual bytes and any supplied length;
+  the build never injects a length to force another serving behavior.

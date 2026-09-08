@@ -391,6 +391,208 @@ graph has no separate serialized format or browser-visible manifest.
 
 ### Source declarations
 
+Shared integrations such as `prover/bb` and `prover/notarization` each define
+their resources once in a data-only `assets` module. The package's internal
+`assets` helper provides declarations and URL resolution; downloading,
+archive extraction, and wildcard matching run only in the artifact build.
+
+#### Archives
+
+```ts
+// prover/notarization/assets.ts — illustrative release location
+import * as assets from '../../assets.js'
+
+const tlsnRelease = assets.archive(
+  'https://releases.example/tlsn-wasm-0.2.0.tar.gz',
+  'tlsn/v0.2.0',
+)
+
+const headers = {
+  ...assets.headers.immutable,
+  ...assets.headers.javascript,
+}
+export const wasmJs = tlsnRelease.member('tlsn_wasm.js', headers)
+export const spawnJs = tlsnRelease.member(
+  'snippets/web-spawn-*/js/spawn.js',
+  { ...headers, ...assets.headers.executionWorker },
+)
+```
+
+`archive(source, mount)` declares a build-time archive source: an HTTPS URL
+or a local filesystem path. Relative local paths resolve from the ceremony
+package root; absolute local paths are accepted. The build reads the archive
+once and registers **all regular-file members** beneath
+`/ccdp/assets/<mount>/`, preserving their archive-relative paths. It does not
+flatten directories, strip release-directory prefixes, or rename members.
+Relative imports and worker references within the archive therefore continue
+to resolve. The source location is never a browser fetch URL.
+
+`member(path, headers)` selects one file and declares its HTTP **response**
+headers. Paths are relative to the archive root and may contain `*` within
+directory components; `*` does not cross `/`. The final filename is exact.
+The build requires exactly one regular-file match: zero or multiple matches
+fail instead of selecting the first. If the example matches
+`snippets/web-spawn-a1b2/js/spawn.js`, its resolved path is
+`/ccdp/assets/tlsn/v0.2.0/snippets/web-spawn-a1b2/js/spawn.js`, never the glob
+or an alias. Mounted members use the immutable asset response profile with
+their media type; member headers specialize that profile, including the
+execution-worker policy where needed, without weakening the HTTP contract.
+Conflicting declarations for the same public path fail the build.
+
+Mounts and member paths cannot escape their roots. Absolute archive paths,
+parent traversal, links, or duplicate entries that would overwrite files fail
+the build. A local source is still subject to immutable publication: changing
+its bytes requires a new public path, not overwriting an existing mount.
+
+`assets.resolve(asset)` synchronously returns the absolute runtime URL. For
+archive members the build supplies the exact matched public path, and runtime
+resolution uses the executing document or worker's CCDP origin, not the source
+URL or the JavaScript bundle's directory. Browser bundles contain only the
+resolved metadata and the small URL resolver: no archive library, filesystem
+access, wildcard lookup, runtime manifest request, or extraction step. Build
+plumbing is internal; callers neither copy generated filenames nor await URL
+resolution.
+
+Execution code imports the declared member and resolves its URL. The build
+imports the data-only declarations above without invoking `resolve()` or
+requiring a browser origin:
+
+```ts
+// prover/notarization — execution code
+import * as assets from '../../assets.js'
+import { wasmJs } from './assets.js'
+
+const wasmJsUrl = assets.resolve(wasmJs)
+// On https://lib.id: https://lib.id/ccdp/assets/tlsn/v0.2.0/tlsn_wasm.js
+```
+
+#### External requests
+
+```ts
+// prover/bb/assets.ts — data-only declaration
+import * as assets from '../../assets.js'
+
+export const g1 = assets.external(
+  'https://crs.aztec-cdn.foundation/g1_compressed.dat',
+  { range: `bytes=0-${SRS_SIZE * 32 - 1}` },
+)
+```
+
+Execution code uses the same resolver:
+
+```ts
+// prover/bb — execution code
+import * as assets from '../../assets.js'
+import { g1 } from './assets.js'
+
+assets.resolve(g1)
+// https://crs.aztec-cdn.foundation/g1_compressed.dat
+```
+
+`external(url, options?)` retains an absolute HTTPS URL and optional request
+parameters. `range` is an HTTP **request** `Range` value, not a response header
+or URL suffix; omitting it requests the full resource. The build validates the
+declaration but does not download, copy, extract, or emit a body, local route,
+or response profile for it. Generated CSP admits the declared fetch origin.
+`resolve()` returns the original URL unchanged and performs no fetch; the
+declaration retains the request parameters for Prefetch and the actual loader.
+Their requests use the same URL and range, including single-flight/cache keys.
+Different ranges cannot silently become the same resource because their URLs
+are equal. No separate runtime resolver or explicit `mode` argument is needed.
+
+External availability, readable CORS, range behavior, and the loader's real
+request set remain release-qualification checks, not ordinary build downloads.
+Current external resources are CRS data, not executable scripts or workers.
+Location is code-owned, not application input or a deployment override API.
+
+#### Header policy and generated metadata
+
+Headers have two owners; resource declarations supply only policy:
+
+| Kind | Examples | Owner |
+|---|---|---|
+| Declared policy | MIME (`Content-Type`), cache lifetime, CSP rules, isolation and framing headers | Code-owned, reusable header groups extended by the resource declaration. |
+| Generated response metadata | `ETag`, `Last-Modified`, `Content-Length`, `Content-Encoding`, `Content-Range` | Supplied by SWS from the build's emitted files and the selected response, never handwritten in a declaration. |
+
+The `assets` module exports shared policy groups as ordinary header records:
+
+| Group | Shared policy |
+|---|---|
+| `headers.immutable` | Immutable asset caching, `nosniff`, and same-origin CORP. |
+| `headers.javascript`, `headers.wasm`, `headers.json` | The corresponding exact MIME header. |
+| `headers.document` | Common document CSP, framing, referrer, and `nosniff` rules. |
+| `headers.executionWorker` | The common execution-worker CSP and JavaScript policy. |
+| `headers.dip`, `headers.isolated` | The distinct DIP and COOP/COEP isolation policies from the HTTP contract. |
+
+Resource declarations and protocol response profiles reuse these groups, then
+extend them with ordinary object spread and explicit fields:
+
+```ts
+const wasm = tlsnRelease.member('tlsn_wasm_bg.wasm', {
+  ...assets.headers.immutable,
+  ...assets.headers.wasm,
+})
+```
+
+An explicit field replaces that header; there is no implicit concatenation or
+deep-merge policy language. The build checks the final policy against the HTTP
+contract. It rejects conflicting case-insensitive header names and any
+handwritten generated-response metadata. Members not selected
+with `member()` receive the shared immutable policy and MIME for their file
+type; execution-worker exceptions must be declared explicitly.
+
+CSP remains declared policy even though its executable hashes and concrete
+resource origins are filled from the emitted code and resource graph. There
+is one source for these rules, not a second copy in deployment templates.
+
+The build produces the original and optional Brotli bodies; SWS derives their
+HTTP metadata when serving them. Length and encoding must match the selected
+body, including range responses. Do not emit fixed metadata overrides into
+path-policy rules or add a custom serving layer to reproduce SWS's behavior.
+There is no checked-in checksum list or new runtime integrity check.
+
+#### Profile composition
+
+Platform/version asset leaves import shared declarations and add their own
+requirements, for example:
+
+```ts
+// platforms/x/1/assets.ts
+import { resources as bb } from '../../../prover/bb/assets'
+import { resources as notarization } from '../../../prover/notarization/assets'
+import { circuit } from './circuit'
+
+export const resources = [...bb, ...notarization, circuit]
+```
+
+Other shared toolchain dependencies compose the same way. A circuit shared by
+multiple platforms likewise has one declaration, not a copy in each platform.
+`platforms/assets` maps supported platform/version pairs to these composed
+sets. It contains resource metadata only, not client or prover implementation
+imports. Prefetch consumes that catalog, not the build table containing the
+document entrypoints. The build collects shared references once while
+preserving membership in every profile that needs them. Both Prefetch and
+actual dependency loaders receive the same resolved resources; neither keeps
+another filename or URL list. The catalog is bundled metadata, not a fetched
+manifest or an independent platform-support registry.
+Mounting an archive makes every member servable; it does not prefetch them all.
+Each selected profile includes the members it actually loads, including nested
+scripts/workers. Shared declarations and overlapping profiles reuse the same
+mounted files and URL/range-keyed fetches.
+
+The build resolves `crsPath` to the common base of the CRS entries, currently
+`https://crs.aztec-cdn.foundation`. Remaining CRS requests and any native
+fallback requests belong to the bb integration's declarations; their exact
+paths, ranges, and sizes are defined in PROVING.md rather than duplicated here.
+
+Local and external declarations participate in the same selected-profile
+prefetch graph. Changing where an asset is served must not change its logical
+role, bytes, or proving semantics. For distributed
+CRS, all members retain the loader's filenames under one immutable base
+directory so the same `crsPath` option selects the set.
+
+### Protocol resources and response profiles
+
 The build's resource table collects protocol entrypoints and the owner-defined
 platform asset sets; it does not redeclare their resources. Protocol entries
 have a stable public route, source entrypoint, and response profile:
@@ -427,52 +629,6 @@ const resources = {
   assets: assetsByPlatform,
 } as const
 ```
-
-Shared integrations such as `prover/bb` and `prover/notarization` each define
-their resources once in a data-only `assets` module. Each declaration owns its
-exact source URL or pinned release member, request parameters, and mode.
-Platform/version asset leaves import these shared declarations and add their
-own requirements, for example:
-
-```ts
-// platforms/x/1/assets.ts
-import { resources as bb } from '../../../prover/bb/assets'
-import { resources as notarization } from '../../../prover/notarization/assets'
-import { circuit } from './circuit'
-
-export const resources = [...bb, ...notarization, circuit]
-```
-
-Other shared toolchain dependencies compose the same way. A circuit shared by
-multiple platforms likewise has one declaration, not a copy in each platform.
-`platforms/assets` maps supported platform/version pairs to these composed
-sets. It contains resource metadata only, not client or prover implementation
-imports. Prefetch consumes that catalog, not the build table containing the
-document entrypoints. The build collects shared references once while
-preserving membership in every profile that needs them. Both Prefetch and
-actual dependency loaders receive the same resolved resources; neither keeps
-another filename or URL list. The catalog is bundled metadata, not a fetched
-manifest or an independent platform-support registry.
-
-The build resolves `crsPath` to the common base of the CRS entries, currently
-`https://crs.aztec-cdn.foundation`. Remaining CRS requests and any native
-fallback requests belong to the bb integration's declarations; their exact
-paths, ranges, and sizes are defined in PROVING.md rather than duplicated here.
-
-| Mode | Build output | Browser use |
-|---|---|---|
-| `distributed` (default) | Compile, copy, or download the pinned source into the static output and resolve its local URL and response profile. | Prefetch and execution use that emitted URL. |
-| `external` | Retain the declared absolute HTTPS URL and request parameters; emit no asset body, route, or response profile for it. | Prefetch and execution fetch that URL directly under CORS; generated CSP admits its origin. |
-
-Both modes participate in the same selected-profile prefetch graph. Location
-and mode are deployment policy controlled by the code-owned declaration; no
-deployer override input is defined. They are not application inputs or runtime
-endpoints. External entries do not request a network download during ordinary artifact generation;
-release qualification checks their availability. Current external entries are
-CRS data, not executable scripts or workers. Changing where an asset is served
-must not change its logical role, bytes, or proving semantics. For distributed
-CRS, all members retain the loader's filenames under one immutable base
-directory so the same `crsPath` option selects the set.
 
 The entrypoints are build-tool inputs, not output filenames. First-party
 execution dependencies use ordinary imports; the build reads their emitted
@@ -512,11 +668,11 @@ script URL. Callback dependencies must be inlined, even where other documents
 can use immutable chunks. A missing implementation or split Callback entry
 dependency fails artifact generation.
 
-Profiles contain fixed isolation, cache, framing, media-type, and CSP rules but
-no generated filenames. The build fills body-dependent values such as inline
-script hashes, generated resource URLs, external asset origins, and the
-build-pinned Notary Service origins. It does not parse this Markdown or ask SWS
-to reconstruct policy.
+Profiles compose the shared [declared header policy](#header-policy-and-generated-metadata),
+with no generated filenames or representation metadata. The build fills CSP
+hashes, generated resource URLs, external asset origins, and the build-pinned
+Notary Service origins. It does not parse this Markdown or ask SWS to
+reconstruct policy.
 
 ### Generation
 
@@ -524,13 +680,14 @@ Across the supported CCDP versions, the pipeline:
 
 1. gives the declared entrypoints to the compiler/bundler;
 2. reads emitted filenames and dependency edges from its output API;
-3. materializes `distributed` dependencies under immutable paths and retains
-   `external` request URLs without downloading their bodies into the output;
+3. materializes local dependencies, mounting complete archives and resolving
+   each member selector to its exact path and response headers; external
+   declarations retain their URLs and request parameters without a download;
 4. resolves each platform/version's prefetch and loader locations from those
    declarations and emitted dependencies, then renders versioned protocol bodies
    and the aggregate Callback artifact using the paths and response profiles;
 5. emits a Brotli sidecar for each unencoded public body only when it is
-   smaller; and
+   smaller, using a standard Brotli implementation; and
 6. validates local graph completeness and the declared external request set
    before replacing the generated output.
 
@@ -543,14 +700,39 @@ release, not on every local build.
 
 ## Portable distribution
 
-[Static Web Server v2](https://static-web-server.net/v2/) (SWS) is the sole
+[Static Web Server v3](https://static-web-server.net/v3/) (SWS) is the sole
 serving dependency. It is an open-source static file server with a
-[TOML configuration](https://static-web-server.net/v2/configuration/config-file),
+[TOML configuration](https://static-web-server.net/v3/configuration/file),
 [path-matched response
-headers](https://static-web-server.net/v2/features/custom-http-headers), ETags,
+headers](https://static-web-server.net/v3/features/custom-http-headers), ETags,
 range requests, and [rootless multi-architecture container
-images](https://static-web-server.net/v2/features/docker). No CCDP-specific
+images](https://static-web-server.net/v3/features/docker). No CCDP-specific
 server or SWS plugin exists.
+
+### Serving ownership
+
+The build produces files and configuration, not an HTTP server. SWS owns file
+streaming, GET/HEAD handling, conditional requests, range responses, generated
+response metadata, and configured static error pages. No TypeScript middleware
+or preview server reimplements those semantics. The build retains resource
+selection, safe extraction, bundling, declared security/cache policy, and
+publication checks.
+
+SWS's native [ETags and conditional requests](https://static-web-server.net/v3/features/etag)
+remain enabled independently of automatic cache-policy defaults. Its weak
+validator uses file modification time and size, not a content hash. Changed
+bytes at a stable protocol URL must therefore receive changed file metadata,
+including when the byte length is unchanged. Preserve that distinction through
+container assembly; normalizing different releases to one fixed timestamp can
+otherwise preserve a stale validator. Qualification checks the served result,
+not a custom ETag algorithm.
+
+The build creates `.br` sidecars using standard compression tooling; SWS's
+[pre-compressed-file serving](https://static-web-server.net/v3/features/compression-static)
+owns negotiation, `Vary`, and representation selection. This does not enable
+request-time compression or move archive extraction into the server.
+
+### Static layout and configuration
 
 Build the portable distribution with:
 
@@ -558,16 +740,16 @@ Build the portable distribution with:
 pnpm --filter @libid/ceremony build:ccdp-artifacts -- --out-dir <directory>
 ```
 
-It replaces the output directory only after validating the complete graph and
-emits:
+It replaces the output directory only after validating the complete graph.
+A typical output is:
 
 ```text
 <directory>/
 ├── public/
 │   ├── ccdp/callback.html
-│   ├── ccdp/v{CCDPVersion}/prefetch
-│   ├── ccdp/v{CCDPVersion}/prover/index.html
-│   ├── ccdp/v{CCDPVersion}/prover/fallback
+│   ├── ccdp/v{CCDPVersion}/prefetch.html
+│   ├── ccdp/v{CCDPVersion}/prover.html
+│   ├── ccdp/v{CCDPVersion}/prover-fallback.html
 │   ├── ccdp/v{CCDPVersion}/worker.js
 │   ├── ccdp/assets/...
 │   └── 404.html
@@ -581,46 +763,75 @@ operator-edited and starts from this fixed baseline:
 ```toml
 [general]
 host = "::"
-port = 80
+port = 8787
 root = "/home/sws/public"
 page404 = "/home/sws/public/404.html"
 cache-control-headers = false
+etag = true
 compression = false
 compression-static = true
 security-headers = false
 directory-listing = false
 redirect-trailing-slash = false
 health = false
-text-charset = ""
+text-charset = false
 ```
 
-No SPA fallback is configured. The `/prover` route resolves its generated
-directory-index body without a trailing-slash redirect, allowing
-`/prover/fallback` to coexist as a separate file. Headers match the public
-request paths, not the physical index filename; the Prover bootstrap rejects
-undeclared entry paths such as `/prover/index.html`. Other protocol routes map
-directly to exact files. SWS uses generated Brotli sidecars for
-`Accept-Encoding` negotiation and never compresses a response at request time.
+No SPA fallback is configured. Exact SWS
+[internal rewrites](https://static-web-server.net/v3/features/url-rewrites)
+map protocol routes to their emitted files, without `redirect`, a Location
+header, or another browser request. For example, the build generates:
 
-The generator emits non-overlapping `advanced.headers` rules covering every
-public resource. Assets with execution-worker CSP use their own exact path
-rules, not a generic asset policy; identical profiles may be grouped only
-without overlap. Those rules are compiled from the response-profile table; SWS does
-not reconstruct policy. They set exact media, cache, isolation, framing, CORS,
-CSP, and `Service-Worker-Allowed` headers. The generator rejects overlapping
-patterns, an omitted profile, an unrepresented file, or any SWS option that
-could weaken the [HTTP contract](distribution.md#http-contract).
+```toml
+[[advanced.rewrites]]
+source = "/ccdp/v1/prefetch"
+destination = "/ccdp/v1/prefetch.html"
+
+[[advanced.rewrites]]
+source = "/ccdp/v1/prover"
+destination = "/ccdp/v1/prover.html"
+
+[[advanced.rewrites]]
+source = "/ccdp/v1/prover/fallback"
+destination = "/ccdp/v1/prover-fallback.html"
+```
+
+The filenames above are illustrative build outputs, not new protocol routes
+or a second hand-maintained mapping. The resource graph supplies the rewrite
+destinations. Versioned documents reject direct navigation to their emitted
+`.html` paths during bootstrap; only the CCDP entry paths execute the protocol.
+Callback, Worker, and asset paths already matching their files need no rewrite.
+Unknown routes do not match a catch-all rewrite.
+
+The generator emits ordered `advanced.headers` rules from the shared policy
+groups: common defaults first, resource-specific overrides afterwards. SWS's
+last matching value wins for each header. Intentional overlap is allowed; no
+algorithm partitions the asset tree into disjoint header patterns. An override
+replaces a complete header value, including CSP, rather than appending another
+policy header.
+
+SWS evaluates these rules after rewriting. Generate matches from the same
+route-to-file graph, accounting for the pinned SWS version's path matching,
+and qualify the effective response at the public URL. Every resource must
+receive its declared media, cache, isolation, framing, CORS, CSP, and
+`Service-Worker-Allowed` policy. In particular, generic asset rules must not
+erase execution-worker policy, and the two Prover responses must retain their
+distinct isolation headers. Reject missing or incorrect effective policy,
+unrepresented files, or configuration weakening the [HTTP contract](#http-contract),
+not overlapping rules merely because they overlap.
+
+### Container and qualification
 
 The checked-in container recipe is fixed apart from the SWS image digest:
 
 ```dockerfile
-FROM ghcr.io/static-web-server/static-web-server:2-alpine@sha256:<pinned-digest>
+FROM ghcr.io/static-web-server/static-web-server@sha256:<pinned-v3-alpine-digest>
 COPY --chown=sws:sws public/ /home/sws/public/
 COPY --chown=sws:sws sws.toml /etc/sws.toml
 ENV SERVER_CONFIG_FILE=/etc/sws.toml
 ```
 
-Release automation pins the SWS v2 image by digest, builds this image from the
+Release automation pins one qualified SWS v3 image by digest, builds this image from the
 generated directory, and verifies the served route, header, cache, method, and
 404 contracts before publication. The container serves HTTP internally; its
 deployment terminates public HTTPS at an ordinary container ingress, load
@@ -633,11 +844,14 @@ every old protocol resource and immutable asset required by the supported
 compatibility window. No startup download, mounted source directory,
 request-time templating, or platform-specific manifest is required.
 
-The same image runs locally:
+Local preview and browser integration tests run the same pinned SWS binary and
+generated configuration as deployment, directly or through the same image.
+Unit tests may use fakes for build logic, but HTTP qualification does not use a
+TypeScript imitation of SWS. For example:
 
 ```sh
 docker build --file <ccdp.Dockerfile> --tag libid-ccdp <directory>
-docker run --rm --publish 8787:80 libid-ccdp
+docker run --rm --publish 8787:8787 libid-ccdp
 ```
 
 Rebuilding it for development changes no browser protocol or response policy.

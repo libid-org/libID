@@ -115,7 +115,11 @@ function workerImports(): Plugin {
 export async function bundle(
   entry: string,
   data: ResolvedAssets,
-  { selfContained = false, invoke }: { selfContained?: boolean; invoke?: string } = {},
+  {
+    selfContained = false,
+    invoke,
+    groupModules = true,
+  }: { selfContained?: boolean; invoke?: string; groupModules?: boolean } = {},
 ) {
   const graph = new Map<string, BundleNode>(),
     workerFiles = new Set<string>()
@@ -201,20 +205,21 @@ export async function bundle(
           entryFileNames: `ccdp/assets/${data.policyId}/[name]-[hash].js`,
           chunkFileNames: `ccdp/assets/${data.policyId}/[name]-[hash].js`,
           assetFileNames: assetName,
-          manualChunks: selfContained
-            ? undefined
-            : (id) => {
-                if (id.includes('/src/prover/engine.') || id.includes('/src/prover/bb/'))
-                  return 'proof-engine'
-                if (id.includes('/src/prover/notarization/')) return 'notarization'
-                if (
-                  id.includes('/src/') &&
-                  !id.includes('/platforms/') &&
-                  !id.includes('/src/ccdp/documents/prover.ts') &&
-                  !id.includes('/popup/')
-                )
-                  return 'shared'
-              },
+          manualChunks:
+            selfContained || !groupModules
+              ? undefined
+              : (id) => {
+                  if (id.includes('/src/prover/engine.') || id.includes('/src/prover/bb/'))
+                    return 'proof-engine'
+                  if (id.includes('/src/prover/notarization/')) return 'notarization'
+                  if (
+                    id.includes('/src/') &&
+                    !id.includes('/platforms/') &&
+                    !id.includes('/src/ccdp/documents/prover.ts') &&
+                    !id.includes('/popup/')
+                  )
+                    return 'shared'
+                },
         },
       },
     },

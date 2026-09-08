@@ -1,8 +1,8 @@
-import { assetUrl } from '../../assets.js'
+import { resolve as resolveAsset } from '../../assets.js'
 import { httpsUrl, origin } from '../../ccdp/index.js'
 import type { NotaryAttestation } from '../../platforms/types.js'
-import type { ByteRange } from './notarize.js'
 import { tlsnModule, tlsnWasm } from './assets.js'
+import type { ByteRange } from './notarize.js'
 export interface ExactHttpRequest {
   url: string
   method: 'GET' | 'POST'
@@ -85,8 +85,8 @@ export async function prepareNotarization(
     worker.postMessage({
       type: 'prepare',
       url,
-      moduleUrl: assetUrl(tlsnModule),
-      wasmUrl: assetUrl(tlsnWasm),
+      moduleUrl: resolveAsset(tlsnModule),
+      wasmUrl: resolveAsset(tlsnWasm),
       notaryAddress,
     })
     await prepared

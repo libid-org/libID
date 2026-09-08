@@ -1,17 +1,18 @@
-import { readBody } from '../../../response.js'
-import { parseJson } from '../../../prover/json.js'
-import { assetUrl } from '../../../assets.js'
+import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
-import { ProofEngine, PROOF_ENGINE_SPANS } from '../../../prover/engine.js'
-import { Progress } from '../../../prover/progress.js'
-import type { ProverContext } from '../../../prover/context.js'
 import { isRecord } from '../../../primitives.js'
-import { parseOAuthReturn } from './oauth.js'
-import { decodeGoogleIdToken, decodeGoogleHeader } from './token.js'
-import { buildGoogleWitness } from './inputs.js'
-import { validateGooglePublicInputs } from './publicInputs.js'
+import type { ProverContext } from '../../../prover/context.js'
+import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../prover/engine.js'
+import { parseJson } from '../../../prover/json.js'
+import { Progress } from '../../../prover/progress.js'
+import { readBody } from '../../../response.js'
 import { circuit } from './assets.js'
+import { buildGoogleWitness } from './inputs.js'
+import { parseOAuthReturn } from './oauth.js'
+import { validateGooglePublicInputs } from './publicInputs.js'
+import { decodeGoogleHeader, decodeGoogleIdToken } from './token.js'
 import type { GoogleProofV1 } from './types.js'
+
 const spans = [
   { code: 'signing-key-fetch', label: 'Fetching signing key', weight: 3 },
   { code: 'circuit-inputs', label: 'Preparing proof inputs', weight: 2 },
@@ -43,7 +44,7 @@ export async function prove(context: ProverContext): Promise<GoogleProofV1 | nul
     onProgress(step, performance.timeOrigin + performance.now()),
   )
   const engine = new ProofEngine({
-    circuitUrl: assetUrl(circuit),
+    circuitUrl: resolveAsset(circuit),
     onProgress: (step) => {
       if (step.status === 'started') progress.start(step.code)
       else if (step.status === 'completed') progress.complete(step.code)

@@ -1,15 +1,23 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { readArchive } from './archive.ts'
+import { loadAssetCatalog } from './assets.ts'
 import { validateCircuitCapacity } from './circuits.ts'
-import { circuitRelease } from './release.ts'
 
 test('released circuit statistics fit the fixed launch SRS [LIBID-ASSET-013]', async () => {
-  const bearer = await circuitRelease('bearer_link'),
-    google = await circuitRelease('oidc_google')
-  const releases = new Map([
-    ['bearer_link', bearer],
-    ['oidc_google', google],
-  ])
+  const catalog = await loadAssetCatalog()
+  const releases = new Map(
+    await Promise.all(
+      catalog.circuits.map(
+        async (asset) =>
+          [
+            asset.member!.replace(/\.json$/, ''),
+            (await readArchive(asset.source)).get(asset.member!)!,
+          ] as const,
+      ),
+    ),
+  )
+  const bearer = releases.get('bearer_link')!
   const stats = await validateCircuitCapacity(releases, 2 ** 18)
   assert.deepEqual(stats, {
     bearer_link: { gates: 42006, dyadic: 2 ** 16 },
