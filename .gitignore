@@ -26,3 +26,7 @@ ts/packages/*/playwright-report/
 ts/packages/ceremony/.cache/
 ts/packages/ceremony/dist-artifacts/
 ts/qualification/ceremony/results/
+
+# Ceremony development configuration
+ts/packages/ceremony/dev/.env*
+!ts/packages/ceremony/dev/.env.example
