@@ -1,9 +1,8 @@
 import { gunzipSync } from 'node:zlib'
 import { BackendType, Barretenberg } from '@aztec/bb.js'
-import type { ReleaseFiles } from './release.ts'
 /** Build-time circuit statistics use the pinned EVM proof settings, without SRS downloads. */
 export async function validateCircuitCapacity(
-  releases: ReadonlyMap<string, ReleaseFiles>,
+  releases: ReadonlyMap<string, Buffer>,
   srsPoints: number,
 ) {
   if (
@@ -15,8 +14,8 @@ export async function validateCircuitCapacity(
   const api = await Barretenberg.new({ backend: BackendType.Wasm, threads: 1, skipSrsInit: true })
   const stats: Record<string, { gates: number; dyadic: number }> = {}
   try {
-    for (const [name, files] of releases) {
-      const circuit = JSON.parse(files[`${name}.json`].toString('utf8')) as { bytecode: string }
+    for (const [name, bytes] of releases) {
+      const circuit = JSON.parse(bytes.toString('utf8')) as { bytecode: string }
       const result = await api.circuitStats({
         circuit: {
           name,

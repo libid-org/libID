@@ -1,20 +1,21 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
-import { brotliCompressSync, brotliDecompressSync, constants } from 'node:zlib'
-import { parse } from 'smol-toml'
+import { join, resolve } from 'node:path'
 import type { Rollup } from 'vite'
 import type { AssetRequest } from '../src/assets.js'
 import type { ResolvedAssets } from './assets.ts'
-import { resolveAssets } from './assets.ts'
+import { assetHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
 import { bundle } from './bundle.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { responseHeaders } from './profiles.ts'
-import { hash, packageDir } from './release.ts'
+import { packageDir } from './release.ts'
+import { safePath } from './archive.ts'
+import { writeDistribution } from './sws.ts'
 export type DistributionMetadata = Pick<ResolvedAssets, 'requestsByProfile' | 'allowedRequests'> & {
   ledgerFixture: boolean
   headers: Record<string, Record<string, string>>
   graph: Record<string, BundleNode>
+  files: Record<string, string>
 }
 const index = process.argv.indexOf('--out-dir'),
   out = resolve(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
@@ -27,9 +28,8 @@ if (process.env.LIBID_LEDGER_FIXTURE === '1') {
 const staging = `${out}.building`
 if (existsSync(staging)) throw new Error('Build staging directory already exists')
 mkdirSync(join(staging, 'public'), { recursive: true })
-const publicDir = join(staging, 'public')
 try {
-  const data = await resolveAssets(publicDir),
+  const data = await resolveAssets(),
     records = new Map<string, { bytes: Buffer; headers: Record<string, string> }>(),
     workerFiles = new Set<string>()
   const options = {
@@ -37,8 +37,8 @@ try {
       ...new Set(
         Object.values(data.profiles)
           .flat()
-          .filter((a) => a.mode === 'external')
-          .flatMap((a) => a.urls.map((u) => new URL(u).origin)),
+          .filter((a) => a.isExternal === true)
+          .flatMap((a) => [a.source, ...(a.fallback ?? [])].map((u) => new URL(u).origin)),
       ),
     ],
     notaryAddresses: data.notaryAddresses,
@@ -46,7 +46,7 @@ try {
   const put = (
     path: string,
     body: string | Uint8Array,
-    profile: ResponseProfile,
+    profile: ResponseProfile | Record<string, string>,
     headers: Record<string, string> = {},
   ) => {
     const bytes = Buffer.from(body),
@@ -55,44 +55,20 @@ try {
     records.set(path, {
       bytes,
       headers: {
-        ...responseHeaders(profile, options),
-        ...(profile === 'asset'
-          ? {
-              'Content-Type': path.endsWith('.js')
-                ? 'text/javascript; charset=utf-8'
-                : path.endsWith('.wasm')
-                  ? 'application/wasm'
-                  : path.endsWith('.json')
-                    ? 'application/json'
-                    : 'application/octet-stream',
-            }
-          : {}),
+        ...(typeof profile === 'string' ? responseHeaders(profile, options) : profile),
+        ...(profile === 'asset' ? { 'Content-Type': mediaType(path) } : {}),
         ...headers,
-        ETag: `"${hash(bytes)}"`,
       },
     })
   }
-  for (const path of data.local)
-    put(
-      path,
-      readFileSync(join(publicDir, path)),
-      path.endsWith('.js') ? 'executionWorker' : 'asset',
-      {
-        'Content-Type': path.endsWith('.json')
-          ? 'application/json'
-          : path.endsWith('.wasm')
-            ? 'application/wasm'
-            : path.endsWith('.js')
-              ? 'text/javascript; charset=utf-8'
-              : 'application/octet-stream',
-      },
-    )
+  for (const [path, record] of data.local) put(path, record.bytes, record.headers)
   const emitted = await bundle('src/ccdp/documents/prover.ts', data, { invoke: 'startProver' })
   for (const path of emitted.workerFiles) workerFiles.add(path)
   const graph = emitted.graph
   const workerProfile = (file: string): ResponseProfile => {
     const modules = graph.get(file)?.modules ?? []
-    if (modules.some((m) => m.includes('/notarization/'))) return 'executionWorker'
+    if (modules.some((m) => m.endsWith('/prover/notarization/session.worker.ts')))
+      return 'executionWorker'
     return modules.some((m) => m.endsWith('?worker&url')) ? 'proofWorker' : 'leafWorker'
   }
   for (const item of emitted.output) {
@@ -118,12 +94,14 @@ try {
       )?.[0]
     if (!entry) throw new Error(`Missing emitted platform entry: ${profile}`)
     const requests: AssetRequest[] = assets.map((a) =>
-      a.mode === 'external'
-        ? { url: a.urls[0], range: a.range, bytes: a.bytes }
+      a.isExternal
+        ? externalRequest(a)
         : {
-            url: data.urls[a.id],
-            bytes: data.sizes[data.urls[a.id]],
-            mime: records.get(data.urls[a.id])!.headers['Content-Type'].split(';')[0],
+            url: data.urls[`${a.mount}/${a.member ?? ''}`],
+            bytes: data.sizes[data.urls[`${a.mount}/${a.member ?? ''}`]],
+            mime: new Headers(records.get(data.urls[`${a.mount}/${a.member ?? ''}`])!.headers)
+              .get('Content-Type')!
+              .split(';')[0],
           },
     )
     for (const file of walk(entry)) {
@@ -145,8 +123,8 @@ try {
         ...Object.values(data.requestsByProfile).flat(),
         ...Object.values(data.profiles)
           .flat()
-          .filter((a) => a.mode === 'external')
-          .flatMap((a) => a.urls.map((url) => ({ url, range: a.range, bytes: a.bytes }))),
+          .filter((a) => a.isExternal === true)
+          .flatMap((a) => (a.fallback ?? []).map((url) => ({ ...externalRequest(a), url }))),
       ].map((r) => [`${r.url}\n${r.range ?? ''}`, r]),
     ).values(),
   ]
@@ -196,62 +174,32 @@ try {
     'prefetch',
     { 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'" },
   )
-  // Carry previous immutable responses forward, including their original policies.
-  // Mutable route entries always come from this build. No runtime manifest is emitted.
-  if (existsSync(join(out, 'sws.toml'))) {
-    const previous = parse(readFileSync(join(out, 'sws.toml'), 'utf8')) as {
-      advanced?: { headers?: { source: string; headers: Record<string, string> }[] }
-    }
-    for (const entry of previous.advanced?.headers ?? []) {
-      const source = entry.source
-      if (typeof source !== 'string' || !source.startsWith('/ccdp/assets/')) continue
-      const path = source.slice(0, source.lastIndexOf('/'))
-      if (path.includes('..') || source !== `${path}/${basename(path)}`)
-        throw new Error('Invalid previous asset path')
-      const bytes = readFileSync(join(out, 'public', path)),
-        headers = entry.headers
-      if (
-        headers.ETag !== `"${hash(bytes)}"` ||
-        headers['Cache-Control'] !== 'public, max-age=31536000, immutable'
-      )
-        throw new Error('Invalid previous immutable response')
+  // Retain old immutable assets and their effective policy through the compatibility window.
+  const previousGraph = join(out, 'distribution-graph.json')
+  if (existsSync(previousGraph)) {
+    const previous: DistributionMetadata = JSON.parse(readFileSync(previousGraph, 'utf8'))
+    for (const [path, headers] of Object.entries(previous.headers)) {
+      if (!path.startsWith('/ccdp/assets/')) continue
+      safePath(path.slice(1))
+      assetHeaders(path, headers)
+      const bytes = readFileSync(join(out, 'public', path))
       const current = records.get(path)
       if (current) {
         if (
           !current.bytes.equals(bytes) ||
-          JSON.stringify({ ...current.headers, Vary: undefined }) !==
-            JSON.stringify({ ...headers, Vary: undefined })
+          JSON.stringify([...new Headers(current.headers)].sort()) !==
+            JSON.stringify([...new Headers(headers)].sort())
         )
           throw new Error(`Immutable response changed: ${path}`)
       } else records.set(path, { bytes, headers })
     }
   }
-  const baseline = `[general]\nhost = "::"\nport = 80\nroot = "/home/sws/public"\npage404 = "/home/sws/public/404.html"\ncache-control-headers = false\ncompression = false\ncompression-static = true\nsecurity-headers = false\ndirectory-listing = false\nredirect-trailing-slash = false\nhealth = false\ntext-charset = false\n`
-  let config = baseline
-  for (const [path, { bytes, headers }] of records) {
-    const physical = path === '/ccdp/v1/prover' ? `${path}/index.html` : path,
-      target = join(publicDir, physical)
-    mkdirSync(dirname(target), { recursive: true })
-    writeFileSync(target, bytes)
-    const compressed = brotliCompressSync(bytes, {
-      params: { [constants.BROTLI_PARAM_QUALITY]: 6 },
-    })
-    if (compressed.length < bytes.length) {
-      if (!brotliDecompressSync(compressed).equals(bytes)) throw new Error('Invalid Brotli sidecar')
-      writeFileSync(`${target}.br`, compressed)
-      headers.Vary = 'Accept-Encoding'
-    }
-    config +=
-      `\n[[advanced.headers]]\nsource = ${JSON.stringify(`${path}/${basename(physical)}`)}\n[advanced.headers.headers]\n` +
-      Object.entries(headers)
-        .map(([k, v]) => `${JSON.stringify(k)} = ${JSON.stringify(v)}\n`)
-        .join('')
-  }
-  writeFileSync(join(staging, 'sws.toml'), config)
+  const files = writeDistribution(staging, records)
   // Qualification metadata belongs to this output, outside public/ and the deployment image.
   writeFileSync(
     join(staging, 'distribution-graph.json'),
     JSON.stringify({
+      files,
       ledgerFixture: process.env.LIBID_LEDGER_FIXTURE === '1',
       requestsByProfile: data.requestsByProfile,
       allowedRequests: data.allowedRequests,

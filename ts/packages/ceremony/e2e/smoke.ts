@@ -1,14 +1,15 @@
 import { LedgerId } from '@libid/ledger'
-import { resolveNotaryAddress } from '../src/prover/notary.js'
-import { ProofEngine } from '../src/prover/engine.js'
-import { assetUrl } from '../src/assets.js'
-import { circuit as google } from '../src/platforms/google/1/assets.js'
-import { bearerCircuit } from '../src/prover/bearerLink.assets.js'
-import { buildGoogleWitness } from '../src/platforms/google/1/inputs.js'
-import { buildBearerLinkWitness } from '../src/prover/bearerLink.js'
-import fixture from '../test-fixtures/google-v1.json'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { resolve as assetUrl } from '../src/assets.js'
+import { circuit as google } from '../src/platforms/google/1/assets.js'
+import { buildGoogleWitness } from '../src/platforms/google/1/inputs.js'
+import { bearerCircuit } from '../src/prover/bearerLink.assets.js'
+import { buildBearerLinkWitness } from '../src/prover/bearerLink.js'
+import { ProofEngine } from '../src/prover/engine.js'
 import { prepareNotarization } from '../src/prover/notarization/session.js'
+import { resolveNotaryAddress } from '../src/prover/notary.js'
+import fixture from '../test-fixtures/google-v1.json'
+
 Object.assign(window, {
   async proveFixture(platform: 'google' | 'bearer') {
     const bearer = `AAAA${'x'.repeat(96)}`

@@ -1,19 +1,20 @@
-import { isFormClientId } from '../../authorization.js'
-import { readBody } from '../../../response.js'
-import { assetUrl } from '../../../assets.js'
+import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
-import type { ProverContext } from '../../../prover/context.js'
-import { ProofEngine, PROOF_ENGINE_SPANS } from '../../../prover/engine.js'
-import { Progress } from '../../../prover/progress.js'
-import { prepareNotarization } from '../../../prover/notarization/session.js'
-import { buildBearerLinkWitness } from '../../../prover/bearerLink.js'
-import { responseJson, bearerOpening } from '../../../prover/http.js'
 import { isRecord } from '../../../primitives.js'
+import { buildBearerLinkWitness } from '../../../prover/bearerLink.js'
+import type { ProverContext } from '../../../prover/context.js'
+import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../prover/engine.js'
+import { bearerOpening, responseJson } from '../../../prover/http.js'
+import { prepareNotarization } from '../../../prover/notarization/session.js'
+import { Progress } from '../../../prover/progress.js'
+import { readBody } from '../../../response.js'
+import { isFormClientId } from '../../authorization.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
-import { encodeTokenRequest, decodeTokenResponse, admitTokenResponse } from './token.js'
-import { identityRequest, selectIdentity } from './transcript.js'
 import { circuit } from './assets.js'
+import { admitTokenResponse, decodeTokenResponse, encodeTokenRequest } from './token.js'
+import { identityRequest, selectIdentity } from './transcript.js'
 import type { GitHubProofV1 } from './types.js'
+
 const spans = [
   { code: 'token-exchange', label: 'Exchanging authorization code', weight: 20 },
   { code: 'identity-session', label: 'Fetching identity', weight: 20 },
@@ -40,7 +41,7 @@ export async function prove(context: ProverContext): Promise<GitHubProofV1 | nul
     onProgress(step, performance.timeOrigin + performance.now()),
   )
   const engine = new ProofEngine({
-    circuitUrl: assetUrl(circuit),
+    circuitUrl: resolveAsset(circuit),
     onProgress: (step) => {
       if (step.status === 'started') progress.start(step.code)
       else if (step.status === 'completed') progress.complete(step.code)

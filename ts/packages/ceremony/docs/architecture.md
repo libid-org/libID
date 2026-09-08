@@ -132,6 +132,7 @@ Launch publishes one `@libid/ceremony` package:
 │       └── prover    source entrypoint for the isolated Prover document
 ├── client      CeremonyConfig fetch, application-side API, and orchestration
 ├── prefetch    shared worker, registration, and asset cache implementation
+├── assets      lightweight resource declarations, shared header policy, and URL resolution
 ├── prover
 │   ├── engine        WASM proving and dedicated proof worker
 │   ├── bb             shared bb.js integration and resource declarations
@@ -214,7 +215,13 @@ top-level document. The OAuth-bridge Callback installs no Worker.
 the X and GitHub prover leaves, not another package entrypoint or artifact.
 
 Shared integrations declare their resources in lightweight `assets` modules,
-separate from execution code. Each platform/version `assets` leaf composes
+separate from execution code. They use the package's internal `assets` helper:
+`archive().member()` selects build-resolved archive files, `external()` declares
+runtime HTTPS requests, and `resolve()` returns either asset's runtime URL.
+Shared `assets.headers` groups supply declared response policy, not generated
+representation metadata. Downloading, extraction, and wildcard resolution
+belong to the build and never enter browser bundles.
+Each platform/version `assets` leaf composes
 shared declarations with its circuit and other dependencies; it copies no
 shared URL, mode, or request parameters. `platforms/assets` collects these sets
 by platform/version for Prefetch and the artifact build, without importing
@@ -224,7 +231,7 @@ an explicit dependency boundary, not a reliance on tree-shaking. The build
 checks that the asset catalog covers exactly the supported platform/version
 pairs and resolves the same declarations for prefetch and execution; the
 [Distribution's source declarations](distribution.md#source-declarations)
-define collection and resource modes.
+define the asset API, header ownership, and profile collection.
 
 OAuth Bridge implementations are outside the package. The GitHub version's
 prover leaf implements only the bridge-contract browser request/response codecs
@@ -250,6 +257,7 @@ platforms/{x,github}/<version>/prover ───> prover/notarization
 prefetch, artifact build ───> platforms/assets ───> platforms/<platform>/<version>/assets
 platforms/<platform>/<version>/prover ───────────> platforms/<platform>/<version>/assets
 platforms/<platform>/<version>/assets ───> shared integrations' assets modules
+owner-defined asset modules ───> assets (declarations and URL resolution only)
 
 client, callback, prefetch, prover, platforms/index ───> ccdp
 client, callback, prefetch, prover ───> @libid/popup
