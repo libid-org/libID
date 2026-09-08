@@ -181,29 +181,30 @@ JavaScript source. Serialization escapes `<` as `\u003c` so data cannot terminat
 the script element or introduce markup. Missing or repeated markers reject the
 artifact. No callback request value participates in substitution.
 
-The configuration contains a `versionedInputs` map with an explicit input tuple
-for each supported CCDP version, keyed by its decimal version string. Version 1
-uses:
+The inserted data is one unversioned JSON list, `[allowedAppOrigins, ccdpOrigin]`,
+derived directly from the Bridge's existing validated configuration:
 
 ```json
-{
-  "versionedInputs": {
-    "1": [
-      ["https://app.example"],
-      "https://lib.id"
-    ]
-  }
-}
+[
+  ["https://app.example"],
+  "https://lib.id"
+]
 ```
 
-The bridge does not dispatch on OAuth `state` or interpret the tuple while
-composing the document. Each bundled Callback implementation defines and
-exact-validates its own inputs; version 1 requires a nonempty, duplicate-free
-canonical HTTPS application allowlist and the configured canonical HTTPS CCDP
-origin. It receives a deeply frozen copy of `versionedInputs[version]`.
-There is no default or fallback to another version's inputs. A missing entry
-fails locally before connection setup. Neither URL input nor an upstream
-artifact supplies deployment configuration.
+There is no version-keyed wrapper, input-declaration block, or Bridge-side
+CCDP version list. Every bundled Callback implementation receives a deeply
+frozen copy of the same list. The first two positions require a nonempty,
+duplicate-free canonical HTTPS application allowlist and the configured
+canonical HTTPS CCDP origin, exactly matching the values used for configuration
+CORS and public `CeremonyConfig`. The list contains no secrets. Neither URL
+input nor an upstream artifact supplies deployment values.
+
+Compatible evolution preserves existing positions, types, and meanings. New
+optional trailing inputs may be defaulted when absent by newer implementations
+and ignored by older ones. New CCDP versions using that compatible contract
+require no Bridge change. A new required input or incompatible interpretation
+instead requires an explicit input-contract version and corresponding Bridge
+support; no such versioning is defined until needed.
 
 This is a data-insertion contract, not a UI template or renderer API. Callback
 owns all code, markup, styles, and the inline libID logo. Its dependencies are
@@ -223,8 +224,8 @@ network use:
    `history.replaceState` while retaining the same path;
 2. requires exactly one routing `state` and reads its `v<version>.` prefix;
 3. rejects a malformed version or one absent from its bundled implementations;
-4. requires the selected version's entry in `versionedInputs`, then
-   exact-validates and freezes its input tuple and captured location; and
+4. requires a JSON input list, validates the inputs used by the selected
+   implementation, and freezes the list and captured location; and
 5. enters the selected Callback implementation once, without dynamic import.
 
 Oversized or malformed input is cleared and renders only fixed failure text.
@@ -236,7 +237,7 @@ or abort-message implementation is retained for this screen. Applications need
 no version-specific failure UI and receive no protocol notification of this
 local failure; their ordinary cancellation/connection-failure handling remains.
 
-Missing or malformed inputs for a bundled version likewise render fixed local
+Missing or malformed required inputs likewise render fixed local
 failure text without establishing a connection or emitting a protocol message.
 
 No platform credential is parsed here. The selected Callback
@@ -500,9 +501,10 @@ const responseProfiles = {
 
 The Callback entry bundles the closed implementation set once across supported
 CCDP versions, sharing dependencies where possible. The same build selection
-drives the bundled dispatch table and corresponding versioned resources;
-no manually maintained bridge-side version table exists. Retiring a version
-after its compatibility window removes its implementation, not the generic
+drives the bundled dispatch table and corresponding versioned resources. All
+implementations share the unversioned deployment-input contract; the Bridge
+maintains no CCDP version table. Retiring a version after its compatibility
+window removes its implementation, not the generic
 local unsupported-version screen, and retains no transport just to report that
 retirement. Its configuration marker is a build-owned constant shared with
 the bridge composition contract, not a generated filename or per-version

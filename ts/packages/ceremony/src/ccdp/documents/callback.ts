@@ -3,7 +3,6 @@ import { AbortCeremony } from '../index.js'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
 import { CancelCeremony, origin, UUID } from '../index.js'
 import { proverFragment, route, type OAuthReturn } from '../navigation.js'
-import { hasExactKeys, isRecord } from '../../primitives.js'
 import { view } from '../../ui.js'
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
 export function startCallback(): void {
@@ -25,43 +24,26 @@ export function startCallback(): void {
       view('This ceremony version is no longer supported. Update the application and try again.')
       return
     }
-    const config: unknown = JSON.parse(
+    const inputs: unknown = JSON.parse(
       document.getElementById('libid-callback-config')?.textContent ?? '',
+      (_key, value) => (value && typeof value === 'object' ? Object.freeze(value) : value),
     )
-    if (
-      !isRecord(config) ||
-      !hasExactKeys(config, ['versionedInputs']) ||
-      !isRecord(config.versionedInputs) ||
-      Object.keys(config.versionedInputs).some((version) => !/^[1-9][0-9]*$/.test(version))
-    )
-      throw new TypeError('Invalid Callback configuration')
-    const inputs: unknown = config.versionedInputs[state[1]]
-    if (!Array.isArray(inputs) || inputs.length !== 2)
-      throw new TypeError('Invalid Callback inputs')
-    const [allowedApplicationOrigins, ccdpOrigin] = inputs
-    if (
-      !Array.isArray(allowedApplicationOrigins) ||
-      !allowedApplicationOrigins.length ||
-      new Set(allowedApplicationOrigins).size !== allowedApplicationOrigins.length ||
-      allowedApplicationOrigins.some((o) => !origin(o)) ||
-      !origin(ccdpOrigin)
-    )
-      throw new TypeError('Invalid Callback inputs')
-    const frozen = Object.freeze([
-      Object.freeze([...allowedApplicationOrigins]),
-      ccdpOrigin,
-    ] as const)
-    callbackV1(input, state[2], ...frozen)
+    if (!Array.isArray(inputs)) throw new TypeError('Invalid Callback inputs')
+    callbackV1(input, state[2], inputs)
   } catch {
     view('Unable to continue. Return to your application.')
   }
 }
-function callbackV1(
-  input: OAuthReturn,
-  id: string,
-  allowedApplicationOrigins: readonly string[],
-  ccdpOrigin: string,
-): void {
+function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]): void {
+  const [allowedApplicationOrigins, ccdpOrigin] = inputs
+  if (
+    !Array.isArray(allowedApplicationOrigins) ||
+    !allowedApplicationOrigins.length ||
+    new Set(allowedApplicationOrigins).size !== allowedApplicationOrigins.length ||
+    allowedApplicationOrigins.some((o) => !origin(o)) ||
+    !origin(ccdpOrigin)
+  )
+    throw new TypeError('Invalid Callback inputs')
   let connection: PopupConnection<Message> | undefined,
     ended = false,
     retained: OAuthReturn | undefined

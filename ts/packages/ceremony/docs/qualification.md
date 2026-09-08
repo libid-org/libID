@@ -11,7 +11,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Input | Pin |
 |---|---|
 | Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `b078fa33039a73c194ade24d266c69752e911fcd`; eight source documents reorganized into module-owned docs; package composition updated for grouped CCDP documents |
+| Architecture PR #13 | `412df215b93473f79fae75df602f6b0be42b13a9`; eight source documents reorganized into module-owned docs; package composition updated for grouped CCDP documents |
 | Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
 | Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
@@ -68,6 +68,11 @@ two-concurrent-popup case observed only one completion before its 15-second test
 deadline. Five immediate focused repetitions passed. The cause is unresolved;
 these repetitions do not establish a consistently passing concurrency gate.
 
+The subsequent Callback input-list update passed 183 ceremony units, all 7
+artifact/loader/actual-SWS checks, and 15 targeted Callback/private-return browser
+cases across all five profiles. Loader tests now read metadata and bodies from the
+same selected artifact directory; no matching production build is required.
+
 The executable matrix is `e2e/flow.spec.ts` plus `playwright.config.ts`. Final run
 counts and browser versions are recorded in the PR; ignored local reports carry
 controlled fixture outputs. Real OAuth traces, callback URLs, credentials,
@@ -117,7 +122,9 @@ A real ledger definition is required before a production ceremony can be constru
    profile. Its tests use a synthetic canonical-bincode record, not a signed
    released GitHub service vector. The obsolete fully revealed request-head layout
    is rejected. Obtain a matching service/profile vector and real `/user` evidence. The Bridge
-   must use the Prover-supplied canonical `notaryAddress` unchanged, with no second
+   must admit exactly one valid `Origin` equal to `ccdpOrigin` independently on
+   every preflight and POST, before DNS or session work; application-allowlist
+   membership grants no admission to this route. It must use the Prover-supplied canonical `notaryAddress` unchanged, with no second
    mapping/override, and reject redirects and forbidden internal destinations,
    including DNS-resolved destinations. Unit origin validation is not server egress
    protection; those service controls and both network selections remain unqualified.

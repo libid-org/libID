@@ -8,14 +8,9 @@ import type { DistributionMetadata } from './distribution.ts'
 import { packageDir } from './release.ts'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
+const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts')
 const graph: DistributionMetadata = JSON.parse(
-  readFileSync(
-    join(
-      process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
-      'distribution-graph.json',
-    ),
-    'utf8',
-  ),
+  readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
 )
 const requests = graph.requestsByProfile['google/1']
 const originalFetch = globalThis.fetch
@@ -50,7 +45,7 @@ test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASS
     if (failPrimary && url.startsWith('https://crs.aztec-cdn.foundation'))
       throw new Error('Primary intentionally blocked')
     const body = url.startsWith('/')
-      ? readFileSync(join(packageDir, 'dist-artifacts/public', url))
+      ? readFileSync(join(out, 'public', url))
       : new Uint8Array(spec.bytes)
     return new Response(body, {
       status: range ? 206 : 200,

@@ -19,8 +19,7 @@ const html = (body) =>
 const callback = prepareCallback(
   readFileSync(join(artifactDir, 'public/ccdp/callback.html'), 'utf8'),
   graph.headers['/ccdp/callback.html'],
-  { versionedInputs: { 1: [[app], ccdp] } },
-  ccdp,
+  [[app], ccdp],
 )
 for (const port of [4681, 4682, 4683])
   createServer(cert, async (req, res) => {

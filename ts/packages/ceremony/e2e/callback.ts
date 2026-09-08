@@ -4,9 +4,9 @@ import { scriptHash } from '../build/profiles.ts'
 export function prepareCallback(
   html: string,
   sourceHeaders: Record<string, string>,
-  inputs: unknown,
-  ccdpOrigin: string,
+  inputs: readonly [readonly string[], string, ...unknown[]],
 ) {
+  const ccdpOrigin = inputs[1]
   const marker = '__LIBID_CALLBACK_CONFIG__'
   const slot = `<script id="libid-callback-config" type="application/json">${marker}</script>`
   const headers = new Headers(sourceHeaders)

@@ -19,7 +19,7 @@ Each directory README links to the relevant contract.
 | Verification | [Test requirements](test-plan.md) · [traceability](traceability.md) · [qualification and blockers](qualification.md) |
 
 These contracts originate in architecture PR #13 at
-`b078fa33039a73c194ade24d266c69752e911fcd`. Sections were moved into their owning
+`412df215b93473f79fae75df602f6b0be42b13a9`. Sections were moved into their owning
 modules, with cross-links and the package map updated. Requirement IDs are unchanged.
 [Qualification](qualification.md) records implementation deviations and remaining qualification gaps. The upstream nonce/signature and bound amendments
 are committed in this source revision.
