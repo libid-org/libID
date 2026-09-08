@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-export function makeCertificate(hostnames) {
+export function makeCertificate(hostnames, days = 2) {
   mkdirSync(new URL('../.cache/', import.meta.url), { recursive: true })
   const dir = mkdtempSync(new URL('../.cache/tls-', import.meta.url))
   const key = join(dir, 'key.pem')
@@ -27,7 +27,7 @@ export function makeCertificate(hostnames) {
       '-out',
       cert,
       '-days',
-      '2',
+      String(days),
       '-subj',
       '/CN=popup-e2e',
       '-addext',
