@@ -54,25 +54,26 @@
     "build:ccdp-artifacts": "node build/distribution.ts",
     "test:distribution": "node --test build/*.test.ts",
     "typecheck:build": "tsc -p tsconfig.scripts.json",
-    "build:qualification-artifacts": "LIBID_LEDGER_FIXTURE=1 node build/distribution.ts --out-dir .cache/qualification-artifacts"
+    "build:qualification-artifacts": "LIBID_LEDGER_FIXTURE=1 node build/distribution.ts --out-dir .cache/qualification-assets"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/estree": "^1.0.8",
     "@types/node": "^22.0.0",
     "smol-toml": "^1.8.0",
+    "tar": "^7.5.22",
     "typescript": "^5.9.0",
     "vite": "^7.3.6",
     "vitest": "^3.2.0"
   },
   "dependencies": {
     "@aztec/bb.js": "5.2.0",
+    "@libid/ledger": "workspace:^",
     "@libid/popup": "workspace:^",
     "@noble/hashes": "^2.3.0",
     "@noir-lang/acvm_js": "1.0.0-beta.25",
     "@noir-lang/noir_js": "1.0.0-beta.25",
-    "@noir-lang/noirc_abi": "1.0.0-beta.25",
-    "@libid/ledger": "workspace:^"
+    "@noir-lang/noirc_abi": "1.0.0-beta.25"
   },
   "sideEffects": false
 }

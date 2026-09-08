@@ -107,14 +107,15 @@ pnpm install --frozen-lockfile
 pnpm --filter @libid/popup build
 pnpm --filter @libid/ledger build
 pnpm --filter @libid/ceremony build
-LIBID_TLSN_BUNDLE=/absolute/path/to/matched-bundle \
-  pnpm --filter @libid/ceremony build:ccdp-artifacts
+pnpm --filter @libid/ceremony build:ccdp-artifacts
 ```
 
-`LIBID_TLSN_BUNDLE` must contain the hash-pinned `tlsn_wasm.js` and
-`tlsn_wasm_bg.wasm` pair. It is read, never modified. Circuit downloads are
-hash-checked and cached under `.cache/`. `LIBID_NOTARY_ADDRESS` optionally replaces
-both fixed addresses at build time and changes the emitted execution policy.
+Owner-defined archive URLs pin circuit v0.3.0 and notary v0.3.0-rc.1 releases.
+The build caches HTTPS downloads under `.cache/downloads/`, mounts archive members
+without renaming them, and resolves the notary snippet wildcard exactly once.
+There is no bundle-path environment variable or handwritten checksum list.
+`LIBID_NOTARY_ADDRESS` optionally replaces both fixed addresses at build time and
+changes the emitted execution policy.
 Without an override, Prover decodes the frozen ledger encoding and its classification selects
 `https://notary.lib.id` or `https://testnet.notary.lib.id`; both share the same
 assets and response. Prover forwards the resolved `notaryAddress` to the GitHub
@@ -129,7 +130,7 @@ resources while live documents may reference them.
 ```sh
 docker build -f packages/ceremony/ccdp.Dockerfile \
   -t libid-ccdp packages/ceremony/dist-artifacts
-docker run --rm -p 8080:80 libid-ccdp
+docker run --rm -p 8080:8787 libid-ccdp
 ```
 
 The image contains only `public/` and generated `sws.toml`. Place it behind a
@@ -159,12 +160,12 @@ CEREMONY_SWS_URL=http://127.0.0.1:8080 pnpm --filter @libid/ceremony test:e2e
 
 Browser tests require `build:qualification-artifacts`, which aliases the shared
 ledger testing entrypoint in both Client and Prover and emits
-`.cache/qualification-artifacts`. Build the test SWS image from that directory and
+`.cache/qualification-assets`. Build the test SWS image from that directory and
 set `CEREMONY_ARTIFACT_DIR` to its absolute path for `test:distribution`. This is
 separate from the normal `dist-artifacts` build, which contains no fixture decoder.
 Browser checks use HTTPS ports 4681–4683 and actual popup
-code; `CEREMONY_SWS_URL` forwards CCDP requests to the real image. Without it, the
-harness serves emitted bodies/policies directly and does not qualify SWS. Tests
+code; `CEREMONY_SWS_URL` is required and transparently forwards CCDP requests to
+the real image, preserving native compression, validators and range responses. Tests
 include controlled real Google proofs verified in a separate Node process against
 the released key. They do not automate real consent. Live consent and devices use
 the opt-in walkthrough in [QUALIFICATION.md](qualification.md).

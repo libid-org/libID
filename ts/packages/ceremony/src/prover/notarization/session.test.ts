@@ -1,11 +1,15 @@
-import { afterEach, expect, it, vi } from 'vitest'
 import { LedgerId } from '@libid/ledger'
+import { afterEach, expect, it, vi } from 'vitest'
 import { resolveNotaryAddress } from '../notary.js'
 import { prepareNotarization } from './session.js'
+
 vi.mock('virtual:ceremony-assets', () => ({
   notaryAddresses: ['https://notary.lib.id', 'https://testnet.notary.lib.id'],
 }))
-vi.mock('../../assets.js', () => ({ assetUrl: () => 'https://ccdp.test/asset' }))
+vi.mock('../../assets.js', async (original) => ({
+  ...(await original<typeof import('../../assets.js')>()),
+  resolve: () => 'https://ccdp.test/asset',
+}))
 afterEach(() => vi.unstubAllGlobals())
 it.each(['test:mainnet', 'test:testnet'])(
   'starts the selected notary only, without retrying another network: %s [LIBID-PROVER-008]',

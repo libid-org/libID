@@ -1,5 +1,6 @@
 import type { AssetRequest } from '../assets.js'
 import { readBody } from '../response.js'
+
 const CACHE = 'libid-ceremony-assets-v1',
   PREFIX = '/__libid_ceremony_cache__/'
 /** Cache bodies are stored as 200 responses; partial responses are reconstructed. */
@@ -20,12 +21,17 @@ export function validateResponse(response: Response, spec: AssetRequest): void {
     !new RegExp(`^bytes ${spec.range.slice(6)}/(?:[1-9][0-9]*|\\*)$`).test(range)
   )
     throw new Error('Unexpected asset range')
-  if (range && range.split('/')[1] !== '*' && BigInt(range.split('/')[1]) < BigInt(spec.bytes))
+  if (
+    spec.bytes !== undefined &&
+    range &&
+    range.split('/')[1] !== '*' &&
+    BigInt(range.split('/')[1]) < BigInt(spec.bytes)
+  )
     throw new Error('Invalid asset total')
   const length = response.headers.get('content-length')
   if (
     length !== null &&
-    (!/^[0-9]+$/.test(length) || Number(length) !== spec.bytes) &&
+    (!/^[0-9]+$/.test(length) || (spec.bytes !== undefined && Number(length) !== spec.bytes)) &&
     !response.headers.has('content-encoding')
   )
     throw new Error('Unexpected asset size')
@@ -52,8 +58,8 @@ export class AssetCache {
         cache = await caches.open(CACHE)
         const hit = await cache.match(cacheKey)
         if (hit) {
-          const bytes = await readBody(hit, spec.bytes)
-          if (bytes.length === spec.bytes) {
+          const bytes = await readBody(hit, spec.bytes ?? Number.MAX_SAFE_INTEGER)
+          if (spec.bytes === undefined || bytes.length === spec.bytes) {
             const response = new Response(bytes.slice().buffer, {
               status: spec.range ? 206 : 200,
               headers: hit.headers,
@@ -81,8 +87,9 @@ export class AssetCache {
       }
       const received = await fetching
       validateResponse(received, spec)
-      const bytes = await readBody(received, spec.bytes)
-      if (bytes.length !== spec.bytes) throw new Error('Incomplete asset body')
+      const bytes = await readBody(received, spec.bytes ?? Number.MAX_SAFE_INTEGER)
+      if (spec.bytes !== undefined && bytes.length !== spec.bytes)
+        throw new Error('Incomplete asset body')
       const headers = new Headers(received.headers)
       headers.delete('content-encoding')
       headers.set('content-length', String(bytes.length))

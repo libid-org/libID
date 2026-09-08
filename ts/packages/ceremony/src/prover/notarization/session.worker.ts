@@ -1,16 +1,17 @@
 import {
-  correlateOpenings,
   correlateAttestation,
+  correlateOpenings,
+  type HashOpening,
   planNotarization,
   type Transcript,
-  type HashOpening,
 } from './notarize.js'
+import type { ExactHttpRequest, Reveals } from './session.js'
 import {
   decodeAttestationFrame,
   deriveNotaryWebSocketUrl,
   MAX_FRAME_PAYLOAD_BYTES,
 } from './transport.js'
-import type { ExactHttpRequest, Reveals } from './session.js'
+
 interface Io {
   read(): Promise<Uint8Array | null>
   write(data: Uint8Array): Promise<void>
@@ -30,7 +31,7 @@ export interface NotaryHttpResponse {
 }
 
 interface TlsnModule {
-  default(url: string): Promise<void>
+  default(options: { module_or_path: string }): Promise<void>
   initialize(logging: null, threads: number): Promise<void>
   Prover: new (config: {
     server_name: string
@@ -166,7 +167,7 @@ async function work(data: Record<string, unknown>) {
     stage = 'preparing'
     target = String(data.url)
     const tlsn = (await import(/* @vite-ignore */ String(data.moduleUrl))) as TlsnModule
-    await tlsn.default(String(data.wasmUrl))
+    await tlsn.default({ module_or_path: String(data.wasmUrl) })
     await tlsn.initialize(null, Math.min(navigator.hardwareConcurrency || 1, 4))
     const socket = new WebSocket(deriveNotaryWebSocketUrl(String(data.notaryAddress)))
     io = socketIo(socket)

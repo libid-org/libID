@@ -1,58 +1,30 @@
-import { build } from 'vite'
-import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { resolveAssets, mediaType } from '../build/assets.ts'
+import { bundle } from '../build/bundle.ts'
+import { responseHeaders } from '../build/profiles.ts'
 import { packageDir } from '../build/release.ts'
-import { resolveAssets, assetPlugin } from '../build/assets.ts'
-const outDir = join(packageDir, '.cache/smoke')
-mkdirSync(outDir, { recursive: true })
-const assets = await resolveAssets(outDir)
-const diagnostics = {
-  name: 'smoke-diagnostics',
-  enforce: 'pre',
-  transform(code, id) {
-    if (id.endsWith('/engine.ts'))
-      return code.replace(
-        '#onMessage(message: WorkerMessage): void {',
-        "#onMessage(message: WorkerMessage): void { console.info('SMOKE engine',message.type,'code' in message?message.code:'')",
-      )
-    if (id.endsWith('/session.worker.ts'))
-      return code
-        .replace('await tlsn.default', "console.info('SMOKE notary load');await tlsn.default")
-        .replace(
-          'await tlsn.initialize',
-          "console.info('SMOKE notary initialize');await tlsn.initialize",
-        )
-        .replace('const socket=new', "console.info('SMOKE notary connect');const socket=new")
-        .replace(
-          'await prover.setup(io)',
-          "console.info('SMOKE notary setup');await prover.setup(io);console.info('SMOKE notary prepared')",
-        )
-  },
+import { writeDistribution } from '../build/sws.ts'
+
+// This harness always uses the shared synthetic ledger decoder.
+process.env.LIBID_LEDGER_FIXTURE = '1'
+const data = await resolveAssets()
+const emitted = await bundle('e2e/smoke.ts', data, { groupModules: false })
+const records = new Map(data.local)
+const options = { notaryAddresses: data.notaryAddresses }
+for (const item of emitted.output) {
+  const path = `/${item.fileName}`
+  const policy = emitted.workerFiles.has(item.fileName) ? 'executionWorker' : 'asset'
+  records.set(path, {
+    bytes: Buffer.from(item.type === 'chunk' ? item.code : item.source),
+    headers: { ...responseHeaders(policy, options), 'Content-Type': mediaType(path) },
+  })
 }
-await build({
-  configFile: false,
-  root: packageDir,
-  base: '/',
-  resolve: { alias: { '@libid/ledger': join(packageDir, '../ledger/src/testing.ts') } },
-  plugins: [assetPlugin(assets), diagnostics],
-  worker: { format: 'es', plugins: () => [assetPlugin(assets), diagnostics] },
-  build: {
-    outDir,
-    emptyOutDir: false,
-    minify: false,
-    target: 'es2022',
-    assetsInlineLimit: 0,
-    rollupOptions: {
-      input: join(packageDir, 'e2e/smoke.ts'),
-      output: {
-        entryFileNames: 'smoke.js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
-        chunkFileNames: 'assets/[name]-[hash].js',
-      },
-    },
-  },
+const entry = emitted.output.find((item) => item.type === 'chunk' && item.isEntry)
+if (!entry) throw new Error('Missing smoke entry')
+records.set('/index.html', {
+  bytes: Buffer.from(
+    `<!doctype html><title>Ceremony engine qualification</title><script type="module" src="/${entry.fileName}"></script>`,
+  ),
+  headers: responseHeaders('proverFallback', options),
 })
-writeFileSync(
-  join(outDir, 'index.html'),
-  '<!doctype html><title>Ceremony engine qualification</title><script type="module" src="/smoke.js"></script>',
-)
+writeDistribution(join(packageDir, '.cache/smoke'), records)

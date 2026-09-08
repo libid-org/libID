@@ -1,7 +1,9 @@
-import type { DistributedAsset } from '../assets.js'
-export const bearerCircuit = {
-  id: 'bearer_link',
-  mode: 'distributed',
-  source: 'circuit:bearer_link.json',
-  sha256: 'ffa27aa82e60b4ff2ab41117955ef895ecabaf2d42b6930ebcd06324cfbf0ef9',
-} as const satisfies DistributedAsset
+import * as assets from '../assets.js'
+export const bearerRelease = assets.archive(
+  'https://github.com/libid-org/libid-circuits/releases/download/v0.3.0/libid-circuits-0.3.0-bearer-link.tar.gz',
+  'circuits/v0.3.0/bearer-link',
+)
+export const bearerCircuit = bearerRelease.member('bearer_link.json', {
+  ...assets.headers.immutable,
+  ...assets.headers.json,
+})

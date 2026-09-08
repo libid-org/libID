@@ -1,6 +1,6 @@
-import { assetUrl } from '../assets.js'
-import { acvm, abi, bbWasm, crs } from './bb/assets.js'
+import { resolve as resolveAsset } from '../assets.js'
 import type { PlatformStep } from '../ccdp/index.js'
+import { abi, acvm, bbWasm, crs } from './bb/assets.js'
 import { Progress, type ProgressSpan } from './progress.js'
 
 export const PROOF_ENGINE_SPANS = [
@@ -126,10 +126,10 @@ export class ProofEngine {
       type: 'engine-preload',
       circuitUrl,
       threads: Math.max(1, Math.min(threads ?? 4, navigator.hardwareConcurrency || 1, 4)),
-      acvmUrl: assetUrl(acvm),
-      abiUrl: assetUrl(abi),
-      wasmPath: assetUrl(bbWasm).replace('-threads.wasm.gz', '.wasm.gz'),
-      crsPath: new URL('.', crs[0].urls[0]).href,
+      acvmUrl: resolveAsset(acvm),
+      abiUrl: resolveAsset(abi),
+      wasmPath: resolveAsset(bbWasm).replace('-threads.wasm.gz', '.wasm.gz'),
+      crsPath: new URL('.', resolveAsset(crs[0])).href,
     }
   }
 
