@@ -564,7 +564,7 @@ The request carries these five headers, in any order: `host: api.x.com`,
 ### 5.3 Identity request
 
 `GET https://api.x.com/2/users/me` with no query. The request carries
-exactly four headers, in this order: `authorization: Bearer <access_token>`,
+exactly four headers, in any order: `authorization: Bearer <access_token>`,
 `accept: application/json`, `host: api.x.com`, and `connection: close`.
 
 Per common §9, the identity session reveals exactly these request ranges;
@@ -947,7 +947,7 @@ keeping the client secret from the browser.
 ### 6.5 Identity request
 
 `GET https://api.github.com/user` with no query. The request carries
-exactly five headers, in this order:
+exactly five headers, in any order:
 `authorization: Bearer <access_token>`, `accept: application/vnd.github+json`,
 `x-github-api-version: 2022-11-28`, `host: api.github.com`, and
 `connection: close`.
