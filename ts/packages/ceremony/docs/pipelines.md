@@ -211,3 +211,16 @@ its Prover pipeline. The catalog is closed and client-safe.
 Execution imports its asset declarations; declarations never import execution.
 See the [qualification record](qualification.md) before treating a pipeline
 as a qualified real OAuth ceremony.
+
+### GitHub authorization response
+
+GitHub v1 requires the decoded `iss` value to equal
+`https://github.com/login/oauth` on both success and error returns. This is the
+[advertised issuer](https://github.com/.well-known/oauth-authorization-server/login/oauth)
+and follows [RFC 9207](https://www.rfc-editor.org/rfc/rfc9207.html#section-2.4).
+The code-return parser accepts bounded `error_description` and `error_uri` on
+error responses, but neither field is displayed, logged or delivered. Duplicate
+fields, aliases, malformed escapes, mixed outcomes and wrong/missing GitHub
+issuers reject before token exchange. Valid equivalent percent encodings decode
+once without requiring URLSearchParams' preferred spelling. X does not inherit
+GitHub's issuer requirement.

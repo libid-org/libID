@@ -1,3 +1,4 @@
+import { CeremonyError } from '../errors.js'
 import { LedgerId } from '@libid/ledger'
 import { hasExactKeys, isRecord } from '../primitives.js'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
@@ -294,7 +295,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         this.resolve?.({ status: 'denied' })
         this.cleanup()
       })
-      this.listen(AbortCeremony, () => this.fail(new Error('Ceremony aborted')))
+      this.listen(AbortCeremony, (message) => this.fail(new CeremonyError(message.code)))
       void this.connection.ready.catch(() => this.fail(new Error('Popup connection failed')))
       void this.connection.closed.then(() => this.fail(new Error('Popup connection ended')))
       this.emit()

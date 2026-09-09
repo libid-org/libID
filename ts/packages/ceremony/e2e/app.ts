@@ -1,6 +1,6 @@
 import { LedgerId } from '@libid/ledger'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
-import { createCeremonyClient } from '../src/client/index.js'
+import { CeremonyError, createCeremonyClient } from '../src/client/index.js'
 const bridge = 'https://localhost:4682',
   ccdp = 'https://localhost:4683'
 const client = await createCeremonyClient({ oauthBridge: bridge })
@@ -54,6 +54,11 @@ anchor.addEventListener('click', (event) => {
       window.completed.push(result)
       Object.assign(window, { result })
     })
-    .catch(() => Object.assign(window, { result: { status: 'failed' } }))
+    .catch((error: unknown) =>
+      Object.assign(window, {
+        result: { status: 'failed' },
+        failureCode: error instanceof CeremonyError ? error.code : undefined,
+      }),
+    )
   if (popup.opened) event.preventDefault()
 })

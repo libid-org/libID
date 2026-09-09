@@ -228,16 +228,21 @@ recipients clear reachable input but do not close or navigate the popup.
 ```ts
 interface AbortCeremony {
   type: 'abort-ceremony'
+  code: FailureCode
   reason: string
 }
 ```
 
-`AbortCeremony` reports an observable technical failure after connection
-acceptance from whichever of Prefetch, Callback, or Prover is active. `reason` is
-a bounded sanitized diagnostic string, not a stable code or raw exception.
-Exact reason enums may emerge from implementation experience. The Application
-rejects the live ceremony. Failure before connection acceptance has no CCDP
-path and remains local.
+`AbortCeremony` reports a technical failure after connection acceptance.
+`code` is a package-owned `FailureCode`; `reason` must exactly match its safe
+message in [the failure catalog](../src/errors.ts). Unknown codes, mismatched
+messages and extra fields reject. Client rejects with `CeremonyError`, preserving
+that code and message. No original exception, stack or cause crosses CCDP.
+Undeliverable failures emit one local sanitized subsystem/code diagnostic.
+
+This extends the upstream PR #13 reason-only message by explicit implementation
+request. Client and CCDP artifacts must be updated together; old reason-only
+messages are not supported by this build.
 
 ## Protocol
 
