@@ -12,7 +12,7 @@ import { readPrefetch, readProver, proverFragment, prefetchFragment } from './na
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
   const samples = [
-    [AbortCeremony, { type: 'abort-ceremony', reason: 'Failed' }],
+    [AbortCeremony, { type: 'abort-ceremony', code: 'proof', reason: 'Proof engine failed.' }],
     [
       AppStartProver,
       {

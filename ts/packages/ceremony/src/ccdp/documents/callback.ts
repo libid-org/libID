@@ -1,5 +1,5 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { AbortCeremony } from '../index.js'
+import { ceremonyError, reportFailure, type FailureCode } from '../../errors.js'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
 import { CancelCeremony, origin, UUID } from '../index.js'
 import { proverFragment, route, type OAuthReturn } from '../navigation.js'
@@ -30,8 +30,10 @@ export function startCallback(): void {
     )
     if (!Array.isArray(inputs)) throw new TypeError('Invalid Callback inputs')
     callbackV1(input, state[2], inputs)
-  } catch {
-    view('Unable to continue. Return to your application.')
+  } catch (error) {
+    const failure = ceremonyError(error, 'callback-input')
+    view(`${failure.message} (${failure.code}) Return to your application.`)
+    reportFailure(undefined, failure)
   }
 }
 function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]): void {
@@ -52,13 +54,13 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     ended = true
     retained = undefined
   }
-  const fail = () => {
+  let failureCode: FailureCode = 'callback-connection'
+  const fail = (error?: unknown) => {
     if (ended) return
+    const failure = ceremonyError(error, failureCode)
     cleanup()
-    view('Unable to continue. Return to your application.')
-    try {
-      connection?.send(AbortCeremony.decode({ type: 'abort-ceremony', reason: 'Callback failed' }))
-    } catch {}
+    view(`${failure.message} (${failure.code}) Return to your application.`)
+    reportFailure(connection, failure)
   }
   try {
     retained = input
@@ -73,17 +75,18 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
       view('Canceled. Return to your application.')
     })
     void connection.closed.then(() => {
-      if (!ended) fail()
+      if (!ended) fail(ceremonyError(undefined, 'callback-connection'))
     })
     void connection.ready
       .then(async () => {
         if (ended || !retained) return
+        failureCode = 'callback-navigation'
         const fragment = proverFragment(id, retained)
         await connection!.navigate(ccdpOrigin + route('prover'), fragment)
         cleanup()
       })
       .catch(fail)
-  } catch {
-    fail()
+  } catch (error) {
+    fail(error)
   }
 }

@@ -16,6 +16,7 @@ let config: unknown,
   locationInput: { search: string; hash: string; pathname: string; origin: string }
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.spyOn(console, 'error').mockImplementation(() => {})
   config = v1Inputs
   locationInput = {
     search: '',
@@ -39,7 +40,10 @@ beforeEach(() => {
     return { ready: Promise.resolve(), closed: new Promise(() => {}), on: vi.fn(), navigate, send }
   })
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010]', async () => {
   const original = locationInput.hash
   config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']
@@ -79,7 +83,9 @@ it.each([
 ])('clears malformed or oversized return before fixed local failure [KIT-010]', (input) => {
   Object.assign(locationInput, input)
   startCallback()
-  expect(view).toHaveBeenCalledWith('Unable to continue. Return to your application.')
+  expect(view).toHaveBeenCalledWith(
+    'Invalid OAuth callback or deployment configuration. (callback-input) Return to your application.',
+  )
   expect(accept).not.toHaveBeenCalled()
 })
 it.each(
@@ -101,7 +107,9 @@ it.each(
 )('rejects malformed deployment data before connection setup [KIT-010]', ({ input }) => {
   config = input
   startCallback()
-  expect(view).toHaveBeenCalledWith('Unable to continue. Return to your application.')
+  expect(view).toHaveBeenCalledWith(
+    'Invalid OAuth callback or deployment configuration. (callback-input) Return to your application.',
+  )
   expect(accept).not.toHaveBeenCalled()
 })
 

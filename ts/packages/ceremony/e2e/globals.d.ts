@@ -2,6 +2,7 @@ import type { CeremonyEvent } from '../src/client/index.js'
 import type { IdentityResult } from '../src/index.js'
 declare global {
   interface Window {
+    failureCode?: import('../src/errors.js').FailureCode
     ready: boolean
     completed: IdentityResult<'google'>[]
     testProgress: { update(value: number, label: string): void; stop(): void }

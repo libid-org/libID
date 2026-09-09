@@ -2,7 +2,7 @@ import { LedgerId } from '@libid/ledger'
 import { resolveNotaryAddress } from '../../prover/notary.js'
 import { claimRootWorker } from '../../prefetch/registration.js'
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { AbortCeremony } from '../index.js'
+import { ceremonyError, reportFailure, type FailureCode } from '../../errors.js'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
 import { AppStartProver, CancelCeremony, ProverNotifyEvent, ProverIdentityProof } from '../index.js'
 import { readProver, route } from '../navigation.js'
@@ -33,17 +33,18 @@ export async function startProver(fragment: string): Promise<void> {
     controller.abort()
     ui?.stop()
   }
-  const fail = () => {
+  let failureCode: FailureCode = 'prover-input'
+  const fail = (error?: unknown) => {
     if (ended) return
+    const failure = ceremonyError(error, failureCode)
     cleanup()
-    view('Unable to complete proof. Return to your application.')
-    try {
-      connection?.send(AbortCeremony.decode({ type: 'abort-ceremony', reason: 'Proving failed' }))
-    } catch {}
+    view(`${failure.message} (${failure.code}) Return to your application.`)
+    reportFailure(connection, failure)
   }
   try {
     retained = readProver(fragment)
     ui = progressView()
+    failureCode = 'prover-connection'
     connection = PopupConnection.accept(PopupWindow.current(fragment, { scope: '/' }), {
       fallback,
       connectionId: retained.ceremonyId,
@@ -57,6 +58,7 @@ export async function startProver(fragment: string): Promise<void> {
     })
     connection.on(AppStartProver, (request) => {
       if (ended) return
+      failureCode = 'prover-request'
       if (
         !ready ||
         started ||
@@ -69,11 +71,12 @@ export async function startProver(fragment: string): Promise<void> {
       let ledgerId: LedgerId
       try {
         ledgerId = LedgerId.decode(request.ledgerId)
-      } catch {
-        fail()
+      } catch (error) {
+        fail(error)
         return
       }
       started = true
+      failureCode = 'prover-execution'
       const context: ProverContext = {
         request,
         ledgerId,
@@ -116,21 +119,23 @@ export async function startProver(fragment: string): Promise<void> {
         .catch(fail)
     })
     void connection.closed.then(() => {
-      if (!ended) fail()
+      if (!ended) fail(ceremonyError(undefined, 'prover-connection'))
     })
     await connection.ready
     if (ended) return
+    failureCode = 'prover-isolation'
     if (
       !crossOriginIsolated ||
       typeof SharedArrayBuffer === 'undefined' ||
       typeof Worker === 'undefined'
     )
       throw new Error('Prover isolation unavailable')
+    failureCode = 'prover-worker'
     await claimRootWorker()
     if (ended) return
     ready = true
     connection.send({ type: 'prover-ready' })
-  } catch {
-    fail()
+  } catch (error) {
+    fail(error)
   }
 }

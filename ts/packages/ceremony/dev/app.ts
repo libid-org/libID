@@ -1,3 +1,4 @@
+import { CeremonyError } from '@libid/ceremony/client'
 import { LedgerId } from '@libid/ledger'
 import {
   createCeremonyClient,
@@ -127,7 +128,9 @@ launch.addEventListener('click', (event) => {
       window.result = { status: cancelled ? 'cancelled' : 'failed' }
       result.textContent = cancelled
         ? 'Ceremony cancelled.'
-        : 'Ceremony failed. Close the popup and start a fresh attempt.'
+        : error instanceof CeremonyError
+          ? `${error.message} (${error.code}) Close the popup and start a fresh attempt.`
+          : 'Ceremony failed. Close the popup and start a fresh attempt.'
       status.textContent = 'Ceremony stopped.'
     })
     .finally(() => {

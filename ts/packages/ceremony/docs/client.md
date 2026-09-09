@@ -499,3 +499,10 @@ Application lifecycle over a caller-supplied `PopupConnection`.
 [config.ts](../src/client/config.ts) validates configuration; [ceremony.ts](../src/client/ceremony.ts) owns state
 and handlers. Identity extraction stays in the platform Provers. Wallet operations,
 submission and post-ceremony actions belong to the Application.
+
+### Technical failure details
+
+Remote technical failures reject with `CeremonyError`: `code` identifies the
+failed subsystem or operation and `message` is a package-owned explanation.
+Local original errors may be retained as standard `Error.cause`; remote errors
+contain no raw cause. Explicit application cancellation still uses `AbortError`.

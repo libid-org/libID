@@ -1,3 +1,4 @@
+import { ceremonyError } from '../errors.js'
 import { resolve as resolveAsset } from '../assets.js'
 import type { PlatformStep } from '../ccdp/index.js'
 import { abi, acvm, bbWasm, crs } from './bb/assets.js'
@@ -173,7 +174,7 @@ export class ProofEngine {
     } catch {
       // Preserve the original failure when lifecycle state is already invalid.
     }
-    const error = reason instanceof Error ? reason : new Error(String(reason))
+    const error = ceremonyError(reason, 'proof')
     this.#failure = error
     this.#resolveReady()
     this.#rejectResult?.(error)

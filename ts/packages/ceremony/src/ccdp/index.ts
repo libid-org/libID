@@ -1,3 +1,4 @@
+import { failureMessages, type FailureCode } from '../errors.js'
 import type { MessageType } from '@libid/popup'
 import { b64urlDecode, hasExactKeys, isRecord } from '../primitives.js'
 
@@ -76,13 +77,19 @@ export const CancelCeremony = {
 } as const satisfies MessageType<CancelCeremony>
 export interface AbortCeremony {
   type: 'abort-ceremony'
+  code: FailureCode
   reason: string
 }
 export const AbortCeremony = {
   type: 'abort-ceremony',
   decode(value: unknown): AbortCeremony {
-    assertMessage(value, this.type, ['reason'])
-    if (!text(value.reason, 256)) throw new TypeError('Invalid abort reason')
+    assertMessage(value, this.type, ['code', 'reason'])
+    if (
+      typeof value.code !== 'string' ||
+      !Object.hasOwn(failureMessages, value.code) ||
+      value.reason !== failureMessages[value.code as FailureCode]
+    )
+      throw new TypeError('Invalid abort reason')
     return value as unknown as AbortCeremony
   },
 } as const satisfies MessageType<AbortCeremony>

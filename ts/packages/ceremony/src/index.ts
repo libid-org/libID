@@ -9,3 +9,5 @@ export {
   type IdentityResult,
   type NotaryAttestation,
 } from './platforms/index.js'
+
+export { CeremonyError, type FailureCode } from './errors.js'

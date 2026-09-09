@@ -1,3 +1,4 @@
+import { CeremonyError, ceremonyError } from '../../../errors.js'
 import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
@@ -26,17 +27,19 @@ export async function prove(
   context: ProverContext,
 ): Promise<{ identity: Identity<'github'>; proof: GitHubProofV1 } | null> {
   const { request, onProgress, signal } = context
+  const { codeVerifier } = request
   signal.throwIfAborted()
   if (!isFormClientId(request.clientId)) throw new Error('Invalid profile client identifier')
-  const returned = parseCodeOAuthReturn(context.oauthReturn)
+  const returned = parseCodeOAuthReturn(context.oauthReturn, 'https://github.com/login/oauth')
   if (
     !returned ||
     returned.state !== oauthState(context.ceremonyId) ||
-    request.codeVerifier === null
+    codeVerifier === null
   )
-    throw new Error('Invalid GitHub return')
+    throw new CeremonyError('oauth-return', { cause: new Error('Invalid GitHub return') })
   if (returned.outcome === 'denied') return null
-  if (returned.outcome !== 'accepted') throw new Error('GitHub authorization failed')
+  if (returned.outcome !== 'accepted')
+    throw new CeremonyError('oauth-return', { cause: new Error('GitHub authorization failed') })
   const controller = new AbortController(),
     abort = () => controller.abort(signal.reason)
   signal.addEventListener('abort', abort, { once: true })
@@ -52,34 +55,42 @@ export async function prove(
     },
   })
   try {
-    const token = await progress.step('token-exchange', async () => {
-      const response = await fetch(new URL('/api/v1/ceremony/github-token', request.redirectUri), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: encodeTokenRequest({
+    const { token, admitted } = await progress
+      .step('token-exchange', async () => {
+        const response = await fetch(
+          new URL('/api/v1/ceremony/github-token', request.redirectUri),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: encodeTokenRequest({
+              code: returned.code,
+              codeVerifier,
+              notaryAddress: context.notaryAddress,
+            }).slice().buffer,
+            credentials: 'omit',
+            redirect: 'error',
+            cache: 'no-store',
+            mode: 'cors',
+            signal: controller.signal,
+          },
+        )
+        if (
+          response.status !== 200 ||
+          response.headers.get('content-type')?.split(';')[0].trim() !== 'application/json'
+        )
+          throw new Error('Token exchange failed')
+        const token = decodeTokenResponse(await readBody(response, 3 * 1024 * 1024))
+        const admitted = admitTokenResponse(token, {
+          clientId: request.clientId,
           code: returned.code,
-          codeVerifier: request.codeVerifier,
-          notaryAddress: context.notaryAddress,
-        }).slice().buffer,
-        credentials: 'omit',
-        redirect: 'error',
-        cache: 'no-store',
-        mode: 'cors',
-        signal: controller.signal,
+          redirectUri: request.redirectUri,
+          codeVerifier,
+        })
+        return { token, admitted }
       })
-      if (
-        response.status !== 200 ||
-        response.headers.get('content-type')?.split(';')[0].trim() !== 'application/json'
-      )
-        throw new Error('Token exchange failed')
-      return decodeTokenResponse(await readBody(response, 3 * 1024 * 1024))
-    })
-    const admitted = admitTokenResponse(token, {
-      clientId: request.clientId,
-      code: returned.code,
-      redirectUri: request.redirectUri,
-      codeVerifier: request.codeVerifier,
-    })
+      .catch((error) => {
+        throw ceremonyError(error, 'token-exchange')
+      })
     const session = await prepareNotarization(
       'https://api.github.com/user',
       context.notaryAddress,

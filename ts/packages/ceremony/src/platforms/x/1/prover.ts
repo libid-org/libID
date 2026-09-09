@@ -1,3 +1,4 @@
+import { CeremonyError } from '../../../errors.js'
 import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
@@ -38,9 +39,10 @@ export async function prove(
     returned.state !== oauthState(context.ceremonyId) ||
     request.codeVerifier === null
   )
-    throw new Error('Invalid X return')
+    throw new CeremonyError('oauth-return', { cause: new Error('Invalid X return') })
   if (returned.outcome === 'denied') return null
-  if (returned.outcome !== 'accepted') throw new Error('X authorization failed')
+  if (returned.outcome !== 'accepted')
+    throw new CeremonyError('oauth-return', { cause: new Error('X authorization failed') })
   const controller = new AbortController(),
     abort = () => controller.abort(context.signal.reason)
   context.signal.addEventListener('abort', abort, { once: true })

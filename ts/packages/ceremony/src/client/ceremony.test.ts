@@ -398,3 +398,18 @@ function checkCreationTypes() {
     })
 }
 void checkCreationTypes
+
+it('preserves the Prover failure code and safe message for the application', async () => {
+  const { connection, ceremony } = setup()
+  const result = ceremony.proveUserIdentity()
+  connection.receive({
+    type: 'abort-ceremony',
+    code: 'oauth-return',
+    reason: 'Invalid OAuth return or provider authorization error.',
+  })
+  await expect(result).rejects.toMatchObject({
+    name: 'CeremonyError',
+    code: 'oauth-return',
+    message: 'Invalid OAuth return or provider authorization error.',
+  })
+})

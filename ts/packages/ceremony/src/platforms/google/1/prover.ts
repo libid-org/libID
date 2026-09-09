@@ -1,3 +1,4 @@
+import { CeremonyError } from '../../../errors.js'
 import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
@@ -30,9 +31,10 @@ export async function prove(
     returned.state !== oauthState(context.ceremonyId) ||
     request.codeVerifier !== null
   )
-    throw new Error('Invalid Google return')
+    throw new CeremonyError('oauth-return', { cause: new Error('Invalid Google return') })
   if (returned.outcome === 'denied') return null
-  if (returned.outcome !== 'accepted') throw new Error('Google authorization failed')
+  if (returned.outcome !== 'accepted')
+    throw new CeremonyError('oauth-return', { cause: new Error('Google authorization failed') })
   const token = decodeGoogleIdToken(returned.idToken),
     header = token && decodeGoogleHeader(token.header)
   if (
@@ -42,7 +44,7 @@ export async function prove(
     token.claims.exp <= Date.now() / 1000 ||
     typeof header?.kid !== 'string'
   )
-    throw new Error('Invalid Google token')
+    throw new CeremonyError('oauth-return', { cause: new Error('Invalid Google token') })
   const progress = new Progress(spans, (step) =>
     onProgress(step, performance.timeOrigin + performance.now()),
   )

@@ -1,3 +1,4 @@
+import { ceremonyError } from '../../errors.js'
 import { resolve as resolveAsset } from '../../assets.js'
 import { httpsUrl, origin } from '../../ccdp/index.js'
 import type { NotaryAttestation } from '../../platforms/types.js'
@@ -64,11 +65,11 @@ export async function prepareNotarization(
     fail(signal.reason)
   }
   signal.addEventListener('abort', abort, { once: true })
-  worker.onerror = () => fail(new Error('Notarization worker failed'))
+  worker.onerror = () => fail(ceremonyError(undefined, 'notarization'))
   worker.onmessage = (event) => {
     if (ended) return
     if (event.data.type === 'error') {
-      fail(new Error('Notarization failed'))
+      fail(ceremonyError(undefined, 'notarization'))
       return
     }
     const waiter = waiters.get(event.data.type)

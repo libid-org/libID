@@ -303,3 +303,13 @@ The first implementation should expose only:
 Automatic browser instrumentation, an OTLP endpoint in popup/prover, a second
 Metrics SDK pipeline, durable telemetry, and a package-owned collector are not
 part of the first implementation.
+
+### Debugging without exporting private data
+
+Terminal UI and `CeremonyError` expose the failure code and safe message. To
+inspect original exceptions, attach DevTools to the failing popup or worker and
+enable **Pause on caught exceptions** before reproducing the failure. Inspect the
+original error and any local `cause` before cleanup terminates workers. Some worker
+boundaries currently discard the raw cause; Client does not recover it.
+There is no automatic raw-error logging or developer modal. A future local modal
+needs a separate decision about captured data, explicit reveal and report export.
