@@ -446,6 +446,11 @@ sessions.
   to link two attestations, so it needs a bound and a charset; the circuit
   verifies no other property of the token response.
 
+The request is one revealed range: the request line, every header and the
+body. The rows below name what the Platform Verifier reads out of it, not
+separate ranges; the attested record carries adjacent revealed ranges as one,
+so a plan of one range per field would not survive signing.
+
 Per common §9, the token session reveals exactly these ranges; every other
 byte stays behind a charset-constrained range commitment of the pinned
 attestation format:
@@ -826,6 +831,9 @@ inside a notarized TLS session and returns the resulting attestation. The
 commitment, so the browser never receives the secret. The attestation is
 verified by the compatible Notary Service selected for the GitHub profile, exactly
 as the `/user` attestation is.
+
+The request is one revealed range up to the committed `client_secret`, which
+REQ-COMMON-22 orders last; the rows below name what is read out of it.
 
 The token-exchange attestation reveals exactly the ranges needed to bind it to
 the local ceremony and to the later `/user` attestation. The separately
