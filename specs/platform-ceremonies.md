@@ -452,7 +452,7 @@ attestation format:
 
 | Range | Revealed | Why |
 |---|---|---|
-| request method and path | yes | the Platform Verifier compares them with its profile constants |
+| the request line and every request header | yes | the Platform Verifier compares the method and path with its profile constants, and the header set with the fixed list below. The media type is among them, and it is the header that selects the parser the platform applied to the body rows beneath this one (common REQ-COMMON-21B) |
 | endpoint authority | not a range | the Notary Service authenticated the TLS server identity, and the Platform Verifier compares the attested authority against its pinned constant per common REQ-COMMON-21A |
 | `grant_type` | yes | constant `authorization_code`; the Platform Verifier compares it byte for byte per REQ-PLAT-56 |
 | `client_id` | yes | the Platform Verifier reads and returns it |
@@ -462,7 +462,7 @@ attestation format:
 | attestation timestamp | not a range | the attestation's own signed creation time, which derives the authenticated validity ceiling per §2.2 |
 | `"access_token":"` and the closing quote immediately around the bearer value | yes | anchor the committed bearer range as that field's value, per common REQ-COMMON-18A |
 | bearer range | committed | a blinded commitment, opened only in circuit |
-| everything else | no | headers, `scope`, `token_type`, other response fields |
+| everything else | no | the response status line and headers, `scope`, `token_type`, other response fields |
 
 Neither the authority nor the attestation timestamp is a transcript range.
 The authority reaches the Platform Verifier as
@@ -505,6 +505,26 @@ dependency.
   Platform Verifier enforces the disclosure: an attestation hiding either
   range does not match the profile layout of common REQ-COMMON-17A and
   REQ-COMMON-18A and fails verification.
+
+The request carries exactly four headers, in this order: `host: api.x.com`,
+`content-type: application/x-www-form-urlencoded`, `accept: application/json`,
+and `connection: close`.
+
+- REQ-PLAT-56A (upholds SP-EXCHANGE-01):
+  The Implementation MUST reveal the token request's request line and every
+  one of its headers. The Platform Verifier MUST compare the revealed headers
+  against the profile's fixed list, byte for byte and in order. The Platform
+  Verifier MUST reject a token attestation carrying any other header set.
+  Necessity: the verifier reads `grant_type`, `client_id` and `code_verifier`
+  out of the body with a form-encoding reading, and common REQ-COMMON-21B
+  fixes the media type precisely because it "selects the platform's request
+  parser" -- so a media type the verifier cannot see is a value the profile
+  pins and nothing checks, and the platform could have parsed those bytes into
+  fields other than the ones read. Revealing without comparing closes nothing:
+  the bytes would be public and unconstrained. Nothing in this request is user
+  data -- the four headers are constants of the profile -- so revealing them
+  discloses nothing and leaves the sent direction with no region a verifier
+  cannot read.
 - REQ-PLAT-56 (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject an X token attestation whose revealed
   `grant_type` differs from the exact ASCII bytes `authorization_code`.
@@ -816,10 +836,9 @@ Submission and every published artifact.
 | bearer range | committed | a blinded commitment, opened only in circuit to link this attestation to `/user` |
 | attestation timestamp | not a range | the attestation's own signed creation time, which derives the authenticated validity ceiling per §2.2 |
 | token endpoint authority | not a range | the Notary Service authenticated the TLS server identity, and the Platform Verifier compares the attested authority against its pinned constant per common REQ-COMMON-21A |
-| token request method | yes | the Platform Verifier checks its profile method |
-| token request path | yes | the Platform Verifier checks its profile path |
+| the request line and every request header | yes | the Platform Verifier checks its profile method and path, and compares the header set with the fixed list below, for the reason REQ-PLAT-56A gives |
 | `client_secret` | no | never revealed, per REQ-PLAT-35A |
-| everything else | no | headers, status line, `scope`, `token_type`, other response fields |
+| everything else | no | the response status line and headers, `scope`, `token_type`, other response fields |
 
 Every unrevealed range stays behind the pinned attestation format's range
 commitment. The delimiter row is what anchors the committed bearer range in
@@ -829,16 +848,28 @@ authority nor the attestation timestamp is a transcript range at all. The
 authority reaches the Platform Verifier
 as the TLS server identity the Notary Service authenticated under common
 REQ-COMMON-21, carried in the attested data, because the
-transcript holds the authority only in a `Host` header this table hides and a
-revealed `Host` header is prover-composed text that says nothing about which
-server answered. The timestamp is the signed creation time of the attested
+transcript holds the authority only in a `Host` header, and that header is
+prover-composed text that says nothing about which server answered. Revealing
+it, as REQ-PLAT-56A now requires, does not make it the authority: it is
+compared against the profile's fixed list like every other header, while the
+authority continues to reach the verifier as the authenticated TLS server
+identity. The timestamp is the signed creation time of the attested
 data itself, which is why common REQ-COMMON-25 can forbid inferring it from a
-response header. Revealing more would widen exposure without adding a check.
+response header. Revealing more than this would widen exposure without adding
+a check -- which is why the request headers are revealed and the response's
+are not: the request's are profile constants a verifier compares, and the
+response's are the platform's own bytes that nothing reads.
+
+The exchange request carries exactly four headers, in this order:
+`host: github.com`, `content-type: application/x-www-form-urlencoded`,
+`accept: application/json`, and `connection: close`.
 
 - REQ-PLAT-43D (upholds SP-EXCHANGE-01):
-  The GitHub Token Service MUST reveal no range outside the seven rows
-  marked `yes` above. The GitHub Token Service MUST commit the bearer range
-  rather than reveal it.
+  The GitHub Token Service MUST reveal no range outside the rows marked `yes`
+  above. The GitHub Token Service MUST commit the bearer range rather than
+  reveal it. The GitHub Token Service MUST commit `client_secret` rather than
+  reveal it, which REQ-COMMON-22 orders last so the revealed run stays
+  contiguous. REQ-PLAT-56A applies to this request too.
 - REQ-PLAT-58 (upholds SP-EXCHANGE-01):
   The GitHub Token Service MUST reveal the `"access_token":"` delimiter
   bytes immediately preceding that committed range and the closing quote byte
