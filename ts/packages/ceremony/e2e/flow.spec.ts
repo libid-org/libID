@@ -264,6 +264,7 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
     await page.locator('#launch').click()
     await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'failed' })
     expect(oauth).toBe(0)
+    expect(await page.evaluate(() => window.failureCode)).toBe('prefetch-worker')
   } finally {
     await context.request.get(`${control}&restore`)
   }
@@ -322,7 +323,7 @@ test('Callback clears unsupported versions and unconfigured direct visits locall
   }
   await page.goto(`${ccdp}/ccdp/callback.html#state=v1.${id}`)
   await expect(page.getByRole('status')).toHaveText(
-    'Unable to continue. Return to your application.',
+    'Invalid OAuth callback or deployment configuration. (callback-input) Return to your application.',
   )
   expect(page.url()).toBe(`${ccdp}/ccdp/callback.html`)
   expect(outbound).toEqual([])

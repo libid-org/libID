@@ -237,3 +237,20 @@ No chain, contract deployment, RPC, wallet or local browser verifier is required
 - Native SWS may stream a representation with chunked transfer instead of emitting
   Content-Length. Qualification checks actual bytes and any supplied length;
   the build never injects a length to force another serving behavior.
+
+### OAuth parsing and error-reporting changes
+
+GitHub return parsing now checks the advertised issuer and accepts bounded provider
+error details. Synthetic parser regressions cover these shapes; they do not qualify
+a live GitHub ceremony or the separately reported notary attestation failure.
+`AbortCeremony` now carries a closed failure code and its safe message; Client
+exposes `CeremonyError` instead of discarding the reason. This is a user-requested
+extension of PR #13's reason-only record; deploy matching Client/CCDP builds.
+Original causes remain local where retained. Raw diagnostics and a developer modal
+remain design work rather than an implicit exception to the privacy boundary.
+
+This fix passed 217 unit tests, 15 native-SWS/build/loader checks, all 55
+browser integration cases and 20 dev frontend cases. Every browser profile
+received the safe worker-failure code through the actual popup package and
+generated a Google fixture proof verified against the released key. TypeScript,
+production/development builds and three focused reviews passed.

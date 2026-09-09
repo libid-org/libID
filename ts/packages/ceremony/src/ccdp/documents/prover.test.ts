@@ -67,7 +67,8 @@ it.each(['test:mainnet', 'test:testnet', 'test:MAINNET', 'unknown:1'])(
     } else {
       expect(connection.send).toHaveBeenCalledWith({
         type: 'abort-ceremony',
-        reason: 'Proving failed',
+        code: 'prover-request',
+        reason: 'Invalid proving request or ledger identifier.',
       })
       expect(prove).not.toHaveBeenCalled()
     }
