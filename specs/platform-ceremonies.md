@@ -452,7 +452,7 @@ attestation format:
 
 | Range | Revealed | Why |
 |---|---|---|
-| the request line and every request header | yes | the Platform Verifier compares the method and path with its profile constants, and the header set with the fixed list below. The media type is among them, and it is the header that selects the parser the platform applied to the body rows beneath this one (common REQ-COMMON-21B) |
+| the request line and every request header | yes | the Platform Verifier compares the method and path with its profile constants and the header set with the list below, the media type among them: it selects the parser the platform applied to the body rows beneath this one (common REQ-COMMON-21B) |
 | endpoint authority | not a range | the Notary Service authenticated the TLS server identity, and the Platform Verifier compares the attested authority against its pinned constant per common REQ-COMMON-21A |
 | `grant_type` | yes | constant `authorization_code`; the Platform Verifier compares it byte for byte per REQ-PLAT-56 |
 | `client_id` | yes | the Platform Verifier reads and returns it |
@@ -506,55 +506,33 @@ dependency.
   range does not match the profile layout of common REQ-COMMON-17A and
   REQ-COMMON-18A and fails verification.
 
-The request carries exactly five headers, in this order: `host: api.x.com`,
+The request carries these five headers, in any order: `host: api.x.com`,
 `content-type: application/x-www-form-urlencoded`, `accept: application/json`,
-`connection: close`, and `content-length`, whose value is the body's byte
-count and therefore the one header value the profile cannot fix.
+`connection: close`, and `content-length`, whose value is the body's own count.
 
 - REQ-PLAT-56A (upholds SP-EXCHANGE-01):
   The Implementation MUST reveal the token request's request line and every
-  one of its headers. The Platform Verifier MUST compare the revealed headers
-  against the profile's fixed list, byte for byte and in order. The Platform
-  Verifier MUST reject a token attestation whose head carries any header
-  outside that list, a second copy of any of them, or them in another order.
-  Necessity: the verifier reads `grant_type`, `client_id` and `code_verifier`
-  out of the body with a form-encoding reading, and common REQ-COMMON-21B
-  fixes the media type precisely because it "selects the platform's request
-  parser" -- so a media type the verifier cannot see is a value the profile
-  pins and nothing checks, and the platform could have parsed those bytes into
-  fields other than the ones read. Revealing without comparing closes nothing:
-  the bytes would be public and unconstrained. The match is exhaustive rather
-  than a presence test, because a request satisfying "these five appear" may
-  still carry a sixth the platform acts on. Nothing here is user data -- the
-  request is composed byte for byte by the Implementation over a raw notarized
-  session rather than by a browser's HTTP stack, so no cookie or ambient
-  credential can reach it -- and revealing leaves the sent direction with no
-  region a verifier cannot read.
+  header. The Platform Verifier MUST reject a head carrying a header outside
+  that list, one of them twice, or a listed header with another value.
+  Necessity: the verifier reads the body with a form-encoding reading, and
+  common REQ-COMMON-21B fixes the media type because it "selects the platform's
+  request parser" -- a media type nothing compares is a pin in name only.
+  Order is left free because it changes nothing the platform does with the
+  request, and fixing it would bind every prover to the header order its HTTP
+  library happens to emit.
 - REQ-PLAT-56B (upholds SP-EXCHANGE-01):
-  The Platform Verifier MUST reject a token attestation whose revealed
-  `content-length` value is not the exact decimal byte count of the request
-  body it frames. The Platform Verifier MUST reject a token attestation whose
-  head carries a `transfer-encoding` header. Necessity: the verifier takes the
-  body to be everything after the sole `\r\n\r\n`, while the platform takes
-  the body to be `content-length` bytes, and where those two disagree the
-  fields the verifier reads are not the fields the platform parsed -- a short
-  `content-length` leaves the remainder outside the request the platform
-  answered. `transfer-encoding` overrides `content-length` entirely and so
-  removes the framing this requirement pins. The body byte count is derivable
-  on the verifying side without trusting the value: the signed transcript
-  length of the sent direction, less the head, is the body, whether that body
-  is revealed whole as in X's request or revealed up to a committed suffix as
-  in GitHub's.
+  The Platform Verifier MUST reject a `content-length` other than the decimal
+  count of the body it frames. The Platform Verifier MUST reject a
+  `transfer-encoding` header. Necessity: the verifier takes the body to be what
+  follows the head while the platform takes it to be `content-length` bytes, so
+  where the two disagree the fields read are not the fields parsed;
+  `transfer-encoding` removes that framing outright.
 - REQ-PLAT-56C (upholds SP-EXCHANGE-01):
-  The Platform Verifier MUST reject a token attestation whose revealed head
-  contains a line feed not preceded by a carriage return, or a line beginning
-  with a space or horizontal tab. Necessity: the head ends at the sole
-  `\r\n\r\n` for the verifier, but an HTTP parser accepting a bare line feed
-  or an obsolete line fold ends it elsewhere, which moves the platform's
-  head-body boundary away from the verifier's and turns bytes the verifier
-  read as a header into bytes the platform parsed as the body. Common
-  REQ-COMMON-39 already requires this of the identity request; the token
-  request needs it for the same reason and did not have it.
+  The Platform Verifier MUST reject a head carrying a line feed not preceded by
+  a carriage return, or a line beginning with a space or a tab. Necessity: a
+  parser accepting either ends the head somewhere this one does not, moving
+  bytes between head and body. Common REQ-COMMON-39 asks the same of the
+  identity request.
 - REQ-PLAT-56 (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject an X token attestation whose revealed
   `grant_type` differs from the exact ASCII bytes `authorization_code`.
@@ -890,13 +868,10 @@ a check -- which is why the request headers are revealed and the response's
 are not: the request's are profile constants a verifier compares, and the
 response's are the platform's own bytes that nothing reads.
 
-The exchange request carries exactly five headers, in this order:
-`host: github.com`, `content-type: application/x-www-form-urlencoded`,
-`accept: application/json`, `connection: close`, and `content-length`. Its
-body includes the committed `client_secret`, so the byte count REQ-PLAT-56B
-compares against spans the revealed prefix and that commitment together --
-which the exact tiling of common REQ-COMMON-35 makes derivable without
-revealing the secret.
+The exchange request carries those same five headers, in any order, with
+`host: github.com`. Its body includes the committed `client_secret`, so the
+count REQ-PLAT-56B compares spans the revealed prefix and that commitment,
+which the exact tiling of common REQ-COMMON-35 makes derivable.
 
 - REQ-PLAT-43D (upholds SP-EXCHANGE-01):
   The GitHub Token Service MUST reveal no range outside the rows marked `yes`
