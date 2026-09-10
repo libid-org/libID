@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
@@ -121,6 +121,72 @@ for (const [platform, name] of [
       }
     })
   }
+}
+
+for (const blocked of [false, true]) {
+  test(`failure keeps the popup open${blocked ? ' through the native anchor' : ''} until manually closed`, async ({
+    page,
+    context,
+  }) => {
+    if (blocked)
+      await page.addInitScript(() => {
+        window.open = () => null
+      })
+    await page.route(configUrl, (route) => route.fulfill({ json: config }))
+    await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><title>Failure test boundary</title>',
+      }),
+    )
+    await page.goto('/')
+    const launch = page.getByRole('button', { name: 'Google', exact: true })
+    await expect(launch).toHaveAttribute('aria-disabled', 'false')
+    const opened = page.waitForEvent('popup')
+    await launch.click()
+    const popup = await opened
+    await expect(popup).toHaveURL(/\/ccdp\/v1\/prefetch#/)
+    // A synthetic failure over the actual popup transport; no OAuth or proof is simulated.
+    // Serve the real package at the popup origin, avoiding cross-origin dev-server imports.
+    await context.route(`${ccdp}/popup-test/**`, (route) =>
+      route.fulfill({
+        contentType: 'text/javascript',
+        body: readFileSync(
+          new URL(
+            new URL(route.request().url()).pathname.slice('/popup-test/'.length),
+            import.meta.resolve('@libid/popup'),
+          ),
+        ),
+      }),
+    )
+    const popupModule = `${ccdp}/popup-test/index.js`
+    await popup.evaluate(async (moduleUrl) => {
+      const { PopupConnection, PopupWindow } = await import(/* @vite-ignore */ moduleUrl)
+      const id = new URLSearchParams(location.hash.slice(1)).get('ceremonyId')
+      const connection = PopupConnection.accept(
+        PopupWindow.current(location.hash, { scope: '/' }),
+        {
+          connectionId: id,
+          allowedApplicationOrigins: ['https://localhost:4692'],
+        },
+      )
+      await connection.ready
+      connection.send({
+        type: 'abort-ceremony',
+        code: 'prover-execution',
+        reason: 'Unable to complete the platform proof.',
+      })
+    }, popupModule)
+    await expect(page.getByRole('status')).toContainText('popup is open for inspection')
+    await expect(page.getByRole('button', { name: 'Cancel ceremony' })).toBeDisabled()
+    await expect(page.locator('#history')).toContainText('Failed (prover-execution)')
+    expect(popup.isClosed()).toBe(false)
+    await expect(launch).toHaveAttribute('aria-disabled', 'true')
+    await page.getByRole('button', { name: 'Close popup' }).click()
+    await expect.poll(() => popup.isClosed()).toBe(true)
+    await expect(page.getByRole('status')).toHaveText('Popup closed. Start a fresh attempt.')
+    await expect(launch).toHaveAttribute('aria-disabled', 'false')
+  })
 }
 
 test('private configuration and generated files are not served', async ({ request }) => {
