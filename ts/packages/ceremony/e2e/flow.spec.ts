@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { expect, test } from './fixtures.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
 import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
 import fixture from '../test-fixtures/google-v1.json' with { type: 'json' }
+import { expect, test } from './fixtures.js'
 
 for (const native of [false, true])
   test(`actual popup: private callback, isolation, denial, and application continuation${native ? ' with native anchor' : ''} [LIBID-BROWSER-001] [LIBID-BROWSER-005]`, async ({
@@ -149,6 +149,73 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
   expect((await (await request.get(control)).json()).count).toBe(before + 1)
   await page.evaluate(() => window.after())
   await expect.poll(() => page.evaluate(() => window.afterReady)).toBe(true)
+})
+
+test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-ASSET-017]', async ({
+  ccdp,
+  browser,
+  request,
+}, testInfo) => {
+  const graph = JSON.parse(
+    readFileSync(
+      new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
+      'utf8',
+    ),
+  )
+  const asset = graph.requestsByProfile['google/1']
+    .filter(
+      (r: { url: string; range?: string }) =>
+        r.url.startsWith('/') && !r.range && r.url.endsWith('.js'),
+    )
+    .sort((a: { bytes: number }, b: { bytes: number }) => a.bytes - b.bytes)[0]
+  const control = `${ccdp}/qualification-control?asset=${encodeURIComponent(asset.url)}`
+  const before = (await (await request.get(control)).json()).count
+  // WebKit's ephemeral test context does not retain this HTTP-cache entry.
+  const context = await browser
+    .browserType()
+    .launchPersistentContext(testInfo.outputPath('http-cache-profile'), {
+      ignoreHTTPSErrors: true,
+    })
+  try {
+    const page = await context.newPage()
+    await page.goto(`${ccdp}/ccdp/v1/seed`)
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.register('/ccdp/v1/worker.js', { scope: '/', type: 'module' })
+      await navigator.serviceWorker.ready
+      if (!navigator.serviceWorker.controller)
+        await new Promise<void>((resolve) =>
+          navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), {
+            once: true,
+          }),
+        )
+    })
+    // No Playwright routes: routing disables the browser HTTP cache being tested.
+    expect(
+      await page.evaluate(
+        async (url) => (await (await fetch(url)).arrayBuffer()).byteLength,
+        asset.url,
+      ),
+    ).toBe(asset.bytes)
+    expect((await (await request.get(control)).json()).count).toBe(before + 1)
+    await request.get(`${control}&fail=1`)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(
+        await page.evaluate(async (url) => {
+          await caches.delete('libid-ceremony-assets-v1')
+          const response = await fetch(url)
+          if (!response.ok) throw new Error(`Asset response ${response.status}`)
+          return (await response.arrayBuffer()).byteLength
+        }, asset.url),
+      ).toBe(asset.bytes)
+    }
+    expect((await (await request.get(control)).json()).count).toBe(before + 1)
+  } finally {
+    try {
+      await request.get(`${control}&restore=1`)
+    } finally {
+      await context.close()
+    }
+  }
 })
 
 test('real Google fixture proof under emitted CSP, independently released-key verified [LIBID-PROVER-001] [CSP-020]', async ({
