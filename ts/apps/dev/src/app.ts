@@ -129,12 +129,17 @@ launch.addEventListener('click', (event) => {
       result.textContent = cancelled
         ? 'Ceremony cancelled.'
         : error instanceof CeremonyError
-          ? `${error.message} (${error.code}) Close the popup and start a fresh attempt.`
-          : 'Ceremony failed. Close the popup and start a fresh attempt.'
+          ? `${error.message} (${error.code}) Start a fresh attempt.`
+          : 'Ceremony failed. Start a fresh attempt.'
       status.textContent = 'Ceremony stopped.'
     })
-    .finally(() => {
+    .finally(async () => {
       off()
+      try {
+        await current.close()
+      } catch {
+        status.textContent = 'Could not close the popup automatically. Close its window manually.'
+      }
       active = undefined
       controls()
     })
