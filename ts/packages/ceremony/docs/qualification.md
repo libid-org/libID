@@ -468,3 +468,24 @@ returned `redirect_uri_mismatch` for HTTP and `bad_verification_code` for the ol
 HTTPS callback. The registration must be updated before live HTTP GitHub consent
 qualification. No valid code/token was used, and neither probe establishes a
 successful confidential token exchange or its final attestation.
+
+
+## Explicit same-origin fetch policy (2026-09-10)
+
+All asset-fetching response profiles now explicitly include `'self'` in
+`connect-src`, matching architecture PR #13 at `83a7fbcd071abeb62aa2cfd6f9cc91933175a328`.
+The TLSN mount is now `tlsn/v0.3.0-rc.3-csp1` so the original mount's immutable
+worker headers remain unchanged. Local CCDP origins already accept HTTP without
+a certificate or development flag; client configuration checks cover both exact
+loopback hosts and a CCDP port distinct from Bridge. Public HTTP stays rejected.
+
+The GitHub callback registration blocker recorded above was resolved after the
+user updated the provider configurations: the HTTP callback probe now returns
+the expected `bad_verification_code`, rather than `redirect_uri_mismatch`. This
+checks registration acceptance, not live OAuth success.
+
+Validation after the policy change: 38 focused client/protocol tests, all 16
+distribution/real-loader/native-SWS checks, and all 33 HTTP browser cases passed
+across Chromium, Firefox and WebKit, including independently verified real Google
+fixture proofs and concurrent TLSN initialization. TypeScript, lint and formatting
+passed. Security/correctness, API and simplicity reviews had no findings.

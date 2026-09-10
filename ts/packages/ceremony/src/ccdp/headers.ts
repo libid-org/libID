@@ -4,7 +4,7 @@ const base =
 export const csp = {
   base,
   // Exact loopback hosts only; public destinations still require TLS.
-  fetch: 'https: http://localhost:* http://127.0.0.1:*',
+  fetch: "'self' https: http://localhost:* http://127.0.0.1:*",
   websocket: 'wss: ws://localhost:* ws://127.0.0.1:*',
   execution: `${base}; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:`,
 } as const
