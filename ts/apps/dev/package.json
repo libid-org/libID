@@ -9,7 +9,6 @@
     "dev": "pnpm build:deps && node services.ts --app",
     "dev:services": "pnpm build:deps && node services.ts",
     "dev:app": "pnpm build:deps && vite",
-    "dev:check": "node check-services.ts",
     "build:deps": "pnpm --filter '@libid/dev^...' build",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
