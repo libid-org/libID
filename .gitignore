@@ -27,6 +27,12 @@ ts/packages/ceremony/.cache/
 ts/packages/ceremony/dist-artifacts/
 ts/qualification/ceremony/results/
 
-# Ceremony development configuration
+# Shared development application
+ts/apps/dev/.cache/
+ts/apps/dev/.env*
+!ts/apps/dev/.env.example
+ts/apps/dev/test-results/
+ts/apps/dev/playwright-report/
+
+# Updating the checkout does not move developers' untracked old credentials.
 ts/packages/ceremony/dev/.env*
-!ts/packages/ceremony/dev/.env.example

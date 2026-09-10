@@ -77,3 +77,5 @@ carries the browser claim library and the integration harness:
   across configured on-chain deployments.
 - [`repository-template`](https://github.com/libid-org/repository-template) —
   shared licensing, contribution, and AI-agent defaults for new repositories.
+
+For shared local services and the browser development app, see [@libid/dev](ts/apps/dev/README.md).

@@ -13,8 +13,8 @@ afterEach(() => {
 test('first startup sets up mkcert; later sessions reuse bytes until expiry', async () => {
   const { execFileSync: openssl } =
     await vi.importActual<typeof import('node:child_process')>('node:child_process')
-  mkdirSync(new URL('../.cache/', import.meta.url), { recursive: true })
-  const directory = mkdtempSync(fileURLToPath(new URL('../.cache/dev-tls-test-', import.meta.url)))
+  mkdirSync(new URL('./.cache/', import.meta.url), { recursive: true })
+  const directory = mkdtempSync(fileURLToPath(new URL('./.cache/dev-tls-test-', import.meta.url)))
   try {
     const cert = join(directory, 'localhost.pem'),
       key = join(directory, 'localhost-key.pem')

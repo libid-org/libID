@@ -7,7 +7,7 @@ import { localhostTls } from './tls.ts'
 const root = fileURLToPath(new URL('.', import.meta.url))
 export default defineConfig(({ mode, command }) => {
   const env = { ...loadEnv(mode, root, 'CEREMONY_'), ...process.env }
-  const directory = join(root, '../.cache/dev')
+  const directory = join(root, '.cache/dev')
   mkdirSync(directory, { recursive: true })
   if (!!env.CEREMONY_TLS_CERT !== !!env.CEREMONY_TLS_KEY)
     throw new Error('Set both CEREMONY_TLS_CERT and CEREMONY_TLS_KEY')
@@ -24,7 +24,8 @@ export default defineConfig(({ mode, command }) => {
     return value
   }
   return {
-    root,
+    root: join(root, 'src'),
+    envDir: root,
     cacheDir: join(directory, 'vite'),
     envPrefix: [],
     define: {
@@ -35,14 +36,14 @@ export default defineConfig(({ mode, command }) => {
     },
     resolve: {
       alias: {
-        '@libid/ceremony/client': join(root, '../src/client/index.ts'),
-        '@libid/ledger': join(root, '../../ledger/src/testing.ts'),
+        '@libid/ledger': fileURLToPath(import.meta.resolve('@libid/ledger/testing')),
       },
     },
     server: {
       host: 'localhost',
       port: Number(env.CEREMONY_APP_PORT ?? 4691),
       strictPort: true,
+      fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.cache/**'] },
       https,
     },
     build: { outDir: join(directory, 'app'), emptyOutDir: true },

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 
 const configUrl = 'https://localhost:4682/api/v1/ceremony/config'
@@ -77,3 +80,18 @@ for (const blocked of [false, true]) {
     expect(await page.evaluate(() => window.result)).toEqual({ status: 'cancelled' })
   })
 }
+
+test('private configuration and generated files are not served', async ({ request }) => {
+  const root = fileURLToPath(new URL('..', import.meta.url))
+  const directory = mkdtempSync(join(root, '.cache/private-file-test-'))
+  const file = join(directory, 'probe.json')
+  writeFileSync(file, '{}')
+  try {
+    for (const path of [join(root, '.env.example'), file]) {
+      const response = await request.get(`/@fs${path}`)
+      expect(response.status(), path).toBe(403)
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
