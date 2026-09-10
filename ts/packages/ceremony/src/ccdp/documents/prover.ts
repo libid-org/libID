@@ -99,12 +99,6 @@ export async function startProver(fragment: string): Promise<void> {
             if (!('platformStep' in event)) return
             if (platformStep.code === 'witness' && platformStep.status === 'started')
               context.onStage('proof-generation')
-            if (
-              request.platformId !== 'google' &&
-              platformStep.code === 'proof-backend-destroy' &&
-              platformStep.status === 'completed'
-            )
-              context.onStage('finalizing')
             if (event.platformStep.progress < last) return
             last = event.platformStep.progress
             ui!.update(last, platformStep.label)

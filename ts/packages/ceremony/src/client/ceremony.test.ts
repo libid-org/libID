@@ -480,7 +480,6 @@ it.each(['google', 'x', 'github'] as const)(
       'proof-preparation',
       'identity-fetch',
       'proof-generation',
-      'finalizing',
     ]) {
       notify(stage)
       connection.receive({
@@ -515,10 +514,9 @@ it.each(['google', 'x', 'github'] as const)(
             'identity-fetch',
             'proof-preparation',
             'proof-generation',
-            'finalizing',
           ],
     )
-    expect(events.filter((e) => e.type === 'step')).toHaveLength(6)
+    expect(events.filter((e) => e.type === 'step')).toHaveLength(5)
     expect(events.at(-1)).toMatchObject({ type: 'finished', outcome: 'denied' })
     const timestamps = events.filter((e) => e.type !== 'step').map((e) => e.timestamp)
     expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b))
