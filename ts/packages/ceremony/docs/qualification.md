@@ -115,11 +115,14 @@ A real ledger definition is required before a production ceremony can be constru
    A matched SDK/service observation contract and delayed-request qualification are
    required before claiming this requirement. This production enforcement remains
    unresolved, not a waived security property.
-3. **HTTP profile alignment:** spec PR #31 (`ae33a29`) permits any header order,
-   resolving the Rust SDK HashMap-order mismatch. Token requests now reveal their
-   heads and use contiguous disclosures. GitHub identity requests still require
-   profile/verifier alignment: the spec omits GitHub's mandatory User-Agent from
-   its exact header set. See [the documented deviation](notarization.md#token-layout-alignment).
+3. **HTTP profile alignment:** spec PR #31 at
+   `5bbd838c81d4a47849104cf0f965ad985b2e5b98` permits additional X/GitHub identity
+   headers and explicitly includes GitHub's runtime-chosen User-Agent. That
+   specification mismatch is resolved. Browser selectors still enforce closed
+   identity-header sets and need the bounded update described in
+   [notarization](notarization.md#token-layout-alignment). Token headers remain
+   closed; existing token-layout requirements and tests are unchanged. Matching
+   released-verifier coverage remains a qualification gate.
 4. **GitHub service:** no real confidential token-exchange service was qualified.
    Admission checks one revealed request prefix and one committed secret-field
    suffix. Tests use canonical-bincode fixtures modeling native coalescing, not
@@ -334,3 +337,39 @@ ports and removed its Compose containers. A builder regression also rejects
 fixture output outside a worktree-relative `.cache` even when the checkout itself
 is below a cache directory. The three focused reviews are clear after correcting
 fresh-checkout dependency builds, legacy credential ignores and that output guard.
+
+## Reviewed architecture update: ledger-owned notary routing
+
+Architecture PR #13 at
+[`0259e72c184e2be7b78a0ad92188e8722d8d6daf`](https://github.com/libid-org/libid/commit/0259e72c184e2be7b78a0ad92188e8722d8d6daf)
+changes the current implementation contract. These changes are reviewed but
+**not implemented** in this branch yet; the earlier source pin and existing
+implementation guides describe the currently running build.
+
+- `LedgerId` exposes `hash()` and `notaryAddress()`; encoding, decoding and
+  `isTestnet()` leave the ceremony contract. Real ledger definitions remain deferred.
+- Client copies the exact 32-byte hash once. X/GitHub also read and validate one
+  canonical HTTPS notary origin before OAuth. Missing/throwing methods and invalid
+  results fail construction; later mutation cannot change a run. Google never
+  calls the address method and sends null.
+- `AppStartProver.notaryAddress` replaces its encoded ledger field. Prover has no
+  ledger dependency or notary defaults. All X sessions and GitHub's token and
+  identity sessions use the same address; failures never switch destinations.
+- CCDP embeds no notary addresses or development overrides. The application can
+  wrap the shared ledger fixture with a local address while retaining its hash.
+- Prover `connect-src` becomes `https: wss:`; dedicated TLSNotary workers also
+  admit `wss:` where they open notary connections. This admits secure network
+  destinations beyond the selected notary. Script and worker
+  sources remain restricted to the emitted graph; Bridge egress restrictions
+  and ledger verification authority remain unchanged.
+
+Client and CCDP must be deployed together because the request shape changes.
+Verification keeps IDs LIBID-MOD-014/015, LIBID-ASSET-003, LIBID-OAUTH-021,
+LIBID-PROVER-008, KIT-013/015/017 and CSP-003/011: snapshot/mutation and invalid-input
+checks, byte-identical distribution policies for different addresses, both
+isolation paths, and matching addresses in real GitHub/X sessions. The pending
+notary image update remains a separate live-qualification prerequisite.
+
+The header audit also found stale explanatory prose in spec §5.2 claiming the
+X token Host is hidden; its normative disclosure table reveals the token head.
+The normative table and token-layout requirements control implementation.

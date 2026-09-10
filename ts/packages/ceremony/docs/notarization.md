@@ -464,16 +464,21 @@ non-CRLF/folded framing, and compare Content-Length with the complete body lengt
 including GitHub's signed committed suffix. Authority still comes from the
 attested TLS server identity, not Host.
 
-**Unresolved profile deviation:** GitHub identity requests carry the pinned
-`X-GitHub-Api-Version: 2022-11-28` and the current browser’s `navigator.userAgent`
-as `User-Agent`, alongside the other four specified headers. PR #31's exact
-five-header list omits User-Agent,
-which [GitHub requires](https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api#user-agent-required).
-The profile and its ledger verifier must admit that sixth header with a
-browser-dependent value before these identity attestations can qualify against
-them. Ceremony forwards the browser value without adding a libID identifier.
-Browser selectors require the
-complete six-header set; they do not accept arbitrary extra headers.
+**Identity header alignment:** [spec PR #31 at 5bbd838](https://github.com/libid-org/libid/blob/5bbd838c81d4a47849104cf0f965ad985b2e5b98/specs/platform-ceremonies.md)
+now explicitly permits additional identity-request headers for both X (§5.3)
+and GitHub (§6.5). X still sends its four required headers. GitHub sends six,
+including `X-GitHub-Api-Version: 2022-11-28` and a runtime-chosen `User-Agent`;
+ceremony uses `navigator.userAgent` without adding a libID identifier. This
+resolves the documented User-Agent mismatch. The Platform Verifier compares
+the request line and Authorization line, while the runtime remains responsible
+for sending the required headers.
+
+The current browser selectors still reject additional headers. Updating them
+must retain required-header values and uniqueness, reject malformed framing,
+and disclose the complete request except exactly one bearer range. Additional
+header values before Authorization require byte-based offsets rather than
+JavaScript string lengths. Token requests are unchanged: their five-header set
+remains closed. Additional identity headers do not imply additional token headers.
 
 Regression coverage is in [transcript tests](../src/prover/transcript.test.ts),
 [GitHub admission](../src/platforms/github/1/token.test.ts), and

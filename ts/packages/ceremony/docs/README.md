@@ -25,3 +25,8 @@ The architecture contracts originate in PR #13 at
 `a73e31fac2cddc960f42220efdf5790727dc298a`, reorganized here with implementation
 guides. Requirement IDs are unchanged. [Qualification](qualification.md) records
 implementation deviations and remaining qualification gaps.
+
+The newer PR #13 contract at `0259e72` and spec PR #31 at `5bbd838` have been
+reviewed. [Pending implementation changes](qualification.md#reviewed-architecture-update-ledger-owned-notary-routing)
+record ledger-owned notary routing and the identity-header allowance separately
+from the currently implemented contract.
