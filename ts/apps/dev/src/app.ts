@@ -19,7 +19,6 @@ declare global {
 const settings = __CEREMONY_DEV__
 const platform = document.querySelector<HTMLSelectElement>('#platform')!
 const launch = document.querySelector<HTMLAnchorElement>('#launch')!
-const connect = document.querySelector<HTMLButtonElement>('#connect')!
 const cancel = document.querySelector<HTMLButtonElement>('#cancel')!
 const close = document.querySelector<HTMLButtonElement>('#close')!
 const status = document.querySelector<HTMLElement>('#status')!
@@ -30,21 +29,15 @@ const names: Record<PlatformId, string> = { google: 'Google', x: 'X', github: 'G
 let client: CeremonyClient | undefined
 let active: Ceremony | undefined
 let connection: PopupConnection<Message> | undefined
-let connecting = false
 function controls() {
-  const ready = !!client?.enabledPlatforms.length && !active && !connection && !connecting
+  const ready = !!client?.enabledPlatforms.length && !active && !connection
   platform.disabled = !ready
   launch.setAttribute('aria-disabled', String(!ready))
   launch.tabIndex = ready ? 0 : -1
-  connect.disabled = connecting || !!connection
   cancel.disabled = !active
   close.disabled = !connection
 }
-async function reconnect() {
-  connecting = true
-  client = undefined
-  controls()
-  status.textContent = 'Connecting to the Bridge…'
+async function initialize() {
   try {
     client = await createCeremonyClient({ oauthBridge: settings.bridge })
     platform.replaceChildren(...client.enabledPlatforms.map((id) => new Option(names[id], id)))
@@ -54,13 +47,11 @@ async function reconnect() {
   } catch {
     platform.replaceChildren(new Option('Bridge unavailable', ''))
     status.textContent =
-      'Could not load Bridge configuration. Check its address, certificate and application allowlist, then retry.'
+      'Could not load Bridge configuration. Check its address, certificate and application allowlist, then reload this page.'
   } finally {
-    connecting = false
     controls()
   }
 }
-connect.addEventListener('click', () => void reconnect())
 launch.addEventListener('click', (event) => {
   if (!client || launch.getAttribute('aria-disabled') === 'true') {
     event.preventDefault()
@@ -157,4 +148,4 @@ close.addEventListener('click', () => {
     controls()
   })
 })
-void reconnect()
+void initialize()

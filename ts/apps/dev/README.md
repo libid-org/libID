@@ -3,8 +3,8 @@
 A minimal application using the public ceremony Client API and actual popup package.
 It makes real Bridge requests and launches the emitted CCDP pages; it has no mock
 Bridge, OAuth exchange or proof-delivery mode. The frontend works while the Bridge
-is unavailable: launch stays disabled, and Retry connection fetches configuration
-again when the service becomes available.
+is unavailable: launch stays disabled with an error; reload the page once the
+service becomes available. There is no manual connection button.
 
 From the TypeScript workspace:
 
@@ -14,7 +14,8 @@ pnpm dev
 ```
 
 Open **https://localhost:4691**. `pnpm dev` builds the workspace dependencies and
-starts the frontend, Bridge, notary and CCDP together. For separate terminals use
+starts Bridge, notary and CCDP, waits for Bridge configuration to respond, then
+starts the frontend. For separate terminals use
 `pnpm dev:services` and `pnpm dev:app`. These root commands delegate to this private
 workspace package; it has no published library API.
 
@@ -163,8 +164,8 @@ and 4688 (notary HTTP/WS). Keep the frontend's default origin/port. Port conflic
 fail instead of selecting another callback URI. Containers belong to a Compose
 project derived from the checkout path. Ctrl-C stops the frontend (when started
 together), HTTPS ingress and that project's containers; Docker retains images for subsequent sessions. Wait for
-Bridge startup before launching consent (the frontend's Retry connection handles
-initial unavailability).
+Bridge startup before opening a separately started frontend. The combined `dev`
+command waits automatically; Ctrl-C or a Compose failure ends the wait.
 
 The Bridge reads the rebuilt Callback using its supported
 `CALLBACK_ARTIFACT_PATH` override. PR #9's retrieval client uses compiled public CA

@@ -13,7 +13,7 @@ const config = {
     github: { clientId: 'test-client', ceremonyVersions: [2] },
   },
 }
-test('unavailable Bridge disables launch; retry loads compatible platforms', async ({ page }) => {
+test('unavailable Bridge disables launch; reload loads compatible platforms', async ({ page }) => {
   let available = false
   await page.route(configUrl, (route) =>
     available
@@ -26,8 +26,9 @@ test('unavailable Bridge disables launch; retry loads compatible platforms', asy
     'aria-disabled',
     'true',
   )
+  await expect(page.getByRole('button', { name: 'Retry connection' })).toHaveCount(0)
   available = true
-  await page.getByRole('button', { name: 'Retry connection' }).click()
+  await page.reload()
   await expect(page.getByRole('status')).toContainText('Ready.')
   await expect(page.locator('#platform option')).toHaveText(['Google'])
   await expect(page.getByRole('link', { name: 'Start ceremony' })).toHaveAttribute(
