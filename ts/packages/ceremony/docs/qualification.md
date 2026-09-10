@@ -285,8 +285,9 @@ initialization of the actual WASM bundle. The 237 unit tests and 14 distribution
 loader/native-SWS checks pass (one mutable-root rebuild test skipped); development
 TypeScript and lint pass. Security, API and simplicity reviews are clear.
 
-Fresh public registrations and GitHub's matching local secret remain deployment
-inputs. Basic network checks from the development machine found TCP port 7047 on
+The fresh public registrations are now committed in `dev/oauth-clients.json`,
+and their shared localhost callback URI is confirmed. GitHub's matching secret
+is stored only in ignored local configuration. Basic network checks from the development machine found TCP port 7047 on
 `notary.testnet.lib.id` timing out and DNS resolution for `testnet.notary.lib.id`
 failing. These are reachability observations, not protocol tests: confirm a
 reachable compatible notary's HTTPS/WebSocket origin and TCP listener before

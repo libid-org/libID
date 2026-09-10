@@ -30,7 +30,9 @@ defaults do not match your local services:
 | `CEREMONY_TLS_CERT`, `CEREMONY_TLS_KEY` | Generated localhost certificate in `.cache/dev/` |
 
 Only the two public origins enter the browser bundle. OAuth client IDs come from
-Bridge configuration. Client secrets belong exclusively to the Bridge.
+Bridge configuration. The local launcher defaults to the public registrations in
+[dev/oauth-clients.json](../dev/oauth-clients.json), so they are declared once.
+Client secrets belong exclusively to the Bridge.
 
 Install `mkcert` first (`brew install mkcert` with Homebrew; Firefox on macOS also
 needs `brew install nss`). On the first `dev` startup, the script runs `mkcert -install`
@@ -117,9 +119,9 @@ Set these in the ignored `dev/.env.local`:
 - `CEREMONY_BRIDGE_BINARY`: absolute path to that build's `libid-server-rs`.
 - `CEREMONY_SWS_BINARY`: absolute path to SWS **3.0.0-beta.1** (the same release
   pinned by `ccdp.Dockerfile`).
-- `CEREMONY_PLATFORMS`: JSON registrations, e.g.
-  `[{"id":"google","clientId":"YOUR_PUBLIC_ID","versions":[1]}]`.
-  Use the fresh public development registrations; placeholder IDs do not work.
+- `CEREMONY_PLATFORMS`: optional JSON override for the committed public
+  registrations in `dev/oauth-clients.json`, for example to enable a subset.
+  The default enables the development Google, X and GitHub clients.
 - `GH_OAUTH_CLIENT_SECRET`: required when GitHub is enabled; keep it local.
 - `NOTARY_URL`: the Bridge's `tcp://HOST:PORT` endpoint for a compatible notary.
   Its host must match the browser's build-time `LIBID_NOTARY_ADDRESS` host.
@@ -132,7 +134,9 @@ notary's TCP listener. Confirm that endpoint before spending a fresh OAuth code.
 Register **`https://localhost:4682/auth/callback`** with each provider. Google also
 needs the appropriate consent-screen/test-user configuration; X must use a public
 client with PKCE; GitHub needs the matching confidential secret on the Bridge.
-Public client IDs can be committed for convenience; secrets cannot.
+The public development IDs are committed in `dev/oauth-clients.json`; secrets
+remain local. All three committed registrations are configured for the callback
+URL above. Changing it requires updating their provider registrations.
 
 From the TypeScript workspace, build CCDP with the chosen notary origin:
 

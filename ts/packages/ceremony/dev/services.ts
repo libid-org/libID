@@ -18,8 +18,8 @@ if (!bridgeBinary || !swsBinary)
   throw new Error(
     'Set CEREMONY_BRIDGE_BINARY and CEREMONY_SWS_BINARY to the pinned local binaries.',
   )
-if (!env.CEREMONY_PLATFORMS)
-  throw new Error('Set CEREMONY_PLATFORMS to the public development OAuth client configuration.')
+const platforms =
+  env.CEREMONY_PLATFORMS ?? readFileSync(join(root, 'dev/oauth-clients.json'), 'utf8')
 if (!existsSync(join(artifact, 'public/ccdp/callback.html')))
   throw new Error('Run build:qualification-artifacts first.')
 mkdirSync(cache, { recursive: true })
@@ -71,7 +71,7 @@ start(bridgeBinary, [], {
   CCDP_ORIGIN: 'https://localhost:4683',
   ALLOWED_APP_ORIGINS: 'https://localhost:4691',
   CALLBACK_ARTIFACT_PATH: join(artifact, 'public/ccdp/callback.html'),
-  CEREMONY_PLATFORMS: env.CEREMONY_PLATFORMS,
+  CEREMONY_PLATFORMS: platforms,
   GH_OAUTH_CLIENT_SECRET: env.GH_OAUTH_CLIENT_SECRET ?? '',
   NOTARY_URL: env.NOTARY_URL ?? 'tcp://127.0.0.1:7047',
 })
