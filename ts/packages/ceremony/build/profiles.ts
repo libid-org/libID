@@ -56,9 +56,9 @@ export function responseHeaders(
     'leafWorker',
   ].includes(profile)
   const connects = ['proofWorker', 'leafWorker'].includes(profile)
-    ? 'https: blob:'
+    ? `${shared.csp.fetch} blob:`
     : execution
-      ? 'https: wss:'
+      ? `${shared.csp.fetch} ${shared.csp.websocket}`
       : `'self' ${externalOrigins.join(' ')}`
   headers['Content-Security-Policy'] =
     `${base}; script-src 'self' ${inline.map(scriptHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}; worker-src ${profile === 'leafWorker' ? "'none'" : `'self'${execution ? ' blob:' : ''}`}; connect-src ${connects} ${popupFallback.connectSources.join(' ')}${profile === 'executionWorker' ? ' blob:' : ''}${['prefetch', 'prover', 'proverFallback'].includes(profile) ? "; style-src 'unsafe-inline'" : ''}`

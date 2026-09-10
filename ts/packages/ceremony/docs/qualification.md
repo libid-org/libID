@@ -381,3 +381,40 @@ rerunning Chromium alone; overlapping browser suites initially reported
 simplicity reviews are clear after documentation corrections. No new real OAuth,
 browser-proof verification, or matched-notary session qualification is claimed by
 these checks. Restart the development stack to load matching Client and CCDP builds.
+
+## Local HTTP qualification — 2026-09-10
+
+The development application and services now use HTTP/WS on explicit localhost
+origins. Bridge [PR #10](https://github.com/libid-org/libid-server-rs/pull/10),
+stacked on PR #9, is pinned at `86d6fcfd8be6bf9155fe67394f517c3ce74a9d44`.
+It admits canonical local HTTP notary origins; its existing configured TCP
+connection remains unchanged. The dev stack waits for CCDP's Callback endpoint
+before starting Bridge, which retrieves Callback directly over HTTP. No Callback
+file override, TLS proxy or mkcert setup is involved.
+
+Validation used a separate Docker Compose project on ports 4962/4963/4967 to
+preserve the existing live stack. The built Bridge, pinned notary RC and native
+SWS passed configuration, origin admission, Callback composition, isolated-route
+and real WebSocket checks. Chromium, Firefox and WebKit each confirmed a secure
+context, cross-origin isolation, and a real local-notary WS handshake under the
+emitted Prover CSP, without certificate bypasses.
+
+- 97 popup and 270 ceremony unit tests passed.
+- 55 development UI cases passed on HTTP across the five browser profiles.
+- The shared ceremony suite covered 88 cases across five HTTPS and three HTTP
+  profiles. All HTTP cases passed, including real Google fixture proofs verified
+  outside the browser against the released key. The initial suite had one HTTPS
+  WebKit two-popup timeout (87/88); its first targeted retry also timed out, then
+  the diagnostic run and final unmodified test both passed. This remains an
+  intermittent test result, not a demonstrated production fix.
+- All 15 distribution/real-loader/native-SWS checks passed, with no skips.
+- Bridge's 75 unit and 39 HTTP tests, TypeScript checks, lint and formatting passed.
+- Security/correctness, API and simplicity reviews completed; canonical-loopback
+  validation and CCDP startup readiness findings were fixed.
+
+HTTPS qualification remains in the suite on ports 4881–4883; HTTP uses 4781–4783.
+The TLSNotary asset mount is `tlsn/v0.3.0-rc.2-loopback` because its worker response
+policy changed. Old immutable responses remain available. Public provider traffic
+and external proving assets still require HTTPS. Physical-device testing still
+needs HTTPS and its own reachable origins. No new live OAuth consent or matched
+notary-session qualification was performed in this run.

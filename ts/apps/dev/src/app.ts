@@ -16,8 +16,8 @@ declare global {
     result?: IdentityResult | { status: 'failed' | 'cancelled' }
   }
 }
-const settings = { bridge: 'https://localhost:4682', ccdp: 'https://localhost:4683' }
-const ledger: LedgerId = { ...testnet, notaryAddress: () => 'https://localhost:4687' }
+const settings = { bridge: 'http://localhost:4682', ccdp: 'http://localhost:4683' }
+const ledger: LedgerId = { ...testnet, notaryAddress: () => 'http://localhost:4687' }
 const platforms = document.querySelector<HTMLElement>('#platforms')!
 const cancel = document.querySelector<HTMLButtonElement>('#cancel')!
 const close = document.querySelector<HTMLButtonElement>('#close')!

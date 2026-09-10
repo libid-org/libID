@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  origin,
+  redirect,
   AbortCeremony,
   AppStartProver,
   CancelCeremony,
@@ -55,7 +57,11 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
   it('validates platform-specific notary routing without ledger decoding [LIBID-OAUTH-021]', () => {
     const message = samples[1][1]
     for (const platformId of ['x', 'github']) {
-      for (const notaryAddress of ['https://notary.test', 'https://localhost:4687']) {
+      for (const notaryAddress of [
+        'https://notary.test',
+        'https://localhost:4687',
+        'http://localhost:4687',
+      ]) {
         const value = { ...message, platformId, notaryAddress }
         expect(AppStartProver.decode(value)).toBe(value)
       }
@@ -126,4 +132,24 @@ it('rejects the retired delivery message and embedded-identity shape', () => {
   expect(() =>
     ProverIdentityProof.decode({ type: 'prover-identity-proof', proof: { identity: {} } }),
   ).toThrow()
+})
+
+it('admits explicit loopback HTTP without widening public URL validation [LIBID-OAUTH-021]', () => {
+  for (const value of ['http://localhost:4682', 'http://127.0.0.1:4682']) {
+    expect(origin(value)).toBe(true)
+    expect(redirect(`${value}/auth/callback`)).toBe(true)
+  }
+  for (const value of [
+    'http://bridge.test',
+    'http://localhost.evil.test',
+    'http://192.168.1.1',
+    'http://localtest.me',
+    'http://localhost.',
+    'http://user@localhost',
+    'http://LOCALHOST',
+    'http://127.1',
+  ]) {
+    expect(origin(value), value).toBe(false)
+    expect(redirect(`${value}/auth/callback`), value).toBe(false)
+  }
 })

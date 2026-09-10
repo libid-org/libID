@@ -49,7 +49,7 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
   })
 }
 export async function fetchCeremonyConfig(bridge: string): Promise<CeremonyConfig> {
-  if (!origin(bridge)) throw new TypeError('oauthBridge must be a canonical HTTPS origin')
+  if (!origin(bridge)) throw new TypeError('oauthBridge must be a canonical HTTPS or localhost HTTP origin')
   const response = await fetch(`${bridge}${CONFIG_PATH}`, {
     mode: 'cors',
     credentials: 'omit',

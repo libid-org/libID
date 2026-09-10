@@ -17,22 +17,28 @@ export function text(value: unknown, max: number): value is string {
     new TextEncoder().encode(value).length <= max
   )
 }
-export function httpsUrl(value: unknown): value is string {
+export function webUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false
   try {
     const u = new URL(value)
-    return u.protocol === 'https:' && !u.username && !u.password && u.href === value
+    return (
+      (u.protocol === 'https:' ||
+        (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) &&
+      !u.username &&
+      !u.password &&
+      u.href === value
+    )
   } catch {
     return false
   }
 }
 export function origin(value: unknown): value is string {
-  return typeof value === 'string' && httpsUrl(`${value}/`) && new URL(value).origin === value
+  return typeof value === 'string' && webUrl(`${value}/`) && new URL(value).origin === value
 }
 export function redirect(value: unknown): value is string {
   return (
     text(value, MAX_REDIRECT_URI_BYTES) &&
-    httpsUrl(value) &&
+    webUrl(value) &&
     !new URL(value).search &&
     !new URL(value).hash
   )

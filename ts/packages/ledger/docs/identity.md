@@ -9,7 +9,7 @@ transaction handling, or ceremony dependency.
 ```ts
 export interface LedgerId {
   hash(): Uint8Array // exact 32-byte Chain Profile identifier
-  notaryAddress(): string // canonical HTTPS origin
+  notaryAddress(): string // canonical HTTPS origin; HTTP on localhost/127.0.0.1 for development
 }
 ```
 
@@ -46,3 +46,7 @@ Profile hash against the ledger's vectors. Distinct supported networks must
 retain distinct identities. A fixture changing only the notary address must
 retain the target ledger hash. Mutating returned hash bytes must not change
 later results.
+
+For local development only, `notaryAddress()` may return a canonical HTTP origin
+on exactly `localhost` or `127.0.0.1`. Ceremony derives WS on the same authority;
+public notaries continue to require HTTPS/WSS. No other HTTP hosts are accepted.

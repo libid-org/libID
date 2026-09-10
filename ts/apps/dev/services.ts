@@ -1,18 +1,12 @@
-// Local HTTPS ingress for the real Bridge and emitted CCDP; no OAuth mocks.
+// Start the real Bridge, notary and emitted CCDP; no OAuth mocks.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import type { Duplex } from 'node:stream'
-import { mkdirSync } from 'node:fs'
-import { request } from 'node:http'
-import { createServer, type Server } from 'node:https'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
-import { localhostTls } from './tls.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
-const cache = join(root, '.cache/dev')
 // Rebuild the shared distribution; immutable assets reuse the build cache.
 execFileSync(
   'pnpm',
@@ -22,22 +16,13 @@ execFileSync(
     stdio: 'inherit',
   },
 )
-mkdirSync(cache, { recursive: true })
-const tls = localhostTls(cache)
 let frontend: ViteDevServer | undefined
-const servers: Server[] = []
-const sockets = new Set<Duplex>()
 let stopping = false
 function stop(code: number) {
   if (stopping) return
   stopping = true
   process.exitCode = code
   void frontend?.close()
-  for (const server of servers) {
-    server.close()
-    server.closeAllConnections()
-  }
-  for (const socket of sockets) socket.destroy()
   // Stop the producer before teardown; CLI plugins share this owned process group.
   if (compose.pid) {
     try {
@@ -69,85 +54,13 @@ compose.on('error', () => {
 compose.on('exit', (code) => {
   if (!stopping) stop(code || 1)
 })
-for (const [port, upstream] of [
-  [4682, 4685],
-  [4683, 4684],
-  [4687, 4688],
-]) {
-  const server = createServer(tls, (req, res) => {
-    const proxy = request(
-      {
-        hostname: '127.0.0.1',
-        port: upstream,
-        path: req.url,
-        method: req.method,
-        headers: req.headers,
-      },
-      (reply) => {
-        res.writeHead(reply.statusCode ?? 502, reply.headers)
-        reply.pipe(res)
-      },
-    )
-    // Never log URLs, request headers, bodies or provider errors.
-    proxy.on('error', () => {
-      if (!res.headersSent) res.writeHead(502)
-      res.end('Service unavailable')
-    })
-    res.on('close', () => proxy.destroy())
-    req.pipe(proxy)
-  })
-  // Node forwards the HTTP upgrade unchanged; TLSNotary owns the binary protocol.
-  if (port === 4687)
-    server.on('upgrade', (req, socket, head) => {
-      const proxy = request({
-        hostname: '127.0.0.1',
-        port: upstream,
-        path: req.url,
-        method: req.method,
-        headers: req.headers,
-      })
-      proxy.on('error', () => socket.destroy())
-      proxy.on('response', (reply) => {
-        reply.resume()
-        socket.destroy()
-      })
-      socket.on('error', () => socket.destroy())
-      socket.on('close', () => proxy.destroy())
-      proxy.on('upgrade', (reply, upstreamSocket, upstreamHead) => {
-        upstreamSocket.on('error', () => socket.destroy())
-        socket.on('close', () => upstreamSocket.destroy())
-        upstreamSocket.on('close', () => socket.destroy())
-        socket.write(`HTTP/1.1 ${reply.statusCode} ${reply.statusMessage}\r\n`)
-        for (let i = 0; i < reply.rawHeaders.length; i += 2)
-          socket.write(`${reply.rawHeaders[i]}: ${reply.rawHeaders[i + 1]}\r\n`)
-        socket.write('\r\n')
-        if (upstreamHead.length) socket.write(upstreamHead)
-        if (head.length) upstreamSocket.write(head)
-        socket.pipe(upstreamSocket).pipe(socket)
-      })
-      proxy.end()
-    })
-  server.on('connection', (socket) => {
-    sockets.add(socket)
-    socket.on('close', () => sockets.delete(socket))
-  })
-  servers.push(server)
-  server.on('error', () => {
-    console.error(`Development HTTPS port ${port} unavailable.`)
-    stop(1)
-  })
-  server.listen(port, 'localhost', () =>
-    console.info(`Development service: https://localhost:${port}`),
-  )
-}
-
 if (process.argv.includes('--app')) {
   try {
     console.info('Waiting for Bridge readiness before starting the frontend…')
     while (!stopping) {
       try {
-        const response = await fetch('http://127.0.0.1:4685/api/v1/ceremony/config', {
-          headers: { Origin: 'https://localhost:4691' },
+        const response = await fetch('http://127.0.0.1:4682/api/v1/ceremony/config', {
+          headers: { Origin: 'http://localhost:4691' },
           redirect: 'error',
           signal: AbortSignal.timeout(1000),
         })

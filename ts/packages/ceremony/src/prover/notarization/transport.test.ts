@@ -29,6 +29,8 @@ const validPayload = (signature: unknown = new Array(65).fill(4)) => ({
 describe('deriveNotaryWebSocketUrl', () => {
   it.each([
     ['https://notary.testnet.lib.id', 'wss://notary.testnet.lib.id/notarize-proxy'],
+    ['http://localhost:4687', 'ws://localhost:4687/notarize-proxy'],
+    ['http://127.0.0.1:4687', 'ws://127.0.0.1:4687/notarize-proxy'],
     ['https://notary.example:7048', 'wss://notary.example:7048/notarize-proxy'],
   ])('derives the fixed proxy route from %s', (address, expected) => {
     expect(deriveNotaryWebSocketUrl(address)).toBe(expected)
@@ -36,6 +38,10 @@ describe('deriveNotaryWebSocketUrl', () => {
 
   it.each([
     'http://notary.example',
+    'http://localhost.evil.test',
+    'http://192.168.1.1',
+    'http://localhost:4687/',
+    'http://user@localhost:4687',
     'ws://notary.example',
     'wss://notary.example',
     'ftp://notary.example',
@@ -49,7 +55,9 @@ describe('deriveNotaryWebSocketUrl', () => {
     'https://notary.example#fragment',
     'notary.example',
   ])('rejects %s', (address) => {
-    expect(() => deriveNotaryWebSocketUrl(address)).toThrow(/canonical HTTPS origin/)
+    expect(() => deriveNotaryWebSocketUrl(address)).toThrow(
+      /canonical HTTPS or localhost HTTP origin/,
+    )
   })
 })
 

@@ -6,8 +6,7 @@ export default defineConfig({
   timeout: 30000,
   workers: 1,
   use: {
-    baseURL: 'https://localhost:4692',
-    ignoreHTTPSErrors: true,
+    baseURL: 'http://localhost:4692',
     trace: 'off',
     video: 'off',
     screenshot: 'off',
@@ -22,8 +21,7 @@ export default defineConfig({
   webServer: {
     command: 'pnpm dev:app --port 4692',
     cwd: new URL('.', import.meta.url).pathname,
-    url: 'https://localhost:4692',
-    ignoreHTTPSErrors: true,
+    url: 'http://localhost:4692',
     reuseExistingServer: false,
     timeout: 60000,
   },

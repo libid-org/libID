@@ -3,10 +3,10 @@ import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 
-const configUrl = 'https://localhost:4682/api/v1/ceremony/config'
-const ccdp = 'https://localhost:4683'
+const configUrl = 'http://localhost:4682/api/v1/ceremony/config'
+const ccdp = 'http://localhost:4683'
 const config = {
-  redirectUri: 'https://localhost:4682/auth/callback',
+  redirectUri: 'http://localhost:4682/auth/callback',
   ccdpOrigin: ccdp,
   platforms: {
     google: { clientId: '407408718192.apps.googleusercontent.com', ceremonyVersions: [1] },
@@ -27,7 +27,7 @@ test('unavailable Bridge disables launch; reload loads compatible platforms', as
   available = true
   await page.reload()
   await expect(page.getByRole('status')).toContainText('Ready.')
-  await expect(page.locator('dl')).toContainText('https://localhost:4687')
+  await expect(page.locator('dl')).toContainText('http://localhost:4687')
   await expect(page.locator('dl')).not.toContainText('Ledger')
   await expect(page.locator('#platforms').getByRole('button')).toHaveText(['Google'])
   await expect(page.getByRole('button', { name: 'Google', exact: true })).toHaveAttribute(
@@ -167,7 +167,7 @@ for (const blocked of [false, true]) {
         PopupWindow.current(location.hash, { scope: '/' }),
         {
           connectionId: id,
-          allowedApplicationOrigins: ['https://localhost:4692'],
+          allowedApplicationOrigins: ['http://localhost:4692'],
         },
       )
       await connection.ready
