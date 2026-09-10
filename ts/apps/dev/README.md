@@ -66,17 +66,15 @@ Bridge. [OAuth Bridge](../../packages/ceremony/docs/oauth-bridge.md) specifies t
 
 ## Synthetic ledger and CCDP
 
-Vite aliases `@libid/ledger` to the shared `@libid/ledger/testing` export.
-The app uses `test:testnet`, a bogus ledger with a synthetic hash, a fixed development
-operation domain and fixed transaction bytes. Each ceremony still generates fresh
-protocol randomness. No wallet, chain, contract or transaction submission is involved.
-There is no separate duplicate ledger definition in this frontend.
+The app wraps the shared `@libid/ledger/testing` testnet fixture with
+`notaryAddress: () => 'https://localhost:4687'`. Its hash stays synthetic, with a
+fixed development operation domain and transaction bytes. Each ceremony generates
+fresh protocol randomness. No wallet, chain or transaction submission is involved.
 
-The launcher invokes ceremony's existing distribution builder, emitting the
-synthetic-ledger distribution into this app's `.cache/ccdp/`. It pins the local
-notary address to `https://localhost:4687`. Build input downloads still use the
-builder's existing cache in the ceremony package. A production CCDP rejects
-this synthetic ledger. For independent deployments see
+The launcher emits the normal shared CCDP distribution into `.cache/ccdp/`.
+No ledger definitions or notary addresses are compiled into that artifact; the
+client supplies the local address at runtime. Build downloads reuse the ceremony
+package's existing cache. For independent deployments see
 [browser tests](../../packages/ceremony/docs/browser-tests.md).
 
 The frontend imports the built public ceremony, popup and ledger packages.

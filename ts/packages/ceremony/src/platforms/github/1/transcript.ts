@@ -1,6 +1,11 @@
 import { isUserId } from '../../types.js'
 import { isUserName } from './types.js'
-import { findUnique, quotedRange, decodePrintable } from '../../../prover/transcript.js'
+import {
+  findUnique,
+  quotedRange,
+  decodePrintable,
+  identityBearerRange,
+} from '../../../prover/transcript.js'
 import type { Transcript, ExactHttpRequest } from '../../../prover/notarization/session.js'
 const encoder = new TextEncoder()
 export function identityRequest(bearer: string): ExactHttpRequest {
@@ -22,26 +27,12 @@ export function identityRequest(bearer: string): ExactHttpRequest {
   }
 }
 export function selectIdentity(transcript: Transcript, bearer: string) {
-  const request = identityRequest(bearer),
-    text = new TextDecoder('utf-8', { fatal: true }).decode(transcript.sent)
-  const [line, ...headers] = text.split('\r\n')
-  if (line !== 'GET /user HTTP/1.1' || headers.splice(-2).join('|') !== '|')
-    throw new Error('Invalid identity request framing')
-  const expected = new Map(
-    Object.entries(request.headers).map(([k, v]) => [k.toLowerCase(), new TextDecoder().decode(v)]),
+  const { start } = identityBearerRange(
+    transcript.sent,
+    'GET /user HTTP/1.1',
+    identityRequest(bearer).headers,
+    bearer,
   )
-  let offset = line.length + 2,
-    start = -1
-  for (const header of headers) {
-    const i = header.indexOf(': '),
-      key = header.slice(0, i).toLowerCase()
-    if (i < 0 || expected.get(key) !== header.slice(i + 2))
-      throw new Error('Invalid identity header')
-    expected.delete(key)
-    if (key === 'authorization') start = offset + i + 2 + 'Bearer '.length
-    offset += header.length + 2
-  }
-  if (expected.size || start < 0) throw new Error('Missing identity header')
   const prefix = encoder.encode('"id":'),
     idStart = findUnique(transcript.received, prefix, 'identity id'),
     valueStart = idStart + prefix.length

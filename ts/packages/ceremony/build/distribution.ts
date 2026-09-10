@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join, relative, resolve, sep } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { Rollup } from 'vite'
 import type { AssetRequest } from '../src/assets.js'
 import type { ResolvedAssets } from './assets.ts'
@@ -12,7 +12,6 @@ import { packageDir } from './release.ts'
 import { safePath } from './archive.ts'
 import { writeDistribution } from './sws.ts'
 export type DistributionMetadata = Pick<ResolvedAssets, 'requestsByProfile' | 'allowedRequests'> & {
-  ledgerFixture: boolean
   headers: Record<string, Record<string, string>>
   graph: Record<string, BundleNode>
   files: Record<string, string>
@@ -21,10 +20,6 @@ const index = process.argv.indexOf('--out-dir'),
   out = resolve(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
 if (out === packageDir || !out.startsWith(`${resolve(packageDir, '../../..')}/`))
   throw new Error('Output must be a dedicated directory inside this worktree')
-if (process.env.LIBID_LEDGER_FIXTURE === '1') {
-  if (!relative(resolve(packageDir, '../../..'), out).split(sep).includes('.cache'))
-    throw new Error('Ledger fixtures are restricted to output under .cache')
-}
 const staging = `${out}.building`
 if (existsSync(staging)) throw new Error('Build staging directory already exists')
 mkdirSync(join(staging, 'public'), { recursive: true })
@@ -41,7 +36,6 @@ try {
           .flatMap((a) => [a.source, ...(a.fallback ?? [])].map((u) => new URL(u).origin)),
       ),
     ],
-    notaryAddresses: data.notaryAddresses,
   }
   const put = (
     path: string,
@@ -200,7 +194,6 @@ try {
     join(staging, 'distribution-graph.json'),
     JSON.stringify({
       files,
-      ledgerFixture: process.env.LIBID_LEDGER_FIXTURE === '1',
       requestsByProfile: data.requestsByProfile,
       allowedRequests: data.allowedRequests,
       headers: Object.fromEntries([...records].map(([p, r]) => [p, r.headers])),

@@ -117,25 +117,26 @@ interface AppStartProver {
   clientId: string
   redirectUri: string
   codeVerifier: string | null
-  ledgerId: string
+  notaryAddress: string | null
 }
 ```
 
 `platformId` and `platformCeremonyVersion` are the exact supported profile
 selected at launch and must match the active Prover. The message is valid only
 after `ProverReady`. The remaining fields are the frozen client identifier and
-redirect, derived code verifier, and canonical encoded ledger identifier. The
+redirect, derived code verifier, and resolved notary address. The
 OAuth return is already retained by Prover and is not repeated in the message.
 Starting Prover initiates OAuth validation; it does not assert acceptance or
 mean that proof generation has
 already begun.
 
-`ledgerId` is the frozen encoding of the target ledger, using the shared
-[ledger identity contract](../../ledger/README.md). Prover decodes and validates
-it before credential use. Its code-owned classification selects the notary
-address; no separate testnet flag, hash, or caller-selected notary URL is
-accepted. Google makes no notary request. This routing choice changes no proof
-statement or ledger trust rule.
+`notaryAddress` is a canonical HTTPS origin with no credentials, path, query,
+or fragment for a platform that uses notarization; it is null for Google.
+The Application selects and freezes it before OAuth. Prover validates it before
+credential use and uses it unchanged for all sessions, including the GitHub
+token request. It neither selects defaults nor accepts a separate profile,
+ledger identifier, hash, or testnet flag. The address changes network routing,
+not the proof statement or trusted signing keys.
 
 The Application origin is trusted for this transient input because it already
 supplies the operation being authorized. It retains the authorization nonce;

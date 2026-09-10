@@ -106,12 +106,15 @@ runtime compression or other negotiated representation exists.
 
 Both Prover responses close script and worker sources to the build-generated
 same-origin graph and toolchain-required `blob:` workers. Asset fetches are
-not restricted to the CCDP origin: their `connect-src https:` admits bb.js's
-Aztec CRS downloads as well as validated third-party OAuth Bridges. The build
-additionally admits the two exact Notary Service WebSocket origins selected by
-[`LedgerId.isTestnet()`](notarization.md#notary-address), or the single development
-override origin when built with `LIBID_NOTARY_ADDRESS`. The response is
-identical for either network; selection changes no asset or cache key.
+not restricted to the CCDP origin: `connect-src https: wss:` admits bb.js's
+Aztec CRS downloads, validated third-party OAuth Bridges, and secure WebSocket
+connections to the notary address supplied by the Application. Dedicated
+TLSNotary workers also admit `wss:` where they open that connection. The
+Distribution embeds no notary addresses, profiles, or environment override;
+one byte-identical response supports any client-supplied notary address.
+Selection changes no asset or cache key. This policy permits those network
+schemes, not just the selected notary; application code enforces destination
+selection. It grants no remote script or worker permission.
 
 Every context which fetches or prefetches CRS, including the Service Worker
 and dedicated proof workers, admits both `https://crs.aztec-cdn.foundation`
@@ -670,9 +673,10 @@ dependency fails artifact generation.
 
 Profiles compose the shared [declared header policy](#header-policy-and-generated-metadata),
 with no generated filenames or representation metadata. The build fills CSP
-hashes, generated resource URLs, external asset origins, and the build-pinned
-Notary Service origins. It does not parse this Markdown or ask SWS to
-reconstruct policy.
+hashes, generated resource URLs, and external asset origins. The shared Prover
+and TLSNotary-worker policies declare their required network scheme sources;
+no client-specific notary setting participates in the build. It does not parse
+this Markdown or ask SWS to reconstruct policy.
 
 ### Generation
 

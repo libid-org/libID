@@ -1,4 +1,4 @@
-import { LedgerId } from '@libid/ledger'
+import { mainnet, testnet } from '@libid/ledger/testing'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
 import { CeremonyError, createCeremonyClient } from '../src/client/index.js'
 const bridge = 'https://localhost:4682',
@@ -40,7 +40,7 @@ anchor.addEventListener('click', (event) => {
   const ceremony = client.new(
     connection,
     id,
-    LedgerId.decode(new URL(location.href).searchParams.get('ledger') ?? 'test:testnet'),
+    new URL(location.href).searchParams.get('ledger') === 'test:mainnet' ? mainnet : testnet,
     'google',
     new Uint8Array(32),
     new Uint8Array([1]),

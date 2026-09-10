@@ -1,23 +1,15 @@
-import { LedgerId } from '@libid/ledger'
 import { afterEach, expect, it, vi } from 'vitest'
-import { resolveNotaryAddress } from '../notary.js'
 import { prepareNotarization } from './session.js'
 
-vi.mock('virtual:ceremony-assets', () => ({
-  notaryAddresses: ['https://notary.lib.id', 'https://testnet.notary.lib.id'],
-}))
+vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
 vi.mock('../../assets.js', async (original) => ({
   ...(await original<typeof import('../../assets.js')>()),
   resolve: () => 'https://ccdp.test/asset',
 }))
 afterEach(() => vi.unstubAllGlobals())
-it.each(['test:mainnet', 'test:testnet'])(
+it.each(['https://notary.lib.id', 'https://testnet.notary.lib.id', 'https://localhost:4687'])(
   'starts the selected notary only, without retrying another network: %s [LIBID-PROVER-008]',
-  async (encoded) => {
-    const notaryAddress = resolveNotaryAddress(LedgerId.decode(encoded))
-    expect(notaryAddress).toBe(
-      encoded === 'test:testnet' ? 'https://testnet.notary.lib.id' : 'https://notary.lib.id',
-    )
+  async (notaryAddress) => {
     const messages: unknown[] = [],
       terminate = vi.fn()
     vi.stubGlobal(

@@ -1,26 +1,11 @@
-/** Synthetic identities for ceremony tests, never a production ledger implementation. */
-import type { LedgerId as LedgerIdentity } from './index.js'
+/** Synthetic identities for tests; neither represents a production ledger. */
+import type { LedgerId } from './index.js'
 
-class FixtureLedgerId implements LedgerIdentity {
-  readonly #encoded: string
-  constructor(encoded: string) {
-    this.#encoded = encoded
-    Object.freeze(this)
-  }
-  encode(): string {
-    return this.#encoded
-  }
-  isTestnet(): boolean {
-    return this.#encoded === 'test:testnet'
-  }
-  hash(): Uint8Array {
-    return new Uint8Array(32).fill(this.isTestnet() ? 2 : 1)
-  }
-}
-export const LedgerId = {
-  decode(value: unknown): FixtureLedgerId {
-    if (value !== 'test:mainnet' && value !== 'test:testnet')
-      throw new TypeError('Unsupported fixture ledger')
-    return new FixtureLedgerId(value)
-  },
-}
+export const mainnet: LedgerId = Object.freeze({
+  hash: () => new Uint8Array(32).fill(1),
+  notaryAddress: () => 'https://notary.lib.id',
+})
+export const testnet: LedgerId = Object.freeze({
+  hash: () => new Uint8Array(32).fill(2),
+  notaryAddress: () => 'https://testnet.notary.lib.id',
+})

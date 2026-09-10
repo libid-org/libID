@@ -111,12 +111,10 @@ Owner-defined archive URLs pin circuit v0.3.0 and notary v0.3.0-rc.2 releases.
 The build caches HTTPS downloads under `.cache/downloads/`, mounts archive members
 without renaming them, and resolves the notary snippet wildcard exactly once.
 There is no bundle-path environment variable or handwritten checksum list.
-`LIBID_NOTARY_ADDRESS` optionally replaces both fixed addresses at build time and
-changes the emitted execution policy.
-Without an override, Prover decodes the frozen ledger encoding and its classification selects
-`https://notary.lib.id` or `https://testnet.notary.lib.id`; both share the same
-assets and response. Prover forwards the resolved `notaryAddress` to the GitHub
-Bridge for the token session and uses that same address for its identity session.
+Client snapshots the ledger's `notaryAddress()` before OAuth; Prover forwards that
+address to the GitHub Bridge for the token session and uses it for identity
+notarization. CCDP contains no ledger definitions or notary addresses. The same
+assets and fixed HTTPS/WSS response policy serve every ledger.
 The Bridge owns egress/DNS protections for this request-controlled destination.
 There is no Bridge-side network mapping or second override. `--out-dir` selects another dedicated
 output directory inside the checkout. Rebuilding into an existing artifact retains

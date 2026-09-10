@@ -4,7 +4,6 @@ declare module 'virtual:ceremony-assets' {
   export const urls: Record<string, string>
   export const profiles: Record<string, readonly import('./assets.js').Asset[]>
   export const local: readonly string[]
-  export const notaryAddresses: readonly [mainnet: string, testnet: string]
 }
 
 declare module 'virtual:ceremony-popup-fallback' {
