@@ -1,5 +1,12 @@
 # `@libid/ceremony` notarization architecture
 
+Local development exception: references to HTTPS Bridge, CCDP, application and
+notary URLs below also admit canonical HTTP URLs on exactly `localhost` or
+`127.0.0.1`. A local HTTP notary uses WS at the same authority. This exception does
+not apply to OAuth provider requests or external proving assets. COOP/COEP, origin
+admission, callback privacy and all other validation remain required. LAN addresses,
+lookalike domains and noncanonical spellings are not admitted.
+
 This document defines the browser-side `prover/notarization` module: how it
 runs a TLSNotary session, applies platform-selected transcript disclosures, and
 returns a byte-exact attestation with its decoded view plus private commitment

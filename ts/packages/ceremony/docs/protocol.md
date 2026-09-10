@@ -1,5 +1,12 @@
 # Ceremony Cross-Document Protocol (CCDP)
 
+Local development exception: references to HTTPS Bridge, CCDP, application and
+notary URLs below also admit canonical HTTP URLs on exactly `localhost` or
+`127.0.0.1`. A local HTTP notary uses WS at the same authority. This exception does
+not apply to OAuth provider requests or external proving assets. COOP/COEP, origin
+admission, callback privacy and all other validation remain required. LAN addresses,
+lookalike domains and noncanonical spellings are not admitted.
+
 This document defines the closed browser protocol across the Application and
 the [documents](documents.md#documents-and-routes) it uses. It owns ceremony locations,
 navigations, messages, ordering, and compatibility. Authorization,

@@ -1,19 +1,16 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures.js'
 
 test('Bridge config admits its effective origins without exposing the allowlist [KIT-004] [KIT-005]', async ({
   request,
+  app,
+  bridge,
+  ccdp,
 }) => {
-  for (const origin of [
-    'https://localhost:4681',
-    'https://localhost:4683',
-    'https://other.test',
-    'null',
-    undefined,
-  ]) {
-    const response = await request.get('https://localhost:4682/api/v1/ceremony/config', {
+  for (const origin of [app, ccdp, 'https://other.test', 'null', undefined]) {
+    const response = await request.get(`${bridge}/api/v1/ceremony/config`, {
       headers: origin === undefined ? {} : { Origin: origin },
     })
-    const admitted = origin === 'https://localhost:4681' || origin === 'https://localhost:4683'
+    const admitted = origin === app || origin === ccdp
     expect(response.status()).toBe(admitted ? 200 : 403)
     expect(response.headers()['access-control-allow-origin']).toBe(admitted ? origin : undefined)
     if (admitted) {

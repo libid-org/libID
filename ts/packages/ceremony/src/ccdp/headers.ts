@@ -3,6 +3,9 @@ const base =
   "default-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 export const csp = {
   base,
+  // Exact loopback hosts only; public destinations still require TLS.
+  fetch: 'https: http://localhost:* http://127.0.0.1:*',
+  websocket: 'wss: ws://localhost:* ws://127.0.0.1:*',
   execution: `${base}; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:`,
 } as const
 export const immutable = {
@@ -24,7 +27,7 @@ export const document = {
 export const executionWorker = {
   ...javascript,
   'Cross-Origin-Embedder-Policy': 'require-corp',
-  'Content-Security-Policy': `${csp.execution}; connect-src https: blob:`,
+  'Content-Security-Policy': `${csp.execution}; connect-src ${csp.fetch} blob:`,
 } as const
 export const dip = { 'Document-Isolation-Policy': 'isolate-and-require-corp' } as const
 export const isolated = {

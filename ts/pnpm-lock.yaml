@@ -76,9 +76,6 @@ importers:
       vite:
         specifier: ^7.3.6
         version: 7.3.6(@types/node@22.20.1)
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/node@22.20.1)
 
   packages/ceremony:
     dependencies:

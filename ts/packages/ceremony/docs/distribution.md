@@ -1,5 +1,18 @@
 # CCDP Distribution
 
+Local development exception: references to HTTPS Bridge, CCDP, application and
+notary URLs below also admit canonical HTTP URLs on exactly `localhost` or
+`127.0.0.1`. A local HTTP notary uses WS at the same authority. This exception does
+not apply to OAuth provider requests or external proving assets. COOP/COEP, origin
+admission, callback privacy and all other validation remain required. LAN addresses,
+lookalike domains and noncanonical spellings are not admitted.
+Execution CSP additionally permits `http://localhost:*`, `http://127.0.0.1:*`
+and, for notary execution, `ws://localhost:*`, `ws://127.0.0.1:*`. These are
+explicit host sources, never unrestricted `http:` or `ws:`. The shared artifact
+therefore permits loopback access even when served publicly; CSP does not bind
+connections to the selected ledger notary. Browser network permissions still apply.
+
+
 This document defines the static browser resources and proving assets required
 by [CCDP](documents.md#documents-and-routes). CCDP owns the protocol routes,
 fragments, roles, navigations, and versions; this document owns their HTTP,
@@ -8,7 +21,7 @@ build, and deployment contract.
 ## Distribution boundary
 
 One CCDP Distribution is served from one canonical HTTPS `ccdpOrigin`. Explicit
-loopback development is the only HTTP exception. It contains:
+development on the explicit hosts above is the only HTTP exception. It contains:
 
 - every protocol resource for each supported CCDP version, including one
   self-contained Callback artifact containing its supported implementations; and
@@ -767,7 +780,7 @@ operator-edited and starts from this fixed baseline:
 ```toml
 [general]
 host = "::"
-port = 8787
+# Port is selected by deployment CLI/env; SWS defaults to 8787.
 root = "/home/sws/public"
 page404 = "/home/sws/public/404.html"
 cache-control-headers = false

@@ -28,7 +28,11 @@ export function prepareCallback(
     scriptPolicies.length !== 1 ||
     scriptPolicies[0][1].trim() !== scriptHash(code) ||
     new URL(ccdpOrigin).origin !== ccdpOrigin ||
-    !ccdpOrigin.startsWith('https://')
+    !(
+      ccdpOrigin.startsWith('https://') ||
+      (ccdpOrigin.startsWith('http://') &&
+        ['localhost', '127.0.0.1'].includes(new URL(ccdpOrigin).hostname))
+    )
   )
     throw new Error('Invalid Callback artifact')
   const data = JSON.stringify(inputs).replace(/</g, '\\u003c')

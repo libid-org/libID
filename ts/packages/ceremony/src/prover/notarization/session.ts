@@ -1,6 +1,6 @@
 import { ceremonyError } from '../../errors.js'
 import { resolve as resolveAsset } from '../../assets.js'
-import { httpsUrl, origin } from '../../ccdp/index.js'
+import { webUrl, origin } from '../../ccdp/index.js'
 import type { NotaryAttestation } from '../../platforms/types.js'
 import { tlsnModule, tlsnWasm } from './assets.js'
 import type { ByteRange } from './notarize.js'
@@ -37,7 +37,7 @@ export async function prepareNotarization(
 ): Promise<NotarizationSession> {
   signal.throwIfAborted()
   if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
-  if (!httpsUrl(url) || new URL(url).hash || new URL(url).port)
+  if (!webUrl(url) || new URL(url).protocol !== 'https:' || new URL(url).hash || new URL(url).port)
     throw new TypeError('Invalid notarization target')
   const worker = new Worker(new URL('./session.worker.ts', import.meta.url), { type: 'module' })
   let stage = 'preparing',

@@ -6,8 +6,18 @@ export default defineConfig({
   expect: { timeout: 15000 },
   workers: 1,
   retries: 0,
-  use: { ignoreHTTPSErrors: true, trace: 'off', video: 'off', screenshot: 'off' },
+  use: {
+    baseURL: 'https://localhost:4881',
+    ignoreHTTPSErrors: true,
+    trace: 'off',
+    video: 'off',
+    screenshot: 'off',
+  },
   projects: [
+    ...(['chromium', 'firefox', 'webkit'] as const).map((browserName) => ({
+      name: `${browserName}-http`,
+      use: { browserName, baseURL: 'http://localhost:4781', ignoreHTTPSErrors: false },
+    })),
     {
       name: 'chromium',
       use: { browserName: 'chromium', launchOptions: { args: ['--ignore-certificate-errors'] } },
@@ -26,7 +36,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'node e2e/build.mjs && node e2e/server.mjs',
-    url: 'https://localhost:4681',
+    url: 'https://localhost:4881',
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
     timeout: 60000,

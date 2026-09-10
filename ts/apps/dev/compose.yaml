@@ -9,38 +9,43 @@ services:
       # Public development key, never a production notary identity.
       SIGNING_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
     ports:
-      - "127.0.0.1:4688:7048"
-      # Bridge shares this namespace so its TCP notary host can be localhost too.
-      - "127.0.0.1:4685:8722"
+      - "127.0.0.1:4687:7048"
+      # Shared namespace keeps localhost destinations reachable from Bridge.
+      - "127.0.0.1:4682:8722"
+      - "127.0.0.1:4683:4683"
 
   bridge:
-    build: https://github.com/libid-org/libid-server-rs.git#ebbf10961dd6960a4d53c0af6470bee1f889a229
+    build: https://github.com/libid-org/libid-server-rs.git#86d6fcfd8be6bf9155fe67394f517c3ce74a9d44
     network_mode: service:notary
     depends_on:
+      ccdp:
+        condition: service_healthy
       notary:
         condition: service_healthy
     environment:
       HOST: 0.0.0.0
       PORT: 8722
-      BASE_URL: https://localhost:4682
+      BASE_URL: http://localhost:4682
       CALLBACK_PATH: /auth/callback
-      CCDP_ORIGIN: https://localhost:4683
-      ALLOWED_APP_ORIGINS: https://localhost:4691
-      CALLBACK_ARTIFACT_PATH: /callback.html
+      CCDP_ORIGIN: http://localhost:4683
+      ALLOWED_APP_ORIGINS: http://localhost:4691
       CEREMONY_PLATFORMS: >-
         [{"id":"google","clientId":"391814431594-94274lch0aosjgsei87k41a08napunhd.apps.googleusercontent.com","versions":[1]},{"id":"x","clientId":"QW5QY1ZGdVRsaDEyTFIwZDVfa2Q6MTpjaQ","versions":[1]},{"id":"github","clientId":"Iv23lioEM9NAR9vO8CmT","versions":[1]}]
       # Intentionally public credential for the shared development app; uses PKCE.
       GH_OAUTH_CLIENT_SECRET: "b020b671192879cb993d1cdd7852c920fe745020"
       NOTARY_URL: tcp://localhost:7047
-    volumes:
-      - .cache/ccdp/public/ccdp/callback.html:/callback.html:ro
 
   ccdp:
+    network_mode: service:notary
+    command: ["--port", "4683"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4683/ccdp/callback.html"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
     image: ghcr.io/static-web-server/static-web-server@sha256:4e804280b5b5b1be4563d4a9e0f3a0ea38e7887967d0cc00bc8c07030f529b3f
     environment:
       SERVER_CONFIG_FILE: /etc/sws.toml
     volumes:
       - .cache/ccdp/public:/home/sws/public:ro
       - .cache/ccdp/sws.toml:/etc/sws.toml:ro
-    ports:
-      - "127.0.0.1:4684:8787"

@@ -38,7 +38,7 @@ export function writeDistribution(
   const config = {
     general: {
       host: '::',
-      port: 8787,
+      // Leave the port to deployment CLI/env; SWS file values take precedence.
       root: '/home/sws/public',
       page404: '/home/sws/public/404.html',
       'cache-control-headers': false,

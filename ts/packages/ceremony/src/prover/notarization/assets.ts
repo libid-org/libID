@@ -2,7 +2,8 @@ import * as assets from '../../assets.js'
 
 const release = assets.archive(
   'https://github.com/libid-org/notary/releases/download/v0.3.0-rc.2/tlsn-wasm-0.3.0-rc.2.tar.gz',
-  'tlsn/v0.3.0-rc.2',
+  // Worker policy changed; retain the old immutable responses for open documents.
+  'tlsn/v0.3.0-rc.2-loopback',
 )
 export const tlsnModule = release.member('tlsn_wasm.js', {
   ...assets.headers.immutable,

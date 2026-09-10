@@ -1,11 +1,11 @@
 // Read-only pre-consent checks. No OAuth credentials or provider calls.
 import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'
-import { request } from 'node:https'
-const bridge = 'https://localhost:4682'
-const ccdp = 'https://localhost:4683'
-const notary = 'https://localhost:4687'
-const origin = 'https://localhost:4691'
+import { request } from 'node:http'
+const bridge = 'http://localhost:4682'
+const ccdp = 'http://localhost:4683'
+const notary = 'http://localhost:4687'
+const origin = 'http://localhost:4691'
 const config = await fetch(`${bridge}/api/v1/ceremony/config`, { headers: { Origin: origin } })
 assert.equal(config.status, 200)
 assert.equal(config.headers.get('access-control-allow-origin'), origin)
@@ -36,7 +36,7 @@ assert.equal(isolated.headers.get('cross-origin-embedder-policy'), 'require-corp
 const info = await fetch(`${notary}/info`)
 assert.equal(info.status, 200)
 assert.match((await info.json()).publicKey, /^(0x)?0[23][0-9a-f]{64}$/i)
-// A real WebSocket handshake through HTTPS, without spending an OAuth code.
+// A real WebSocket handshake through HTTP, without spending an OAuth code.
 await new Promise<void>((resolve, reject) => {
   const key = randomBytes(16).toString('base64')
   const probe = request(`${notary}/notarize-proxy`, {
@@ -68,7 +68,7 @@ await new Promise<void>((resolve, reject) => {
   probe.end()
 })
 console.info(
-  'Bridge configuration, origin admission, Callback composition, isolated CCDP route and notary HTTPS/WebSocket passed.',
+  'Bridge configuration, origin admission, Callback composition, isolated CCDP route and notary HTTP/WebSocket passed.',
 )
 console.info(
   'OAuth consent, token exchange, notarization and proof delivery still require the manual flow.',
