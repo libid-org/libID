@@ -7,6 +7,7 @@ import { request } from 'node:http'
 import { createServer, type Server } from 'node:https'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { createServer as createViteServer, loadEnv, type ViteDevServer } from 'vite'
 import { localhostTls } from './tls.ts'
 
@@ -160,14 +161,33 @@ for (const [port, upstream] of [
 
 if (process.argv.includes('--app')) {
   try {
-    frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })
-    if (stopping) await frontend.close()
-    else {
-      await frontend.listen()
-      frontend.printUrls()
+    console.info('Waiting for Bridge readiness before starting the frontend…')
+    while (!stopping) {
+      try {
+        const response = await fetch('http://127.0.0.1:4685/api/v1/ceremony/config', {
+          headers: { Origin: 'https://localhost:4691' },
+          redirect: 'error',
+          signal: AbortSignal.timeout(1000),
+        })
+        await response.body?.cancel()
+        if (response.status === 200) break
+      } catch {
+        /* Compose may still be building or starting the Bridge. */
+      }
+      await delay(500)
+    }
+    if (!stopping) {
+      frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })
+      if (stopping) await frontend.close()
+      else {
+        await frontend.listen()
+        frontend.printUrls()
+      }
     }
   } catch {
-    console.error('Could not start the development frontend.')
-    stop(1)
+    if (!stopping) {
+      console.error('Could not start the development frontend.')
+      stop(1)
+    }
   }
 }
