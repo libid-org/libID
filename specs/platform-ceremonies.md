@@ -524,8 +524,8 @@ REQ-PLAT-56A does not forbid.
   `application/x-www-form-urlencoded`, comparing names lowercased and values
   exactly. The Platform Verifier MUST reject a head carrying `authorization`,
   `content-encoding`, `transfer-encoding`, `cookie` or
-  `x-http-method-override` under any spelling of the name, and MUST ignore
-  every other header. Necessity: common REQ-COMMON-21B fixes the media type
+  `x-http-method-override` under any spelling of the name. The Platform
+  Verifier MUST ignore every other header. Necessity: common REQ-COMMON-21B fixes the media type
   because it "selects the platform's request parser", and a media type nothing
   compares is a pin in name only. The forbidden headers change what the
   platform does with the request in a way no revealed byte shows: which client
