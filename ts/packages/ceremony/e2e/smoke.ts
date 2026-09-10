@@ -1,4 +1,3 @@
-import { LedgerId } from '@libid/ledger'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { resolve as assetUrl } from '../src/assets.js'
 import { circuit as google } from '../src/platforms/google/1/assets.js'
@@ -7,7 +6,6 @@ import { bearerCircuit } from '../src/prover/bearerLink.assets.js'
 import { buildBearerLinkWitness } from '../src/prover/bearerLink.js'
 import { ProofEngine } from '../src/prover/engine.js'
 import { prepareNotarization } from '../src/prover/notarization/session.js'
-import { resolveNotaryAddress } from '../src/prover/notary.js'
 import fixture from '../test-fixtures/google-v1.json'
 
 Object.assign(window, {
@@ -41,7 +39,7 @@ Object.assign(window, {
       engine.destroy()
     }
   },
-  async notarySmoke(count = 2) {
+  async notarySmoke(count = 2, notaryAddress = 'https://localhost:4687') {
     const abort = new AbortController(),
       engine = new ProofEngine({ circuitUrl: assetUrl(bearerCircuit), threads: 2 })
     const timer = setTimeout(() => abort.abort(new Error('Notary smoke timed out')), 120000)
@@ -49,11 +47,7 @@ Object.assign(window, {
       const results = await Promise.all(
         Array.from({ length: count }, async () => {
           const url = 'https://api.x.com/2/users/me',
-            session = await prepareNotarization(
-              url,
-              resolveNotaryAddress(LedgerId.decode('test:testnet')),
-              abort.signal,
-            )
+            session = await prepareNotarization(url, notaryAddress, abort.signal)
           const transcript = await session.send({
             url,
             method: 'GET',

@@ -22,11 +22,8 @@ All package documentation lives in this directory.
   [qualification](qualification.md): required coverage, evidence and remaining gaps.
 
 The architecture contracts originate in PR #13 at
-`a73e31fac2cddc960f42220efdf5790727dc298a`, reorganized here with implementation
-guides. Requirement IDs are unchanged. [Qualification](qualification.md) records
-implementation deviations and remaining qualification gaps.
-
-The newer PR #13 contract at `0259e72` and spec PR #31 at `5bbd838` have been
-reviewed. [Pending implementation changes](qualification.md#reviewed-architecture-update-ledger-owned-notary-routing)
-record ledger-owned notary routing and the identity-header allowance separately
-from the currently implemented contract.
+`0259e72c184e2be7b78a0ad92188e8722d8d6daf`, reorganized here with implementation
+guides. Identity request headers follow spec PR #31 at
+`5bbd838c81d4a47849104cf0f965ad985b2e5b98`. Requirement IDs are unchanged.
+[Qualification](qualification.md) records implementation deviations and remaining
+live qualification gaps.

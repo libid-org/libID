@@ -2,7 +2,7 @@
   "name": "@libid/ledger",
   "version": "0.0.0",
   "private": true,
-  "description": "Shared ledger identity contract and canonical decoding.",
+  "description": "Shared ledger identity and notary routing contract.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
     "type": "git",

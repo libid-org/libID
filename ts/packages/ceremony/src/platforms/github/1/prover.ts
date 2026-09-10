@@ -31,11 +31,7 @@ export async function prove(
   signal.throwIfAborted()
   if (!isFormClientId(request.clientId)) throw new Error('Invalid profile client identifier')
   const returned = parseCodeOAuthReturn(context.oauthReturn, 'https://github.com/login/oauth')
-  if (
-    !returned ||
-    returned.state !== oauthState(context.ceremonyId) ||
-    codeVerifier === null
-  )
+  if (!returned || returned.state !== oauthState(context.ceremonyId) || codeVerifier === null)
     throw new CeremonyError('oauth-return', { cause: new Error('Invalid GitHub return') })
   if (returned.outcome === 'denied') return null
   if (returned.outcome !== 'accepted')
@@ -65,7 +61,7 @@ export async function prove(
             body: encodeTokenRequest({
               code: returned.code,
               codeVerifier,
-              notaryAddress: context.notaryAddress,
+              notaryAddress: request.notaryAddress!,
             }).slice().buffer,
             credentials: 'omit',
             redirect: 'error',
@@ -93,7 +89,7 @@ export async function prove(
       })
     const session = await prepareNotarization(
       'https://api.github.com/user',
-      context.notaryAddress,
+      request.notaryAddress!,
       controller.signal,
     )
     const transcript = await progress.step('identity-session', () =>

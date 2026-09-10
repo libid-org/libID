@@ -1,5 +1,6 @@
+import { origin } from '../ccdp/index.js'
 import { CeremonyError } from '../errors.js'
-import { LedgerId } from '@libid/ledger'
+import type { LedgerId } from '@libid/ledger'
 import { hasExactKeys, isRecord } from '../primitives.js'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import {
@@ -43,7 +44,7 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
 }
 interface Input<P extends PlatformId> {
   connection: PopupConnection<Message>
-  ledgerId: string
+  notaryAddress: string | null
   chainId: Uint8Array
   platformId: P
   operationDomain: Uint8Array
@@ -86,13 +87,19 @@ export function clientFromConfig(config: CeremonyConfig): CeremonyClient {
     ): Ceremony<P> {
       if (typeof id !== 'string' || !UUID.test(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
-      if (!ledgerId || typeof ledgerId.encode !== 'function')
+      if (!ledgerId || typeof ledgerId.hash !== 'function')
         throw new TypeError('Invalid ledger identity')
-      const encodedLedgerId = ledgerId.encode()
-      const hash = LedgerId.decode(encodedLedgerId).hash()
+      const hash = ledgerId.hash()
       if (!(hash instanceof Uint8Array) || hash.length !== 32)
         throw new TypeError('Ledger hash must be 32 bytes')
       const chainId = Uint8Array.from(hash)
+      let notaryAddress: string | null = null
+      if (platformId !== 'google') {
+        if (typeof ledgerId.notaryAddress !== 'function')
+          throw new TypeError('Missing notary address')
+        notaryAddress = ledgerId.notaryAddress()
+        if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
+      }
       if (!(operationDomain instanceof Uint8Array) || operationDomain.length !== 32)
         throw new TypeError('Operation domain must be 32 bytes')
       if (!(transactionData instanceof Uint8Array) || transactionData.length > 0xffffffff)
@@ -106,7 +113,7 @@ export function clientFromConfig(config: CeremonyConfig): CeremonyClient {
           operationDomain,
           transactionData,
           chainId,
-          ledgerId: encodedLedgerId,
+          notaryAddress,
         },
         config,
         () => {
@@ -191,7 +198,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       clientId: platform.clientId,
       redirectUri: config.redirectUri,
       codeVerifier,
-      ledgerId: input.ledgerId,
+      notaryAddress: input.notaryAddress,
     }
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)

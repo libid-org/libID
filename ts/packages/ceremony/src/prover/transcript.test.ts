@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildTokenRequest, selectTokenReveals } from '../platforms/x/1/transcript.js'
+import {
+  buildTokenRequest,
+  selectTokenReveals,
+  buildIdentityRequest,
+  selectIdentityReveals,
+} from '../platforms/x/1/transcript.js'
 import { identityRequest, selectIdentity } from '../platforms/github/1/transcript.js'
 import { planNotarization } from './notarization/notarize.js'
 import type { ExactHttpRequest } from './notarization/session.js'
@@ -101,3 +106,50 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60]', () => {
     }
   })
 })
+
+for (const platform of ['x', 'github'] as const) {
+  describe(`${platform} additional identity headers [LIBID-PROVER-003/004]`, () => {
+    const request = platform === 'x' ? buildIdentityRequest('token') : identityRequest('token')
+    const line = platform === 'x' ? 'GET /2/users/me HTTP/1.1' : 'GET /user HTTP/1.1'
+    const original = text(serialize(line, request))
+    const received = utf8(
+      platform === 'x' ? '{"id":"123","username":"alice"}' : '{"id":123,"login":"alice"}',
+    )
+    const select = (sent: Uint8Array) =>
+      platform === 'x'
+        ? selectIdentityReveals({ sent, recv: received }, 'token').sent
+        : selectIdentity({ sent, received }, 'token').ranges.sent
+    it.each(['x-extra: value', 'x-extra: café 😀', 'x-extra:', 'x-extra:\tvalue'])(
+      'reveals extra headers before and after Authorization without shifting its bearer: %s',
+      (extra) => {
+        const sent = utf8(
+          original.replace(
+            'authorization: Bearer token\r\n',
+            `${extra}\r\nauthorization: Bearer token\r\n${extra}\r\n`,
+          ),
+        )
+        const ranges = select(sent)
+        const plan = planNotarization({ sent, recv: received }, { sent: ranges, recv: [] })
+        expect(plan.commit.sent).toHaveLength(1)
+        const hole = plan.commit.sent[0]
+        expect(text(sent.slice(hole.start, hole.end))).toBe('token')
+        expect(ranges).toEqual([
+          { start: 0, end: hole.start },
+          { start: hole.end, end: sent.length },
+        ])
+      },
+    )
+    it.each([
+      ['authorization: Bearer token', 'authorization: Bearer token\r\nAuthorization: Bearer token'],
+      ['authorization: Bearer token', 'authorization: Bearer other'],
+      ['authorization: Bearer token\r\n', ''],
+      ['host: ', ' host: '],
+      ['host: ', 'extra: x\nhost: '],
+      ['host: ', 'extra: x\u0000\r\nhost: '],
+      [line, line.replace(' HTTP', '?extra=1 HTTP')],
+      ['\r\n\r\n', '\r\n\r\nbody'],
+    ])('rejects ambiguous framing or changed required headers: %s', (from, to) => {
+      expect(() => select(utf8(original.replace(from, to)))).toThrow()
+    })
+  })
+}

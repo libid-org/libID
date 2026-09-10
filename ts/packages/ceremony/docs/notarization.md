@@ -29,33 +29,19 @@ its deterministic sibling `tlsn_wasm_bg.wasm`.
 
 ### Notary address
 
-Prover resolves one Notary Service address per ceremony from the decoded
-`LedgerId`, using two code-pinned defaults:
+The adapter receives the canonical HTTPS `notaryAddress` read from the ledger and frozen
+by [CeremonyClient](client.md#notary-selection), through `AppStartProver`.
+It owns no profile defaults, ledger classification, or environment override.
+X uses that address for both browser sessions. GitHub passes it unchanged in
+its Bridge token request and uses it locally for identity notarization. Neither
+Prover nor Bridge remaps the address, and failure never selects a different
+notary. Google supplies null and never invokes this adapter.
 
-```ts
-const notaryAddress = ledgerId.isTestnet()
-  ? 'https://testnet.notary.lib.id'
-  : 'https://notary.lib.id'
-```
-
-X uses the resolved address for both browser sessions. GitHub passes that
-address in its Bridge token request and uses it locally for identity
-notarization. The Bridge neither classifies ledgers nor remaps the address;
-failure never switches to the other network. Google uses neither address.
-
-For local development, `LIBID_NOTARY_ADDRESS` overrides the resolved address
-for either network. It must be a canonical HTTPS origin and is read
-when building the static Prover distribution, never from browser runtime
-inputs. The build emits the effective WebSocket origins in the response policy.
-The same resolved override reaches GitHub through its token request; no second
-Bridge override or profile configuration exists. Asset declarations,
-prefetch, and proof formats are identical for both networks.
-
-Applications supply a supported ledger identity, not an arbitrary endpoint,
-OAuth-platform request, disclosure layout, or Notary Service behavior. The
-address is only network routing; Ledger Verifier governance independently
-decides which notary signatures are authoritative. No browser signature check
-or notary-key input is introduced by this selection.
+The address is only network routing, not a caller-selected platform request,
+disclosure layout, or Notary Service behavior. Ledger Verifier governance
+independently decides which notary signatures are authoritative. No browser
+signature check or notary-key input is introduced by this selection. Asset
+declarations, prefetch, and proof formats do not depend on the address.
 
 ## Internal contract
 
@@ -447,9 +433,9 @@ attested bytes, and [notarize.ts](../src/prover/notarization/notarize.ts) correl
 Original attestations and signatures are preserved; local signature verification is
 outside the adapter's responsibility.
 
-[notary.ts](../src/prover/notary.ts) selects one build-owned notary address from the decoded
-ledger. X uses it for both sessions; GitHub sends it unchanged to the Bridge and
-uses it for the browser identity session. The ledger package contains no endpoints.
+[Client](../src/client/ceremony.ts) snapshots the ledger's notary address before OAuth.
+X uses it for both sessions; GitHub sends it unchanged to the Bridge and uses it
+for the browser identity session. Prover performs no ledger lookup.
 
 ## Token layout alignment
 
@@ -473,11 +459,10 @@ resolves the documented User-Agent mismatch. The Platform Verifier compares
 the request line and Authorization line, while the runtime remains responsible
 for sending the required headers.
 
-The current browser selectors still reject additional headers. Updating them
-must retain required-header values and uniqueness, reject malformed framing,
-and disclose the complete request except exactly one bearer range. Additional
-header values before Authorization require byte-based offsets rather than
-JavaScript string lengths. Token requests are unchanged: their five-header set
+Both browser selectors accept additional headers through one shared HTTP framing
+parser. It retains required-header values and uniqueness, rejects malformed
+framing, and discloses the complete request except exactly one bearer range.
+Offsets count wire bytes, including when extra headers contain non-ASCII values. Token requests are unchanged: their five-header set
 remains closed. Additional identity headers do not imply additional token headers.
 
 Regression coverage is in [transcript tests](../src/prover/transcript.test.ts),

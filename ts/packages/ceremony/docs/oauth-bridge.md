@@ -232,11 +232,11 @@ most 1,024 bytes. `codeVerifier` matches `[A-Za-z0-9_-]{43}`. The bridge does
 not normalize either value.
 
 `notaryAddress` is a required canonical HTTPS origin with no credentials, path,
-query, or fragment. Prover supplies its already
-[resolved address](notarization.md#notary-address), including any development
-override, and uses that same address for identity notarization. The Bridge
+query, or fragment. Prover forwards the address already
+[snapshotted by CeremonyClient](client.md#notary-selection) from the
+supplied ledger, and uses that same address for identity notarization. The Bridge
 derives the fixed `/notarize-proxy` WebSocket endpoint from it; it neither
-classifies ledgers nor maintains a profile mapping or second override.
+classifies ledgers nor maintains a notary mapping or override.
 Failure never selects a different notary. Callback configuration and public
 `CeremonyConfig` carry no notary selection.
 

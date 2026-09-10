@@ -77,3 +77,39 @@ export function tokenRequestBody(
   if (expected.size) invalid('missing token header')
   return request.subarray(bodyStart)
 }
+
+/** Locate the sole bearer hole while admitting additional identity headers. */
+export function identityBearerRange(
+  sent: Uint8Array,
+  requestLine: string,
+  required: Record<string, Uint8Array>,
+  bearer: string,
+): ByteRange {
+  // Latin-1 decoding produces one code unit per wire byte, including UTF-8 header values.
+  const bytes = new TextDecoder('latin1')
+  const text = bytes.decode(sent)
+  const headEnd = text.indexOf('\r\n\r\n')
+  if (headEnd < 0 || headEnd !== text.length - 4) invalid('identity request framing')
+  const [line, ...headers] = text.slice(0, headEnd).split('\r\n')
+  if (line !== requestLine) invalid('identity request line')
+  const expected = new Map(
+    Object.entries(required).map(([name, value]) => [name.toLowerCase(), bytes.decode(value)]),
+  )
+  const seen = new Set<string>()
+  let offset = line.length + 2,
+    start = -1
+  for (const header of headers) {
+    const match = /^([!#$%&'*+.^_`|~0-9a-z-]+):([\t\x20-\x7e\u0080-\uffff]*)$/i.exec(header)
+    if (!match) invalid('identity header framing')
+    const name = match[1].toLowerCase()
+    if (expected.has(name)) {
+      if (seen.has(name) || match[2] !== ` ${expected.get(name)}`)
+        invalid('identity header value or duplicate')
+      seen.add(name)
+    }
+    if (name === 'authorization') start = offset + match[1].length + ': Bearer '.length
+    offset += header.length + 2
+  }
+  if (seen.size !== expected.size || start < 0) invalid('missing identity header')
+  return { start, end: start + bearer.length }
+}

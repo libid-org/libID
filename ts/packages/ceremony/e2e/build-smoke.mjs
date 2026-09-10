@@ -5,12 +5,10 @@ import { responseHeaders } from '../build/profiles.ts'
 import { packageDir } from '../build/release.ts'
 import { writeDistribution } from '../build/sws.ts'
 
-// This harness always uses the shared synthetic ledger decoder.
-process.env.LIBID_LEDGER_FIXTURE = '1'
 const data = await resolveAssets()
 const emitted = await bundle('e2e/smoke.ts', data, { groupModules: false })
 const records = new Map(data.local)
-const options = { notaryAddresses: data.notaryAddresses }
+const options = {}
 for (const item of emitted.output) {
   const path = `/${item.fileName}`
   const policy = emitted.workerFiles.has(item.fileName) ? 'executionWorker' : 'asset'

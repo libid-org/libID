@@ -265,7 +265,7 @@ owner-defined asset modules ───> assets (declarations and URL resolution o
 
 client, callback, prefetch, prover, platforms/index ───> ccdp
 client, callback, prefetch, prover ───> @libid/popup
-client, prover ───> @libid/ledger
+client ───> @libid/ledger
 wallet-client ─────────> client + ceremony + wallet/protocol + @libid/popup
 ```
 

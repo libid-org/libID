@@ -71,10 +71,14 @@ export async function prove(
     }
     const tokenRequest = buildTokenRequest(input)
     const tokenSession = observe(
-      prepareNotarization(tokenRequest.url, context.notaryAddress, controller.signal),
+      prepareNotarization(tokenRequest.url, request.notaryAddress!, controller.signal),
     )
     const identitySession = observe(
-      prepareNotarization('https://api.x.com/2/users/me', context.notaryAddress, controller.signal),
+      prepareNotarization(
+        'https://api.x.com/2/users/me',
+        request.notaryAddress!,
+        controller.signal,
+      ),
     )
     const session = await tokenSession
     const transcript = await progress.step('token-session', () => session.send(tokenRequest))

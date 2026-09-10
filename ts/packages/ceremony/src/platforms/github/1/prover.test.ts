@@ -1,4 +1,3 @@
-import { LedgerId } from '@libid/ledger'
 import { afterEach, expect, it, vi } from 'vitest'
 import { prove } from './prover.js'
 import type { ProverContext } from '../../../prover/context.js'
@@ -27,8 +26,6 @@ function context(outcome: Record<string, string>): ProverContext {
   const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
   return {
     ceremonyId,
-    ledgerId: LedgerId.decode('test:testnet'),
-    notaryAddress: 'https://notary.test',
     signal: new AbortController().signal,
     onProgress: vi.fn(),
     request: {
@@ -38,7 +35,7 @@ function context(outcome: Record<string, string>): ProverContext {
       clientId: 'client',
       codeVerifier: 'a'.repeat(43),
       redirectUri: 'https://bridge.test/callback',
-      ledgerId: 'test:testnet',
+      notaryAddress: 'https://notary.test',
     },
     oauthReturn: {
       fragment: '',

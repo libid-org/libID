@@ -22,7 +22,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         clientId: 'client',
         redirectUri: 'https://bridge.test/callback',
         codeVerifier: null,
-        ledgerId: 'test:mainnet',
+        notaryAddress: null,
       },
     ],
     [CancelCeremony, { type: 'cancel-ceremony' }],
@@ -52,18 +52,32 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
       expect(() => codec.decode({ ...value, type: 'other' })).toThrow()
       expect(() => codec.decode(Object.assign(new Date(), value))).toThrow()
     })
-  it('checks ledger string structure and leaves semantic decoding to Prover [LIBID-OAUTH-021]', () => {
+  it('validates platform-specific notary routing without ledger decoding [LIBID-OAUTH-021]', () => {
     const message = samples[1][1]
-    for (const ledgerId of ['test:mainnet', 'test:testnet', 'unknown:1']) {
-      const value = { ...message, ledgerId }
-      expect(AppStartProver.decode(value)).toBe(value)
+    for (const platformId of ['x', 'github']) {
+      for (const notaryAddress of ['https://notary.test', 'https://localhost:4687']) {
+        const value = { ...message, platformId, notaryAddress }
+        expect(AppStartProver.decode(value)).toBe(value)
+      }
+      for (const notaryAddress of [
+        undefined,
+        null,
+        0,
+        {},
+        'http://notary.test',
+        'https://notary.test/',
+        'https://user@notary.test',
+        'https://notary.test?x=1',
+        'https://notary.test#x',
+      ])
+        expect(() => AppStartProver.decode({ ...message, platformId, notaryAddress })).toThrow()
     }
-    for (const ledgerId of [undefined, null, 0, true, {}, new String('test:mainnet')])
-      expect(() => AppStartProver.decode({ ...message, ledgerId })).toThrow()
+    for (const notaryAddress of [undefined, '', 'https://notary.test'])
+      expect(() => AppStartProver.decode({ ...message, notaryAddress })).toThrow()
     for (const extra of [
+      { ledgerId: 'test:mainnet' },
       { isTestnet: false },
       { chainId: new Uint8Array(32) },
-      { notaryAddress: 'https://other.test' },
     ])
       expect(() => AppStartProver.decode({ ...message, ...extra })).toThrow()
   })

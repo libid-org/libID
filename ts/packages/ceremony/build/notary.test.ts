@@ -1,30 +1,23 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { resolveNotaryAddresses } from './assets.ts'
 import { responseHeaders } from './profiles.ts'
-test('notary mapping and exact CSP share production/testnet or one development override [LIBID-ASSET-003] [CSP-011]', () => {
-  const defaults = resolveNotaryAddresses()
-  assert.deepEqual(defaults, ['https://notary.lib.id', 'https://testnet.notary.lib.id'])
-  for (const override of [undefined, 'https://local-notary.test']) {
-    const notaryAddresses = resolveNotaryAddresses(override)
-    if (override) assert.deepEqual(notaryAddresses, [override, override])
-    for (const profile of ['prover', 'proverFallback', 'executionWorker'] as const) {
-      const policy = responseHeaders(profile, { notaryAddresses })['Content-Security-Policy']
-      assert.deepEqual(
-        policy.match(/wss:\/\/[^ ;]+/g),
-        override
-          ? ['wss://local-notary.test']
-          : ['wss://notary.lib.id', 'wss://testnet.notary.lib.id'],
-      )
+test('fixed response policies admit runtime notaries without remote code permission [LIBID-ASSET-003] [CSP-003/011]', () => {
+  for (const profile of ['prover', 'proverFallback', 'executionWorker'] as const) {
+    const policy = responseHeaders(profile, {})['Content-Security-Policy']
+    const directives = new Map(
+      policy.split(';').map((d) => {
+        const [name, ...sources] = d.trim().split(/\s+/)
+        return [name, sources]
+      }),
+    )
+    assert.ok(directives.get('connect-src')!.includes('wss:'))
+    assert.ok(directives.get('connect-src')!.includes('https:'))
+    assert.ok(!policy.includes('notary.lib.id'))
+    for (const name of ['script-src', 'worker-src']) {
+      assert.ok(!directives.get(name)!.includes('https:'))
+      assert.ok(!directives.get(name)!.includes('*'))
     }
   }
-  for (const override of [
-    '',
-    'http://localhost',
-    'https://notary.test/',
-    'https://notary.test/path',
-    'https://user@notary.test',
-    'https://notary.test?x=1',
-  ])
-    assert.throws(() => resolveNotaryAddresses(override))
+  for (const profile of ['prefetch', 'worker', 'proofWorker', 'leafWorker'] as const)
+    assert.ok(!responseHeaders(profile, {})['Content-Security-Policy'].includes('wss:'))
 })

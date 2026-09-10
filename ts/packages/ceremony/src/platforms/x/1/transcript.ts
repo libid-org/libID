@@ -1,14 +1,17 @@
 import { isUserId } from '../../types.js'
 import { isUserName } from './types.js'
-import { quotedRange, decodePrintable, tokenRequestBody } from '../../../prover/transcript.js'
+import {
+  quotedRange,
+  decodePrintable,
+  tokenRequestBody,
+  identityBearerRange,
+} from '../../../prover/transcript.js'
 import { bytesEqual } from '../../../primitives.js'
 import type { ByteRange, RevealRanges, Transcript } from '../../../prover/notarization/notarize.js'
 import type { ExactHttpRequest } from '../../../prover/notarization/session.js'
 const encoder = new TextEncoder()
-const decoder = new TextDecoder('utf-8', { fatal: true })
 const TOKEN_LINE = 'POST /2/oauth2/token HTTP/1.1'
 const IDENTITY_LINE = 'GET /2/users/me HTTP/1.1'
-const AUTHORIZATION_PREFIX = 'authorization: Bearer '
 const ACCESS_TOKEN = encoder.encode('"access_token":"')
 const USER_ID = encoder.encode('"id":"')
 const USERNAME = encoder.encode('"username":"')
@@ -145,42 +148,12 @@ export function identityFromReveals(reveals: readonly Uint8Array[]): {
 /** Reveal the complete fixed identity request except its bearer and the two identity fields. */
 export function selectIdentityReveals(transcript: Transcript, accessToken: string): RevealRanges {
   const expectedRequest = buildIdentityRequest(accessToken)
-  let request: string
-  try {
-    request = decoder.decode(transcript.sent)
-  } catch {
-    return invalid('identity request is not ASCII')
-  }
-  const headerEnd = request.indexOf('\r\n\r\n')
-  if (headerEnd < 0 || headerEnd !== request.length - 4) {
-    return invalid('identity request framing changed')
-  }
-  const [requestLine, ...headers] = request.slice(0, headerEnd).split('\r\n')
-  if (requestLine !== IDENTITY_LINE) return invalid('identity request line changed')
-
-  const expectedHeaders = new Map(
-    Object.entries(expectedRequest.headers).map(([name, value]) => [
-      name.toLowerCase(),
-      decoder.decode(value),
-    ]),
+  const { start: bearerStart, end: bearerEnd } = identityBearerRange(
+    transcript.sent,
+    IDENTITY_LINE,
+    expectedRequest.headers,
+    accessToken,
   )
-  let offset = IDENTITY_LINE.length + 2
-  let bearerStart = -1
-  for (const header of headers) {
-    const separator = header.indexOf(': ')
-    const name = separator < 0 ? '' : header.slice(0, separator).toLowerCase()
-    const value = separator < 0 ? '' : header.slice(separator + 2)
-    const expected = expectedHeaders.get(name)
-    if (expected === undefined) return invalid('identity request has an unexpected header')
-    if (value !== expected) return invalid(`identity request ${name} changed`)
-    expectedHeaders.delete(name)
-    if (name === 'authorization') bearerStart = offset + AUTHORIZATION_PREFIX.length
-    offset += header.length + 2
-  }
-  if (expectedHeaders.size !== 0 || bearerStart < 0) {
-    return invalid('identity request is missing a required header')
-  }
-  const bearerEnd = bearerStart + accessToken.length
 
   const id = quotedRange(transcript.recv, USER_ID, 'identity id')
   const username = quotedRange(transcript.recv, USERNAME, 'identity username')

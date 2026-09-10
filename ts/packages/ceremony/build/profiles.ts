@@ -20,11 +20,9 @@ export function responseHeaders(
   {
     inline = [],
     externalOrigins = [],
-    notaryAddresses,
   }: {
     inline?: string[]
     externalOrigins?: string[]
-    notaryAddresses: readonly string[]
   },
 ): Record<string, string> {
   const headers: Record<string, string> = {
@@ -60,7 +58,7 @@ export function responseHeaders(
   const connects = ['proofWorker', 'leafWorker'].includes(profile)
     ? 'https: blob:'
     : execution
-      ? `https: ${[...new Set(notaryAddresses)].map((origin) => origin.replace('https:', 'wss:')).join(' ')}`
+      ? 'https: wss:'
       : `'self' ${externalOrigins.join(' ')}`
   headers['Content-Security-Policy'] =
     `${base}; script-src 'self' ${inline.map(scriptHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}; worker-src ${profile === 'leafWorker' ? "'none'" : `'self'${execution ? ' blob:' : ''}`}; connect-src ${connects} ${popupFallback.connectSources.join(' ')}${profile === 'executionWorker' ? ' blob:' : ''}${['prefetch', 'prover', 'proverFallback'].includes(profile) ? "; style-src 'unsafe-inline'" : ''}`

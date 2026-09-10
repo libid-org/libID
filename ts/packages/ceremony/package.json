@@ -54,7 +54,7 @@
     "build:ccdp-artifacts": "node build/distribution.ts",
     "test:distribution": "node --test build/*.test.ts",
     "typecheck:build": "tsc -p tsconfig.scripts.json",
-    "build:qualification-artifacts": "LIBID_LEDGER_FIXTURE=1 node build/distribution.ts --out-dir .cache/qualification-assets"
+    "build:qualification-artifacts": "node build/distribution.ts --out-dir .cache/qualification-assets"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

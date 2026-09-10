@@ -5,10 +5,7 @@ import type { ResolvedAssets } from './assets.ts'
 import { packageDir } from './release.ts'
 
 export function assetPlugin(
-  data?: Pick<
-    ResolvedAssets,
-    'urls' | 'moduleUrls' | 'requestsByProfile' | 'allowedRequests' | 'notaryAddresses'
-  >,
+  data?: Pick<ResolvedAssets, 'urls' | 'moduleUrls' | 'requestsByProfile' | 'allowedRequests'>,
 ): Plugin {
   return {
     name: 'ceremony-assets',
@@ -139,7 +136,6 @@ export function assetPlugin(
           urls: data?.urls ?? {},
           requestsByProfile: data?.requestsByProfile ?? {},
           allowedRequests: data?.allowedRequests ?? [],
-          notaryAddresses: data?.notaryAddresses ?? [],
         }
         return Object.entries(runtime)
           .map(([k, v]) => `export const ${k}=${JSON.stringify(v)};`)
