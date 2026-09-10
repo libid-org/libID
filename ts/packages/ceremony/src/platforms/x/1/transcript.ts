@@ -1,20 +1,20 @@
-import { isUserId } from '../../types.js'
-import { isUserName } from './types.js'
-import {
-  quotedRange,
-  decodePrintable,
-  tokenRequestBody,
-  identityBearerRange,
-} from '../../../prover/transcript.js'
 import { bytesEqual } from '../../../primitives.js'
 import type { ByteRange, RevealRanges, Transcript } from '../../../prover/notarization/notarize.js'
 import type { ExactHttpRequest } from '../../../prover/notarization/session.js'
+import {
+  decodePrintable,
+  identityBearerRange,
+  quotedRange,
+  tokenRequestBody,
+} from '../../../prover/transcript.js'
+import { isUserId } from '../../types.js'
+import { isUserName } from './types.js'
+
 const encoder = new TextEncoder()
 const TOKEN_LINE = 'POST /2/oauth2/token HTTP/1.1'
 const IDENTITY_LINE = 'GET /2/users/me HTTP/1.1'
-const ACCESS_TOKEN = encoder.encode('"access_token":"')
-const USER_ID = encoder.encode('"id":"')
-const USERNAME = encoder.encode('"username":"')
+const USER_ID = encoder.encode('"id"')
+const USERNAME = encoder.encode('"username"')
 // libid-circuits v0.3.0 bearer-link private-input width.
 const MAX_BEARER_BYTES = 128
 const PKCE = /^[A-Za-z0-9_-]{43}$/
@@ -101,9 +101,9 @@ export function selectTokenReveals(
     return invalid('token request body changed')
   }
 
-  const accessToken = quotedRange(transcript.recv, ACCESS_TOKEN, 'access_token')
+  const accessToken = quotedRange(transcript.recv, 'access_token')
   const token = decodePrintable(accessToken.value, 'access token', MAX_BEARER_BYTES)
-  const valueStart = accessToken.range.start + ACCESS_TOKEN.length
+  const valueStart = accessToken.valueStart
   return {
     ranges: {
       sent: [{ start: 0, end: transcript.sent.length }],
@@ -126,7 +126,9 @@ export function identityFromReveals(reveals: readonly Uint8Array[]): {
   for (const reveal of reveals) {
     if (bytesEqual(reveal.subarray(0, USER_ID.length), USER_ID) && reveal.at(-1) === 0x22) {
       if (userId !== null) return invalid('identity id reveal is duplicated')
-      const value = decodePrintable(reveal.subarray(USER_ID.length, -1), 'identity id', 20)
+      const field = quotedRange(reveal, 'id')
+      if (field.range.end !== reveal.length) return invalid('identity id trailing bytes')
+      const value = decodePrintable(field.value, 'identity id', 20)
       if (!isUserId(value)) return invalid('identity id is not canonical')
       userId = value
     } else if (
@@ -134,7 +136,9 @@ export function identityFromReveals(reveals: readonly Uint8Array[]): {
       reveal.at(-1) === 0x22
     ) {
       if (handle !== null) return invalid('identity username reveal is duplicated')
-      const value = decodePrintable(reveal.subarray(USERNAME.length, -1), 'identity username', 15)
+      const field = quotedRange(reveal, 'username')
+      if (field.range.end !== reveal.length) return invalid('identity username trailing bytes')
+      const value = decodePrintable(field.value, 'identity username', 15)
       if (!isUserName(value)) return invalid('identity username is not canonical')
       handle = value
     } else {
@@ -155,8 +159,8 @@ export function selectIdentityReveals(transcript: Transcript, accessToken: strin
     accessToken,
   )
 
-  const id = quotedRange(transcript.recv, USER_ID, 'identity id')
-  const username = quotedRange(transcript.recv, USERNAME, 'identity username')
+  const id = quotedRange(transcript.recv, 'id')
+  const username = quotedRange(transcript.recv, 'username')
   const response = [id.range, username.range].sort((a, b) => a.start - b.start)
   identityFromReveals(response.map((range) => transcript.recv.slice(range.start, range.end)))
   return {

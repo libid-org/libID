@@ -993,6 +993,25 @@ and no `authorization` needle to count.
   following structural byte. The Proving Circuit MUST keep both matches inside
   the authenticated payload length and reject quoted, signed, fractional,
   exponent, leading-zero, padded, or wrong-type alternatives.
+- REQ-COMMON-19F (upholds SP-BIND-01, SP-EXCHANGE-01):
+  The Implementation, Canonical Runtime, and Platform Verifier reading JSON
+  fields from TLS transcripts MUST accept zero or more JSON whitespace bytes
+  (`0x20`, `0x09`, `0x0a`, `0x0d`) between the quoted field name and colon,
+  between the colon and value, and between an integer value and its required
+  structural terminator. The Implementation MUST retain those bytes in the
+  revealed field prefix or snippet at their original transcript offsets.
+  The Platform Verifier MUST count all accepted whitespace spellings when
+  enforcing REQ-COMMON-19A. The Platform Verifier MUST read each field or bearer
+  prefix from one contiguous revealed range. The Platform Verifier MUST NOT
+  reconstruct it by dropping whitespace or joining disjoint ranges. The Implementation MUST
+  exclude prefix whitespace from the committed bearer value.
+  Necessity: valid provider JSON can be pretty-printed; compact delimiter
+  spellings such as `"access_token":"` and `"login":"` in TLS transcript
+  layouts denote this whitespace-aware grammar, not mandatory compact output.
+  Whitespace is outside the value: the integer digit grammar, string charsets,
+  required terminator, commitment bytes and circuit inputs are unchanged.
+  This rule concerns TLS transcript readers, not extraction inside an OIDC
+  proving circuit.
 - REQ-COMMON-19E (upholds SP-BIND-01):
   The Platform Profile MUST fix, for each field it requires, the authenticated
   bytes that field is read from and the one algorithm that reads them. The
@@ -1248,6 +1267,13 @@ the constructions that role implements.
   Submission whose supplied bytes its evidence does not authenticate is
   rejected. X and GitHub reject an empty identifier and every identifier byte
   outside `[A-Za-z0-9*._-]` rather than returning a form serialization.
+- TEST-COMMON-10A (exercises REQ-COMMON-19F, REQ-COMMON-19A):
+  Token and identity transcript fixtures cover compact JSON, each JSON
+  whitespace byte and mixed runs around colons, whitespace before integer
+  terminators, and exact original-byte reveal and bearer ranges. Negative
+  vectors cover non-JSON whitespace, malformed numbers, mixed-spelling
+  duplicate fields (including split delimiters), hidden prefix whitespace,
+  and a field split by HTTP chunk framing or disjoint reveal ranges.
 - TEST-COMMON-10 (exercises REQ-COMMON-17A, REQ-COMMON-17B, REQ-COMMON-18, REQ-COMMON-18A, REQ-COMMON-19, REQ-COMMON-19A, REQ-COMMON-19B, REQ-COMMON-19C, REQ-COMMON-19E, REQ-COMMON-20, REQ-COMMON-22):
   An authenticated JSON response carrying a second copy of a templated field
   in its revealed bytes is rejected; a transcript whose
