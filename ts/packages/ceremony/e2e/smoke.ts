@@ -39,7 +39,7 @@ Object.assign(window, {
       engine.destroy()
     }
   },
-  async notarySmoke(count = 2, notaryAddress = 'https://localhost:4687') {
+  async notarySmoke(count = 2, notaryAddress = 'http://localhost:4687') {
     const abort = new AbortController(),
       engine = new ProofEngine({ circuitUrl: assetUrl(bearerCircuit), threads: 2 })
     const timer = setTimeout(() => abort.abort(new Error('Notary smoke timed out')), 120000)
