@@ -14,8 +14,8 @@ pnpm --filter @libid/ceremony dev
 ```
 
 Open **https://localhost:4691**. This command builds popup and starts Vite for the
-frontend only. Bridge, CCDP and notary startup remain separate until the Bridge
-integration is ready. No container/image is silently substituted for those services.
+frontend only. `dev:services` starts the real Bridge and CCDP behind local HTTPS
+on their fixed default ports; the notary remains an independently deployed service.
 
 ## Configuration
 
@@ -101,3 +101,63 @@ alias is included in the package's production build.
 A complete walkthrough still requires a compatible live Bridge and CCDP. See
 [qualification](qualification.md#repeatable-opt-in-real-consent) for the manual runner,
 released-key verification and the remaining live notary/device gates.
+
+## Real local services
+
+The selected Bridge is [PR #9](https://github.com/libid-org/libid-server-rs/pull/9),
+`ebbf10961dd6960a4d53c0af6470bee1f889a229`. Build that revision with Rust 1.97
+or newer using `cargo build --locked`. Its `libid-rs` pin, `501f094`, is already
+current main and includes the origin-form request and chunk-layout fixes. No
+additional `libid-rs` bump is needed for this target. Keep its source, Cargo cache
+and target directory inside your development checkout; do not rebuild a shared
+reference worktree.
+
+Set these in the ignored `dev/.env.local`:
+
+- `CEREMONY_BRIDGE_BINARY`: absolute path to that build's `libid-server-rs`.
+- `CEREMONY_SWS_BINARY`: absolute path to SWS **3.0.0-beta.1** (the same release
+  pinned by `ccdp.Dockerfile`).
+- `CEREMONY_PLATFORMS`: JSON registrations, e.g.
+  `[{"id":"google","clientId":"YOUR_PUBLIC_ID","versions":[1]}]`.
+  Use the fresh public development registrations; placeholder IDs do not work.
+- `GH_OAUTH_CLIENT_SECRET`: required when GitHub is enabled; keep it local.
+- `NOTARY_URL`: the Bridge's `tcp://HOST:PORT` endpoint for a compatible notary.
+  Its host must match the browser's build-time `LIBID_NOTARY_ADDRESS` host.
+
+The browser bundle is **notary v0.3.0-rc.2**, whose TLSN revision `8a5de746`
+matches the Bridge. The live notary must be compatible with that revision too.
+A WebSocket endpoint alone is insufficient for GitHub: the Bridge needs the
+notary's TCP listener. Confirm that endpoint before spending a fresh OAuth code.
+
+Register **`https://localhost:4682/auth/callback`** with each provider. Google also
+needs the appropriate consent-screen/test-user configuration; X must use a public
+client with PKCE; GitHub needs the matching confidential secret on the Bridge.
+Public client IDs can be committed for convenience; secrets cannot.
+
+From the TypeScript workspace, build CCDP with the chosen notary origin:
+
+```sh
+LIBID_NOTARY_ADDRESS=https://YOUR_NOTARY_HOST pnpm --filter @libid/ceremony build:qualification-artifacts
+pnpm --filter @libid/ceremony dev:services
+# Another terminal:
+pnpm --filter @libid/ceremony dev
+# A read-only pre-consent check (Node 24+ system trust, including mkcert):
+NODE_USE_SYSTEM_CA=1 pnpm --filter @libid/ceremony dev:check
+```
+
+`dev:services` uses the fixed default origins in this guide and reserves internal
+loopback ports 4684 (SWS) and 4685 (Bridge). Keep the frontend's origin/port defaults
+when using it. It preserves upstream response headers and bytes, logs no request
+URLs or bodies, and stops its own services on Ctrl-C or a service failure. It
+passes GitHub's secret only to the Bridge child, not SWS.
+
+The Bridge reads the rebuilt Callback using its supported
+`CALLBACK_ARTIFACT_PATH` override. PR #9's retrieval client uses compiled public CA
+roots and cannot retrieve the mkcert-served CCDP. This file mode permits local
+consent testing without disabling certificate verification; it does **not** test
+upstream retrieval/revalidation. Rebuild CCDP and restart the services after
+Callback changes. Qualify retrieval separately against a publicly trusted CCDP.
+
+`dev:check` exercises actual configuration and origin admission, checks that
+Callback composition omits request data, and checks the isolated Prover route.
+It does not exchange an OAuth code, create a notary session, or prove identity.
