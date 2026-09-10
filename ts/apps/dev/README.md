@@ -139,8 +139,6 @@ From the TypeScript workspace:
 pnpm dev:services
 # Another terminal:
 pnpm dev:app
-# A read-only pre-consent check:
-pnpm --filter @libid/dev dev:check
 ```
 
 `dev:services` uses fixed HTTP ports 4682 (Bridge), 4683 (CCDP) and 4687
@@ -152,9 +150,3 @@ The combined `dev` command waits for Bridge readiness before starting the fronte
 
 Bridge retrieves and revalidates Callback directly from CCDP. No Callback file
 mount or certificate exception is used. Rebuild CCDP after changing its source.
-
-`dev:check` exercises actual configuration and origin admission, checks that
-Callback composition omits request data, and checks the isolated Prover route.
-It also reads the real notary public key and opens its WebSocket endpoint. This
-establishes reachability only; it does not complete a TLSNotary session, exchange
-an OAuth code, or generate a proof.

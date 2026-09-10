@@ -288,7 +288,7 @@ Bridge PR #9 builds with `cargo build --locked` against its existing libid-rs pi
 The actual Bridge served the emitted Callback and public configuration through
 trusted mkcert HTTPS; the actual frontend reached Ready. An explicitly synthetic
 Google client ID was used only for these pre-consent checks and is not a committed
-OAuth registration. `dev:services` and `dev:check` make that local setup repeatable.
+OAuth registration. `dev:services` starts the local services for the manual flow.
 The Callback file override does not qualify upstream refresh/revalidation.
 
 Browser assets now use notary rc.2. All five browser profiles pass concurrent
