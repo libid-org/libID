@@ -167,6 +167,7 @@ it('validates advisory stage messages without accepting terminal claims or mixed
     'prefetch',
     'authorization',
     'oauth-return',
+    'finalizing',
     'complete',
     'success',
     '',

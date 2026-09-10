@@ -10,7 +10,6 @@ export const stages = [
   'identity-fetch',
   'proof-preparation',
   'proof-generation',
-  'finalizing',
 ] as const
 export type CeremonyStage = (typeof stages)[number]
 const stageMessages = {
@@ -18,11 +17,10 @@ const stageMessages = {
   prefetch: ['Prefetching assets', 'Prefetch dispatched'],
   authorization: ['Authorizing', 'User authorised'],
   'oauth-return': ['Returning from authorization', 'OAuth return received'],
-  'code-exchange': ['Notarizing token', 'Token ready'],
-  'identity-fetch': ['Notarizing identity', 'Identity ready'],
-  'proof-preparation': ['Setting up prover', 'Prover ready'],
+  'code-exchange': ['Notarizing token', 'Token fetched'],
+  'identity-fetch': ['Notarizing identity', 'Identity fetched'],
+  'proof-preparation': ['Setting up ZK prover', 'ZK prover ready'],
   'proof-generation': ['Generating proof', 'Proof generated'],
-  finalizing: ['Completing', 'Complete'],
 } satisfies Record<CeremonyStage, readonly [string, string]>
 
 /** Package-owned display groups and wording; complete a group only when it ends. */
