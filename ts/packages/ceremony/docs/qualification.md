@@ -292,3 +292,28 @@ is stored only in ignored local configuration. Basic network checks from the dev
 failing. These are reachability observations, not protocol tests: confirm a
 reachable compatible notary's HTTPS/WebSocket origin and TCP listener before
 spending OAuth codes. No live X/GitHub session or proof delivery was qualified.
+
+## Container dev stack (2026-09-10)
+
+`dev:services` now builds the pinned Bridge PR #9 using its upstream Dockerfile
+and starts it alongside notary 0.3.0-rc.2 and the pinned SWS image. The browser
+distribution is rebuilt with the local notary origin. No host Rust is needed.
+Linux validation used Docker Compose with an isolated Podman engine; Docker
+Desktop and Apple Silicon emulation have not been exercised here.
+
+Trusted mkcert HTTPS passed the real Bridge config/Callback and SWS header checks;
+the actual frontend admitted all three development OAuth registrations. The
+notary's image healthcheck passed, `/info` exposed the development key, and the
+WebSocket handshake passed through the local HTTPS ingress. The existing Chromium
+smoke completed one real TLSNotary session and then two concurrent sessions,
+including receipt and decoding of their final attestations, against the local
+released notary. These use unauthenticated requests to the public X endpoint;
+they establish transport/runtime concurrency for this probe, not successful
+OAuth exchange, platform proofs, or full X/GitHub ceremony qualification.
+
+Development TypeScript/lint and all 237 unit tests pass. Security/correctness,
+API ergonomics and simplicity reviews completed. Fixes removed the old generic
+multi-child launcher wrapper and corrected teardown ordering: terminate the owned
+Compose startup process group before the final `compose down`. A real lifecycle
+regression then passed startup, SIGTERM, exit status 0, all six service ports closed
+and no remaining project containers.
