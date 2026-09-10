@@ -104,6 +104,8 @@ for (const [platform, name] of [
       await expect(rows.first().getByRole('cell').nth(2)).toHaveText('Cancelled')
       await expect(rows.first().getByRole('cell').nth(3)).toHaveText(/^\d+\.\d s$/)
       await expect(rows.first().getByRole('cell').nth(4)).toHaveText('—')
+      await expect(rows.first().locator('.stage-timings li')).toContainText('Opening popup')
+      await expect(rows.first().locator('.stage-timings li')).toContainText('(cancelled)')
       if (platform === 'google' && !blocked) {
         const secondOpened = page.waitForEvent('popup')
         await page.getByRole('button', { name: 'X', exact: true }).click()
@@ -208,12 +210,13 @@ test('private configuration and generated files are not served', async ({ reques
   }
 })
 
-for (const [platform, name] of [
+for (const [platform, name, outcome = 'denied'] of [
   ['google', 'Google'],
   ['x', 'X'],
   ['github', 'GitHub'],
+  ['google', 'Google', 'success'],
 ]) {
-  test(`${name} stage timings survive overlapping progress and freeze on finish`, async ({
+  test(`${name} stage timings survive overlapping progress and freeze on ${outcome}`, async ({
     page,
     context,
   }) => {
@@ -247,7 +250,10 @@ for (const [platform, name] of [
       ${
         prover
           ? `
-        connection.on({ type: 'app-start-prover', decode: value => value }, () => { window.stageConnection = connection; });
+        connection.on({ type: 'app-start-prover', decode: value => value }, request => {
+          connection.send({ type: 'prover-notify-event', stage: request.platformId === 'google' ? 'proof-preparation' : 'code-exchange', timestamp: 1 });
+          window.stageConnection = connection;
+        });
       `
           : ''
       }
@@ -309,32 +315,57 @@ for (const [platform, name] of [
       await expect(page.getByRole('status')).not.toContainText('Concurrent backend work')
       await expect(page.locator('.stage-timings li').last()).toContainText(
         stage === 'identity-fetch'
-          ? 'Fetching identity'
+          ? 'Notarizing identity'
           : stage === 'proof-preparation'
-            ? 'Preparing proof'
+            ? 'Setting up prover'
             : stage === 'finalizing'
-              ? 'Finalizing'
+              ? 'Completing'
               : 'Generating proof',
       )
     }
     await page.clock.runFor(1000)
-    await popup.evaluate(() => {
-      ;(
-        window as unknown as { stageConnection: { send(value: unknown): void } }
-      ).stageConnection.send({ type: 'cancel-ceremony' })
-    })
-    await expect(page.locator('#history')).toContainText('Denied')
+    await popup.evaluate((success) => {
+      const connection = (window as unknown as { stageConnection: { send(value: unknown): void } })
+        .stageConnection
+      // Synthetic delivery tests UI completion only, never cryptographic qualification.
+      connection.send(
+        success
+          ? {
+              type: 'prover-identity-proof',
+              identity: {
+                platformId: 'google',
+                oauthClientId: 'client',
+                userId: '1',
+                userName: 'a@b.c',
+              },
+              proof: {
+                identityProof: new Uint8Array([1]),
+                tokenExpiresAt: 42,
+                signingKeyModulus: new Uint8Array(256),
+              },
+            }
+          : { type: 'cancel-ceremony' },
+      )
+    }, outcome === 'success')
+    await expect(page.locator('#history')).toContainText(
+      outcome === 'success' ? 'Proof received' : 'Denied',
+    )
     const timings = page.locator('.stage-timings li')
-    await expect(timings).toHaveCount(platform === 'google' ? 6 : 9)
+    await expect(timings).toHaveCount(platform === 'google' ? 4 : 7)
     expect(
-      (await timings.allTextContents()).slice(0, 4).map((text) => text.split(' · ')[0]),
-    ).toEqual(['Start', 'Prefetch', 'Authorization', 'OAuth return'])
-    for (const text of await timings.allTextContents()) expect(text).toMatch(/ · \d+\.\d s$/)
-    for (const text of (await timings.allTextContents()).slice(4)) {
-      const seconds = Number(/ · ([\d.]+) s$/.exec(text)![1])
+      (await timings.allTextContents()).slice(0, 2).map((text) => text.split(' · ')[0]),
+    ).toEqual(['Popup opened', 'User authorised'])
+    for (const text of await timings.allTextContents())
+      expect(text).toMatch(/ · \d+\.\d s(?: \(denied\))?$/)
+    for (const text of (await timings.allTextContents()).slice(2)) {
+      const seconds = Number(/ · ([\d.]+) s/.exec(text)![1])
       expect(seconds).toBeGreaterThanOrEqual(1)
       expect(seconds).toBeLessThan(3)
     }
+    await expect(timings.last()).toContainText(
+      outcome === 'success' ? 'Proof generated' : '(denied)',
+    )
+    await expect(timings.last()).not.toContainText('Complete ·')
     const cells = page.locator('#history tr').first().getByRole('cell')
     const total = Number.parseFloat((await cells.nth(3).textContent())!)
     const postConsent = Number.parseFloat((await cells.nth(4).textContent())!)

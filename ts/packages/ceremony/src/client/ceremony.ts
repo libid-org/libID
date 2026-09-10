@@ -297,8 +297,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       this.listen(ProverReady, () => {
         this.expect('oauth')
         this.state = 'proving'
-        this.enterStage(this.platform === 'google' ? 'proof-preparation' : 'code-exchange')
-        if (this.state === 'proving') this.connection.send({ ...this.start })
+        this.connection.send({ ...this.start })
       })
       this.listen(ProverNotifyEvent, (m) => {
         this.expect('proving')

@@ -1,9 +1,9 @@
+export { CeremonyStage } from '../events.js'
 export * from '../index.js'
 export {
-  createCeremonyClient,
-  type CeremonyClient,
   type Ceremony,
+  type CeremonyClient,
   type CeremonyEvent,
-  type CeremonyStage,
+  createCeremonyClient,
 } from './ceremony.js'
 export { type CeremonyConfig, type PlatformConfig, validateCeremonyConfig } from './config.js'

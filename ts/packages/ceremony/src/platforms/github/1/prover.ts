@@ -36,6 +36,7 @@ export async function prove(
   if (returned.outcome === 'denied') return null
   if (returned.outcome !== 'accepted')
     throw new CeremonyError('oauth-return', { cause: new Error('GitHub authorization failed') })
+  context.onStage('code-exchange')
   const controller = new AbortController(),
     abort = () => controller.abort(signal.reason)
   signal.addEventListener('abort', abort, { once: true })

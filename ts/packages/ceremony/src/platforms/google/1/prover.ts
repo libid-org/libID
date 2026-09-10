@@ -1,13 +1,13 @@
-import { CeremonyError } from '../../../errors.js'
-import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
+import { CeremonyError } from '../../../errors.js'
 import { isRecord } from '../../../primitives.js'
 import type { ProverContext } from '../../../prover/context.js'
 import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../prover/engine.js'
 import { parseJson } from '../../../prover/json.js'
 import { Progress } from '../../../prover/progress.js'
 import { readBody } from '../../../response.js'
+import type { Identity } from '../../types.js'
 import { circuit } from './assets.js'
 import { buildGoogleWitness } from './inputs.js'
 import { parseOAuthReturn } from './oauth.js'
@@ -45,6 +45,7 @@ export async function prove(
     typeof header?.kid !== 'string'
   )
     throw new CeremonyError('oauth-return', { cause: new Error('Invalid Google token') })
+  context.onStage('proof-preparation')
   const progress = new Progress(spans, (step) =>
     onProgress(step, performance.timeOrigin + performance.now()),
   )

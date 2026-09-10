@@ -13,6 +13,31 @@ export const stages = [
   'finalizing',
 ] as const
 export type CeremonyStage = (typeof stages)[number]
+const stageMessages = {
+  start: ['Opening popup', 'Popup opened'],
+  prefetch: ['Prefetching assets', 'Prefetch dispatched'],
+  authorization: ['Authorizing', 'User authorised'],
+  'oauth-return': ['Returning from authorization', 'OAuth return received'],
+  'code-exchange': ['Notarizing token', 'Token ready'],
+  'identity-fetch': ['Notarizing identity', 'Identity ready'],
+  'proof-preparation': ['Setting up prover', 'Prover ready'],
+  'proof-generation': ['Generating proof', 'Proof generated'],
+  finalizing: ['Completing', 'Complete'],
+} satisfies Record<CeremonyStage, readonly [string, string]>
+
+/** Package-owned display groups and wording; complete a group only when it ends. */
+export const CeremonyStage = {
+  group(stage: CeremonyStage): CeremonyStage {
+    return stage === 'prefetch' || stage === 'oauth-return' ? 'authorization' : stage
+  },
+  inProgress(stage: CeremonyStage): string {
+    return stageMessages[stage][0]
+  },
+  completed(stage: CeremonyStage): string {
+    return stageMessages[stage][1]
+  },
+} as const
+
 export type ProverStage = Exclude<
   CeremonyStage,
   'start' | 'prefetch' | 'authorization' | 'oauth-return'

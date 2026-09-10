@@ -43,6 +43,7 @@ export async function prove(
   if (returned.outcome === 'denied') return null
   if (returned.outcome !== 'accepted')
     throw new CeremonyError('oauth-return', { cause: new Error('X authorization failed') })
+  context.onStage('code-exchange')
   const controller = new AbortController(),
     abort = () => controller.abort(context.signal.reason)
   context.signal.addEventListener('abort', abort, { once: true })

@@ -3,7 +3,7 @@ import {
   type CeremonyClient,
   CeremonyError,
   type CeremonyEvent,
-  type CeremonyStage,
+  CeremonyStage,
   createCeremonyClient,
   type IdentityResult,
   type PlatformId,
@@ -71,17 +71,6 @@ async function initialize() {
     controls()
   }
 }
-const stageNames: Record<CeremonyStage, string> = {
-  start: 'Start',
-  prefetch: 'Prefetch',
-  authorization: 'Authorization',
-  'oauth-return': 'OAuth return',
-  'code-exchange': 'Exchanging code',
-  'identity-fetch': 'Fetching identity',
-  'proof-preparation': 'Preparing proof',
-  'proof-generation': 'Generating proof',
-  finalizing: 'Finalizing',
-}
 function beginRun(platform: PlatformId) {
   const now = () => performance.timeOrigin + performance.now()
   const started = now()
@@ -106,18 +95,19 @@ function beginRun(platform: PlatformId) {
   let finished = false
   const duration = (start: number, end: number) =>
     `${Math.max(0, (end - start) / 1000).toFixed(1)} s`
-  const render = (timestamp = now()) => {
+  const render = (timestamp = now(), completed = false) => {
     cells[3]!.textContent = duration(started, timestamp)
     if (returnedAt !== undefined) cells[4]!.textContent = duration(returnedAt, timestamp)
     if (current)
-      current.cell.textContent = `${stageNames[current.stage]} · ${duration(current.started, timestamp)}`
+      current.cell.textContent = `${completed ? CeremonyStage.completed(current.stage) : CeremonyStage.inProgress(current.stage)} · ${duration(current.started, timestamp)}`
   }
   const timer = setInterval(render, 100)
-  const finish = (outcome: string, timestamp = now()) => {
+  const finish = (outcome: string, timestamp = now(), success = false) => {
     if (finished) return
     finished = true
     clearInterval(timer)
-    render(timestamp)
+    render(timestamp, success)
+    if (current && !success) current.cell.textContent += ` (${outcome.toLowerCase()})`
     cells[2]!.textContent = outcome
   }
   return {
@@ -136,14 +126,20 @@ function beginRun(platform: PlatformId) {
                   ? `Failed (${event.code})`
                   : 'Failed',
           event.timestamp,
+          event.outcome === 'success',
         )
         return
       }
       if (event.stage === 'oauth-return') returnedAt = event.timestamp
-      render(event.timestamp)
+      const stage = CeremonyStage.group(event.stage)
+      if (current?.stage === stage) {
+        render(event.timestamp)
+        return
+      }
+      render(event.timestamp, true)
       const cell = document.createElement('li')
       const first = !current
-      current = { stage: event.stage, started: first ? started : event.timestamp, cell }
+      current = { stage, started: first ? started : event.timestamp, cell }
       timings.append(cell)
       render(event.timestamp)
     },
@@ -195,7 +191,8 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
   controls()
   const off = ceremony.onEvent((event) => {
     run.onEvent(event)
-    if (event.type === 'stage') status.textContent = `${stageNames[event.stage]}…`
+    if (event.type === 'stage')
+      status.textContent = `${CeremonyStage.inProgress(CeremonyStage.group(event.stage))}…`
   })
   let failed = false
   void current.closed.then(() => {
