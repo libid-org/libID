@@ -481,7 +481,10 @@ noncanonical encodings fail before use.
 
 ```ts
 type CeremonyStage =
+  | 'start'
+  | 'prefetch'
   | 'authorization'
+  | 'oauth-return'
   | 'code-exchange'
   | 'identity-fetch'
   | 'proof-preparation'
@@ -495,12 +498,24 @@ type CeremonyEvent =
   | { type: 'finished'; outcome: 'failed'; code: FailureCode | null; timestamp: number }
 ```
 
-Stages form a sequential UI timeline. Google uses authorization → proof preparation →
-proof generation; X and GitHub use all six stages in the order above. A stage whose
+Stages form a sequential UI timeline. All platforms begin with start → prefetch →
+authorization → OAuth return. Google then uses proof preparation → proof generation;
+X and GitHub use all nine stages in the order above. A stage whose
 work is already complete may be brief; concurrent work is never delayed for display.
 
-The client starts authorization with `proveUserIdentity()`. On `ProverReady`, it
-enters proof preparation for Google or code exchange for X/GitHub. Prover reports
+The client starts `start` with `proveUserIdentity()`. It enters `prefetch` when
+Prefetch authenticates the connection and sends fieldless `PrefetchReady`, before
+Worker preparation. `PrefetchStarted` ends prefetch and starts `authorization`
+immediately before provider navigation: it acknowledges fetch dispatch, not completed
+downloads. Fieldless `CallbackReady`, sent after capturing/clearing the return and
+authenticating the Application, starts `oauth-return`. That stage includes navigation,
+Prover document startup, isolation and resource-worker readiness until `ProverReady`.
+Authorization therefore includes provider navigation and return/Callback authentication,
+not just consent-screen time. Neither milestone exposes return data or its outcome.
+Missing, duplicate or out-of-phase advisory milestones never gate the ceremony.
+
+On `ProverReady`, the client enters proof preparation for Google or code exchange
+for X/GitHub. Prover reports
 identity fetch after token admission, then proof preparation after identity extraction
 and the commitment openings needed for the witness are available. Witness execution
 starts proof generation; completed proof-backend teardown starts finalizing for

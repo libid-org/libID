@@ -1,10 +1,10 @@
 import { requestsByProfile } from 'virtual:ceremony-assets'
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
+import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
 import { dispatchPrefetch, rootWorker } from '../../prefetch/registration.js'
 import { startWorker } from '../../prefetch/worker.js'
 import { view } from '../../ui.js'
-import { ceremonyError, reportFailure, type FailureCode } from '../../errors.js'
 import { readPrefetch } from '../navigation.js'
 export async function startPrefetch(fragment: string): Promise<void> {
   let connection: PopupConnection<Message> | undefined
@@ -21,6 +21,11 @@ export async function startPrefetch(fragment: string): Promise<void> {
       allowedApplicationOrigins: '*',
     })
     await connection.ready
+    try {
+      connection.send({ type: 'prefetch-ready' })
+    } catch {
+      /* Advisory readiness cannot decide the ceremony outcome. */
+    }
     failureCode = 'prefetch-worker'
     const registration = await rootWorker()
     await dispatchPrefetch(registration, profile)
