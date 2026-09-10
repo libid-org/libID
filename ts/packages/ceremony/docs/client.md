@@ -517,7 +517,7 @@ keep active wording with a failure/denial/cancellation indication otherwise.
 `Proof generated` is shown only on terminal success: proof means the complete
 verifier input, including required attestations, not just the ZK proof bytes.
 Token and identity intervals end after fetching the data needed for subsequent
-work, so their labels say `Token fetched` / `Identity fetched`; background
+work, so their labels say `Token fetched via notary` / `Identity fetched via notary`; background
 attestations may still be running. Prover setup uses `Setting up ZK prover` /
 `ZK prover ready`.
 `User authorised` applies only after Prover has admitted the OAuth return;

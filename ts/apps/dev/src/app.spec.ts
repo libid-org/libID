@@ -315,7 +315,7 @@ for (const [platform, name, outcome = 'denied'] of [
       await expect(page.getByRole('status')).not.toContainText('Concurrent backend work')
       await expect(page.locator('.stage-timings li').last()).toContainText(
         stage === 'identity-fetch'
-          ? 'Notarizing identity'
+          ? 'Fetching identity via notary'
           : stage === 'proof-preparation'
             ? 'Setting up ZK prover'
             : 'Generating proof',
@@ -374,7 +374,7 @@ for (const [platform, name, outcome = 'denied'] of [
     ).toEqual(
       platform === 'google'
         ? ['ZK prover ready']
-        : ['Token fetched', 'Identity fetched', 'ZK prover ready'],
+        : ['Token fetched via notary', 'Identity fetched via notary', 'ZK prover ready'],
     )
     for (const text of await timings.allTextContents())
       expect(text).toMatch(/ · \d+\.\d s(?: \(denied\))?$/)

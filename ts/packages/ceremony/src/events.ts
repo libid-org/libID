@@ -17,8 +17,8 @@ const stageMessages = {
   prefetch: ['Prefetching assets', 'Prefetch dispatched'],
   authorization: ['Authorizing', 'User authorised'],
   'oauth-return': ['Returning from authorization', 'OAuth return received'],
-  'code-exchange': ['Notarizing token', 'Token fetched'],
-  'identity-fetch': ['Notarizing identity', 'Identity fetched'],
+  'code-exchange': ['Fetching token via notary', 'Token fetched via notary'],
+  'identity-fetch': ['Fetching identity via notary', 'Identity fetched via notary'],
   'proof-preparation': ['Setting up ZK prover', 'ZK prover ready'],
   'proof-generation': ['Generating proof', 'Proof generated'],
 } satisfies Record<CeremonyStage, readonly [string, string]>
