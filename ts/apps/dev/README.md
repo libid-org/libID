@@ -88,8 +88,8 @@ library package. Frontend edits use Vite's normal live reload.
 Click a platform button and complete real provider consent. Run history records each
 attempt’s start time, platform, outcome and duration, newest first, until page reload. Cancel ends ceremony
 work; Close popup releases the application-owned connection during a run. The app
-automatically closes the popup after success, denial, cancellation or failure,
-then enables another attempt. The ceremony library does not own this UI decision.
+automatically closes the popup after success, denial or cancellation. On failure it
+keeps the popup open for DevTools inspection; close it before starting another attempt. The ceremony library does not own this UI decision.
 The result summary never displays raw OAuth returns or attestations. An accepted
 result is retained only in `window.result` for the existing opt-in walkthrough and
 manual inspection; it is not written to storage or logged. Failed and cancelled

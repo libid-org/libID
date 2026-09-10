@@ -133,8 +133,12 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
         ? 'Complete authorization in the popup.'
         : `Generating proof${platformStep ? `: ${platformStep.label}` : '…'}`
   })
+  let failed = false
   void current.closed.then(() => {
-    if (connection === current) connection = undefined
+    if (connection === current) {
+      connection = undefined
+      if (failed) status.textContent = 'Popup closed. Start a fresh attempt.'
+    }
     controls()
   })
   void ceremony
@@ -150,6 +154,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     })
     .catch((error: unknown) => {
       const cancelled = error instanceof Error && error.name === 'AbortError'
+      failed = !cancelled
       window.result = { status: cancelled ? 'cancelled' : 'failed' }
       finishRun(
         cancelled
@@ -161,16 +166,21 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
       result.textContent = cancelled
         ? 'Ceremony cancelled.'
         : error instanceof CeremonyError
-          ? `${error.message} (${error.code}) Start a fresh attempt.`
-          : 'Ceremony failed. Start a fresh attempt.'
-      status.textContent = 'Ceremony stopped.'
+          ? `${error.message} (${error.code})`
+          : 'Ceremony failed.'
+      status.textContent =
+        failed && connection === current
+          ? 'Ceremony failed. The popup is open for inspection; close it before starting another attempt.'
+          : 'Ceremony stopped.'
     })
     .finally(async () => {
       off()
-      try {
-        await current.close()
-      } catch {
-        status.textContent = 'Could not close the popup automatically. Close its window manually.'
+      if (!failed) {
+        try {
+          await current.close()
+        } catch {
+          status.textContent = 'Could not close the popup automatically. Close its window manually.'
+        }
       }
       active = undefined
       controls()
