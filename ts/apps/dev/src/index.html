@@ -49,11 +49,11 @@
     </section>
     <section aria-labelledby="history-heading">
       <h2 id="history-heading">Run history</h2>
-      <p class="muted">Newest first. Cleared when you reload this page.</p>
+      <p class="muted">Newest first. Cleared when you reload this page. Post-consent starts when the OAuth return reconnects.</p>
       <p id="history-empty">No ceremonies started.</p>
       <div class="history-scroll">
         <table aria-labelledby="history-heading">
-          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col">Stages</th></tr></thead>
+          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col" title="From authenticated OAuth return to completion; excludes provider redirect time.">Post-consent</th><th scope="col">Stages</th></tr></thead>
           <tbody id="history"></tbody>
         </table>
       </div>

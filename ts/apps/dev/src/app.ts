@@ -86,12 +86,14 @@ function beginRun(platform: PlatformId) {
   const now = () => performance.timeOrigin + performance.now()
   const started = now()
   const row = document.createElement('tr')
-  const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—'].map((text) => {
-    const cell = document.createElement('td')
-    cell.textContent = text
-    row.append(cell)
-    return cell
-  })
+  const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—', '—'].map(
+    (text) => {
+      const cell = document.createElement('td')
+      cell.textContent = text
+      row.append(cell)
+      return cell
+    },
+  )
   document.querySelector('#history')!.prepend(row)
   document.querySelector<HTMLElement>('#history-empty')!.hidden = true
   const timings = document.createElement('ol')
@@ -100,11 +102,13 @@ function beginRun(platform: PlatformId) {
   timingsCell.append(timings)
   row.append(timingsCell)
   let current: { stage: CeremonyStage; started: number; cell: HTMLLIElement } | undefined
+  let returnedAt: number | undefined
   let finished = false
   const duration = (start: number, end: number) =>
     `${Math.max(0, (end - start) / 1000).toFixed(1)} s`
   const render = (timestamp = now()) => {
     cells[3]!.textContent = duration(started, timestamp)
+    if (returnedAt !== undefined) cells[4]!.textContent = duration(returnedAt, timestamp)
     if (current)
       current.cell.textContent = `${stageNames[current.stage]} · ${duration(current.started, timestamp)}`
   }
@@ -135,6 +139,7 @@ function beginRun(platform: PlatformId) {
         )
         return
       }
+      if (event.stage === 'oauth-return') returnedAt = event.timestamp
       render(event.timestamp)
       const cell = document.createElement('li')
       const first = !current
