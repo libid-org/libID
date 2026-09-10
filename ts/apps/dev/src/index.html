@@ -17,16 +17,18 @@
       .launch { border: 1px solid currentColor; border-radius: .25rem; text-decoration: none; cursor: pointer; }
       [aria-disabled="true"] { opacity: .5; cursor: default; }
       #status { min-height: 3rem; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: .5rem; border-bottom: 1px solid GrayText; }
       #result { white-space: pre-wrap; overflow-wrap: anywhere; }
     </style>
   </head>
   <body>
     <h1>Ceremony development</h1>
-    <p class="muted">Real OAuth and browser proving with a synthetic test ledger. No transaction is submitted.</p>
+    <p class="muted">Real OAuth and browser proving. No transaction is submitted.</p>
     <dl>
       <dt>Bridge</dt><dd id="bridge"></dd>
       <dt>CCDP</dt><dd id="ccdp"></dd>
-      <dt>Ledger</dt><dd>test:testnet</dd>
+      <dt>Notary</dt><dd>https://localhost:4687</dd>
     </dl>
     <p id="status" role="status" aria-live="polite">Connecting to the Bridge…</p>
     <fieldset>
@@ -41,6 +43,15 @@
     <section aria-labelledby="result-heading">
       <h2 id="result-heading">Result</h2>
       <p id="result">No ceremony completed.</p>
+    </section>
+    <section aria-labelledby="history-heading">
+      <h2 id="history-heading">Run history</h2>
+      <p class="muted">Newest first. Cleared when you reload this page.</p>
+      <p id="history-empty">No ceremonies started.</p>
+      <table aria-labelledby="history-heading">
+        <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th></tr></thead>
+        <tbody id="history"></tbody>
+      </table>
     </section>
     <script type="module" src="/app.ts"></script>
   </body>
