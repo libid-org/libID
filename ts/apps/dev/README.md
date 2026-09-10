@@ -81,3 +81,7 @@ pnpm --filter @libid/dev test:e2e
 The browser tests use port 4692 and cover frontend behavior with intercepted
 responses. Real OAuth and proving checks are documented in the
 [ceremony qualification guide](../../packages/ceremony/docs/qualification.md).
+
+Run history shows each ceremony’s sequential stage durations, including failed or
+cancelled attempts. Timings freeze at completion and clear on page reload; concurrent
+proof/notary work is not double-counted.

@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
-  origin,
-  redirect,
   AbortCeremony,
   AppStartProver,
   CancelCeremony,
+  origin,
   PrefetchStarted,
-  ProverReady,
-  ProverNotifyEvent,
   ProverIdentityProof,
+  ProverNotifyEvent,
+  ProverReady,
+  redirect,
 } from './index.js'
-import { readPrefetch, readProver, proverFragment, prefetchFragment } from './navigation.js'
+import { prefetchFragment, proverFragment, readPrefetch, readProver } from './navigation.js'
+
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
   const samples = [
@@ -152,4 +153,19 @@ it('admits explicit loopback HTTP without widening public URL validation [LIBID-
     expect(origin(value), value).toBe(false)
     expect(redirect(`${value}/auth/callback`), value).toBe(false)
   }
+})
+
+it('validates advisory stage messages without accepting terminal claims or mixed payloads [LIBID-MOD-016]', () => {
+  const event = { type: 'prover-notify-event', stage: 'proof-generation', timestamp: 1 }
+  expect(ProverNotifyEvent.decode(event)).toBe(event)
+  for (const stage of ['authorization', 'complete', 'success', '', {}, null])
+    expect(() => ProverNotifyEvent.decode({ ...event, stage })).toThrow()
+  for (const timestamp of [-1, NaN, Infinity, '1'])
+    expect(() => ProverNotifyEvent.decode({ ...event, timestamp })).toThrow()
+  expect(() =>
+    ProverNotifyEvent.decode({
+      ...event,
+      platformStep: { code: 'proof', label: 'Proof', status: 'completed', progress: 0.9 },
+    }),
+  ).toThrow()
 })

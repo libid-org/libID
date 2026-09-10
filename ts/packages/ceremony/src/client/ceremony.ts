@@ -1,20 +1,18 @@
-import { origin } from '../ccdp/index.js'
-import { CeremonyError } from '../errors.js'
 import type { LedgerId } from '@libid/ledger'
-import { hasExactKeys, isRecord } from '../primitives.js'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import {
   AbortCeremony,
   type AppStartProver,
   CancelCeremony,
+  origin,
   PrefetchStarted,
   ProverIdentityProof,
   ProverNotifyEvent,
   ProverReady,
   UUID,
-  type PlatformStep,
 } from '../ccdp/index.js'
 import { oauthState, prefetchFragment, route } from '../ccdp/navigation.js'
+import { CeremonyError } from '../errors.js'
 import {
   deriveAuthorizationDigest,
   deriveCodeChallenge,
@@ -22,20 +20,19 @@ import {
 } from '../platforms/authorization.js'
 import {
   assembleResult,
-  implementationFor,
   greatestCommonVersion,
+  type IdentityResult,
+  implementationFor,
+  type PlatformId,
   platforms,
   supportedPlatforms,
-  type IdentityResult,
-  type PlatformId,
 } from '../platforms/index.js'
+import { hasExactKeys, isRecord } from '../primitives.js'
 import { type CeremonyConfig, fetchCeremonyConfig } from './config.js'
-export type CeremonyStage = 'authorization' | 'proof-generation'
-export interface CeremonyEvent {
-  stage: CeremonyStage
-  platformStep: PlatformStep | null
-  timestamp: number
-}
+
+export type { CeremonyEvent, CeremonyStage } from '../events.js'
+
+import { type CeremonyEvent, type CeremonyStage, stages } from '../events.js'
 export interface Ceremony<P extends PlatformId = PlatformId> {
   readonly launchUrl: string
   onEvent(listener: (event: CeremonyEvent) => void): () => void
@@ -211,21 +208,31 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       this.listeners.delete(listener)
     }
   }
-  private emit(
-    platformStep: PlatformStep | null = null,
-    timestamp = performance.timeOrigin + performance.now(),
-  ): void {
-    for (const listener of this.listeners) {
+  private emit(event: CeremonyEvent, listeners = [...this.listeners]): void {
+    for (const listener of listeners) {
+      if (this.state === 'done' && event.type !== 'finished') return
       try {
-        listener({
-          stage: this.stage,
-          platformStep: platformStep ? { ...platformStep } : null,
-          timestamp,
-        })
+        listener(
+          event.type === 'step'
+            ? { ...event, platformStep: { ...event.platformStep } }
+            : { ...event },
+        )
       } catch {
         /* Observers cannot affect ceremony authority. */
       }
     }
+  }
+  private enterStage(stage: CeremonyStage): void {
+    if (this.state === 'done' || stages.indexOf(stage) <= stages.indexOf(this.stage)) return
+    if (this.platform === 'google' && !['proof-preparation', 'proof-generation'].includes(stage))
+      return
+    this.stage = stage
+    this.emit({ type: 'stage', stage, timestamp: performance.timeOrigin + performance.now() })
+  }
+  private finish(event: CeremonyEvent & { type: 'finished' }): void {
+    const listeners = [...this.listeners]
+    this.cleanup()
+    this.emit(event, listeners)
   }
   private listen<M extends Message>(type: MessageType<M>, handler: (message: M) => void): void {
     const listener = receiver((m: M) => {
@@ -246,8 +253,11 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   proveUserIdentity(): Promise<IdentityResult<P>> {
     if (this.state !== 'new') return Promise.reject(new Error('Ceremony is one-shot'))
     const previous = bindings.get(this.connection)
-    if (previous?.active)
-      return Promise.reject(new Error('Connection already has an active ceremony'))
+    if (previous?.active) {
+      const error = new Error('Connection already has an active ceremony')
+      this.fail(error)
+      return Promise.reject(error)
+    }
     for (const remove of previous?.remove ?? []) remove()
     const binding = { active: true, remove: [] as (() => void)[] }
     bindings.set(this.connection, binding)
@@ -274,38 +284,54 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       this.listen(ProverReady, () => {
         this.expect('oauth')
         this.state = 'proving'
-        this.stage = 'proof-generation'
-        this.emit()
+        this.enterStage(this.platform === 'google' ? 'proof-preparation' : 'code-exchange')
         if (this.state === 'proving') this.connection.send({ ...this.start })
       })
       this.listen(ProverNotifyEvent, (m) => {
         this.expect('proving')
+        if ('stage' in m) {
+          this.enterStage(m.stage)
+          return
+        }
         if (m.platformStep.progress < this.progress) return
         this.progress = m.platformStep.progress
-        this.emit(m.platformStep, m.timestamp)
+        this.emit({ type: 'step', platformStep: m.platformStep, timestamp: m.timestamp })
       })
       this.listen(ProverIdentityProof, (m) => {
         this.expect('proving')
-        this.resolve?.(
-          assembleResult(
-            this.platform,
-            this.version,
-            m,
-            this.start.clientId,
-            this.retained.authorizationNonce,
-          ),
+        const result = assembleResult(
+          this.platform,
+          this.version,
+          m,
+          this.start.clientId,
+          this.retained.authorizationNonce,
         )
-        this.cleanup()
+        const resolve = this.resolve
+        this.finish({
+          type: 'finished',
+          outcome: 'success',
+          timestamp: performance.timeOrigin + performance.now(),
+        })
+        resolve?.(result)
       })
       this.listen(CancelCeremony, () => {
         this.expect('proving')
-        this.resolve?.({ status: 'denied' })
-        this.cleanup()
+        const resolve = this.resolve
+        this.finish({
+          type: 'finished',
+          outcome: 'denied',
+          timestamp: performance.timeOrigin + performance.now(),
+        })
+        resolve?.({ status: 'denied' })
       })
       this.listen(AbortCeremony, (message) => this.fail(new CeremonyError(message.code)))
       void this.connection.ready.catch(() => this.fail(new Error('Popup connection failed')))
       void this.connection.closed.then(() => this.fail(new Error('Popup connection ended')))
-      this.emit()
+      this.emit({
+        type: 'stage',
+        stage: 'authorization',
+        timestamp: performance.timeOrigin + performance.now(),
+      })
       if (this.state === 'prefetch')
         void this.connection
           .navigate(this.prefetchUrl, this.fragment)
@@ -321,7 +347,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     if (this.state === 'done') return
     const active = this.state === 'oauth' || this.state === 'proving'
     this.fail(new DOMException('Ceremony canceled', 'AbortError'))
-    if (active)
+    if (active && bindings.get(this.connection) === this.binding && !this.binding?.active)
       try {
         this.connection.send({ type: 'cancel-ceremony' })
       } catch {
@@ -330,8 +356,19 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   }
   private fail(error: Error): void {
     if (this.state === 'done') return
-    this.reject?.(error)
-    this.cleanup()
+    const reject = this.reject
+    const timestamp = performance.timeOrigin + performance.now()
+    this.finish(
+      error.name === 'AbortError'
+        ? { type: 'finished', outcome: 'cancelled', timestamp }
+        : {
+            type: 'finished',
+            outcome: 'failed',
+            code: error instanceof CeremonyError ? error.code : null,
+            timestamp,
+          },
+    )
+    reject?.(error)
   }
   private cleanup(): void {
     if (this.binding) this.binding.active = false
