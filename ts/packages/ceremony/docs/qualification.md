@@ -17,7 +17,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
 | Noir/Nargo and bb.js | `1.0.0-beta.25`, `5.2.0`; generation and independent verification explicitly use `verifierTarget: 'evm'` |
 | Canonical attestation encoder | `libid-rs` `239a4bb426ac72591fe30006f22660e164a98d96` |
-| TLSNotary bundle | `libid-org/notary` v0.3.0-rc.1, commit `d2372e9fc38d49d1cbc5d55be1288410954e7bfb`; snippet member selected with a directory wildcard |
+| TLSNotary bundle | `libid-org/notary` v0.3.0-rc.2, commit `86c179deafb464b0dd31f6792bf0eaa5135225fe`; snippet member selected with a directory wildcard |
 | SWS | `3.0.0-beta.1`; image digest in `ccdp.Dockerfile` |
 
 The RC replaces the former local TLSNotary bundle. Its exported call shape and
@@ -127,9 +127,9 @@ A real ledger definition is required before a production ceremony can be constru
    [Bridge PR #9](https://github.com/libid-org/libid-server-rs/pull/9),
    `feat/callback-artifact-retrieval` at `ebbf10961dd6960a4d53c0af6470bee1f889a229`,
    using libid-rs `501f094bf10f776c2227ef345908f507a0c80fd0`. Its TLSN fork pin is
-   `8a5de746f73bbe3476a3b10ce411fde3c87e479d`; the browser's rc.1 bundle uses
-   `0f82f54968b36738eacebf7c8ac7728003918b72`. Establish a compatible matched
-   service/browser bundle before live qualification. The Bridge
+   `8a5de746f73bbe3476a3b10ce411fde3c87e479d`, now matching the browser rc.2
+   bundle. The deployed notary must run that compatible release too; matching
+   source pins alone does not establish a successful live session. The Bridge
    must admit exactly one valid `Origin` matching its effective `allowedOrigins`
    independently on every preflight and POST, before DNS or session work. This
    admits configured application origins and the resolved CCDP origin. It must use the Prover-supplied canonical `notaryAddress` unchanged, with no second
@@ -270,3 +270,24 @@ Firefox, WebKit and Android/iOS emulation, including Google fixture proofs
 independently verified against the released key. Security/correctness, API and
 simplicity reviews are clear. These checks do not qualify live X/GitHub sessions;
 Bridge PR #9 is the selected next integration target.
+
+## Manual-stack preparation (2026-09-10)
+
+Bridge PR #9 builds with `cargo build --locked` against its existing libid-rs pin.
+The actual Bridge served the emitted Callback and public configuration through
+trusted mkcert HTTPS; the actual frontend reached Ready. An explicitly synthetic
+Google client ID was used only for these pre-consent checks and is not a committed
+OAuth registration. `dev:services` and `dev:check` make that local setup repeatable.
+The Callback file override does not qualify upstream refresh/revalidation.
+
+Browser assets now use notary rc.2. All five browser profiles pass concurrent
+initialization of the actual WASM bundle. The 237 unit tests and 14 distribution/
+loader/native-SWS checks pass (one mutable-root rebuild test skipped); development
+TypeScript and lint pass. Security, API and simplicity reviews are clear.
+
+Fresh public registrations and GitHub's matching local secret remain deployment
+inputs. Basic network checks from the development machine found TCP port 7047 on
+`notary.testnet.lib.id` timing out and DNS resolution for `testnet.notary.lib.id`
+failing. These are reachability observations, not protocol tests: confirm a
+reachable compatible notary's HTTPS/WebSocket origin and TCP listener before
+spending OAuth codes. No live X/GitHub session or proof delivery was qualified.

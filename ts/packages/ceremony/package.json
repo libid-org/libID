@@ -58,7 +58,9 @@
     "dev": "pnpm --filter @libid/popup build && vite --config dev/vite.config.ts",
     "build:dev": "pnpm --filter @libid/popup build && vite build --config dev/vite.config.ts",
     "typecheck:dev": "tsc -p tsconfig.dev.json",
-    "test:dev": "playwright test --config dev/playwright.config.ts"
+    "test:dev": "playwright test --config dev/playwright.config.ts",
+    "dev:services": "node dev/services.ts",
+    "dev:check": "node dev/check-services.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

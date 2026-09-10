@@ -1,8 +1,8 @@
 import * as assets from '../../assets.js'
 
 const release = assets.archive(
-  'https://github.com/libid-org/notary/releases/download/v0.3.0-rc.1/tlsn-wasm-0.3.0-rc.1.tar.gz',
-  'tlsn/v0.3.0-rc.1',
+  'https://github.com/libid-org/notary/releases/download/v0.3.0-rc.2/tlsn-wasm-0.3.0-rc.2.tar.gz',
+  'tlsn/v0.3.0-rc.2',
 )
 export const tlsnModule = release.member('tlsn_wasm.js', {
   ...assets.headers.immutable,

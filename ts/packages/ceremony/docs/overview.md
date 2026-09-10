@@ -107,7 +107,7 @@ pnpm --filter @libid/ceremony build
 pnpm --filter @libid/ceremony build:ccdp-artifacts
 ```
 
-Owner-defined archive URLs pin circuit v0.3.0 and notary v0.3.0-rc.1 releases.
+Owner-defined archive URLs pin circuit v0.3.0 and notary v0.3.0-rc.2 releases.
 The build caches HTTPS downloads under `.cache/downloads/`, mounts archive members
 without renaming them, and resolves the notary snippet wildcard exactly once.
 There is no bundle-path environment variable or handwritten checksum list.
