@@ -85,6 +85,17 @@ function complement(ranges: readonly ByteRange[], length: number): CommitRange[]
   return hidden
 }
 
+// TLSNotary stores disclosed bytes as a range set, merging adjacent intervals.
+function mergeAdjacent(ranges: readonly ByteRange[]): ByteRange[] {
+  const merged: ByteRange[] = []
+  for (const { start, end } of ranges) {
+    const previous = merged.at(-1)
+    if (previous?.end === start) previous.end = end
+    else merged.push({ start, end })
+  }
+  return merged
+}
+
 /** Build the exact range objects accepted by TLSNotary's browser `reveal`. */
 export function planNotarization(transcript: Transcript, ranges: RevealRanges): NotarizationPlan {
   if (transcript.sent.length > MAX_SENT_BYTES) invalid('sent transcript exceeds 4 KiB')
@@ -92,8 +103,8 @@ export function planNotarization(transcript: Transcript, ranges: RevealRanges): 
   validateRanges(ranges.sent, transcript.sent.length, 'sent')
   validateRanges(ranges.recv, transcript.recv.length, 'received')
 
-  const sent = ranges.sent.map(({ start, end }) => ({ start, end }))
-  const recv = ranges.recv.map(({ start, end }) => ({ start, end }))
+  const sent = mergeAdjacent(ranges.sent)
+  const recv = mergeAdjacent(ranges.recv)
   return {
     reveal: { sent, recv, server_identity: true },
     commit: {

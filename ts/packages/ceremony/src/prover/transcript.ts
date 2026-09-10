@@ -43,3 +43,37 @@ export function decodePrintable(value: Uint8Array, name: string, maximum: number
     return invalid(`${name} is not ASCII`)
   }
 }
+
+/** Read a fully disclosed token head; length includes any committed body suffix. */
+export function tokenRequestBody(
+  request: Uint8Array,
+  requestLine: string,
+  host: string,
+  length = request.length,
+): Uint8Array {
+  const bodyStart =
+    findUnique(request, new Uint8Array([13, 10, 13, 10]), 'token head terminator') + 4
+  const head = request.subarray(0, bodyStart - 4)
+  if (head.some((byte) => byte !== 13 && byte !== 10 && (byte < 32 || byte > 126)))
+    invalid('token head is not ASCII')
+  const [line, ...headers] = decoder.decode(head).split('\r\n')
+  if (line !== requestLine || length < request.length) invalid('token request framing')
+  const expected = new Map([
+    ['host', host],
+    ['content-type', 'application/x-www-form-urlencoded'],
+    ['accept', 'application/json'],
+    ['connection', 'close'],
+    ['content-length', String(length - bodyStart)],
+  ])
+  for (const header of headers) {
+    const match = /^([a-z-]+): ([\x20-\x7e]+)$/i.exec(header)
+    if (!match) invalid('token header framing')
+    const name = match[1].toLowerCase()
+    let value = match[2]
+    if (name === 'content-length' && /^[0-9]+$/.test(value)) value = BigInt(value).toString()
+    if (expected.get(name) !== value) invalid('token header value or duplicate')
+    expected.delete(name)
+  }
+  if (expected.size) invalid('missing token header')
+  return request.subarray(bodyStart)
+}

@@ -365,7 +365,8 @@ browser execution order.
 
 The Notary Service does not choose disclosures. After the platform responds,
 the platform module selects ascending, non-overlapping revealed ranges from its
-local transcript. One adapter helper validates those ranges and commits their
+local transcript. One adapter helper validates those ranges, merges adjacent
+intervals to match TLSNotary's range-set serialization, and commits their
 complement over the complete signed transcript length. Every byte is therefore
 revealed or committed by construction, with no separately maintained committed
 range list that could leave a gap or overlap.
@@ -449,3 +450,30 @@ outside the adapter's responsibility.
 [notary.ts](../src/prover/notary.ts) selects one build-owned notary address from the decoded
 ledger. X uses it for both sessions; GitHub sends it unchanged to the Bridge and
 uses it for the browser identity session. The ledger package contains no endpoints.
+
+## Token layout alignment
+
+The token layouts follow [spec PR #31 at ae33a29](https://github.com/libid-org/libid/blob/ae33a29e454198212215764c167eb10f624d926a/specs/platform-ceremonies.md),
+REQ-PLAT-56A/B/C and §6.4. X reveals its entire request as one range. GitHub
+admits one revealed prefix followed by one committed suffix covering the trailing
+`&client_secret=…` field, matching the
+[Rust layout builder](https://github.com/libid-org/libid-rs/blob/501f094bf10f776c2227ef345908f507a0c80fd0/crates/libid-transcript/src/ceremony.rs).
+No hidden-header or per-field compatibility layout is accepted. Both paths
+check the five permitted token headers in any order, reject duplicates and
+non-CRLF/folded framing, and compare Content-Length with the complete body length,
+including GitHub's signed committed suffix. Authority still comes from the
+attested TLS server identity, not Host.
+
+**Unresolved profile deviation:** GitHub identity requests carry the pinned
+`X-GitHub-Api-Version: 2022-11-28` and `User-Agent: libid-ceremony` alongside the
+other four specified headers. PR #31's exact five-header list omits User-Agent,
+which [GitHub requires](https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api#user-agent-required).
+The profile and its ledger verifier must admit that sixth header before these
+identity attestations can qualify against them. Browser selectors require the
+complete six-header set; they do not accept arbitrary extra headers.
+
+Regression coverage is in [transcript tests](../src/prover/transcript.test.ts),
+[GitHub admission](../src/platforms/github/1/token.test.ts), and
+[attestation correlation](../src/prover/notarization/notarize.test.ts). This covers
+adjacent GitHub `id`/`login` disclosures as well as token requests. Fixtures model
+native range coalescing; they do not establish a live notarized ceremony.

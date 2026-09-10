@@ -1,12 +1,12 @@
 import { isUserId } from '../../types.js'
 import { isUserName } from './types.js'
-import { findUnique, quotedRange, decodePrintable } from '../../../prover/transcript.js'
+import { quotedRange, decodePrintable, tokenRequestBody } from '../../../prover/transcript.js'
 import { bytesEqual } from '../../../primitives.js'
 import type { ByteRange, RevealRanges, Transcript } from '../../../prover/notarization/notarize.js'
 import type { ExactHttpRequest } from '../../../prover/notarization/session.js'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
-const TOKEN_LINE = encoder.encode('POST /2/oauth2/token HTTP/1.1\r\n')
+const TOKEN_LINE = 'POST /2/oauth2/token HTTP/1.1'
 const IDENTITY_LINE = 'GET /2/users/me HTTP/1.1'
 const AUTHORIZATION_PREFIX = 'authorization: Bearer '
 const ACCESS_TOKEN = encoder.encode('"access_token":"')
@@ -54,6 +54,7 @@ function tokenBody(input: TokenRequestInput): string {
 }
 
 export function buildTokenRequest(input: TokenRequestInput): ExactHttpRequest {
+  const body = encoder.encode(tokenBody(input))
   return {
     url: 'https://api.x.com/2/oauth2/token',
     method: 'POST',
@@ -63,10 +64,11 @@ export function buildTokenRequest(input: TokenRequestInput): ExactHttpRequest {
     headers: {
       Host: ascii('api.x.com'),
       'Content-Type': ascii('application/x-www-form-urlencoded'),
+      'Content-Length': ascii(String(body.length)),
       Accept: ascii('application/json'),
       Connection: ascii('close'),
     },
-    body: encoder.encode(tokenBody(input)),
+    body,
   }
 }
 
@@ -91,31 +93,17 @@ export function selectTokenReveals(
   transcript: Transcript,
   input: TokenRequestInput,
 ): TokenRevealSelection {
-  if (!bytesEqual(transcript.sent.subarray(0, TOKEN_LINE.length), TOKEN_LINE)) {
-    return invalid('token request line changed')
-  }
-  const separator = encoder.encode('\r\n\r\n')
-  const bodyStart =
-    findUnique(transcript.sent, separator, 'token header terminator') + separator.length
-  const body = encoder.encode(tokenBody(input))
-  if (!bytesEqual(transcript.sent.subarray(bodyStart), body)) {
+  const body = tokenRequestBody(transcript.sent, TOKEN_LINE, 'api.x.com')
+  if (!bytesEqual(body, encoder.encode(tokenBody(input)))) {
     return invalid('token request body changed')
   }
-  const bodyRanges: ByteRange[] = []
-  let fieldStart = bodyStart
-  for (let offset = 0; offset < body.length; offset++) {
-    if (body[offset] !== 0x26) continue
-    bodyRanges.push({ start: fieldStart, end: bodyStart + offset + 1 })
-    fieldStart = bodyStart + offset + 1
-  }
-  bodyRanges.push({ start: fieldStart, end: transcript.sent.length })
 
   const accessToken = quotedRange(transcript.recv, ACCESS_TOKEN, 'access_token')
   const token = decodePrintable(accessToken.value, 'access token', MAX_BEARER_BYTES)
   const valueStart = accessToken.range.start + ACCESS_TOKEN.length
   return {
     ranges: {
-      sent: [{ start: 0, end: TOKEN_LINE.length }, ...bodyRanges],
+      sent: [{ start: 0, end: transcript.sent.length }],
       recv: [
         { start: accessToken.range.start, end: valueStart },
         { start: accessToken.range.end - 1, end: accessToken.range.end },

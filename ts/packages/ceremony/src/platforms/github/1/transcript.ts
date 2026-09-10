@@ -15,6 +15,7 @@ export function identityRequest(bearer: string): ExactHttpRequest {
         Authorization: `Bearer ${bearer}`,
         Accept: 'application/vnd.github+json',
         'User-Agent': 'libid-ceremony',
+        'X-GitHub-Api-Version': '2022-11-28',
         Connection: 'close',
       }).map(([k, v]) => [k, encoder.encode(v)]),
     ),
