@@ -482,41 +482,50 @@ noncanonical encodings fail before use.
 ```ts
 type CeremonyStage =
   | 'authorization'
+  | 'code-exchange'
+  | 'identity-fetch'
+  | 'proof-preparation'
   | 'proof-generation'
+  | 'finalizing'
 
-interface PlatformStep {
-  code: string
-  label: string
-  status: 'started' | 'completed' | 'failed'
-  progress: number
-}
-
-interface CeremonyEvent {
-  stage: CeremonyStage
-  platformStep: PlatformStep | null
-  timestamp: number
-}
+type CeremonyEvent =
+  | { type: 'stage'; stage: CeremonyStage; timestamp: number }
+  | { type: 'step'; platformStep: PlatformStep; timestamp: number }
+  | { type: 'finished'; outcome: 'success' | 'denied' | 'cancelled'; timestamp: number }
+  | { type: 'finished'; outcome: 'failed'; code: FailureCode | null; timestamp: number }
 ```
 
-The application-side `Ceremony` client owns the common stage. It enters
-`authorization` when `proveUserIdentity()` starts and `proof-generation`
-immediately before it sends `AppStartProver` after `ProverReady`.
-The latter includes Prover-side OAuth validation, platform steps, proof
-delivery, and immediate `OAuthProof` assembly. There is no separate
-`oauth-validation` stage: the client does not observe that internal boundary.
-The client publishes these transitions from its own control flow; no callback
-lifecycle message or platform-step inference changes the common stage.
+Stages form a sequential UI timeline. Google uses authorization → proof preparation →
+proof generation; X and GitHub use all six stages in the order above. A stage whose
+work is already complete may be brief; concurrent work is never delayed for display.
 
-Each platform-ceremony-version prover leaf owns its closed diagnostic-span
-catalog and partial-order rules beside the code which performs it; it cannot
-select a common stage. Spans may overlap, and the client otherwise does not
-interpret that catalog. `label` is bounded package-owned display text for the
-current code, and `progress` is a finite monotonic value in `[0, 1)` derived by
-the prover from completed weighted leaf spans. It is advisory milestone
-progress, not elapsed time or an estimated completion time. Neither
-common-stage nor platform-step events contain operation inputs, outputs,
-credentials, identities, witnesses, proofs, raw exceptions, or raw service
-errors.
+The client starts authorization with `proveUserIdentity()`. On `ProverReady`, it
+enters proof preparation for Google or code exchange for X/GitHub. Prover reports
+identity fetch after token admission, then proof preparation after identity extraction
+and the commitment openings needed for the witness are available. Witness execution
+starts proof generation; completed proof-backend teardown starts finalizing for
+X/GitHub, which covers outstanding attestations, correlations, delivery and client
+assembly. Backend preparation overlaps input collection, and final attestations
+overlap proving. Duplicate, backward and platform-inapplicable stage reports are
+ignored. Detailed step events do not change the stage.
+
+Exactly one `finished` event follows acceptance of the assembled result, denial,
+local cancellation or failure, before the result promise settles. The client retires
+the run before notifying observers; late messages and reentrant cancellation cannot
+change its result. Success means structurally accepted output, not cryptographic
+verification. A failed event carries a standardized `FailureCode`, or `null` for a
+local failure without a catalog code. Raw errors and proof material remain absent.
+
+Stage and terminal timestamps use the client's `performance.timeOrigin +
+performance.now()` clock at observation, so differences measure sequential UI elapsed
+time, including transport delay. Detailed step timestamps retain the Prover clock.
+Each platform owns its diagnostic step catalog: `{ code, label, status, progress }`.
+Steps may overlap; status is `started`, `completed` or `failed`, and weighted progress
+is advisory, finite and monotonic, topping out at 0.95. A successful terminal event
+lets the UI display 100%. These timings are diagnostics, not completion estimates.
+
+This event expansion supersedes the previous two-stage API and step-only CCDP
+notification for this unreleased package. Deploy matching client and CCDP builds.
 
 `CeremonyEvent` is advisory. The application may project it into broader Job
 progress, but confirmation, submission, and finality remain outside this

@@ -206,3 +206,126 @@ test('private configuration and generated files are not served', async ({ reques
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+for (const [platform, name] of [
+  ['google', 'Google'],
+  ['x', 'X'],
+  ['github', 'GitHub'],
+]) {
+  test(`${name} stage timings survive overlapping progress and freeze on finish`, async ({
+    page,
+    context,
+  }) => {
+    await page.route(configUrl, (route) =>
+      route.fulfill({
+        json: {
+          ...config,
+          platforms: { [platform]: { clientId: 'client', ceremonyVersions: [1] } },
+        },
+      }),
+    )
+    await context.route(`${ccdp}/popup-test/**`, (route) =>
+      route.fulfill({
+        contentType: 'text/javascript',
+        body: readFileSync(
+          new URL(
+            new URL(route.request().url()).pathname.slice('/popup-test/'.length),
+            import.meta.resolve('@libid/popup'),
+          ),
+        ),
+      }),
+    )
+    const document = (
+      prover: boolean,
+    ) => `<!doctype html><title>Stage transport fixture</title><script type="module">
+      import { PopupConnection, PopupWindow } from '${ccdp}/popup-test/index.js';
+      const id = new URLSearchParams(location.hash.slice(1)).get('ceremonyId');
+      const connection = PopupConnection.accept(PopupWindow.current(location.hash, { scope: '/' }), {
+        connectionId: id, allowedApplicationOrigins: ['http://localhost:4692'],
+      });
+      ${
+        prover
+          ? `
+        connection.on({ type: 'app-start-prover', decode: value => value }, () => { window.stageConnection = connection; });
+      `
+          : ''
+      }
+      await connection.ready;
+      connection.send({ type: '${prover ? 'prover-ready' : 'prefetch-started'}' });
+    </script>`
+    await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
+      route.fulfill({ contentType: 'text/html', body: document(false) }),
+    )
+    await context.route(`${ccdp}/stage-test**`, (route) =>
+      route.fulfill({ contentType: 'text/html', body: document(true) }),
+    )
+    // Simulated OAuth navigation and advisory events over the actual popup package.
+    // This test produces no tokens, attestations or proofs.
+    await context.route(/https:\/\/(accounts\.google\.com|x\.com|github\.com)\//, (route) => {
+      const id = new URL(route.request().url()).searchParams.get('state')!.slice(3)
+      return route.fulfill({
+        contentType: 'text/html',
+        body: `<script>location.replace(${JSON.stringify(`${ccdp}/stage-test#ceremonyId=${id}`)})</script>`,
+      })
+    })
+    await page.clock.install()
+    await page.goto('/')
+    const opened = page.waitForEvent('popup')
+    await page.getByRole('button', { name, exact: true }).click()
+    const popup = await opened
+    await popup.waitForFunction(
+      () => !!(window as unknown as { stageConnection?: unknown }).stageConnection,
+    )
+    const stages =
+      platform === 'google'
+        ? ['proof-generation']
+        : ['identity-fetch', 'proof-preparation', 'proof-generation', 'finalizing']
+    for (const stage of stages) {
+      await page.clock.runFor(1000)
+      await popup.evaluate((stage) => {
+        const connection = (
+          window as unknown as { stageConnection: { send(value: unknown): void } }
+        ).stageConnection
+        connection.send({ type: 'prover-notify-event', stage, timestamp: 1 })
+        connection.send({
+          type: 'prover-notify-event',
+          timestamp: 1,
+          platformStep: {
+            code: 'proof-backend-initialization',
+            label: 'Concurrent backend work',
+            status: 'completed',
+            progress: 0.5,
+          },
+        })
+      }, stage)
+      await expect(page.getByRole('status')).not.toContainText('Concurrent backend work')
+      await expect(page.locator('.stage-timings li').last()).toContainText(
+        stage === 'identity-fetch'
+          ? 'Fetching identity'
+          : stage === 'proof-preparation'
+            ? 'Preparing proof'
+            : stage === 'finalizing'
+              ? 'Finalizing'
+              : 'Generating proof',
+      )
+    }
+    await page.clock.runFor(1000)
+    await popup.evaluate(() => {
+      ;(
+        window as unknown as { stageConnection: { send(value: unknown): void } }
+      ).stageConnection.send({ type: 'cancel-ceremony' })
+    })
+    await expect(page.locator('#history')).toContainText('Denied')
+    const timings = page.locator('.stage-timings li')
+    await expect(timings).toHaveCount(platform === 'google' ? 3 : 6)
+    for (const text of await timings.allTextContents()) expect(text).toMatch(/ · \d+\.\d s$/)
+    for (const text of (await timings.allTextContents()).slice(1)) {
+      const seconds = Number(/ · ([\d.]+) s$/.exec(text)![1])
+      expect(seconds).toBeGreaterThanOrEqual(1)
+      expect(seconds).toBeLessThan(3)
+    }
+    const row = await page.locator('#history').textContent()
+    await page.clock.runFor(2000)
+    await expect(page.locator('#history')).toHaveText(row!)
+  })
+}

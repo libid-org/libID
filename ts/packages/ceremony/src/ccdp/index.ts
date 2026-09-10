@@ -1,5 +1,6 @@
-import { failureMessages, type FailureCode } from '../errors.js'
 import type { MessageType } from '@libid/popup'
+import { type FailureCode, failureMessages } from '../errors.js'
+import { type ProverStage, stages } from '../events.js'
 import { b64urlDecode, hasExactKeys, isRecord } from '../primitives.js'
 
 export const CCDP_VERSION = 1
@@ -145,14 +146,25 @@ export interface PlatformStep {
   status: 'started' | 'completed' | 'failed'
   progress: number
 }
-export interface ProverNotifyEvent {
+export type ProverNotifyEvent = {
   type: 'prover-notify-event'
-  platformStep: PlatformStep
   timestamp: number
-}
+} & ({ platformStep: PlatformStep } | { stage: ProverStage })
 export const ProverNotifyEvent = {
   type: 'prover-notify-event',
   decode(value: unknown): ProverNotifyEvent {
+    if (isRecord(value) && 'stage' in value) {
+      assertMessage(value, this.type, ['stage', 'timestamp'])
+      if (
+        typeof value.stage !== 'string' ||
+        !stages.slice(1).some((stage) => stage === value.stage) ||
+        typeof value.timestamp !== 'number' ||
+        !Number.isFinite(value.timestamp) ||
+        value.timestamp < 0
+      )
+        throw new TypeError('Invalid stage')
+      return value as ProverNotifyEvent
+    }
     assertMessage(value, this.type, ['platformStep', 'timestamp'])
     const s = value.platformStep
     if (

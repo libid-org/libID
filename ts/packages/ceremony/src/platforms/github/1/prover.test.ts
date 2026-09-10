@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { prove } from './prover.js'
 import type { ProverContext } from '../../../prover/context.js'
+import { prove } from './prover.js'
+
 const { admit } = vi.hoisted(() => ({ admit: vi.fn() }))
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
 vi.mock('../../../assets.js', async (original) => ({
@@ -28,6 +29,7 @@ function context(outcome: Record<string, string>): ProverContext {
     ceremonyId,
     signal: new AbortController().signal,
     onProgress: vi.fn(),
+    onStage: vi.fn(),
     request: {
       type: 'app-start-prover',
       platformId: 'github',

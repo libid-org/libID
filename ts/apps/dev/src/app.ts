@@ -1,14 +1,16 @@
-import { CeremonyError } from '@libid/ceremony/client'
-import type { LedgerId } from '@libid/ledger'
-import { testnet } from '@libid/ledger/testing'
 import {
-  createCeremonyClient,
   type Ceremony,
   type CeremonyClient,
+  CeremonyError,
+  type CeremonyEvent,
+  type CeremonyStage,
+  createCeremonyClient,
   type IdentityResult,
   type PlatformId,
 } from '@libid/ceremony/client'
-import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
+import type { LedgerId } from '@libid/ledger'
+import { testnet } from '@libid/ledger/testing'
+import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { sha256 } from '@noble/hashes/sha2.js'
 
 declare global {
@@ -69,8 +71,17 @@ async function initialize() {
     controls()
   }
 }
+const stageNames: Record<CeremonyStage, string> = {
+  authorization: 'Authorization',
+  'code-exchange': 'Exchanging code',
+  'identity-fetch': 'Fetching identity',
+  'proof-preparation': 'Preparing proof',
+  'proof-generation': 'Generating proof',
+  finalizing: 'Finalizing',
+}
 function beginRun(platform: PlatformId) {
-  const started = performance.now()
+  const now = () => performance.timeOrigin + performance.now()
+  const started = now()
   const row = document.createElement('tr')
   const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—'].map((text) => {
     const cell = document.createElement('td')
@@ -80,9 +91,54 @@ function beginRun(platform: PlatformId) {
   })
   document.querySelector('#history')!.prepend(row)
   document.querySelector<HTMLElement>('#history-empty')!.hidden = true
-  return (outcome: string) => {
+  const timings = document.createElement('ol')
+  timings.className = 'stage-timings'
+  const timingsCell = document.createElement('td')
+  timingsCell.append(timings)
+  row.append(timingsCell)
+  let current: { stage: CeremonyStage; started: number; cell: HTMLLIElement } | undefined
+  let finished = false
+  const duration = (start: number, end: number) =>
+    `${Math.max(0, (end - start) / 1000).toFixed(1)} s`
+  const render = (timestamp = now()) => {
+    cells[3]!.textContent = duration(started, timestamp)
+    if (current)
+      current.cell.textContent = `${stageNames[current.stage]} · ${duration(current.started, timestamp)}`
+  }
+  const timer = setInterval(render, 100)
+  const finish = (outcome: string, timestamp = now()) => {
+    if (finished) return
+    finished = true
+    clearInterval(timer)
+    render(timestamp)
     cells[2]!.textContent = outcome
-    cells[3]!.textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`
+  }
+  return {
+    finish,
+    onEvent(event: CeremonyEvent) {
+      if (finished || event.type === 'step') return
+      if (event.type === 'finished') {
+        finish(
+          event.outcome === 'success'
+            ? 'Proof received'
+            : event.outcome === 'denied'
+              ? 'Denied'
+              : event.outcome === 'cancelled'
+                ? 'Cancelled'
+                : event.outcome === 'failed' && event.code
+                  ? `Failed (${event.code})`
+                  : 'Failed',
+          event.timestamp,
+        )
+        return
+      }
+      render(event.timestamp)
+      const cell = document.createElement('li')
+      const first = !current
+      current = { stage: event.stage, started: first ? started : event.timestamp, cell }
+      timings.append(cell)
+      render(event.timestamp)
+    },
   }
 }
 function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformId) {
@@ -91,7 +147,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     return
   }
   const id = crypto.randomUUID()
-  const finishRun = beginRun(platform)
+  const run = beginRun(platform)
   launch.target = `ceremony-dev-${id}`
   // Keep creation and the native-anchor fallback inside the same user gesture.
   const popup = PopupWindow.open(launch.target, 'width=480,height=720')
@@ -118,7 +174,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     status.textContent = 'Could not start the ceremony. Close any remaining popup and retry.'
     window.result = { status: 'failed' }
     result.textContent = 'No ceremony started.'
-    finishRun('Failed to start')
+    run.finish('Failed to start')
     void connection?.close().catch(() => {})
     connection = undefined
     controls()
@@ -129,11 +185,9 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
   if (popup.opened) event.preventDefault()
   status.textContent = 'Opening authorization…'
   controls()
-  const off = ceremony.onEvent(({ stage, platformStep }) => {
-    status.textContent =
-      stage === 'authorization'
-        ? 'Complete authorization in the popup.'
-        : `Generating proof${platformStep ? `: ${platformStep.label}` : '…'}`
+  const off = ceremony.onEvent((event) => {
+    run.onEvent(event)
+    if (event.type === 'stage') status.textContent = `${stageNames[event.stage]}…`
   })
   let failed = false
   void current.closed.then(() => {
@@ -147,7 +201,6 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     .proveUserIdentity()
     .then((outcome) => {
       window.result = outcome
-      finishRun(outcome.status === 'denied' ? 'Denied' : 'Proof received')
       result.textContent =
         outcome.status === 'denied'
           ? 'Authorization was denied.'
@@ -158,13 +211,6 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
       const cancelled = error instanceof Error && error.name === 'AbortError'
       failed = !cancelled
       window.result = { status: cancelled ? 'cancelled' : 'failed' }
-      finishRun(
-        cancelled
-          ? 'Cancelled'
-          : error instanceof CeremonyError
-            ? `Failed (${error.code})`
-            : 'Failed',
-      )
       result.textContent = cancelled
         ? 'Ceremony cancelled.'
         : error instanceof CeremonyError

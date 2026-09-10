@@ -1,7 +1,6 @@
-import { CeremonyError, ceremonyError } from '../../../errors.js'
-import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
+import { CeremonyError, ceremonyError } from '../../../errors.js'
 import { isRecord } from '../../../primitives.js'
 import { buildBearerLinkWitness } from '../../../prover/bearerLink.js'
 import type { ProverContext } from '../../../prover/context.js'
@@ -12,6 +11,7 @@ import { Progress } from '../../../prover/progress.js'
 import { readBody } from '../../../response.js'
 import { isFormClientId } from '../../authorization.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
+import type { Identity } from '../../types.js'
 import { circuit } from './assets.js'
 import { admitTokenResponse, decodeTokenResponse, encodeTokenRequest } from './token.js'
 import { identityRequest, selectIdentity } from './transcript.js'
@@ -87,6 +87,7 @@ export async function prove(
       .catch((error) => {
         throw ceremonyError(error, 'token-exchange')
       })
+    context.onStage('identity-fetch')
     const session = await prepareNotarization(
       'https://api.github.com/user',
       request.notaryAddress!,
@@ -106,6 +107,7 @@ export async function prove(
       throw new Error('Invalid GitHub identity')
     const result = await session.reveal(selected.ranges)
     void result.attestation.catch((error) => controller.abort(error))
+    context.onStage('proof-preparation')
     const inputs = buildBearerLinkWitness(
       token.accessToken,
       admitted.bearer,

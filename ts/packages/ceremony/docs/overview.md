@@ -36,8 +36,8 @@ const ceremony = client.new(
 )
 anchor.href = ceremony.launchUrl
 if (popup.opened) event.preventDefault() // otherwise allow the real anchor
-const off = ceremony.onEvent(({ stage, platformStep }) => {
-  // Optional advisory application UI; the Prover's own UI remains authoritative.
+const off = ceremony.onEvent((event) => {
+  // Use event.type to render stages, detailed steps, or the final outcome.
 })
 try {
   const result = await ceremony.proveUserIdentity()

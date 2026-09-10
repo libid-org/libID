@@ -165,17 +165,24 @@ restart the run.
 ### ProverNotifyEvent
 
 ```ts
-interface ProverNotifyEvent {
+type ProverNotifyEvent = {
   type: 'prover-notify-event'
+  timestamp: number
+} & ({
   platformStep: {
     code: string
     label: string
     status: 'started' | 'completed' | 'failed'
     progress: number
   }
-  timestamp: number
-}
+} | { stage: Exclude<CeremonyStage, 'authorization'> })
 ```
+
+Exactly one of `stage` or `platformStep` is present. Stage values and platform
+chains are defined by the [client event contract](client.md#progress-cancellation-and-recovery).
+Prover cannot claim terminal success through an advisory notification; the client
+emits `finished` only from its own result handling. Stage reports never decide
+whether a result is accepted.
 
 `platformStep.code` belongs to the selected platform ceremony version's closed
 step set. `label` is nonempty display text of at most 96 UTF-8 bytes without

@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { startProver } from './prover.js'
 import type { ProverContext } from '../../prover/context.js'
+import { startProver } from './prover.js'
+
 const { connection, prove } = vi.hoisted(() => ({
   connection: {
     ready: Promise.resolve(),
@@ -60,5 +61,56 @@ it.each(['google', 'x', 'github'])(
     )
     expect(context).not.toHaveProperty('ledgerId')
     expect(context.oauthReturn.fragment).toBe('#error=access_denied')
+  },
+)
+
+it.each(['google', 'x', 'github'])(
+  'forwards %s stage milestones while proof steps remain independent',
+  async (platformId) => {
+    vi.stubGlobal('location', { origin: 'https://ccdp.test' })
+    vi.stubGlobal('crossOriginIsolated', true)
+    vi.stubGlobal('Worker', vi.fn())
+    prove.mockImplementationOnce(async (context) => {
+      if (platformId !== 'google') {
+        context.onStage('identity-fetch')
+        context.onStage('proof-preparation')
+      }
+      context.onProgress(
+        { code: 'witness', label: 'Generating witness', status: 'started', progress: 0.2 },
+        1,
+      )
+      context.onProgress(
+        {
+          code: 'proof-backend-destroy',
+          label: 'Finishing proof',
+          status: 'completed',
+          progress: 0.95,
+        },
+        2,
+      )
+      return null
+    })
+    await startProver(
+      new URLSearchParams({
+        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        oauthQuery: '',
+        oauthFragment: '#error=access_denied',
+      }).toString(),
+    )
+    connection.on.mock.calls.find(([codec]) => codec.type === 'app-start-prover')![1]({
+      type: 'app-start-prover',
+      platformId,
+      platformCeremonyVersion: 1,
+    })
+    await vi.waitFor(() =>
+      expect(connection.send).toHaveBeenCalledWith({ type: 'cancel-ceremony' }),
+    )
+    const events = connection.send.mock.calls.map(([event]) => event)
+    expect(events.filter((e) => 'stage' in e).map((e) => e.stage)).toEqual(
+      platformId === 'google'
+        ? ['proof-generation']
+        : ['identity-fetch', 'proof-preparation', 'proof-generation', 'finalizing'],
+    )
+    expect(events.filter((e) => 'platformStep' in e)).toHaveLength(2)
   },
 )

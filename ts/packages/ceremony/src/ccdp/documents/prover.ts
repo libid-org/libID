@@ -1,11 +1,12 @@
-import { claimRootWorker } from '../../prefetch/registration.js'
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { ceremonyError, reportFailure, type FailureCode } from '../../errors.js'
-import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
-import { AppStartProver, CancelCeremony, ProverNotifyEvent, ProverIdentityProof } from '../index.js'
-import { readProver, route } from '../navigation.js'
-import { progressView, view } from '../../ui.js'
+import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
+import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
+import { claimRootWorker } from '../../prefetch/registration.js'
 import type { ProverContext } from '../../prover/context.js'
+import { progressView, view } from '../../ui.js'
+import { AppStartProver, CancelCeremony, ProverIdentityProof, ProverNotifyEvent } from '../index.js'
+import { readProver, route } from '../navigation.js'
+
 const implementations: Record<
   string,
   () => Promise<{
@@ -73,6 +74,20 @@ export async function startProver(fragment: string): Promise<void> {
         ceremonyId: retained!.ceremonyId,
         oauthReturn: retained!.oauthReturn,
         signal: controller.signal,
+        onStage(stage) {
+          if (ended) return
+          try {
+            connection!.send(
+              ProverNotifyEvent.decode({
+                type: 'prover-notify-event',
+                stage,
+                timestamp: performance.timeOrigin + performance.now(),
+              }),
+            )
+          } catch {
+            /* Advisory stage reporting cannot decide the result. */
+          }
+        },
         onProgress(platformStep, timestamp) {
           if (ended) return
           try {
@@ -81,6 +96,15 @@ export async function startProver(fragment: string): Promise<void> {
               platformStep,
               timestamp,
             })
+            if (!('platformStep' in event)) return
+            if (platformStep.code === 'witness' && platformStep.status === 'started')
+              context.onStage('proof-generation')
+            if (
+              request.platformId !== 'google' &&
+              platformStep.code === 'proof-backend-destroy' &&
+              platformStep.status === 'completed'
+            )
+              context.onStage('finalizing')
             if (event.platformStep.progress < last) return
             last = event.platformStep.progress
             ui!.update(last, platformStep.label)
