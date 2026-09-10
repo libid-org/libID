@@ -6,7 +6,7 @@
     <title>Ceremony development</title>
     <style>
       :root { font: 16px/1.5 system-ui, sans-serif; color-scheme: light dark; }
-      body { max-width: 42rem; margin: 3rem auto; padding: 0 1.25rem; }
+      body { max-width: 64rem; margin: 3rem auto; padding: 0 1.25rem; }
       h1 { margin-bottom: .25rem; }
       .muted { opacity: .75; }
       dl { display: grid; grid-template-columns: 7rem 1fr; gap: .5rem; }
@@ -17,8 +17,11 @@
       .launch { border: 1px solid currentColor; border-radius: .25rem; text-decoration: none; cursor: pointer; }
       [aria-disabled="true"] { opacity: .5; cursor: default; }
       #status { min-height: 3rem; }
+      .history-scroll { overflow-x: auto; }
       table { width: 100%; border-collapse: collapse; }
       th, td { text-align: left; padding: .5rem; border-bottom: 1px solid GrayText; }
+      .stage-timings { margin: 0; padding-left: 1.25rem; font-size: .875rem; }
+      td { vertical-align: top; }
       #result { white-space: pre-wrap; overflow-wrap: anywhere; }
     </style>
   </head>
@@ -48,10 +51,12 @@
       <h2 id="history-heading">Run history</h2>
       <p class="muted">Newest first. Cleared when you reload this page.</p>
       <p id="history-empty">No ceremonies started.</p>
-      <table aria-labelledby="history-heading">
-        <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th></tr></thead>
-        <tbody id="history"></tbody>
-      </table>
+      <div class="history-scroll">
+        <table aria-labelledby="history-heading">
+          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col">Stages</th></tr></thead>
+          <tbody id="history"></tbody>
+        </table>
+      </div>
     </section>
     <script type="module" src="/app.ts"></script>
   </body>

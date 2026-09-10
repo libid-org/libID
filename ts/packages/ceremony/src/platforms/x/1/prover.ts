@@ -1,7 +1,6 @@
-import { CeremonyError } from '../../../errors.js'
-import type { Identity } from '../../types.js'
 import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
+import { CeremonyError } from '../../../errors.js'
 import { isRecord } from '../../../primitives.js'
 import { buildBearerLinkWitness } from '../../../prover/bearerLink.js'
 import type { ProverContext } from '../../../prover/context.js'
@@ -11,6 +10,7 @@ import { prepareNotarization } from '../../../prover/notarization/session.js'
 import { Progress } from '../../../prover/progress.js'
 import { isFormClientId } from '../../authorization.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
+import type { Identity } from '../../types.js'
 import { circuit } from './assets.js'
 import {
   buildIdentityRequest,
@@ -98,6 +98,7 @@ export async function prove(
           return value
         }),
     )
+    context.onStage('identity-fetch')
     const identity = await identitySession
     const identityTranscript = await progress.step('identity-session', () =>
       identity.send(buildIdentityRequest(bearer)),
@@ -122,6 +123,7 @@ export async function prove(
       observe(identity.reveal({ sent: ranges.sent, received: ranges.recv })),
     ])
     const final = observe(Promise.all([first.attestation, second.attestation]))
+    context.onStage('proof-preparation')
     const inputs = buildBearerLinkWitness(
       bearer,
       bearerOpening(first.openings, 'received', selection.bearerRange, bearer),

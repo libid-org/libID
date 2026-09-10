@@ -1,11 +1,12 @@
 import type { LedgerId } from '@libid/ledger'
 import { mainnet, testnet } from '@libid/ledger/testing'
+import type { Message, MessageType, PopupConnection } from '@libid/popup'
+import { describe, expect, it, vi } from 'vitest'
 import { deriveAuthorizationDigest } from '../platforms/authorization.js'
 import { b64urlEncode } from '../primitives.js'
-import { describe, expect, it, vi } from 'vitest'
-import type { Message, MessageType, PopupConnection } from '@libid/popup'
-import { clientFromConfig } from './ceremony.js'
+import { type CeremonyEvent, clientFromConfig } from './ceremony.js'
 import { validateCeremonyConfig } from './config.js'
+
 class Connection implements PopupConnection<Message> {
   ready = Promise.resolve()
   closed = new Promise<never>(() => {})
@@ -59,7 +60,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
   it('uses distinct origins and frozen input; never receives raw OAuth return', async () => {
     const { connection: c, ceremony, data } = setup()
     const events: string[] = []
-    ceremony.onEvent((e) => events.push(e.stage))
+    ceremony.onEvent((e) => events.push(e.type === 'stage' ? e.stage : e.type))
     data[0] = 9
     const pending = ceremony.proveUserIdentity()
     expect(c.navigate.mock.calls[0][0]).toBe('https://ccdp.test/ccdp/v1/prefetch')
@@ -96,10 +97,10 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       ),
     )
     expect(result.oauthProof.proof.identityProof).toEqual(new Uint8Array([1]))
-    expect(events).toEqual(['authorization', 'proof-generation'])
+    expect(events).toEqual(['authorization', 'proof-preparation', 'finished'])
     expect(c.close).not.toHaveBeenCalled()
     c.receive({ type: 'prover-identity-proof', identity, proof })
-    expect(events).toEqual(['authorization', 'proof-generation'])
+    expect(events).toEqual(['authorization', 'proof-preparation', 'finished'])
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
   })
   it('cancellation wins over late delivery and preserves the popup [LIBID-BROWSER-005]', async () => {
@@ -454,4 +455,134 @@ it('preserves the Prover failure code and safe message for the application', asy
     code: 'oauth-return',
     message: 'Invalid OAuth return or provider authorization error.',
   })
+})
+
+it.each(['google', 'x', 'github'] as const)(
+  'publishes a monotonic %s stage chain independently of overlapping steps [LIBID-BROWSER-007]',
+  async (platformId) => {
+    const connection = new Connection()
+    const ceremony = clientFromConfig({
+      ...config,
+      platforms: { [platformId]: { clientId: 'client', ceremonyVersions: [1] } },
+    }).new(connection, id, testnet, platformId, new Uint8Array(32), new Uint8Array())
+    const events: CeremonyEvent[] = []
+    ceremony.onEvent((event) => events.push(event))
+    const result = ceremony.proveUserIdentity()
+    connection.receive({ type: 'prefetch-started' })
+    connection.receive({ type: 'prover-ready' })
+    const notify = (stage: string) =>
+      connection.receive({ type: 'prover-notify-event', stage, timestamp: 1 })
+    for (const stage of [
+      'code-exchange',
+      'identity-fetch',
+      'proof-preparation',
+      'identity-fetch',
+      'proof-generation',
+      'finalizing',
+    ]) {
+      notify(stage)
+      connection.receive({
+        type: 'prover-notify-event',
+        timestamp: 1,
+        platformStep: {
+          code: 'proof-backend-initialization',
+          label: 'Preparing proof system',
+          status: 'completed',
+          progress: 0.1,
+        },
+      })
+    }
+    connection.receive({ type: 'cancel-ceremony' })
+    await expect(result).resolves.toEqual({ status: 'denied' })
+    expect(events.filter((e) => e.type === 'stage').map((e) => e.stage)).toEqual(
+      platformId === 'google'
+        ? ['authorization', 'proof-preparation', 'proof-generation']
+        : [
+            'authorization',
+            'code-exchange',
+            'identity-fetch',
+            'proof-preparation',
+            'proof-generation',
+            'finalizing',
+          ],
+    )
+    expect(events.filter((e) => e.type === 'step')).toHaveLength(6)
+    expect(events.at(-1)).toMatchObject({ type: 'finished', outcome: 'denied' })
+    const timestamps = events.filter((e) => e.type !== 'step').map((e) => e.timestamp)
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b))
+  },
+)
+
+it.each(['success', 'denied', 'cancelled', 'failed', 'closed', 'invalid-result', 'setup'] as const)(
+  'finishes exactly once for %s, before settling the promise [LIBID-BROWSER-008]',
+  async (outcome) => {
+    const { ceremony, connection } = setup()
+    let close!: () => void
+    connection.closed = new Promise<never>((resolve) => {
+      close = () => resolve(undefined as never)
+    })
+    if (outcome === 'setup') connection.handlers.set('prover-ready', () => {})
+    const events: CeremonyEvent[] = []
+    let settled = false
+    const settledAtFinish: boolean[] = []
+    ceremony.onEvent((event) => {
+      events.push(event)
+      if (event.type === 'finished') {
+        settledAtFinish.push(settled)
+        // Observer reentry must not turn a success into cancellation or emit twice.
+        void ceremony.cancel()
+      }
+    })
+    const result = ceremony.proveUserIdentity().then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      },
+    )
+    if (outcome !== 'setup') {
+      connection.receive({ type: 'prefetch-started' })
+      connection.receive({ type: 'prover-ready' })
+      if (outcome === 'success' || outcome === 'invalid-result')
+        connection.receive({
+          type: 'prover-identity-proof',
+          identity,
+          proof: outcome === 'success' ? proof : {},
+        })
+      else if (outcome === 'denied') connection.receive({ type: 'cancel-ceremony' })
+      else if (outcome === 'cancelled') await ceremony.cancel()
+      else if (outcome === 'closed') close()
+      else
+        connection.receive({
+          type: 'abort-ceremony',
+          code: 'proof',
+          reason: 'Proof engine failed.',
+        })
+    }
+    await result
+    close()
+    connection.receive({ type: 'prover-identity-proof', identity, proof })
+    await ceremony.cancel()
+    expect(events.filter((e) => e.type === 'finished')).toEqual([
+      expect.objectContaining({
+        type: 'finished',
+        outcome: ['closed', 'invalid-result', 'setup'].includes(outcome) ? 'failed' : outcome,
+      }),
+    ])
+    expect(events.at(-1)?.type).toBe('finished')
+    expect(settledAtFinish).toEqual([false])
+    if (outcome === 'failed') expect(events.at(-1)).toMatchObject({ code: 'proof' })
+  },
+)
+
+it('stops event delivery after an observer cancels synchronously', async () => {
+  const { ceremony } = setup()
+  const events: CeremonyEvent[] = []
+  ceremony.onEvent((event) => {
+    if (event.type === 'stage') void ceremony.cancel()
+  })
+  ceremony.onEvent((event) => events.push(event))
+  await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ name: 'AbortError' })
+  expect(events).toEqual([expect.objectContaining({ type: 'finished', outcome: 'cancelled' })])
 })
