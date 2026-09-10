@@ -85,8 +85,9 @@ library package. Frontend edits use Vite's normal live reload.
 ## Walkthrough and checks
 
 Choose a platform, launch, and complete real provider consent. Cancel ends ceremony
-work; Close popup releases the application-owned connection. Completed ceremonies
-leave the connection available until you close it, then another attempt can start.
+work; Close popup releases the application-owned connection during a run. The app
+automatically closes the popup after success, denial, cancellation or failure,
+then enables another attempt. The ceremony library does not own this UI decision.
 The result summary never displays raw OAuth returns or attestations. An accepted
 result is retained only in `window.result` for the existing opt-in walkthrough and
 manual inspection; it is not written to storage or logged. Failed and cancelled

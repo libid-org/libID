@@ -70,9 +70,9 @@ for (const blocked of [false, true]) {
     await expect(page.getByRole('button', { name: 'Cancel ceremony' })).toBeEnabled()
     await page.getByRole('button', { name: 'Cancel ceremony' }).click()
     await expect(page.locator('#result')).toHaveText('Ceremony cancelled.')
-    await page.getByRole('button', { name: 'Close popup' }).click()
-    // A blocked programmatic open has no handle until the popup authenticates.
-    if (!popup.isClosed()) await popup.close()
+    // This inert fallback has no handle or authenticated carrier to receive closure.
+    if (blocked) await popup.close()
+    else await expect.poll(() => popup.isClosed()).toBe(true)
     await expect(page.getByRole('link', { name: 'Start ceremony' })).toHaveAttribute(
       'aria-disabled',
       'false',
