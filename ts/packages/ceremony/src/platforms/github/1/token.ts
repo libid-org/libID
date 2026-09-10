@@ -1,9 +1,8 @@
-import { tokenRequestBody } from '../../../prover/transcript.js'
-import { origin } from '../../../ccdp/index.js'
-import { parseJson } from '../../../prover/json.js'
-import { keccak_256 } from '@noble/hashes/sha3.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { keccak_256 } from '@noble/hashes/sha3.js'
+import { origin } from '../../../ccdp/index.js'
 import { b64urlDecode, bytesEqual, hasExactKeys, isRecord } from '../../../primitives.js'
+import { parseJson } from '../../../prover/json.js'
 import {
   type DecodedAttestedData,
   type DecodedRangeCommitment,
@@ -11,6 +10,7 @@ import {
 } from '../../../prover/notarization/decode.js'
 import type { CorrelatedCommitment } from '../../../prover/notarization/notarize.js'
 import type { NotaryAttestation } from '../../../prover/notarization/transport.js'
+import { jsonField, tokenRequestBody } from '../../../prover/transcript.js'
 
 const MAX_RESPONSE_BYTES = 3 * 1024 * 1024
 const MAX_ATTESTED_DATA_BYTES = 2 * 1024 * 1024
@@ -19,7 +19,6 @@ const ACCESS_TOKEN = /^[\x21-\x7e]{1,128}$/
 const CODE_VERIFIER = /^[A-Za-z0-9_-]{43}$/
 const encoder = new TextEncoder()
 const REQUEST_LINE = 'POST /login/oauth/access_token HTTP/1.1'
-const ACCESS_TOKEN_DELIMITER = encoder.encode('"access_token":"')
 const QUOTE = new Uint8Array([0x22])
 
 export interface TokenRequest {
@@ -131,9 +130,12 @@ function requireBearer(
 ): CorrelatedCommitment {
   if (decoded.received.revealed.length !== 2) return invalid('response reveal layout')
   const [delimiter, closingQuote] = decoded.received.revealed
+  const field = jsonField(delimiter.bytes, 'access_token')
   const bearerStart = delimiter.start + delimiter.bytes.length
   if (
-    !bytesEqual(delimiter.bytes, ACCESS_TOKEN_DELIMITER) ||
+    field.start !== 0 ||
+    field.valueStart !== delimiter.bytes.length - 1 ||
+    delimiter.bytes[field.valueStart] !== 34 ||
     !bytesEqual(closingQuote.bytes, QUOTE) ||
     closingQuote.start <= bearerStart
   ) {

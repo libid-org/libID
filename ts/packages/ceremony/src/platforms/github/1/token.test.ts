@@ -1,5 +1,5 @@
-import { keccak_256 } from '@noble/hashes/sha3.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
 import { b64urlEncode } from '../../../primitives.js'
 import {
@@ -268,6 +268,32 @@ describe('GitHub TokenResponse codec', () => {
 })
 
 describe('GitHub admission [LIBID-PROVER-004]', () => {
+  it.each([' ', '\t', '\r', '\n', ' \t\r\n'])(
+    'admits whitespace in the attested bearer anchor: %j',
+    (ws) => {
+      const delimiter = utf8(`"access_token"${ws}:${ws}"`)
+      const shift = delimiter.length - DELIMITER.length
+      const received: Direction = {
+        length: RECEIVED.length + shift,
+        revealed: [
+          { start: RESPONSE_PREFIX.length, bytes: delimiter },
+          { start: BEARER_END + shift, bytes: utf8('"') },
+        ],
+        commitments: RECEIVED.commitments.map((c, i) =>
+          i === 0
+            ? c
+            : {
+                ...c,
+                start: c.start + shift,
+                end: c.end + shift,
+              },
+        ),
+      }
+      const admitted = admitTokenResponse(response(SENT, received), BINDING)
+      expect(admitted.bearer.start).toBe(BEARER_START + shift)
+      expect(admitted.bearer.end).toBe(BEARER_END + shift)
+    },
+  )
   it('accepts one revealed request prefix and a committed secret suffix without signature verification', () => {
     const admitted = admitTokenResponse(response(), BINDING)
     expect(admitted.bearer.hash).toEqual(bearerHash)

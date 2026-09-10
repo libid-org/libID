@@ -1,4 +1,5 @@
 import type { ByteRange } from './notarization/notarize.js'
+
 const decoder = new TextDecoder('utf-8', { fatal: true })
 function invalid(reason: string): never {
   throw new Error(`Invalid transcript: ${reason}`)
@@ -20,17 +21,46 @@ export function findUnique(haystack: Uint8Array, needle: Uint8Array, name: strin
   return start
 }
 
+/** JSON whitespace only; offsets always remain relative to the original bytes. */
+export function skipJsonWhitespace(bytes: Uint8Array, start: number): number {
+  while ([32, 9, 10, 13].includes(bytes[start])) start++
+  return start
+}
+
+export function jsonField(
+  transcript: Uint8Array,
+  name: string,
+): { start: number; valueStart: number } {
+  const key = new TextEncoder().encode(`"${name}"`)
+  let found: { start: number; valueStart: number } | undefined
+  for (
+    let start = findFrom(transcript, key);
+    start >= 0;
+    start = findFrom(transcript, key, start + 1)
+  ) {
+    const colon = skipJsonWhitespace(transcript, start + key.length)
+    if (transcript[colon] !== 58) continue
+    if (found) return invalid(`${name} is duplicated`)
+    found = { start, valueStart: skipJsonWhitespace(transcript, colon + 1) }
+  }
+  return found ?? invalid(`${name} is missing`)
+}
+
 export function quotedRange(
   transcript: Uint8Array,
-  prefix: Uint8Array,
   name: string,
-): { range: ByteRange; value: Uint8Array } {
-  const start = findUnique(transcript, prefix, name)
-  const valueStart = start + prefix.length
+): { range: ByteRange; valueStart: number; value: Uint8Array } {
+  const field = jsonField(transcript, name)
+  if (transcript[field.valueStart] !== 34) return invalid(`${name} is not a string`)
+  const valueStart = field.valueStart + 1
   let end = valueStart
   while (end < transcript.length && transcript[end] !== 0x22) end++
   if (end === transcript.length) return invalid(`${name} is unterminated`)
-  return { range: { start, end: end + 1 }, value: transcript.slice(valueStart, end) }
+  return {
+    range: { start: field.start, end: end + 1 },
+    valueStart,
+    value: transcript.slice(valueStart, end),
+  }
 }
 
 export function decodePrintable(value: Uint8Array, name: string, maximum: number): string {

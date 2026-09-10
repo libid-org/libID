@@ -1,12 +1,14 @@
-import { isUserId } from '../../types.js'
-import { isUserName } from './types.js'
+import type { ExactHttpRequest, Transcript } from '../../../prover/notarization/session.js'
 import {
-  findUnique,
-  quotedRange,
   decodePrintable,
   identityBearerRange,
+  jsonField,
+  quotedRange,
+  skipJsonWhitespace,
 } from '../../../prover/transcript.js'
-import type { Transcript, ExactHttpRequest } from '../../../prover/notarization/session.js'
+import { isUserId } from '../../types.js'
+import { isUserName } from './types.js'
+
 const encoder = new TextEncoder()
 export function identityRequest(bearer: string): ExactHttpRequest {
   if (!/^[\x21-\x7e]{1,128}$/.test(bearer)) throw new Error('Invalid bearer')
@@ -33,15 +35,14 @@ export function selectIdentity(transcript: Transcript, bearer: string) {
     identityRequest(bearer).headers,
     bearer,
   )
-  const prefix = encoder.encode('"id":'),
-    idStart = findUnique(transcript.received, prefix, 'identity id'),
-    valueStart = idStart + prefix.length
+  const { start: idStart, valueStart } = jsonField(transcript.received, 'id')
   let end = valueStart
   while (transcript.received[end] >= 48 && transcript.received[end] <= 57) end++
   const userId = new TextDecoder().decode(transcript.received.slice(valueStart, end))
+  end = skipJsonWhitespace(transcript.received, end)
   if (!isUserId(userId) || ![44, 125].includes(transcript.received[end]))
     throw new Error('Invalid GitHub id')
-  const login = quotedRange(transcript.received, encoder.encode('"login":"'), 'identity login'),
+  const login = quotedRange(transcript.received, 'login'),
     userName = decodePrintable(login.value, 'identity login', 39)
   if (!isUserName(userName)) throw new Error('Invalid GitHub login')
   return {

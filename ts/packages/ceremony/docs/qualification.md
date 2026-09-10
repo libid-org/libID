@@ -489,3 +489,19 @@ distribution/real-loader/native-SWS checks, and all 33 HTTP browser cases passed
 across Chromium, Firefox and WebKit, including independently verified real Google
 fixture proofs and concurrent TLSN initialization. TypeScript, lint and formatting
 passed. Security/correctness, API and simplicity reviews had no findings.
+
+
+### JSON whitespace compatibility fix
+
+Manual Firefox GitHub execution exposed a valid `/user` response with a space
+following `"id":`. Allowing JSON whitespace in the identity transcript parser
+let that manual ceremony complete. This was not a released-verifier acceptance
+result: the prior Rust and Solidity readers also assumed compact field prefixes.
+
+The coordinated patch accepts JSON whitespace around colons in X/GitHub token
+and identity fields, and before GitHub integer terminators. Original transcript
+bytes, reveal offsets and bearer-only commitments are preserved. Existing
+compact fixtures remain covered; whitespace, malformed numbers, duplicate
+spellings and framing regressions have focused tests. Release/pin updates and
+end-to-end qualification against the updated verifier remain required before
+claiming released-stack compatibility.
