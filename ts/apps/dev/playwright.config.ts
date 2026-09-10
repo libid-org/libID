@@ -20,13 +20,8 @@ export default defineConfig({
     { name: 'ios-emulated', use: { ...devices['iPhone 15'], browserName: 'webkit' } },
   ],
   webServer: {
-    command: 'pnpm dev:app',
+    command: 'pnpm dev:app --port 4692',
     cwd: new URL('.', import.meta.url).pathname,
-    env: {
-      CEREMONY_APP_PORT: '4692',
-      CEREMONY_BRIDGE_ORIGIN: 'https://localhost:4682',
-      CEREMONY_CCDP_ORIGIN: process.env.CEREMONY_CCDP_ORIGIN ?? 'https://localhost:4683',
-    },
     url: 'https://localhost:4692',
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,

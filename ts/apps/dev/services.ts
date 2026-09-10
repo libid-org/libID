@@ -2,36 +2,28 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import type { Duplex } from 'node:stream'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { request } from 'node:http'
 import { createServer, type Server } from 'node:https'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { createServer as createViteServer, loadEnv, type ViteDevServer } from 'vite'
+import { createServer as createViteServer, type ViteDevServer } from 'vite'
 import { localhostTls } from './tls.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
-const env = { ...loadEnv('development', root, ''), ...process.env }
 const cache = join(root, '.cache/dev')
-const platforms = env.CEREMONY_PLATFORMS ?? readFileSync(join(root, 'oauth-clients.json'), 'utf8')
-const { GH_OAUTH_CLIENT_SECRET: _secret, ...publicEnv } = process.env
 // Rebuild the shared distribution; immutable assets reuse the build cache.
 execFileSync(
   'pnpm',
   ['--filter', '@libid/ceremony', 'build:ccdp-artifacts', '--out-dir', join(root, '.cache/ccdp')],
   {
     cwd: root,
-    env: publicEnv,
     stdio: 'inherit',
   },
 )
 mkdirSync(cache, { recursive: true })
-if (!!env.CEREMONY_TLS_CERT !== !!env.CEREMONY_TLS_KEY)
-  throw new Error('Set both CEREMONY_TLS_CERT and CEREMONY_TLS_KEY')
-const tls = env.CEREMONY_TLS_CERT
-  ? { cert: readFileSync(env.CEREMONY_TLS_CERT), key: readFileSync(env.CEREMONY_TLS_KEY!) }
-  : localhostTls(cache)
+const tls = localhostTls(cache)
 let frontend: ViteDevServer | undefined
 const servers: Server[] = []
 const sockets = new Set<Duplex>()
@@ -55,7 +47,7 @@ function stop(code: number) {
     }
   }
   // Keep this child alive through completion, including after a partial startup.
-  const down = spawn('docker', [...composeArgs, 'down'], { env: composeEnv, stdio: 'inherit' })
+  const down = spawn('docker', [...composeArgs, 'down'], { stdio: 'inherit' })
   down.on('error', () => console.error('Could not stop development containers. Check Docker.'))
   down.on('close', (code) => {
     if (code !== 0) process.exitCode = 1
@@ -66,13 +58,7 @@ process.once('SIGTERM', () => stop(0))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
-const composeEnv = {
-  ...publicEnv,
-  CEREMONY_PLATFORMS: platforms,
-  GH_OAUTH_CLIENT_SECRET: env.GH_OAUTH_CLIENT_SECRET ?? '',
-}
 const compose = spawn('docker', [...composeArgs, 'up', '--build', '--abort-on-container-exit'], {
-  env: composeEnv,
   stdio: 'inherit',
   detached: true,
 })
