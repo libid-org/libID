@@ -1,10 +1,10 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 
 const configUrl = 'https://localhost:4682/api/v1/ceremony/config'
-const ccdp = process.env.CEREMONY_CCDP_ORIGIN ?? 'https://localhost:4683'
+const ccdp = 'https://localhost:4683'
 const config = {
   redirectUri: 'https://localhost:4682/auth/callback',
   ccdpOrigin: ccdp,
@@ -193,13 +193,16 @@ test('private configuration and generated files are not served', async ({ reques
   const root = fileURLToPath(new URL('..', import.meta.url))
   const directory = mkdtempSync(join(root, '.cache/private-file-test-'))
   const file = join(directory, 'probe.json')
+  const privateConfig = join(root, `.env.${basename(directory)}`)
   writeFileSync(file, '{}')
+  writeFileSync(privateConfig, 'PRIVATE_TEST_VALUE=fixture', { flag: 'wx' })
   try {
-    for (const path of [join(root, '.env.example'), file]) {
+    for (const path of [privateConfig, file]) {
       const response = await request.get(`/@fs${path}`)
       expect(response.status(), path).toBe(403)
     }
   } finally {
+    rmSync(privateConfig)
     rmSync(directory, { recursive: true, force: true })
   }
 })

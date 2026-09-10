@@ -26,22 +26,17 @@ can connect to the same services; add their exact origins to the Bridge's
 
 ## Configuration
 
-Copy `.env.example` to `.env.local` inside `ts/apps/dev` if the
-defaults do not match your local services. When upgrading from the ceremony-owned
-setup, move your existing `ts/packages/ceremony/dev/.env.local` here; Git cannot
-move that untracked credential file for you. The old location remains ignored.
+Development configuration is fixed in the files that consume it:
 
-| Setting | Default |
-|---|---|
-| `CEREMONY_BRIDGE_ORIGIN` | `https://localhost:4682` |
-| `CEREMONY_CCDP_ORIGIN` | `https://localhost:4683` |
-| `CEREMONY_APP_PORT` | `4691` (occupied ports fail instead of silently moving) |
-| `CEREMONY_TLS_CERT`, `CEREMONY_TLS_KEY` | Generated localhost certificate in `.cache/dev/` |
+- [Compose](compose.yaml) defines the Bridge/notary/SWS services, OAuth registrations
+  and intentionally public GitHub development credential.
+- [Frontend](src/app.ts) names Bridge, CCDP and the local-notary ledger fixture.
+- [Vite](vite.config.ts) serves the application on HTTPS port 4691.
+- [Service launcher](services.ts) exposes HTTPS ports 4682, 4683 and 4687.
 
-Only the two public origins enter the browser bundle. OAuth client IDs come from
-Bridge configuration. The local launcher defaults to the public registrations in
-[oauth-clients.json](oauth-clients.json), so they are declared once.
-Client secrets belong exclusively to the Bridge.
+No environment file or credential provisioning is needed. Existing `.env.local`
+files are no longer loaded by the launcher. The four browser origins remain
+separate through their ports; they share the localhost site.
 
 Install `mkcert` first (`brew install mkcert` with Homebrew; Firefox on macOS also
 needs `brew install nss`). On the first `dev` startup, the script runs `mkcert -install`
@@ -55,9 +50,8 @@ certificates are regenerated. The older self-signed `cert.pem` is no longer used
 If you remove the CA from your trust store, run `mkcert -install` to restore trust.
 
 The same localhost certificate can serve Bridge and CCDP on different ports. Other
-machines/devices need their own trust setup. To use existing certificates instead,
-set both `CEREMONY_TLS_CERT` and `CEREMONY_TLS_KEY` to absolute paths; this skips
-mkcert entirely. `build` does not generate certificates or install trust.
+machines/devices need their own trust setup. `build` does not generate certificates
+or install trust.
 
 Configure the Bridge to allow the application's exact origin and publish the same
 CCDP origin as the app's popup allowlist. Register the Bridge callback URL with the
@@ -98,8 +92,6 @@ not independent verification. The app does not verify browser proofs itself.
 pnpm --filter @libid/dev typecheck
 pnpm --filter @libid/dev... build
 pnpm --filter @libid/dev test:e2e
-# Also exercise a Bridge and CCDP sharing one origin:
-CEREMONY_CCDP_ORIGIN=https://localhost:4682 pnpm --filter @libid/dev test:e2e --project chromium
 ```
 
 The focused browser tests run on port 4692 in all five existing Playwright profiles.
@@ -107,7 +99,7 @@ They intercept Bridge configuration and an inert Prefetch page to check unavaila
 retry behavior, platform admission, actual popup/native-anchor launch and cancellation.
 These tests establish frontend behavior only, not real OAuth or proof generation.
 `build` emits the frontend to `.cache/dev/app`. Neither this app nor its ledger
-alias is included in ceremony's production build.
+fixture is included in ceremony's production build.
 
 A complete walkthrough still requires a compatible live Bridge and CCDP. See
 [qualification](../../packages/ceremony/docs/qualification.md#repeatable-opt-in-real-consent) for the manual runner,
@@ -134,17 +126,17 @@ and the browser's `https://localhost:4687` therefore name the same notary host,
 without changing Bridge's host correlation check. TCP 7047 is not published.
 The HTTPS ingress forwards WebSocket upgrades and binary streams unchanged.
 
-Set `GH_OAUTH_CLIENT_SECRET` in the ignored `.env.local` when GitHub is enabled.
-Only Bridge receives it; it is never a build argument or image layer. Public
-registrations default to [oauth-clients.json](oauth-clients.json).
-`CEREMONY_PLATFORMS` can override these with another registration or a subset.
-Native binary paths and `NOTARY_URL` are no longer launcher settings.
+The GitHub development credential is committed directly in
+[compose.yaml](compose.yaml), alongside the public OAuth client registrations.
+This registration uses PKCE; its client identity is intentionally public and cannot
+authenticate a trusted application. Only Bridge receives the credential at runtime;
+it is not a build argument or image layer.
 
 Register **`https://localhost:4682/auth/callback`** with each provider. Google also
 needs the appropriate consent-screen/test-user configuration; X must use a public
 client with PKCE; GitHub needs the matching confidential secret on the Bridge.
-The public development IDs are committed in `oauth-clients.json`; secrets
-remain local. All three committed registrations are configured for the callback
+The public development IDs and matching GitHub development credential are committed
+in `compose.yaml`. All three committed registrations are configured for the callback
 URL above. Changing it requires updating their provider registrations.
 
 From the TypeScript workspace:

@@ -1,45 +1,23 @@
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import { localhostTls } from './tls.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
-export default defineConfig(({ mode, command }) => {
-  const env = { ...loadEnv(mode, root, 'CEREMONY_'), ...process.env }
+export default defineConfig(({ command }) => {
   const directory = join(root, '.cache/dev')
   mkdirSync(directory, { recursive: true })
-  if (!!env.CEREMONY_TLS_CERT !== !!env.CEREMONY_TLS_KEY)
-    throw new Error('Set both CEREMONY_TLS_CERT and CEREMONY_TLS_KEY')
-  const https =
-    command !== 'serve'
-      ? undefined
-      : env.CEREMONY_TLS_CERT
-        ? { cert: readFileSync(env.CEREMONY_TLS_CERT), key: readFileSync(env.CEREMONY_TLS_KEY!) }
-        : localhostTls(directory)
-  const origin = (value: string) => {
-    const url = new URL(value)
-    if (url.protocol !== 'https:' || url.origin !== value)
-      throw new Error('Bridge and CCDP must be canonical HTTPS origins')
-    return value
-  }
   return {
     root: join(root, 'src'),
-    envDir: root,
     cacheDir: join(directory, 'vite'),
     envPrefix: [],
-    define: {
-      __CEREMONY_DEV__: JSON.stringify({
-        bridge: origin(env.CEREMONY_BRIDGE_ORIGIN ?? 'https://localhost:4682'),
-        ccdp: origin(env.CEREMONY_CCDP_ORIGIN ?? 'https://localhost:4683'),
-      }),
-    },
     server: {
       host: 'localhost',
-      port: Number(env.CEREMONY_APP_PORT ?? 4691),
+      port: 4691,
       strictPort: true,
       fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.cache/**'] },
-      https,
+      https: command === 'serve' ? localhostTls(directory) : undefined,
     },
     build: { outDir: join(directory, 'app'), emptyOutDir: true },
   }

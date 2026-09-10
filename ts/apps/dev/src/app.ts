@@ -11,13 +11,12 @@ import {
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
 import { sha256 } from '@noble/hashes/sha2.js'
 
-declare const __CEREMONY_DEV__: { bridge: string; ccdp: string }
 declare global {
   interface Window {
     result?: IdentityResult | { status: 'failed' | 'cancelled' }
   }
 }
-const settings = __CEREMONY_DEV__
+const settings = { bridge: 'https://localhost:4682', ccdp: 'https://localhost:4683' }
 const ledger: LedgerId = { ...testnet, notaryAddress: () => 'https://localhost:4687' }
 const platforms = document.querySelector<HTMLElement>('#platforms')!
 const cancel = document.querySelector<HTMLButtonElement>('#cancel')!

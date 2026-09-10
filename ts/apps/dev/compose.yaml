@@ -1,4 +1,4 @@
-# Started by services.ts after building CCDP and loading the ignored .env.local.
+# Started by services.ts after building CCDP.
 services:
   notary:
     image: ghcr.io/libid-org/notary:0.3.0-rc.2
@@ -27,8 +27,10 @@ services:
       CCDP_ORIGIN: https://localhost:4683
       ALLOWED_APP_ORIGINS: https://localhost:4691
       CALLBACK_ARTIFACT_PATH: /callback.html
-      CEREMONY_PLATFORMS: ${CEREMONY_PLATFORMS:?Start with pnpm dev:services}
-      GH_OAUTH_CLIENT_SECRET: ${GH_OAUTH_CLIENT_SECRET:-}
+      CEREMONY_PLATFORMS: >-
+        [{"id":"google","clientId":"391814431594-94274lch0aosjgsei87k41a08napunhd.apps.googleusercontent.com","versions":[1]},{"id":"x","clientId":"QW5QY1ZGdVRsaDEyTFIwZDVfa2Q6MTpjaQ","versions":[1]},{"id":"github","clientId":"Iv23lioEM9NAR9vO8CmT","versions":[1]}]
+      # Intentionally public credential for the shared development app; uses PKCE.
+      GH_OAUTH_CLIENT_SECRET: "b020b671192879cb993d1cdd7852c920fe745020"
       NOTARY_URL: tcp://localhost:7047
     volumes:
       - .cache/ccdp/public/ccdp/callback.html:/callback.html:ro
