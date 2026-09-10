@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { AssetCache, validateResponse } from './cache.js'
+
 const spec = { url: 'https://assets.example/g1', range: 'bytes=0-1', bytes: 2 }
 afterEach(() => vi.unstubAllGlobals())
 it('joins pending downloads and preserves independent readers and worker CSP in stored bodies', async () => {
@@ -68,4 +69,78 @@ it('storage denial still fetches; failed bodies never become a reusable flight',
   await expect(cache.load(spec).response).rejects.toThrow('Incomplete')
   await expect(cache.load(spec).response).rejects.toThrow('Incomplete')
   expect(fetcher).toHaveBeenCalledTimes(2)
+})
+
+it.each(['application/wasm', 'text/javascript'])(
+  'returns ordinary cached %s bodies without consuming them',
+  async (mime) => {
+    const hit = new Response(new Uint8Array([4, 5]), {
+      headers: {
+        'Content-Type': mime,
+        'Content-Length': '2',
+        'Content-Security-Policy': "default-src 'none'",
+      },
+    })
+    vi.stubGlobal('caches', { open: async () => ({ match: async () => hit }) })
+    const fetching = vi.fn()
+    vi.stubGlobal('fetch', fetching)
+    const loaded = new AssetCache('https://ccdp.example').load({
+      url: 'https://ccdp.example/asset',
+      bytes: 2,
+      mime,
+    })
+    const result = await loaded.response
+    await loaded.dispatched
+    expect(hit.bodyUsed).toBe(false)
+    expect(fetching).not.toHaveBeenCalled()
+    expect(result.headers.get('content-security-policy')).toBe("default-src 'none'")
+    expect(new Uint8Array(await result.arrayBuffer())).toEqual(new Uint8Array([4, 5]))
+  },
+)
+it.each(['miss', 'denied'])(
+  'uses the browser HTTP cache after a Cache Storage %s, retaining request options',
+  async (storage) => {
+    vi.stubGlobal('caches', {
+      open: async () => {
+        if (storage === 'denied') throw new Error('denied')
+        return { match: async () => undefined, put: async () => {} }
+      },
+    })
+    const fetching = vi.fn(async () => new Response(new Uint8Array([4, 5]), { status: 206 }))
+    vi.stubGlobal('fetch', fetching)
+    await new AssetCache('https://ccdp.example').load(spec).response
+    expect(fetching).toHaveBeenCalledWith(spec.url, {
+      credentials: 'omit',
+      mode: 'cors',
+      redirect: 'error',
+      headers: { Range: spec.range },
+      cache: 'force-cache',
+    })
+  },
+)
+it.each([
+  { 'Content-Type': 'text/html', 'Content-Length': '2' },
+  { 'Content-Type': 'application/wasm', 'Content-Length': '3' },
+])('rejects invalid cached metadata and validates the fetched body', async (headers) => {
+  vi.stubGlobal('caches', {
+    open: async () => ({
+      match: async () => new Response(new Uint8Array([4, 5]), { headers }),
+      put: async () => {},
+    }),
+  })
+  const fetching = vi.fn(
+    async () =>
+      new Response(new Uint8Array([4]), {
+        headers: { 'Content-Type': 'application/wasm' },
+      }),
+  )
+  vi.stubGlobal('fetch', fetching)
+  await expect(
+    new AssetCache('https://ccdp.example').load({
+      url: 'https://ccdp.example/asset.wasm',
+      bytes: 2,
+      mime: 'application/wasm',
+    }).response,
+  ).rejects.toThrow('Incomplete')
+  expect(fetching).toHaveBeenCalledTimes(1)
 })

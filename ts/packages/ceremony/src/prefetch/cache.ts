@@ -3,7 +3,7 @@ import { readBody } from '../response.js'
 
 const CACHE = 'libid-ceremony-assets-v1',
   PREFIX = '/__libid_ceremony_cache__/'
-/** Cache bodies are stored as 200 responses; partial responses are reconstructed. */
+/** Validate status and exposed metadata before accepting an asset response. */
 export function validateResponse(response: Response, spec: AssetRequest): void {
   if (
     response.redirected ||
@@ -58,10 +58,16 @@ export class AssetCache {
         cache = await caches.open(CACHE)
         const hit = await cache.match(cacheKey)
         if (hit) {
+          // Complete bodies were checked before cache.put; ordinary hits need no copy.
+          if (!spec.range) {
+            validateResponse(hit, spec)
+            dispatched()
+            return hit
+          }
           const bytes = await readBody(hit, spec.bytes ?? Number.MAX_SAFE_INTEGER)
           if (spec.bytes === undefined || bytes.length === spec.bytes) {
             const response = new Response(bytes.slice().buffer, {
-              status: spec.range ? 206 : 200,
+              status: 206,
               headers: hit.headers,
             })
             validateResponse(response, spec)
@@ -80,7 +86,7 @@ export class AssetCache {
           mode: 'cors',
           redirect: 'error',
           headers: spec.range ? { Range: spec.range } : {},
-          cache: 'no-store',
+          cache: 'force-cache',
         })
       } finally {
         dispatched()
@@ -100,10 +106,9 @@ export class AssetCache {
         } catch {
           /* A valid response remains usable when storage is full. */
         }
-      return new Response(bytes.slice().buffer, {
-        status: spec.range ? 206 : 200,
-        headers: stored.headers,
-      })
+      return spec.range
+        ? new Response(bytes.slice().buffer, { status: 206, headers: stored.headers })
+        : stored
     })().finally(() => {
       dispatched()
       this.pending.delete(key)
