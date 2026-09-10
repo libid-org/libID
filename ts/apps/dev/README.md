@@ -43,8 +43,21 @@ notary signing key; no environment file is needed. OAuth registrations must use
 **`http://localhost:4682/auth/callback`**. To connect another application, add its
 exact origin to Bridge's `ALLOWED_APP_ORIGINS` in Compose.
 
-Frontend edits reload through Vite. Restart `pnpm dev` after changing a library
-package or CCDP source to rebuild it. To run services and frontend separately:
+Frontend edits reload through Vite. After changing ceremony or popup source,
+run this in another terminal while `pnpm dev` stays running:
+
+```sh
+pnpm dev:ccdp
+```
+
+It rebuilds the packages and static distribution, then recreates only CCDP.
+Bridge, notary and the app stay running; no Docker images are built. Refresh
+the app and start a fresh ceremony to use updated Prover/Prefetch code.
+Bridge caches Callback for up to five minutes, so restart `pnpm dev` after
+Callback changes to apply them immediately. Also restart after changing service
+configuration or dependency images; unchanged Bridge builds reuse Docker layers.
+
+To run services and frontend separately:
 
 ```sh
 pnpm dev:services

@@ -12,6 +12,7 @@
     "fmt:check": "biome format .",
     "dev": "pnpm --filter @libid/dev dev",
     "dev:services": "pnpm --filter @libid/dev dev:services",
+    "dev:ccdp": "pnpm --filter @libid/dev dev:ccdp",
     "dev:app": "pnpm --filter @libid/dev dev:app"
   },
   "devDependencies": {
