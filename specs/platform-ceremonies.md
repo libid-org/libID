@@ -537,11 +537,15 @@ REQ-PLAT-56A does not forbid.
   requiring its absence would bind every prover to one HTTP library's habits
   for nothing.
 - REQ-PLAT-56B (upholds SP-EXCHANGE-01):
-  The Platform Verifier MUST reject a head without exactly one
-  `content-length`, or with one other than the decimal count of the body it
-  frames. Necessity: the verifier takes the body to be what follows the head
-  while the platform takes it to be `content-length` bytes, so where the two
-  disagree the fields read are not the fields parsed.
+  The Platform Verifier MUST reject a token request whose revealed bytes carry
+  other than exactly one empty line, the one that ends the head. The Platform
+  Verifier MUST reject a head without exactly one `content-length`, or with
+  one other than the decimal count of the body it frames, written without a
+  leading zero. Necessity: the verifier takes the body to be what follows the
+  head while the platform takes it to be `content-length` bytes, so where the
+  two disagree the fields read are not the fields parsed; a second empty line
+  is a second place a parser could end the head, and a second spelling of the
+  count is a second thing to compare one spelling of.
 - REQ-PLAT-56C (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject a head carrying a line feed not preceded by
   a carriage return, a carriage return not followed by a line feed, a line
