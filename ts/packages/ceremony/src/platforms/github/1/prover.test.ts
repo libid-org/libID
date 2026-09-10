@@ -54,9 +54,9 @@ function context(outcome: Record<string, string>): ProverContext {
 it('returns detailed GitHub denial before any token exchange', async () => {
   const fetch = vi.fn()
   vi.stubGlobal('fetch', fetch)
-  await expect(
-    prove(context({ error: 'access_denied', error_description: 'Denied', error_uri: '/help' })),
-  ).resolves.toBeNull()
+  const input = context({ error: 'access_denied', error_description: 'Denied', error_uri: '/help' })
+  await expect(prove(input)).resolves.toBeNull()
+  expect(input.onStage).not.toHaveBeenCalled()
   expect(fetch).not.toHaveBeenCalled()
 })
 it('rejects a mismatched issuer before token exchange', async () => {
@@ -76,8 +76,10 @@ it('classifies token admission failure and retains its local cause', async () =>
     'fetch',
     vi.fn(async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } })),
   )
-  await expect(prove(context({ code: 'test' }))).rejects.toMatchObject({
+  const input = context({ code: 'test' })
+  await expect(prove(input)).rejects.toMatchObject({
     code: 'token-exchange',
     cause,
   })
+  expect(input.onStage).toHaveBeenCalledExactlyOnceWith('code-exchange')
 })

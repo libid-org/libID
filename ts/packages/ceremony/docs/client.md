@@ -498,6 +498,30 @@ type CeremonyEvent =
   | { type: 'finished'; outcome: 'failed'; code: FailureCode | null; timestamp: number }
 ```
 
+The `CeremonyStage` value companion owns display wording:
+
+```ts
+CeremonyStage.inProgress('start') // "Opening popup"
+CeremonyStage.completed('start')  // "Popup opened"
+```
+
+For a user-facing timeline, first project raw stage events through
+`CeremonyStage.group(event.stage)`: Prefetch, Authorization and OAuth return all
+belong to the `authorization` display group. Keep its active label and original
+start time while raw events remain in that group. Switch to completed wording
+only when the **display group changes**, not on every raw stage event. In
+particular, raw `authorization → oauth-return` does not mean `User authorised`;
+that label applies when the group reaches code exchange or proof preparation,
+after Prover admits the return. The raw OAuth-return timestamp remains available
+for post-consent timing. For the last group use completed wording only on terminal success;
+keep active wording with a failure/denial/cancellation indication otherwise.
+`Complete` is the successful completion label for `finalizing`, never its entry label.
+Token and identity intervals end at readiness for subsequent work, so their labels
+say `Token ready` / `Identity ready`, not that background attestations are finished.
+`User authorised` applies only after Prover has admitted the OAuth return;
+readiness alone does not end the authorization interval. These are local
+presentation methods; CCDP events remain plain data with no serialized methods.
+
 Stages form a sequential UI timeline. All platforms begin with start → prefetch →
 authorization → OAuth return. Google then uses proof preparation → proof generation;
 X and GitHub use all nine stages in the order above. A stage whose
@@ -509,13 +533,15 @@ Worker preparation. `PrefetchStarted` ends prefetch and starts `authorization`
 immediately before provider navigation: it acknowledges fetch dispatch, not completed
 downloads. Fieldless `CallbackReady`, sent after capturing/clearing the return and
 authenticating the Application, starts `oauth-return`. That stage includes navigation,
-Prover document startup, isolation and resource-worker readiness until `ProverReady`.
+Prover document startup, isolation, resource-worker readiness and OAuth-return validation.
 Authorization therefore includes provider navigation and return/Callback authentication,
 not just consent-screen time. Neither milestone exposes return data or its outcome.
 Missing, duplicate or out-of-phase advisory milestones never gate the ceremony.
 
-On `ProverReady`, the client enters proof preparation for Google or code exchange
-for X/GitHub. Prover reports
+On `ProverReady`, the client sends `AppStartProver` without advancing the stage.
+After admitting the OAuth return, Prover reports proof preparation for Google or
+code exchange for X/GitHub. Denied or malformed returns end the run without that
+transition. Prover then reports
 identity fetch after token admission, then proof preparation after identity extraction
 and the commitment openings needed for the witness are available. Witness execution
 starts proof generation; completed proof-backend teardown starts finalizing for

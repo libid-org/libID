@@ -82,6 +82,8 @@ The browser tests use port 4692 and cover frontend behavior with intercepted
 responses. Real OAuth and proving checks are documented in the
 [ceremony qualification guide](../../packages/ceremony/docs/qualification.md).
 
-Run history shows each ceremony’s sequential stage durations, including failed or
+Run history groups Prefetch, Authorization and OAuth return into one authorization
+interval while retaining the return timestamp for Post-consent duration. It uses the
+package’s active/completed stage wording and shows durations, including failed or
 cancelled attempts. Timings freeze at completion and clear on page reload; concurrent
 proof/notary work is not double-counted.
