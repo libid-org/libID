@@ -955,10 +955,11 @@ keeping the client secret from the browser.
 ### 6.5 Identity request
 
 `GET https://api.github.com/user` with no query. The request carries
-exactly five headers, in any order:
+exactly six headers, in any order:
 `authorization: Bearer <access_token>`, `accept: application/vnd.github+json`,
-`x-github-api-version: 2022-11-28`, `host: api.github.com`, and
-`connection: close`.
+`x-github-api-version: 2022-11-28`, `host: api.github.com`,
+`connection: close`, and a `user-agent` of the Canonical Runtime's choosing,
+which GitHub requires of every API request and answers `403` without.
 
 Per common §9, the identity session reveals exactly these request ranges;
 the bearer value is the only committed request range, and every other
