@@ -457,7 +457,7 @@ attestation format:
 
 | Range | Revealed | Why |
 |---|---|---|
-| the request line and every request header | yes | the Platform Verifier compares the method and path with its profile constants and the header set with the list below, the media type among them: it selects the parser the platform applied to the body rows beneath this one (common REQ-COMMON-21B) |
+| the request line and every request header | yes | the Platform Verifier compares the method and path with its profile constants, requires `host` and the media type that selects the parser the platform applied to the body rows beneath this one (common REQ-COMMON-21B), and refuses the headers REQ-PLAT-56A forbids |
 | endpoint authority | not a range | the Notary Service authenticated the TLS server identity, and the Platform Verifier compares the attested authority against its pinned constant per common REQ-COMMON-21A |
 | `grant_type` | yes | constant `authorization_code`; the Platform Verifier compares it byte for byte per REQ-PLAT-56 |
 | `client_id` | yes | the Platform Verifier reads and returns it |
@@ -511,27 +511,35 @@ dependency.
   range does not match the profile layout of common REQ-COMMON-17A and
   REQ-COMMON-18A and fails verification.
 
-The request carries these five headers, in any order: `host: api.x.com`,
-`content-type: application/x-www-form-urlencoded`, `accept: application/json`,
-`connection: close`, and `content-length`, whose value is the body's own count.
+The request carries `host: api.x.com`,
+`content-type: application/x-www-form-urlencoded`, and a `content-length` of the
+body's own count. The Canonical Runtime also sends `accept: application/json`
+and `connection: close`, which nothing verifies, and may send any other header
+REQ-PLAT-56A does not forbid.
 
 - REQ-PLAT-56A (upholds SP-EXCHANGE-01):
   The Implementation MUST reveal the token request's request line and every
-  header. The Platform Verifier MUST reject a head carrying a header outside
-  that list, one of them twice, or a listed header with another value.
-  Necessity: the verifier reads the body with a form-encoding reading, and
-  common REQ-COMMON-21B fixes the media type because it "selects the platform's
-  request parser" -- a media type nothing compares is a pin in name only.
-  Order is left free because it changes nothing the platform does with the
-  request, and fixing it would bind every prover to the header order its HTTP
-  library happens to emit.
+  header. The Platform Verifier MUST reject a head without exactly one `host`
+  naming the pinned authority and exactly one `content-type` whose value is
+  `application/x-www-form-urlencoded`, comparing names lowercased and values
+  exactly. The Platform Verifier MUST reject a head carrying `authorization`,
+  `content-encoding`, `transfer-encoding`, `cookie` or
+  `x-http-method-override` under any spelling of the name, and MUST ignore
+  every other header. Necessity: common REQ-COMMON-21B fixes the media type
+  because it "selects the platform's request parser", and a media type nothing
+  compares is a pin in name only. The forbidden headers change what the
+  platform does with the request in a way no revealed byte shows: which client
+  it authenticates, which bytes it parses, which method it runs. Any other
+  header changes only what the platform answers, and a wrong answer is a
+  response the verifier cannot read rather than one it can be fooled by, so
+  requiring its absence would bind every prover to one HTTP library's habits
+  for nothing.
 - REQ-PLAT-56B (upholds SP-EXCHANGE-01):
-  The Platform Verifier MUST reject a `content-length` other than the decimal
-  count of the body it frames. The Platform Verifier MUST reject a
-  `transfer-encoding` header. Necessity: the verifier takes the body to be what
-  follows the head while the platform takes it to be `content-length` bytes, so
-  where the two disagree the fields read are not the fields parsed;
-  `transfer-encoding` removes that framing outright.
+  The Platform Verifier MUST reject a head without exactly one
+  `content-length`, or with one other than the decimal count of the body it
+  frames. Necessity: the verifier takes the body to be what follows the head
+  while the platform takes it to be `content-length` bytes, so where the two
+  disagree the fields read are not the fields parsed.
 - REQ-PLAT-56C (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject a head carrying a line feed not preceded by
   a carriage return, or a line beginning with a space or a tab. Necessity: a
@@ -854,7 +862,7 @@ Submission and every published artifact.
 | bearer range | committed | a blinded commitment, opened only in circuit to link this attestation to `/user` |
 | attestation timestamp | not a range | the attestation's own signed creation time, which derives the authenticated validity ceiling per §2.2 |
 | token endpoint authority | not a range | the Notary Service authenticated the TLS server identity, and the Platform Verifier compares the attested authority against its pinned constant per common REQ-COMMON-21A |
-| the request line and every request header | yes | the Platform Verifier checks its profile method and path, and compares the header set with the fixed list below, for the reason REQ-PLAT-56A gives |
+| the request line and every request header | yes | the Platform Verifier compares the method and path with its profile constants, requires `host` and the media type that selects the parser the platform applied to the body rows beneath this one (common REQ-COMMON-21B), and refuses the headers REQ-PLAT-56A forbids |
 | `client_secret` | no | never revealed, per REQ-PLAT-35A |
 | everything else | no | the response status line and headers, `scope`, `token_type`, other response fields |
 
@@ -878,8 +886,10 @@ a check -- which is why the request headers are revealed and the response's
 are not: the request's are profile constants a verifier compares, and the
 response's are the platform's own bytes that nothing reads.
 
-The exchange request carries those same five headers, in any order, with
-`host: github.com`. Its body includes the committed `client_secret`, so the
+The exchange request carries `host: github.com` and the same media type under
+the same REQ-PLAT-56A; the GitHub Token Service also sends
+`accept: application/json` and `connection: close`, which nothing verifies.
+Its body includes the committed `client_secret`, so the
 count REQ-PLAT-56B compares spans the revealed prefix and that commitment,
 which the exact tiling of common REQ-COMMON-35 makes derivable.
 
