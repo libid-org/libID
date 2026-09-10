@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 import type { Rollup } from 'vite'
 import type { AssetRequest } from '../src/assets.js'
 import type { ResolvedAssets } from './assets.ts'
@@ -22,8 +22,8 @@ const index = process.argv.indexOf('--out-dir'),
 if (out === packageDir || !out.startsWith(`${resolve(packageDir, '../../..')}/`))
   throw new Error('Output must be a dedicated directory inside this worktree')
 if (process.env.LIBID_LEDGER_FIXTURE === '1') {
-  if (!out.startsWith(`${join(packageDir, '.cache')}/`))
-    throw new Error('Ledger fixtures are restricted to qualification output under .cache')
+  if (!relative(resolve(packageDir, '../../..'), out).split(sep).includes('.cache'))
+    throw new Error('Ledger fixtures are restricted to output under .cache')
 }
 const staging = `${out}.building`
 if (existsSync(staging)) throw new Error('Build staging directory already exists')

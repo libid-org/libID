@@ -285,7 +285,7 @@ initialization of the actual WASM bundle. The 237 unit tests and 14 distribution
 loader/native-SWS checks pass (one mutable-root rebuild test skipped); development
 TypeScript and lint pass. Security, API and simplicity reviews are clear.
 
-The fresh public registrations are now committed in `dev/oauth-clients.json`,
+The fresh public registrations are now committed in `ts/apps/dev/oauth-clients.json`,
 and their shared localhost callback URI is confirmed. GitHub's matching secret
 is stored only in ignored local configuration. Basic network checks from the development machine found TCP port 7047 on
 `notary.testnet.lib.id` timing out and DNS resolution for `testnet.notary.lib.id`
@@ -317,3 +317,20 @@ multi-child launcher wrapper and corrected teardown ordering: terminate the owne
 Compose startup process group before the final `compose down`. A real lifecycle
 regression then passed startup, SIGTERM, exit status 0, all six service ports closed
 and no remaining project containers.
+
+## Shared development app
+
+The local frontend and Docker services now live in the private `@libid/dev`
+workspace package at [ts/apps/dev](../../../apps/dev/README.md). From `ts/`,
+`pnpm dev` starts both, while `pnpm dev:services` and `pnpm dev:app` start them
+separately. Ceremony retains its distribution builder and qualification harnesses.
+
+Migration validation: all 236 ceremony unit tests and the moved TLS unit test pass;
+all 25 dev-app browser tests pass across Chromium, Firefox, WebKit and mobile
+emulation. App build, TypeScript and lint pass. The combined workspace command
+served the real Bridge configuration, CCDP and notary through trusted HTTPS, and
+its frontend reached Ready with all three registrations. SIGTERM closed all seven
+ports and removed its Compose containers. A builder regression also rejects
+fixture output outside a worktree-relative `.cache` even when the checkout itself
+is below a cache directory. The three focused reviews are clear after correcting
+fresh-checkout dependency builds, legacy credential ignores and that output guard.

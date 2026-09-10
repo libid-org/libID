@@ -7,27 +7,35 @@ import { request } from 'node:http'
 import { createServer, type Server } from 'node:https'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import { loadEnv } from 'vite'
+import { createServer as createViteServer, loadEnv, type ViteDevServer } from 'vite'
 import { localhostTls } from './tls.ts'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
-const env = { ...loadEnv('development', join(root, 'dev'), ''), ...process.env }
+const root = fileURLToPath(new URL('.', import.meta.url))
+const env = { ...loadEnv('development', root, ''), ...process.env }
 const cache = join(root, '.cache/dev')
-const platforms =
-  env.CEREMONY_PLATFORMS ?? readFileSync(join(root, 'dev/oauth-clients.json'), 'utf8')
+const platforms = env.CEREMONY_PLATFORMS ?? readFileSync(join(root, 'oauth-clients.json'), 'utf8')
 const { GH_OAUTH_CLIENT_SECRET: _secret, ...publicEnv } = process.env
 // Always rebuild against the local notary; immutable assets reuse the build cache.
-execFileSync('pnpm', ['build:qualification-artifacts'], {
-  cwd: root,
-  env: { ...publicEnv, LIBID_NOTARY_ADDRESS: 'https://localhost:4687' },
-  stdio: 'inherit',
-})
+execFileSync(
+  'pnpm',
+  ['--filter', '@libid/ceremony', 'build:ccdp-artifacts', '--out-dir', join(root, '.cache/ccdp')],
+  {
+    cwd: root,
+    env: {
+      ...publicEnv,
+      LIBID_LEDGER_FIXTURE: '1',
+      LIBID_NOTARY_ADDRESS: 'https://localhost:4687',
+    },
+    stdio: 'inherit',
+  },
+)
 mkdirSync(cache, { recursive: true })
 if (!!env.CEREMONY_TLS_CERT !== !!env.CEREMONY_TLS_KEY)
   throw new Error('Set both CEREMONY_TLS_CERT and CEREMONY_TLS_KEY')
 const tls = env.CEREMONY_TLS_CERT
   ? { cert: readFileSync(env.CEREMONY_TLS_CERT), key: readFileSync(env.CEREMONY_TLS_KEY!) }
   : localhostTls(cache)
+let frontend: ViteDevServer | undefined
 const servers: Server[] = []
 const sockets = new Set<Duplex>()
 let stopping = false
@@ -35,6 +43,7 @@ function stop(code: number) {
   if (stopping) return
   stopping = true
   process.exitCode = code
+  void frontend?.close()
   for (const server of servers) {
     server.close()
     server.closeAllConnections()
@@ -58,8 +67,8 @@ function stop(code: number) {
 process.once('SIGINT', () => stop(0))
 process.once('SIGTERM', () => stop(0))
 // Distinct Compose ownership for each checkout. No shared container names.
-const project = `ceremony-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
-const composeArgs = ['compose', '-p', project, '-f', join(root, 'dev/compose.yaml')]
+const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
+const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
 const composeEnv = {
   ...publicEnv,
   CEREMONY_PLATFORMS: platforms,
@@ -147,4 +156,18 @@ for (const [port, upstream] of [
   server.listen(port, 'localhost', () =>
     console.info(`Development service: https://localhost:${port}`),
   )
+}
+
+if (process.argv.includes('--app')) {
+  try {
+    frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })
+    if (stopping) await frontend.close()
+    else {
+      await frontend.listen()
+      frontend.printUrls()
+    }
+  } catch {
+    console.error('Could not start the development frontend.')
+    stop(1)
+  }
 }

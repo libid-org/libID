@@ -12,7 +12,10 @@
       "!packages/ceremony/dist-artifacts",
       "!packages/ceremony/test-results",
       "!packages/ceremony/playwright-report",
-      "!qualification/ceremony/results"
+      "!qualification/ceremony/results",
+      "!apps/dev/.cache",
+      "!apps/dev/test-results",
+      "!apps/dev/playwright-report"
     ]
   },
   "formatter": {

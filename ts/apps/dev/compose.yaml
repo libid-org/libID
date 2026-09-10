@@ -31,14 +31,14 @@ services:
       GH_OAUTH_CLIENT_SECRET: ${GH_OAUTH_CLIENT_SECRET:-}
       NOTARY_URL: tcp://localhost:7047
     volumes:
-      - ../.cache/qualification-assets/public/ccdp/callback.html:/callback.html:ro
+      - .cache/ccdp/public/ccdp/callback.html:/callback.html:ro
 
   ccdp:
     image: ghcr.io/static-web-server/static-web-server@sha256:4e804280b5b5b1be4563d4a9e0f3a0ea38e7887967d0cc00bc8c07030f529b3f
     environment:
       SERVER_CONFIG_FILE: /etc/sws.toml
     volumes:
-      - ../.cache/qualification-assets/public:/home/sws/public:ro
-      - ../.cache/qualification-assets/sws.toml:/etc/sws.toml:ro
+      - .cache/ccdp/public:/home/sws/public:ro
+      - .cache/ccdp/sws.toml:/etc/sws.toml:ro
     ports:
       - "127.0.0.1:4684:8787"
