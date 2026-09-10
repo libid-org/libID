@@ -1,5 +1,6 @@
 import { CeremonyError } from '@libid/ceremony/client'
-import { LedgerId } from '@libid/ledger'
+import type { LedgerId } from '@libid/ledger'
+import { testnet } from '@libid/ledger/testing'
 import {
   createCeremonyClient,
   type Ceremony,
@@ -17,6 +18,7 @@ declare global {
   }
 }
 const settings = __CEREMONY_DEV__
+const ledger: LedgerId = { ...testnet, notaryAddress: () => 'https://localhost:4687' }
 const platforms = document.querySelector<HTMLElement>('#platforms')!
 const cancel = document.querySelector<HTMLButtonElement>('#cancel')!
 const close = document.querySelector<HTMLButtonElement>('#close')!
@@ -24,6 +26,7 @@ const status = document.querySelector<HTMLElement>('#status')!
 const result = document.querySelector<HTMLElement>('#result')!
 document.querySelector('#bridge')!.textContent = settings.bridge
 document.querySelector('#ccdp')!.textContent = settings.ccdp
+document.querySelector('#notary')!.textContent = ledger.notaryAddress()
 const names: Record<PlatformId, string> = { google: 'Google', x: 'X', github: 'GitHub' }
 let client: CeremonyClient | undefined
 let active: Ceremony | undefined
@@ -106,7 +109,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     ceremony = client.new(
       current,
       id,
-      LedgerId.decode('test:testnet'),
+      ledger,
       platform,
       sha256(new TextEncoder().encode('libid/ceremony/dev')),
       new TextEncoder().encode('Ceremony development walkthrough'),

@@ -112,12 +112,18 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   assert.equal(Object.hasOwn(graph.headers, '/ccdp/v1/callback.js'), false)
 })
 
-test('production and fixture ledger modules remain separate', () => {
+test('CCDP contains no ledger implementation or build-time notary mapping [LIBID-ASSET-003]', () => {
   const modules = Object.values(graph.graph).flatMap((node) => node.modules)
-  const fixture = modules.some((path) => path.endsWith('/ledger/src/testing.ts'))
-  assert.equal(fixture, graph.ledgerFixture)
-  if (fixture) assert.ok(out.startsWith(`${join(packageDir, '.cache')}/`))
-  assert.ok(fixture || modules.some((path) => path.endsWith('/ledger/dist/index.js')))
+  assert.ok(!modules.some((path) => /\/ledger\//.test(path)))
+  assert.equal(Object.hasOwn(graph, 'ledgerFixture'), false)
+  for (const [path, headers] of Object.entries(graph.headers)) {
+    const policy = headers['Content-Security-Policy'] ?? ''
+    // Prior immutable responses remain available for already-open documents.
+    if (!path.startsWith('/ccdp/assets/') || Object.hasOwn(graph.graph, path.slice(1)))
+      assert.ok(!policy.includes('notary.lib.id'), path)
+    if (path === '/ccdp/v1/prover' || path === '/ccdp/v1/prover/fallback')
+      assert.ok(policy.includes('connect-src https: wss:'), path)
+  }
 })
 
 test('native SWS negotiates representations, HEAD, conditional requests and ranges [LIBID-ASSET-026] [LIBID-ASSET-016] [KIT-001B]', {

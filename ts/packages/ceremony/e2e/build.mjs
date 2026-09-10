@@ -9,7 +9,6 @@ for (const [entry, name] of [
   await build({
     configFile: false,
     root: packageDir,
-    resolve: { alias: { '@libid/ledger': join(packageDir, '../ledger/src/testing.ts') } },
     logLevel: 'warn',
     build: {
       outDir: join(packageDir, '.cache/e2e'),

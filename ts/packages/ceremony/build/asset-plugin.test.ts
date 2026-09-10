@@ -37,7 +37,6 @@ test('runtime lowering preserves named/chained calls and external request option
         moduleUrls: {},
         requestsByProfile: {},
         allowedRequests: [],
-        notaryAddresses: ['https://notary.lib.id', 'https://testnet.notary.lib.id'],
       }),
     ],
     build: { write: false, minify: false, lib: { entry: id, formats: ['es'] } },

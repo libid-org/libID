@@ -34,11 +34,6 @@ export default defineConfig(({ mode, command }) => {
         ccdp: origin(env.CEREMONY_CCDP_ORIGIN ?? 'https://localhost:4683'),
       }),
     },
-    resolve: {
-      alias: {
-        '@libid/ledger': fileURLToPath(import.meta.resolve('@libid/ledger/testing')),
-      },
-    },
     server: {
       host: 'localhost',
       port: Number(env.CEREMONY_APP_PORT ?? 4691),

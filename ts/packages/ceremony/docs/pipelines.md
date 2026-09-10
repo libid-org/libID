@@ -77,11 +77,11 @@ notarization module pins both immutable asset paths. Each remains a normal,
 independently cached response; the browser never downloads or unpacks a release
 archive. The [CCDP Distribution contract](distribution.md#proving-assets) owns their
 serving.
-Prover decodes `AppStartProver.ledgerId` through `@libid/ledger` and uses
-`isTestnet()` to resolve the code-pinned
-[notary address](notarization.md#notary-address). The ledger input cannot supply
-an arbitrary endpoint or select a circuit or bb.js version. Both networks use the same assets
-and prefetch graph; Google does not use a notary.
+Prover validates `AppStartProver.notaryAddress`, already
+[selected by CeremonyClient](client.md#notary-selection), and uses it
+unchanged. It owns no notary profiles, ledger dependency, or override. All addresses use
+the same proving resources and prefetch graph; Google receives null and makes
+no notary request.
 
 ### Google
 
@@ -160,8 +160,8 @@ verified attestations and submitted authorization fields.
 
 `platforms/github/1/prover` first sends the captured code, derived verifier,
 and resolved `notaryAddress` to the fixed OAuth bridge token-exchange route.
-The Bridge and browser identity session use that exact address, including any
-build-time development override; the Bridge performs no network classification.
+The Bridge and browser identity session use that exact address supplied by the
+ledger; the Bridge performs no network classification.
 The bridge uses its confidential client secret, performs the token-exchange
 TLSNotary session, and returns the bounded access token, token attestation,
 and `bearerOpening`: the

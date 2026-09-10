@@ -1,29 +1,28 @@
 # @libid/ledger
 
-Shared `LedgerId` contract and decoder for application and browser-document code.
+Shared `LedgerId` contract for application code: `hash()` and `notaryAddress()`.
 See the [identity contract](docs/identity.md), extracted from architecture PR #13
-at `b078fa33039a73c194ade24d266c69752e911fcd`.
+at `0259e72c184e2be7b78a0ad92188e8722d8d6daf`.
 
-**No real ledger definitions are implemented yet.** The production
-`LedgerId.decode(value)` rejects every identifier. Adding a supported ledger means
-adding its canonical decoder, immutable value, classification and matching Chain
-Profile hash vectors here; ceremony needs no chain-specific changes.
+**No real ledger definitions are implemented yet.** Adding one requires its
+canonical Chain Profile hash vectors and notary-address checks. Ceremony stays
+chain agnostic; Prover has no ledger dependency.
 
 ## Shared test fixture
 
 ```ts
-import { LedgerId } from '@libid/ledger/testing'
+import { testnet } from '@libid/ledger/testing'
 
-const ledger = LedgerId.decode('test:testnet')
-const restored = LedgerId.decode(ledger.encode())
+const localLedger = {
+  hash: () => testnet.hash(),
+  notaryAddress: () => 'https://localhost:4687',
+}
 ```
 
-The testing entrypoint recognizes only `test:mainnet` and `test:testnet`. These
-synthetic identities return dummy 32-byte hashes; they are not real Chain Profiles
-and establish no ledger conformance. The production entrypoint never imports them.
-Tests may alias `@libid/ledger` to this entrypoint on both sides of a message
-boundary. Ceremony's fixture distribution is restricted to local qualification
-output; never deploy it as a supported-ledger distribution.
+The testing entrypoint exports `mainnet` and `testnet`, synthetic identities with
+dummy 32-byte hashes. They establish no real ledger conformance. A local fixture
+can change the notary address without changing its hash. Fixtures belong to the
+application or tests; CCDP uses the same distribution for every ledger.
 
 ## Checks
 

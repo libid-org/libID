@@ -16,17 +16,13 @@ const env = { ...loadEnv('development', root, ''), ...process.env }
 const cache = join(root, '.cache/dev')
 const platforms = env.CEREMONY_PLATFORMS ?? readFileSync(join(root, 'oauth-clients.json'), 'utf8')
 const { GH_OAUTH_CLIENT_SECRET: _secret, ...publicEnv } = process.env
-// Always rebuild against the local notary; immutable assets reuse the build cache.
+// Rebuild the shared distribution; immutable assets reuse the build cache.
 execFileSync(
   'pnpm',
   ['--filter', '@libid/ceremony', 'build:ccdp-artifacts', '--out-dir', join(root, '.cache/ccdp')],
   {
     cwd: root,
-    env: {
-      ...publicEnv,
-      LIBID_LEDGER_FIXTURE: '1',
-      LIBID_NOTARY_ADDRESS: 'https://localhost:4687',
-    },
+    env: publicEnv,
     stdio: 'inherit',
   },
 )

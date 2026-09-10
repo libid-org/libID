@@ -11,7 +11,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Input | Pin |
 |---|---|
 | Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `a73e31fac2cddc960f42220efdf5790727dc298a`; eight source documents consolidated with implementation guides in the package docs directory; package composition updated for grouped CCDP documents |
+| Architecture PR #13 | `0259e72c184e2be7b78a0ad92188e8722d8d6daf`; eight source documents consolidated with implementation guides in the package docs directory; package composition updated for grouped CCDP documents |
 | Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
 | Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
@@ -79,15 +79,12 @@ transcripts, openings and witnesses are never qualification artifacts.
 
 ## Ledger fixture scope
 
-The real `@libid/ledger` package supplies the public interface and production decoder;
-real ledger definitions are intentionally deferred by user instruction. Production
-`decode` rejects every identifier, including testing identities. The shared testing
-entrypoint exercises encode/decode, immutable hash bytes and code-owned network
-classification with synthetic values only. Ceremony unit tests and the local browser
-harness alias that same fixture into Client and Prover. `build:qualification-artifacts`
-restricts these builds to `.cache/`; normal production builds use the real package.
-This verifies ceremony integration, not real-ledger support or Chain Profile vectors.
-A real ledger definition is required before a production ceremony can be constructed.
+The real `@libid/ledger` package supplies the hash/address interface. Real ledger
+definitions and Chain Profile vectors remain deferred. Tests and the development
+app import the shared synthetic fixtures explicitly; no module alias or decoder
+is involved. Client snapshots their hash and notary address. CCDP contains no
+ledger implementation and needs no separate fixture build. This verifies ceremony
+integration, not support for a real ledger.
 
 ## Actual blockers and unqualified boundaries
 
@@ -118,8 +115,8 @@ A real ledger definition is required before a production ceremony can be constru
 3. **HTTP profile alignment:** spec PR #31 at
    `5bbd838c81d4a47849104cf0f965ad985b2e5b98` permits additional X/GitHub identity
    headers and explicitly includes GitHub's runtime-chosen User-Agent. That
-   specification mismatch is resolved. Browser selectors still enforce closed
-   identity-header sets and need the bounded update described in
+   specification mismatch is resolved. Browser selectors accept additional identity
+   headers and retain byte-exact bearer disclosure as described in
    [notarization](notarization.md#token-layout-alignment). Token headers remain
    closed; existing token-layout requirements and tests are unchanged. Matching
    released-verifier coverage remains a qualification gate.
@@ -167,7 +164,7 @@ complete cache/update fault matrix are not claimed; their remaining properties a
 
 - `LIBID-OAUTH-003` in the pinned source still names raw `chainId` input, conflicting
   with its updated `LIBID-MOD-014/015` and Client API. The local requirement row keeps
-  its ID but names `LedgerId` and a decoder-derived hash, matching the current API.
+  its ID but names `LedgerId` and a snapshotted hash, matching the current API.
 
 - The pinned SWS v3 beta uses boolean `text-charset = false`. With trailing-slash
   redirects disabled, its header matcher appends the resolved file basename even
@@ -338,13 +335,12 @@ fixture output outside a worktree-relative `.cache` even when the checkout itsel
 is below a cache directory. The three focused reviews are clear after correcting
 fresh-checkout dependency builds, legacy credential ignores and that output guard.
 
-## Reviewed architecture update: ledger-owned notary routing
+## Ledger-owned notary routing
 
 Architecture PR #13 at
 [`0259e72c184e2be7b78a0ad92188e8722d8d6daf`](https://github.com/libid-org/libid/commit/0259e72c184e2be7b78a0ad92188e8722d8d6daf)
-changes the current implementation contract. These changes are reviewed but
-**not implemented** in this branch yet; the earlier source pin and existing
-implementation guides describe the currently running build.
+defines the implemented routing contract. Client snapshots ledger inputs, and the
+shared CCDP distribution consumes the supplied address without a ledger dependency.
 
 - `LedgerId` exposes `hash()` and `notaryAddress()`; encoding, decoding and
   `isTestnet()` leave the ceremony contract. Real ledger definitions remain deferred.
@@ -373,3 +369,14 @@ notary image update remains a separate live-qualification prerequisite.
 The header audit also found stale explanatory prose in spec §5.2 claiming the
 X token Host is hidden; its normative disclosure table reveals the token head.
 The normative table and token-layout requirements control implementation.
+
+Validation of this routing/header update: 263 ceremony unit tests, the ledger
+fixture check, all 15 distribution/loader/native-SWS checks, and package/build/
+browser/development TypeScript checks pass. All 45 ceremony integration cases
+pass across Chromium, Firefox, WebKit and both mobile emulations, including real
+TLSNotary WASM initialization. The 55 development-frontend cases also pass after
+rerunning Chromium alone; overlapping browser suites initially reported
+`ERR_INSUFFICIENT_RESOURCES` before page navigation. Security/correctness, API and
+simplicity reviews are clear after documentation corrections. No new real OAuth,
+browser-proof verification, or matched-notary session qualification is claimed by
+these checks. Restart the development stack to load matching Client and CCDP builds.

@@ -14,12 +14,7 @@ import { download, hash, packageDir } from './release.ts'
 export { assetPlugin } from './asset-plugin.ts'
 
 const require = createRequire(import.meta.url)
-export function resolveNotaryAddresses(override?: string): readonly [string, string] {
-  if (override === undefined) return ['https://notary.lib.id', 'https://testnet.notary.lib.id']
-  if (new URL(override).origin !== override || !override.startsWith('https://'))
-    throw new Error('Invalid notary origin')
-  return [override, override]
-}
+
 export async function loadAssetCatalog() {
   const result = await build({
     configFile: false,
@@ -221,12 +216,11 @@ export async function resolveAssets() {
     bodyHashes[path] = hash(bytes)
     sizes[path] = bytes.length
   }
-  const notaryAddresses = resolveNotaryAddresses(process.env.LIBID_NOTARY_ADDRESS)
   // Bundled code changes URL when its execution policy changes, even if its code does not.
   const policyId = hash(
     JSON.stringify(
       ['executionWorker', 'proofWorker', 'leafWorker'].map((p) =>
-        responseHeaders(p as 'executionWorker', { notaryAddresses }),
+        responseHeaders(p as 'executionWorker', {}),
       ),
     ),
   ).slice(0, 12)
@@ -236,7 +230,6 @@ export async function resolveAssets() {
     moduleUrls,
     profiles,
     local,
-    notaryAddresses,
     bodyHashes,
     sizes,
     hashBody: hash,

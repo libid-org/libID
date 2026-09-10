@@ -1,5 +1,4 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { LedgerId } from '@libid/ledger'
 import { startProver } from './prover.js'
 import type { ProverContext } from '../../prover/context.js'
 const { connection, prove } = vi.hoisted(() => ({
@@ -16,11 +15,10 @@ vi.mock('@libid/popup', () => ({
   PopupWindow: { current: vi.fn() },
 }))
 vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
-vi.mock('virtual:ceremony-assets', () => ({
-  notaryAddresses: ['https://notary.lib.id', 'https://testnet.notary.lib.id'],
-}))
 vi.mock('../../prefetch/registration.js', () => ({ claimRootWorker: vi.fn() }))
 vi.mock('../../platforms/google/1/prover.js', () => ({ prove }))
+vi.mock('../../platforms/x/1/prover.js', () => ({ prove }))
+vi.mock('../../platforms/github/1/prover.js', () => ({ prove }))
 vi.mock('../../ui.js', () => ({
   view: vi.fn(),
   progressView: () => ({ stop: vi.fn(), update: vi.fn() }),
@@ -29,9 +27,9 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
 })
-it.each(['test:mainnet', 'test:testnet', 'test:MAINNET', 'unknown:1'])(
-  'decodes %s before passing OAuth return to the platform [LIBID-OAUTH-021]',
-  async (encoded) => {
+it.each(['google', 'x', 'github'])(
+  'passes validated %s routing to the platform without ledger decoding [LIBID-OAUTH-021]',
+  async (platformId) => {
     vi.stubGlobal('location', { origin: 'https://ccdp.test' })
     vi.stubGlobal('crossOriginIsolated', true)
     vi.stubGlobal('Worker', vi.fn())
@@ -48,29 +46,19 @@ it.each(['test:mainnet', 'test:testnet', 'test:MAINNET', 'unknown:1'])(
     expect(connection.send).toHaveBeenCalledWith({ type: 'prover-ready' })
     handler({
       type: 'app-start-prover',
-      platformId: 'google',
+      platformId,
       platformCeremonyVersion: 1,
       clientId: 'client',
       redirectUri: 'https://bridge.test/callback',
       codeVerifier: null,
-      ledgerId: encoded,
+      notaryAddress: platformId === 'google' ? null : 'https://local-notary.test',
     })
-    if (encoded === 'test:mainnet' || encoded === 'test:testnet') {
-      await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
-      const context = prove.mock.calls[0][0]
-      expect(context.ledgerId.encode()).toBe(encoded)
-      expect(context.ledgerId.hash()).toEqual(LedgerId.decode(encoded).hash())
-      expect(context.notaryAddress).toBe(
-        encoded === 'test:testnet' ? 'https://testnet.notary.lib.id' : 'https://notary.lib.id',
-      )
-      expect(context.oauthReturn.fragment).toBe('#error=access_denied')
-    } else {
-      expect(connection.send).toHaveBeenCalledWith({
-        type: 'abort-ceremony',
-        code: 'prover-request',
-        reason: 'Invalid proving request or ledger identifier.',
-      })
-      expect(prove).not.toHaveBeenCalled()
-    }
+    await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
+    const context = prove.mock.calls[0][0]
+    expect(context.request.notaryAddress).toBe(
+      platformId === 'google' ? null : 'https://local-notary.test',
+    )
+    expect(context).not.toHaveProperty('ledgerId')
+    expect(context.oauthReturn.fragment).toBe('#error=access_denied')
   },
 )

@@ -1,4 +1,5 @@
-import { LedgerId } from '@libid/ledger'
+import type { LedgerId } from '@libid/ledger'
+import { mainnet, testnet } from '@libid/ledger/testing'
 import { deriveAuthorizationDigest } from '../platforms/authorization.js'
 import { b64urlEncode } from '../primitives.js'
 import { describe, expect, it, vi } from 'vitest'
@@ -36,7 +37,7 @@ function setup() {
   const ceremony = clientFromConfig(config).new(
     connection,
     id,
-    LedgerId.decode('test:testnet'),
+    testnet,
     'google',
     new Uint8Array(32),
     data,
@@ -72,7 +73,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       clientId: 'client',
       redirectUri: config.redirectUri,
       codeVerifier: null,
-      ledgerId: 'test:testnet',
+      notaryAddress: null,
     })
     c.receive({ type: 'prover-identity-proof', identity, proof })
     const result = await pending
@@ -86,7 +87,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     expect(new URL(c.navigateAway.mock.calls[0][0]).searchParams.get('nonce')).toBe(
       b64urlEncode(
         deriveAuthorizationDigest({
-          chainId: LedgerId.decode('test:testnet').hash(),
+          chainId: testnet.hash(),
           operationDomain: new Uint8Array(32),
           transactionData: new Uint8Array([1, 2]),
           platformCeremonyVersion: 1,
@@ -136,7 +137,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     const next = clientFromConfig(config).new(
       c,
       id,
-      LedgerId.decode('test:testnet'),
+      testnet,
       'google',
       new Uint8Array(32),
       new Uint8Array(),
@@ -177,7 +178,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
   const client = clientFromConfig(config),
     input = {
       connection: new Connection(),
-      ledgerId: LedgerId.decode('test:testnet'),
+      ledgerId: testnet,
       platformId: 'google' as const,
       operationDomain: new Uint8Array(32),
       transactionData: new Uint8Array(),
@@ -240,117 +241,146 @@ it('rejects changed form serialization for X/GitHub client IDs, not signed Googl
   ).not.toThrow()
 })
 
-it.each(['test:mainnet', 'test:testnet'])(
-  'captures the encoded ledger once and derives its hash from the shared decoder: %s [LIBID-MOD-015]',
-  async (encoded) => {
-    const ledgerId = {
-      encode: vi.fn(() => encoded),
-      hash: vi.fn(() => {
-        throw new Error('must use the shared decoder')
-      }),
-      isTestnet: vi.fn(() => {
-        throw new Error('must use the shared decoder')
-      }),
+it.each(['google', 'x', 'github'] as const)(
+  'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015]',
+  async (platformId) => {
+    const hash = testnet.hash(),
+      domain = new Uint8Array(32),
+      data = new Uint8Array([1, 2])
+    const ledger = {
+      hash: vi.fn(() => hash),
+      notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
     }
     const connection = new Connection()
-    const ceremony = clientFromConfig(config).new(
-      connection,
-      id,
-      ledgerId,
-      'google',
-      new Uint8Array(32),
-      new Uint8Array([1, 2]),
-    )
-    expect(ledgerId.encode).toHaveBeenCalledOnce()
-    expect(ledgerId.hash).not.toHaveBeenCalled()
-    expect(ledgerId.isTestnet).not.toHaveBeenCalled()
-    ledgerId.encode.mockImplementation(() => {
+    const ceremony = clientFromConfig({
+      ...config,
+      platforms: { [platformId]: { clientId: 'client', ceremonyVersions: [1] } },
+    }).new(connection, id, ledger, platformId, domain, data)
+    expect(ledger.hash).toHaveBeenCalledOnce()
+    expect(ledger.notaryAddress).toHaveBeenCalledTimes(platformId === 'google' ? 0 : 1)
+    hash.fill(9)
+    domain.fill(9)
+    data.fill(9)
+    ledger.hash.mockImplementation(() => {
+      throw new Error('must not reread')
+    })
+    ledger.notaryAddress.mockImplementation(() => {
       throw new Error('must not reread')
     })
     const pending = ceremony.proveUserIdentity()
     connection.receive({ type: 'prefetch-started' })
     const authorization = new URL(connection.navigateAway.mock.calls[0][0])
     connection.receive({ type: 'prover-ready' })
-    expect(connection.send.mock.calls[0][0]).toMatchObject({ ledgerId: encoded })
-    expect(connection.send.mock.calls[0][0]).not.toHaveProperty('isTestnet')
-    expect(connection.send.mock.calls[0][0]).not.toHaveProperty('chainId')
-    connection.receive({ type: 'prover-identity-proof', identity, proof })
-    const result = await pending
-    if (result.status !== 'accepted') throw new Error('Expected proof')
-    expect(authorization.searchParams.get('nonce')).toBe(
-      b64urlEncode(
-        deriveAuthorizationDigest({
-          chainId: LedgerId.decode(encoded).hash(),
-          operationDomain: new Uint8Array(32),
-          transactionData: new Uint8Array([1, 2]),
-          platformCeremonyVersion: 1,
-          authorizationNonce: result.oauthProof.authorizationNonce,
-        }),
-      ),
+    const message = connection.send.mock.calls[0][0]
+    expect(message.notaryAddress).toBe(
+      platformId === 'google' ? null : 'https://local-notary.test:8443',
     )
-    expect(result.oauthProof).not.toHaveProperty('isTestnet')
+    for (const key of ['ledgerId', 'chainId', 'isTestnet']) expect(message).not.toHaveProperty(key)
+    if (platformId === 'google') {
+      connection.receive({ type: 'prover-identity-proof', identity, proof })
+      const result = await pending
+      if (result.status !== 'accepted') throw new Error('Expected proof')
+      expect(authorization.searchParams.get('nonce')).toBe(
+        b64urlEncode(
+          deriveAuthorizationDigest({
+            chainId: testnet.hash(),
+            operationDomain: new Uint8Array(32),
+            transactionData: new Uint8Array([1, 2]),
+            platformCeremonyVersion: 1,
+            authorizationNonce: result.oauthProof.authorizationNonce,
+          }),
+        ),
+      )
+    } else {
+      connection.receive({ type: 'cancel-ceremony' })
+      await expect(pending).resolves.toEqual({ status: 'denied' })
+    }
   },
 )
-it('rejects malformed ledger encodings before OAuth [LIBID-MOD-014]', () => {
-  const connection = new Connection()
-  const input = {
-    connection,
-    ledgerId: LedgerId.decode('test:mainnet'),
-    platformId: 'google' as const,
-    operationDomain: new Uint8Array(32),
-    transactionData: new Uint8Array(),
+it('Google never reads the notary method [LIBID-MOD-014]', async () => {
+  const ledger = {
+    hash: testnet.hash,
+    get notaryAddress(): () => string {
+      throw new Error('must not read')
+    },
   }
-  const client = clientFromConfig(config)
-  for (const ledgerId of [
+  const ceremony = clientFromConfig(config).new(
+    new Connection(),
+    id,
+    ledger,
+    'google',
+    new Uint8Array(32),
+    new Uint8Array(),
+  )
+  await ceremony.cancel()
+})
+it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014]', () => {
+  const connection = new Connection()
+  for (const ledger of [
     null,
     {},
-    { encode: 1 },
-    ...[null, undefined, 1, {}, '', 'test:MAINNET', 'unknown:1'].map((value) => ({
-      encode: () => value,
-    })),
+    { hash: 1 },
+    ...[null, [], new Uint8Array(31), new Uint8Array(33)].map((hash) => ({ hash: () => hash })),
     {
-      encode: () => {
-        throw new Error('encoding failure')
+      hash: () => {
+        throw new Error('hash failure')
       },
     },
   ])
     expect(() =>
-      client.new(
+      clientFromConfig(config).new(
         connection,
         id,
-        ledgerId as LedgerId,
-        input.platformId,
-        input.operationDomain,
-        input.transactionData,
+        ledger as LedgerId,
+        'google',
+        new Uint8Array(32),
+        new Uint8Array(),
       ),
     ).toThrow()
   expect(connection.navigate).not.toHaveBeenCalled()
-  expect(connection.navigateAway).not.toHaveBeenCalled()
 })
-
-it('rejects malformed decoded hashes before OAuth [LIBID-MOD-014]', () => {
-  const connection = new Connection(),
-    ledgerId = LedgerId.decode('test:mainnet')
-  const decode = vi.spyOn(LedgerId, 'decode')
-  try {
-    for (const hash of [null, [], new Uint8Array(31), new Uint8Array(33)]) {
-      decode.mockReturnValueOnce({ ...ledgerId, hash: () => hash } as LedgerId)
+it.each(['x', 'github'] as const)(
+  'rejects invalid notary addresses before OAuth for %s [LIBID-OAUTH-021]',
+  (platformId) => {
+    const connection = new Connection()
+    const client = clientFromConfig({
+      ...config,
+      platforms: { [platformId]: { clientId: 'client', ceremonyVersions: [1] } },
+    })
+    for (const method of [
+      undefined,
+      1,
+      () => {
+        throw new Error('address failure')
+      },
+      ...[
+        null,
+        1,
+        '',
+        'http://notary.test',
+        'https://notary.test/',
+        'https://notary.test/path',
+        'https://user@notary.test',
+        'https://notary.test?x=1',
+        'https://notary.test#x',
+        'https://NOTARY.test',
+        'https://notary.test:443',
+      ].map((value) => () => value),
+    ])
       expect(() =>
-        clientFromConfig(config).new(
+        client.new(
           connection,
           id,
-          ledgerId,
-          'google',
+          { hash: mainnet.hash, notaryAddress: method } as LedgerId,
+          platformId,
           new Uint8Array(32),
           new Uint8Array(),
         ),
-      ).toThrow('Ledger hash must be 32 bytes')
-    }
+      ).toThrow()
     expect(connection.navigate).not.toHaveBeenCalled()
-  } finally {
-    decode.mockRestore()
-  }
-})
+    expect(connection.send).not.toHaveBeenCalled()
+  },
+)
 
 it.each([
   { ...identity, platformId: 'x' },
@@ -369,7 +399,7 @@ it.each([
 function checkCreationTypes() {
   const client = clientFromConfig(config)
   const conn = new Connection(),
-    ledger = LedgerId.decode('test:testnet'),
+    ledger = testnet,
     bytes = new Uint8Array(32)
   // @ts-expect-error Former object form is not supported.
   client.new(id, {

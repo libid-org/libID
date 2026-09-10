@@ -10,7 +10,7 @@ export const failureMessages = {
   'prefetch-worker': 'Unable to prepare the prefetch worker or dispatch assets.',
   'prover-input': 'Invalid Prover navigation input.',
   'prover-connection': 'Unable to connect Prover.',
-  'prover-request': 'Invalid proving request or ledger identifier.',
+  'prover-request': 'Invalid proving request.',
   'prover-isolation': 'Required browser isolation is unavailable.',
   'prover-worker': 'Unable to claim the proving resource worker.',
   'oauth-return': 'Invalid OAuth return or provider authorization error.',

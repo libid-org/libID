@@ -16,6 +16,9 @@ declare global {
       publicInputs: string[]
       runtime: { effectiveThreads: number; sharedMemory: boolean }
     }>
-    notarySmoke(count?: number): Promise<{ sent: number; received: number; attestedData: number }[]>
+    notarySmoke(
+      count?: number,
+      notaryAddress?: string,
+    ): Promise<{ sent: number; received: number; attestedData: number }[]>
   }
 }
