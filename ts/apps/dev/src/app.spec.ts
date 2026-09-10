@@ -22,16 +22,13 @@ test('unavailable Bridge disables launch; reload loads compatible platforms', as
   )
   await page.goto('/')
   await expect(page.getByRole('status')).toContainText('Could not load Bridge configuration')
-  await expect(page.getByRole('link', { name: 'Start ceremony' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  )
+  await expect(page.locator('#platforms').getByRole('button')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Retry connection' })).toHaveCount(0)
   available = true
   await page.reload()
   await expect(page.getByRole('status')).toContainText('Ready.')
-  await expect(page.locator('#platform option')).toHaveText(['Google'])
-  await expect(page.getByRole('link', { name: 'Start ceremony' })).toHaveAttribute(
+  await expect(page.locator('#platforms').getByRole('button')).toHaveText(['Google'])
+  await expect(page.getByRole('button', { name: 'Google', exact: true })).toHaveAttribute(
     'aria-disabled',
     'false',
   )
@@ -40,46 +37,71 @@ test('no compatible platforms stays unavailable', async ({ page }) => {
   await page.route(configUrl, (route) => route.fulfill({ json: { ...config, platforms: {} } }))
   await page.goto('/')
   await expect(page.getByRole('status')).toContainText('no compatible platforms')
-  await expect(page.getByRole('link', { name: 'Start ceremony' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  )
+  await expect(page.locator('#platforms').getByRole('button')).toHaveCount(0)
 })
-for (const blocked of [false, true]) {
-  test(`real popup launch${blocked ? ' through the native anchor' : ''}, cancellation and retry`, async ({
-    page,
-    context,
-  }) => {
-    if (blocked)
-      await page.addInitScript(() => {
-        window.open = () => null
-      })
-    await page.route(configUrl, (route) => route.fulfill({ json: config }))
-    // Only transport setup is exercised here. No simulated proof delivery or OAuth consent.
-    await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
-      route.fulfill({
-        contentType: 'text/html',
-        body: '<!doctype html><title>Prefetch test boundary</title>',
-      }),
-    )
-    await page.goto('/')
-    await expect(page.getByRole('status')).toContainText('Ready.')
-    const opened = page.waitForEvent('popup')
-    await page.getByRole('link', { name: 'Start ceremony' }).click()
-    const popup = await opened
-    await expect(popup).toHaveURL(/\/ccdp\/v1\/prefetch#/)
-    await expect(page.getByRole('button', { name: 'Cancel ceremony' })).toBeEnabled()
-    await page.getByRole('button', { name: 'Cancel ceremony' }).click()
-    await expect(page.locator('#result')).toHaveText('Ceremony cancelled.')
-    // This inert fallback has no handle or authenticated carrier to receive closure.
-    if (blocked) await popup.close()
-    else await expect.poll(() => popup.isClosed()).toBe(true)
-    await expect(page.getByRole('link', { name: 'Start ceremony' })).toHaveAttribute(
-      'aria-disabled',
-      'false',
-    )
-    expect(await page.evaluate(() => window.result)).toEqual({ status: 'cancelled' })
-  })
+for (const [platform, name] of [
+  ['google', 'Google'],
+  ['x', 'X'],
+  ['github', 'GitHub'],
+]) {
+  for (const blocked of [false, true]) {
+    test(`${name} popup launch${blocked ? ' through the native anchor' : ''}, cancellation and retry`, async ({
+      page,
+      context,
+    }) => {
+      if (blocked)
+        await page.addInitScript(() => {
+          window.open = () => null
+        })
+      await page.route(configUrl, (route) =>
+        route.fulfill({
+          json: {
+            ...config,
+            platforms: {
+              ...config.platforms,
+              x: { clientId: 'test-client', ceremonyVersions: [1] },
+              github: { clientId: 'test-client', ceremonyVersions: [1] },
+            },
+          },
+        }),
+      )
+      // Only transport setup is exercised here. No simulated proof delivery or OAuth consent.
+      await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
+        route.fulfill({
+          contentType: 'text/html',
+          body: '<!doctype html><title>Prefetch test boundary</title>',
+        }),
+      )
+      await page.goto('/')
+      await expect(page.getByRole('status')).toContainText('Ready.')
+      const opened = page.waitForEvent('popup')
+      const launch = page.getByRole('button', { name, exact: true })
+      if (platform === 'google') await launch.press(blocked ? 'Space' : 'Enter')
+      else await launch.click()
+      const popup = await opened
+      await expect(popup).toHaveURL(/\/ccdp\/v1\/prefetch#/)
+      expect(new URLSearchParams(new URL(popup.url()).hash.slice(1)).get('platformId')).toBe(
+        platform,
+      )
+      for (const button of await page
+        .getByRole('group', { name: 'Platforms' })
+        .getByRole('button')
+        .all())
+        await expect(button).toHaveAttribute('aria-disabled', 'true')
+      await expect(page.getByRole('button', { name: 'Cancel ceremony' })).toBeEnabled()
+      await page.getByRole('button', { name: 'Cancel ceremony' }).click()
+      await expect(page.locator('#result')).toHaveText('Ceremony cancelled.')
+      // This inert fallback has no handle or authenticated carrier to receive closure.
+      if (blocked) await popup.close()
+      else await expect.poll(() => popup.isClosed()).toBe(true)
+      for (const button of await page
+        .getByRole('group', { name: 'Platforms' })
+        .getByRole('button')
+        .all())
+        await expect(button).toHaveAttribute('aria-disabled', 'false')
+      expect(await page.evaluate(() => window.result)).toEqual({ status: 'cancelled' })
+    })
+  }
 }
 
 test('private configuration and generated files are not served', async ({ request }) => {

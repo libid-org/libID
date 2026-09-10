@@ -12,10 +12,9 @@
       dl { display: grid; grid-template-columns: 7rem 1fr; gap: .5rem; }
       dd { margin: 0; overflow-wrap: anywhere; }
       fieldset { border: 1px solid GrayText; border-radius: .5rem; padding: 1rem; }
-      label { display: block; margin-bottom: .35rem; }
-      select, button, .launch { font: inherit; padding: .5rem .8rem; }
+      button, .launch { font: inherit; padding: .5rem .8rem; }
       .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; align-items: center; }
-      .launch { border: 1px solid currentColor; border-radius: .25rem; text-decoration: none; }
+      .launch { border: 1px solid currentColor; border-radius: .25rem; text-decoration: none; cursor: pointer; }
       [aria-disabled="true"] { opacity: .5; cursor: default; }
       #status { min-height: 3rem; }
       #result { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -32,10 +31,8 @@
     <p id="status" role="status" aria-live="polite">Connecting to the Bridge…</p>
     <fieldset>
       <legend>Start a ceremony</legend>
-      <label for="platform">Platform</label>
-      <select id="platform" disabled><option value="">Waiting for Bridge configuration</option></select>
+      <div id="platforms" class="actions"></div>
       <div class="actions">
-        <a id="launch" class="launch" href="/" aria-disabled="true" tabindex="-1">Start ceremony</a>
         <button id="cancel" type="button" disabled>Cancel ceremony</button>
         <button id="close" type="button" disabled>Close popup</button>
       </div>

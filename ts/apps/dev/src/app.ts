@@ -17,8 +17,7 @@ declare global {
   }
 }
 const settings = __CEREMONY_DEV__
-const platform = document.querySelector<HTMLSelectElement>('#platform')!
-const launch = document.querySelector<HTMLAnchorElement>('#launch')!
+const platforms = document.querySelector<HTMLElement>('#platforms')!
 const cancel = document.querySelector<HTMLButtonElement>('#cancel')!
 const close = document.querySelector<HTMLButtonElement>('#close')!
 const status = document.querySelector<HTMLElement>('#status')!
@@ -31,28 +30,44 @@ let active: Ceremony | undefined
 let connection: PopupConnection<Message> | undefined
 function controls() {
   const ready = !!client?.enabledPlatforms.length && !active && !connection
-  platform.disabled = !ready
-  launch.setAttribute('aria-disabled', String(!ready))
-  launch.tabIndex = ready ? 0 : -1
+  for (const launch of platforms.querySelectorAll('a')) {
+    launch.setAttribute('aria-disabled', String(!ready))
+    launch.tabIndex = ready ? 0 : -1
+  }
   cancel.disabled = !active
   close.disabled = !connection
 }
 async function initialize() {
   try {
     client = await createCeremonyClient({ oauthBridge: settings.bridge })
-    platform.replaceChildren(...client.enabledPlatforms.map((id) => new Option(names[id], id)))
+    platforms.replaceChildren(
+      ...client.enabledPlatforms.map((platform) => {
+        const launch = document.createElement('a')
+        launch.className = 'launch'
+        launch.href = '/'
+        launch.setAttribute('role', 'button')
+        launch.textContent = names[platform]
+        launch.addEventListener('click', (event) => start(event, launch, platform))
+        launch.addEventListener('keydown', (event) => {
+          if (event.key === ' ') {
+            event.preventDefault()
+            launch.click()
+          }
+        })
+        return launch
+      }),
+    )
     status.textContent = client.enabledPlatforms.length
-      ? 'Ready. Choose a platform and start a ceremony.'
+      ? 'Ready. Click a platform to start a ceremony.'
       : 'The Bridge has no compatible platforms enabled.'
   } catch {
-    platform.replaceChildren(new Option('Bridge unavailable', ''))
     status.textContent =
       'Could not load Bridge configuration. Check its address, certificate and application allowlist, then reload this page.'
   } finally {
     controls()
   }
 }
-launch.addEventListener('click', (event) => {
+function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformId) {
   if (!client || launch.getAttribute('aria-disabled') === 'true') {
     event.preventDefault()
     return
@@ -75,7 +90,7 @@ launch.addEventListener('click', (event) => {
       current,
       id,
       LedgerId.decode('test:testnet'),
-      platform.value as PlatformId,
+      platform,
       sha256(new TextEncoder().encode('libid/ceremony/dev')),
       new TextEncoder().encode('Ceremony development walkthrough'),
     )
@@ -134,7 +149,7 @@ launch.addEventListener('click', (event) => {
       active = undefined
       controls()
     })
-})
+}
 cancel.addEventListener('click', () => {
   cancel.disabled = true
   void active?.cancel().catch(() => {
