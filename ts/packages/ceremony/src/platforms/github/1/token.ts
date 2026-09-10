@@ -1,3 +1,4 @@
+import { tokenRequestBody } from '../../../prover/transcript.js'
 import { origin } from '../../../ccdp/index.js'
 import { parseJson } from '../../../prover/json.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
@@ -17,7 +18,7 @@ const CODE = /^[\x21-\x7e]{1,1024}$/
 const ACCESS_TOKEN = /^[\x21-\x7e]{1,128}$/
 const CODE_VERIFIER = /^[A-Za-z0-9_-]{43}$/
 const encoder = new TextEncoder()
-const REQUEST_LINE = encoder.encode('POST /login/oauth/access_token HTTP/1.1\r\n')
+const REQUEST_LINE = 'POST /login/oauth/access_token HTTP/1.1'
 const ACCESS_TOKEN_DELIMITER = encoder.encode('"access_token":"')
 const QUOTE = new Uint8Array([0x22])
 
@@ -86,37 +87,29 @@ function sameRange(actual: DecodedRangeCommitment, start: number, end: number): 
 
 function requireRequest(decoded: DecodedAttestedData, binding: TokenExchangeBinding): void {
   const { revealed, commitments } = decoded.sent
-  const [line, ...fields] = revealed
+  const [prefix] = revealed
   if (
-    revealed.length !== 5 ||
-    commitments.length !== 2 ||
-    line.start !== 0 ||
-    !bytesEqual(line.bytes, REQUEST_LINE)
+    revealed.length !== 1 ||
+    commitments.length !== 1 ||
+    prefix.start !== 0 ||
+    prefix.bytes.length >= decoded.sentTranscriptLength ||
+    !sameRange(commitments[0], prefix.bytes.length, decoded.sentTranscriptLength)
   )
     invalid('request layout')
+  const body = tokenRequestBody(
+    prefix.bytes,
+    REQUEST_LINE,
+    'github.com',
+    decoded.sentTranscriptLength,
+  )
   const expected = new URLSearchParams([
     ['client_id', binding.clientId],
     ['code', binding.code],
     ['redirect_uri', binding.redirectUri],
     ['code_verifier', binding.codeVerifier],
-  ])
-    .toString()
-    .split('&')
-    .map((field, index) => encoder.encode(field + (index < 3 ? '&' : '')))
-  let end = fields[0].start
-  if (end <= REQUEST_LINE.length || !sameRange(commitments[0], REQUEST_LINE.length, end))
-    invalid('hidden request headers')
-  for (let index = 0; index < fields.length; index++) {
-    const field = fields[index]
-    if (field.start !== end || !bytesEqual(field.bytes, expected[index]))
-      invalid('request bindings')
-    end += field.bytes.length
-  }
-  if (
-    end >= decoded.sentTranscriptLength ||
-    !sameRange(commitments[1], end, decoded.sentTranscriptLength)
-  )
-    invalid('hidden client secret')
+  ]).toString()
+  // The bridge commits the entire trailing &client_secret=... field.
+  if (!bytesEqual(body, encoder.encode(expected))) invalid('request bindings')
 }
 
 function receivedCommitmentRanges(
