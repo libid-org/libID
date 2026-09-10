@@ -71,7 +71,11 @@ Registration or activation failure is terminal under the package's fixed
 prefetch/cache contract; artifact fetch failure records no weaker mode and
 leaves proving on the identical cold path. The active prover resolves
 the same profile using the exact `AppStartProver` platform/version. Ordinary asset
-requests join an in-flight fetch or read the completed Cache Storage entry. It
+requests join an in-flight fetch or return the completed Cache Storage response
+after validating its headers, without rereading or copying its body. Complete
+bodies are validated before storage; CRS partial responses retain their range
+reconstruction and byte-count checks. A Cache Storage miss or storage denial
+uses `force-cache` for these immutable URLs, allowing browser HTTP-cache reuse. It
 joins raw-CRS fetches in the same way. Backend initialization uses the explicit
 options above and keeps bb.js's native processed-CRS IndexedDB cache enabled;
 on a miss its normal CRS loading consumes the prefetched raw responses.
