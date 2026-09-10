@@ -97,10 +97,10 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       ),
     )
     expect(result.oauthProof.proof.identityProof).toEqual(new Uint8Array([1]))
-    expect(events).toEqual(['start', 'authorization', 'proof-preparation', 'finished'])
+    expect(events).toEqual(['start', 'authorization', 'finished'])
     expect(c.close).not.toHaveBeenCalled()
     c.receive({ type: 'prover-identity-proof', identity, proof })
-    expect(events).toEqual(['start', 'authorization', 'proof-preparation', 'finished'])
+    expect(events).toEqual(['start', 'authorization', 'finished'])
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
   })
   it('cancellation wins over late delivery and preserves the popup [LIBID-BROWSER-005]', async () => {
@@ -620,7 +620,6 @@ it('startup milestones are advisory, phase-bound and insensitive to duplicate or
     'prefetch',
     'authorization',
     'oauth-return',
-    'proof-preparation',
   ])
 })
 it('cancellation at authorization entry prevents provider navigation', async () => {
@@ -632,4 +631,21 @@ it('cancellation at authorization entry prevents provider navigation', async () 
   connection.receive({ type: 'prefetch-started' })
   await expect(result).rejects.toMatchObject({ name: 'AbortError' })
   expect(connection.navigateAway).not.toHaveBeenCalled()
+})
+
+it('Prover readiness does not claim user authorization before OAuth return admission', async () => {
+  const { ceremony, connection } = setup()
+  const stages: string[] = []
+  ceremony.onEvent((event) => {
+    if (event.type === 'stage') stages.push(event.stage)
+  })
+  const result = ceremony.proveUserIdentity()
+  connection.receive({ type: 'prefetch-ready' })
+  connection.receive({ type: 'prefetch-started' })
+  connection.receive({ type: 'callback-ready' })
+  connection.receive({ type: 'prover-ready' })
+  expect(stages).toEqual(['start', 'prefetch', 'authorization', 'oauth-return'])
+  connection.receive({ type: 'cancel-ceremony' })
+  await expect(result).resolves.toEqual({ status: 'denied' })
+  expect(stages.at(-1)).toBe('oauth-return')
 })
