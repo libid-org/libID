@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { startCallback } from './callback.js'
+
 const { accept, current, view, navigate, send } = vi.hoisted(() => ({
   accept: vi.fn(),
   current: vi.fn(),
@@ -58,7 +59,8 @@ it('clears before acceptance and preserves exact private return with shared depl
     'https://other-ccdp.test/ccdp/v1/prover',
     new URLSearchParams({ ceremonyId: id, oauthQuery: '', oauthFragment: original }),
   )
-  expect(send).not.toHaveBeenCalled()
+  expect(send).toHaveBeenCalledExactlyOnceWith({ type: 'callback-ready' })
+  expect(send.mock.invocationCallOrder[0]).toBeLessThan(navigate.mock.invocationCallOrder[0])
 })
 it.each(['2', '99', '99999999999999999999'])(
   'rejects unbundled/retired version %s locally [LIBID-ASSET-015]',
@@ -150,3 +152,12 @@ it.each([[], [null], [{ optional: { nested: [1, 2] } }]].map((trailing) => ({ tr
     }
   },
 )
+
+it('does not prevent private navigation when the advisory readiness send fails', async () => {
+  send.mockImplementationOnce(() => {
+    throw new Error('transport send failure')
+  })
+  startCallback()
+  await Promise.resolve()
+  expect(navigate).toHaveBeenCalledOnce()
+})

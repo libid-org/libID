@@ -72,7 +72,10 @@ async function initialize() {
   }
 }
 const stageNames: Record<CeremonyStage, string> = {
+  start: 'Start',
+  prefetch: 'Prefetch',
   authorization: 'Authorization',
+  'oauth-return': 'OAuth return',
   'code-exchange': 'Exchanging code',
   'identity-fetch': 'Fetching identity',
   'proof-preparation': 'Preparing proof',

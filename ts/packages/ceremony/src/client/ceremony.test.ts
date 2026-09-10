@@ -97,10 +97,10 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       ),
     )
     expect(result.oauthProof.proof.identityProof).toEqual(new Uint8Array([1]))
-    expect(events).toEqual(['authorization', 'proof-preparation', 'finished'])
+    expect(events).toEqual(['start', 'authorization', 'proof-preparation', 'finished'])
     expect(c.close).not.toHaveBeenCalled()
     c.receive({ type: 'prover-identity-proof', identity, proof })
-    expect(events).toEqual(['authorization', 'proof-preparation', 'finished'])
+    expect(events).toEqual(['start', 'authorization', 'proof-preparation', 'finished'])
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
   })
   it('cancellation wins over late delivery and preserves the popup [LIBID-BROWSER-005]', async () => {
@@ -468,7 +468,9 @@ it.each(['google', 'x', 'github'] as const)(
     const events: CeremonyEvent[] = []
     ceremony.onEvent((event) => events.push(event))
     const result = ceremony.proveUserIdentity()
+    connection.receive({ type: 'prefetch-ready' })
     connection.receive({ type: 'prefetch-started' })
+    connection.receive({ type: 'callback-ready' })
     connection.receive({ type: 'prover-ready' })
     const notify = (stage: string) =>
       connection.receive({ type: 'prover-notify-event', stage, timestamp: 1 })
@@ -496,9 +498,19 @@ it.each(['google', 'x', 'github'] as const)(
     await expect(result).resolves.toEqual({ status: 'denied' })
     expect(events.filter((e) => e.type === 'stage').map((e) => e.stage)).toEqual(
       platformId === 'google'
-        ? ['authorization', 'proof-preparation', 'proof-generation']
-        : [
+        ? [
+            'start',
+            'prefetch',
             'authorization',
+            'oauth-return',
+            'proof-preparation',
+            'proof-generation',
+          ]
+        : [
+            'start',
+            'prefetch',
+            'authorization',
+            'oauth-return',
             'code-exchange',
             'identity-fetch',
             'proof-preparation',
@@ -585,4 +597,39 @@ it('stops event delivery after an observer cancels synchronously', async () => {
   ceremony.onEvent((event) => events.push(event))
   await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ name: 'AbortError' })
   expect(events).toEqual([expect.objectContaining({ type: 'finished', outcome: 'cancelled' })])
+})
+
+it('startup milestones are advisory, phase-bound and insensitive to duplicate or late reports [LIBID-BROWSER-006]', async () => {
+  const { ceremony, connection } = setup()
+  const events: CeremonyEvent[] = []
+  ceremony.onEvent((event) => events.push(event))
+  const result = ceremony.proveUserIdentity()
+  connection.receive({ type: 'callback-ready' })
+  connection.receive({ type: 'prefetch-ready' })
+  connection.receive({ type: 'prefetch-ready' })
+  connection.receive({ type: 'prefetch-started' })
+  connection.receive({ type: 'prefetch-ready' })
+  connection.receive({ type: 'callback-ready' })
+  connection.receive({ type: 'callback-ready' })
+  connection.receive({ type: 'prover-ready' })
+  connection.receive({ type: 'callback-ready' })
+  connection.receive({ type: 'cancel-ceremony' })
+  await expect(result).resolves.toEqual({ status: 'denied' })
+  expect(events.filter((e) => e.type === 'stage').map((e) => e.stage)).toEqual([
+    'start',
+    'prefetch',
+    'authorization',
+    'oauth-return',
+    'proof-preparation',
+  ])
+})
+it('cancellation at authorization entry prevents provider navigation', async () => {
+  const { ceremony, connection } = setup()
+  ceremony.onEvent((event) => {
+    if (event.type === 'stage' && event.stage === 'authorization') void ceremony.cancel()
+  })
+  const result = ceremony.proveUserIdentity()
+  connection.receive({ type: 'prefetch-started' })
+  await expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  expect(connection.navigateAway).not.toHaveBeenCalled()
 })

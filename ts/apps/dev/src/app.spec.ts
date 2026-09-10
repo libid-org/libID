@@ -251,6 +251,7 @@ for (const [platform, name] of [
           : ''
       }
       await connection.ready;
+      connection.send({ type: '${prover ? 'callback-ready' : 'prefetch-ready'}' });
       connection.send({ type: '${prover ? 'prover-ready' : 'prefetch-started'}' });
     </script>`
     await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
@@ -317,9 +318,12 @@ for (const [platform, name] of [
     })
     await expect(page.locator('#history')).toContainText('Denied')
     const timings = page.locator('.stage-timings li')
-    await expect(timings).toHaveCount(platform === 'google' ? 3 : 6)
+    await expect(timings).toHaveCount(platform === 'google' ? 6 : 9)
+    expect(
+      (await timings.allTextContents()).slice(0, 4).map((text) => text.split(' · ')[0]),
+    ).toEqual(['Start', 'Prefetch', 'Authorization', 'OAuth return'])
     for (const text of await timings.allTextContents()) expect(text).toMatch(/ · \d+\.\d s$/)
-    for (const text of (await timings.allTextContents()).slice(1)) {
+    for (const text of (await timings.allTextContents()).slice(4)) {
       const seconds = Number(/ · ([\d.]+) s$/.exec(text)![1])
       expect(seconds).toBeGreaterThanOrEqual(1)
       expect(seconds).toBeLessThan(3)

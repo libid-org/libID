@@ -1,9 +1,9 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { ceremonyError, reportFailure, type FailureCode } from '../../errors.js'
-import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
-import { CancelCeremony, origin, UUID } from '../index.js'
-import { proverFragment, route, type OAuthReturn } from '../navigation.js'
+import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
+import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
 import { view } from '../../ui.js'
+import { CancelCeremony, origin, UUID } from '../index.js'
+import { type OAuthReturn, proverFragment, route } from '../navigation.js'
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
 export function startCallback(): void {
   try {
@@ -80,6 +80,11 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     void connection.ready
       .then(async () => {
         if (ended || !retained) return
+        try {
+          connection!.send({ type: 'callback-ready' })
+        } catch {
+          /* Report no return parameters; a missed milestone cannot prevent navigation. */
+        }
         failureCode = 'callback-navigation'
         const fragment = proverFragment(id, retained)
         await connection!.navigate(ccdpOrigin + route('prover'), fragment)
