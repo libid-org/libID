@@ -161,6 +161,18 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       ),
     ).toThrow()
   })
+  it('accepts a local HTTP CCDP on a separate origin [LIBID-MOD-011]', () => {
+    for (const host of ['localhost', '127.0.0.1']) {
+      const bridge = `http://${host}:4682`
+      for (const ccdpOrigin of [`http://${host}`, `http://${host}:4683`]) {
+        const local = { ...config, ccdpOrigin, redirectUri: `${bridge}/auth/callback` }
+        expect(validateCeremonyConfig(local, bridge).ccdpOrigin).toBe(ccdpOrigin)
+      }
+    }
+    expect(() =>
+      validateCeremonyConfig({ ...config, ccdpOrigin: 'http://ccdp.test' }, 'https://bridge.test'),
+    ).toThrow()
+  })
   it('validates configuration without coupling Bridge and CCDP [LIBID-OAUTH-001]', () => {
     expect(validateCeremonyConfig(config, 'https://bridge.test').ccdpOrigin).toBe(
       'https://ccdp.test',

@@ -125,6 +125,7 @@ test('CCDP contains no ledger implementation or build-time notary mapping [LIBID
     if (path === '/ccdp/v1/prover' || path === '/ccdp/v1/prover/fallback') {
       const sources = policy.split('connect-src ')[1].split(';')[0].trim().split(/\s+/)
       for (const source of [
+        "'self'",
         'https:',
         'wss:',
         'http://localhost:*',

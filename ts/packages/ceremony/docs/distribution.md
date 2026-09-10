@@ -6,6 +6,8 @@ notary URLs below also admit canonical HTTP URLs on exactly `localhost` or
 not apply to OAuth provider requests or external proving assets. COOP/COEP, origin
 admission, callback privacy and all other validation remain required. LAN addresses,
 lookalike domains and noncanonical spellings are not admitted.
+Every asset-fetching context explicitly includes `'self'` in `connect-src`, so
+local HTTP assets use the same policies without requiring TLS or an upgrade.
 Execution CSP additionally permits `http://localhost:*`, `http://127.0.0.1:*`
 and, for notary execution, `ws://localhost:*`, `ws://127.0.0.1:*`. These are
 explicit host sources, never unrestricted `http:` or `ws:`. The shared artifact
@@ -119,7 +121,7 @@ runtime compression or other negotiated representation exists.
 
 Both Prover responses close script and worker sources to the build-generated
 same-origin graph and toolchain-required `blob:` workers. Asset fetches are
-not restricted to the CCDP origin: `connect-src https: wss:` admits bb.js's
+not restricted to the CCDP origin: `connect-src 'self' https: wss:` admits bb.js's
 Aztec CRS downloads, validated third-party OAuth Bridges, and secure WebSocket
 connections to the notary address supplied by the Application. Dedicated
 TLSNotary workers also admit `wss:` where they open that connection. The

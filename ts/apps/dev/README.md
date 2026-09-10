@@ -130,9 +130,8 @@ Register **`http://localhost:4682/auth/callback`** with each provider. Google al
 needs the appropriate consent-screen/test-user configuration; X must use a public
 client with PKCE; GitHub needs the matching confidential secret on the Bridge.
 The public development IDs and matching GitHub development credential are committed
-in `compose.yaml`. Provider registrations must match the callback URL above. The RC3 check on
-2026-09-10 found GitHub still accepting the old HTTPS callback and rejecting HTTP
-with `redirect_uri_mismatch`; update that GitHub App registration before testing.
+in `compose.yaml`. Provider registrations must match the callback URL above. The registrations have been updated to HTTP; a synthetic GitHub probe confirmed
+that its token endpoint accepts the HTTP callback. Live consent remains a separate check.
 
 From the TypeScript workspace:
 
