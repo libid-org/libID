@@ -96,7 +96,7 @@ const REQUEST_BODY = new URLSearchParams([
   ['code_verifier', BINDING.codeVerifier],
 ]).toString()
 const REQUEST_PREFIX = utf8(
-  `POST /login/oauth/access_token HTTP/1.1\r\nhost: github.com\r\ncontent-type: application/x-www-form-urlencoded\r\naccept: application/json\r\n\r\n${REQUEST_BODY}`,
+  `POST /login/oauth/access_token HTTP/1.1\r\nhost: github.com\r\ncontent-type: application/x-www-form-urlencoded\r\naccept: application/json\r\nconnection: close\r\ncontent-length: ${utf8(`${REQUEST_BODY}&client_secret=deployment-secret`).length}\r\n\r\n${REQUEST_BODY}`,
 )
 const REQUEST_LENGTH = REQUEST_PREFIX.length + utf8('&client_secret=deployment-secret').length
 const ACCESS_TOKEN = 'gho_launch_token'
@@ -109,23 +109,11 @@ const BEARER_END = BEARER_START + ACCESS_TOKEN.length
 const RESPONSE_LENGTH = BEARER_END + RESPONSE_SUFFIX.length
 const bearerHash = sha256(concat(utf8(ACCESS_TOKEN), OPENING))
 
-const line = utf8('POST /login/oauth/access_token HTTP/1.1\r\n')
-const fields = REQUEST_BODY.split('&').map((field, index) => utf8(field + (index < 3 ? '&' : '')))
-let fieldOffset = REQUEST_PREFIX.length - REQUEST_BODY.length
-const fieldStart = fieldOffset
 const SENT: Direction = {
   length: REQUEST_LENGTH,
-  revealed: [
-    { start: 0, bytes: line },
-    ...fields.map((bytes) => {
-      const range = { start: fieldOffset, bytes }
-      fieldOffset += bytes.length
-      return range
-    }),
-  ],
+  revealed: [{ start: 0, bytes: REQUEST_PREFIX }],
   commitments: [
-    { start: line.length, end: fieldStart, commitment: new Uint8Array(32).fill(1) },
-    { start: fieldOffset, end: REQUEST_LENGTH, commitment: new Uint8Array(32).fill(2) },
+    { start: REQUEST_PREFIX.length, end: REQUEST_LENGTH, commitment: new Uint8Array(32).fill(2) },
   ],
 }
 const RECEIVED: Direction = {
@@ -280,18 +268,18 @@ describe('GitHub TokenResponse codec', () => {
 })
 
 describe('GitHub admission [LIBID-PROVER-004]', () => {
-  it('accepts current hidden-header disclosures without signature verification', () => {
+  it('accepts one revealed request prefix and a committed secret suffix without signature verification', () => {
     const admitted = admitTokenResponse(response(), BINDING)
     expect(admitted.bearer.hash).toEqual(bearerHash)
-    expect(admitted.decoded.sent.revealed).toHaveLength(5)
+    expect(admitted.decoded.sent.revealed).toHaveLength(1)
   })
-  it('rejects obsolete exposed headers, altered bindings and bearer correlation', () => {
+  it('rejects hidden headers, altered bindings and bearer correlation', () => {
     expect(() =>
       admitTokenResponse(
         response({
           ...SENT,
-          revealed: [{ start: 0, bytes: REQUEST_PREFIX }],
-          commitments: [SENT.commitments[1]],
+          revealed: [{ start: 0, bytes: utf8('POST /login/oauth/access_token HTTP/1.1\r\n') }],
+          commitments: SENT.commitments,
         }),
         BINDING,
       ),
@@ -305,4 +293,49 @@ describe('GitHub admission [LIBID-PROVER-004]', () => {
       admitTokenResponse({ ...response(), bearerOpening: new Uint8Array(16) }, BINDING),
     ).toThrow()
   })
+})
+
+it('checks GitHub token head framing against the signed length [REQ-PLAT-56A/B/C]', () => {
+  const original = new TextDecoder().decode(REQUEST_PREFIX)
+  const contentLength = String(utf8(`${REQUEST_BODY}&client_secret=deployment-secret`).length)
+  for (const changed of [
+    original.replace('host: github.com', 'host: evil.test'),
+    original.replace(
+      `content-length: ${contentLength}`,
+      `content-length: ${Number(contentLength) - 1}`,
+    ),
+    original.replace('connection: close\r\n', ''),
+    original.replace(
+      'accept: application/json',
+      'accept: application/json\r\naccept: application/json',
+    ),
+    original.replace('accept: application/json', 'transfer-encoding: chunked'),
+    original.replace('\r\nhost:', '\nhost:'),
+    original.replace('host: github.com\r\n', 'host: github.com\n\r\n'),
+    original.replace('\r\nhost:', '\r\n host:'),
+  ]) {
+    const prefix = utf8(changed)
+    const length = REQUEST_LENGTH + prefix.length - REQUEST_PREFIX.length
+    expect(() =>
+      admitTokenResponse(
+        response({
+          length,
+          revealed: [{ start: 0, bytes: prefix }],
+          commitments: [{ ...SENT.commitments[0], start: prefix.length, end: length }],
+        }),
+        BINDING,
+      ),
+    ).toThrow()
+  }
+  for (const change of [-1, 1]) {
+    expect(() =>
+      admitTokenResponse(
+        response({
+          ...SENT,
+          commitments: [{ ...SENT.commitments[0], start: REQUEST_PREFIX.length + change }],
+        }),
+        BINDING,
+      ),
+    ).toThrow()
+  }
 })

@@ -371,3 +371,46 @@ describe('correlateAttestation', () => {
     expect(() => correlateAttestation(transcript, plan, { sent, recv }, signed)).toThrow(reason)
   })
 })
+
+it('coalesces adjacent disclosures in both directions before signing [LIBID-PROVER-009]', () => {
+  const selected = {
+    sent: [
+      { start: 0, end: 2 },
+      { start: 2, end: 4 },
+      { start: 4, end: 7 },
+    ],
+    recv: [
+      { start: 2, end: 5 },
+      { start: 5, end: 8 },
+    ],
+  }
+  const original = structuredClone(selected)
+  const plan = planNotarization(transcript, selected)
+  // Expected native RangeSet serialization, independent of the planner's partition.
+  const native = {
+    ...plan,
+    reveal: {
+      sent: [{ start: 0, end: 7 }],
+      recv: [{ start: 2, end: 8 }],
+      server_identity: true as const,
+    },
+  }
+  expect(plan.reveal).toEqual(native.reveal)
+  expect(selected).toEqual(original)
+  const openings = {
+    sent: plan.commit.sent.map((range, i) => opening(transcript.sent, range, i + 1)),
+    recv: plan.commit.recv.map((range, i) => opening(transcript.recv, range, i + 4)),
+  }
+  const signed = encodeAttestation(transcript, native, {
+    sent: openings.sent.map((o) => o.hash),
+    recv: openings.recv.map((o) => o.hash),
+  })
+  expect(
+    correlateAttestation(transcript, plan, openings, signed).decoded.received.revealed,
+  ).toHaveLength(1)
+  const changed = { ...transcript, recv: transcript.recv.slice() }
+  changed.recv[3] ^= 1
+  expect(() => correlateAttestation(changed, plan, openings, signed)).toThrow(
+    /revealed range changed/,
+  )
+})

@@ -115,16 +115,21 @@ A real ledger definition is required before a production ceremony can be constru
    A matched SDK/service observation contract and delayed-request qualification are
    required before claiming this requirement. This production enforcement remains
    unresolved, not a waived security property.
-3. **Exact HTTP profile ordering:** the pinned TLSN SDK accepts request headers in
-   a Rust `HashMap`. The current profile prose prescribes an order which that API
-   does not guarantee. Selectors validate the complete permitted header set,
-   uniqueness, values and bearer placement against the actual transcript, but do
-   not claim exact order. A matching SDK serializer/profile decision is needed.
+3. **HTTP profile alignment:** spec PR #31 (`ae33a29`) permits any header order,
+   resolving the Rust SDK HashMap-order mismatch. Token requests now reveal their
+   heads and use contiguous disclosures. GitHub identity requests still require
+   profile/verifier alignment: the spec omits GitHub's mandatory User-Agent from
+   its exact header set. See [the documented deviation](notarization.md#token-layout-alignment).
 4. **GitHub service:** no real confidential token-exchange service was qualified.
-   Admission implements the current hidden-header, separately disclosed field
-   profile. Its tests use a synthetic canonical-bincode record, not a signed
-   released GitHub service vector. The obsolete fully revealed request-head layout
-   is rejected. Obtain a matching service/profile vector and real `/user` evidence. The Bridge
+   Admission checks one revealed request prefix and one committed secret-field
+   suffix. Tests use canonical-bincode fixtures modeling native coalescing, not
+   live signed service evidence. The selected next qualification target is
+   [Bridge PR #9](https://github.com/libid-org/libid-server-rs/pull/9),
+   `feat/callback-artifact-retrieval` at `ebbf10961dd6960a4d53c0af6470bee1f889a229`,
+   using libid-rs `501f094bf10f776c2227ef345908f507a0c80fd0`. Its TLSN fork pin is
+   `8a5de746f73bbe3476a3b10ce411fde3c87e479d`; the browser's rc.1 bundle uses
+   `0f82f54968b36738eacebf7c8ac7728003918b72`. Establish a compatible matched
+   service/browser bundle before live qualification. The Bridge
    must admit exactly one valid `Origin` matching its effective `allowedOrigins`
    independently on every preflight and POST, before DNS or session work. This
    admits configured application origins and the resolved CCDP origin. It must use the Prover-supplied canonical `notaryAddress` unchanged, with no second
@@ -254,3 +259,14 @@ browser integration cases and 20 dev frontend cases. Every browser profile
 received the safe worker-failure code through the actual popup package and
 generated a Google fixture proof verified against the released key. TypeScript,
 production/development builds and three focused reviews passed.
+
+## Token-layout regression run (2026-09-10)
+
+After the PR #31 layout fixes: 237 unit tests, strict package/build TypeScript,
+package emission, formatting and lint pass. Rebuilt CCDP artifacts pass 14
+build/loader/native-SWS checks; the separate mutable-root rebuild test was not
+configured in this run (one skip). All 55 browser cases pass across Chromium,
+Firefox, WebKit and Android/iOS emulation, including Google fixture proofs
+independently verified against the released key. Security/correctness, API and
+simplicity reviews are clear. These checks do not qualify live X/GitHub sessions;
+Bridge PR #9 is the selected next integration target.
