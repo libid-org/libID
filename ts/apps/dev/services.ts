@@ -1,12 +1,15 @@
 // Start the real Bridge, notary and emitted CCDP; no OAuth mocks.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { fileURLToPath } from 'node:url'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
+// Distinct Compose ownership for each checkout. No shared container names.
+const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
+const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
 // Rebuild the shared distribution; immutable assets reuse the build cache.
 execFileSync(
   'pnpm',
@@ -16,6 +19,17 @@ execFileSync(
     stdio: 'inherit',
   },
 )
+// Refresh the bind mounts after the build atomically replaces its output directory.
+if (process.argv.includes('--ccdp')) {
+  execFileSync(
+    'docker',
+    [...composeArgs, 'up', '--wait', '--no-deps', '--no-build', '--force-recreate', 'ccdp'],
+    {
+      stdio: 'inherit',
+    },
+  )
+  process.exit(0)
+}
 let frontend: ViteDevServer | undefined
 let stopping = false
 function stop(code: number) {
@@ -40,10 +54,7 @@ function stop(code: number) {
 }
 process.once('SIGINT', () => stop(0))
 process.once('SIGTERM', () => stop(0))
-// Distinct Compose ownership for each checkout. No shared container names.
-const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
-const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
-const compose = spawn('docker', [...composeArgs, 'up', '--build', '--abort-on-container-exit'], {
+const compose = spawn('docker', [...composeArgs, 'up', '--build', '--abort-on-container-failure'], {
   stdio: 'inherit',
   detached: true,
 })

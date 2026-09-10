@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "pnpm build:deps && node services.ts --app",
     "dev:services": "pnpm build:deps && node services.ts",
+    "dev:ccdp": "pnpm build:deps && node services.ts --ccdp",
     "dev:app": "pnpm build:deps && vite",
     "build:deps": "pnpm --filter '@libid/dev^...' build",
     "build": "vite build",
