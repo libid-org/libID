@@ -1,4 +1,4 @@
-# Local development application
+# @libid/dev
 
 A minimal application using the public ceremony Client API and actual popup package.
 It makes real Bridge requests and launches the emitted CCDP pages; it has no mock
@@ -10,19 +10,25 @@ From the TypeScript workspace:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @libid/ceremony dev
+pnpm dev
 ```
 
-Open **https://localhost:4691**. This command builds popup and starts Vite for the
-frontend only. `dev:services` starts the real Bridge and CCDP behind local HTTPS
-on their fixed default ports, together with a compatible local notary in Docker.
+Open **https://localhost:4691**. `pnpm dev` builds the workspace dependencies and
+starts the frontend, Bridge, notary and CCDP together. For separate terminals use
+`pnpm dev:services` and `pnpm dev:app`. These root commands delegate to this private
+workspace package; it has no published library API.
+
 Install Docker with Compose (Docker Desktop on macOS); no host Rust or SWS binary
-is needed. The frontend and mkcert HTTPS ingress run in Node.
+is needed. The frontend and mkcert HTTPS ingress run in Node. Other applications
+can connect to the same services; add their exact origins to the Bridge's
+`ALLOWED_APP_ORIGINS` in [compose.yaml](compose.yaml) when doing so.
 
 ## Configuration
 
-Copy `dev/.env.example` to `dev/.env.local` inside the ceremony package if the
-defaults do not match your local services:
+Copy `.env.example` to `.env.local` inside `ts/apps/dev` if the
+defaults do not match your local services. When upgrading from the ceremony-owned
+setup, move your existing `ts/packages/ceremony/dev/.env.local` here; Git cannot
+move that untracked credential file for you. The old location remains ignored.
 
 | Setting | Default |
 |---|---|
@@ -33,7 +39,7 @@ defaults do not match your local services:
 
 Only the two public origins enter the browser bundle. OAuth client IDs come from
 Bridge configuration. The local launcher defaults to the public registrations in
-[dev/oauth-clients.json](../dev/oauth-clients.json), so they are declared once.
+[oauth-clients.json](oauth-clients.json), so they are declared once.
 Client secrets belong exclusively to the Bridge.
 
 Install `mkcert` first (`brew install mkcert` with Homebrew; Firefox on macOS also
@@ -50,31 +56,31 @@ If you remove the CA from your trust store, run `mkcert -install` to restore tru
 The same localhost certificate can serve Bridge and CCDP on different ports. Other
 machines/devices need their own trust setup. To use existing certificates instead,
 set both `CEREMONY_TLS_CERT` and `CEREMONY_TLS_KEY` to absolute paths; this skips
-mkcert entirely. `build:dev` does not generate certificates or install trust.
+mkcert entirely. `build` does not generate certificates or install trust.
 
 Configure the Bridge to allow the application's exact origin and publish the same
 CCDP origin as the app's popup allowlist. Register the Bridge callback URL with the
 OAuth providers. The app shows only platform versions supported by both Client and
-Bridge. [OAuth Bridge](oauth-bridge.md) specifies that service's contract.
+Bridge. [OAuth Bridge](../../packages/ceremony/docs/oauth-bridge.md) specifies that service's contract.
 
 ## Synthetic ledger and CCDP
 
-Vite aliases `@libid/ledger` to the existing shared `@libid/ledger/testing` source.
+Vite aliases `@libid/ledger` to the shared `@libid/ledger/testing` export.
 The app uses `test:testnet`, a bogus ledger with a synthetic hash, a fixed development
 operation domain and fixed transaction bytes. Each ceremony still generates fresh
 protocol randomness. No wallet, chain, contract or transaction submission is involved.
 There is no separate duplicate ledger definition in this frontend.
 
-Build the matching CCDP using:
+The launcher invokes ceremony's existing distribution builder, emitting the
+synthetic-ledger distribution into this app's `.cache/ccdp/`. It pins the local
+notary address to `https://localhost:4687`. Build input downloads still use the
+builder's existing cache in the ceremony package. A production CCDP rejects
+this synthetic ledger. For independent deployments see
+[browser tests](../../packages/ceremony/docs/browser-tests.md).
 
-```sh
-pnpm --filter @libid/ceremony build:qualification-artifacts
-```
-
-`dev:services` builds this automatically with `https://localhost:4687` as the
-notary address, using the existing build cache, then serves it with SWS. A production
-CCDP rejects this synthetic ledger. For independent deployments see
-[browser tests](browser-tests.md).
+The frontend imports the built public ceremony, popup and ledger packages.
+`dev` and `dev:app` build them before starting Vite; restart after changing a
+library package. Frontend edits use Vite's normal live reload.
 
 ## Walkthrough and checks
 
@@ -88,27 +94,27 @@ attempts expose only their status there. An accepted result means proof delivery
 not independent verification. The app does not verify browser proofs itself.
 
 ```sh
-pnpm --filter @libid/ceremony typecheck:dev
-pnpm --filter @libid/ceremony build:dev
-pnpm --filter @libid/ceremony test:dev
+pnpm --filter @libid/dev typecheck
+pnpm --filter @libid/dev... build
+pnpm --filter @libid/dev test:e2e
 # Also exercise a Bridge and CCDP sharing one origin:
-CEREMONY_CCDP_ORIGIN=https://localhost:4682 pnpm --filter @libid/ceremony test:dev --project chromium
+CEREMONY_CCDP_ORIGIN=https://localhost:4682 pnpm --filter @libid/dev test:e2e --project chromium
 ```
 
 The focused browser tests run on port 4692 in all five existing Playwright profiles.
 They intercept Bridge configuration and an inert Prefetch page to check unavailable/
 retry behavior, platform admission, actual popup/native-anchor launch and cancellation.
 These tests establish frontend behavior only, not real OAuth or proof generation.
-`build:dev` emits the frontend to `.cache/dev/app`; neither dev code nor its ledger
-alias is included in the package's production build.
+`build` emits the frontend to `.cache/dev/app`. Neither this app nor its ledger
+alias is included in ceremony's production build.
 
 A complete walkthrough still requires a compatible live Bridge and CCDP. See
-[qualification](qualification.md#repeatable-opt-in-real-consent) for the manual runner,
+[qualification](../../packages/ceremony/docs/qualification.md#repeatable-opt-in-real-consent) for the manual runner,
 released-key verification and the remaining live notary/device gates.
 
 ## Real local services
 
-[dev/compose.yaml](../dev/compose.yaml) runs three services:
+[compose.yaml](compose.yaml) runs three services:
 
 - Bridge [PR #9](https://github.com/libid-org/libid-server-rs/pull/9), pinned at
   `ebbf10961dd6960a4d53c0af6470bee1f889a229`. Docker retrieves the Git build context
@@ -117,7 +123,7 @@ released-key verification and the remaining live notary/device gates.
 - Notary **0.3.0-rc.2**, matching the browser WASM's TLSN revision `8a5de746`.
   This released image is amd64 only; Apple Silicon requires Docker Desktop's
   amd64 emulation. Native ARM and physical mobile qualification remain separate.
-- SWS **3.0.0-beta.1**, using the same image digest as `ccdp.Dockerfile` and
+- SWS **3.0.0-beta.1**, using the same image digest as ceremony's `ccdp.Dockerfile` and
   read-only mounts of the emitted distribution and its header configuration.
 
 The notary uses a **public development signing key** (scalar 1). Its attestations
@@ -127,35 +133,35 @@ and the browser's `https://localhost:4687` therefore name the same notary host,
 without changing Bridge's host correlation check. TCP 7047 is not published.
 The HTTPS ingress forwards WebSocket upgrades and binary streams unchanged.
 
-Set `GH_OAUTH_CLIENT_SECRET` in the ignored `dev/.env.local` when GitHub is enabled.
+Set `GH_OAUTH_CLIENT_SECRET` in the ignored `.env.local` when GitHub is enabled.
 Only Bridge receives it; it is never a build argument or image layer. Public
-registrations default to [dev/oauth-clients.json](../dev/oauth-clients.json).
+registrations default to [oauth-clients.json](oauth-clients.json).
 `CEREMONY_PLATFORMS` can override these with another registration or a subset.
 Native binary paths and `NOTARY_URL` are no longer launcher settings.
 
 Register **`https://localhost:4682/auth/callback`** with each provider. Google also
 needs the appropriate consent-screen/test-user configuration; X must use a public
 client with PKCE; GitHub needs the matching confidential secret on the Bridge.
-The public development IDs are committed in `dev/oauth-clients.json`; secrets
+The public development IDs are committed in `oauth-clients.json`; secrets
 remain local. All three committed registrations are configured for the callback
 URL above. Changing it requires updating their provider registrations.
 
 From the TypeScript workspace:
 
 ```sh
-pnpm --filter @libid/ceremony dev:services
+pnpm dev:services
 # Another terminal:
-pnpm --filter @libid/ceremony dev
+pnpm dev:app
 # A read-only pre-consent check (Node 24+ system trust, including mkcert):
-NODE_USE_SYSTEM_CA=1 pnpm --filter @libid/ceremony dev:check
+NODE_USE_SYSTEM_CA=1 pnpm --filter @libid/dev dev:check
 ```
 
 `dev:services` uses the fixed default origins and HTTPS ports 4682 (Bridge),
 4683 (CCDP), 4687 (notary), plus internal loopback ports 4684 (SWS), 4685 (Bridge)
 and 4688 (notary HTTP/WS). Keep the frontend's default origin/port. Port conflicts
 fail instead of selecting another callback URI. Containers belong to a Compose
-project derived from the checkout path. Ctrl-C stops the HTTPS ingress and that
-project's containers; Docker retains images for subsequent sessions. Wait for
+project derived from the checkout path. Ctrl-C stops the frontend (when started
+together), HTTPS ingress and that project's containers; Docker retains images for subsequent sessions. Wait for
 Bridge startup before launching consent (the frontend's Retry connection handles
 initial unavailability).
 

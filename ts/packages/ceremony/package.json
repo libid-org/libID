@@ -54,13 +54,7 @@
     "build:ccdp-artifacts": "node build/distribution.ts",
     "test:distribution": "node --test build/*.test.ts",
     "typecheck:build": "tsc -p tsconfig.scripts.json",
-    "build:qualification-artifacts": "LIBID_LEDGER_FIXTURE=1 node build/distribution.ts --out-dir .cache/qualification-assets",
-    "dev": "pnpm --filter @libid/popup build && vite --config dev/vite.config.ts",
-    "build:dev": "pnpm --filter @libid/popup build && vite build --config dev/vite.config.ts",
-    "typecheck:dev": "tsc -p tsconfig.dev.json",
-    "test:dev": "playwright test --config dev/playwright.config.ts",
-    "dev:services": "node dev/services.ts",
-    "dev:check": "node dev/check-services.ts"
+    "build:qualification-artifacts": "LIBID_LEDGER_FIXTURE=1 node build/distribution.ts --out-dir .cache/qualification-assets"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
