@@ -15,7 +15,9 @@ pnpm --filter @libid/ceremony dev
 
 Open **https://localhost:4691**. This command builds popup and starts Vite for the
 frontend only. `dev:services` starts the real Bridge and CCDP behind local HTTPS
-on their fixed default ports; the notary remains an independently deployed service.
+on their fixed default ports, together with a compatible local notary in Docker.
+Install Docker with Compose (Docker Desktop on macOS); no host Rust or SWS binary
+is needed. The frontend and mkcert HTTPS ingress run in Node.
 
 ## Configuration
 
@@ -69,10 +71,10 @@ Build the matching CCDP using:
 pnpm --filter @libid/ceremony build:qualification-artifacts
 ```
 
-Serve `.cache/qualification-assets` through the real SWS image and your local HTTPS
-ingress as described in [browser tests](browser-tests.md). That build uses the same
-fixture decoder. A production CCDP rejects this synthetic ledger. Select a compatible
-notary using the existing build-time `LIBID_NOTARY_ADDRESS` override if needed.
+`dev:services` builds this automatically with `https://localhost:4687` as the
+notary address, using the existing build cache, then serves it with SWS. A production
+CCDP rejects this synthetic ledger. For independent deployments see
+[browser tests](browser-tests.md).
 
 ## Walkthrough and checks
 
@@ -106,30 +108,30 @@ released-key verification and the remaining live notary/device gates.
 
 ## Real local services
 
-The selected Bridge is [PR #9](https://github.com/libid-org/libid-server-rs/pull/9),
-`ebbf10961dd6960a4d53c0af6470bee1f889a229`. Build that revision with Rust 1.97
-or newer using `cargo build --locked`. Its `libid-rs` pin, `501f094`, is already
-current main and includes the origin-form request and chunk-layout fixes. No
-additional `libid-rs` bump is needed for this target. Keep its source, Cargo cache
-and target directory inside your development checkout; do not rebuild a shared
-reference worktree.
+[dev/compose.yaml](../dev/compose.yaml) runs three services:
 
-Set these in the ignored `dev/.env.local`:
+- Bridge [PR #9](https://github.com/libid-org/libid-server-rs/pull/9), pinned at
+  `ebbf10961dd6960a4d53c0af6470bee1f889a229`. Docker retrieves the Git build context
+  and runs the upstream Dockerfile, including Cargo. The first build takes time;
+  later launches reuse the image layers. Its `libid-rs` pin is `501f094`.
+- Notary **0.3.0-rc.2**, matching the browser WASM's TLSN revision `8a5de746`.
+  This released image is amd64 only; Apple Silicon requires Docker Desktop's
+  amd64 emulation. Native ARM and physical mobile qualification remain separate.
+- SWS **3.0.0-beta.1**, using the same image digest as `ccdp.Dockerfile` and
+  read-only mounts of the emitted distribution and its header configuration.
 
-- `CEREMONY_BRIDGE_BINARY`: absolute path to that build's `libid-server-rs`.
-- `CEREMONY_SWS_BINARY`: absolute path to SWS **3.0.0-beta.1** (the same release
-  pinned by `ccdp.Dockerfile`).
-- `CEREMONY_PLATFORMS`: optional JSON override for the committed public
-  registrations in `dev/oauth-clients.json`, for example to enable a subset.
-  The default enables the development Google, X and GitHub clients.
-- `GH_OAUTH_CLIENT_SECRET`: required when GitHub is enabled; keep it local.
-- `NOTARY_URL`: the Bridge's `tcp://HOST:PORT` endpoint for a compatible notary.
-  Its host must match the browser's build-time `LIBID_NOTARY_ADDRESS` host.
+The notary uses a **public development signing key** (scalar 1). Its attestations
+are for this local harness only; no production ledger should trust that key.
+Bridge shares the notary's container network namespace: `tcp://localhost:7047`
+and the browser's `https://localhost:4687` therefore name the same notary host,
+without changing Bridge's host correlation check. TCP 7047 is not published.
+The HTTPS ingress forwards WebSocket upgrades and binary streams unchanged.
 
-The browser bundle is **notary v0.3.0-rc.2**, whose TLSN revision `8a5de746`
-matches the Bridge. The live notary must be compatible with that revision too.
-A WebSocket endpoint alone is insufficient for GitHub: the Bridge needs the
-notary's TCP listener. Confirm that endpoint before spending a fresh OAuth code.
+Set `GH_OAUTH_CLIENT_SECRET` in the ignored `dev/.env.local` when GitHub is enabled.
+Only Bridge receives it; it is never a build argument or image layer. Public
+registrations default to [dev/oauth-clients.json](../dev/oauth-clients.json).
+`CEREMONY_PLATFORMS` can override these with another registration or a subset.
+Native binary paths and `NOTARY_URL` are no longer launcher settings.
 
 Register **`https://localhost:4682/auth/callback`** with each provider. Google also
 needs the appropriate consent-screen/test-user configuration; X must use a public
@@ -138,10 +140,9 @@ The public development IDs are committed in `dev/oauth-clients.json`; secrets
 remain local. All three committed registrations are configured for the callback
 URL above. Changing it requires updating their provider registrations.
 
-From the TypeScript workspace, build CCDP with the chosen notary origin:
+From the TypeScript workspace:
 
 ```sh
-LIBID_NOTARY_ADDRESS=https://YOUR_NOTARY_HOST pnpm --filter @libid/ceremony build:qualification-artifacts
 pnpm --filter @libid/ceremony dev:services
 # Another terminal:
 pnpm --filter @libid/ceremony dev
@@ -149,11 +150,14 @@ pnpm --filter @libid/ceremony dev
 NODE_USE_SYSTEM_CA=1 pnpm --filter @libid/ceremony dev:check
 ```
 
-`dev:services` uses the fixed default origins in this guide and reserves internal
-loopback ports 4684 (SWS) and 4685 (Bridge). Keep the frontend's origin/port defaults
-when using it. It preserves upstream response headers and bytes, logs no request
-URLs or bodies, and stops its own services on Ctrl-C or a service failure. It
-passes GitHub's secret only to the Bridge child, not SWS.
+`dev:services` uses the fixed default origins and HTTPS ports 4682 (Bridge),
+4683 (CCDP), 4687 (notary), plus internal loopback ports 4684 (SWS), 4685 (Bridge)
+and 4688 (notary HTTP/WS). Keep the frontend's default origin/port. Port conflicts
+fail instead of selecting another callback URI. Containers belong to a Compose
+project derived from the checkout path. Ctrl-C stops the HTTPS ingress and that
+project's containers; Docker retains images for subsequent sessions. Wait for
+Bridge startup before launching consent (the frontend's Retry connection handles
+initial unavailability).
 
 The Bridge reads the rebuilt Callback using its supported
 `CALLBACK_ARTIFACT_PATH` override. PR #9's retrieval client uses compiled public CA
@@ -164,4 +168,6 @@ Callback changes. Qualify retrieval separately against a publicly trusted CCDP.
 
 `dev:check` exercises actual configuration and origin admission, checks that
 Callback composition omits request data, and checks the isolated Prover route.
-It does not exchange an OAuth code, create a notary session, or prove identity.
+It also reads the real notary public key and opens its WebSocket endpoint. This
+establishes reachability only; it does not complete a TLSNotary session, exchange
+an OAuth code, or generate a proof.

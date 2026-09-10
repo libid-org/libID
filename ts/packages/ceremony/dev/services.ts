@@ -1,6 +1,8 @@
 // Local HTTPS ingress for the real Bridge and emitted CCDP; no OAuth mocks.
-import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import type { Duplex } from 'node:stream'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { createServer, type Server } from 'node:https'
 import { fileURLToPath } from 'node:url'
@@ -11,31 +13,23 @@ import { localhostTls } from './tls.ts'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const env = { ...loadEnv('development', join(root, 'dev'), ''), ...process.env }
 const cache = join(root, '.cache/dev')
-const artifact = join(root, '.cache/qualification-assets')
-const bridgeBinary = env.CEREMONY_BRIDGE_BINARY
-const swsBinary = env.CEREMONY_SWS_BINARY
-if (!bridgeBinary || !swsBinary)
-  throw new Error(
-    'Set CEREMONY_BRIDGE_BINARY and CEREMONY_SWS_BINARY to the pinned local binaries.',
-  )
 const platforms =
   env.CEREMONY_PLATFORMS ?? readFileSync(join(root, 'dev/oauth-clients.json'), 'utf8')
-if (!existsSync(join(artifact, 'public/ccdp/callback.html')))
-  throw new Error('Run build:qualification-artifacts first.')
+const { GH_OAUTH_CLIENT_SECRET: _secret, ...publicEnv } = process.env
+// Always rebuild against the local notary; immutable assets reuse the build cache.
+execFileSync('pnpm', ['build:qualification-artifacts'], {
+  cwd: root,
+  env: { ...publicEnv, LIBID_NOTARY_ADDRESS: 'https://localhost:4687' },
+  stdio: 'inherit',
+})
 mkdirSync(cache, { recursive: true })
 if (!!env.CEREMONY_TLS_CERT !== !!env.CEREMONY_TLS_KEY)
   throw new Error('Set both CEREMONY_TLS_CERT and CEREMONY_TLS_KEY')
 const tls = env.CEREMONY_TLS_CERT
   ? { cert: readFileSync(env.CEREMONY_TLS_CERT), key: readFileSync(env.CEREMONY_TLS_KEY!) }
   : localhostTls(cache)
-// These ports match dev/.env.example. Private listeners never leave loopback.
-const config = readFileSync(join(artifact, 'sws.toml'), 'utf8')
-  .replaceAll('/home/sws/public', join(artifact, 'public'))
-  .replace('host = "::"', 'host = "127.0.0.1"')
-  .replace('port = 8787', 'port = 4684')
-writeFileSync(join(cache, 'sws.toml'), config)
-const children: ChildProcess[] = []
 const servers: Server[] = []
+const sockets = new Set<Duplex>()
 let stopping = false
 function stop(code: number) {
   if (stopping) return
@@ -45,39 +39,48 @@ function stop(code: number) {
     server.close()
     server.closeAllConnections()
   }
-  for (const child of children) child.kill('SIGTERM')
+  for (const socket of sockets) socket.destroy()
+  // Stop the producer before teardown; CLI plugins share this owned process group.
+  if (compose.pid) {
+    try {
+      process.kill(-compose.pid, 'SIGTERM')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+    }
+  }
+  // Keep this child alive through completion, including after a partial startup.
+  const down = spawn('docker', [...composeArgs, 'down'], { env: composeEnv, stdio: 'inherit' })
+  down.on('error', () => console.error('Could not stop development containers. Check Docker.'))
+  down.on('close', (code) => {
+    if (code !== 0) process.exitCode = 1
+  })
 }
 process.once('SIGINT', () => stop(0))
 process.once('SIGTERM', () => stop(0))
-function start(binary: string, args: string[], childEnv: NodeJS.ProcessEnv) {
-  const child = spawn(binary, args, { env: childEnv, stdio: 'inherit' })
-  children.push(child)
-  child.on('error', () => {
-    console.error('Could not start a development service.')
-    stop(1)
-  })
-  child.on('exit', (code) => {
-    if (!stopping) stop(code ?? 1)
-  })
-}
-const { GH_OAUTH_CLIENT_SECRET: _secret, ...publicEnv } = process.env
-start(swsBinary, ['--config-file', join(cache, 'sws.toml')], publicEnv)
-start(bridgeBinary, [], {
+// Distinct Compose ownership for each checkout. No shared container names.
+const project = `ceremony-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
+const composeArgs = ['compose', '-p', project, '-f', join(root, 'dev/compose.yaml')]
+const composeEnv = {
   ...publicEnv,
-  HOST: '127.0.0.1',
-  PORT: '4685',
-  BASE_URL: 'https://localhost:4682',
-  CALLBACK_PATH: '/auth/callback',
-  CCDP_ORIGIN: 'https://localhost:4683',
-  ALLOWED_APP_ORIGINS: 'https://localhost:4691',
-  CALLBACK_ARTIFACT_PATH: join(artifact, 'public/ccdp/callback.html'),
   CEREMONY_PLATFORMS: platforms,
   GH_OAUTH_CLIENT_SECRET: env.GH_OAUTH_CLIENT_SECRET ?? '',
-  NOTARY_URL: env.NOTARY_URL ?? 'tcp://127.0.0.1:7047',
+}
+const compose = spawn('docker', [...composeArgs, 'up', '--build', '--abort-on-container-exit'], {
+  env: composeEnv,
+  stdio: 'inherit',
+  detached: true,
+})
+compose.on('error', () => {
+  console.error('Could not start Docker Compose. Install Docker with Compose and start its engine.')
+  stop(1)
+})
+compose.on('exit', (code) => {
+  if (!stopping) stop(code || 1)
 })
 for (const [port, upstream] of [
   [4682, 4685],
   [4683, 4684],
+  [4687, 4688],
 ]) {
   const server = createServer(tls, (req, res) => {
     const proxy = request(
@@ -100,6 +103,41 @@ for (const [port, upstream] of [
     })
     res.on('close', () => proxy.destroy())
     req.pipe(proxy)
+  })
+  // Node forwards the HTTP upgrade unchanged; TLSNotary owns the binary protocol.
+  if (port === 4687)
+    server.on('upgrade', (req, socket, head) => {
+      const proxy = request({
+        hostname: '127.0.0.1',
+        port: upstream,
+        path: req.url,
+        method: req.method,
+        headers: req.headers,
+      })
+      proxy.on('error', () => socket.destroy())
+      proxy.on('response', (reply) => {
+        reply.resume()
+        socket.destroy()
+      })
+      socket.on('error', () => socket.destroy())
+      socket.on('close', () => proxy.destroy())
+      proxy.on('upgrade', (reply, upstreamSocket, upstreamHead) => {
+        upstreamSocket.on('error', () => socket.destroy())
+        socket.on('close', () => upstreamSocket.destroy())
+        upstreamSocket.on('close', () => socket.destroy())
+        socket.write(`HTTP/1.1 ${reply.statusCode} ${reply.statusMessage}\r\n`)
+        for (let i = 0; i < reply.rawHeaders.length; i += 2)
+          socket.write(`${reply.rawHeaders[i]}: ${reply.rawHeaders[i + 1]}\r\n`)
+        socket.write('\r\n')
+        if (upstreamHead.length) socket.write(upstreamHead)
+        if (head.length) upstreamSocket.write(head)
+        socket.pipe(upstreamSocket).pipe(socket)
+      })
+      proxy.end()
+    })
+  server.on('connection', (socket) => {
+    sockets.add(socket)
+    socket.on('close', () => sockets.delete(socket))
   })
   servers.push(server)
   server.on('error', () => {

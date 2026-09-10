@@ -1,0 +1,44 @@
+# Started by services.ts after building CCDP and loading the ignored .env.local.
+services:
+  notary:
+    image: ghcr.io/libid-org/notary:0.3.0-rc.2
+    # This upstream release publishes amd64 only; Docker Desktop emulates it on ARM.
+    platform: linux/amd64
+    environment:
+      NOTARY_HOST: 0.0.0.0
+      # Public development key, never a production notary identity.
+      SIGNING_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+    ports:
+      - "127.0.0.1:4688:7048"
+      # Bridge shares this namespace so its TCP notary host can be localhost too.
+      - "127.0.0.1:4685:8722"
+
+  bridge:
+    build: https://github.com/libid-org/libid-server-rs.git#ebbf10961dd6960a4d53c0af6470bee1f889a229
+    network_mode: service:notary
+    depends_on:
+      notary:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8722
+      BASE_URL: https://localhost:4682
+      CALLBACK_PATH: /auth/callback
+      CCDP_ORIGIN: https://localhost:4683
+      ALLOWED_APP_ORIGINS: https://localhost:4691
+      CALLBACK_ARTIFACT_PATH: /callback.html
+      CEREMONY_PLATFORMS: ${CEREMONY_PLATFORMS:?Start with pnpm dev:services}
+      GH_OAUTH_CLIENT_SECRET: ${GH_OAUTH_CLIENT_SECRET:-}
+      NOTARY_URL: tcp://localhost:7047
+    volumes:
+      - ../.cache/qualification-assets/public/ccdp/callback.html:/callback.html:ro
+
+  ccdp:
+    image: ghcr.io/static-web-server/static-web-server@sha256:4e804280b5b5b1be4563d4a9e0f3a0ea38e7887967d0cc00bc8c07030f529b3f
+    environment:
+      SERVER_CONFIG_FILE: /etc/sws.toml
+    volumes:
+      - ../.cache/qualification-assets/public:/home/sws/public:ro
+      - ../.cache/qualification-assets/sws.toml:/etc/sws.toml:ro
+    ports:
+      - "127.0.0.1:4684:8787"
