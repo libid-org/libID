@@ -521,8 +521,10 @@ REQ-PLAT-56A does not forbid.
   The Implementation MUST reveal the token request's request line and every
   header. The Platform Verifier MUST reject a head without exactly one `host`
   naming the pinned authority and exactly one `content-type` whose value is
-  `application/x-www-form-urlencoded`, comparing names lowercased and values
-  exactly. The Platform Verifier MUST reject a head carrying `authorization`,
+  `application/x-www-form-urlencoded`, comparing names lowercased with every
+  space and tab removed, as common REQ-COMMON-39 normalizes, and values
+  exactly once the optional whitespace around them is removed. The Platform
+  Verifier MUST reject a head carrying `authorization`,
   `content-encoding`, `transfer-encoding`, `cookie` or
   `x-http-method-override` under any spelling of the name. The Platform
   Verifier MUST ignore every other header. Necessity: common REQ-COMMON-21B fixes the media type
@@ -542,9 +544,11 @@ REQ-PLAT-56A does not forbid.
   disagree the fields read are not the fields parsed.
 - REQ-PLAT-56C (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject a head carrying a line feed not preceded by
-  a carriage return, or a line beginning with a space or a tab. Necessity: a
-  parser accepting either ends the head somewhere this one does not, moving
-  bytes between head and body. Common REQ-COMMON-39 asks the same of the
+  a carriage return, a line beginning with a space or a tab, or a line with no
+  colon. Necessity: a parser accepting a bare line feed or a fold ends the head
+  somewhere this one does not, moving bytes between head and body, and a line
+  no colon splits is not a header field, so a parser that tolerates one reads a
+  head this one cannot. Common REQ-COMMON-39 asks the first two of the
   identity request.
 - REQ-PLAT-56 (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject an X token attestation whose revealed
