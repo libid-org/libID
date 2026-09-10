@@ -109,7 +109,7 @@ it.each(['google', 'x', 'github'])(
     expect(events.filter((e) => 'stage' in e).map((e) => e.stage)).toEqual(
       platformId === 'google'
         ? ['proof-generation']
-        : ['identity-fetch', 'proof-preparation', 'proof-generation', 'finalizing'],
+        : ['identity-fetch', 'proof-preparation', 'proof-generation'],
     )
     expect(events.filter((e) => 'platformStep' in e)).toHaveLength(2)
   },

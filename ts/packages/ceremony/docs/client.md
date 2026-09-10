@@ -489,7 +489,6 @@ type CeremonyStage =
   | 'identity-fetch'
   | 'proof-preparation'
   | 'proof-generation'
-  | 'finalizing'
 
 type CeremonyEvent =
   | { type: 'stage'; stage: CeremonyStage; timestamp: number }
@@ -515,16 +514,19 @@ that label applies when the group reaches code exchange or proof preparation,
 after Prover admits the return. The raw OAuth-return timestamp remains available
 for post-consent timing. For the last group use completed wording only on terminal success;
 keep active wording with a failure/denial/cancellation indication otherwise.
-`Complete` is the successful completion label for `finalizing`, never its entry label.
-Token and identity intervals end at readiness for subsequent work, so their labels
-say `Token ready` / `Identity ready`, not that background attestations are finished.
+`Proof generated` is shown only on terminal success: proof means the complete
+verifier input, including required attestations, not just the ZK proof bytes.
+Token and identity intervals end after fetching the data needed for subsequent
+work, so their labels say `Token fetched` / `Identity fetched`; background
+attestations may still be running. Prover setup uses `Setting up ZK prover` /
+`ZK prover ready`.
 `User authorised` applies only after Prover has admitted the OAuth return;
 readiness alone does not end the authorization interval. These are local
 presentation methods; CCDP events remain plain data with no serialized methods.
 
 Stages form a sequential UI timeline. All platforms begin with start → prefetch →
 authorization → OAuth return. Google then uses proof preparation → proof generation;
-X and GitHub use all nine stages in the order above. A stage whose
+X and GitHub use all eight stages in the order above. A stage whose
 work is already complete may be brief; concurrent work is never delayed for display.
 
 The client starts `start` with `proveUserIdentity()`. It enters `prefetch` when
@@ -544,9 +546,9 @@ code exchange for X/GitHub. Denied or malformed returns end the run without that
 transition. Prover then reports
 identity fetch after token admission, then proof preparation after identity extraction
 and the commitment openings needed for the witness are available. Witness execution
-starts proof generation; completed proof-backend teardown starts finalizing for
-X/GitHub, which covers outstanding attestations, correlations, delivery and client
-assembly. Backend preparation overlaps input collection, and final attestations
+starts proof generation. That stage continues through backend teardown, any
+outstanding attestations, correlation checks, delivery and client assembly. There
+is no separate finalizing stage. Backend preparation overlaps input collection, and final attestations
 overlap proving. Duplicate, backward and platform-inapplicable stage reports are
 ignored. Detailed step events do not change the stage.
 

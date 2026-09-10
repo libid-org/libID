@@ -293,7 +293,7 @@ for (const [platform, name, outcome = 'denied'] of [
     const stages =
       platform === 'google'
         ? ['proof-generation']
-        : ['identity-fetch', 'proof-preparation', 'proof-generation', 'finalizing']
+        : ['identity-fetch', 'proof-preparation', 'proof-generation']
     for (const stage of stages) {
       await page.clock.runFor(1000)
       await popup.evaluate((stage) => {
@@ -317,13 +317,27 @@ for (const [platform, name, outcome = 'denied'] of [
         stage === 'identity-fetch'
           ? 'Notarizing identity'
           : stage === 'proof-preparation'
-            ? 'Setting up prover'
-            : stage === 'finalizing'
-              ? 'Completing'
-              : 'Generating proof',
+            ? 'Setting up ZK prover'
+            : 'Generating proof',
       )
     }
+    // Finishing the ZK backend must not finish the complete proof's UI interval.
+    await popup.evaluate(() => {
+      ;(
+        window as unknown as { stageConnection: { send(value: unknown): void } }
+      ).stageConnection.send({
+        type: 'prover-notify-event',
+        timestamp: 1,
+        platformStep: {
+          code: 'proof-backend-destroy',
+          label: 'Finishing ZK proof',
+          status: 'completed',
+          progress: 0.9,
+        },
+      })
+    })
     await page.clock.runFor(1000)
+    await expect(page.locator('.stage-timings li').last()).toContainText('Generating proof')
     await popup.evaluate((success) => {
       const connection = (window as unknown as { stageConnection: { send(value: unknown): void } })
         .stageConnection
@@ -351,10 +365,17 @@ for (const [platform, name, outcome = 'denied'] of [
       outcome === 'success' ? 'Proof received' : 'Denied',
     )
     const timings = page.locator('.stage-timings li')
-    await expect(timings).toHaveCount(platform === 'google' ? 4 : 7)
+    await expect(timings).toHaveCount(platform === 'google' ? 4 : 6)
     expect(
       (await timings.allTextContents()).slice(0, 2).map((text) => text.split(' · ')[0]),
     ).toEqual(['Popup opened', 'User authorised'])
+    expect(
+      (await timings.allTextContents()).slice(2, -1).map((text) => text.split(' · ')[0]),
+    ).toEqual(
+      platform === 'google'
+        ? ['ZK prover ready']
+        : ['Token fetched', 'Identity fetched', 'ZK prover ready'],
+    )
     for (const text of await timings.allTextContents())
       expect(text).toMatch(/ · \d+\.\d s(?: \(denied\))?$/)
     for (const text of (await timings.allTextContents()).slice(2)) {
@@ -369,7 +390,7 @@ for (const [platform, name, outcome = 'denied'] of [
     const cells = page.locator('#history tr').first().getByRole('cell')
     const total = Number.parseFloat((await cells.nth(3).textContent())!)
     const postConsent = Number.parseFloat((await cells.nth(4).textContent())!)
-    expect(postConsent).toBeGreaterThanOrEqual(platform === 'google' ? 2 : 5)
+    expect(postConsent).toBeGreaterThanOrEqual(platform === 'google' ? 2 : 4)
     expect(total - postConsent).toBeGreaterThanOrEqual(4.9)
     const row = await page.locator('#history').textContent()
     await page.clock.runFor(2000)

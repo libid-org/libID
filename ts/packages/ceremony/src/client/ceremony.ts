@@ -226,11 +226,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   }
   private enterStage(stage: CeremonyStage): void {
     if (this.state === 'done' || stages.indexOf(stage) <= stages.indexOf(this.stage)) return
-    if (
-      this.platform === 'google' &&
-      ['code-exchange', 'identity-fetch', 'finalizing'].includes(stage)
-    )
-      return
+    if (this.platform === 'google' && ['code-exchange', 'identity-fetch'].includes(stage)) return
     this.stage = stage
     this.emit({ type: 'stage', stage, timestamp: performance.timeOrigin + performance.now() })
   }
