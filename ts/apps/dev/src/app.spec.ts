@@ -27,6 +27,8 @@ test('unavailable Bridge disables launch; reload loads compatible platforms', as
   available = true
   await page.reload()
   await expect(page.getByRole('status')).toContainText('Ready.')
+  await expect(page.locator('dl')).toContainText('https://localhost:4687')
+  await expect(page.locator('dl')).not.toContainText('Ledger')
   await expect(page.locator('#platforms').getByRole('button')).toHaveText(['Google'])
   await expect(page.getByRole('button', { name: 'Google', exact: true })).toHaveAttribute(
     'aria-disabled',
@@ -83,23 +85,40 @@ for (const [platform, name] of [
       expect(new URLSearchParams(new URL(popup.url()).hash.slice(1)).get('platformId')).toBe(
         platform,
       )
-      for (const button of await page
-        .getByRole('group', { name: 'Platforms' })
-        .getByRole('button')
-        .all())
+      await expect(page.locator('#platforms').getByRole('button')).toHaveCount(3)
+      for (const button of await page.locator('#platforms').getByRole('button').all())
         await expect(button).toHaveAttribute('aria-disabled', 'true')
+      const rows = page.locator('#history tr')
+      await expect(rows).toHaveCount(1)
+      await expect(rows.first().getByRole('cell').nth(1)).toHaveText(name)
+      await expect(rows.first().getByRole('cell').nth(2)).toHaveText('Running')
       await expect(page.getByRole('button', { name: 'Cancel ceremony' })).toBeEnabled()
       await page.getByRole('button', { name: 'Cancel ceremony' }).click()
       await expect(page.locator('#result')).toHaveText('Ceremony cancelled.')
       // This inert fallback has no handle or authenticated carrier to receive closure.
       if (blocked) await popup.close()
       else await expect.poll(() => popup.isClosed()).toBe(true)
-      for (const button of await page
-        .getByRole('group', { name: 'Platforms' })
-        .getByRole('button')
-        .all())
+      for (const button of await page.locator('#platforms').getByRole('button').all())
         await expect(button).toHaveAttribute('aria-disabled', 'false')
       expect(await page.evaluate(() => window.result)).toEqual({ status: 'cancelled' })
+      await expect(rows.first().getByRole('cell').nth(2)).toHaveText('Cancelled')
+      await expect(rows.first().getByRole('cell').nth(3)).toHaveText(/^\d+\.\d s$/)
+      if (platform === 'google' && !blocked) {
+        const secondOpened = page.waitForEvent('popup')
+        await page.getByRole('button', { name: 'X', exact: true }).click()
+        const secondPopup = await secondOpened
+        await expect(rows).toHaveCount(2)
+        await expect(rows.first().getByRole('cell').nth(1)).toHaveText('X')
+        await expect(rows.first().getByRole('cell').nth(2)).toHaveText('Running')
+        await expect(rows.nth(1).getByRole('cell').nth(1)).toHaveText('Google')
+        await expect(rows.nth(1).getByRole('cell').nth(2)).toHaveText('Cancelled')
+        await page.getByRole('button', { name: 'Cancel ceremony' }).click()
+        await expect(rows.first().getByRole('cell').nth(2)).toHaveText('Cancelled')
+        await expect.poll(() => secondPopup.isClosed()).toBe(true)
+        await page.reload()
+        await expect(rows).toHaveCount(0)
+        await expect(page.locator('#history-empty')).toBeVisible()
+      }
     })
   }
 }

@@ -85,7 +85,8 @@ library package. Frontend edits use Vite's normal live reload.
 
 ## Walkthrough and checks
 
-Click a platform button and complete real provider consent. Cancel ends ceremony
+Click a platform button and complete real provider consent. Run history records each
+attempt’s start time, platform, outcome and duration, newest first, until page reload. Cancel ends ceremony
 work; Close popup releases the application-owned connection during a run. The app
 automatically closes the popup after success, denial, cancellation or failure,
 then enables another attempt. The ceremony library does not own this UI decision.

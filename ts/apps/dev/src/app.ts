@@ -67,12 +67,29 @@ async function initialize() {
     controls()
   }
 }
+function beginRun(platform: PlatformId) {
+  const started = performance.now()
+  const row = document.createElement('tr')
+  const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—'].map((text) => {
+    const cell = document.createElement('td')
+    cell.textContent = text
+    row.append(cell)
+    return cell
+  })
+  document.querySelector('#history')!.prepend(row)
+  document.querySelector<HTMLElement>('#history-empty')!.hidden = true
+  return (outcome: string) => {
+    cells[2]!.textContent = outcome
+    cells[3]!.textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`
+  }
+}
 function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformId) {
   if (!client || launch.getAttribute('aria-disabled') === 'true') {
     event.preventDefault()
     return
   }
   const id = crypto.randomUUID()
+  const finishRun = beginRun(platform)
   launch.target = `ceremony-dev-${id}`
   // Keep creation and the native-anchor fallback inside the same user gesture.
   const popup = PopupWindow.open(launch.target, 'width=480,height=720')
@@ -99,6 +116,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     status.textContent = 'Could not start the ceremony. Close any remaining popup and retry.'
     window.result = { status: 'failed' }
     result.textContent = 'No ceremony started.'
+    finishRun('Failed to start')
     void connection?.close().catch(() => {})
     connection = undefined
     controls()
@@ -123,6 +141,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     .proveUserIdentity()
     .then((outcome) => {
       window.result = outcome
+      finishRun(outcome.status === 'denied' ? 'Denied' : 'Proof received')
       result.textContent =
         outcome.status === 'denied'
           ? 'Authorization was denied.'
@@ -132,6 +151,13 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     .catch((error: unknown) => {
       const cancelled = error instanceof Error && error.name === 'AbortError'
       window.result = { status: cancelled ? 'cancelled' : 'failed' }
+      finishRun(
+        cancelled
+          ? 'Cancelled'
+          : error instanceof CeremonyError
+            ? `Failed (${error.code})`
+            : 'Failed',
+      )
       result.textContent = cancelled
         ? 'Ceremony cancelled.'
         : error instanceof CeremonyError
