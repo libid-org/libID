@@ -82,11 +82,14 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60]', () => {
       expect(plan.commit.sent).toEqual([{ ...selected.bearerRange, algorithm: 'SHA256' }])
     },
   )
-  it('pins the API version and required User-Agent, rejecting missing or duplicate headers', () => {
+  it('pins the API version and forwards the browser User-Agent, rejecting missing or duplicate headers', () => {
     expect(text(request.headers['X-GitHub-Api-Version'])).toBe('2022-11-28')
-    expect(text(request.headers['User-Agent'])).toBe('libid-ceremony')
+    expect(text(request.headers['User-Agent'])).toBe(navigator.userAgent)
     const received = utf8('{"id":123,"login":"alice"}')
-    for (const header of ['x-github-api-version: 2022-11-28', 'user-agent: libid-ceremony']) {
+    for (const header of [
+      'x-github-api-version: 2022-11-28',
+      `user-agent: ${navigator.userAgent}`,
+    ]) {
       for (const replacement of ['', `${header}\r\n${header}\r\n`]) {
         expect(() =>
           selectIdentity(

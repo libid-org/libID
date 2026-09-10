@@ -465,11 +465,14 @@ including GitHub's signed committed suffix. Authority still comes from the
 attested TLS server identity, not Host.
 
 **Unresolved profile deviation:** GitHub identity requests carry the pinned
-`X-GitHub-Api-Version: 2022-11-28` and `User-Agent: libid-ceremony` alongside the
-other four specified headers. PR #31's exact five-header list omits User-Agent,
+`X-GitHub-Api-Version: 2022-11-28` and the current browser’s `navigator.userAgent`
+as `User-Agent`, alongside the other four specified headers. PR #31's exact
+five-header list omits User-Agent,
 which [GitHub requires](https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api#user-agent-required).
-The profile and its ledger verifier must admit that sixth header before these
-identity attestations can qualify against them. Browser selectors require the
+The profile and its ledger verifier must admit that sixth header with a
+browser-dependent value before these identity attestations can qualify against
+them. Ceremony forwards the browser value without adding a libID identifier.
+Browser selectors require the
 complete six-header set; they do not accept arbitrary extra headers.
 
 Regression coverage is in [transcript tests](../src/prover/transcript.test.ts),
