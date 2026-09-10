@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   AbortCeremony,
   AppStartProver,
+  CallbackReady,
   CancelCeremony,
   origin,
+  PrefetchReady,
   PrefetchStarted,
   ProverIdentityProof,
   ProverNotifyEvent,
@@ -47,6 +49,8 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         proof: { arbitrary: true },
       },
     ],
+    [PrefetchReady, { type: 'prefetch-ready' }],
+    [CallbackReady, { type: 'callback-ready' }],
   ] as const
   for (const [codec, value] of samples)
     it(codec.type, () => {
@@ -158,7 +162,17 @@ it('admits explicit loopback HTTP without widening public URL validation [LIBID-
 it('validates advisory stage messages without accepting terminal claims or mixed payloads [LIBID-MOD-016]', () => {
   const event = { type: 'prover-notify-event', stage: 'proof-generation', timestamp: 1 }
   expect(ProverNotifyEvent.decode(event)).toBe(event)
-  for (const stage of ['authorization', 'complete', 'success', '', {}, null])
+  for (const stage of [
+    'start',
+    'prefetch',
+    'authorization',
+    'oauth-return',
+    'complete',
+    'success',
+    '',
+    {},
+    null,
+  ])
     expect(() => ProverNotifyEvent.decode({ ...event, stage })).toThrow()
   for (const timestamp of [-1, NaN, Infinity, '1'])
     expect(() => ProverNotifyEvent.decode({ ...event, timestamp })).toThrow()

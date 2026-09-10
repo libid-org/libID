@@ -73,6 +73,8 @@ The following table is the complete CCDP version-1 message set.
 
 | Message | Direction | Accepted after | Cardinality and effect |
 |---|---|---|---|
+| [`PrefetchReady`](#prefetchready) | Prefetch → Application | Prefetch connection acceptance | once per document; advisory start of Worker preparation |
+| [`CallbackReady`](#callbackready) | Callback → Application | capture/clear and Callback connection acceptance | once per document; advisory start of return handling |
 | [`PrefetchStarted`](#prefetchstarted) | Prefetch → Application | connection acceptance and selected-profile dispatch | exactly once; permits navigation to Authorization |
 | [`ProverReady`](#proverready) | Prover → Application | Prover connection acceptance and cross-origin isolation | exactly once; permits `AppStartProver` |
 | [`AppStartProver`](#appstartprover) | Application → Prover | `ProverReady` | exactly once; selects the profile for OAuth validation and proof execution |
@@ -85,7 +87,29 @@ Every recipient requires a plain record with the exact fields, types, and bounds
 defined below. Unknown fields, coercion, normalization, defaults, and
 unrecognized discriminators are invalid. Messages outside the listed direction,
 predecessor, and cardinality are invalid. Cancellation, proof delivery, and
-abort make later messages inert even when they race in transit.
+abort make later messages inert even when they race in transit. The two advisory
+readiness markers are ignored outside their expected phase; duplicates and missing
+markers affect timing display only.
+
+### PrefetchReady
+
+```ts
+interface PrefetchReady { type: 'prefetch-ready' }
+```
+
+Sent after Prefetch authenticates its Application connection, before Worker setup
+and fetch dispatch. This optional timing marker grants no navigation permission.
+
+### CallbackReady
+
+```ts
+interface CallbackReady { type: 'callback-ready' }
+```
+
+Sent after Callback bounds, captures and clears the return, validates its deployment
+inputs and authenticates Application, before private Prover navigation. It contains
+no parameters, URLs, timestamps, outcome classification or credentials. It changes
+only the application's displayed stage; navigation does not wait for an acknowledgement.
 
 ### PrefetchStarted
 
@@ -175,7 +199,7 @@ type ProverNotifyEvent = {
     status: 'started' | 'completed' | 'failed'
     progress: number
   }
-} | { stage: Exclude<CeremonyStage, 'authorization'> })
+} | { stage: Exclude<CeremonyStage, 'start' | 'prefetch' | 'authorization' | 'oauth-return'> })
 ```
 
 Exactly one of `stage` or `platformStep` is present. Stage values and platform
@@ -311,8 +335,8 @@ establishes its connection there. A scripted opener may first reserve the
 popup at `about:blank`; if that fails, the same activation's real anchor
 navigates it directly to Prefetch.
 
-Prefetch clears and validates its fragment, accepts the connection, registers
-the Worker, and dispatches the selected profile's fetches. It then sends
+Prefetch clears and validates its fragment, accepts the connection, sends advisory
+`PrefetchReady`, registers the Worker, and dispatches the selected profile's fetches. It then sends
 [`PrefetchStarted`](protocol.md#prefetchstarted). Only after accepting that message, the
 Application endpoint navigates the retained popup to
 [Authorization](documents.md#authorization-get-platformauthorizationurl) at the frozen
@@ -343,7 +367,8 @@ ingress.
 Callback accepts the Application connection using the ceremony ID extracted
 from the captured `state`. This authenticates the Application against the
 Bridge's deployment allowlist before the return can leave Callback. It sends
-no OAuth-return message. Connection acceptance permits the Prover transition.
+only fieldless `CallbackReady`, never an OAuth-return payload or outcome. Connection
+acceptance permits the Prover transition; milestone delivery is not a prerequisite.
 
 #### 3. Callback to Prover
 
@@ -419,6 +444,7 @@ sequenceDiagram
     P->>P: OAuth Platform redirects to redirectUri
     P->>P: Callback starts and selects its bundled version
     P->>P: Callback accepts authenticated connection
+    P-->>A: CallbackReady (advisory)
     break Callback fails after connection acceptance
         P-->>A: AbortCeremony
     end

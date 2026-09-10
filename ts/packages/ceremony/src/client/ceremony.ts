@@ -3,8 +3,10 @@ import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import {
   AbortCeremony,
   type AppStartProver,
+  CallbackReady,
   CancelCeremony,
   origin,
+  PrefetchReady,
   PrefetchStarted,
   ProverIdentityProof,
   ProverNotifyEvent,
@@ -138,7 +140,7 @@ function receiver<M extends Message>(handler: ((message: M) => void) | undefined
 class Run<P extends PlatformId> implements Ceremony<P> {
   readonly launchUrl: string
   private state: 'new' | 'prefetch' | 'oauth' | 'proving' | 'done' = 'new'
-  private stage: CeremonyStage = 'authorization'
+  private stage: CeremonyStage = 'start'
   private readonly listeners = new Set<(event: CeremonyEvent) => void>()
   private readonly off: (() => void)[] = []
   private readonly connection: PopupConnection<Message>
@@ -224,7 +226,10 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   }
   private enterStage(stage: CeremonyStage): void {
     if (this.state === 'done' || stages.indexOf(stage) <= stages.indexOf(this.stage)) return
-    if (this.platform === 'google' && !['proof-preparation', 'proof-generation'].includes(stage))
+    if (
+      this.platform === 'google' &&
+      ['code-exchange', 'identity-fetch', 'finalizing'].includes(stage)
+    )
       return
     this.stage = stage
     this.emit({ type: 'stage', stage, timestamp: performance.timeOrigin + performance.now() })
@@ -272,11 +277,19 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       this.reject = reject
     })
     try {
+      this.listen(PrefetchReady, () => {
+        if (this.state === 'prefetch') this.enterStage('prefetch')
+      })
+      this.listen(CallbackReady, () => {
+        if (this.state === 'oauth') this.enterStage('oauth-return')
+      })
       this.listen(PrefetchStarted, () => {
         this.expect('prefetch')
         this.state = 'oauth'
         const url = this.authorizationUrl
         this.authorizationUrl = ''
+        this.enterStage('authorization')
+        if (this.state !== 'oauth') return
         void this.connection
           .navigateAway(url)
           .catch(() => this.fail(new Error('OAuth navigation failed')))
@@ -329,7 +342,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       void this.connection.closed.then(() => this.fail(new Error('Popup connection ended')))
       this.emit({
         type: 'stage',
-        stage: 'authorization',
+        stage: 'start',
         timestamp: performance.timeOrigin + performance.now(),
       })
       if (this.state === 'prefetch')

@@ -52,6 +52,16 @@ export function assertMessage<T extends string>(
   if (!isRecord(value) || !hasExactKeys(value, ['type', ...fields]) || value.type !== type)
     throw new TypeError('Invalid CCDP record')
 }
+export interface PrefetchReady {
+  type: 'prefetch-ready'
+}
+export const PrefetchReady = {
+  type: 'prefetch-ready',
+  decode(value: unknown): PrefetchReady {
+    assertMessage(value, this.type, [])
+    return value
+  },
+} as const satisfies MessageType<PrefetchReady>
 export interface PrefetchStarted {
   type: 'prefetch-started'
 }
@@ -62,6 +72,16 @@ export const PrefetchStarted = {
     return value
   },
 } as const satisfies MessageType<PrefetchStarted>
+export interface CallbackReady {
+  type: 'callback-ready'
+}
+export const CallbackReady = {
+  type: 'callback-ready',
+  decode(value: unknown): CallbackReady {
+    assertMessage(value, this.type, [])
+    return value
+  },
+} as const satisfies MessageType<CallbackReady>
 export interface ProverReady {
   type: 'prover-ready'
 }
@@ -157,7 +177,7 @@ export const ProverNotifyEvent = {
       assertMessage(value, this.type, ['stage', 'timestamp'])
       if (
         typeof value.stage !== 'string' ||
-        !stages.slice(1).some((stage) => stage === value.stage) ||
+        !stages.slice(stages.indexOf('code-exchange')).some((stage) => stage === value.stage) ||
         typeof value.timestamp !== 'number' ||
         !Number.isFinite(value.timestamp) ||
         value.timestamp < 0
@@ -210,6 +230,8 @@ export const ProverIdentityProof = {
   },
 } as const satisfies MessageType<ProverIdentityProof>
 export type CCDPMessage =
+  | PrefetchReady
+  | CallbackReady
   | PrefetchStarted
   | ProverReady
   | CancelCeremony
