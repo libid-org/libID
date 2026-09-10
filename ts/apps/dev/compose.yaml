@@ -1,7 +1,7 @@
 # Started by services.ts after building CCDP.
 services:
   notary:
-    image: ghcr.io/libid-org/notary:0.3.0-rc.2
+    image: ghcr.io/libid-org/notary:0.3.0-rc.3
     # This upstream release publishes amd64 only; Docker Desktop emulates it on ARM.
     platform: linux/amd64
     environment:
@@ -15,7 +15,7 @@ services:
       - "127.0.0.1:4683:4683"
 
   bridge:
-    build: https://github.com/libid-org/libid-server-rs.git#86d6fcfd8be6bf9155fe67394f517c3ce74a9d44
+    build: https://github.com/libid-org/libid-server-rs.git#054839f43cbad7ed9d9e15a04d2f7ed1118b0c7d
     network_mode: service:notary
     depends_on:
       ccdp:

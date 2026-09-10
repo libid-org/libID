@@ -101,10 +101,11 @@ released-key verification and the remaining live notary/device gates.
 
 - Bridge [PR #10](https://github.com/libid-org/libid-server-rs/pull/10), stacked on
   [PR #9](https://github.com/libid-org/libid-server-rs/pull/9), pinned at
-  `86d6fcfd8be6bf9155fe67394f517c3ce74a9d44`. Docker retrieves the Git build context
+  `054839f43cbad7ed9d9e15a04d2f7ed1118b0c7d`. Docker retrieves the Git build context
   and runs the upstream Dockerfile, including Cargo. The first build takes time;
-  later launches reuse the image layers. Its `libid-rs` pin is `501f094`.
-- Notary **0.3.0-rc.2**, matching the browser WASM's TLSN revision `8a5de746`.
+  later launches reuse the image layers. Its `libid-rs` pin is release `v0.3.0` (`501f094`).
+- Notary **0.3.0-rc.3**, matching the browser WASM and Bridge TLSN revision
+  `94aaaf33` and MPZ revision `1dd2349d`.
   This released image is amd64 only; Apple Silicon requires Docker Desktop's
   amd64 emulation. Native ARM and physical mobile qualification remain separate.
 - SWS **3.0.0-beta.1**, using the same image digest as ceremony's `ccdp.Dockerfile` and
@@ -129,8 +130,9 @@ Register **`http://localhost:4682/auth/callback`** with each provider. Google al
 needs the appropriate consent-screen/test-user configuration; X must use a public
 client with PKCE; GitHub needs the matching confidential secret on the Bridge.
 The public development IDs and matching GitHub development credential are committed
-in `compose.yaml`. All three committed registrations are configured for the callback
-URL above. Changing it requires updating their provider registrations.
+in `compose.yaml`. Provider registrations must match the callback URL above. The RC3 check on
+2026-09-10 found GitHub still accepting the old HTTPS callback and rejecting HTTP
+with `redirect_uri_mismatch`; update that GitHub App registration before testing.
 
 From the TypeScript workspace:
 

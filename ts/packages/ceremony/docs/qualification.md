@@ -17,7 +17,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
 | Noir/Nargo and bb.js | `1.0.0-beta.25`, `5.2.0`; generation and independent verification explicitly use `verifierTarget: 'evm'` |
 | Canonical attestation encoder | `libid-rs` `239a4bb426ac72591fe30006f22660e164a98d96` |
-| TLSNotary bundle | `libid-org/notary` v0.3.0-rc.2, commit `86c179deafb464b0dd31f6792bf0eaa5135225fe`; snippet member selected with a directory wildcard |
+| TLSNotary bundle | `libid-org/notary` v0.3.0-rc.3, commit `37e195035e6b11683b09233a8815ae703e3cc55f`; snippet member selected with a directory wildcard |
 | SWS | `3.0.0-beta.1`; image digest in `ccdp.Dockerfile` |
 
 The RC replaces the former local TLSNotary bundle. Its exported call shape and
@@ -124,11 +124,11 @@ integration, not support for a real ledger.
    Admission checks one revealed request prefix and one committed secret-field
    suffix. Tests use canonical-bincode fixtures modeling native coalescing, not
    live signed service evidence. The selected next qualification target is
-   [Bridge PR #9](https://github.com/libid-org/libid-server-rs/pull/9),
-   `feat/callback-artifact-retrieval` at `ebbf10961dd6960a4d53c0af6470bee1f889a229`,
-   using libid-rs `501f094bf10f776c2227ef345908f507a0c80fd0`. Its TLSN fork pin is
-   `8a5de746f73bbe3476a3b10ce411fde3c87e479d`, now matching the browser rc.2
-   bundle. The deployed notary must run that compatible release too; matching
+   [Bridge PR #10](https://github.com/libid-org/libid-server-rs/pull/10), stacked on
+   PR #9, at `054839f43cbad7ed9d9e15a04d2f7ed1118b0c7d`. It uses released libid-rs
+   `v0.3.0` (`501f094bf10f776c2227ef345908f507a0c80fd0`), TLSN fork
+   `94aaaf33f3361d1218f9abb4c82b5c58a9199460` and MPZ fork
+   `1dd2349d52aeea038d77fb0816f781c6b714fe77`, matching notary/browser RC3. Matching
    source pins alone does not establish a successful live session. The Bridge
    must admit exactly one valid `Origin` matching its effective `allowedOrigins`
    independently on every preflight and POST, before DNS or session work. This
@@ -224,9 +224,20 @@ outcomes. Exercise suspension, eviction, popup defaults, openerless/same-tab ret
 ignored close and application resumption. A mismatched/absent fallback must fail
 closed. Qualify both normal isolation and popup-managed fallback responses.
 
-Separately run `e2e/build-smoke.mjs`, `e2e/server-smoke.mjs` (HTTPS port 4686), and
-`ts/qualification/ceremony/run-smoke.mjs <browser> <google|bearer|notary|notary-single>`
-with the same pinned artifacts. The notary smoke uses a public unauthenticated
+Separately run `e2e/build-smoke.mjs`, `e2e/server-smoke.mjs` (loopback HTTP port 4686), and
+`ts/qualification/ceremony/run-smoke.mjs <browser> <google|bearer|notary|notary-single> [page-url] [notary-origin]`
+with the same pinned artifacts. Defaults are `http://localhost:4686` for the smoke
+page and `http://localhost:4687` for the dev notary. For an isolated native-SWS
+HTTP smoke server and RC3 notary, for example:
+
+```sh
+node ts/qualification/ceremony/run-smoke.mjs chromium notary http://localhost:4966/index.html http://localhost:4967
+```
+
+Repeat with `firefox`/`webkit`, `notary-single`/`notary`, and both `localhost` and
+`127.0.0.1` notary origins. The optional URLs configure this qualification runner
+only. The smoke server uses loopback HTTP, so the runner needs no certificate
+bypass; all HTTPS connections use normal validation and public HTTP is refused. The notary smoke uses a public unauthenticated
 request and records lengths only; it diagnoses runtime concurrency and cannot
 replace real X token/identity or GitHub profile qualification. The independent
 verifier consumes the released key, never a key recomputed by the proving backend.
@@ -418,3 +429,42 @@ policy changed. Old immutable responses remain available. Public provider traffi
 and external proving assets still require HTTPS. Physical-device testing still
 needs HTTPS and its own reachable origins. No new live OAuth consent or matched
 notary-session qualification was performed in this run.
+
+
+## Notary RC3 qualification (2026-09-10)
+
+Browser assets and the dev server now use `v0.3.0-rc.3`; its new immutable mount
+is `tlsn/v0.3.0-rc.3`. The Bridge uses the matching TLSN/MPZ revisions listed above,
+including the active-context lifetime fix. The released libid-rs tag resolves to
+the same `501f094` source previously pinned by revision.
+
+Twelve real TLSNotary cases passed: Chromium 151.0.7922.34, Firefox 153.0 and
+WebKit 26.5, each with one and two concurrent sessions against both
+`http://localhost` and `http://127.0.0.1` notary origins on an isolated custom port.
+All pages were secure contexts and cross-origin isolated under the emitted
+COOP/COEP fallback response. Each session exchanged real HTTPS traffic with
+`api.x.com` and received a final canonical attestation frame while a real proof
+backend initialized concurrently. The test reveals an unauthenticated response
+and checks its correlation and framing, not its signature or a platform identity.
+WebKit concurrent runs took about 30 seconds; no runtime deadlock was observed.
+These timings were collected during other builds, not as a performance benchmark.
+
+All 33 HTTP browser integration cases passed, including real Google fixture
+proofs independently verified against the released key in each engine. All 15
+distribution, actual-loader and native-SWS checks passed without skips. The Bridge
+passed 75 unit and 39 HTTP tests, and its RC3 container built with `--locked`.
+
+This does not qualify live OAuth success, the normal DIP response with real
+notarization, public WSS/mobile networks, physical devices, or request-selected
+Bridge routing. The last remains a separate reported Bridge bug; its native
+notary connection still comes from server configuration. No requirement IDs
+or remaining qualification gates were removed.
+
+The isolated Docker stack passed Bridge startup, Callback retrieval and public
+configuration admission. A native Bridge MPC-TLS probe reached GitHub and read
+its refusal response, but returned 502: the public development GitHub App still
+rejects `http://localhost:4682/auth/callback`. Direct synthetic invalid-code probes
+returned `redirect_uri_mismatch` for HTTP and `bad_verification_code` for the old
+HTTPS callback. The registration must be updated before live HTTP GitHub consent
+qualification. No valid code/token was used, and neither probe establishes a
+successful confidential token exchange or its final attestation.
