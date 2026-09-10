@@ -14,6 +14,7 @@ const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifact
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
   assert.equal((config.general as TomlTable)['text-charset'], false)
+  assert.equal(Object.hasOwn(config.general as object, 'port'), false)
   for (const [path, headers] of Object.entries(graph.headers)) {
     const physical = graph.files[path],
       body = readFileSync(join(out, 'public', physical))
@@ -121,8 +122,19 @@ test('CCDP contains no ledger implementation or build-time notary mapping [LIBID
     // Prior immutable responses remain available for already-open documents.
     if (!path.startsWith('/ccdp/assets/') || Object.hasOwn(graph.graph, path.slice(1)))
       assert.ok(!policy.includes('notary.lib.id'), path)
-    if (path === '/ccdp/v1/prover' || path === '/ccdp/v1/prover/fallback')
-      assert.ok(policy.includes('connect-src https: wss:'), path)
+    if (path === '/ccdp/v1/prover' || path === '/ccdp/v1/prover/fallback') {
+      const sources = policy.split('connect-src ')[1].split(';')[0].trim().split(/\s+/)
+      for (const source of [
+        'https:',
+        'wss:',
+        'http://localhost:*',
+        'http://127.0.0.1:*',
+        'ws://localhost:*',
+        'ws://127.0.0.1:*',
+      ])
+        assert.ok(sources.includes(source), path)
+      assert.ok(!sources.includes('http:') && !sources.includes('ws:'), path)
+    }
   }
 })
 

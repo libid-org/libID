@@ -1,16 +1,15 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
 import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
 import fixture from '../test-fixtures/google-v1.json' with { type: 'json' }
 
-const app = 'https://localhost:4681',
-  bridge = 'https://localhost:4682',
-  ccdp = 'https://localhost:4683'
 for (const native of [false, true])
   test(`actual popup: private callback, isolation, denial, and application continuation${native ? ' with native anchor' : ''} [LIBID-BROWSER-001] [LIBID-BROWSER-005]`, async ({
+    app,
+    bridge,
     page,
     context,
   }) => {
@@ -63,7 +62,10 @@ for (const native of [false, true])
     expect(errors).toEqual([])
     expect(callbackScripts).toEqual([])
   })
-test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async ({ request }) => {
+test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async ({
+  request,
+  ccdp,
+}) => {
   for (const path of [
     '/ccdp/v1/prefetch',
     '/ccdp/v1/prover',
@@ -86,6 +88,9 @@ test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async
 })
 
 test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020]', async ({
+  app,
+  bridge,
+  ccdp,
   page,
   context,
   request,
@@ -147,6 +152,8 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
 })
 
 test('real Google fixture proof under emitted CSP, independently released-key verified [LIBID-PROVER-001] [CSP-020]', async ({
+  app,
+  bridge,
   page,
   context,
 }, testInfo) => {
@@ -232,6 +239,7 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
 })
 
 test('package UI has bounded progress and a nonblocking 15-second hint [LIBID-BROWSER-024] [LIBID-BROWSER-025]', async ({
+  app,
   page,
 }) => {
   await page.clock.install()
@@ -248,6 +256,8 @@ test('package UI has bounded progress and a nonblocking 15-second hint [LIBID-BR
   await expect(page.getByText(/Still proving/)).toHaveCount(0)
 })
 test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async ({
+  app,
+  ccdp,
   page,
   context,
 }) => {
@@ -270,6 +280,8 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
   }
 })
 test('two independently supplied connections cannot replace each other [LIBID-BROWSER-014]', async ({
+  app,
+  bridge,
   page,
   context,
 }) => {
@@ -295,6 +307,8 @@ test('two independently supplied connections cannot replace each other [LIBID-BR
 })
 
 test('Callback clears unsupported versions and unconfigured direct visits locally [KIT-010] [CSP-007]', async ({
+  bridge,
+  ccdp,
   page,
 }) => {
   const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
@@ -331,6 +345,7 @@ test('Callback clears unsupported versions and unconfigured direct visits locall
 
 // Real RC WASM and its nested module workers; no simulated SDK initialization.
 test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASSET-017]', async ({
+  ccdp,
   page,
   context,
 }) => {

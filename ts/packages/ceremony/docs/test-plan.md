@@ -210,3 +210,12 @@ for these checks.
 | LIBID-BROWSER-025 | After 15 seconds of active proving, fake-timer and real Vanadium tests show a nonblocking **Still proving** notice with optional per-site JavaScript-JIT guidance. The notice does not diagnose the cause, require JIT, user-agent sniff, reload, cancel, emit CCDP or `CeremonyEvent`, alter a timeout, or affect proof authority. Terminal cleanup removes the timer. |
 | LIBID-BROWSER-028 | With an opener-independent fallback supplied, Callback authenticates Application and privately navigates to Prover without sending OAuth parameters through the connection or signaling. Prover accepts the logical connection with isolation established and sends one `ProverReady`; Application sends the profile/configuration request; Prover classifies the retained return. CCDP adds no fallback-specific handoff message or signaling format. |
 | LIBID-BROWSER-029 | Diagnostics count three simultaneous uncached requests as one network retrieval and two single-flight joiners. Warm-cache reads add no download; earlier Service Worker transfers are not counted again on Prover join. Missing earlier-worker timing is unavailable rather than zero, and overlapping span durations are not summed as elapsed time. |
+
+### Loopback HTTP coverage
+
+Existing IDs remain unchanged. `LIBID-OAUTH-021` and `POPUP-CONNECTION-009` boundary
+tests admit explicit canonical localhost HTTP and reject public HTTP, lookalikes,
+credentials and noncanonical spellings. `CSP-003` distribution checks admit only
+explicit loopback HTTP/WS sources. The `*-http` browser projects repeat the existing
+browser cases against the same artifact without TLS; HTTPS projects remain.
+These runs do not replace real OAuth, physical-device or proof-verification gates.

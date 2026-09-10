@@ -1,8 +1,8 @@
 import { mainnet, testnet } from '@libid/ledger/testing'
 import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
 import { CeremonyError, createCeremonyClient } from '../src/client/index.js'
-const bridge = 'https://localhost:4682',
-  ccdp = 'https://localhost:4683'
+const bridge = `${location.protocol}//localhost:${Number(location.port) + 1}`,
+  ccdp = `${location.protocol}//localhost:${Number(location.port) + 2}`
 const client = await createCeremonyClient({ oauthBridge: bridge })
 let activeId = ''
 const anchor = document.querySelector<HTMLAnchorElement>('#launch')!

@@ -1,3 +1,4 @@
+import { origin } from '../../ccdp/index.js'
 import { parseJson } from '../json.js'
 import { hasExactKeys, isRecord } from '../../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES } from './decode.js'
@@ -15,16 +16,9 @@ function invalid(reason: string): never {
 }
 
 export function deriveNotaryWebSocketUrl(notaryAddress: string): string {
-  let url: URL
-  try {
-    url = new URL(notaryAddress)
-  } catch {
-    return invalid('address must be a canonical HTTPS origin')
-  }
-  if (url.protocol !== 'https:' || url.origin !== notaryAddress) {
-    invalid('address must be a canonical HTTPS origin')
-  }
-  return `wss://${url.host}/notarize-proxy`
+  if (!origin(notaryAddress)) invalid('address must be a canonical HTTPS or localhost HTTP origin')
+  const url = new URL(notaryAddress)
+  return `${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}/notarize-proxy`
 }
 
 function validateByteArray(value: unknown, maximum: number): asserts value is number[] {
