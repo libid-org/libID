@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildTokenRequest,
-  selectTokenReveals,
-  buildIdentityRequest,
-  selectIdentityReveals,
-} from '../platforms/x/1/transcript.js'
 import { identityRequest, selectIdentity } from '../platforms/github/1/transcript.js'
+import {
+  buildIdentityRequest,
+  buildTokenRequest,
+  selectIdentityReveals,
+  selectTokenReveals,
+} from '../platforms/x/1/transcript.js'
 import { planNotarization } from './notarization/notarize.js'
 import type { ExactHttpRequest } from './notarization/session.js'
+import { quotedRange } from './transcript.js'
+
 const utf8 = (value: string) => new TextEncoder().encode(value)
 const text = (value: Uint8Array) => new TextDecoder().decode(value)
 function serialize(line: string, request: ExactHttpRequest): Uint8Array {
@@ -87,6 +89,27 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60]', () => {
       expect(plan.commit.sent).toEqual([{ ...selected.bearerRange, algorithm: 'SHA256' }])
     },
   )
+  it.each([' ', '\t', '\r', '\n', ' \t\r\n'])(
+    'preserves original whitespace in revealed GitHub fields: %j',
+    (space) => {
+      const id = `"id"${space}:${space}123${space},`
+      const login = `"login"${space}:${space}"alice"`
+      const received = utf8(`HTTP/1.1 200 OK\r\n\r\n{${id}\n${login}}`)
+      const selected = selectIdentity({ sent, received }, 'token')
+      expect(selected.userId).toBe('123')
+      expect(selected.userName).toBe('alice')
+      expect(
+        selected.ranges.received.map(({ start, end }) => text(received.slice(start, end))),
+      ).toEqual([id, login])
+    },
+  )
+  it.each(['"123"', '0123', '123.4', '123e2', '123 4', '18446744073709551616'])(
+    'still rejects invalid spaced IDs: %s',
+    (id) => {
+      const received = utf8(`{"id": ${id}, "login": "alice"}`)
+      expect(() => selectIdentity({ sent, received }, 'token')).toThrow()
+    },
+  )
   it('pins the API version and forwards the browser User-Agent, rejecting missing or duplicate headers', () => {
     expect(text(request.headers['X-GitHub-Api-Version'])).toBe('2022-11-28')
     expect(text(request.headers['User-Agent'])).toBe(navigator.userAgent)
@@ -153,3 +176,34 @@ for (const platform of ['x', 'github'] as const) {
     })
   })
 }
+
+describe('JSON field whitespace [LIBID-PROVER-003/004]', () => {
+  it.each([' ', '\t', '\r', '\n', ' \t\r\n'])('keeps X bearer offsets with %j', (ws) => {
+    const prefix = `"access_token"${ws}:${ws}"`
+    const recv = utf8(`HTTP/1.1 200 OK\r\n\r\n{${prefix}token"}`)
+    const selected = selectTokenReveals({ ...transcript, recv }, input)
+    expect(text(recv.slice(selected.bearerRange.start, selected.bearerRange.end))).toBe('token')
+    expect(selected.ranges.recv.map(({ start, end }) => text(recv.slice(start, end)))).toEqual([
+      prefix,
+      '"',
+    ])
+    const request = buildIdentityRequest('token')
+    const identity = utf8(`{"id"${ws}:${ws}"123", "username"${ws}:${ws}"alice"}`)
+    const reveals = selectIdentityReveals(
+      { sent: serialize('GET /2/users/me HTTP/1.1', request), recv: identity },
+      'token',
+    )
+    expect(reveals.recv.map(({ start, end }) => text(identity.slice(start, end)))).toEqual([
+      `"id"${ws}:${ws}"123"`,
+      `"username"${ws}:${ws}"alice"`,
+    ])
+  })
+  it.each(['\v', '\f', '\u00a0'])('rejects non-JSON whitespace %j', (ws) => {
+    expect(() => quotedRange(utf8(`{"login":${ws}"alice"}`), 'login')).toThrow()
+    expect(() => quotedRange(utf8(`{"login"${ws}:"alice"}`), 'login')).toThrow()
+  })
+  it('rejects duplicates with different whitespace and incomplete values', () => {
+    for (const body of ['{"login":"alice","login" : "bob"}', '{"login": "alice', '{"login" : '])
+      expect(() => quotedRange(utf8(body), 'login')).toThrow()
+  })
+})

@@ -15,7 +15,7 @@ services:
       - "127.0.0.1:4683:4683"
 
   bridge:
-    build: https://github.com/libid-org/libid-server-rs.git#054839f43cbad7ed9d9e15a04d2f7ed1118b0c7d
+    build: https://github.com/libid-org/libid-server-rs.git#dc2514609b8331ee4db6a2102d9077ac10f719e4
     network_mode: service:notary
     depends_on:
       ccdp:
