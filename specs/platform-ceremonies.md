@@ -522,16 +522,16 @@ REQ-PLAT-56A does not forbid.
   header. The Platform Verifier MUST reject a head without exactly one `host`
   naming the pinned authority and exactly one `content-type` whose value is
   `application/x-www-form-urlencoded`, comparing names lowercased with every
-  space and tab removed, as common REQ-COMMON-39 normalizes, and values
-  exactly once the optional whitespace around them is removed. The Platform
-  Verifier MUST reject a head carrying `authorization`,
-  `content-encoding`, `transfer-encoding`, `cookie` or
-  `x-http-method-override` under any spelling of the name. The Platform
-  Verifier MUST ignore every other header. Necessity: common REQ-COMMON-21B fixes the media type
+  space and tab removed and `_` read as `-`, as common REQ-COMMON-39B
+  normalizes, and values exactly once the optional whitespace around them is
+  removed. The Platform Verifier MUST reject a head carrying `authorization`
+  or any name common REQ-COMMON-39B forbids, under any spelling of the name.
+  The Platform Verifier MUST ignore every other header. Necessity: common REQ-COMMON-21B fixes the media type
   because it "selects the platform's request parser", and a media type nothing
   compares is a pin in name only. The forbidden headers change what the
   platform does with the request in a way no revealed byte shows: which client
-  it authenticates, which bytes it parses, which method it runs. Any other
+  it authenticates, which session it answers for, which bytes it parses, which
+  method it runs. Any other
   header changes only what the platform answers, and a wrong answer is a
   response the verifier cannot read rather than one it can be fooled by, so
   requiring its absence would bind every prover to one HTTP library's habits
@@ -544,12 +544,13 @@ REQ-PLAT-56A does not forbid.
   disagree the fields read are not the fields parsed.
 - REQ-PLAT-56C (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject a head carrying a line feed not preceded by
-  a carriage return, a line beginning with a space or a tab, or a line with no
-  colon. Necessity: a parser accepting a bare line feed or a fold ends the head
-  somewhere this one does not, moving bytes between head and body, and a line
-  no colon splits is not a header field, so a parser that tolerates one reads a
-  head this one cannot. Common REQ-COMMON-39 asks the first two of the
-  identity request.
+  a carriage return, a carriage return not followed by a line feed, a line
+  beginning with a space or a tab, or a line with no colon. Necessity: a
+  parser accepting a bare line feed, a bare carriage return or a fold ends the
+  head somewhere this one does not, moving bytes between head and body, and a
+  line no colon splits is not a header field, so a parser that tolerates one
+  reads a head this one cannot. Common REQ-COMMON-39A asks the first three of
+  the identity request.
 - REQ-PLAT-56 (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject an X token attestation whose revealed
   `grant_type` differs from the exact ASCII bytes `authorization_code`.

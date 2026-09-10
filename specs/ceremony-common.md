@@ -942,16 +942,39 @@ and no `authorization` needle to count.
   removing every space and horizontal tab. The
   Platform Verifier MUST leave carriage-return and line-feed bytes in
   place. The Platform Verifier MUST require exactly one occurrence of the normalized,
-  line-anchored credential header needle `\r\nauthorization:bearer` across
-  all revealed request bytes, counting the region before the committed
-  range and the region after it together. Necessity: HTTP field names and
-  the auth-scheme token are case-insensitive and the colon admits optional
-  whitespace, so a literal search over raw bytes is evadable; removing only
-  bytes absent from the needle can create a spurious match, an over-reject
-  which is safe, but can never hide a real one; and keeping CR and LF is
-  what makes the needle count header lines rather than any substring, so a
-  second genuine `authorization` header is rejected whatever the Identity
-  Platform would have done with it.
+  line-anchored credential header needle `\r\nauthorization:` across
+  all revealed request bytes, whatever auth scheme follows it, counting the
+  region before the committed range and the region after it together.
+  Necessity: HTTP field names are case-insensitive and the colon admits
+  optional whitespace, so a literal search over raw bytes is evadable;
+  removing only bytes absent from the needle can create a spurious match, an
+  over-reject which is safe, but can never hide a real one; keeping CR and LF
+  is what makes the needle count header lines rather than any substring; and
+  counting under any scheme is what rejects a second `authorization` header
+  whatever it carries. A count of `bearer` lines alone leaves a second header
+  under Basic or a platform's own token scheme uncounted, and the Identity
+  Platform answering for whichever credential it honoured, which is the
+  committed bearer or someone else's.
+- REQ-COMMON-39A (upholds SP-EXCHANGE-01):
+  For that same identity-session request, the Platform Verifier MUST reject
+  revealed request bytes carrying a line feed not preceded by a carriage
+  return, a carriage return not followed by a line feed, or a line beginning
+  with a space or a horizontal tab. Necessity: the count of REQ-COMMON-39
+  reads header lines, and each of the three is a byte some parser reads as a
+  line boundary this one does not, so a second header could sit where the
+  count sees none.
+- REQ-COMMON-39B (upholds SP-EXCHANGE-01):
+  For that same identity-session request, the Platform Verifier MUST reject a
+  revealed header line whose name, normalized as REQ-COMMON-39 normalizes
+  and with `_` read as `-`, is `cookie`, `content-encoding`,
+  `transfer-encoding`, `x-http-method-override`, `x-http-method` or
+  `x-method-override`. Necessity: each changes what the Identity Platform
+  does with the request in a way no revealed byte shows. `cookie` is the case
+  that matters: another credential a platform might honour over the
+  committed bearer, and that bearer is the one thing the cross-bind to the
+  token exchange fixes. The underscore folds because a CGI-style stack reads
+  `content_encoding` as `content-encoding`. `authorization` is not on this
+  list only because REQ-COMMON-39 already holds it to one line.
 - REQ-COMMON-40 (upholds SP-EXCHANGE-01):
   For that same identity-session request, the Platform Verifier MUST require
   the raw transcript bytes immediately before the committed range to be
