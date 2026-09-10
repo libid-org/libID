@@ -103,6 +103,7 @@ for (const [platform, name] of [
       expect(await page.evaluate(() => window.result)).toEqual({ status: 'cancelled' })
       await expect(rows.first().getByRole('cell').nth(2)).toHaveText('Cancelled')
       await expect(rows.first().getByRole('cell').nth(3)).toHaveText(/^\d+\.\d s$/)
+      await expect(rows.first().getByRole('cell').nth(4)).toHaveText('—')
       if (platform === 'google' && !blocked) {
         const secondOpened = page.waitForEvent('popup')
         await page.getByRole('button', { name: 'X', exact: true }).click()
@@ -266,7 +267,7 @@ for (const [platform, name] of [
       const id = new URL(route.request().url()).searchParams.get('state')!.slice(3)
       return route.fulfill({
         contentType: 'text/html',
-        body: `<script>location.replace(${JSON.stringify(`${ccdp}/stage-test#ceremonyId=${id}`)})</script>`,
+        body: `<script>window.returnUrl = ${JSON.stringify(`${ccdp}/stage-test#ceremonyId=${id}`)}</script>`,
       })
     })
     await page.clock.install()
@@ -274,6 +275,12 @@ for (const [platform, name] of [
     const opened = page.waitForEvent('popup')
     await page.getByRole('button', { name, exact: true }).click()
     const popup = await opened
+    await popup.waitForFunction(() => !!(window as unknown as { returnUrl?: string }).returnUrl)
+    // Advance consent time only after navigation settles; the return has not started.
+    await page.clock.runFor(5000)
+    await popup.evaluate(() =>
+      location.replace((window as unknown as { returnUrl: string }).returnUrl),
+    )
     await popup.waitForFunction(
       () => !!(window as unknown as { stageConnection?: unknown }).stageConnection,
     )
@@ -328,6 +335,11 @@ for (const [platform, name] of [
       expect(seconds).toBeGreaterThanOrEqual(1)
       expect(seconds).toBeLessThan(3)
     }
+    const cells = page.locator('#history tr').first().getByRole('cell')
+    const total = Number.parseFloat((await cells.nth(3).textContent())!)
+    const postConsent = Number.parseFloat((await cells.nth(4).textContent())!)
+    expect(postConsent).toBeGreaterThanOrEqual(platform === 'google' ? 2 : 5)
+    expect(total - postConsent).toBeGreaterThanOrEqual(4.9)
     const row = await page.locator('#history').textContent()
     await page.clock.runFor(2000)
     await expect(page.locator('#history')).toHaveText(row!)
