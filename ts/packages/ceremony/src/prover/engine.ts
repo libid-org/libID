@@ -29,7 +29,7 @@ export interface ProofEngineOptions {
 
 type WorkerMessage =
   | { type: 'engine-booted' }
-  | { type: 'engine-ready' }
+  | { type: 'engine-ready' } // Ready for witness execution; bb may still be initializing.
   | { type: 'engine-span'; code: string; status: PlatformStep['status'] }
   | { type: 'engine-result'; result: RawProof }
   | { type: 'engine-error'; error: string }
