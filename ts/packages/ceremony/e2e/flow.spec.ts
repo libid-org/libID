@@ -170,10 +170,17 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
     .sort((a: { bytes: number }, b: { bytes: number }) => a.bytes - b.bytes)[0]
   const control = `${ccdp}/qualification-control?asset=${encodeURIComponent(asset.url)}`
   const before = (await (await request.get(control)).json()).count
+  const args = [...(testInfo.project.use.launchOptions?.args ?? [])]
+  if (browser.browserType().name() === 'chromium' && ccdp.startsWith('https:'))
+    args.push(
+      `--ignore-certificate-errors-spki-list=${readFileSync(new URL('../.cache/e2e/cert-spki', import.meta.url), 'utf8')}`,
+    )
   // WebKit's ephemeral test context does not retain this HTTP-cache entry.
   const context = await browser
     .browserType()
     .launchPersistentContext(testInfo.outputPath('http-cache-profile'), {
+      ...testInfo.project.use.launchOptions,
+      args,
       ignoreHTTPSErrors: true,
     })
   try {
