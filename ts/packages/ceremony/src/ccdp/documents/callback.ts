@@ -1,9 +1,10 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
-import { view } from '../../ui.js'
-import { CancelCeremony, origin, UUID } from '../index.js'
+import { origin } from '../../primitives.js'
+import { CancelCeremony, UUID } from '../index.js'
 import { type OAuthReturn, proverFragment, route } from '../navigation.js'
+import { view } from './ui.js'
 
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
 export function startCallback(): void {

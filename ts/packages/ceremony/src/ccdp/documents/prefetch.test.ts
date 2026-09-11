@@ -24,7 +24,7 @@ vi.mock('../../assets/registration.js', () => ({ rootWorker, dispatchPrefetch })
 
 vi.mock('../../assets/worker.js', () => ({ startWorker: vi.fn() }))
 
-vi.mock('../../ui.js', () => ({ view: vi.fn() }))
+vi.mock('./ui.js', () => ({ view: vi.fn() }))
 
 const fragment = new URLSearchParams({
   ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',

@@ -131,7 +131,8 @@ Launch publishes one `@libid/ceremony` package:
 │   └── documents
 │       ├── callback  OAuth return capture and navigation
 │       ├── prefetch  Prefetch page and root Worker entrypoint
-│       └── prover    isolated Prover page
+│       ├── prover    isolated Prover page
+│       └── ui        shared document UI
 ├── assets            declarations, URL resolution, cache and root Worker delivery
 ├── barretenberg      Noir/bb engine and barretenberg.assets.ts
 │   └── circuits      oidc_google and bearer_link adapters and *.assets.ts
@@ -246,20 +247,19 @@ The dependency direction is closed:
 client, native wallet ───> platforms/index
                                 │
                                 ▼
-                 platforms/<platform>/<version>/url ───> types
-                                │
-                                ▼
-                      platforms/authorization
+                 platforms/<platform>/<version>/{url,types}
+
+client ───> platforms/authorization
 
 prover ───> platforms/<platform>/<version>/prover ───> types
                               │
                               └──> platforms/authorization
 
-platforms/{x,github}/<version>/prover ───> notarization
+platforms/{x,github}/<version>/{types,prover} ───> notary
 
-prefetch, artifact build ───> platforms/assets ───> platforms/<platform>/<version>/assets
-platforms/<platform>/<version>/prover ───────────> platforms/<platform>/<version>/assets
-platforms/<platform>/<version>/assets ───> shared integrations' assets modules
+prefetch, artifact build ───> platforms/platforms.assets ───> platforms/<platform>/<version>/*.assets
+platforms/<platform>/<version>/prover ───────────> platforms/<platform>/<version>/*.assets
+platforms/<platform>/<version>/*.assets ───> shared integrations' assets modules
 owner-defined asset modules ───> assets (declarations and URL resolution only)
 
 client, callback, prefetch, prover, platforms/index ───> ccdp

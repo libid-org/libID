@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
-import { origin, redirect } from '../../../ccdp/index.js'
+import { redirect } from '../../../ccdp/index.js'
 import { parseJson } from '../../../json.js'
 import {
   type DecodedAttestedData,
@@ -10,7 +10,7 @@ import {
 import type { CorrelatedCommitment } from '../../../notary/notarize.js'
 import { jsonField, tokenRequestBody } from '../../../notary/transcript.js'
 import type { NotaryAttestation } from '../../../notary/transport.js'
-import { b64urlDecode, bytesEqual, hasExactKeys, isRecord } from '../../../primitives.js'
+import { b64urlDecode, bytesEqual, hasExactKeys, isRecord, origin } from '../../../primitives.js'
 
 const MAX_RESPONSE_BYTES = 3 * 1024 * 1024
 
