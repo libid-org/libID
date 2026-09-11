@@ -9,20 +9,29 @@ import type { DistributionMetadata } from './distribution.ts'
 import { packageDir } from './release.ts'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
+
 const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts')
+
 const graph: DistributionMetadata = JSON.parse(
   readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
 )
+
 const requests = graph.requestsByProfile['google/1']
+
 const originalFetch = globalThis.fetch
+
 const observations: { url: string; range?: string; method: string; cache: RequestCache }[] = []
+
 let failPrimary = false
+
 const select = (name: string) => {
   const request = requests.find((r) => r.url.endsWith(`/${name}`))
   assert.ok(request, `Missing ${name}`)
   return request
 }
+
 const external = requests.filter((r) => r.url.startsWith('https:'))
+
 // These observing stubs never contact external hosts. They test the dependency
 // loaders, not proving: only the standalone browser qualification uses real CRS.
 test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASSET-018]', async () => {

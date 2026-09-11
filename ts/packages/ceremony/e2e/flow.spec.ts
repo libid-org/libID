@@ -62,6 +62,7 @@ for (const native of [false, true])
     expect(errors).toEqual([])
     expect(callbackScripts).toEqual([])
   })
+
 test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async ({
   request,
   ccdp,
@@ -338,6 +339,7 @@ test('package UI has bounded progress and a nonblocking 15-second hint [LIBID-BR
   await expect(page.getByRole('progressbar')).toHaveAttribute('value', '0.5')
   await expect(page.getByText(/Still proving/)).toHaveCount(0)
 })
+
 test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async ({
   app,
   ccdp,
@@ -362,6 +364,7 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
     await context.request.get(`${control}&restore`)
   }
 })
+
 test('two independently supplied connections cannot replace each other [LIBID-BROWSER-014]', async ({
   app,
   bridge,

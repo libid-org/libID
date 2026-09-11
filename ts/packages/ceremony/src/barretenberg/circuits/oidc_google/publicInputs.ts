@@ -1,11 +1,11 @@
-import type { Identity } from '../../../platforms/types.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import {
-  RSA_MODULUS_BYTES,
   type GoogleProofV1,
-  validateProof,
+  RSA_MODULUS_BYTES,
   validateIdentity,
+  validateProof,
 } from '../../../platforms/google/1/types.js'
+import type { Identity } from '../../../platforms/types.js'
 
 const encoder = new TextEncoder()
 

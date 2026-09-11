@@ -9,7 +9,7 @@ export interface ProgressSpan {
 
 type Status = PlatformStep['status']
 
-/** A small, closed span tracker shared by every proof engine. */
+/** Weighted diagnostic progress for overlapping spans, capped at 0.95 until terminal success. */
 export class Progress {
   readonly #spans: ReadonlyMap<string, ProgressSpan>
   readonly #emit: (step: PlatformStep) => void
@@ -72,6 +72,7 @@ export class Progress {
     this.#finish(code, 'failed')
   }
 
+  /** Complete or fail the named span while preserving the work’s result or original error. */
   async step<T>(code: string, work: () => T | Promise<T>): Promise<T> {
     this.start(code)
     try {
@@ -84,6 +85,7 @@ export class Progress {
     }
   }
 
+  /** Fail children before parents during cleanup, preserving the span nesting contract. */
   failActive(): void {
     const active = [...this.#status]
       .filter(([, status]) => status === 'started')

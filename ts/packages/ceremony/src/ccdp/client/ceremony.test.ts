@@ -15,6 +15,7 @@ class Connection implements PopupConnection<Message> {
   navigateAway = vi.fn(async (_url: string) => {})
   close = vi.fn(async () => {})
   handlers = new Map<string, (v: unknown) => void>()
+
   on<M extends Message>(type: MessageType<M>, handler: (m: M) => void) {
     if (this.handlers.has(type.type)) throw new Error('Duplicate message handler')
     this.handlers.set(type.type, (v) => handler(type.decode(v)))
@@ -22,17 +23,22 @@ class Connection implements PopupConnection<Message> {
       this.handlers.delete(type.type)
     }
   }
+
   receive(value: Message & Record<string, unknown>) {
     this.handlers.get(value.type)?.(value)
   }
 }
+
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+
 const wireConfig = {
   callbackPath: '/auth/callback',
   ccdpOrigin: 'https://ccdp.test',
   platforms: { google: { clientId: 'client', ceremonyVersions: [1] } },
 }
+
 const config = validateCeremonyConfig(wireConfig, 'https://bridge.test')
+
 function setup() {
   const connection = new Connection()
   const data = new Uint8Array([1, 2])
@@ -46,17 +52,20 @@ function setup() {
   )
   return { connection, ceremony, data }
 }
+
 const identity = {
   platformId: 'google' as const,
   oauthClientId: 'client',
   userId: '1',
   userName: 'a@b.c',
 }
+
 const proof = {
   identityProof: new Uint8Array([1]),
   tokenExpiresAt: 42,
   signingKeyModulus: new Uint8Array(256),
 }
+
 describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
   it('uses distinct origins and frozen input; never receives raw OAuth return', async () => {
     const { connection: c, ceremony, data } = setup()
@@ -342,6 +351,7 @@ it.each(['google', 'x', 'github'] as const)(
     }
   },
 )
+
 it('Google never reads the notary method [LIBID-MOD-014]', async () => {
   const ledger = {
     hash: testnet.hash,
@@ -359,6 +369,7 @@ it('Google never reads the notary method [LIBID-MOD-014]', async () => {
   )
   await ceremony.cancel()
 })
+
 it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014]', () => {
   const connection = new Connection()
   for (const ledger of [
@@ -384,6 +395,7 @@ it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-
     ).toThrow()
   expect(connection.navigate).not.toHaveBeenCalled()
 })
+
 it.each(['x', 'github'] as const)(
   'rejects invalid notary addresses before OAuth for %s [LIBID-OAUTH-021]',
   (platformId) => {
@@ -472,6 +484,7 @@ function checkCreationTypes() {
       return { platform, proof }
     })
 }
+
 void checkCreationTypes
 
 it('preserves the Prover failure code and safe message for the application', async () => {
@@ -652,6 +665,7 @@ it('startup milestones are advisory, phase-bound and insensitive to duplicate or
     'oauth-return',
   ])
 })
+
 it('cancellation at authorization entry prevents provider navigation', async () => {
   const { ceremony, connection } = setup()
   ceremony.onEvent((event) => {

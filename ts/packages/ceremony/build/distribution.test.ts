@@ -11,6 +11,7 @@ const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifact
   graph: DistributionMetadata = JSON.parse(
     readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
   )
+
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
   assert.equal((config.general as TomlTable)['text-charset'], false)
@@ -76,6 +77,7 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
   }
   assert.equal(existsSync(join(out, 'public/manifest.json')), false)
 })
+
 test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018]', {
   skip: !process.env.CEREMONY_SWS_URL,
 }, async () => {

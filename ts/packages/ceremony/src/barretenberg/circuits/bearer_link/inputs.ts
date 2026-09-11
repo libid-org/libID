@@ -1,6 +1,7 @@
 import type { CorrelatedCommitment } from '../../../notary/notarize.js'
 
 const encoder = new TextEncoder()
+
 const MAX_BEARER_BYTES = 128
 
 function validateOpening(opening: CorrelatedCommitment, name: string, bearerLength: number): void {

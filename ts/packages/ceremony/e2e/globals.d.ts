@@ -1,5 +1,6 @@
 import type { CeremonyEvent } from '../src/ccdp/client/index.js'
 import type { IdentityResult } from '../src/index.js'
+
 declare global {
   interface Window {
     failureCode?: import('../src/errors.js').FailureCode

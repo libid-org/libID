@@ -3,13 +3,19 @@ import { type FailureCode, failureMessages } from '../errors.js'
 import { type ProverStage, stages } from '../events.js'
 import { b64urlDecode, hasExactKeys, isRecord } from '../primitives.js'
 
+/** Pure CCDP codecs: shape and bounds validation only; transport authentication belongs to popup. */
 export const CCDP_VERSION = 1
+
 export const MAX_REDIRECT_URI_BYTES = 2048
+
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
 export const PLATFORM = /^[a-z][a-z0-9-]{0,63}$/
+
 export function uint(value: unknown, max: number): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max
 }
+
 export function text(value: unknown, max: number): value is string {
   return (
     typeof value === 'string' &&
@@ -18,6 +24,7 @@ export function text(value: unknown, max: number): value is string {
     new TextEncoder().encode(value).length <= max
   )
 }
+
 export function webUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false
   try {
@@ -33,12 +40,15 @@ export function webUrl(value: unknown): value is string {
     return false
   }
 }
+
 export function origin(value: unknown): value is string {
   return typeof value === 'string' && webUrl(`${value}/`) && new URL(value).origin === value
 }
+
 export function redirect(value: unknown): value is string {
   return text(value, MAX_REDIRECT_URI_BYTES) && webUrl(value) && !/[?#]/.test(value)
 }
+
 export function assertMessage<T extends string>(
   value: unknown,
   type: T,
@@ -47,9 +57,12 @@ export function assertMessage<T extends string>(
   if (!isRecord(value) || !hasExactKeys(value, ['type', ...fields]) || value.type !== type)
     throw new TypeError('Invalid CCDP record')
 }
+
+/** Advisory page readiness; fetch dispatch is acknowledged separately. */
 export interface PrefetchReady {
   type: 'prefetch-ready'
 }
+
 export const PrefetchReady = {
   type: 'prefetch-ready',
   decode(value: unknown): PrefetchReady {
@@ -57,9 +70,12 @@ export const PrefetchReady = {
     return value
   },
 } as const satisfies MessageType<PrefetchReady>
+
+/** Every selected fetch has been dispatched or joined; downloads may still be pending. */
 export interface PrefetchStarted {
   type: 'prefetch-started'
 }
+
 export const PrefetchStarted = {
   type: 'prefetch-started',
   decode(value: unknown): PrefetchStarted {
@@ -67,9 +83,11 @@ export const PrefetchStarted = {
     return value
   },
 } as const satisfies MessageType<PrefetchStarted>
+
 export interface CallbackReady {
   type: 'callback-ready'
 }
+
 export const CallbackReady = {
   type: 'callback-ready',
   decode(value: unknown): CallbackReady {
@@ -77,9 +95,12 @@ export const CallbackReady = {
     return value
   },
 } as const satisfies MessageType<CallbackReady>
+
+/** The isolated Prover can accept the application’s frozen inputs. */
 export interface ProverReady {
   type: 'prover-ready'
 }
+
 export const ProverReady = {
   type: 'prover-ready',
   decode(value: unknown): ProverReady {
@@ -87,9 +108,11 @@ export const ProverReady = {
     return value
   },
 } as const satisfies MessageType<ProverReady>
+
 export interface CancelCeremony {
   type: 'cancel-ceremony'
 }
+
 export const CancelCeremony = {
   type: 'cancel-ceremony',
   decode(value: unknown): CancelCeremony {
@@ -97,11 +120,13 @@ export const CancelCeremony = {
     return value
   },
 } as const satisfies MessageType<CancelCeremony>
+
 export interface AbortCeremony {
   type: 'abort-ceremony'
   code: FailureCode
   reason: string
 }
+
 export const AbortCeremony = {
   type: 'abort-ceremony',
   decode(value: unknown): AbortCeremony {
@@ -115,6 +140,8 @@ export const AbortCeremony = {
     return value as unknown as AbortCeremony
   },
 } as const satisfies MessageType<AbortCeremony>
+
+/** Application-owned inputs only; raw OAuth returns remain private to Callback and Prover. */
 export interface AppStartProver {
   type: 'app-start-prover'
   platformId: string
@@ -124,6 +151,7 @@ export interface AppStartProver {
   codeVerifier: string | null
   notaryAddress: string | null
 }
+
 export const AppStartProver = {
   type: 'app-start-prover',
   decode(value: unknown): AppStartProver {
@@ -155,16 +183,19 @@ export const AppStartProver = {
     return value as unknown as AppStartProver
   },
 } as const satisfies MessageType<AppStartProver>
+
 export interface PlatformStep {
   code: string
   label: string
   status: 'started' | 'completed' | 'failed'
   progress: number
 }
+
 export type ProverNotifyEvent = {
   type: 'prover-notify-event'
   timestamp: number
 } & ({ platformStep: PlatformStep } | { stage: ProverStage })
+
 export const ProverNotifyEvent = {
   type: 'prover-notify-event',
   decode(value: unknown): ProverNotifyEvent {
@@ -201,11 +232,14 @@ export const ProverNotifyEvent = {
     return value as unknown as ProverNotifyEvent
   },
 } as const satisfies MessageType<ProverNotifyEvent>
+
+/** Final pipeline output, including all required attestations; the ledger verifier remains authoritative. */
 export interface ProverIdentityProof {
   type: 'prover-identity-proof'
   identity: { platformId: string; oauthClientId: string; userId: string; userName: string }
   proof: unknown
 }
+
 export const ProverIdentityProof = {
   type: 'prover-identity-proof',
   decode(value: unknown): ProverIdentityProof {
@@ -224,6 +258,7 @@ export const ProverIdentityProof = {
     return value as unknown as ProverIdentityProof
   },
 } as const satisfies MessageType<ProverIdentityProof>
+
 export type CCDPMessage =
   | PrefetchReady
   | CallbackReady

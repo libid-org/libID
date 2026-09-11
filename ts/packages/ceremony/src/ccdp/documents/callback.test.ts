@@ -8,13 +8,20 @@ const { accept, current, view, navigate, send } = vi.hoisted(() => ({
   navigate: vi.fn(),
   send: vi.fn(),
 }))
+
 vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
+
 vi.mock('@libid/popup', () => ({ PopupConnection: { accept }, PopupWindow: { current } }))
+
 vi.mock('../../ui.js', () => ({ view }))
+
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+
 const v1Inputs = [['https://app.test', 'https://ccdp.test'], 'https://ccdp.test']
+
 let config: unknown,
   locationInput: { search: string; hash: string; pathname: string; origin: string }
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -41,10 +48,12 @@ beforeEach(() => {
     return { ready: Promise.resolve(), closed: new Promise(() => {}), on: vi.fn(), navigate, send }
   })
 })
+
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
+
 it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010]', async () => {
   const original = locationInput.hash
   config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']
@@ -62,6 +71,7 @@ it('clears before acceptance and preserves exact private return with shared depl
   expect(send).toHaveBeenCalledExactlyOnceWith({ type: 'callback-ready' })
   expect(send.mock.invocationCallOrder[0]).toBeLessThan(navigate.mock.invocationCallOrder[0])
 })
+
 it.each(['2', '99', '99999999999999999999'])(
   'rejects unbundled/retired version %s locally [LIBID-ASSET-015]',
   (version) => {
@@ -73,6 +83,7 @@ it.each(['2', '99', '99999999999999999999'])(
     expect(send).not.toHaveBeenCalled()
   },
 )
+
 it.each([
   { search: `?state=v1.${id}`, hash: `#state=v1.${id}` },
   { hash: `#state=v01.${id}` },
@@ -90,6 +101,7 @@ it.each([
   )
   expect(accept).not.toHaveBeenCalled()
 })
+
 it.each(
   [
     null,

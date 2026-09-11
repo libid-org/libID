@@ -11,6 +11,7 @@ import {
 } from './token.js'
 
 const VERIFIER = 'c8HLMaJOzc8OUoRYc7AocL5ioAkXVtAOmoGxoSY60IQ'
+
 const utf8 = (value: string) => new TextEncoder().encode(value)
 
 const concat = (...parts: readonly Uint8Array[]): Uint8Array => {
@@ -89,24 +90,36 @@ const BINDING = {
   redirectUri: 'https://server.example/auth/v1/callback',
   codeVerifier: VERIFIER,
 } satisfies TokenExchangeBinding
+
 const REQUEST_BODY = new URLSearchParams([
   ['client_id', BINDING.clientId],
   ['code', BINDING.code],
   ['redirect_uri', BINDING.redirectUri],
   ['code_verifier', BINDING.codeVerifier],
 ]).toString()
+
 const REQUEST_PREFIX = utf8(
   `POST /login/oauth/access_token HTTP/1.1\r\nhost: github.com\r\ncontent-type: application/x-www-form-urlencoded\r\naccept: application/json\r\nconnection: close\r\ncontent-length: ${utf8(`${REQUEST_BODY}&client_secret=deployment-secret`).length}\r\n\r\n${REQUEST_BODY}`,
 )
+
 const REQUEST_LENGTH = REQUEST_PREFIX.length + utf8('&client_secret=deployment-secret').length
+
 const ACCESS_TOKEN = 'gho_launch_token'
+
 const OPENING = Uint8Array.from(Array.from({ length: 16 }, (_, index) => index))
+
 const RESPONSE_PREFIX = utf8('HTTP/1.1 200 OK\r\n\r\n{"token_type":"bearer",')
+
 const DELIMITER = utf8('"access_token":"')
+
 const RESPONSE_SUFFIX = utf8('","scope":"read:user"}')
+
 const BEARER_START = RESPONSE_PREFIX.length + DELIMITER.length
+
 const BEARER_END = BEARER_START + ACCESS_TOKEN.length
+
 const RESPONSE_LENGTH = BEARER_END + RESPONSE_SUFFIX.length
+
 const bearerHash = sha256(concat(utf8(ACCESS_TOKEN), OPENING))
 
 const SENT: Direction = {
@@ -116,6 +129,7 @@ const SENT: Direction = {
     { start: REQUEST_PREFIX.length, end: REQUEST_LENGTH, commitment: new Uint8Array(32).fill(2) },
   ],
 }
+
 const RECEIVED: Direction = {
   length: RESPONSE_LENGTH,
   revealed: [

@@ -1,13 +1,13 @@
+export { CeremonyError, type FailureCode } from './errors.js'
+
 export {
-  supportedPlatforms,
-  type PlatformId,
-  type PlatformCeremonyVersion,
-  type SupportedCeremonyVersion,
-  type ProofByPlatformVersion,
-  type OAuthProof,
   type Identity,
   type IdentityResult,
   type NotaryAttestation,
+  type OAuthProof,
+  type PlatformCeremonyVersion,
+  type PlatformId,
+  type ProofByPlatformVersion,
+  type SupportedCeremonyVersion,
+  supportedPlatforms,
 } from './platforms/index.js'
-
-export { CeremonyError, type FailureCode } from './errors.js'

@@ -2,8 +2,8 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { stringify } from 'smol-toml'
-import { safePath } from './archive.ts'
 import { immutable } from '../src/ccdp/headers.ts'
+import { safePath } from './archive.ts'
 
 /** Emit static files and native SWS configuration; no response metadata overrides. */
 export function writeDistribution(

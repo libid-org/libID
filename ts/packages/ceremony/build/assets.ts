@@ -37,6 +37,7 @@ export async function loadAssetCatalog() {
     SRS_SIZE: number
   }
 }
+
 export function mediaType(path: string): string {
   return path.endsWith('.js') || path.endsWith('.mjs')
     ? headers.javascript['Content-Type']
@@ -48,6 +49,7 @@ export function mediaType(path: string): string {
           ? 'text/html; charset=utf-8'
           : 'application/octet-stream'
 }
+
 export function assetHeaders(path: string, policy: Readonly<Record<string, string>> = {}) {
   const seen = new Set<string>()
   for (const [name, value] of Object.entries(policy)) {
@@ -96,6 +98,7 @@ export function assetHeaders(path: string, policy: Readonly<Record<string, strin
   }
   return Object.fromEntries(merged)
 }
+
 export function externalRequest(asset: ExternalAsset): AssetRequest {
   for (const source of [asset.source, ...(asset.fallback ?? [])]) {
     const url = new URL(source)
@@ -119,6 +122,7 @@ export function externalRequest(asset: ExternalAsset): AssetRequest {
     throw new Error('Invalid external size')
   return { url: asset.source, range: asset.range, bytes }
 }
+
 function installedFile(source: string): Buffer {
   const path = source.slice(4),
     parts = path.split('/'),
@@ -134,6 +138,7 @@ function installedFile(source: string): Buffer {
   }
   return readFileSync(join(directory, safePath(path.slice(pkg.length + 1))))
 }
+
 export async function resolveAssets() {
   const catalog = await loadAssetCatalog()
   const profiles = Object.fromEntries(
@@ -240,4 +245,5 @@ export async function resolveAssets() {
     allowedRequests: [] as AssetRequest[],
   }
 }
+
 export type ResolvedAssets = Awaited<ReturnType<typeof resolveAssets>>

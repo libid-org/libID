@@ -4,6 +4,7 @@ import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
 import { view } from '../../ui.js'
 import { CancelCeremony, origin, UUID } from '../index.js'
 import { type OAuthReturn, proverFragment, route } from '../navigation.js'
+
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
 export function startCallback(): void {
   try {
@@ -36,6 +37,7 @@ export function startCallback(): void {
     reportFailure(undefined, failure)
   }
 }
+
 function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]): void {
   const [allowedApplicationOrigins, ccdpOrigin] = inputs
   if (

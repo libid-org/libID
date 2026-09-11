@@ -2,7 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { AssetCache, validateResponse } from './cache.js'
 
 const spec = { url: 'https://assets.example/g1', range: 'bytes=0-1', bytes: 2 }
+
 afterEach(() => vi.unstubAllGlobals())
+
 it('joins pending downloads and preserves independent readers and worker CSP in stored bodies', async () => {
   const stored = new Map<string, Response>()
   vi.stubGlobal('caches', {
@@ -46,9 +48,11 @@ it('joins pending downloads and preserves independent readers and worker CSP in 
   expect(hit.headers.get('content-security-policy')).toBe("default-src 'none'")
   expect(fetching).toHaveBeenCalledTimes(1)
 })
+
 it.each([200, 404])('rejects status %i for range fetches', (status) =>
   expect(() => validateResponse(new Response(null, { status }), spec)).toThrow(),
 )
+
 it('allows unexposed range headers but rejects exposed mismatches and wrong lengths', () => {
   expect(() => validateResponse(new Response(null, { status: 206 }), spec)).not.toThrow()
   for (const headers of [
@@ -57,6 +61,7 @@ it('allows unexposed range headers but rejects exposed mismatches and wrong leng
   ])
     expect(() => validateResponse(new Response(null, { status: 206, headers }), spec)).toThrow()
 })
+
 it('storage denial still fetches; failed bodies never become a reusable flight', async () => {
   vi.stubGlobal('caches', {
     open: async () => {
@@ -97,6 +102,7 @@ it.each(['application/wasm', 'text/javascript'])(
     expect(new Uint8Array(await result.arrayBuffer())).toEqual(new Uint8Array([4, 5]))
   },
 )
+
 it.each(['miss', 'denied'])(
   'uses the browser HTTP cache after a Cache Storage %s, retaining request options',
   async (storage) => {
@@ -118,6 +124,7 @@ it.each(['miss', 'denied'])(
     })
   },
 )
+
 it.each([
   { 'Content-Type': 'text/html', 'Content-Length': '2' },
   { 'Content-Type': 'application/wasm', 'Content-Length': '3' },
@@ -192,6 +199,7 @@ it.each([false, true])(
     expect(fetcher).toHaveBeenCalledTimes(1)
   },
 )
+
 it('absorbs failed writes, releases the pending entry and retries later', async () => {
   let reject!: (error: Error) => void
   vi.stubGlobal('caches', {

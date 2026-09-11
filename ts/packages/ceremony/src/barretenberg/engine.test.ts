@@ -2,7 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { ProofEngine } from './engine.js'
 
 vi.mock('../assets/index.js', () => ({ resolve: () => 'https://ccdp.test/asset' }))
+
 vi.mock('./barretenberg.assets.js', () => ({ abi: {}, acvm: {}, bbWasm: {}, crs: [{}] }))
+
 afterEach(() => vi.unstubAllGlobals())
 
 function engine() {
@@ -16,6 +18,7 @@ function engine() {
     class {
       postMessage = postMessage
       terminate = terminate
+
       addEventListener(type: string, listener: typeof receive) {
         if (type === 'message') receive = listener
       }
@@ -30,6 +33,7 @@ function engine() {
   receive({ data: { type: 'engine-booted' } })
   return { instance, postMessage, terminate, events, send: (data: unknown) => receive({ data }) }
 }
+
 it('cancels an early witness, terminates the worker and ignores late delivery [LIBID-PROVER-014]', async () => {
   const e = engine()
   const controller = new AbortController()
@@ -56,6 +60,7 @@ it('cancels an early witness, terminates the worker and ignores late delivery [L
   expect(e.events).toHaveLength(count)
   expect(e.terminate).toHaveBeenCalledOnce()
 })
+
 it('initialization failure releases waiting inputs without dispatching them [LIBID-PROVER-014]', async () => {
   const e = engine()
   const result = e.instance.prove({ fixture: 1 })

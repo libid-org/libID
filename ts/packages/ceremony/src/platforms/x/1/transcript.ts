@@ -1,4 +1,3 @@
-import { bytesEqual } from '../../../primitives.js'
 import type { ByteRange, RevealRanges, Transcript } from '../../../notary/notarize.js'
 import type { ExactHttpRequest } from '../../../notary/session.js'
 import {
@@ -7,16 +6,23 @@ import {
   quotedRange,
   tokenRequestBody,
 } from '../../../notary/transcript.js'
+import { bytesEqual } from '../../../primitives.js'
 import { isUserId } from '../../types.js'
 import { isUserName } from './types.js'
 
 const encoder = new TextEncoder()
+
 const TOKEN_LINE = 'POST /2/oauth2/token HTTP/1.1'
+
 const IDENTITY_LINE = 'GET /2/users/me HTTP/1.1'
+
 const USER_ID = encoder.encode('"id"')
+
 const USERNAME = encoder.encode('"username"')
+
 // libid-circuits v0.3.0 bearer-link private-input width.
 const MAX_BEARER_BYTES = 128
+
 const PKCE = /^[A-Za-z0-9_-]{43}$/
 
 export interface TokenRequestInput {
