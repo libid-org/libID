@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { Rollup } from 'vite'
-import type { AssetRequest } from '../src/assets.js'
+import type { AssetRequest } from '../src/assets/index.js'
 import type { ResolvedAssets } from './assets.ts'
 import { assetHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
@@ -61,7 +61,7 @@ try {
   const graph = emitted.graph
   const workerProfile = (file: string): ResponseProfile => {
     const modules = graph.get(file)?.modules ?? []
-    if (modules.some((m) => m.endsWith('/notarization/session.worker.ts'))) return 'executionWorker'
+    if (modules.some((m) => m.endsWith('/notary/session.worker.ts'))) return 'executionWorker'
     return modules.some((m) => m.endsWith('?worker&url')) ? 'proofWorker' : 'leafWorker'
   }
   for (const item of emitted.output) {

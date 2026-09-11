@@ -15,8 +15,8 @@ vi.mock('@libid/popup', () => ({
   PopupConnection: { accept: () => connection },
   PopupWindow: { current: vi.fn() },
 }))
-vi.mock('../../prefetch/registration.js', () => ({ rootWorker, dispatchPrefetch }))
-vi.mock('../../prefetch/worker.js', () => ({ startWorker: vi.fn() }))
+vi.mock('../../assets/registration.js', () => ({ rootWorker, dispatchPrefetch }))
+vi.mock('../../assets/worker.js', () => ({ startWorker: vi.fn() }))
 vi.mock('../../ui.js', () => ({ view: vi.fn() }))
 const fragment = new URLSearchParams({
   ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',

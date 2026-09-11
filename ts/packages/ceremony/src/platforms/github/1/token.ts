@@ -7,10 +7,10 @@ import {
   type DecodedAttestedData,
   type DecodedRangeCommitment,
   decodeAttestedData,
-} from '../../../notarization/decode.js'
-import type { CorrelatedCommitment } from '../../../notarization/notarize.js'
-import type { NotaryAttestation } from '../../../notarization/transport.js'
-import { jsonField, tokenRequestBody } from '../../../notarization/transcript.js'
+} from '../../../notary/decode.js'
+import type { CorrelatedCommitment } from '../../../notary/notarize.js'
+import type { NotaryAttestation } from '../../../notary/transport.js'
+import { jsonField, tokenRequestBody } from '../../../notary/transcript.js'
 
 const MAX_RESPONSE_BYTES = 3 * 1024 * 1024
 const MAX_ATTESTED_DATA_BYTES = 2 * 1024 * 1024

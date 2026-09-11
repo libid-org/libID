@@ -17,8 +17,8 @@ test('runtime lowering preserves named/chained calls and external request option
         load: (file) =>
           file === id
             ? `
-        import {archive as release,file,external,resolve,headers} from './assets.js';
-        import * as assets from './assets.js';
+        import {archive as release,file,external,resolve,headers} from './assets/index.js';
+        import * as assets from './assets/index.js';
         const a=release('https://secret-build-source.test/a.tar.gz','a/v1').member('snippets/x-*/worker.js',headers.executionWorker);
         const b=assets.archive('https://secret-build-source.test/b.tar.gz','b/v1');
         const c=file('npm:build-only/file.wasm','file/v1.wasm',headers.wasm);

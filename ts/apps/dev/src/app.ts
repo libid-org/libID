@@ -1,13 +1,13 @@
 import {
   type Ceremony,
-  type CeremonyClient,
+  type CCDPClient,
   CeremonyError,
   type CeremonyEvent,
   CeremonyStage,
-  createCeremonyClient,
+  createCCDPClient,
   type IdentityResult,
   type PlatformId,
-} from '@libid/ceremony/client'
+} from '@libid/ceremony/ccdp/client'
 import type { LedgerId } from '@libid/ledger'
 import { testnet } from '@libid/ledger/testing'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
@@ -29,7 +29,7 @@ document.querySelector('#bridge')!.textContent = settings.bridge
 document.querySelector('#ccdp')!.textContent = settings.ccdp
 document.querySelector('#notary')!.textContent = ledger.notaryAddress()
 const names: Record<PlatformId, string> = { google: 'Google', x: 'X', github: 'GitHub' }
-let client: CeremonyClient | undefined
+let client: CCDPClient | undefined
 let active: Ceremony | undefined
 let connection: PopupConnection<Message> | undefined
 function controls() {
@@ -43,7 +43,7 @@ function controls() {
 }
 async function initialize() {
   try {
-    client = await createCeremonyClient({ oauthBridge: settings.bridge })
+    client = await createCCDPClient({ oauthBridge: settings.bridge })
     platforms.replaceChildren(
       ...client.enabledPlatforms.map((platform) => {
         const launch = document.createElement('a')

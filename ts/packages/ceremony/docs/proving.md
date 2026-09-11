@@ -138,7 +138,7 @@ repeat does not make browser acceptance authoritative.
 
 ## Browser notarization
 
-X and GitHub use `notarization`, one internal TypeScript adapter over
+X and GitHub use `notary`, one internal TypeScript adapter over
 the pinned raw TLSNotary WASM API. Platform-version prover leaves supply their exact
 request, response parser, and transcript layout; the adapter owns the shared
 session, reveal, reclaimed-channel, attestation-delivery, and
@@ -222,7 +222,7 @@ their causal lifecycle remains a platform-ceremony-version change.
 
 ## Shared toolchain and assets
 
-Each platform/version's lightweight `assets` leaf composes its pinned circuit
+Each platform/version's lightweight `*.assets.ts` leaf composes its pinned circuit
 and shared integration resources into its selected-profile set. Shared bb.js,
 notarization, and circuit declarations are referenced, not copied between
 platforms; [resource ownership and collection](distribution.md#source-declarations)
@@ -453,7 +453,7 @@ All version axes are defined in
 
 ## Implementation guide
 
-`src/proving/bb/` owns the Noir/bb engine, worker runtime, circuit resources and
+`src/barretenberg/` owns the Noir/bb engine, worker runtime, circuit resources and
 witness/public-input encoding. Notarization is a sibling module, composed by the
 platform pipelines.
 The browser page itself lives in [ccdp/documents/prover.ts](../src/ccdp/documents/prover.ts).
@@ -462,10 +462,10 @@ The browser page itself lives in [ccdp/documents/prover.ts](../src/ccdp/document
 - [Notarization](notarization.md#implementation-guide): TLSNotary sessions and canonical attestations.
 - [Prefetch](prefetch.md#implementation-guide): byte caching before execution.
 
-[engine.ts](../src/proving/bb/engine.ts) controls [engine.worker.ts](../src/proving/bb/engine.worker.ts); [bb/assets.ts](../src/proving/bb/assets.ts)
-owns shared backend resources. [circuits/oidc_google/](../src/proving/bb/circuits/oidc_google/) owns the released
+[engine.ts](../src/barretenberg/engine.ts) controls [engine.worker.ts](../src/barretenberg/engine.worker.ts); [barretenberg.assets.ts](../src/barretenberg/barretenberg.assets.ts)
+owns shared backend resources. [circuits/oidc_google/](../src/barretenberg/circuits/oidc_google/) owns the released
 `oidc_google` circuit declarations, witness and public-input mapping.
-[circuits/bearer_link/](../src/proving/bb/circuits/bearer_link/) owns the common
+[circuits/bearer_link/](../src/barretenberg/circuits/bearer_link/) owns the common
 bearer-link circuit, witness and public-input check. Provider JWT decoding remains
 in the Google platform module. Each platform composes its asset list once for
 execution and prefetch.

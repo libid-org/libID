@@ -1,8 +1,8 @@
 import type { Identity } from './types.js'
 import type { ProverIdentityProof } from '../ccdp/index.js'
-import * as googleV1 from './google/1/client.js'
-import * as xV1 from './x/1/client.js'
-import * as githubV1 from './github/1/client.js'
+import * as googleV1 from './google/1/url.js'
+import * as xV1 from './x/1/url.js'
+import * as githubV1 from './github/1/url.js'
 export type { Identity, NotaryAttestation } from './types.js'
 export const platforms = {
   google: { versions: { 1: googleV1 } },

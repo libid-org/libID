@@ -410,16 +410,16 @@ graph has no separate serialized format or browser-visible manifest.
 
 ### Source declarations
 
-Shared integrations such as `proving/bb` and `notarization` each define
-their resources once in a data-only `assets` module. The package's internal
+Shared integrations such as `barretenberg` and `notary` each define
+their resources once in a data-only `*.assets.ts` module. The package's internal
 `assets` helper provides declarations and URL resolution; downloading,
 archive extraction, and wildcard matching run only in the artifact build.
 
 #### Archives
 
 ```ts
-// notarization/assets.ts — illustrative release location
-import * as assets from '../assets.js'
+// notary/notary.assets.ts — illustrative release location
+import * as assets from '../assets/index.js'
 
 const tlsnRelease = assets.archive(
   'https://releases.example/tlsn-wasm-0.2.0.tar.gz',
@@ -478,8 +478,8 @@ requiring a browser origin:
 
 ```ts
 // notarization — execution code
-import * as assets from '../assets.js'
-import { wasmJs } from './assets.js'
+import * as assets from '../assets/index.js'
+import { wasmJs } from './notary.assets.js'
 
 const wasmJsUrl = assets.resolve(wasmJs)
 // On https://lib.id: https://lib.id/ccdp/assets/tlsn/v0.2.0/tlsn_wasm.js
@@ -488,8 +488,8 @@ const wasmJsUrl = assets.resolve(wasmJs)
 #### External requests
 
 ```ts
-// proving/bb/assets.ts — data-only declaration
-import * as assets from '../../assets.js'
+// barretenberg/barretenberg.assets.ts — data-only declaration
+import * as assets from '../assets/index.js'
 
 export const g1 = assets.external(
   'https://crs.aztec-cdn.foundation/g1_compressed.dat',
@@ -500,9 +500,9 @@ export const g1 = assets.external(
 Execution code uses the same resolver:
 
 ```ts
-// proving/bb — execution code
-import * as assets from '../../assets.js'
-import { g1 } from './assets.js'
+// barretenberg — execution code
+import * as assets from '../assets/index.js'
+import { g1 } from './barretenberg.assets.js'
 
 assets.resolve(g1)
 // https://crs.aztec-cdn.foundation/g1_compressed.dat
@@ -576,17 +576,20 @@ Platform/version asset leaves import shared declarations and add their own
 requirements, for example:
 
 ```ts
-// platforms/x/1/assets.ts
-import { resources as bb } from '../../../proving/bb/assets'
-import { resources as notarization } from '../../../notarization/assets'
-import { circuit } from './circuit'
+// platforms/x/1/x.assets.ts
+import { proofAssets } from '../../../barretenberg/barretenberg.assets.js'
+import { notaryAssets } from '../../../notary/notary.assets.js'
+import {
+  bearerCircuit,
+  bearerVerificationKey,
+} from '../../../barretenberg/circuits/bearer_link/bearer_link.assets.js'
 
-export const resources = [...bb, ...notarization, circuit]
+export const assets = [...proofAssets, ...notaryAssets, bearerCircuit, bearerVerificationKey]
 ```
 
 Other shared toolchain dependencies compose the same way. A circuit shared by
 multiple platforms likewise has one declaration, not a copy in each platform.
-`platforms/assets` maps supported platform/version pairs to these composed
+`platforms/platforms.assets` maps supported platform/version pairs to these composed
 sets. It contains resource metadata only, not client or prover implementation
 imports. Prefetch consumes that catalog, not the build table containing the
 document entrypoints. The build collects shared references once while

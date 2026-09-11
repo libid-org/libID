@@ -15,11 +15,11 @@ An application creates one client for one configured OAuth bridge:
 
 ```ts
 import {
-  createCeremonyClient,
+  createCCDPClient,
   supportedPlatforms,
-} from '@libid/ceremony/client'
+} from '@libid/ceremony/ccdp/client'
 
-const ceremonies = await createCeremonyClient({
+const ceremonies = await createCCDPClient({
   oauthBridge: 'https://oauth.example',
 })
 ```
@@ -33,9 +33,9 @@ versions, and `ProofByPlatformVersion` from the same keys and validators:
 
 ```ts
 import type { LedgerId } from '@libid/ledger'
-import * as googleV1 from './platforms/google/1/client'
-import * as xV1 from './platforms/x/1/client'
-import * as githubV1 from './platforms/github/1/client'
+import * as googleV1 from './platforms/google/1/url'
+import * as xV1 from './platforms/x/1/url'
+import * as githubV1 from './platforms/github/1/url'
 
 const platforms = {
   google: { versions: { 1: googleV1 } },
@@ -73,11 +73,11 @@ export const supportedPlatforms: readonly PlatformId[] = Object.freeze(
   Object.keys(platforms) as PlatformId[],
 )
 
-export declare function createCeremonyClient(options: {
+export declare function createCCDPClient(options: {
   oauthBridge: string
-}): Promise<CeremonyClient>
+}): Promise<CCDPClient>
 
-interface CeremonyClient {
+interface CCDPClient {
   readonly enabledPlatforms: readonly PlatformId[]
   new: <P extends PlatformId>(
     conn: PopupConnection<Message>,
@@ -136,7 +136,7 @@ values before constructing OAuth or allowing OAuth-platform navigation. Client
 initialization has already fetched and validated `CeremonyConfig`, so `new`
 does only local synchronous work.
 
-`CeremonyClient.new` takes six positional arguments in the order shown above;
+`CCDPClient.new` takes six positional arguments in the order shown above;
 there is no separate input object. `ceremonyId` is a plain string which must be
 a lowercase UUIDv4. A composition normally generates one value and calls it
 `jobId` in its Job API and `ceremonyId` in this API. The equality is a
@@ -336,7 +336,7 @@ type IdentityResult<P extends PlatformId = PlatformId> =
 
 ```
 
-The platform type selected in `CeremonyClient.new` flows through `Ceremony`,
+The platform type selected in `CCDPClient.new` flows through `Ceremony`,
 `IdentityResult`, and `OAuthProof`. A literal platform input therefore returns
 the corresponding `proof` type; a dynamic `PlatformId` returns the platform
 proof union. The mapped unions preserve the relationship between
@@ -448,7 +448,7 @@ canonical evidence parsing and configured-client checks.
 Neither endpoint performs a separate Google nonce-versus-expected-digest
 comparison or local notary-signature verification. The Prover still parses the
 nonce canonically, the Google circuit still verifies RS256 and binds that
-nonce to its public input, and the notarization/platform code still performs
+nonce to its public input, and the notary/platform code still performs
 its documented structural, request-binding, and commitment/opening checks.
 Early digest-mismatch and structurally valid attestation-forgery detection are
 omitted; downstream verification must still reject them using the recomputed
@@ -582,13 +582,18 @@ connection delivery ordering.
 
 ## Implementation guide
 
+The application entrypoint is `@libid/ceremony/ccdp/client`, exporting
+`createCCDPClient` and `CCDPClient`. It implements the application participant;
+`Ceremony` still names one run. The API rename changes caller imports and builds;
+CCDP wire messages and routes are unchanged.
+
 Owns one-time Bridge configuration, frozen ceremony construction and the one-shot
 Application lifecycle over a caller-supplied `PopupConnection`.
 
 - [Public configuration](oauth-bridge.md#public-configuration): Bridge response contract.
 - [CCDP protocol](protocol.md): messages and ordering.
 
-[config.ts](../src/client/config.ts) validates configuration; [ceremony.ts](../src/client/ceremony.ts) owns state
+[config.ts](../src/ccdp/client/config.ts) validates configuration; [ceremony.ts](../src/ccdp/client/ceremony.ts) owns state
 and handlers. Identity extraction stays in the platform Provers. Wallet operations,
 submission and post-ceremony actions belong to the Application.
 

@@ -92,7 +92,7 @@ may run key preparation before the ceremony and wallet confirmation afterward;
 those sessions do not extend the browser message protocol.
 
 The application origin owns the durable operation record, called the Job. One
-application-scoped `CeremonyClient` creates independent `Ceremony` instances.
+application-scoped `CCDPClient` creates independent `Ceremony` instances.
 Each instance owns its in-memory state and handlers on the popup connection
 supplied by the composition. Apart from the transient private OAuth-return
 fragment handoff, credentials, witnesses, and the generated proof remain in
@@ -126,30 +126,29 @@ Launch publishes one `@libid/ceremony` package:
 ```text
 @libid/ceremony
 ├── ccdp
-│   ├── index         ceremony records, directional codecs, and protocol version
+│   ├── index         pure message codecs and protocol version
+│   ├── client        CCDPClient, CeremonyConfig and application-side orchestration
 │   └── documents
-│       ├── callback  bundled Callback versions, URL clearing, and startup
-│       ├── prefetch  dual-context Prefetch document and Worker entrypoint
-│       └── prover    source entrypoint for the isolated Prover document
-├── client      CeremonyConfig fetch, application-side API, and orchestration
-├── prefetch    shared worker, registration, and asset cache implementation
-├── assets      lightweight resource declarations, shared header policy, and URL resolution
-├── prover
-│   ├── engine        WASM proving and dedicated proof worker
-│   ├── bb             shared bb.js integration and resource declarations
-│   └── notarization  internal TLSNotary session and attestation adapter
+│       ├── callback  OAuth return capture and navigation
+│       ├── prefetch  Prefetch page and root Worker entrypoint
+│       └── prover    isolated Prover page
+├── assets            declarations, URL resolution, cache and root Worker delivery
+├── barretenberg      Noir/bb engine and barretenberg.assets.ts
+│   └── circuits      oidc_google and bearer_link adapters and *.assets.ts
+├── notary            TLSNotary sessions, transcripts, attestations and notary.assets.ts
 └── platforms
-    ├── index    client-safe platform/version catalog and derived public result types
-    ├── assets   lightweight platform/version resource catalog
-    ├── authorization  shared digest and PKCE helpers used under platform-version policy
-    ├── google/<version>/{assets,client,types,prover}
-    ├── x/<version>/{assets,client,types,prover}
-    └── github/<version>/{assets,client,types,prover}
+    ├── index         client-safe platform/version catalog and result types
+    ├── platforms.assets.ts  platform/version resource catalog
+    ├── context       shared ProverContext for platform orchestration
+    ├── authorization shared digest and PKCE helpers
+    ├── google/<version>/{google.assets,url,types,prover}
+    ├── x/<version>/{x.assets,url,types,prover}
+    └── github/<version>/{github.assets,url,types,prover}
 ```
 
 The public `@libid/ceremony/{callback,prefetch,prover}` subpaths resolve directly
 to `ccdp/documents`. The Prover document imports platform pipelines and shared
-proving code from the top-level `platforms` and `prover` modules.
+proving code from the top-level `platforms`, `barretenberg`, and `notary` modules.
 
 `ccdp/index` is the pure protocol leaf imported by client, callback,
 prefetch, and prover. It performs no platform dispatch, browser work, storage,
@@ -191,12 +190,12 @@ connection typing.
 `platforms/authorization`
 provides the shared Authorization Digest and PKCE helpers, but each
 platform/version slice owns whether and how those helpers participate in its
-ceremony. Its `client` leaf owns authorization-request construction and final
+ceremony. Its `url` leaf owns authorization-request construction and final
 assembly and re-exports its
 `types` leaf; `types` owns the proof type and side-effect-free runtime validator;
 and `prover` owns OAuth-return parsing, progress, witness construction, and
 proof generation.
-`platforms/index` imports only the client-safe `client` leaves, derives the
+`platforms/index` imports only the client-safe `url` leaves, derives the
 catalog and public result types, and is re-exported by the package root and
 client API. Prover leaves are internal imports of the prover entrypoint and
 never enter the client catalog.
@@ -215,10 +214,10 @@ The popup package owns isolation selection and carrier continuity. Prover
 registers its CCDP handlers, awaits connection readiness, and only then emits
 `ProverReady` and accepts proof input. It joins the cached flights in the active
 top-level document. The OAuth-bridge Callback installs no Worker.
-`notarization` is an internal leaf shared by
+`notary` is an internal leaf shared by
 the X and GitHub prover leaves, not another package entrypoint or artifact.
 
-Shared integrations declare their resources in lightweight `assets` modules,
+Shared integrations declare their resources in lightweight `*.assets.ts` modules,
 separate from execution code. They use the package's internal `assets` helper:
 `archive().member()` selects build-resolved archive files, `external()` declares
 runtime HTTPS requests, and `resolve()` returns either asset's runtime URL.
@@ -227,7 +226,7 @@ representation metadata. Downloading, extraction, and wildcard resolution
 belong to the build and never enter browser bundles.
 Each platform/version `assets` leaf composes
 shared declarations with its circuit and other dependencies; it copies no
-shared URL, mode, or request parameters. `platforms/assets` collects these sets
+shared URL, mode, or request parameters. `platforms/platforms.assets` collects these sets
 by platform/version for Prefetch and the artifact build, without importing
 `platforms/index`, platform implementations, or proving/notarization runtimes.
 Execution modules import their asset declarations, never the reverse. This is
@@ -247,7 +246,7 @@ The dependency direction is closed:
 client, native wallet ───> platforms/index
                                 │
                                 ▼
-                 platforms/<platform>/<version>/client ───> types
+                 platforms/<platform>/<version>/url ───> types
                                 │
                                 ▼
                       platforms/authorization
@@ -280,7 +279,7 @@ The package-facing API surface is:
 |---|---|
 | `@libid/ceremony` | catalog-derived `PlatformId`, `PlatformCeremonyVersion`, `supportedPlatforms`, `ProofByPlatformVersion`, `OAuthProof`, `Identity`, and `IdentityResult` |
 | `@libid/ceremony/ccdp` | internal CCDP record types, per-record decoder companions, protocol version, and direction/order checks; no application export |
-| `@libid/ceremony/client` | `CeremonyConfig` fetch/validation, application-scoped `CeremonyClient`, stateful `Ceremony` orchestration, and public catalog/result re-exports |
+| `@libid/ceremony/ccdp/client` | `CeremonyConfig` fetch/validation, application-scoped `CCDPClient`, stateful `Ceremony` orchestration, and public catalog/result re-exports |
 | `@libid/ceremony/callback` | [browser entrypoint](documents.md#callback-get-redirecturi) bundled into the complete Callback artifact; the OAuth Bridge retrieves it from the CCDP Distribution, inserts deployment data, and serves it without a separate browser script fetch |
 | `@libid/ceremony/prefetch` | dual-context browser entrypoint embedded by the versioned Prefetch document and served at the versioned Worker path |
 | `@libid/ceremony/prover` | [browser entrypoint](documents.md#prover-get-prover) embedded by the versioned isolated Prover document |

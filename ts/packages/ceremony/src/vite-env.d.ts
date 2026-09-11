@@ -1,8 +1,11 @@
 declare module 'virtual:ceremony-assets' {
-  export const requestsByProfile: Record<string, readonly import('./assets.js').AssetRequest[]>
-  export const allowedRequests: readonly import('./assets.js').AssetRequest[]
+  export const requestsByProfile: Record<
+    string,
+    readonly import('./assets/index.js').AssetRequest[]
+  >
+  export const allowedRequests: readonly import('./assets/index.js').AssetRequest[]
   export const urls: Record<string, string>
-  export const profiles: Record<string, readonly import('./assets.js').Asset[]>
+  export const profiles: Record<string, readonly import('./assets/index.js').Asset[]>
   export const local: readonly string[]
 }
 

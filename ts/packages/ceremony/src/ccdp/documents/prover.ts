@@ -1,7 +1,7 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
-import { claimRootWorker } from '../../prefetch/registration.js'
+import { claimRootWorker } from '../../assets/registration.js'
 import type { ProverContext } from '../../platforms/context.js'
 import { progressView, view } from '../../ui.js'
 import { AppStartProver, CancelCeremony, ProverIdentityProof, ProverNotifyEvent } from '../index.js'
