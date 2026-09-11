@@ -1,7 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { origin, redirect } from '../../../ccdp/index.js'
-import { b64urlDecode, bytesEqual, hasExactKeys, isRecord } from '../../../primitives.js'
 import { parseJson } from '../../../json.js'
 import {
   type DecodedAttestedData,
@@ -9,16 +8,24 @@ import {
   decodeAttestedData,
 } from '../../../notary/decode.js'
 import type { CorrelatedCommitment } from '../../../notary/notarize.js'
-import type { NotaryAttestation } from '../../../notary/transport.js'
 import { jsonField, tokenRequestBody } from '../../../notary/transcript.js'
+import type { NotaryAttestation } from '../../../notary/transport.js'
+import { b64urlDecode, bytesEqual, hasExactKeys, isRecord } from '../../../primitives.js'
 
 const MAX_RESPONSE_BYTES = 3 * 1024 * 1024
+
 const MAX_ATTESTED_DATA_BYTES = 2 * 1024 * 1024
+
 const CODE = /^[\x21-\x7e]{1,1024}$/
+
 const ACCESS_TOKEN = /^[\x21-\x7e]{1,128}$/
+
 const CODE_VERIFIER = /^[A-Za-z0-9_-]{43}$/
+
 const encoder = new TextEncoder()
+
 const REQUEST_LINE = 'POST /login/oauth/access_token HTTP/1.1'
+
 const QUOTE = new Uint8Array([0x22])
 
 export interface TokenRequest {

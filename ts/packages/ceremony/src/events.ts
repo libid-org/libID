@@ -11,7 +11,9 @@ export const stages = [
   'proof-preparation',
   'proof-generation',
 ] as const
+
 export type CeremonyStage = (typeof stages)[number]
+
 const stageMessages = {
   start: ['Opening popup', 'Popup opened'],
   prefetch: ['Prefetching assets', 'Prefetch dispatched'],
@@ -31,6 +33,7 @@ export const CeremonyStage = {
   inProgress(stage: CeremonyStage): string {
     return stageMessages[stage][0]
   },
+  /** Label a completed interval; receiving the stage-start event alone does not complete it. */
   completed(stage: CeremonyStage): string {
     return stageMessages[stage][1]
   },
@@ -40,6 +43,8 @@ export type ProverStage = Exclude<
   CeremonyStage,
   'start' | 'prefetch' | 'authorization' | 'oauth-return'
 >
+
+/** Advisory UI events. `finished` fires once before result settlement and carries no proof material. */
 export type CeremonyEvent =
   | { type: 'stage'; stage: CeremonyStage; timestamp: number }
   | { type: 'step'; platformStep: PlatformStep; timestamp: number }

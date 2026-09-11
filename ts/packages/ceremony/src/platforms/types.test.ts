@@ -1,9 +1,9 @@
 import { expect, it } from 'vitest'
+import { validateIdentity as github } from './github/1/types.js'
+import { validateIdentity as google, validateProof } from './google/1/types.js'
 import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from './index.js'
 import { validateProofMessage } from './index.js'
-import { validateIdentity as google, validateProof } from './google/1/types.js'
 import { validateIdentity as x } from './x/1/types.js'
-import { validateIdentity as github } from './github/1/types.js'
 
 it('checks profile identity encodings without reading evidence [LIBID-MOD-019]', () => {
   for (const [validate, identity, badNames] of [
@@ -72,4 +72,5 @@ function checkResultTypes(result: IdentityResult) {
   void invalid
   void unsupported
 }
+
 void checkResultTypes

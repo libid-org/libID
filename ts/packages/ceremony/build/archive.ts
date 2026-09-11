@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Parser } from 'tar'
 import { download, packageDir } from './release.ts'
+
 export function safePath(path: string, selector = false): string {
   if (
     !path ||
@@ -16,6 +17,7 @@ export function safePath(path: string, selector = false): string {
     throw new Error(`Invalid resource path: ${path}`)
   return path
 }
+
 /** Read regular files into memory; archive entries never get filesystem write authority. */
 export async function readArchive(source: string): Promise<Map<string, Buffer>> {
   const bytes = source.startsWith('https:')
@@ -61,6 +63,7 @@ export async function readArchive(source: string): Promise<Map<string, Buffer>> 
   }
   return files
 }
+
 export function selectMember(files: ReadonlyMap<string, Buffer>, selector: string): string {
   safePath(selector, true)
   const pattern = new RegExp(

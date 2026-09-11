@@ -7,7 +7,9 @@ vi.mock('virtual:ceremony-assets', () => ({
       '/ccdp/assets/tlsn/v1/snippets/web-spawn-abcd/js/spawn.js',
   },
 }))
+
 afterEach(() => vi.unstubAllGlobals())
+
 it('resolves exact build matches at the executing origin without fetching [LIBID-ASSET-025]', () => {
   vi.stubGlobal('location', { origin: 'https://ccdp.test', pathname: '/ccdp/v1/prover' })
   const fetch = vi.fn()

@@ -1,9 +1,10 @@
-import type { CommitmentOpening } from './session.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesEqual } from '../primitives.js'
-import { decodeAttestedData, type DecodedAttestedData, type DecodedDirection } from './decode.js'
+import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
+import type { CommitmentOpening } from './session.js'
 
 const MAX_SENT_BYTES = 4 * 1024
+
 const MAX_RECV_BYTES = 32 * 1024
 
 export interface ByteRange {
@@ -259,6 +260,7 @@ export function correlateAttestation(
   }
 }
 
+/** Select one provisional opening and reconstruct SHA256(bearer || blinder) for the link witness. */
 export function bearerOpening(
   openings: readonly CommitmentOpening[],
   direction: 'sent' | 'received',

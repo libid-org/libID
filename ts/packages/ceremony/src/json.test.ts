@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
 import { parseJson } from './json.js'
+
 it('rejects duplicate/escaped keys without restricting valid JSON [LIBID-PROVER-004]', () => {
   for (const source of [
     '{"a":1,"a":2}',

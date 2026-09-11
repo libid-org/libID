@@ -3,7 +3,9 @@
 // prover); anything narrower lives beside its one consumer.
 
 const B64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+
 const B64URL_REV = new Int8Array(128).fill(-1)
+
 for (let i = 0; i < B64URL.length; i++) B64URL_REV[B64URL.charCodeAt(i)] = i
 
 /** Encode bytes as canonical unpadded base64url. */

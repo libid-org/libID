@@ -15,6 +15,7 @@ import {
 import { prefetchFragment, proverFragment, readPrefetch, readProver } from './navigation.js'
 
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+
 describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
   const samples = [
     [AbortCeremony, { type: 'abort-ceremony', code: 'proof', reason: 'Proof engine failed.' }],
@@ -132,6 +133,7 @@ it.each([
     ProverIdentityProof.decode({ type: 'prover-identity-proof', identity, proof: null }),
   ).toThrow()
 })
+
 it('rejects the retired delivery message and embedded-identity shape', () => {
   expect(() => ProverIdentityProof.decode({ type: 'prover-deliver-proof', proof: {} })).toThrow()
   expect(() =>

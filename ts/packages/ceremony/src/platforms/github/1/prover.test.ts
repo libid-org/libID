@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CeremonyError } from '../../../errors.js'
-import type { ProverContext } from '../../context.js'
 import type { NotarizationSession } from '../../../notary/session.js'
+import type { ProverContext } from '../../context.js'
 import { prove } from './prover.js'
 
 const { admit, prepare, send, created, destroy, runtimeFailure } = vi.hoisted(() => ({
@@ -12,25 +12,31 @@ const { admit, prepare, send, created, destroy, runtimeFailure } = vi.hoisted(()
   destroy: vi.fn(),
   runtimeFailure: { current: new AbortController() },
 }))
+
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
+
 vi.mock('../../../assets/index.js', async (original) => ({
   ...(await original<typeof import('../../../assets/index.js')>()),
   resolve: () => 'https://ccdp.test/asset',
 }))
+
 vi.mock('../../../barretenberg/engine.js', () => ({
   PROOF_ENGINE_SPANS: [],
   ProofEngine: class {
     destroy = destroy
   },
 }))
+
 vi.mock('./token.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./token.js')>()),
   decodeTokenResponse: () => ({ accessToken: 'test-bearer' }),
   admitTokenResponse: admit,
 }))
+
 vi.mock('../../../notary/session.js', () => ({
   Notarization: class {
     readonly signal: AbortSignal
+
     constructor(address: string, signal: AbortSignal) {
       this.signal = AbortSignal.any([signal, runtimeFailure.current.signal])
       created(address, signal)
@@ -38,16 +44,19 @@ vi.mock('../../../notary/session.js', () => ({
     prepare = prepare
   },
 }))
+
 beforeEach(() => {
   runtimeFailure.current = new AbortController()
   admit.mockReset().mockReturnValue({})
   send.mockReset()
   prepare.mockReset().mockResolvedValue({ send })
 })
+
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })
+
 function context(outcome: Record<string, string>): ProverContext {
   const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
   return {
@@ -76,6 +85,7 @@ function context(outcome: Record<string, string>): ProverContext {
     },
   }
 }
+
 it('returns detailed GitHub denial before any token exchange', async () => {
   const fetch = vi.fn()
   vi.stubGlobal('fetch', fetch)
@@ -85,6 +95,7 @@ it('returns detailed GitHub denial before any token exchange', async () => {
   expect(fetch).not.toHaveBeenCalled()
   expect(created).not.toHaveBeenCalled()
 })
+
 it('rejects a mismatched issuer before token exchange', async () => {
   const fetch = vi.fn()
   vi.stubGlobal('fetch', fetch)
@@ -94,6 +105,7 @@ it('rejects a mismatched issuer before token exchange', async () => {
   expect(fetch).not.toHaveBeenCalled()
   expect(created).not.toHaveBeenCalled()
 })
+
 it('classifies token admission failure and retains its local cause', async () => {
   const cause = new Error('synthetic private admission detail')
   admit.mockImplementation(() => {
@@ -122,6 +134,7 @@ function deferred<T>() {
   })
   return { promise, resolve, reject }
 }
+
 it.each(['setup', 'token'])(
   'overlaps GitHub setup and token exchange when %s finishes first [LIBID-PROVER-004]',
   async (first) => {
@@ -170,6 +183,7 @@ it.each(['setup', 'token'])(
     expect(destroy).toHaveBeenCalledOnce()
   },
 )
+
 it('setup failure cancels the Bridge fetch without masking its notary error [LIBID-PROVER-004]', async () => {
   const setup = deferred<NotarizationSession>()
   prepare.mockReturnValue(setup.promise)
@@ -197,6 +211,7 @@ it('setup failure cancels the Bridge fetch without masking its notary error [LIB
   expect(send).not.toHaveBeenCalled()
   expect(destroy).toHaveBeenCalledOnce()
 })
+
 it('cancellation stops both pending GitHub branches [LIBID-PROVER-018]', async () => {
   let setupSignal!: AbortSignal, fetchSignal!: AbortSignal
   prepare.mockImplementation(

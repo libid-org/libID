@@ -1,19 +1,5 @@
 import type { LedgerId } from '@libid/ledger'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
-import {
-  AbortCeremony,
-  type AppStartProver,
-  CallbackReady,
-  CancelCeremony,
-  origin,
-  PrefetchReady,
-  PrefetchStarted,
-  ProverIdentityProof,
-  ProverNotifyEvent,
-  ProverReady,
-  UUID,
-} from '../index.js'
-import { oauthState, prefetchFragment, route } from '../navigation.js'
 import { CeremonyError } from '../../errors.js'
 import {
   deriveAuthorizationDigest,
@@ -30,17 +16,38 @@ import {
   supportedPlatforms,
 } from '../../platforms/index.js'
 import { hasExactKeys, isRecord } from '../../primitives.js'
+import {
+  AbortCeremony,
+  type AppStartProver,
+  CallbackReady,
+  CancelCeremony,
+  origin,
+  PrefetchReady,
+  PrefetchStarted,
+  ProverIdentityProof,
+  ProverNotifyEvent,
+  ProverReady,
+  UUID,
+} from '../index.js'
+import { oauthState, prefetchFragment, route } from '../navigation.js'
 import { type CeremonyConfig, fetchCeremonyConfig } from './config.js'
 
 export type { CeremonyEvent, CeremonyStage } from '../../events.js'
 
 import { type CeremonyEvent, type CeremonyStage, stages } from '../../events.js'
+
+/** One ceremony over a caller-supplied connection; the application owns the window. */
 export interface Ceremony<P extends PlatformId = PlatformId> {
+  /** Initial CCDP Prefetch URL, including the private ceremony navigation fragment. */
   readonly launchUrl: string
+  /** Subscribe to advisory events. Returns an unsubscribe function; listener exceptions do not fail the run. */
   onEvent(listener: (event: CeremonyEvent) => void): () => void
+  /** Start once; resolve accepted/denied output, or reject cancellation and technical failures. */
   proveUserIdentity(): Promise<IdentityResult<P>>
+  /** Cancel this run. Calling again after termination has no effect. */
   cancel(): Promise<void>
 }
+
 interface Input<P extends PlatformId> {
   connection: PopupConnection<Message>
   notaryAddress: string | null
@@ -49,8 +56,12 @@ interface Input<P extends PlatformId> {
   operationDomain: Uint8Array
   transactionData: Uint8Array
 }
+
+/** Application-scoped Bridge configuration used to construct independent ceremony runs. */
 export interface CCDPClient {
+  /** Intersection of supported platforms and versions advertised by the Bridge. */
   readonly enabledPlatforms: readonly PlatformId[]
+  /** Snapshot ledger/operation inputs and reserve the ID; no OAuth navigation occurs yet. */
   new: <P extends PlatformId>(
     conn: PopupConnection<Message>,
     ceremonyId: string,
@@ -60,11 +71,15 @@ export interface CCDPClient {
     transactionData: Uint8Array,
   ) => Ceremony<P>
 }
+
+/** Fetch and validate Bridge configuration once. Rejects unavailable or malformed configuration. */
 export async function createCCDPClient(options: { oauthBridge: string }): Promise<CCDPClient> {
   if (!isRecord(options) || !hasExactKeys(options, ['oauthBridge']))
     throw new TypeError('Invalid client options')
   return ccdpClientFromConfig(await fetchCeremonyConfig(options.oauthBridge))
 }
+
+/** Internal construction from an already validated, frozen Bridge configuration. */
 export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
   const liveIds = new Set<string>()
   const enabledPlatforms = Object.freeze(
@@ -122,8 +137,11 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
     },
   })
 }
+
 type Binding = { active: boolean; remove: (() => void)[] }
+
 const bindings = new WeakMap<PopupConnection<Message>, Binding>()
+
 // Keep decoding late CCDP traffic without retaining the completed run's inputs.
 function receiver<M extends Message>(handler: ((message: M) => void) | undefined) {
   return {
@@ -135,6 +153,7 @@ function receiver<M extends Message>(handler: ((message: M) => void) | undefined
     },
   }
 }
+
 class Run<P extends PlatformId> implements Ceremony<P> {
   readonly launchUrl: string
   private state: 'new' | 'prefetch' | 'oauth' | 'proving' | 'done' = 'new'
@@ -157,6 +176,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private reject: ((reason: Error) => void) | undefined
   private progress = 0
   private binding: Binding | undefined
+
   constructor(
     id: string,
     input: Input<P>,
@@ -202,12 +222,14 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
     Object.defineProperty(this, 'launchUrl', { writable: false })
   }
+
   onEvent(listener: (event: CeremonyEvent) => void): () => void {
     this.listeners.add(listener)
     return () => {
       this.listeners.delete(listener)
     }
   }
+
   private emit(event: CeremonyEvent, listeners = [...this.listeners]): void {
     for (const listener of listeners) {
       if (this.state === 'done' && event.type !== 'finished') return
@@ -222,17 +244,20 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       }
     }
   }
+
   private enterStage(stage: CeremonyStage): void {
     if (this.state === 'done' || stages.indexOf(stage) <= stages.indexOf(this.stage)) return
     if (this.platform === 'google' && ['code-exchange', 'identity-fetch'].includes(stage)) return
     this.stage = stage
     this.emit({ type: 'stage', stage, timestamp: performance.timeOrigin + performance.now() })
   }
+
   private finish(event: CeremonyEvent & { type: 'finished' }): void {
     const listeners = [...this.listeners]
     this.cleanup()
     this.emit(event, listeners)
   }
+
   private listen<M extends Message>(type: MessageType<M>, handler: (message: M) => void): void {
     const listener = receiver((m: M) => {
       if (this.state === 'done') return
@@ -249,6 +274,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private expect(state: typeof this.state): void {
     if (this.state !== state) throw new Error('Unexpected ceremony message')
   }
+
   proveUserIdentity(): Promise<IdentityResult<P>> {
     if (this.state !== 'new') return Promise.reject(new Error('Ceremony is one-shot'))
     const previous = bindings.get(this.connection)
@@ -349,6 +375,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     }
     return result
   }
+
   async cancel(): Promise<void> {
     if (this.state === 'done') return
     const active = this.state === 'oauth' || this.state === 'proving'
@@ -360,6 +387,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         /* Best effort; local cancellation already won. */
       }
   }
+
   private fail(error: Error): void {
     if (this.state === 'done') return
     const reject = this.reject
@@ -376,6 +404,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     )
     reject?.(error)
   }
+
   private cleanup(): void {
     if (this.binding) this.binding.active = false
     this.state = 'done'

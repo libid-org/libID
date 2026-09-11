@@ -1,15 +1,19 @@
 import { hasExactKeys, isRecord } from '../../../primitives.js'
 import { fixedBytes, type Identity, isIdentity, proofBytes } from '../../types.js'
+
 export const MAX_HONK_PROOF_BYTES = 4 * 1024 * 1024
+
 export const MAX_EMAIL_BYTES = 62,
   MAX_SUB_BYTES = 31,
   MAX_AUD_BYTES = 128,
   RSA_MODULUS_BYTES = 256
+
 export interface GoogleProofV1 {
   identityProof: Uint8Array
   tokenExpiresAt: number
   signingKeyModulus: Uint8Array
 }
+
 export function validateProof(v: unknown): GoogleProofV1 {
   if (
     !isRecord(v) ||

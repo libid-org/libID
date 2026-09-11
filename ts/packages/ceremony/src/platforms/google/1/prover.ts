@@ -1,17 +1,17 @@
 import { resolve as resolveAsset } from '../../../assets/index.js'
+import { buildGoogleWitness } from '../../../barretenberg/circuits/oidc_google/inputs.js'
+import { validateGooglePublicInputs } from '../../../barretenberg/circuits/oidc_google/publicInputs.js'
+import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../barretenberg/engine.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { CeremonyError } from '../../../errors.js'
-import { isRecord } from '../../../primitives.js'
-import type { ProverContext } from '../../context.js'
-import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../barretenberg/engine.js'
 import { parseJson } from '../../../json.js'
+import { isRecord } from '../../../primitives.js'
 import { Progress } from '../../../progress.js'
 import { readBody } from '../../../response.js'
+import type { ProverContext } from '../../context.js'
 import type { Identity } from '../../types.js'
 import { circuit, verificationKey } from './google.assets.js'
-import { buildGoogleWitness } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import { parseOAuthReturn } from './oauth.js'
-import { validateGooglePublicInputs } from '../../../barretenberg/circuits/oidc_google/publicInputs.js'
 import { decodeGoogleHeader, decodeGoogleIdToken } from './token.js'
 import type { GoogleProofV1 } from './types.js'
 
@@ -20,6 +20,7 @@ const spans = [
   { code: 'circuit-inputs', label: 'Preparing proof inputs', weight: 2 },
   ...PROOF_ENGINE_SPANS,
 ]
+
 export async function prove(
   context: ProverContext,
 ): Promise<{ identity: Identity<'google'>; proof: GoogleProofV1 } | null> {

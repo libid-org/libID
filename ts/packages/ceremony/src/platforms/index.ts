@@ -1,18 +1,24 @@
-import type { Identity } from './types.js'
 import type { ProverIdentityProof } from '../ccdp/index.js'
-import * as googleV1 from './google/1/url.js'
-import * as xV1 from './x/1/url.js'
 import * as githubV1 from './github/1/url.js'
+import * as googleV1 from './google/1/url.js'
+import type { Identity } from './types.js'
+import * as xV1 from './x/1/url.js'
+
 export type { Identity, NotaryAttestation } from './types.js'
+
 export const platforms = {
   google: { versions: { 1: googleV1 } },
   x: { versions: { 1: xV1 } },
   github: { versions: { 1: githubV1 } },
 } as const
+
 export type PlatformId = keyof typeof platforms
+
 export type PlatformCeremonyVersion = number
+
 export type SupportedCeremonyVersion<P extends PlatformId> =
   keyof (typeof platforms)[P]['versions'] & number
+
 export type ProofByPlatformVersion = {
   [P in PlatformId]: {
     [V in SupportedCeremonyVersion<P>]: (typeof platforms)[P]['versions'][V] extends {
@@ -22,9 +28,11 @@ export type ProofByPlatformVersion = {
       : never
   }
 }
+
 export const supportedPlatforms: readonly PlatformId[] = Object.freeze(
   Object.keys(platforms) as PlatformId[],
 )
+
 export type OAuthProof<P extends PlatformId = PlatformId> = {
   [K in P]: {
     [V in SupportedCeremonyVersion<K>]: {
@@ -34,9 +42,11 @@ export type OAuthProof<P extends PlatformId = PlatformId> = {
     }
   }[SupportedCeremonyVersion<K>]
 }[P]
+
 export type IdentityResult<P extends PlatformId = PlatformId> =
   | { [K in P]: { status: 'accepted'; identity: Identity<K>; oauthProof: OAuthProof<K> } }[P]
   | { status: 'denied' }
+
 export function validateProofMessage<P extends PlatformId, V extends SupportedCeremonyVersion<P>>(
   platformId: P,
   version: V,
@@ -51,6 +61,7 @@ export function validateProofMessage<P extends PlatformId, V extends SupportedCe
     proof: ProofByPlatformVersion[P][V]
   }
 }
+
 export function assembleResult<P extends PlatformId>(
   platformId: P,
   version: SupportedCeremonyVersion<P>,
@@ -70,6 +81,7 @@ export function assembleResult<P extends PlatformId>(
     },
   } as IdentityResult<P>
 }
+
 // Version choice stays behind the same closed, validated catalog boundary.
 export function greatestCommonVersion<P extends PlatformId>(
   platform: P,

@@ -436,20 +436,10 @@ selective disclosures and correlation with canonical final attestations.
 - [Platform pipelines](pipelines.md): token/identity overlap and delivery dependencies.
 - [Qualification blockers](qualification.md#actual-blockers-and-unqualified-boundaries): matched service, timing and profile gaps.
 
-[session.ts](../src/notary/session.ts) controls one ceremony-owned
-[session.worker.ts](../src/notary/session.worker.ts). X creates one
-`Notarization` instance for both requests, sharing WASM initialization and its
-thread pool. Each request has a separate native message channel, TLSNotary prover,
-socket, transcript and attestation. Each socket opens alongside shared WASM
-initialization; TLS session setup waits for both and checks the socket is still
-open. A failed connection or initialization reports failure without waiting for
-the other branch and closes the socket; the owner aborts the shared worker and
-sibling sessions. Setup remains concurrent; no state or runtime is shared across
-ceremonies. The runtime exposes its combined abort signal for
-concurrent dependent work, so even a failure after a session is prepared can
-cancel a pending Bridge fetch. GitHub uses the same adapter for its one browser
-identity request. Real shared-runtime concurrency and timing remain subject to
-qualification; unit-level overlap does not establish WASM liveness.
+[session.ts](../src/notary/session.ts) documents the ceremony-owned runtime,
+independent sessions, provisional openings and cancellation contract.
+[session.worker.ts](../src/notary/session.worker.ts) owns socket/runtime overlap
+and finalization. Real runtime concurrency still requires the qualification above.
 [transport.ts](../src/notary/transport.ts) frames final output, [decode.ts](../src/notary/decode.ts) reads canonical
 attested bytes, and [notarize.ts](../src/notary/notarize.ts) correlates transcripts and openings.
 [http.ts](../src/notary/http.ts) decodes HTTP responses, preserving numeric

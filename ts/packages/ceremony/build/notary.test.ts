@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { responseHeaders } from './profiles.ts'
 import { executionWorker } from '../src/ccdp/headers.ts'
+import { responseHeaders } from './profiles.ts'
+
 test('fixed response policies admit runtime notaries without remote code permission [LIBID-ASSET-003] [CSP-003/011]', () => {
   for (const profile of ['prover', 'proverFallback', 'executionWorker'] as const) {
     const policy = responseHeaders(profile, {})['Content-Security-Policy']

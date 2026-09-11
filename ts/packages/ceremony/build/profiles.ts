@@ -12,9 +12,12 @@ export type ResponseProfile =
 import { createHash } from 'node:crypto'
 import * as shared from '../src/ccdp/headers.ts'
 import { popupFallback } from './popup.ts'
+
 export const scriptHash = (code: string) =>
   `'sha256-${createHash('sha256').update(code).digest('base64')}'`
+
 const base = shared.csp.base
+
 export function responseHeaders(
   profile: ResponseProfile,
   {

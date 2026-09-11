@@ -1,5 +1,5 @@
-import type { AbortCeremony } from './ccdp/index.js'
 import type { Message, PopupConnection } from '@libid/popup'
+import type { AbortCeremony } from './ccdp/index.js'
 
 export const failureMessages = {
   'callback-input': 'Invalid OAuth callback or deployment configuration.',
@@ -19,6 +19,7 @@ export const failureMessages = {
   proof: 'Proof engine failed.',
   'prover-execution': 'Unable to complete the platform proof.',
 } as const
+
 export type FailureCode = keyof typeof failureMessages
 
 /** A cause stays in the context that caught it; only the code and catalog message cross CCDP. */
@@ -31,9 +32,11 @@ export class CeremonyError extends Error {
     this.name = 'CeremonyError'
   }
 }
+
 export function ceremonyError(error: unknown, code: FailureCode): CeremonyError {
   return error instanceof CeremonyError ? error : new CeremonyError(code, { cause: error })
 }
+
 export function reportFailure(
   connection: PopupConnection<Message> | undefined,
   error: CeremonyError,

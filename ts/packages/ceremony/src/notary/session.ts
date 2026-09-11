@@ -2,39 +2,55 @@ import { resolve as resolveAsset } from '../assets/index.js'
 import { origin, webUrl } from '../ccdp/index.js'
 import { ceremonyError } from '../errors.js'
 import type { NotaryAttestation } from '../platforms/types.js'
-import { tlsnModule, tlsnWasm } from './notary.assets.js'
 import type { ByteRange } from './notarize.js'
+import { tlsnModule, tlsnWasm } from './notary.assets.js'
+
 export interface ExactHttpRequest {
   url: string
   method: 'GET' | 'POST'
   headers: Readonly<Record<string, Uint8Array>>
   body: Uint8Array
 }
+
 export interface Transcript {
   sent: Uint8Array
   received: Uint8Array
 }
+
 export interface Reveals {
   sent: readonly ByteRange[]
   received: readonly ByteRange[]
 }
+
 export interface CommitmentOpening extends ByteRange {
   direction: 'sent' | 'received'
   blinder: Uint8Array
 }
+
+/** Correlated provisional openings plus a separate promise for the final attestation. */
 export interface RevealResult {
   openings: readonly CommitmentOpening[]
   attestation: Promise<NotaryAttestation>
 }
+
 export interface NotarizationSession {
+  /** Send one exact request after setup and return its original transcript bytes. */
   send(request: ExactHttpRequest): Promise<Transcript>
+  /** Reveal once after send; proof preparation may use openings before attestation completes. */
   reveal(reveals: Reveals): Promise<RevealResult>
 }
-/** One ceremony-owned WASM runtime; each prepare creates a separate TLS session. */
+
+/**
+ * One ceremony-owned WASM runtime and thread pool, with a separate TLS session per prepare.
+ * The supplied abort signal releases the worker; any session failure also aborts sibling work.
+ * Final outputs preserve signed bytes and correlate openings without verifying notary signatures.
+ */
 export class Notarization {
   #worker?: Worker
   #failure = new AbortController()
+  /** Caller cancellation combined with runtime failure, including failures after prepare resolves. */
   readonly signal: AbortSignal
+
   constructor(
     private readonly notaryAddress: string,
     signal: AbortSignal,
@@ -43,6 +59,8 @@ export class Notarization {
     if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
     this.signal = AbortSignal.any([signal, this.#failure.signal])
   }
+
+  /** Start target-specific setup without a bearer. Calls may overlap within this ceremony. */
   async prepare(url: string): Promise<NotarizationSession> {
     const signal = this.signal
     signal.throwIfAborted()

@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync } from 'node:fs'
 import { createHash, createPublicKey } from 'node:crypto'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { createServer as createHttpServer, request as proxyRequest } from 'node:http'
 import { createServer } from 'node:https'
 import { join } from 'node:path'
@@ -8,18 +8,25 @@ import { prepareCallback } from './callback.ts'
 import { makeCertificate } from './tls.mjs'
 
 const sws = process.env.CEREMONY_SWS_URL
+
 if (!sws)
   throw new Error(
     'CEREMONY_SWS_URL must point to the pinned SWS serving the qualification artifact',
   )
+
 const artifactDir = join(packageDir, '.cache/qualification-assets')
+
 const counts = new Map(),
   holds = new Map(),
   failures = new Set()
+
 const graph = JSON.parse(readFileSync(join(artifactDir, 'distribution-graph.json')))
+
 const html = (body) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ceremony qualification</title><body>${body}</body></html>`
+
 const certificate = makeCertificate(['localhost'])
+
 // Chromium's HTTP cache needs a clean certificate result, not just an ignored TLS error.
 writeFileSync(
   join(packageDir, '.cache/e2e/cert-spki'),
@@ -27,6 +34,7 @@ writeFileSync(
     .update(createPublicKey(certificate.cert).export({ type: 'spki', format: 'der' }))
     .digest('base64'),
 )
+
 // Both schemes run the same emitted bytes and protocol tests on separate origins.
 for (const secure of [true, false]) {
   const offset = secure ? 200 : 100

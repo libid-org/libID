@@ -7,7 +7,9 @@ export type GoogleOAuthOutcome =
 
 // Ignore provider metadata; unexpected credentials still violate the ID-token profile.
 const FIELD = /^([A-Za-z0-9_.-]{1,64})=(.*)$/
+
 const MAX_FIELD_VALUE = 8192
+
 const PRINTABLE_VALUE = /^[\x20-\x7e]*$/
 
 function parseFields(component: string): Map<string, string> | null {

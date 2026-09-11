@@ -1,16 +1,22 @@
 import { expect, it, vi } from 'vitest'
+
 const { load } = vi.hoisted(() => ({ load: vi.fn() }))
+
 vi.mock('./cache.js', () => ({
   AssetCache: class {
     load = load
   },
 }))
+
 vi.mock('@libid/popup/worker', () => ({ installPortKeeper: vi.fn() }))
+
 vi.mock('virtual:ceremony-assets', () => ({
   requestsByProfile: { 'google/1': [{ url: '/asset' }] },
   allowedRequests: [{ url: '/asset' }],
 }))
+
 import { startWorker } from './worker.js'
+
 it.each(['fetch', 'message', 'failed-prefetch'])(
   'keeps %s lifetime tied to persistence after response delivery',
   async (type) => {

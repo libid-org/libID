@@ -8,17 +8,21 @@ import { popupPlugin } from './popup.ts'
 import { packageDir } from './release.ts'
 
 type Edit = readonly [start: number, end: number, replacement: string]
+
 // Rollup supplies offsets on every parsed node; ESTree's base types omit them.
 function replacement(node: Node, text: string): Edit {
   const { start, end } = node as Node & { start: number; end: number }
   return [start, end, text]
 }
+
 export type BundleNode = {
   entry: string | null
   modules: string[]
   dependencies: string[]
 }
+
 type ViteChunk = Rollup.OutputChunk & { viteMetadata?: ChunkMetadata }
+
 /** Compiler AST rewriting keeps inline module imports rooted at the distribution. */
 function absoluteImports(): Plugin {
   return {
@@ -56,6 +60,7 @@ function absoluteImports(): Plugin {
     },
   }
 }
+
 /** Make native Worker URL dependencies ordinary bundler edges, including dependency workers. */
 function workerImports(): Plugin {
   return {
@@ -112,6 +117,7 @@ function workerImports(): Plugin {
     },
   }
 }
+
 export async function bundle(
   entry: string,
   data: ResolvedAssets,
