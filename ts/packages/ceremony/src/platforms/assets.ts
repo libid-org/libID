@@ -9,7 +9,7 @@ export const assetsByPlatform = {
   github: { 1: github },
 } as const satisfies { [P in PlatformId]: { [V in SupportedCeremonyVersion<P>]: readonly Asset[] } }
 
-import { bearerCircuit } from '../prover/bearerLink.assets.js'
+import { bearerCircuit } from '../proving/bb/circuits/bearer_link/assets.js'
 import { circuit as googleCircuit } from './google/1/assets.js'
 export const circuits = [googleCircuit, bearerCircuit] as const
-export { SRS_SIZE } from '../prover/bb/assets.js'
+export { SRS_SIZE } from '../proving/bb/assets.js'

@@ -1,8 +1,8 @@
-import { ceremonyError } from '../errors.js'
-import { resolve as resolveAsset } from '../assets.js'
-import type { PlatformStep } from '../ccdp/index.js'
-import { abi, acvm, bbWasm, crs } from './bb/assets.js'
-import { Progress, type ProgressSpan } from './progress.js'
+import { ceremonyError } from '../../errors.js'
+import { resolve as resolveAsset } from '../../assets.js'
+import type { PlatformStep } from '../../ccdp/index.js'
+import { abi, acvm, bbWasm, crs } from './assets.js'
+import { Progress, type ProgressSpan } from '../../progress.js'
 
 export const PROOF_ENGINE_SPANS = [
   { code: 'proof-worker-bootstrap', label: 'Starting prover', weight: 1 },

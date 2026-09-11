@@ -1,4 +1,4 @@
-import * as assets from '../assets.js'
+import * as assets from '../../../../assets.js'
 export const bearerRelease = assets.archive(
   'https://github.com/libid-org/libid-circuits/releases/download/v0.3.0/libid-circuits-0.3.0-bearer-link.tar.gz',
   'circuits/v0.3.0/bearer-link',

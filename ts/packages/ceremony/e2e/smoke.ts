@@ -4,11 +4,14 @@ import {
   circuit as google,
   verificationKey as googleKey,
 } from '../src/platforms/google/1/assets.js'
-import { buildGoogleWitness } from '../src/platforms/google/1/inputs.js'
-import { bearerCircuit, bearerVerificationKey } from '../src/prover/bearerLink.assets.js'
-import { buildBearerLinkWitness } from '../src/prover/bearerLink.js'
-import { ProofEngine } from '../src/prover/engine.js'
-import { Notarization } from '../src/prover/notarization/session.js'
+import { buildGoogleWitness } from '../src/proving/bb/circuits/oidc_google/inputs.js'
+import {
+  bearerCircuit,
+  bearerVerificationKey,
+} from '../src/proving/bb/circuits/bearer_link/assets.js'
+import { buildBearerLinkWitness } from '../src/proving/bb/circuits/bearer_link/inputs.js'
+import { ProofEngine } from '../src/proving/bb/engine.js'
+import { Notarization } from '../src/notarization/session.js'
 import fixture from '../test-fixtures/google-v1.json'
 
 Object.assign(window, {

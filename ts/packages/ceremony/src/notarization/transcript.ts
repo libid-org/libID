@@ -1,4 +1,4 @@
-import type { ByteRange } from './notarization/notarize.js'
+import type { ByteRange } from './notarize.js'
 
 const decoder = new TextDecoder('utf-8', { fatal: true })
 // REQ-COMMON-39B applies to both request types; tokens also forbid Authorization.

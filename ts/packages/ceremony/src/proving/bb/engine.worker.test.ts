@@ -21,7 +21,7 @@ vi.mock('@aztec/bb.js', () => ({
   BackendType: { Wasm: 'Wasm' },
   Barretenberg: { new: mocks.create },
 }))
-vi.mock('./bb/assets.js', () => ({ SRS_SIZE: 2 ** 18 }))
+vi.mock('./assets.js', () => ({ SRS_SIZE: 2 ** 18 }))
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.resetAllMocks()

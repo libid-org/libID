@@ -2,8 +2,8 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { type ExactHttpRequest, Notarization } from './session.js'
 
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
-vi.mock('../../assets.js', async (original) => ({
-  ...(await original<typeof import('../../assets.js')>()),
+vi.mock('../assets.js', async (original) => ({
+  ...(await original<typeof import('../assets.js')>()),
   resolve: () => 'https://ccdp.test/asset',
 }))
 const ports: MessagePort[] = []
