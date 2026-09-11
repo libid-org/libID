@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { brotliDecompressSync } from 'node:zlib'
+import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { packageDir } from './release.ts'
@@ -26,11 +26,13 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
       'content-range',
     ])
       assert.equal(new Headers(headers).has(name), false)
-    if (existsSync(join(out, 'public', `${physical}.br`)))
-      assert.deepEqual(
-        brotliDecompressSync(readFileSync(join(out, 'public', `${physical}.br`))),
-        body,
-      )
+    for (const [extension, decode] of [
+      ['br', brotliDecompressSync],
+      ['gz', gunzipSync],
+    ] as const) {
+      const sidecar = join(out, 'public', `${physical}.${extension}`)
+      if (existsSync(sidecar)) assert.deepEqual(decode(readFileSync(sidecar)), body)
+    }
   }
   const google = graph.requestsByProfile['google/1'],
     x = graph.requestsByProfile['x/1'],
@@ -49,6 +51,16 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
     x.filter((r) => r.url.endsWith('/vk')),
     github.filter((r) => r.url.endsWith('/vk')),
   )
+  const wasm = google.find((r) => r.url.endsWith('/barretenberg-threads.wasm'))
+  assert.ok(wasm)
+  assert.equal(wasm.mime, 'application/wasm')
+  for (const list of [x, github])
+    assert.deepEqual(
+      list.filter((r) => r.url.endsWith('/barretenberg-threads.wasm')),
+      [wasm],
+    )
+  for (const extension of ['br', 'gz'])
+    assert.ok(existsSync(join(out, 'public', `${wasm.url}.${extension}`)))
   assert.ok(!google.some((r) => r.url.includes('tlsn')))
   assert.ok(x.some((r) => r.url.endsWith('/tlsn_wasm.js')))
   assert.ok(!google.some((r) => r.url.endsWith('/bearer_link.json')))
@@ -177,22 +189,29 @@ test('native SWS negotiates representations, HEAD, conditional requests and rang
     '/ccdp/v1/prover',
     '/ccdp/v1/prover/fallback',
     '/ccdp/v1/worker.js',
+    graph.requestsByProfile['google/1'].find((r) => r.url.endsWith('/barretenberg-threads.wasm'))!
+      .url,
     ...Object.keys(graph.headers)
       .filter((p) => /\.(js|wasm|json)$/.test(p) && p.startsWith('/ccdp/assets/'))
       .slice(0, 6),
   ]) {
     const original = readFileSync(join(out, 'public', graph.files[path]))
-    for (const encoding of ['identity', 'br']) {
+    for (const encoding of ['identity', 'br', 'gzip']) {
       const response = await raw(path, { 'Accept-Encoding': encoding })
       assert.equal(response.status, 200)
       assert.equal(response.headers.location, undefined)
-      const sidecar = join(out, 'public', `${graph.files[path]}.br`)
-      const compressed = encoding === 'br' && existsSync(sidecar)
-      assert.equal(response.headers['content-encoding'], compressed ? 'br' : undefined)
+      const sidecar = join(out, 'public', `${graph.files[path]}.${encoding === 'br' ? 'br' : 'gz'}`)
+      const compressed = encoding !== 'identity' && existsSync(sidecar)
+      assert.equal(response.headers['content-encoding'], compressed ? encoding : undefined)
       if (response.headers['content-length'] !== undefined)
         assert.equal(Number(response.headers['content-length']), response.body.length)
       else assert.equal(response.headers['transfer-encoding'], 'chunked')
-      assert.deepEqual(compressed ? brotliDecompressSync(response.body) : response.body, original)
+      assert.deepEqual(
+        compressed
+          ? (encoding === 'br' ? brotliDecompressSync : gunzipSync)(response.body)
+          : response.body,
+        original,
+      )
       assert.ok(response.headers.etag)
       assert.ok(response.headers['last-modified'])
       if (compressed) assert.match(String(response.headers.vary), /Accept-Encoding/i)
