@@ -3,12 +3,15 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
+  initialize: vi.fn(),
+  acvm: vi.fn(),
+  abi: vi.fn(),
   execute: vi.fn(),
   prove: vi.fn(),
   destroy: vi.fn(),
 }))
-vi.mock('@noir-lang/acvm_js', () => ({ default: async () => {} }))
-vi.mock('@noir-lang/noirc_abi', () => ({ default: async () => {} }))
+vi.mock('@noir-lang/acvm_js', () => ({ default: mocks.acvm }))
+vi.mock('@noir-lang/noirc_abi', () => ({ default: mocks.abi }))
 vi.mock('@noir-lang/noir_js', () => ({
   Noir: class {
     execute = mocks.execute
@@ -24,7 +27,7 @@ afterEach(() => {
   vi.resetAllMocks()
   vi.resetModules()
 })
-async function worker(key = new Response(Uint8Array.of(11, 12))) {
+async function worker(key: Response | Promise<Response> = new Response(Uint8Array.of(11, 12))) {
   let receive!: (event: { data: unknown }) => void
   const postMessage = vi.fn()
   const request = vi.fn(async (url: string) =>
@@ -45,6 +48,7 @@ async function worker(key = new Response(Uint8Array.of(11, 12))) {
   })
   vi.stubGlobal('fetch', request)
   mocks.create.mockImplementation(async ({ logger }) => {
+    await mocks.initialize()
     logger('threads: 4; shared memory: true')
     return { circuitProve: mocks.prove, destroy: mocks.destroy }
   })
@@ -110,7 +114,7 @@ it.each(['missing', 'empty'])(
     const w = await worker(new Response(null, { status: kind === 'missing' ? 404 : 200 }))
     await expect.poll(() => w.has('engine-error')).toBe(true)
     expect(w.has('engine-ready')).toBe(false)
-    expect(mocks.create).not.toHaveBeenCalled()
+    expect(mocks.destroy).toHaveBeenCalledOnce()
     expect(mocks.prove).not.toHaveBeenCalled()
   },
 )
@@ -123,4 +127,115 @@ it('preserves cleanup when bb rejects the supplied key [LIBID-PROVER-001]', asyn
   expect(w.has('engine-result')).toBe(false)
   expect(mocks.prove).toHaveBeenCalledOnce()
   expect(mocks.destroy).toHaveBeenCalledOnce()
+})
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((ok, fail) => {
+    resolve = ok
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+it.each(['backend', 'resources'])(
+  'starts all preload branches before %s finishes [LIBID-PROVER-012]',
+  async (first) => {
+    const backend = deferred<void>(),
+      acvm = deferred<void>(),
+      abi = deferred<void>(),
+      key = deferred<Response>()
+    mocks.initialize.mockReturnValueOnce(backend.promise)
+    mocks.acvm.mockReturnValueOnce(acvm.promise)
+    mocks.abi.mockReturnValueOnce(abi.promise)
+    const w = await worker(key.promise)
+    expect(mocks.create).toHaveBeenCalledOnce()
+    expect(mocks.acvm).toHaveBeenCalledOnce()
+    expect(mocks.abi).toHaveBeenCalledOnce()
+    expect(w.request).toHaveBeenCalledTimes(2)
+    expect(w.has('engine-ready')).toBe(false)
+    const resources = () => {
+      acvm.resolve()
+      abi.resolve()
+      key.resolve(new Response(Uint8Array.of(11, 12)))
+    }
+    if (first === 'backend') {
+      backend.resolve()
+      await expect
+        .poll(() =>
+          w.postMessage.mock.calls.some(
+            ([m]) => m.code === 'proof-backend-initialization' && m.status === 'completed',
+          ),
+        )
+        .toBe(true)
+      expect(w.has('engine-ready')).toBe(false)
+      resources()
+    } else {
+      resources()
+      await expect
+        .poll(() =>
+          w.postMessage.mock.calls.some(
+            ([m]) => m.code === 'proof-circuit-load' && m.status === 'completed',
+          ),
+        )
+        .toBe(true)
+      expect(w.has('engine-ready')).toBe(false)
+      backend.resolve()
+    }
+    await expect.poll(() => w.has('engine-ready')).toBe(true)
+    expect(mocks.destroy).not.toHaveBeenCalled()
+    expect(mocks.execute).not.toHaveBeenCalled()
+  },
+)
+it.each(['circuit', 'wasm'])(
+  'fails promptly on %s loading and releases a late backend [LIBID-PROVER-014]',
+  async (failure) => {
+    const backend = deferred<void>()
+    mocks.initialize.mockReturnValueOnce(backend.promise)
+    if (failure === 'wasm') mocks.acvm.mockRejectedValueOnce(new Error('WASM load failed'))
+    const w = await worker(
+      failure === 'circuit'
+        ? new Response(null, { status: 404 })
+        : new Response(Uint8Array.of(11, 12)),
+    )
+    await expect.poll(() => w.has('engine-error')).toBe(true)
+    expect(mocks.destroy).not.toHaveBeenCalled()
+    backend.resolve()
+    await expect.poll(() => mocks.destroy.mock.calls.length).toBe(1)
+    expect(w.has('engine-ready')).toBe(false)
+    expect(mocks.prove).not.toHaveBeenCalled()
+  },
+)
+it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]', async () => {
+  const acvm = deferred<void>()
+  mocks.acvm.mockReturnValueOnce(acvm.promise)
+  const w = await worker()
+  await expect
+    .poll(() =>
+      w.postMessage.mock.calls.some(
+        ([m]) => m.code === 'proof-backend-initialization' && m.status === 'completed',
+      ),
+    )
+    .toBe(true)
+  acvm.reject(new Error('WASM load failed'))
+  await expect.poll(() => w.has('engine-error')).toBe(true)
+  expect(mocks.destroy).toHaveBeenCalledOnce()
+  expect(w.has('engine-ready')).toBe(false)
+})
+it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]', async () => {
+  const key = deferred<Response>()
+  mocks.initialize.mockRejectedValueOnce(new Error('Backend unavailable'))
+  const w = await worker(key.promise)
+  await expect.poll(() => w.has('engine-error')).toBe(true)
+  expect(mocks.destroy).not.toHaveBeenCalled()
+  key.resolve(new Response(Uint8Array.of(11, 12)))
+  await expect
+    .poll(() =>
+      w.postMessage.mock.calls.some(
+        ([m]) => m.code === 'proof-circuit-load' && m.status === 'completed',
+      ),
+    )
+    .toBe(true)
+  expect(w.has('engine-ready')).toBe(false)
+  expect(mocks.prove).not.toHaveBeenCalled()
 })

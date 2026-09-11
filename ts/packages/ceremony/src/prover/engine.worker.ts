@@ -53,37 +53,7 @@ async function preload(message: Preload): Promise<void> {
   if (!self.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
     throw new Error('proof worker requires cross-origin isolation')
   }
-  const [{ compiled, circuit }] = await Promise.all([
-    span('proof-circuit-load', async () => {
-      const [response, keyResponse] = await Promise.all(
-        [message.circuitUrl, message.verificationKeyUrl].map((url) =>
-          fetch(url, { credentials: 'same-origin', redirect: 'error' }),
-        ),
-      )
-      if (!response.ok || !keyResponse.ok) throw new Error('Circuit resource request failed')
-      const [compiled, key] = await Promise.all([
-        response.json() as Promise<Circuit>,
-        keyResponse.arrayBuffer(),
-      ])
-      // An empty key asks bb to recompute it; a missing release artifact must fail instead.
-      if (!key.byteLength) throw new Error('Empty verification key')
-      return {
-        compiled,
-        circuit: {
-          name: 'circuit',
-          bytecode: await inflate(Uint8Array.from(atob(compiled.bytecode), (c) => c.charCodeAt(0))),
-          verificationKey: new Uint8Array(key),
-        },
-      }
-    }),
-    span('proof-wasm-load', async () => {
-      await Promise.all([
-        initACVM({ module_or_path: message.acvmUrl }),
-        initAbi({ module_or_path: message.abiUrl }),
-      ])
-    }),
-  ])
-  ready = await span('proof-backend-initialization', async () => {
+  const backend = span('proof-backend-initialization', async () => {
     const api = await Barretenberg.new({
       backend: BackendType.Wasm,
       threads: message.threads,
@@ -100,12 +70,48 @@ async function preload(message: Preload): Promise<void> {
       await api.destroy()
       throw new Error('Multithreaded backend unavailable')
     }
-    return {
-      noir: new Noir(compiled),
-      api,
-      circuit,
-    }
+    return api
   })
+  try {
+    const [api, { compiled, circuit }] = await Promise.all([
+      backend,
+      span('proof-circuit-load', async () => {
+        const [response, keyResponse] = await Promise.all(
+          [message.circuitUrl, message.verificationKeyUrl].map((url) =>
+            fetch(url, { credentials: 'same-origin', redirect: 'error' }),
+          ),
+        )
+        if (!response.ok || !keyResponse.ok) throw new Error('Circuit resource request failed')
+        const [compiled, key] = await Promise.all([
+          response.json() as Promise<Circuit>,
+          keyResponse.arrayBuffer(),
+        ])
+        // An empty key asks bb to recompute it; a missing release artifact must fail instead.
+        if (!key.byteLength) throw new Error('Empty verification key')
+        return {
+          compiled,
+          circuit: {
+            name: 'circuit',
+            bytecode: await inflate(
+              Uint8Array.from(atob(compiled.bytecode), (c) => c.charCodeAt(0)),
+            ),
+            verificationKey: new Uint8Array(key),
+          },
+        }
+      }),
+      span('proof-wasm-load', async () => {
+        await Promise.all([
+          initACVM({ module_or_path: message.acvmUrl }),
+          initAbi({ module_or_path: message.abiUrl }),
+        ])
+      }),
+    ])
+    ready = { noir: new Noir(compiled), api, circuit }
+  } catch (error) {
+    // Fail promptly; release a backend that finishes after a sibling failed.
+    void backend.then((api) => api.destroy()).catch(() => {})
+    throw error
+  }
   state = 'ready'
   send({ type: 'engine-ready' })
 }
