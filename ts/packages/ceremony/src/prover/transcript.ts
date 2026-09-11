@@ -1,6 +1,15 @@
 import type { ByteRange } from './notarization/notarize.js'
 
 const decoder = new TextDecoder('utf-8', { fatal: true })
+// REQ-COMMON-39B applies to both request types; tokens also forbid Authorization.
+const FORBIDDEN_HEADERS = new Set([
+  'cookie',
+  'content-encoding',
+  'transfer-encoding',
+  'x-http-method-override',
+  'x-http-method',
+  'x-method-override',
+])
 function invalid(reason: string): never {
   throw new Error(`Invalid transcript: ${reason}`)
 }
@@ -84,27 +93,26 @@ export function tokenRequestBody(
   const bodyStart =
     findUnique(request, new Uint8Array([13, 10, 13, 10]), 'token head terminator') + 4
   const head = request.subarray(0, bodyStart - 4)
-  if (head.some((byte) => byte !== 13 && byte !== 10 && (byte < 32 || byte > 126)))
-    invalid('token head is not ASCII')
-  const [line, ...headers] = decoder.decode(head).split('\r\n')
+  const [line, ...headers] = new TextDecoder('latin1').decode(head).split('\r\n')
   if (line !== requestLine || length < request.length) invalid('token request framing')
   const expected = new Map([
     ['host', host],
     ['content-type', 'application/x-www-form-urlencoded'],
-    ['accept', 'application/json'],
-    ['connection', 'close'],
     ['content-length', String(length - bodyStart)],
   ])
+  const seen = new Set<string>()
   for (const header of headers) {
-    const match = /^([a-z-]+): ([\x20-\x7e]+)$/i.exec(header)
+    const match = /^([!#$%&'*+.^_`|~0-9a-z-]+)[ \t]*:([\t\x20-\x7e\u0080-\uffff]*)$/i.exec(header)
     if (!match) invalid('token header framing')
-    const name = match[1].toLowerCase()
-    let value = match[2]
-    if (name === 'content-length' && /^[0-9]+$/.test(value)) value = BigInt(value).toString()
-    if (expected.get(name) !== value) invalid('token header value or duplicate')
-    expected.delete(name)
+    const name = match[1].toLowerCase().replaceAll('_', '-')
+    if (name === 'authorization' || FORBIDDEN_HEADERS.has(name)) invalid('forbidden token header')
+    if (expected.has(name)) {
+      const value = match[2].replace(/^[ \t]+|[ \t]+$/g, '')
+      if (seen.has(name) || expected.get(name) !== value) invalid('token header value or duplicate')
+      seen.add(name)
+    }
   }
-  if (expected.size) invalid('missing token header')
+  if (seen.size !== expected.size) invalid('missing token header')
   return request.subarray(bodyStart)
 }
 
@@ -131,7 +139,8 @@ export function identityBearerRange(
   for (const header of headers) {
     const match = /^([!#$%&'*+.^_`|~0-9a-z-]+):([\t\x20-\x7e\u0080-\uffff]*)$/i.exec(header)
     if (!match) invalid('identity header framing')
-    const name = match[1].toLowerCase()
+    const name = match[1].toLowerCase().replaceAll('_', '-')
+    if (FORBIDDEN_HEADERS.has(name)) invalid('forbidden identity header')
     if (expected.has(name)) {
       if (seen.has(name) || match[2] !== ` ${expected.get(name)}`)
         invalid('identity header value or duplicate')

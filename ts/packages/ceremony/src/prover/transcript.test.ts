@@ -39,16 +39,46 @@ describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C]', () => {
     expect(plan.reveal.sent).toEqual([{ start: 0, end: transcript.sent.length }])
     expect(plan.commit.sent).toEqual([])
     expect(plan.commit.recv).toContainEqual({ ...selected.bearerRange, algorithm: 'SHA256' })
-    const padded = text(transcript.sent).replace('content-length: ', 'content-length: 000')
-    expect(selectTokenReveals({ ...transcript, sent: utf8(padded) }, input).accessToken).toBe(
-      'token',
-    )
+  })
+  it('admits additional headers and normalizes required names and HTTP whitespace', () => {
+    for (const sent of [
+      text(transcript.sent)
+        .replace('accept: application/json\r\n', '')
+        .replace('connection: close\r\n', ''),
+      text(transcript.sent).replace(
+        'accept: application/json',
+        'accept: text/plain\r\naccept: application/json',
+      ),
+      text(transcript.sent).replace('host: api.x.com', 'HOST \t:\tapi.x.com \t'),
+      text(transcript.sent).replace('content-type: ', 'CONTENT_TYPE:\t'),
+      text(transcript.sent).replace('accept:', 'x-extra: café 😀\r\nx-extra:\r\naccept:'),
+    ]) {
+      const changed = { ...transcript, sent: utf8(sent) }
+      const selected = selectTokenReveals(changed, input)
+      expect(selected.accessToken).toBe('token')
+      expect(selected.ranges.sent).toEqual([{ start: 0, end: changed.sent.length }])
+    }
+  })
+  it.each([
+    'Authorization: Basic other',
+    'Cookie: session=other',
+    'Content_Encoding: gzip',
+    'Transfer-Encoding: chunked',
+    'X_HTTP_Method_Override: POST',
+    'X-Http-Method: POST',
+    'X-Method-Override: POST',
+  ])('rejects forbidden token header %s [REQ-PLAT-56A]', (header) => {
+    const sent = utf8(text(transcript.sent).replace('accept:', `${header}\r\naccept:`))
+    expect(() => selectTokenReveals({ ...transcript, sent }, input)).toThrow()
   })
   it.each([
     ['host: api.x.com', 'host: other.com'],
     ['application/x-www-form-urlencoded', 'text/plain'],
-    ['connection: close\r\n', ''],
-    ['accept: application/json', 'accept: application/json\r\naccept: application/json'],
+    ['host: api.x.com\r\n', ''],
+    ['host: api.x.com', 'host: api.x.com\r\nHOST: api.x.com'],
+    ['content-type: ', 'content-type: application/x-www-form-urlencoded\r\ncontent_type: '],
+    ['content-length: ', 'content-length: 3\r\ncontent_length: '],
+    ['content-length: ', 'content-length: 000'],
     ['accept: application/json', 'accept: application/json\r\ntransfer-encoding: chunked'],
     [`content-length: ${request.body.length}`, `content-length: ${request.body.length - 1}`],
     ['content-length: ', 'content-length: +'],
@@ -163,11 +193,24 @@ for (const platform of ['x', 'github'] as const) {
       },
     )
     it.each([
+      'Cookie: session=other',
+      'Content_Encoding: gzip',
+      'Transfer-Encoding: chunked',
+      'X_HTTP_Method_Override: POST',
+      'X-Http-Method: POST',
+      'X-Method-Override: POST',
+    ])('rejects forbidden identity header %s [REQ-COMMON-39B]', (header) => {
+      expect(() => select(utf8(original.replace('host:', `${header}\r\nhost:`)))).toThrow()
+    })
+    it.each([
       ['authorization: Bearer token', 'authorization: Bearer token\r\nAuthorization: Bearer token'],
+      ['authorization: Bearer token', 'authorization: Bearer token\r\nAuthorization: Basic other'],
       ['authorization: Bearer token', 'authorization: Bearer other'],
       ['authorization: Bearer token\r\n', ''],
       ['host: ', ' host: '],
       ['host: ', 'extra: x\nhost: '],
+      ['host: ', 'extra: x\rhost: '],
+      ['host: ', '\thost: '],
       ['host: ', 'extra: x\u0000\r\nhost: '],
       [line, line.replace(' HTTP', '?extra=1 HTTP')],
       ['\r\n\r\n', '\r\n\r\nbody'],

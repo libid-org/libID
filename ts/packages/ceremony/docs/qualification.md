@@ -113,13 +113,14 @@ integration, not support for a real ledger.
    required before claiming this requirement. This production enforcement remains
    unresolved, not a waived security property.
 3. **HTTP profile alignment:** spec PR #31 at
-   `5bbd838c81d4a47849104cf0f965ad985b2e5b98` permits additional X/GitHub identity
-   headers and explicitly includes GitHub's runtime-chosen User-Agent. That
-   specification mismatch is resolved. Browser selectors accept additional identity
-   headers and retain byte-exact bearer disclosure as described in
-   [notarization](notarization.md#token-layout-alignment). Token headers remain
-   closed; existing token-layout requirements and tests are unchanged. Matching
-   released-verifier coverage remains a qualification gate.
+   `860075a4bf288dc7fee20866ed3536dc260f4574` permits additional token and identity
+   headers, with required and forbidden names as described in
+   [notarization](notarization.md#token-layout-alignment). The shared selectors
+   preserve request layouts, reject forbidden headers and require canonical token
+   Content-Length values, including GitHub's committed suffix. Focused tests cover
+   permitted headers, normalization, duplicate credentials, forbidden names and
+   malformed framing. Matching released-verifier coverage remains a qualification
+   gate; parser tests do not establish successful live attestations.
 4. **GitHub service:** no real confidential token-exchange service was qualified.
    Admission checks one revealed request prefix and one committed secret-field
    suffix. Tests use canonical-bincode fixtures modeling native coalescing, not

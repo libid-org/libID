@@ -23,7 +23,7 @@ All package documentation lives in this directory.
 
 The architecture contracts originate in PR #13 at
 `0259e72c184e2be7b78a0ad92188e8722d8d6daf`, reorganized here with implementation
-guides. Identity request headers follow spec PR #31 at
-`5bbd838c81d4a47849104cf0f965ad985b2e5b98`. Requirement IDs are unchanged.
+guides. Transcript layouts, headers and JSON whitespace follow spec PR #31 at
+`860075a4bf288dc7fee20866ed3536dc260f4574`. Requirement IDs are unchanged.
 [Qualification](qualification.md) records implementation deviations and remaining
 live qualification gaps.
