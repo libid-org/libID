@@ -1,0 +1,19 @@
+ccdp_origin = "http://localhost:4683"
+allowed_app_origins = ["http://localhost:4691"]
+# Intentionally public credential for the shared development app; uses PKCE.
+gh_oauth_client_secret = "b020b671192879cb993d1cdd7852c920fe745020"
+
+[[platforms]]
+id = "google"
+client_id = "391814431594-94274lch0aosjgsei87k41a08napunhd.apps.googleusercontent.com"
+versions = [1]
+
+[[platforms]]
+id = "x"
+client_id = "QW5QY1ZGdVRsaDEyTFIwZDVfa2Q6MTpjaQ"
+versions = [1]
+
+[[platforms]]
+id = "github"
+client_id = "Iv23lioEM9NAR9vO8CmT"
+versions = [1]

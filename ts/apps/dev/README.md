@@ -34,14 +34,15 @@ These are separate browser origins. Ports are fixed and services bind to loopbac
 
 Edit configuration directly where it is used:
 
-- [compose.yaml](compose.yaml): services and the inline Bridge TOML configuration.
+- [compose.yaml](compose.yaml): services.
+- [bridge-config.toml](bridge-config.toml): Bridge configuration and development OAuth credentials.
 - [src/app.ts](src/app.ts): Bridge/CCDP URLs and the local ledger/notary fixture.
 - [vite.config.ts](vite.config.ts): frontend port.
 
-Compose includes shared development OAuth credentials and a public development
+The setup includes shared development OAuth credentials and a public development
 notary signing key; no environment file is needed. OAuth registrations must use
 **`http://localhost:4682/auth/callback`**. To connect another application, add its
-exact origin to `allowed_app_origins` in the Bridge TOML block.
+exact origin to `allowed_app_origins` in `bridge-config.toml`.
 
 Frontend edits reload through Vite. After changing ceremony or popup source,
 run this in another terminal while `pnpm dev` stays running:
