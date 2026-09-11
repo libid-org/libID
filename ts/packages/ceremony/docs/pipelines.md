@@ -7,11 +7,16 @@
 Prover imports its runtime concurrently with joining selected-profile asset
 prefetch. Once both are ready and the OAuth return is accepted, platform input
 preparation and dedicated proof-worker startup run concurrently. Backend
-initialization needs the selected circuit, not the ceremony's private inputs.
-Witness execution waits for both prepared inputs and backend readiness.
+initialization needs only its code-owned WASM, CRS and thread settings; it does
+not wait for the circuit or ceremony inputs. Witness execution still waits for
+prepared inputs and complete engine readiness.
 
-Inside the proof worker, initialize ACVM and ABI WASM concurrently, then load
-Noir, Barretenberg, and the circuit concurrently before initializing the backend.
+Inside the proof worker, start Barretenberg initialization, circuit/key loading,
+and ACVM/ABI WASM initialization concurrently. Construct Noir and report readiness
+only after all three branches succeed. A failed branch reports failure promptly;
+an initialized backend is destroyed, including one that finishes after the
+failure. The owner terminates the proof worker and its outstanding work on error
+or cancellation.
 Pass the build-emitted absolute same-origin WASM URLs explicitly to the
 ACVM/ABI initializers. Do not let wasm-bindgen infer sibling paths from a
 bundled or `blob:` worker's `import.meta.url`. Noir must reuse those initialized

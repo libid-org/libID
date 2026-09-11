@@ -166,9 +166,9 @@ Every profile includes these spans:
 
 - readiness: parent `prover-readiness`, with `asset-prefetch` and `runtime-load`
   children which may overlap;
-- proof engine: `proof-worker-bootstrap` → `proof-wasm-load` →
-  `proof-circuit-load` → `proof-backend-initialization` → `witness` → `proof` →
-  `proof-backend-destroy`.
+- proof engine: `proof-worker-bootstrap`, then concurrent `proof-wasm-load`,
+  `proof-circuit-load` and `proof-backend-initialization`; after all complete,
+  `witness` → `proof` → `proof-backend-destroy`.
 
 Profiles add these spans alongside proof-engine initialization:
 
@@ -184,9 +184,11 @@ may already have started during prefetch. X's session setup overlaps; only
 `identity-credential-wait` measures that remaining wait after identity setup
 completes, separate from setup and request latency. If the bearer is already
 available it still emits a started/completed pair with no artificial delay.
-`witness` waits for `circuit-inputs` and `proof-backend-initialization`, not for
-the attestation spans. `proof-wasm-load` covers concurrent ACVM/ABI initialization;
-`proof-circuit-load` covers concurrent Noir/Barretenberg/circuit loading.
+`witness` waits for `circuit-inputs` and all three engine initialization branches,
+not for the attestation spans. `proof-wasm-load` covers concurrent ACVM/ABI
+initialization; `proof-circuit-load` covers the circuit/key fetches and ACIR
+decoding. `proof-backend-initialization` covers bb WASM, threads and CRS setup,
+independently of those two resource-loading spans.
 GitHub exposes its one server request and local validation
 of the complete response, but no fictional server-internal progress.
 
