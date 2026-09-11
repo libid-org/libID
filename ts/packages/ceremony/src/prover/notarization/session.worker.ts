@@ -48,6 +48,7 @@ interface TlsnModule {
       commit: ReturnType<typeof planNotarization>['commit'],
     ): Promise<{ sent: HashOpening[]; recv: HashOpening[] }>
     finish(): Promise<void>
+    free(): void
   }
 }
 
@@ -154,120 +155,141 @@ async function readFinalFrame(io: Io): Promise<Uint8Array> {
   return frame
 }
 
-let prover: InstanceType<TlsnModule['Prover']> | undefined
-let io: Io | undefined
-let transcript: Transcript | undefined
-let target = ''
-let stage = 'new'
-function reply(value: unknown) {
-  self.postMessage(value)
-}
-async function work(data: Record<string, unknown>) {
-  if (data.type === 'prepare' && stage === 'new') {
-    stage = 'preparing'
-    target = String(data.url)
+// The module and its thread pool are initialized once for this ceremony's sessions.
+let runtime: Promise<TlsnModule> | undefined
+function initialize(data: Record<string, unknown>): Promise<TlsnModule> {
+  runtime ??= (async () => {
     const tlsn = (await import(/* @vite-ignore */ String(data.moduleUrl))) as TlsnModule
     await tlsn.default({ module_or_path: String(data.wasmUrl) })
     await tlsn.initialize(null, Math.min(navigator.hardwareConcurrency || 1, 4))
-    const socket = new WebSocket(deriveNotaryWebSocketUrl(String(data.notaryAddress)))
-    io = socketIo(socket)
-    await waitForOpen(socket)
-    prover = new tlsn.Prover({
-      server_name: new URL(target).hostname,
-      mode: 'Proxy',
-      max_sent_data: 4096,
-      max_recv_data: 32768,
-      network: 'Bandwidth',
-    })
-    await prover.setup(io)
-    stage = 'prepared'
-    reply({ type: 'prepared' })
-    return
+    return tlsn
+  })()
+  return runtime
+}
+
+function session(port: MessagePort, initial: Record<string, unknown>) {
+  let prover: InstanceType<TlsnModule['Prover']> | undefined
+  let io: Io | undefined
+  let transcript: Transcript | undefined
+  let target = ''
+  let stage = 'new'
+  function reply(value: unknown) {
+    port.postMessage(value)
   }
-  if (data.type === 'send' && stage === 'prepared' && prover) {
-    stage = 'sending'
-    const request = data.request as ExactHttpRequest
-    if (request.url !== target) throw new Error('Request target changed')
-    const url = new URL(target)
-    await prover.send_request(null, {
-      uri: url.pathname + url.search,
-      method: request.method,
-      headers: Object.fromEntries(
-        Object.entries(request.headers).map(([k, v]) => [k, Array.from(v)]),
-      ),
-      body: request.body.length
-        ? new TextDecoder('utf-8', { fatal: true }).decode(request.body)
-        : null,
-    })
-    const raw = prover.transcript()
-    if (raw.sent.length > 4096 || raw.recv.length > 32768)
-      throw new Error('Transcript acceptance limit exceeded')
-    transcript = { sent: Uint8Array.from(raw.sent), recv: Uint8Array.from(raw.recv) }
-    stage = 'sent'
-    reply({ type: 'sent', transcript: { sent: transcript.sent, received: transcript.recv } })
-    return
-  }
-  if (data.type === 'reveal' && stage === 'sent' && prover && transcript && io) {
-    stage = 'revealing'
-    const reveals = data.reveals as Reveals
-    const plan = planNotarization(transcript, { sent: reveals.sent, recv: reveals.received })
-    const raw = await prover.reveal(plan.reveal, plan.commit)
-    const openings = []
-    for (const direction of ['sent', 'recv'] as const) {
-      raw[direction] = raw[direction].map((o) => ({
-        hash: Uint8Array.from(o.hash),
-        blinder: Uint8Array.from(o.blinder),
-      }))
-      for (const { start, end, blinder } of correlateOpenings(
-        transcript[direction],
-        plan.commit[direction],
-        raw[direction],
-        direction,
-      )) {
-        openings.push({
-          direction: direction === 'recv' ? 'received' : 'sent',
-          start,
-          end,
-          blinder,
-        })
+  async function work(data: Record<string, unknown>) {
+    if (data.type === 'prepare' && stage === 'new') {
+      stage = 'preparing'
+      target = String(data.url)
+      const tlsn = await initialize(data)
+      const socket = new WebSocket(deriveNotaryWebSocketUrl(String(data.notaryAddress)))
+      io = socketIo(socket)
+      await waitForOpen(socket)
+      prover = new tlsn.Prover({
+        server_name: new URL(target).hostname,
+        mode: 'Proxy',
+        max_sent_data: 4096,
+        max_recv_data: 32768,
+        network: 'Bandwidth',
+      })
+      await prover.setup(io)
+      stage = 'prepared'
+      reply({ type: 'prepared' })
+      return
+    }
+    if (data.type === 'send' && stage === 'prepared' && prover) {
+      stage = 'sending'
+      const request = data.request as ExactHttpRequest
+      if (request.url !== target) throw new Error('Request target changed')
+      const url = new URL(target)
+      await prover.send_request(null, {
+        uri: url.pathname + url.search,
+        method: request.method,
+        headers: Object.fromEntries(
+          Object.entries(request.headers).map(([k, v]) => [k, Array.from(v)]),
+        ),
+        body: request.body.length
+          ? new TextDecoder('utf-8', { fatal: true }).decode(request.body)
+          : null,
+      })
+      const raw = prover.transcript()
+      if (raw.sent.length > 4096 || raw.recv.length > 32768)
+        throw new Error('Transcript acceptance limit exceeded')
+      transcript = { sent: Uint8Array.from(raw.sent), recv: Uint8Array.from(raw.recv) }
+      stage = 'sent'
+      reply({ type: 'sent', transcript: { sent: transcript.sent, received: transcript.recv } })
+      return
+    }
+    if (data.type === 'reveal' && stage === 'sent' && prover && transcript && io) {
+      stage = 'revealing'
+      const reveals = data.reveals as Reveals
+      const plan = planNotarization(transcript, { sent: reveals.sent, recv: reveals.received })
+      const raw = await prover.reveal(plan.reveal, plan.commit)
+      const openings = []
+      for (const direction of ['sent', 'recv'] as const) {
+        raw[direction] = raw[direction].map((o) => ({
+          hash: Uint8Array.from(o.hash),
+          blinder: Uint8Array.from(o.blinder),
+        }))
+        for (const { start, end, blinder } of correlateOpenings(
+          transcript[direction],
+          plan.commit[direction],
+          raw[direction],
+          direction,
+        )) {
+          openings.push({
+            direction: direction === 'recv' ? 'received' : 'sent',
+            start,
+            end,
+            blinder,
+          })
+        }
       }
+      reply({ type: 'revealed', openings })
+      // Final channel completion has a deadline independent of proof generation.
+      const finalIo = io
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let frame: Uint8Array
+      try {
+        frame = await Promise.race([
+          (async () => {
+            await prover!.finish()
+            return readFinalFrame(finalIo)
+          })(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              void finalIo.close()
+              reject(new Error('Notary finalization timed out'))
+            }, 30000)
+          }),
+        ])
+      } finally {
+        clearTimeout(timer)
+      }
+      const wire = decodeAttestationFrame(frame)
+      const { decoded } = correlateAttestation(transcript, plan, raw, wire.attestedData)
+      await io.close()
+      prover.free()
+      prover = undefined
+      transcript = undefined
+      io = undefined
+      stage = 'done'
+      reply({ type: 'attestation', attestation: { ...wire, decoded } })
+      port.close()
+      return
     }
-    reply({ type: 'revealed', openings })
-    // Final channel completion has a deadline independent of proof generation.
-    const finalIo = io
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let frame: Uint8Array
-    try {
-      frame = await Promise.race([
-        (async () => {
-          await prover!.finish()
-          return readFinalFrame(finalIo)
-        })(),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            void finalIo.close()
-            reject(new Error('Notary finalization timed out'))
-          }, 30000)
-        }),
-      ])
-    } finally {
-      clearTimeout(timer)
-    }
-    const wire = decodeAttestationFrame(frame)
-    const { decoded } = correlateAttestation(transcript, plan, raw, wire.attestedData)
-    reply({ type: 'attestation', attestation: { ...wire, decoded } })
-    stage = 'done'
-    await io.close()
-    self.close()
-    return
+    throw new Error('Invalid notarization sequence')
   }
-  throw new Error('Invalid notarization sequence')
+  function dispatch(data: Record<string, unknown>) {
+    void work(data).catch(async () => {
+      reply({ type: 'error' })
+      stage = 'done'
+      await io?.close()
+      port.close()
+    })
+  }
+  port.onmessage = (event) => dispatch(event.data)
+  dispatch(initial)
 }
 self.addEventListener('message', (event: MessageEvent<Record<string, unknown>>) => {
-  void work(event.data).catch(async () => {
-    reply({ type: 'error' })
-    stage = 'done'
-    await io?.close()
-    self.close()
-  })
+  session(event.data.port as MessagePort, event.data)
 })
