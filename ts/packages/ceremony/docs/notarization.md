@@ -440,8 +440,12 @@ selective disclosures and correlation with canonical final attestations.
 [session.worker.ts](../src/prover/notarization/session.worker.ts). X creates one
 `Notarization` instance for both requests, sharing WASM initialization and its
 thread pool. Each request has a separate native message channel, TLSNotary prover,
-socket, transcript and attestation. Setup remains concurrent; no state or runtime
-is shared across ceremonies. The runtime exposes its combined abort signal for
+socket, transcript and attestation. Each socket opens alongside shared WASM
+initialization; TLS session setup waits for both and checks the socket is still
+open. A failed connection or initialization reports failure without waiting for
+the other branch and closes the socket; the owner aborts the shared worker and
+sibling sessions. Setup remains concurrent; no state or runtime is shared across
+ceremonies. The runtime exposes its combined abort signal for
 concurrent dependent work, so even a failure after a session is prepared can
 cancel a pending Bridge fetch. GitHub uses the same adapter for its one browser
 identity request. Real shared-runtime concurrency and timing remain subject to
