@@ -11,7 +11,7 @@ interface Fixture {
 }
 
 const fixture = JSON.parse(
-  readFileSync(new URL('../../../../test-fixtures/google-v1.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../../../test-fixtures/google-v1.json', import.meta.url), 'utf8'),
 ) as Fixture
 const digest = new Uint8Array(Buffer.from(fixture.authorizationDigest, 'hex'))
 

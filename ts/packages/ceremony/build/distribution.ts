@@ -61,8 +61,7 @@ try {
   const graph = emitted.graph
   const workerProfile = (file: string): ResponseProfile => {
     const modules = graph.get(file)?.modules ?? []
-    if (modules.some((m) => m.endsWith('/prover/notarization/session.worker.ts')))
-      return 'executionWorker'
+    if (modules.some((m) => m.endsWith('/notarization/session.worker.ts'))) return 'executionWorker'
     return modules.some((m) => m.endsWith('?worker&url')) ? 'proofWorker' : 'leafWorker'
   }
   for (const item of emitted.output) {

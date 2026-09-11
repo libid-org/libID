@@ -6,8 +6,8 @@ import {
   selectIdentityReveals,
   selectTokenReveals,
 } from '../platforms/x/1/transcript.js'
-import { planNotarization } from './notarization/notarize.js'
-import type { ExactHttpRequest } from './notarization/session.js'
+import { planNotarization } from './notarize.js'
+import type { ExactHttpRequest } from './session.js'
 import { quotedRange } from './transcript.js'
 
 const utf8 = (value: string) => new TextEncoder().encode(value)

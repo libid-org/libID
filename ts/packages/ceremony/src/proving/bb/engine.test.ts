@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { ProofEngine } from './engine.js'
 
-vi.mock('../assets.js', () => ({ resolve: () => 'https://ccdp.test/asset' }))
-vi.mock('./bb/assets.js', () => ({ abi: {}, acvm: {}, bbWasm: {}, crs: [{}] }))
+vi.mock('../../assets.js', () => ({ resolve: () => 'https://ccdp.test/asset' }))
+vi.mock('./assets.js', () => ({ abi: {}, acvm: {}, bbWasm: {}, crs: [{}] }))
 afterEach(() => vi.unstubAllGlobals())
 
 function engine() {

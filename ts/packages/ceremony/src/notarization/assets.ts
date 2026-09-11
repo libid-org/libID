@@ -1,4 +1,4 @@
-import * as assets from '../../assets.js'
+import * as assets from '../assets.js'
 
 const release = assets.archive(
   'https://github.com/libid-org/notary/releases/download/v0.3.0-rc.3/tlsn-wasm-0.3.0-rc.3.tar.gz',

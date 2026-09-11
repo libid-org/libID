@@ -215,7 +215,7 @@ The popup package owns isolation selection and carrier continuity. Prover
 registers its CCDP handlers, awaits connection readiness, and only then emits
 `ProverReady` and accepts proof input. It joins the cached flights in the active
 top-level document. The OAuth-bridge Callback installs no Worker.
-`prover/notarization` is an internal leaf shared by
+`notarization` is an internal leaf shared by
 the X and GitHub prover leaves, not another package entrypoint or artifact.
 
 Shared integrations declare their resources in lightweight `assets` modules,
@@ -256,7 +256,7 @@ prover ───> platforms/<platform>/<version>/prover ───> types
                               │
                               └──> platforms/authorization
 
-platforms/{x,github}/<version>/prover ───> prover/notarization
+platforms/{x,github}/<version>/prover ───> notarization
 
 prefetch, artifact build ───> platforms/assets ───> platforms/<platform>/<version>/assets
 platforms/<platform>/<version>/prover ───────────> platforms/<platform>/<version>/assets
