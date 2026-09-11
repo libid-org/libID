@@ -3,9 +3,9 @@ import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { claimRootWorker } from '../../assets/registration.js'
 import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
 import type { ProverContext } from '../../platforms/context.js'
-import { progressView, view } from '../../ui.js'
 import { AppStartProver, CancelCeremony, ProverIdentityProof, ProverNotifyEvent } from '../index.js'
 import { readProver, route } from '../navigation.js'
+import { progressView, view } from './ui.js'
 
 const implementations: Record<
   string,

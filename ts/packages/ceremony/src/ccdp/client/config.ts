@@ -1,7 +1,7 @@
 import { isFormClientId } from '../../platforms/authorization.js'
 import { type PlatformId, supportedPlatforms } from '../../platforms/index.js'
-import { hasExactKeys, isRecord } from '../../primitives.js'
-import { origin, redirect, text, uint } from '../index.js'
+import { hasExactKeys, isRecord, origin, text, uint } from '../../primitives.js'
+import { redirect } from '../index.js'
 
 export interface PlatformConfig {
   clientId: string

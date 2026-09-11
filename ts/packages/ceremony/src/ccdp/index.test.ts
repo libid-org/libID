@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { origin } from '../primitives.js'
 import {
   AbortCeremony,
   AppStartProver,
   CallbackReady,
   CancelCeremony,
-  origin,
   PrefetchReady,
   PrefetchStarted,
   ProverIdentityProof,

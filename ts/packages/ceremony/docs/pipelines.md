@@ -218,15 +218,17 @@ its Prover pipeline. The catalog is closed and client-safe.
 - [Result contract](client.md#result-and-lifecycle): identity and OAuth proof assembly.
 - [Normative platform profiles](../../../../specs/platform-ceremonies.md): encodings and proof statements.
 
-[index.ts](../src/platforms/index.ts) derives the public types and dispatches structural validation.
+[index.ts](../src/platforms/index.ts) composes each version's URL builder and proof validators
+directly, derives public types and dispatches structural validation. URL modules
+contain authorization request construction; `types.ts` owns identity/proof shapes.
 [authorization.ts](../src/platforms/authorization.ts) provides shared digest/PKCE helpers;
 [platforms.assets.ts](../src/platforms/platforms.assets.ts) aggregates data-only declarations.
 
-| Platform | Client leaf | Prover leaf | Pipeline contract |
+| Platform | Authorization URL | Prover leaf | Pipeline contract |
 |---|---|---|---|
-| Google v1 | [client](../src/platforms/google/1/url.ts) | [prover](../src/platforms/google/1/prover.ts) | [Google](pipelines.md#google) |
-| X v1 | [client](../src/platforms/x/1/url.ts) | [prover](../src/platforms/x/1/prover.ts) | [X](pipelines.md#x) |
-| GitHub v1 | [client](../src/platforms/github/1/url.ts) | [prover](../src/platforms/github/1/prover.ts) | [GitHub](pipelines.md#github) |
+| Google v1 | [url](../src/platforms/google/1/url.ts) | [prover](../src/platforms/google/1/prover.ts) | [Google](pipelines.md#google) |
+| X v1 | [url](../src/platforms/x/1/url.ts) | [prover](../src/platforms/x/1/prover.ts) | [X](pipelines.md#x) |
+| GitHub v1 | [url](../src/platforms/github/1/url.ts) | [prover](../src/platforms/github/1/prover.ts) | [GitHub](pipelines.md#github) |
 
 Execution imports its asset declarations; declarations never import execution.
 See the [qualification record](qualification.md) before treating a pipeline

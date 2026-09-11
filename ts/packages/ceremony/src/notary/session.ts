@@ -1,7 +1,7 @@
 import { resolve as resolveAsset } from '../assets/index.js'
-import { origin, webUrl } from '../ccdp/index.js'
 import { ceremonyError } from '../errors.js'
-import type { NotaryAttestation } from '../platforms/types.js'
+import { origin, webUrl } from '../primitives.js'
+import type { NotaryAttestation } from './decode.js'
 import type { ByteRange } from './notarize.js'
 import { tlsnModule, tlsnWasm } from './notary.assets.js'
 

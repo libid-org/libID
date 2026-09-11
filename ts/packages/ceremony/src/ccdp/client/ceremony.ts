@@ -15,13 +15,12 @@ import {
   platforms,
   supportedPlatforms,
 } from '../../platforms/index.js'
-import { hasExactKeys, isRecord } from '../../primitives.js'
+import { hasExactKeys, isRecord, origin } from '../../primitives.js'
 import {
   AbortCeremony,
   type AppStartProver,
   CallbackReady,
   CancelCeremony,
-  origin,
   PrefetchReady,
   PrefetchStarted,
   ProverIdentityProof,

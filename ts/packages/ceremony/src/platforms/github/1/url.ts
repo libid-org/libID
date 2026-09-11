@@ -1,9 +1,3 @@
-export * from './types.js'
-
-export const platformId = 'github'
-
-export const platformCeremonyVersion = 1
-
 export const pkce = true
 
 const AUTHORIZATION_ENDPOINT = 'https://github.com/login/oauth/authorize'

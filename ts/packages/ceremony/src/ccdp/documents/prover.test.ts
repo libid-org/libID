@@ -27,7 +27,7 @@ vi.mock('../../platforms/x/1/prover.js', () => ({ prove }))
 
 vi.mock('../../platforms/github/1/prover.js', () => ({ prove }))
 
-vi.mock('../../ui.js', () => ({
+vi.mock('./ui.js', () => ({
   view: vi.fn(),
   progressView: () => ({ stop: vi.fn(), update: vi.fn() }),
 }))

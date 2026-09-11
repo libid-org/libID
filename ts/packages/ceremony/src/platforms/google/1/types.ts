@@ -1,5 +1,5 @@
-import { hasExactKeys, isRecord } from '../../../primitives.js'
-import { fixedBytes, type Identity, isIdentity, proofBytes } from '../../types.js'
+import { fixedBytes, hasExactKeys, isRecord } from '../../../primitives.js'
+import { type Identity, isIdentity, proofBytes } from '../../types.js'
 
 export const MAX_HONK_PROOF_BYTES = 4 * 1024 * 1024
 

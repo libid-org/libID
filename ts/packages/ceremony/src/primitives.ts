@@ -1,4 +1,4 @@
-// Shared byte-level primitives. Admission rule: a helper lives here only
+// Shared byte and validation primitives. Admission rule: a helper lives here only
 // when its consumers span two or more entrypoint bundles (client, popup,
 // prover); anything narrower lives beside its one consumer.
 
@@ -72,4 +72,40 @@ export function hasExactKeys(rec: Record<string, unknown>, keys: readonly string
   if (Object.keys(rec).length !== keys.length) return false
   for (const k of keys) if (!Object.hasOwn(rec, k)) return false
   return true
+}
+
+export const fixedBytes = (v: unknown, n: number): v is Uint8Array =>
+  v instanceof Uint8Array && v.length === n
+
+export function uint(value: unknown, max: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max
+}
+
+export function text(value: unknown, max: number): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !/\p{Cc}/u.test(value) &&
+    new TextEncoder().encode(value).length <= max
+  )
+}
+
+export function webUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  try {
+    const u = new URL(value)
+    return (
+      (u.protocol === 'https:' ||
+        (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) &&
+      !u.username &&
+      !u.password &&
+      u.href === value
+    )
+  } catch {
+    return false
+  }
+}
+
+export function origin(value: unknown): value is string {
+  return typeof value === 'string' && webUrl(`${value}/`) && new URL(value).origin === value
 }

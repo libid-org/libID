@@ -171,3 +171,4 @@ imports the [cache implementation](prefetch.md#implementation-guide). [prover.ts
 handles readiness, UI, cancellation and delivery while dispatching the
 [platform pipelines](pipelines.md#implementation-guide). Proving machinery stays in
 [barretenberg/](proving.md#implementation-guide).
+[ui.ts](../src/ccdp/documents/ui.ts) supplies the UI shared by all three documents.

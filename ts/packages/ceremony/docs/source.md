@@ -10,8 +10,9 @@ exports. The guides below describe each module and its contract.
 - [Notary](notarization.md#implementation-guide): TLSNotary sessions, transcripts and attestations.
 - [Assets](prefetch.md#implementation-guide): resource declarations and resolution, root Service Worker, cached bytes and pending fetches.
 
-[ui.ts](../src/ui.ts) owns the native document UI. [primitives.ts](../src/primitives.ts) and
-[response.ts](../src/response.ts) contain shared encoding and bounded-response helpers.
+[ui.ts](../src/ccdp/documents/ui.ts) owns the native document UI.
+[primitives.ts](../src/primitives.ts) owns shared byte and validation helpers;
+[response.ts](../src/response.ts) reads bounded response bodies.
 [json.ts](../src/json.ts) detects duplicate JSON keys; [progress.ts](../src/progress.ts)
 accounts for work across platform pipelines and proving.
 The source root exports the client-safe platform catalog, not browser entrypoints.

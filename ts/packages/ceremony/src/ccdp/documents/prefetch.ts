@@ -4,8 +4,8 @@ import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { dispatchPrefetch, rootWorker } from '../../assets/registration.js'
 import { startWorker } from '../../assets/worker.js'
 import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
-import { view } from '../../ui.js'
 import { readPrefetch } from '../navigation.js'
+import { view } from './ui.js'
 
 /** Authenticate the Prefetch page and acknowledge selected fetch dispatch before OAuth navigation. */
 export async function startPrefetch(fragment: string): Promise<void> {

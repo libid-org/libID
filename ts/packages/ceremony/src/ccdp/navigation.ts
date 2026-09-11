@@ -1,4 +1,5 @@
-import { CCDP_VERSION, PLATFORM, UUID, uint } from './index.js'
+import { uint } from '../primitives.js'
+import { CCDP_VERSION, PLATFORM, UUID } from './index.js'
 
 export interface OAuthReturn {
   query: string

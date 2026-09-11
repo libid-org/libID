@@ -4,7 +4,7 @@ import { packageDir } from '../build/release.ts'
 
 for (const [entry, name] of [
   ['e2e/app.ts', 'app.js'],
-  ['src/ui.ts', 'ui.js'],
+  ['src/ccdp/documents/ui.ts', 'ui.js'],
   ['../popup/src/index.ts', 'popup.js'],
 ])
   await build({
