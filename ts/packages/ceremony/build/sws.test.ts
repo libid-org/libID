@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
@@ -23,6 +23,27 @@ test('sidecars cannot overwrite archive members or executable resources [LIBID-A
         ),
       /sidecar/,
     )
+})
+
+test('rebuild removes obsolete compression sidecars [LIBID-ASSET-023]', () => {
+  mkdirSync(cache, { recursive: true })
+  const dir = mkdtempSync(join(cache, 'sws-sidecars-'))
+  const publish = (body: string) =>
+    writeDistribution(
+      dir,
+      new Map([['/index.html', { bytes: Buffer.from(body), headers: { ...document } }]]),
+    )
+  try {
+    publish('<p>compressible</p>'.repeat(100))
+    for (const extension of ['br', 'gz'])
+      assert.ok(existsSync(join(dir, `public/index.html.${extension}`)))
+    publish('short')
+    assert.equal(readFileSync(join(dir, 'public/index.html'), 'utf8'), 'short')
+    for (const extension of ['br', 'gz'])
+      assert.ok(!existsSync(join(dir, `public/index.html.${extension}`)))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-027]', {

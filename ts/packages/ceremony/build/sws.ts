@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { stringify } from 'smol-toml'
@@ -31,9 +31,12 @@ export function writeDistribution(
     const compressed = brotliCompressSync(bytes, {
       params: { [constants.BROTLI_PARAM_QUALITY]: 6 },
     })
+    // Rebuilds must not leave a previous body available through content negotiation.
     if (compressed.length < bytes.length) writeFileSync(`${target}.br`, compressed)
+    else rmSync(`${target}.br`, { force: true })
     const gzip = gzipSync(bytes, { level: 6 })
     if (gzip.length < bytes.length) writeFileSync(`${target}.gz`, gzip)
+    else rmSync(`${target}.gz`, { force: true })
     // With redirects disabled the pinned SWS appends the resolved filename for header matching.
     rules.push({ source: `${physical}/${basename(physical)}`, headers })
   }
