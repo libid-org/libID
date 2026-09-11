@@ -91,6 +91,18 @@ Platform Ceremony Version independently versions one platform's authorization,
 OAuth, proof, and output semantics. Popup connection controls and the OAuth
 Bridge API are independently versioned as well.
 
+#### OAuth return fields
+
+Prover validates the selected profile's transport, state, expected credential,
+issuer where required, and success/error outcome. It ignores other bounded,
+syntactically valid return fields without a metadata allowlist, following
+[OAuth's response rule](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.1.2).
+New fields such as Google's `version_info` therefore require no package update.
+Ignored metadata cannot change the outcome or enter the result, proof, or events.
+Duplicate fields, malformed encoding, mixed outcomes, unexpected credentials,
+and invalid required fields still reject. Error descriptions are metadata;
+only `error` determines an error or denial outcome.
+
 #### Popup and fragment model
 
 The **ceremony popup** is a reusable browsing context, not an actor or

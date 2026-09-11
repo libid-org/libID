@@ -5,20 +5,8 @@ export type GoogleOAuthOutcome =
   | { outcome: 'denied'; state: string }
   | { outcome: 'error'; state: string; error: string }
 
-// The closed return grammar of REQ-PLAT-12: fields the provider is known to
-// send. Unlisted keys, duplicates, decoded aliases, and mixed outcomes reject.
-const AUTHORITATIVE = new Set(['state', 'id_token', 'error'])
-const DIAGNOSTIC = new Set([
-  'iss',
-  'authuser',
-  'prompt',
-  'scope',
-  'hd',
-  'session_state',
-  'error_description',
-  'error_uri',
-])
-const FIELD = /^([A-Za-z][A-Za-z0-9_]{0,63})=(.*)$/
+// Ignore provider metadata; unexpected credentials still violate the ID-token profile.
+const FIELD = /^([A-Za-z0-9_.-]{1,64})=(.*)$/
 const MAX_FIELD_VALUE = 8192
 const PRINTABLE_VALUE = /^[\x20-\x7e]*$/
 
@@ -29,9 +17,14 @@ function parseFields(component: string): Map<string, string> | null {
     const match = FIELD.exec(part)
     if (!match) return null
     const [, key, value] = match
-    if (!AUTHORITATIVE.has(key) && !DIAGNOSTIC.has(key)) return null
+    if (['code', 'access_token', 'refresh_token'].includes(key)) return null
     if (fields.has(key)) return null
     if (value.length > MAX_FIELD_VALUE || !PRINTABLE_VALUE.test(value)) return null
+    try {
+      decodeURIComponent(value.replace(/\+/g, ' '))
+    } catch {
+      return null
+    }
     fields.set(key, value)
   }
   return fields
