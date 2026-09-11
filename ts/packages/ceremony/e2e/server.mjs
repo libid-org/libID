@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { createHash, createPublicKey } from 'node:crypto'
 import { createServer as createHttpServer, request as proxyRequest } from 'node:http'
 import { createServer } from 'node:https'
 import { join } from 'node:path'
@@ -18,6 +19,14 @@ const counts = new Map(),
 const graph = JSON.parse(readFileSync(join(artifactDir, 'distribution-graph.json')))
 const html = (body) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ceremony qualification</title><body>${body}</body></html>`
+const certificate = makeCertificate(['localhost'])
+// Chromium's HTTP cache needs a clean certificate result, not just an ignored TLS error.
+writeFileSync(
+  join(packageDir, '.cache/e2e/cert-spki'),
+  createHash('sha256')
+    .update(createPublicKey(certificate.cert).export({ type: 'spki', format: 'der' }))
+    .digest('base64'),
+)
 // Both schemes run the same emitted bytes and protocol tests on separate origins.
 for (const secure of [true, false]) {
   const offset = secure ? 200 : 100
@@ -26,7 +35,7 @@ for (const secure of [true, false]) {
     bridge = `${scheme}://localhost:${4682 + offset}`,
     ccdp = `${scheme}://localhost:${4683 + offset}`
   const allowedOrigins = [app, ccdp]
-  const server = secure ? createServer.bind(null, makeCertificate(['localhost'])) : createHttpServer
+  const server = secure ? createServer.bind(null, certificate) : createHttpServer
   // Prepared once, independently of OAuth requests; both bytes and policy change together.
   const callback = prepareCallback(
     readFileSync(join(artifactDir, 'public/ccdp/callback.html'), 'utf8'),
