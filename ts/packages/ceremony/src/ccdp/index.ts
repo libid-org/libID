@@ -1,7 +1,7 @@
 import type { MessageType } from '@libid/popup'
 import { type FailureCode, failureMessages } from '../errors.js'
 import { type ProverStage, stages } from '../events.js'
-import { b64urlDecode, hasExactKeys, isRecord } from '../primitives.js'
+import { b64urlDecode, hasExactKeys, isRecord, origin, text, uint, webUrl } from '../primitives.js'
 
 /** Pure CCDP codecs: shape and bounds validation only; transport authentication belongs to popup. */
 export const CCDP_VERSION = 1
@@ -11,39 +11,6 @@ export const MAX_REDIRECT_URI_BYTES = 2048
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 export const PLATFORM = /^[a-z][a-z0-9-]{0,63}$/
-
-export function uint(value: unknown, max: number): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max
-}
-
-export function text(value: unknown, max: number): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    !/\p{Cc}/u.test(value) &&
-    new TextEncoder().encode(value).length <= max
-  )
-}
-
-export function webUrl(value: unknown): value is string {
-  if (typeof value !== 'string') return false
-  try {
-    const u = new URL(value)
-    return (
-      (u.protocol === 'https:' ||
-        (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) &&
-      !u.username &&
-      !u.password &&
-      u.href === value
-    )
-  } catch {
-    return false
-  }
-}
-
-export function origin(value: unknown): value is string {
-  return typeof value === 'string' && webUrl(`${value}/`) && new URL(value).origin === value
-}
 
 export function redirect(value: unknown): value is string {
   return text(value, MAX_REDIRECT_URI_BYTES) && webUrl(value) && !/[?#]/.test(value)

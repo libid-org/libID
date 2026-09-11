@@ -1,9 +1,3 @@
-export * from './types.js'
-
-export const platformId = 'x'
-
-export const platformCeremonyVersion = 1
-
 export const pkce = true
 
 const AUTHORIZATION_ENDPOINT = 'https://x.com/i/oauth2/authorize'

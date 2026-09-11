@@ -85,7 +85,7 @@ identifier, and wraps the proof with its selected version and authorization nonc
 | [src/notary/](notarization.md#implementation-guide) | Browser TLSNotary sessions, canonical decoding and correlation |
 | [src/assets/](prefetch.md#implementation-guide) | Root Service Worker, byte caches and pending-fetch joins |
 | [src/ccdp/documents/](documents.md#implementation-guide) | Callback, Prefetch and Prover page entrypoints |
-| `src/ui.ts` | Native, package-owned DOM and progress |
+| `src/ccdp/documents/ui.ts` | Native, package-owned DOM and progress |
 | [build/](build.md) | Compiler-owned graph and static response policies |
 | [e2e/](browser-tests.md) | Independent HTTPS origins and actual-popup browser checks |
 

@@ -13,7 +13,7 @@ vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
 
 vi.mock('@libid/popup', () => ({ PopupConnection: { accept }, PopupWindow: { current } }))
 
-vi.mock('../../ui.js', () => ({ view }))
+vi.mock('./ui.js', () => ({ view }))
 
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 

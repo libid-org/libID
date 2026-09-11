@@ -1,15 +1,28 @@
 import type { ProverIdentityProof } from '../ccdp/index.js'
-import * as githubV1 from './github/1/url.js'
-import * as googleV1 from './google/1/url.js'
+import {
+  validateIdentity as githubIdentity,
+  validateProof as githubProof,
+} from './github/1/types.js'
+import * as githubUrl from './github/1/url.js'
+import {
+  validateIdentity as googleIdentity,
+  validateProof as googleProof,
+} from './google/1/types.js'
+import * as googleUrl from './google/1/url.js'
 import type { Identity } from './types.js'
-import * as xV1 from './x/1/url.js'
+import { validateIdentity as xIdentity, validateProof as xProof } from './x/1/types.js'
+import * as xUrl from './x/1/url.js'
 
-export type { Identity, NotaryAttestation } from './types.js'
+export type { Identity } from './types.js'
 
 export const platforms = {
-  google: { versions: { 1: googleV1 } },
-  x: { versions: { 1: xV1 } },
-  github: { versions: { 1: githubV1 } },
+  google: {
+    versions: { 1: { ...googleUrl, validateIdentity: googleIdentity, validateProof: googleProof } },
+  },
+  x: { versions: { 1: { ...xUrl, validateIdentity: xIdentity, validateProof: xProof } } },
+  github: {
+    versions: { 1: { ...githubUrl, validateIdentity: githubIdentity, validateProof: githubProof } },
+  },
 } as const
 
 export type PlatformId = keyof typeof platforms

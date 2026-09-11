@@ -1,10 +1,4 @@
-export * from './types.js'
-
 import { b64urlEncode } from '../../../primitives.js'
-
-export const platformId = 'google'
-
-export const platformCeremonyVersion = 1
 
 /** Google carries the digest as the OIDC nonce; no PKCE (spec §5 table). */
 export const pkce = false

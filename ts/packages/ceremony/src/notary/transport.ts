@@ -1,6 +1,5 @@
-import { origin } from '../ccdp/index.js'
 import { parseJson } from '../json.js'
-import { hasExactKeys, isRecord } from '../primitives.js'
+import { hasExactKeys, isRecord, origin } from '../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES } from './decode.js'
 
 export const MAX_FRAME_BYTES = 10 * 1024 * 1024

@@ -1,13 +1,7 @@
+import { isAttestation, type NotaryAttestation } from '../../../notary/decode.js'
 import { hasExactKeys, isRecord } from '../../../primitives.js'
 import { isFormClientId } from '../../authorization.js'
-import {
-  type Identity,
-  isAttestation,
-  isIdentity,
-  isUserId,
-  type NotaryAttestation,
-  proofBytes,
-} from '../../types.js'
+import { type Identity, isIdentity, isUserId, proofBytes } from '../../types.js'
 
 export interface GitHubProofV1 {
   bearerLinkProof: Uint8Array

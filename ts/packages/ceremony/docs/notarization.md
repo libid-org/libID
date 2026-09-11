@@ -440,8 +440,10 @@ selective disclosures and correlation with canonical final attestations.
 independent sessions, provisional openings and cancellation contract.
 [session.worker.ts](../src/notary/session.worker.ts) owns socket/runtime overlap
 and finalization. Real runtime concurrency still requires the qualification above.
-[transport.ts](../src/notary/transport.ts) frames final output, [decode.ts](../src/notary/decode.ts) reads canonical
-attested bytes, and [notarize.ts](../src/notary/notarize.ts) correlates transcripts and openings.
+[transport.ts](../src/notary/transport.ts) frames final output.
+[decode.ts](../src/notary/decode.ts) owns canonical decoding, `NotaryAttestation` and
+its delivered-projection shape validator, consumed by platform proof validators.
+[notarize.ts](../src/notary/notarize.ts) correlates transcripts and openings.
 [http.ts](../src/notary/http.ts) decodes HTTP responses, preserving numeric
 identity IDs, and [transcript.ts](../src/notary/transcript.ts) provides byte-range
 and request-binding helpers. Provider-specific reveal selection stays in each platform.

@@ -28,50 +28,19 @@ This is an application-owned instance, not a package-global singleton. Client
 creation fetches and exact-validates `CeremonyConfig`; a configured platform is
 enabled only when the installed package has a closed implementation and at
 least one advertised ceremony version in common.
-One closed catalog derives `PlatformId`, `supportedPlatforms`, supported
-versions, and `ProofByPlatformVersion` from the same keys and validators:
+One closed [catalog](../src/platforms/index.ts) derives `PlatformId`,
+`supportedPlatforms`, supported versions and `ProofByPlatformVersion` from the
+same keys and validators. It composes each version's URL builder with the identity
+and proof validators from that version's `types.ts`.
+
+The public factory and client contract are:
 
 ```ts
 import type { LedgerId } from '@libid/ledger'
-import * as googleV1 from './platforms/google/1/url'
-import * as xV1 from './platforms/x/1/url'
-import * as githubV1 from './platforms/github/1/url'
+import type { Message, PopupConnection } from '@libid/popup'
+import type { Ceremony, PlatformId } from '@libid/ceremony/ccdp/client'
 
-const platforms = {
-  google: { versions: { 1: googleV1 } },
-  x: { versions: { 1: xV1 } },
-  github: { versions: { 1: githubV1 } },
-} as const
-
-export type PlatformId = keyof typeof platforms
-
-export type SupportedCeremonyVersion<P extends PlatformId> =
-  keyof (typeof platforms)[P]['versions'] & number
-
-export type ProofByPlatformVersion = {
-  [P in PlatformId]: {
-    [V in SupportedCeremonyVersion<P>]:
-      (typeof platforms)[P]['versions'][V] extends {
-        validateProof(value: unknown): infer Proof
-      } ? Proof : never
-  }
-}
-
-export declare function validateProofMessage<
-  P extends PlatformId,
-  V extends SupportedCeremonyVersion<P>,
->(
-  platformId: P,
-  platformCeremonyVersion: V,
-  message: ProverIdentityProof,
-): ProverIdentityProof & {
-  identity: Identity<P>
-  proof: ProofByPlatformVersion[P][V]
-}
-
-export const supportedPlatforms: readonly PlatformId[] = Object.freeze(
-  Object.keys(platforms) as PlatformId[],
-)
+export declare const supportedPlatforms: readonly PlatformId[]
 
 export declare function createCCDPClient(options: {
   oauthBridge: string
