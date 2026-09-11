@@ -21,8 +21,9 @@ the bridge's public transport and deployment boundary.
 ## Current Bridge integration
 
 The package follows the updated [Bridge PR #9](https://github.com/libid-org/libid-server-rs/pull/9)
-at `991d5c604acdb1a67099f28cbf37ad58b6c317a5`, with the RC3 and JSON-whitespace
-pins retained by [PR #10](https://github.com/libid-org/libid-server-rs/pull/10).
+at `991d5c604acdb1a67099f28cbf37ad58b6c317a5`. [PR #10](https://github.com/libid-org/libid-server-rs/pull/10)
+uses released libid-rs v0.4.0 for JSON-whitespace support and retains the matched
+RC3 runtime pins and server-specific GitHub error classification.
 Its public record uses `callbackPath`; Client resolves the registered redirect
 URI against its supplied Bridge origin once and sends that same URI in GitHub's
 `TokenRequest`. This intentionally differs from architecture PR #13 at
