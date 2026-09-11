@@ -6,7 +6,7 @@ import { buildBearerLinkWitness } from '../../../prover/bearerLink.js'
 import type { ProverContext } from '../../../prover/context.js'
 import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../prover/engine.js'
 import { bearerOpening, responseJson } from '../../../prover/http.js'
-import { prepareNotarization } from '../../../prover/notarization/session.js'
+import { Notarization } from '../../../prover/notarization/session.js'
 import { Progress } from '../../../prover/progress.js'
 import { isFormClientId } from '../../authorization.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
@@ -70,17 +70,10 @@ export async function prove(
       redirectUri: request.redirectUri,
       codeVerifier: request.codeVerifier,
     }
+    const notary = new Notarization(request.notaryAddress!, controller.signal)
     const tokenRequest = buildTokenRequest(input)
-    const tokenSession = observe(
-      prepareNotarization(tokenRequest.url, request.notaryAddress!, controller.signal),
-    )
-    const identitySession = observe(
-      prepareNotarization(
-        'https://api.x.com/2/users/me',
-        request.notaryAddress!,
-        controller.signal,
-      ),
-    )
+    const tokenSession = observe(notary.prepare(tokenRequest.url))
+    const identitySession = observe(notary.prepare('https://api.x.com/2/users/me'))
     const session = await tokenSession
     const transcript = await progress.step('token-session', () => session.send(tokenRequest))
     const body = responseJson(transcript)
