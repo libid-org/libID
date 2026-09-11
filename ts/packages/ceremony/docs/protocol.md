@@ -482,11 +482,12 @@ Carrier mechanics and proof-generation internals are omitted.
 ## Implementation guide
 
 Pure message types, decoder companions and navigation encodings shared by the Client
-and document entrypoints. The public `@libid/ceremony/ccdp` export stays browser-free.
+and document entrypoints. This internal module stays browser-free and has no
+public package subpath.
 
 - [Documents](documents.md#implementation-guide): Callback, Prefetch and Prover entrypoints.
 - [Routes and fragments](documents.md): versioned locations and private handoff.
 
-[index.ts](../src/ccdp/index.ts) defines the seven message companions. [navigation.ts](../src/ccdp/navigation.ts)
+[index.ts](../src/ccdp/index.ts) defines the nine message companions. [navigation.ts](../src/ccdp/navigation.ts)
 owns fragment codecs and state routing. `@libid/popup` supplies authenticated delivery,
 window lifecycle and continuity; CCDP owns no carrier implementation.

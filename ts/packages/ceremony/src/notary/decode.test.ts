@@ -8,7 +8,7 @@ import { decodeAttestedData, MAX_ATTESTED_DATA_BYTES } from './decode.js'
 const FIXTURE = Uint8Array.from(
   Buffer.from(
     readFileSync(
-      new URL('../../test-fixtures/libid-rs-239a4bb-attested-data.hex', import.meta.url),
+      new URL('./libid-rs-239a4bb-attested-data.fixture.hex', import.meta.url),
       'utf8',
     ).trim(),
     'hex',

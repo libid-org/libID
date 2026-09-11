@@ -5,6 +5,7 @@ import {
   bearerVerificationKey,
 } from '../src/barretenberg/circuits/bearer_link/bearer_link.assets.js'
 import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer_link/inputs.js'
+import fixture from '../src/barretenberg/circuits/oidc_google/google-v1.fixture.json'
 import { buildGoogleWitness } from '../src/barretenberg/circuits/oidc_google/inputs.js'
 import { ProofEngine } from '../src/barretenberg/engine.js'
 import { Notarization } from '../src/notary/session.js'
@@ -12,7 +13,6 @@ import {
   circuit as google,
   verificationKey as googleKey,
 } from '../src/platforms/google/1/google.assets.js'
-import fixture from '../test-fixtures/google-v1.json'
 
 Object.assign(window, {
   async proveFixture(platform: 'google' | 'bearer') {

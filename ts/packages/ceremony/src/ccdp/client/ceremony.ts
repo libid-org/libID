@@ -8,11 +8,11 @@ import {
 } from '../../platforms/authorization.js'
 import {
   assembleResult,
-  greatestCommonVersion,
+  commonVersions,
   type IdentityResult,
   implementationFor,
   type PlatformId,
-  platforms,
+  type SupportedCeremonyVersion,
   supportedPlatforms,
 } from '../../platforms/index.js'
 import { hasExactKeys, isRecord, origin } from '../../primitives.js'
@@ -52,6 +52,7 @@ interface Input<P extends PlatformId> {
   notaryAddress: string | null
   chainId: Uint8Array
   platformId: P
+  version: SupportedCeremonyVersion<P>
   operationDomain: Uint8Array
   transactionData: Uint8Array
 }
@@ -60,7 +61,9 @@ interface Input<P extends PlatformId> {
 export interface CCDPClient {
   /** Intersection of supported platforms and versions advertised by the Bridge. */
   readonly enabledPlatforms: readonly PlatformId[]
-  /** Snapshot ledger/operation inputs and reserve the ID; no OAuth navigation occurs yet. */
+  /** Compatible versions in ascending order; returns an immutable list, empty for disabled platforms. */
+  enabledVersions<P extends PlatformId>(platformId: P): readonly SupportedCeremonyVersion<P>[]
+  /** Snapshot inputs before OAuth. Omitted version selects the highest compatible version. */
   new: <P extends PlatformId>(
     conn: PopupConnection<Message>,
     ceremonyId: string,
@@ -68,6 +71,7 @@ export interface CCDPClient {
     platformId: P,
     operationDomain: Uint8Array,
     transactionData: Uint8Array,
+    ceremonyVersion?: SupportedCeremonyVersion<P>,
   ) => Ceremony<P>
 }
 
@@ -81,13 +85,14 @@ export async function createCCDPClient(options: { oauthBridge: string }): Promis
 /** Internal construction from an already validated, frozen Bridge configuration. */
 export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
   const liveIds = new Set<string>()
+  const enabledVersions = <P extends PlatformId>(platform: P) =>
+    commonVersions(platform, config.platforms[platform]?.ceremonyVersions ?? [])
   const enabledPlatforms = Object.freeze(
-    supportedPlatforms.filter((p) =>
-      config.platforms[p]?.ceremonyVersions.some((v) => Object.hasOwn(platforms[p].versions, v)),
-    ),
+    supportedPlatforms.filter((p) => enabledVersions(p).length > 0),
   )
   return Object.freeze({
     enabledPlatforms,
+    enabledVersions,
     new<P extends PlatformId>(
       conn: PopupConnection<Message>,
       id: string,
@@ -95,9 +100,14 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
       platformId: P,
       operationDomain: Uint8Array,
       transactionData: Uint8Array,
+      ceremonyVersion?: SupportedCeremonyVersion<P>,
     ): Ceremony<P> {
       if (typeof id !== 'string' || !UUID.test(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
+      const available = enabledVersions(platformId)
+      const version =
+        ceremonyVersion === undefined ? available[available.length - 1] : ceremonyVersion
+      if (!available.includes(version)) throw new TypeError('Unsupported ceremony version')
       if (!ledgerId || typeof ledgerId.hash !== 'function')
         throw new TypeError('Invalid ledger identity')
       const hash = ledgerId.hash()
@@ -121,6 +131,7 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
         {
           connection: conn,
           platformId,
+          version,
           operationDomain,
           transactionData,
           chainId,
@@ -161,7 +172,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private readonly off: (() => void)[] = []
   private readonly connection: PopupConnection<Message>
   private readonly platform: P
-  private readonly version: ReturnType<typeof greatestCommonVersion<P>>
+  private readonly version: SupportedCeremonyVersion<P>
   private readonly retained: {
     operationDomain: Uint8Array
     authorizationNonce: Uint8Array
@@ -185,7 +196,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.connection = input.connection
     this.platform = input.platformId
     const platform = config.platforms[this.platform]
-    this.version = greatestCommonVersion(this.platform, platform.ceremonyVersions)
+    this.version = input.version
     this.retained = {
       operationDomain: Uint8Array.from(input.operationDomain),
       authorizationNonce: crypto.getRandomValues(new Uint8Array(32)),

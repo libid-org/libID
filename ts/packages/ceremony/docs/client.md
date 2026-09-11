@@ -29,7 +29,7 @@ creation fetches and exact-validates `CeremonyConfig`; a configured platform is
 enabled only when the installed package has a closed implementation and at
 least one advertised ceremony version in common.
 One closed [catalog](../src/platforms/index.ts) derives `PlatformId`,
-`supportedPlatforms`, supported versions and `ProofByPlatformVersion` from the
+`supportedPlatforms`, supported versions and internal proof-type mappings from the
 same keys and validators. It composes each version's URL builder with the identity
 and proof validators from that version's `types.ts`.
 
@@ -38,7 +38,7 @@ The public factory and client contract are:
 ```ts
 import type { LedgerId } from '@libid/ledger'
 import type { Message, PopupConnection } from '@libid/popup'
-import type { Ceremony, PlatformId } from '@libid/ceremony/ccdp/client'
+import type { Ceremony, PlatformId, SupportedCeremonyVersion } from '@libid/ceremony/ccdp/client'
 
 export declare const supportedPlatforms: readonly PlatformId[]
 
@@ -48,6 +48,7 @@ export declare function createCCDPClient(options: {
 
 interface CCDPClient {
   readonly enabledPlatforms: readonly PlatformId[]
+  enabledVersions<P extends PlatformId>(platformId: P): readonly SupportedCeremonyVersion<P>[]
   new: <P extends PlatformId>(
     conn: PopupConnection<Message>,
     ceremonyId: string,
@@ -55,6 +56,7 @@ interface CCDPClient {
     platformId: P,
     operationDomain: Uint8Array,
     transactionData: Uint8Array,
+    ceremonyVersion?: SupportedCeremonyVersion<P>,
   ) => Ceremony<P>
 }
 ```
@@ -78,6 +80,35 @@ stable discovery order, not a product ranking; applications may present
 another order. Neither array contains OAuth clients, ceremony versions, server
 configuration, or display metadata.
 
+For platform discovery, use the configured client's list:
+
+```ts
+const client = await createCCDPClient({ oauthBridge: 'https://oauth.example' })
+for (const platform of client.enabledPlatforms) {
+  // Render an action that passes this platform to client.new(...).
+}
+```
+
+`supportedPlatforms` can be read before configuration is fetched, but it does not
+establish that this Bridge enables a platform. An empty `enabledPlatforms` means
+there is no compatible configured ceremony. `client.enabledVersions(platform)`
+returns the immutable compatible version list in ascending order, or an empty list
+for a known but disabled platform. Unknown platform IDs reject. Names, icons and action layout belong
+to the consuming application; discovery returns IDs and version numbers only.
+
+```ts
+const versions = client.enabledVersions('google')
+// Choose an enabled version for the application's intended behavior.
+const ceremony = client.new(
+  connection, ceremonyId, ledgerId, 'google', operationDomain, transactionData, 1,
+)
+```
+
+Passing an unavailable version fails synchronously before reading ledger inputs,
+reserving the ceremony ID or starting OAuth. Omitting the last argument retains
+the highest-compatible-version default. Each current platform implements only v1;
+additional privacy modes require their own implementation and qualification.
+
 The composition supplies a [`LedgerId`](../../ledger/README.md) from
 `@libid/ledger`, an exact 32-byte `operationDomain` hash, and bounded opaque
 `transactionData`. The ledger package owns the canonical Chain Profile hash
@@ -98,15 +129,16 @@ hash. Prover needs no ledger dependency. Notary routing adds no field to the aut
 or `OAuthProof`.
 
 The client requires the selected platform to be enabled by validated
-`CeremonyConfig`, chooses the numerically greatest ceremony version supported
-both locally and by that platform, generates a fresh 32-byte authorization nonce,
+`CeremonyConfig`. An explicit `ceremonyVersion` must belong to the package/Bridge
+intersection; when omitted, the client selects its numerically greatest version.
+The client then generates a fresh 32-byte authorization nonce,
 computes the authorization digest and code verifier, and freezes all of those
 values before constructing OAuth or allowing OAuth-platform navigation. Client
 initialization has already fetched and validated `CeremonyConfig`, so `new`
 does only local synchronous work.
 
-`CCDPClient.new` takes six positional arguments in the order shown above;
-there is no separate input object. `ceremonyId` is a plain string which must be
+`CCDPClient.new` takes six required positional arguments and an optional trailing
+`ceremonyVersion`, in the order shown above; there is no separate input object. `ceremonyId` is a plain string which must be
 a lowercase UUIDv4. A composition normally generates one value and calls it
 `jobId` in its Job API and `ceremonyId` in this API. The equality is a
 composition invariant, not a shared branded type. The identifier is not chain
@@ -115,7 +147,7 @@ continuity. The composition uses the same value as the supplied popup
 connection's private `connectionId`; no CCDP message carries it. It is not a
 second authorization secret.
 
-`new` chooses the platform ceremony version, generates the fresh authorization
+`new` pins the selected platform ceremony version, generates the fresh authorization
 nonce, derives the code verifier from it and the Authorization Digest by the
 normative Proof Key for Code Exchange (PKCE) construction where required, and
 constructs the authorization request with the [CCDP-defined OAuth
@@ -258,6 +290,8 @@ verification remains authoritative.
 ## Result and lifecycle
 
 ```ts
+import type { NotaryAttestation, OAuthProof, PlatformId } from '@libid/ceremony'
+
 interface Identity<P extends PlatformId = PlatformId> {
   platformId: P
   oauthClientId: string
@@ -283,16 +317,6 @@ interface GitHubProofV1 {
   identityAttestation: NotaryAttestation
 }
 
-type OAuthProof<P extends PlatformId = PlatformId> = {
-  [K in P]: {
-    [V in SupportedCeremonyVersion<K>]: {
-      platformCeremonyVersion: V
-      authorizationNonce: Uint8Array   // exactly 32 bytes
-      proof: ProofByPlatformVersion[K][V]
-    }
-  }[SupportedCeremonyVersion<K>]
-}[P]
-
 type IdentityResult<P extends PlatformId = PlatformId> =
   | {
       [K in P]: {
@@ -304,6 +328,10 @@ type IdentityResult<P extends PlatformId = PlatformId> =
   | { status: 'denied' }
 
 ```
+
+`OAuthProof<P>` contains the selected `platformCeremonyVersion`, a 32-byte
+`authorizationNonce`, and the version-specific `proof`. To name a proof's payload
+without importing catalog internals, use `OAuthProof<'google'>['proof']`.
 
 The platform type selected in `CCDPClient.new` flows through `Ceremony`,
 `IdentityResult`, and `OAuthProof`. A literal platform input therefore returns
@@ -338,8 +366,9 @@ if (result.status === 'accepted') {
 Wrappers preserve inference by carrying `P extends PlatformId`; widening either
 input or return type to `PlatformId` intentionally widens the result union.
 
-`PlatformCeremonyVersion` is an unsigned 16-bit integer selected by the ceremony client
-from the versions advertised in ceremony configuration, never by the caller. It
+`PlatformCeremonyVersion` is an unsigned 16-bit integer from the package/Bridge
+intersection. The caller may select it explicitly, or omit it to use the highest
+compatible version. It
 versions one platform's complete ceremony semantics: authorization-digest
 construction, OAuth request and return handling, platform proof construction,
 and assembly of the final `OAuthProof`. It does not version a chain, Registry,
@@ -349,7 +378,9 @@ Together with `Identity.platformId`, the selected `PlatformCeremonyVersion`
 identifies the proof shape; there is no independent proof or contract-verifier
 version. Each current platform has only version `1`. A new ceremony version must add its own
 version slice, proof type, and validator, even when it deliberately retains the
-same fields. The caller cannot select a version directly.
+same fields. Versions may offer different disclosure behavior while both remaining
+secure. An application offering a specific behavior selects its corresponding
+version explicitly; the automatic default does not describe disclosure policy.
 `authorizationNonce` is exactly 32 cryptographically random bytes. For X and
 GitHub the Ceremony Client derives the code verifier from the Authorization
 Digest and that nonce, sends only the derived verifier to the prover, and
@@ -358,7 +389,7 @@ retains the nonce until the token exchange has completed. The accepted
 reproduce the binding. Exact authorization and PKCE encoding are delegated to
 the normative ceremony specification.
 
-`OAuthProof<P>` contains only the internally selected ceremony version,
+`OAuthProof<P>` contains only the selected ceremony version,
 client-generated authorization nonce, and platform-specific `proof`.
 `IdentityResult` carries `identity` beside it, not inside the platform proof.
 `platformId` is already in `Identity`; `operationDomain` and `transactionData`
