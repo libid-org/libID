@@ -91,7 +91,7 @@ independently cached response; the browser never downloads or unpacks a release
 archive. The [CCDP Distribution contract](distribution.md#proving-assets) owns their
 serving.
 Prover validates `AppStartProver.notaryAddress`, already
-[selected by CeremonyClient](client.md#notary-selection), and uses it
+[selected by CCDPClient](client.md#notary-selection), and uses it
 unchanged. It owns no notary profiles, ledger dependency, or override. All addresses use
 the same proving resources and prefetch graph; Google receives null and makes
 no notary request.
@@ -220,13 +220,13 @@ its Prover pipeline. The catalog is closed and client-safe.
 
 [index.ts](../src/platforms/index.ts) derives the public types and dispatches structural validation.
 [authorization.ts](../src/platforms/authorization.ts) provides shared digest/PKCE helpers;
-[assets.ts](../src/platforms/assets.ts) aggregates data-only declarations.
+[platforms.assets.ts](../src/platforms/platforms.assets.ts) aggregates data-only declarations.
 
 | Platform | Client leaf | Prover leaf | Pipeline contract |
 |---|---|---|---|
-| Google v1 | [client](../src/platforms/google/1/client.ts) | [prover](../src/platforms/google/1/prover.ts) | [Google](pipelines.md#google) |
-| X v1 | [client](../src/platforms/x/1/client.ts) | [prover](../src/platforms/x/1/prover.ts) | [X](pipelines.md#x) |
-| GitHub v1 | [client](../src/platforms/github/1/client.ts) | [prover](../src/platforms/github/1/prover.ts) | [GitHub](pipelines.md#github) |
+| Google v1 | [client](../src/platforms/google/1/url.ts) | [prover](../src/platforms/google/1/prover.ts) | [Google](pipelines.md#google) |
+| X v1 | [client](../src/platforms/x/1/url.ts) | [prover](../src/platforms/x/1/prover.ts) | [X](pipelines.md#x) |
+| GitHub v1 | [client](../src/platforms/github/1/url.ts) | [prover](../src/platforms/github/1/prover.ts) | [GitHub](pipelines.md#github) |
 
 Execution imports its asset declarations; declarations never import execution.
 See the [qualification record](qualification.md) before treating a pipeline

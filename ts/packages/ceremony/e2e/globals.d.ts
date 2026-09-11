@@ -1,4 +1,4 @@
-import type { CeremonyEvent } from '../src/client/index.js'
+import type { CeremonyEvent } from '../src/ccdp/client/index.js'
 import type { IdentityResult } from '../src/index.js'
 declare global {
   interface Window {

@@ -19,9 +19,9 @@
       "types": "./dist/ccdp/index.d.ts",
       "default": "./dist/ccdp/index.js"
     },
-    "./client": {
-      "types": "./dist/client/index.d.ts",
-      "default": "./dist/client/index.js"
+    "./ccdp/client": {
+      "types": "./dist/ccdp/client/index.d.ts",
+      "default": "./dist/ccdp/client/index.js"
     },
     "./prover": {
       "types": "./dist/ccdp/documents/prover.d.ts",
