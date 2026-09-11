@@ -67,6 +67,7 @@ export async function prove(
             body: encodeTokenRequest({
               code: returned.code,
               codeVerifier,
+              redirectUri: request.redirectUri,
               notaryAddress: request.notaryAddress!,
             }).slice().buffer,
             credentials: 'omit',

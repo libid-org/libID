@@ -6,6 +6,7 @@ export interface PlatformConfig {
   clientId: string
   ceremonyVersions: readonly number[]
 }
+/** Validated Bridge configuration with its registered redirect URI resolved once. */
 export interface CeremonyConfig {
   redirectUri: string
   ccdpOrigin: string
@@ -16,9 +17,11 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
   if (
     !origin(bridge) ||
     !isRecord(v) ||
-    !hasExactKeys(v, ['redirectUri', 'ccdpOrigin', 'platforms']) ||
-    !redirect(v.redirectUri) ||
-    new URL(v.redirectUri).origin !== bridge ||
+    !hasExactKeys(v, ['callbackPath', 'ccdpOrigin', 'platforms']) ||
+    typeof v.callbackPath !== 'string' ||
+    !v.callbackPath.startsWith('/') ||
+    v.callbackPath.startsWith('//') ||
+    !redirect(`${bridge}${v.callbackPath}`) ||
     !origin(v.ccdpOrigin) ||
     !isRecord(v.platforms)
   )
@@ -43,13 +46,14 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
     })
   }
   return Object.freeze({
-    redirectUri: v.redirectUri,
+    redirectUri: `${bridge}${v.callbackPath}`,
     ccdpOrigin: v.ccdpOrigin,
     platforms: Object.freeze(platforms),
   })
 }
 export async function fetchCeremonyConfig(bridge: string): Promise<CeremonyConfig> {
-  if (!origin(bridge)) throw new TypeError('oauthBridge must be a canonical HTTPS or localhost HTTP origin')
+  if (!origin(bridge))
+    throw new TypeError('oauthBridge must be a canonical HTTPS or localhost HTTP origin')
   const response = await fetch(`${bridge}${CONFIG_PATH}`, {
     mode: 'cors',
     credentials: 'omit',

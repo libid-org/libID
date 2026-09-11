@@ -18,6 +18,26 @@ participant in [CCDP](documents.md#callback-get-redirecturi), and proof generati
 platform-return, token-exchange, and proof semantics; this document fixes only
 the bridge's public transport and deployment boundary.
 
+## Current Bridge integration
+
+The package follows the updated [Bridge PR #9](https://github.com/libid-org/libid-server-rs/pull/9)
+at `991d5c604acdb1a67099f28cbf37ad58b6c317a5`, with the RC3 and JSON-whitespace
+pins retained by [PR #10](https://github.com/libid-org/libid-server-rs/pull/10).
+Its public record uses `callbackPath`; Client resolves the registered redirect
+URI against its supplied Bridge origin once and sends that same URI in GitHub's
+`TokenRequest`. This intentionally differs from architecture PR #13 at
+`83a7fbcd071abeb62aa2cfd6f9cc91933175a328`, which still specifies `redirectUri`
+in configuration and omits it from the token request. Deploy matching Client,
+CCDP and Bridge builds together; the old wire format is not accepted.
+
+The Bridge reads platform profiles from TOML `[[platforms]]` tables with
+`client_id` and `versions`; `BASE_URL`, `NOTARY_URL`, `CEREMONY_PLATFORMS` and
+Callback file overrides are no longer inputs. It retrieves Callback from CCDP
+before listening. It resolves the request-selected notary host and dials the
+configured wire port (default 7047), rather than the WebSocket transport specified
+below. DNS/egress checks remain server-owned; loopback is admitted by that server's
+current policy. These transport/policy differences remain qualification gaps.
+
 ## Boundary
 
 The OAuth bridge owns:
@@ -52,7 +72,7 @@ One bridge deployment has these inputs:
 | Callback path | Developer-configurable fixed path whose default is `/auth/callback`; registered as every enabled platform's OAuth `redirect_uri` |
 | Platform profiles | Public OAuth client ID and supported ceremony versions for each enabled platform |
 | Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
-| GitHub settings | Client secret, redirect URI, and token endpoint settings when GitHub is enabled |
+| GitHub settings | Client secret when GitHub is enabled; the request supplies the registered redirect URI |
 
 `allowedAppOrigins` has no protocol maximum. A duplicate or invalid member is a
 deployment error rather than something the bridge normalizes. After resolving
@@ -117,7 +137,9 @@ is no request-time version negotiation.
 
 ## Public configuration
 
-`GET /api/v1/ceremony/config` returns `application/json` with this exact record:
+`GET /api/v1/ceremony/config` returns `application/json` with this exact wire record.
+`validateCeremonyConfig` converts it into the exported TypeScript `CeremonyConfig`,
+which contains the resolved `redirectUri` instead of `callbackPath`:
 
 ```ts
 import type { PlatformCeremonyVersion } from '@libid/ceremony'
@@ -128,7 +150,7 @@ interface PlatformConfig {
 }
 
 interface CeremonyConfig {
-  redirectUri: string
+  callbackPath: string
   ccdpOrigin: string
   platforms: Readonly<Record<string, PlatformConfig>>
 }
@@ -137,8 +159,9 @@ interface CeremonyConfig {
 The response rules are:
 
 - `PlatformCeremonyVersion` is an unsigned 16-bit integer.
-- `redirectUri` is the canonical registered URL on the bridge origin. It
-  contains no credentials, query, or fragment.
+- `callbackPath` is an absolute path beginning with one `/`, without query or
+  fragment. Client appends it to the supplied canonical Bridge origin and
+  validates the resulting registered `redirectUri` without normalizing it.
 - `ccdpOrigin` is the configured canonical HTTPS origin with no credentials,
   path, query, or fragment.
 - Each platform entry has one public client ID and a nonempty, duplicate-free
@@ -217,6 +240,7 @@ requires a new bridge API version.
 interface TokenRequest {
   code: string
   codeVerifier: string
+  redirectUri: string
   notaryAddress: string
 }
 
@@ -233,6 +257,12 @@ interface TokenResponse {
 Both records are UTF-8 JSON objects. Member order and insignificant whitespace
 have no meaning. Duplicate, missing, additional, or wrongly typed members are
 invalid. The versioned route carries no redundant schema field.
+
+`redirectUri` is the exact URI frozen before OAuth and passed in `AppStartProver`.
+It is a canonical HTTPS or permitted local HTTP URL without credentials, query or
+fragment, at most 2,048 bytes. The Bridge checks its configured Callback path and
+passes the URI unchanged to GitHub. Prover also checks that URI in the returned
+attested request before using the token.
 
 `code` is nonempty printable ASCII without whitespace or control bytes and at
 most 1,024 bytes. `codeVerifier` matches `[A-Za-z0-9_-]{43}`. The bridge does
