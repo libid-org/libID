@@ -39,18 +39,18 @@ export function validateResponse(response: Response, spec: AssetRequest): void {
 export class AssetCache {
   private readonly pending = new Map<
     string,
-    { dispatched: Promise<void>; response: Promise<Response> }
+    { dispatched: Promise<void>; response: Promise<Response>; complete: Promise<void> }
   >()
   constructor(private readonly origin: string) {}
   load(spec: AssetRequest) {
     const key = `${spec.url}\n${spec.range ?? ''}`
     const existing = this.pending.get(key)
-    if (existing)
-      return { dispatched: existing.dispatched, response: existing.response.then((r) => r.clone()) }
+    if (existing) return { ...existing, response: existing.response.then((r) => r.clone()) }
     let dispatched!: () => void
     const started = new Promise<void>((resolve) => {
       dispatched = resolve
     })
+    let writing = Promise.resolve()
     const response = (async () => {
       let cache: Cache | undefined
       const cacheKey = this.origin + PREFIX + encodeURIComponent(key)
@@ -102,19 +102,23 @@ export class AssetCache {
       const stored = new Response(bytes.slice().buffer, { headers })
       if (cache)
         try {
-          await cache.put(cacheKey, stored.clone())
+          writing = cache.put(cacheKey, stored.clone()).catch(() => {})
         } catch {
           /* A valid response remains usable when storage is full. */
         }
       return spec.range
         ? new Response(bytes.slice().buffer, { status: 206, headers: stored.headers })
         : stored
-    })().finally(() => {
-      dispatched()
-      this.pending.delete(key)
-    })
-    void response.catch(() => {})
-    this.pending.set(key, { dispatched: started, response })
-    return { dispatched: started, response: response.then((r) => r.clone()) }
+    })().finally(dispatched)
+    const complete = response
+      .then(
+        () => writing,
+        () => writing,
+      )
+      .finally(() => {
+        this.pending.delete(key)
+      })
+    this.pending.set(key, { dispatched: started, response, complete })
+    return { dispatched: started, response: response.then((r) => r.clone()), complete }
   }
 }
