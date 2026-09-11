@@ -21,14 +21,9 @@ export function startWorker(scope: ServiceWorkerGlobalScope): void {
     if (event.request.method !== 'GET') return
     const spec = allowed.get(`${event.request.url}\n${event.request.headers.get('range') ?? ''}`)
     if (!spec) return
-    const { response } = cache.load(spec)
+    const { response, complete } = cache.load(spec)
     event.respondWith(response)
-    event.waitUntil(
-      response.then(
-        () => {},
-        () => {},
-      ),
-    )
+    event.waitUntil(complete)
   })
   scope.addEventListener('message', (event) => {
     const value: unknown = event.data
@@ -66,12 +61,11 @@ export function startWorker(scope: ServiceWorkerGlobalScope): void {
       return
     }
     const jobs = requestsByProfile[value.profile].map((r) => cache.load(resolve(r)))
+    for (const job of jobs) void job.response.catch(() => {})
     const dispatch = Promise.all(jobs.map((j) => j.dispatched)).then(() => {
       reply.postMessage({ dispatched: true })
       reply.close()
     })
-    event.waitUntil(
-      Promise.all([dispatch, ...jobs.map((j) => j.response.catch(() => {}))]).then(() => {}),
-    )
+    event.waitUntil(Promise.all([dispatch, ...jobs.map((j) => j.complete)]).then(() => {}))
   })
 }

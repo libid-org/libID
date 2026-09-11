@@ -144,3 +144,76 @@ it.each([
   ).rejects.toThrow('Incomplete')
   expect(fetching).toHaveBeenCalledTimes(1)
 })
+
+it.each([false, true])(
+  'delivers validated bytes before persistence, keeping joiners until write completion (range=%s)',
+  async (range) => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const stored = new Map<string, Response>()
+    const put = vi.fn(async (key: string, response: Response) => {
+      await held
+      stored.set(key, response)
+    })
+    vi.stubGlobal('caches', {
+      open: async () => ({ match: async (key: string) => stored.get(key)?.clone(), put }),
+    })
+    const fetcher = vi.fn(
+      async () => new Response(new Uint8Array([4, 5]), { status: range ? 206 : 200 }),
+    )
+    vi.stubGlobal('fetch', fetcher)
+    const cache = new AssetCache('https://ccdp.example')
+    const spec = {
+      url: 'https://ccdp.example/asset',
+      bytes: 2,
+      ...(range ? { range: 'bytes=0-1' } : {}),
+    }
+    const first = cache.load(spec)
+    let complete = false
+    void first.complete.then(() => {
+      complete = true
+    })
+    const a = await first.response
+    expect(Array.from(new Uint8Array(await a.arrayBuffer()))).toEqual([4, 5])
+    expect(a.status).toBe(range ? 206 : 200)
+    expect(complete).toBe(false)
+    expect(stored.size).toBe(0)
+    const joined = cache.load(spec)
+    expect(joined.complete).toBe(first.complete)
+    expect(Array.from(new Uint8Array(await (await joined.response).arrayBuffer()))).toEqual([4, 5])
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(put).toHaveBeenCalledTimes(1)
+    release()
+    await first.complete
+    expect(complete).toBe(true)
+    await cache.load(spec).response
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  },
+)
+it('absorbs failed writes, releases the pending entry and retries later', async () => {
+  let reject!: (error: Error) => void
+  vi.stubGlobal('caches', {
+    open: async () => ({
+      match: async () => undefined,
+      put: () =>
+        new Promise<void>((_, r) => {
+          reject = r
+        }),
+    }),
+  })
+  const fetcher = vi.fn(async () => new Response(new Uint8Array([4, 5])))
+  vi.stubGlobal('fetch', fetcher)
+  const cache = new AssetCache('https://ccdp.example'),
+    spec = { url: 'https://ccdp.example/asset', bytes: 2 }
+  const first = cache.load(spec)
+  await first.response
+  reject(new Error('quota'))
+  await first.complete
+  const second = cache.load(spec)
+  await second.response
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  reject(new Error('quota'))
+  await second.complete
+})
