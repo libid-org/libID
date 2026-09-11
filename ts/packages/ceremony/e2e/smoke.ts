@@ -1,8 +1,11 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { resolve as assetUrl } from '../src/assets.js'
-import { circuit as google } from '../src/platforms/google/1/assets.js'
+import {
+  circuit as google,
+  verificationKey as googleKey,
+} from '../src/platforms/google/1/assets.js'
 import { buildGoogleWitness } from '../src/platforms/google/1/inputs.js'
-import { bearerCircuit } from '../src/prover/bearerLink.assets.js'
+import { bearerCircuit, bearerVerificationKey } from '../src/prover/bearerLink.assets.js'
 import { buildBearerLinkWitness } from '../src/prover/bearerLink.js'
 import { ProofEngine } from '../src/prover/engine.js'
 import { Notarization } from '../src/prover/notarization/session.js'
@@ -26,6 +29,7 @@ Object.assign(window, {
         : buildBearerLinkWitness(bearer, opening(0), opening(16))
     const engine = new ProofEngine({
       circuitUrl: assetUrl(platform === 'google' ? google : bearerCircuit),
+      verificationKeyUrl: assetUrl(platform === 'google' ? googleKey : bearerVerificationKey),
       threads: 2,
     })
     try {
@@ -41,7 +45,11 @@ Object.assign(window, {
   },
   async notarySmoke(count = 2, notaryAddress = 'http://localhost:4687') {
     const abort = new AbortController(),
-      engine = new ProofEngine({ circuitUrl: assetUrl(bearerCircuit), threads: 2 })
+      engine = new ProofEngine({
+        circuitUrl: assetUrl(bearerCircuit),
+        verificationKeyUrl: assetUrl(bearerVerificationKey),
+        threads: 2,
+      })
     const timer = setTimeout(() => abort.abort(new Error('Notary smoke timed out')), 120000)
     try {
       const notary = new Notarization(notaryAddress, abort.signal)

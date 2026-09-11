@@ -8,4 +8,5 @@ export const circuit = release.member('oidc_google.json', {
   ...resource.headers.immutable,
   ...resource.headers.json,
 })
-export const assets = [...proofAssets, circuit] as const
+export const verificationKey = release.member('vk', resource.headers.immutable)
+export const assets = [...proofAssets, circuit, verificationKey] as const
