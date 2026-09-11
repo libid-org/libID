@@ -352,34 +352,51 @@ describe('GitHub admission [LIBID-PROVER-004]', () => {
 it('checks GitHub token head framing against the signed length [REQ-PLAT-56A/B/C]', () => {
   const original = new TextDecoder().decode(REQUEST_PREFIX)
   const contentLength = String(utf8(`${REQUEST_BODY}&client_secret=deployment-secret`).length)
+  const admitHead = (changed: string) => {
+    const prefix = utf8(changed)
+    const length = REQUEST_LENGTH + prefix.length - REQUEST_PREFIX.length
+    return admitTokenResponse(
+      response({
+        length,
+        revealed: [{ start: 0, bytes: prefix }],
+        commitments: [{ ...SENT.commitments[0], start: prefix.length, end: length }],
+      }),
+      BINDING,
+    )
+  }
+  for (const changed of [
+    original.replace('connection: close\r\n', '').replace('accept: application/json\r\n', ''),
+    original.replace('accept: application/json', 'accept: application/json\r\naccept: text/plain'),
+    original.replace('host: github.com', 'HOST \t:\tgithub.com \t'),
+    original.replace('content-type: ', 'CONTENT_TYPE:\t'),
+    original.replace('accept:', 'x-extra: café 😀\r\nx-extra:\r\naccept:'),
+  ]) {
+    expect(admitHead(changed).bearer.hash).toEqual(bearerHash)
+  }
   for (const changed of [
     original.replace('host: github.com', 'host: evil.test'),
     original.replace(
       `content-length: ${contentLength}`,
       `content-length: ${Number(contentLength) - 1}`,
     ),
-    original.replace('connection: close\r\n', ''),
-    original.replace(
-      'accept: application/json',
-      'accept: application/json\r\naccept: application/json',
-    ),
-    original.replace('accept: application/json', 'transfer-encoding: chunked'),
+    original.replace('host: github.com\r\n', ''),
+    original.replace('content-length: ', 'content-length: 000'),
+    original.replace('content-length: ', 'content-length: 3\r\ncontent_length: '),
+    original.replace('host: github.com', 'host: github.com\r\nHOST: github.com'),
+    ...[
+      'Authorization: Basic other',
+      'Cookie: session=other',
+      'Content_Encoding: gzip',
+      'Transfer-Encoding: chunked',
+      'X_HTTP_Method_Override: POST',
+      'X-Http-Method: POST',
+      'X-Method-Override: POST',
+    ].map((header) => original.replace('accept:', `${header}\r\naccept:`)),
     original.replace('\r\nhost:', '\nhost:'),
     original.replace('host: github.com\r\n', 'host: github.com\n\r\n'),
     original.replace('\r\nhost:', '\r\n host:'),
   ]) {
-    const prefix = utf8(changed)
-    const length = REQUEST_LENGTH + prefix.length - REQUEST_PREFIX.length
-    expect(() =>
-      admitTokenResponse(
-        response({
-          length,
-          revealed: [{ start: 0, bytes: prefix }],
-          commitments: [{ ...SENT.commitments[0], start: prefix.length, end: length }],
-        }),
-        BINDING,
-      ),
-    ).toThrow()
+    expect(() => admitHead(changed)).toThrow()
   }
   for (const change of [-1, 1]) {
     expect(() =>
