@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CeremonyError } from '../../../errors.js'
-import type { ProverContext } from '../../../prover/context.js'
-import type { NotarizationSession } from '../../../prover/notarization/session.js'
+import type { ProverContext } from '../../context.js'
+import type { NotarizationSession } from '../../../notarization/session.js'
 import { prove } from './prover.js'
 
 const { admit, prepare, send, created, destroy, runtimeFailure } = vi.hoisted(() => ({
@@ -17,7 +17,7 @@ vi.mock('../../../assets.js', async (original) => ({
   ...(await original<typeof import('../../../assets.js')>()),
   resolve: () => 'https://ccdp.test/asset',
 }))
-vi.mock('../../../prover/engine.js', () => ({
+vi.mock('../../../proving/bb/engine.js', () => ({
   PROOF_ENGINE_SPANS: [],
   ProofEngine: class {
     destroy = destroy
@@ -28,7 +28,7 @@ vi.mock('./token.js', async (importOriginal) => ({
   decodeTokenResponse: () => ({ accessToken: 'test-bearer' }),
   admitTokenResponse: admit,
 }))
-vi.mock('../../../prover/notarization/session.js', () => ({
+vi.mock('../../../notarization/session.js', () => ({
   Notarization: class {
     readonly signal: AbortSignal
     constructor(address: string, signal: AbortSignal) {

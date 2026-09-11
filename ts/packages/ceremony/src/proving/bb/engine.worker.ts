@@ -4,7 +4,7 @@ import initAbi from '@noir-lang/noirc_abi'
 import { BackendType, Barretenberg } from '@aztec/bb.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import type { RawProof } from './engine.js'
-import { SRS_SIZE } from './bb/assets.js'
+import { SRS_SIZE } from './assets.js'
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
 type Api = Awaited<ReturnType<typeof Barretenberg.new>>
@@ -152,7 +152,9 @@ async function prove(message: Prove): Promise<void> {
   if (state !== 'proving') return
   ready = null
   const proof = new Uint8Array(generated.proof.length * 32)
-  generated.proof.forEach((field, i) => proof.set(field, i * 32))
+  generated.proof.forEach((field, i) => {
+    proof.set(field, i * 32)
+  })
   const result: RawProof = {
     proof,
     publicInputs: generated.publicInputs.map((field) => `0x${bytesToHex(field)}`),

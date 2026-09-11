@@ -1,8 +1,8 @@
 import type { PlatformId } from './index.js'
 import { text, uint } from '../ccdp/index.js'
 import { hasExactKeys, isRecord } from '../primitives.js'
-import type { DecodedAttestedData, DecodedDirection } from '../prover/notarization/decode.js'
-export type { DecodedAttestedData, DecodedDirection } from '../prover/notarization/decode.js'
+import type { DecodedAttestedData, DecodedDirection } from '../notarization/decode.js'
+export type { DecodedAttestedData, DecodedDirection } from '../notarization/decode.js'
 export interface Identity<P extends PlatformId = PlatformId> {
   platformId: P
   oauthClientId: string

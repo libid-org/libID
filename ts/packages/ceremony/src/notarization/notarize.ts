@@ -1,5 +1,6 @@
+import type { CommitmentOpening } from './session.js'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { bytesEqual } from '../../primitives.js'
+import { bytesEqual } from '../primitives.js'
 import { decodeAttestedData, type DecodedAttestedData, type DecodedDirection } from './decode.js'
 
 const MAX_SENT_BYTES = 4 * 1024
@@ -256,4 +257,24 @@ export function correlateAttestation(
       'received',
     ),
   }
+}
+
+export function bearerOpening(
+  openings: readonly CommitmentOpening[],
+  direction: 'sent' | 'received',
+  range: ByteRange,
+  bearer: string,
+) {
+  const matches = openings.filter(
+    (o) => o.direction === direction && o.start === range.start && o.end === range.end,
+  )
+  if (matches.length !== 1) throw new Error('Bearer opening is not unique')
+  const opening = matches[0],
+    bytes = new TextEncoder().encode(bearer),
+    preimage = new Uint8Array(bytes.length + 16)
+  if (opening.blinder.length !== 16 || opening.end - opening.start !== bytes.length)
+    throw new Error('Invalid bearer opening')
+  preimage.set(bytes)
+  preimage.set(opening.blinder, bytes.length)
+  return { ...opening, hash: sha256(preimage) }
 }

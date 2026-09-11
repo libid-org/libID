@@ -1,11 +1,11 @@
-import type { ExactHttpRequest, Transcript } from '../../../prover/notarization/session.js'
+import type { ExactHttpRequest, Transcript } from '../../../notarization/session.js'
 import {
   decodePrintable,
   identityBearerRange,
   jsonField,
   quotedRange,
   skipJsonWhitespace,
-} from '../../../prover/transcript.js'
+} from '../../../notarization/transcript.js'
 import { isUserId } from '../../types.js'
 import { isUserName } from './types.js'
 

@@ -410,7 +410,7 @@ graph has no separate serialized format or browser-visible manifest.
 
 ### Source declarations
 
-Shared integrations such as `prover/bb` and `prover/notarization` each define
+Shared integrations such as `proving/bb` and `notarization` each define
 their resources once in a data-only `assets` module. The package's internal
 `assets` helper provides declarations and URL resolution; downloading,
 archive extraction, and wildcard matching run only in the artifact build.
@@ -418,8 +418,8 @@ archive extraction, and wildcard matching run only in the artifact build.
 #### Archives
 
 ```ts
-// prover/notarization/assets.ts — illustrative release location
-import * as assets from '../../assets.js'
+// notarization/assets.ts — illustrative release location
+import * as assets from '../assets.js'
 
 const tlsnRelease = assets.archive(
   'https://releases.example/tlsn-wasm-0.2.0.tar.gz',
@@ -477,8 +477,8 @@ imports the data-only declarations above without invoking `resolve()` or
 requiring a browser origin:
 
 ```ts
-// prover/notarization — execution code
-import * as assets from '../../assets.js'
+// notarization — execution code
+import * as assets from '../assets.js'
 import { wasmJs } from './assets.js'
 
 const wasmJsUrl = assets.resolve(wasmJs)
@@ -488,7 +488,7 @@ const wasmJsUrl = assets.resolve(wasmJs)
 #### External requests
 
 ```ts
-// prover/bb/assets.ts — data-only declaration
+// proving/bb/assets.ts — data-only declaration
 import * as assets from '../../assets.js'
 
 export const g1 = assets.external(
@@ -500,7 +500,7 @@ export const g1 = assets.external(
 Execution code uses the same resolver:
 
 ```ts
-// prover/bb — execution code
+// proving/bb — execution code
 import * as assets from '../../assets.js'
 import { g1 } from './assets.js'
 
@@ -577,8 +577,8 @@ requirements, for example:
 
 ```ts
 // platforms/x/1/assets.ts
-import { resources as bb } from '../../../prover/bb/assets'
-import { resources as notarization } from '../../../prover/notarization/assets'
+import { resources as bb } from '../../../proving/bb/assets'
+import { resources as notarization } from '../../../notarization/assets'
 import { circuit } from './circuit'
 
 export const resources = [...bb, ...notarization, circuit]

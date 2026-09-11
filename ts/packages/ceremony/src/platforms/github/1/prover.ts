@@ -2,12 +2,16 @@ import { resolve as resolveAsset } from '../../../assets.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { CeremonyError, ceremonyError } from '../../../errors.js'
 import { isRecord } from '../../../primitives.js'
-import { buildBearerLinkWitness } from '../../../prover/bearerLink.js'
-import type { ProverContext } from '../../../prover/context.js'
-import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../prover/engine.js'
-import { bearerOpening, responseJson } from '../../../prover/http.js'
-import { Notarization } from '../../../prover/notarization/session.js'
-import { Progress } from '../../../prover/progress.js'
+import {
+  buildBearerLinkWitness,
+  validateBearerLinkPublicInputs,
+} from '../../../proving/bb/circuits/bearer_link/inputs.js'
+import type { ProverContext } from '../../context.js'
+import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../proving/bb/engine.js'
+import { responseJson } from '../../../notarization/http.js'
+import { bearerOpening } from '../../../notarization/notarize.js'
+import { Notarization } from '../../../notarization/session.js'
+import { Progress } from '../../../progress.js'
 import { readBody } from '../../../response.js'
 import { isFormClientId } from '../../authorization.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
@@ -121,11 +125,7 @@ export async function prove(
       engine.prove(inputs, notary.signal),
       progress.step('attestation', () => result.attestation),
     ])
-    const expected = [
-      ...(inputs.token_commitment as number[]),
-      ...(inputs.identity_commitment as number[]),
-    ].map((n) => `0x${BigInt(n).toString(16).padStart(64, '0')}`)
-    if (raw.publicInputs.length !== 64 || raw.publicInputs.some((v, i) => v !== expected[i]))
+    if (!validateBearerLinkPublicInputs(raw.publicInputs, inputs))
       throw new Error('Bearer public input mismatch')
     return {
       identity: {

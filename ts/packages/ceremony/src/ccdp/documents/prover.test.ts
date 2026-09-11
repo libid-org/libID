@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import type { ProverContext } from '../../prover/context.js'
+import type { ProverContext } from '../../platforms/context.js'
 import { startProver } from './prover.js'
 
 const { connection, prove } = vi.hoisted(() => ({

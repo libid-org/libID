@@ -1,12 +1,12 @@
 import { bytesEqual } from '../../../primitives.js'
-import type { ByteRange, RevealRanges, Transcript } from '../../../prover/notarization/notarize.js'
-import type { ExactHttpRequest } from '../../../prover/notarization/session.js'
+import type { ByteRange, RevealRanges, Transcript } from '../../../notarization/notarize.js'
+import type { ExactHttpRequest } from '../../../notarization/session.js'
 import {
   decodePrintable,
   identityBearerRange,
   quotedRange,
   tokenRequestBody,
-} from '../../../prover/transcript.js'
+} from '../../../notarization/transcript.js'
 import { isUserId } from '../../types.js'
 import { isUserName } from './types.js'
 

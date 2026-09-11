@@ -1,4 +1,4 @@
-import { parseJson } from '../../../prover/json.js'
+import { parseJson } from '../../../json.js'
 import { b64urlDecode } from '../../../primitives.js'
 import { MAX_AUD_BYTES, MAX_EMAIL_BYTES, MAX_SUB_BYTES, printableWithoutQuote } from './types.js'
 
@@ -77,4 +77,20 @@ export function decodeGoogleIdToken(idToken: string): DecodedGoogleIdToken | nul
 
 export function decodeGoogleHeader(bytes: Uint8Array): Record<string, unknown> | null {
   return json(bytes)
+}
+
+interface ParsedGoogleIdToken extends DecodedGoogleIdToken {
+  kid: string
+}
+
+export function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
+  const token = decodeGoogleIdToken(idToken)
+  if (token?.claims.iss !== 'https://accounts.google.com') {
+    throw new Error('invalid Google ID token')
+  }
+  const header = decodeGoogleHeader(token.header)
+  if (header?.alg !== 'RS256' || typeof header.kid !== 'string' || header.kid === '') {
+    throw new Error('invalid Google ID token header')
+  }
+  return { ...token, kid: header.kid }
 }

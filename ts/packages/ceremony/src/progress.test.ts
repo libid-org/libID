@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { PlatformStep } from '../ccdp/index.js'
+import type { PlatformStep } from './ccdp/index.js'
 import { Progress, type ProgressSpan } from './progress.js'
 
 const catalog = [

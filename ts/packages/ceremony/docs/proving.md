@@ -138,7 +138,7 @@ repeat does not make browser acceptance authoritative.
 
 ## Browser notarization
 
-X and GitHub use `prover/notarization`, one internal TypeScript adapter over
+X and GitHub use `notarization`, one internal TypeScript adapter over
 the pinned raw TLSNotary WASM API. Platform-version prover leaves supply their exact
 request, response parser, and transcript layout; the adapter owns the shared
 session, reveal, reclaimed-channel, attestation-delivery, and
@@ -453,15 +453,24 @@ All version axes are defined in
 
 ## Implementation guide
 
-Owns the shared proof engine, worker runtime, input helpers and notarization adapter.
+`src/proving/bb/` owns the Noir/bb engine, worker runtime, circuit resources and
+witness/public-input encoding. Notarization is a sibling module, composed by the
+platform pipelines.
 The browser page itself lives in [ccdp/documents/prover.ts](../src/ccdp/documents/prover.ts).
 
 - [Platform pipelines](pipelines.md): provider-specific execution order.
 - [Notarization](notarization.md#implementation-guide): TLSNotary sessions and canonical attestations.
 - [Prefetch](prefetch.md#implementation-guide): byte caching before execution.
 
-[engine.ts](../src/prover/engine.ts) controls [engine.worker.ts](../src/prover/engine.worker.ts); [bb/assets.ts](../src/prover/bb/assets.ts)
-owns shared backend resources. [bearerLink.ts](../src/prover/bearerLink.ts) constructs the common
-bearer-link witness. [progress.ts](../src/prover/progress.ts) accounts for completed work. The browser
+[engine.ts](../src/proving/bb/engine.ts) controls [engine.worker.ts](../src/proving/bb/engine.worker.ts); [bb/assets.ts](../src/proving/bb/assets.ts)
+owns shared backend resources. [circuits/oidc_google/](../src/proving/bb/circuits/oidc_google/) owns the released
+`oidc_google` circuit declarations, witness and public-input mapping.
+[circuits/bearer_link/](../src/proving/bb/circuits/bearer_link/) owns the common
+bearer-link circuit, witness and public-input check. Provider JWT decoding remains
+in the Google platform module. Each platform composes its asset list once for
+execution and prefetch.
+[platforms/context.ts](../src/platforms/context.ts) defines the Prover page input
+to those pipelines; the proving engine has no page lifecycle responsibility.
+[progress.ts](../src/progress.ts) accounts for completed work. The browser
 performs no final cryptographic proof verification; qualification uses released keys
 in a separate harness.

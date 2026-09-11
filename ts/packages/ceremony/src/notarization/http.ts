@@ -1,7 +1,5 @@
-import { parseJson, parseJsonNumbersAsText } from './json.js'
-import type { Transcript, CommitmentOpening } from './notarization/session.js'
-import type { ByteRange } from './notarization/notarize.js'
-import { sha256 } from '@noble/hashes/sha2.js'
+import { parseJson } from '../json.js'
+import type { Transcript } from './session.js'
 export function responseJson(transcript: Transcript, numbersAsText = false): unknown {
   const bytes = transcript.received,
     decoder = new TextDecoder('utf-8', { fatal: true }),
@@ -68,22 +66,40 @@ export function responseJson(transcript: Transcript, numbersAsText = false): unk
     throw new Error('HTTP length mismatch')
   return (numbersAsText ? parseJsonNumbersAsText : parseJson)(decoder.decode(body))
 }
-export function bearerOpening(
-  openings: readonly CommitmentOpening[],
-  direction: 'sent' | 'received',
-  range: ByteRange,
-  bearer: string,
-) {
-  const matches = openings.filter(
-    (o) => o.direction === direction && o.start === range.start && o.end === range.end,
+
+/** Preserve numeric root fields as bigint, without ever rounding an identity ID. */
+function parseJsonNumbersAsText(source: string): unknown {
+  const numericRoots = new Map<string, string>()
+  let depth = 0
+  for (const match of source.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\]]/g)) {
+    const token = match[0]
+    if (token === '{' || token === '[') depth++
+    else if (token === '}' || token === ']') depth--
+    else if (depth === 1) {
+      const number = /^\s*:\s*(-?(?:0|[1-9][0-9]*))\s*[,}]/.exec(
+        source.slice(match.index + token.length),
+      )
+      if (number) numericRoots.set(JSON.parse(token), number[1])
+    }
+  }
+  const value = parseJson(
+    source.replace(
+      /"(?:[^"\\]|\\.)*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/g,
+      (token, offset) => {
+        if (token.startsWith('"')) return token
+        if (/^\s*:/.test(source.slice(offset + token.length)))
+          throw new TypeError('Invalid JSON object key')
+        return JSON.stringify(token)
+      },
+    ),
   )
-  if (matches.length !== 1) throw new Error('Bearer opening is not unique')
-  const opening = matches[0],
-    bytes = new TextEncoder().encode(bearer),
-    preimage = new Uint8Array(bytes.length + 16)
-  if (opening.blinder.length !== 16 || opening.end - opening.start !== bytes.length)
-    throw new Error('Invalid bearer opening')
-  preimage.set(bytes)
-  preimage.set(opening.blinder, bytes.length)
-  return { ...opening, hash: sha256(preimage) }
+  if (value && typeof value === 'object' && !Array.isArray(value))
+    for (const [key, number] of numericRoots)
+      Object.defineProperty(value, key, {
+        value: BigInt(number),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      })
+  return value
 }

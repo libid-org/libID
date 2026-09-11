@@ -203,9 +203,8 @@ export async function bundle(
             selfContained || !groupModules
               ? undefined
               : (id) => {
-                  if (id.includes('/src/prover/engine.') || id.includes('/src/prover/bb/'))
-                    return 'proof-engine'
-                  if (id.includes('/src/prover/notarization/')) return 'notarization'
+                  if (id.includes('/src/proving/bb/')) return 'proof-engine'
+                  if (id.includes('/src/notarization/')) return 'notarization'
                   if (
                     id.includes('/src/') &&
                     !id.includes('/platforms/') &&

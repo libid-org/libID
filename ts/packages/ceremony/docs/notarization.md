@@ -7,7 +7,7 @@ not apply to OAuth provider requests or external proving assets. COOP/COEP, orig
 admission, callback privacy and all other validation remain required. LAN addresses,
 lookalike domains and noncanonical spellings are not admitted.
 
-This document defines the browser-side `prover/notarization` module: how it
+This document defines the browser-side `notarization` module: how it
 runs a TLSNotary session, applies platform-selected transcript disclosures, and
 returns a byte-exact attestation with its decoded view plus private commitment
 openings. The enclosing pipeline is defined in [PROVING.md](proving.md), browser placement in
@@ -166,7 +166,7 @@ and exposes only the range and private blinder for each opening.
 
 ## Canonical attested-data decoder
 
-`prover/notarization` owns one read-only decoder for the signed attested-data
+`notarization` owns one read-only decoder for the signed attested-data
 bytes. It does not expose an encoder and never reserializes a received record.
 The decoder returns this view, attached as `NotaryAttestation.decoded` and
 exposed through the public platform proof. Its types are client-safe; the
@@ -436,8 +436,8 @@ selective disclosures and correlation with canonical final attestations.
 - [Platform pipelines](pipelines.md): token/identity overlap and delivery dependencies.
 - [Qualification blockers](qualification.md#actual-blockers-and-unqualified-boundaries): matched service, timing and profile gaps.
 
-[session.ts](../src/prover/notarization/session.ts) controls one ceremony-owned
-[session.worker.ts](../src/prover/notarization/session.worker.ts). X creates one
+[session.ts](../src/notarization/session.ts) controls one ceremony-owned
+[session.worker.ts](../src/notarization/session.worker.ts). X creates one
 `Notarization` instance for both requests, sharing WASM initialization and its
 thread pool. Each request has a separate native message channel, TLSNotary prover,
 socket, transcript and attestation. Each socket opens alongside shared WASM
@@ -450,8 +450,11 @@ concurrent dependent work, so even a failure after a session is prepared can
 cancel a pending Bridge fetch. GitHub uses the same adapter for its one browser
 identity request. Real shared-runtime concurrency and timing remain subject to
 qualification; unit-level overlap does not establish WASM liveness.
-[transport.ts](../src/prover/notarization/transport.ts) frames final output, [decode.ts](../src/prover/notarization/decode.ts) reads canonical
-attested bytes, and [notarize.ts](../src/prover/notarization/notarize.ts) correlates transcripts and openings.
+[transport.ts](../src/notarization/transport.ts) frames final output, [decode.ts](../src/notarization/decode.ts) reads canonical
+attested bytes, and [notarize.ts](../src/notarization/notarize.ts) correlates transcripts and openings.
+[http.ts](../src/notarization/http.ts) decodes HTTP responses, preserving numeric
+identity IDs, and [transcript.ts](../src/notarization/transcript.ts) provides byte-range
+and request-binding helpers. Provider-specific reveal selection stays in each platform.
 Original attestations and signatures are preserved; local signature verification is
 outside the adapter's responsibility.
 
@@ -486,8 +489,8 @@ required-header values, rejects a second Authorization header under any scheme,
 and discloses the complete request except exactly one bearer range. Offsets count
 wire bytes, including when additional headers contain non-ASCII values.
 
-Regression coverage is in [transcript tests](../src/prover/transcript.test.ts),
+Regression coverage is in [transcript tests](../src/notarization/transcript.test.ts),
 [GitHub admission](../src/platforms/github/1/token.test.ts), and
-[attestation correlation](../src/prover/notarization/notarize.test.ts). This covers
+[attestation correlation](../src/notarization/notarize.test.ts). This covers
 adjacent GitHub `id`/`login` disclosures as well as token requests. Fixtures model
 native range coalescing; they do not establish a live notarized ceremony.

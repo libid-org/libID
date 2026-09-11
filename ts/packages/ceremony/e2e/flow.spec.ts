@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
+import { buildGooglePublicInputs } from '../src/proving/bb/circuits/oidc_google/publicInputs.js'
 import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
 import fixture from '../test-fixtures/google-v1.json' with { type: 'json' }
 import { expect, test } from './fixtures.js'

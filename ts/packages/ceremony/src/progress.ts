@@ -1,4 +1,4 @@
-import type { PlatformStep } from '../ccdp/index.js'
+import type { PlatformStep } from './ccdp/index.js'
 
 export interface ProgressSpan {
   code: string

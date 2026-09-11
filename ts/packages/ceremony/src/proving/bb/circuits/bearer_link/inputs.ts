@@ -1,4 +1,4 @@
-import type { CorrelatedCommitment } from './notarization/notarize.js'
+import type { CorrelatedCommitment } from '../../../../notarization/notarize.js'
 
 const encoder = new TextEncoder()
 const MAX_BEARER_BYTES = 128
@@ -41,4 +41,16 @@ export function buildBearerLinkWitness(
     token_commitment: Array.from(token.hash),
     identity_commitment: Array.from(identity.hash),
   }
+}
+
+/** Match the two commitments in the circuit's exact public-input order. */
+export function validateBearerLinkPublicInputs(
+  value: readonly string[],
+  inputs: Record<string, unknown>,
+): boolean {
+  const expected = [
+    ...(inputs.token_commitment as number[]),
+    ...(inputs.identity_commitment as number[]),
+  ].map((n) => `0x${BigInt(n).toString(16).padStart(64, '0')}`)
+  return value.length === 64 && value.every((v, i) => v === expected[i])
 }

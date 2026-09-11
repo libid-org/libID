@@ -81,8 +81,8 @@ identifier, and wraps the proof with its selected version and authorization nonc
 | [src/client/](client.md#implementation-guide) | Configuration, frozen construction, one-shot application state |
 | [src/ccdp/](protocol.md#implementation-guide) | Seven message companions and navigation-fragment codecs |
 | [src/platforms/](pipelines.md#implementation-guide) | Authorization, proof type, asset set and proof pipeline |
-| [src/prover/](proving.md#implementation-guide) | Dedicated Noir/bb.js proof worker |
-| [src/prover/notarization/](notarization.md#implementation-guide) | Browser TLSNotary sessions, canonical decoding and correlation |
+| [src/proving/](proving.md#implementation-guide) | Dedicated Noir/bb.js proof worker |
+| [src/notarization/](notarization.md#implementation-guide) | Browser TLSNotary sessions, canonical decoding and correlation |
 | [src/prefetch/](prefetch.md#implementation-guide) | Root Service Worker, byte caches and pending-fetch joins |
 | [src/ccdp/documents/](documents.md#implementation-guide) | Callback, Prefetch and Prover page entrypoints |
 | `src/ui.ts` | Native, package-owned DOM and progress |

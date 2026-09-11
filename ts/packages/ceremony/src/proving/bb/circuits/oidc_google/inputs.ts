@@ -1,14 +1,14 @@
-import type { Identity } from '../../types.js'
+import type { Identity } from '../../../../platforms/types.js'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { b64urlDecode, isRecord } from '../../../primitives.js'
-import { decodeGoogleHeader, decodeGoogleIdToken, type DecodedGoogleIdToken } from './token.js'
+import { b64urlDecode, isRecord } from '../../../../primitives.js'
+import { parseGoogleIdToken } from '../../../../platforms/google/1/token.js'
 import {
   MAX_AUD_BYTES,
   MAX_EMAIL_BYTES,
   MAX_SUB_BYTES,
   RSA_MODULUS_BYTES,
   type GoogleProofV1,
-} from './types.js'
+} from '../../../../platforms/google/1/types.js'
 
 const SIGNING_INPUT_MAX = 1280
 const PAYLOAD_JSON_MAX = 768
@@ -53,10 +53,6 @@ export interface BuiltGoogleWitness {
   proofFields: Omit<GoogleProofV1, 'identityProof'>
 }
 
-interface ParsedGoogleIdToken extends DecodedGoogleIdToken {
-  kid: string
-}
-
 function bytesToBigInt(bytes: Uint8Array): bigint {
   let value = 0n
   for (const byte of bytes) value = (value << 8n) | BigInt(byte)
@@ -98,19 +94,9 @@ function findOffset(payload: Uint8Array, pattern: string): number {
   throw new Error(`missing canonical signed claim ${pattern.slice(0, pattern.indexOf(':'))}`)
 }
 
-function parseToken(idToken: string): ParsedGoogleIdToken {
-  const token = decodeGoogleIdToken(idToken)
-  if (token?.claims.iss !== 'https://accounts.google.com') {
-    throw new Error('invalid Google ID token')
-  }
-  const header = decodeGoogleHeader(token.header)
-  if (header?.alg !== 'RS256' || typeof header.kid !== 'string' || header.kid === '') {
-    throw new Error('invalid Google ID token header')
-  }
-  return { ...token, kid: header.kid }
-}
-
-function buildWitness(token: ParsedGoogleIdToken, jwk: unknown): BuiltGoogleWitness {
+/** Build the exact libid-circuits v0.3.0 `oidc_google` witness. */
+export function buildGoogleWitness(idToken: string, jwk: unknown): BuiltGoogleWitness {
+  const token = parseGoogleIdToken(idToken)
   if (
     !isRecord(jwk) ||
     jwk.kty !== 'RSA' ||
@@ -194,9 +180,4 @@ function buildWitness(token: ParsedGoogleIdToken, jwk: unknown): BuiltGoogleWitn
       signingKeyModulus: modulus,
     },
   }
-}
-
-/** Build the exact libid-circuits v0.3.0 `oidc_google` witness. */
-export function buildGoogleWitness(idToken: string, jwk: unknown): BuiltGoogleWitness {
-  return buildWitness(parseToken(idToken), jwk)
 }
