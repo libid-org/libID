@@ -67,7 +67,7 @@ async function worker(key: Response | Promise<Response> = new Response(Uint8Arra
       threads: 4,
       acvmUrl: '/acvm.wasm',
       abiUrl: '/abi.wasm',
-      wasmPath: '/bb.wasm.gz',
+      wasmPath: '/bb.wasm',
       crsPath: 'https://crs.test/',
     },
   })
