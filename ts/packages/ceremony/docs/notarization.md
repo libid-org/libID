@@ -461,31 +461,30 @@ for the browser identity session. Prover performs no ledger lookup.
 
 ## Token layout alignment
 
-The token layouts follow [spec PR #31 at ae33a29](https://github.com/libid-org/libid/blob/ae33a29e454198212215764c167eb10f624d926a/specs/platform-ceremonies.md),
+The token layouts follow [spec PR #31 at 860075a](https://github.com/libid-org/libid/blob/860075a4bf288dc7fee20866ed3536dc260f4574/specs/platform-ceremonies.md),
 REQ-PLAT-56A/B/C and §6.4. X reveals its entire request as one range. GitHub
 admits one revealed prefix followed by one committed suffix covering the trailing
 `&client_secret=…` field, matching the
-[Rust layout builder](https://github.com/libid-org/libid-rs/blob/501f094bf10f776c2227ef345908f507a0c80fd0/crates/libid-transcript/src/ceremony.rs).
-No hidden-header or per-field compatibility layout is accepted. Both paths
-check the five permitted token headers in any order, reject duplicates and
-non-CRLF/folded framing, and compare Content-Length with the complete body length,
-including GitHub's signed committed suffix. Authority still comes from the
-attested TLS server identity, not Host.
+[released Rust layout builder](https://github.com/libid-org/libid-rs/blob/82bc4e286d762531ba3ac86996db4afc6ea38f56/crates/libid-transcript/src/ceremony.rs).
+Both paths require exactly one Host, Content-Type and Content-Length. Header names
+are compared without case distinctions and with underscores treated as hyphens;
+optional HTTP whitespace around values is accepted. Content-Length must use
+canonical decimal spelling and match the complete body, including GitHub's signed
+committed suffix. Bare CR/LF, folded or malformed headers and duplicate required
+headers are rejected. Authority comes from the attested TLS server identity.
 
-**Identity header alignment:** [spec PR #31 at 5bbd838](https://github.com/libid-org/libid/blob/5bbd838c81d4a47849104cf0f965ad985b2e5b98/specs/platform-ceremonies.md)
-now explicitly permits additional identity-request headers for both X (§5.3)
-and GitHub (§6.5). X still sends its four required headers. GitHub sends six,
-including `X-GitHub-Api-Version: 2022-11-28` and a runtime-chosen `User-Agent`;
-ceremony uses `navigator.userAgent` without adding a libID identifier. This
-resolves the documented User-Agent mismatch. The Platform Verifier compares
-the request line and Authorization line, while the runtime remains responsible
-for sending the required headers.
+Additional token headers are permitted, except Authorization and the shared
+REQ-COMMON-39B forbidden names: Cookie, Content-Encoding, Transfer-Encoding and
+HTTP method-override headers. The constructors still send Accept and Connection;
+the parser does not require those headers or fix their values.
 
-Both browser selectors accept additional headers through one shared HTTP framing
-parser. It retains required-header values and uniqueness, rejects malformed
-framing, and discloses the complete request except exactly one bearer range.
-Offsets count wire bytes, including when extra headers contain non-ASCII values. Token requests are unchanged: their five-header set
-remains closed. Additional identity headers do not imply additional token headers.
+**Identity header alignment:** X sends its four required headers. GitHub sends six,
+including `X-GitHub-Api-Version: 2022-11-28` and `navigator.userAgent` without a
+libID identifier. The shared parser admits additional headers except those
+forbidden by REQ-COMMON-39B, including case and underscore variants. It retains
+required-header values, rejects a second Authorization header under any scheme,
+and discloses the complete request except exactly one bearer range. Offsets count
+wire bytes, including when additional headers contain non-ASCII values.
 
 Regression coverage is in [transcript tests](../src/prover/transcript.test.ts),
 [GitHub admission](../src/platforms/github/1/token.test.ts), and
