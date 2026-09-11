@@ -147,8 +147,8 @@ Launch publishes one `@libid/ceremony` package:
     └── github/<version>/{github.assets,url,types,prover}
 ```
 
-The public `@libid/ceremony/{callback,prefetch,prover}` subpaths resolve directly
-to `ccdp/documents`. The Prover document imports platform pipelines and shared
+The build consumes the private Callback, Prefetch and Prover entrypoints directly
+from `ccdp/documents`. The Prover document imports platform pipelines and shared
 proving code from the top-level `platforms`, `barretenberg`, and `notary` modules.
 
 `ccdp/index` is the pure protocol leaf imported by client, callback,
@@ -191,19 +191,18 @@ connection typing.
 `platforms/authorization`
 provides the shared Authorization Digest and PKCE helpers, but each
 platform/version slice owns whether and how those helpers participate in its
-ceremony. Its `url` leaf owns authorization-request construction and final
-assembly and re-exports its
-`types` leaf; `types` owns the proof type and side-effect-free runtime validator;
+ceremony. Its `url` leaf owns authorization-request construction;
+`types` owns the proof type and side-effect-free runtime validator;
 and `prover` owns OAuth-return parsing, progress, witness construction, and
 proof generation.
-`platforms/index` imports only the client-safe `url` leaves, derives the
+`platforms/index` composes the client-safe `url` and `types` leaves, derives the
 catalog and public result types, and is re-exported by the package root and
 client API. Prover leaves are internal imports of the prover entrypoint and
 never enter the client catalog.
 Individual platform leaves never import the aggregator. `callback`,
 `prefetch`, and `prover` are build entrypoints, not separately versioned
-packages. The CCDP Distribution serves Callback as a cross-origin-loadable
-module, embeds Prefetch and Prover entry code directly into their
+packages. The CCDP Distribution emits the complete Callback HTML artifact,
+embeds Prefetch and Prover entry code directly into their
 versioned documents, and serves the Prefetch Service Worker at CCDP's versioned
 worker path; internal bundle filenames are deployment details. The Prefetch entrypoint
 runs in Window and Service Worker contexts: its
@@ -273,21 +272,28 @@ The compositions adapt cancellation, progress projection, and the final
 result commit around `proveUserIdentity()`. No generic plugin, caller-selected platform
 module, validator, or finalizer exists.
 
-The package-facing API surface is:
+The package-facing API has two entrypoints:
 
-| Export or entrypoint | Contract |
+| Export | Contract |
 |---|---|
-| `@libid/ceremony` | catalog-derived `PlatformId`, `PlatformCeremonyVersion`, `supportedPlatforms`, `ProofByPlatformVersion`, `OAuthProof`, `Identity`, and `IdentityResult` |
-| `@libid/ceremony/ccdp` | internal CCDP record types, per-record decoder companions, protocol version, and direction/order checks; no application export |
-| `@libid/ceremony/ccdp/client` | `CeremonyConfig` fetch/validation, application-scoped `CCDPClient`, stateful `Ceremony` orchestration, and public catalog/result re-exports |
-| `@libid/ceremony/callback` | [browser entrypoint](documents.md#callback-get-redirecturi) bundled into the complete Callback artifact; the OAuth Bridge retrieves it from the CCDP Distribution, inserts deployment data, and serves it without a separate browser script fetch |
-| `@libid/ceremony/prefetch` | dual-context browser entrypoint embedded by the versioned Prefetch document and served at the versioned Worker path |
-| `@libid/ceremony/prover` | [browser entrypoint](documents.md#prover-get-prover) embedded by the versioned isolated Prover document |
+| `@libid/ceremony` | `supportedPlatforms`, `CeremonyError`; types `PlatformId`, `SupportedCeremonyVersion`, `Identity`, `IdentityResult`, `OAuthProof`, `NotaryAttestation`, and `FailureCode` |
+| `@libid/ceremony/ccdp/client` | `createCCDPClient`, `CeremonyStage`; types `CCDPClient`, `Ceremony`, and `CeremonyEvent`, plus the root exports |
 
-The API below and the [CCDP records](protocol.md#messages)
-are the launch surface.
-Implementation-private helpers may change without changing authority or wire
-behavior.
+`supportedPlatforms` describes this package's closed implementation catalog.
+`CCDPClient.enabledPlatforms` filters it to the platforms advertised by the Bridge
+with at least one supported ceremony version. Applications use the latter to
+present available actions. `enabledVersions(platform)` exposes the compatible
+version choices. The optional trailing `new(..., ceremonyVersion)` selects one;
+omission selects the highest compatible version. Configuration validation stays internal.
+
+CCDP codecs and document startup functions remain internal module exports for the
+static build and browser participants. They are not package subpaths. Configuration
+records/validators and the proof-type mapping are internal too; an adapter
+can name a platform's delivered proof through `OAuthProof<'google'>['proof']`.
+
+This narrower TypeScript surface replaces the initial six package subpaths.
+It does not change [CCDP records](protocol.md#messages), emitted routes, browser
+roles or qualification requirements.
 
 ## Application integration
 
@@ -309,9 +315,11 @@ See [Client API and lifecycle](client.md).
 `PlatformCeremonyVersion` versions one platform's authorization digest, OAuth
 grammar, progress-code lifecycle, circuit, witness, proof pieces, and final
 `OAuthProof` assembly. `PlatformConfig.ceremonyVersions` advertises what the
-deployment can execute; the client selects the numerically greatest member also
-present in its closed local catalog, independent of list or object-key order,
-and every live ceremony pins it. Chain-specific contract and
+deployment can execute. The caller may select any member also present in the
+closed local catalog; otherwise the client defaults to the numerically greatest
+common version, independent of list or object-key order. Every live ceremony pins
+that choice. Versions can differ in features or disclosure behavior without one
+being insecure; application labels and explicit selection own that user choice. Chain-specific contract and
 Registry versions are outside this boundary and independently decide which
 ceremony outputs they accept.
 

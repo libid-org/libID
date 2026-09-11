@@ -139,18 +139,17 @@ is no request-time version negotiation.
 ## Public configuration
 
 `GET /api/v1/ceremony/config` returns `application/json` with this exact wire record.
-`validateCeremonyConfig` converts it into the exported TypeScript `CeremonyConfig`,
-which contains the resolved `redirectUri` instead of `callbackPath`:
+The client validates this public HTTP response and resolves `callbackPath` into
+`redirectUri` in its internal `CeremonyConfig`. Neither that internal type nor its
+validator is exported from the package:
 
 ```ts
-import type { PlatformCeremonyVersion } from '@libid/ceremony'
-
 interface PlatformConfig {
   clientId: string
-  ceremonyVersions: readonly PlatformCeremonyVersion[]
+  ceremonyVersions: readonly number[]
 }
 
-interface CeremonyConfig {
+interface CeremonyConfigResponse {
   callbackPath: string
   ccdpOrigin: string
   platforms: Readonly<Record<string, PlatformConfig>>

@@ -27,10 +27,9 @@ export const platforms = {
 
 export type PlatformId = keyof typeof platforms
 
-export type PlatformCeremonyVersion = number
-
-export type SupportedCeremonyVersion<P extends PlatformId> =
-  keyof (typeof platforms)[P]['versions'] & number
+export type SupportedCeremonyVersion<P extends PlatformId> = P extends PlatformId
+  ? keyof (typeof platforms)[P]['versions'] & number
+  : never
 
 export type ProofByPlatformVersion = {
   [P in PlatformId]: {
@@ -95,16 +94,19 @@ export function assembleResult<P extends PlatformId>(
   } as IdentityResult<P>
 }
 
-// Version choice stays behind the same closed, validated catalog boundary.
-export function greatestCommonVersion<P extends PlatformId>(
+/** Enumerate the closed catalog/Bridge intersection in ascending version order. */
+export function commonVersions<P extends PlatformId>(
   platform: P,
   advertised: readonly number[],
-): SupportedCeremonyVersion<P> {
-  const versions = Object.keys(platforms[platform].versions)
-    .map(Number)
-    .filter((v) => advertised.includes(v))
-  if (!versions.length) throw new TypeError('No supported platform version')
-  return Math.max(...versions) as SupportedCeremonyVersion<P>
+): readonly SupportedCeremonyVersion<P>[] {
+  if (typeof platform !== 'string' || !Object.hasOwn(platforms, platform))
+    throw new TypeError('Unsupported platform')
+  return Object.freeze(
+    Object.keys(platforms[platform].versions)
+      .map(Number)
+      .filter((v) => advertised.includes(v))
+      .sort((a, b) => a - b),
+  ) as readonly SupportedCeremonyVersion<P>[]
 }
 
 export function implementationFor<P extends PlatformId>(
