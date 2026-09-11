@@ -10,7 +10,7 @@ static-distribution checks are separate from real OAuth, matched-notary concurre
 and device qualification. See [QUALIFICATION.md](qualification.md) for evidence,
 remaining prerequisites and the complete [requirement index](test-plan.md).
 
-See the [documentation index](README.md) and [source guide](source.md) for
+See the [documentation index](../README.md) and [source guide](source.md) for
 module ownership and contracts.
 
 ## Application use
