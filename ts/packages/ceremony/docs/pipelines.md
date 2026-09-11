@@ -8,15 +8,17 @@ Prover imports its runtime concurrently with joining selected-profile asset
 prefetch. Once both are ready and the OAuth return is accepted, platform input
 preparation and dedicated proof-worker startup run concurrently. Backend
 initialization needs only its code-owned WASM, CRS and thread settings; it does
-not wait for the circuit or ceremony inputs. Witness execution still waits for
-prepared inputs and complete engine readiness.
+not wait for the circuit or ceremony inputs. Witness execution needs prepared
+inputs, the circuit and initialized ACVM/ABI; it can overlap backend initialization.
 
 Inside the proof worker, start Barretenberg initialization, circuit/key loading,
 and ACVM/ABI WASM initialization concurrently. Construct Noir and report readiness
-only after all three branches succeed. A failed branch reports failure promptly;
-an initialized backend is destroyed, including one that finishes after the
-failure. The owner terminates the proof worker and its outstanding work on error
-or cancellation.
+for inputs after circuit/key and ACVM/ABI loading succeed. Generate the witness
+while any remaining backend initialization continues; proof generation joins both.
+A failed branch reports failure promptly; an initialized backend is destroyed,
+including one that finishes after the failure. The owner terminates the proof
+worker and its outstanding work on error or cancellation. Late completions cannot
+revive a failed run or deliver a result.
 Pass the build-emitted absolute same-origin WASM URLs explicitly to the
 ACVM/ABI initializers. Do not let wasm-bindgen infer sibling paths from a
 bundled or `blob:` worker's `import.meta.url`. Noir must reuse those initialized
@@ -109,8 +111,8 @@ JSON Web Key Set (JWKS) endpoint and constructs the `oidc_google` input map:
 
 JWT decoding, signing-key retrieval and selection, and circuit-input
 construction overlap proof-worker startup and backend initialization. Witness
-execution starts once both inputs and backend are ready. No TLSNotary session
-is created for Google.
+execution starts once inputs and Noir are ready, while bb may still be initializing.
+No TLSNotary session is created for Google.
 
 The semantic groups flatten to exactly 56 bb.js public-input fields. The module
 requires a canonical unpadded base64url nonce encoding exactly 32 bytes and
@@ -150,8 +152,9 @@ detected, not either ledger verification requirement.
    canonical `id` and `username` ranges.
 4. Once both sessions expose the required reveal material and independent
    16-byte commitment openings, build the `bearer-link` witness from the private
-   bearer, its length, and those blinders. Execute the witness and generate the
-   proof as soon as the backend is ready, overlapping final notarization work.
+   bearer, its length, and those blinders. Execute the witness as soon as Noir is
+   ready; generate the proof once both witness and backend are ready, overlapping
+   final notarization work.
 5. Deliver `bearerLinkProof`, both final attestations with their decoded views,
    and the extracted `identity` only after commitment and transcript
    correlations pass. A late notarization failure discards an already-generated
