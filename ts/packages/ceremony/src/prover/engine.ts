@@ -22,6 +22,7 @@ export interface RawProof {
 
 export interface ProofEngineOptions {
   circuitUrl: string
+  verificationKeyUrl: string
   onProgress?: (step: PlatformStep, timestamp: number) => void
   threads?: number
 }
@@ -48,6 +49,7 @@ export class ProofEngine {
   #preload: {
     type: 'engine-preload'
     circuitUrl: string
+    verificationKeyUrl: string
     threads: number
     acvmUrl: string
     abiUrl: string
@@ -55,11 +57,18 @@ export class ProofEngine {
     crsPath: string
   } | null = null
 
-  constructor({ circuitUrl, onProgress = () => undefined, threads }: ProofEngineOptions) {
-    const url = new URL(circuitUrl, location.href)
-    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.hash) {
-      throw new Error('invalid circuit URL')
-    }
+  constructor({
+    circuitUrl,
+    verificationKeyUrl,
+    onProgress = () => undefined,
+    threads,
+  }: ProofEngineOptions) {
+    const [url, keyUrl] = [circuitUrl, verificationKeyUrl].map((value) => {
+      const url = new URL(value, location.href)
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.hash)
+        throw new Error('invalid circuit resource URL')
+      return url.href
+    })
     this.#progress = new Progress(PROOF_ENGINE_SPANS, (step) => {
       try {
         onProgress(step, performance.timeOrigin + performance.now())
@@ -71,7 +80,7 @@ export class ProofEngine {
     this.#ready = new Promise<void>((resolve) => {
       this.#resolveReady = resolve
     })
-    void this.#start(url.href, threads).catch((error: unknown) => this.#fail(error))
+    void this.#start(url, keyUrl, threads).catch((error: unknown) => this.#fail(error))
   }
 
   async prove(inputs: Record<string, unknown>, signal?: AbortSignal): Promise<RawProof> {
@@ -103,7 +112,7 @@ export class ProofEngine {
     if (!this.#settled) this.#fail('proof engine destroyed')
   }
 
-  async #start(circuitUrl: string, threads?: number): Promise<void> {
+  async #start(circuitUrl: string, verificationKeyUrl: string, threads?: number): Promise<void> {
     if (this.#settled) return
     const worker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' })
     this.#worker = worker
@@ -126,6 +135,7 @@ export class ProofEngine {
     this.#preload = {
       type: 'engine-preload',
       circuitUrl,
+      verificationKeyUrl,
       threads: Math.max(1, Math.min(threads ?? 4, navigator.hardwareConcurrency || 1, 4)),
       acvmUrl: resolveAsset(acvm),
       abiUrl: resolveAsset(abi),

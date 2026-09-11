@@ -53,11 +53,17 @@ All pipelines use one proving engine. The platform module builds the closed
 Noir input map, the Noir ACIR virtual machine (ACVM) runtime solves the witness,
 and the circuit-compatible
 [Aztec bb.js](https://github.com/AztecProtocol/aztec-packages/tree/v5.2.0/barretenberg/ts)
-release generates an UltraHonk proof with
-`backend.generateProof(witness, { verifierTarget: 'evm' })`. This explicitly
-selects ZK-Honk with the Keccak transcript, not the library's default or
-`evm-no-zk`. The option belongs to the pinned platform proving configuration;
-it is not selected from the caller's chain. Qualification verifies the browser
+release generates an UltraHonk proof through `api.circuitProve`, supplying the
+matching released `vk` instead of recomputing it. The circuit and key are
+prefetched from the same release archive. Missing or empty keys fail; there is
+no fallback to key generation. Native `DecompressionStream` decodes the
+compressed ACIR and witness before the call.
+
+The explicit settings are exactly bb.js 5.2.0's `verifierTarget: 'evm'` mapping:
+`ipaAccumulation: false`, `oracleHashType: 'keccak'`, `disableZk: false`, and
+`optimizedSolidityVerifier: false`. This preserves ZK-Honk with the Keccak
+transcript. The settings belong to the pinned platform proving configuration;
+they are not selected from the caller's chain. Qualification verifies the browser
 output against the matching released verifier artifact and key, not just a
 local verifier configured with the same possibly incorrect defaults.
 

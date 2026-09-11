@@ -35,6 +35,20 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
   const google = graph.requestsByProfile['google/1'],
     x = graph.requestsByProfile['x/1'],
     github = graph.requestsByProfile['github/1']
+  for (const [list, name] of [
+    [google, 'oidc-google'],
+    [x, 'bearer-link'],
+    [github, 'bearer-link'],
+  ] as const) {
+    const keys = list.filter((r) => r.url.endsWith('/vk'))
+    assert.equal(keys.length, 1)
+    assert.ok(keys[0].url.endsWith(`/${name}/vk`))
+    assert.equal(keys[0].bytes, 1888)
+  }
+  assert.deepEqual(
+    x.filter((r) => r.url.endsWith('/vk')),
+    github.filter((r) => r.url.endsWith('/vk')),
+  )
   assert.ok(!google.some((r) => r.url.includes('tlsn')))
   assert.ok(x.some((r) => r.url.endsWith('/tlsn_wasm.js')))
   assert.ok(!google.some((r) => r.url.endsWith('/bearer_link.json')))

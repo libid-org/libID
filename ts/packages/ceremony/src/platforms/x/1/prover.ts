@@ -11,7 +11,7 @@ import { Progress } from '../../../prover/progress.js'
 import { isFormClientId } from '../../authorization.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
 import type { Identity } from '../../types.js'
-import { circuit } from './assets.js'
+import { circuit, verificationKey } from './assets.js'
 import {
   buildIdentityRequest,
   buildTokenRequest,
@@ -52,6 +52,7 @@ export async function prove(
   )
   const engine = new ProofEngine({
     circuitUrl: resolveAsset(circuit),
+    verificationKeyUrl: resolveAsset(verificationKey),
     onProgress: (step) => {
       if (step.status === 'started') progress.start(step.code)
       else if (step.status === 'completed') progress.complete(step.code)
