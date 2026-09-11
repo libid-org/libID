@@ -16,7 +16,7 @@ vi.mock('@libid/popup', () => ({
   PopupWindow: { current: vi.fn() },
 }))
 vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
-vi.mock('../../prefetch/registration.js', () => ({ claimRootWorker: vi.fn() }))
+vi.mock('../../assets/registration.js', () => ({ claimRootWorker: vi.fn() }))
 vi.mock('../../platforms/google/1/prover.js', () => ({ prove }))
 vi.mock('../../platforms/x/1/prover.js', () => ({ prove }))
 vi.mock('../../platforms/github/1/prover.js', () => ({ prove }))

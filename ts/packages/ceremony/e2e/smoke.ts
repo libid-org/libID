@@ -1,17 +1,17 @@
 import { sha256 } from '@noble/hashes/sha2.js'
-import { resolve as assetUrl } from '../src/assets.js'
+import { resolve as assetUrl } from '../src/assets/index.js'
 import {
   circuit as google,
   verificationKey as googleKey,
-} from '../src/platforms/google/1/assets.js'
-import { buildGoogleWitness } from '../src/proving/bb/circuits/oidc_google/inputs.js'
+} from '../src/platforms/google/1/google.assets.js'
+import { buildGoogleWitness } from '../src/barretenberg/circuits/oidc_google/inputs.js'
 import {
   bearerCircuit,
   bearerVerificationKey,
-} from '../src/proving/bb/circuits/bearer_link/assets.js'
-import { buildBearerLinkWitness } from '../src/proving/bb/circuits/bearer_link/inputs.js'
-import { ProofEngine } from '../src/proving/bb/engine.js'
-import { Notarization } from '../src/notarization/session.js'
+} from '../src/barretenberg/circuits/bearer_link/bearer_link.assets.js'
+import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer_link/inputs.js'
+import { ProofEngine } from '../src/barretenberg/engine.js'
+import { Notarization } from '../src/notary/session.js'
 import fixture from '../test-fixtures/google-v1.json'
 
 Object.assign(window, {

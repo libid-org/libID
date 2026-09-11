@@ -16,10 +16,10 @@ module ownership and contracts.
 ## Application use
 
 ```ts
-import { createCeremonyClient } from '@libid/ceremony/client'
+import { createCCDPClient } from '@libid/ceremony/ccdp/client'
 import { PopupConnection, PopupWindow } from '@libid/popup'
 
-const client = await createCeremonyClient({ oauthBridge: 'https://bridge.example' })
+const client = await createCCDPClient({ oauthBridge: 'https://bridge.example' })
 
 // Inside the application's synchronous click handler. The application supplies
 // its own canonical CCDP origin to the popup package's origin allowlist.
@@ -78,12 +78,12 @@ identifier, and wraps the proof with its selected version and authorization nonc
 
 | Path | Owner |
 |---|---|
-| [src/client/](client.md#implementation-guide) | Configuration, frozen construction, one-shot application state |
+| [src/ccdp/client/](client.md#implementation-guide) | Configuration, frozen construction, one-shot application state |
 | [src/ccdp/](protocol.md#implementation-guide) | Seven message companions and navigation-fragment codecs |
 | [src/platforms/](pipelines.md#implementation-guide) | Authorization, proof type, asset set and proof pipeline |
-| [src/proving/](proving.md#implementation-guide) | Dedicated Noir/bb.js proof worker |
-| [src/notarization/](notarization.md#implementation-guide) | Browser TLSNotary sessions, canonical decoding and correlation |
-| [src/prefetch/](prefetch.md#implementation-guide) | Root Service Worker, byte caches and pending-fetch joins |
+| [src/barretenberg/](proving.md#implementation-guide) | Dedicated Noir/bb.js proof worker |
+| [src/notary/](notarization.md#implementation-guide) | Browser TLSNotary sessions, canonical decoding and correlation |
+| [src/assets/](prefetch.md#implementation-guide) | Root Service Worker, byte caches and pending-fetch joins |
 | [src/ccdp/documents/](documents.md#implementation-guide) | Callback, Prefetch and Prover page entrypoints |
 | `src/ui.ts` | Native, package-owned DOM and progress |
 | [build/](build.md) | Compiler-owned graph and static response policies |

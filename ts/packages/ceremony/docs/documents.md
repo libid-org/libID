@@ -170,4 +170,4 @@ return. [prefetch.ts](../src/ccdp/documents/prefetch.ts) is the dual-context Pre
 imports the [cache implementation](prefetch.md#implementation-guide). [prover.ts](../src/ccdp/documents/prover.ts)
 handles readiness, UI, cancellation and delivery while dispatching the
 [platform pipelines](pipelines.md#implementation-guide). Proving machinery stays in
-[proving/](proving.md#implementation-guide).
+[barretenberg/](proving.md#implementation-guide).

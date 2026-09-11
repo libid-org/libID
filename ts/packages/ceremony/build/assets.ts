@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import type { Rollup } from 'vite'
 import { build } from 'vite'
-import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets.js'
+import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.js'
 import * as headers from '../src/ccdp/headers.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetPlugin } from './asset-plugin.ts'
@@ -24,7 +24,7 @@ export async function loadAssetCatalog() {
     build: {
       write: false,
       minify: false,
-      lib: { entry: join(packageDir, 'src/platforms/assets.ts'), formats: ['es'] },
+      lib: { entry: join(packageDir, 'src/platforms/platforms.assets.ts'), formats: ['es'] },
     },
   })
   const output = ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output

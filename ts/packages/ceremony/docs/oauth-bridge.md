@@ -188,7 +188,7 @@ requests return no configuration. These browser admission checks do not make
 the public record a secret from non-browser clients. Request values do not
 alter the response record.
 
-The application-scoped `CeremonyClient` fetches and validates this record once
+The application-scoped `CCDPClient` fetches and validates this record once
 at creation using `credentials: 'omit'`. It freezes the selected client ID,
 redirect URI, CCDP origin, and mutually supported platform ceremony version
 in each live ceremony. CCDP browser [resources](documents.md#documents-and-routes)
@@ -271,7 +271,7 @@ not normalize either value.
 
 `notaryAddress` is a required canonical HTTPS origin with no credentials, path,
 query, or fragment. Prover forwards the address already
-[snapshotted by CeremonyClient](client.md#notary-selection) from the
+[snapshotted by CCDPClient](client.md#notary-selection) from the
 supplied ledger, and uses that same address for identity notarization. The Bridge
 derives the fixed `/notarize-proxy` WebSocket endpoint from it; it neither
 classifies ledgers nor maintains a notary mapping or override.

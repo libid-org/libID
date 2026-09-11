@@ -7,7 +7,7 @@ not apply to OAuth provider requests or external proving assets. COOP/COEP, orig
 admission, callback privacy and all other validation remain required. LAN addresses,
 lookalike domains and noncanonical spellings are not admitted.
 
-This document defines the browser-side `notarization` module: how it
+This document defines the browser-side `notary` module: how it
 runs a TLSNotary session, applies platform-selected transcript disclosures, and
 returns a byte-exact attestation with its decoded view plus private commitment
 openings. The enclosing pipeline is defined in [PROVING.md](proving.md), browser placement in
@@ -37,7 +37,7 @@ its deterministic sibling `tlsn_wasm_bg.wasm`.
 ### Notary address
 
 The adapter receives the canonical HTTPS `notaryAddress` read from the ledger and frozen
-by [CeremonyClient](client.md#notary-selection), through `AppStartProver`.
+by [CCDPClient](client.md#notary-selection), through `AppStartProver`.
 It owns no profile defaults, ledger classification, or environment override.
 X uses that address for both browser sessions. GitHub passes it unchanged in
 its Bridge token request and uses it locally for identity notarization. Neither
@@ -166,7 +166,7 @@ and exposes only the range and private blinder for each opening.
 
 ## Canonical attested-data decoder
 
-`notarization` owns one read-only decoder for the signed attested-data
+`notary` owns one read-only decoder for the signed attested-data
 bytes. It does not expose an encoder and never reserializes a received record.
 The decoder returns this view, attached as `NotaryAttestation.decoded` and
 exposed through the public platform proof. Its types are client-safe; the
@@ -436,8 +436,8 @@ selective disclosures and correlation with canonical final attestations.
 - [Platform pipelines](pipelines.md): token/identity overlap and delivery dependencies.
 - [Qualification blockers](qualification.md#actual-blockers-and-unqualified-boundaries): matched service, timing and profile gaps.
 
-[session.ts](../src/notarization/session.ts) controls one ceremony-owned
-[session.worker.ts](../src/notarization/session.worker.ts). X creates one
+[session.ts](../src/notary/session.ts) controls one ceremony-owned
+[session.worker.ts](../src/notary/session.worker.ts). X creates one
 `Notarization` instance for both requests, sharing WASM initialization and its
 thread pool. Each request has a separate native message channel, TLSNotary prover,
 socket, transcript and attestation. Each socket opens alongside shared WASM
@@ -450,15 +450,15 @@ concurrent dependent work, so even a failure after a session is prepared can
 cancel a pending Bridge fetch. GitHub uses the same adapter for its one browser
 identity request. Real shared-runtime concurrency and timing remain subject to
 qualification; unit-level overlap does not establish WASM liveness.
-[transport.ts](../src/notarization/transport.ts) frames final output, [decode.ts](../src/notarization/decode.ts) reads canonical
-attested bytes, and [notarize.ts](../src/notarization/notarize.ts) correlates transcripts and openings.
-[http.ts](../src/notarization/http.ts) decodes HTTP responses, preserving numeric
-identity IDs, and [transcript.ts](../src/notarization/transcript.ts) provides byte-range
+[transport.ts](../src/notary/transport.ts) frames final output, [decode.ts](../src/notary/decode.ts) reads canonical
+attested bytes, and [notarize.ts](../src/notary/notarize.ts) correlates transcripts and openings.
+[http.ts](../src/notary/http.ts) decodes HTTP responses, preserving numeric
+identity IDs, and [transcript.ts](../src/notary/transcript.ts) provides byte-range
 and request-binding helpers. Provider-specific reveal selection stays in each platform.
 Original attestations and signatures are preserved; local signature verification is
 outside the adapter's responsibility.
 
-[Client](../src/client/ceremony.ts) snapshots the ledger's notary address before OAuth.
+[Client](../src/ccdp/client/ceremony.ts) snapshots the ledger's notary address before OAuth.
 X uses it for both sessions; GitHub sends it unchanged to the Bridge and uses it
 for the browser identity session. Prover performs no ledger lookup.
 
@@ -489,8 +489,8 @@ required-header values, rejects a second Authorization header under any scheme,
 and discloses the complete request except exactly one bearer range. Offsets count
 wire bytes, including when additional headers contain non-ASCII values.
 
-Regression coverage is in [transcript tests](../src/notarization/transcript.test.ts),
+Regression coverage is in [transcript tests](../src/notary/transcript.test.ts),
 [GitHub admission](../src/platforms/github/1/token.test.ts), and
-[attestation correlation](../src/notarization/notarize.test.ts). This covers
+[attestation correlation](../src/notary/notarize.test.ts). This covers
 adjacent GitHub `id`/`login` disclosures as well as token requests. Fixtures model
 native range coalescing; they do not establish a live notarized ceremony.

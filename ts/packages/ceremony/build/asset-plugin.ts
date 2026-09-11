@@ -11,7 +11,7 @@ export function assetPlugin(
     name: 'ceremony-assets',
     enforce: 'pre',
     async transform(source, id) {
-      if (!data || !id.endsWith('.ts') || !source.includes('assets.js')) return
+      if (!data || !id.endsWith('.ts') || !source.includes('assets/index.js')) return
       const code = (await transformWithEsbuild(source, id, { loader: 'ts', target: 'es2022' })).code
       const ast = this.parse(code)
       const namespaces = new Set<string>(),
@@ -21,7 +21,7 @@ export function assetPlugin(
         if (
           node.type !== 'ImportDeclaration' ||
           typeof node.source.value !== 'string' ||
-          resolve(dirname(id), node.source.value) !== join(packageDir, 'src/assets.js')
+          resolve(dirname(id), node.source.value) !== join(packageDir, 'src/assets/index.js')
         )
           continue
         for (const spec of node.specifiers) {
@@ -120,7 +120,7 @@ export function assetPlugin(
       if (id === 'virtual:ceremony-assets') return `\0${id}`
     },
     load(id) {
-      if (data && id === join(packageDir, 'src/assets.ts'))
+      if (data && id === join(packageDir, 'src/assets/index.ts'))
         return `
         import {urls} from 'virtual:ceremony-assets';
         export * as headers from ${JSON.stringify(join(packageDir, 'src/ccdp/headers.ts'))};

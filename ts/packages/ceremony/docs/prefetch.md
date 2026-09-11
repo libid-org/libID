@@ -1,4 +1,4 @@
-# Prefetch and cache lifecycle
+# Asset caching and prefetch and cache lifecycle
 
 ## Prefetch and cache lifecycle
 
@@ -131,6 +131,6 @@ fetch sharing. Pre-OAuth work warms bytes, not initialized proof or TLSNotary ru
 - [Dependency loaders](proving.md#dependency-asset-resolution): exact native URLs and ranges.
 - [Distribution graph](distribution.md#source-declarations): one owner declaration per resource.
 
-[registration.ts](../src/prefetch/registration.ts) resolves root ownership and dispatches selected
-profiles. [worker.ts](../src/prefetch/worker.ts) composes popup continuity with [cache.ts](../src/prefetch/cache.ts).
+[registration.ts](../src/assets/registration.ts) resolves root ownership and dispatches selected
+profiles. [worker.ts](../src/assets/worker.ts) composes popup continuity with [cache.ts](../src/assets/cache.ts).
 The browser/worker entrypoint lives in [ccdp/documents/prefetch.ts](../src/ccdp/documents/prefetch.ts).

@@ -5,13 +5,13 @@ Browser identity ceremonies over a caller-supplied `@libid/popup` connection.
 - [Package guide](docs/overview.md): application usage, package layout, build and checks.
 - [Architecture](docs/architecture.md): ownership, public boundaries and versioning.
 - [Source guide](docs/source.md): implementation map.
-- [Client](docs/client.md): configuration, construction, results and lifecycle.
+- [CCDP client](docs/client.md): configuration, construction, results and lifecycle.
 - [CCDP](docs/protocol.md): messages, ordering and terminal outcomes.
 - [Documents](docs/documents.md): Callback, Prefetch and Prover entrypoints and navigation.
 - [Platform pipelines](docs/pipelines.md): Google, X and GitHub execution.
 - [Proving](docs/proving.md): proof workers, toolchain and dependency loaders.
 - [Notarization](docs/notarization.md): TLSNotary sessions and attestation contracts.
-- [Prefetch](docs/prefetch.md): root Service Worker, byte caching and pending requests.
+- [Assets](docs/prefetch.md): root Service Worker, byte caching and pending requests.
 - [Distribution](docs/distribution.md): static artifacts, routes and response policies.
 - [Build](docs/build.md): compiler and deployment tooling.
 - [OAuth Bridge](docs/oauth-bridge.md): external server contract.
