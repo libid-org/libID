@@ -157,11 +157,11 @@ preserves the already authenticated port without repeating its handshake.
 `PortKeeper` never receives an RTC resource, substitute carrier, or caller
 value.
 
-This path is strictly same-origin. The host must serve source and destination
-under the same active Service Worker registration and scope when it expects
-preservation. Connection can check only the target origin before navigation; if
-a same-origin destination resolves to another registration, it claims no port
-and performs a fresh handshake through its opener or fallback. Before
+This path is strictly same-origin. The host must make the worker holding the
+port reachable from the destination. By default, keep uses the registration
+controlling the destination URL and claim asks every registration on the
+origin. With an explicit scope, both use only that registration. A mismatched
+scope or inaccessible owner claims no port and selection proceeds normally. Before
 cross-origin navigation, including navigation to another site, connection does
 not call `keep`; it releases the old popup endpoint and the allowed destination
 likewise establishes a fresh carrier.
@@ -200,8 +200,9 @@ These are observations, not guaranteed browser contracts. The carrier uses one
 conservative `CARRIER_CLAIM_TIMEOUT_MS = 5_000` across engines, below the
 observed WebKit boundary. It does not sniff the user agent or select a
 browser-specific deadline. Suspension, process loss, memory pressure, or expiry
-may still break continuity; failure is terminal and never selects a weaker
-path.
+may still lose the preserved port. The next document then follows normal
+carrier selection; an authentication failure remains terminal rather than
+selecting a weaker path.
 
 ### Internal PortKeeper API
 
@@ -217,9 +218,9 @@ that script. The handler acts only on its own keep and claim records and
 leaves every other message and its ports to the host; installation, update,
 and claiming policy stay the host's. The handler is exported from the `@libid/popup/worker` subpath
 only, so worker-global types never enter the main package declaration. The
-package registers nothing and `PopupWindow.current()` resolves the active
-registration whose scope matches the current document; control of the
-document is not required to message that worker.
+package registers nothing. `PopupWindow.current()` resolves registrations
+as described above; control of the document is not required to message the
+selected worker.
 
 ```ts
 // @libid/popup/worker

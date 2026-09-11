@@ -5,6 +5,7 @@
 // documented path; they own nothing the package cares about.
 
 import { readFileSync } from 'node:fs'
+import { createServer as createHttpServer } from 'node:http'
 import { createServer } from 'node:https'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -162,7 +163,7 @@ const DIP = {
   'Document-Isolation-Policy': 'isolate-and-require-corp',
 }
 
-function popupHandler(req, res) {
+function popupHandler(req, res, page = popupPage) {
   const url = new URL(req.url, 'https://popup.invalid')
   switch (url.pathname) {
     case '/health':
@@ -173,16 +174,16 @@ function popupHandler(req, res) {
       return send(res, 200, { ...JS, 'Service-Worker-Allowed': '/' }, workerModule)
     case '/p':
     case '/p-any':
-      return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'unsafe-none' }, popupPage)
+      return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'unsafe-none' }, page)
     case '/isolated':
     case '/dip/fallback':
-      return send(res, 200, { ...HTML, ...ISOLATED }, popupPage)
+      return send(res, 200, { ...HTML, ...ISOLATED }, page)
     case '/dip':
     case '/dip-broken':
-      return send(res, 200, { ...HTML, ...DIP }, popupPage)
+      return send(res, 200, { ...HTML, ...DIP }, page)
     case '/dip-broken/fallback':
       // COOP without COEP: never isolated, so the fallback must not loop.
-      return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'same-origin' }, popupPage)
+      return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'same-origin' }, page)
     case '/external':
       return send(res, 200, HTML, externalPage)
     default:
@@ -190,10 +191,10 @@ function popupHandler(req, res) {
   }
 }
 
-function appHandler(req, res) {
+function appHandler(req, res, page = appPage) {
   const url = new URL(req.url, ORIGINS.appA)
   if (url.pathname === '/popup.js') return send(res, 200, JS, popupModule)
-  if (url.pathname === '/') return send(res, 200, HTML, appPage)
+  if (url.pathname === '/') return send(res, 200, HTML, page)
   return send(res, 404, {}, '')
 }
 
@@ -206,3 +207,11 @@ for (const [origin, handler] of [
 ]) {
   createServer(tls, handler).listen(Number(new URL(origin).port))
 }
+
+// Exercise both exact HTTP loopback names with the same documents and worker.
+const localPage = (page) =>
+  page
+    .replaceAll(ORIGINS.appA, 'http://127.0.0.1:4585')
+    .replaceAll(ORIGINS.popup, 'http://localhost:4586')
+createHttpServer((req, res) => appHandler(req, res, localPage(appPage))).listen(4585)
+createHttpServer((req, res) => popupHandler(req, res, localPage(popupPage))).listen(4586)

@@ -3,7 +3,7 @@ import {
   canonicalOrigin,
   decodeControl,
   isAllowedOrigin,
-  isCanonicalHttpsUrl,
+  isCanonicalWebUrl,
   isConnectionId,
   isReservedType,
   MAX_TYPE_LENGTH,
@@ -34,7 +34,7 @@ describe('connection id [POPUP-CONNECTION-007]', () => {
 
 describe('navigation url [POPUP-CONTROL-002]', () => {
   it('accepts only canonical absolute HTTPS without credentials', () => {
-    expect(isCanonicalHttpsUrl('https://popup.example/p#c=1')).toBe(true)
+    expect(isCanonicalWebUrl('https://popup.example/p#c=1')).toBe(true)
     for (const bad of [
       'http://popup.example/p',
       'https://user:pw@popup.example/p',
@@ -46,7 +46,7 @@ describe('navigation url [POPUP-CONTROL-002]', () => {
       'javascript:alert(1)',
       '',
     ]) {
-      expect(isCanonicalHttpsUrl(bad)).toBe(false)
+      expect(isCanonicalWebUrl(bad)).toBe(false)
     }
   })
 })
@@ -136,11 +136,43 @@ describe('origin sets [POPUP-CONNECTION-009]', () => {
 })
 
 describe('wildcard allowlist [POPUP-CONNECTION-009]', () => {
-  it("accepts any canonical HTTPS origin under '*' and nothing else", () => {
+  it("accepts canonical HTTPS and rejects unrelated origins under '*'", () => {
     expect(isAllowedOrigin('https://any.example', '*')).toBe(true)
     for (const bad of ['null', 'http://any.example', 'https://any.example/', '', 'file://']) {
       expect(isAllowedOrigin(bad, '*'), bad).toBe(false)
     }
     expect(isAllowedOrigin('https://any.example', ['https://other.example'])).toBe(false)
   })
+})
+
+it('admits only canonical explicit loopback HTTP for navigation and origins', () => {
+  for (const origin of [
+    'http://localhost',
+    'http://127.0.0.1',
+    'http://localhost:4683',
+    'http://127.0.0.1:65535',
+  ]) {
+    expect(isCanonicalWebUrl(`${origin}/prover`)).toBe(true)
+    expect(requireOrigins([origin], 'origins')).toEqual([origin])
+    expect(isAllowedOrigin(origin, '*')).toBe(true)
+    expect(decodeControl({ type: 'navigate', url: `${origin}/prover` })).not.toBeNull()
+    expect(() => requireOrigins([origin, origin], 'origins')).toThrow()
+  }
+  for (const origin of [
+    'http://localhost.evil.test',
+    'http://192.168.1.1',
+    'http://localtest.me',
+    'http://localhost.',
+    'http://user@localhost',
+    'http://LOCALHOST',
+    'http://127.1',
+    'http://localhost:80',
+    'http://localhost:65536',
+  ]) {
+    expect(isCanonicalWebUrl(`${origin}/prover`), origin).toBe(false)
+    expect(() => requireOrigins([origin], 'origins'), origin).toThrow()
+    expect(isAllowedOrigin(origin, '*'), origin).toBe(false)
+  }
+  expect(isAllowedOrigin('http://localhost:4684', ['http://localhost:4683'])).toBe(false)
+  expect(isAllowedOrigin('https://localhost:4683', ['http://localhost:4683'])).toBe(false)
 })

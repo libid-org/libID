@@ -15,6 +15,10 @@ carrier transparently across document changes. Carrier identity, count, and
 lifetime are not API guarantees. If no carrier can continue or be established,
 the logical connection fails closed.
 
+This implements the [normative popup transport](../../../../specs/popup-transport.md).
+Continuity is best-effort: preserving the logical connection does not promise
+delivery across carrier retirement or replay messages lost during navigation.
+
 ```ts
 type ConnectionVersion = 1
 ```
@@ -106,9 +110,10 @@ message.
 ## Failure and security rules
 
 - A carrier is selectable only after it authenticates both endpoints.
-- One connection admits at most one popup browsing context and one active
-  carrier. Each participating popup document authenticates and selects its own
-  carrier; stale carrier results are inert.
+- One connection admits at most one current popup endpoint and one active
+  carrier. MessagePort additionally binds the exact window handle; a fallback
+  authenticates its peer without proving that handle's identity. Each new
+  document authenticates and selects its own carrier; stale results are inert.
 - Application-level messages travel only over the active end-to-end carrier.
   Rendezvous and continuity
   controls carry none; neither do cookies, durable storage, request data, or
@@ -194,7 +199,7 @@ keeps its still-unstarted port through the worker, so every value the
 application already sent stays queued inside it, settles `closed` as closed,
 and replaces itself with the fallback; the fallback restores the port and
 becomes ready. The fallback is resolved against the current document, must be
-same-origin HTTPS without a fragment of its own, and always carries the
+same-origin, with the URL policy below and without a fragment of its own, and always carries the
 document's captured fragment, the value `PopupWindow.current` was given or
 read at adoption. Because the host may register its worker in the same
 document, the endpoint waits up to the keeper reply deadline for that
@@ -208,19 +213,24 @@ does not invoke it: a carrier it produced could not cross the replacement, so
 the document replaces itself first and the isolated destination establishes
 the only carrier through its own fallback constructor, from the same
 still-unused signaling round. The intermediate document spends no connection,
-never becomes ready, and delivers nothing; the application holds no carrier
-until the destination authenticates, so nothing it sends can fall into the
-gap. This is what lets
+never becomes ready, and delivers nothing. Before the first carrier is
+selected, application sends throw. After a previous carrier was retired, the
+application may still hold its unusable side: sends succeed locally and are
+lost until the destination authenticates. Preparing a signaling round does
+not authenticate the replacement or queue messages for it. This is what lets
 a host serve one document with Document-Isolation-Policy for engines that
 honour it and a COOP fallback for the rest, with no protocol change.
 
 `connect` copies `allowedPopupOrigins`, and `accept` copies
 `allowedApplicationOrigins`. Both must be nonempty, duplicate-free sets of
 canonical HTTPS origins; either constructor rejects an invalid member or
-duplicate. `accept` alone also takes the literal `'*'`, which admits any
-canonical HTTPS origin the browser stamps on the opener's handshake; an
-opaque or non-HTTPS origin is still rejected, and the exact observed origin
-and source are still bound. `connect` never accepts a wildcard. Every initial
+duplicate. HTTP is also accepted on exactly `localhost` and `127.0.0.1`, at
+any valid port, without hostname resolution. This same URL policy applies to
+navigation and isolation fallback. Scheme and effective port remain part of
+exact origin matching; lookalikes, other HTTP hosts, and noncanonical
+spellings are rejected. `accept` alone also takes the literal `'*'`, admitting
+any origin satisfying that policy while still authenticating its exact peer.
+`connect` never accepts a wildcard. Every initial
 or later participating popup document must authenticate from one exact
 popup-origin member, and each popup endpoint binds one exact observed
 application origin. The sets admit participants; they neither select
@@ -505,13 +515,15 @@ the popup selects the destination, it navigates only after receiving the
 reply. An application-side `navigateAway` issued immediately after a `send`
 does not wait for the port and can lose the reply; the popup initiates that
 departure instead. After the application sends `Navigate`, ordinary messages
-it sends cannot reach the departing document: on a same-origin transition
-they wait in the preserved port and reach the destination once it accepts,
-provided the destination registered their handlers before yielding; on a
-cross-origin transition they are lost. Send what the destination needs only
+it sends cannot reach the departing document: when the port is preserved,
+they wait in it and reach the destination once it accepts, provided the
+destination registered their handlers before yielding. When the carrier is
+retired instead, including a same-origin nontransferable carrier, they are
+lost until the destination authenticates. Send what the destination needs only
 after it announces itself.
 
-`navigate` and `navigateAway` take a fragment-free canonical HTTPS URL and,
+`navigate` and `navigateAway` take a fragment-free canonical URL satisfying
+the origin scheme/host policy above and,
 separately, optional fragment fields as `URLSearchParams`. The endpoint
 serializes the fields at the call, so later mutation of the object is
 invisible, appends them as the fragment, and treats them as opaque protocol
@@ -572,9 +584,10 @@ documents may instead preserve a transferable port across the bounded
 replacements defined below.
 
 The factory installs the appropriate operation from the native resource it
-owns, never from the URL. A popup endpoint without the required carrier port
-rejects rather than navigating and losing live state. The application endpoint
-has no keeper, including a no-op implementation.
+owns, never from the URL. A failed port preservation or successor preparation
+rejects before navigation; a fallback-only isolation hop with no carrier yet
+instead connects at the destination. The application endpoint has no keeper,
+including a no-op implementation.
 
 ## Carriers
 
@@ -678,10 +691,10 @@ through the already-armed exact signaling round.
 
 ## Continuity across navigations
 
-Carrier continuity means that the logical connection can preserve one active
-carrier while the popup replaces one participating document with another. It
-does not preserve the old JavaScript heap or an `RTCDataChannel`. A current
-carrier which cannot survive a document change is replaced transparently.
+Continuity preserves the logical connection at best effort while the popup
+replaces one participating document with another. It may preserve the same
+carrier or authenticate a fresh one; it does not preserve the old JavaScript
+heap or an `RTCDataChannel`, and does not recover lost messages.
 
 Only a direct `PopupConnection.navigate()` between participating documents
 performs managed carrier preservation or replacement. Any navigation outside

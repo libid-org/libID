@@ -89,10 +89,12 @@ settles once a carrier is selected and rejects with a `PopupError` if the
 endpoint failed first.
 
 `allowedApplicationOrigins` is an explicit list of canonical HTTPS origins or
-`'*'`, which accepts any canonical HTTPS origin the browser observed on the
-opener's handshake while still binding that exact origin and source. An
-empty list remains invalid. The application's `allowedPopupOrigins` is always
-explicit.
+`'*'`. Canonical HTTP on exactly `localhost` and `127.0.0.1` is also admitted,
+at any valid port, for allowlists, navigation and isolation fallback. The
+wildcard follows that same policy and still authenticates the exact peer;
+other HTTP hosts are rejected. Empty lists and duplicates remain invalid.
+The application's `allowedPopupOrigins` is always explicit. See the
+[normative origin rules](../../../specs/popup-transport.md#6-origin-allowlists-and-binding).
 
 The caller supplies a fresh `crypto.randomUUID()` value for each logical
 connection; the exact accepted grammar and non-reuse rule are defined by the
@@ -107,6 +109,8 @@ transfers a port between Service Workers: the next participating document
 authenticates a fresh carrier through its opener or the configured fallback.
 A cross-origin destination whose isolation policy severs its opener therefore
 requires a fallback constructor; without one, the connection fails closed.
+This is best-effort logical continuity, not guaranteed delivery across a
+carrier change: sends into a retired carrier can succeed locally and be lost.
 
 ```ts
 interface PopupConnection<Out extends Message, In extends Message = Out> {
@@ -274,8 +278,9 @@ and that carrier could not cross the replacement, so the non-isolated document
 does not construct it: it replaces itself first, and the isolated fallback
 establishes the only carrier through its own constructor from the same
 still-unused signaling round. No connection is spent on the intermediate
-document, and the application, which holds no carrier until then, cannot send
-into the gap.
+document. Before initial selection application sends throw; if it retains a
+retired predecessor, sends may succeed locally and be lost until the new
+carrier authenticates. The transport neither queues nor replays those values.
 
 ### Continuity worker
 

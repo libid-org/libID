@@ -85,8 +85,8 @@ export function routingType(value: unknown): string | null {
   return typeof type === 'string' && type.length > 0 && type.length <= MAX_TYPE_LENGTH ? type : null
 }
 
-/** An absolute HTTPS URL in its own serialization, without credentials. */
-export function isCanonicalHttpsUrl(url: string): boolean {
+/** An absolute HTTPS (or localhost HTTP) URL in its own serialization, without credentials. */
+export function isCanonicalWebUrl(url: string): boolean {
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -94,7 +94,8 @@ export function isCanonicalHttpsUrl(url: string): boolean {
     return false
   }
   return (
-    parsed.protocol === 'https:' &&
+    (parsed.protocol === 'https:' ||
+      (parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname))) &&
     parsed.href === url &&
     parsed.username === '' &&
     parsed.password === ''
@@ -108,7 +109,7 @@ export function decodeControl(value: Record<string, unknown>): PopupControl | nu
   if (value.type === 'navigate') {
     return hasExactKeys(value, ['type', 'url']) &&
       typeof value.url === 'string' &&
-      isCanonicalHttpsUrl(value.url)
+      isCanonicalWebUrl(value.url)
       ? { type: 'navigate', url: value.url }
       : null
   }
@@ -132,16 +133,17 @@ export function canonicalOrigin(value: unknown): string | null {
   }
 }
 
-/** Either an explicit allowlist or any canonical HTTPS origin the browser observed. */
+/** Either an explicit allowlist or any canonical HTTPS (or localhost HTTP) origin the browser observed. */
 export type OriginAllowlist = readonly string[] | '*'
 
 export function isAllowedOrigin(origin: string, allowlist: OriginAllowlist): boolean {
-  if (allowlist === '*') return origin.startsWith('https://') && canonicalOrigin(origin) === origin
+  if (allowlist === '*')
+    return canonicalOrigin(origin) === origin && isCanonicalWebUrl(`${origin}/`)
   return allowlist.includes(origin)
 }
 
 /**
- * A nonempty, duplicate-free set of canonical HTTPS origins, frozen.
+ * A nonempty, duplicate-free set of canonical HTTPS (or localhost HTTP) origins, frozen.
  * Throws `TypeError` naming the option otherwise.
  */
 export function requireOrigins(value: unknown, option: string): readonly string[] {
@@ -149,8 +151,8 @@ export function requireOrigins(value: unknown, option: string): readonly string[
     throw new TypeError(`${option} must list at least one origin`)
   }
   const origins = value.map((origin) => canonicalOrigin(origin))
-  if (origins.some((origin) => origin === null || !origin.startsWith('https://'))) {
-    throw new TypeError(`${option} must contain canonical HTTPS origins`)
+  if (origins.some((origin) => origin === null || !isCanonicalWebUrl(`${origin}/`))) {
+    throw new TypeError(`${option} must contain canonical HTTPS (or localhost HTTP) origins`)
   }
   if (new Set(origins).size !== origins.length) {
     throw new TypeError(`${option} must not repeat an origin`)

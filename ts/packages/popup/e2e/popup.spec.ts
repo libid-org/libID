@@ -154,6 +154,26 @@ test('[POPUP-WINDOW-002] blocked scripted open binds the native anchor popup', a
   ).toBe(true)
 })
 
+test('[POPUP-CONNECTION-009/011] HTTP loopback authenticates and preserves an isolated replacement', async ({
+  page,
+}) => {
+  const id = freshId()
+  const origin = 'http://localhost:4586'
+  const { popup } = await open(page, {
+    app: 'http://127.0.0.1:4585',
+    id,
+    href: `${origin}/p#c=${id}`,
+  })
+  await expect(popup.locator('#status')).toHaveText('connected')
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  await nextDocument(popup, () => navigate(page, `${origin}/isolated#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  await expect.poll(() => diag(popup)).toContain('carrier-restored')
+  await ping(page, 1)
+  expect(await expectPong(page, 1)).toMatchObject({ path: '/isolated', isolated: true })
+})
+
 test('[POPUP-WINDOW-003] a noopener anchor never binds and the popup fails closed', async ({
   page,
 }) => {

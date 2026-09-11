@@ -854,6 +854,65 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
   })
 })
 
+describe('loopback HTTP [POPUP-CONNECTION-009/011]', () => {
+  it.each(['localhost', '127.0.0.1'])(
+    'authenticates and preserves isolation continuity on %s',
+    async (host) => {
+      const applicationOrigin = `http://${host}:4683`
+      const popupOrigin = `http://${host}:4684`
+      const pair = fakePair(popupOrigin, applicationOrigin)
+      pair.relocate(popupOrigin, '/prover', '#private=captured')
+      const scope = fakeScope(popupOrigin)
+      const app = PopupConnection.connect<Messages>(
+        new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView),
+        { connectionId: ID, allowedPopupOrigins: [popupOrigin] },
+      )
+      const accept = (allowedApplicationOrigins: readonly string[] | '*') =>
+        PopupConnection.accept<Messages>(
+          new CurrentWindow(
+            pair.popupWindow,
+            registrationWith(scope.worker),
+            pair.popupWindow.location.hash,
+          ),
+          { connectionId: ID, allowedApplicationOrigins, isolationFallbackUrl: '/prover/fallback' },
+        )
+      const first = accept([applicationOrigin])
+      const premature = vi.fn()
+      first.on(Start, premature)
+      await app.ready
+      await expect(first.closed).resolves.toEqual({ outcome: 'closed' })
+      app.send(new Start())
+      expect(pair.popupProxy.replaced).toEqual([`${popupOrigin}/prover/fallback#private=captured`])
+      expect(premature).not.toHaveBeenCalled()
+
+      pair.relocate(popupOrigin, '/prover/fallback', '#private=captured')
+      pair.setIsolated(true)
+      const next = accept([applicationOrigin])
+      const received = vi.fn()
+      next.on(Start, received)
+      await next.ready
+      await tick()
+      expect(received).toHaveBeenCalledTimes(1)
+
+      // A normal HTTP departure retires the port; a fresh wildcard handshake
+      // then admits the same canonical local application origin.
+      await app.navigateAway(`${popupOrigin}/external`)
+      pair.relocate(popupOrigin, '/prover/fallback')
+      const fresh = accept('*')
+      fresh.on(Start, received)
+      await fresh.ready
+      await tick()
+      app.send(new Start())
+      await tick()
+      expect(received).toHaveBeenCalledTimes(2)
+      await app.navigate(`${popupOrigin}/next`, new URLSearchParams('p=1'))
+      await expect(fresh.closed).resolves.toEqual({ outcome: 'closed' })
+      expect(pair.popupProxy.replaced.at(-1)).toBe(`${popupOrigin}/next#p=1`)
+      await app.close()
+    },
+  )
+})
+
 describe('structured fragments [POPUP-CONNECTION-013]', () => {
   it('serializes fragment fields into the Navigate control and direct navigation', async () => {
     const pair = fakePair()
@@ -966,63 +1025,71 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     return { endpoint, events }
   }
 
-  it('hops before establishing a carrier and connects the destination from the unused round', async () => {
-    const hub = fakeSignaling()
-    const { pair, app, events } = severedPair(hub)
-    const first = acceptWith(pair, hub)
-    await first.endpoint.ready
-    await app.ready
-    expect(codes(events)).toContain('carrier-fallback')
+  it.each([POPUP_ORIGIN, PROVER])(
+    'hops to %s before establishing a replacement, losing gap sends',
+    async (targetOrigin) => {
+      const hub = fakeSignaling()
+      const { pair, app, events } = severedPair(hub)
+      const first = acceptWith(pair, hub)
+      await first.endpoint.ready
+      await app.ready
+      expect(codes(events)).toContain('carrier-fallback')
 
-    // Cross-origin navigation over the fallback carrier prepares round two,
-    // retires the popup side, and the application installs its new side.
-    await app.navigate(`${PROVER}/prover`, new URLSearchParams('c=1'))
-    await tick(20)
-    expect(pair.popupProxy.replaced).toEqual([`${PROVER}/prover#c=1`])
-    expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(2)
-    expect(await first.endpoint.closed).toEqual({ outcome: 'closed' })
-    const rounds = hub.carriers.length
+      // Navigation prepares round two but cannot authenticate it before the
+      // destination exists. An ordered reply still reaches the old document.
+      const replies = vi.fn()
+      first.endpoint.on(Start, replies)
+      app.send(new Start())
+      await app.navigate(`${targetOrigin}/prover`, new URLSearchParams('c=1'))
+      await tick(20)
+      expect(replies).toHaveBeenCalledTimes(1)
+      expect(pair.popupProxy.replaced).toEqual([`${targetOrigin}/prover#c=1`])
+      expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(1)
+      expect(await first.endpoint.closed).toEqual({ outcome: 'closed' })
+      const rounds = hub.carriers.length
 
-    // The non-isolated destination hops without spending a connection: no
-    // constructor call, no new round, nothing delivered.
-    pair.relocate(PROVER, '/prover', '#c=1')
-    const second = acceptWith(pair, hub, '/prover/fallback')
-    const leaked = vi.fn()
-    second.endpoint.on(Start, leaked)
-    await tick(20)
-    expect(pair.popupProxy.replaced.at(-1)).toBe(`${PROVER}/prover/fallback#c=1`)
-    expect(codes(second.events)).toEqual(['isolation-fallback', 'connection-closed'])
-    expect(hub.carriers).toHaveLength(rounds)
-    expect(leaked).not.toHaveBeenCalled()
-    expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(2)
-    expect(() => app.send(new Start())).not.toThrow() // the prepared side is live
-    let settled = false
-    void second.endpoint.ready.then(
-      () => (settled = true),
-      () => (settled = true),
-    )
-    await tick()
-    expect(settled).toBe(false)
+      // The non-isolated destination hops without spending a connection: no
+      // constructor call, no new round, nothing delivered.
+      pair.relocate(targetOrigin, '/prover', '#c=1')
+      const second = acceptWith(pair, hub, '/prover/fallback')
+      const leaked = vi.fn()
+      second.endpoint.on(Start, leaked)
+      await tick(20)
+      expect(pair.popupProxy.replaced.at(-1)).toBe(`${targetOrigin}/prover/fallback#c=1`)
+      expect(codes(second.events)).toEqual(['isolation-fallback', 'connection-closed'])
+      expect(hub.carriers).toHaveLength(rounds)
+      expect(leaked).not.toHaveBeenCalled()
+      expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(1)
+      expect(() => app.send(new Start())).not.toThrow() // silent loss on the retired side
+      let settled = false
+      void second.endpoint.ready.then(
+        () => (settled = true),
+        () => (settled = true),
+      )
+      await tick()
+      expect(settled).toBe(false)
 
-    // The isolated fallback consumes the prepared round and both directions work.
-    pair.relocate(PROVER, '/prover/fallback', '#c=1')
-    pair.setIsolated(true)
-    const third = acceptWith(pair, hub, '/prover/fallback')
-    const starts = vi.fn()
-    third.endpoint.on(Start, starts)
-    await third.endpoint.ready
-    expect(codes(third.events)).toEqual(['carrier-fallback'])
-    expect(hub.carriers).toHaveLength(rounds)
-    const readies: number[] = []
-    app.on(Ready, (r) => void readies.push(r.version))
-    app.send(new Start())
-    third.endpoint.send(new Ready(4))
-    await tick()
-    expect(starts).toHaveBeenCalledTimes(2) // the pre-hop send was queued in the round, not lost
-    expect(readies).toEqual([4])
-    expect(codes(events)).not.toContain('connection-closed')
-    expect(codes(events)).not.toContain('connection-failed')
-  })
+      // The isolated fallback consumes the prepared round and both directions work.
+      pair.relocate(targetOrigin, '/prover/fallback', '#c=1')
+      pair.setIsolated(true)
+      const third = acceptWith(pair, hub, '/prover/fallback')
+      const starts = vi.fn()
+      third.endpoint.on(Start, starts)
+      await third.endpoint.ready
+      expect(codes(third.events)).toEqual(['carrier-fallback'])
+      expect(hub.carriers).toHaveLength(rounds + 2)
+      const readies: number[] = []
+      app.on(Ready, (r) => void readies.push(r.version))
+      app.send(new Start())
+      third.endpoint.send(new Ready(4))
+      await tick()
+      expect(starts).toHaveBeenCalledTimes(1) // only the post-authentication send
+      expect(readies).toEqual([4])
+      expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(2)
+      expect(codes(events)).not.toContain('connection-closed')
+      expect(codes(events)).not.toContain('connection-failed')
+    },
+  )
 
   it('closes before the hop without navigating', async () => {
     const hub = fakeSignaling()

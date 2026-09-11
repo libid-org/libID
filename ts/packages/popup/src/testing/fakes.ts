@@ -84,7 +84,7 @@ export interface FakePair {
   setIsolated(isolated: boolean): void
 }
 
-export function fakePair(popupOrigin = POPUP_ORIGIN): FakePair {
+export function fakePair(popupOrigin = POPUP_ORIGIN, applicationOrigin = APP_ORIGIN): FakePair {
   const appView = fakeView()
   const popupView = fakeView()
   const state = { popupOrigin, path: '/p', hash: '', isolated: false }
@@ -136,12 +136,12 @@ export function fakePair(popupOrigin = POPUP_ORIGIN): FakePair {
   popupProxy = makeProxy(
     popupView,
     popupOriginNow,
-    () => APP_ORIGIN,
+    () => applicationOrigin,
     () => appProxy,
   )
   appProxy = makeProxy(
     appView,
-    () => APP_ORIGIN,
+    () => applicationOrigin,
     popupOriginNow,
     () => popupProxy,
   )
@@ -227,9 +227,9 @@ export const noRegistration = () => Promise.resolve([])
 
 /**
  * A stand-in for a non-transferable carrier and its signaling service. Each
- * round is one MessageChannel; the popup side prepares the next round
- * before navigating, the application side reports it through the
- * replacement hook, and the next popup document constructs its end.
+ * round creates one MessageChannel only when the destination connects. The
+ * application receives a pending promise during preparation, not an already
+ * authenticated carrier with an unowned port that would queue gap messages.
  */
 export interface FakeSignaling {
   application: CarrierConstructor
@@ -250,13 +250,13 @@ export function fakeSignaling(): FakeSignaling {
       }
       const round = prepared ?? newRound(resolveInitial)
       prepared = null
-      return round.popupSide
+      return round.connect()
     },
     carriers: [],
     failNext: false,
   }
   let resolveInitial: (carrier: Carrier) => void = () => {}
-  let prepared: { popupSide: Carrier } | null = null
+  let prepared: ReturnType<typeof newRound> | null = null
 
   const replacementHandlers = new Set<(c: Promise<Carrier>) => void>()
   function endpoint(
@@ -281,10 +281,10 @@ export function fakeSignaling(): FakeSignaling {
         port.close()
       },
       [prepareNavigation]: async (target) => {
-        // Arm the next round: the application learns its side now, the next
-        // popup document constructs its side later.
+        // Arm authentication; no replacement carrier exists until the
+        // destination connects. Sends on the old port meanwhile are lost.
         const round = newRound(null)
-        prepared = { popupSide: round.popupSide }
+        prepared = round
         for (const handler of replacementHandlers) handler(round.applicationSide)
         return target
       },
@@ -298,11 +298,19 @@ export function fakeSignaling(): FakeSignaling {
   }
 
   function newRound(resolveApplication: ((c: Carrier) => void) | null) {
-    const channel = new MessageChannel()
-    const applicationCarrier = endpoint(channel.port1, replacementHandlers)
-    const popupSide = endpoint(channel.port2, new Set())
-    resolveApplication?.(applicationCarrier)
-    return { applicationSide: Promise.resolve(applicationCarrier), popupSide }
+    let resolve!: (carrier: Carrier) => void
+    const applicationSide = new Promise<Carrier>((done) => (resolve = done))
+    return {
+      applicationSide,
+      connect() {
+        const channel = new MessageChannel()
+        const applicationCarrier = endpoint(channel.port1, replacementHandlers)
+        const popupSide = endpoint(channel.port2, new Set())
+        resolveApplication?.(applicationCarrier)
+        resolve(applicationCarrier)
+        return popupSide
+      },
+    }
   }
   return hub
 }
