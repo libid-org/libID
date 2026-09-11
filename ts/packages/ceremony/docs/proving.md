@@ -180,8 +180,10 @@ Profiles add these spans alongside proof-engine initialization:
 | `github` | `token-exchange-request` → `token-exchange-validation` → `notary-initialization` → `identity-session` → `identity-attestation` → `circuit-inputs` |
 
 `prover-readiness` covers awaiting selected artifact single flights; downloads
-may already have started during prefetch. X's session setup overlaps; only
-`identity-platform-request` waits for the parsed token-response bearer.
+may already have started during prefetch. X and GitHub open their browser notary
+WebSockets alongside TLSNotary runtime initialization; each session's setup waits
+for both. X's session setups overlap; only `identity-platform-request` waits for
+the parsed token-response bearer.
 `identity-credential-wait` measures that remaining wait after identity setup
 completes, separate from setup and request latency. If the bearer is already
 available it still emits a started/completed pair with no artificial delay.

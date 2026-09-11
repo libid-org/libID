@@ -180,10 +180,10 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
     if (data.type === 'prepare' && stage === 'new') {
       stage = 'preparing'
       target = String(data.url)
-      const tlsn = await initialize(data)
       const socket = new WebSocket(deriveNotaryWebSocketUrl(String(data.notaryAddress)))
       io = socketIo(socket)
-      await waitForOpen(socket)
+      const [tlsn] = await Promise.all([initialize(data), waitForOpen(socket)])
+      if (socket.readyState !== WebSocket.OPEN) throw new Error('notary WebSocket closed')
       prover = new tlsn.Prover({
         server_name: new URL(target).hostname,
         mode: 'Proxy',
