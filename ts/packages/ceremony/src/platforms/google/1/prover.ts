@@ -8,7 +8,7 @@ import { parseJson } from '../../../prover/json.js'
 import { Progress } from '../../../prover/progress.js'
 import { readBody } from '../../../response.js'
 import type { Identity } from '../../types.js'
-import { circuit } from './assets.js'
+import { circuit, verificationKey } from './assets.js'
 import { buildGoogleWitness } from './inputs.js'
 import { parseOAuthReturn } from './oauth.js'
 import { validateGooglePublicInputs } from './publicInputs.js'
@@ -51,6 +51,7 @@ export async function prove(
   )
   const engine = new ProofEngine({
     circuitUrl: resolveAsset(circuit),
+    verificationKeyUrl: resolveAsset(verificationKey),
     onProgress: (step) => {
       if (step.status === 'started') progress.start(step.code)
       else if (step.status === 'completed') progress.complete(step.code)

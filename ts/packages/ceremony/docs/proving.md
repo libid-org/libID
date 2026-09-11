@@ -228,6 +228,12 @@ the same URL and request options for prefetch and execution. X and GitHub reuse
 the notarization client and `bearer-link` circuit; Google fetches neither when
 it does not need them.
 
+Each circuit declaration also selects the matching raw `vk` member from its
+release archive (1,888 bytes for each v0.3.0 circuit). Prefetch and execution use
+that same immutable key URL; X and GitHub share the bearer-link key. The engine
+supplies it to bb proof generation to avoid recomputing the key, without adding
+browser proof verification. Missing or empty key responses fail initialization.
+
 The ceremony package pins the compatible Noir and bb.js dependencies in code.
 Their JavaScript is bundled into the static prover distribution, not imported
 from a CDN on demand. Internal companion chunks are not deployment
@@ -250,16 +256,16 @@ The ceremony package pins one launch-wide structured reference string size,
 
 | Profile | Pinned libID assets | Measured circuit size | Pinned BN254 SRS size |
 |---|---|---:|---:|
-| `x` | shared notarization client and `bearer-link` circuit descriptor | 42,006 | 262,144 (2^18) points |
-| `github` | the same two shared artifacts as X | 42,006 | 262,144 (2^18) points |
-| `google` | `oidc_google` circuit descriptor | 179,443 | 262,144 (2^18) points |
+| `x` | shared notarization client, `bearer-link` circuit and key | 42,006 | 262,144 (2^18) points |
+| `github` | the same shared artifacts as X | 42,006 | 262,144 (2^18) points |
+| `google` | `oidc_google` circuit and key | 179,443 | 262,144 (2^18) points |
 
 The pinned current-circuit heavy-resource subtotal is:
 
 | Profile | Non-CRS artifact bodies | Pinned CRS bodies | Known heavy subtotal |
 |---|---:|---:|---:|
-| `google` | 8,092,815 bytes (7.72 MiB) | 12,583,040 bytes (12.00 MiB) | 20,675,855 bytes (19.72 MiB) |
-| `x` or `github` | 24,683,695 bytes (23.54 MiB) | 12,583,040 bytes (12.00 MiB) | 37,266,735 bytes (35.54 MiB) |
+| `google` | 8,094,703 bytes (7.72 MiB) | 12,583,040 bytes (12.00 MiB) | 20,677,743 bytes (19.72 MiB) |
+| `x` or `github` | 19,514,543 bytes (18.61 MiB) | 12,583,040 bytes (12.00 MiB) | 32,097,583 bytes (30.61 MiB) |
 
 These resource-body counts use Nargo `1.0.0-beta.25`, native bb `5.2.0`, and
 bb.js `5.2.0`, as recorded by
@@ -269,8 +275,8 @@ bytes and `bearer_link.json` is 171,956 bytes. The pinned bb.js
 `barretenberg-threads.wasm.gz` is 3,071,085 bytes. The pinned Noir runtime adds
 3,049,596 bytes of `acvm_js_bg.wasm` and 659,396 bytes of
 `noirc_abi_wasm_bg.wasm`; every profile shares these code-owned build assets.
-The [`libid-org/notary v0.2.0`](https://github.com/libid-org/notary/releases/tag/v0.2.0)
-browser bundle contains a 17,731,662-byte `tlsn_wasm_bg.wasm`.
+The [`libid-org/notary v0.3.0-rc.3`](https://github.com/libid-org/notary/releases/tag/v0.3.0-rc.3)
+browser bundle contains a 12,560,622-byte `tlsn_wasm_bg.wasm`.
 
 Gate count alone does not determine the deployable SRS floor. bb.js 5.2's 4 MiB
 verification chunks make `bearer_link` require at least 2^17 despite its 2^16
@@ -281,8 +287,8 @@ and cache-upgrade paths.
 
 The first ceremony downloads the one shared SRS set. A later ceremony for any
 platform reuses it and fetches only missing profile assets. X/GitHub after
-Google fetches 17,903,618 bytes of notary WASM and the bearer circuit; Google
-after X/GitHub fetches only its 1,312,738-byte circuit.
+Google fetches 12,734,466 bytes of notary WASM, bearer circuit and key; Google
+after X/GitHub fetches its 1,312,738-byte circuit and 1,888-byte key.
 
 The counts are before HTTP content encoding and exclude CCDP HTML, entry code,
 worker JavaScript graph, headers, OAuth/notary traffic, and attestations. The
