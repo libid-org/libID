@@ -199,6 +199,15 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
     expect((await (await request.get(control)).json()).count).toBe(before + 1)
     await request.get(`${control}&fail=1`)
     for (let attempt = 0; attempt < 2; attempt++) {
+      // Evict a durable entry so an unfinished write's flight cannot mask HTTP-cache reuse.
+      await expect
+        .poll(() =>
+          page.evaluate(async () => {
+            const cache = await caches.open('libid-ceremony-assets-v1')
+            return (await cache.keys()).length
+          }),
+        )
+        .toBe(1)
       expect(
         await page.evaluate(async (url) => {
           await caches.delete('libid-ceremony-assets-v1')

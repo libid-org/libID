@@ -401,6 +401,10 @@ and does not relocate the CDN request. Each single-flight joiner receives a
 readable response body. Failed flights leave no cache hit; a canceled joiner
 does not cancel another ceremony's shared fetch.
 
+After complete-body validation, responses are delivered without waiting for
+Cache Storage writes. The single-flight entry and Worker event remain alive
+until persistence settles. Storage failure does not invalidate the response.
+
 The integration keeps one reviewed request set beside the bb.js pin; CSP and
 prefetch derive from it. A dependency-bump test runs the installed browser
 loaders with an observing fetch stub and compares their actual URLs, methods,
