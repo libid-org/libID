@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import type { Rollup } from 'vite'
 import { build } from 'vite'
 import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets.js'
@@ -150,6 +151,8 @@ export async function resolveAssets() {
   const selections = new Map<string, string>(),
     mounts = new Map<string, string>()
   const register = (path: string, bytes: Buffer, policy: Record<string, string>) => {
+    // WASM resources have decoded bodies; HTTP compression belongs to the static server.
+    if (path.endsWith('.wasm') && bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = gunzipSync(bytes)
     const old = local.get(path)
     if (old && !old.bytes.equals(bytes)) throw new Error(`Conflicting asset body: ${path}`)
     local.set(path, { bytes, headers: policy })

@@ -13,8 +13,8 @@ export const abi = assets.file(
 export const bbWasm = {
   ...assets.file(
     'npm:@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg-threads.wasm.gz',
-    'bb/5.2.0/barretenberg-threads.wasm.gz',
-    { ...assets.headers.immutable, 'Content-Type': 'application/octet-stream' },
+    'bb/5.2.0/wasm/barretenberg-threads.wasm',
+    { ...assets.headers.immutable, ...assets.headers.wasm },
   ),
   bundledUrlModules: [
     '@aztec/bb.js/dest/browser/barretenberg_wasm/fetch_code/browser/barretenberg-threads.js',

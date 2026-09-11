@@ -75,7 +75,7 @@ by OAuth Bridges; the contract below defines its configuration slot, embedded
 startup, and the response they serve.
 
 Each supported path has one decoded representation and response policy.
-`Accept-Encoding` may select only the Brotli transfer representation defined
+`Accept-Encoding` may select only the Brotli or gzip transfer representations defined
 below. Conditional caching may return `304 Not Modified`; otherwise query
 values, request headers, `Origin`, `Referer`, cookies, and user agent cannot
 select different bytes, policy, embedded configuration, or implementation. A
@@ -112,12 +112,13 @@ source or styling customization input.
 | Prover isolation fallback | top-level HTML at `/ccdp/v{CCDPVersion}/prover/fallback` | `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Same Prover entrypoint, fragment contract, and non-isolation response rules. |
 | Worker | module Service Worker JavaScript | `text/javascript; charset=utf-8` and `Service-Worker-Allowed: /`. Prefetch registers it with `scope: '/'`; it remains compatible with every live CCDP version and passes unrelated requests through unchanged. Code is same-origin; `connect-src` also admits the pinned Aztec CRS origins for asset caching. |
 
-For any resource whose generated Brotli representation is smaller, the
-Distribution serves that representation when the request admits `br` and the
-original otherwise. A compressed response keeps the original media type and
-response profile, adds `Content-Encoding: br`, and includes
-`Vary: Accept-Encoding`. Decoding it produces the exact original bytes. No
-runtime compression or other negotiated representation exists.
+For each resource, the build retains Brotli and gzip representations only
+when they are smaller. SWS negotiates an accepted representation, serving the
+original when neither compressed representation is available or accepted. A
+compressed response keeps the original media type and response profile, adds
+the matching `Content-Encoding`, and includes `Vary: Accept-Encoding`. Decoding
+it produces the exact original bytes. No runtime compression or other
+negotiated representation exists.
 
 Both Prover responses close script and worker sources to the build-generated
 same-origin graph and toolchain-required `blob:` workers. Asset fetches are
@@ -563,7 +564,7 @@ CSP remains declared policy even though its executable hashes and concrete
 resource origins are filled from the emitted code and resource graph. There
 is one source for these rules, not a second copy in deployment templates.
 
-The build produces the original and optional Brotli bodies; SWS derives their
+The build produces the original and optional Brotli/gzip bodies; SWS derives their
 HTTP metadata when serving them. Length and encoding must match the selected
 body, including range responses. Do not emit fixed metadata overrides into
 path-policy rules or add a custom serving layer to reproduce SWS's behavior.
@@ -700,13 +701,14 @@ Across the supported CCDP versions, the pipeline:
 1. gives the declared entrypoints to the compiler/bundler;
 2. reads emitted filenames and dependency edges from its output API;
 3. materializes local dependencies, mounting complete archives and resolving
-   each member selector to its exact path and response headers; external
-   declarations retain their URLs and request parameters without a download;
+   each member selector to its exact path and response headers; gzip-packed
+   `.wasm` bodies are decoded before publication. External declarations retain
+   their URLs and request parameters without a download;
 4. resolves each platform/version's prefetch and loader locations from those
    declarations and emitted dependencies, then renders versioned protocol bodies
    and the aggregate Callback artifact using the paths and response profiles;
-5. emits a Brotli sidecar for each unencoded public body only when it is
-   smaller, using a standard Brotli implementation; and
+5. emits Brotli and gzip sidecars for each unencoded public body, each only
+   when smaller, using standard compression implementations; and
 6. validates local graph completeness and the declared external request set
    before replacing the generated output.
 
@@ -746,10 +748,14 @@ container assembly; normalizing different releases to one fixed timestamp can
 otherwise preserve a stale validator. Qualification checks the served result,
 not a custom ETag algorithm.
 
-The build creates `.br` sidecars using standard compression tooling; SWS's
+The build creates `.br` and `.gz` sidecars using standard compression tooling; SWS's
 [pre-compressed-file serving](https://static-web-server.net/v3/features/compression-static)
 owns negotiation, `Vary`, and representation selection. This does not enable
-request-time compression or move archive extraction into the server.
+request-time compression or move archive extraction into the server. Gzip
+provides a compressed response when the browser does not advertise Brotli,
+including WebKit on localhost HTTP. Prefetch and execution use the same
+unencoded resource URL and cache the decoded body. Sidecar paths may not
+collide with retained immutable resources.
 
 ### Static layout and configuration
 

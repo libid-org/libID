@@ -139,7 +139,7 @@ export class ProofEngine {
       threads: Math.max(1, Math.min(threads ?? 4, navigator.hardwareConcurrency || 1, 4)),
       acvmUrl: resolveAsset(acvm),
       abiUrl: resolveAsset(abi),
-      wasmPath: resolveAsset(bbWasm).replace('-threads.wasm.gz', '.wasm.gz'),
+      wasmPath: resolveAsset(bbWasm).replace('-threads.wasm', '.wasm'),
       crsPath: new URL('.', resolveAsset(crs[0])).href,
     }
   }

@@ -19,7 +19,7 @@ contracts, Vite's plugin/output types and ESTree's AST types.
 [bundle.ts](../build/bundle.ts) records compiler dependencies. [assets.ts](../build/assets.ts) resolves
 owner declarations, [archive.ts](../build/archive.ts) safely reads archives, and [release.ts](../build/release.ts) caches declared HTTPS downloads, and
 [circuits.ts](../build/circuits.ts) checks circuit capacity. [profiles.ts](../build/profiles.ts)
-composes protocol policies from [shared headers](../src/ccdp/headers.ts); [sws.ts](../build/sws.ts) emits files, Brotli sidecars and native SWS configuration; [popup.ts](../build/popup.ts) integrates the optional external carrier.
+composes protocol policies from [shared headers](../src/ccdp/headers.ts); [sws.ts](../build/sws.ts) emits files, Brotli/gzip sidecars and native SWS configuration; [popup.ts](../build/popup.ts) integrates the optional external carrier.
 
 The build never rehosts native external CRS resources. `test:distribution` exercises
 real dependency loaders and emitted responses; set `CEREMONY_SWS_URL` to check the

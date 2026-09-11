@@ -270,15 +270,21 @@ The pinned current-circuit heavy-resource subtotal is:
 
 | Profile | Non-CRS artifact bodies | Pinned CRS bodies | Known heavy subtotal |
 |---|---:|---:|---:|
-| `google` | 8,094,703 bytes (7.72 MiB) | 12,583,040 bytes (12.00 MiB) | 20,677,743 bytes (19.72 MiB) |
-| `x` or `github` | 19,514,543 bytes (18.61 MiB) | 12,583,040 bytes (12.00 MiB) | 32,097,583 bytes (30.61 MiB) |
+| `google` | 15,498,698 bytes (14.78 MiB) | 12,583,040 bytes (12.00 MiB) | 28,081,738 bytes (26.78 MiB) |
+| `x` or `github` | 26,918,538 bytes (25.67 MiB) | 12,583,040 bytes (12.00 MiB) | 39,501,578 bytes (37.67 MiB) |
 
 These resource-body counts use Nargo `1.0.0-beta.25`, native bb `5.2.0`, and
 bb.js `5.2.0`, as recorded by
 [`libid-circuits v0.3.0`](https://github.com/libid-org/libid-circuits/releases/tag/v0.3.0),
 whose target is the source commit pinned above. `oidc_google.json` is 1,312,738
 bytes and `bearer_link.json` is 171,956 bytes. The pinned bb.js
-`barretenberg-threads.wasm.gz` is 3,071,085 bytes. The pinned Noir runtime adds
+`barretenberg-threads.wasm.gz` source is 3,071,085 bytes; the build decodes it
+to a 10,475,080-byte `barretenberg-threads.wasm` body under
+`/ccdp/assets/bb/5.2.0/wasm/`. Its gzip/Brotli sidecars are generated with the
+other public resources. Prefetch caches the decoded WASM, and bb uses its
+uncompressed loader branch. The new directory preserves the old standalone
+gzip resource without colliding with the new gzip sidecar. The pinned Noir
+runtime adds
 3,049,596 bytes of `acvm_js_bg.wasm` and 659,396 bytes of
 `noirc_abi_wasm_bg.wasm`; every profile shares these code-owned build assets.
 The [`libid-org/notary v0.3.0-rc.3`](https://github.com/libid-org/notary/releases/tag/v0.3.0-rc.3)

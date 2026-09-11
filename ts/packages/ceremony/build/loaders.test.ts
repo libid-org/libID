@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
+import { gunzipSync } from 'node:zlib'
 import type { DistributionMetadata } from './distribution.ts'
 import { packageDir } from './release.ts'
 
@@ -65,9 +66,14 @@ test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASS
     const { fetchCode } = await import(
       pathToFileURL(join(bb, 'barretenberg_wasm/fetch_code/browser/index.js')).href
     )
-    const wasm = select('barretenberg-threads.wasm.gz').url
+    const wasm = select('barretenberg-threads.wasm').url
+    // The emitted body is already decoded; bb must not need its JS gzip branch.
+    assert.deepEqual(
+      readFileSync(join(out, 'public', wasm)),
+      gunzipSync(readFileSync(join(bb, '../node/barretenberg_wasm/barretenberg-threads.wasm.gz'))),
+    )
     assert.equal(
-      WebAssembly.validate(await fetchCode(true, wasm.replace('-threads.wasm.gz', '.wasm.gz'))),
+      WebAssembly.validate(await fetchCode(true, wasm.replace('-threads.wasm', '.wasm'))),
       true,
     )
     const { NetCrs, NetGrumpkinCrs } = await import(pathToFileURL(join(bb, 'crs/net_crs.js')).href)

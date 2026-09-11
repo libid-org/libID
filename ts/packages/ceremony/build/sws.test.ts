@@ -11,17 +11,18 @@ import { cache } from './release.ts'
 import { writeDistribution } from './sws.ts'
 
 test('sidecars cannot overwrite archive members or executable resources [LIBID-ASSET-024]', () => {
-  assert.throws(
-    () =>
-      writeDistribution(
-        '/unused',
-        new Map([
-          ['/ccdp/assets/a.js', { bytes: Buffer.from('same'.repeat(100)), headers: {} }],
-          ['/ccdp/assets/a.js.br', { bytes: Buffer.from('different'), headers: {} }],
-        ]),
-      ),
-    /sidecar/,
-  )
+  for (const extension of ['br', 'gz', 'zst'])
+    assert.throws(
+      () =>
+        writeDistribution(
+          '/unused',
+          new Map([
+            ['/ccdp/assets/a.js', { bytes: Buffer.from('same'.repeat(100)), headers: {} }],
+            [`/ccdp/assets/a.js.${extension}`, { bytes: Buffer.from('different'), headers: {} }],
+          ]),
+        ),
+      /sidecar/,
+    )
 })
 
 test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-027]', {

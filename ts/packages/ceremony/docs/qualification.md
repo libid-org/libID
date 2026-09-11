@@ -36,7 +36,7 @@ SWS v3 is currently a prerelease; the exact image is pinned in `ccdp.Dockerfile`
   loaders run with an observing fetch stub and external hosts blocked. This checks
   request methods, cache modes, URLs, ranges and primary/fallback ordering; synthetic CRS bodies in this probe are never proof evidence.
 - Exact per-platform sets, retained immutable responses and
-  Brotli roundtrips. Every emitted HTTP response is checked against actual SWS.
+  Brotli/gzip roundtrips. Every emitted HTTP response is checked against actual SWS.
   The deployment image was built and used behind the HTTPS browser harness; only
   its local listening port was changed to accommodate rootless host networking.
 - Actual popup launch, native-anchor fallback, private callback forwarding,

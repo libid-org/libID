@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { brotliCompressSync, constants } from 'node:zlib'
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { stringify } from 'smol-toml'
 import { safePath } from './archive.ts'
 import { immutable } from '../src/ccdp/headers.ts'
@@ -32,6 +32,8 @@ export function writeDistribution(
       params: { [constants.BROTLI_PARAM_QUALITY]: 6 },
     })
     if (compressed.length < bytes.length) writeFileSync(`${target}.br`, compressed)
+    const gzip = gzipSync(bytes, { level: 6 })
+    if (gzip.length < bytes.length) writeFileSync(`${target}.gz`, gzip)
     // With redirects disabled the pinned SWS appends the resolved filename for header matching.
     rules.push({ source: `${physical}/${basename(physical)}`, headers })
   }
