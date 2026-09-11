@@ -101,11 +101,11 @@ interface NotarizationSession {
   reveal(reveals: Reveals): Promise<RevealResult>
 }
 
-declare function prepareNotarization(
-  url: string,
-  notaryAddress: string,
-  signal: AbortSignal,
-): Promise<NotarizationSession>
+declare class Notarization {
+  readonly signal: AbortSignal
+  constructor(notaryAddress: string, signal: AbortSignal)
+  prepare(url: string): Promise<NotarizationSession>
+}
 ```
 
 The platform leaf supplies its code-owned canonical HTTPS request URL and the
@@ -131,8 +131,10 @@ work on failure/cancellation, and delivers nothing until all final attestation
 promises succeed. The supplied signal covers preparation and every later stage,
 including an idle prepared session. An already-aborted signal opens nothing;
 later abort rejects pending operations, closes the socket, releases session-owned
-workers and private buffers, and prevents later sends. Completion or failure
-performs the same resource cleanup and removes its abort listener. The platform
+runtime and private buffers, and prevents later sends. Successful sessions release
+their own prover and message channel; the shared WASM worker remains alive until
+the ceremony aborts its controller in `finally`. Any session failure aborts all
+sessions in that runtime. Cleanup removes the session abort listener. The platform
 pipeline aborts its shared controller on cancellation, sibling failure, or
 abandonment in `finally`; no separate session disposal API is needed.
 
@@ -311,7 +313,7 @@ sequenceDiagram
     participant N as Notary Service
     participant P as Platform HTTPS server
 
-    M->>T: prepareNotarization(url, notaryAddress, signal)
+    M->>T: notary.prepare(url)
     T->>N: Open wss://<notary-origin>/notarize-proxy
     T->>W: setup(IoChannel)
     W->>N: TLSNotary setup messages (Proxy profile)
@@ -434,7 +436,16 @@ selective disclosures and correlation with canonical final attestations.
 - [Platform pipelines](pipelines.md): token/identity overlap and delivery dependencies.
 - [Qualification blockers](qualification.md#actual-blockers-and-unqualified-boundaries): matched service, timing and profile gaps.
 
-[session.ts](../src/prover/notarization/session.ts) controls a dedicated [session.worker.ts](../src/prover/notarization/session.worker.ts).
+[session.ts](../src/prover/notarization/session.ts) controls one ceremony-owned
+[session.worker.ts](../src/prover/notarization/session.worker.ts). X creates one
+`Notarization` instance for both requests, sharing WASM initialization and its
+thread pool. Each request has a separate native message channel, TLSNotary prover,
+socket, transcript and attestation. Setup remains concurrent; no state or runtime
+is shared across ceremonies. The runtime exposes its combined abort signal for
+concurrent dependent work, so even a failure after a session is prepared can
+cancel a pending Bridge fetch. GitHub uses the same adapter for its one browser
+identity request. Real shared-runtime concurrency and timing remain subject to
+qualification; unit-level overlap does not establish WASM liveness.
 [transport.ts](../src/prover/notarization/transport.ts) frames final output, [decode.ts](../src/prover/notarization/decode.ts) reads canonical
 attested bytes, and [notarize.ts](../src/prover/notarization/notarize.ts) correlates transcripts and openings.
 Original attestations and signatures are preserved; local signature verification is

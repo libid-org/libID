@@ -6,7 +6,7 @@ import { buildBearerLinkWitness } from '../../../prover/bearerLink.js'
 import type { ProverContext } from '../../../prover/context.js'
 import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../prover/engine.js'
 import { bearerOpening, responseJson } from '../../../prover/http.js'
-import { prepareNotarization } from '../../../prover/notarization/session.js'
+import { Notarization } from '../../../prover/notarization/session.js'
 import { Progress } from '../../../prover/progress.js'
 import { readBody } from '../../../response.js'
 import { isFormClientId } from '../../authorization.js'
@@ -52,6 +52,10 @@ export async function prove(
     },
   })
   try {
+    const notary = new Notarization(request.notaryAddress!, controller.signal)
+    const identitySession = notary.prepare('https://api.github.com/user')
+    // Setup needs no bearer; a failure must stop the concurrent Bridge request.
+    void identitySession.catch((error) => controller.abort(error))
     const { token, admitted } = await progress
       .step('token-exchange', async () => {
         const response = await fetch(
@@ -68,7 +72,7 @@ export async function prove(
             redirect: 'error',
             cache: 'no-store',
             mode: 'cors',
-            signal: controller.signal,
+            signal: notary.signal,
           },
         )
         if (
@@ -86,14 +90,11 @@ export async function prove(
         return { token, admitted }
       })
       .catch((error) => {
+        notary.signal.throwIfAborted()
         throw ceremonyError(error, 'token-exchange')
       })
     context.onStage('identity-fetch')
-    const session = await prepareNotarization(
-      'https://api.github.com/user',
-      request.notaryAddress!,
-      controller.signal,
-    )
+    const session = await identitySession
     const transcript = await progress.step('identity-session', () =>
       session.send(identityRequest(token.accessToken)),
     )
@@ -115,7 +116,7 @@ export async function prove(
       bearerOpening(result.openings, 'sent', selected.bearerRange, token.accessToken),
     )
     const [raw, identityAttestation] = await Promise.all([
-      engine.prove(inputs, controller.signal),
+      engine.prove(inputs, notary.signal),
       progress.step('attestation', () => result.attestation),
     ])
     const expected = [

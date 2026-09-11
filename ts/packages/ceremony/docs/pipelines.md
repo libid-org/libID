@@ -125,7 +125,8 @@ detected, not either ledger verification requirement.
 `platforms/x/1/prover` performs two browser-owned TLSNotary Proxy sessions:
 
 1. Connect and set up the token and identity TLSNotary sessions concurrently,
-   while the proof backend initializes. Each session owns its own WebSocket.
+   while the proof backend initializes. Both use one ceremony-owned WASM runtime
+   and thread pool; each session owns its own WebSocket, TLS prover and transcript.
 2. Execute the fixed `/2/oauth2/token` exchange using the captured code,
    derived code verifier, frozen redirect URI, and client identifier. Reveal
    the profile-owned request and delimiter ranges and commit the returned
@@ -158,8 +159,13 @@ verified attestations and submitted authorization fields.
 
 ### GitHub
 
-`platforms/github/1/prover` first sends the captured code, derived verifier,
-and resolved `notaryAddress` to the fixed OAuth bridge token-exchange route.
+`platforms/github/1/prover` starts browser identity-session setup alongside the
+fixed OAuth Bridge token-exchange request carrying the captured code, derived
+verifier, and resolved `notaryAddress`. Proof-backend initialization overlaps both.
+Setup uses the fixed GitHub target and needs no bearer; `/user` HTTP waits for
+both setup and token-response admission. Failure in either branch cancels the
+other; setup failure retains its notarization error instead of being reported as
+a token-exchange failure.
 The Bridge and browser identity session use that exact address supplied by the
 ledger; the Bridge performs no network classification.
 The bridge uses its confidential client secret, performs the token-exchange
