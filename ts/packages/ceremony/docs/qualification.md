@@ -515,7 +515,7 @@ its new tip is `e375d86626be4b9b57e9fb9499e27d31e48573f9`. Localhost admission
 and request-selected notary routing now come from the base. Only the matched
 RC3 dependency pins and JSON-whitespace patch remain above it.
 
-Dev Compose supplies native inline TOML platform tables. Client resolves
+Dev Compose mounts `bridge-config.toml` with native TOML platform tables. Client resolves
 `callbackPath` against its supplied Bridge origin once; GitHub's token request
 carries that frozen redirect URI. The [Bridge integration note](oauth-bridge.md#current-bridge-integration)
 records the wire change relative to architecture PR #13 and the remaining
