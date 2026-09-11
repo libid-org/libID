@@ -179,7 +179,7 @@ it.each(['backend', 'resources'])(
           ),
         )
         .toBe(true)
-      expect(w.has('engine-ready')).toBe(false)
+      await expect.poll(() => w.has('engine-ready')).toBe(true)
       backend.resolve()
     }
     await expect.poll(() => w.has('engine-ready')).toBe(true)
@@ -238,4 +238,91 @@ it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]'
     .toBe(true)
   expect(w.has('engine-ready')).toBe(false)
   expect(mocks.prove).not.toHaveBeenCalled()
+})
+
+it.each(['witness', 'backend'])(
+  'overlaps witness execution with backend initialization when %s finishes first [LIBID-PROVER-012]',
+  async (first) => {
+    const backend = deferred<void>()
+    const witness = deferred<{ witness: Uint8Array }>()
+    mocks.initialize.mockReturnValueOnce(backend.promise)
+    const w = await worker()
+    mocks.execute.mockReturnValueOnce(witness.promise)
+    await expect.poll(() => w.has('engine-ready')).toBe(true)
+    w.receive({ data: { type: 'engine-prove', inputs: { fixture: 1 } } })
+    expect(mocks.execute).toHaveBeenCalledExactlyOnceWith({ fixture: 1 })
+    expect(mocks.prove).not.toHaveBeenCalled()
+    const finishWitness = () => witness.resolve({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
+    if (first === 'witness') finishWitness()
+    else backend.resolve()
+    await expect
+      .poll(() =>
+        w.postMessage.mock.calls.some(
+          ([m]) =>
+            m.code === (first === 'witness' ? 'witness' : 'proof-backend-initialization') &&
+            m.status === 'completed',
+        ),
+      )
+      .toBe(true)
+    expect(mocks.prove).not.toHaveBeenCalled()
+    if (first === 'witness') backend.resolve()
+    else finishWitness()
+    await expect.poll(() => w.has('engine-result')).toBe(true)
+    expect(mocks.prove).toHaveBeenCalledOnce()
+    expect(mocks.destroy).toHaveBeenCalledOnce()
+  },
+)
+it('reports witness failure promptly and destroys a late backend once [LIBID-PROVER-014]', async () => {
+  const backend = deferred<void>()
+  mocks.initialize.mockReturnValueOnce(backend.promise)
+  const w = await worker()
+  mocks.execute.mockRejectedValueOnce(new Error('Witness failed'))
+  await expect.poll(() => w.has('engine-ready')).toBe(true)
+  w.receive({ data: { type: 'engine-prove', inputs: {} } })
+  await expect.poll(() => w.has('engine-error')).toBe(true)
+  expect(mocks.destroy).not.toHaveBeenCalled()
+  backend.resolve()
+  await expect.poll(() => mocks.destroy.mock.calls.length).toBe(1)
+  expect(mocks.prove).not.toHaveBeenCalled()
+  expect(w.has('engine-result')).toBe(false)
+})
+it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-014]', async () => {
+  const backend = deferred<void>()
+  const witness = deferred<{ witness: Uint8Array }>()
+  mocks.initialize.mockReturnValueOnce(backend.promise)
+  const w = await worker()
+  mocks.execute.mockReturnValueOnce(witness.promise)
+  await expect.poll(() => w.has('engine-ready')).toBe(true)
+  w.receive({ data: { type: 'engine-prove', inputs: {} } })
+  backend.reject(new Error('Backend failed'))
+  await expect.poll(() => w.has('engine-error')).toBe(true)
+  witness.resolve({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
+  await expect
+    .poll(() =>
+      w.postMessage.mock.calls.some(([m]) => m.code === 'witness' && m.status === 'completed'),
+    )
+    .toBe(true)
+  expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'engine-error')).toHaveLength(1)
+  expect(mocks.prove).not.toHaveBeenCalled()
+  expect(w.has('engine-result')).toBe(false)
+})
+it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER-014]', async () => {
+  const proof = deferred<unknown>()
+  const w = await worker()
+  mocks.prove.mockReturnValueOnce(proof.promise)
+  await expect.poll(() => w.has('engine-ready')).toBe(true)
+  const message = { data: { type: 'engine-prove', inputs: {} } }
+  w.receive(message)
+  await expect.poll(() => mocks.prove.mock.calls.length).toBe(1)
+  w.receive(message)
+  await expect.poll(() => w.has('engine-error')).toBe(true)
+  proof.resolve({ proof: [new Uint8Array(32)], publicInputs: [] })
+  await expect
+    .poll(() =>
+      w.postMessage.mock.calls.some(([m]) => m.code === 'proof' && m.status === 'completed'),
+    )
+    .toBe(true)
+  expect(mocks.destroy).toHaveBeenCalledOnce()
+  expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'engine-error')).toHaveLength(1)
+  expect(w.has('engine-result')).toBe(false)
 })

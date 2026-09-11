@@ -546,10 +546,11 @@ code exchange for X/GitHub. Denied or malformed returns end the run without that
 transition. Prover then reports
 identity fetch after token admission, then proof preparation after identity extraction
 and the commitment openings needed for the witness are available. Witness execution
-starts proof generation. That stage continues through backend teardown, any
-outstanding attestations, correlation checks, delivery and client assembly. There
-is no separate finalizing stage. Backend preparation overlaps input collection, and final attestations
-overlap proving. Duplicate, backward and platform-inapplicable stage reports are
+starts proof generation: `ZK prover ready` means Noir can accept inputs, while
+bb may still be initializing. That stage includes any remaining bb initialization,
+proof generation, backend teardown, outstanding attestations, correlation checks,
+delivery and client assembly. There is no separate finalizing stage. Backend
+preparation overlaps input collection, and final attestations overlap proving. Duplicate, backward and platform-inapplicable stage reports are
 ignored. Detailed step events do not change the stage.
 
 Exactly one `finished` event follows acceptance of the assembled result, denial,
