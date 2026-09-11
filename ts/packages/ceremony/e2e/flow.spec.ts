@@ -246,7 +246,7 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
     const state = new URL(route.request().url()).searchParams.get('state')
     await route.fulfill({
       contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/callback#id_token=${fixture.idToken}&state=${state}`)})</script>`,
+      body: `<script>location.replace(${JSON.stringify(`${bridge}/callback#id_token=${fixture.idToken}&state=${state}&version_info=synthetic&provider_meta=future&release.rev=1`)})</script>`,
     })
   })
   await page.goto(app)

@@ -5,8 +5,8 @@ export type CodeOAuthOutcome =
   | { outcome: 'denied'; state: string }
   | { outcome: 'error'; state: string; error: string }
 
-const FIELD = /^([A-Za-z][A-Za-z0-9_]{0,63})=(.*)$/
-const VALUE = /^[\x20-\x7e]{1,8192}$/
+const FIELD = /^([A-Za-z0-9_.-]{1,64})=(.*)$/
+const VALUE = /^[\x20-\x7e]+$/
 
 /** Decode provider form values without requiring one particular percent-encoding spelling. */
 export function parseCodeOAuthReturn(
@@ -25,8 +25,8 @@ export function parseCodeOAuthReturn(
     if (!match) return null
     const [, key, raw] = match
     if (
-      !['state', 'code', 'error', 'error_description', 'error_uri'].includes(key) &&
-      !(key === 'iss' && expectedIssuer)
+      ['id_token', 'access_token', 'refresh_token'].includes(key) ||
+      (key === 'iss' && !expectedIssuer)
     )
       return null
     if (fields.has(key)) return null
@@ -36,7 +36,9 @@ export function parseCodeOAuthReturn(
     } catch {
       return null
     }
-    if (!VALUE.test(value)) return null
+    if (value.length > 8192) return null
+    // Metadata has no value schema; only fields used by this profile are interpreted.
+    if (['state', 'code', 'error', 'iss'].includes(key) && !VALUE.test(value)) return null
     fields.set(key, value)
   }
   if (expectedIssuer && fields.get('iss') !== expectedIssuer) return null
@@ -44,10 +46,7 @@ export function parseCodeOAuthReturn(
     code = fields.get('code'),
     error = fields.get('error')
   if (!state || (code === undefined) === (error === undefined)) return null
-  if (code !== undefined) {
-    if (fields.has('error_description') || fields.has('error_uri')) return null
-    return { outcome: 'accepted', state, code }
-  }
+  if (code !== undefined) return { outcome: 'accepted', state, code }
   return error === 'access_denied'
     ? { outcome: 'denied', state }
     : { outcome: 'error', state, error: error! }
