@@ -1,9 +1,13 @@
 export * from './types.js'
+
 export const platformId = 'x'
+
 export const platformCeremonyVersion = 1
+
 export const pkce = true
 
 const AUTHORIZATION_ENDPOINT = 'https://x.com/i/oauth2/authorize'
+
 const PKCE = /^[A-Za-z0-9_-]{43}$/
 
 /** Build X v1's fixed public-client S256 authorization request. */

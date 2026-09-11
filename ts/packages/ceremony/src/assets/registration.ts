@@ -1,4 +1,6 @@
 import { route } from '../ccdp/navigation.js'
+
+/** Activate the canonical root registration and retire only the known legacy nested scope. */
 export async function rootWorker(): Promise<ServiceWorkerRegistration> {
   const registration = await navigator.serviceWorker.register(route('worker.js'), {
     scope: '/',
@@ -42,6 +44,8 @@ export async function rootWorker(): Promise<ServiceWorkerRegistration> {
   }
   return registration
 }
+
+/** Wait for fetch-dispatch acknowledgement for this profile, not download completion. */
 export async function dispatchPrefetch(
   registration: ServiceWorkerRegistration,
   profile: string,

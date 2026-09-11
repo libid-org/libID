@@ -2,8 +2,10 @@ import { expect, it } from 'vitest'
 import { parseCodeOAuthReturn } from './codeReturn.js'
 
 const issuer = 'https://github.com/login/oauth'
+
 const parse = (query: string, expectedIssuer: string | undefined = issuer) =>
   parseCodeOAuthReturn({ query, fragment: '' }, expectedIssuer)
+
 const iss = '&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth'
 
 it('accepts GitHub success and detailed denial/error returns [LIBID-OAUTH-018]', () => {
@@ -26,6 +28,7 @@ it('accepts GitHub success and detailed denial/error returns [LIBID-OAUTH-018]',
     outcome: 'accepted',
   })
 })
+
 it('decodes equivalent valid form encodings exactly once', () => {
   expect(parse(`?code=a%2fb%20c&state=v1.test${iss.toLowerCase()}`)).toMatchObject({
     code: 'a/b c',
@@ -34,6 +37,7 @@ it('decodes equivalent valid form encodings exactly once', () => {
     code: '/'.repeat(4096),
   })
 })
+
 it.each([
   '?code=test&state=v1.test',
   `?code=test&state=v1.test${iss}/`,
@@ -56,6 +60,7 @@ it.each([
 ])('rejects ambiguous or invalid GitHub return: %s', (query) => {
   expect(parse(query)).toBeNull()
 })
+
 it('does not accept issuer fields for X or mixed query/fragment returns', () => {
   expect(parseCodeOAuthReturn({ query: `?code=test&state=v1.test${iss}`, fragment: '' })).toBeNull()
   expect(

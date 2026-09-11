@@ -5,17 +5,21 @@ class Socket extends EventTarget {
   static CONNECTING = 0
   readyState = 1
   binaryType = ''
+
   send() {}
+
   close() {
     this.readyState = 3
     this.dispatchEvent(new Event('close'))
   }
 }
+
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.resetModules()
 })
+
 async function worker(sent: number, recv: number) {
   let receive!: (event: { data: unknown }) => void
   const postMessage = vi.fn(),
@@ -56,6 +60,7 @@ async function worker(sent: number, recv: number) {
   })
   return { postMessage, close, receive: port.onmessage! }
 }
+
 it.each([
   [4096, 32768, true],
   [4097, 0, false],
@@ -75,6 +80,7 @@ it.each([
     }
   },
 )
+
 it('missing final EOF terminates rather than hanging indefinitely', async () => {
   const result = await worker(0, 0)
   await expect.poll(() => result.postMessage.mock.calls.some(([m]) => m.type === 'sent')).toBe(true)
@@ -203,6 +209,7 @@ async function preparing() {
     },
   }
 }
+
 it.each(['runtime', 'socket'])(
   'overlaps runtime and socket startup when %s finishes first [LIBID-PROVER-018]',
   async (first) => {
@@ -219,6 +226,7 @@ it.each(['runtime', 'socket'])(
     expect(w.hooks.setup).toHaveBeenCalledOnce()
   },
 )
+
 it.each(['runtime', 'socket-error', 'socket-close'])(
   '%s failure retires preparation without waiting for its sibling [LIBID-PROVER-018]',
   async (failure) => {
@@ -235,6 +243,7 @@ it.each(['runtime', 'socket-error', 'socket-close'])(
     expect(w.port.postMessage).toHaveBeenCalledOnce()
   },
 )
+
 it('rejects a socket closed while runtime initialization was pending [LIBID-PROVER-018]', async () => {
   const w = await preparing()
   w.open()

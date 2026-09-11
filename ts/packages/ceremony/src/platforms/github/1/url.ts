@@ -1,9 +1,13 @@
 export * from './types.js'
+
 export const platformId = 'github'
+
 export const platformCeremonyVersion = 1
+
 export const pkce = true
 
 const AUTHORIZATION_ENDPOINT = 'https://github.com/login/oauth/authorize'
+
 const PKCE = /^[A-Za-z0-9_-]{43}$/
 
 /** Build GitHub v1's fixed public authorization request. */

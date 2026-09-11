@@ -1,20 +1,25 @@
-import type { Identity } from '../../../platforms/types.js'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { b64urlDecode, isRecord } from '../../../primitives.js'
 import { parseGoogleIdToken } from '../../../platforms/google/1/token.js'
 import {
+  type GoogleProofV1,
   MAX_AUD_BYTES,
   MAX_EMAIL_BYTES,
   MAX_SUB_BYTES,
   RSA_MODULUS_BYTES,
-  type GoogleProofV1,
 } from '../../../platforms/google/1/types.js'
+import type { Identity } from '../../../platforms/types.js'
+import { b64urlDecode, isRecord } from '../../../primitives.js'
 
 const SIGNING_INPUT_MAX = 1280
+
 const PAYLOAD_JSON_MAX = 768
+
 const NUM_LIMBS = 18
+
 const LIMB_BITS = 120n
+
 const BARRETT_OVERFLOW_BITS = 6n
+
 const encoder = new TextEncoder()
 
 export interface GoogleCircuitInputs extends Record<string, unknown> {

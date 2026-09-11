@@ -12,8 +12,11 @@ const hex = (bytes: Uint8Array) =>
 
 // The ceremony-common §5 conformance vector (TEST-COMMON-01).
 const operationDomain = operationDomainFromString('libid.claim-identity')
+
 const chainId = operationDomainFromString('example:1')
+
 const authorizationNonce = new Uint8Array(32).fill(0x55)
+
 const transactionData = new Uint8Array([0x00, 0x01, 0x02, 0x03])
 
 describe('[TEST-COMMON-01] authorization digest', () => {

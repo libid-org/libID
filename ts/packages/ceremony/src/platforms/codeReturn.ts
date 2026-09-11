@@ -6,6 +6,7 @@ export type CodeOAuthOutcome =
   | { outcome: 'error'; state: string; error: string }
 
 const FIELD = /^([A-Za-z0-9_.-]{1,64})=(.*)$/
+
 const VALUE = /^[\x20-\x7e]+$/
 
 /** Decode provider form values without requiring one particular percent-encoding spelling. */

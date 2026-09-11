@@ -1,6 +1,7 @@
 import type { ByteRange } from './notarize.js'
 
 const decoder = new TextDecoder('utf-8', { fatal: true })
+
 // REQ-COMMON-39B applies to both request types; tokens also forbid Authorization.
 const FORBIDDEN_HEADERS = new Set([
   'cookie',
@@ -10,9 +11,11 @@ const FORBIDDEN_HEADERS = new Set([
   'x-http-method',
   'x-method-override',
 ])
+
 function invalid(reason: string): never {
   throw new Error(`Invalid transcript: ${reason}`)
 }
+
 function findFrom(haystack: Uint8Array, needle: Uint8Array, start = 0): number {
   outer: for (let i = start; i <= haystack.length - needle.length; i++) {
     for (let j = 0; j < needle.length; j++) {

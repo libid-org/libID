@@ -1,18 +1,23 @@
 import { isFormClientId } from '../../platforms/authorization.js'
-import { supportedPlatforms, type PlatformId } from '../../platforms/index.js'
-import { origin, redirect, text, uint } from '../index.js'
+import { type PlatformId, supportedPlatforms } from '../../platforms/index.js'
 import { hasExactKeys, isRecord } from '../../primitives.js'
+import { origin, redirect, text, uint } from '../index.js'
+
 export interface PlatformConfig {
   clientId: string
   ceremonyVersions: readonly number[]
 }
+
 /** Validated Bridge configuration with its registered redirect URI resolved once. */
 export interface CeremonyConfig {
   redirectUri: string
   ccdpOrigin: string
   platforms: Readonly<Record<string, PlatformConfig>>
 }
+
 export const CONFIG_PATH = '/api/v1/ceremony/config'
+
+/** Validate the Bridge wire shape, resolve callbackPath against its origin and freeze the result. */
 export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
   if (
     !origin(bridge) ||
@@ -51,6 +56,8 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
     platforms: Object.freeze(platforms),
   })
 }
+
+/** Fetch current configuration without cookies, redirects or persistent browser caching. */
 export async function fetchCeremonyConfig(bridge: string): Promise<CeremonyConfig> {
   if (!origin(bridge))
     throw new TypeError('oauthBridge must be a canonical HTTPS or localhost HTTP origin')

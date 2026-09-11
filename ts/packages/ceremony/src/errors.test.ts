@@ -1,7 +1,7 @@
-import { expect, it, vi } from 'vitest'
 import type { Message, PopupConnection } from '@libid/popup'
-import { CeremonyError, ceremonyError, reportFailure } from './errors.js'
+import { expect, it, vi } from 'vitest'
 import { AbortCeremony } from './ccdp/index.js'
+import { CeremonyError, ceremonyError, reportFailure } from './errors.js'
 
 it('preserves the original local cause but sends only the known code/message', () => {
   const cause = new Error('synthetic-secret-token')
@@ -21,6 +21,7 @@ it('preserves the original local cause but sends only the known code/message', (
   expect(() => AbortCeremony.decode({ ...message, reason: cause.message })).toThrow()
   expect(() => AbortCeremony.decode({ ...message, cause })).toThrow()
 })
+
 it('reports undeliverable failures once without leaking causes or changing outcomes', () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   try {

@@ -1,9 +1,11 @@
 import { expect, it } from 'vitest'
 import { responseJson } from './http.js'
+
 const response = (headers: string, body: string) => ({
   sent: new Uint8Array(),
   received: new TextEncoder().encode(`HTTP/1.1 200 OK\r\n${headers}\r\n${body}`),
 })
+
 it('parses chunked JSON without altering the transcript used for range commitments', () => {
   const transcript = response(
       'Transfer-Encoding: chunked\r\n',
@@ -13,6 +15,7 @@ it('parses chunked JSON without altering the transcript used for range commitmen
   expect(responseJson(transcript)).toEqual({ id: 1 })
   expect(transcript.received).toEqual(original)
 })
+
 it('rejects ambiguous framing, truncated chunks, compressed bodies, and duplicate JSON members', () => {
   for (const transcript of [
     response('Transfer-Encoding: chunked\r\nContent-Length: 2\r\n', '{}'),

@@ -1,5 +1,6 @@
 import { gunzipSync } from 'node:zlib'
 import { BackendType, Barretenberg } from '@aztec/bb.js'
+
 /** Build-time circuit statistics use the pinned EVM proof settings, without SRS downloads. */
 export async function validateCircuitCapacity(
   releases: ReadonlyMap<string, Buffer>,

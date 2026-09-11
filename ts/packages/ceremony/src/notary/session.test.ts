@@ -2,15 +2,19 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { type ExactHttpRequest, Notarization } from './session.js'
 
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
+
 vi.mock('../assets/index.js', async (original) => ({
   ...(await original<typeof import('../assets/index.js')>()),
   resolve: () => 'https://ccdp.test/asset',
 }))
+
 const ports: MessagePort[] = []
+
 afterEach(() => {
   for (const port of ports.splice(0)) port.close()
   vi.unstubAllGlobals()
 })
+
 function runtime() {
   const messages: { type: string; url: string; notaryAddress: string; port: MessagePort }[] = []
   const terminate = vi.fn()
@@ -24,13 +28,16 @@ function runtime() {
   vi.stubGlobal('Worker', worker)
   return { messages, terminate, worker }
 }
+
 const target = 'https://api.x.com/2/users/me'
+
 const request: ExactHttpRequest = {
   url: target,
   method: 'GET',
   headers: {},
   body: new Uint8Array(),
 }
+
 it.each(['https://notary.lib.id', 'https://testnet.notary.lib.id', 'https://localhost:4687'])(
   'starts the selected notary only, without retrying another network: %s [LIBID-PROVER-008]',
   async (notaryAddress) => {
@@ -43,6 +50,7 @@ it.each(['https://notary.lib.id', 'https://testnet.notary.lib.id', 'https://loca
     expect(terminate).toHaveBeenCalledOnce()
   },
 )
+
 it('rejects invalid origins, targets and pre-aborted work before creating a worker', async () => {
   const { worker } = runtime()
   for (const address of ['http://notary.test', 'https://notary.test/', 'https://notary.test/path'])
@@ -53,6 +61,7 @@ it('rejects invalid origins, targets and pre-aborted work before creating a work
   expect(() => new Notarization('https://notary.test', AbortSignal.abort())).toThrow()
   expect(worker).not.toHaveBeenCalled()
 })
+
 it('shares one worker, routes overlapping replies per session and keeps it alive until ceremony cleanup', async () => {
   const { messages, worker, terminate } = runtime()
   const abort = new AbortController()
@@ -91,6 +100,7 @@ it('shares one worker, routes overlapping replies per session and keeps it alive
   expect(terminate).toHaveBeenCalledOnce()
   await expect(notary.prepare(target)).rejects.toThrow()
 })
+
 it.each(['abort', 'session-error'])(
   '%s rejects sibling preparation and pending attestations and terminates the shared worker',
   async (failure) => {

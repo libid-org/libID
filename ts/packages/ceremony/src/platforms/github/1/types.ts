@@ -1,18 +1,20 @@
-import { isFormClientId } from '../../authorization.js'
 import { hasExactKeys, isRecord } from '../../../primitives.js'
+import { isFormClientId } from '../../authorization.js'
 import {
   type Identity,
-  type NotaryAttestation,
+  isAttestation,
   isIdentity,
   isUserId,
-  isAttestation,
+  type NotaryAttestation,
   proofBytes,
 } from '../../types.js'
+
 export interface GitHubProofV1 {
   bearerLinkProof: Uint8Array
   tokenAttestation: NotaryAttestation
   identityAttestation: NotaryAttestation
 }
+
 export function validateProof(v: unknown): GitHubProofV1 {
   if (
     !isRecord(v) ||

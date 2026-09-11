@@ -15,3 +15,21 @@ exports. The guides below describe each module and its contract.
 [json.ts](../src/json.ts) detects duplicate JSON keys; [progress.ts](../src/progress.ts)
 accounts for work across platform pipelines and proving.
 The source root exports the client-safe platform catalog, not browser entrypoints.
+
+## Code conventions
+
+Use the workspace Biome format: two spaces, single quotes and no semicolons.
+`pnpm -C ts lint` also checks ceremony import/export organization;
+`pnpm -C ts fmt:check` checks formatting. To apply both locally, run
+`pnpm -C ts exec biome check --write --only=assist/source/organizeImports packages/ceremony`.
+
+Separate top-level declarations and class methods with a blank line; keep related
+fields together. Add JSDoc where an API has meaningful input, lifecycle, ordering,
+ownership or failure constraints. Internal comments explain reasons and invariants,
+especially byte preservation, concurrency and trust boundaries. Avoid restating
+names or types, and keep comments adjacent to the code they explain.
+
+These docs own cross-component behavior, deployment and qualification requirements.
+Implementation guides link to code for local mechanics; stable test IDs remain in
+[the requirement index](test-plan.md) and [traceability](traceability.md). Biome checks
+mechanical style; comment usefulness and declaration spacing remain review concerns.

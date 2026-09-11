@@ -1,23 +1,29 @@
-import type { PlatformId } from './index.js'
 import { text, uint } from '../ccdp/index.js'
-import { hasExactKeys, isRecord } from '../primitives.js'
 import type { DecodedAttestedData, DecodedDirection } from '../notary/decode.js'
+import { hasExactKeys, isRecord } from '../primitives.js'
+import type { PlatformId } from './index.js'
+
 export type { DecodedAttestedData, DecodedDirection } from '../notary/decode.js'
+
 export interface Identity<P extends PlatformId = PlatformId> {
   platformId: P
   oauthClientId: string
   userId: string
   userName: string
 }
+
 export interface NotaryAttestation {
   attestedData: Uint8Array
   signature: Uint8Array
   decoded: DecodedAttestedData
 }
+
 export const proofBytes = (v: unknown): v is Uint8Array =>
   v instanceof Uint8Array && v.length > 0 && v.length <= 4 * 1024 * 1024
+
 export const fixedBytes = (v: unknown, n: number): v is Uint8Array =>
   v instanceof Uint8Array && v.length === n
+
 export function isIdentity<P extends PlatformId>(
   v: unknown,
   platform: P,
@@ -32,6 +38,7 @@ export function isIdentity<P extends PlatformId>(
     text(v.userName, limits[2])
   )
 }
+
 function direction(v: unknown): v is DecodedDirection {
   return (
     isRecord(v) &&
@@ -58,6 +65,7 @@ function direction(v: unknown): v is DecodedDirection {
     )
   )
 }
+
 export function isAttestation(v: unknown): v is NotaryAttestation {
   if (
     !isRecord(v) ||

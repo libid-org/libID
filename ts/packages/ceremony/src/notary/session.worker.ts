@@ -157,6 +157,7 @@ async function readFinalFrame(io: Io): Promise<Uint8Array> {
 
 // The module and its thread pool are initialized once for this ceremony's sessions.
 let runtime: Promise<TlsnModule> | undefined
+
 function initialize(data: Record<string, unknown>): Promise<TlsnModule> {
   runtime ??= (async () => {
     const tlsn = (await import(/* @vite-ignore */ String(data.moduleUrl))) as TlsnModule
@@ -180,9 +181,11 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
     if (data.type === 'prepare' && stage === 'new') {
       stage = 'preparing'
       target = String(data.url)
+      // Socket connection and shared WASM initialization overlap; TLS setup needs both.
       const socket = new WebSocket(deriveNotaryWebSocketUrl(String(data.notaryAddress)))
       io = socketIo(socket)
       const [tlsn] = await Promise.all([initialize(data), waitForOpen(socket)])
+      // Opening earlier is insufficient if the peer disconnected while WASM initialized.
       if (socket.readyState !== WebSocket.OPEN) throw new Error('notary WebSocket closed')
       prover = new tlsn.Prover({
         server_name: new URL(target).hostname,
@@ -290,6 +293,7 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
   port.onmessage = (event) => dispatch(event.data)
   dispatch(initial)
 }
+
 self.addEventListener('message', (event: MessageEvent<Record<string, unknown>>) => {
   session(event.data.port as MessagePort, event.data)
 })

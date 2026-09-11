@@ -7,7 +7,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "lint": "biome lint .",
+    "lint": "biome lint . && biome check --formatter-enabled=false --only=assist/source/organizeImports packages/ceremony",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
     "dev": "pnpm --filter @libid/dev dev",

@@ -11,23 +11,32 @@ const { connection, prove } = vi.hoisted(() => ({
   },
   prove: vi.fn(async (_context: ProverContext) => null),
 }))
+
 vi.mock('@libid/popup', () => ({
   PopupConnection: { accept: () => connection },
   PopupWindow: { current: vi.fn() },
 }))
+
 vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
+
 vi.mock('../../assets/registration.js', () => ({ claimRootWorker: vi.fn() }))
+
 vi.mock('../../platforms/google/1/prover.js', () => ({ prove }))
+
 vi.mock('../../platforms/x/1/prover.js', () => ({ prove }))
+
 vi.mock('../../platforms/github/1/prover.js', () => ({ prove }))
+
 vi.mock('../../ui.js', () => ({
   view: vi.fn(),
   progressView: () => ({ stop: vi.fn(), update: vi.fn() }),
 }))
+
 afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
 })
+
 it.each(['google', 'x', 'github'])(
   'passes validated %s routing to the platform without ledger decoding [LIBID-OAUTH-021]',
   async (platformId) => {

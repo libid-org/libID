@@ -1,12 +1,18 @@
 import { mainnet, testnet } from '@libid/ledger/testing'
-import { PopupConnection, PopupWindow, type Message } from '@libid/popup'
+import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { CeremonyError, createCCDPClient } from '../src/ccdp/client/index.js'
+
 const bridge = `${location.protocol}//localhost:${Number(location.port) + 1}`,
   ccdp = `${location.protocol}//localhost:${Number(location.port) + 2}`
+
 const client = await createCCDPClient({ oauthBridge: bridge })
+
 let activeId = ''
+
 const anchor = document.querySelector<HTMLAnchorElement>('#launch')!
+
 let connection: PopupConnection<Message> | undefined
+
 Object.assign(window, {
   ready: true,
   result: undefined,
@@ -17,6 +23,7 @@ Object.assign(window, {
     await connection!.navigate(`${ccdp}/after`, new URLSearchParams({ id: activeId }))
   },
 })
+
 anchor.addEventListener('click', (event) => {
   const id = crypto.randomUUID()
   activeId = id

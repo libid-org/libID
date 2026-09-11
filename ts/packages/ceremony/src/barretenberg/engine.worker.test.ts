@@ -10,23 +10,30 @@ const mocks = vi.hoisted(() => ({
   prove: vi.fn(),
   destroy: vi.fn(),
 }))
+
 vi.mock('@noir-lang/acvm_js', () => ({ default: mocks.acvm }))
+
 vi.mock('@noir-lang/noirc_abi', () => ({ default: mocks.abi }))
+
 vi.mock('@noir-lang/noir_js', () => ({
   Noir: class {
     execute = mocks.execute
   },
 }))
+
 vi.mock('@aztec/bb.js', () => ({
   BackendType: { Wasm: 'Wasm' },
   Barretenberg: { new: mocks.create },
 }))
+
 vi.mock('./barretenberg.assets.js', () => ({ SRS_SIZE: 2 ** 18 }))
+
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.resetAllMocks()
   vi.resetModules()
 })
+
 async function worker(key: Response | Promise<Response> = new Response(Uint8Array.of(11, 12))) {
   let receive!: (event: { data: unknown }) => void
   const postMessage = vi.fn()
@@ -78,6 +85,7 @@ async function worker(key: Response | Promise<Response> = new Response(Uint8Arra
     has: (type: string) => postMessage.mock.calls.some(([m]) => m.type === type),
   }
 }
+
 it('uses the released VK with exact ZK Keccak settings and preserves proof encoding [LIBID-PROVER-001]', async () => {
   const w = await worker()
   await expect.poll(() => w.has('engine-ready')).toBe(true)
@@ -108,6 +116,7 @@ it('uses the released VK with exact ZK Keccak settings and preserves proof encod
   })
   expect(mocks.destroy).toHaveBeenCalledOnce()
 })
+
 it.each(['missing', 'empty'])(
   'fails for a %s VK without falling back to recomputation [LIBID-PROVER-001]',
   async (kind) => {
@@ -118,6 +127,7 @@ it.each(['missing', 'empty'])(
     expect(mocks.prove).not.toHaveBeenCalled()
   },
 )
+
 it('preserves cleanup when bb rejects the supplied key [LIBID-PROVER-001]', async () => {
   const w = await worker()
   await expect.poll(() => w.has('engine-ready')).toBe(true)
@@ -138,6 +148,7 @@ function deferred<T>() {
   })
   return { promise, resolve, reject }
 }
+
 it.each(['backend', 'resources'])(
   'starts all preload branches before %s finishes [LIBID-PROVER-012]',
   async (first) => {
@@ -187,6 +198,7 @@ it.each(['backend', 'resources'])(
     expect(mocks.execute).not.toHaveBeenCalled()
   },
 )
+
 it.each(['circuit', 'wasm'])(
   'fails promptly on %s loading and releases a late backend [LIBID-PROVER-014]',
   async (failure) => {
@@ -206,6 +218,7 @@ it.each(['circuit', 'wasm'])(
     expect(mocks.prove).not.toHaveBeenCalled()
   },
 )
+
 it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]', async () => {
   const acvm = deferred<void>()
   mocks.acvm.mockReturnValueOnce(acvm.promise)
@@ -222,6 +235,7 @@ it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]',
   expect(mocks.destroy).toHaveBeenCalledOnce()
   expect(w.has('engine-ready')).toBe(false)
 })
+
 it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]', async () => {
   const key = deferred<Response>()
   mocks.initialize.mockRejectedValueOnce(new Error('Backend unavailable'))
@@ -272,6 +286,7 @@ it.each(['witness', 'backend'])(
     expect(mocks.destroy).toHaveBeenCalledOnce()
   },
 )
+
 it('reports witness failure promptly and destroys a late backend once [LIBID-PROVER-014]', async () => {
   const backend = deferred<void>()
   mocks.initialize.mockReturnValueOnce(backend.promise)
@@ -286,6 +301,7 @@ it('reports witness failure promptly and destroys a late backend once [LIBID-PRO
   expect(mocks.prove).not.toHaveBeenCalled()
   expect(w.has('engine-result')).toBe(false)
 })
+
 it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-014]', async () => {
   const backend = deferred<void>()
   const witness = deferred<{ witness: Uint8Array }>()
@@ -306,6 +322,7 @@ it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-01
   expect(mocks.prove).not.toHaveBeenCalled()
   expect(w.has('engine-result')).toBe(false)
 })
+
 it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER-014]', async () => {
   const proof = deferred<unknown>()
   const w = await worker()

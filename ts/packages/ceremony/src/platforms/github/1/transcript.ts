@@ -10,6 +10,7 @@ import { isUserId } from '../../types.js'
 import { isUserName } from './types.js'
 
 const encoder = new TextEncoder()
+
 export function identityRequest(bearer: string): ExactHttpRequest {
   if (!/^[\x21-\x7e]{1,128}$/.test(bearer)) throw new Error('Invalid bearer')
   return {
@@ -28,6 +29,7 @@ export function identityRequest(bearer: string): ExactHttpRequest {
     ),
   }
 }
+
 export function selectIdentity(transcript: Transcript, bearer: string) {
   const { start } = identityBearerRange(
     transcript.sent,

@@ -1,8 +1,9 @@
-import type { AssetRequest } from './index.js'
 import { readBody } from '../response.js'
+import type { AssetRequest } from './index.js'
 
 const CACHE = 'libid-ceremony-assets-v1',
   PREFIX = '/__libid_ceremony_cache__/'
+
 /** Validate status and exposed metadata before accepting an asset response. */
 export function validateResponse(response: Response, spec: AssetRequest): void {
   if (
@@ -36,12 +37,22 @@ export function validateResponse(response: Response, spec: AssetRequest): void {
   )
     throw new Error('Unexpected asset size')
 }
+
+/** Single-flight delivery of immutable bytes. Storage failure falls back to the same fetch. */
 export class AssetCache {
   private readonly pending = new Map<
     string,
     { dispatched: Promise<void>; response: Promise<Response>; complete: Promise<void> }
   >()
+
   constructor(private readonly origin: string) {}
+
+  /**
+   * Join one URL/range fetch, with an independently consumable response for each caller.
+   * `dispatched` acknowledges a cache hit or fetch invocation, allowing OAuth navigation.
+   * `response` validates the body before delivery; `complete` keeps the worker and pending
+   * entry alive through best-effort cache persistence, without delaying delivery.
+   */
   load(spec: AssetRequest) {
     const key = `${spec.url}\n${spec.range ?? ''}`
     const existing = this.pending.get(key)

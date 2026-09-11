@@ -1,20 +1,20 @@
 import { resolve as resolveAsset } from '../../../assets/index.js'
-import { oauthState } from '../../../ccdp/navigation.js'
-import { CeremonyError, ceremonyError } from '../../../errors.js'
-import { isRecord } from '../../../primitives.js'
 import {
   buildBearerLinkWitness,
   validateBearerLinkPublicInputs,
 } from '../../../barretenberg/circuits/bearer_link/inputs.js'
-import type { ProverContext } from '../../context.js'
 import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../barretenberg/engine.js'
+import { oauthState } from '../../../ccdp/navigation.js'
+import { CeremonyError, ceremonyError } from '../../../errors.js'
 import { responseJson } from '../../../notary/http.js'
 import { bearerOpening } from '../../../notary/notarize.js'
 import { Notarization } from '../../../notary/session.js'
+import { isRecord } from '../../../primitives.js'
 import { Progress } from '../../../progress.js'
 import { readBody } from '../../../response.js'
 import { isFormClientId } from '../../authorization.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
+import type { ProverContext } from '../../context.js'
 import type { Identity } from '../../types.js'
 import { circuit, verificationKey } from './github.assets.js'
 import { admitTokenResponse, decodeTokenResponse, encodeTokenRequest } from './token.js'
@@ -27,6 +27,7 @@ const spans = [
   { code: 'attestation', label: 'Completing identity evidence', weight: 5 },
   ...PROOF_ENGINE_SPANS,
 ]
+
 export async function prove(
   context: ProverContext,
 ): Promise<{ identity: Identity<'github'>; proof: GitHubProofV1 } | null> {

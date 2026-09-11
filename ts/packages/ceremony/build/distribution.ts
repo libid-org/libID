@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join, resolve } from 'node:path'
 import type { Rollup } from 'vite'
 import type { AssetRequest } from '../src/assets/index.js'
+import { safePath } from './archive.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { assetHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
@@ -9,20 +10,26 @@ import { bundle } from './bundle.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { responseHeaders } from './profiles.ts'
 import { packageDir } from './release.ts'
-import { safePath } from './archive.ts'
 import { writeDistribution } from './sws.ts'
+
 export type DistributionMetadata = Pick<ResolvedAssets, 'requestsByProfile' | 'allowedRequests'> & {
   headers: Record<string, Record<string, string>>
   graph: Record<string, BundleNode>
   files: Record<string, string>
 }
+
 const index = process.argv.indexOf('--out-dir'),
   out = resolve(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
+
 if (out === packageDir || !out.startsWith(`${resolve(packageDir, '../../..')}/`))
   throw new Error('Output must be a dedicated directory inside this worktree')
+
 const staging = `${out}.building`
+
 if (existsSync(staging)) throw new Error('Build staging directory already exists')
+
 mkdirSync(join(staging, 'public'), { recursive: true })
+
 try {
   const data = await resolveAssets(),
     records = new Map<string, { bytes: Buffer; headers: Record<string, string> }>(),

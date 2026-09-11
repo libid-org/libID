@@ -2,7 +2,9 @@ import { expect, it } from 'vitest'
 import { parseOAuthReturn } from './oauth.js'
 
 const state = 'v1.123e4567-e89b-42d3-a456-426614174000'
+
 const accepted = `#state=${state}&id_token=header.payload.signature`
+
 const parse = (fragment: string, query = '') => parseOAuthReturn({ query, fragment })
 
 it('ignores Google metadata without changing the outcome or credential [LIBID-OAUTH-006]', () => {

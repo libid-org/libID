@@ -1,7 +1,7 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
-import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
 import { claimRootWorker } from '../../assets/registration.js'
+import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
 import type { ProverContext } from '../../platforms/context.js'
 import { progressView, view } from '../../ui.js'
 import { AppStartProver, CancelCeremony, ProverIdentityProof, ProverNotifyEvent } from '../index.js'
@@ -17,6 +17,8 @@ const implementations: Record<
   x: () => import('../../platforms/x/1/prover.js'),
   github: () => import('../../platforms/github/1/prover.js'),
 }
+
+/** Accept the private callback fragment, run the selected pipeline and deliver one terminal result. */
 export async function startProver(fragment: string): Promise<void> {
   let connection: PopupConnection<Message> | undefined,
     retained: ReturnType<typeof readProver> | undefined,

@@ -1,11 +1,15 @@
-import { CCDP_VERSION, PLATFORM, uint, UUID } from './index.js'
+import { CCDP_VERSION, PLATFORM, UUID, uint } from './index.js'
+
 export interface OAuthReturn {
   query: string
   fragment: string
 }
+
 export const route = (name: 'prefetch' | 'prover' | 'prover/fallback' | 'worker.js') =>
   `/ccdp/v${CCDP_VERSION}/${name}`
+
 export const oauthState = (ceremonyId: string) => `v${CCDP_VERSION}.${ceremonyId}`
+
 function fields(fragment: string, keys: string[]): URLSearchParams {
   const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment
   if (raw.length > 65536) throw new TypeError('Navigation input too large')
@@ -16,6 +20,7 @@ function fields(fragment: string, keys: string[]): URLSearchParams {
     throw new TypeError('Invalid navigation fields')
   return p
 }
+
 export function prefetchFragment(
   ceremonyId: string,
   platformId: string,
@@ -23,6 +28,7 @@ export function prefetchFragment(
 ): URLSearchParams {
   return new URLSearchParams({ ceremonyId, platformId, ceremonyVersion: String(version) })
 }
+
 export function readPrefetch(fragment: string) {
   const p = fields(fragment, ['ceremonyId', 'platformId', 'ceremonyVersion'])
   const ceremonyId = p.get('ceremonyId')!,
@@ -37,9 +43,11 @@ export function readPrefetch(fragment: string) {
     throw new TypeError('Invalid Prefetch input')
   return { ceremonyId, platformId, platformCeremonyVersion: Number(version) }
 }
+
 export function proverFragment(ceremonyId: string, input: OAuthReturn): URLSearchParams {
   return new URLSearchParams({ ceremonyId, oauthQuery: input.query, oauthFragment: input.fragment })
 }
+
 export function readProver(fragment: string) {
   const p = fields(fragment, ['ceremonyId', 'oauthQuery', 'oauthFragment'])
   const ceremonyId = p.get('ceremonyId')!,

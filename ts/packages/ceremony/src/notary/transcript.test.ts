@@ -11,7 +11,9 @@ import type { ExactHttpRequest } from './session.js'
 import { quotedRange } from './transcript.js'
 
 const utf8 = (value: string) => new TextEncoder().encode(value)
+
 const text = (value: Uint8Array) => new TextDecoder().decode(value)
+
 function serialize(line: string, request: ExactHttpRequest): Uint8Array {
   return utf8(
     `${line}\r\n${Object.entries(request.headers)
@@ -20,17 +22,21 @@ function serialize(line: string, request: ExactHttpRequest): Uint8Array {
       .join('\r\n')}\r\n\r\n${text(request.body)}`,
   )
 }
+
 const input = {
   clientId: 'client',
   code: 'code+with/slash',
   redirectUri: 'https://bridge.example/callback',
   codeVerifier: 'a'.repeat(43),
 }
+
 const request = buildTokenRequest(input)
+
 const transcript = {
   sent: serialize('POST /2/oauth2/token HTTP/1.1', request),
   recv: utf8('HTTP/1.1 200 OK\r\n\r\n{"access_token":"token","token_type":"bearer"}'),
 }
+
 describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C]', () => {
   it('reveals the entire request, accepts reordered headers, and keeps the bearer committed', () => {
     expect(text(request.headers['Content-Length'])).toBe(String(request.body.length))

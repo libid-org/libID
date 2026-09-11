@@ -1,7 +1,9 @@
 import { createServer, request } from 'node:http'
 
 const upstream = process.env.CEREMONY_SWS_URL
+
 if (!upstream) throw new Error('CEREMONY_SWS_URL must serve the smoke artifact with the pinned SWS')
+
 createServer((req, res) => {
   const path = req.url === '/' ? '/index.html' : req.url
   const proxy = request(

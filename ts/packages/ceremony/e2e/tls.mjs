@@ -4,8 +4,7 @@
 // ignoreHTTPSErrors; nothing here is a production artifact.
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync } from 'node:fs'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 export function makeCertificate(hostnames, days = 2) {

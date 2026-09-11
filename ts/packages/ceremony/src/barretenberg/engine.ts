@@ -1,8 +1,8 @@
-import { ceremonyError } from '../errors.js'
 import { resolve as resolveAsset } from '../assets/index.js'
 import type { PlatformStep } from '../ccdp/index.js'
-import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
+import { ceremonyError } from '../errors.js'
 import { Progress, type ProgressSpan } from '../progress.js'
+import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
 
 export const PROOF_ENGINE_SPANS = [
   { code: 'proof-worker-bootstrap', label: 'Starting prover', weight: 1 },
@@ -14,6 +14,7 @@ export const PROOF_ENGINE_SPANS = [
   { code: 'proof-backend-destroy', label: 'Finishing proof', weight: 1 },
 ] satisfies readonly ProgressSpan[]
 
+/** Browser-generated bb output; structural checks here do not establish cryptographic validity. */
 export interface RawProof {
   proof: Uint8Array
   publicInputs: string[]
@@ -21,6 +22,7 @@ export interface RawProof {
 }
 
 export interface ProofEngineOptions {
+  /** Compiled Noir circuit and matching released verification key, resolved by the asset graph. */
   circuitUrl: string
   verificationKeyUrl: string
   onProgress?: (step: PlatformStep, timestamp: number) => void
@@ -83,6 +85,7 @@ export class ProofEngine {
     void this.#start(url, keyUrl, threads).catch((error: unknown) => this.#fail(error))
   }
 
+  /** Execute one witness and proof; initialization overlaps until bb is needed. Aborting retires the worker. */
   async prove(inputs: Record<string, unknown>, signal?: AbortSignal): Promise<RawProof> {
     if (this.#used) throw new Error('proof engine is single-use')
     this.#used = true
@@ -108,6 +111,7 @@ export class ProofEngine {
     }
   }
 
+  /** Retire pending work and the worker; repeated calls after settlement are harmless. */
   destroy(): void {
     if (!this.#settled) this.#fail('proof engine destroyed')
   }

@@ -13,6 +13,7 @@ interface Fixture {
 const fixture = JSON.parse(
   readFileSync(new URL('../../../../test-fixtures/google-v1.json', import.meta.url), 'utf8'),
 ) as Fixture
+
 const digest = new Uint8Array(Buffer.from(fixture.authorizationDigest, 'hex'))
 
 // Generated once by running this fixture through the official libid-circuits

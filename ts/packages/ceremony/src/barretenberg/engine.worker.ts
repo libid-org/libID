@@ -1,13 +1,15 @@
+import { BackendType, Barretenberg } from '@aztec/bb.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
 import initACVM from '@noir-lang/acvm_js'
 import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
-import { BackendType, Barretenberg } from '@aztec/bb.js'
-import { bytesToHex } from '@noble/hashes/utils.js'
-import type { RawProof } from './engine.js'
 import { SRS_SIZE } from './barretenberg.assets.js'
+import type { RawProof } from './engine.js'
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
+
 type Api = Awaited<ReturnType<typeof Barretenberg.new>>
+
 type ProvingCircuit = Parameters<Api['circuitProve']>[0]['circuit']
 
 type Preload = {
@@ -20,11 +22,15 @@ type Preload = {
   wasmPath: string
   crsPath: string
 }
+
 type Prove = { type: 'engine-prove'; inputs: Record<string, unknown> }
 
 let runtime: { effectiveThreads: number; sharedMemory: boolean } | undefined
+
 let state: 'new' | 'loading' | 'ready' | 'proving' | 'done' = 'new'
+
 let ready: { noir: Noir; circuit: ProvingCircuit } | null = null
+
 let backend: Promise<Api> | null = null
 
 const send = (message: unknown): void => self.postMessage(message)
@@ -63,6 +69,7 @@ function fail(): void {
   send({ type: 'engine-error', error: 'Proof engine failed' })
 }
 
+/** Start bb initialization alongside circuit/key and Noir loading; witness readiness does not await bb. */
 async function preload(message: Preload): Promise<void> {
   if (state !== 'new') throw new Error('Duplicate engine initialization')
   state = 'loading'
@@ -165,6 +172,7 @@ async function prove(message: Prove): Promise<void> {
 }
 
 send({ type: 'engine-booted' })
+
 self.addEventListener('message', (event: MessageEvent<Preload | Prove>) => {
   const work = event.data.type === 'engine-preload' ? preload(event.data) : prove(event.data)
   void work.catch(fail)

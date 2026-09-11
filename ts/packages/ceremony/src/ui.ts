@@ -15,6 +15,7 @@ export function view(title: string) {
   root.append(logo, label)
   return { root, label }
 }
+
 export function progressView() {
   const { root, label } = view('Preparing proof'),
     bar = document.createElement('progress')

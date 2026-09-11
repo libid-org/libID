@@ -4,9 +4,9 @@ import { join, relative } from 'node:path'
 import { test } from 'node:test'
 import { gzipSync } from 'node:zlib'
 import { Header } from 'tar'
+import { executionWorker } from '../src/ccdp/headers.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetHeaders, externalRequest, loadAssetCatalog } from './assets.ts'
-import { executionWorker } from '../src/ccdp/headers.ts'
 import { cache, packageDir } from './release.ts'
 
 function tar(entries: { path: string; type?: 'File' | 'SymbolicLink' | 'Link'; body?: string }[]) {
@@ -25,6 +25,7 @@ function tar(entries: { path: string; type?: 'File' | 'SymbolicLink' | 'Link'; b
   }
   return gzipSync(Buffer.concat([...chunks, Buffer.alloc(1024)]))
 }
+
 test('safe archives preserve paths and wildcard selectors select exactly once [LIBID-ASSET-024] [LIBID-ASSET-025]', async () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'archive-test-')),
@@ -75,6 +76,7 @@ test('safe archives preserve paths and wildcard selectors select exactly once [L
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
 test('policy cannot override server metadata or weaken immutable resources [LIBID-ASSET-026]', () => {
   for (const name of [
     'ETag',
@@ -103,6 +105,7 @@ test('policy cannot override server metadata or weaken immutable resources [LIBI
     }),
   )
 })
+
 test('external declarations retain exact URL/range and derive size without downloading [LIBID-ASSET-022]', async () => {
   const fetch = globalThis.fetch
   globalThis.fetch = () => {
