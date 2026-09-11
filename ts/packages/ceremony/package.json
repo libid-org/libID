@@ -15,25 +15,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./ccdp": {
-      "types": "./dist/ccdp/index.d.ts",
-      "default": "./dist/ccdp/index.js"
-    },
     "./ccdp/client": {
       "types": "./dist/ccdp/client/index.d.ts",
       "default": "./dist/ccdp/client/index.js"
-    },
-    "./prover": {
-      "types": "./dist/ccdp/documents/prover.d.ts",
-      "default": "./dist/ccdp/documents/prover.js"
-    },
-    "./callback": {
-      "types": "./dist/ccdp/documents/callback.d.ts",
-      "default": "./dist/ccdp/documents/callback.js"
-    },
-    "./prefetch": {
-      "types": "./dist/ccdp/documents/prefetch.d.ts",
-      "default": "./dist/ccdp/documents/prefetch.js"
     }
   },
   "files": [
@@ -41,6 +25,7 @@
     "src",
     "docs",
     "!src/**/*.test.ts",
+    "!src/**/*.fixture.*",
     "build",
     "ccdp.Dockerfile"
   ],

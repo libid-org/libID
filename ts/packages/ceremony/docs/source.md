@@ -15,7 +15,8 @@ exports. The guides below describe each module and its contract.
 [response.ts](../src/response.ts) reads bounded response bodies.
 [json.ts](../src/json.ts) detects duplicate JSON keys; [progress.ts](../src/progress.ts)
 accounts for work across platform pipelines and proving.
-The source root exports the client-safe platform catalog, not browser entrypoints.
+The source root exports the client-safe discovery and result API. Only the root
+and `ccdp/client` are public package entrypoints; document startup remains private.
 
 ## Code conventions
 
@@ -34,3 +35,7 @@ These docs own cross-component behavior, deployment and qualification requiremen
 Implementation guides link to code for local mechanics; stable test IDs remain in
 [the requirement index](test-plan.md) and [traceability](traceability.md). Biome checks
 mechanical style; comment usefulness and declaration spacing remain review concerns.
+
+Keep fixtures beside the owning tests using a `.fixture.*` suffix. The Google
+circuit fixture is shared with browser qualification; the canonical attestation
+fixture lives with its decoder tests. Package contents exclude these fixture files.

@@ -5,9 +5,7 @@ export {
   type Identity,
   type IdentityResult,
   type OAuthProof,
-  type PlatformCeremonyVersion,
   type PlatformId,
-  type ProofByPlatformVersion,
   type SupportedCeremonyVersion,
   supportedPlatforms,
 } from './platforms/index.js'

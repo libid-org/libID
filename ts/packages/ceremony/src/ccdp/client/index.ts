@@ -8,5 +8,3 @@ export {
   type CeremonyEvent,
   createCCDPClient,
 } from './ceremony.js'
-
-export { type CeremonyConfig, type PlatformConfig, validateCeremonyConfig } from './config.js'

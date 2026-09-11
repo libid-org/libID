@@ -3,6 +3,7 @@ import { mainnet, testnet } from '@libid/ledger/testing'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import { describe, expect, it, vi } from 'vitest'
 import { deriveAuthorizationDigest } from '../../platforms/authorization.js'
+import { platforms } from '../../platforms/index.js'
 import { b64urlEncode } from '../../primitives.js'
 import { type CeremonyEvent, ccdpClientFromConfig } from './ceremony.js'
 import { validateCeremonyConfig } from './config.js'
@@ -692,4 +693,104 @@ it('Prover readiness does not claim user authorization before OAuth return admis
   connection.receive({ type: 'cancel-ceremony' })
   await expect(result).resolves.toEqual({ status: 'denied' })
   expect(stages.at(-1)).toBe('oauth-return')
+})
+
+it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] [LIBID-MOD-020]', async () => {
+  // A second catalog entry tests selection only; it is not a new or qualified Google profile.
+  Reflect.set(platforms.google.versions, '2', platforms.google.versions[1])
+  try {
+    const client = ccdpClientFromConfig(
+      validateCeremonyConfig(
+        {
+          ...wireConfig,
+          platforms: {
+            google: { clientId: identity.oauthClientId, ceremonyVersions: [2, 99, 1] },
+            x: { clientId: 'client', ceremonyVersions: [99] },
+          },
+        },
+        'https://bridge.test',
+      ),
+    )
+    expect(client.enabledPlatforms).toEqual(['google'])
+    const versions = client.enabledVersions('google')
+    expect(versions).toEqual([1, 2])
+    expect(Object.isFrozen(versions)).toBe(true)
+    expect(client.enabledVersions('x')).toEqual([])
+    expect(client.enabledVersions('github')).toEqual([])
+    const onlyNewer = ccdpClientFromConfig({
+      ...config,
+      platforms: { google: { clientId: identity.oauthClientId, ceremonyVersions: [2] } },
+    })
+    expect(() =>
+      onlyNewer.new(
+        new Connection(),
+        id,
+        testnet,
+        'google',
+        new Uint8Array(32),
+        new Uint8Array(),
+        1,
+      ),
+    ).toThrow('Unsupported ceremony version')
+    for (const selected of [1, undefined] as const) {
+      const c = new Connection()
+      const run = client.new(
+        c,
+        id,
+        testnet,
+        'google',
+        new Uint8Array(32),
+        new Uint8Array(),
+        selected,
+      )
+      const version = selected ?? 2
+      expect(new URLSearchParams(new URL(run.launchUrl).hash.slice(1)).get('ceremonyVersion')).toBe(
+        String(version),
+      )
+      const pending = run.proveUserIdentity()
+      c.receive({ type: 'prefetch-started' })
+      c.receive({ type: 'prover-ready' })
+      expect(c.send.mock.calls[0][0].platformCeremonyVersion).toBe(version)
+      c.receive({ type: 'prover-identity-proof', identity, proof })
+      const result = await pending
+      expect(result).toMatchObject({ oauthProof: { platformCeremonyVersion: version } })
+      if (result.status !== 'accepted') throw new Error('Expected proof')
+      const digest = deriveAuthorizationDigest({
+        chainId: testnet.hash(),
+        operationDomain: new Uint8Array(32),
+        transactionData: new Uint8Array(),
+        platformCeremonyVersion: version,
+        authorizationNonce: result.oauthProof.authorizationNonce,
+      })
+      expect(new URL(c.navigateAway.mock.calls[0][0]).searchParams.get('nonce')).toBe(
+        b64urlEncode(digest),
+      )
+    }
+  } finally {
+    Reflect.deleteProperty(platforms.google.versions, '2')
+  }
+})
+
+it('rejects unavailable explicit versions before reading ledger or reserving the run [LIBID-MOD-015]', async () => {
+  const client = ccdpClientFromConfig(config)
+  const ledger = { ...testnet, hash: vi.fn(testnet.hash) }
+  const c = new Connection()
+  for (const version of [0, 2, 99, -1, 1.5, NaN, null, '1']) {
+    expect(() =>
+      client.new(
+        c,
+        id,
+        ledger,
+        'google',
+        new Uint8Array(32),
+        new Uint8Array(),
+        // @ts-expect-error Reject unsupported versions and malformed runtime input.
+        version,
+      ),
+    ).toThrow('Unsupported ceremony version')
+  }
+  expect(ledger.hash).not.toHaveBeenCalled()
+  expect(c.handlers.size).toBe(0)
+  const run = client.new(c, id, ledger, 'google', new Uint8Array(32), new Uint8Array(), 1)
+  await run.cancel()
 })
