@@ -1060,6 +1060,26 @@ and no `authorization` needle to count.
   more than one position. Necessity: an authenticated response value the
   account holder influences, such as a display name, can embed a lookalike
   field.
+- REQ-COMMON-19F (upholds SP-BIND-01, SP-EXCHANGE-01):
+  The Platform Verifier reading a JSON field from revealed attestation bytes
+  MUST first remove every JSON whitespace byte (`0x20`, `0x09`, `0x0a`,
+  `0x0d`) that touches a structural byte (`:`, `,`, `{`, `}`, `[`, `]`) on
+  either side, and no other byte. The Platform Verifier MUST match the
+  field's delimiter, count its positions under REQ-COMMON-19A, read its
+  value, and judge its terminator over the bytes that removal leaves. The
+  Implementation MUST reveal a member as the transcript carries it, its JSON
+  whitespace inside the revealed range at its offsets. The Implementation
+  MUST NOT commit that whitespace with a bearer. Every compact delimiter this
+  specification spells, such as `"login":"` or `"access_token":"`, names the
+  member that removal leaves, not the bytes a platform must serve. The
+  Proving Circuit is outside this rule: REQ-COMMON-19 and REQ-COMMON-19D fix
+  what it asserts at the offset the prover supplies. Necessity: a platform
+  may pretty-print the response it serves for the media type a profile pins,
+  and GitHub does for `/user`. Removing whitespace only where it touches a
+  structural byte leaves every reader one exact template and makes a member
+  in any spelling the same member, so a second copy spelled with spaces is
+  still the duplicate REQ-COMMON-19A rejects, while `123 456` still does not
+  read as `123456`.
 - REQ-COMMON-20 (upholds SP-EXCHANGE-01):
   The Proving Circuit MUST constrain every variable value it opens or
   extracts to the charset the profile states, including values that are never
@@ -1290,6 +1310,15 @@ the constructions that role implements.
   format, or required security properties is invalid. A destination chain
   cannot support it without selecting a compatible Notary Service. A profile
   whose Attestation Count is zero remains valid without either.
+- TEST-COMMON-10A (exercises REQ-COMMON-19F, REQ-COMMON-19A):
+  A revealed member spelled with each JSON whitespace byte, alone and as a
+  run, between its name and its colon, between its colon and its value, and
+  between its integer and its terminator, reads as the compact member, and
+  its bytes are revealed at their transcript offsets; a second copy of the
+  field spelled with whitespace is rejected as a duplicate; a byte JSON does
+  not call whitespace, such as `0x0b`, in any of those positions is rejected;
+  an integer with whitespace between its digits is rejected; and a member
+  whose whitespace an HTTP chunk boundary splits is not built as a layout.
 - TEST-COMMON-11 (exercises REQ-COMMON-21, REQ-COMMON-21A, REQ-COMMON-21B, REQ-COMMON-21C):
   The Platform Verifier rejects an authenticated foreign authority, method,
   or path. The request constructor refuses a media type or `redirect_uri`

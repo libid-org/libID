@@ -1017,8 +1017,10 @@ REQ-COMMON-18A requires.
   The Implementation MUST reveal the full `"id":` delimiter, its integer
   token, and the structural byte after it, together with the full
   `"login":"` delimiter, its value, and its closing quote, in the `/user`
-  response. The Implementation MUST redact every other response byte behind
-  a range commitment. Necessity: REQ-PLAT-51 reads both fields out of
+  response. The Implementation MUST keep the JSON whitespace GitHub puts
+  inside either member in the revealed range, per common REQ-COMMON-19F. The
+  Implementation MUST redact every other response byte behind a range
+  commitment. Necessity: REQ-PLAT-51 reads both fields out of
   revealed response bytes, and a session revealing no response range at all
   leaves it nothing to read.
 - REQ-PLAT-51 (upholds SP-BIND-01):
@@ -1028,7 +1030,8 @@ REQ-COMMON-18A requires.
   REQ-COMMON-19A. The Platform Verifier MUST reject a noncanonical `id`
   encoding. The GitHub profile fixes the structural byte following the
   `id` integer token, which common REQ-COMMON-19D leaves to the profile, as
-  `,` or `}` and no other byte. The Platform Verifier MUST reject any other
+  `,` or `}` and no other byte, judged after the removal common
+  REQ-COMMON-19F fixes. The Platform Verifier MUST reject any other
   following byte. Necessity: the terminator is what proves the revealed digits
   are the whole number rather than a prefix of a longer one, and JSON member
   order does not guarantee which of the two closes it.
