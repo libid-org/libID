@@ -541,3 +541,20 @@ All 24 targeted actual-popup/configuration cases passed across Chromium, Firefox
 and WebKit over HTTP and HTTPS, including six real Google fixture proofs checked
 against the released verifier key with mutated-public-input rejection. This is
 fixture qualification, not a live Google OAuth ceremony.
+
+## Released libid-rs v0.4.0 integration
+
+Dev Compose now pins Bridge PR #10 at
+`cdc16551114070ea3458ef0d5ceb19ca4228833e`, using released libid-rs v0.4.0
+(`82bc4e286d762531ba3ac86996db4afc6ea38f56`). Its shared whitespace parser
+comes from merged libid-rs #21, replacing closed #20. The server-specific GitHub
+error classifier remains; redundant server #11 is superseded by #10. TLSN/MPZ
+pins still match notary v0.3.0-rc.3.
+
+All 124 Bridge tests, Clippy and the release Docker build pass. The updated
+container retrieves Callback and serves configuration accepted by ceremony.
+A real RC3-notarized GitHub exchange correctly classifies an intentionally
+invalid code; malformed redirects and private notary egress remain rejected.
+Security/correctness, API and simplicity reviews found no upgrade issues.
+This check does not establish fresh OAuth consent, successful identity
+attestations or qualification against the updated contract verifier.
