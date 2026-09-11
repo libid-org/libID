@@ -32,7 +32,6 @@ for (const secure of [true, false]) {
   const offset = secure ? 200 : 100
   const scheme = secure ? 'https' : 'http'
   const app = `${scheme}://localhost:${4681 + offset}`,
-    bridge = `${scheme}://localhost:${4682 + offset}`,
     ccdp = `${scheme}://localhost:${4683 + offset}`
   const allowedOrigins = [app, ccdp]
   const server = secure ? createServer.bind(null, certificate) : createHttpServer
@@ -87,7 +86,7 @@ for (const secure of [true, false]) {
             return send(
               JSON.stringify({
                 ccdpOrigin: ccdp,
-                redirectUri: `${bridge}/callback`,
+                callbackPath: '/callback',
                 platforms: {
                   google: {
                     clientId: '407408718192.apps.googleusercontent.com',

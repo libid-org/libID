@@ -505,3 +505,39 @@ compact fixtures remain covered; whitespace, malformed numbers, duplicate
 spellings and framing regressions have focused tests. Release/pin updates and
 end-to-end qualification against the updated verifier remain required before
 claiming released-stack compatibility.
+
+
+## Updated Bridge configuration integration
+
+Bridge PR #10 is rebased onto PR #9 at `991d5c604acdb1a67099f28cbf37ad58b6c317a5`;
+its new tip is `e375d86626be4b9b57e9fb9499e27d31e48573f9`. Localhost admission
+and request-selected notary routing now come from the base. Only the matched
+RC3 dependency pins and JSON-whitespace patch remain above it.
+
+Dev Compose supplies native inline TOML platform tables. Client resolves
+`callbackPath` against its supplied Bridge origin once; GitHub's token request
+carries that frozen redirect URI. The [Bridge integration note](oauth-bridge.md#current-bridge-integration)
+records the wire change relative to architecture PR #13 and the remaining
+TCP-versus-WebSocket and egress-policy differences. This supersedes the earlier
+request-selected-host routing blocker; it does not qualify the documented
+WebSocket Bridge transport.
+
+Validation: 124 Bridge tests and Clippy pass; 375 ceremony unit tests,
+package/build/app/browser typechecks, formatting and lint pass. All 45 dev UI
+cases pass across Chromium, Firefox and WebKit. One unchanged oversized-token
+unit case hit its five-second timeout while the Rust release build and browsers
+were running; the full suite passes with two test workers and unchanged timeouts.
+
+The real Docker image starts with this Compose configuration, retrieves Callback
+from the emitted CCDP and serves configuration accepted by the actual Client
+validator. A real RC3-notarized GitHub probe reaches GitHub and receives the
+expected invalid-code classification; malformed redirect and private-notary
+egress probes reject. The live frontend enables Google, X and GitHub. This uses
+an intentionally invalid code, not fresh consent or an authenticated identity.
+Security/correctness, API and simplicity reviews are clear after correcting empty
+query/fragment delimiter rejection in the shared redirect validator.
+
+All 24 targeted actual-popup/configuration cases passed across Chromium, Firefox
+and WebKit over HTTP and HTTPS, including six real Google fixture proofs checked
+against the released verifier key with mutated-public-input rejection. This is
+fixture qualification, not a live Google OAuth ceremony.

@@ -152,13 +152,28 @@ describe('GitHub TokenRequest codec', () => {
     expect(
       JSON.parse(
         new TextDecoder().decode(
-          encodeTokenRequest({ code: 'github-code', codeVerifier: VERIFIER, notaryAddress }),
+          encodeTokenRequest({
+            code: 'github-code',
+            codeVerifier: VERIFIER,
+            redirectUri: BINDING.redirectUri,
+            notaryAddress,
+          }),
         ),
       ),
-    ).toEqual({ code: 'github-code', codeVerifier: VERIFIER, notaryAddress })
+    ).toEqual({
+      code: 'github-code',
+      codeVerifier: VERIFIER,
+      redirectUri: BINDING.redirectUri,
+      notaryAddress,
+    })
   })
   it('rejects missing, extra, wrongly typed, and out-of-bounds fields', () => {
-    const valid = { code: 'a', codeVerifier: VERIFIER, notaryAddress: 'https://notary.lib.id' }
+    const valid = {
+      code: 'a',
+      codeVerifier: VERIFIER,
+      redirectUri: BINDING.redirectUri,
+      notaryAddress: 'https://notary.lib.id',
+    }
     for (const patch of [
       { code: undefined },
       { extra: true },
@@ -176,6 +191,19 @@ describe('GitHub TokenRequest codec', () => {
         'https://user@notary.test',
         'https://notary.test/path',
       ].map((notaryAddress) => ({ notaryAddress })),
+      ...[
+        undefined,
+        null,
+        '',
+        '/callback',
+        'http://bridge.test/callback',
+        'https://bridge.test/callback?',
+        'https://bridge.test/callback#',
+        'https://bridge.test/callback?x=1',
+        'https://bridge.test/callback#x',
+        'https://user@bridge.test/callback',
+        `https://bridge.test/${'a'.repeat(2048)}`,
+      ].map((redirectUri) => ({ redirectUri })),
       { isTestnet: false },
     ])
       expect(() => encodeTokenRequest({ ...valid, ...patch })).toThrow()

@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test'
 const configUrl = 'http://localhost:4682/api/v1/ceremony/config'
 const ccdp = 'http://localhost:4683'
 const config = {
-  redirectUri: 'http://localhost:4682/auth/callback',
+  callbackPath: '/auth/callback',
   ccdpOrigin: ccdp,
   platforms: {
     google: { clientId: '407408718192.apps.googleusercontent.com', ceremonyVersions: [1] },

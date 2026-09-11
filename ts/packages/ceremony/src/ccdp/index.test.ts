@@ -140,6 +140,21 @@ it('rejects the retired delivery message and embedded-identity shape', () => {
 })
 
 it('admits explicit loopback HTTP without widening public URL validation [LIBID-OAUTH-021]', () => {
+  for (const suffix of ['?', '#', '?x=1', '#x']) {
+    const redirectUri = `https://bridge.test/callback${suffix}`
+    expect(redirect(redirectUri)).toBe(false)
+    expect(() =>
+      AppStartProver.decode({
+        type: 'app-start-prover',
+        platformId: 'google',
+        platformCeremonyVersion: 1,
+        clientId: 'client',
+        redirectUri,
+        codeVerifier: null,
+        notaryAddress: null,
+      }),
+    ).toThrow()
+  }
   for (const value of ['http://localhost:4682', 'http://127.0.0.1:4682']) {
     expect(origin(value)).toBe(true)
     expect(redirect(`${value}/auth/callback`)).toBe(true)

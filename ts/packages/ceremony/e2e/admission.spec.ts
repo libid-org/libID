@@ -15,9 +15,9 @@ test('Bridge config admits its effective origins without exposing the allowlist 
     expect(response.headers()['access-control-allow-origin']).toBe(admitted ? origin : undefined)
     if (admitted) {
       expect(Object.keys(await response.json()).sort()).toEqual([
+        'callbackPath',
         'ccdpOrigin',
         'platforms',
-        'redirectUri',
       ])
       expect(response.headers().vary).toBe('Origin')
     }

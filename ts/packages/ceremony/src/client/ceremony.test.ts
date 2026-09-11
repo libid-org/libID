@@ -27,11 +27,12 @@ class Connection implements PopupConnection<Message> {
   }
 }
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
-const config = {
-  redirectUri: 'https://bridge.test/auth/callback',
+const wireConfig = {
+  callbackPath: '/auth/callback',
   ccdpOrigin: 'https://ccdp.test',
   platforms: { google: { clientId: 'client', ceremonyVersions: [1] } },
 }
+const config = validateCeremonyConfig(wireConfig, 'https://bridge.test')
 function setup() {
   const connection = new Connection()
   const data = new Uint8Array([1, 2])
@@ -85,6 +86,9 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       'authorizationNonce',
       'proof',
     ])
+    expect(new URL(c.navigateAway.mock.calls[0][0]).searchParams.get('redirect_uri')).toBe(
+      config.redirectUri,
+    )
     expect(new URL(c.navigateAway.mock.calls[0][0]).searchParams.get('nonce')).toBe(
       b64urlEncode(
         deriveAuthorizationDigest({
@@ -151,13 +155,16 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
   it('ignores unknown platforms and rejects oversized Google audiences', () => {
     expect(
       validateCeremonyConfig(
-        { ...config, platforms: { ...config.platforms, future: null } },
+        { ...wireConfig, platforms: { ...wireConfig.platforms, future: null } },
         'https://bridge.test',
       ).platforms,
     ).toEqual(config.platforms)
     expect(() =>
       validateCeremonyConfig(
-        { ...config, platforms: { google: { clientId: 'x'.repeat(129), ceremonyVersions: [1] } } },
+        {
+          ...wireConfig,
+          platforms: { google: { clientId: 'x'.repeat(129), ceremonyVersions: [1] } },
+        },
         'https://bridge.test',
       ),
     ).toThrow()
@@ -166,24 +173,49 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     for (const host of ['localhost', '127.0.0.1']) {
       const bridge = `http://${host}:4682`
       for (const ccdpOrigin of [`http://${host}`, `http://${host}:4683`]) {
-        const local = { ...config, ccdpOrigin, redirectUri: `${bridge}/auth/callback` }
-        expect(validateCeremonyConfig(local, bridge).ccdpOrigin).toBe(ccdpOrigin)
+        const local = { ...wireConfig, ccdpOrigin, callbackPath: '/auth/callback' }
+        expect(validateCeremonyConfig(local, bridge)).toMatchObject({
+          ccdpOrigin,
+          redirectUri: `${bridge}/auth/callback`,
+        })
       }
     }
     expect(() =>
-      validateCeremonyConfig({ ...config, ccdpOrigin: 'http://ccdp.test' }, 'https://bridge.test'),
+      validateCeremonyConfig(
+        { ...wireConfig, ccdpOrigin: 'http://ccdp.test' },
+        'https://bridge.test',
+      ),
     ).toThrow()
   })
   it('validates configuration without coupling Bridge and CCDP [LIBID-OAUTH-001]', () => {
-    expect(validateCeremonyConfig(config, 'https://bridge.test').ccdpOrigin).toBe(
+    expect(validateCeremonyConfig(wireConfig, 'https://bridge.test').ccdpOrigin).toBe(
       'https://ccdp.test',
     )
     for (const patch of [
       { ccdpOrigin: 'https://ccdp.test/' },
-      { redirectUri: 'https://elsewhere.test/callback' },
+      ...[
+        undefined,
+        null,
+        0,
+        '',
+        'callback',
+        '//elsewhere.test/callback',
+        'https://elsewhere.test/callback',
+        '/a/../callback',
+        '/callback?',
+        '/callback#',
+        '/callback?x=1',
+        '/callback#x',
+        '/callback\\elsewhere',
+        '/ callback',
+        `/${'a'.repeat(2048)}`,
+      ].map((callbackPath) => ({ callbackPath })),
+      { redirectUri: 'https://bridge.test/auth/callback' },
       { allowedAppOrigins: [] },
     ])
-      expect(() => validateCeremonyConfig({ ...config, ...patch }, 'https://bridge.test')).toThrow()
+      expect(() =>
+        validateCeremonyConfig({ ...wireConfig, ...patch }, 'https://bridge.test'),
+      ).toThrow()
   })
 })
 
@@ -242,13 +274,13 @@ it('rejects changed form serialization for X/GitHub client IDs, not signed Googl
     for (const clientId of ['a+b', 'a b', 'a%2Fb', 'é'])
       expect(() =>
         validateCeremonyConfig(
-          { ...config, platforms: { [platform]: { clientId, ceremonyVersions: [1] } } },
+          { ...wireConfig, platforms: { [platform]: { clientId, ceremonyVersions: [1] } } },
           'https://bridge.test',
         ),
       ).toThrow()
   expect(() =>
     validateCeremonyConfig(
-      { ...config, platforms: { google: { clientId: 'a+b', ceremonyVersions: [1] } } },
+      { ...wireConfig, platforms: { google: { clientId: 'a+b', ceremonyVersions: [1] } } },
       'https://bridge.test',
     ),
   ).not.toThrow()

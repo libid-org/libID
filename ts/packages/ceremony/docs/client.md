@@ -252,6 +252,10 @@ no-ceremony-recovery launch scope.
 
 ### OAuth Bridge configuration
 
+Bridge publishes `callbackPath`. Client validates that absolute path and resolves
+`redirectUri` once against its supplied `oauthBridge` origin; OAuth, AppStartProver
+and GitHub token exchange all use those same bytes.
+
 The client fetches and validates the origin-controlled
 [`CeremonyConfig`](oauth-bridge.md#public-configuration) once, then freezes
 the chosen platform, version, client ID, redirect URI, and CCDP origin. CCDP
