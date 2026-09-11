@@ -23,8 +23,8 @@ vi.mock('../../../prover/engine.js', () => ({
     destroy = destroy
   },
 }))
-vi.mock('./token.js', () => ({
-  encodeTokenRequest: () => new Uint8Array(),
+vi.mock('./token.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./token.js')>()),
   decodeTokenResponse: () => ({ accessToken: 'test-bearer' }),
   admitTokenResponse: admit,
 }))
@@ -128,7 +128,7 @@ it.each(['setup', 'token'])(
     const setup = deferred<NotarizationSession>(),
       token = deferred<Response>()
     prepare.mockReturnValue(setup.promise)
-    const fetch = vi.fn(() => token.promise)
+    const fetch = vi.fn<typeof globalThis.fetch>(() => token.promise)
     vi.stubGlobal('fetch', fetch)
     vi.stubGlobal('navigator', { userAgent: 'browser fixture' })
     // Stop at the first authenticated HTTP send; this test does not simulate proofs.
@@ -138,6 +138,8 @@ it.each(['setup', 'token'])(
     const result = prove(input).catch((error) => error)
     expect(prepare).toHaveBeenCalledExactlyOnceWith('https://api.github.com/user')
     expect(fetch).toHaveBeenCalledOnce()
+    const posted = JSON.parse(new TextDecoder().decode(fetch.mock.calls[0][1]!.body as ArrayBuffer))
+    expect(posted.redirectUri).toBe('https://bridge.test/callback')
     expect(send).not.toHaveBeenCalled()
     const ready = () => setup.resolve({ send, reveal: vi.fn() })
     const returned = () =>

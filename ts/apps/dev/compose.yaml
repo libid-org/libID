@@ -15,25 +15,17 @@ services:
       - "127.0.0.1:4683:4683"
 
   bridge:
-    build: https://github.com/libid-org/libid-server-rs.git#dc2514609b8331ee4db6a2102d9077ac10f719e4
+    build: https://github.com/libid-org/libid-server-rs.git#e375d86626be4b9b57e9fb9499e27d31e48573f9
     network_mode: service:notary
     depends_on:
       ccdp:
         condition: service_healthy
       notary:
         condition: service_healthy
-    environment:
-      HOST: 0.0.0.0
-      PORT: 8722
-      BASE_URL: http://localhost:4682
-      CALLBACK_PATH: /auth/callback
-      CCDP_ORIGIN: http://localhost:4683
-      ALLOWED_APP_ORIGINS: http://localhost:4691
-      CEREMONY_PLATFORMS: >-
-        [{"id":"google","clientId":"391814431594-94274lch0aosjgsei87k41a08napunhd.apps.googleusercontent.com","versions":[1]},{"id":"x","clientId":"QW5QY1ZGdVRsaDEyTFIwZDVfa2Q6MTpjaQ","versions":[1]},{"id":"github","clientId":"Iv23lioEM9NAR9vO8CmT","versions":[1]}]
-      # Intentionally public credential for the shared development app; uses PKCE.
-      GH_OAUTH_CLIENT_SECRET: "b020b671192879cb993d1cdd7852c920fe745020"
-      NOTARY_URL: tcp://localhost:7047
+    command: ["--config", "/bridge.toml"]
+    configs:
+      - source: bridge
+        target: /bridge.toml
 
   ccdp:
     network_mode: service:notary
@@ -49,3 +41,26 @@ services:
     volumes:
       - .cache/ccdp/public:/home/sws/public:ro
       - .cache/ccdp/sws.toml:/etc/sws.toml:ro
+
+configs:
+  bridge:
+    content: |
+      ccdp_origin = "http://localhost:4683"
+      allowed_app_origins = ["http://localhost:4691"]
+      # Intentionally public credential for the shared development app; uses PKCE.
+      gh_oauth_client_secret = "b020b671192879cb993d1cdd7852c920fe745020"
+
+      [[platforms]]
+      id = "google"
+      client_id = "391814431594-94274lch0aosjgsei87k41a08napunhd.apps.googleusercontent.com"
+      versions = [1]
+
+      [[platforms]]
+      id = "x"
+      client_id = "QW5QY1ZGdVRsaDEyTFIwZDVfa2Q6MTpjaQ"
+      versions = [1]
+
+      [[platforms]]
+      id = "github"
+      client_id = "Iv23lioEM9NAR9vO8CmT"
+      versions = [1]

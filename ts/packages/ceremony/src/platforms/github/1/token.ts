@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
-import { origin } from '../../../ccdp/index.js'
+import { origin, redirect } from '../../../ccdp/index.js'
 import { b64urlDecode, bytesEqual, hasExactKeys, isRecord } from '../../../primitives.js'
 import { parseJson } from '../../../prover/json.js'
 import {
@@ -24,6 +24,7 @@ const QUOTE = new Uint8Array([0x22])
 export interface TokenRequest {
   code: string
   codeVerifier: string
+  redirectUri: string
   notaryAddress: string
 }
 
@@ -51,9 +52,13 @@ function invalid(reason: string): never {
 
 /** Encode the exact bounded browser-to-server request. */
 export function encodeTokenRequest(value: unknown): Uint8Array {
-  if (!isRecord(value) || !hasExactKeys(value, ['code', 'codeVerifier', 'notaryAddress'])) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['code', 'codeVerifier', 'redirectUri', 'notaryAddress'])
+  ) {
     return invalid('request shape')
   }
+  if (!redirect(value.redirectUri)) return invalid('redirect URI')
   if (!origin(value.notaryAddress)) return invalid('notary origin')
   if (typeof value.code !== 'string' || !CODE.test(value.code)) return invalid('code')
   if (typeof value.codeVerifier !== 'string' || !CODE_VERIFIER.test(value.codeVerifier)) {
@@ -63,6 +68,7 @@ export function encodeTokenRequest(value: unknown): Uint8Array {
     JSON.stringify({
       code: value.code,
       codeVerifier: value.codeVerifier,
+      redirectUri: value.redirectUri,
       notaryAddress: value.notaryAddress,
     }),
   )

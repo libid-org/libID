@@ -37,12 +37,7 @@ export function origin(value: unknown): value is string {
   return typeof value === 'string' && webUrl(`${value}/`) && new URL(value).origin === value
 }
 export function redirect(value: unknown): value is string {
-  return (
-    text(value, MAX_REDIRECT_URI_BYTES) &&
-    webUrl(value) &&
-    !new URL(value).search &&
-    !new URL(value).hash
-  )
+  return text(value, MAX_REDIRECT_URI_BYTES) && webUrl(value) && !/[?#]/.test(value)
 }
 export function assertMessage<T extends string>(
   value: unknown,
