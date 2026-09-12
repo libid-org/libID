@@ -1,210 +1,163 @@
-# Qualification and release prerequisites
+# Qualification
 
-Status: **launch qualification incomplete**.
-Security/correctness, API ergonomics and simplicity were independently reviewed.
-Reasonable findings were fixed and targeted checks rerun. No predecessor review
-ledger or completion state is inherited. [TRACEABILITY.md](traceability.md) accounts
-for every stable requirement ID, including partial, external and deferred coverage.
+The implementation is not fully qualified for release. This page records the
+current evidence and remaining gaps; [traceability](traceability.md) accounts
+for every stable row in the [test index](test-plan.md). Passing parser or
+orchestration tests is not cryptographic, live-OAuth, or physical-device evidence.
 
-## Inputs
+## Pinned integration
 
-| Input | Pin |
+| Input | Qualified source |
 |---|---|
-| Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `dcec48e05eed04a02971a41a2237b89e5ab9f393` plus the reviewed working CCDP/TEST_PLAN event update; consolidated package guides include the approved API and event-model decisions described below |
-| Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
-| Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
-| Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
-| Noir/Nargo and bb.js | `1.0.0-beta.25`, `5.2.0`; generation and independent verification explicitly use `verifierTarget: 'evm'` |
-| Canonical attestation encoder | `libid-rs` `239a4bb426ac72591fe30006f22660e164a98d96` |
-| TLSNotary bundle | `libid-org/notary` v0.3.0-rc.3, commit `37e195035e6b11683b09233a8815ae703e3cc55f`; snippet member selected with a directory wildcard |
-| SWS | `3.0.0-beta.1`; image digest in `ccdp.Dockerfile` |
+| Circuits | v0.3.0, `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
+| Noir / bb.js | 1.0.0-beta.25 / 5.2.0; explicit `verifierTarget: 'evm'` |
+| Browser notary bundle | v0.3.0-rc.3, `37e195035e6b11683b09233a8815ae703e3cc55f`; immutable mount `tlsn/v0.3.0-rc.3-csp1` |
+| TLSN / MPZ | `94aaaf33f3361d1218f9abb4c82b5c58a9199460` / `1dd2349d52aeea038d77fb0816f781c6b714fe77` |
+| Development Bridge | PR #10 at `cdc16551114070ea3458ef0d5ceb19ca4228833e`, on PR #9 at `991d5c604acdb1a67099f28cbf37ad58b6c317a5`; libid-rs v0.4.0 (`82bc4e286d762531ba3ac86996db4afc6ea38f56`) |
+| SWS | 3.0.0-beta.1, exact image in [ccdp.Dockerfile](../ccdp.Dockerfile) |
+| HTTP framing | Spec PR #31 at `860075a4bf288dc7fee20866ed3536dc260f4574` |
 
-The RC replaces the former local TLSNotary bundle. Its exported call shape and
-real browser WASM initialization are checked, but those checks do not establish
-matched-service protocol compatibility or successful concurrent notarizations.
-SWS v3 is currently a prerelease; the exact image is pinned in `ccdp.Dockerfile`.
+The [normative browser contracts](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md) are maintained separately.
+The two implementation differences below are explicit, not competing contracts.
+
+## Pending contract updates
+
+1. **Fixed Callback path — coordinated Bridge migration deferred.**
+   Current config contains `callbackPath`; Client resolves it against the Bridge
+   origin and GitHub's token request includes the frozen `redirectUri`.
+   The spec fixes `/auth/callback`, removes `callbackPath` from config, and
+   removes `redirectUri` from that token request. Client, CCDP, tests, and the
+   separately deployed Bridge need a coordinated change. This docs-only
+   reconciliation does not implement it.
+2. **Carry Callback's authenticated Application origin to Prover.**
+   Current Callback authenticates its explicit allowlist, but Prover accepts
+   `'*'`. The spec requires a private `applicationOrigin` fragment field derived
+   from Callback's authenticated peer and exact admission at Prover, including
+   fallback/replacement. This needs authenticated-peer-origin access from popup
+   and a coordinated navigation-codec/document/test update. Do not claim the
+   restriction is implemented or that a retained window reference establishes it.
 
 ## Evidence obtained
 
-- TypeScript package/harness checks, declaration emission, workspace formatting and
-  lint; focused canonical, authorization, parser, client, cache and worker tests.
-- Actual worker-handler tests accept returned transcripts at 4 KiB/32 KiB and reject
-  one byte over before `send` resolves, with a deliberately permissive SDK. A missing
-  final EOF expires the finalization deadline. These are adapter tests, not real TLSN.
-- Native installed ACVM/ABI WASM loaders, bb.js WASM loader and primary/fallback CRS
-  loaders run with an observing fetch stub and external hosts blocked. This checks
-  request methods, cache modes, URLs, ranges and primary/fallback ordering; synthetic CRS bodies in this probe are never proof evidence.
-- Exact per-platform sets, retained immutable responses and
-  Brotli/gzip roundtrips. Every emitted HTTP response is checked against actual SWS.
-  The deployment image was built and used behind the HTTPS browser harness; only
-  its local listening port was changed to accommodate rootless host networking.
-- Actual popup launch, native-anchor fallback, private callback forwarding,
-  isolation, denial and application continuation in Chromium, Firefox and WebKit.
-  A same-script legacy nested registration is seeded; execution joins a delayed
-  root-worker prefetch without a second server download.
-- Real bearer-link browser proofs in Chromium, Firefox and WebKit and a real Google
-  browser proof in Chromium verified against the released keys. Effective proof
-  backend observations report shared memory and two threads in this isolated lane.
-- Real Google fixture proving in Chromium, Firefox and WebKit through the emitted
-  distribution and generated CSP,
-  using the actual popup package and a separate released-key verification process.
-  Fixture time/JWKS/OAuth return are controlled. WebKit bypasses Playwright routing
-  for the controlled-page JWKS fetch, so this one public fixture response is supplied
-  at the page fetch boundary. Live JWKS CORS/CSP behavior is not qualified by this
-  test; proof assets still use their real native loaders. The fixture uses its own known
-  digest: this is runtime/key compatibility, not real consent or authorization for
-  the harness transaction. Public-input mutation must fail independent verification.
+The latest coordinated event/client run (2026-09-12) passed 403 unit tests,
+17 distribution/native-loader/SWS checks, package and harness TypeScript,
+declaration emission, the development frontend build, and workspace style checks.
+All 75 development browser cases passed, including mobile emulation.
+The six desktop HTTP/HTTPS profiles exercised 72 ceremony cases: 60 passed
+initially; after correcting UI/error-text migration failures, all 30 targeted
+rechecks passed. This is not a claim that the complete 72-case suite was rerun.
 
-The positional API and separate identity/proof update passed 197 unit tests,
-15 build/loader/native-SWS checks, 50 actual-popup browser cases and five additional
-Bridge origin-admission checks across the five profiles. All 20 dev frontend
-cases passed. Each profile generated a real Google fixture proof through the new
-CCDP result message and independently verified it against the released key.
-Security/correctness, API and simplicity reviews found only stale qualification
-wording, now corrected. Production Bridge admission remains externally qualified.
+Those checks include one terminal update, readiness without subscribers,
+opaque failure context, preserved occurrence timestamps, repeated navigation,
+and X orchestration without premature proof delivery. Every generated Google
+fixture proof was independently verified against the released key, including
+mutated-public-input rejection.
 
-The asset API/SWS v3 update passed 184 ceremony unit tests, all 15 build/loader/
-actual-SWS checks, and all 50 browser cases across Chromium, Firefox, WebKit,
-Android emulation and iOS emulation. Every profile generated a real Google fixture
-proof and verified it independently against the released key. Two concurrent
-notary RC WASM runtimes initialized in each profile; this does not qualify live
-TLSNotary sessions. An earlier WebKit concurrent-popup timeout was not reproduced
-in this full run; one passing run does not establish absence of intermittent faults.
+Additional evidence with these component releases:
 
-The executable matrix is `e2e/flow.spec.ts` plus `playwright.config.ts`. Final run
-counts and browser versions are recorded in the PR; ignored local reports carry
-controlled fixture outputs. Real OAuth traces, callback URLs, credentials,
-transcripts, openings and witnesses are never qualification artifacts.
+- Actual isolated browser proof workers generated Google and bearer-link fixture
+  proofs. This exercises runtime/key compatibility, not live consent or the
+  harness operation's authorization. Google JWKS/time/return inputs are controlled;
+  WebKit supplies the public fixture JWKS at the page fetch boundary, so that
+  case does not qualify live JWKS CORS.
+- Twelve RC3 TLSNotary cases passed on Chromium 151.0.7922.34, Firefox 153.0,
+  and WebKit 26.5: one and two concurrent sessions for both `localhost` and
+  `127.0.0.1`, on custom ports, alongside real proof-backend initialization.
+  Each used actual WASM, HTTPS traffic to `api.x.com`, and final canonical
+  attestation delivery over the same reclaimed WebSocket. The requests were
+  unauthenticated and ran under the COOP/COEP response. This qualifies that
+  transport/runtime probe, not an X identity or live OAuth profile.
+- Actual worker-handler tests reject returned transcripts one byte above
+  4 KiB sent / 32 KiB received before exposing them to parsing/reveal, even
+  when the SDK ignores setup bounds. Missing final EOF reaches the separate
+  finalization deadline. These adapter checks do not cap reception memory.
+- Native dependency-loader tests observe ACVM/ABI WASM, bb.js WASM, and CRS
+  primary/fallback URLs, ranges, cache modes, and ordering. Synthetic CRS bodies
+  in those probes are not proof evidence. Distribution tests exercise native
+  SWS, Brotli/gzip decoding, actual policies, and retained immutable responses.
+- Browser regressions cover real popup/anchor paths, denial, Application
+  continuation, and a stale narrower Worker registration using the same script
+  URL. Prover joins delayed root-worker prefetch without another server download.
+- The pinned Bridge passed 124 tests, Clippy, and its release container build.
+  The container fetched Callback and served config accepted by Client. A real
+  RC3-notarized GitHub request correctly classified an intentionally invalid code;
+  malformed redirects and private-notary egress probes rejected. This is not
+  successful confidential exchange or authenticated identity evidence.
+- The local HTTP stack admitted the real development registrations; the GitHub
+  HTTP callback registration check succeeded after its configuration update.
+  One reported manual Firefox GitHub flow completed after the JSON-whitespace
+  parser fix. Neither observation qualifies the updated released Ledger Verifier.
 
-## Ledger fixture scope
+Desktop/emulated-mobile checks do not replace physical devices. An intermittent
+WebKit multi-popup timeout passed subsequent unchanged retries; that is not
+evidence of a diagnosed production fix. Old public-notary setup stalls do not
+negate the successful matched local RC3 probes or establish current public-service
+availability.
 
-The real `@libid/ledger` package supplies the hash/address interface. Real ledger
-definitions and Chain Profile vectors remain deferred. Tests and the development
-app import the shared synthetic fixtures explicitly; no module alias or decoder
-is involved. Client snapshots their hash and notary address. CCDP contains no
-ledger implementation and needs no separate fixture build. This verifies ceremony
-integration, not support for a real ledger.
+## Remaining qualification
 
-## Actual blockers and unqualified boundaries
+- Fresh approval and denial for every platform against the selected public
+  services, including real X token/identity correlation and GitHub's confidential
+  token plus browser identity attestations.
+- Real notarization under the primary DIP response, public WSS/mobile networks,
+  iOS/Android physical devices, Vanadium/JIT behavior, background suspension,
+  native platform apps, eviction, and optional opener-independent carriers.
+  No WebRTC implementation is supplied by ceremony.
+- X request receipt within its authorization-code deadline. The pinned SDK does
+  not expose request-direction-only completion, and the browser has no specified
+  issuance anchor. A timeout around response completion would reject valid later
+  responses and is not a substitute. LIBID-BROWSER-010 remains unresolved.
+- Updated released-verifier acceptance of the #31 request framing and
+  order-independent/JSON-whitespace rules. Browser parsing tests and matched
+  Rust pins alone do not establish ledger acceptance.
+- Production Bridge conditional artifact refresh, compressed-source handling,
+  redirect rejection, atomic last-good replacement, ingress log redaction, and
+  request-selected notary DNS/egress policy. The browser harness's startup
+  artifact preparation does not implement that production lifecycle.
+- Readable live CRS primary/fallback CORS and Range responses under both isolation
+  profiles. External CDN availability is not atomic with a local release.
+- Negative real-proof SRS-floor tests and the complete cache/update fault matrix.
+  Build-time circuit statistics check 42,006 and 179,443 gates; that is not a
+  replacement for runtime capacity qualification.
+- Production ledger identifiers and Chain Profile vectors. Tests and the dev app
+  import explicit synthetic `LedgerId` fixtures; Client snapshots their hash and
+  notary address. Prover contains no ledger decoder or build alias.
+- Complete resource/cache accounting, telemetry export, and the
+  identity-credential-wait extension. The unified event feed exists; missing
+  measurements are not synthesized as zeros.
 
-1. **Matched notary service:** both single-session and concurrent browser probes
-   against `https://notary.testnet.lib.id` reached WASM initialization and WebSocket
-   opening but stalled in `Prover.setup`; the single-session run was aborted at
-   120 seconds. Proof-backend initialization completed concurrently. Checking the
-   earlier 8-KiB SDK receive setting produced the same stall; production keeps the
-   documented 32-KiB acceptance ceiling. This is no evidence of real TLSN concurrency
-   or a qualified X/GitHub ceremony. Reestablish a matched service/bundle, then run
-   the real profiles and correlate every final output.
-   A fresh single-session probe with v0.3.0-rc.1 also expired after 120 seconds
-   against that development endpoint; the probe does not establish the failing
-   protocol stage. The rebuilt standalone Chromium bearer proof passed independent
-   released-key verification in the same harness.
-   These probes used the development override address, not the newly
-   documented `https://testnet.notary.lib.id`. Both fixed network selections and
-   matched browser/Bridge sessions remain unqualified against live services.
-2. **X request deadline:** REQ-PLAT-33 / LIBID-BROWSER-010 require complete request
-   receipt at X before its 30-second authorization-code deadline. The documents do
-   not define a browser-observable issuance anchor. The pinned SDK exposes
-   request-start and completion only after the response body; it exposes no
-   request-direction-only completion signal. A timeout around `send_request()`
-   would incorrectly reject allowed later responses. No such substitute is used.
-   A matched SDK/service observation contract and delayed-request qualification are
-   required before claiming this requirement. This production enforcement remains
-   unresolved, not a waived security property.
-3. **HTTP profile alignment:** spec PR #31 at
-   `860075a4bf288dc7fee20866ed3536dc260f4574` permits additional token and identity
-   headers, with required and forbidden names as described in
-   [notarization](notarization.md#token-layout-alignment). The shared selectors
-   preserve request layouts, reject forbidden headers and require canonical token
-   Content-Length values, including GitHub's committed suffix. Focused tests cover
-   permitted headers, normalization, duplicate credentials, forbidden names and
-   malformed framing. Matching released-verifier coverage remains a qualification
-   gate; parser tests do not establish successful live attestations.
-4. **GitHub service:** no real confidential token-exchange service was qualified.
-   Admission checks one revealed request prefix and one committed secret-field
-   suffix. Tests use canonical-bincode fixtures modeling native coalescing, not
-   live signed service evidence. The selected next qualification target is
-   [Bridge PR #10](https://github.com/libid-org/libid-server-rs/pull/10), stacked on
-   PR #9, at `054839f43cbad7ed9d9e15a04d2f7ed1118b0c7d`. It uses released libid-rs
-   `v0.3.0` (`501f094bf10f776c2227ef345908f507a0c80fd0`), TLSN fork
-   `94aaaf33f3361d1218f9abb4c82b5c58a9199460` and MPZ fork
-   `1dd2349d52aeea038d77fb0816f781c6b714fe77`, matching notary/browser RC3. Matching
-   source pins alone does not establish a successful live session. The Bridge
-   must admit exactly one valid `Origin` matching its effective `allowedOrigins`
-   independently on every preflight and POST, before DNS or session work. This
-   admits configured application origins and the resolved CCDP origin. It must use the Prover-supplied canonical `notaryAddress` unchanged, with no second
-   mapping/override, and reject redirects and forbidden internal destinations,
-   including DNS-resolved destinations. Unit origin validation is not server egress
-   protection; those service controls and both network selections remain unqualified.
-5. **Devices and optional carrier:** real iOS/Android devices, native platform apps,
-   Vanadium, background scheduling/memory pressure and corresponding optional
-   fallback adapters/signaling were unavailable. Desktop engines and mobile
-   emulation cannot satisfy these gates. No replacement WebRTC code is supplied.
-The nonce/signature-check and released-bound normative amendments are now committed
-in architecture PR #13 at `5cfbf47` (included in the pinned documentation head).
-They are no longer an uncommitted-source prerequisite.
+## Implementation choices
 
-Callback now ships as `/ccdp/callback.html`, including clearing, bundled version
-selection, local unsupported-version UI, and all dependencies. The test Bridge
-prepares the HTML and hash-only CSP from this artifact with escaped deployment
-JSON. Production Bridge refresh, conditional revalidation, redirect rejection,
-compressed-source handling, atomic replacement/last-good retention, and ingress
-log redaction still require external deployment qualification; the harness loads
-the emitted source at startup and does not implement that server lifecycle.
+These are local implementation decisions, not alternative protocol rules:
 
-Complete metrics transport, timing coverage and the full documented diagnostic-span
-catalog are deferred by user instruction. Coarse package-owned progress, worker
-capability observations and targeted download counts remain. No fabricated zero
-metrics, speculative transport, or second protocol message family is introduced.
-Real build-time circuit statistics match 42,006 and 179,443 gates and reject
-insufficient launch capacity. Negative browser-proof SRS-floor execution and the
-complete cache/update fault matrix are not claimed; their remaining properties are retained in the index.
-
-## Implementation deviations with consequences
-
-- `LIBID-OAUTH-003` in the pinned source still names raw `chainId` input, conflicting
-  with its updated `LIBID-MOD-014/015` and Client API. The local requirement row keeps
-  its ID but names `LedgerId` and a snapshotted hash, matching the current API.
-
-- The pinned SWS v3 beta uses boolean `text-charset = false`. With trailing-slash
-  redirects disabled, its header matcher appends the resolved file basename even
-  for files; generated exact header rules account for this. Native SWS owns weak
-  ETags, conditional responses and encoded representation selection. Compressed
-  and range responses may use chunked framing; tests verify body bytes and any
-  supplied length instead of requiring a redundant Content-Length.
-- Execution workers explicitly carry `Cross-Origin-Embedder-Policy: require-corp`.
-  A real Firefox proof otherwise fails before worker bootstrap; the isolated engine
-  harness had already supplied this header. The generated policy and immutable URL
-  digest now include it for every execution worker, including leaves.
-- The known stale `/ccdp/v1/` registration is retired only when all its workers use
-  the exact canonical script URL. Root is selected explicitly. Unrelated scopes
-  are untouched. Firefox's isolated document can initially be uncontrolled, so a
-  same-origin root-worker claim handshake finishes before `prover.started`. This is
-  cache ownership, not popup carrier or MessagePort continuity machinery.
-- Callback is self-contained. Prefetch/Prover HTML clears the URL in the first
-  inline script before its inline module entry imports dependencies. Build-owned
-  worker AST edges expose nested workers to graph traversal; they do not scrape
-  generated dependency text or change native Worker execution.
-- The build replaces bb.js's unused embedded default-WASM URL modules with its
-  owned threaded-WASM URL; actual initialization uses supported `wasmPath`. This
-  avoids duplicate embedded WASM chunks. Native CRS hosts/ranges are untouched;
-  there is no production fetch interception or external-CRS rehosting.
-- Immutable execution paths include a response-policy digest, and compatible
-  rebuilds retain prior assets plus their original headers. Promotion must preserve
-  that accumulated artifact for the compatibility window. Removal/garbage collection
-  requires a separate release decision.
-- The final notary finish/frame/EOF phase has a 30-second terminal deadline, separate
-  from proof generation and X's authorization-code deadline. It prevents an otherwise
-  unbounded incomplete frame from retaining a worker. Real-device timing remains a
-  qualification gate. Transcript ceilings are acceptance checks, not network caps.
+- The source asset API uses positional `archive(source, mount)` and
+  `file(source, mount, headers)`. Archive parsing uses the build-only `tar`
+  dependency without extracting to archive-selected filesystem paths.
+- SWS owns validators, conditional responses, ranges, transfer framing, and
+  encoded representation selection. Exact generated header rules account for
+  its basename matching. Chunked responses are checked by actual bytes and any
+  supplied length, not a forced Content-Length.
+- Immutable execution paths include response-policy digests; compatible rebuilds
+  retain old assets and their headers. Deployments preserve the accumulated
+  artifact for the compatibility window.
+- Root registration is selected explicitly. The known narrower registration is
+  retired only if all its workers use the canonical script URL; unrelated
+  registrations remain untouched. Firefox's root-worker claim precedes readiness.
+- Execution workers carry COEP. Build-owned AST edges expose nested workers;
+  unused embedded bb.js default-WASM modules resolve to the owned WASM to avoid
+  duplicate bundles. Native CRS requests remain untouched.
+- The final notary frame/EOF deadline is 30 seconds, separate from proving and X's
+  code deadline. It prevents an incomplete frame from retaining a worker forever.
+- UI stages are a sequential projection over events; the native progress bar is
+  indeterminate. Missing `authorization.finished` can advance presentation at
+  Prover readiness without inventing its timestamp.
 
 ## Repeatable opt-in real consent
 
-Use a dedicated test application built against this package, a deployed Bridge
-allowlisting its HTTPS origin, the emitted CCDP distribution, and real provider
-registrations with exact redirect URIs. For GitHub, provision secrets only in the
-Bridge's secret store. Do not place secrets in command arguments, reports or chat.
+Use the [shared development app](../../../apps/dev/README.md) or a dedicated test
+Application, the emitted distribution, a compatible Bridge, and real platform
+registrations. Keep confidential credentials in the Bridge's secret store,
+not command arguments, reports, or chat.
 
 ```sh
 CEREMONY_WALKTHROUGH_URL=https://your-test-application.example \
@@ -212,381 +165,17 @@ CEREMONY_BROWSER=chromium \
   node ts/qualification/ceremony/walkthrough.mjs
 ```
 
-The runner opens a real headed browser, installs no OAuth mocks, and stops at manual
-consent/foreground/suspension/outcome checkpoints. Its ignored report records only
-checkpoint labels, browser version and optional application `window.result.status`;
-that status is Prover-reported, not verification. Repeat approval and denial for each
-platform, app-installed/app-absent and signed-in/signed-out conditions. Never bypass
-CAPTCHAs, MFA or provider consent screens.
+The headed runner uses no OAuth mocks and pauses for manual consent and
+foreground/suspension/outcome checkpoints. Its ignored report contains only
+checkpoint labels, browser version, and optional result status, not verification
+claims. Repeat approved/denied, signed-in/out, and native-app installed/absent
+cases. Never bypass CAPTCHA, MFA, or platform consent.
 
-On physical iOS/Android, repeat the same walkthrough in the system browser and
-record model, OS/browser version, declared proof/TLSN thread pools and only nonsecret
-outcomes. Exercise suspension, eviction, popup defaults, openerless/same-tab returns,
-ignored close and application resumption. A mismatched/absent fallback must fail
-closed. Qualify both normal isolation and popup-managed fallback responses.
-
-Separately run `e2e/build-smoke.mjs`, `e2e/server-smoke.mjs` (loopback HTTP port 4686), and
+For transport diagnosis, run the existing smoke server and
 `ts/qualification/ceremony/run-smoke.mjs <browser> <google|bearer|notary|notary-single> [page-url] [notary-origin]`
-with the same pinned artifacts. Defaults are `http://localhost:4686` for the smoke
-page and `http://localhost:4687` for the dev notary. For an isolated native-SWS
-HTTP smoke server and RC3 notary, for example:
-
-```sh
-node ts/qualification/ceremony/run-smoke.mjs chromium notary http://localhost:4966/index.html http://localhost:4967
-```
-
-Repeat with `firefox`/`webkit`, `notary-single`/`notary`, and both `localhost` and
-`127.0.0.1` notary origins. The optional URLs configure this qualification runner
-only. The smoke server uses loopback HTTP, so the runner needs no certificate
-bypass; all HTTPS connections use normal validation and public HTTP is refused. The notary smoke uses a public unauthenticated
-request and records lengths only; it diagnoses runtime concurrency and cannot
-replace real X token/identity or GitHub profile qualification. The independent
-verifier consumes the released key, never a key recomputed by the proving backend.
-No chain, contract deployment, RPC, wallet or local browser verifier is required.
-
-## Asset API implementation choices
-
-- `archive(source, mount)` uses positional arguments by explicit user decision;
-  the upstream document's object-shaped example is not retained.
-- `file(source, mount, headers)` covers installed standalone WASM. External range
-  sizes are derived from Range; full-resource byte counts may be supplied where
-  known (G2 is 128 bytes). Unknown full-resource sizes do not become fictitious totals.
-- Native SWS may stream a representation with chunked transfer instead of emitting
-  Content-Length. Qualification checks actual bytes and any supplied length;
-  the build never injects a length to force another serving behavior.
-
-### OAuth parsing and error-reporting changes
-
-GitHub return parsing now checks the advertised issuer and accepts bounded provider
-error details. Synthetic parser regressions cover these shapes; they do not qualify
-a live GitHub ceremony or the separately reported notary attestation failure.
-The earlier error-reporting run passed 217 unit tests, 15 native-SWS/build/loader
-checks, 55 browser integration cases and 20 dev frontend cases. Those counts
-belong to the previous protocol. The current unified event/Abort contract is
-described in [CCDP](protocol.md); its validation is recorded separately below.
-
-## Token-layout regression run (2026-09-10)
-
-After the PR #31 layout fixes: 237 unit tests, strict package/build TypeScript,
-package emission, formatting and lint pass. Rebuilt CCDP artifacts pass 14
-build/loader/native-SWS checks; the separate mutable-root rebuild test was not
-configured in this run (one skip). All 55 browser cases pass across Chromium,
-Firefox, WebKit and Android/iOS emulation, including Google fixture proofs
-independently verified against the released key. Security/correctness, API and
-simplicity reviews are clear. These checks do not qualify live X/GitHub sessions;
-Bridge PR #9 is the selected next integration target.
-
-## Manual-stack preparation (2026-09-10)
-
-Bridge PR #9 builds with `cargo build --locked` against its existing libid-rs pin.
-The actual Bridge served the emitted Callback and public configuration through
-trusted mkcert HTTPS; the actual frontend reached Ready. An explicitly synthetic
-Google client ID was used only for these pre-consent checks and is not a committed
-OAuth registration. `dev:services` starts the local services for the manual flow.
-The Callback file override does not qualify upstream refresh/revalidation.
-
-Browser assets now use notary rc.2. All five browser profiles pass concurrent
-initialization of the actual WASM bundle. The 237 unit tests and 14 distribution/
-loader/native-SWS checks pass (one mutable-root rebuild test skipped); development
-TypeScript and lint pass. Security, API and simplicity reviews are clear.
-
-The shared localhost callback URI is confirmed. The registrations and intentionally
-public GitHub development credential now live directly in `ts/apps/dev/compose.yaml`;
-there is no environment override or separate registration file. Basic network
-checks from the development machine found TCP port 7047 on
-`notary.testnet.lib.id` timing out and DNS resolution for `testnet.notary.lib.id`
-failing. These are reachability observations, not protocol tests: confirm a
-reachable compatible notary's HTTPS/WebSocket origin and TCP listener before
-spending OAuth codes. No live X/GitHub session or proof delivery was qualified.
-
-## Container dev stack (2026-09-10)
-
-`dev:services` now builds the pinned Bridge PR #9 using its upstream Dockerfile
-and starts it alongside notary 0.3.0-rc.2 and the pinned SWS image. The browser
-distribution is rebuilt with the local notary origin. No host Rust is needed.
-Linux validation used Docker Compose with an isolated Podman engine; Docker
-Desktop and Apple Silicon emulation have not been exercised here.
-
-Trusted mkcert HTTPS passed the real Bridge config/Callback and SWS header checks;
-the actual frontend admitted all three development OAuth registrations. The
-notary's image healthcheck passed, `/info` exposed the development key, and the
-WebSocket handshake passed through the local HTTPS ingress. The existing Chromium
-smoke completed one real TLSNotary session and then two concurrent sessions,
-including receipt and decoding of their final attestations, against the local
-released notary. These use unauthenticated requests to the public X endpoint;
-they establish transport/runtime concurrency for this probe, not successful
-OAuth exchange, platform proofs, or full X/GitHub ceremony qualification.
-
-Development TypeScript/lint and all 237 unit tests pass. Security/correctness,
-API ergonomics and simplicity reviews completed. Fixes removed the old generic
-multi-child launcher wrapper and corrected teardown ordering: terminate the owned
-Compose startup process group before the final `compose down`. A real lifecycle
-regression then passed startup, SIGTERM, exit status 0, all six service ports closed
-and no remaining project containers.
-
-## Shared development app
-
-The local frontend and Docker services now live in the private `@libid/dev`
-workspace package at [ts/apps/dev](../../../apps/dev/README.md). From `ts/`,
-`pnpm dev` starts both, while `pnpm dev:services` and `pnpm dev:app` start them
-separately. Ceremony retains its distribution builder and qualification harnesses.
-
-Migration validation: all 236 ceremony unit tests and the moved TLS unit test pass;
-all 25 dev-app browser tests pass across Chromium, Firefox, WebKit and mobile
-emulation. App build, TypeScript and lint pass. The combined workspace command
-served the real Bridge configuration, CCDP and notary through trusted HTTPS, and
-its frontend reached Ready with all three registrations. SIGTERM closed all seven
-ports and removed its Compose containers. A builder regression also rejects
-fixture output outside a worktree-relative `.cache` even when the checkout itself
-is below a cache directory. The three focused reviews are clear after correcting
-fresh-checkout dependency builds, legacy credential ignores and that output guard.
-
-## Ledger-owned notary routing
-
-Architecture PR #13 at
-[`0259e72c184e2be7b78a0ad92188e8722d8d6daf`](https://github.com/libid-org/libid/commit/0259e72c184e2be7b78a0ad92188e8722d8d6daf)
-defines the implemented routing contract. Client snapshots ledger inputs, and the
-shared CCDP distribution consumes the supplied address without a ledger dependency.
-
-- `LedgerId` exposes `hash()` and `notaryAddress()`; encoding, decoding and
-  `isTestnet()` leave the ceremony contract. Real ledger definitions remain deferred.
-- Client copies the exact 32-byte hash once. X/GitHub also read and validate one
-  canonical HTTPS notary origin before OAuth. Missing/throwing methods and invalid
-  results fail construction; later mutation cannot change a run. Google never
-  calls the address method and sends null.
-- `ProveIdentity.notaryAddress` replaces its encoded ledger field. Prover has no
-  ledger dependency or notary defaults. All X sessions and GitHub's token and
-  identity sessions use the same address; failures never switch destinations.
-- CCDP embeds no notary addresses or development overrides. The application can
-  wrap the shared ledger fixture with a local address while retaining its hash.
-- Prover `connect-src` becomes `https: wss:`; dedicated TLSNotary workers also
-  admit `wss:` where they open notary connections. This admits secure network
-  destinations beyond the selected notary. Script and worker
-  sources remain restricted to the emitted graph; Bridge egress restrictions
-  and ledger verification authority remain unchanged.
-
-Client and CCDP must be deployed together because the request shape changes.
-Verification keeps IDs LIBID-MOD-014/015, LIBID-ASSET-003, LIBID-OAUTH-021,
-LIBID-PROVER-008, KIT-013/015/017 and CSP-003/011: snapshot/mutation and invalid-input
-checks, byte-identical distribution policies for different addresses, both
-isolation paths, and matching addresses in real GitHub/X sessions. The pending
-notary image update remains a separate live-qualification prerequisite.
-
-The header audit also found stale explanatory prose in spec §5.2 claiming the
-X token Host is hidden; its normative disclosure table reveals the token head.
-The normative table and token-layout requirements control implementation.
-
-Validation of this routing/header update: 263 ceremony unit tests, the ledger
-fixture check, all 15 distribution/loader/native-SWS checks, and package/build/
-browser/development TypeScript checks pass. All 45 ceremony integration cases
-pass across Chromium, Firefox, WebKit and both mobile emulations, including real
-TLSNotary WASM initialization. The 55 development-frontend cases also pass after
-rerunning Chromium alone; overlapping browser suites initially reported
-`ERR_INSUFFICIENT_RESOURCES` before page navigation. Security/correctness, API and
-simplicity reviews are clear after documentation corrections. No new real OAuth,
-browser-proof verification, or matched-notary session qualification is claimed by
-these checks. Restart the development stack to load matching Client and CCDP builds.
-
-## Local HTTP qualification — 2026-09-10
-
-The development application and services now use HTTP/WS on explicit localhost
-origins. Bridge [PR #10](https://github.com/libid-org/libid-server-rs/pull/10),
-stacked on PR #9, is pinned at `86d6fcfd8be6bf9155fe67394f517c3ce74a9d44`.
-It admits canonical local HTTP notary origins; its existing configured TCP
-connection remains unchanged. The dev stack waits for CCDP's Callback endpoint
-before starting Bridge, which retrieves Callback directly over HTTP. No Callback
-file override, TLS proxy or mkcert setup is involved.
-
-Validation used a separate Docker Compose project on ports 4962/4963/4967 to
-preserve the existing live stack. The built Bridge, pinned notary RC and native
-SWS passed configuration, origin admission, Callback composition, isolated-route
-and real WebSocket checks. Chromium, Firefox and WebKit each confirmed a secure
-context, cross-origin isolation, and a real local-notary WS handshake under the
-emitted Prover CSP, without certificate bypasses.
-
-- 97 popup and 270 ceremony unit tests passed.
-- 55 development UI cases passed on HTTP across the five browser profiles.
-- The shared ceremony suite covered 88 cases across five HTTPS and three HTTP
-  profiles. All HTTP cases passed, including real Google fixture proofs verified
-  outside the browser against the released key. The initial suite had one HTTPS
-  WebKit two-popup timeout (87/88); its first targeted retry also timed out, then
-  the diagnostic run and final unmodified test both passed. This remains an
-  intermittent test result, not a demonstrated production fix.
-- All 15 distribution/real-loader/native-SWS checks passed, with no skips.
-- Bridge's 75 unit and 39 HTTP tests, TypeScript checks, lint and formatting passed.
-- Security/correctness, API and simplicity reviews completed; canonical-loopback
-  validation and CCDP startup readiness findings were fixed.
-
-HTTPS qualification remains in the suite on ports 4881–4883; HTTP uses 4781–4783.
-The TLSNotary asset mount is `tlsn/v0.3.0-rc.2-loopback` because its worker response
-policy changed. Old immutable responses remain available. Public provider traffic
-and external proving assets still require HTTPS. Physical-device testing still
-needs HTTPS and its own reachable origins. No new live OAuth consent or matched
-notary-session qualification was performed in this run.
-
-
-## Notary RC3 qualification (2026-09-10)
-
-Browser assets and the dev server now use `v0.3.0-rc.3`; its new immutable mount
-is `tlsn/v0.3.0-rc.3`. The Bridge uses the matching TLSN/MPZ revisions listed above,
-including the active-context lifetime fix. The released libid-rs tag resolves to
-the same `501f094` source previously pinned by revision.
-
-Twelve real TLSNotary cases passed: Chromium 151.0.7922.34, Firefox 153.0 and
-WebKit 26.5, each with one and two concurrent sessions against both
-`http://localhost` and `http://127.0.0.1` notary origins on an isolated custom port.
-All pages were secure contexts and cross-origin isolated under the emitted
-COOP/COEP fallback response. Each session exchanged real HTTPS traffic with
-`api.x.com` and received a final canonical attestation frame while a real proof
-backend initialized concurrently. The test reveals an unauthenticated response
-and checks its correlation and framing, not its signature or a platform identity.
-WebKit concurrent runs took about 30 seconds; no runtime deadlock was observed.
-These timings were collected during other builds, not as a performance benchmark.
-
-All 33 HTTP browser integration cases passed, including real Google fixture
-proofs independently verified against the released key in each engine. All 15
-distribution, actual-loader and native-SWS checks passed without skips. The Bridge
-passed 75 unit and 39 HTTP tests, and its RC3 container built with `--locked`.
-
-This does not qualify live OAuth success, the normal DIP response with real
-notarization, public WSS/mobile networks, physical devices, or request-selected
-Bridge routing. The last remains a separate reported Bridge bug; its native
-notary connection still comes from server configuration. No requirement IDs
-or remaining qualification gates were removed.
-
-The isolated Docker stack passed Bridge startup, Callback retrieval and public
-configuration admission. A native Bridge MPC-TLS probe reached GitHub and read
-its refusal response, but returned 502: the public development GitHub App still
-rejects `http://localhost:4682/auth/callback`. Direct synthetic invalid-code probes
-returned `redirect_uri_mismatch` for HTTP and `bad_verification_code` for the old
-HTTPS callback. The registration must be updated before live HTTP GitHub consent
-qualification. No valid code/token was used, and neither probe establishes a
-successful confidential token exchange or its final attestation.
-
-
-## Explicit same-origin fetch policy (2026-09-10)
-
-All asset-fetching response profiles now explicitly include `'self'` in
-`connect-src`, matching architecture PR #13 at `83a7fbcd071abeb62aa2cfd6f9cc91933175a328`.
-The TLSN mount is now `tlsn/v0.3.0-rc.3-csp1` so the original mount's immutable
-worker headers remain unchanged. Local CCDP origins already accept HTTP without
-a certificate or development flag; client configuration checks cover both exact
-loopback hosts and a CCDP port distinct from Bridge. Public HTTP stays rejected.
-
-The GitHub callback registration blocker recorded above was resolved after the
-user updated the provider configurations: the HTTP callback probe now returns
-the expected `bad_verification_code`, rather than `redirect_uri_mismatch`. This
-checks registration acceptance, not live OAuth success.
-
-Validation after the policy change: 38 focused client/protocol tests, all 16
-distribution/real-loader/native-SWS checks, and all 33 HTTP browser cases passed
-across Chromium, Firefox and WebKit, including independently verified real Google
-fixture proofs and concurrent TLSN initialization. TypeScript, lint and formatting
-passed. Security/correctness, API and simplicity reviews had no findings.
-
-
-### JSON whitespace compatibility fix
-
-Manual Firefox GitHub execution exposed a valid `/user` response with a space
-following `"id":`. Allowing JSON whitespace in the identity transcript parser
-let that manual ceremony complete. This was not a released-verifier acceptance
-result: the prior Rust and Solidity readers also assumed compact field prefixes.
-
-The coordinated patch accepts JSON whitespace around colons in X/GitHub token
-and identity fields, and before GitHub integer terminators. Original transcript
-bytes, reveal offsets and bearer-only commitments are preserved. Existing
-compact fixtures remain covered; whitespace, malformed numbers, duplicate
-spellings and framing regressions have focused tests. Release/pin updates and
-end-to-end qualification against the updated verifier remain required before
-claiming released-stack compatibility.
-
-
-## Updated Bridge configuration integration
-
-Bridge PR #10 is rebased onto PR #9 at `991d5c604acdb1a67099f28cbf37ad58b6c317a5`;
-its new tip is `e375d86626be4b9b57e9fb9499e27d31e48573f9`. Localhost admission
-and request-selected notary routing now come from the base. Only the matched
-RC3 dependency pins and JSON-whitespace patch remain above it.
-
-Dev Compose mounts `bridge-config.toml` with native TOML platform tables. Client resolves
-`callbackPath` against its supplied Bridge origin once; GitHub's token request
-carries that frozen redirect URI. The [Bridge integration note](oauth-bridge.md#current-bridge-integration)
-records the wire change relative to architecture PR #13 and the remaining
-TCP-versus-WebSocket and egress-policy differences. This supersedes the earlier
-request-selected-host routing blocker; it does not qualify the documented
-WebSocket Bridge transport.
-
-Validation: 124 Bridge tests and Clippy pass; 375 ceremony unit tests,
-package/build/app/browser typechecks, formatting and lint pass. All 45 dev UI
-cases pass across Chromium, Firefox and WebKit. One unchanged oversized-token
-unit case hit its five-second timeout while the Rust release build and browsers
-were running; the full suite passes with two test workers and unchanged timeouts.
-
-The real Docker image starts with this Compose configuration, retrieves Callback
-from the emitted CCDP and serves configuration accepted by the actual Client
-validator. A real RC3-notarized GitHub probe reaches GitHub and receives the
-expected invalid-code classification; malformed redirect and private-notary
-egress probes reject. The live frontend enables Google, X and GitHub. This uses
-an intentionally invalid code, not fresh consent or an authenticated identity.
-Security/correctness, API and simplicity reviews are clear after correcting empty
-query/fragment delimiter rejection in the shared redirect validator.
-
-All 24 targeted actual-popup/configuration cases passed across Chromium, Firefox
-and WebKit over HTTP and HTTPS, including six real Google fixture proofs checked
-against the released verifier key with mutated-public-input rejection. This is
-fixture qualification, not a live Google OAuth ceremony.
-
-## Released libid-rs v0.4.0 integration
-
-Dev Compose now pins Bridge PR #10 at
-`cdc16551114070ea3458ef0d5ceb19ca4228833e`, using released libid-rs v0.4.0
-(`82bc4e286d762531ba3ac86996db4afc6ea38f56`). Its shared whitespace parser
-comes from merged libid-rs #21, replacing closed #20. The server-specific GitHub
-error classifier remains; redundant server #11 is superseded by #10. TLSN/MPZ
-pins still match notary v0.3.0-rc.3.
-
-All 124 Bridge tests, Clippy and the release Docker build pass. The updated
-container retrieves Callback and serves configuration accepted by ceremony.
-A real RC3-notarized GitHub exchange correctly classifies an intentionally
-invalid code; malformed redirects and private notary egress remain rejected.
-Security/correctness, API and simplicity reviews found no upgrade issues.
-This check does not establish fresh OAuth consent, successful identity
-attestations or qualification against the updated contract verifier.
-
-## Unified operation events (2026-09-12)
-
-The coordinated Client/CCDP update replaces the previous wire catalog with
-`ProveIdentity`, `IdentityProof`, `Cancel`, `Abort` and `Event`. No old discriminator
-or readiness alias remains. The design follows the approved event model and the
-working CCDP/TEST_PLAN update following architecture PR #13 at
-`dcec48e05eed04a02971a41a2237b89e5ab9f393`. Deploy matching Client and CCDP builds.
-
-Validation: 403 unit tests, 17 distribution/native-loader/SWS checks, package and
-harness TypeScript, declaration emission, dev frontend build, and workspace style
-checks pass. All 75 dev browser cases pass, including mobile emulation. The six
-desktop HTTP/HTTPS profiles exercised 72 browser cases: 60 passed initially; the
-UI/error-text migration failures were corrected and all 30 targeted rechecks
-passed, including repeated navigation and real Google fixture proofs in Chromium,
-Firefox and WebKit. Each generated fixture proof was independently verified
-against the released key. The qualification server was reloaded with the matching
-generated CSP/header configuration after rebuilding the static files.
-
-Security/correctness, API ergonomics and simplicity reviews were completed and
-findings addressed. Tests preserve exactly one terminal update, readiness without
-subscribers, opaque failure context, occurrence timestamps, and independent X
-attestation completion without premature proof delivery. All 154 existing
-requirement IDs are retained; four event/lifecycle IDs from the updated index are
-added to [traceability](traceability.md).
-
-Implementation choices are explicit: popup origin authentication plus CCDP state
-validation require no new document-role handshake; missing observational
-`authorization.finished` can advance presentation at `prover.started` without
-inventing timing; the native progress bar is indeterminate and retains the
-15-second slow-proving hint. Caught messages follow the display boundary in
-[Abort](protocol.md#abort), not a blanket credential-redaction guarantee. The
-separate metrics-record design is replaced by the event feed; complete resource
-accounting/export and the credential-wait extension remain deferred.
-
-This run does not establish new live OAuth, matched-notary concurrency, or physical
-mobile qualification. Synthetic X/GitHub timing tests are orchestration evidence,
-not cryptographic or live-service evidence.
+with the same emitted assets. Repeat both loopback hostnames and engines.
+Unauthenticated notary probes record lengths/correlation only; they cannot
+replace platform qualification. On physical devices, record the model,
+OS/browser version, effective thread counts, and nonsecret outcomes.
+No raw OAuth return, credential, witness, transcript, opening, or live proof is
+a qualification artifact.
