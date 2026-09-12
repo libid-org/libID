@@ -20,7 +20,7 @@
       .history-scroll { overflow-x: auto; }
       table { width: 100%; border-collapse: collapse; }
       th, td { text-align: left; padding: .5rem; border-bottom: 1px solid GrayText; }
-      .stage-timings { margin: 0; padding-left: 1.25rem; font-size: .875rem; }
+      .operation-timings { margin: 0; padding-left: 1.25rem; font-size: .875rem; }
       td { vertical-align: top; }
       #result { white-space: pre-wrap; overflow-wrap: anywhere; }
     </style>
@@ -53,7 +53,7 @@
       <p id="history-empty">No ceremonies started.</p>
       <div class="history-scroll">
         <table aria-labelledby="history-heading">
-          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col" title="From authenticated OAuth return to completion; excludes provider redirect time.">Post-consent</th><th scope="col">Stages</th></tr></thead>
+          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col" title="From authenticated OAuth return to completion; excludes provider redirect time.">Post-consent</th><th scope="col">Operations</th></tr></thead>
           <tbody id="history"></tbody>
         </table>
       </div>

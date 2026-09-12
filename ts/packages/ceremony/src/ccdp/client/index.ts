@@ -1,4 +1,9 @@
-export { CeremonyStage } from '../../events.js'
+export {
+  CeremonyStage,
+  type CeremonyStatus,
+  type OperationEvent,
+  type StageEvent,
+} from '../../events.js'
 
 export * from '../../index.js'
 

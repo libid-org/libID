@@ -69,80 +69,29 @@ See [CCDP documents and navigation](documents.md).
 
 ## Messages
 
-The following table is the complete CCDP version-1 message set.
+The complete CCDP message catalog has five exact records. Wire discriminators use
+kebab case; names do not encode the sender. Popup authenticates the configured
+peer origins and connection. CCDP enforces message meaning and protocol state;
+it does not add sender-role claims or a second authentication handshake.
 
-| Message | Direction | Accepted after | Cardinality and effect |
-|---|---|---|---|
-| [`PrefetchReady`](#prefetchready) | Prefetch → Application | Prefetch connection acceptance | once per document; advisory start of Worker preparation |
-| [`CallbackReady`](#callbackready) | Callback → Application | capture/clear and Callback connection acceptance | once per document; advisory start of return handling |
-| [`PrefetchStarted`](#prefetchstarted) | Prefetch → Application | connection acceptance and selected-profile dispatch | exactly once; permits navigation to Authorization |
-| [`ProverReady`](#proverready) | Prover → Application | Prover connection acceptance and cross-origin isolation | exactly once; permits `AppStartProver` |
-| [`AppStartProver`](#appstartprover) | Application → Prover | `ProverReady` | exactly once; selects the profile for OAuth validation and proof execution |
-| [`ProverNotifyEvent`](#provernotifyevent) | Prover → Application | `AppStartProver` and valid OAuth acceptance | zero or more; advisory only |
-| [`ProverIdentityProof`](#proveridentityproof) | Prover → Application | `AppStartProver` and valid OAuth acceptance | at most once; ends the Prover run |
-| [`CancelCeremony`](#cancelceremony) | Application → Callback or Prover; Prover → Application | active connection for Application cancellation; `AppStartProver` and valid OAuth denial for Prover cancellation | at most once; ends the run without a technical error |
-| [`AbortCeremony`](#abortceremony) | Prefetch, Callback, or Prover → Application | connection acceptance | at most once; reports technical failure and ends the run |
+| Message | Sender | Accepted after / consequence |
+|---|---|---|
+| `ProveIdentity` | Application | one `prover.started`; supplies frozen inputs once |
+| `IdentityProof` | Prover | one request and valid OAuth acceptance; delivers identity and proof once |
+| `Cancel` | Application, or Prover reporting OAuth denial | existing directional cancellation rules below |
+| `Abort` | active Prefetch, Callback, or Prover | authenticated connection; terminates technical failure |
+| `Event` | active participating document; Application also produces local events | core event ownership and state rules below |
 
-Every recipient requires a plain record with the exact fields, types, and bounds
-defined below. Unknown fields, coercion, normalization, defaults, and
-unrecognized discriminators are invalid. Messages outside the listed direction,
-predecessor, and cardinality are invalid. Cancellation, proof delivery, and
-abort make later messages inert even when they race in transit. The two advisory
-readiness markers are ignored outside their expected phase; duplicates and missing
-markers affect timing display only.
+Unknown message types, extra fields, invalid types and invalid predecessors fail.
+Event names may be extended, but arbitrary extension events cannot substitute for
+core readiness or declare success. Terminal outcomes make later traffic inert.
+There is no parallel readiness, stage, or platform-step wire stream.
 
-### PrefetchReady
+### ProveIdentity
 
 ```ts
-interface PrefetchReady { type: 'prefetch-ready' }
-```
-
-Sent after Prefetch authenticates its Application connection, before Worker setup
-and fetch dispatch. This optional timing marker grants no navigation permission.
-
-### CallbackReady
-
-```ts
-interface CallbackReady { type: 'callback-ready' }
-```
-
-Sent after Callback bounds, captures and clears the return, validates its deployment
-inputs and authenticates Application, before private Prover navigation. It contains
-no parameters, URLs, timestamps, outcome classification or credentials. It changes
-only the application's displayed stage; navigation does not wait for an acknowledgement.
-
-### PrefetchStarted
-
-```ts
-interface PrefetchStarted {
-  type: 'prefetch-started'
-}
-```
-
-`PrefetchStarted` states only that fetching for the selected public profile
-was dispatched. It does not promise completion or grant authority. Prefetch
-already received the profile through its cleared fragment, so the message
-repeats no selection field.
-
-### ProverReady
-
-```ts
-interface ProverReady {
-  type: 'prover-ready'
-}
-```
-
-`ProverReady` states only that Prover accepted the Application connection,
-established cross-origin isolation, and installed its CCDP handlers. It carries
-no correlation or profile field and does not imply that proving started.
-The Application sends `AppStartProver` only after accepting this message.
-Readiness does not classify the retained OAuth return as approval or denial.
-
-### AppStartProver
-
-```ts
-interface AppStartProver {
-  type: 'app-start-prover'
+interface ProveIdentity {
+  type: 'prove-identity'
   platformId: string
   platformCeremonyVersion: number
   clientId: string
@@ -154,7 +103,7 @@ interface AppStartProver {
 
 `platformId` and `platformCeremonyVersion` are the exact supported profile
 selected at launch and must match the active Prover. The message is valid only
-after `ProverReady`. The remaining fields are the frozen client identifier and
+after `prover.started`. The remaining fields are the frozen client identifier and
 redirect, derived code verifier, and resolved notary address. The
 OAuth return is already retained by Prover and is not repeated in the message.
 Starting Prover initiates OAuth validation; it does not assert acceptance or
@@ -186,41 +135,86 @@ authenticated logical connection, not a second caller-selected expected state.
 The return is consumed once; no second request or replacement response can
 restart the run.
 
-### ProverNotifyEvent
+### Event
 
 ```ts
-type ProverNotifyEvent = {
-  type: 'prover-notify-event'
+interface Event {
+  type: 'event'
+  event: string
+  phase?: 'started' | 'finished'
   timestamp: number
-} & ({
-  platformStep: {
-    code: string
-    label: string
-    status: 'started' | 'completed' | 'failed'
-    progress: number
-  }
-} | { stage: Exclude<CeremonyStage, 'start' | 'prefetch' | 'authorization' | 'oauth-return'> })
+  operationId?: string
+  attributes?: Record<string, string | number | boolean>
+}
 ```
 
-Exactly one of `stage` or `platformStep` is present. Stage values and platform
-chains are defined by the [client event contract](client.md#progress-cancellation-and-recovery).
-Prover cannot claim terminal success through an advisory notification; the client
-emits `finished` only from its own result handling. Stage reports never decide
-whether a result is accepted.
+The producing document or worker captures a finite, nonnegative occurrence time
+using `performance.timeOrigin + performance.now()`. Receivers preserve it;
+arrival time must not replace it. A start/finish pair describes one operation.
+An observation has no phase. Repeated overlapping extension operations use an
+instrumentation-only `operationId` to pair their occurrences. It is never an
+OAuth, ceremony, user, or request identifier and supplies no authority.
 
-`platformStep.code` belongs to the selected platform ceremony version's closed
-step set. `label` is nonempty display text of at most 96 UTF-8 bytes without
-control characters. `status` records the step transition. `progress` is
-finite, monotonic, and in `[0, 1)`. `timestamp` is the Prover's finite,
-nonnegative `performance.timeOrigin + performance.now()` value in milliseconds.
-It permits same-browser ordering and duration diagnostics but grants no
-authority.
+Event names and attribute names match `[a-z][a-z0-9-]{0,63}`. Optional operation
+identifiers are nonempty strings of at most 64 UTF-8 bytes without control
+characters. Attributes have at most 16 entries; strings have at most 128 UTF-8
+bytes without controls, numbers are finite, and booleans are allowed. Producers
+own the attribute meanings and units. Credentials, identity, proofs, witnesses,
+attestations and error text do not belong in these records.
 
-### ProverIdentityProof
+Core operations occur once and do not carry operation identifiers. Each has a
+`started` and `finished` occurrence except `prover-fallback`, the only single-shot
+core event. Each applicable occurrence is emitted when reached; interrupted operations
+do not fabricate a finish. Core duplicates, invalid phases, finishes without their
+required start and out-of-state occurrences reject independently of subscribers.
+Optional extension observations may be absent without invalidating proof delivery.
+
+| Core event | Emission ownership and meaning |
+|---|---|
+| `prefetch-dispatch` | Application starts preparation; authenticated Prefetch finishes after the root Worker dispatches/joins the selected fetches. Downloads may remain pending. |
+| `authorization` | Application starts immediately before platform navigation. Callback finishes after capture/clearing and Application authentication. This does not imply consent. |
+| `prover` | Prover starts after authentication, isolation, handler installation and root-worker claim. Client alone derives the public finish after accepting `IdentityProof` and assembling the result. |
+| `prover-fallback` | The isolated fallback document reports its own navigation start retrospectively, before `prover.started`. |
+| `token-fetch` | X obtains and parses a usable access token, without waiting for final token attestation. |
+| `token-attestation` | X obtains its complete token attestation. For GitHub it covers the whole Bridge request and response admission, obtaining both token and attestation. |
+| `identity-fetch` | Obtains and parses the platform identity response. |
+| `identity-attestation` | Obtains the complete identity attestation. |
+| `zk-proof-preparation` | Prepares circuit inputs and proving backend; finishes when both are ready. |
+| `zk-proof-generation` | Executes the witness and generates the ZK proof. |
+
+X emits all six proving operations. GitHub omits `token-fetch`. Google emits only
+the two ZK operations. Platform and implementation modules may add observations
+and operations; their definitions belong beside their implementation, not here.
+No globally sequential ordering is imposed on concurrent work. Witness execution
+can overlap backend initialization, so the two ZK intervals may also overlap.
+Finishing ZK generation does not finish pending attestations or the ceremony.
+
+Two core event occurrences provide mandatory readiness:
+
+- `prefetch-dispatch.finished`, accepted once during Prefetch, permits private
+  navigation to Authorization.
+- `prover.started`, accepted once during OAuth return, permits one `ProveIdentity`.
+
+Their production and processing run independently of subscriptions, filters,
+rendering and optional recorders. Send failures are technical failures, not
+silently dropped readiness. Extension events and source-supplied terminal claims
+cannot open either gate. `authorization.finished` and `prover-fallback` are
+observations in the OAuth-return phase, not extra readiness gates. Only Prover
+produces proving operations, after request acceptance and valid OAuth approval.
+A remote `prover.finished` is invalid; `IdentityProof` owns delivery.
+
+For fallback timing, the replacement document emits `prover-fallback` with its
+own `performance.timeOrigin`, once authenticated. It then emits `prover.started`
+after all readiness work. Their difference includes fallback navigation, document
+loading and remaining readiness work. It excludes source-document port
+preservation and is not the counterfactual cost of fallback versus DIP. It uses
+no timestamp storage, extra handshake or pre-authentication message.
+
+### IdentityProof
 
 ```ts
-interface ProverIdentityProof {
-  type: 'prover-identity-proof'
+interface IdentityProof {
+  type: 'identity-proof'
   identity: {
     platformId: string
     oauthClientId: string
@@ -234,54 +228,60 @@ interface ProverIdentityProof {
 `identity` is a separate, exact-shaped record of prover-extracted strings:
 platform identifier, OAuth client identifier, user identifier, and user name
 (the signed email for Google). The selected platform validator checks their
-encodings and the platform/client binding to `AppStartProver`.
+encodings and the platform/client binding to `ProveIdentity`.
 `proof` is the exact value defined by that platform ceremony version, without
 a nested identity copy. CCDP treats the proof as opaque; adding a platform does
 not change this message. Neither browser endpoint cryptographically verifies
 the delivered result; identity is non-authoritative until ledger verification.
 
-### CancelCeremony
+### Cancel
 
 ```ts
-interface CancelCeremony {
-  type: 'cancel-ceremony'
+interface Cancel {
+  type: 'cancel'
 }
 ```
 
-`CancelCeremony` is a parameterless, bidirectional terminal message:
+`Cancel` is a parameterless, bidirectional terminal message:
 
 - Application → Callback or Prover stops reachable work after explicit
   cancellation or retirement of Application authority.
 - Prover → Application reports only a valid, ceremony-bound OAuth-platform
-  denial discovered while validating `AppStartProver`. The Application
+  denial discovered while validating `ProveIdentity`. The Application
   resolves `{ status: 'denied' }`. Prover sends it before token exchange,
-  proof execution, or platform progress, never as a substitute for a failure.
+  proof execution, or core proving operations, never as a substitute for a failure.
 
 Malformed, mismatched, or otherwise invalid OAuth returns use
-`AbortCeremony`, not cancellation. An Application which has already canceled
+`Abort`, not cancellation. An Application which has already canceled
 ignores a racing denial or proof. Cancellation has no acknowledgement;
 recipients clear reachable input but do not close or navigate the popup.
 
-### AbortCeremony
+### Abort
 
 ```ts
-interface AbortCeremony {
-  type: 'abort-ceremony'
-  code: FailureCode
-  reason: string
+interface Abort {
+  type: 'abort'
+  event: string
+  message: string
 }
 ```
 
-`AbortCeremony` reports a technical failure after connection acceptance.
-`code` is a package-owned `FailureCode`; `reason` must exactly match its safe
-message in [the failure catalog](../src/errors.ts). Unknown codes, mismatched
-messages and extra fields reject. Client rejects with `CeremonyError`, preserving
-that code and message. No original exception, stack or cause crosses CCDP.
-Undeliverable failures emit one local sanitized subsystem/code diagnostic.
+`event` identifies the failing core or implementation operation using the event
+name grammar. `message` is nonempty opaque display text, bounded to 2048 UTF-8
+bytes without control characters. There is no required code, closed error-text
+catalog, or code-to-message equality check. Recipients render it as text and do
+not interpret it as control data, markup, navigation, or a retry instruction.
 
-This extends the upstream PR #13 reason-only message by explicit implementation
-request. Client and CCDP artifacts must be updated together; old reason-only
-messages are not supported by this build.
+The implementation preserves the caught exception's message (or a thrown string),
+normalizes controls, and bounds its size. It never serializes error objects,
+stacks, nested causes or arbitrary objects. This is an explicit display boundary:
+bounded text is not guaranteed to be redacted and may contain sensitive details
+from a dependency. Applications must exclude it from telemetry exports. The
+original cause can remain in the producing context for inspection.
+
+Client rejects with `CeremonyError`, retaining `event` and `message`. Failures
+before authentication remain local. An undeliverable report logs a fixed sanitized
+local diagnostic; a logging/reporting failure must not replace the original failure.
 
 ## Protocol
 
@@ -335,9 +335,9 @@ establishes its connection there. A scripted opener may first reserve the
 popup at `about:blank`; if that fails, the same activation's real anchor
 navigates it directly to Prefetch.
 
-Prefetch clears and validates its fragment, accepts the connection, sends advisory
-`PrefetchReady`, registers the Worker, and dispatches the selected profile's fetches. It then sends
-[`PrefetchStarted`](protocol.md#prefetchstarted). Only after accepting that message, the
+Prefetch clears and validates its fragment, accepts the connection, registers
+the Worker, and dispatches the selected profile's fetches. It then sends
+[`prefetch-dispatch.finished`](protocol.md#event). Only after accepting that message, the
 Application endpoint navigates the retained popup to
 [Authorization](documents.md#authorization-get-platformauthorizationurl) at the frozen
 `platformAuthorizationUrl`. The Application owns this transition because it
@@ -347,7 +347,7 @@ retires the Prefetch carrier while leaving the Application endpoint available
 for Callback.
 
 Worker registration, activation, or selected-profile dispatch failure after
-connection acceptance sends `AbortCeremony` instead of `PrefetchStarted`;
+connection acceptance sends `Abort` instead of `prefetch-dispatch.finished`;
 Application rejects without navigating to Authorization. Download failure
 after successful dispatch remains an asset-cache concern and uses the normal
 cold-fetch path, not a late Prefetch abort. Failures before connection acceptance
@@ -367,7 +367,7 @@ ingress.
 Callback accepts the Application connection using the ceremony ID extracted
 from the captured `state`. This authenticates the Application against the
 Bridge's deployment allowlist before the return can leave Callback. It sends
-only fieldless `CallbackReady`, never an OAuth-return payload or outcome. Connection
+`Event` for `authorization.finished`, never an OAuth-return payload or outcome. Connection
 acceptance permits the Prover transition; milestone delivery is not a prerequisite.
 
 #### 3. Callback to Prover
@@ -379,30 +379,30 @@ Callback owns this transition to keep the return private from Application and
 because the OAuth Platform may have severed Application's direct popup handle.
 
 Prover captures and clears the fragment, then accepts the same logical
-Application connection. It sends [`ProverReady`](protocol.md#proverready) only after
+Application connection. It sends [`prover.started`](protocol.md#event) only after
 cross-origin isolation is established and its CCDP handlers are installed.
 Connection establishment and any internal isolation transition are below CCDP:
 neither introduces another participant, message, or phase. The captured
 parameters survive that transition without passing through Application.
 
-Application accepts one `ProverReady` and sends one
-[`AppStartProver`](protocol.md#appstartprover) using its frozen configuration and code
+Application accepts one `prover.started` and sends one
+[`ProveIdentity`](protocol.md#proveidentity) using its frozen configuration and code
 verifier. It does not receive or parse the OAuth return. On receiving
-`AppStartProver`, the selected platform/version validates the retained return
+`ProveIdentity`, the selected platform/version validates the retained return
 before credential use. A valid denial sends
-[`CancelCeremony`](protocol.md#cancelceremony); malformed or mismatched input sends
-[`AbortCeremony`](protocol.md#abortceremony). Both end the run in this phase, as does
+[`Cancel`](protocol.md#cancel); malformed or mismatched input sends
+[`Abort`](protocol.md#abort). Both end the run in this phase, as does
 Application cancellation. Only valid OAuth acceptance enters Phase 4.
 
 #### 4. Prover execution
 
 This phase begins only after [Prover](documents.md#prover-get-prover) has validated and
 accepted the OAuth return in Phase 3. It performs the selected profile's token
-exchange, notarization, and proof-generation steps as applicable. It sends zero or more
-[`ProverNotifyEvent`](#provernotifyevent) messages followed by one
-[`ProverIdentityProof`](#proveridentityproof), unless it sends
-[`AbortCeremony`](#abortceremony) or receives
-[`CancelCeremony`](#cancelceremony). The first terminal outcome—proof
+exchange, notarization, and proof-generation steps as applicable. It sends the
+applicable core occurrences and any extension [`Event`](#event) messages followed by one
+[`IdentityProof`](#identityproof), unless it sends
+[`Abort`](#abort) or receives
+[`Cancel`](#cancel). The first terminal outcome—proof
 delivery, abort, or cancellation—ends the phase; later messages have no effect.
 
 ### Terminal outcomes
@@ -434,9 +434,9 @@ sequenceDiagram
     P->>P: Prefetch accepts connection
     P->>P: Prefetch registers Worker and dispatches selected-profile fetches
     break Prefetch setup fails
-        P-->>A: AbortCeremony
+        P-->>A: Abort
     end
-    P-->>A: PrefetchStarted
+    P-->>A: prefetch-dispatch.finished
     A->>P: Navigate away to Authorization
 
     Note over A,P: Phase 2 - Authorization to Callback
@@ -444,35 +444,35 @@ sequenceDiagram
     P->>P: OAuth Platform redirects to redirectUri
     P->>P: Callback starts and selects its bundled version
     P->>P: Callback accepts authenticated connection
-    P-->>A: CallbackReady (advisory)
+    P-->>A: Event: authorization.finished
     break Callback fails after connection acceptance
-        P-->>A: AbortCeremony
+        P-->>A: Abort
     end
 
     Note over A,P: Phase 3 - Callback to Prover
     P->>P: Callback navigates to Prover with private return fragment
     P->>P: Prover accepts connection with isolation established
-    P-->>A: ProverReady
+    P-->>A: prover.started
     break Application cancels
-        A-->>P: CancelCeremony
+        A-->>P: Cancel
     end
-    A-->>P: AppStartProver
+    A-->>P: ProveIdentity
 
     P->>P: Validate retained OAuth return
     break Valid OAuth denial
-        P-->>A: CancelCeremony
+        P-->>A: Cancel
     end
     break Invalid OAuth return
-        P-->>A: AbortCeremony
+        P-->>A: Abort
     end
     Note over A,P: Phase 4 - Prover execution after OAuth acceptance
-    loop Zero or more progress events
-        P-->>A: ProverNotifyEvent
+    loop Applicable core events and optional observations
+        P-->>A: Event
     end
     break Prover fails
-        P-->>A: AbortCeremony
+        P-->>A: Abort
     end
-    P-->>A: ProverIdentityProof
+    P-->>A: IdentityProof
 ```
 
 Terminal exits are shown without their cleanup details, which follow

@@ -1,5 +1,4 @@
 import { resolve as resolveAsset } from '../assets/index.js'
-import { ceremonyError } from '../errors.js'
 import { origin, webUrl } from '../primitives.js'
 import type { NotaryAttestation } from './decode.js'
 import type { ByteRange } from './notarize.js'
@@ -75,7 +74,8 @@ export class Notarization {
       const worker = new Worker(new URL('./session.worker.ts', import.meta.url), { type: 'module' })
       this.#worker = worker
       signal.addEventListener('abort', () => worker.terminate(), { once: true })
-      worker.onerror = () => this.#failure.abort(ceremonyError(undefined, 'notarization'))
+      worker.onerror = (event) =>
+        this.#failure.abort(new Error(event.message || 'Notary worker failed'))
     }
     const worker = this.#worker
     const { port1: port, port2 } = new MessageChannel()
@@ -113,7 +113,11 @@ export class Notarization {
     port.onmessage = (event) => {
       if (ended) return
       if (event.data.type === 'error') {
-        fail(ceremonyError(undefined, 'notarization'))
+        fail(
+          new Error(
+            typeof event.data.message === 'string' ? event.data.message : 'Notarization failed',
+          ),
+        )
         return
       }
       const waiter = waiters.get(event.data.type)

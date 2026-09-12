@@ -223,7 +223,7 @@ platform-mandated callback queries are not forwarded to the Distribution.
 When GitHub is enabled, `POST /api/v1/ceremony/github-token` performs the
 confidential OAuth token exchange and token TLSNotary session synchronously. It
 retains no state. The prover derives this fixed route from the origin of the
-Ceremony Client's frozen `redirectUri` in `AppStartProver`; the prover document
+Ceremony Client's frozen `redirectUri` in `ProveIdentity`; the prover document
 does not embed it.
 
 The ceremony's browser caller is Prover on `ccdpOrigin`, but this route uses the
@@ -258,7 +258,7 @@ Both records are UTF-8 JSON objects. Member order and insignificant whitespace
 have no meaning. Duplicate, missing, additional, or wrongly typed members are
 invalid. The versioned route carries no redundant schema field.
 
-`redirectUri` is the exact URI frozen before OAuth and passed in `AppStartProver`.
+`redirectUri` is the exact URI frozen before OAuth and passed in `ProveIdentity`.
 It is a canonical HTTPS or permitted local HTTP URL without credentials, query or
 fragment, at most 2,048 bytes. The Bridge checks its configured Callback path and
 passes the URI unchanged to GitHub. Prover also checks that URI in the returned

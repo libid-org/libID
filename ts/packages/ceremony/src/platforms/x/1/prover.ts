@@ -3,14 +3,14 @@ import {
   buildBearerLinkWitness,
   validateBearerLinkPublicInputs,
 } from '../../../barretenberg/circuits/bearer_link/inputs.js'
-import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../barretenberg/engine.js'
+import { ProofEngine } from '../../../barretenberg/engine.js'
 import { oauthState } from '../../../ccdp/navigation.js'
-import { CeremonyError } from '../../../errors.js'
+import { CeremonyError, ceremonyError } from '../../../errors.js'
+import { now, operation } from '../../../events.js'
 import { responseJson } from '../../../notary/http.js'
 import { bearerOpening } from '../../../notary/notarize.js'
 import { Notarization } from '../../../notary/session.js'
 import { isRecord } from '../../../primitives.js'
-import { Progress } from '../../../progress.js'
 import { isFormClientId } from '../../authorization.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
 import type { ProverContext } from '../../context.js'
@@ -25,17 +25,10 @@ import {
 import type { XProofV1 } from './types.js'
 import { circuit, verificationKey } from './x.assets.js'
 
-const spans = [
-  { code: 'token-session', label: 'Exchanging authorization code', weight: 20 },
-  { code: 'identity-session', label: 'Fetching identity', weight: 20 },
-  { code: 'attestations', label: 'Completing identity evidence', weight: 5 },
-  ...PROOF_ENGINE_SPANS,
-]
-
 export async function prove(
   context: ProverContext,
 ): Promise<{ identity: Identity<'x'>; proof: XProofV1 } | null> {
-  const { request, onProgress } = context
+  const { request, emit } = context
   context.signal.throwIfAborted()
   if (!isFormClientId(request.clientId)) throw new Error('Invalid profile client identifier')
   const returned = parseCodeOAuthReturn(context.oauthReturn)
@@ -44,25 +37,17 @@ export async function prove(
     returned.state !== oauthState(context.ceremonyId) ||
     request.codeVerifier === null
   )
-    throw new CeremonyError('oauth-return', { cause: new Error('Invalid X return') })
+    throw new CeremonyError('authorization', 'Invalid X return')
   if (returned.outcome === 'denied') return null
   if (returned.outcome !== 'accepted')
-    throw new CeremonyError('oauth-return', { cause: new Error('X authorization failed') })
-  context.onStage('code-exchange')
+    throw new CeremonyError('authorization', 'X authorization failed')
   const controller = new AbortController(),
     abort = () => controller.abort(context.signal.reason)
   context.signal.addEventListener('abort', abort, { once: true })
-  const progress = new Progress(spans, (step) =>
-    onProgress(step, performance.timeOrigin + performance.now()),
-  )
   const engine = new ProofEngine({
     circuitUrl: resolveAsset(circuit),
     verificationKeyUrl: resolveAsset(verificationKey),
-    onProgress: (step) => {
-      if (step.status === 'started') progress.start(step.code)
-      else if (step.status === 'completed') progress.complete(step.code)
-      else progress.fail(step.code)
-    },
+    emit,
   })
   // Observe every provisional branch immediately; any failure retires sibling work.
   const observe = <T>(p: Promise<T>) => {
@@ -78,67 +63,107 @@ export async function prove(
     }
     const notary = new Notarization(request.notaryAddress!, controller.signal)
     const tokenRequest = buildTokenRequest(input)
-    const tokenSession = observe(notary.prepare(tokenRequest.url))
-    const identitySession = observe(notary.prepare('https://api.x.com/2/users/me'))
-    const session = await tokenSession
-    const transcript = await progress.step('token-session', () => session.send(tokenRequest))
-    const body = responseJson(transcript)
-    const selection = selectTokenReveals(
-      { sent: transcript.sent, recv: transcript.received },
-      input,
+    const tokenSession = observe(
+      notary.prepare(tokenRequest.url).catch((e) => {
+        throw ceremonyError(e, 'token-fetch')
+      }),
     )
-    if (!isRecord(body) || body.access_token !== selection.accessToken)
-      throw new Error('Invalid token response')
-    const bearer = selection.accessToken
+    const identitySession = observe(
+      notary.prepare('https://api.x.com/2/users/me').catch((e) => {
+        throw ceremonyError(e, 'identity-fetch')
+      }),
+    )
+    const { session, selection, bearer } = await operation(emit, 'token-fetch', async () => {
+      const session = await tokenSession
+      const transcript = await session.send(tokenRequest)
+      const body = responseJson(transcript)
+      const selection = selectTokenReveals(
+        { sent: transcript.sent, recv: transcript.received },
+        input,
+      )
+      if (!isRecord(body) || body.access_token !== selection.accessToken)
+        throw new Error('Invalid token response')
+      const bearer = selection.accessToken
+      return { session, selection, bearer }
+    })
+    emit({ event: 'token-attestation', phase: 'started', timestamp: now() })
     const tokenReveal = observe(
       session
         .reveal({ sent: selection.ranges.sent, received: selection.ranges.recv })
         .then((value) => {
-          observe(value.attestation)
-          return value
+          const attestation = observe(
+            value.attestation
+              .then((result) => {
+                emit({ event: 'token-attestation', phase: 'finished', timestamp: now() })
+                return result
+              })
+              .catch((e) => {
+                throw ceremonyError(e, 'token-attestation')
+              }),
+          )
+          return { ...value, attestation }
+        })
+        .catch((e) => {
+          throw ceremonyError(e, 'token-attestation')
         }),
     )
-    context.onStage('identity-fetch')
-    const identity = await identitySession
-    const identityTranscript = await progress.step('identity-session', () =>
-      identity.send(buildIdentityRequest(bearer)),
-    )
-    const identityBody = responseJson(identityTranscript),
-      ranges = selectIdentityReveals(
-        { sent: identityTranscript.sent, recv: identityTranscript.received },
-        bearer,
+    const { identity, ranges, extracted } = await operation(emit, 'identity-fetch', async () => {
+      const identity = await identitySession
+      const identityTranscript = await identity.send(buildIdentityRequest(bearer))
+      const identityBody = responseJson(identityTranscript),
+        ranges = selectIdentityReveals(
+          { sent: identityTranscript.sent, recv: identityTranscript.received },
+          bearer,
+        )
+      const extracted = identityFromReveals(
+        ranges.recv.map((r) => identityTranscript.received.slice(r.start, r.end)),
       )
-    const extracted = identityFromReveals(
-      ranges.recv.map((r) => identityTranscript.received.slice(r.start, r.end)),
+      if (
+        !isRecord(identityBody) ||
+        !isRecord(identityBody.data) ||
+        identityBody.data.id !== extracted.userId ||
+        identityBody.data.username !== extracted.handle
+      )
+        throw new Error('Invalid identity response')
+      return { identity, ranges, extracted }
+    })
+    emit({ event: 'identity-attestation', phase: 'started', timestamp: now() })
+    const identityReveal = observe(
+      identity
+        .reveal({ sent: ranges.sent, received: ranges.recv })
+        .then((value) => {
+          const attestation = observe(
+            value.attestation
+              .then((result) => {
+                emit({ event: 'identity-attestation', phase: 'finished', timestamp: now() })
+                return result
+              })
+              .catch((e) => {
+                throw ceremonyError(e, 'identity-attestation')
+              }),
+          )
+          return { ...value, attestation }
+        })
+        .catch((e) => {
+          throw ceremonyError(e, 'identity-attestation')
+        }),
     )
-    if (
-      !isRecord(identityBody) ||
-      !isRecord(identityBody.data) ||
-      identityBody.data.id !== extracted.userId ||
-      identityBody.data.username !== extracted.handle
-    )
-      throw new Error('Invalid identity response')
-    const [first, second] = await Promise.all([
-      tokenReveal,
-      observe(identity.reveal({ sent: ranges.sent, received: ranges.recv })),
-    ])
+    const [first, second] = await Promise.all([tokenReveal, identityReveal])
     const final = observe(Promise.all([first.attestation, second.attestation]))
-    context.onStage('proof-preparation')
-    const inputs = buildBearerLinkWitness(
-      bearer,
-      bearerOpening(first.openings, 'received', selection.bearerRange, bearer),
-      bearerOpening(
-        second.openings,
-        'sent',
-        { start: ranges.sent[0].end, end: ranges.sent[1].start },
+    const inputs = await operation(emit, 'circuit-inputs', () =>
+      buildBearerLinkWitness(
         bearer,
+        bearerOpening(first.openings, 'received', selection.bearerRange, bearer),
+        bearerOpening(
+          second.openings,
+          'sent',
+          { start: ranges.sent[0].end, end: ranges.sent[1].start },
+          bearer,
+        ),
       ),
     )
     const proof = observe(engine.prove(inputs, controller.signal))
-    const [raw, [tokenAttestation, identityAttestation]] = await Promise.all([
-      proof,
-      progress.step('attestations', () => final),
-    ])
+    const [raw, [tokenAttestation, identityAttestation]] = await Promise.all([proof, final])
     if (!validateBearerLinkPublicInputs(raw.publicInputs, inputs))
       throw new Error('Bearer public input mismatch')
     return {
@@ -158,6 +183,5 @@ export async function prove(
     context.signal.removeEventListener('abort', abort)
     controller.abort()
     engine.destroy()
-    progress.failActive()
   }
 }

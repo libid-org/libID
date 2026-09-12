@@ -1,12 +1,12 @@
 import { resolve as resolveAsset } from '../../../assets/index.js'
 import { buildGoogleWitness } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import { validateGooglePublicInputs } from '../../../barretenberg/circuits/oidc_google/publicInputs.js'
-import { PROOF_ENGINE_SPANS, ProofEngine } from '../../../barretenberg/engine.js'
+import { ProofEngine } from '../../../barretenberg/engine.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { CeremonyError } from '../../../errors.js'
+import { operation } from '../../../events.js'
 import { parseJson } from '../../../json.js'
 import { isRecord } from '../../../primitives.js'
-import { Progress } from '../../../progress.js'
 import { readBody } from '../../../response.js'
 import type { ProverContext } from '../../context.js'
 import type { Identity } from '../../types.js'
@@ -15,16 +15,10 @@ import { parseOAuthReturn } from './oauth.js'
 import { decodeGoogleHeader, decodeGoogleIdToken } from './token.js'
 import type { GoogleProofV1 } from './types.js'
 
-const spans = [
-  { code: 'signing-key-fetch', label: 'Fetching signing key', weight: 3 },
-  { code: 'circuit-inputs', label: 'Preparing proof inputs', weight: 2 },
-  ...PROOF_ENGINE_SPANS,
-]
-
 export async function prove(
   context: ProverContext,
 ): Promise<{ identity: Identity<'google'>; proof: GoogleProofV1 } | null> {
-  const { request, signal, onProgress } = context
+  const { request, signal, emit } = context
   signal.throwIfAborted()
   const returned = parseOAuthReturn(context.oauthReturn)
   if (
@@ -32,10 +26,10 @@ export async function prove(
     returned.state !== oauthState(context.ceremonyId) ||
     request.codeVerifier !== null
   )
-    throw new CeremonyError('oauth-return', { cause: new Error('Invalid Google return') })
+    throw new CeremonyError('authorization', 'Invalid Google return')
   if (returned.outcome === 'denied') return null
   if (returned.outcome !== 'accepted')
-    throw new CeremonyError('oauth-return', { cause: new Error('Google authorization failed') })
+    throw new CeremonyError('authorization', 'Google authorization failed')
   const token = decodeGoogleIdToken(returned.idToken),
     header = token && decodeGoogleHeader(token.header)
   if (
@@ -45,22 +39,14 @@ export async function prove(
     token.claims.exp <= Date.now() / 1000 ||
     typeof header?.kid !== 'string'
   )
-    throw new CeremonyError('oauth-return', { cause: new Error('Invalid Google token') })
-  context.onStage('proof-preparation')
-  const progress = new Progress(spans, (step) =>
-    onProgress(step, performance.timeOrigin + performance.now()),
-  )
+    throw new CeremonyError('authorization', 'Invalid Google token')
   const engine = new ProofEngine({
     circuitUrl: resolveAsset(circuit),
     verificationKeyUrl: resolveAsset(verificationKey),
-    onProgress: (step) => {
-      if (step.status === 'started') progress.start(step.code)
-      else if (step.status === 'completed') progress.complete(step.code)
-      else progress.fail(step.code)
-    },
+    emit,
   })
   try {
-    const key = await progress.step('signing-key-fetch', async () => {
+    const key = await operation(emit, 'signing-key-fetch', async () => {
       const response = await fetch('https://www.googleapis.com/oauth2/v3/certs', {
         credentials: 'omit',
         redirect: 'error',
@@ -75,7 +61,7 @@ export async function prove(
       if (keys.length !== 1) throw new Error('Signing key is not unique')
       return keys[0]
     })
-    const built = await progress.step('circuit-inputs', () =>
+    const built = await operation(emit, 'circuit-inputs', () =>
       buildGoogleWitness(returned.idToken, key),
     )
     const raw = await engine.prove(built.inputs, signal),
@@ -92,6 +78,5 @@ export async function prove(
     return { identity: built.identity, proof }
   } finally {
     engine.destroy()
-    progress.failActive()
   }
 }

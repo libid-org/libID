@@ -32,7 +32,7 @@ it('checks profile identity encodings without reading evidence [LIBID-MOD-019]',
 
 it('narrows the separate identity/proof message and rejects nested identity [LIBID-MOD-019]', () => {
   const message = {
-    type: 'prover-identity-proof' as const,
+    type: 'identity-proof' as const,
     identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
     proof: {
       identityProof: new Uint8Array([1]),

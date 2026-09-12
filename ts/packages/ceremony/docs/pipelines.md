@@ -90,7 +90,7 @@ notarization module pins both immutable asset paths. Each remains a normal,
 independently cached response; the browser never downloads or unpacks a release
 archive. The [CCDP Distribution contract](distribution.md#proving-assets) owns their
 serving.
-Prover validates `AppStartProver.notaryAddress`, already
+Prover validates `ProveIdentity.notaryAddress`, already
 [selected by CCDPClient](client.md#notary-selection), and uses it
 unchanged. It owns no notary profiles, ledger dependency, or override. All addresses use
 the same proving resources and prefetch graph; Google receives null and makes
@@ -118,7 +118,7 @@ The semantic groups flatten to exactly 56 bb.js public-input fields. The module
 requires a canonical unpadded base64url nonce encoding exactly 32 bytes and
 uses those bytes as the candidate authorization digest. Neither Prover nor
 Client compares that candidate to the Application's separately constructed
-digest; `AppStartProver` carries no expected-digest field. The circuit
+digest; `ProveIdentity` carries no expected-digest field. The circuit
 re-encodes the candidate as the exact nonce and verifies the RS256
 signature and signed claims. The module then generates one proof and returns it
 with the signed expiry and selected JWK modulus as `GoogleProofV1`, with no

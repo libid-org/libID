@@ -37,7 +37,7 @@ its deterministic sibling `tlsn_wasm_bg.wasm`.
 ### Notary address
 
 The adapter receives the canonical HTTPS `notaryAddress` read from the ledger and frozen
-by [CCDPClient](client.md#notary-selection), through `AppStartProver`.
+by [CCDPClient](client.md#notary-selection), through `ProveIdentity`.
 It owns no profile defaults, ledger classification, or environment override.
 X uses that address for both browser sessions. GitHub passes it unchanged in
 its Bridge token request and uses it locally for identity notarization. Neither
