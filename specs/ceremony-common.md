@@ -229,6 +229,14 @@ identity-platform signing root, notary key, Platform Verifier, verifier governan
 browser supply chain, or Consumer Chain invalidates the properties that depend
 on it.
 
+Browser result acceptance is not ledger verification. Prover performs canonical
+parsing and local request/commitment consistency checks; Application validates
+the delivered structure. Neither performs local notary-signature verification
+or a separate Google nonce-versus-expected-digest comparison. Well-formed
+mismatches or forgeries can survive those browser checks but still fail the
+applicable downstream proof, digest-binding, trusted signing-key, or
+notary-signature check before an authoritative effect.
+
 - SP-BIND-01:
   Evidence produced by a ceremony discharges only for the Authorized
   Transaction Data committed in its Authorization Digest. Depends on
@@ -237,15 +245,18 @@ on it.
   conformance tests (supporting, not proving) plus the collision resistance of
   SHA-256 and keccak256.
 - SP-CLIENT-01:
-  The Canonical Runtime rejects evidence issued to an OAuth client other than
-  the one fixed by its immutable ceremony profile. Depends on ASM-PROV-04,
+  The browser Prover rejects a parsed OAuth client identifier differing from
+  the one fixed by its immutable ceremony profile. This checks local consistency,
+  not the authenticity of an attestation's claimed identifier; ledger
+  verification authenticates that identifier independently. Depends on ASM-PROV-04,
   ASM-PROV-05, ASM-PROV-07, ASM-NOTARY-01, ASM-PROOF-01, and ASM-BROWSER-01.
   Evidence: checked invariant in the Canonical Runtime, plus conformance tests
   (supporting).
 - SP-DELIVERY-01:
-  An authorization response for one OAuth client reaches only an origin
-  registered to that client, so a site borrowing another deployment's client
-  cannot receive its evidence. Depends on ASM-PROV-01, ASM-BROWSER-01.
+  The Identity Platform delivers an OAuth client's initial authorization
+  response only to that client's registered redirect origin. Subsequent browser
+  release follows REQ-COMMON-30, so borrowing another deployment's client does
+  not authorize receipt of its response. Depends on ASM-PROV-01, ASM-BROWSER-01.
   Evidence: external audit of the registered redirect URI list, plus
   conformance tests (supporting).
 - SP-EXCHANGE-01:
@@ -671,9 +682,11 @@ attestation to verify carries no value at all.
   The Deployment MUST register with each Identity Platform only redirect URIs
   whose origins it controls.
 - REQ-COMMON-30 (upholds SP-DELIVERY-01):
-  The Canonical Runtime MUST forward an authorization response only over a live
-  browser channel authenticated to an exact origin in the deployment-configured
-  allowed application-origin set. The set MAY contain more than one origin.
+  The Canonical Runtime MUST release an authorization response beyond Callback
+  only after authenticating the exact Application origin against the deployment
+  allowlist. The Canonical Runtime MUST carry the response only to the configured
+  Prover, preserving that authenticated origin restriction as defined by CCDP
+  (REQ-CCDP-03, REQ-CCDP-04). The set MAY contain more than one origin.
 - REQ-COMMON-31 (upholds SP-DELIVERY-01):
   The Canonical Runtime MUST ignore a forwarding target supplied in the
   redirect request.
@@ -1337,7 +1350,9 @@ the constructions that role implements.
 - TEST-COMMON-14 (exercises REQ-COMMON-30, REQ-COMMON-31):
   Each of two configured application origins can complete its own authenticated
   live channel; an unlisted origin is rejected, and a redirect request carrying
-  a forwarding target cannot change either result.
+  a forwarding target cannot change either result. Callback privately carries
+  the return only to the configured Prover; that Prover authenticates the same
+  Application origin before credential use.
 - TEST-COMMON-15 (exercises REQ-COMMON-29):
   Every redirect URI registered against each production client resolves to an
   origin the deployment controls. Verification: audit of the platform client
@@ -1363,7 +1378,8 @@ the constructions that role implements.
   moves no value; and a call whose native value differs from the quoted value
   is rejected at every hop.
 - TEST-COMMON-17 (exercises REQ-COMMON-33, REQ-COMMON-34B, REQ-COMMON-33A, REQ-COMMON-34, REQ-COMMON-34A, REQ-COMMON-34C, REQ-COMMON-34D, REQ-COMMON-34E):
-  An attestation carrying a foreign notary signature is rejected; a
+  At ledger verification, the trusted Notary Service rejects an attestation
+  carrying a foreign notary signature; a
   verification whose fee was not delivered is rejected; the charged fee is
   identical across differing attested content, authors, payers, and
   submitters; the current fee is readable before the Submission is submitted; and a
