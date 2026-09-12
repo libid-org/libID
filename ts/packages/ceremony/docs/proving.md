@@ -6,17 +6,17 @@ proving toolchain, prefetch/cache behavior, and worker graph. CCDP owns the
 browser documents, routes, isolation, presentation, messages, and navigation.
 
 The package API and result lifecycle are defined in
-[ARCHITECTURE.md](architecture.md). The browser boundary and its input/output
-messages are defined by [CCDP](documents.md#prover-get-prover). This document owns only the
+[Architecture](architecture.md). The browser boundary and its input/output
+messages are defined by [CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#prover-get-prover). This document owns only the
 proof-generation implementation and its pinned asset selection; the CCDP Distribution
 serves local proving resources from an origin independent of the
 [OAuth bridge](oauth-bridge.md), while declared external resources retain their
 upstream URLs.
 TLSNotary sessions, transcript disclosure, and attestation delivery are defined
-in [NOTARIZATION.md](notarization.md).
+in [Notarization](notarization.md).
 Normative proof relations and authorization semantics remain in the
-[common ceremony rules](../../../../specs/ceremony-common.md) and
-[identity-platform ceremonies](../../../../specs/platform-ceremonies.md).
+[common ceremony rules](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ceremony-common.md) and
+[identity-platform ceremonies](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md).
 
 ## Execution boundary
 
@@ -75,7 +75,7 @@ associated signature as produced by the pinned notary client. The signature
 covers exactly those attested-data bytes, including server identity, evidence
 time, transcript lengths, reveals, and commitments. Each attestation also
 contains the existing decoder's complete `decoded` view, defined in
-[NOTARIZATION.md](notarization.md#canonical-attested-data-decoder). It preserves
+[Notarization](notarization.md#canonical-attested-data-decoder). It preserves
 authority, creation time, transcript lengths, every reveal, and every
 commitment; it does not add hidden bearer bytes, commitment openings, or
 witnesses. The prover never normalizes or reserializes the signed bytes or
@@ -144,7 +144,7 @@ request, response parser, and transcript layout; the adapter owns the shared
 session, reveal, reclaimed-channel, attestation-delivery, and
 commitment-correlation mechanics. The full boundary, disclosure model, three
 browser call sites, and attestation handoff are defined in
-[NOTARIZATION.md](notarization.md).
+[Notarization](notarization.md).
 
 ## Platform pipelines
 
@@ -152,7 +152,7 @@ See [Platform proof pipelines](pipelines.md).
 
 ## Operation events
 
-All producers use the [same operation event feed](protocol.md#event). Core operation
+All producers use the [same operation event feed](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#event). Core operation
 meanings belong to CCDP. Platforms do not emit UI stages or ceremony success.
 Client derives presentation and terminal outcomes; popup UI subscribes locally.
 
@@ -208,7 +208,7 @@ configuration. The build owns local toolchain worker/WASM locations and pins
 bb.js's native external common reference string (CRS) requests. No runtime
 configuration can replace those dependencies.
 
-The [CCDP Distribution](distribution.md#proving-assets) serves companion chunks, spawner
+The [CCDP Distribution](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md#proving-assets) serves companion chunks, spawner
 and nested worker modules, WASM, and circuits from immutable same-origin paths.
 The bb asset declarations use `assets.external()` for CRS: those bodies are
 prefetched and fetched directly from Aztec's CDNs using bb.js's native URLs and
@@ -391,8 +391,8 @@ See [Prefetch and cache lifecycle](prefetch.md).
 
 ## Execution isolation
 
-[CCDP](documents.md#documents-and-routes) owns the Prover's isolated execution
-context; the [CCDP Distribution contract](distribution.md#protocol-resources) owns its HTTP
+[CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#documents-and-routes) owns the Prover's isolated execution
+context; the [CCDP Distribution contract](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md#protocol-resources) owns its HTTP
 policy and declared local/external resource graph. No request parameter selects a document
 role, asset, or CSP. `ProveIdentity` carries the Application's frozen
 `redirectUri`; its origin selects the OAuth Bridge for GitHub's fixed token
@@ -410,7 +410,7 @@ proof output.
 A live prover pins its loaded modules and assets. Proof-semantic changes use
 `PlatformCeremonyVersion`; host, cache, and equivalent SRS-fetch changes do not.
 All version axes are defined in
-[ARCHITECTURE.md](architecture.md#versioning-and-compatibility).
+[Architecture](architecture.md#versioning-and-compatibility).
 
 ## Implementation guide
 

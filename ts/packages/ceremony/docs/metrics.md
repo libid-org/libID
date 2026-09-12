@@ -1,6 +1,6 @@
 # Ceremony measurements
 
-The [operation event feed](protocol.md#event) is the input for UI, debugging,
+The [operation event feed](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#event) is the input for UI, debugging,
 tracing and metrics. There is no second metrics-record format. Core meanings and
 protocol consequences belong to CCDP; the [client guide](client.md#progress-cancellation-and-recovery)
 defines public subscriptions and the stage projection.
@@ -72,7 +72,7 @@ context and display text. They are separate from wire `Event`; a failed operatio
 need not have emitted its start. Cancellation and denial also terminate the
 ceremony without fabricating `prover.finished`.
 
-The display text follows [Abort’s boundary](protocol.md#abort): a bounded opaque
+The display text follows [Abort’s boundary](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#abort): a bounded opaque
 caught message, not an error-code catalog or serialized exception. It can help
 debug failures such as `Invalid GitHub id`. Bounding and rendering it as text do
 not guarantee that dependency messages contain no sensitive data. Telemetry

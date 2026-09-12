@@ -31,7 +31,8 @@ ownership or failure constraints. Internal comments explain reasons and invarian
 especially byte preservation, concurrency and trust boundaries. Avoid restating
 names or types, and keep comments adjacent to the code they explain.
 
-These docs own cross-component behavior, deployment and qualification requirements.
+The normative specs own cross-component interoperability; these guides own
+implementation, deployment tooling, and qualification evidence.
 Implementation guides link to code for local mechanics; stable test IDs remain in
 [the requirement index](test-plan.md) and [traceability](traceability.md). Biome checks
 mechanical style; comment usefulness and declaration spacing remain review concerns.
