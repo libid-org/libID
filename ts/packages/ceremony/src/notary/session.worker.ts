@@ -1,3 +1,4 @@
+import { errorMessage } from '../errors.js'
 import {
   correlateAttestation,
   correlateOpenings,
@@ -283,8 +284,8 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
     throw new Error('Invalid notarization sequence')
   }
   function dispatch(data: Record<string, unknown>) {
-    void work(data).catch(async () => {
-      reply({ type: 'error' })
+    void work(data).catch(async (error) => {
+      reply({ type: 'error', message: errorMessage(error) })
       stage = 'done'
       await io?.close()
       port.close()

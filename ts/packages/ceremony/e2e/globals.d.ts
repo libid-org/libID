@@ -1,12 +1,14 @@
 import type { CeremonyEvent } from '../src/ccdp/client/index.js'
+import type { Events } from '../src/events.js'
 import type { IdentityResult } from '../src/index.js'
 
 declare global {
   interface Window {
-    failureCode?: import('../src/errors.js').FailureCode
+    failureEvent?: string
     ready: boolean
     completed: IdentityResult<'google'>[]
-    testProgress: { update(value: number, label: string): void; stop(): void }
+    testEvents: Events
+    testView: { stop(): void }
     result: IdentityResult<'google'> | { status: 'failed' } | undefined
     events: CeremonyEvent[]
     ceremonyClosed: unknown

@@ -1,3 +1,5 @@
+import { CeremonyStage, type Events } from '../../events.js'
+
 /** Package-owned DOM: no remote resources, application markup, or styling inputs. */
 export function view(title: string) {
   const root = document.getElementById('libid-root')
@@ -16,39 +18,52 @@ export function view(title: string) {
   return { root, label }
 }
 
-export function progressView() {
-  const { root, label } = view('Preparing proof'),
-    bar = document.createElement('progress')
-  bar.max = 1
-  bar.value = 0
-  bar.setAttribute('aria-label', 'Proof progress')
+/** The same local projection as the Application; subscriptions never mediate wire delivery. */
+export function eventView(events: Events, platform: string) {
+  const { root, label } = view('Preparing your ceremony')
+  const bar = document.createElement('progress')
+  bar.setAttribute('aria-label', 'Ceremony in progress')
   bar.style.cssText = 'width:100%;accent-color:#6556d8'
   root.append(bar)
-  const style = document.createElement('style')
-  style.textContent =
-    'progress::-webkit-progress-value{transition:width .3s}progress::-moz-progress-bar{transition:width .3s}.libid-activity{height:2px;background:linear-gradient(90deg,transparent,#6556d8,transparent);animation:libid-shimmer 1.5s linear infinite}@keyframes libid-shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}@media(prefers-reduced-motion:reduce){.libid-activity{animation:none}}'
-  const activity = document.createElement('div')
-  activity.className = 'libid-activity'
-  activity.setAttribute('aria-hidden', 'true')
-  root.style.overflow = 'hidden'
-  root.append(style, activity)
   const hint = document.createElement('p')
   hint.setAttribute('role', 'status')
-  root.append(hint)
-  const timer = setTimeout(() => {
-    hint.textContent =
-      'Still proving. In Vanadium, enabling JavaScript JIT in site controls may help.'
-  }, 15000)
-  return {
-    update(value: number, text: string) {
-      bar.value = value
-      label.textContent = text
-    },
-    stop() {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const off = events.onStage((event) => {
+    if (
+      event.status === 'active' &&
+      event.stage !== 'preparation' &&
+      event.stage !== 'authorization' &&
+      timer === undefined
+    )
+      timer = setTimeout(() => {
+        hint.textContent =
+          'Still proving. In Vanadium, enabling JavaScript JIT in site controls may help.'
+        root.append(hint)
+      }, 15000)
+    label.textContent =
+      event.status === 'active'
+        ? CeremonyStage.message(event.stage, platform)
+        : event.status === 'completed'
+          ? 'Proof received'
+          : event.status === 'denied'
+            ? 'Authorization declined. Return to your application.'
+            : event.status === 'cancelled'
+              ? 'Canceled. Return to your application.'
+              : `${event.message ?? 'Ceremony failed.'} Return to your application.`
+    if (event.status !== 'active') {
       clearTimeout(timer)
       hint.remove()
-      activity.remove()
-      style.remove()
+      bar.remove()
+    }
+  })
+  return {
+    stop() {
+      off()
+      clearTimeout(timer)
+      hint.remove()
+    },
+    message(text: string) {
+      label.textContent = text
     },
   }
 }

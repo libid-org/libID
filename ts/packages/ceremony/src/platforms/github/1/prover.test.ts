@@ -21,7 +21,6 @@ vi.mock('../../../assets/index.js', async (original) => ({
 }))
 
 vi.mock('../../../barretenberg/engine.js', () => ({
-  PROOF_ENGINE_SPANS: [],
   ProofEngine: class {
     destroy = destroy
   },
@@ -62,10 +61,9 @@ function context(outcome: Record<string, string>): ProverContext {
   return {
     ceremonyId,
     signal: new AbortController().signal,
-    onProgress: vi.fn(),
-    onStage: vi.fn(),
+    emit: vi.fn(),
     request: {
-      type: 'app-start-prover',
+      type: 'prove-identity',
       platformId: 'github',
       platformCeremonyVersion: 1,
       clientId: 'client',
@@ -91,7 +89,7 @@ it('returns detailed GitHub denial before any token exchange', async () => {
   vi.stubGlobal('fetch', fetch)
   const input = context({ error: 'access_denied', error_description: 'Denied', error_uri: '/help' })
   await expect(prove(input)).resolves.toBeNull()
-  expect(input.onStage).not.toHaveBeenCalled()
+  expect(input.emit).not.toHaveBeenCalled()
   expect(fetch).not.toHaveBeenCalled()
   expect(created).not.toHaveBeenCalled()
 })
@@ -100,7 +98,7 @@ it('rejects a mismatched issuer before token exchange', async () => {
   const fetch = vi.fn()
   vi.stubGlobal('fetch', fetch)
   await expect(prove(context({ code: 'test', iss: 'https://other.test' }))).rejects.toMatchObject({
-    code: 'oauth-return',
+    event: 'authorization',
   })
   expect(fetch).not.toHaveBeenCalled()
   expect(created).not.toHaveBeenCalled()
@@ -117,10 +115,12 @@ it('classifies token admission failure and retains its local cause', async () =>
   )
   const input = context({ code: 'test' })
   await expect(prove(input)).rejects.toMatchObject({
-    code: 'token-exchange',
+    event: 'token-attestation',
     cause,
   })
-  expect(input.onStage).toHaveBeenCalledExactlyOnceWith('code-exchange')
+  expect(input.emit).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ event: 'token-attestation', phase: 'started' }),
+  )
   expect(created.mock.calls[0][1].aborted).toBe(true)
   expect(send).not.toHaveBeenCalled()
 })
@@ -169,7 +169,7 @@ it.each(['setup', 'token'])(
       expect(send).not.toHaveBeenCalled()
       ready()
     }
-    expect(await result).toBe(sent)
+    expect(await result).toMatchObject({ message: sent.message, event: 'identity-fetch' })
     expect(send).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         url: 'https://api.github.com/user',
@@ -203,7 +203,7 @@ it('setup failure cancels the Bridge fetch without masking its notary error [LIB
     ),
   )
   const result = prove(context({ code: 'test' })).catch((error) => error)
-  const failure = new CeremonyError('notarization')
+  const failure = new CeremonyError('identity-fetch', 'Notary failed')
   setup.reject(failure)
   expect(await result).toBe(failure)
   expect(fetchSignal.aborted).toBe(true)
@@ -236,7 +236,7 @@ it('cancellation stops both pending GitHub branches [LIBID-PROVER-018]', async (
   input.signal = abort.signal
   const result = prove(input).catch((error) => error)
   abort.abort()
-  expect(await result).toBe(abort.signal.reason)
+  expect(await result).toMatchObject({ message: abort.signal.reason.message })
   expect(setupSignal.aborted).toBe(true)
   expect(fetchSignal.aborted).toBe(true)
   expect(send).not.toHaveBeenCalled()
@@ -262,7 +262,7 @@ it('prepared-runtime failure aborts the pending Bridge request [LIBID-PROVER-018
   const result = prove(context({ code: 'test' })).catch((error) => error)
   await prepare.mock.results[0].value
   // Unlike setup rejection, this failure happens after preparation has resolved.
-  const failure = new CeremonyError('notarization')
+  const failure = new CeremonyError('identity-fetch', 'Notary failed')
   runtimeFailure.current.abort(failure)
   expect(await result).toBe(failure)
   expect(fetchSignal.aborted).toBe(true)

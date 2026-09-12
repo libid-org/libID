@@ -65,13 +65,13 @@ sequenceDiagram
     P->>P: Authenticate Application
     P->>R: Navigate with private OAuth-return fragment
     R-->>C: Report Prover ready
-    C->>R: AppStartProver
+    C->>R: ProveIdentity
     R->>R: Validate retained OAuth return
     alt User denied
-        R-->>C: CancelCeremony
+        R-->>C: Cancel
         C-->>A: IdentityResult denied
     else User approved
-        R-->>C: Progress, then ProverIdentityProof
+        R-->>C: Progress, then IdentityProof
         C->>C: Validate result shape and assemble OAuthProof
         C-->>A: IdentityResult accepted with identity and oauthProof
         A->>A: Commit Job successor before downstream use
@@ -166,15 +166,15 @@ field types and bounds. Decoding returns the received object without coercion,
 normalization, defaults, field removal, or replacement allocation.
 
 ```ts
-const ProverIdentityProof = {
-  type: 'prover-identity-proof',
+const IdentityProof = {
+  type: 'identity-proof',
 
-  decode(value: unknown): ProverIdentityProof {
+  decode(value: unknown): IdentityProof {
     assertMessage(value, this.type, ['identity', 'proof'])
     assertIdentity(value.identity)
     return value
   },
-} as const satisfies MessageType<ProverIdentityProof>
+} as const satisfies MessageType<IdentityProof>
 ```
 
 Each endpoint registers only its permitted inbound companions with its popup
@@ -212,7 +212,7 @@ cache. Both Prover responses embed the same entrypoint, which configures
 `PopupConnection.accept` with the Distribution's isolation fallback URL.
 The popup package owns isolation selection and carrier continuity. Prover
 registers its CCDP handlers, awaits connection readiness, and only then emits
-`ProverReady` and accepts proof input. It joins the cached flights in the active
+`prover.started` and accepts proof input. It joins the cached flights in the active
 top-level document. The OAuth-bridge Callback installs no Worker.
 `notary` is an internal leaf shared by
 the X and GitHub prover leaves, not another package entrypoint or artifact.
@@ -276,8 +276,8 @@ The package-facing API has two entrypoints:
 
 | Export | Contract |
 |---|---|
-| `@libid/ceremony` | `supportedPlatforms`, `CeremonyError`; types `PlatformId`, `SupportedCeremonyVersion`, `Identity`, `IdentityResult`, `OAuthProof`, `NotaryAttestation`, and `FailureCode` |
-| `@libid/ceremony/ccdp/client` | `createCCDPClient`, `CeremonyStage`; types `CCDPClient`, `Ceremony`, and `CeremonyEvent`, plus the root exports |
+| `@libid/ceremony` | `supportedPlatforms`, `CeremonyError`; types `PlatformId`, `SupportedCeremonyVersion`, `Identity`, `IdentityResult`, `OAuthProof`, `NotaryAttestation` |
+| `@libid/ceremony/ccdp/client` | `createCCDPClient`, `CeremonyStage`; types `CCDPClient`, `Ceremony`, `CeremonyEvent`, `OperationEvent`, `StageEvent`, and `CeremonyStatus`, plus the root exports |
 
 `supportedPlatforms` describes this package's closed implementation catalog.
 `CCDPClient.enabledPlatforms` filters it to the platforms advertised by the Bridge
@@ -303,7 +303,7 @@ See [Client API and lifecycle](client.md).
 
 [PROVING.md](proving.md) defines pipelines, asset use, workers, caching, and
 proof delivery; [CCDP_DISTRIBUTION.md](distribution.md) defines asset deployment. After
-`ProverReady`, the client sends one `AppStartProver`, validates the returned
+`prover.started`, the client sends one `ProveIdentity`, validates the returned
 identity and platform proof's structure, and assembles `IdentityResult`.
 
 ## Progress, cancellation, and recovery

@@ -324,21 +324,27 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
   )
 })
 
-test('package UI has bounded progress and a nonblocking 15-second hint [LIBID-BROWSER-024] [LIBID-BROWSER-025]', async ({
+test('package UI projects stages with indeterminate progress and a nonblocking 15-second hint [LIBID-BROWSER-024] [LIBID-BROWSER-025]', async ({
   app,
   page,
 }) => {
   await page.clock.install()
   await page.goto(`${app}/ui`)
-  await expect(page.getByRole('progressbar')).toHaveAttribute('value', '0')
-  await expect(page.getByText('Preparing proof')).toBeVisible()
+  await expect(page.getByRole('progressbar')).not.toHaveAttribute('value')
+  await expect(page.getByText('Preparing your identity proof')).toBeVisible()
   await page.clock.runFor(15000)
   await expect(page.getByText(/Still proving/)).toBeVisible()
   await page.evaluate(() => {
-    window.testProgress.update(0.5, 'Generating proof')
-    window.testProgress.stop()
+    window.testEvents.emit({
+      event: 'zk-proof-generation',
+      phase: 'started',
+      timestamp: performance.timeOrigin + performance.now(),
+      status: 'active',
+    })
+    window.testView.stop()
   })
-  await expect(page.getByRole('progressbar')).toHaveAttribute('value', '0.5')
+  await expect(page.getByRole('progressbar')).not.toHaveAttribute('value')
+  await expect(page.getByText('Creating your identity proof with ZK')).toBeVisible()
   await expect(page.getByText(/Still proving/)).toHaveCount(0)
 })
 
@@ -361,7 +367,7 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
     await page.locator('#launch').click()
     await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'failed' })
     expect(oauth).toBe(0)
-    expect(await page.evaluate(() => window.failureCode)).toBe('prefetch-worker')
+    expect(await page.evaluate(() => window.failureEvent)).toBe('prefetch-dispatch')
   } finally {
     await context.request.get(`${control}&restore`)
   }
@@ -424,9 +430,9 @@ test('Callback clears unsupported versions and unconfigured direct visits locall
     await expect(page).toHaveURL(bridge + path.split(/[?#]/)[0])
   }
   await page.goto(`${ccdp}/ccdp/callback.html#state=v1.${id}`)
-  await expect(page.getByRole('status')).toHaveText(
-    'Invalid OAuth callback or deployment configuration. (callback-input) Return to your application.',
-  )
+  // Native JSON error wording differs across engines; the bounded text remains local.
+  await expect(page.getByRole('status')).toContainText('Return to your application.')
+  await expect(page.getByRole('status')).toContainText(/JSON/i)
   expect(page.url()).toBe(`${ccdp}/ccdp/callback.html`)
   expect(outbound).toEqual([])
 })

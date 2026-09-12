@@ -11,7 +11,7 @@ for every stable requirement ID, including partial, external and deferred covera
 | Input | Pin |
 |---|---|
 | Workspace main | `4f205fdf733e3c137543f5f4a8f7281f74377d02` |
-| Architecture PR #13 | `0259e72c184e2be7b78a0ad92188e8722d8d6daf`; eight source documents consolidated with implementation guides in the package docs directory; package composition updated for grouped CCDP documents |
+| Architecture PR #13 | `dcec48e05eed04a02971a41a2237b89e5ab9f393` plus the reviewed working CCDP/TEST_PLAN event update; consolidated package guides include the approved API and event-model decisions described below |
 | Popup PR #25 / stack base | `1c5b78c6f9d783f7b5c536f6018d724b3ced9132` |
 | Circuits release | `v0.3.0`, commit `91bc3446eeaa50ab2056d88dd9941374aa4fa34c` |
 | Latest circuits source checked | `b25bc5b89e595f5bb6049c50446a0edcde47da58`; only README changes after release |
@@ -180,7 +180,7 @@ complete cache/update fault matrix are not claimed; their remaining properties a
 - The known stale `/ccdp/v1/` registration is retired only when all its workers use
   the exact canonical script URL. Root is selected explicitly. Unrelated scopes
   are untouched. Firefox's isolated document can initially be uncontrolled, so a
-  same-origin root-worker claim handshake finishes before `ProverReady`. This is
+  same-origin root-worker claim handshake finishes before `prover.started`. This is
   cache ownership, not popup carrier or MessagePort continuity machinery.
 - Callback is self-contained. Prefetch/Prover HTML clears the URL in the first
   inline script before its inline module entry imports dependencies. Build-owned
@@ -260,17 +260,10 @@ No chain, contract deployment, RPC, wallet or local browser verifier is required
 GitHub return parsing now checks the advertised issuer and accepts bounded provider
 error details. Synthetic parser regressions cover these shapes; they do not qualify
 a live GitHub ceremony or the separately reported notary attestation failure.
-`AbortCeremony` now carries a closed failure code and its safe message; Client
-exposes `CeremonyError` instead of discarding the reason. This is a user-requested
-extension of PR #13's reason-only record; deploy matching Client/CCDP builds.
-Original causes remain local where retained. Raw diagnostics and a developer modal
-remain design work rather than an implicit exception to the privacy boundary.
-
-This fix passed 217 unit tests, 15 native-SWS/build/loader checks, all 55
-browser integration cases and 20 dev frontend cases. Every browser profile
-received the safe worker-failure code through the actual popup package and
-generated a Google fixture proof verified against the released key. TypeScript,
-production/development builds and three focused reviews passed.
+The earlier error-reporting run passed 217 unit tests, 15 native-SWS/build/loader
+checks, 55 browser integration cases and 20 dev frontend cases. Those counts
+belong to the previous protocol. The current unified event/Abort contract is
+described in [CCDP](protocol.md); its validation is recorded separately below.
 
 ## Token-layout regression run (2026-09-10)
 
@@ -361,7 +354,7 @@ shared CCDP distribution consumes the supplied address without a ledger dependen
   canonical HTTPS notary origin before OAuth. Missing/throwing methods and invalid
   results fail construction; later mutation cannot change a run. Google never
   calls the address method and sends null.
-- `AppStartProver.notaryAddress` replaces its encoded ledger field. Prover has no
+- `ProveIdentity.notaryAddress` replaces its encoded ledger field. Prover has no
   ledger dependency or notary defaults. All X sessions and GitHub's token and
   identity sessions use the same address; failures never switch destinations.
 - CCDP embeds no notary addresses or development overrides. The application can
@@ -559,3 +552,41 @@ invalid code; malformed redirects and private notary egress remain rejected.
 Security/correctness, API and simplicity reviews found no upgrade issues.
 This check does not establish fresh OAuth consent, successful identity
 attestations or qualification against the updated contract verifier.
+
+## Unified operation events (2026-09-12)
+
+The coordinated Client/CCDP update replaces the previous wire catalog with
+`ProveIdentity`, `IdentityProof`, `Cancel`, `Abort` and `Event`. No old discriminator
+or readiness alias remains. The design follows the approved event model and the
+working CCDP/TEST_PLAN update following architecture PR #13 at
+`dcec48e05eed04a02971a41a2237b89e5ab9f393`. Deploy matching Client and CCDP builds.
+
+Validation: 403 unit tests, 17 distribution/native-loader/SWS checks, package and
+harness TypeScript, declaration emission, dev frontend build, and workspace style
+checks pass. All 75 dev browser cases pass, including mobile emulation. The six
+desktop HTTP/HTTPS profiles exercised 72 browser cases: 60 passed initially; the
+UI/error-text migration failures were corrected and all 30 targeted rechecks
+passed, including repeated navigation and real Google fixture proofs in Chromium,
+Firefox and WebKit. Each generated fixture proof was independently verified
+against the released key. The qualification server was reloaded with the matching
+generated CSP/header configuration after rebuilding the static files.
+
+Security/correctness, API ergonomics and simplicity reviews were completed and
+findings addressed. Tests preserve exactly one terminal update, readiness without
+subscribers, opaque failure context, occurrence timestamps, and independent X
+attestation completion without premature proof delivery. All 154 existing
+requirement IDs are retained; four event/lifecycle IDs from the updated index are
+added to [traceability](traceability.md).
+
+Implementation choices are explicit: popup origin authentication plus CCDP state
+validation require no new document-role handshake; missing observational
+`authorization.finished` can advance presentation at `prover.started` without
+inventing timing; the native progress bar is indeterminate and retains the
+15-second slow-proving hint. Caught messages follow the display boundary in
+[Abort](protocol.md#abort), not a blanket credential-redaction guarantee. The
+separate metrics-record design is replaced by the event feed; complete resource
+accounting/export and the credential-wait extension remain deferred.
+
+This run does not establish new live OAuth, matched-notary concurrency, or physical
+mobile qualification. Synthetic X/GitHub timing tests are orchestration evidence,
+not cryptographic or live-service evidence.

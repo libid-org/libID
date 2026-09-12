@@ -47,8 +47,8 @@ anchor.addEventListener('click', (event) => {
   const ceremony = client.new(
     connection,
     id,
-    new URL(location.href).searchParams.get('ledger') === 'test:mainnet' ? mainnet : testnet,
     'google',
+    new URL(location.href).searchParams.get('ledger') === 'test:mainnet' ? mainnet : testnet,
     new Uint8Array(32),
     new Uint8Array([1]),
   )
@@ -64,7 +64,7 @@ anchor.addEventListener('click', (event) => {
     .catch((error: unknown) =>
       Object.assign(window, {
         result: { status: 'failed' },
-        failureCode: error instanceof CeremonyError ? error.code : undefined,
+        failureEvent: error instanceof CeremonyError ? error.event : undefined,
       }),
     )
   if (popup.opened) event.preventDefault()

@@ -20,14 +20,14 @@ Normative proof relations and authorization semantics remain in the
 
 ## Execution boundary
 
-After CCDP accepts one `AppStartProver`, the selected platform/version prover
+After CCDP accepts one `ProveIdentity`, the selected platform/version prover
 leaf parses the retained OAuth query/fragment from the private navigation
 handoff. It enforces that profile's exact return transport and field grammar,
 client checks, and state matching against the authenticated ceremony ID and
 CCDP version before any token exchange or proof work. A valid denial produces
 cancellation; a malformed or mismatched return produces technical failure.
-The Prover entrypoint maps those outcomes to `CancelCeremony` or
-`AbortCeremony` without adding message logic to the platform leaf.
+The Prover entrypoint maps those outcomes to `Cancel` or
+`Abort` without adding message logic to the platform leaf.
 
 For accepted OAuth, the leaf joins the selected asset fetches, constructs its
 witness, generates its proof, and returns bounded platform steps followed by
@@ -52,7 +52,7 @@ or verify `OAuthProof`, call a Ledger Verifier, or persist credential-bearing st
 Ceremony Client structurally validates the identity and selected proof variant,
 then returns `identity` and `oauthProof` separately; it does not repeat evidence
 parsing or identity extraction. Prover inputs, workers, witnesses,
-and outputs are cleared after delivery, `CancelCeremony`, `AbortCeremony`, failure, or context
+and outputs are cleared after delivery, `Cancel`, `Abort`, failure, or context
 destruction.
 
 ## Proof delivery
@@ -67,7 +67,7 @@ platform proof and flattens their named values into the circuit's 56 public-inpu
 fields only at the verifier/transaction-encoding boundary; the Ceremony Client
 does not verify the proof.
 
-For X, `ProverIdentityProof.proof` is `XProofV1`; for GitHub it is `GitHubProofV1`.
+For X, `IdentityProof.proof` is `XProofV1`; for GitHub it is `GitHubProofV1`.
 Each independently contains `bearerLinkProof` and the named `tokenAttestation`
 and `identityAttestation`; the shared `identity` is a sibling message field.
 Each attestation preserves the byte-exact attested-data serialization and its
@@ -99,7 +99,7 @@ binds the token exchange to the Authorization Digest outside the circuit.
 The platform delivery-to-output mapping is closed, but CCDP treats `proof` as
 an unknown logical value:
 
-| Platform | `ProverIdentityProof.proof` (identity is separate) | Ceremony Client additions | OAuth proof |
+| Platform | `IdentityProof.proof` (identity is separate) | Ceremony Client additions | OAuth proof |
 |---|---|---|---|
 | Google | `GoogleProofV1 { identityProof, tokenExpiresAt, signingKeyModulus }` | version and nonce | `OAuthProof<'google'>` with ceremony version `1` |
 | X | `XProofV1 { bearerLinkProof, tokenAttestation, identityAttestation }` | version and nonce | `OAuthProof<'x'>` with ceremony version `1` |
@@ -112,7 +112,7 @@ validator is selected from the live Ceremony's platform and ceremony version,
 not from a discriminator inside the nested value. It rejects unknown fields, malformed arrays and bytes, and
 profile-bound violations. The result validator also checks the separate
 `identity` against the selected platform and frozen client, then returns a
-typed `ProverIdentityProof`. It checks the decoded view's structure, not its
+typed `IdentityProof`. It checks the decoded view's structure, not its
 agreement with signed bytes; that decoding belongs to the Prover. CCDP never
 changes when another platform proof type is added.
 
@@ -150,75 +150,36 @@ browser call sites, and attestation handoff are defined in
 
 See [Platform proof pipelines](pipelines.md).
 
-## Platform progress
+## Operation events
 
-Each profile owns a closed catalog of advisory diagnostic spans after
-`AppStartProver`. The Ceremony Client owns the common `proof-generation`
-stage; platform-version prover leaves emit only their version-owned spans. Each
-catalog entry also owns one bounded user-facing label. Labels describe current
-work, such as **Loading proving assets**, **Connecting to notary**, **Preparing
-proof inputs**, or **Generating proof**; they never contain a credential,
-identity, URL, caller value, raw exception, or raw service error.
-Collection, privacy, aggregation, and optional export are defined in
-[METRICS.md](metrics.md).
+All producers use the [same operation event feed](protocol.md#event). Core operation
+meanings belong to CCDP. Platforms do not emit UI stages or ceremony success.
+Client derives presentation and terminal outcomes; popup UI subscribes locally.
 
-Every profile includes these spans:
+The proof engine adds these implementation operations: `proof-worker-bootstrap`,
+`proof-wasm-load`, `proof-circuit-load`, `proof-backend-initialization`, `witness`,
+`proof`, and `proof-backend-destroy`. Google also records `signing-key-fetch`;
+platforms record `circuit-inputs` around witness-input construction. These names
+have start/finish occurrence timestamps and no separate platform-step envelope.
 
-- readiness: parent `prover-readiness`, with `asset-prefetch` and `runtime-load`
-  children which may overlap;
-- proof engine: `proof-worker-bootstrap`, then concurrent `proof-wasm-load`,
-  `proof-circuit-load` and `proof-backend-initialization`; `witness` may start
-  after the first two and input preparation, overlapping backend initialization.
-  Both witness and backend must finish before `proof` → `proof-backend-destroy`.
+`zk-proof-preparation` begins with engine construction while input preparation
+runs concurrently. It finishes when both inputs and the entire backend are ready.
+Witness execution can begin once Noir and inputs are ready, before bb finishes
+initializing; `zk-proof-generation` therefore may overlap preparation. It finishes
+when ZK proof generation completes, independently of pending attestations.
 
-Profiles add these spans alongside proof-engine initialization:
+X token and identity session setup still overlap. `token-fetch` ends after token
+parsing; identity HTTP then uses the bearer without waiting for token attestation.
+Each attestation operation begins at reveal and finishes when its full correlated
+attestation is available. GitHub's `token-attestation` covers the complete Bridge
+request/admission and provides its bearer; it has no separate `token-fetch` event.
+Identity parsing belongs to `identity-fetch`, so parser failures retain that context.
 
-| Profile | Platform-step codes |
-|---|---|
-| `google` | `token-decoding` → `signing-key-fetch` → `signing-key-selection` → `circuit-inputs` |
-| `x` | `notary-worker-bootstrap` → `notary-wrapper-load` → `notary-wasm-instantiation` → `notary-worker-initialization`; concurrent parents `token-session` and `identity-session`, each containing `*-websocket-connect` → `*-prover-setup` → `*-platform-request` → `*-reveal` → `*-attestation`; identity adds `identity-credential-wait` between setup and request; `circuit-inputs` starts once both required openings are available, without waiting for attestations |
-| `github` | `token-exchange-request` → `token-exchange-validation` → `notary-initialization` → `identity-session` → `identity-attestation` → `circuit-inputs` |
-
-`prover-readiness` covers awaiting selected artifact single flights; downloads
-may already have started during prefetch. X and GitHub open their browser notary
-WebSockets alongside TLSNotary runtime initialization; each session's setup waits
-for both. X's session setups overlap; only `identity-platform-request` waits for
-the parsed token-response bearer.
-`identity-credential-wait` measures that remaining wait after identity setup
-completes, separate from setup and request latency. If the bearer is already
-available it still emits a started/completed pair with no artificial delay.
-`witness` waits for `circuit-inputs`, `proof-wasm-load` and `proof-circuit-load`.
-It can overlap `proof-backend-initialization` and attestation spans. Proof generation
-waits for both witness and backend. `proof-wasm-load` covers concurrent ACVM/ABI
-initialization; `proof-circuit-load` covers the circuit/key fetches and ACIR
-decoding. `proof-backend-initialization` covers bb WASM, threads and CRS setup,
-independently of those two resource-loading spans.
-GitHub exposes its one server request and local validation
-of the complete response, but no fictional server-internal progress.
-
-On a successful run, each code emits `started` once and `completed` once. On
-any run, every started span emits exactly one terminal `completed` or `failed`;
-a failure does not invent later spans. Message order preserves that per-span
-lifecycle and the parent/dependency rules above; unrelated spans may overlap
-and therefore have no total order. A cache hit emits the same lifecycle. OAuth,
-isolation, delivery, and Client result assembly are represented elsewhere and do
-not add platform steps. Events remain credential-free; implementations may
-derive durations from their prover-stamped timestamps.
-
-Each leaf span has one nonnegative presentation weight based initially on
-measured typical duration for that platform/version. Parent spans have zero
-weight so nested and parallel work is not counted twice. Leaf weights form one
-positive closed total. Every emitted event carries
-`progress = 0.95 * completedWeight / totalWeight`; a `started` event changes the
-label and shimmer but retains the last completed weight, while a `completed`
-event advances the monotonic target. Parallel completion order therefore cannot
-move progress backwards. `ProverIdentityProof`, outside `PlatformStep`, alone
-makes the renderer show `1`.
-
-Weights improve the rough visual distribution of milestones but make no time
-or completion guarantee. The renderer does not make the bar creep between
-events. Updating labels or weights is presentation tuning; changing codes or
-their causal lifecycle remains a platform-ceremony-version change.
+Successful operations finish once. Interrupted operations have no fabricated finish;
+Abort identifies the failure. Worker events carry worker occurrence times through
+the Prover unchanged. These fine-grained operations are observational; backend teardown, final correlations,
+delivery and client result assembly must still succeed. For aggregation and optional
+export, see [metrics](metrics.md).
 
 ## Shared toolchain and assets
 
@@ -433,7 +394,7 @@ See [Prefetch and cache lifecycle](prefetch.md).
 [CCDP](documents.md#documents-and-routes) owns the Prover's isolated execution
 context; the [CCDP Distribution contract](distribution.md#protocol-resources) owns its HTTP
 policy and declared local/external resource graph. No request parameter selects a document
-role, asset, or CSP. `AppStartProver` carries the Application's frozen
+role, asset, or CSP. `ProveIdentity` carries the Application's frozen
 `redirectUri`; its origin selects the OAuth Bridge for GitHub's fixed token
 route. The implementation exact-validates that canonical HTTPS origin and
 derived route before use. The response does not embed or enumerate Bridge
@@ -471,6 +432,6 @@ in the Google platform module. Each platform composes its asset list once for
 execution and prefetch.
 [platforms/context.ts](../src/platforms/context.ts) defines the Prover page input
 to those pipelines; the proving engine has no page lifecycle responsibility.
-[progress.ts](../src/progress.ts) accounts for completed work. The browser
+[events.ts](../src/events.ts) carries operation occurrences and projects presentation. The browser
 performs no final cryptographic proof verification; qualification uses released keys
 in a separate harness.

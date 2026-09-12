@@ -175,7 +175,8 @@ it.each(['backend', 'resources'])(
       await expect
         .poll(() =>
           w.postMessage.mock.calls.some(
-            ([m]) => m.code === 'proof-backend-initialization' && m.status === 'completed',
+            ([m]) =>
+              m.event?.event === 'proof-backend-initialization' && m.event?.phase === 'finished',
           ),
         )
         .toBe(true)
@@ -186,7 +187,7 @@ it.each(['backend', 'resources'])(
       await expect
         .poll(() =>
           w.postMessage.mock.calls.some(
-            ([m]) => m.code === 'proof-circuit-load' && m.status === 'completed',
+            ([m]) => m.event?.event === 'proof-circuit-load' && m.event?.phase === 'finished',
           ),
         )
         .toBe(true)
@@ -226,7 +227,7 @@ it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]',
   await expect
     .poll(() =>
       w.postMessage.mock.calls.some(
-        ([m]) => m.code === 'proof-backend-initialization' && m.status === 'completed',
+        ([m]) => m.event?.event === 'proof-backend-initialization' && m.event?.phase === 'finished',
       ),
     )
     .toBe(true)
@@ -246,7 +247,7 @@ it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]'
   await expect
     .poll(() =>
       w.postMessage.mock.calls.some(
-        ([m]) => m.code === 'proof-circuit-load' && m.status === 'completed',
+        ([m]) => m.event?.event === 'proof-circuit-load' && m.event?.phase === 'finished',
       ),
     )
     .toBe(true)
@@ -273,8 +274,8 @@ it.each(['witness', 'backend'])(
       .poll(() =>
         w.postMessage.mock.calls.some(
           ([m]) =>
-            m.code === (first === 'witness' ? 'witness' : 'proof-backend-initialization') &&
-            m.status === 'completed',
+            m.event?.event === (first === 'witness' ? 'witness' : 'proof-backend-initialization') &&
+            m.event?.phase === 'finished',
         ),
       )
       .toBe(true)
@@ -315,7 +316,9 @@ it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-01
   witness.resolve({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
   await expect
     .poll(() =>
-      w.postMessage.mock.calls.some(([m]) => m.code === 'witness' && m.status === 'completed'),
+      w.postMessage.mock.calls.some(
+        ([m]) => m.event?.event === 'witness' && m.event?.phase === 'finished',
+      ),
     )
     .toBe(true)
   expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'engine-error')).toHaveLength(1)
@@ -336,7 +339,9 @@ it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER
   proof.resolve({ proof: [new Uint8Array(32)], publicInputs: [] })
   await expect
     .poll(() =>
-      w.postMessage.mock.calls.some(([m]) => m.code === 'proof' && m.status === 'completed'),
+      w.postMessage.mock.calls.some(
+        ([m]) => m.event?.event === 'proof' && m.event?.phase === 'finished',
+      ),
     )
     .toBe(true)
   expect(mocks.destroy).toHaveBeenCalledOnce()

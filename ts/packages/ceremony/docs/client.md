@@ -52,8 +52,8 @@ interface CCDPClient {
   new: <P extends PlatformId>(
     conn: PopupConnection<Message>,
     ceremonyId: string,
-    ledgerId: LedgerId,
     platformId: P,
+    ledgerId: LedgerId,
     operationDomain: Uint8Array,
     transactionData: Uint8Array,
     ceremonyVersion?: SupportedCeremonyVersion<P>,
@@ -100,7 +100,7 @@ to the consuming application; discovery returns IDs and version numbers only.
 const versions = client.enabledVersions('google')
 // Choose an enabled version for the application's intended behavior.
 const ceremony = client.new(
-  connection, ceremonyId, ledgerId, 'google', operationDomain, transactionData, 1,
+  connection, ceremonyId, 'google', ledgerId, operationDomain, transactionData, 1,
 )
 ```
 
@@ -124,7 +124,7 @@ Missing methods, thrown errors, or invalid returned values fail before OAuth.
 Later changes to supplied objects or buffers cannot change the ceremony. All
 authorization/proof-input construction uses the retained Chain Profile hash.
 
-`AppStartProver` carries only the resolved address, not the ledger object or
+`ProveIdentity` carries only the resolved address, not the ledger object or
 hash. Prover needs no ledger dependency. Notary routing adds no field to the authorization digest
 or `OAuthProof`.
 
@@ -160,6 +160,7 @@ interface Ceremony<P extends PlatformId = PlatformId> {
   readonly launchUrl: string
 
   onEvent(listener: (event: CeremonyEvent) => void): () => void
+  onStage(listener: (event: StageEvent) => void): () => void
   proveUserIdentity(): Promise<IdentityResult<P>>
   cancel(): Promise<void>
 }
@@ -182,7 +183,7 @@ require it.
 `proveUserIdentity()` navigates the retained connection to Prefetch using its
 bare URL and a separate `URLSearchParams` fragment argument. `launchUrl` is
 the equivalent browser URL for the native anchor, not a string passed into
-`connection.navigate`. It waits for `PrefetchStarted`, then calls
+`connection.navigate`. It waits for `prefetch-dispatch.finished`, then calls
 `connection.navigateAway` with the frozen platform authorization destination
 (and a separate fragment argument if that platform uses one), without
 disclosing that URL to the Prefetch peer. With native-anchor fallback,
@@ -203,8 +204,8 @@ function activate(event: MouseEvent) {
   const ceremony = ceremonies.new(
     connection,
     ceremonyId,
-    ledgerId,
     platformId,
+    ledgerId,
     operationDomain,
     transactionData,
   )
@@ -218,16 +219,16 @@ function activate(event: MouseEvent) {
 
 Callback authenticates the Application, then navigates directly to Prover
 with the captured OAuth query/fragment in a private structured fragment.
-`proveUserIdentity()` receives no OAuth return. It accepts one fieldless
-`ProverReady` and sends one `AppStartProver` containing the frozen platform,
+`proveUserIdentity()` receives no OAuth return. It accepts one authenticated
+`Event(prover, started)` and sends one `ProveIdentity` containing the frozen platform,
 version, client ID, redirect URI, nullable code verifier, and resolved notary
 address (null when the selected platform does not use notarization).
 
 The selected Prover leaf validates the retained return against that request,
 the CCDP version, and the authenticated connection's ceremony ID. A valid
-OAuth denial sends `CancelCeremony`, making the client resolve a denied
+OAuth denial sends `Cancel`, making the client resolve a denied
 `IdentityResult`. Malformed returns and technical failures use
-`AbortCeremony` and reject. Only accepted OAuth proceeds to proof execution.
+`Abort` and reject. Only accepted OAuth proceeds to proof execution.
 On proof delivery the client structurally validates the separate identity and
 selected platform/version proof, adds the version and retained authorization
 nonce to `OAuthProof`, and resolves an accepted `IdentityResult`. A locally
@@ -254,7 +255,7 @@ no-ceremony-recovery launch scope.
 ### OAuth Bridge configuration
 
 Bridge publishes `callbackPath`. Client validates that absolute path and resolves
-`redirectUri` once against its supplied `oauthBridge` origin; OAuth, AppStartProver
+`redirectUri` once against its supplied `oauthBridge` origin; OAuth, ProveIdentity
 and GitHub token exchange all use those same bytes.
 
 The client fetches and validates the origin-controlled
@@ -350,8 +351,8 @@ through `new` and `proveUserIdentity()`:
 const ceremony = ceremonies.new(
   connection,
   jobId,
-  ledgerId,
   'google',
+  ledgerId,
   operationDomain,
   transactionData,
 )
@@ -453,7 +454,7 @@ its documented structural, request-binding, and commitment/opening checks.
 Early digest-mismatch and structurally valid attestation-forgery detection are
 omitted; downstream verification must still reject them using the recomputed
 authorization digest and trusted signing keys. The expected digest is not an
-`AppStartProver` input.
+`ProveIdentity` input.
 `status: 'accepted'` means the Prover reported successful OAuth/proving and the
 Client accepted the result shape, not that the Client authenticated its
 contents. UI and diagnostics may use the extracted fields as unverified
@@ -483,109 +484,66 @@ noncanonical encodings fail before use.
 
 ## Progress, cancellation, and recovery
 
-```ts
-type CeremonyStage =
-  | 'start'
-  | 'prefetch'
-  | 'authorization'
-  | 'oauth-return'
-  | 'code-exchange'
-  | 'identity-fetch'
-  | 'proof-preparation'
-  | 'proof-generation'
-
-type CeremonyEvent =
-  | { type: 'stage'; stage: CeremonyStage; timestamp: number }
-  | { type: 'step'; platformStep: PlatformStep; timestamp: number }
-  | { type: 'finished'; outcome: 'success' | 'denied' | 'cancelled'; timestamp: number }
-  | { type: 'finished'; outcome: 'failed'; code: FailureCode | null; timestamp: number }
-```
-
-The `CeremonyStage` value companion owns display wording:
+`onEvent` combines Application-local and received [operation events](protocol.md#event)
+into one timeline. All active occurrences preserve their producer timestamp and
+have `status: 'active'`. The client adds exactly one terminal update before
+`proveUserIdentity()` settles:
 
 ```ts
-CeremonyStage.inProgress('start') // "Opening popup"
-CeremonyStage.completed('start')  // "Popup opened"
+// Accepted proof and assembled result:
+{ event: 'prover', phase: 'finished', status: 'completed', timestamp }
+// Early outcomes do not fabricate prover.finished:
+{ status: 'denied', timestamp }
+{ status: 'cancelled', timestamp }
+{ status: 'failed', event: 'identity-fetch', message: 'Invalid GitHub id', timestamp }
 ```
 
-For a user-facing timeline, first project raw stage events through
-`CeremonyStage.group(event.stage)`: Prefetch, Authorization and OAuth return all
-belong to the `authorization` display group. Keep its active label and original
-start time while raw events remain in that group. Switch to completed wording
-only when the **display group changes**, not on every raw stage event. In
-particular, raw `authorization → oauth-return` does not mean `User authorised`;
-that label applies when the group reaches code exchange or proof preparation,
-after Prover admits the return. The raw OAuth-return timestamp remains available
-for post-consent timing. For the last group use completed wording only on terminal success;
-keep active wording with a failure/denial/cancellation indication otherwise.
-`Proof generated` is shown only on terminal success: proof means the complete
-verifier input, including required attestations, not just the ZK proof bytes.
-Token and identity intervals end after fetching the data needed for subsequent
-work, so their labels say `Token fetched via notary` / `Identity fetched via notary`; background
-attestations may still be running. Prover setup uses `Setting up ZK prover` /
-`ZK prover ready`.
-`User authorised` applies only after Prover has admitted the OAuth return;
-readiness alone does not end the authorization interval. These are local
-presentation methods; CCDP events remain plain data with no serialized methods.
+Only Client acceptance of `IdentityProof` completes the ceremony. Finishing
+`zk-proof-generation` remains an active operation event if attestations or delivery
+are pending. Unknown extension events do not authorize transitions. Observers may
+unsubscribe or throw without affecting protocol processing; late events cannot
+reactivate a terminated run. Total duration is measured from the initial
+`prefetch-dispatch.started` through the terminal update. An absent observation is
+unavailable, not zero.
 
-Stages form a sequential UI timeline. All platforms begin with start → prefetch →
-authorization → OAuth return. Google then uses proof preparation → proof generation;
-X and GitHub use all eight stages in the order above. A stage whose
-work is already complete may be brief; concurrent work is never delayed for display.
+`onStage` projects selected core events into sequential presentation, forwarding
+terminal status and opaque error text through the same subscription:
 
-The client starts `start` with `proveUserIdentity()`. It enters `prefetch` when
-Prefetch authenticates the connection and sends fieldless `PrefetchReady`, before
-Worker preparation. `PrefetchStarted` ends prefetch and starts `authorization`
-immediately before provider navigation: it acknowledges fetch dispatch, not completed
-downloads. Fieldless `CallbackReady`, sent after capturing/clearing the return and
-authenticating the Application, starts `oauth-return`. That stage includes navigation,
-Prover document startup, isolation, resource-worker readiness and OAuth-return validation.
-Authorization therefore includes provider navigation and return/Callback authentication,
-not just consent-screen time. Neither milestone exposes return data or its outcome.
-Missing, duplicate or out-of-phase advisory milestones never gate the ceremony.
+| Stage | Display text | Trigger |
+|---|---|---|
+| `preparation` | Preparing your ceremony | `prefetch-dispatch.started` |
+| `authorization` | Authorize with {platform} | `authorization.started` |
+| `proof-preparation` | Preparing your identity proof | `authorization.finished` |
+| `notarization` | Notarizing your identity data | `token-fetch.started` or `token-attestation.started` |
+| `zk-proving` | Creating your identity proof with ZK | `zk-proof-generation.started` |
 
-On `ProverReady`, the client sends `AppStartProver` without advancing the stage.
-After admitting the OAuth return, Prover reports proof preparation for Google or
-code exchange for X/GitHub. Denied or malformed returns end the run without that
-transition. Prover then reports
-identity fetch after token admission, then proof preparation after identity extraction
-and the commitment openings needed for the witness are available. Witness execution
-starts proof generation: `ZK prover ready` means Noir can accept inputs, while
-bb may still be initializing. That stage includes any remaining bb initialization,
-proof generation, backend teardown, outstanding attestations, correlation checks,
-delivery and client assembly. There is no separate finalizing stage. Backend
-preparation overlaps input collection, and final attestations overlap proving. Duplicate, backward and platform-inapplicable stage reports are
-ignored. Detailed step events do not change the stage.
+Google skips notarization. Early backend preparation does not advance presentation;
+late observations cannot move it backwards. If the observational authorization
+finish was lost, `prover.started` also advances to proof-preparation without
+inventing an authorization timestamp. Stages are not mutually exclusive
+execution intervals or percentage estimates. Terminal status supplies final text;
+there is no separate completed stage. Use `CeremonyStage.message(stage, platformName)`
+for package-owned active wording. The application owns its platform display name.
 
-Exactly one `finished` event follows acceptance of the assembled result, denial,
-local cancellation or failure, before the result promise settles. The client retires
-the run before notifying observers; late messages and reentrant cancellation cannot
-change its result. Success means structurally accepted output, not cryptographic
-verification. A failed event carries a standardized `FailureCode`, or `null` for a
-local failure without a catalog code. Raw errors and proof material remain absent.
+```ts
+const unsubscribe = ceremony.onStage(update => {
+  status.textContent = update.status === 'active'
+    ? CeremonyStage.message(update.stage, 'Google')
+    : update.status === 'failed' ? update.message ?? 'Ceremony failed.' : update.status
+})
+```
 
-Stage and terminal timestamps use the client's `performance.timeOrigin +
-performance.now()` clock at observation, so differences measure sequential UI elapsed
-time, including transport delay. Detailed step timestamps retain the Prover clock.
-Each platform owns its diagnostic step catalog: `{ code, label, status, progress }`.
-Steps may overlap; status is `started`, `completed` or `failed`, and weighted progress
-is advisory, finite and monotonic, topping out at 0.95. A successful terminal event
-lets the UI display 100%. These timings are diagnostics, not completion estimates.
-
-This event expansion supersedes the previous two-stage API and step-only CCDP
-notification for this unreleased package. Deploy matching client and CCDP builds.
-
-`CeremonyEvent` is advisory. The application may project it into broader Job
-progress, but confirmation, submission, and finality remain outside this
-package. [CCDP](protocol.md#4-prover-execution) defines authenticated
-connection delivery ordering.
+Popup documents use the same local feed and projection. A local emission can feed
+UI, optional recording, and Application forwarding without a UI roundtrip. Readiness
+sends do not depend on observers. Local proof delivery is not Application acceptance.
+[Metrics](metrics.md) defines measurements and exporter responsibilities.
 
 ## Implementation guide
 
 The application entrypoint is `@libid/ceremony/ccdp/client`, exporting
 `createCCDPClient` and `CCDPClient`. It implements the application participant;
-`Ceremony` still names one run. The API rename changes caller imports and builds;
-CCDP wire messages and routes are unchanged.
+`Ceremony` still names one run. Client and CCDP must use matching five-message builds; no legacy wire aliases
+are retained.
 
 Owns one-time Bridge configuration, frozen ceremony construction and the one-shot
 Application lifecycle over a caller-supplied `PopupConnection`.
@@ -599,7 +557,9 @@ submission and post-ceremony actions belong to the Application.
 
 ### Technical failure details
 
-Remote technical failures reject with `CeremonyError`: `code` identifies the
-failed subsystem or operation and `message` is a package-owned explanation.
-Local original errors may be retained as standard `Error.cause`; remote errors
-contain no raw cause. Explicit application cancellation still uses `AbortError`.
+A technical failure rejects with `CeremonyError` containing `event` and `message`.
+`onEvent` and `onStage` expose the same terminal text before rejection, so simple
+UIs need no second failure subscription. Error text is opaque, bounded and rendered
+as text, with no required error-code catalog. See [Abort](protocol.md#abort) for
+its display/telemetry boundary. Denial resolves a denied result; local cancellation
+rejects with `AbortError`. The application still owns popup closure and retries.

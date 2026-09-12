@@ -32,12 +32,13 @@ const connection = PopupConnection.connect(popup, {
   allowedPopupOrigins: ['https://bridge.example', 'https://proofs.example'],
 })
 const ceremony = client.new(
-  connection, id, ledgerId, 'google', operationDomain, transactionData,
+  connection, id, 'google', ledgerId, operationDomain, transactionData,
 )
 anchor.href = ceremony.launchUrl
 if (popup.opened) event.preventDefault() // otherwise allow the real anchor
 const off = ceremony.onEvent((event) => {
-  // Use event.type to render stages, detailed steps, or the final outcome.
+  // Inspect event.event/phase for operations and event.status for the outcome.
+  // Use onStage instead for the package-owned sequential presentation.
 })
 try {
   const result = await ceremony.proveUserIdentity()

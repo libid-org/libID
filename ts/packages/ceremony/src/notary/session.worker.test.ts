@@ -235,7 +235,10 @@ it.each(['runtime', 'socket-error', 'socket-close'])(
     else if (failure === 'socket-error') w.socket.dispatchEvent(new Event('error'))
     else w.socket.close()
     await expect.poll(() => w.port.close.mock.calls.length).toBe(1)
-    expect(w.port.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'error' })
+    expect(w.port.postMessage).toHaveBeenCalledExactlyOnceWith({
+      type: 'error',
+      message: expect.any(String),
+    })
     expect(w.socket.readyState).toBe(3)
     w.resolve()
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -250,6 +253,9 @@ it('rejects a socket closed while runtime initialization was pending [LIBID-PROV
   w.socket.close()
   w.resolve()
   await expect.poll(() => w.port.close.mock.calls.length).toBe(1)
-  expect(w.port.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'error' })
+  expect(w.port.postMessage).toHaveBeenCalledExactlyOnceWith({
+    type: 'error',
+    message: expect.any(String),
+  })
   expect(w.hooks.setup).not.toHaveBeenCalled()
 })

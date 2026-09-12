@@ -1,4 +1,4 @@
-import type { ProverIdentityProof } from '../ccdp/index.js'
+import type { IdentityProof } from '../ccdp/index.js'
 import {
   validateIdentity as githubIdentity,
   validateProof as githubProof,
@@ -62,13 +62,13 @@ export type IdentityResult<P extends PlatformId = PlatformId> =
 export function validateProofMessage<P extends PlatformId, V extends SupportedCeremonyVersion<P>>(
   platformId: P,
   version: V,
-  message: ProverIdentityProof,
-): ProverIdentityProof & { identity: Identity<P>; proof: ProofByPlatformVersion[P][V] } {
+  message: IdentityProof,
+): IdentityProof & { identity: Identity<P>; proof: ProofByPlatformVersion[P][V] } {
   const implementation = platforms[platformId]?.versions[version as 1]
   if (!implementation) throw new TypeError('Unsupported platform version')
   implementation.validateIdentity(message.identity)
   implementation.validateProof(message.proof)
-  return message as ProverIdentityProof & {
+  return message as IdentityProof & {
     identity: Identity<P>
     proof: ProofByPlatformVersion[P][V]
   }
@@ -77,7 +77,7 @@ export function validateProofMessage<P extends PlatformId, V extends SupportedCe
 export function assembleResult<P extends PlatformId>(
   platformId: P,
   version: SupportedCeremonyVersion<P>,
-  message: ProverIdentityProof,
+  message: IdentityProof,
   clientId: string,
   authorizationNonce: Uint8Array,
 ): IdentityResult<P> {

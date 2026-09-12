@@ -29,7 +29,7 @@ vi.mock('../../platforms/github/1/prover.js', () => ({ prove }))
 
 vi.mock('./ui.js', () => ({
   view: vi.fn(),
-  progressView: () => ({ stop: vi.fn(), update: vi.fn() }),
+  eventView: () => ({ stop: vi.fn(), message: vi.fn() }),
 }))
 
 afterEach(() => {
@@ -50,12 +50,15 @@ it.each(['google', 'x', 'github'])(
         oauthFragment: '#error=access_denied',
       }).toString(),
     )
-    const handler = connection.on.mock.calls.find(
-      ([codec]) => codec.type === 'app-start-prover',
-    )?.[1]
-    expect(connection.send).toHaveBeenCalledWith({ type: 'prover-ready' })
+    const handler = connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')?.[1]
+    expect(connection.send).toHaveBeenCalledWith({
+      type: 'event',
+      event: 'prover',
+      phase: 'started',
+      timestamp: expect.any(Number),
+    })
     handler({
-      type: 'app-start-prover',
+      type: 'prove-identity',
       platformId,
       platformCeremonyVersion: 1,
       clientId: 'client',
@@ -73,53 +76,44 @@ it.each(['google', 'x', 'github'])(
   },
 )
 
-it.each(['google', 'x', 'github'])(
-  'forwards %s stage milestones while proof steps remain independent',
-  async (platformId) => {
-    vi.stubGlobal('location', { origin: 'https://ccdp.test' })
-    vi.stubGlobal('crossOriginIsolated', true)
-    vi.stubGlobal('Worker', vi.fn())
-    prove.mockImplementationOnce(async (context) => {
-      if (platformId !== 'google') {
-        context.onStage('identity-fetch')
-        context.onStage('proof-preparation')
-      }
-      context.onProgress(
-        { code: 'witness', label: 'Generating witness', status: 'started', progress: 0.2 },
-        1,
-      )
-      context.onProgress(
-        {
-          code: 'proof-backend-destroy',
-          label: 'Finishing proof',
-          status: 'completed',
-          progress: 0.95,
-        },
-        2,
-      )
-      return null
-    })
-    await startProver(
-      new URLSearchParams({
-        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
-        oauthQuery: '',
-        oauthFragment: '#error=access_denied',
-      }).toString(),
-    )
-    connection.on.mock.calls.find(([codec]) => codec.type === 'app-start-prover')![1]({
-      type: 'app-start-prover',
-      platformId,
-      platformCeremonyVersion: 1,
-    })
-    await vi.waitFor(() =>
-      expect(connection.send).toHaveBeenCalledWith({ type: 'cancel-ceremony' }),
-    )
-    const events = connection.send.mock.calls.map(([event]) => event)
-    expect(events.filter((e) => 'stage' in e).map((e) => e.stage)).toEqual(
-      platformId === 'google'
-        ? ['proof-generation']
-        : ['identity-fetch', 'proof-preparation', 'proof-generation'],
-    )
-    expect(events.filter((e) => 'platformStep' in e)).toHaveLength(2)
-  },
-)
+it('reports retrospective fallback before readiness and preserves producer timestamps [CSP-016]', async () => {
+  vi.stubGlobal('location', { origin: 'https://ccdp.test', pathname: '/ccdp/v1/prover/fallback' })
+  vi.stubGlobal('crossOriginIsolated', true)
+  vi.stubGlobal('Worker', vi.fn())
+  prove.mockImplementationOnce(async (context) => {
+    context.emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: 12 })
+    throw new Error('Invalid GitHub id')
+  })
+  await startProver(
+    new URLSearchParams({
+      ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+      oauthQuery: '',
+      oauthFragment: '#error=access_denied',
+    }).toString(),
+  )
+  expect(connection.send.mock.calls.slice(0, 2).map(([m]) => m)).toEqual([
+    { type: 'event', event: 'prover-fallback', timestamp: performance.timeOrigin },
+    { type: 'event', event: 'prover', phase: 'started', timestamp: expect.any(Number) },
+  ])
+  connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]({
+    type: 'prove-identity',
+    platformId: 'github',
+    platformCeremonyVersion: 1,
+  })
+  await vi.waitFor(() =>
+    expect(connection.send).toHaveBeenCalledWith({
+      type: 'abort',
+      event: 'prover',
+      message: 'Invalid GitHub id',
+    }),
+  )
+  expect(connection.send).toHaveBeenCalledWith({
+    type: 'event',
+    event: 'proof-worker-bootstrap',
+    phase: 'started',
+    timestamp: 12,
+  })
+  expect(
+    connection.send.mock.calls.some(([m]) => m.event === 'prover' && m.phase === 'finished'),
+  ).toBe(false)
+})

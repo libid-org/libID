@@ -1,18 +1,7 @@
 import { resolve as resolveAsset } from '../assets/index.js'
-import type { PlatformStep } from '../ccdp/index.js'
 import { ceremonyError } from '../errors.js'
-import { Progress, type ProgressSpan } from '../progress.js'
+import { now, type OperationEvent } from '../events.js'
 import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
-
-export const PROOF_ENGINE_SPANS = [
-  { code: 'proof-worker-bootstrap', label: 'Starting prover', weight: 1 },
-  { code: 'proof-wasm-load', label: 'Loading prover', weight: 8 },
-  { code: 'proof-circuit-load', label: 'Loading circuit', weight: 4 },
-  { code: 'proof-backend-initialization', label: 'Preparing proof system', weight: 12 },
-  { code: 'witness', label: 'Generating witness', weight: 20 },
-  { code: 'proof', label: 'Generating proof', weight: 54 },
-  { code: 'proof-backend-destroy', label: 'Finishing proof', weight: 1 },
-] satisfies readonly ProgressSpan[]
 
 /** Browser-generated bb output; structural checks here do not establish cryptographic validity. */
 export interface RawProof {
@@ -25,21 +14,25 @@ export interface ProofEngineOptions {
   /** Compiled Noir circuit and matching released verification key, resolved by the asset graph. */
   circuitUrl: string
   verificationKeyUrl: string
-  onProgress?: (step: PlatformStep, timestamp: number) => void
+  emit?: (event: OperationEvent) => void
   threads?: number
 }
 
 type WorkerMessage =
-  | { type: 'engine-booted' }
+  | { type: 'engine-booted'; timestamp: number }
   | { type: 'engine-ready' } // Ready for witness execution; bb may still be initializing.
-  | { type: 'engine-span'; code: string; status: PlatformStep['status'] }
+  | { type: 'engine-event'; event: OperationEvent }
+  | { type: 'engine-prepared'; timestamp: number }
   | { type: 'engine-result'; result: RawProof }
-  | { type: 'engine-error'; error: string }
+  | { type: 'engine-error'; error: string; event: string }
 
 /** One boot, one witness, one proof, then unconditional worker destruction. */
 export class ProofEngine {
   #worker: Worker | null = null
-  readonly #progress: Progress
+  readonly #emit: (event: OperationEvent) => void
+  #inputsAt: number | undefined
+  #backendAt: number | undefined
+  #prepared = false
   readonly #ready: Promise<void>
   #resolveReady!: () => void
   #failure: Error | null = null
@@ -62,7 +55,7 @@ export class ProofEngine {
   constructor({
     circuitUrl,
     verificationKeyUrl,
-    onProgress = () => undefined,
+    emit = () => undefined,
     threads,
   }: ProofEngineOptions) {
     const [url, keyUrl] = [circuitUrl, verificationKeyUrl].map((value) => {
@@ -71,14 +64,15 @@ export class ProofEngine {
         throw new Error('invalid circuit resource URL')
       return url.href
     })
-    this.#progress = new Progress(PROOF_ENGINE_SPANS, (step) => {
+    this.#emit = (event) => {
       try {
-        onProgress(step, performance.timeOrigin + performance.now())
+        emit(event)
       } catch {
-        // Progress is advisory; an observer cannot control proving.
+        /* Observers cannot control proving. */
       }
-    })
-    this.#progress.start('proof-worker-bootstrap')
+    }
+    this.#emit({ event: 'zk-proof-preparation', phase: 'started', timestamp: now() })
+    this.#emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: now() })
     this.#ready = new Promise<void>((resolve) => {
       this.#resolveReady = resolve
     })
@@ -89,6 +83,8 @@ export class ProofEngine {
   async prove(inputs: Record<string, unknown>, signal?: AbortSignal): Promise<RawProof> {
     if (this.#used) throw new Error('proof engine is single-use')
     this.#used = true
+    this.#inputsAt = now()
+    this.#finishPreparation()
     const abort = () =>
       this.#fail(signal?.reason ?? new DOMException('Proving aborted', 'AbortError'))
     signal?.addEventListener('abort', abort, { once: true })
@@ -152,16 +148,22 @@ export class ProofEngine {
     if (!message || typeof message !== 'object' || this.#settled) return
     switch (message.type) {
       case 'engine-booted':
-        this.#progress.complete('proof-worker-bootstrap')
+        this.#emit({
+          event: 'proof-worker-bootstrap',
+          phase: 'finished',
+          timestamp: message.timestamp,
+        })
         if (this.#preload) {
           this.#worker?.postMessage(this.#preload)
           this.#preload = null
         }
         break
-      case 'engine-span':
-        if (message.status === 'started') this.#progress.start(message.code)
-        else if (message.status === 'completed') this.#progress.complete(message.code)
-        else this.#progress.fail(message.code)
+      case 'engine-event':
+        this.#emit(message.event)
+        break
+      case 'engine-prepared':
+        this.#backendAt = message.timestamp
+        this.#finishPreparation()
         break
       case 'engine-ready':
         this.#resolveReady()
@@ -172,23 +174,28 @@ export class ProofEngine {
         this.#resolveResult?.(message.result)
         break
       case 'engine-error':
-        this.#fail(message.error)
+        this.#fail(ceremonyError(message.error, message.event))
         break
       default:
         this.#fail('unexpected proof worker message')
     }
   }
 
+  #finishPreparation(): void {
+    if (this.#prepared || this.#inputsAt === undefined || this.#backendAt === undefined) return
+    this.#prepared = true
+    this.#emit({
+      event: 'zk-proof-preparation',
+      phase: 'finished',
+      timestamp: Math.max(this.#inputsAt, this.#backendAt),
+    })
+  }
+
   #fail(reason: unknown): void {
     if (this.#settled) return
     this.#settled = true
     this.#worker?.terminate()
-    try {
-      this.#progress.failActive()
-    } catch {
-      // Preserve the original failure when lifecycle state is already invalid.
-    }
-    const error = ceremonyError(reason, 'proof')
+    const error = ceremonyError(reason, this.#used ? 'zk-proof-generation' : 'zk-proof-preparation')
     this.#failure = error
     this.#resolveReady()
     this.#rejectResult?.(error)

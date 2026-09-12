@@ -320,7 +320,7 @@ package's fragment-capture API, so URL clearing cannot erase fallback input.
 `isolationFallbackUrl` contains no fragment; automatic replacement preserves
 the snapshot without an override. The final response captures and clears it
 again. Neither response parses platform-specific return fields before
-`AppStartProver`, sends the captured return to Application, or puts it into
+`ProveIdentity`, sends the captured return to Application, or puts it into
 Worker state, signaling, logs, or telemetry.
 
 Both paths resolve the root-scope Worker registration installed by Prefetch.
@@ -331,7 +331,7 @@ This lets the popup package preserve a MessagePort internally while the same
 Worker's asset flights and caches remain available to the final Prover.
 Before connection readiness the entrypoint performs no proving or CCDP
 delivery. It registers its handlers and awaits readiness before emitting
-`ProverReady`. Isolation, shared memory, and worker support are required;
+`prover.started`. Isolation, shared memory, and worker support are required;
 there is no single-threaded or unisolated proving mode.
 
 Successful DIP isolation avoids an extra navigation. Otherwise the package

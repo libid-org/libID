@@ -1,10 +1,11 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
-import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
+import { ceremonyError, reportFailure } from '../../errors.js'
+import { Events, now } from '../../events.js'
 import { origin } from '../../primitives.js'
-import { CancelCeremony, UUID } from '../index.js'
+import { Cancel, UUID } from '../index.js'
 import { type OAuthReturn, proverFragment, route } from '../navigation.js'
-import { view } from './ui.js'
+import { eventView, view } from './ui.js'
 
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
 export function startCallback(): void {
@@ -33,8 +34,8 @@ export function startCallback(): void {
     if (!Array.isArray(inputs)) throw new TypeError('Invalid Callback inputs')
     callbackV1(input, state[2], inputs)
   } catch (error) {
-    const failure = ceremonyError(error, 'callback-input')
-    view(`${failure.message} (${failure.code}) Return to your application.`)
+    const failure = ceremonyError(error, 'authorization')
+    view(`${failure.message} Return to your application.`)
     reportFailure(undefined, failure)
   }
 }
@@ -57,41 +58,51 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     ended = true
     retained = undefined
   }
-  let failureCode: FailureCode = 'callback-connection'
+  const events = new Events()
+  const ui = eventView(events, '')
   const fail = (error?: unknown) => {
     if (ended) return
-    const failure = ceremonyError(error, failureCode)
+    const failure = ceremonyError(error, 'authorization')
     cleanup()
-    view(`${failure.message} (${failure.code}) Return to your application.`)
+    events.emit({
+      status: 'failed',
+      event: failure.event,
+      message: failure.message,
+      timestamp: now(),
+    })
+    ui.stop()
     reportFailure(connection, failure)
   }
   try {
     retained = input
-    view('Returning to your application')
+    ui.message('Returning to your application')
     connection = PopupConnection.accept(PopupWindow.current(), {
       fallback,
       connectionId: id,
       allowedApplicationOrigins: [...allowedApplicationOrigins],
     })
-    connection.on(CancelCeremony, () => {
+    connection.on(Cancel, () => {
       cleanup()
-      view('Canceled. Return to your application.')
+      events.emit({ status: 'cancelled', timestamp: now() })
+      ui.stop()
     })
     void connection.closed.then(() => {
-      if (!ended) fail(ceremonyError(undefined, 'callback-connection'))
+      if (!ended) fail(ceremonyError(new Error('Callback connection closed'), 'authorization'))
     })
     void connection.ready
       .then(async () => {
         if (ended || !retained) return
+        const event = { event: 'authorization', phase: 'finished', timestamp: now() } as const
         try {
-          connection!.send({ type: 'callback-ready' })
+          connection!.send({ type: 'event', ...event })
         } catch {
-          /* Report no return parameters; a missed milestone cannot prevent navigation. */
+          /* A lost observation does not gate navigation. */
         }
-        failureCode = 'callback-navigation'
+        events.emit({ ...event, status: 'active' })
         const fragment = proverFragment(id, retained)
         await connection!.navigate(ccdpOrigin + route('prover'), fragment)
         cleanup()
+        ui.stop()
       })
       .catch(fail)
   } catch (error) {

@@ -141,10 +141,10 @@ it('exposes late worker failure after preparation through the runtime signal [LI
   messages[0].port.postMessage({ type: 'prepared' })
   const session = await prepared
   expect(notary.signal.aborted).toBe(false)
-  worker.mock.results[0].value.onerror()
+  worker.mock.results[0].value.onerror({ message: 'Notary worker failed' })
   expect(notary.signal.aborted).toBe(true)
-  expect(notary.signal.reason).toMatchObject({ code: 'notarization' })
+  expect(notary.signal.reason).toMatchObject({ message: 'Notary worker failed' })
   expect(parent.signal.aborted).toBe(false)
   expect(terminate).toHaveBeenCalledOnce()
-  await expect(session.send(request)).rejects.toMatchObject({ code: 'notarization' })
+  await expect(session.send(request)).rejects.toMatchObject({ message: 'Notary worker failed' })
 })

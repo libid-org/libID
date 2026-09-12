@@ -1,60 +1,49 @@
 import type { Message, PopupConnection } from '@libid/popup'
-import type { AbortCeremony } from './ccdp/index.js'
+import { text } from './primitives.js'
 
-export const failureMessages = {
-  'callback-input': 'Invalid OAuth callback or deployment configuration.',
-  'callback-connection': 'Unable to connect the OAuth callback.',
-  'callback-navigation': 'Unable to navigate from Callback to Prover.',
-  'prefetch-input': 'Invalid prefetch request.',
-  'prefetch-connection': 'Unable to connect Prefetch.',
-  'prefetch-worker': 'Unable to prepare the prefetch worker or dispatch assets.',
-  'prover-input': 'Invalid Prover navigation input.',
-  'prover-connection': 'Unable to connect Prover.',
-  'prover-request': 'Invalid proving request.',
-  'prover-isolation': 'Required browser isolation is unavailable.',
-  'prover-worker': 'Unable to claim the proving resource worker.',
-  'oauth-return': 'Invalid OAuth return or provider authorization error.',
-  'token-exchange': 'OAuth token exchange or response validation failed.',
-  notarization: 'Notarization failed.',
-  proof: 'Proof engine failed.',
-  'prover-execution': 'Unable to complete the platform proof.',
-} as const
+/** Opaque display text only: never serialize an exception object, stack, or nested causes. */
+export function errorMessage(error: unknown): string {
+  let message =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : 'Ceremony failed.'
+  message = message.replace(/\p{Cc}/gu, ' ').trim()
+  while (new TextEncoder().encode(message).length > 2048)
+    message = message.slice(0, Math.floor(message.length * 0.9))
+  return text(message, 2048) ? message : 'Ceremony failed.'
+}
 
-export type FailureCode = keyof typeof failureMessages
-
-/** A cause stays in the context that caught it; only the code and catalog message cross CCDP. */
+/** A failed operation and its displayable explanation; no stable error-code catalog. */
 export class CeremonyError extends Error {
   constructor(
-    readonly code: FailureCode,
+    readonly event: string,
+    message: string,
     options?: ErrorOptions,
   ) {
-    super(failureMessages[code], options)
+    super(errorMessage(message), options)
     this.name = 'CeremonyError'
   }
 }
 
-export function ceremonyError(error: unknown, code: FailureCode): CeremonyError {
-  return error instanceof CeremonyError ? error : new CeremonyError(code, { cause: error })
+export function ceremonyError(error: unknown, event: string): CeremonyError {
+  return error instanceof CeremonyError
+    ? error
+    : new CeremonyError(event, errorMessage(error), { cause: error })
 }
 
+/** Failure to deliver an Abort is recorded locally without exposing its opaque text to telemetry. */
 export function reportFailure(
   connection: PopupConnection<Message> | undefined,
   error: CeremonyError,
 ): void {
   try {
     if (connection) {
-      const message: AbortCeremony = {
-        type: 'abort-ceremony',
-        code: error.code,
-        reason: failureMessages[error.code],
-      }
+      const message = { type: 'abort', event: error.event, message: error.message }
       connection.send(message)
       return
     }
   } catch {
-    // The original failure remains available locally; reporting cannot change the outcome.
+    /* Reporting cannot replace the original failure. */
   }
   try {
-    console.error(`[ceremony] ${error.code}`)
+    console.error('[ceremony] failure report unavailable')
   } catch {}
 }

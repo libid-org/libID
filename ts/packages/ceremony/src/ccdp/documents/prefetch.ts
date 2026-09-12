@@ -3,39 +3,48 @@ import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { dispatchPrefetch, rootWorker } from '../../assets/registration.js'
 import { startWorker } from '../../assets/worker.js'
-import { ceremonyError, type FailureCode, reportFailure } from '../../errors.js'
+import { ceremonyError, reportFailure } from '../../errors.js'
+import { Events, now } from '../../events.js'
 import { readPrefetch } from '../navigation.js'
-import { view } from './ui.js'
+import { eventView } from './ui.js'
 
 /** Authenticate the Prefetch page and acknowledge selected fetch dispatch before OAuth navigation. */
 export async function startPrefetch(fragment: string): Promise<void> {
   let connection: PopupConnection<Message> | undefined
-  let failureCode: FailureCode = 'prefetch-input'
+  const events = new Events()
+  const ui = eventView(events, '')
   try {
     const input = readPrefetch(fragment),
       profile = `${input.platformId}/${input.platformCeremonyVersion}`
     if (!Object.hasOwn(requestsByProfile, profile)) throw new Error('Unsupported profile')
-    view('Preparing your ceremony')
-    failureCode = 'prefetch-connection'
+    events.emit({
+      event: 'prefetch-dispatch',
+      phase: 'started',
+      timestamp: now(),
+      status: 'active',
+    })
     connection = PopupConnection.accept(PopupWindow.current(fragment, { scope: '/' }), {
       fallback,
       connectionId: input.ceremonyId,
       allowedApplicationOrigins: '*',
     })
     await connection.ready
-    try {
-      connection.send({ type: 'prefetch-ready' })
-    } catch {
-      /* Advisory readiness cannot decide the ceremony outcome. */
-    }
-    failureCode = 'prefetch-worker'
     const registration = await rootWorker()
     await dispatchPrefetch(registration, profile)
-    connection.send({ type: 'prefetch-started' })
+    const event = { event: 'prefetch-dispatch', phase: 'finished', timestamp: now() } as const
+    connection.send({ type: 'event', ...event })
+    events.emit({ ...event, status: 'active' })
   } catch (error) {
-    const failure = ceremonyError(error, failureCode)
-    view(`${failure.message} (${failure.code}) Return to your application.`)
+    const failure = ceremonyError(error, 'prefetch-dispatch')
+    events.emit({
+      status: 'failed',
+      event: failure.event,
+      message: failure.message,
+      timestamp: now(),
+    })
     reportFailure(connection, failure)
+  } finally {
+    ui.stop()
   }
 }
 

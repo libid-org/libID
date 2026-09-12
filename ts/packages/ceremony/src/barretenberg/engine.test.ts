@@ -24,13 +24,13 @@ function engine() {
       }
     },
   )
-  const events: { code: string; status: string }[] = []
+  const events: import('../events.js').OperationEvent[] = []
   const instance = new ProofEngine({
     circuitUrl: 'https://ccdp.test/circuit',
     verificationKeyUrl: 'https://ccdp.test/vk',
-    onProgress: (step) => events.push(step),
+    emit: (event) => events.push(event),
   })
-  receive({ data: { type: 'engine-booted' } })
+  receive({ data: { type: 'engine-booted', timestamp: 1 } })
   return { instance, postMessage, terminate, events, send: (data: unknown) => receive({ data }) }
 }
 
@@ -38,23 +38,25 @@ it('cancels an early witness, terminates the worker and ignores late delivery [L
   const e = engine()
   const controller = new AbortController()
   const result = e.instance.prove({ fixture: 1 }, controller.signal)
-  const rejected = expect(result).rejects.toMatchObject({ code: 'proof' })
-  e.send({ type: 'engine-span', code: 'proof-backend-initialization', status: 'started' })
+  const rejected = expect(result).rejects.toMatchObject({ event: 'zk-proof-generation' })
+  e.send({
+    type: 'engine-event',
+    event: { event: 'proof-backend-initialization', phase: 'started', timestamp: 2 },
+  })
   expect(e.postMessage).toHaveBeenCalledTimes(1)
   e.send({ type: 'engine-ready' })
   await vi.waitFor(() =>
     expect(e.postMessage).toHaveBeenCalledWith({ type: 'engine-prove', inputs: { fixture: 1 } }),
   )
-  e.send({ type: 'engine-span', code: 'witness', status: 'started' })
+  e.send({ type: 'engine-event', event: { event: 'witness', phase: 'started', timestamp: 3 } })
   controller.abort()
   await rejected
   expect(e.terminate).toHaveBeenCalledOnce()
-  expect(e.events.filter((event) => event.status === 'failed').map((event) => event.code)).toEqual([
-    'proof-backend-initialization',
-    'witness',
-  ])
+  expect(
+    e.events.filter((event) => event.phase === 'finished').map((event) => event.event),
+  ).toEqual(['proof-worker-bootstrap'])
   const count = e.events.length
-  e.send({ type: 'engine-span', code: 'witness', status: 'completed' })
+  e.send({ type: 'engine-event', event: { event: 'witness', phase: 'finished', timestamp: 4 } })
   e.send({ type: 'engine-result', result: {} })
   e.instance.destroy()
   expect(e.events).toHaveLength(count)
@@ -64,10 +66,29 @@ it('cancels an early witness, terminates the worker and ignores late delivery [L
 it('initialization failure releases waiting inputs without dispatching them [LIBID-PROVER-014]', async () => {
   const e = engine()
   const result = e.instance.prove({ fixture: 1 })
-  const rejected = expect(result).rejects.toMatchObject({ code: 'proof' })
-  e.send({ type: 'engine-error', error: 'Proof engine failed' })
+  const rejected = expect(result).rejects.toMatchObject({ event: 'zk-proof-generation' })
+  e.send({ type: 'engine-error', event: 'zk-proof-generation', error: 'Proof engine failed' })
   await rejected
   e.send({ type: 'engine-ready' })
   expect(e.postMessage).toHaveBeenCalledTimes(1)
   expect(e.terminate).toHaveBeenCalledOnce()
+})
+
+it('preparation finishes only once both backend and inputs are ready, without blocking witness dispatch', async () => {
+  const e = engine()
+  const result = e.instance.prove({ fixture: 1 }).catch(() => {})
+  e.send({ type: 'engine-ready' })
+  await vi.waitFor(() =>
+    expect(e.postMessage).toHaveBeenCalledWith({ type: 'engine-prove', inputs: { fixture: 1 } }),
+  )
+  expect(
+    e.events.filter((x) => x.event === 'zk-proof-preparation' && x.phase === 'finished'),
+  ).toHaveLength(0)
+  const timestamp = performance.timeOrigin + performance.now() + 1
+  e.send({ type: 'engine-prepared', timestamp })
+  expect(
+    e.events.filter((x) => x.event === 'zk-proof-preparation' && x.phase === 'finished'),
+  ).toEqual([{ event: 'zk-proof-preparation', phase: 'finished', timestamp }])
+  e.instance.destroy()
+  await result
 })

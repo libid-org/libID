@@ -1,7 +1,6 @@
 import {
-  type Ceremony,
   type CCDPClient,
-  CeremonyError,
+  type Ceremony,
   type CeremonyEvent,
   CeremonyStage,
   createCCDPClient,
@@ -71,9 +70,19 @@ async function initialize() {
     controls()
   }
 }
+const operationNames: Record<string, string> = {
+  'prefetch-dispatch': 'Prefetch dispatch',
+  authorization: 'Authorization',
+  prover: 'Prover',
+  'token-fetch': 'Token fetch',
+  'token-attestation': 'Token attestation',
+  'identity-fetch': 'Identity fetch',
+  'identity-attestation': 'Identity attestation',
+  'zk-proof-preparation': 'ZK proof preparation',
+  'zk-proof-generation': 'ZK proof generation',
+}
 function beginRun(platform: PlatformId) {
   const now = () => performance.timeOrigin + performance.now()
-  const started = now()
   const row = document.createElement('tr')
   const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—', '—'].map(
     (text) => {
@@ -86,62 +95,65 @@ function beginRun(platform: PlatformId) {
   document.querySelector('#history')!.prepend(row)
   document.querySelector<HTMLElement>('#history-empty')!.hidden = true
   const timings = document.createElement('ol')
-  timings.className = 'stage-timings'
+  timings.className = 'operation-timings'
   const timingsCell = document.createElement('td')
   timingsCell.append(timings)
   row.append(timingsCell)
-  let current: { stage: CeremonyStage; started: number; cell: HTMLLIElement } | undefined
-  let returnedAt: number | undefined
-  let finished = false
+  const operations = new Map<
+    string,
+    { name: string; started: number; finished?: number; cell: HTMLLIElement }
+  >()
+  let started: number | undefined,
+    returnedAt: number | undefined,
+    finished = false
   const duration = (start: number, end: number) =>
     `${Math.max(0, (end - start) / 1000).toFixed(1)} s`
-  const render = (timestamp = now(), completed = false) => {
-    cells[3]!.textContent = duration(started, timestamp)
+  const render = (timestamp = now()) => {
+    if (started !== undefined) cells[3]!.textContent = duration(started, timestamp)
     if (returnedAt !== undefined) cells[4]!.textContent = duration(returnedAt, timestamp)
-    if (current)
-      current.cell.textContent = `${completed ? CeremonyStage.completed(current.stage) : CeremonyStage.inProgress(current.stage)} · ${duration(current.started, timestamp)}`
+    for (const op of operations.values())
+      op.cell.textContent = `${op.name} · ${duration(op.started, op.finished ?? timestamp)}${op.finished === undefined ? (finished ? ' (interrupted)' : ' (running)') : ''}`
   }
   const timer = setInterval(render, 100)
-  const finish = (outcome: string, timestamp = now(), success = false) => {
+  const finish = (outcome: string, timestamp = now()) => {
     if (finished) return
     finished = true
     clearInterval(timer)
-    render(timestamp, success)
-    if (current && !success) current.cell.textContent += ` (${outcome.toLowerCase()})`
+    render(timestamp)
     cells[2]!.textContent = outcome
   }
   return {
     finish,
     onEvent(event: CeremonyEvent) {
-      if (finished || event.type === 'step') return
-      if (event.type === 'finished') {
+      if (finished) return
+      if ('event' in event && 'phase' in event && operationNames[event.event]) {
+        if (event.event === 'prefetch-dispatch' && event.phase === 'started')
+          started = event.timestamp
+        if (event.event === 'authorization' && event.phase === 'finished')
+          returnedAt = event.timestamp
+        const op = operations.get(event.event)
+        if (event.phase === 'started' && !op) {
+          const cell = document.createElement('li')
+          operations.set(event.event, {
+            name: operationNames[event.event],
+            started: event.timestamp,
+            cell,
+          })
+          timings.append(cell)
+        } else if (event.phase === 'finished' && op) op.finished = event.timestamp
+      }
+      if (event.status !== 'active')
         finish(
-          event.outcome === 'success'
+          event.status === 'completed'
             ? 'Proof received'
-            : event.outcome === 'denied'
+            : event.status === 'denied'
               ? 'Denied'
-              : event.outcome === 'cancelled'
+              : event.status === 'cancelled'
                 ? 'Cancelled'
-                : event.outcome === 'failed' && event.code
-                  ? `Failed (${event.code})`
-                  : 'Failed',
+                : `Failed (${'event' in event ? event.event : 'ceremony'})`,
           event.timestamp,
-          event.outcome === 'success',
         )
-        return
-      }
-      if (event.stage === 'oauth-return') returnedAt = event.timestamp
-      const stage = CeremonyStage.group(event.stage)
-      if (current?.stage === stage) {
-        render(event.timestamp)
-        return
-      }
-      render(event.timestamp, true)
-      const cell = document.createElement('li')
-      const first = !current
-      current = { stage, started: first ? started : event.timestamp, cell }
-      timings.append(cell)
-      render(event.timestamp)
+      else render()
     },
   }
 }
@@ -168,8 +180,8 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     ceremony = client.new(
       current,
       id,
-      ledger,
       platform,
+      ledger,
       sha256(new TextEncoder().encode('libid/ceremony/dev')),
       new TextEncoder().encode('Ceremony development walkthrough'),
     )
@@ -189,10 +201,14 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
   if (popup.opened) event.preventDefault()
   status.textContent = 'Opening authorization…'
   controls()
-  const off = ceremony.onEvent((event) => {
-    run.onEvent(event)
-    if (event.type === 'stage')
-      status.textContent = `${CeremonyStage.inProgress(CeremonyStage.group(event.stage))}…`
+  const off = ceremony.onEvent(run.onEvent)
+  const offStage = ceremony.onStage((event) => {
+    status.textContent =
+      event.status === 'active'
+        ? CeremonyStage.message(event.stage, names[platform])
+        : event.status === 'failed'
+          ? (event.message ?? 'Ceremony failed.')
+          : event.status
   })
   let failed = false
   void current.closed.then(() => {
@@ -218,8 +234,8 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
       window.result = { status: cancelled ? 'cancelled' : 'failed' }
       result.textContent = cancelled
         ? 'Ceremony cancelled.'
-        : error instanceof CeremonyError
-          ? `${error.message} (${error.code})`
+        : error instanceof Error
+          ? error.message
           : 'Ceremony failed.'
       status.textContent =
         failed && connection === current
@@ -228,6 +244,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     })
     .finally(async () => {
       off()
+      offStage()
       if (!failed) {
         try {
           await current.close()

@@ -13,7 +13,7 @@ vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
 
 vi.mock('@libid/popup', () => ({ PopupConnection: { accept }, PopupWindow: { current } }))
 
-vi.mock('./ui.js', () => ({ view }))
+vi.mock('./ui.js', () => ({ view, eventView: () => ({ stop: vi.fn(), message: vi.fn() }) }))
 
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 
@@ -68,7 +68,12 @@ it('clears before acceptance and preserves exact private return with shared depl
     'https://other-ccdp.test/ccdp/v1/prover',
     new URLSearchParams({ ceremonyId: id, oauthQuery: '', oauthFragment: original }),
   )
-  expect(send).toHaveBeenCalledExactlyOnceWith({ type: 'callback-ready' })
+  expect(send).toHaveBeenCalledExactlyOnceWith({
+    type: 'event',
+    event: 'authorization',
+    phase: 'finished',
+    timestamp: expect.any(Number),
+  })
   expect(send.mock.invocationCallOrder[0]).toBeLessThan(navigate.mock.invocationCallOrder[0])
 })
 
@@ -96,9 +101,7 @@ it.each([
 ])('clears malformed or oversized return before fixed local failure [KIT-010]', (input) => {
   Object.assign(locationInput, input)
   startCallback()
-  expect(view).toHaveBeenCalledWith(
-    'Invalid OAuth callback or deployment configuration. (callback-input) Return to your application.',
-  )
+  expect(view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
   expect(accept).not.toHaveBeenCalled()
 })
 
@@ -121,9 +124,7 @@ it.each(
 )('rejects malformed deployment data before connection setup [KIT-010]', ({ input }) => {
   config = input
   startCallback()
-  expect(view).toHaveBeenCalledWith(
-    'Invalid OAuth callback or deployment configuration. (callback-input) Return to your application.',
-  )
+  expect(view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
   expect(accept).not.toHaveBeenCalled()
 })
 

@@ -13,8 +13,8 @@ exports. The guides below describe each module and its contract.
 [ui.ts](../src/ccdp/documents/ui.ts) owns the native document UI.
 [primitives.ts](../src/primitives.ts) owns shared byte and validation helpers;
 [response.ts](../src/response.ts) reads bounded response bodies.
-[json.ts](../src/json.ts) detects duplicate JSON keys; [progress.ts](../src/progress.ts)
-accounts for work across platform pipelines and proving.
+[events.ts](../src/events.ts) owns the shared operation feed and stage projection.
+[json.ts](../src/json.ts) detects duplicate JSON keys in transcript parsing.
 The source root exports the client-safe discovery and result API. Only the root
 and `ccdp/client` are public package entrypoints; document startup remains private.
 
