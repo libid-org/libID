@@ -1,11 +1,9 @@
 # Client API and lifecycle
 
-Local development exception: references to HTTPS Bridge, CCDP, application and
-notary URLs below also admit canonical HTTP URLs on exactly `localhost` or
-`127.0.0.1`. A local HTTP notary uses WS at the same authority. This exception does
-not apply to OAuth provider requests or external proving assets. COOP/COEP, origin
-admission, callback privacy and all other validation remain required. LAN addresses,
-lookalike domains and noncanonical spellings are not admitted.
+Origins follow the [canonical and loopback policy](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#origin-policy).
+The implementation's shared validators admit HTTP on exactly `localhost` and
+`127.0.0.1` at arbitrary ports; browser notary transport maps those origins to WS.
+This does not relax platform TLS or Prover isolation.
 
 ## Application integration
 
@@ -151,7 +149,7 @@ second authorization secret.
 nonce, derives the code verifier from it and the Authorization Digest by the
 normative Proof Key for Code Exchange (PKCE) construction where required, and
 constructs the authorization request with the [CCDP-defined OAuth
-state](documents.md#documents-and-routes), and returns the `Ceremony` with its launch
+state](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#documents-and-routes), and returns the `Ceremony` with its launch
 URL ready. OAuth `state` carries the CCDP
 routing version plus `ceremonyId`; it is not a second identifier:
 
@@ -254,14 +252,15 @@ no-ceremony-recovery launch scope.
 
 ### OAuth Bridge configuration
 
-Bridge publishes `callbackPath`. Client validates that absolute path and resolves
+The [coordinated fixed-path migration](qualification.md#pending-contract-updates)
+is deferred. Current Bridge configuration publishes `callbackPath`. Client validates that absolute path and resolves
 `redirectUri` once against its supplied `oauthBridge` origin; OAuth, ProveIdentity
 and GitHub token exchange all use those same bytes.
 
 The client fetches and validates the origin-controlled
-[`CeremonyConfig`](oauth-bridge.md#public-configuration) once, then freezes
+[`CeremonyConfig`](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#public-configuration) once, then freezes
 the chosen platform, version, client ID, redirect URI, and CCDP origin. CCDP
-[resources](documents.md#documents-and-routes) never fetch it.
+[resources](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#documents-and-routes) never fetch it.
 
 ### Notary selection
 
@@ -484,7 +483,7 @@ noncanonical encodings fail before use.
 
 ## Progress, cancellation, and recovery
 
-`onEvent` combines Application-local and received [operation events](protocol.md#event)
+`onEvent` combines Application-local and received [operation events](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#event)
 into one timeline. All active occurrences preserve their producer timestamp and
 have `status: 'active'`. The client adds exactly one terminal update before
 `proveUserIdentity()` settles:
@@ -548,8 +547,8 @@ are retained.
 Owns one-time Bridge configuration, frozen ceremony construction and the one-shot
 Application lifecycle over a caller-supplied `PopupConnection`.
 
-- [Public configuration](oauth-bridge.md#public-configuration): Bridge response contract.
-- [CCDP protocol](protocol.md): messages and ordering.
+- [Public configuration](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#public-configuration): Bridge response contract.
+- [CCDP protocol](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md): messages and ordering.
 
 [config.ts](../src/ccdp/client/config.ts) validates configuration; [ceremony.ts](../src/ccdp/client/ceremony.ts) owns state
 and handlers. Identity extraction stays in the platform Provers. Wallet operations,
@@ -560,6 +559,6 @@ submission and post-ceremony actions belong to the Application.
 A technical failure rejects with `CeremonyError` containing `event` and `message`.
 `onEvent` and `onStage` expose the same terminal text before rejection, so simple
 UIs need no second failure subscription. Error text is opaque, bounded and rendered
-as text, with no required error-code catalog. See [Abort](protocol.md#abort) for
+as text, with no required error-code catalog. See [Abort](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#abort) for
 its display/telemetry boundary. Denial resolves a denied result; local cancellation
 rejects with `AbortError`. The application still owns popup closure and retries.

@@ -1,335 +1,48 @@
-# OAuth Bridge Server
+# OAuth Bridge integration
 
-Local development exception: references to HTTPS Bridge, CCDP, application and
-notary URLs below also admit canonical HTTP URLs on exactly `localhost` or
-`127.0.0.1`. A local HTTP notary uses WS at the same authority. This exception does
-not apply to OAuth provider requests or external proving assets. COOP/COEP, origin
-admission, callback privacy and all other validation remain required. LAN addresses,
-lookalike domains and noncanonical spellings are not admitted.
-
-This document defines the HTTP and deployment contract for the OAuth bridge
-used by `@libid/ceremony`. The bridge publishes platform
-configuration, serves the OAuth callback document, and performs the one
-confidential platform exchange required by GitHub.
-
-The package API is defined in [ARCHITECTURE.md](architecture.md), the callback
-participant in [CCDP](documents.md#callback-get-redirecturi), and proof generation in
-[PROVING.md](proving.md). The normative libID specification owns authorization,
-platform-return, token-exchange, and proof semantics; this document fixes only
-the bridge's public transport and deployment boundary.
+The normative [OAuth Bridge contract](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md) owns routes,
+admission, configuration, and token request/response semantics. Ceremony supplies
+a browser client and static Callback artifact, not a production Bridge server.
+[The shared development app](../../../apps/dev/README.md) owns the runnable stack.
 
 ## Current Bridge integration
 
-The package follows the updated [Bridge PR #9](https://github.com/libid-org/libid-server-rs/pull/9)
-at `991d5c604acdb1a67099f28cbf37ad58b6c317a5`. [PR #10](https://github.com/libid-org/libid-server-rs/pull/10)
-uses released libid-rs v0.4.0 for JSON-whitespace support and retains the matched
-RC3 runtime pins and server-specific GitHub error classification.
-Its public record uses `callbackPath`; Client resolves the registered redirect
-URI against its supplied Bridge origin once and sends that same URI in GitHub's
-`TokenRequest`. This intentionally differs from architecture PR #13 at
-`83a7fbcd071abeb62aa2cfd6f9cc91933175a328`, which still specifies `redirectUri`
-in configuration and omits it from the token request. Deploy matching Client,
-CCDP and Bridge builds together; the old wire format is not accepted.
+The development stack pins Bridge PR #10 at
+`cdc16551114070ea3458ef0d5ceb19ca4228833e`, on PR #9 at
+`991d5c604acdb1a67099f28cbf37ad58b6c317a5`. It uses libid-rs v0.4.0 and the
+TLSN/MPZ revisions matched to notary v0.3.0-rc.3.
+[Qualification](qualification.md) records what was exercised.
 
-The Bridge reads platform profiles from TOML `[[platforms]]` tables with
-`client_id` and `versions`; `BASE_URL`, `NOTARY_URL`, `CEREMONY_PLATFORMS` and
-Callback file overrides are no longer inputs. It retrieves Callback from CCDP
-before listening. It resolves the request-selected notary host and dials the
-configured wire port (default 7047), rather than the WebSocket transport specified
-below. DNS/egress checks remain server-owned; loopback is admitted by that server's
-current policy. These transport/policy differences remain qualification gaps.
+The current wire differs from the fixed-callback specification in two linked
+places: config includes `callbackPath`, and GitHub's token request includes
+`redirectUri`. Client validates the path and freezes the resolved URI once;
+the GitHub adapter forwards that same value and checks it in the returned
+attestation. Removing both fields requires the coordinated Bridge migration
+tracked in [pending updates](qualification.md#pending-contract-updates). It is
+intentionally not implemented by this documentation reconciliation.
 
-## Boundary
+The Bridge's TOML platform tables supply client IDs and versions. It retrieves
+the complete Callback artifact before listening and inserts deployment data
+into its non-executable slot. The [distribution build](distribution.md) owns
+the bundled Callback code and generated executable hashes.
 
-The OAuth bridge owns:
+## Notary and token exchange
 
-- OAuth application registrations, public client IDs, and confidential client
-  credentials;
-- the public ceremony configuration;
-- callback ingress, its configured path, response policy, and deployment
-  inputs; and
-- GitHub's confidential token exchange and token attestation when GitHub is
-  enabled.
+Client snapshots `LedgerId.notaryAddress()` before OAuth. The GitHub adapter
+sends that origin in its token request and uses the same notary for identity
+notarization. The Bridge uses the requested host with its configured native
+MPC-TLS TCP listener port, not the origin's HTTP port and not a Proxy WebSocket.
+The browser identity session uses `/notarize-proxy` over WSS, or WS for permitted
+HTTP loopback. This is the intended mode split, not an implementation deviation.
 
-For Callback, the bridge is a configuration-inserting, cached proxy to the
-[CCDP Distribution](distribution.md#callback-artifact). It neither
-implements the document nor requires a TypeScript build. It serves no other
-CCDP resources and stores no ceremony state. Google and X require no
-confidential bridge route.
+The [GitHub adapter](../src/platforms/github/1/prover.ts) checks canonical JSON
+and byte encodings, token bounds, attestation structure, request bindings, and
+opening correlation before its dependent identity request. It does not verify
+notary signatures locally. The response remains one correlated result; it has
+no polling or recovery record.
 
-The bridge and Distribution may be cross-site and independently operated;
-both are code-supply-chain trust boundaries. The Distribution requires no
-Bridge registration and receives no application allowlists.
-
-## Deployment configuration
-
-One bridge deployment has these inputs:
-
-| Input | Contract |
-|---|---|
-| Bridge origin | Canonical HTTPS origin used by every bridge route and the configured OAuth redirect URI; explicit loopback development is the only HTTP exception |
-| `allowedAppOrigins` | Nonempty, duplicate-free set of canonical HTTPS application origins admitted by the bridge |
-| CCDP origin | One canonical HTTPS origin selected by the operator; defaults to `https://lib.id` when omitted |
-| Callback path | Developer-configurable fixed path whose default is `/auth/callback`; registered as every enabled platform's OAuth `redirect_uri` |
-| Platform profiles | Public OAuth client ID and supported ceremony versions for each enabled platform |
-| Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
-| GitHub settings | Client secret when GitHub is enabled; the request supplies the registered redirect URI |
-
-`allowedAppOrigins` has no protocol maximum. A duplicate or invalid member is a
-deployment error rather than something the bridge normalizes. After resolving
-the default or configured `ccdpOrigin`, the bridge derives one effective set:
-`allowedOrigins = allowedAppOrigins ∪ {ccdpOrigin}`. Adding an already-listed
-CCDP origin does not duplicate it. When `ccdpOrigin` is omitted, this adds
-`https://lib.id`; when overridden, only the replacement is added automatically.
-`https://lib.id` then remains allowed only if explicitly listed.
-
-The effective set governs configuration GET, callback connection authentication,
-and GitHub preflight/POST admission. It is embedded into Callback, not separately
-configured, and never inferred from a request's `Origin`, `Referer`, query,
-fragment, or body.
-
-The CCDP origin is likewise deployment data. It is returned to the
-application in public configuration and embedded into the callback document so
-Callback can navigate the popup to Prover. The bridge also resolves the fixed
-Callback artifact path against it; no separate Callback artifact URL is
-configured. Omitting it selects the canonical `https://lib.id`
-Distribution.
-
-The Bridge injects the same input list regardless of CCDP version. New versions
-with compatible inputs work on artifact refresh without a Bridge rebuild or
-configuration change. Callback owns browser version selection; the Bridge
-neither enumerates versions nor reads input declarations from the artifact.
-Input-contract versioning and Bridge awareness are introduced only if that
-contract actually becomes incompatible, not for an ordinary CCDP version bump.
-
-One platform configuration generates both the public profile entries and the
-OAuth registrations used by the callback. The bridge advertises only
-platform/version pairs supported by its selected CCDP Distribution. Selecting
-a shared Distribution requires no reciprocal configuration; the effective
-allowlist automatically admits its origin at this Bridge's GitHub endpoint.
-
-## Route surface
-
-The bridge exposes only:
-
-| Method | Route | Availability | Purpose | Origin enforcement |
-|---|---|---|---|---|
-| `GET` | `/api/v1/ceremony/config` | always | public platform and CCDP configuration | exact `Origin` in `allowedOrigins`; absent `Origin` accepted only by the same-origin rule below |
-| `GET` | configured callback path, default `/auth/callback` | always | complete OAuth Callback document | none at HTTP ingress; callback authenticates its popup connection after clearing its input |
-| `OPTIONS`, `POST` | `/api/v1/ceremony/github-token` | only when GitHub is enabled | confidential GitHub token exchange and token attestation | exact request `Origin` in `allowedOrigins`, checked on every request; exact noncredentialed CORS |
-
-Top-level navigation may omit `Origin`, and an OAuth-platform callback may
-identify the platform rather than the application. `Referer` is never an
-authority input. The callback document is therefore public and
-request-invariant; its browser protocol authenticates the application after it
-loads.
-
-No separate Callback script, prover, proving-asset, preparation, continuation,
-polling, status, result, cancellation, browser TLS bridge, or proof-recovery
-route exists on the OAuth bridge. Unsupported methods fail without route work.
-Except for the OAuth-platform-mandated callback query and the GitHub JSON
-request, bridge routes accept no query or request body.
-
-The `v1` in `/api/v1/ceremony/...` versions the bridge's JSON API.
-The configured callback path is a browser protocol document; its embedded code
-selects `CCDPVersion` from OAuth `state`.
-`PlatformCeremonyVersion` independently versions one platform ceremony. There
-is no request-time version negotiation.
-
-## Public configuration
-
-`GET /api/v1/ceremony/config` returns `application/json` with this exact wire record.
-The client validates this public HTTP response and resolves `callbackPath` into
-`redirectUri` in its internal `CeremonyConfig`. Neither that internal type nor its
-validator is exported from the package:
-
-```ts
-interface PlatformConfig {
-  clientId: string
-  ceremonyVersions: readonly number[]
-}
-
-interface CeremonyConfigResponse {
-  callbackPath: string
-  ccdpOrigin: string
-  platforms: Readonly<Record<string, PlatformConfig>>
-}
-```
-
-The response rules are:
-
-- `PlatformCeremonyVersion` is an unsigned 16-bit integer.
-- `callbackPath` is an absolute path beginning with one `/`, without query or
-  fragment. Client appends it to the supplied canonical Bridge origin and
-  validates the resulting registered `redirectUri` without normalizing it.
-- `ccdpOrigin` is the configured canonical HTTPS origin with no credentials,
-  path, query, or fragment.
-- Each platform entry has one public client ID and a nonempty, duplicate-free
-  list of supported ceremony versions. List order has no meaning.
-- Unknown fields, malformed URLs, and unsupported numeric representations are
-  invalid. A platform absent from the client's closed local catalog is ignored;
-  known entries remain exact-validated before use.
-- The record contains no secret, allowlist, artifact URL, CSP source,
-  notary setting, platform display metadata, or application-specific value.
-
-When present, `Origin` must exactly match an `allowedOrigins` member. A
-successful cross-origin response sets that exact origin in
-`Access-Control-Allow-Origin`, permits no credentials, and never uses `*`.
-A same-origin browser GET may omit `Origin`: accept that case only when
-`Sec-Fetch-Site` is `same-origin` and the Bridge's configured public origin is
-itself in `allowedOrigins`. It needs no CORS response header. Do not infer
-admission from `Referer`, the request host, or absent Fetch Metadata; an explicit
-invalid, `null`, or unlisted `Origin` always fails.
-
-Both cases use `Content-Type: application/json`, `Cache-Control: no-store`,
-`Vary: Origin, Sec-Fetch-Site`, and `X-Content-Type-Options: nosniff`. Rejected
-requests return no configuration. These browser admission checks do not make
-the public record a secret from non-browser clients. Request values do not
-alter the response record.
-
-The application-scoped `CCDPClient` fetches and validates this record once
-at creation using `credentials: 'omit'`. It freezes the selected client ID,
-redirect URI, CCDP origin, and mutually supported platform ceremony version
-in each live ceremony. CCDP browser [resources](documents.md#documents-and-routes)
-never fetch bridge configuration; server-side Callback artifact retrieval is
-separate.
-
-## Callback document
-
-The registered `redirect_uri` serves Callback on the bridge origin, without
-an HTTP redirect. Its [artifact contract](distribution.md#callback-artifact)
-owns the HTML, configuration slot, response policy, browser startup, version
-selection, and failure UI. The bridge only:
-
-- retrieves `{ccdpOrigin}/ccdp/callback.html` at startup and revalidates it
-  independently of callback requests, rejecting upstream redirects;
-- sends no callback query, OAuth return, incoming request headers, cookies, or
-  credentials upstream; the configured source never depends on a request;
-- validates and inserts its unversioned input list using the artifact contract,
-  then publishes the completed HTML and matching response headers atomically;
-- serves the cached result until a valid replacement is ready; a failed
-  refresh retains the last valid result, or returns an inert unavailable
-  response when none exists; and
-- suppresses or redacts callback query strings throughout its ingress proxies,
-  access logs, traces, analytics, metrics labels, and errors.
-
-Compatible artifact updates require no bridge rebuild. The bridge neither
-parses OAuth state nor selects a CCDP implementation, generates browser code,
-or handles protocol errors. Google fragments never reach this server;
-platform-mandated callback queries are not forwarded to the Distribution.
-
-## GitHub token endpoint
-
-When GitHub is enabled, `POST /api/v1/ceremony/github-token` performs the
-confidential OAuth token exchange and token TLSNotary session synchronously. It
-retains no state. The prover derives this fixed route from the origin of the
-Ceremony Client's frozen `redirectUri` in `ProveIdentity`; the prover document
-does not embed it.
-
-The ceremony's browser caller is Prover on `ccdpOrigin`, but this route uses the
-same `allowedOrigins` rule as configuration and Callback: configured application
-origins are also admitted. The requested `notaryAddress` grants no caller
-admission.
-
-The bridge API version implements GitHub ceremony version `1` only. The request
-carries no ceremony-version field, and configuration must not advertise a
-GitHub version requiring different token-service semantics. Such a change
-requires a new bridge API version.
-
-```ts
-interface TokenRequest {
-  code: string
-  codeVerifier: string
-  redirectUri: string
-  notaryAddress: string
-}
-
-interface TokenResponse {
-  accessToken: string
-  tokenAttestation: {
-    attestedData: string // canonical unpadded base64url
-    signature: string    // canonical unpadded base64url
-  }
-  bearerOpening: string // canonical unpadded base64url
-}
-```
-
-Both records are UTF-8 JSON objects. Member order and insignificant whitespace
-have no meaning. Duplicate, missing, additional, or wrongly typed members are
-invalid. The versioned route carries no redundant schema field.
-
-`redirectUri` is the exact URI frozen before OAuth and passed in `ProveIdentity`.
-It is a canonical HTTPS or permitted local HTTP URL without credentials, query or
-fragment, at most 2,048 bytes. The Bridge checks its configured Callback path and
-passes the URI unchanged to GitHub. Prover also checks that URI in the returned
-attested request before using the token.
-
-`code` is nonempty printable ASCII without whitespace or control bytes and at
-most 1,024 bytes. `codeVerifier` matches `[A-Za-z0-9_-]{43}`. The bridge does
-not normalize either value.
-
-`notaryAddress` is a required canonical HTTPS origin with no credentials, path,
-query, or fragment. Prover forwards the address already
-[snapshotted by CCDPClient](client.md#notary-selection) from the
-supplied ledger, and uses that same address for identity notarization. The Bridge
-derives the fixed `/notarize-proxy` WebSocket endpoint from it; it neither
-classifies ledgers nor maintains a notary mapping or override.
-Failure never selects a different notary. Callback configuration and public
-`CeremonyConfig` carry no notary selection.
-
-This server-side destination is request-controlled. Origin/CORS checks do not
-authenticate non-browser callers or replace egress controls. The Bridge must
-prevent access to private/internal destinations, including through DNS
-resolution, unless its operator explicitly permits the development destination.
-Canonical HTTPS syntax alone is insufficient; redirects remain forbidden.
-
-`accessToken` is nonempty printable ASCII without whitespace or control bytes
-and at most 128 bytes, matching GitHub v1's bearer circuit. Both Bridge and
-Prover enforce this bound before dependent identity notarization; an oversized
-token fails rather than being truncated. `attestedData` decodes to a nonempty
-byte-exact record of at most 2 MiB; `signature` decodes to exactly 65 bytes; and `bearerOpening`
-decodes to exactly 16 bytes. Every byte string uses canonical unpadded base64url.
-The encoded response body is at most 3 MiB.
-
-The returned fields are one correlated result: the uniquely framed bearer
-commitment in `tokenAttestation.attestedData` equals
-`SHA256(accessToken || bearerOpening)`. The bridge preserves signed attestation
-bytes exactly. Before its dependent identity notarization, the prover validates
-the response encoding, correlation, and open request bindings. Neither Prover
-nor Client performs local notary-signature verification. A structurally valid
-forged signature is not detected by these checks alone; downstream verification
-of the original bytes against trusted notary keys remains authoritative and
-mandatory.
-
-The endpoint contract is:
-
-- the query is empty and the request media type is exactly `application/json`;
-- every preflight and POST carries one valid `Origin` exactly matching an
-  `allowedOrigins` member; missing, `null`, malformed, multiple, or unlisted origins
-  reject before notary resolution, connection, or token exchange. Successful
-  preflight never substitutes for checking the actual POST;
-- successful preflight admits only `POST` and `Content-Type`, uses no
-  credentials, and returns no ceremony data;
-- malformed UTF-8, JSON, or fields fail before token exchange;
-- client ID, client secret, redirect URI, and the GitHub TLS/request target
-  come only from bridge configuration; only the notary destination comes from
-  the validated request above;
-- redirects are rejected and request duration and response size are bounded;
-- success is status `200` with exact noncredentialed CORS,
-  `Content-Type: application/json`, `Cache-Control: no-store`, and one bounded
-  `TokenResponse`;
-- credentials and OAuth-platform-return values never enter logs, traces, analytics,
-  metrics labels, or error bodies; and
-- failure returns no partial credential, attestation, or caller-selected
-  diagnostic content.
-
-Timeout, duplicate request, restart, or response loss leaves no bridge record.
-There is no action ID, polling route, progress stream, or response recovery; a
-lost response requires a fresh ceremony.
-
-## Compatibility
-
-A breaking JSON request or response changes the bridge API version. CCDP,
-platform ceremony, prover release, and popup connection versions remain
-independent as defined in
-[ARCHITECTURE.md](architecture.md#versioning-and-compatibility).
+Bridge origin admission is checked on every actual request, independently of
+preflight. DNS/egress controls remain server-owned: CORS is not authentication
+of non-browser clients. The loopback exception does not waive those controls.
+Production egress and refresh behavior require the external qualification
+recorded in the [qualification guide](qualification.md).

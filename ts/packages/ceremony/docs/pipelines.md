@@ -88,7 +88,7 @@ The browser distribution exposes `tlsn_wasm.js` and its sibling
 `tlsn_wasm_bg.wasm`; the worker bootstrap is embedded in the module. The global
 notarization module pins both immutable asset paths. Each remains a normal,
 independently cached response; the browser never downloads or unpacks a release
-archive. The [CCDP Distribution contract](distribution.md#proving-assets) owns their
+archive. The [CCDP Distribution contract](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md#proving-assets) owns their
 serving.
 Prover validates `ProveIdentity.notaryAddress`, already
 [selected by CCDPClient](client.md#notary-selection), and uses it
@@ -195,7 +195,7 @@ A structurally valid forgery can survive these early checks and waste browser
 work, but cannot pass ledger signature verification under the trusted notary
 keys. That session commits the bearer and reveals the
 canonical `id` and `login` ranges. The OAuth bridge route is defined in
-[OAUTH_BRIDGE.md](oauth-bridge.md#github-token-endpoint).
+[OAuth Bridge](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#github-token-endpoint).
 
 The module then runs the same `bearer-link` circuit with the token-exchange and
 identity blinders. Its public-input count and order are identical to X: 64
@@ -216,7 +216,7 @@ its Prover pipeline. The catalog is closed and client-safe.
 
 - [Versioning](architecture.md#versioning-and-compatibility): ceremony compatibility.
 - [Result contract](client.md#result-and-lifecycle): identity and OAuth proof assembly.
-- [Normative platform profiles](../../../../specs/platform-ceremonies.md): encodings and proof statements.
+- [Normative platform profiles](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md): encodings and proof statements.
 
 [index.ts](../src/platforms/index.ts) composes each version's URL builder and proof validators
 directly, derives public types and dispatches structural validation. URL modules

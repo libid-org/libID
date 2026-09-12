@@ -1,22 +1,20 @@
 # `@libid/ceremony` notarization architecture
 
-Local development exception: references to HTTPS Bridge, CCDP, application and
-notary URLs below also admit canonical HTTP URLs on exactly `localhost` or
-`127.0.0.1`. A local HTTP notary uses WS at the same authority. This exception does
-not apply to OAuth provider requests or external proving assets. COOP/COEP, origin
-admission, callback privacy and all other validation remain required. LAN addresses,
-lookalike domains and noncanonical spellings are not admitted.
+Origins follow the [canonical and loopback policy](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#origin-policy).
+The implementation's shared validators admit HTTP on exactly `localhost` and
+`127.0.0.1` at arbitrary ports; browser notary transport maps those origins to WS.
+This does not relax platform TLS or Prover isolation.
 
 This document defines the browser-side `notary` module: how it
 runs a TLSNotary session, applies platform-selected transcript disclosures, and
 returns a byte-exact attestation with its decoded view plus private commitment
-openings. The enclosing pipeline is defined in [PROVING.md](proving.md), browser placement in
-[CCDP.md](protocol.md), asset serving in [CCDP_DISTRIBUTION.md](distribution.md#proving-assets),
+openings. The enclosing pipeline is defined in [Proving](proving.md), browser placement in
+[CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md), asset serving in [Distribution](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md#proving-assets),
 and GitHub's confidential exchange in
-[OAUTH_BRIDGE.md](oauth-bridge.md#github-token-endpoint). Exact proof semantics
+[OAuth Bridge](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#github-token-endpoint). Exact proof semantics
 remain normative in the
-[common ceremony rules](../../../../specs/ceremony-common.md) and
-[identity-platform ceremonies](../../../../specs/platform-ceremonies.md).
+[common ceremony rules](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ceremony-common.md) and
+[identity-platform ceremonies](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md).
 
 ## Boundary and rationale
 
@@ -290,20 +288,13 @@ unknown or duplicate field, trailing byte, second frame, or missing close fails.
 
 ### Integration qualification
 
-The reported active PoC exercises direct WebSocket notarization and receives
-the final attestation over that same reclaimed socket, without HTTP session
-creation or polling. Related upstream work is tracked in:
-
-1. [notary #3](https://github.com/libid-org/notary/pull/3) produces the canonical
-   ceremony attestation and removes the single-platform authority pin;
-2. [notary #4](https://github.com/libid-org/notary/pull/4) moves the browser
-   bundle to the required TLSNotary release; and
-3. [TLSNotary #1178](https://github.com/tlsnotary/tlsn/pull/1178) returns the
-   completed session channel to the caller.
-
-Qualify the selected server/client artifacts together for X token, X identity,
-and GitHub identity against the framing below. The PoC result does not establish
-that every deployed service or older release supports this transport.
+The selected RC3 browser bundle and matched notary deliver the final attestation
+over the reclaimed WebSocket, without HTTP session creation or polling.
+[Qualification](qualification.md#evidence-obtained) records real single/concurrent
+browser probes and their limits. The selected TLSN revision includes channel
+reclamation; the integration history is available in
+[TLSNotary #1178](https://github.com/tlsnotary/tlsn/pull/1178).
+Successful unauthenticated probes do not qualify real token and identity sessions.
 
 ```mermaid
 sequenceDiagram
@@ -402,7 +393,7 @@ exists.
 
 GitHub's confidential token exchange is server-side and does not use this
 browser module. Its HTTP contract is defined in
-[OAUTH_BRIDGE.md](oauth-bridge.md#github-token-endpoint), while the GitHub platform module
+[OAuth Bridge](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#github-token-endpoint), while the GitHub platform module
 owns browser-side response validation and subsequent `/user` orchestration.
 
 ## Attestation handoff
@@ -426,7 +417,7 @@ valid forgery can survive browser checks, so delivery and convenience views
 remain unverified. The Ledger Verifier's trusted-notary signature and
 platform-profile checks remain mandatory over the original signed bytes.
 
-[TEST_PLAN.md](test-plan.md) owns the executable notarization requirements.
+[Test plan](test-plan.md) owns the executable notarization requirements.
 
 ## Implementation guide
 
@@ -434,7 +425,7 @@ Shared TLSNotary adapter for X and GitHub: exact HTTP requests, bounded transcri
 selective disclosures and correlation with canonical final attestations.
 
 - [Platform pipelines](pipelines.md): token/identity overlap and delivery dependencies.
-- [Qualification blockers](qualification.md#actual-blockers-and-unqualified-boundaries): matched service, timing and profile gaps.
+- [Remaining qualification](qualification.md#remaining-qualification): matched service, timing and profile gaps.
 
 [session.ts](../src/notary/session.ts) documents the ceremony-owned runtime,
 independent sessions, provisional openings and cancellation contract.
