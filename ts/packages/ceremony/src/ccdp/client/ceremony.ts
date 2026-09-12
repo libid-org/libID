@@ -1,6 +1,6 @@
 import type { LedgerId } from '@libid/ledger'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
-import { CeremonyError } from '../../errors.js'
+import { CeremonyError, ceremonyError } from '../../errors.js'
 import {
   deriveAuthorizationDigest,
   deriveCodeChallenge,
@@ -17,23 +17,27 @@ import {
 } from '../../platforms/index.js'
 import { hasExactKeys, isRecord, origin } from '../../primitives.js'
 import {
-  AbortCeremony,
-  type AppStartProver,
-  CallbackReady,
-  CancelCeremony,
-  PrefetchReady,
-  PrefetchStarted,
-  ProverIdentityProof,
-  ProverNotifyEvent,
-  ProverReady,
+  Abort,
+  Cancel,
+  Event as EventMessage,
+  IdentityProof,
+  type ProveIdentity,
   UUID,
 } from '../index.js'
 import { oauthState, prefetchFragment, route } from '../navigation.js'
 import { type CeremonyConfig, fetchCeremonyConfig } from './config.js'
 
-export type { CeremonyEvent, CeremonyStage } from '../../events.js'
+export type { CeremonyEvent, CeremonyStage, StageEvent } from '../../events.js'
 
-import { type CeremonyEvent, type CeremonyStage, stages } from '../../events.js'
+import {
+  type CeremonyEvent,
+  type CoreEvent,
+  coreEvents,
+  Events,
+  now,
+  type OperationEvent,
+  type StageEvent,
+} from '../../events.js'
 
 /** One ceremony over a caller-supplied connection; the application owns the window. */
 export interface Ceremony<P extends PlatformId = PlatformId> {
@@ -41,6 +45,8 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
   readonly launchUrl: string
   /** Subscribe to advisory events. Returns an unsubscribe function; listener exceptions do not fail the run. */
   onEvent(listener: (event: CeremonyEvent) => void): () => void
+  /** Subscribe to the sequential UI projection, including terminal status and error text. */
+  onStage(listener: (event: StageEvent) => void): () => void
   /** Start once; resolve accepted/denied output, or reject cancellation and technical failures. */
   proveUserIdentity(): Promise<IdentityResult<P>>
   /** Cancel this run. Calling again after termination has no effect. */
@@ -67,8 +73,8 @@ export interface CCDPClient {
   new: <P extends PlatformId>(
     conn: PopupConnection<Message>,
     ceremonyId: string,
-    ledgerId: LedgerId,
     platformId: P,
+    ledgerId: LedgerId,
     operationDomain: Uint8Array,
     transactionData: Uint8Array,
     ceremonyVersion?: SupportedCeremonyVersion<P>,
@@ -96,8 +102,8 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
     new<P extends PlatformId>(
       conn: PopupConnection<Message>,
       id: string,
-      ledgerId: LedgerId,
       platformId: P,
+      ledgerId: LedgerId,
       operationDomain: Uint8Array,
       transactionData: Uint8Array,
       ceremonyVersion?: SupportedCeremonyVersion<P>,
@@ -167,8 +173,9 @@ function receiver<M extends Message>(handler: ((message: M) => void) | undefined
 class Run<P extends PlatformId> implements Ceremony<P> {
   readonly launchUrl: string
   private state: 'new' | 'prefetch' | 'oauth' | 'proving' | 'done' = 'new'
-  private stage: CeremonyStage = 'start'
-  private readonly listeners = new Set<(event: CeremonyEvent) => void>()
+  private readonly events = new Events()
+  private readonly observations = new Set<string>()
+  private proofWorkStarted = false
   private readonly off: (() => void)[] = []
   private readonly connection: PopupConnection<Message>
   private readonly platform: P
@@ -178,13 +185,12 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     authorizationNonce: Uint8Array
     transactionData: Uint8Array
   }
-  private readonly start: AppStartProver
+  private readonly start: ProveIdentity
   private authorizationUrl: string
   private readonly prefetchUrl: string
   private readonly fragment: URLSearchParams
   private resolve: ((value: IdentityResult<P>) => void) | undefined
   private reject: ((reason: Error) => void) | undefined
-  private progress = 0
   private binding: Binding | undefined
 
   constructor(
@@ -219,7 +225,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       codeChallenge: codeVerifier === null ? null : deriveCodeChallenge(codeVerifier),
     })
     this.start = {
-      type: 'app-start-prover',
+      type: 'prove-identity',
       platformId: this.platform,
       platformCeremonyVersion: this.version,
       clientId: platform.clientId,
@@ -234,38 +240,74 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   }
 
   onEvent(listener: (event: CeremonyEvent) => void): () => void {
-    this.listeners.add(listener)
-    return () => {
-      this.listeners.delete(listener)
-    }
+    return this.state === 'done' ? () => {} : this.events.onEvent(listener)
   }
 
-  private emit(event: CeremonyEvent, listeners = [...this.listeners]): void {
-    for (const listener of listeners) {
-      if (this.state === 'done' && event.type !== 'finished') return
-      try {
-        listener(
-          event.type === 'step'
-            ? { ...event, platformStep: { ...event.platformStep } }
-            : { ...event },
-        )
-      } catch {
-        /* Observers cannot affect ceremony authority. */
-      }
-    }
+  onStage(listener: (event: StageEvent) => void): () => void {
+    return this.state === 'done' ? () => {} : this.events.onStage(listener)
   }
 
-  private enterStage(stage: CeremonyStage): void {
-    if (this.state === 'done' || stages.indexOf(stage) <= stages.indexOf(this.stage)) return
-    if (this.platform === 'google' && ['code-exchange', 'identity-fetch'].includes(stage)) return
-    this.stage = stage
-    this.emit({ type: 'stage', stage, timestamp: performance.timeOrigin + performance.now() })
+  private publish(event: OperationEvent): void {
+    this.events.emit({ ...event, status: 'active' })
   }
 
-  private finish(event: CeremonyEvent & { type: 'finished' }): void {
-    const listeners = [...this.listeners]
+  private finish(event: Exclude<CeremonyEvent, { status: 'active' }>): void {
     this.cleanup()
-    this.emit(event, listeners)
+    this.events.emit(event)
+  }
+
+  private receiveEvent(message: EventMessage): void {
+    const { type: _type, ...event } = message
+    const core = coreEvents.includes(event.event as CoreEvent)
+    if (event.event === 'prefetch-dispatch') {
+      this.expect('prefetch')
+      if (event.phase !== 'finished') throw new Error('Invalid prefetch readiness')
+      this.state = 'oauth'
+      const url = this.authorizationUrl
+      this.authorizationUrl = ''
+      this.publish(event)
+      if (this.state !== 'oauth') return
+      this.publish({ event: 'authorization', phase: 'started', timestamp: now() })
+      if (this.state === 'oauth')
+        void this.connection
+          .navigateAway(url)
+          .catch((error) => this.fail(ceremonyError(error, 'authorization')))
+      return
+    }
+    if (event.event === 'prover') {
+      this.expect('oauth')
+      if (event.phase !== 'started') throw new Error('Invalid prover readiness')
+      this.state = 'proving'
+      // Readiness processing precedes observers; no subscription is needed to start proving.
+      this.connection.send({ ...this.start })
+      this.publish(event)
+      return
+    }
+    if (event.event === 'authorization' || event.event === 'prover-fallback') {
+      this.expect('oauth')
+      if (event.event === 'authorization' && event.phase !== 'finished')
+        throw new Error('Invalid authorization observation')
+    } else if (core) {
+      this.expect('proving')
+      if (
+        (this.platform === 'google' && !event.event.startsWith('zk-')) ||
+        (this.platform === 'github' && event.event === 'token-fetch')
+      )
+        throw new Error('Event does not apply to platform')
+      this.proofWorkStarted = true
+    }
+    if (core) {
+      const key = `${event.event}/${event.phase ?? ''}`
+      if (this.observations.has(key)) throw new Error('Duplicate core occurrence')
+      if (
+        event.phase === 'finished' &&
+        event.event !== 'authorization' &&
+        !this.observations.has(`${event.event}/started`)
+      )
+        throw new Error('Core finish precedes start')
+      this.observations.add(key)
+    }
+    this.publish(event)
   }
 
   private listen<M extends Message>(type: MessageType<M>, handler: (message: M) => void): void {
@@ -273,8 +315,12 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       if (this.state === 'done') return
       try {
         handler(m)
-      } catch {
-        this.fail(new Error('Invalid ceremony sequence'))
+      } catch (error) {
+        this.fail(
+          new Error(
+            `Invalid ceremony sequence: ${error instanceof Error ? error.message : 'unexpected message'}`,
+          ),
+        )
       }
     })
     this.binding!.remove.push(this.connection.on(type, listener.receive))
@@ -289,7 +335,10 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     if (this.state !== 'new') return Promise.reject(new Error('Ceremony is one-shot'))
     const previous = bindings.get(this.connection)
     if (previous?.active) {
-      const error = new Error('Connection already has an active ceremony')
+      const error = new CeremonyError(
+        'prefetch-dispatch',
+        'Connection already has an active ceremony',
+      )
       this.fail(error)
       return Promise.reject(error)
     }
@@ -307,39 +356,8 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       this.reject = reject
     })
     try {
-      this.listen(PrefetchReady, () => {
-        if (this.state === 'prefetch') this.enterStage('prefetch')
-      })
-      this.listen(CallbackReady, () => {
-        if (this.state === 'oauth') this.enterStage('oauth-return')
-      })
-      this.listen(PrefetchStarted, () => {
-        this.expect('prefetch')
-        this.state = 'oauth'
-        const url = this.authorizationUrl
-        this.authorizationUrl = ''
-        this.enterStage('authorization')
-        if (this.state !== 'oauth') return
-        void this.connection
-          .navigateAway(url)
-          .catch(() => this.fail(new Error('OAuth navigation failed')))
-      })
-      this.listen(ProverReady, () => {
-        this.expect('oauth')
-        this.state = 'proving'
-        this.connection.send({ ...this.start })
-      })
-      this.listen(ProverNotifyEvent, (m) => {
-        this.expect('proving')
-        if ('stage' in m) {
-          this.enterStage(m.stage)
-          return
-        }
-        if (m.platformStep.progress < this.progress) return
-        this.progress = m.platformStep.progress
-        this.emit({ type: 'step', platformStep: m.platformStep, timestamp: m.timestamp })
-      })
-      this.listen(ProverIdentityProof, (m) => {
+      this.listen(EventMessage, (event) => this.receiveEvent(event))
+      this.listen(IdentityProof, (m) => {
         this.expect('proving')
         const result = assembleResult(
           this.platform,
@@ -350,30 +368,27 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         )
         const resolve = this.resolve
         this.finish({
-          type: 'finished',
-          outcome: 'success',
-          timestamp: performance.timeOrigin + performance.now(),
+          event: 'prover',
+          phase: 'finished',
+          status: 'completed',
+          timestamp: now(),
         })
         resolve?.(result)
       })
-      this.listen(CancelCeremony, () => {
+      this.listen(Cancel, () => {
         this.expect('proving')
+        if (this.proofWorkStarted) throw new Error('Denial after proof work began')
         const resolve = this.resolve
         this.finish({
-          type: 'finished',
-          outcome: 'denied',
-          timestamp: performance.timeOrigin + performance.now(),
+          status: 'denied',
+          timestamp: now(),
         })
         resolve?.({ status: 'denied' })
       })
-      this.listen(AbortCeremony, (message) => this.fail(new CeremonyError(message.code)))
+      this.listen(Abort, (message) => this.fail(new CeremonyError(message.event, message.message)))
       void this.connection.ready.catch(() => this.fail(new Error('Popup connection failed')))
       void this.connection.closed.then(() => this.fail(new Error('Popup connection ended')))
-      this.emit({
-        type: 'stage',
-        stage: 'start',
-        timestamp: performance.timeOrigin + performance.now(),
-      })
+      this.publish({ event: 'prefetch-dispatch', phase: 'started', timestamp: now() })
       if (this.state === 'prefetch')
         void this.connection
           .navigate(this.prefetchUrl, this.fragment)
@@ -392,7 +407,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.fail(new DOMException('Ceremony canceled', 'AbortError'))
     if (active && bindings.get(this.connection) === this.binding && !this.binding?.active)
       try {
-        this.connection.send({ type: 'cancel-ceremony' })
+        this.connection.send({ type: 'cancel' })
       } catch {
         /* Best effort; local cancellation already won. */
       }
@@ -401,18 +416,20 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private fail(error: Error): void {
     if (this.state === 'done') return
     const reject = this.reject
-    const timestamp = performance.timeOrigin + performance.now()
+    const failure = ceremonyError(
+      error,
+      this.state === 'prefetch' || this.state === 'new'
+        ? 'prefetch-dispatch'
+        : this.state === 'oauth'
+          ? 'authorization'
+          : 'prover',
+    )
     this.finish(
       error.name === 'AbortError'
-        ? { type: 'finished', outcome: 'cancelled', timestamp }
-        : {
-            type: 'finished',
-            outcome: 'failed',
-            code: error instanceof CeremonyError ? error.code : null,
-            timestamp,
-          },
+        ? { status: 'cancelled', timestamp: now() }
+        : { status: 'failed', event: failure.event, message: failure.message, timestamp: now() },
     )
-    reject?.(error)
+    reject?.(error.name === 'AbortError' ? error : failure)
   }
 
   private cleanup(): void {
@@ -420,7 +437,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.state = 'done'
     this.releaseId()
     for (const off of this.off.splice(0)) off()
-    this.listeners.clear()
+    this.observations.clear()
     this.start.codeVerifier = null
     this.authorizationUrl = ''
     this.retained.authorizationNonce.fill(0)

@@ -1,6 +1,5 @@
 import type { MessageType } from '@libid/popup'
-import { type FailureCode, failureMessages } from '../errors.js'
-import { type ProverStage, stages } from '../events.js'
+import { eventName, type OperationEvent, validateEvent } from '../events.js'
 import { b64urlDecode, hasExactKeys, isRecord, origin, text, uint, webUrl } from '../primitives.js'
 
 /** Pure CCDP codecs: shape and bounds validation only; transport authentication belongs to popup. */
@@ -25,92 +24,38 @@ export function assertMessage<T extends string>(
     throw new TypeError('Invalid CCDP record')
 }
 
-/** Advisory page readiness; fetch dispatch is acknowledged separately. */
-export interface PrefetchReady {
-  type: 'prefetch-ready'
+export interface Cancel {
+  type: 'cancel'
 }
 
-export const PrefetchReady = {
-  type: 'prefetch-ready',
-  decode(value: unknown): PrefetchReady {
+export const Cancel = {
+  type: 'cancel',
+  decode(value: unknown): Cancel {
     assertMessage(value, this.type, [])
     return value
   },
-} as const satisfies MessageType<PrefetchReady>
+} as const satisfies MessageType<Cancel>
 
-/** Every selected fetch has been dispatched or joined; downloads may still be pending. */
-export interface PrefetchStarted {
-  type: 'prefetch-started'
+/** Opaque display text and the failed operation; neither grants authority. */
+export interface Abort {
+  type: 'abort'
+  event: string
+  message: string
 }
 
-export const PrefetchStarted = {
-  type: 'prefetch-started',
-  decode(value: unknown): PrefetchStarted {
-    assertMessage(value, this.type, [])
-    return value
+export const Abort = {
+  type: 'abort',
+  decode(value: unknown): Abort {
+    assertMessage(value, this.type, ['event', 'message'])
+    if (!eventName(value.event) || !text(value.message, 2048))
+      throw new TypeError('Invalid abort message')
+    return value as unknown as Abort
   },
-} as const satisfies MessageType<PrefetchStarted>
-
-export interface CallbackReady {
-  type: 'callback-ready'
-}
-
-export const CallbackReady = {
-  type: 'callback-ready',
-  decode(value: unknown): CallbackReady {
-    assertMessage(value, this.type, [])
-    return value
-  },
-} as const satisfies MessageType<CallbackReady>
-
-/** The isolated Prover can accept the application’s frozen inputs. */
-export interface ProverReady {
-  type: 'prover-ready'
-}
-
-export const ProverReady = {
-  type: 'prover-ready',
-  decode(value: unknown): ProverReady {
-    assertMessage(value, this.type, [])
-    return value
-  },
-} as const satisfies MessageType<ProverReady>
-
-export interface CancelCeremony {
-  type: 'cancel-ceremony'
-}
-
-export const CancelCeremony = {
-  type: 'cancel-ceremony',
-  decode(value: unknown): CancelCeremony {
-    assertMessage(value, this.type, [])
-    return value
-  },
-} as const satisfies MessageType<CancelCeremony>
-
-export interface AbortCeremony {
-  type: 'abort-ceremony'
-  code: FailureCode
-  reason: string
-}
-
-export const AbortCeremony = {
-  type: 'abort-ceremony',
-  decode(value: unknown): AbortCeremony {
-    assertMessage(value, this.type, ['code', 'reason'])
-    if (
-      typeof value.code !== 'string' ||
-      !Object.hasOwn(failureMessages, value.code) ||
-      value.reason !== failureMessages[value.code as FailureCode]
-    )
-      throw new TypeError('Invalid abort reason')
-    return value as unknown as AbortCeremony
-  },
-} as const satisfies MessageType<AbortCeremony>
+} as const satisfies MessageType<Abort>
 
 /** Application-owned inputs only; raw OAuth returns remain private to Callback and Prover. */
-export interface AppStartProver {
-  type: 'app-start-prover'
+export interface ProveIdentity {
+  type: 'prove-identity'
   platformId: string
   platformCeremonyVersion: number
   clientId: string
@@ -119,9 +64,9 @@ export interface AppStartProver {
   notaryAddress: string | null
 }
 
-export const AppStartProver = {
-  type: 'app-start-prover',
-  decode(value: unknown): AppStartProver {
+export const ProveIdentity = {
+  type: 'prove-identity',
+  decode(value: unknown): ProveIdentity {
     assertMessage(value, this.type, [
       'platformId',
       'platformCeremonyVersion',
@@ -147,69 +92,32 @@ export const AppStartProver = {
       )
     )
       throw new TypeError('Invalid proving request')
-    return value as unknown as AppStartProver
+    return value as unknown as ProveIdentity
   },
-} as const satisfies MessageType<AppStartProver>
+} as const satisfies MessageType<ProveIdentity>
 
-export interface PlatformStep {
-  code: string
-  label: string
-  status: 'started' | 'completed' | 'failed'
-  progress: number
-}
+/** One event envelope for coordination and observations; it never declares ceremony success. */
+export type Event = { type: 'event' } & OperationEvent
 
-export type ProverNotifyEvent = {
-  type: 'prover-notify-event'
-  timestamp: number
-} & ({ platformStep: PlatformStep } | { stage: ProverStage })
-
-export const ProverNotifyEvent = {
-  type: 'prover-notify-event',
-  decode(value: unknown): ProverNotifyEvent {
-    if (isRecord(value) && 'stage' in value) {
-      assertMessage(value, this.type, ['stage', 'timestamp'])
-      if (
-        typeof value.stage !== 'string' ||
-        !stages.slice(stages.indexOf('code-exchange')).some((stage) => stage === value.stage) ||
-        typeof value.timestamp !== 'number' ||
-        !Number.isFinite(value.timestamp) ||
-        value.timestamp < 0
-      )
-        throw new TypeError('Invalid stage')
-      return value as ProverNotifyEvent
-    }
-    assertMessage(value, this.type, ['platformStep', 'timestamp'])
-    const s = value.platformStep
-    if (
-      !isRecord(s) ||
-      !hasExactKeys(s, ['code', 'label', 'status', 'progress']) ||
-      !text(s.code, 64) ||
-      !/^[a-z][a-z0-9-]*$/.test(s.code) ||
-      !text(s.label, 96) ||
-      (s.status !== 'started' && s.status !== 'completed' && s.status !== 'failed') ||
-      typeof s.progress !== 'number' ||
-      !Number.isFinite(s.progress) ||
-      s.progress < 0 ||
-      s.progress >= 1 ||
-      typeof value.timestamp !== 'number' ||
-      !Number.isFinite(value.timestamp) ||
-      value.timestamp < 0
-    )
-      throw new TypeError('Invalid progress')
-    return value as unknown as ProverNotifyEvent
+export const Event = {
+  type: 'event',
+  decode(value: unknown): Event {
+    if (!isRecord(value) || value.type !== this.type) throw new TypeError('Invalid event')
+    validateEvent(value)
+    return value as unknown as Event
   },
-} as const satisfies MessageType<ProverNotifyEvent>
+} as const satisfies MessageType<Event>
 
 /** Final pipeline output, including all required attestations; the ledger verifier remains authoritative. */
-export interface ProverIdentityProof {
-  type: 'prover-identity-proof'
+export interface IdentityProof {
+  type: 'identity-proof'
   identity: { platformId: string; oauthClientId: string; userId: string; userName: string }
   proof: unknown
 }
 
-export const ProverIdentityProof = {
-  type: 'prover-identity-proof',
-  decode(value: unknown): ProverIdentityProof {
+export const IdentityProof = {
+  type: 'identity-proof',
+  decode(value: unknown): IdentityProof {
     assertMessage(value, this.type, ['identity', 'proof'])
     const identity = value.identity
     if (
@@ -222,17 +130,8 @@ export const ProverIdentityProof = {
       !text(identity.userName, 255)
     )
       throw new TypeError('Invalid identity')
-    return value as unknown as ProverIdentityProof
+    return value as unknown as IdentityProof
   },
-} as const satisfies MessageType<ProverIdentityProof>
+} as const satisfies MessageType<IdentityProof>
 
-export type CCDPMessage =
-  | PrefetchReady
-  | CallbackReady
-  | PrefetchStarted
-  | ProverReady
-  | CancelCeremony
-  | AbortCeremony
-  | AppStartProver
-  | ProverNotifyEvent
-  | ProverIdentityProof
+export type CCDPMessage = ProveIdentity | IdentityProof | Cancel | Abort | Event

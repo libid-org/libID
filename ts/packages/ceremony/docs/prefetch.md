@@ -66,11 +66,11 @@ GitHub token exchange, platform APIs, OAuth navigation, HTML, and configuration
 are never cached, rewritten, or synthesized by this worker.
 
 As soon as active-worker selection and the prefetch request settle, without
-waiting for download completion, the Prefetch emits CCDP's `PrefetchStarted`.
+waiting for download completion, the Prefetch emits CCDP's `prefetch-dispatch.finished`.
 Registration or activation failure is terminal under the package's fixed
 prefetch/cache contract; artifact fetch failure records no weaker mode and
 leaves proving on the identical cold path. The active prover resolves
-the same profile using the exact `AppStartProver` platform/version. Ordinary asset
+the same profile using the exact `ProveIdentity` platform/version. Ordinary asset
 requests join an in-flight fetch or return the completed Cache Storage response
 after validating its headers, without rereading or copying its body. Complete
 bodies are validated before storage; CRS partial responses retain their range

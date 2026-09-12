@@ -67,14 +67,14 @@ for (const secure of [true, false]) {
       }
       try {
         if (port === 4681) {
-          if (path === '/ui.js')
-            return send(readFileSync(join(packageDir, '.cache/e2e/ui.js')), {
+          if (path === '/ui.js' || path === '/events.js')
+            return send(readFileSync(join(packageDir, '.cache/e2e', path.slice(1))), {
               'Content-Type': 'text/javascript',
             })
           if (path === '/ui')
             return send(
               html(
-                '<main id="libid-root"></main><script type="module">import {progressView} from "/ui.js";window.testProgress=progressView()</script>',
+                '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {Events} from "/events.js";window.testEvents=new Events();window.testView=eventView(window.testEvents,"Google");window.testEvents.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
               ),
             )
           if (path === '/app.js')

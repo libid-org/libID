@@ -104,8 +104,8 @@ for (const [platform, name] of [
       await expect(rows.first().getByRole('cell').nth(2)).toHaveText('Cancelled')
       await expect(rows.first().getByRole('cell').nth(3)).toHaveText(/^\d+\.\d s$/)
       await expect(rows.first().getByRole('cell').nth(4)).toHaveText('—')
-      await expect(rows.first().locator('.stage-timings li')).toContainText('Opening popup')
-      await expect(rows.first().locator('.stage-timings li')).toContainText('(cancelled)')
+      await expect(rows.first().locator('.operation-timings li')).toContainText('Prefetch dispatch')
+      await expect(rows.first().locator('.operation-timings li')).toContainText('(interrupted)')
       if (platform === 'google' && !blocked) {
         const secondOpened = page.waitForEvent('popup')
         await page.getByRole('button', { name: 'X', exact: true }).click()
@@ -175,15 +175,19 @@ for (const blocked of [false, true]) {
       )
       await connection.ready
       connection.send({
-        type: 'abort-ceremony',
-        code: 'prover-execution',
-        reason: 'Unable to complete the platform proof.',
+        type: 'abort',
+        event: 'identity-fetch',
+        message: '<img src=x onerror=alert(1)> Invalid GitHub id',
       })
     }, popupModule)
     await expect(page.getByRole('status')).toContainText('popup is open for inspection')
     await expect(page.getByRole('button', { name: 'Cancel ceremony' })).toBeDisabled()
-    await expect(page.locator('#history')).toContainText('Failed (prover-execution)')
+    await expect(page.locator('#history')).toContainText('Failed (identity-fetch)')
     expect(popup.isClosed()).toBe(false)
+    await expect(page.locator('#result')).toHaveText(
+      '<img src=x onerror=alert(1)> Invalid GitHub id',
+    )
+    await expect(page.locator('#result img')).toHaveCount(0)
     await expect(launch).toHaveAttribute('aria-disabled', 'true')
     await page.getByRole('button', { name: 'Close popup' }).click()
     await expect.poll(() => popup.isClosed()).toBe(true)
@@ -210,13 +214,13 @@ test('private configuration and generated files are not served', async ({ reques
   }
 })
 
-for (const [platform, name, outcome = 'denied'] of [
+for (const [platform, name, outcome = 'failed'] of [
   ['google', 'Google'],
   ['x', 'X'],
   ['github', 'GitHub'],
   ['google', 'Google', 'success'],
 ]) {
-  test(`${name} stage timings survive overlapping progress and freeze on ${outcome}`, async ({
+  test(`${name} operation timings preserve occurrences and freeze on ${outcome}`, async ({
     page,
     context,
   }) => {
@@ -241,39 +245,27 @@ for (const [platform, name, outcome = 'denied'] of [
     )
     const document = (
       prover: boolean,
-    ) => `<!doctype html><title>Stage transport fixture</title><script type="module">
+    ) => `<!doctype html><title>Event transport fixture</title><script type="module">
       import { PopupConnection, PopupWindow } from '${ccdp}/popup-test/index.js';
       const id = new URLSearchParams(location.hash.slice(1)).get('ceremonyId');
       const connection = PopupConnection.accept(PopupWindow.current(location.hash, { scope: '/' }), {
         connectionId: id, allowedApplicationOrigins: ['http://localhost:4692'],
       });
-      ${
-        prover
-          ? `
-        connection.on({ type: 'app-start-prover', decode: value => value }, request => {
-          connection.send({ type: 'prover-notify-event', stage: request.platformId === 'google' ? 'proof-preparation' : 'code-exchange', timestamp: 1 });
-          window.stageConnection = connection;
-        });
-      `
-          : ''
-      }
+      ${prover ? `connection.on({ type: 'prove-identity', decode: value => value }, () => { window.requested = true });` : ''}
       await connection.ready;
-      connection.send({ type: '${prover ? 'callback-ready' : 'prefetch-ready'}' });
-      connection.send({ type: '${prover ? 'prover-ready' : 'prefetch-started'}' });
+      ${prover ? 'window.eventConnection = connection;' : "connection.send({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: performance.timeOrigin + performance.now() });"}
     </script>`
     await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
       route.fulfill({ contentType: 'text/html', body: document(false) }),
     )
-    await context.route(`${ccdp}/stage-test**`, (route) =>
+    await context.route(`${ccdp}/event-test**`, (route) =>
       route.fulfill({ contentType: 'text/html', body: document(true) }),
     )
-    // Simulated OAuth navigation and advisory events over the actual popup package.
-    // This test produces no tokens, attestations or proofs.
     await context.route(/https:\/\/(accounts\.google\.com|x\.com|github\.com)\//, (route) => {
       const id = new URL(route.request().url()).searchParams.get('state')!.slice(3)
       return route.fulfill({
         contentType: 'text/html',
-        body: `<script>window.returnUrl = ${JSON.stringify(`${ccdp}/stage-test#ceremonyId=${id}`)}</script>`,
+        body: `<script>window.returnUrl = ${JSON.stringify(`${ccdp}/event-test#ceremonyId=${id}`)}</script>`,
       })
     })
     await page.clock.install()
@@ -282,70 +274,53 @@ for (const [platform, name, outcome = 'denied'] of [
     await page.getByRole('button', { name, exact: true }).click()
     const popup = await opened
     await popup.waitForFunction(() => !!(window as unknown as { returnUrl?: string }).returnUrl)
-    // Advance consent time only after navigation settles; the return has not started.
     await page.clock.runFor(5000)
     await popup.evaluate(() =>
       location.replace((window as unknown as { returnUrl: string }).returnUrl),
     )
     await popup.waitForFunction(
-      () => !!(window as unknown as { stageConnection?: unknown }).stageConnection,
+      () => !!(window as unknown as { eventConnection?: unknown }).eventConnection,
     )
-    const stages =
-      platform === 'google'
-        ? ['proof-generation']
-        : ['identity-fetch', 'proof-preparation', 'proof-generation']
-    for (const stage of stages) {
-      await page.clock.runFor(1000)
-      await popup.evaluate((stage) => {
-        const connection = (
-          window as unknown as { stageConnection: { send(value: unknown): void } }
-        ).stageConnection
-        connection.send({ type: 'prover-notify-event', stage, timestamp: 1 })
-        connection.send({
-          type: 'prover-notify-event',
-          timestamp: 1,
-          platformStep: {
-            code: 'proof-backend-initialization',
-            label: 'Concurrent backend work',
-            status: 'completed',
-            progress: 0.5,
-          },
-        })
-      }, stage)
-      await expect(page.getByRole('status')).not.toContainText('Concurrent backend work')
-      await expect(page.locator('.stage-timings li').last()).toContainText(
-        stage === 'identity-fetch'
-          ? 'Fetching identity via notary'
-          : stage === 'proof-preparation'
-            ? 'Setting up ZK prover'
-            : 'Generating proof',
-      )
-    }
-    // Finishing the ZK backend must not finish the complete proof's UI interval.
-    await popup.evaluate(() => {
-      ;(
-        window as unknown as { stageConnection: { send(value: unknown): void } }
-      ).stageConnection.send({
-        type: 'prover-notify-event',
-        timestamp: 1,
-        platformStep: {
-          code: 'proof-backend-destroy',
-          label: 'Finishing ZK proof',
-          status: 'completed',
-          progress: 0.9,
+    const returnedAt = await page.evaluate(() => performance.timeOrigin + performance.now())
+    // Explicit occurrence times test transport delay independently of the app's delivery clock.
+    const send = async (event: string, phase: 'started' | 'finished', offset: number) =>
+      popup.evaluate(
+        ({ event, phase, timestamp }) => {
+          ;(
+            window as unknown as { eventConnection: { send(value: unknown): void } }
+          ).eventConnection.send({ type: 'event', event, phase, timestamp })
         },
-      })
-    })
-    await page.clock.runFor(1000)
-    await expect(page.locator('.stage-timings li').last()).toContainText('Generating proof')
+        { event, phase, timestamp: returnedAt + offset },
+      )
+    await send('authorization', 'finished', 0)
+    await send('prover', 'started', 10)
+    await popup.waitForFunction(() => (window as unknown as { requested?: boolean }).requested)
+    await send('zk-proof-preparation', 'started', 20)
+    await expect(page.getByRole('status')).toHaveText('Preparing your identity proof')
+    if (platform !== 'google') {
+      const token = platform === 'x' ? 'token-fetch' : 'token-attestation'
+      await send(token, 'started', 20)
+      await send(token, 'finished', 1000)
+      await send('identity-fetch', 'started', 1000)
+      await send('identity-fetch', 'finished', 2000)
+      await send('identity-attestation', 'started', 2000)
+    }
+    await send('zk-proof-generation', 'started', 2500)
+    await send('zk-proof-preparation', 'finished', 2600)
+    await send('zk-proof-generation', 'finished', 3500)
+    await expect(page.getByRole('status')).toHaveText('Creating your identity proof with ZK')
+    await expect(page.locator('.operation-timings')).toContainText('ZK proof generation · 1.0 s')
+    await expect(page.locator('#history tr').first().getByRole('cell').nth(2)).toHaveText('Running')
+    // This synthetic delivery checks UI only; no browser proof generation is claimed.
+    await page.clock.runFor(4500)
+    if (platform !== 'google') await send('identity-attestation', 'finished', 4000)
     await popup.evaluate((success) => {
-      const connection = (window as unknown as { stageConnection: { send(value: unknown): void } })
-        .stageConnection
-      // Synthetic delivery tests UI completion only, never cryptographic qualification.
+      const connection = (window as unknown as { eventConnection: { send(value: unknown): void } })
+        .eventConnection
       connection.send(
         success
           ? {
-              type: 'prover-identity-proof',
+              type: 'identity-proof',
               identity: {
                 platformId: 'google',
                 oauthClientId: 'client',
@@ -358,39 +333,18 @@ for (const [platform, name, outcome = 'denied'] of [
                 signingKeyModulus: new Uint8Array(256),
               },
             }
-          : { type: 'cancel-ceremony' },
+          : { type: 'abort', event: 'identity-fetch', message: 'Invalid GitHub id' },
       )
     }, outcome === 'success')
     await expect(page.locator('#history')).toContainText(
-      outcome === 'success' ? 'Proof received' : 'Denied',
+      outcome === 'success' ? 'Proof received' : 'Failed (identity-fetch)',
     )
-    const timings = page.locator('.stage-timings li')
-    await expect(timings).toHaveCount(platform === 'google' ? 4 : 6)
-    expect(
-      (await timings.allTextContents()).slice(0, 2).map((text) => text.split(' · ')[0]),
-    ).toEqual(['Popup opened', 'User authorised'])
-    expect(
-      (await timings.allTextContents()).slice(2, -1).map((text) => text.split(' · ')[0]),
-    ).toEqual(
-      platform === 'google'
-        ? ['ZK prover ready']
-        : ['Token fetched via notary', 'Identity fetched via notary', 'ZK prover ready'],
-    )
-    for (const text of await timings.allTextContents())
-      expect(text).toMatch(/ · \d+\.\d s(?: \(denied\))?$/)
-    for (const text of (await timings.allTextContents()).slice(2)) {
-      const seconds = Number(/ · ([\d.]+) s/.exec(text)![1])
-      expect(seconds).toBeGreaterThanOrEqual(1)
-      expect(seconds).toBeLessThan(3)
-    }
-    await expect(timings.last()).toContainText(
-      outcome === 'success' ? 'Proof generated' : '(denied)',
-    )
-    await expect(timings.last()).not.toContainText('Complete ·')
+    const timings = page.locator('.operation-timings li')
+    await expect(timings).toHaveCount(platform === 'google' ? 5 : 8)
     const cells = page.locator('#history tr').first().getByRole('cell')
     const total = Number.parseFloat((await cells.nth(3).textContent())!)
     const postConsent = Number.parseFloat((await cells.nth(4).textContent())!)
-    expect(postConsent).toBeGreaterThanOrEqual(platform === 'google' ? 2 : 4)
+    expect(postConsent).toBeGreaterThanOrEqual(4.5)
     expect(total - postConsent).toBeGreaterThanOrEqual(4.9)
     const row = await page.locator('#history').textContent()
     await page.clock.runFor(2000)

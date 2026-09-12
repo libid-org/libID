@@ -1,28 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { origin } from '../primitives.js'
-import {
-  AbortCeremony,
-  AppStartProver,
-  CallbackReady,
-  CancelCeremony,
-  PrefetchReady,
-  PrefetchStarted,
-  ProverIdentityProof,
-  ProverNotifyEvent,
-  ProverReady,
-  redirect,
-} from './index.js'
+import { Abort, Cancel, Event, IdentityProof, ProveIdentity, redirect } from './index.js'
 import { prefetchFragment, proverFragment, readPrefetch, readProver } from './navigation.js'
 
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 
 describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
   const samples = [
-    [AbortCeremony, { type: 'abort-ceremony', code: 'proof', reason: 'Proof engine failed.' }],
+    [Abort, { type: 'abort', event: 'proof', message: 'Unexpected proving failure.' }],
     [
-      AppStartProver,
+      ProveIdentity,
       {
-        type: 'app-start-prover',
+        type: 'prove-identity',
         platformId: 'google',
         platformCeremonyVersion: 1,
         clientId: 'client',
@@ -31,27 +20,26 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         notaryAddress: null,
       },
     ],
-    [CancelCeremony, { type: 'cancel-ceremony' }],
-    [PrefetchStarted, { type: 'prefetch-started' }],
-    [ProverReady, { type: 'prover-ready' }],
+    [Cancel, { type: 'cancel' }],
+    [Event, { type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 }],
+    [Event, { type: 'event', event: 'prover', phase: 'started', timestamp: 2 }],
     [
-      ProverNotifyEvent,
+      Event,
       {
-        type: 'prover-notify-event',
-        platformStep: { code: 'proof', label: 'Proof', status: 'started', progress: 0 },
+        type: 'event',
+        event: 'proof',
+        phase: 'started',
         timestamp: 1,
       },
     ],
     [
-      ProverIdentityProof,
+      IdentityProof,
       {
-        type: 'prover-identity-proof',
+        type: 'identity-proof',
         identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
         proof: { arbitrary: true },
       },
     ],
-    [PrefetchReady, { type: 'prefetch-ready' }],
-    [CallbackReady, { type: 'callback-ready' }],
   ] as const
   for (const [codec, value] of samples)
     it(codec.type, () => {
@@ -69,7 +57,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         'http://localhost:4687',
       ]) {
         const value = { ...message, platformId, notaryAddress }
-        expect(AppStartProver.decode(value)).toBe(value)
+        expect(ProveIdentity.decode(value)).toBe(value)
       }
       for (const notaryAddress of [
         undefined,
@@ -82,32 +70,29 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         'https://notary.test?x=1',
         'https://notary.test#x',
       ])
-        expect(() => AppStartProver.decode({ ...message, platformId, notaryAddress })).toThrow()
+        expect(() => ProveIdentity.decode({ ...message, platformId, notaryAddress })).toThrow()
     }
     for (const notaryAddress of [undefined, '', 'https://notary.test'])
-      expect(() => AppStartProver.decode({ ...message, notaryAddress })).toThrow()
+      expect(() => ProveIdentity.decode({ ...message, notaryAddress })).toThrow()
     for (const extra of [
       { ledgerId: 'test:mainnet' },
       { isTestnet: false },
       { chainId: new Uint8Array(32) },
     ])
-      expect(() => AppStartProver.decode({ ...message, ...extra })).toThrow()
+      expect(() => ProveIdentity.decode({ ...message, ...extra })).toThrow()
   })
-  it('rejects malformed progress without coercion', () => {
+  it('rejects malformed event records and terminal claims without coercion', () => {
     const message = samples[5][1]
-    for (const progress of [NaN, Infinity, -1, 1, '0'])
-      expect(() =>
-        ProverNotifyEvent.decode({
-          ...message,
-          platformStep: { ...message.platformStep, progress },
-        }),
-      ).toThrow()
-    expect(() =>
-      ProverNotifyEvent.decode({
-        ...message,
-        platformStep: { ...message.platformStep, status: { toString: () => 'started' } },
-      }),
-    ).toThrow()
+    for (const timestamp of [NaN, Infinity, -1, '0'])
+      expect(() => Event.decode({ ...message, timestamp })).toThrow()
+    for (const extra of [
+      { status: 'completed' },
+      { stage: 'zk-proving' },
+      { phase: 'failed' },
+      { proof: 'secret' },
+      { attributes: { bytes: Infinity } },
+    ])
+      expect(() => Event.decode({ ...message, ...extra })).toThrow()
   })
   it('preserves private return components with one outer encoding [LIBID-OAUTH-026]', () => {
     const input = { query: `?code=a%2Bb&state=v1.${id}`, fragment: '' }
@@ -129,16 +114,12 @@ it.each([
   { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a', extra: true },
   { platformId: 'google', oauthClientId: 'client', userId: '1', userName: '\n' },
 ])('rejects malformed shared identities [LIBID-MOD-016]', (identity) => {
-  expect(() =>
-    ProverIdentityProof.decode({ type: 'prover-identity-proof', identity, proof: null }),
-  ).toThrow()
+  expect(() => IdentityProof.decode({ type: 'identity-proof', identity, proof: null })).toThrow()
 })
 
 it('rejects the retired delivery message and embedded-identity shape', () => {
-  expect(() => ProverIdentityProof.decode({ type: 'prover-deliver-proof', proof: {} })).toThrow()
-  expect(() =>
-    ProverIdentityProof.decode({ type: 'prover-identity-proof', proof: { identity: {} } }),
-  ).toThrow()
+  expect(() => IdentityProof.decode({ type: 'prover-deliver-proof', proof: {} })).toThrow()
+  expect(() => IdentityProof.decode({ type: 'identity-proof', proof: { identity: {} } })).toThrow()
 })
 
 it('admits explicit loopback HTTP without widening public URL validation [LIBID-OAUTH-021]', () => {
@@ -146,8 +127,8 @@ it('admits explicit loopback HTTP without widening public URL validation [LIBID-
     const redirectUri = `https://bridge.test/callback${suffix}`
     expect(redirect(redirectUri)).toBe(false)
     expect(() =>
-      AppStartProver.decode({
-        type: 'app-start-prover',
+      ProveIdentity.decode({
+        type: 'prove-identity',
         platformId: 'google',
         platformCeremonyVersion: 1,
         clientId: 'client',
@@ -176,28 +157,42 @@ it('admits explicit loopback HTTP without widening public URL validation [LIBID-
   }
 })
 
-it('validates advisory stage messages without accepting terminal claims or mixed payloads [LIBID-MOD-016]', () => {
-  const event = { type: 'prover-notify-event', stage: 'proof-generation', timestamp: 1 }
-  expect(ProverNotifyEvent.decode(event)).toBe(event)
-  for (const stage of [
-    'start',
-    'prefetch',
-    'authorization',
-    'oauth-return',
-    'finalizing',
-    'complete',
-    'success',
-    '',
-    {},
-    null,
+it('supports bounded extension observations and disambiguated operations [LIBID-MOD-016]', () => {
+  for (const event of [
+    {
+      type: 'event',
+      event: 'resource-request',
+      timestamp: 1,
+      attributes: { bytes: 1024, cache: 'hit' },
+    },
+    {
+      type: 'event',
+      event: 'tls-session',
+      phase: 'started',
+      operationId: 'identity',
+      timestamp: 1,
+    },
+    {
+      type: 'event',
+      event: 'tls-session',
+      phase: 'finished',
+      operationId: 'identity',
+      timestamp: 2,
+    },
+    { type: 'event', event: 'prover-fallback', timestamp: 3 },
   ])
-    expect(() => ProverNotifyEvent.decode({ ...event, stage })).toThrow()
-  for (const timestamp of [-1, NaN, Infinity, '1'])
-    expect(() => ProverNotifyEvent.decode({ ...event, timestamp })).toThrow()
-  expect(() =>
-    ProverNotifyEvent.decode({
-      ...event,
-      platformStep: { code: 'proof', label: 'Proof', status: 'completed', progress: 0.9 },
-    }),
-  ).toThrow()
+    expect(Event.decode(event)).toBe(event)
+  for (const event of [
+    { event: 'prover-fallback', phase: 'started' },
+    { event: 'prover' },
+    { event: 'prover', phase: 'started', operationId: 'extra' },
+    { event: 'some-event', phase: 'unknown' },
+    { event: 'unknown', operationId: '' },
+    { event: 'unknown', attributes: { data: {} } },
+    {
+      event: 'unknown',
+      attributes: Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`field-${i}`, i])),
+    },
+  ])
+    expect(() => Event.decode({ type: 'event', timestamp: 1, ...event })).toThrow()
 })

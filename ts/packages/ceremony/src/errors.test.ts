@@ -1,33 +1,39 @@
 import type { Message, PopupConnection } from '@libid/popup'
 import { expect, it, vi } from 'vitest'
-import { AbortCeremony } from './ccdp/index.js'
-import { CeremonyError, ceremonyError, reportFailure } from './errors.js'
+import { Abort } from './ccdp/index.js'
+import { CeremonyError, ceremonyError, errorMessage, reportFailure } from './errors.js'
 
-it('preserves the original local cause but sends only the known code/message', () => {
-  const cause = new Error('synthetic-secret-token')
-  const error = ceremonyError(cause, 'token-exchange')
+it('preserves unexpected error text and context without serializing the exception [LIBID-OAUTH-022]', () => {
+  const cause = new Error('Invalid GitHub id')
+  const error = ceremonyError(cause, 'identity-fetch')
   expect(error.cause).toBe(cause)
-  expect(ceremonyError(error, 'prover-execution')).toBe(error)
+  expect(ceremonyError(error, 'prover')).toBe(error)
   const send = vi.fn()
   reportFailure({ send } as unknown as PopupConnection<Message>, error)
   const message = send.mock.calls[0][0]
-  expect(AbortCeremony.decode(message)).toBe(message)
-  expect(message).toEqual({
-    type: 'abort-ceremony',
-    code: 'token-exchange',
-    reason: 'OAuth token exchange or response validation failed.',
-  })
-  expect(JSON.stringify(message)).not.toContain('secret')
-  expect(() => AbortCeremony.decode({ ...message, reason: cause.message })).toThrow()
-  expect(() => AbortCeremony.decode({ ...message, cause })).toThrow()
+  expect(Abort.decode(message)).toBe(message)
+  expect(message).toEqual({ type: 'abort', event: 'identity-fetch', message: 'Invalid GitHub id' })
+  expect(Abort.decode({ ...message, message: 'A new dependency error' }).message).toBe(
+    'A new dependency error',
+  )
+  for (const extra of [{ cause }, { stack: cause.stack }, { code: 'fixed' }])
+    expect(() => Abort.decode({ ...message, ...extra })).toThrow()
 })
 
-it('reports undeliverable failures once without leaking causes or changing outcomes', () => {
+it('bounds display text and rejects arbitrary objects instead of stringifying their contents', () => {
+  expect(errorMessage({ secret: 'value' })).toBe('Ceremony failed.')
+  expect(errorMessage(new Error('bad\nvalue\0'))).toBe('bad value')
+  const long = errorMessage(new Error('💥'.repeat(2048)))
+  expect(new TextEncoder().encode(long).length).toBeLessThanOrEqual(2048)
+  expect(long.length).toBeGreaterThan(0)
+})
+
+it('records undeliverable failures without logging opaque text or changing outcomes', () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   try {
-    const error = new CeremonyError('proof', { cause: new Error('synthetic-secret') })
+    const error = new CeremonyError('proof', 'synthetic-secret')
     reportFailure(undefined, error)
-    expect(log).toHaveBeenLastCalledWith('[ceremony] proof')
+    expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
     log.mockClear()
     reportFailure(
       {

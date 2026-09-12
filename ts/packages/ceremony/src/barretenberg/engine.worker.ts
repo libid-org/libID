@@ -3,6 +3,8 @@ import { bytesToHex } from '@noble/hashes/utils.js'
 import initACVM from '@noir-lang/acvm_js'
 import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
+import { ceremonyError, errorMessage } from '../errors.js'
+import { now, type OperationEvent, operation } from '../events.js'
 import { SRS_SIZE } from './barretenberg.assets.js'
 import type { RawProof } from './engine.js'
 
@@ -35,17 +37,9 @@ let backend: Promise<Api> | null = null
 
 const send = (message: unknown): void => self.postMessage(message)
 
-async function span<T>(code: string, work: () => Promise<T>): Promise<T> {
-  send({ type: 'engine-span', code, status: 'started' })
-  try {
-    const result = await work()
-    send({ type: 'engine-span', code, status: 'completed' })
-    return result
-  } catch (error) {
-    send({ type: 'engine-span', code, status: 'failed' })
-    throw error
-  }
-}
+const emit = (event: OperationEvent) => send({ type: 'engine-event', event })
+
+const span = <T>(event: string, work: () => Promise<T>) => operation(emit, event, work)
 
 async function inflate(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   const stream = new Response(Uint8Array.from(bytes)).body!.pipeThrough(
@@ -60,13 +54,14 @@ function destroyBackend(): Promise<void> {
   return pending ? pending.then((api) => api.destroy()) : Promise.resolve()
 }
 
-function fail(): void {
+function fail(error: unknown): void {
   if (state === 'done') return
   state = 'done'
   ready = null
   // Also releases a backend that finishes initializing after a sibling failed.
   void destroyBackend().catch(() => {})
-  send({ type: 'engine-error', error: 'Proof engine failed' })
+  const failure = ceremonyError(error, 'zk-proof-generation')
+  send({ type: 'engine-error', error: errorMessage(failure), event: failure.event })
 }
 
 /** Start bb initialization alongside circuit/key and Noir loading; witness readiness does not await bb. */
@@ -130,11 +125,17 @@ async function preload(message: Preload): Promise<void> {
   ready = { noir: new Noir(compiled), circuit }
   state = 'ready'
   send({ type: 'engine-ready' })
+  void backend
+    .then(() => {
+      if (state !== 'done') send({ type: 'engine-prepared', timestamp: now() })
+    })
+    .catch(fail)
 }
 
 async function prove(message: Prove): Promise<void> {
   if (!ready || !backend || state !== 'ready') throw new Error('proof engine is not ready')
   state = 'proving'
+  emit({ event: 'zk-proof-generation', phase: 'started', timestamp: now() })
   const { noir, circuit } = ready
   const [api, { witness }] = await Promise.all([
     backend,
@@ -155,9 +156,6 @@ async function prove(message: Prove): Promise<void> {
     }),
   )
   if (state !== 'proving') return
-  await span('proof-backend-destroy', destroyBackend)
-  if (state !== 'proving') return
-  ready = null
   const proof = new Uint8Array(generated.proof.length * 32)
   generated.proof.forEach((field, i) => {
     proof.set(field, i * 32)
@@ -167,11 +165,15 @@ async function prove(message: Prove): Promise<void> {
     publicInputs: generated.publicInputs.map((field) => `0x${bytesToHex(field)}`),
     runtime: runtime!,
   }
+  emit({ event: 'zk-proof-generation', phase: 'finished', timestamp: now() })
+  await span('proof-backend-destroy', destroyBackend)
+  if (state !== 'proving') return
+  ready = null
   state = 'done'
   send({ type: 'engine-result', result })
 }
 
-send({ type: 'engine-booted' })
+send({ type: 'engine-booted', timestamp: now() })
 
 self.addEventListener('message', (event: MessageEvent<Preload | Prove>) => {
   const work = event.data.type === 'engine-preload' ? preload(event.data) : prove(event.data)
