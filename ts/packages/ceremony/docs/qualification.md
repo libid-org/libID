@@ -64,12 +64,24 @@ runs. After extending Close to a popup whose input preparation failed, all ten
 concurrency/startup rechecks passed. Closing a failed popup preserves its original
 outcome.
 
-4. **Platform-independent notary input.**
-   Client still skips the ledger notary address for Google, and the wire decoder
-   requires null for Google or an address for every other platform. Remove those
-   branches: Client passes its ledger-selected address uniformly, the wire accepts
-   a canonical address or null, and only a platform using notarization requires
-   an address. Update Client/codec tests; unused addresses open no notary session.
+## Platform input ownership
+
+Aligned with spec PR #13 at `5b46008f632656fd0ecffecd0cb32fdbbf7a05b4`.
+Client snapshots the ledger's notary address once for every platform; the wire
+accepts a canonical origin or null independently of platform. X/GitHub require
+an address before notarized work, while Google ignores a supplied address.
+PKCE remains platform-declared: Google sends null; X/GitHub use the exact derived
+verifier. Shared configuration, event admission and progress accounting consult
+platform-owned definitions instead of provider-name branches.
+
+The change passes 433 unit tests, all 17 emitted-distribution checks, and
+package/build/browser type checks. Thirty-two ceremony browser cases cover real
+Google fixture proofs verified against the released key, popup progress, bounded
+paint waiting and independent connections across Chromium, Firefox and WebKit,
+over HTTP/HTTPS and mobile emulation. All 110 dev-app browser cases also pass.
+The [platform extension guide](pipelines.md#adding-a-platform) records the remaining
+registration points and version-one limitations. No new live OAuth or physical
+device qualification is claimed.
 
 ## Authenticated-origin handoff
 

@@ -62,12 +62,12 @@ export function eventView(events: Events, platform: string) {
   })
   return {
     /** ProveIdentity supplies the platform before any pipeline events are produced. */
-    trackProof(platformId: string) {
+    trackProof(weights: Readonly<Record<string, number>>) {
       offProgress()
       bar.max = 1
       bar.value = 0
       root.append(style)
-      const progress = proofProgress(platformId)
+      const progress = proofProgress(weights)
       offProgress = events.onEvent((event) => {
         const value = progress(event)
         if (value !== undefined) bar.value = value

@@ -53,7 +53,7 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
 
 interface Input<P extends PlatformId> {
   connection: PopupConnection<Message>
-  notaryAddress: string | null
+  notaryAddress: string
   chainId: Uint8Array
   platformId: P
   version: SupportedCeremonyVersion<P>
@@ -118,13 +118,10 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
       if (!(hash instanceof Uint8Array) || hash.length !== 32)
         throw new TypeError('Ledger hash must be 32 bytes')
       const chainId = Uint8Array.from(hash)
-      let notaryAddress: string | null = null
-      if (platformId !== 'google') {
-        if (typeof ledgerId.notaryAddress !== 'function')
-          throw new TypeError('Missing notary address')
-        notaryAddress = ledgerId.notaryAddress()
-        if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
-      }
+      if (typeof ledgerId.notaryAddress !== 'function')
+        throw new TypeError('Missing notary address')
+      const notaryAddress = ledgerId.notaryAddress()
+      if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
       if (!(operationDomain instanceof Uint8Array) || operationDomain.length !== 32)
         throw new TypeError('Operation domain must be 32 bytes')
       if (!(transactionData instanceof Uint8Array) || transactionData.length > 0xffffffff)
@@ -293,10 +290,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         throw new Error('Invalid authorization observation')
     } else if (core) {
       this.expect('proving')
-      if (
-        (this.platform === 'google' && !event.event.startsWith('zk-')) ||
-        (this.platform === 'github' && event.event === 'token-fetch')
-      )
+      if (!implementationFor(this.platform, this.version).events.includes(event.event as CoreEvent))
         throw new Error('Event does not apply to platform')
       this.proofWorkStarted = true
     }

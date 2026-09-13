@@ -1,5 +1,5 @@
 import { isAttestation, type NotaryAttestation } from '../../../notary/decode.js'
-import { hasExactKeys, isRecord } from '../../../primitives.js'
+import { hasExactKeys, isRecord, text } from '../../../primitives.js'
 import { isFormClientId } from '../../authorization.js'
 import { type Identity, isIdentity, isUserId, proofBytes } from '../../types.js'
 
@@ -33,3 +33,7 @@ export function validateIdentity(value: unknown): Identity<'x'> {
 }
 
 export const isUserName = (value: string): boolean => /^[A-Za-z0-9_]{1,15}$/.test(value)
+
+/** Client identifier constraints for this platform. */
+export const isClientId = (value: unknown): value is string =>
+  text(value, 512) && isFormClientId(value)

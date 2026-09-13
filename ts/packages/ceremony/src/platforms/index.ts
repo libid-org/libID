@@ -1,27 +1,55 @@
 import type { IdentityProof } from '../ccdp/index.js'
+import * as githubEvents from './github/1/events.js'
 import {
+  isClientId as githubClientId,
   validateIdentity as githubIdentity,
   validateProof as githubProof,
 } from './github/1/types.js'
 import * as githubUrl from './github/1/url.js'
+import * as googleEvents from './google/1/events.js'
 import {
+  isClientId as googleClientId,
   validateIdentity as googleIdentity,
   validateProof as googleProof,
 } from './google/1/types.js'
 import * as googleUrl from './google/1/url.js'
 import type { Identity } from './types.js'
-import { validateIdentity as xIdentity, validateProof as xProof } from './x/1/types.js'
+import * as xEvents from './x/1/events.js'
+import {
+  isClientId as xClientId,
+  validateIdentity as xIdentity,
+  validateProof as xProof,
+} from './x/1/types.js'
 import * as xUrl from './x/1/url.js'
 
 export type { Identity } from './types.js'
 
 export const platforms = {
   google: {
-    versions: { 1: { ...googleUrl, validateIdentity: googleIdentity, validateProof: googleProof } },
+    isClientId: googleClientId,
+    versions: {
+      1: {
+        ...googleUrl,
+        ...googleEvents,
+        validateIdentity: googleIdentity,
+        validateProof: googleProof,
+      },
+    },
   },
-  x: { versions: { 1: { ...xUrl, validateIdentity: xIdentity, validateProof: xProof } } },
+  x: {
+    isClientId: xClientId,
+    versions: { 1: { ...xUrl, ...xEvents, validateIdentity: xIdentity, validateProof: xProof } },
+  },
   github: {
-    versions: { 1: { ...githubUrl, validateIdentity: githubIdentity, validateProof: githubProof } },
+    isClientId: githubClientId,
+    versions: {
+      1: {
+        ...githubUrl,
+        ...githubEvents,
+        validateIdentity: githubIdentity,
+        validateProof: githubProof,
+      },
+    },
   },
 } as const
 

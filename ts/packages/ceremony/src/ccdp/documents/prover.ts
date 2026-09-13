@@ -4,12 +4,13 @@ import { claimRootWorker } from '../../assets/registration.js'
 import { ceremonyError, reportFailure } from '../../errors.js'
 import { type CoreEvent, coreEvents, Events, now, type OperationEvent } from '../../events.js'
 import type { ProverContext } from '../../platforms/context.js'
+import { implementationFor, type PlatformId } from '../../platforms/index.js'
 import { Event as EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
 import { eventView } from './ui.js'
 
 const implementations: Record<
-  string,
+  PlatformId,
   () => Promise<{
     prove(context: ProverContext): Promise<Omit<IdentityProof, 'type'> | null>
   }>
@@ -89,7 +90,7 @@ export async function startProver(fragment: string): Promise<void> {
       }
       started = true
       try {
-        ui!.trackProof(request.platformId)
+        ui!.trackProof(implementationFor(request.platformId as PlatformId, 1).progressWeights)
       } catch {
         /* Presentation cannot prevent proof execution. */
       }
