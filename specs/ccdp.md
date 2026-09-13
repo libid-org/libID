@@ -125,7 +125,7 @@ Worker. Authorization is an external document, not a CCDP resource.
 |---|---|
 | Location and context | OAuth Bridge origin at the fixed registered callback path `/auth/callback`; top-level, non-isolated document with complete bundled Callback code and bridge-owned deployment inputs |
 | Role | Authenticates the Application during [Authorization to Callback](#2-authorization-to-callback), then privately carries the captured OAuth return in popup navigation to Prover during [Callback to Prover](#3-callback-to-prover). It installs no Service Worker, retains no state across navigation, and does not classify, prefetch, prove, verify, persist a checkpoint, or close the popup. |
-| Failure and cleanup | Failure before connection acceptance is displayed locally and cannot release the return; observable failure after acceptance uses `Abort`. Terminal cleanup clears retained return bytes and releases listeners and references. |
+| Failure and cleanup | Failure before connection acceptance is displayed locally and cannot release the return; observable failure after acceptance uses `CeremonyFailed`. Terminal cleanup clears retained return bytes and releases listeners and references. |
 
 ### Prover `GET /prover`
 
@@ -223,8 +223,9 @@ The Prover captures and clears it before use. Any internal isolation
 replacement preserves the captured fragment and clears it again on arrival.
 No participant deliberately includes the captured return in a request query,
 connection notification, signaling record, Worker record, telemetry, or error.
-Opaque dependency error text follows the [Abort boundary](#abort), which does
-not promise automatic redaction. Proofs and other proving inputs never enter
+Opaque dependency error text follows the
+[CeremonyFailed boundary](#ceremonyfailed), which does not promise automatic
+redaction. Proofs and other proving inputs never enter
 navigation fragments. The OAuth-platform-mandated query on `redirectUri`
 remains the sole credential-bearing HTTP-request URL.
 
@@ -289,8 +290,8 @@ The following table is the complete CCDP version-1 message set.
 |---|---|---|---|
 | [`ProveIdentity`](#proveidentity) | Application → Prover | `Event(prover, started)` | exactly once; selects the profile for OAuth validation and proof execution |
 | [`IdentityProof`](#identityproof) | Prover → Application | `ProveIdentity` and valid OAuth acceptance | at most once; ends the Prover run |
-| [`Denied`](#denied) | Prover → Application | `ProveIdentity` and valid OAuth denial | at most once; reports platform denial without a technical error |
-| [`Abort`](#abort) | Prefetch, Callback, or Prover → Application | connection acceptance | at most once; reports technical failure and ends the run |
+| [`UserDenied`](#userdenied) | Prover → Application | `ProveIdentity` and valid OAuth denial | at most once; reports platform denial without a technical error |
+| [`CeremonyFailed`](#ceremonyfailed) | Prefetch, Callback, or Prover → Application | connection acceptance | at most once; reports technical failure and ends the run |
 | [`Event`](#event) | Prefetch, Callback, or Prover → Application | connection acceptance and the event's documented emission point | core occurrences follow the [event catalog](#core-events); additional observations do not advance the protocol |
 
 Every recipient requires a plain record with the exact fields, types, and bounds
@@ -377,35 +378,35 @@ a nested identity copy. CCDP treats the proof as opaque; adding a platform does
 not change this message. Neither browser endpoint cryptographically verifies
 the delivered result; identity is non-authoritative until ledger verification.
 
-### Denied
+### UserDenied
 
 ```ts
-interface Denied {
-  type: 'denied'
+interface UserDenied {
+  type: 'user-denied'
 }
 ```
 
-`Denied` reports only a valid, ceremony-bound OAuth-platform denial discovered
+`UserDenied` reports only a valid, ceremony-bound OAuth-platform denial discovered
 by Prover while validating `ProveIdentity`. The Application resolves
 `{ status: 'denied' }`. Prover sends it before token exchange, proof execution,
 or proving-operation events, never as a substitute for a failure.
 
-Malformed, mismatched, or otherwise invalid OAuth returns use `Abort`, not
-`Denied`. Denial has no acknowledgement and does not close or navigate the
+Malformed, mismatched, or otherwise invalid OAuth returns use `CeremonyFailed`, not
+`UserDenied`. Denial has no acknowledgement and does not close or navigate the
 popup. Application cancellation is local, not a CCDP message; see
 [Terminal outcomes](#terminal-outcomes).
 
-### Abort
+### CeremonyFailed
 
 ```ts
-interface Abort {
-  type: 'abort'
+interface CeremonyFailed {
+  type: 'ceremony-failed'
   event: string
   message: string
 }
 ```
 
-`Abort` reports an observable technical failure after connection
+`CeremonyFailed` reports an observable technical failure after connection
 acceptance from whichever of Prefetch, Callback, or Prover is active. `event`
 is the nonempty, bounded, code-owned name of the failing core or
 implementation-defined operation; it is not a UI
@@ -462,7 +463,7 @@ Optional fields are absent when unused, not null. Event names, attribute names,
 string values, and record sizes are bounded by the implementation. Names and
 attribute meanings are code-owned, not supplied by OAuth returns or callers.
 No event contains a UI stage, display label, progress percentage, overall
-ceremony status, or error text. Technical failure uses `Abort`.
+ceremony status, or error text. Technical failure uses `CeremonyFailed`.
 
 #### Core events
 
@@ -579,8 +580,8 @@ CCDP supplies no durable OAuth/proof recovery or guaranteed cancellation of
 already dispatched work. Background suspension, lost connections, and document
 replacement can prevent progress. A missing event or closed popup is never
 success or valid denial. Error text is deliberately useful for local debugging
-and is not guaranteed to be credential-free; the Abort and Event contracts
-separate it from exported observations.
+and is not guaranteed to be credential-free; the `CeremonyFailed` and `Event`
+contracts separate it from exported observations.
 
 The selected platform and common ceremony rules own proof soundness, identity
 extraction, replay, freshness, and trust-root lifecycle. Browser structural checks
@@ -605,13 +606,13 @@ cryptographic properties delegated to the common and platform specifications.
 - TEST-CCDP-04 (exercises REQ-CCDP-04):
   Public Prefetch authenticates its exact peer; Callback rejects an unlisted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Canonical HTTP loopback works at arbitrary ports.
 - TEST-CCDP-05 (exercises REQ-CCDP-05):
-  Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel` records and Application-sent `Denied` are invalid. Proof payloads are structurally checked under the selected platform version.
+  Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel`, `denied`, and `abort` records and Application-sent `UserDenied` are invalid. Proof payloads are structurally checked under the selected platform version.
 - TEST-CCDP-06 (exercises REQ-CCDP-05, REQ-CCDP-06):
   Only the designated core occurrences open gates; extensions cannot do so. Omitted instrumentation and either or both nested fields are accepted when valid; null, unknown instrumentation members, nonfinite attribute numbers, and top-level operationId/attributes are rejected. Overlap, occurrence timestamps, and retrospective fallback timing are preserved.
 - TEST-CCDP-07 (exercises REQ-CCDP-07):
   The four phases preserve navigation ownership and credential privacy; approval enters execution, bound denial exits before proving, and malformed returns abort.
 - TEST-CCDP-08 (exercises REQ-CCDP-08):
-  Denied/Abort/IdentityProof and local-cancellation races settle once. Local cancellation sends no CCDP message; subsequent composition-owned navigation or closure cannot let late traffic revive the run. Errors are text-only, excluded from exported events, and undeliverable failures have a fixed local diagnostic.
+  UserDenied/CeremonyFailed/IdentityProof and local-cancellation races settle once. Local cancellation sends no CCDP message; subsequent composition-owned navigation or closure cannot let late traffic revive the run. Errors are text-only, excluded from exported events, and undeliverable failures have a fixed local diagnostic.
 
 ## Protocol
 
@@ -646,8 +647,8 @@ can reactivate an earlier phase.
   private fragment, including any isolation replacement. Every arrival clears
   its URL before use; participants do not deliberately copy the return into an
   intermediate store, notification, or diagnostic. Opaque error text has the
-  separate [Abort boundary](#abort). The platform-mandated callback query is the
-  sole HTTP-request ingress exception.
+  separate [CeremonyFailed boundary](#ceremonyfailed). The platform-mandated
+  callback query is the sole HTTP-request ingress exception.
 - Callback carries the return onward only after authenticating the Application.
   Prover validates it against the authenticated ceremony and selected profile
   before any credential-bearing request. Application receives only protocol
@@ -686,10 +687,10 @@ retires the Prefetch carrier while leaving the Application endpoint available
 for Callback.
 
 Worker registration, activation, or selected-profile dispatch failure after
-connection acceptance sends `Abort` for `prefetch-dispatch` instead of its
+connection acceptance sends `CeremonyFailed` for `prefetch-dispatch` instead of its
 finish event; Application rejects without navigating to Authorization. Download
 failure after successful dispatch remains an asset-cache concern and uses the normal
-cold-fetch path, not a late Prefetch abort. Failures before connection acceptance
+cold-fetch path, not a late Prefetch failure. Failures before connection acceptance
 are reported locally and release no protocol message.
 
 #### 2. Authorization to Callback
@@ -737,8 +738,8 @@ Application accepts one `Event(prover, started)` and sends one
 verifier. It does not receive or parse the OAuth return. On receiving
 `ProveIdentity`, the selected platform/version validates the retained return
 before credential use. A valid denial sends
-[`Denied`](#denied); malformed or mismatched input sends
-[`Abort`](#abort). Both end the run in this phase, as does
+[`UserDenied`](#userdenied); malformed or mismatched input sends
+[`CeremonyFailed`](#ceremonyfailed). Both end the run in this phase, as does
 context loss. Only valid OAuth acceptance enters Phase 4.
 
 #### 4. Prover execution
@@ -751,8 +752,8 @@ platform events. Each operation's `finished` reports only that operation;
 events from overlapping operations are not forced into a global order.
 After all required proof and evidence work completes, Prover sends one
 [`IdentityProof`](#identityproof), unless failure or context loss ends its work.
-Observable failure sends [`Abort`](#abort). Prover accepts no second proof
-request; Application-local cancellation makes any later delivery inert.
+Observable failure sends [`CeremonyFailed`](#ceremonyfailed). Prover accepts no
+second proof request; Application-local cancellation makes any later delivery inert.
 
 ### Terminal outcomes
 
@@ -760,10 +761,10 @@ request; Application-local cancellation makes any later delivery inert.
   terminal outcome as final and perform the cleanup described below without
   closing the popup or fabricating a successful operation finish.
 
-Prover's `Denied` reports valid OAuth denial; an active document's `Abort`
-reports failure; and `IdentityProof` delivers a proof. These outcomes are
+Prover's `UserDenied` reports valid OAuth denial; an active document's
+`CeremonyFailed` reports failure; and `IdentityProof` delivers a proof. These outcomes are
 mutually terminal even when they race in transit. Denial resolves denied;
-an observable abort rejects the live ceremony. A failure before connection
+an observable failure rejects the live ceremony. A failure before connection
 acceptance is reported locally. Application structurally validates the delivered identity and
 selected platform/version proof and assembles its result before recording
 `prover.finished` locally. Neither endpoint adds local cryptographic proof or
@@ -800,7 +801,7 @@ sequenceDiagram
     P->>P: Prefetch accepts connection
     P->>P: Prefetch registers Worker and dispatches selected-profile fetches
     break Prefetch setup fails
-        P-->>A: Abort
+        P-->>A: CeremonyFailed
     end
     P-->>A: Event(prefetch-dispatch, finished)
     Note over A: Local authorization.started
@@ -812,7 +813,7 @@ sequenceDiagram
     P->>P: Callback starts and selects its bundled version
     P->>P: Callback accepts authenticated connection
     break Callback fails after connection acceptance
-        P-->>A: Abort
+        P-->>A: CeremonyFailed
     end
     P-->>A: Event(authorization, finished)
 
@@ -827,17 +828,17 @@ sequenceDiagram
 
     P->>P: Validate retained OAuth return
     break Valid OAuth denial
-        P-->>A: Denied
+        P-->>A: UserDenied
     end
     break Invalid OAuth return
-        P-->>A: Abort
+        P-->>A: CeremonyFailed
     end
     Note over A,P: Phase 4 - Prover execution after OAuth acceptance
     loop Applicable operations, possibly overlapping
         P-->>A: Event(operation, started or finished)
     end
     break Prover fails
-        P-->>A: Abort
+        P-->>A: CeremonyFailed
     end
     P-->>A: IdentityProof
     Note over A: Validate structure and assemble result

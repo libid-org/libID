@@ -258,7 +258,7 @@ A version absent from the bundle, including a retired version, displays a
 package-owned message such as **This ceremony version is no longer supported.
 Update the application and try again.** It establishes no connection, emits no
 protocol message, and never substitutes another version. No retired transport
-or abort-message implementation is retained for this screen. Applications need
+or failure-message implementation is retained for this screen. Applications need
 no version-specific failure UI and receive no protocol notification of this
 local failure; their ordinary cancellation/connection-failure handling remains.
 
