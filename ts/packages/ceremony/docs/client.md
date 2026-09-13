@@ -7,7 +7,7 @@ This does not relax platform TLS or Prover isolation.
 
 [Pending contract updates](qualification.md#pending-contract-updates) tracks
 implementation differences from the API contract below, including local-only
-cancellation and the `Denied` message.
+cancellation and the `UserDenied` message.
 
 ## Application integration
 
@@ -228,9 +228,9 @@ address (null when the selected platform does not use notarization).
 
 The selected Prover leaf validates the retained return against that request,
 the CCDP version, and the authenticated connection's ceremony ID. A valid
-OAuth denial sends `Denied`, making the client resolve a denied
+OAuth denial sends `UserDenied`, making the client resolve a denied
 `IdentityResult`. Malformed returns and technical failures use
-`Abort` and reject. Only accepted OAuth proceeds to proof execution.
+`CeremonyFailed` and reject. Only accepted OAuth proceeds to proof execution.
 On proof delivery the client structurally validates the separate identity and
 selected platform/version proof, adds the version and retained authorization
 nonce to `OAuthProof`, and resolves an accepted `IdentityResult`. A locally
@@ -570,8 +570,8 @@ submission and post-ceremony actions belong to the Application.
 A technical failure rejects with `CeremonyError` containing `event` and `message`.
 `onEvent` and `onStage` expose the same terminal text before rejection, so simple
 UIs need no second failure subscription. Error text is opaque, bounded and rendered
-as text, with no required error-code catalog. See [Abort](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#abort) for
+as text, with no required error-code catalog. See [CeremonyFailed](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#ceremonyfailed) for
 its display/telemetry boundary. Denial resolves a denied result; local cancellation
 rejects with the exported `CancelError` (`error instanceof CancelError`).
-Browser APIs retain their native abort errors; a received protocol `Abort` is a
+Browser APIs retain their native abort errors; a received protocol `CeremonyFailed` is a
 `CeremonyError`. The application still owns popup closure and retries.
