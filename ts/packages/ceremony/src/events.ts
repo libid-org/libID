@@ -22,18 +22,19 @@ export interface OperationEvent {
   event: string
   phase?: 'started' | 'finished'
   timestamp: number
-  /** Instrumentation only; required to distinguish overlapping instances of the same operation. */
-  operationId?: string
-  /** Producer-owned bounded measurements and coarse facts; never credentials or raw errors. */
-  attributes?: Readonly<Record<string, string | number | boolean>>
+  /** Optional tracing metadata; never credentials, identity values, or raw errors. */
+  instrumentation?: {
+    operationId?: string
+    attributes?: Readonly<Record<string, string | number | boolean>>
+  }
 }
 
-export type CeremonyStatus = 'active' | 'completed' | 'denied' | 'cancelled' | 'failed'
+export type CeremonyStatus = 'active' | 'completed' | 'denied' | 'failed'
 
 export type CeremonyEvent =
   | (OperationEvent & { status: 'active' })
   | { event: 'prover'; phase: 'finished'; timestamp: number; status: 'completed' }
-  | { status: 'denied' | 'cancelled'; timestamp: number }
+  | { status: 'denied'; timestamp: number }
   | { status: 'failed'; event: string; message: string; timestamp: number }
 
 export const now = () => performance.timeOrigin + performance.now()
@@ -51,30 +52,37 @@ export function validateEvent(value: unknown): asserts value is OperationEvent {
     !Number.isFinite(value.timestamp) ||
     value.timestamp < 0 ||
     Object.keys(value).some(
-      (key) => !['event', 'phase', 'timestamp', 'operationId', 'attributes', 'type'].includes(key),
+      (key) => !['event', 'phase', 'timestamp', 'instrumentation', 'type'].includes(key),
     ) ||
-    ('phase' in value && value.phase !== 'started' && value.phase !== 'finished') ||
-    ('operationId' in value && !text(value.operationId, 64))
+    ('phase' in value && value.phase !== 'started' && value.phase !== 'finished')
   )
     throw new TypeError('Invalid operation event')
   if (coreEvents.includes(value.event as CoreEvent)) {
     if (value.event === 'prover-fallback' ? 'phase' in value : !('phase' in value))
       throw new TypeError('Invalid core event phase')
-    if ('operationId' in value) throw new TypeError('Core operations occur once')
   }
-  if ('attributes' in value) {
+  if ('instrumentation' in value) {
+    const metadata = value.instrumentation
     if (
-      !isRecord(value.attributes) ||
-      Object.keys(value.attributes).length > 16 ||
-      Object.entries(value.attributes).some(
-        ([key, v]) =>
-          !eventName(key) ||
-          !(
-            typeof v === 'boolean' ||
-            (typeof v === 'number' && Number.isFinite(v)) ||
-            text(v, 128)
-          ),
-      )
+      !isRecord(metadata) ||
+      Object.keys(metadata).some((key) => !['operationId', 'attributes'].includes(key)) ||
+      ('operationId' in metadata &&
+        (!text(metadata.operationId, 64) || coreEvents.includes(value.event as CoreEvent)))
+    )
+      throw new TypeError('Invalid event instrumentation')
+    if (
+      'attributes' in metadata &&
+      (!isRecord(metadata.attributes) ||
+        Object.keys(metadata.attributes).length > 16 ||
+        Object.entries(metadata.attributes).some(
+          ([key, value]) =>
+            !eventName(key) ||
+            !(
+              typeof value === 'boolean' ||
+              (typeof value === 'number' && Number.isFinite(value)) ||
+              text(value, 128)
+            ),
+        ))
     )
       throw new TypeError('Invalid event attributes')
   }
@@ -156,8 +164,15 @@ export class Events {
     }
     const update = Object.freeze({
       ...event,
-      ...('attributes' in event && event.attributes
-        ? { attributes: Object.freeze({ ...event.attributes }) }
+      ...('instrumentation' in event && event.instrumentation
+        ? {
+            instrumentation: Object.freeze({
+              ...event.instrumentation,
+              ...(event.instrumentation.attributes
+                ? { attributes: Object.freeze({ ...event.instrumentation.attributes }) }
+                : {}),
+            }),
+          }
         : {}),
     })
     const stageUpdate = Object.freeze({
@@ -199,7 +214,10 @@ export async function operation<T>(
   work: () => T | Promise<T>,
   operationId?: string,
 ): Promise<T> {
-  const context = { event, ...(operationId === undefined ? {} : { operationId }) }
+  const context = {
+    event,
+    ...(operationId === undefined ? {} : { instrumentation: { operationId } }),
+  }
   emit({ ...context, phase: 'started', timestamp: now() })
   try {
     const result = await work()

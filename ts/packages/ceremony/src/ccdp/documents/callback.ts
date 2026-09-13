@@ -3,7 +3,7 @@ import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { ceremonyError, reportFailure } from '../../errors.js'
 import { Events, now } from '../../events.js'
 import { origin } from '../../primitives.js'
-import { Cancel, UUID } from '../index.js'
+import { UUID } from '../index.js'
 import { type OAuthReturn, proverFragment, route } from '../navigation.js'
 import { eventView, view } from './ui.js'
 
@@ -81,11 +81,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
       connectionId: id,
       allowedApplicationOrigins: [...allowedApplicationOrigins],
     })
-    connection.on(Cancel, () => {
-      cleanup()
-      events.emit({ status: 'cancelled', timestamp: now() })
-      ui.stop()
-    })
+
     void connection.closed.then(() => {
       if (!ended) fail(ceremonyError(new Error('Callback connection closed'), 'authorization'))
     })

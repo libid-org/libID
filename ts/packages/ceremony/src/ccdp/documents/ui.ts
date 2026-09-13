@@ -52,9 +52,7 @@ export function eventView(events: Events, platform: string) {
           ? 'Proof received'
           : event.status === 'denied'
             ? 'Authorization declined. Return to your application.'
-            : event.status === 'cancelled'
-              ? 'Canceled. Return to your application.'
-              : `${event.message ?? 'Ceremony failed.'} Return to your application.`
+            : `${event.message ?? 'Ceremony failed.'} Return to your application.`
     if (event.status !== 'active') {
       clearTimeout(timer)
       hint.remove()

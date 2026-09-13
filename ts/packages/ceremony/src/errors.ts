@@ -11,14 +11,6 @@ export function errorMessage(error: unknown): string {
   return text(message, 2048) ? message : 'Ceremony failed.'
 }
 
-/** Application-requested cancellation, separate from technical protocol Abort failures. */
-export class CancelError extends Error {
-  constructor() {
-    super('Ceremony canceled')
-    this.name = 'CancelError'
-  }
-}
-
 /** A failed operation and its displayable explanation; no stable error-code catalog. */
 export class CeremonyError extends Error {
   constructor(
@@ -37,14 +29,14 @@ export function ceremonyError(error: unknown, event: string): CeremonyError {
     : new CeremonyError(event, errorMessage(error), { cause: error })
 }
 
-/** Failure to deliver an Abort is recorded locally without exposing its opaque text to telemetry. */
+/** Failure to deliver an CeremonyFailed is recorded locally without exposing its opaque text to telemetry. */
 export function reportFailure(
   connection: PopupConnection<Message> | undefined,
   error: CeremonyError,
 ): void {
   try {
     if (connection) {
-      const message = { type: 'abort', event: error.event, message: error.message }
+      const message = { type: 'ceremony-failed', event: error.event, message: error.message }
       connection.send(message)
       return
     }

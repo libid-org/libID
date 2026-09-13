@@ -1,5 +1,4 @@
 import {
-  CancelError,
   type CCDPClient,
   type CeremonyEvent,
   CeremonyStage,
@@ -14,7 +13,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 
 declare global {
   interface Window {
-    results: Map<string, IdentityResult | { status: 'failed' | 'cancelled' }>
+    results: Map<string, IdentityResult | { status: 'failed' }>
   }
 }
 const settings = { bridge: 'http://localhost:4682', ccdp: 'http://localhost:4683' }
@@ -95,11 +94,11 @@ function beginRun(platform: PlatformId, id: string) {
   timingsCell.append(timings)
   row.append(timingsCell)
   const actions = document.createElement('td')
-  const cancel = document.createElement('button')
-  cancel.type = 'button'
-  cancel.textContent = 'Cancel ceremony'
-  cancel.disabled = true
-  actions.append(cancel)
+  const close = document.createElement('button')
+  close.type = 'button'
+  close.textContent = 'Close'
+  close.disabled = true
+  actions.append(close)
   actions.className = 'run-actions'
   row.append(actions)
   const operations = new Map<
@@ -124,12 +123,11 @@ function beginRun(platform: PlatformId, id: string) {
     clearInterval(timer)
     render(timestamp)
     outcome.textContent = text
-    cancel.disabled = true
   }
   return {
     finish,
     message,
-    cancel,
+    close,
     onEvent(event: CeremonyEvent) {
       if (finished) return
       if ('event' in event && 'phase' in event && operationNames[event.event]) {
@@ -154,9 +152,7 @@ function beginRun(platform: PlatformId, id: string) {
             ? 'Proof received'
             : event.status === 'denied'
               ? 'Denied'
-              : event.status === 'cancelled'
-                ? 'Cancelled'
-                : `Failed (${'event' in event ? event.event : 'ceremony'})`,
+              : `Failed (${'event' in event ? event.event : 'ceremony'})`,
           event.timestamp,
         )
       else render()
@@ -178,6 +174,23 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
       connectionId: id,
       allowedPopupOrigins: [...new Set([settings.bridge, settings.ccdp])],
     })
+    run.close.disabled = !popup.opened
+    // A native-anchor popup supplies its window handle only when it authenticates.
+    void current.ready
+      .then(() => {
+        run.close.disabled = false
+      })
+      .catch(() => {})
+    void current.closed.then((end) => {
+      run.close.disabled = true
+      run.close.onclick = null
+      if (end.outcome === 'failed') run.close.replaceWith('Close the popup window manually.')
+    })
+    run.close.onclick = () => {
+      void current.close().catch(() => {
+        run.message.textContent = 'Could not close the popup. Close its window manually.'
+      })
+    }
     const ceremony = client.new(
       current,
       id,
@@ -188,13 +201,6 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     )
     launch.href = ceremony.launchUrl
     if (popup.opened) event.preventDefault()
-    run.cancel.disabled = false
-    run.cancel.onclick = () => {
-      run.cancel.disabled = true
-      void ceremony.cancel().catch(() => {
-        run.message.textContent = 'Cancellation failed. Close the popup to end this attempt.'
-      })
-    }
     const off = ceremony.onEvent(run.onEvent)
     const offStage = ceremony.onStage((event) => {
       if (event.status === 'active')
@@ -216,19 +222,12 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
         }
       })
       .catch((error: unknown) => {
-        const cancelled = error instanceof CancelError
-        window.results.set(id, { status: cancelled ? 'cancelled' : 'failed' })
-        run.message.textContent = cancelled
-          ? 'Ceremony cancelled.'
-          : error instanceof Error
-            ? error.message
-            : 'Ceremony failed.'
+        window.results.set(id, { status: 'failed' })
+        run.message.textContent = error instanceof Error ? error.message : 'Ceremony failed.'
       })
       .finally(() => {
         off()
         offStage()
-        run.cancel.disabled = true
-        run.cancel.onclick = null
       })
   } catch {
     event.preventDefault()

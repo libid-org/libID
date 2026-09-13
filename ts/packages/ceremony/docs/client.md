@@ -6,8 +6,7 @@ The implementation's shared validators admit HTTP on exactly `localhost` and
 This does not relax platform TLS or Prover isolation.
 
 [Pending contract updates](qualification.md#pending-contract-updates) tracks
-implementation differences from the API contract below, including local-only
-cancellation and the `UserDenied` message.
+the remaining coordinated Bridge configuration migration.
 
 ## Application integration
 
@@ -163,7 +162,6 @@ interface Ceremony<P extends PlatformId = PlatformId> {
   onEvent(listener: (event: CeremonyEvent) => void): () => void
   onStage(listener: (event: StageEvent) => void): () => void
   proveUserIdentity(): Promise<IdentityResult<P>>
-  cancel(): Promise<void>
 }
 ```
 
@@ -247,13 +245,19 @@ exists. The final composition-owned Job CAS is the authority boundary: if
 cancellation, expiry, or another transition retired the Job, a late result
 cannot commit.
 
-`cancel()` retires only the local Ceremony: it rejects pending work with
-`CancelError`, clears its retained inputs and observers, and ignores late
-messages. It sends no CCDP message or event/status update and does not close,
-navigate, or release the supplied connection. The composition retires its Job
-first, cancels locally, then navigates or closes the popup to stop the current
-document's work. Local cancellation alone does not stop Prover. Losing the
-application document loses the in-memory Ceremony and requires fresh OAuth.
+To stop an active ceremony, the application calls `connection.close()` on its
+supplied popup connection. There is no ceremony cancellation method or cancellation error
+type. Closing ends the live run through popup transport; Client clears retained
+inputs and ignores late messages. A first proof call after pre-start closure
+reports that connection failure; repeated proof calls remain one-shot errors.
+
+Connection loss rejects with `CeremonyError` and produces a failed lifecycle update
+for any remaining observers. It never implies OAuth denial or proof success. An
+application that initiated closure already knows it was cancellation and can keep
+that label in its own UI. The development app instead uses a plain Close button
+and displays the resulting connection failure. Stopping the popup document
+does not guarantee cancellation of dispatched server requests. Retiring a run
+while retaining its live connection for navigation is not exposed by this API.
 
 ### OAuth Bridge configuration
 
@@ -494,8 +498,8 @@ noncanonical encodings fail before use.
 into one timeline. All active occurrences preserve their producer timestamp and
 have `status: 'active'`. The client adds exactly one terminal update for
 success, OAuth denial, or technical failure before `proveUserIdentity()`
-settles. Explicit local cancellation instead ends observation without a
-terminal update; its caller already owns that decision.
+settles. Connection closure also terminates with a failed update. A caller that
+closes deliberately can unsubscribe first and record its own cancellation time.
 
 ```ts
 // Accepted proof and assembled result:
@@ -506,7 +510,7 @@ terminal update; its caller already owns that decision.
 ```
 
 The status set is `active | completed | denied | failed` for both `onEvent`
-and `onStage`. Local cancellation is not mapped to denial or technical failure.
+and `onStage`. There is no `cancelled` status; cancellation intent is application-owned.
 
 Only Client acceptance of `IdentityProof` completes the ceremony. Finishing
 `zk-proof-generation` remains an active operation event if attestations or delivery
@@ -514,8 +518,7 @@ are pending. Unknown extension events do not authorize transitions. Observers ma
 unsubscribe or throw without affecting protocol processing; late events cannot
 reactivate a terminated run. When a terminal update exists, total duration is
 measured from the initial `prefetch-dispatch.started` through that update.
-A canceled run has no event-stream end timestamp; the composition may record
-its own cancellation time. An absent observation is unavailable, not zero.
+Connection closure supplies a failed terminal observation. An absent observation is unavailable, not zero.
 
 `onStage` projects selected core events into sequential presentation, forwarding
 terminal status and opaque error text through the same subscription:
@@ -572,7 +575,6 @@ A technical failure rejects with `CeremonyError` containing `event` and `message
 `onEvent` and `onStage` expose the same terminal text before rejection, so simple
 UIs need no second failure subscription. Error text is opaque, bounded and rendered
 as text, with no required error-code catalog. See [CeremonyFailed](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#ceremonyfailed) for
-its display/telemetry boundary. Denial resolves a denied result; local cancellation
-rejects with the exported `CancelError` (`error instanceof CancelError`).
-Browser APIs retain their native abort errors; a received protocol `CeremonyFailed` is a
-`CeremonyError`. The application still owns popup closure and retries.
+its display/telemetry boundary. Denial resolves a denied result. Browser APIs
+retain their native abort errors; a received `CeremonyFailed` and connection loss
+both reject with `CeremonyError`. The application owns popup closure and retries.

@@ -21,12 +21,12 @@ has sent its proof cannot claim that Application accepted it.
 
 An operation's `started` and `finished` occurrences form a span using their
 original epoch-millisecond timestamps. Core operations occur once per ceremony.
-Repeated extension operations that can overlap use `operationId` to pair their
+Repeated extension operations that can overlap use `instrumentation.operationId` to pair their
 occurrences. It is an instrumentation identifier, never a protocol credential.
 Phase-less extension observations are valid; `prover-fallback` is the only
 phase-less core event. Interrupted spans need no fabricated finish.
 
-`attributes` carries bounded scalar measurements and coarse facts. Producers
+`instrumentation.attributes` carries bounded scalar measurements and coarse facts. Producers
 choose code-owned names and values; transport limits do not make arbitrary data
 safe to export. Exclude credentials, identity data, callback parameters, proofs,
 witnesses, attestations, transcripts and raw exceptions. Do not use URLs, origins,
@@ -41,8 +41,8 @@ measurement must not be filled with a plausible number.
 ## Timing and accounting
 
 - Total ceremony duration runs from `prefetch-dispatch.started` to the client’s
-  terminal update, when present. Explicit local cancellation emits no terminal
-  update; its caller may record the cancellation time separately. There is no
+  terminal update, when observed. A caller cancelling by popup closure records
+  its own decision time before unsubscribing and closing. There is no
   separate root ceremony event, and a missing endpoint is not a completed span.
 - Post-authorization waiting runs from `authorization.finished` to that terminal
   update. Callback records this after capture/clearing and authentication; it is
@@ -72,8 +72,9 @@ sequential execution order from concurrent work.
 `CeremonyFailed` and local failures yield one terminal lifecycle update with operation
 context and display text. They are separate from wire `Event`; a failed operation
 need not have emitted its start. Denial yields the denied status without
-fabricating `prover.finished`. Explicit local cancellation ends observation
-without any event/status update; it is neither denial nor technical failure.
+fabricating `prover.finished`. Connection loss produces a failed update. The
+application records its own cancellation intent and may unsubscribe before closing;
+the package exports no cancellation status or cancellation-specific exception.
 
 The display text follows [CeremonyFailed’s boundary](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#ceremonyfailed): a bounded opaque
 caught message, not an error-code catalog or serialized exception. It can help
@@ -91,7 +92,7 @@ package-owned developer modal or automatic raw-error export.
 
 Focused checks exercise timestamp preservation, concurrent operation pairing,
 interrupted spans, monotonic stages, observer independence, one terminal update
-for success/denial/failure, and no update on explicit local cancellation.
+for success/denial/failure, and application-owned cancellation timings.
 Browser checks use the actual popup transport. Mocked events establish
 presentation and coordination behavior, not
 proof generation, live TLSNotary concurrency or physical-device behavior.
