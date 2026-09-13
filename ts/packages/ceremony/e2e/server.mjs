@@ -74,7 +74,7 @@ for (const secure of [true, false]) {
           if (path === '/ui')
             return send(
               html(
-                '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {Events} from "/events.js";window.testEvents=new Events();window.testView=eventView(window.testEvents,"Google");window.testEvents.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
+                '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {Events} from "/events.js";window.testEvents=new Events();window.testView=eventView(window.testEvents,"Google");window.testView.trackProof("google");window.testEvents.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
               ),
             )
           if (path === '/app.js')

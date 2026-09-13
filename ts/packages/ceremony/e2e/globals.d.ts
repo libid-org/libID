@@ -8,7 +8,12 @@ declare global {
     ready: boolean
     completed: IdentityResult<'google'>[]
     testEvents: Events
-    testView: { stop(): void }
+    testView: {
+      trackProof(platform: string): void
+      finishProof(): Promise<void>
+      delivered(): void
+      stop(): void
+    }
     result: IdentityResult<'google'> | { status: 'failed' } | undefined
     events: CeremonyEvent[]
     ceremonyClosed: unknown
