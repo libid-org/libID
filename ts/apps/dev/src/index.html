@@ -6,7 +6,7 @@
     <title>Ceremony development</title>
     <style>
       :root { font: 16px/1.5 system-ui, sans-serif; color-scheme: light dark; }
-      body { max-width: 64rem; margin: 3rem auto; padding: 0 1.25rem; }
+      body { max-width: 76rem; margin: 3rem auto; padding: 0 1.25rem; }
       h1 { margin-bottom: .25rem; }
       .muted { opacity: .75; }
       dl { display: grid; grid-template-columns: 7rem 1fr; gap: .5rem; }
@@ -15,14 +15,14 @@
       button, .launch { font: inherit; padding: .5rem .8rem; }
       .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; align-items: center; }
       .launch { border: 1px solid currentColor; border-radius: .25rem; text-decoration: none; cursor: pointer; }
-      [aria-disabled="true"] { opacity: .5; cursor: default; }
       #status { min-height: 3rem; }
       .history-scroll { overflow-x: auto; }
       table { width: 100%; border-collapse: collapse; }
       th, td { text-align: left; padding: .5rem; border-bottom: 1px solid GrayText; }
       .operation-timings { margin: 0; padding-left: 1.25rem; font-size: .875rem; }
       td { vertical-align: top; }
-      #result { white-space: pre-wrap; overflow-wrap: anywhere; }
+      .run-status { white-space: pre-wrap; overflow-wrap: anywhere; margin: .25rem 0; font-size: .875rem; }
+      .run-actions button { display: block; white-space: nowrap; margin-bottom: .5rem; }
     </style>
   </head>
   <body>
@@ -37,23 +37,15 @@
     <fieldset>
       <legend>Start a ceremony</legend>
       <div id="platforms" class="actions"></div>
-      <div class="actions">
-        <button id="cancel" type="button" disabled>Cancel ceremony</button>
-        <button id="close" type="button" disabled>Close popup</button>
-      </div>
     </fieldset>
-    <p class="muted">Consent happens in the provider’s window. The popup closes after success, denial or cancellation. Failed attempts stay open for inspection.</p>
-    <section aria-labelledby="result-heading">
-      <h2 id="result-heading">Result</h2>
-      <p id="result">No ceremony completed.</p>
-    </section>
+    <p class="muted">Consent happens in the provider’s window. The popup closes after success or denial. Cancelled and failed attempts stay open for inspection.</p>
     <section aria-labelledby="history-heading">
       <h2 id="history-heading">Run history</h2>
       <p class="muted">Newest first. Cleared when you reload this page. Post-consent starts when the OAuth return reconnects.</p>
       <p id="history-empty">No ceremonies started.</p>
       <div class="history-scroll">
         <table aria-labelledby="history-heading">
-          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col" title="From authenticated OAuth return to completion; excludes provider redirect time.">Post-consent</th><th scope="col">Operations</th></tr></thead>
+          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col" title="From authenticated OAuth return to completion; excludes provider redirect time.">Post-consent</th><th scope="col">Operations</th><th scope="col">Actions</th></tr></thead>
           <tbody id="history"></tbody>
         </table>
       </div>
