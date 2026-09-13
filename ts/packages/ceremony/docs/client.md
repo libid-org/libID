@@ -5,6 +5,10 @@ The implementation's shared validators admit HTTP on exactly `localhost` and
 `127.0.0.1` at arbitrary ports; browser notary transport maps those origins to WS.
 This does not relax platform TLS or Prover isolation.
 
+[Pending contract updates](qualification.md#pending-contract-updates) tracks
+implementation differences from the API contract below, including local-only
+cancellation and the `Denied` message.
+
 ## Application integration
 
 ### Client lifecycle
@@ -224,7 +228,7 @@ address (null when the selected platform does not use notarization).
 
 The selected Prover leaf validates the retained return against that request,
 the CCDP version, and the authenticated connection's ceremony ID. A valid
-OAuth denial sends `Cancel`, making the client resolve a denied
+OAuth denial sends `Denied`, making the client resolve a denied
 `IdentityResult`. Malformed returns and technical failures use
 `Abort` and reject. Only accepted OAuth proceeds to proof execution.
 On proof delivery the client structurally validates the separate identity and
@@ -244,11 +248,13 @@ exists. The final composition-owned Job CAS is the authority boundary: if
 cancellation, expiry, or another transition retired the Job, a late result
 cannot commit.
 
-`cancel()` is best-effort ceremony-work and connection cleanup and is called
-only after the composition retires its Job. It does not close or navigate the
-popup. Losing the application document loses the in-memory Ceremony and
-therefore requires fresh OAuth, as already required by the
-no-ceremony-recovery launch scope.
+`cancel()` retires only the local Ceremony: it rejects pending work with
+`CancelError`, clears its retained inputs and observers, and ignores late
+messages. It sends no CCDP message or event/status update and does not close,
+navigate, or release the supplied connection. The composition retires its Job
+first, cancels locally, then navigates or closes the popup to stop the current
+document's work. Local cancellation alone does not stop Prover. Losing the
+application document loses the in-memory Ceremony and requires fresh OAuth.
 
 ### OAuth Bridge configuration
 
@@ -485,25 +491,30 @@ noncanonical encodings fail before use.
 
 `onEvent` combines Application-local and received [operation events](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#event)
 into one timeline. All active occurrences preserve their producer timestamp and
-have `status: 'active'`. The client adds exactly one terminal update before
-`proveUserIdentity()` settles:
+have `status: 'active'`. The client adds exactly one terminal update for
+success, OAuth denial, or technical failure before `proveUserIdentity()`
+settles. Explicit local cancellation instead ends observation without a
+terminal update; its caller already owns that decision.
 
 ```ts
 // Accepted proof and assembled result:
 { event: 'prover', phase: 'finished', status: 'completed', timestamp }
 // Early outcomes do not fabricate prover.finished:
 { status: 'denied', timestamp }
-{ status: 'cancelled', timestamp }
 { status: 'failed', event: 'identity-fetch', message: 'Invalid GitHub id', timestamp }
 ```
+
+The status set is `active | completed | denied | failed` for both `onEvent`
+and `onStage`. Local cancellation is not mapped to denial or technical failure.
 
 Only Client acceptance of `IdentityProof` completes the ceremony. Finishing
 `zk-proof-generation` remains an active operation event if attestations or delivery
 are pending. Unknown extension events do not authorize transitions. Observers may
 unsubscribe or throw without affecting protocol processing; late events cannot
-reactivate a terminated run. Total duration is measured from the initial
-`prefetch-dispatch.started` through the terminal update. An absent observation is
-unavailable, not zero.
+reactivate a terminated run. When a terminal update exists, total duration is
+measured from the initial `prefetch-dispatch.started` through that update.
+A canceled run has no event-stream end timestamp; the composition may record
+its own cancellation time. An absent observation is unavailable, not zero.
 
 `onStage` projects selected core events into sequential presentation, forwarding
 terminal status and opaque error text through the same subscription:

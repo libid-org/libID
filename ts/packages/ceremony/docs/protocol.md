@@ -3,7 +3,7 @@
 The [CCDP specification](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md) owns documents, private navigation
 inputs, messages, core events, ordering, and terminal outcomes. This guide owns
 only their TypeScript implementation. [Qualification](qualification.md#pending-contract-updates)
-records the remaining coordinated Bridge migration. Callback and Prover implement
+records the pending Bridge and cancellation migrations. Callback and Prover implement
 the exact-origin handoff using popup's authenticated peer metadata.
 
 ## Implementation guide
@@ -39,8 +39,9 @@ and local observations. Core readiness is handled before subscribers; optional
 observers and exporters cannot suppress it.
 
 Client alone accepts the final proof structure and produces the completed
-outcome. Denial, cancellation, and failure terminate without fabricating an
-operation finish. [Client subscriptions](client.md#progress-cancellation-and-recovery)
+outcome. `Denied` and failure produce terminal status without fabricating an
+operation finish. Explicit local cancellation ends observation without a wire
+message or status update. [Client subscriptions](client.md#progress-cancellation-and-recovery)
 and [measurements](metrics.md) describe UI projections and the export boundary;
 they are not extra wire messages.
 
