@@ -93,8 +93,8 @@ serving.
 Prover validates `ProveIdentity.notaryAddress`, already
 [selected by CCDPClient](client.md#notary-selection), and uses it
 unchanged. It owns no notary profiles, ledger dependency, or override. All addresses use
-the same proving resources and prefetch graph; Google receives null and makes
-no notary request.
+the same proving resources and prefetch graph; Google ignores the supplied
+address and makes no notary request.
 
 ### Google
 

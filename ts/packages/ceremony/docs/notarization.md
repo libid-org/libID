@@ -40,7 +40,8 @@ It owns no profile defaults, ledger classification, or environment override.
 X uses that address for both browser sessions. GitHub passes it unchanged in
 its Bridge token request and uses it locally for identity notarization. Neither
 Prover nor Bridge remaps the address, and failure never selects a different
-notary. Google supplies null and never invokes this adapter.
+notary. Platforms that do not notarize ignore the supplied address and never
+invoke this adapter.
 
 The address is only network routing, not a caller-selected platform request,
 disclosure layout, or Notary Service behavior. Ledger Verifier governance
