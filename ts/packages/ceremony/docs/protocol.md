@@ -39,7 +39,7 @@ and local observations. Core readiness is handled before subscribers; optional
 observers and exporters cannot suppress it.
 
 Client alone accepts the final proof structure and produces the completed
-outcome. `Denied` and failure produce terminal status without fabricating an
+outcome. `UserDenied` and failure produce terminal status without fabricating an
 operation finish. Explicit local cancellation ends observation without a wire
 message or status update. [Client subscriptions](client.md#progress-cancellation-and-recovery)
 and [measurements](metrics.md) describe UI projections and the export boundary;
