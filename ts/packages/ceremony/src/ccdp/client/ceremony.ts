@@ -1,6 +1,6 @@
 import type { LedgerId } from '@libid/ledger'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
-import { CancelError, CeremonyError, ceremonyError } from '../../errors.js'
+import { CeremonyError, ceremonyError } from '../../errors.js'
 import {
   deriveAuthorizationDigest,
   deriveCodeChallenge,
@@ -17,11 +17,11 @@ import {
 } from '../../platforms/index.js'
 import { hasExactKeys, isRecord, origin } from '../../primitives.js'
 import {
-  Abort,
-  Cancel,
+  CeremonyFailed,
   Event as EventMessage,
   IdentityProof,
   type ProveIdentity,
+  UserDenied,
   UUID,
 } from '../index.js'
 import { oauthState, prefetchFragment, route } from '../navigation.js'
@@ -47,10 +47,8 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
   onEvent(listener: (event: CeremonyEvent) => void): () => void
   /** Subscribe to the sequential UI projection, including terminal status and error text. */
   onStage(listener: (event: StageEvent) => void): () => void
-  /** Start once; resolve accepted/denied output, or reject cancellation and technical failures. */
+  /** Start once; resolve accepted/denied output, or reject connection loss and technical failures. */
   proveUserIdentity(): Promise<IdentityResult<P>>
-  /** Cancel this run. Calling again after termination has no effect. */
-  cancel(): Promise<void>
 }
 
 interface Input<P extends PlatformId> {
@@ -192,6 +190,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private resolve: ((value: IdentityResult<P>) => void) | undefined
   private reject: ((reason: Error) => void) | undefined
   private binding: Binding | undefined
+  private startFailure: CeremonyError | undefined
 
   constructor(
     id: string,
@@ -237,6 +236,11 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
     Object.defineProperty(this, 'launchUrl', { writable: false })
+    void this.connection.closed.then(() => {
+      const error = new Error('Popup connection ended')
+      if (this.state === 'new') this.startFailure = ceremonyError(error, 'prefetch-dispatch')
+      this.fail(error)
+    })
   }
 
   onEvent(listener: (event: CeremonyEvent) => void): () => void {
@@ -332,6 +336,11 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   }
 
   proveUserIdentity(): Promise<IdentityResult<P>> {
+    if (this.startFailure) {
+      const failure = this.startFailure
+      this.startFailure = undefined
+      return Promise.reject(failure)
+    }
     if (this.state !== 'new') return Promise.reject(new Error('Ceremony is one-shot'))
     const previous = bindings.get(this.connection)
     if (previous?.active) {
@@ -375,7 +384,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         })
         resolve?.(result)
       })
-      this.listen(Cancel, () => {
+      this.listen(UserDenied, () => {
         this.expect('proving')
         if (this.proofWorkStarted) throw new Error('Denial after proof work began')
         const resolve = this.resolve
@@ -385,9 +394,10 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         })
         resolve?.({ status: 'denied' })
       })
-      this.listen(Abort, (message) => this.fail(new CeremonyError(message.event, message.message)))
+      this.listen(CeremonyFailed, (message) =>
+        this.fail(new CeremonyError(message.event, message.message)),
+      )
       void this.connection.ready.catch(() => this.fail(new Error('Popup connection failed')))
-      void this.connection.closed.then(() => this.fail(new Error('Popup connection ended')))
       this.publish({ event: 'prefetch-dispatch', phase: 'started', timestamp: now() })
       if (this.state === 'prefetch')
         void this.connection
@@ -401,37 +411,23 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     return result
   }
 
-  async cancel(): Promise<void> {
-    if (this.state === 'done') return
-    const active = this.state === 'oauth' || this.state === 'proving'
-    this.fail(new CancelError())
-    if (active && bindings.get(this.connection) === this.binding && !this.binding?.active)
-      try {
-        this.connection.send({ type: 'cancel' })
-      } catch {
-        /* Best effort; local cancellation already won. */
-      }
-  }
-
   private fail(error: Error): void {
     if (this.state === 'done') return
     const reject = this.reject
-    const failure =
-      error instanceof CancelError
-        ? error
-        : ceremonyError(
-            error,
-            this.state === 'prefetch' || this.state === 'new'
-              ? 'prefetch-dispatch'
-              : this.state === 'oauth'
-                ? 'authorization'
-                : 'prover',
-          )
-    this.finish(
-      failure instanceof CancelError
-        ? { status: 'cancelled', timestamp: now() }
-        : { status: 'failed', event: failure.event, message: failure.message, timestamp: now() },
+    const failure = ceremonyError(
+      error,
+      this.state === 'prefetch' || this.state === 'new'
+        ? 'prefetch-dispatch'
+        : this.state === 'oauth'
+          ? 'authorization'
+          : 'prover',
     )
+    this.finish({
+      status: 'failed',
+      event: failure.event,
+      message: failure.message,
+      timestamp: now(),
+    })
     reject?.(failure)
   }
 

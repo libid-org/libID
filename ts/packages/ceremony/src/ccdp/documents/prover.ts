@@ -4,7 +4,7 @@ import { claimRootWorker } from '../../assets/registration.js'
 import { ceremonyError, reportFailure } from '../../errors.js'
 import { type CoreEvent, coreEvents, Events, now, type OperationEvent } from '../../events.js'
 import type { ProverContext } from '../../platforms/context.js'
-import { Cancel, Event as EventMessage, IdentityProof, ProveIdentity } from '../index.js'
+import { Event as EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
 import { eventView } from './ui.js'
 
@@ -75,11 +75,7 @@ export async function startProver(fragment: string): Promise<void> {
       allowedApplicationOrigins: [retained.applicationOrigin],
       isolationFallbackUrl: location.origin + route('prover/fallback'),
     })
-    connection.on(Cancel, () => {
-      if (ended) return
-      events.emit({ status: 'cancelled', timestamp: now() })
-      cleanup()
-    })
+
     connection.on(ProveIdentity, (request) => {
       if (ended) return
       if (
@@ -110,7 +106,7 @@ export async function startProver(fragment: string): Promise<void> {
         .then(async (result) => {
           if (ended) return
           if (result === null) {
-            connection!.send({ type: 'cancel' })
+            connection!.send({ type: 'user-denied' })
             events.emit({ status: 'denied', timestamp: now() })
             cleanup()
             return

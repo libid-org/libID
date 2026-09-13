@@ -24,34 +24,34 @@ export function assertMessage<T extends string>(
     throw new TypeError('Invalid CCDP record')
 }
 
-export interface Cancel {
-  type: 'cancel'
+export interface UserDenied {
+  type: 'user-denied'
 }
 
-export const Cancel = {
-  type: 'cancel',
-  decode(value: unknown): Cancel {
+export const UserDenied = {
+  type: 'user-denied',
+  decode(value: unknown): UserDenied {
     assertMessage(value, this.type, [])
     return value
   },
-} as const satisfies MessageType<Cancel>
+} as const satisfies MessageType<UserDenied>
 
 /** Opaque display text and the failed operation; neither grants authority. */
-export interface Abort {
-  type: 'abort'
+export interface CeremonyFailed {
+  type: 'ceremony-failed'
   event: string
   message: string
 }
 
-export const Abort = {
-  type: 'abort',
-  decode(value: unknown): Abort {
+export const CeremonyFailed = {
+  type: 'ceremony-failed',
+  decode(value: unknown): CeremonyFailed {
     assertMessage(value, this.type, ['event', 'message'])
     if (!eventName(value.event) || !text(value.message, 2048))
-      throw new TypeError('Invalid abort message')
-    return value as unknown as Abort
+      throw new TypeError('Invalid ceremony failure')
+    return value as unknown as CeremonyFailed
   },
-} as const satisfies MessageType<Abort>
+} as const satisfies MessageType<CeremonyFailed>
 
 /** Application-owned inputs only; raw OAuth returns remain private to Callback and Prover. */
 export interface ProveIdentity {
@@ -134,4 +134,4 @@ export const IdentityProof = {
   },
 } as const satisfies MessageType<IdentityProof>
 
-export type CCDPMessage = ProveIdentity | IdentityProof | Cancel | Abort | Event
+export type CCDPMessage = ProveIdentity | IdentityProof | UserDenied | CeremonyFailed | Event
