@@ -289,15 +289,16 @@ The following table is the complete CCDP version-1 message set.
 |---|---|---|---|
 | [`ProveIdentity`](#proveidentity) | Application → Prover | `Event(prover, started)` | exactly once; selects the profile for OAuth validation and proof execution |
 | [`IdentityProof`](#identityproof) | Prover → Application | `ProveIdentity` and valid OAuth acceptance | at most once; ends the Prover run |
-| [`Cancel`](#cancel) | Application → Callback or Prover; Prover → Application | active connection for Application cancellation; `ProveIdentity` and valid OAuth denial for Prover cancellation | at most once; ends the run without a technical error |
+| [`Denied`](#denied) | Prover → Application | `ProveIdentity` and valid OAuth denial | at most once; reports platform denial without a technical error |
 | [`Abort`](#abort) | Prefetch, Callback, or Prover → Application | connection acceptance | at most once; reports technical failure and ends the run |
 | [`Event`](#event) | Prefetch, Callback, or Prover → Application | connection acceptance and the event's documented emission point | core occurrences follow the [event catalog](#core-events); additional observations do not advance the protocol |
 
 Every recipient requires a plain record with the exact fields, types, and bounds
 defined below. Unknown fields, coercion, normalization, defaults, and
 unrecognized discriminators are invalid. Messages outside the listed direction,
-predecessor, and cardinality are invalid. Cancellation, proof delivery, and
-abort make later messages inert even when they race in transit.
+predecessor, and cardinality are invalid. Denial, proof delivery, abort, and
+Application-local cancellation make later messages inert even when they race
+in transit.
 
 ### ProveIdentity
 
@@ -376,28 +377,23 @@ a nested identity copy. CCDP treats the proof as opaque; adding a platform does
 not change this message. Neither browser endpoint cryptographically verifies
 the delivered result; identity is non-authoritative until ledger verification.
 
-### Cancel
+### Denied
 
 ```ts
-interface Cancel {
-  type: 'cancel'
+interface Denied {
+  type: 'denied'
 }
 ```
 
-`Cancel` is a parameterless, bidirectional terminal message:
+`Denied` reports only a valid, ceremony-bound OAuth-platform denial discovered
+by Prover while validating `ProveIdentity`. The Application resolves
+`{ status: 'denied' }`. Prover sends it before token exchange, proof execution,
+or proving-operation events, never as a substitute for a failure.
 
-- Application → Callback or Prover stops reachable work after explicit
-  cancellation or retirement of Application authority.
-- Prover → Application reports only a valid, ceremony-bound OAuth-platform
-  denial discovered while validating `ProveIdentity`. The Application
-  resolves `{ status: 'denied' }`. Prover sends it before token exchange,
-  proof execution, or proving-operation events, never as a substitute for a
-  failure.
-
-Malformed, mismatched, or otherwise invalid OAuth returns use
-`Abort`, not cancellation. An Application which has already canceled
-ignores a racing denial or proof. Cancellation has no acknowledgement;
-recipients clear reachable input but do not close or navigate the popup.
+Malformed, mismatched, or otherwise invalid OAuth returns use `Abort`, not
+`Denied`. Denial has no acknowledgement and does not close or navigate the
+popup. Application cancellation is local, not a CCDP message; see
+[Terminal outcomes](#terminal-outcomes).
 
 ### Abort
 
@@ -594,13 +590,13 @@ cryptographic properties delegated to the common and platform specifications.
 - TEST-CCDP-04 (exercises REQ-CCDP-04):
   Public Prefetch authenticates its exact peer; Callback rejects an unlisted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Canonical HTTP loopback works at arbitrary ports.
 - TEST-CCDP-05 (exercises REQ-CCDP-05):
-  Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Proof payloads are structurally checked under the selected platform version.
+  Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel` records and Application-sent `Denied` are invalid. Proof payloads are structurally checked under the selected platform version.
 - TEST-CCDP-06 (exercises REQ-CCDP-06):
   Only the designated core occurrences open gates; extensions cannot do so. Overlap, occurrence timestamps, and retrospective fallback timing are preserved.
 - TEST-CCDP-07 (exercises REQ-CCDP-07):
   The four phases preserve navigation ownership and credential privacy; approval enters execution, bound denial exits before proving, and malformed returns abort.
 - TEST-CCDP-08 (exercises REQ-CCDP-08):
-  Cancel/Abort/IdentityProof races settle once; errors are text-only, excluded from exported events, and undeliverable failures have a fixed local diagnostic.
+  Denied/Abort/IdentityProof and local-cancellation races settle once. Local cancellation sends no CCDP message; subsequent composition-owned navigation or closure cannot let late traffic revive the run. Errors are text-only, excluded from exported events, and undeliverable failures have a fixed local diagnostic.
 
 ## Protocol
 
@@ -726,9 +722,9 @@ Application accepts one `Event(prover, started)` and sends one
 verifier. It does not receive or parse the OAuth return. On receiving
 `ProveIdentity`, the selected platform/version validates the retained return
 before credential use. A valid denial sends
-[`Cancel`](#cancel); malformed or mismatched input sends
+[`Denied`](#denied); malformed or mismatched input sends
 [`Abort`](#abort). Both end the run in this phase, as does
-Application cancellation. Only valid OAuth acceptance enters Phase 4.
+context loss. Only valid OAuth acceptance enters Phase 4.
 
 #### 4. Prover execution
 
@@ -739,10 +735,9 @@ applicable [core operation events](#core-events) and may add implementation or
 platform events. Each operation's `finished` reports only that operation;
 events from overlapping operations are not forced into a global order.
 After all required proof and evidence work completes, Prover sends one
-[`IdentityProof`](#identityproof), unless it sends
-[`Abort`](#abort) or receives
-[`Cancel`](#cancel). The first terminal outcome—proof
-delivery, abort, or cancellation—ends the phase; later messages have no effect.
+[`IdentityProof`](#identityproof), unless failure or context loss ends its work.
+Observable failure sends [`Abort`](#abort). Prover accepts no second proof
+request; Application-local cancellation makes any later delivery inert.
 
 ### Terminal outcomes
 
@@ -750,17 +745,21 @@ delivery, abort, or cancellation—ends the phase; later messages have no effect
   terminal outcome as final and perform the cleanup described below without
   closing the popup or fabricating a successful operation finish.
 
-Terminal processing begins when the Application cancels an active Callback
-or Prover; Prover reports valid OAuth denial; an active document reports an
-abort; or Prover delivers a proof. These outcomes are mutually terminal even
-when they race in transit.
-Cancellation has no acknowledgement. Prover's valid denial resolves denied;
-Application cancellation retains its local canceled outcome. An observable
-abort rejects the live ceremony; a failure before connection acceptance is
-reported locally. Application structurally validates the delivered identity and
+Prover's `Denied` reports valid OAuth denial; an active document's `Abort`
+reports failure; and `IdentityProof` delivers a proof. These outcomes are
+mutually terminal even when they race in transit. Denial resolves denied;
+an observable abort rejects the live ceremony. A failure before connection
+acceptance is reported locally. Application structurally validates the delivered identity and
 selected platform/version proof and assembles its result before recording
 `prover.finished` locally. Neither endpoint adds local cryptographic proof or
 attestation verification; ledger verification remains authoritative.
+
+The Application may cancel locally at any point, settling its run and ignoring
+late events or results before the composition navigates or closes the popup
+through popup transport. It sends no CCDP message and waits for no
+acknowledgement. Navigation or closure retires the current document; local
+cancellation alone does not stop remote proving. Neither path guarantees
+cancellation of already-dispatched server work.
 
 Early failure, denial, and cancellation do not fabricate `prover.finished`;
 late traffic cannot reactivate the ceremony. Application-local event/status APIs
@@ -809,14 +808,11 @@ sequenceDiagram
         P-->>A: Event(prover-fallback), original navigation timestamp
     end
     P-->>A: Event(prover, started)
-    break Application cancels
-        A-->>P: Cancel
-    end
     A-->>P: ProveIdentity
 
     P->>P: Validate retained OAuth return
     break Valid OAuth denial
-        P-->>A: Cancel
+        P-->>A: Denied
     end
     break Invalid OAuth return
         P-->>A: Abort
