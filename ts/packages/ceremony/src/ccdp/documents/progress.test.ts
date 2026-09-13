@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest'
+import { type PlatformId, platforms } from '../../platforms/index.js'
 import { proofProgress } from './progress.js'
+
+const progressFor = (platform: PlatformId) =>
+  proofProgress(platforms[platform].versions[1].progressWeights)
 
 const proofOperations = [
   'proof-worker-bootstrap',
@@ -28,7 +32,7 @@ it.each(['google', 'x', 'github'] as const)(
   (platform) => {
     const operations = [...proofOperations, ...platformOperations[platform]]
     for (const order of [operations, [...operations].reverse()]) {
-      const progress = proofProgress(platform)
+      const progress = progressFor(platform)
       let previous = 0
       for (const event of order) {
         expect(progress({ ...finished(event), phase: 'started' })).toBeUndefined()
@@ -58,7 +62,7 @@ it.each(['google', 'x', 'github'] as const)(
 )
 
 it('keeps late attestations separate from finished ZK work [LIBID-BROWSER-024]', () => {
-  const progress = proofProgress('x')
+  const progress = progressFor('x')
   for (const event of [...proofOperations, 'token-fetch']) progress(finished(event))
   const beforeAttestations = progress(finished('identity-fetch'))!
   expect(progress(finished('zk-proof-generation'))).toBeUndefined()
@@ -68,6 +72,6 @@ it('keeps late attestations separate from finished ZK work [LIBID-BROWSER-024]',
   expect(token).toBeLessThan(1)
   expect(identity).toBeGreaterThan(token)
   expect(identity).toBe(1)
-  expect(proofProgress('google')(finished('identity-attestation'))).toBeUndefined()
-  expect(proofProgress('github')(finished('token-fetch'))).toBeUndefined()
+  expect(progressFor('google')(finished('identity-attestation'))).toBeUndefined()
+  expect(progressFor('github')(finished('token-fetch'))).toBeUndefined()
 })

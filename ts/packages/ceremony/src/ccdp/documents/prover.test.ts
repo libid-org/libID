@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ProverContext } from '../../platforms/context.js'
+import { platforms } from '../../platforms/index.js'
 import type { IdentityProof } from '../index.js'
 import { startProver } from './prover.js'
 
@@ -58,7 +59,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-it.each(['google', 'x', 'github'])(
+it.each(['google', 'x', 'github'] as const)(
   'passes validated %s routing to the platform without ledger decoding [LIBID-OAUTH-021]',
   async (platformId) => {
     vi.stubGlobal('location', { origin: 'https://ccdp.test' })
@@ -91,14 +92,14 @@ it.each(['google', 'x', 'github'])(
       clientId: 'client',
       redirectUri: 'https://bridge.test/callback',
       codeVerifier: null,
-      notaryAddress: platformId === 'google' ? null : 'https://local-notary.test',
+      notaryAddress: 'https://local-notary.test',
     })
     await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
     const context = prove.mock.calls[0][0]
-    expect(ui.trackProof).toHaveBeenCalledExactlyOnceWith(platformId)
-    expect(context.request.notaryAddress).toBe(
-      platformId === 'google' ? null : 'https://local-notary.test',
+    expect(ui.trackProof).toHaveBeenCalledExactlyOnceWith(
+      platforms[platformId].versions[1].progressWeights,
     )
+    expect(context.request.notaryAddress).toBe('https://local-notary.test')
     expect(context).not.toHaveProperty('ledgerId')
     expect(context.oauthReturn.fragment).toBe('#error=access_denied')
   },

@@ -58,10 +58,11 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
       expect(() => codec.decode({ ...value, type: 'other' })).toThrow()
       expect(() => codec.decode(Object.assign(new Date(), value))).toThrow()
     })
-  it('validates platform-specific notary routing without ledger decoding [LIBID-OAUTH-021]', () => {
+  it('validates nullable notary routing independently of platform [LIBID-OAUTH-021]', () => {
     const message = samples[1][1]
-    for (const platformId of ['x', 'github']) {
+    for (const platformId of ['google', 'x', 'github', 'new-platform']) {
       for (const notaryAddress of [
+        null,
         'https://notary.test',
         'https://localhost:4687',
         'http://localhost:4687',
@@ -71,7 +72,6 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
       }
       for (const notaryAddress of [
         undefined,
-        null,
         0,
         {},
         'http://notary.test',
@@ -82,14 +82,28 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
       ])
         expect(() => ProveIdentity.decode({ ...message, platformId, notaryAddress })).toThrow()
     }
-    for (const notaryAddress of [undefined, '', 'https://notary.test'])
-      expect(() => ProveIdentity.decode({ ...message, notaryAddress })).toThrow()
     for (const extra of [
       { ledgerId: 'test:mainnet' },
       { isTestnet: false },
       { chainId: new Uint8Array(32) },
     ])
       expect(() => ProveIdentity.decode({ ...message, ...extra })).toThrow()
+  })
+  it('validates nullable code verifiers without deciding platform applicability [LIBID-OAUTH-021]', () => {
+    for (const platformId of ['google', 'x', 'github', 'new-platform']) {
+      for (const codeVerifier of [null, 'A'.repeat(43)]) {
+        const value = { ...samples[1][1], platformId, codeVerifier }
+        expect(ProveIdentity.decode(value)).toBe(value)
+      }
+      for (const codeVerifier of [
+        undefined,
+        '',
+        'A'.repeat(42),
+        '+'.repeat(43),
+        `${'A'.repeat(43)}=`,
+      ])
+        expect(() => ProveIdentity.decode({ ...samples[1][1], platformId, codeVerifier })).toThrow()
+    }
   })
   it('rejects malformed event records and terminal claims without coercion', () => {
     const message = samples[5][1]

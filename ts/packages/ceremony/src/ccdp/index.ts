@@ -81,9 +81,7 @@ export const ProveIdentity = {
       !uint(value.platformCeremonyVersion, 65535) ||
       !text(value.clientId, 512) ||
       !redirect(value.redirectUri) ||
-      !(value.platformId === 'google'
-        ? value.notaryAddress === null
-        : origin(value.notaryAddress)) ||
+      !(value.notaryAddress === null || origin(value.notaryAddress)) ||
       !(
         value.codeVerifier === null ||
         (typeof value.codeVerifier === 'string' &&

@@ -29,6 +29,7 @@ export async function prove(
   context: ProverContext,
 ): Promise<{ identity: Identity<'x'>; proof: XProofV1 } | null> {
   const { request, emit } = context
+  const { notaryAddress } = request
   context.signal.throwIfAborted()
   if (!isFormClientId(request.clientId)) throw new Error('Invalid profile client identifier')
   const returned = parseCodeOAuthReturn(context.oauthReturn)
@@ -41,6 +42,7 @@ export async function prove(
   if (returned.outcome === 'denied') return null
   if (returned.outcome !== 'accepted')
     throw new CeremonyError('authorization', 'X authorization failed')
+  if (notaryAddress === null) throw new CeremonyError('prover', 'Missing notary address')
   const controller = new AbortController(),
     abort = () => controller.abort(context.signal.reason)
   context.signal.addEventListener('abort', abort, { once: true })
@@ -61,7 +63,7 @@ export async function prove(
       redirectUri: request.redirectUri,
       codeVerifier: request.codeVerifier,
     }
-    const notary = new Notarization(request.notaryAddress!, controller.signal)
+    const notary = new Notarization(notaryAddress, controller.signal)
     const tokenRequest = buildTokenRequest(input)
     const tokenSession = observe(
       notary.prepare(tokenRequest.url).catch((e) => {

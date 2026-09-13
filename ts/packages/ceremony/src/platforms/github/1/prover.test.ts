@@ -269,3 +269,16 @@ it('prepared-runtime failure aborts the pending Bridge request [LIBID-PROVER-018
   expect(send).not.toHaveBeenCalled()
   expect(destroy).toHaveBeenCalledOnce()
 })
+
+it.each(['notaryAddress', 'codeVerifier'] as const)(
+  'requires %s before any credential-bearing work [LIBID-OAUTH-021]',
+  async (field) => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const input = context({ code: 'test' })
+    input.request[field] = null
+    await expect(prove(input)).rejects.toBeInstanceOf(CeremonyError)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(created).not.toHaveBeenCalled()
+  },
+)

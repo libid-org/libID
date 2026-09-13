@@ -31,8 +31,9 @@ enabled only when the installed package has a closed implementation and at
 least one advertised ceremony version in common.
 One closed [catalog](../src/platforms/index.ts) derives `PlatformId`,
 `supportedPlatforms`, supported versions and internal proof-type mappings from the
-same keys and validators. It composes each version's URL builder with the identity
-and proof validators from that version's `types.ts`.
+same keys and validators. It composes each version's URL builder, identity/proof
+validators and event declarations. Platform `types.ts` owns client-ID validation;
+version `events.ts` owns admitted proving operations and presentation weights.
 
 The public factory and client contract are:
 
@@ -71,8 +72,9 @@ proof opaque and does not import the catalog.
 
 The prover entrypoint imports matching `prover` leaves through an exhaustive
 internal dispatch. Adding a platform or version changes the catalog,
-implementation, and proof validator together; no mutable registration API or
-second platform list exists.
+implementation, and proof validator together. Runtime and asset registration are
+separate so Client imports do not load proving code or assets; there is no mutable
+registration API. See [adding a platform](pipelines.md#adding-a-platform).
 
 `enabledPlatforms` is the immutable intersection of `supportedPlatforms` and
 the exact platform keys in validated `CeremonyConfig` that have at least one
@@ -280,7 +282,7 @@ the platform:
 const notaryAddress = ledgerId.notaryAddress()
 ```
 
-The client validates a nonempty canonical HTTPS origin with no credentials,
+The client validates a nonempty canonical origin under the origin policy above, with no credentials,
 path, query, or fragment and freezes it before OAuth. Missing, throwing, or
 invalid results fail `new`; there is no default fallback. The client has no
 notary profiles, environment lookup, or constructor override. Ledger
@@ -290,7 +292,8 @@ Chain Profile hash.
 
 The client sends that address for every platform. The selected platform decides
 whether to use it; Google ignores it and opens no notary connection. CCDP also
-accepts null when the selected platform does not need notarization.
+accepts null for any platform; the selected pipeline rejects it before work that
+needs notarization.
 Prover validates a supplied address and uses it unchanged for all notarized
 browser sessions, forwarding the same value to GitHub's token endpoint.
 Neither Prover nor Bridge selects or switches notaries on failure.

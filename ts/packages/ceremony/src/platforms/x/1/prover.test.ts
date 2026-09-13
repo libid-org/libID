@@ -134,3 +134,29 @@ it.each(['accepted', 'failed'])(
     expect(destroy).toHaveBeenCalledOnce()
   },
 )
+
+it.each(['notaryAddress', 'codeVerifier'] as const)(
+  'requires %s before notarization [LIBID-OAUTH-021]',
+  async (field) => {
+    const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+    const context: ProverContext = {
+      ceremonyId,
+      signal: new AbortController().signal,
+      emit: vi.fn(),
+      request: {
+        type: 'prove-identity',
+        platformId: 'x',
+        platformCeremonyVersion: 1,
+        clientId: 'client',
+        redirectUri: 'https://bridge.test/callback',
+        codeVerifier: 'A'.repeat(43),
+        notaryAddress: 'https://notary.test',
+      },
+      oauthReturn: { query: `?code=fixture&state=v1.${ceremonyId}`, fragment: '' },
+    }
+    context.request[field] = null
+    await expect(proveX(context)).rejects.toBeInstanceOf(Error)
+    expect(prepare).not.toHaveBeenCalled()
+    expect(generate).not.toHaveBeenCalled()
+  },
+)

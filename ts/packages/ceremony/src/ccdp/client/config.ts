@@ -1,6 +1,5 @@
-import { isFormClientId } from '../../platforms/authorization.js'
-import { type PlatformId, supportedPlatforms } from '../../platforms/index.js'
-import { hasExactKeys, isRecord, origin, text, uint } from '../../primitives.js'
+import { platforms as catalog, type PlatformId, supportedPlatforms } from '../../platforms/index.js'
+import { hasExactKeys, isRecord, origin, uint } from '../../primitives.js'
 import { redirect } from '../index.js'
 
 export interface PlatformConfig {
@@ -37,8 +36,7 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
     if (
       !isRecord(p) ||
       !hasExactKeys(p, ['clientId', 'ceremonyVersions']) ||
-      !text(p.clientId, key === 'google' ? 128 : 512) ||
-      (key !== 'google' && !isFormClientId(p.clientId)) ||
+      !catalog[key as PlatformId].isClientId(p.clientId) ||
       !Array.isArray(p.ceremonyVersions) ||
       !p.ceremonyVersions.length ||
       p.ceremonyVersions.some((n) => !uint(n, 65535)) ||

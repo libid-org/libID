@@ -67,14 +67,14 @@ for (const secure of [true, false]) {
       }
       try {
         if (port === 4681) {
-          if (path === '/ui.js' || path === '/events.js')
+          if (['/ui.js', '/events.js', '/google-events.js'].includes(path))
             return send(readFileSync(join(packageDir, '.cache/e2e', path.slice(1))), {
               'Content-Type': 'text/javascript',
             })
           if (path === '/ui')
             return send(
               html(
-                '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {Events} from "/events.js";window.testEvents=new Events();window.testView=eventView(window.testEvents,"Google");window.testView.trackProof("google");window.testEvents.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
+                '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {Events} from "/events.js";import {progressWeights} from "/google-events.js";window.testEvents=new Events();window.testView=eventView(window.testEvents,"Google");window.testView.trackProof(progressWeights);window.testEvents.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
               ),
             )
           if (path === '/app.js')
