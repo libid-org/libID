@@ -161,7 +161,7 @@ Index: all 158 stable IDs from [Test plan](test-plan.md). No requirement is dele
 | LIBID-BROWSER-025 | Partial | [Browser fake-clock UI test](../e2e/flow.spec.ts) covers hint/timer cleanup. Real Vanadium check remains. |
 | LIBID-BROWSER-028 | External | Build-owned fallback integration exists; actual adapter/signaling and private openerless handoff qualification remain. |
 | LIBID-BROWSER-029 | Deferred / partial | User deferred full metrics/span collection. Coarse package-owned progress and focused measurements exist; complete prescribed spans/timings/export remain untested and unclaimed. |
-| LIBID-BROWSER-030 | Partial | [Prover document tests](../src/ccdp/documents/prover.test.ts) check navigation timeOrigin, ordering and direct-path absence; [client tests](../src/ccdp/client/ceremony.test.ts) preserve retrospective timestamps. Independent browser delay/missing-connection combinations remain. |
+| LIBID-BROWSER-030 | Partial | [Prover document tests](../src/ccdp/documents/prover.test.ts) check navigation timeOrigin, ordering and direct-path absence; [client tests](../src/ccdp/client/ceremony.test.ts) preserve retrospective timestamps. [Dev app browser tests](../../../apps/dev/src/app.spec.ts) display the fallback-to-readiness interval despite forwarding delay and freeze it at the terminal outcome; synthetic event delivery does not qualify replacement itself. Independent browser delay/missing-connection combinations remain. |
 
 ## Exact-origin handoff
 

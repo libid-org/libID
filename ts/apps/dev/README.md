@@ -94,3 +94,8 @@ Run history shows core operation durations from their occurrence timestamps, plu
 total and post-authorization waiting time. The status uses the package’s stage
 projection. Timings freeze at the terminal outcome and clear on page reload;
 interrupted operations are marked, and overlapping durations are not added together.
+
+When isolation fallback occurs, **Prover fallback** shows navigation through Prover
+readiness, using `prover-fallback` and `prover.started` occurrence timestamps. It
+excludes work before navigation and does not measure the difference from a run
+without fallback. Direct runs have no fallback row.
