@@ -41,7 +41,9 @@ measurement must not be filled with a plausible number.
 ## Timing and accounting
 
 - Total ceremony duration runs from `prefetch-dispatch.started` to the client’s
-  terminal update. There is no separate root ceremony event.
+  terminal update, when present. Explicit local cancellation emits no terminal
+  update; its caller may record the cancellation time separately. There is no
+  separate root ceremony event, and a missing endpoint is not a completed span.
 - Post-authorization waiting runs from `authorization.finished` to that terminal
   update. Callback records this after capture/clearing and authentication; it is
   not a direct measurement of the instant the user clicked consent. If that
@@ -69,8 +71,9 @@ sequential execution order from concurrent work.
 
 `Abort` and local failures yield one terminal lifecycle update with operation
 context and display text. They are separate from wire `Event`; a failed operation
-need not have emitted its start. Cancellation and denial also terminate the
-ceremony without fabricating `prover.finished`.
+need not have emitted its start. Denial yields the denied status without
+fabricating `prover.finished`. Explicit local cancellation ends observation
+without any event/status update; it is neither denial nor technical failure.
 
 The display text follows [Abort’s boundary](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#abort): a bounded opaque
 caught message, not an error-code catalog or serialized exception. It can help
@@ -87,9 +90,10 @@ package-owned developer modal or automatic raw-error export.
 ## Qualification
 
 Focused checks exercise timestamp preservation, concurrent operation pairing,
-interrupted spans, monotonic stages, observer independence, and exactly one
-terminal update before promise settlement. Browser checks use the actual popup
-transport. Mocked events establish presentation and coordination behavior, not
+interrupted spans, monotonic stages, observer independence, one terminal update
+for success/denial/failure, and no update on explicit local cancellation.
+Browser checks use the actual popup transport. Mocked events establish
+presentation and coordination behavior, not
 proof generation, live TLSNotary concurrency or physical-device behavior.
 
 [The requirement index](test-plan.md) and [traceability](traceability.md) retain
