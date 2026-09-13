@@ -1,120 +1,100 @@
-# Ceremony package architecture
+# Architecture
 
-`@libid/ceremony` obtains platform evidence for an Application-owned operation
-and returns separate identity and OAuth proof values. Application supplies a
-`@libid/popup` connection; ceremony neither creates nor closes it. Result
-acceptance is structural, not ledger verification.
-
-[CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md) and its
-[Bridge](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md) and
-[Distribution](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md) contracts own interoperability.
-This document owns module boundaries and their rationale. The [client guide](client.md)
-owns the public API, [qualification](qualification.md) records remaining gaps,
-and the [test index](test-plan.md) retains the stable acceptance IDs.
+Ceremony obtains identity evidence for an application-owned operation. The caller
+supplies a popup connection and keeps control of its lifetime. Prover extracts
+identity and builds evidence; Client checks the result structure and assembles
+`OAuthProof`. Neither performs final cryptographic verification in the browser.
 
 ## Ownership
 
-| Module | Responsibility |
+| Owner | Responsibility |
 |---|---|
-| `ccdp/client` | Fetch/freeze configuration, construct authorization, run one-shot ceremonies, validate result structure, assemble OAuthProof. |
-| `ccdp/index`, `ccdp/navigation` | Browser-free message companions and route/fragment codecs. |
-| `ccdp/documents` | Callback, Prefetch/Worker, Prover, and shared native UI entrypoints. |
-| `platforms/<platform>/<version>` | Authorization URL, proof types/validators, asset declarations, and the platform pipeline. |
-| `platforms/authorization` | Shared digest and PKCE helpers selected by each version, not another version boundary. |
-| `barretenberg` | Dedicated Noir/bb.js proof worker and circuit adapters. |
-| `notary` | TLSNotary sessions, transcript interpretation, canonical attestation decoding, and correlation. |
-| `assets` | Data-only declarations, runtime resolution, root Worker byte caches and pending-fetch joins. |
-| `build` | Compile the closed resource graph and emit the static distribution. |
+| [ccdp/client](../src/ccdp/client/ceremony.ts) | Fetch/freeze Bridge config, derive authorization inputs, run one ceremony, validate and assemble its result. |
+| [ccdp/index](../src/ccdp/index.ts), [navigation](../src/ccdp/navigation.ts) | Browser-free message companions and route/fragment codecs. |
+| [ccdp/documents](../src/ccdp/documents/) | Callback, Prefetch/Worker and Prover entrypoints; native package-owned UI. |
+| [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its execution pipeline. |
+| [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker, circuits and input adapters. |
+| [notary](../src/notary/session.ts) | TLSNotary sessions, HTTP/transcript helpers, canonical decoding and evidence correlation. |
+| [assets](../src/assets/index.ts) | Resource declarations and resolution, root Worker registration, byte caches and pending fetches. |
+| [build](../build/distribution.ts) | Compile the dependency graph and emit static files and response policies. |
+| [events](../src/events.ts), [errors](../src/errors.ts) | Shared operation feed, stage projection and bounded failure text. |
 
-The package has two public entrypoints:
+The two public entrypoints are `@libid/ceremony` (discovery, result types and
+`CeremonyError`) and `@libid/ceremony/ccdp/client` (the client and subscriptions,
+plus the root exports). Codecs, document startup, execution and build helpers
+are private. See the [client guide](client.md) for application use.
 
-- `@libid/ceremony`: client-safe platform discovery, `CeremonyError`, and result types.
-- `@libid/ceremony/ccdp/client`: `createCCDPClient`, ceremony lifecycle and
-  event/stage APIs, plus the root exports.
+## Document lifecycle
 
-Document startup, codecs, platform execution, and build helpers are private.
-The [source guide](source.md) links their implementations and code conventions.
+1. **Prefetch**, on the CCDP origin, authenticates the connection, activates the
+   canonical root Worker and dispatches the selected assets. Its completion
+   event permits Client to navigate to the provider; downloads may continue.
+2. **Callback**, on the Bridge origin, captures and clears the OAuth return
+   before other work. Its self-contained HTML selects bundled CCDP code and
+   validates the Bridge's inserted deployment data. It authenticates Application,
+   reports the authorization return, and navigates privately to Prover.
+3. **Prover**, on the CCDP origin, accepts only Callback's authenticated
+   `connection.peerOrigin`, forwarded in the private fragment. That origin is
+   never inferred from OAuth fields or allowlist order. After popup connection
+   readiness, isolation checks and root-worker claim, Prover requests inputs
+   through `prover.started`, runs the selected pipeline and sends one outcome.
 
-## Why the boundaries look this way
+The [CCDP specification](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md)
+owns the five messages, routes and permitted transitions. Message companions
+check exact shape and bounds; the receiving Client/document enforces state and
+cardinality. Readiness processing does not depend on event subscriptions.
+Unknown extension events cannot authorize a transition or complete a ceremony.
 
-### Application state and popup lifetime
+Popup owns window creation, native-anchor fallback, authentication, navigation,
+isolation replacement, port continuity and closure. Ceremony's root Worker
+composes popup's keeper with asset fetching; it adds no handshake or transport.
+Callback installs no Worker. Application, documents and Worker must use compatible
+popup transport versions, including the authenticated-origin handoff.
 
-Each Ceremony owns its in-memory handlers on the supplied connection, not a Job
-store or application-wide OAuth lookup. The caller freezes operation inputs and
-may retain an accepted result for later submission. A lost unfinished ceremony
-starts again with fresh OAuth; application-level resumptions remain independent.
+Proving stays in the foreground popup. A shared abort signal tears down reachable
+workers and private state after delivery, denial, failure or connection loss.
+There is no persistent proof checkpoint, application iframe prover, Job store,
+wallet operation or transaction submission inside this package.
 
-Application already controls the authorized operation. Keeping raw OAuth returns
-inside the popup reduces transient credential exposure; it cannot protect human
-intent from compromised Application code. Prover extracts evidence and identity;
-Client validates the separate identity/proof structures and their selected
-platform/client/version binding. It does not repeat evidence parsing or perform
-cryptographic verification. The Ledger Verifier remains authoritative.
+## Import boundaries
 
-The connection can carry an Application composition before and after ceremony.
-Ceremony settles its own result and makes later CCDP traffic inert without
-closing that connection. It imports no wallet, job, connector, registry, or
-transaction-submission implementation.
+The client-safe catalog imports URL builders, proof validators and event
+metadata. It never imports platform execution. Prover lazily imports execution
+leaves; those leaves do not import the catalog selecting them.
 
-### Browser documents and execution
+Shared integrations declare resources once in `*.assets.ts`; platform/version
+leaves compose those handles. Prefetch imports only this data-only catalog.
+The compiler adds actual chunks and nested-worker edges to each selected set.
+Execution resolves the same handles. Fetching scripts as bytes before OAuth
+never initializes WASM, proof backends or TLSNotary sessions.
 
-Callback runs at the OAuth Bridge origin because that is the registered redirect
-authority. Prover and its assets can be hosted independently on the CCDP origin.
-Proving runs in the foreground popup: an Application-level background iframe can
-be suspended or throttled on mobile. Popup owns isolation selection and carrier
-continuity, so ceremony does not coordinate duplicate provers or inspect browsers.
-
-The [document entrypoints](documents.md) are compiler inputs, not public package
-APIs. Callback is a self-contained HTML artifact; Prefetch/Prover embed their
-clearing bootstrap and entry code. The Worker composes byte caching with popup's
-keeper handler. Callback installs no Worker. It forwards popup's authenticated
-Application origin in the private fragment; Prover restricts acceptance to that
-exact origin, including after isolation replacement.
-
-### Lightweight declarations, shared execution resources
-
-`platforms/index` imports only client-safe URL and proof-validator leaves.
-Prover lazily imports platform execution; those leaves never import the catalog
-that selects them. This keeps proving runtimes out of Application bundles.
-
-Shared integrations declare resources once in `*.assets.ts` leaves. Each platform
-composes those handles with its circuit; `platforms/platforms.assets.ts` collects
-the resulting versioned sets. Prefetch and the build import that data-only
-catalog. Execution imports the same declarations, never the reverse. This is an
-explicit dependency boundary, not a hope that tree-shaking removes side effects.
-
-The [build](build.md) resolves archives and wildcard members, records actual
-compiler chunks/nested workers, and checks the catalog covers the supported
-platform/version set. Runtime `resolve()` is synchronous; source fetching and
-archive extraction never enter browser bundles. Prefetch warms bytes only,
-and execution joins outstanding downloads rather than starting another fetch.
-
-### Proving and notarization
-
-[Platform pipelines](pipelines.md) overlap backend preparation, evidence work, and
-proof generation where their dependencies permit it. Final delivery still joins
-the proof and every required attestation. [Notarization](notarization.md) separates
-TypeScript transcript policy from the WASM cryptographic/session machinery;
-canonical signed bytes survive unchanged for downstream verification.
-
-One [operation feed](metrics.md) supports readiness, local UI, and optional
-Application tracing. User-facing stages are a sequential projection, not another
-protocol or a restriction on concurrent work.
+[Platform pipelines](pipelines.md) compose the independent proving and notary
+modules. Early transcripts and commitment openings permit overlap, but proof
+delivery joins every required final attestation and correlation.
 
 ## Versioning and compatibility
 
-The local catalog exposes supported platform ceremony versions; Bridge config
-filters it to enabled versions. An explicit trailing version argument selects
-one compatible member, otherwise Client selects the greatest common version.
-Each live ceremony freezes its choice.
+Client intersects the local platform catalog with Bridge-advertised versions.
+An explicit version selects a compatible member; omission chooses the greatest
+common version. Each run freezes its selection. Version semantics may differ in
+disclosure behavior, so an application promising a specific behavior selects it
+explicitly.
 
-Platform ceremony versions own authorization, OAuth, and proof/output semantics.
-Internal asset or UI changes do not add a public version when those semantics
-remain compatible. CCDP and popup connection versions are independent, as defined
-by their specifications; the Bridge JSON API has its own boundary. This avoids
-inventing independent versions for every helper while retaining cross-component
-compatibility checks.
+Platform ceremony, CCDP, popup transport and Bridge API versions have separate
+owners. Internal UI or asset changes need no platform ceremony version when the
+proof semantics remain compatible. Only version 1 is implemented today;
+[adding another version](pipelines.md#adding-a-platform) also requires changes
+to the Prover dispatcher and distribution build.
 
-[Pending contract updates](qualification.md#pending-contract-updates) identify
-coordinated changes not yet implemented. Other guidance describes current code,
-not a second competing protocol specification.
+## Code and documentation conventions
+
+Keep cross-module rationale here, user contracts in the client/deployment guides,
+and byte layouts, limits, ownership and ordering comments beside their code.
+Link normative encodings instead of defining them again. Fixtures sit beside
+owning tests as `.fixture.*`; package contents exclude tests and fixtures.
+
+Use workspace Biome formatting: two spaces, single quotes, no semicolons and
+organized imports. Separate declarations and methods with a blank line. JSDoc
+explains meaningful input, lifetime and failure constraints; internal comments
+explain invariants rather than restating types. Run `pnpm -C ts lint` and
+`pnpm -C ts fmt:check` for mechanical checks.

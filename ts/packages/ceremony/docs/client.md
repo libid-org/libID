@@ -1,583 +1,195 @@
-# Client API and lifecycle
+# Client guide
 
-Origins follow the [canonical and loopback policy](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#origin-policy).
-The implementation's shared validators admit HTTP on exactly `localhost` and
-`127.0.0.1` at arbitrary ports; browser notary transport maps those origins to WS.
-This does not relax platform TLS or Prover isolation.
+Create one client per Bridge configuration lifetime. It fetches public
+configuration once; create a new client to pick up a changed deployment.
+The application must also know its intended CCDP origin to configure popup's
+origin allowlist.
 
-[Pending contract updates](qualification.md#pending-contract-updates) tracks
-the remaining coordinated Bridge configuration migration.
+## Launch a ceremony
 
-## Application integration
-
-### Client lifecycle
-
-An application creates one client for one configured OAuth bridge:
+This example connects an existing anchor and status element. Call it during
+application setup, then let the user click the anchor. Supply the application's
+ledger, 32-byte operation-domain hash and opaque transaction bytes.
 
 ```ts
-import {
-  createCCDPClient,
-  supportedPlatforms,
-} from '@libid/ceremony/ccdp/client'
-
-const ceremonies = await createCCDPClient({
-  oauthBridge: 'https://oauth.example',
-})
-```
-
-This is an application-owned instance, not a package-global singleton. Client
-creation fetches and exact-validates `CeremonyConfig`; a configured platform is
-enabled only when the installed package has a closed implementation and at
-least one advertised ceremony version in common.
-One closed [catalog](../src/platforms/index.ts) derives `PlatformId`,
-`supportedPlatforms`, supported versions and internal proof-type mappings from the
-same keys and validators. It composes each version's URL builder, identity/proof
-validators and event declarations. Platform `types.ts` owns client-ID validation;
-version `events.ts` owns admitted proving operations and presentation weights.
-
-The public factory and client contract are:
-
-```ts
+import { CeremonyStage, createCCDPClient } from '@libid/ceremony/ccdp/client'
 import type { LedgerId } from '@libid/ledger'
-import type { Message, PopupConnection } from '@libid/popup'
-import type { Ceremony, PlatformId, SupportedCeremonyVersion } from '@libid/ceremony/ccdp/client'
+import { PopupConnection, PopupWindow } from '@libid/popup'
 
-export declare const supportedPlatforms: readonly PlatformId[]
+async function bindGoogleAction(
+  anchor: HTMLAnchorElement,
+  status: HTMLElement,
+  ledger: LedgerId,
+  operationDomain: Uint8Array,
+  transactionData: Uint8Array,
+) {
+  const bridgeOrigin = 'https://bridge.example'
+  const ccdpOrigin = 'https://proofs.example'
+  const client = await createCCDPClient({ oauthBridge: bridgeOrigin })
 
-export declare function createCCDPClient(options: {
-  oauthBridge: string
-}): Promise<CCDPClient>
-
-interface CCDPClient {
-  readonly enabledPlatforms: readonly PlatformId[]
-  enabledVersions<P extends PlatformId>(platformId: P): readonly SupportedCeremonyVersion<P>[]
-  new: <P extends PlatformId>(
-    conn: PopupConnection<Message>,
-    ceremonyId: string,
-    platformId: P,
-    ledgerId: LedgerId,
-    operationDomain: Uint8Array,
-    transactionData: Uint8Array,
-    ceremonyVersion?: SupportedCeremonyVersion<P>,
-  ) => Ceremony<P>
-}
-```
-
-`validateProofMessage` dispatches to the selected version's exact `types`
-validator and returns the same CCDP envelope with its proof field narrowed to
-that validator's derived proof type. Any implementation-only assertion needed
-to express the indexed dispatch to TypeScript remains behind this validated aggregation
-boundary; the Ceremony Client performs no cast. The CCDP codec layer keeps the
-proof opaque and does not import the catalog.
-
-The prover entrypoint imports matching `prover` leaves through an exhaustive
-internal dispatch. Adding a platform or version changes the catalog,
-implementation, and proof validator together. Runtime and asset registration are
-separate so Client imports do not load proving code or assets; there is no mutable
-registration API. See [adding a platform](pipelines.md#adding-a-platform).
-
-`enabledPlatforms` is the immutable intersection of `supportedPlatforms` and
-the exact platform keys in validated `CeremonyConfig` that have at least one
-ceremony version in common with the installed implementation. Catalog order is
-stable discovery order, not a product ranking; applications may present
-another order. Neither array contains OAuth clients, ceremony versions, server
-configuration, or display metadata.
-
-For platform discovery, use the configured client's list:
-
-```ts
-const client = await createCCDPClient({ oauthBridge: 'https://oauth.example' })
-for (const platform of client.enabledPlatforms) {
-  // Render an action that passes this platform to client.new(...).
-}
-```
-
-`supportedPlatforms` can be read before configuration is fetched, but it does not
-establish that this Bridge enables a platform. An empty `enabledPlatforms` means
-there is no compatible configured ceremony. `client.enabledVersions(platform)`
-returns the immutable compatible version list in ascending order, or an empty list
-for a known but disabled platform. Unknown platform IDs reject. Names, icons and action layout belong
-to the consuming application; discovery returns IDs and version numbers only.
-
-```ts
-const versions = client.enabledVersions('google')
-// Choose an enabled version for the application's intended behavior.
-const ceremony = client.new(
-  connection, ceremonyId, 'google', ledgerId, operationDomain, transactionData, 1,
-)
-```
-
-Passing an unavailable version fails synchronously before reading ledger inputs,
-reserving the ceremony ID or starting OAuth. Omitting the last argument retains
-the highest-compatible-version default. Each current platform implements only v1;
-additional privacy modes require their own implementation and qualification.
-
-The composition supplies a [`LedgerId`](../../ledger/README.md) from
-`@libid/ledger`, an exact 32-byte `operationDomain` hash, and bounded opaque
-`transactionData`. The ledger package owns the canonical Chain Profile hash
-used by the Ledger Verifier and the ledger's notary address. Ceremony owns no
-ledger catalog, network classification, or chain-specific parser.
-
-During `new`, the client reads `ledgerId.hash()` once, requires and copies
-exactly 32 hash bytes as `chainId`, and validates/copies `operationDomain` and
-`transactionData`. It also reads and validates `ledgerId.notaryAddress()` once as described in
-[notary selection](#notary-selection).
-Missing methods, thrown errors, or invalid returned values fail before OAuth.
-Later changes to supplied objects or buffers cannot change the ceremony. All
-authorization/proof-input construction uses the retained Chain Profile hash.
-
-`ProveIdentity` carries only the resolved address, not the ledger object or
-hash. Prover needs no ledger dependency. Notary routing adds no field to the authorization digest
-or `OAuthProof`.
-
-The client requires the selected platform to be enabled by validated
-`CeremonyConfig`. An explicit `ceremonyVersion` must belong to the package/Bridge
-intersection; when omitted, the client selects its numerically greatest version.
-The client then generates a fresh 32-byte authorization nonce,
-computes the authorization digest and code verifier, and freezes all of those
-values before constructing OAuth or allowing OAuth-platform navigation. Client
-initialization has already fetched and validated `CeremonyConfig`, so `new`
-does only local synchronous work.
-
-`CCDPClient.new` takes six required positional arguments and an optional trailing
-`ceremonyVersion`, in the order shown above; there is no separate input object. `ceremonyId` is a plain string which must be
-a lowercase UUIDv4. A composition normally generates one value and calls it
-`jobId` in its Job API and `ceremonyId` in this API. The equality is a
-composition invariant, not a shared branded type. The identifier is not chain
-authorization, but its unpredictability and one-use handling provide browser
-continuity. The composition uses the same value as the supplied popup
-connection's private `connectionId`; no CCDP message carries it. It is not a
-second authorization secret.
-
-`new` pins the selected platform ceremony version, generates the fresh authorization
-nonce, derives the code verifier from it and the Authorization Digest by the
-normative Proof Key for Code Exchange (PKCE) construction where required, and
-constructs the authorization request with the [CCDP-defined OAuth
-state](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#documents-and-routes), and returns the `Ceremony` with its launch
-URL ready. OAuth `state` carries the CCDP
-routing version plus `ceremonyId`; it is not a second identifier:
-
-```ts
-interface Ceremony<P extends PlatformId = PlatformId> {
-  readonly launchUrl: string
-
-  onEvent(listener: (event: CeremonyEvent) => void): () => void
-  onStage(listener: (event: StageEvent) => void): () => void
-  proveUserIdentity(): Promise<IdentityResult<P>>
-}
-```
-
-The caller owns launch UI and constructs the popup connection. The ceremony
-package never opens a window, renders an anchor, or selects a carrier.
-The caller chooses one unique non-reserved browsing-context target, uses it for
-both `PopupWindow.open` and the action-specific real anchor, and passes the
-resulting connection to `new`. Ceremony exposes only the initial CCDP Prefetch
-location as `launchUrl`. The activation handler prevents native navigation only
-when scripted popup creation succeeded; otherwise the same activation's anchor
-proceeds while the armed connection binds it.
-
-The scripted path is primary and PoC-qualified; the qualified mobile browsers
-did not reject it. The real anchor is a hedge against an unqualified browser or
-embedding policy returning `null`, not a claim that a launch target is known to
-require it.
-
-`proveUserIdentity()` navigates the retained connection to Prefetch using its
-bare URL and a separate `URLSearchParams` fragment argument. `launchUrl` is
-the equivalent browser URL for the native anchor, not a string passed into
-`connection.navigate`. It waits for `prefetch-dispatch.finished`, then calls
-`connection.navigateAway` with the frozen platform authorization destination
-(and a separate fragment argument if that platform uses one), without
-disclosing that URL to the Prefetch peer. With native-anchor fallback,
-`@libid/popup` binds the anchor-created window while the Application's anchor performs the initial
-navigation; ceremony observes only its typed messages. There is no popup
-argument to proving and no mutable connection setter.
-
-```ts
-function activate(event: MouseEvent) {
-  const anchor = event.currentTarget as HTMLAnchorElement
-  const ceremonyId = crypto.randomUUID()
-  const target = `libid-${ceremonyId}`
-  const popupWindow = PopupWindow.open(target)
-  const connection = PopupConnection.connect<Message>(popupWindow, {
-    connectionId: ceremonyId,
-    allowedPopupOrigins: [ccdpOrigin, new URL(redirectUri).origin],
+  anchor.addEventListener('click', (event) => {
+    const id = crypto.randomUUID()
+    const target = `ceremony-${id}`
+    // Keep window creation synchronous with the user's activation.
+    const popup = PopupWindow.open(target)
+    const connection = PopupConnection.connect(popup, {
+      connectionId: id,
+      allowedPopupOrigins: [bridgeOrigin, ccdpOrigin],
+    })
+    try {
+      const ceremony = client.new(
+        connection, id, 'google', ledger, operationDomain, transactionData,
+      )
+      anchor.target = target
+      anchor.href = ceremony.launchUrl
+      if (popup.opened) event.preventDefault() // Otherwise let the real anchor launch.
+      const off = ceremony.onStage((update) => {
+        status.textContent = update.status === 'active'
+          ? CeremonyStage.message(update.stage, 'Google')
+          : update.message ?? update.status
+      })
+      void ceremony.proveUserIdentity().then(
+        (result) => {
+          if (result.status === 'accepted') {
+            // Hand result.identity and result.oauthProof to your ledger adapter,
+            // together with the original operation inputs.
+          }
+          connection.close() // This application closes on acceptance or denial.
+        },
+        (error: unknown) => {
+          status.textContent = error instanceof Error ? error.message : 'Ceremony failed.'
+          // Keep this application's failed popup available for inspection.
+        },
+      ).finally(off)
+    } catch (error) {
+      event.preventDefault()
+      connection.close()
+      status.textContent = error instanceof Error ? error.message : 'Unable to start ceremony.'
+    }
   })
-  const ceremony = ceremonies.new(
-    connection,
-    ceremonyId,
-    platformId,
-    ledgerId,
-    operationDomain,
-    transactionData,
-  )
-
-  anchor.href = ceremony.launchUrl
-  anchor.target = target
-  if (popupWindow.opened) event.preventDefault()
-  void ceremony.proveUserIdentity()
 }
 ```
 
-Callback authenticates the Application, then navigates directly to Prover
-with the captured OAuth query/fragment in a private structured fragment.
-`proveUserIdentity()` receives no OAuth return. It accepts one authenticated
-`Event(prover, started)` and sends one `ProveIdentity` containing the frozen platform,
-version, client ID, redirect URI, nullable code verifier, and resolved notary
-address (null when the selected platform does not use notarization).
+The [development app](../../../apps/dev/src/app.ts) shows platform buttons,
+concurrent runs, independent Close controls and timing history. Each live run
+needs its own target, connection and fresh lowercase UUIDv4. Use the same UUID
+for popup's `connectionId` and `client.new`'s ceremony ID. Reserve no CCDP message
+handlers yourself on that connection.
 
-The selected Prover leaf validates the retained return against that request,
-the CCDP version, and the authenticated connection's ceremony ID. A valid
-OAuth denial sends `UserDenied`, making the client resolve a denied
-`IdentityResult`. Malformed returns and technical failures use
-`CeremonyFailed` and reject. Only accepted OAuth proceeds to proof execution.
-On proof delivery the client structurally validates the separate identity and
-selected platform/version proof, adds the version and retained authorization
-nonce to `OAuthProof`, and resolves an accepted `IdentityResult`. A locally
-canceled ceremony ignores any later remote result.
+`new(connection, id, platformId, ledger, operationDomain, transactionData, version?)`
+is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`
+and `ledger.notaryAddress()` once, copies the hash and byte inputs, and derives
+fresh authorization material. Invalid selection, ledger values or inputs fail
+before OAuth. A client cannot reuse a live ID; a connection cannot run two
+ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
+[ceremony.ts](../src/ccdp/client/ceremony.ts).
 
-The ceremony never closes its popup. The application composition owns whether
-to retain, navigate, or close the window after any result, cancellation, or
-failure; a wallet composition may therefore continue its own flow in the same
-popup.
+`launchUrl` is the complete Prefetch URL for a native anchor.
+`proveUserIdentity()` starts the run once and owns subsequent protocol navigation.
+Raw OAuth returns stay inside Callback and Prover; the application receives
+neither them nor bearer credentials or private witnesses.
 
-The Job is already committed before `proveUserIdentity()` and remains the
-composition's current ceremony state while the call runs. Progress may update
-its advisory projection, but no pre-proving authority CAS or ceremony callback
-exists. The final composition-owned Job CAS is the authority boundary: if
-cancellation, expiry, or another transition retired the Job, a late result
-cannot commit.
+## Platform and version discovery
 
-To stop an active ceremony, the application calls `connection.close()` on its
-supplied popup connection. There is no ceremony cancellation method or cancellation error
-type. Closing ends the live run through popup transport; Client clears retained
-inputs and ignores late messages. A first proof call after pre-start closure
-reports that connection failure; repeated proof calls remain one-shot errors.
+- `client.enabledPlatforms`: frozen compatible platform IDs for this Bridge.
+- `client.enabledVersions(platform)`: compatible versions in ascending order;
+  empty for a known disabled platform.
+- `supportedPlatforms`, exported from either entrypoint: package capabilities
+  before fetching configuration. It does not establish Bridge availability.
 
-Connection loss rejects with `CeremonyError` and produces a failed lifecycle update
-for any remaining observers. It never implies OAuth denial or proof success. An
-application that initiated closure already knows it was cancellation and can keep
-that label in its own UI. The development app instead uses a plain Close button
-and displays the resulting connection failure. Stopping the popup document
-does not guarantee cancellation of dispatched server requests. Retiring a run
-while retaining its live connection for navigation is not exposed by this API.
+`PlatformId` is derived from the closed catalog (`google`, `x`, `github`). Display
+names and icons belong to the application. Only ceremony version 1 currently
+exists. An omitted version chooses the highest compatible one; pass the trailing
+version argument explicitly when selecting a particular disclosure behavior.
+Unsupported selections fail synchronously without starting OAuth.
 
-### OAuth Bridge configuration
+## Ledger and notary inputs
 
-The [coordinated fixed-path migration](qualification.md#pending-contract-updates)
-is deferred. Current Bridge configuration publishes `callbackPath`. Client validates that absolute path and resolves
-`redirectUri` once against its supplied `oauthBridge` origin; OAuth, ProveIdentity
-and GitHub token exchange all use those same bytes.
+[`@libid/ledger`](../../ledger/README.md) owns the ledger interface. Production
+ledger definitions are still deferred; the dev app uses an explicit synthetic
+fixture. Ceremony includes no chain catalog, EVM adapter or ledger decoder.
 
-The client fetches and validates the origin-controlled
-[`CeremonyConfig`](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#public-configuration) once, then freezes
-the chosen platform, version, client ID, redirect URI, and CCDP origin. CCDP
-[resources](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#documents-and-routes) never fetch it.
+Client forwards the ledger's notary address for every platform. Google ignores
+it; X and GitHub require it before notarized work. There is no client override,
+environment lookup or automatic notary substitution. The address selects routing,
+not a trusted signing key. Downstream verification establishes notary authority.
 
-### Notary selection
+Bridge, CCDP and notary origins must be canonical HTTPS origins, with HTTP
+allowed on exactly `localhost` and `127.0.0.1` at arbitrary ports. Credentials,
+paths, query strings and fragments are not origins. The HTTP exception does not
+relax platform HTTPS or the Prover's isolation requirement.
 
-`new` takes the address directly from the supplied ledger, without branching on
-the platform:
+## Results and errors
 
-```ts
-const notaryAddress = ledgerId.notaryAddress()
-```
+`proveUserIdentity()` resolves either `{ status: 'denied' }` or an accepted result
+containing separate `identity` and `oauthProof` values:
 
-The client validates a nonempty canonical origin under the origin policy above, with no credentials,
-path, query, or fragment and freezes it before OAuth. Missing, throwing, or
-invalid results fail `new`; there is no default fallback. The client has no
-notary profiles, environment lookup, or constructor override. Ledger
-definitions own their addresses; tests and local development can supply a
-[ledger fixture](../../ledger/docs/identity.md#api) with a different address and the same
-Chain Profile hash.
+- `identity`: exact platform ID, OAuth client ID, user ID and user name. The name
+  is Google's signed email, X's username or GitHub's login, without normalization.
+- `oauthProof`: selected `platformCeremonyVersion`, fresh `authorizationNonce`
+  and the platform-specific `proof`.
 
-The client sends that address for every platform. The selected platform decides
-whether to use it; Google ignores it and opens no notary connection. CCDP also
-accepts null for any platform; the selected pipeline rejects it before work that
-needs notarization.
-Prover validates a supplied address and uses it unchanged for all notarized
-browser sessions, forwarding the same value to GitHub's token endpoint.
-Neither Prover nor Bridge selects or switches notaries on failure.
-Assets and prefetch caches are unchanged.
-The address selects a network destination, not a trusted signing key; ledger
-verification remains authoritative.
+Google's proof contains `identityProof`, `tokenExpiresAt` and
+`signingKeyModulus`. X/GitHub contain `bearerLinkProof`, `tokenAttestation` and
+`identityAttestation`. A `NotaryAttestation` preserves original `attestedData`
+and `signature` bytes with the Prover's complete `decoded` convenience view.
+Use `OAuthProof<'google'>['proof']`, for example, to name a payload type without
+importing private modules. A literal platform argument infers its result type;
+a dynamic `PlatformId` produces the corresponding union.
 
-## Result and lifecycle
+**Accepted means structurally accepted, not cryptographically verified.** Client
+checks the selected platform/version, exact shapes, bounds and OAuth client ID.
+It does not repeat evidence parsing, authenticate decoded views, verify notary
+signatures or verify ZK proofs. The ledger adapter must preserve signed bytes
+and combine the result with the original operation inputs; convenience views
+are not authoritative ledger evidence.
 
-```ts
-import type { NotaryAttestation, OAuthProof, PlatformId } from '@libid/ceremony'
+Technical failure and connection loss reject with `CeremonyError`, carrying
+`event` (failing operation) and bounded opaque `message`. Display text with
+`textContent`; do not interpret it as a stable error code or export it as
+telemetry. A caught dependency message is not guaranteed free of sensitive data.
+An OAuth denial resolves normally; closing a consent page without a valid denial
+return does not imply denial.
 
-interface Identity<P extends PlatformId = PlatformId> {
-  platformId: P
-  oauthClientId: string
-  userId: string
-  userName: string
-}
+## Events and presentation
 
-interface GoogleProofV1 {
-  identityProof: Uint8Array
-  tokenExpiresAt: number        // exact signed exp
-  signingKeyModulus: Uint8Array
-}
+Subscribe before starting; subscriptions do not replay past observations.
+`onEvent` combines local and received operation occurrences into one timeline.
+Active events have `event`, optional `phase`, `timestamp` and optional
+`instrumentation`. Client derives exactly one terminal lifecycle update before
+the promise settles. Status is `active | completed | denied | failed`.
+Only accepted proof delivery produces `prover.finished` with `completed` status;
+early outcomes do not fabricate a finished operation.
 
-interface XProofV1 {
-  bearerLinkProof: Uint8Array
-  tokenAttestation: NotaryAttestation
-  identityAttestation: NotaryAttestation
-}
+`onStage` provides a sequential UI projection, including terminal status and
+failure text, so a simple UI needs only this subscription:
 
-interface GitHubProofV1 {
-  bearerLinkProof: Uint8Array
-  tokenAttestation: NotaryAttestation
-  identityAttestation: NotaryAttestation
-}
+| Stage | Trigger |
+|---|---|
+| `preparation` | Prefetch dispatch starts. |
+| `authorization` | Provider navigation starts. |
+| `proof-preparation` | Authorization return, or Prover readiness if that observation was lost. |
+| `notarization` | Token fetch or token attestation starts; Google skips it. |
+| `zk-proving` | ZK generation starts. |
 
-type IdentityResult<P extends PlatformId = PlatformId> =
-  | {
-      [K in P]: {
-        status: 'accepted'
-        identity: Identity<K>
-        oauthProof: OAuthProof<K>
-      }
-    }[P]
-  | { status: 'denied' }
+Use `CeremonyStage.message(stage, platformName)` for package wording. Stages
+never move backwards and do not represent exclusive execution intervals or
+percentages. ZK generation may finish while attestations remain pending.
+[Measurements](metrics.md) explains occurrence timestamps and timing limits.
+Observers can throw or unsubscribe without disrupting protocol processing.
 
-```
+## Closure and retries
 
-`OAuthProof<P>` contains the selected `platformCeremonyVersion`, a 32-byte
-`authorizationNonce`, and the version-specific `proof`. To name a proof's payload
-without importing catalog internals, use `OAuthProof<'google'>['proof']`.
+Ceremony never closes the supplied connection, including after success or denial.
+The example chooses automatic closure; an application may instead continue its
+own flow in the popup. Late CCDP traffic becomes inert after settlement.
 
-The platform type selected in `CCDPClient.new` flows through `Ceremony`,
-`IdentityResult`, and `OAuthProof`. A literal platform input therefore returns
-the corresponding `proof` type; a dynamic `PlatformId` returns the platform
-proof union. The mapped unions preserve the relationship between
-`identity.platformId`, `oauthProof.platformCeremonyVersion`, and the proof type.
-A nested `identity.platformId` check alone does not narrow the sibling
-`oauthProof` in TypeScript; dynamic callers use a platform/version result guard
-when they need platform-specific fields. Adding a platform or version extends
-the closed catalog, not `OAuthProof` or CCDP.
+To stop a live run, call `connection.close()`. This causes a failed lifecycle
+update and `CeremonyError`, not an OAuth denial, cancel message or `CancelError`.
+An application wanting a separate cancellation label records its own intent.
+Closing the popup cannot recall a request already dispatched to the Bridge.
 
-Callers do not supply a generic explicitly. A static platform literal flows
-through `new` and `proveUserIdentity()`:
-
-```ts
-const ceremony = ceremonies.new(
-  connection,
-  jobId,
-  'google',
-  ledgerId,
-  operationDomain,
-  transactionData,
-)
-
-const result = await ceremony.proveUserIdentity()
-if (result.status === 'accepted') {
-  result.identity.userName             // Google's exact signed email
-  result.oauthProof.proof.identityProof // GoogleProofV1
-}
-```
-
-Wrappers preserve inference by carrying `P extends PlatformId`; widening either
-input or return type to `PlatformId` intentionally widens the result union.
-
-`PlatformCeremonyVersion` is an unsigned 16-bit integer from the package/Bridge
-intersection. The caller may select it explicitly, or omit it to use the highest
-compatible version. It
-versions one platform's complete ceremony semantics: authorization-digest
-construction, OAuth request and return handling, platform proof construction,
-and assembly of the final `OAuthProof`. It does not version a chain, Registry,
-or verifier contract; multiple chain-specific Consumers may accept the same
-ceremony output.
-Together with `Identity.platformId`, the selected `PlatformCeremonyVersion`
-identifies the proof shape; there is no independent proof or contract-verifier
-version. Each current platform has only version `1`. A new ceremony version must add its own
-version slice, proof type, and validator, even when it deliberately retains the
-same fields. Versions may offer different disclosure behavior while both remaining
-secure. An application offering a specific behavior selects its corresponding
-version explicitly; the automatic default does not describe disclosure policy.
-`authorizationNonce` is exactly 32 cryptographically random bytes. For X and
-GitHub the Ceremony Client derives the code verifier from the Authorization
-Digest and that nonce, sends only the derived verifier to the prover, and
-retains the nonce until the token exchange has completed. The accepted
-`OAuthProof` then publishes `authorizationNonce` so the Platform Verifier can
-reproduce the binding. Exact authorization and PKCE encoding are delegated to
-the normative ceremony specification.
-
-`OAuthProof<P>` contains only the selected ceremony version,
-client-generated authorization nonce, and platform-specific `proof`.
-`IdentityResult` carries `identity` beside it, not inside the platform proof.
-`platformId` is already in `Identity`; `operationDomain` and `transactionData`
-are caller-owned ceremony inputs and are not returned. Each version's
-`types` leaf owns that proof type and structural validator. Each platform
-retains its own proof type even when fields coincide. Proof-byte names describe
-the statement: Google's `identityProof` proves its signed identity claims;
-X/GitHub's `bearerLinkProof` links the hidden bearer in two attested sessions.
-
-`Identity` is the common prover-extracted view. `oauthClientId` and `userId`
-preserve the platform's exact identifier strings. `userName` is Google's signed
-email, X's username, or GitHub's login, not a display name or normalized handle.
-`platformId` must match the selected platform. No observation time, expiry,
-signing key, digest, or proof bytes belong in this shared view.
-
-[`NotaryAttestation`](notarization.md#internal-contract) contains the original
-`attestedData` and `signature` bytes plus their complete `decoded` view. The
-Prover attaches that view from its existing decoder; the Client does not
-decode the bytes again. Signed evidence time remains in each attestation's
-`decoded.createdAt`, not a second proof-level `metadataObservedAt` field.
-The result types are client-safe; importing them does not import the Prover's
-decoder or WASM.
-
-`GoogleProofV1` names the circuit's semantic public values rather than exposing
-bb.js's ordered field array. The Google adapter's pure
-`buildGooglePublicInputs(authorizationDigest, identity, proof)` helper hashes and packs
-those values from the separate identity and platform proof, including
-`identity.oauthClientId`, `identity.userId`, and
-`identity.userName`, into the circuit's exact 56-field verifier input only at the
-verifier/transaction-encoding boundary. The Ceremony Client does not call it to
-verify the proof. Google has no attestation from which the Platform Verifier
-could recover these values, so they remain proof inputs. For X and GitHub,
-the Platform Verifiers reconstruct the bearer commitments, client identifier,
-identity, and evidence time from verified attestation bytes. Their separate
-browser `identity` and attestation `decoded` fields are convenience views for
-UI and diagnostics, not additional verifier inputs.
-
-Neither `OAuthProof` nor its platform proof contains chain ID or Authorization
-Digest: the Proof Verifier observes the former from its chain environment and
-recomputes the latter. No proof record adds a verifier address, verification
-key, caller-selected validity bound, or normalized handle. The composition
-assembles ledger submission from its original operation inputs and the accepted
-`IdentityResult`; the reduced `OAuthProof` alone is not a complete submission.
-Ledger serialization omits the attestation `decoded` views and X/GitHub's
-convenience `identity`; it passes the original signed bytes unchanged. Changing a convenience view
-cannot change authoritative ledger identity or evidence time.
-
-The Ceremony Client calls `validateProofMessage` with its retained platform and
-version, returns the decoded `identity` separately, and constructs `OAuthProof`
-from the typed platform proof, selected version, and retained authorization nonce.
-Validation checks exact shapes, field types, bounds, the selected platform, and
-the identity's OAuth client identifier against the frozen client; it does not
-parse attestation bytes, derive identity, repeat prover-side evidence checks, recompute the retained
-digest, or cryptographically verify the proof. Prover-side platform code owns
-canonical evidence parsing and configured-client checks.
-Neither endpoint performs a separate Google nonce-versus-expected-digest
-comparison or local notary-signature verification. The Prover still parses the
-nonce canonically, the Google circuit still verifies RS256 and binds that
-nonce to its public input, and the notary/platform code still performs
-its documented structural, request-binding, and commitment/opening checks.
-Early digest-mismatch and structurally valid attestation-forgery detection are
-omitted; downstream verification must still reject them using the recomputed
-authorization digest and trusted signing keys. The expected digest is not an
-`ProveIdentity` input.
-`status: 'accepted'` means the Prover reported successful OAuth/proving and the
-Client accepted the result shape, not that the Client authenticated its
-contents. UI and diagnostics may use the extracted fields as unverified
-information; only Ledger Verifier acceptance makes identity authoritative.
-
-The live `Ceremony` privately retains its ID, copied operation inputs, selected
-platform and ceremony version, authorization nonce and digest, OAuth client and
-redirect, resolved notary address, derived code verifier, and supplied popup connection. A restart creates a fresh Ceremony
-with a fresh nonce, digest, and verifier. After proof acceptance, the Job may
-store the accepted `IdentityResult` alongside its original operation inputs. Before
-acceptance, no Job or IndexedDB index stores the authorization nonce or digest,
-code verifier, OAuth-platform credential, or private witness. No separate OAuth-state
-value or pre-proof checkpoint is ever persisted.
-
-The ceremony receives no action kind, job revision, chain RPC, Registry client,
-wallet key, threshold, fee, connector, transaction submitter, database,
-`CryptoKey`, or arbitrary callback. Its output contains separate `Identity`
-and `OAuthProof` but no live bearer credential, private witness, wallet signature, fee quote,
-or transaction submission capability.
-
-All records are exact-shape and bounds validated without coercion. Ceremony IDs are
-lowercase RFC 4122 UUIDv4 values generated with `crypto.randomUUID()` and are
-serialized as the suffix of `v1.<ceremonyId>` OAuth `state`. The code verifier is derived by the
-normative PKCE construction. Derived hashes are exact 32-byte `Uint8Array`
-values. Unknown fields, aliases, coercions, and
-noncanonical encodings fail before use.
-
-## Progress, cancellation, and recovery
-
-`onEvent` combines Application-local and received [operation events](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#event)
-into one timeline. All active occurrences preserve their producer timestamp and
-have `status: 'active'`. The client adds exactly one terminal update for
-success, OAuth denial, or technical failure before `proveUserIdentity()`
-settles. Connection closure also terminates with a failed update. A caller that
-closes deliberately can unsubscribe first and record its own cancellation time.
-
-```ts
-// Accepted proof and assembled result:
-{ event: 'prover', phase: 'finished', status: 'completed', timestamp }
-// Early outcomes do not fabricate prover.finished:
-{ status: 'denied', timestamp }
-{ status: 'failed', event: 'identity-fetch', message: 'Invalid GitHub id', timestamp }
-```
-
-The status set is `active | completed | denied | failed` for both `onEvent`
-and `onStage`. There is no `cancelled` status; cancellation intent is application-owned.
-
-Only Client acceptance of `IdentityProof` completes the ceremony. Finishing
-`zk-proof-generation` remains an active operation event if attestations or delivery
-are pending. Unknown extension events do not authorize transitions. Observers may
-unsubscribe or throw without affecting protocol processing; late events cannot
-reactivate a terminated run. When a terminal update exists, total duration is
-measured from the initial `prefetch-dispatch.started` through that update.
-Connection closure supplies a failed terminal observation. An absent observation is unavailable, not zero.
-
-`onStage` projects selected core events into sequential presentation, forwarding
-terminal status and opaque error text through the same subscription:
-
-| Stage | Display text | Trigger |
-|---|---|---|
-| `preparation` | Preparing your ceremony | `prefetch-dispatch.started` |
-| `authorization` | Authorize with {platform} | `authorization.started` |
-| `proof-preparation` | Preparing your identity proof | `authorization.finished` |
-| `notarization` | Notarizing your identity data | `token-fetch.started` or `token-attestation.started` |
-| `zk-proving` | Creating your identity proof with ZK | `zk-proof-generation.started` |
-
-Google skips notarization. Early backend preparation does not advance presentation;
-late observations cannot move it backwards. If the observational authorization
-finish was lost, `prover.started` also advances to proof-preparation without
-inventing an authorization timestamp. Stages are not mutually exclusive
-execution intervals or percentage estimates. Terminal status supplies final text;
-there is no separate completed stage. Use `CeremonyStage.message(stage, platformName)`
-for package-owned active wording. The application owns its platform display name.
-
-```ts
-const unsubscribe = ceremony.onStage(update => {
-  status.textContent = update.status === 'active'
-    ? CeremonyStage.message(update.stage, 'Google')
-    : update.status === 'failed' ? update.message ?? 'Ceremony failed.' : update.status
-})
-```
-
-Popup documents use the same local feed and projection. A local emission can feed
-UI, optional recording, and Application forwarding without a UI roundtrip. Readiness
-sends do not depend on observers. Local proof delivery is not Application acceptance.
-[Metrics](metrics.md) defines measurements and exporter responsibilities.
-
-## Implementation guide
-
-The application entrypoint is `@libid/ceremony/ccdp/client`, exporting
-`createCCDPClient` and `CCDPClient`. It implements the application participant;
-`Ceremony` still names one run. Client and CCDP must use matching five-message builds; no legacy wire aliases
-are retained.
-
-Owns one-time Bridge configuration, frozen ceremony construction and the one-shot
-Application lifecycle over a caller-supplied `PopupConnection`.
-
-- [Public configuration](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#public-configuration): Bridge response contract.
-- [CCDP protocol](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md): messages and ordering.
-
-[config.ts](../src/ccdp/client/config.ts) validates configuration; [ceremony.ts](../src/ccdp/client/ceremony.ts) owns state
-and handlers. Identity extraction stays in the platform Provers. Wallet operations,
-submission and post-ceremony actions belong to the Application.
-
-### Technical failure details
-
-A technical failure rejects with `CeremonyError` containing `event` and `message`.
-`onEvent` and `onStage` expose the same terminal text before rejection, so simple
-UIs need no second failure subscription. Error text is opaque, bounded and rendered
-as text, with no required error-code catalog. See [CeremonyFailed](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#ceremonyfailed) for
-its display/telemetry boundary. Denial resolves a denied result. Browser APIs
-retain their native abort errors; a received `CeremonyFailed` and connection loss
-both reject with `CeremonyError`. The application owns popup closure and retries.
+A Ceremony is one-shot. Loss, reload or retry requires fresh OAuth and a new
+ceremony ID; there is no resume API. Discard subscriptions when the consuming
+view is removed. Optional opener-independent fallback requires matching popup
+adapters in the application and [distribution build](distribution.md#bridge-and-popup-integration).
