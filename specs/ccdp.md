@@ -327,15 +327,18 @@ by Prover and is not repeated in the message.
 Starting Prover initiates OAuth validation; it does not assert acceptance or
 mean that proof generation has already begun.
 
-`notaryAddress` follows the [origin policy](#origin-policy) for a platform that
-uses notarization; it is null for Google. The local HTTP exception needs no
-client option or environment override. A remote HTTP address is rejected,
-never upgraded or used as a downgrade fallback.
-The Application selects and freezes it before OAuth. Prover validates it before
-credential use and uses it unchanged for all sessions, including the GitHub
-token request. It neither selects defaults nor accepts a separate profile,
-ledger identifier, hash, or testnet flag. The address changes network routing,
-not the proof statement or trusted signing keys.
+`notaryAddress` may be supplied for any platform; a non-null value follows the
+[origin policy](#origin-policy). The Application can pass its resolved address
+uniformly without knowing which platforms use notarization. The selected
+platform ignores it when unused and requires a non-null address before starting
+work that needs notarization. The local HTTP exception needs no client option or
+environment override. A remote HTTP address is rejected, never upgraded or used
+as a downgrade fallback.
+The Application selects and freezes a supplied address before OAuth. Prover
+validates it before credential use and, when needed, uses it unchanged for all
+sessions, including the GitHub token request. It neither selects defaults nor
+accepts a separate profile, ledger identifier, hash, or testnet flag. The address
+changes network routing, not the proof statement or trusted signing keys.
 
 The Application origin is trusted for this transient input because it already
 supplies the operation being authorized. It retains the authorization nonce;
@@ -607,6 +610,9 @@ cryptographic properties delegated to the common and platform specifications.
   Public Prefetch authenticates its exact peer; Callback rejects an unlisted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Canonical HTTP loopback works at arbitrary ports.
 - TEST-CCDP-05 (exercises REQ-CCDP-05):
   Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel`, `denied`, and `abort` records and Application-sent `UserDenied` are invalid. Proof payloads are structurally checked under the selected platform version.
+  A valid notary address is accepted for any platform, including one that does
+  not notarize; null is accepted when unused but rejected before work requiring
+  notarization. Malformed non-null addresses are rejected under the origin policy.
 - TEST-CCDP-06 (exercises REQ-CCDP-05, REQ-CCDP-06):
   Only the designated core occurrences open gates; extensions cannot do so. Omitted instrumentation and either or both nested fields are accepted when valid; null, unknown instrumentation members, nonfinite attribute numbers, and top-level operationId/attributes are rejected. Overlap, occurrence timestamps, and retrospective fallback timing are preserved.
 - TEST-CCDP-07 (exercises REQ-CCDP-07):
