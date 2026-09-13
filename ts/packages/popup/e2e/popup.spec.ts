@@ -139,6 +139,46 @@ test('[POPUP-WINDOW-001] [POPUP-PORT-001] scripted open connects over MessagePor
   expect(await popup.evaluate(() => window.outerWidth)).toBe(480)
 })
 
+test('[POPUP-WINDOW-005] concurrent opens receive distinct placement hints and connect', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const open = window.open.bind(window)
+    const features: string[] = []
+    ;(window as unknown as { __features: string[] }).__features = features
+    window.open = (url, target, options) => {
+      features.push(options ?? '')
+      return open(url, target, options)
+    }
+  })
+  const { popup: first } = await open(page)
+  await expect(first.locator('#status')).toHaveText('connected')
+  const id = freshId()
+  await page.evaluate((id) => {
+    ;(window as unknown as { __id: string }).__id = id
+    const anchor = document.getElementById('go') as HTMLAnchorElement
+    anchor.target = `popup-${id}`
+    anchor.href = `${anchor.origin}/p#c=${id}`
+  }, id)
+  const opened = page.waitForEvent('popup')
+  await page.click('#go')
+  const second = await opened
+  await expect(second.locator('#status')).toHaveText('connected')
+  expect(first.isClosed()).toBe(false)
+  await ping(page, 1)
+  await expectPong(page, 1)
+  const features = await page.evaluate(
+    () => (window as unknown as { __features: string[] }).__features,
+  )
+  expect(features).toHaveLength(2)
+  for (const value of features)
+    expect(value).toMatch(/^popup,width=480,height=720,left=-?\d+,top=-?\d+$/)
+  expect(features[0]).not.toBe(features[1])
+  // Browser/OS placement can override these hints, especially tabs and WebKit headless.
+  await first.close()
+  await second.close()
+})
+
 test('[POPUP-WINDOW-002] blocked scripted open binds the native anchor popup', async ({ page }) => {
   const { popup } = await open(page, { blocked: true })
   await expect(popup.locator('#status')).toHaveText('connected')

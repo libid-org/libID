@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { activeRegistration } from './keeper.js'
 import { type CurrentWindow, PopupWindow } from './window.js'
 
@@ -120,5 +120,78 @@ describe('registration selection [POPUP-KEEPER-005]', () => {
 
   it('rejects a cross-origin scope', () => {
     expect(() => current(container(), 'https://other.example/')).toThrow(TypeError)
+  })
+})
+
+describe('default popup placement [POPUP-WINDOW-005]', () => {
+  let open: typeof PopupWindow.open
+  let nativeOpen: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    vi.resetModules()
+    open = (await import('./window.js')).PopupWindow.open
+    nativeOpen = vi.fn(() => ({ closed: false }))
+    vi.stubGlobal('window', {
+      open: nativeOpen,
+      outerWidth: 1280,
+      screenX: 80,
+      screenY: 40,
+      screen: { availWidth: 1600, availLeft: -1600, availTop: 24 },
+    })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('places mixed widths side by side, then staggers without consulting prior handles', () => {
+    const first = {
+      get closed(): boolean {
+        throw new Error('Severed handle')
+      },
+    }
+    nativeOpen.mockReturnValueOnce(first)
+    open('one', 'width=480,height=720')
+    open('two', 'innerWidth=600,height=720')
+    open('three', 'width=480,height=720')
+    open('four', 'width=480,height=720')
+    expect(nativeOpen.mock.calls.map((call) => call[2])).toEqual([
+      'popup,width=480,height=720,left=-1600,top=24',
+      'popup,innerWidth=600,height=720,left=-1088,top=24',
+      'popup,width=480,height=720,left=-1568,top=56',
+      'popup,width=480,height=720,left=-1056,top=56',
+    ])
+  })
+
+  it('uses the final width declaration after normalizing its alias', () => {
+    open('wide', 'width=100,innerWidth=900')
+    open('next', 'width=480')
+    expect(nativeOpen).toHaveBeenLastCalledWith(
+      'about:blank',
+      'next',
+      'popup,width=480,left=-668,top=24',
+    )
+  })
+
+  it('keeps explicit positions, including aliases, and blocked opens out of the sequence', () => {
+    for (const features of ['left=10', ' TOP = 10', 'ScreenX=-20', 'screenY=40']) {
+      open('explicit', features)
+      expect(nativeOpen).toHaveBeenLastCalledWith('about:blank', 'explicit', `popup,${features}`)
+    }
+    nativeOpen.mockReturnValueOnce(null)
+    expect(open('blocked', 'width=480').opened).toBe(false)
+    expect(open('first', 'width=480').opened).toBe(true)
+    expect(nativeOpen.mock.calls.slice(-2).map((call) => call[2])).toEqual([
+      'popup,width=480,left=-1600,top=24',
+      'popup,width=480,left=-1600,top=24',
+    ])
+  })
+
+  it('uses opener width when omitted and bounds repeated large-window launches', () => {
+    open('default')
+    expect(nativeOpen).toHaveBeenLastCalledWith('about:blank', 'default', 'popup,left=-1600,top=24')
+    for (let i = 0; i < 20; i++) {
+      open(`large-${i}`, 'width=9000')
+      const features = nativeOpen.mock.lastCall![2] as string
+      expect(features).toMatch(/,left=-1600,top=\d+$/)
+      expect(Number(/top=(\d+)/.exec(features)![1])).toBeLessThan(280)
+    }
   })
 })

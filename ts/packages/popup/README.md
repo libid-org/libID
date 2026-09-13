@@ -45,7 +45,15 @@ written.
 `window.open('about:blank', target, 'popup,…')` and returns a wrapper even when
 the browser returns no handle. The popup is always requested as a separate
 window; `features` may add size or position (`width=480,height=720`) and must
-not contain `noopener` or `noreferrer`. The native-anchor fallback and mobile
+not contain `noopener` or `noreferrer`. Without a caller position (`left`, `top`,
+`screenX`, or `screenY`), successful launches from that application document are
+placed side by side with a small gap, then staggered when the row is full. This
+uses native opening coordinates, preserves the requested size, and leaves
+already-open windows alone. It does not track or reclaim closed positions:
+isolation can make a live popup's retained handle appear closed. Positioning is
+best-effort; browser or window-manager policy may override it.
+
+The native-anchor fallback and mobile
 browsers present a tab instead, which changes no rule. It throws `TypeError` before opening for an empty target or
 one beginning with `_`. When no handle is returned, the connection binds the
 popup created by the same action's real anchor. See [popup creation and

@@ -29,13 +29,20 @@ function usable(handle: WindowProxy | null): handle is WindowProxy {
   }
 }
 
+// Placement is a sequence of launch hints, not a registry of live windows:
+// COOP can make a still-open popup's retained handle report closed.
+let nextLeft = 0
+let cascade = 0
+
 export class PopupWindow {
   protected constructor() {}
 
   /**
    * Synchronously attempts `window.open('about:blank', target, 'popup,…')`.
    * The popup is always requested as a separate window; `features` may add
-   * size or position and MUST NOT sever the opener.
+   * size or position and MUST NOT sever the opener. Without a position, new
+   * windows are placed side by side, then staggered when the screen is full.
+   * Placement is best-effort; browsers and window managers may ignore it.
    */
   static open(target: string, features = ''): PopupWindow {
     if (target === '' || target.startsWith('_')) {
@@ -44,8 +51,31 @@ export class PopupWindow {
     if (/\b(noopener|noreferrer)\b/i.test(features)) {
       throw new TypeError('popup features must not sever the opener')
     }
-    const windowFeatures = features === '' ? 'popup' : `popup,${features}`
-    return new OpenedWindow(window.open('about:blank', target, windowFeatures), window)
+    let windowFeatures = features === '' ? 'popup' : `popup,${features}`
+    const positioned = /(?:^|[\s,])(?:left|top|screenx|screeny)(?:[\s,=]|$)/i.test(features)
+    let left = nextLeft
+    let offset = cascade
+    let width = 0
+    if (!positioned) {
+      const { screen } = window
+      // availLeft/Top are supported by desktop engines but absent from lib.dom.
+      const bounds = screen as Screen & { availLeft?: number; availTop?: number }
+      const requested = [
+        ...features.matchAll(/(?:^|[\s,])(?:width|innerwidth)\s*=\s*([+-]?\d+)/gi),
+      ].at(-1)?.[1]
+      width = Math.min(screen.availWidth, Math.max(100, Number(requested) || window.outerWidth))
+      if (left + width > screen.availWidth) {
+        offset = (offset + 32) % 256
+        left = Math.min(offset, Math.max(0, screen.availWidth - width))
+      }
+      windowFeatures += `,left=${(bounds.availLeft ?? window.screenX) + left},top=${(bounds.availTop ?? window.screenY) + offset}`
+    }
+    const handle = window.open('about:blank', target, windowFeatures)
+    if (handle && !positioned) {
+      nextLeft = left + width + 32
+      cascade = offset
+    }
+    return new OpenedWindow(handle, window)
   }
 
   /**
