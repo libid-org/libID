@@ -28,7 +28,7 @@ and the [test index](test-plan.md) retains the stable acceptance IDs.
 
 The package has two public entrypoints:
 
-- `@libid/ceremony`: client-safe platform discovery, `CeremonyError`, and result types.
+- `@libid/ceremony`: client-safe platform discovery, `CancelError`, `CeremonyError`, and result types.
 - `@libid/ceremony/ccdp/client`: `createCCDPClient`, ceremony lifecycle and
   event/stage APIs, plus the root exports.
 

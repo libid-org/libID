@@ -1,6 +1,6 @@
 import type { LedgerId } from '@libid/ledger'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
-import { CeremonyError, ceremonyError } from '../../errors.js'
+import { CancelError, CeremonyError, ceremonyError } from '../../errors.js'
 import {
   deriveAuthorizationDigest,
   deriveCodeChallenge,
@@ -404,7 +404,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   async cancel(): Promise<void> {
     if (this.state === 'done') return
     const active = this.state === 'oauth' || this.state === 'proving'
-    this.fail(new DOMException('Ceremony canceled', 'AbortError'))
+    this.fail(new CancelError())
     if (active && bindings.get(this.connection) === this.binding && !this.binding?.active)
       try {
         this.connection.send({ type: 'cancel' })
@@ -416,20 +416,23 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private fail(error: Error): void {
     if (this.state === 'done') return
     const reject = this.reject
-    const failure = ceremonyError(
-      error,
-      this.state === 'prefetch' || this.state === 'new'
-        ? 'prefetch-dispatch'
-        : this.state === 'oauth'
-          ? 'authorization'
-          : 'prover',
-    )
+    const failure =
+      error instanceof CancelError
+        ? error
+        : ceremonyError(
+            error,
+            this.state === 'prefetch' || this.state === 'new'
+              ? 'prefetch-dispatch'
+              : this.state === 'oauth'
+                ? 'authorization'
+                : 'prover',
+          )
     this.finish(
-      error.name === 'AbortError'
+      failure instanceof CancelError
         ? { status: 'cancelled', timestamp: now() }
         : { status: 'failed', event: failure.event, message: failure.message, timestamp: now() },
     )
-    reject?.(error.name === 'AbortError' ? error : failure)
+    reject?.(failure)
   }
 
   private cleanup(): void {

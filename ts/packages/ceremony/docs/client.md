@@ -561,4 +561,6 @@ A technical failure rejects with `CeremonyError` containing `event` and `message
 UIs need no second failure subscription. Error text is opaque, bounded and rendered
 as text, with no required error-code catalog. See [Abort](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#abort) for
 its display/telemetry boundary. Denial resolves a denied result; local cancellation
-rejects with `AbortError`. The application still owns popup closure and retries.
+rejects with the exported `CancelError` (`error instanceof CancelError`).
+Browser APIs retain their native abort errors; a received protocol `Abort` is a
+`CeremonyError`. The application still owns popup closure and retries.

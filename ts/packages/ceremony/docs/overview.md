@@ -60,7 +60,7 @@ Construct the client once per application configuration lifetime. It fetches and
 validates public Bridge configuration once; `enabledPlatforms` is a frozen catalog
 intersection. Each `new` captures its configuration and copies input bytes. A live
 ID cannot be reused by that client. A Ceremony is one-shot. `cancel()` rejects active
-work with `AbortError`; OAuth denial resolves `{ status: 'denied' }`. Failure or
+work with `CancelError`; OAuth denial resolves `{ status: 'denied' }`. Failure or
 connection loss rejects. Start fresh OAuth after loss; there is no recovery API.
 
 Ceremony never closes the supplied connection. Late CCDP messages are decoded and
