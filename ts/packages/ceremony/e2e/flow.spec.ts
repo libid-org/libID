@@ -324,28 +324,92 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
   )
 })
 
-test('package UI projects stages with indeterminate progress and a nonblocking 15-second hint [LIBID-BROWSER-024] [LIBID-BROWSER-025]', async ({
+test('popup progress follows operation events independently of stage labels [LIBID-PROVER-011] [LIBID-BROWSER-024] [LIBID-BROWSER-025]', async ({
   app,
   page,
 }) => {
   await page.clock.install()
   await page.goto(`${app}/ui`)
-  await expect(page.getByRole('progressbar')).not.toHaveAttribute('value')
+  const bar = page.getByRole('progressbar')
+  await expect(bar).toHaveAttribute('value', '0')
+  await expect(page.locator('.libid-activity')).toHaveCount(0)
   await expect(page.getByText('Preparing your identity proof')).toBeVisible()
+  await page.evaluate(() => {
+    for (const event of ['proof-worker-bootstrap', 'proof-wasm-load'])
+      window.testEvents.emit({ event, phase: 'finished', timestamp: 1, status: 'active' })
+  })
+  const value = await bar.evaluate((node: HTMLProgressElement) => node.value)
+  expect(value).toBeGreaterThan(0)
+  await expect(page.getByText('Preparing your identity proof')).toBeVisible()
+  await page.evaluate(() => {
+    for (const event of ['proof-wasm-load', 'zk-proof-preparation', 'unrelated-observation'])
+      window.testEvents.emit({ event, phase: 'finished', timestamp: 1, status: 'active' })
+  })
+  expect(await bar.evaluate((node: HTMLProgressElement) => node.value)).toBe(value)
   await page.clock.runFor(15000)
   await expect(page.getByText(/Still proving/)).toBeVisible()
   await page.evaluate(() => {
     window.testEvents.emit({
       event: 'zk-proof-generation',
       phase: 'started',
-      timestamp: performance.timeOrigin + performance.now(),
+      timestamp: 2,
       status: 'active',
     })
-    window.testView.stop()
+    for (const event of [
+      'proof-circuit-load',
+      'proof-backend-initialization',
+      'circuit-inputs',
+      'signing-key-fetch',
+      'witness',
+      'proof',
+    ])
+      window.testEvents.emit({ event, phase: 'finished', timestamp: 3, status: 'active' })
   })
-  await expect(page.getByRole('progressbar')).not.toHaveAttribute('value')
+  // Proof work fills the bar before backend teardown and delivery.
+  await expect(bar).toHaveAttribute('value', '1')
   await expect(page.getByText('Creating your identity proof with ZK')).toBeVisible()
+  const frames = await page.evaluate(async () => {
+    let frames = 0
+    const requestFrame = window.requestAnimationFrame.bind(window)
+    window.requestAnimationFrame = (callback) =>
+      requestFrame((time) => {
+        frames++
+        callback(time)
+      })
+    await window.testView.finishProof()
+    window.requestAnimationFrame = requestFrame
+    return frames
+  })
+  expect(frames).toBe(2)
+  await page.evaluate(() => {
+    window.testView.stop()
+    window.testView.delivered()
+  })
+  await expect(bar).toHaveAttribute('value', '1')
+  await expect(page.getByText('Proof delivered. Return to your application.')).toBeVisible()
   await expect(page.getByText(/Still proving/)).toHaveCount(0)
+  await expect(page.locator('.libid-activity')).toHaveCount(0)
+})
+
+test('popup paint wait skips hidden documents and tolerates stopped animation frames [LIBID-BROWSER-024]', async ({
+  app,
+  page,
+}) => {
+  await page.goto(`${app}/ui`)
+  await page.evaluate(async () => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+    window.requestAnimationFrame = () => {
+      throw new Error('Hidden documents should not wait')
+    }
+    await window.testView.finishProof()
+  })
+  await expect(page.getByRole('progressbar')).toHaveAttribute('value', '1')
+  await page.evaluate(async () => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+    // Simulate frames stopping while the document is waiting to paint.
+    window.requestAnimationFrame = () => 0
+    await window.testView.finishProof()
+  })
 })
 
 test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async ({

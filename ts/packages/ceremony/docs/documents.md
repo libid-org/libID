@@ -57,9 +57,12 @@ owns subsequent use of the supplied connection.
 
 ### Presentation
 
-Every view includes an inline libID logo. Prover uses an accessible, indeterminate
-native progress bar and the shared sequential stage projection; it reports
-`Proof delivered` locally, not Application acceptance. After 15 seconds, a
+Every view includes an inline libID logo. Prover uses an accessible native progress
+bar driven by [completed operation events](proving.md#popup-progress), alongside
+the shared sequential stage projection. Before delivery it fills the bar and gives
+it a paint opportunity; the final local text is `Proof delivered`, without claiming
+Application acceptance. There is no activity shimmer or Application-side close delay.
+After 15 seconds, a
 nonblocking slow-proving notice may suggest enabling JavaScript JIT in Vanadium.
 There is no ETA, styling API, Application markup, or renderer injection.
 

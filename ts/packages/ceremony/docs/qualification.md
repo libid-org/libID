@@ -195,3 +195,25 @@ replace platform qualification. On physical devices, record the model,
 OS/browser version, effective thread counts, and nonsecret outcomes.
 No raw OAuth return, credential, witness, transcript, opening, or live proof is
 a qualification artifact.
+
+## Popup operation progress (2026-09-13)
+
+The popup bar counts completed operations with UI-owned weights. Duplicate/parent
+events add no work, late attestations still advance the bar, and 100% does not
+claim Application acceptance. Before delivery, Prover gives the full bar a paint
+opportunity using two animation-frame callbacks and a 100 ms timer fallback.
+Already-hidden documents skip that wait. Cancellation during the wait prevents
+delivery; UI failure cannot suppress it. There is no activity shimmer or app-side
+close delay.
+
+Initial restoration passed 410 unit tests, all 17 distribution checks, 24 desktop
+browser cases over HTTP/HTTPS and two mobile-emulation UI cases. The desktop run
+included real Google fixture proofs independently verified against the released
+key in Chromium, Firefox and WebKit.
+
+The final paint behavior was rechecked with 12 focused unit tests, 10 popup UI
+cases across all three engines and both mobile-emulation profiles, and 12 app
+cases across the desktop engines. These check cancellation while waiting, failed
+rendering, hidden/stopped frames, immediate app closure without an app timer, and
+unchanged terminal timing records. Package/build/browser/app types and formatting
+pass. No new live-notary or physical-device qualification is claimed.

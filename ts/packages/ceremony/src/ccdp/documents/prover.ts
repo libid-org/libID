@@ -6,7 +6,7 @@ import { type CoreEvent, coreEvents, Events, now, type OperationEvent } from '..
 import type { ProverContext } from '../../platforms/context.js'
 import { Cancel, Event as EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
-import { eventView, view } from './ui.js'
+import { eventView } from './ui.js'
 
 const implementations: Record<
   string,
@@ -92,6 +92,11 @@ export async function startProver(fragment: string): Promise<void> {
         return
       }
       started = true
+      try {
+        ui!.trackProof(request.platformId)
+      } catch {
+        /* Presentation cannot prevent proof execution. */
+      }
       const context: ProverContext = {
         request,
         ceremonyId: retained!.ceremonyId,
@@ -102,7 +107,7 @@ export async function startProver(fragment: string): Promise<void> {
       retained = undefined
       void implementations[request.platformId as keyof typeof implementations]()
         .then((module) => module.prove(context))
-        .then((result) => {
+        .then(async (result) => {
           if (ended) return
           if (result === null) {
             connection!.send({ type: 'cancel' })
@@ -110,9 +115,16 @@ export async function startProver(fragment: string): Promise<void> {
             cleanup()
             return
           }
-          connection!.send(IdentityProof.decode({ type: 'identity-proof', ...result }))
-          view('Proof delivered. Return to your application.')
+          const message = IdentityProof.decode({ type: 'identity-proof', ...result })
+          try {
+            await ui!.finishProof()
+          } catch {
+            /* Presentation cannot prevent proof delivery. */
+          }
+          if (ended) return
+          connection!.send(message)
           cleanup()
+          ui!.delivered()
         })
         .catch(fail)
     })

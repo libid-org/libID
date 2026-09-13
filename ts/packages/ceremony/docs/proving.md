@@ -181,6 +181,31 @@ the Prover unchanged. These fine-grained operations are observational; backend t
 delivery and client result assembly must still succeed. For aggregation and optional
 export, see [metrics](metrics.md).
 
+### Popup progress
+
+The status label follows the shared stage projection, while the bar counts
+completed operation events using [UI-owned weights](../src/ccdp/documents/progress.ts).
+The selected platform fixes the denominator before its pipeline starts. Loading,
+backend initialization, inputs, witness and proof contribute independently;
+Google adds signing-key retrieval, and X/GitHub add their fetch/attestation work.
+Parent ZK operations carry no extra weight, so nested work is not counted twice.
+
+Each selected operation contributes once, including on a cache hit. Starts,
+duplicates, unknown extensions and unrelated operation IDs add no progress.
+Completions may overlap or arrive in a different order without regressing the bar.
+These are work estimates, not elapsed-time percentages or an ETA. The bar reaches
+100% as soon as proof work and required attestations finish, without waiting for
+teardown or delivery; the final step has no animation delay. Local delivery says
+**Proof delivered**; it emits no success event and makes no claim about Application
+acceptance. Failure/cancellation removes the active bar.
+The bar transition respects reduced motion; the slow-proving hint is retained.
+Before delivery, Prover gives the full bar a paint opportunity using two animation
+frame callbacks, with a 100 ms timer fallback if frames stop. Already-hidden
+documents skip the wait. UI errors cannot suppress delivery, and cancellation
+during the wait prevents sending the result. The Application can close immediately
+on receipt. This brief presentation wait is included in the overall prover duration;
+it is not a guarantee that the completed bar stays visible long enough to notice.
+
 ## Shared toolchain and assets
 
 Each platform/version's lightweight `*.assets.ts` leaf composes its pinned circuit
