@@ -1,0 +1,35 @@
+import { expect, test } from './fixtures.js'
+import { verifyBrowserProof } from './verify.js'
+
+// Controlled circuit inputs and unauthenticated X requests; no live OAuth credentials.
+test.beforeEach(async ({ page }) => {
+  await page.goto('http://localhost:4986/index.html')
+  await page.waitForFunction(() => typeof window.proveBearerFixture === 'function')
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true)
+})
+
+test('real bearer-link fixture proof [LIBID-PROVER-001] [LIBID-PROVER-015]', async ({ page }) => {
+  test.setTimeout(480000)
+  const result = await page.evaluate(() => window.proveBearerFixture())
+  expect(result.runtime.sharedMemory).toBe(true)
+  expect(result.runtime.effectiveThreads).toBeGreaterThan(1)
+  await verifyBrowserProof('bearer_link', result)
+})
+
+for (const count of [1, 2])
+  test(`real notary: ${count} session(s) alongside proving [LIBID-PROVER-019]`, async ({
+    page,
+  }) => {
+    test.setTimeout(480000)
+    const [proof, attestations] = await page.evaluate(
+      async (count) => Promise.all([window.proveBearerFixture(), window.notarizeRequests(count)]),
+      count,
+    )
+    await verifyBrowserProof('bearer_link', proof)
+    expect(attestations).toHaveLength(count)
+    for (const attestation of attestations) {
+      expect(attestation.sent).toBeGreaterThan(0)
+      expect(attestation.received).toBeGreaterThan(0)
+      expect(attestation.attestedData).toBeGreaterThan(0)
+    }
+  })

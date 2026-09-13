@@ -5,6 +5,17 @@ current evidence and remaining gaps; [traceability](traceability.md) accounts
 for every stable row in the [test index](test-plan.md). Passing parser or
 orchestration tests is not cryptographic, live-OAuth, or physical-device evidence.
 
+## Automated browser suite
+
+The separate Ceremony e2e CI job runs the normal package command, including its
+emitted SWS artifacts and matched notary services. The complete command passed
+locally: 127 Playwright cases, with no skips, across Chromium, Firefox, WebKit,
+HTTP/HTTPS document flows and mobile emulation. The runtime cases generate and
+released-key-verify a separate fixture proof alongside one/two real notary
+sessions. They preserve the limits on authenticated evidence and real-device
+qualification described below. Browser types, formatting and CI configuration
+checks also pass. GitHub-hosted execution is not claimed by this local run.
+
 ## Pinned integration
 
 | Input | Qualified source |
@@ -221,34 +232,27 @@ These are local implementation decisions, not alternative protocol rules:
   indeterminate. Missing `authorization.finished` can advance presentation at
   Prover readiness without inventing its timestamp.
 
-## Repeatable opt-in real consent
+## Repeatable manual consent checks
 
-Use the [shared development app](../../../apps/dev/README.md) or a dedicated test
-Application, the emitted distribution, a compatible Bridge, and real platform
-registrations. Keep confidential credentials in the Bridge's secret store,
-not command arguments, reports, or chat.
+Use the [shared development app](../../../apps/dev/README.md) with the emitted
+CCDP, compatible Bridge and real platform registrations. Automated fixtures do
+not substitute for real consent or physical-device qualification.
 
-```sh
-CEREMONY_WALKTHROUGH_URL=https://your-test-application.example \
-CEREMONY_BROWSER=chromium \
-  node ts/qualification/ceremony/walkthrough.mjs
-```
+1. Launch from a platform button and complete consent manually. Repeat approval
+   and denial, signed-in/out states, and native-app installed/absent cases.
+2. Keep Prover foregrounded; suspend the application tab and resume it. On real
+   devices, also exercise background scheduling and memory pressure.
+3. Check the application outcome and its chosen popup closure/continuation.
+   Record browser/device versions, effective thread counts and nonsecret outcomes.
 
-The headed runner uses no OAuth mocks and pauses for manual consent and
-foreground/suspension/outcome checkpoints. Its ignored report contains only
-checkpoint labels, browser version, and optional per-run statuses from the
-Application's `window.results` Map; these are outcomes, not cryptographic
-verification. Repeat approved/denied, signed-in/out, and native-app installed/absent
-cases. Never bypass CAPTCHA, MFA, or platform consent.
+Never bypass CAPTCHA, MFA or platform consent. Keep confidential credentials in
+the Bridge's local configuration. Do not record callback URLs, credentials,
+identity data, witnesses, transcripts, openings or live proofs.
 
-For transport diagnosis, run the existing smoke server and
-`ts/qualification/ceremony/run-smoke.mjs <browser> <google|bearer|notary|notary-single> [page-url] [notary-origin]`
-with the same emitted assets. Repeat both loopback hostnames and engines.
-Unauthenticated notary probes record lengths/correlation only; they cannot
-replace platform qualification. On physical devices, record the model,
-OS/browser version, effective thread counts, and nonsecret outcomes.
-No raw OAuth return, credential, witness, transcript, opening, or live proof is
-a qualification artifact.
+The [automated browser suite](browser-tests.md) now owns fixture-proof and
+one/two-session matched-notary checks. There is no separate manual runner or
+checkpoint recorder. Those unauthenticated requests and separate fixture proofs
+do not qualify authenticated platform evidence or physical devices.
 
 ## Popup operation progress (2026-09-13)
 
