@@ -1,4 +1,4 @@
-export { CeremonyError } from './errors.js'
+export { CancelError, CeremonyError } from './errors.js'
 export type { NotaryAttestation } from './notary/decode.js'
 
 export {

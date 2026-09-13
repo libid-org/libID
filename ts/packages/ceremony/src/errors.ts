@@ -11,6 +11,14 @@ export function errorMessage(error: unknown): string {
   return text(message, 2048) ? message : 'Ceremony failed.'
 }
 
+/** Application-requested cancellation, separate from technical protocol Abort failures. */
+export class CancelError extends Error {
+  constructor() {
+    super('Ceremony canceled')
+    this.name = 'CancelError'
+  }
+}
+
 /** A failed operation and its displayable explanation; no stable error-code catalog. */
 export class CeremonyError extends Error {
   constructor(
