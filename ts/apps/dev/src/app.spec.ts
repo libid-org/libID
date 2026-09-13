@@ -291,14 +291,16 @@ test('private configuration and generated files are not served', async ({ reques
   }
 })
 
-for (const [platform, name, outcome = 'failed'] of [
+for (const [platform, name, outcome = 'failed', fallback = false] of [
   ['google', 'Google'],
   ['x', 'X'],
   ['github', 'GitHub'],
   ['google', 'Google', 'success'],
   ['google', 'Google', 'denied'],
-]) {
-  test(`${name} operation timings preserve occurrences and freeze on ${outcome}`, async ({
+  ['google', 'Google', 'success', true],
+  ['google', 'Google', 'failed', true],
+] as const) {
+  test(`${name} operation timings${fallback ? ' with fallback' : ''} preserve occurrences and freeze on ${outcome}`, async ({
     page,
     context,
   }) => {
@@ -326,17 +328,31 @@ for (const [platform, name, outcome = 'failed'] of [
     )
     const returnedAt = await page.evaluate(() => performance.timeOrigin + performance.now())
     // Explicit occurrence times test transport delay independently of the app's delivery clock.
-    const send = async (event: string, phase: 'started' | 'finished', offset: number) =>
+    const send = async (event: string, phase: 'started' | 'finished' | undefined, offset: number) =>
       popup.evaluate(
         ({ event, phase, timestamp }) => {
           ;(
             window as unknown as { eventConnection: { send(value: unknown): void } }
-          ).eventConnection.send({ type: 'event', event, phase, timestamp })
+          ).eventConnection.send({ type: 'event', event, ...(phase ? { phase } : {}), timestamp })
         },
         { event, phase, timestamp: returnedAt + offset },
       )
     await send('authorization', 'finished', 0)
-    await send('prover', 'started', 10)
+    if (fallback) {
+      await page.clock.runFor(1000)
+      await send('prover-fallback', undefined, 100)
+      await expect(page.locator('.operation-timings')).toContainText('Prover fallback')
+      await page.clock.runFor(1500)
+      await expect(page.locator('.operation-timings')).toContainText(
+        /Prover fallback · \d+\.\d s \(running\)/,
+      )
+    }
+    await send('prover', 'started', fallback ? 710 : 10)
+    const fallbackTiming = page
+      .locator('.operation-timings li')
+      .filter({ hasText: 'Prover fallback' })
+    if (fallback) await expect(fallbackTiming).toHaveText('Prover fallback · 0.6 s')
+    else await expect(fallbackTiming).toHaveCount(0)
     await popup.waitForFunction(() => (window as unknown as { requested?: boolean }).requested)
     if (outcome === 'denied') {
       await popup.evaluate(() => {
@@ -353,7 +369,7 @@ for (const [platform, name, outcome = 'failed'] of [
       await expect(page.locator('#history')).toHaveText(row!)
       return
     }
-    await send('zk-proof-preparation', 'started', 20)
+    await send('zk-proof-preparation', 'started', fallback ? 720 : 20)
     await expect(page.locator('.run-status')).toHaveText('Preparing your identity proof')
     if (platform !== 'google') {
       const token = platform === 'x' ? 'token-fetch' : 'token-attestation'
@@ -402,7 +418,8 @@ for (const [platform, name, outcome = 'failed'] of [
     if (outcome === 'success') await expect.poll(() => popup.isClosed()).toBe(true)
     else expect(popup.isClosed()).toBe(false)
     const timings = page.locator('.operation-timings li')
-    await expect(timings).toHaveCount(platform === 'google' ? 5 : 8)
+    await expect(timings).toHaveCount((platform === 'google' ? 5 : 8) + Number(fallback))
+    if (fallback) await expect(fallbackTiming).toHaveText('Prover fallback · 0.6 s')
     const cells = page.locator('#history tr').first().getByRole('cell')
     const total = Number.parseFloat((await cells.nth(3).textContent())!)
     const postConsent = Number.parseFloat((await cells.nth(4).textContent())!)
