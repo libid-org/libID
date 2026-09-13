@@ -1,46 +1,49 @@
 # Browser integration and proving qualification
 
-Uses actual `@libid/popup` connections across three local HTTPS origins. Browser
-proofs are checked outside the browser against the released verification key.
+The Playwright suite uses actual `@libid/popup` connections across three local
+origins, over both HTTPS and HTTP loopback. Chromium, Firefox, WebKit and mobile
+emulation run the same suite. Mobile emulation does not qualify physical devices.
 
 - [Requirement index](test-plan.md): stable acceptance IDs.
 - [Traceability](traceability.md): automated, partial, external and deferred coverage.
-- [Qualification](qualification.md): setup, exact pins, evidence and missing release gates.
+- [Qualification](qualification.md): evidence, manual consent checkpoints and remaining release gates.
 
-[flow.spec.ts](../e2e/flow.spec.ts) covers document flows and controlled Google fixture
-proofs. [server.mjs](../e2e/server.mjs) hosts HTTPS origins on ports 4881–4883 and HTTP origins on 4781–4783 and requires a proxy target for
-the actual built SWS image. [smoke.ts](../e2e/smoke.ts) and [server-smoke.mjs](../e2e/server-smoke.mjs)
-provide the opt-in proof/notary runtime lane on port 4686. The
-[manual consent walkthrough](../../../qualification/ceremony/walkthrough.mjs) installs
-no OAuth mocks. Synthetic exchanges and mobile emulation are not real-platform or
-physical-device qualification.
+From the repository root, with Node 24+, pnpm and Docker Compose available:
 
-[callback.ts](../e2e/callback.ts) demonstrates data-only insertion into the emitted
-Callback HTML and composes its hash-only script policy. It is deliberately a
-harness helper, not the production Bridge refresh/cache lifecycle. Its
-`connect-src 'none'` tests the deployment without an optional fallback adapter;
-configured fallback connectivity requires separate qualification.
+```sh
+pnpm -C ts --filter '@libid/ceremony...' build
+pnpm -C ts --filter @libid/ceremony exec playwright install --with-deps chromium firefox webkit
+pnpm -C ts --filter @libid/ceremony test:e2e
+```
 
-Build `pnpm --filter @libid/ceremony build:qualification-artifacts` before this
-harness. It reads `.cache/qualification-assets`; its app uses the shared synthetic
-ledger fixture. No ledger definition or decoder is included in the Prover.
-For actual SWS tests, build the image from this test
-artifact and set `CEREMONY_ARTIFACT_DIR` to its absolute path when running
-`test:distribution`, alongside `CEREMONY_SWS_URL`.
+The command builds the emitted CCDP and runtime fixtures. Playwright starts the
+pinned SWS images, matched notary and browser harness, waits for readiness, and
+stops the services afterwards. Each invocation owns its containers; test ports
+4980/4986/4987 and 4781–4783/4881–4883 are separate from the development app.
+Concurrent test invocations on those ports fail rather than reuse another run.
 
-The standalone smoke lane also uses SWS: `node e2e/build-smoke.mjs` emits
-`.cache/smoke/public/` and `sws.toml`. Run the pinned SWS against that output on a
-separate local port, then set `CEREMONY_SWS_URL` for `node e2e/server-smoke.mjs`.
-Both HTTPS harnesses stream upstream responses; neither implements static-file
-HTTP semantics. App/Bridge/control fixtures remain test-only handlers.
+The separate **Ceremony e2e** CI job runs this command. No OAuth credentials are
+required. Release downloads and the notary's unauthenticated HTTPS requests to
+X require network access; unavailable services fail the tests rather than skip
+coverage. Traces, video and screenshots remain disabled.
 
-Set `CEREMONY_SWS_BINARY` to the binary extracted from the pinned image when
-running `test:distribution` to include the same-length ETag rebuild regression.
-It uses a temporary directory under `.cache/` and port 4687 (override with
-`CEREMONY_SWS_TEST_PORT` if another server already uses that port).
+[flow.spec.ts](../e2e/flow.spec.ts) covers document flows, emitted policies,
+resource loading and a controlled Google proof. [runtime.spec.ts](../e2e/runtime.spec.ts)
+adds a real bearer-link fixture proof and one/two concurrent notary sessions
+alongside a separate fixture proof. [verify.ts](../e2e/verify.ts) checks generated
+proofs in Node against their released keys and rejects changed public inputs.
+The runtime cases exercise real WASM and a real matched notary; they do not
+establish authenticated OAuth or bind their fixture proof to those attestations.
 
-The same ceremony browser suite also runs on HTTP loopback in Chromium, Firefox
-and WebKit (`*-http` projects, ports 4781–4783). It uses the emitted distribution
-and actual popup package, checking secure contexts, isolation and worker continuity
-without certificate bypasses. Existing HTTPS projects remain deployment coverage.
-The `@libid/dev` frontend tests use HTTP port 4692 and no TLS setup.
+The [browser harness](../e2e/server.mjs) proxies CCDP responses from SWS without
+implementing static-file semantics. [callback.ts](../e2e/callback.ts) prepares
+data-only insertion into emitted Callback HTML and its hash-only script policy;
+it does not implement the production Bridge refresh/cache lifecycle. Its
+`connect-src 'none'` covers deployments without an optional fallback adapter.
+
+Distribution checks remain a separate command. After building the qualification
+artifact, point `CEREMONY_ARTIFACT_DIR` at its absolute directory and
+`CEREMONY_SWS_URL` at a SWS instance serving it, then run `test:distribution`.
+Set `CEREMONY_SWS_BINARY` to the binary extracted from the pinned image to include
+the same-length ETag regression. Its port defaults to 4687; use
+`CEREMONY_SWS_TEST_PORT` when that port is occupied.

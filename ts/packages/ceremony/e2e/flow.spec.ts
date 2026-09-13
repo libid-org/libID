@@ -1,12 +1,11 @@
-import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import fixture from '../src/barretenberg/circuits/oidc_google/google-v1.fixture.json' with {
   type: 'json',
 }
 import { buildGooglePublicInputs } from '../src/barretenberg/circuits/oidc_google/publicInputs.js'
 import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
 import { expect, test } from './fixtures.js'
+import { verifyBrowserProof } from './verify.js'
 
 for (const native of [false, true])
   test(`actual popup: private callback, isolation, denial, and application continuation${native ? ' with native anchor' : ''} [LIBID-BROWSER-001] [LIBID-BROWSER-005]`, async ({
@@ -242,7 +241,7 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
   bridge,
   page,
   context,
-}, testInfo) => {
+}) => {
   test.setTimeout(480000)
   // This controlled fixture is old and has its own digest. This proves runtime/key
   // compatibility, not real consent or authorization for the application transaction.
@@ -302,26 +301,10 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
     signingKeyModulus: Uint8Array.from(result.signingKeyModulus),
   }
   const digest = Uint8Array.from(Buffer.from(fixture.authorizationDigest.replace(/^0x/, ''), 'hex'))
-  const output = new URL(
-    `../.cache/${testInfo.project.name}-distribution-proof.json`,
-    import.meta.url,
-  )
-  writeFileSync(
-    output,
-    JSON.stringify({
-      proof: result.identityProof,
-      publicInputs: buildGooglePublicInputs(digest, result.identity, proof),
-    }),
-  )
-  execFileSync(
-    process.execPath,
-    [
-      fileURLToPath(new URL('../../../qualification/ceremony/verify.mjs', import.meta.url)),
-      'oidc_google',
-      fileURLToPath(output),
-    ],
-    { stdio: 'pipe', timeout: 120000 },
-  )
+  await verifyBrowserProof('oidc_google', {
+    proof: result.identityProof,
+    publicInputs: buildGooglePublicInputs(digest, result.identity, proof),
+  })
 })
 
 test('popup progress follows operation events independently of stage labels [LIBID-PROVER-011] [LIBID-BROWSER-024] [LIBID-BROWSER-025]', async ({
