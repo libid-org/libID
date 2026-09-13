@@ -32,7 +32,8 @@ part of this contract. The common specification's Canonical Runtime spans the
 Application and its browser participants; Callback is its Redirect Runtime and
 Prover owns the platform-aware browser evidence checks. A Ledger Verifier means
 the downstream verification path defined in the common specification, not a
-browser component.
+browser component. CCDP ends at browser proof delivery; construction and
+submission of a ledger-specific Submission remain composition-owned.
 
 - ASM-CCDP-01: Browser origin enforcement, authenticated popup transport, and
   the configured Application, Bridge, and Distribution code execute correctly.
@@ -297,9 +298,12 @@ The following table is the complete CCDP version-1 message set.
 Every recipient requires a plain record with the exact fields, types, and bounds
 defined below. Unknown fields, coercion, normalization, defaults, and
 unrecognized discriminators are invalid. Messages outside the listed direction,
-predecessor, and cardinality are invalid. Denial, proof delivery, abort, and
-Application-local cancellation make later messages inert even when they race
-in transit.
+predecessor, and cardinality are invalid. Unknown discriminators and decoder
+rejections fail the logical connection under REQ-POPUP-MSG-04; they are not
+silently ignored. Handler state guards authorize no action for an invalid
+sequence. Denial, proof delivery, failure, and Application-local cancellation
+make later valid CCDP messages inert even when they race in transit; transport
+validation still applies.
 
 ### ProveIdentity
 
@@ -315,9 +319,10 @@ interface ProveIdentity {
 }
 ```
 
-`platformId` and `platformCeremonyVersion` are the exact supported profile
-selected at launch and must match the active Prover. The message is valid only
-after `Event(prover, started)`. The remaining fields are the frozen client
+The Application sends the exact `platformId` and `platformCeremonyVersion`
+selected at launch. Prover requires that pair to be supported by its loaded
+implementation; this message selects its profile. The message is valid only after
+`Event(prover, started)`. The remaining fields are the frozen client
 identifier and redirect, derived code verifier, and resolved notary address.
 `redirectUri` is the canonical OAuth Bridge origin with the fixed
 `/auth/callback` path and no
@@ -380,6 +385,9 @@ encodings and the platform/client binding to `ProveIdentity`.
 a nested identity copy. CCDP treats the proof as opaque; adding a platform does
 not change this message. Neither browser endpoint cryptographically verifies
 the delivered result; identity is non-authoritative until ledger verification.
+This browser delivery is not the common specification's ledger-specific
+Submission. The composition adds its retained authorization and dispatch inputs
+without changing the delivered evidence.
 
 ### UserDenied
 
@@ -541,6 +549,8 @@ and delayed delivery; receipt time is not operation time. Independently running
 operations may overlap, and retrospective observations may arrive after later
 timestamps. Protocol ordering follows authenticated state and messages, never
 timestamp sorting.
+These browser observations are not the authenticated evidence timestamps of
+common §10 and never supply proof validity or metadata ordering.
 
 Start/finish differences measure operation intervals. Do not sum overlapping
 intervals as total elapsed time, fabricate a finish after context loss, or turn
@@ -610,6 +620,9 @@ cryptographic properties delegated to the common and platform specifications.
   Public Prefetch authenticates its exact peer; Callback rejects an unlisted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Canonical HTTP loopback works at arbitrary ports.
 - TEST-CCDP-05 (exercises REQ-CCDP-05):
   Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel`, `denied`, and `abort` records and Application-sent `UserDenied` are invalid. Proof payloads are structurally checked under the selected platform version.
+  An unknown discriminator or rejected decoder fails the logical connection;
+  a handler's state guard permits no invalid transition. Late valid CCDP
+  messages cannot change a settled ceremony outcome.
   A valid notary address is accepted for any platform, including one that does
   not notarize; null is accepted when unused but rejected before work requiring
   notarization. Malformed non-null addresses are rejected under the origin policy.
@@ -619,6 +632,8 @@ cryptographic properties delegated to the common and platform specifications.
   The four phases preserve navigation ownership and credential privacy; approval enters execution, bound denial exits before proving, and malformed returns abort.
 - TEST-CCDP-08 (exercises REQ-CCDP-08):
   UserDenied/CeremonyFailed/IdentityProof and local-cancellation races settle once. Local cancellation sends no CCDP message; subsequent composition-owned navigation or closure cannot let late traffic revive the run. Errors are text-only, excluded from exported events, and undeliverable failures have a fixed local diagnostic.
+  Outcome cleanup leaves the popup connection available, and its authenticated
+  closure control still closes an isolated popup after the ceremony settles.
 
 ## Protocol
 
@@ -641,14 +656,17 @@ can reactivate an earlier phase.
   ownership supplies message correlation and its private version; loaded
   resources supply the CCDP version. CCDP messages repeat neither.
 - Each participant accepts only exact records permitted by its direction,
-  current state, and cardinality. Unknown message types, malformed, replayed,
-  out-of-order, wrong-direction, and post-terminal values change no state.
+  current state, and cardinality. Invalid or post-terminal traffic authorizes
+  no ceremony action; malformed or unregistered records still fail transport
+  under REQ-POPUP-MSG-04.
   Valid event extensions may be observed but never advance the protocol.
 - Browser-observed exact origins establish authority. Same-site placement,
   navigation history, request headers, and message fields do not substitute for
   connection authentication.
-- Documents use only the frozen locations and fragments defined here. A CCDP
-  message never selects an origin, implementation, or navigation destination.
+- Documents use only the frozen locations and fragments defined here. Messages
+  select no document implementation or popup navigation destination.
+  `ProveIdentity` carries the frozen platform selection and service-routing
+  inputs used by that platform, not a navigation command.
 - Raw OAuth returns pass only from the cleared Callback capture to Prover's
   private fragment, including any isolation replacement. Every arrival clears
   its URL before use; participants do not deliberately copy the return into an
@@ -664,8 +682,9 @@ can reactivate an earlier phase.
   the next protocol action, but neither they nor other observations, carrier
   state, navigation, popup closure, or unvalidated proof delivery constitute
   ceremony success. Operation completion is not ceremony completion.
-- The Application owns terminal popup lifetime. No CCDP document closes the
-  popup.
+- The Application owns terminal popup lifetime. CCDP outcomes do not initiate
+  popup closure; documents still honor the popup transport's authenticated
+  closure control.
 - Cancellation and context-loss cleanup are best effort. CCDP has no durable
   checkpoint, ceremony recovery, or migration to another popup connection.
 
@@ -765,7 +784,11 @@ second proof request; Application-local cancellation makes any later delivery in
 
 - REQ-CCDP-08 (upholds SP-CCDP-01): Each Participant MUST treat the first valid
   terminal outcome as final and perform the cleanup described below without
-  closing the popup or fabricating a successful operation finish.
+  initiating popup closure or fabricating a successful operation finish.
+
+Outcome cleanup releases ceremony resources, not the composition-owned popup
+connection. That connection remains available for navigation or closure under
+the popup transport contract, including after isolation.
 
 Prover's `UserDenied` reports valid OAuth denial; an active document's
 `CeremonyFailed` reports failure; and `IdentityProof` delivers a proof. These outcomes are

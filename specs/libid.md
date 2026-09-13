@@ -56,7 +56,8 @@ User -> Identity Platform -> Canonical Runtime -> Proving Circuit -> Consumer
 
 The Consumer never verifies evidence itself. It calls the Proof Verifier,
 which selects the Platform Verifier registered for the named identity platform
-and Platform Ceremony Version, which in turn obtains
+and ledger-local Verifier Version. Several Verifier Versions may implement the
+same Platform Ceremony Version. The selected Platform Verifier obtains
 attestation authenticity from the Notary Service once for each attestation
 that profile carries. Google carries none, so its path reaches no Notary
 Service and pays no fee; X and GitHub carry two each. The result travels

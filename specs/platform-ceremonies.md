@@ -74,19 +74,25 @@ REQ-COMMON-15A.
   contains every fixed route it requires. Necessity: cross-component
   interoperability between the Canonical Runtime build and server deployment.
 - REQ-PLAT-03 (upholds SP-CLIENT-01):
-  The Canonical Runtime MUST derive the local identity fields exclusively from
-  the Platform Profile's canonical source in the exact Submission it
-  returns.
+  The Prover MUST derive the local identity fields exclusively from the
+  Platform Profile's canonical sources in the evidence it returns.
   Those fields are not an authority decision; only the Consumer's
-  acceptance of that exact Submission is. For X and GitHub, the Canonical Runtime MUST parse the exact revealed identity-response bytes that the
+  acceptance of the resulting Submission is. For X and GitHub, the Prover
+  MUST parse the exact revealed identity-response bytes that the
   Platform Verifier extracts, using the same canonical extraction and
-  normalization rules. The Canonical Runtime MUST reject a detached proof
-  output, sidecar value, or caller value that supplies or overrides `userId`,
-  handle, or `metadataObservedAt`.
+  normalization rules. The Prover MUST take `metadataObservedAt` from the
+  profile's evidence-time source in §2.2, not from a detached identity value.
+  The Prover MUST reject a caller-supplied or detached value used as an
+  alternative source for `userId`, handle, or `metadataObservedAt`.
 
 This is a data-source invariant, not a browser-flow requirement. It defines
 the identity fields returned to callers and used by any composition-owned UI;
-it does not create a ceremony-owned confirmation page.
+it does not create a ceremony-owned confirmation page. CCDP's separate
+`IdentityProof.identity` record transports Prover's derivation alongside the
+proof; it is not another evidence source. Application validates that delivery's
+structure and selected platform/client binding without repeating the evidence
+extraction. Common REQ-COMMON-19E still binds the derivation to the exact evidence
+used in the resulting Submission.
 
 ### 2.1 Canonical platform user identifiers
 
@@ -824,7 +830,7 @@ revealed `client_id` something other than the credential GitHub authenticated.
 
 ### 6.3 GitHub token service boundary
 
-The Deployment exposes one GitHub Token Service to its isolated prover. This
+The Deployment exposes one GitHub Token Service used by its isolated prover. This
 specification defines the semantic call, not its endpoint or wire encoding:
 
 ```text
@@ -842,6 +848,9 @@ These identifiers name protocol values, not serialized field names. The
 browser and deployment specifications own endpoint naming, transport framing,
 serialization, parsing bounds, caller authentication, and cache policy. Those
 choices MUST preserve the semantic interface and security requirements below.
+The notary destination is routing input owned by the
+[OAuth Bridge contract](oauth-bridge.md#github-token-endpoint), not another
+proof input or a caller-selected trust root.
 
 - REQ-PLAT-37:
   The Canonical Runtime MUST invoke the GitHub Token Service with the exact
@@ -870,20 +879,25 @@ choices MUST preserve the semantic interface and security requirements below.
   and the commitment together reveal the committed bearer, so a published
   opening publishes the credential its commitment exists to hide.
 - REQ-PLAT-41 (upholds SP-EXCHANGE-01):
-  The GitHub Token Service MUST use only its compiled client identifier, client
-  secret, redirect URI, token endpoint, and notary configuration. The GitHub
+  The GitHub Token Service MUST use its deployment-configured client
+  identifier, client secret, redirect URI, and token endpoint. The GitHub
   Token Service MUST NOT accept a caller-selected action, job, client, redirect,
-  endpoint, return URL, or operation.
+  platform endpoint, return URL, or operation. The GitHub Token Service MUST
+  use the request-selected notary destination under the validation and egress
+  rules owned by REQ-BRIDGE-05. That address selects routing, not the notary
+  keys accepted during ledger verification.
 - REQ-PLAT-42:
   The GitHub Token Service MUST persist no code, verifier, bearer, proof,
   result, or progress state. The GitHub Token Service MUST expose no polling or
   result route. Necessity: the service holds ceremony credentials, so retention
   creates a compromise target with no protocol purpose.
 - REQ-PLAT-43:
-  The deployment transport MUST make the GitHub Token Service callable only by
-  its authenticated isolated prover boundary, not by an application frontend
-  or unrelated origin. The browser and deployment specifications define the
-  concrete enforcement mechanism.
+  The GitHub Token Service MUST enforce the deployment-origin admission rules
+  owned by REQ-BRIDGE-02 and REQ-BRIDGE-05. The effective allowlist admits the
+  configured Application origins and the selected CCDP origin; isolation is
+  not an HTTP caller-authentication mechanism. Origin admission does not
+  authenticate non-browser callers or replace notary-destination egress checks.
+  Necessity: the service's browser admission must agree with its HTTP contract.
 - REQ-PLAT-43B:
   The GitHub Token Service MUST reject redirects. Necessity: a followed redirect
   would notarize a session other than the pinned token endpoint.
@@ -983,7 +997,7 @@ which the exact tiling of common REQ-COMMON-35 makes derivable.
   remains mandatory under common REQ-COMMON-33 and REQ-COMMON-33A.
 - REQ-PLAT-45 (upholds SP-EXCHANGE-01):
   The GitHub Token Service MUST return an attestation carrying the
-  configured notary's signature and revealing the token request's method and
+  selected notary's signature and revealing the token request's method and
   path. The Platform Verifier MUST compare those two revealed values with the
   GitHub profile. The Platform Verifier MUST compare the authority that
   attestation authenticates with the same profile, per common REQ-COMMON-21A.
@@ -1256,10 +1270,14 @@ Platform Verifier, Notary Service, Consumer.
   from one notarized session; substitution, a mixed-session tuple, and a
   partial result on failure are rejected.
 - TEST-PLAT-14 (exercises REQ-PLAT-41, REQ-PLAT-42, REQ-PLAT-43, REQ-PLAT-43B, REQ-PLAT-43D, REQ-PLAT-43E):
-  A request selecting an endpoint, client, or return URL is rejected; no state
-  survives the call; a caller outside the authenticated isolated-prover
-  boundary is refused; a redirected token exchange is rejected; an attestation
-  revealing a range outside the seven marked rows, or revealing the bearer
+  A request selecting a platform endpoint, client, or return URL is rejected;
+  a valid request-selected notary destination is used without changing those
+  deployment fields or ledger trust roots. Invalid or forbidden notary
+  destinations fail the Bridge's routing/egress checks. No state survives the
+  call. Both an admitted Application origin and the selected CCDP origin pass
+  browser admission; an unlisted or invalid Origin is refused before exchange.
+  A redirected token exchange is rejected; an attestation
+  revealing a range outside the rows marked `yes`, or revealing the bearer
   range instead of committing it, is rejected; and no proof exposes the bearer
   or a value from which it can be recovered.
 - TEST-PLAT-15 (exercises REQ-PLAT-44, REQ-PLAT-45, REQ-PLAT-46, REQ-PLAT-47, REQ-PLAT-48, REQ-PLAT-48A, REQ-PLAT-49, REQ-PLAT-50):
@@ -1302,9 +1320,11 @@ Platform Verifier, Notary Service, Consumer.
   acceptance of that exact Submission makes the claim authoritative.
 - TEST-PLAT-17A (exercises REQ-PLAT-03, REQ-PLAT-31A, REQ-PLAT-51A):
   Pair authenticated X or GitHub identity-response bytes for account B with a
-  detached `userId`, handle, or metadata value for account A. The Canonical Runtime
-  rejects the extra representation; without it, the Canonical Runtime and the
-  Platform Verifier both derive account B byte for byte. Replacing the proof,
+  detached `userId`, handle, or metadata value for account A offered as an
+  extraction input. Prover rejects that alternative source; without it, Prover
+  and the Platform Verifier both derive account B byte for byte. Prover may
+  deliver its derived identity separately through CCDP, and Application accepts
+  its valid structure without repeating evidence extraction. Replacing the proof,
   attestation, platform, or version after deriving the local identity fields
   discards them and requires rederivation from the replacement Submission.
 - TEST-PLAT-18 (exercises REQ-PLAT-25, REQ-PLAT-26, REQ-PLAT-27, REQ-PLAT-28, REQ-PLAT-28A):

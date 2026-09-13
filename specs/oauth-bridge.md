@@ -298,7 +298,8 @@ a development setup must make the intended notary reachable by both. Canonical
 origin syntax alone is insufficient; redirects remain forbidden.
 
 `accessToken` is nonempty printable ASCII without whitespace or control bytes
-and at most 128 bytes, matching GitHub v1's bearer circuit. Both Bridge and
+and at most 128 bytes. This is the Bridge API's acceptance bound, not a change
+to the platform profile's circuit bound. Both Bridge and
 Prover enforce this bound before dependent identity notarization; an oversized
 token fails rather than being truncated. `attestedData` decodes to a nonempty
 byte-exact record of at most 2 MiB; `signature` decodes to exactly 65 bytes; and `bearerOpening`
