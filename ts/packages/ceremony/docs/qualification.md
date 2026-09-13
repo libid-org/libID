@@ -30,14 +30,22 @@ The implementation differences below are explicit, not competing contracts.
    separately deployed Bridge need a coordinated change. This docs-only
    reconciliation does not implement it.
 
-2. **One-way denial and local-only cancellation.**
-   Current code uses bidirectional `Cancel` and emits `status: 'cancelled'`.
-   The contract uses `Denied` (`type: 'denied'`) only from Prover to Application
-   for valid OAuth denial. Client `cancel()` retires the local run without
+2. **Outcome messages and local-only cancellation.**
+   Current code uses bidirectional `Cancel`, technical-failure `Abort`, and
+   emits `status: 'cancelled'`.
+   The contract uses `UserDenied` (`type: 'user-denied'`) only from Prover to Application
+   for valid OAuth denial, and `CeremonyFailed` (`type: 'ceremony-failed'`) for
+   technical failure, preserving its event and message fields.
+   Client `cancel()` retires the local run without
    sending a CCDP message or event/status update; the composition navigates or
    closes the popup separately. Update wire codecs, Client/document handlers,
    event and stage types, UI, and cancellation/race tests together. Existing
    cancellation tests do not qualify this changed contract.
+
+3. **Nested event instrumentation.**
+   CCDP `Event` groups `operationId` and `attributes` inside optional
+   `instrumentation`. The current wire codec and document forwarding still use
+   top-level fields; update them and their shape tests together.
 
 ## Authenticated-origin handoff
 

@@ -26,8 +26,8 @@ handoff. It enforces that profile's exact return transport and field grammar,
 client checks, and state matching against the authenticated ceremony ID and
 CCDP version before any token exchange or proof work. A valid denial produces
 an OAuth-denied outcome; a malformed or mismatched return produces technical failure.
-The Prover entrypoint maps those outcomes to `Denied` or
-`Abort` without adding message logic to the platform leaf.
+The Prover entrypoint maps those outcomes to `UserDenied` or
+`CeremonyFailed` without adding message logic to the platform leaf.
 
 For accepted OAuth, the leaf joins the selected asset fetches, constructs its
 witness, generates its proof, and returns bounded platform steps followed by
@@ -178,7 +178,7 @@ request/admission and provides its bearer; it has no separate `token-fetch` even
 Identity parsing belongs to `identity-fetch`, so parser failures retain that context.
 
 Successful operations finish once. Interrupted operations have no fabricated finish;
-Abort identifies the failure. Worker events carry worker occurrence times through
+CeremonyFailed identifies the failure. Worker events carry worker occurrence times through
 the Prover unchanged. These fine-grained operations are observational; backend teardown, final correlations,
 delivery and client result assembly must still succeed. For aggregation and optional
 export, see [metrics](metrics.md).

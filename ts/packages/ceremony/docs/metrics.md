@@ -69,20 +69,20 @@ sequential execution order from concurrent work.
 
 ## Failure details and telemetry
 
-`Abort` and local failures yield one terminal lifecycle update with operation
+`CeremonyFailed` and local failures yield one terminal lifecycle update with operation
 context and display text. They are separate from wire `Event`; a failed operation
 need not have emitted its start. Denial yields the denied status without
 fabricating `prover.finished`. Explicit local cancellation ends observation
 without any event/status update; it is neither denial nor technical failure.
 
-The display text follows [Abort’s boundary](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#abort): a bounded opaque
+The display text follows [CeremonyFailed’s boundary](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#ceremonyfailed): a bounded opaque
 caught message, not an error-code catalog or serialized exception. It can help
 debug failures such as `Invalid GitHub id`. Bounding and rendering it as text do
 not guarantee that dependency messages contain no sensitive data. Telemetry
 adapters must omit `message` and any local exception/cause; copying all fields
 from `onEvent` into an exporter is not supported.
 
-If Abort cannot be delivered, reporting emits a fixed local diagnostic without
+If CeremonyFailed cannot be delivered, reporting emits a fixed local diagnostic without
 the caught message. A failing logger or observer never creates another protocol
 failure. DevTools can inspect a retained local cause where needed; there is no
 package-owned developer modal or automatic raw-error export.
