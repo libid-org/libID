@@ -57,7 +57,8 @@ it('isolates throwing observers and mutations, and unsubscribes locally', () => 
     throw new Error('observer')
   })
   feed.onEvent((e) => {
-    if ('attributes' in e && e.attributes) Reflect.set(e.attributes, 'bytes', 99)
+    if ('instrumentation' in e && e.instrumentation?.attributes)
+      Reflect.set(e.instrumentation.attributes, 'bytes', 99)
   })
   const off = feed.onEvent(listen)
   feed.onStage(stage)
@@ -66,12 +67,12 @@ it('isolates throwing observers and mutations, and unsubscribes locally', () => 
     phase: 'started',
     timestamp: 1,
     status: 'active',
-    attributes: { bytes: 1 },
+    instrumentation: { attributes: { bytes: 1 } },
   })
-  expect(listen.mock.calls[0][0].attributes.bytes).toBe(1)
+  expect(listen.mock.calls[0][0].instrumentation.attributes.bytes).toBe(1)
   expect(stage).toHaveBeenCalledOnce()
   off()
-  feed.emit({ status: 'cancelled', timestamp: 2 })
+  feed.emit({ status: 'denied', timestamp: 2 })
   expect(listen).toHaveBeenCalledOnce()
   expect(stage).toHaveBeenCalledTimes(2)
 })
@@ -100,7 +101,7 @@ it('pairs concurrent repeated operations by identifier and leaves interrupted sp
   ).rejects.toMatchObject({ event: 'session', message: 'TLS failed' })
   finish()
   await work
-  expect(events.map((e) => [e.operationId, e.phase])).toEqual([
+  expect(events.map((e) => [e.instrumentation?.operationId, e.phase])).toEqual([
     ['first', 'started'],
     ['second', 'started'],
     ['first', 'finished'],

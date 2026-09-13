@@ -2,7 +2,7 @@ import type { LedgerId } from '@libid/ledger'
 import { mainnet, testnet } from '@libid/ledger/testing'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import { describe, expect, it, vi } from 'vitest'
-import { CancelError, CeremonyError } from '../../errors.js'
+import { CeremonyError } from '../../errors.js'
 import { deriveAuthorizationDigest } from '../../platforms/authorization.js'
 import { platforms } from '../../platforms/index.js'
 import { b64urlEncode } from '../../primitives.js'
@@ -12,11 +12,22 @@ import { validateCeremonyConfig } from './config.js'
 class Connection implements PopupConnection<Message> {
   readonly peerOrigin = 'https://ccdp.test'
   ready = Promise.resolve()
-  closed = new Promise<never>(() => {})
+  private end!: () => void
+  ended = false
+  closed = new Promise<{ outcome: 'closed' }>((resolve) => {
+    this.end = () => resolve({ outcome: 'closed' })
+  })
   send = vi.fn()
   navigate = vi.fn(async (_url: string, _fragment?: URLSearchParams) => {})
-  navigateAway = vi.fn(async (_url: string) => {})
-  close = vi.fn(async () => {})
+  navigations: string[] = []
+  navigateAway = vi.fn(async (url: string) => {
+    if (this.ended) throw new Error('Connection closed')
+    this.navigations.push(url)
+  })
+  close = vi.fn(async () => {
+    this.ended = true
+    this.end()
+  })
   handlers = new Map<string, (v: unknown) => void>()
 
   on<M extends Message>(type: MessageType<M>, handler: (m: M) => void) {
@@ -28,7 +39,7 @@ class Connection implements PopupConnection<Message> {
   }
 
   receive(value: Message & Record<string, unknown>) {
-    this.handlers.get(value.type)?.(value)
+    if (!this.ended) this.handlers.get(value.type)?.(value)
   }
 }
 
@@ -131,21 +142,26 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     ])
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
   })
-  it('cancellation wins over late delivery and preserves the popup [LIBID-BROWSER-005]', async () => {
+  it('closing the connection wins over late delivery without a CCDP cancel [LIBID-BROWSER-005]', async () => {
     const { connection: c, ceremony } = setup()
     const result = ceremony.proveUserIdentity()
-    const rejection = expect(result).rejects.toBeInstanceOf(CancelError)
-    await ceremony.cancel()
+    const rejection = expect(result).rejects.toBeInstanceOf(CeremonyError)
+    await c.close()
     c.receive({ type: 'identity-proof', identity, proof })
     await rejection
-    expect(c.close).not.toHaveBeenCalled()
+    expect(c.close).toHaveBeenCalledOnce()
+    expect(c.send).not.toHaveBeenCalled()
   })
-  it('protocol Abort remains a failure even with cancellation-like text [LIBID-OAUTH-022]', async () => {
+  it('protocol CeremonyFailed remains a failure even with cancellation-like text [LIBID-OAUTH-022]', async () => {
     const { connection, ceremony } = setup()
     const events: CeremonyEvent[] = []
     ceremony.onEvent((event) => events.push(event))
     const result = ceremony.proveUserIdentity()
-    connection.receive({ type: 'abort', event: 'authorization', message: 'Ceremony canceled' })
+    connection.receive({
+      type: 'ceremony-failed',
+      event: 'authorization',
+      message: 'Ceremony canceled',
+    })
     await expect(result).rejects.toBeInstanceOf(CeremonyError)
     expect(events.at(-1)).toMatchObject({ status: 'failed', event: 'authorization' })
   })
@@ -167,7 +183,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     const pending = ceremony.proveUserIdentity()
     c.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
     c.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
-    c.receive({ type: 'cancel' })
+    c.receive({ type: 'user-denied' })
     await expect(pending).resolves.toEqual({ status: 'denied' })
   })
   it('rejects setup failures without leaking handlers or connection ownership', async () => {
@@ -185,8 +201,8 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       new Uint8Array(),
     )
     const result = next.proveUserIdentity()
-    const rejection = expect(result).rejects.toMatchObject({ name: 'CancelError' })
-    await next.cancel()
+    const rejection = expect(result).rejects.toMatchObject({ name: 'CeremonyError' })
+    await c.close()
     await rejection
   })
   it('ignores unknown platforms and rejects oversized Google audiences', () => {
@@ -293,7 +309,10 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
       input.transactionData,
     ),
   ).toThrow()
-  await first.cancel()
+  const result = first.proveUserIdentity()
+  const rejected = expect(result).rejects.toBeInstanceOf(CeremonyError)
+  await input.connection.close()
+  await rejected
   expect(() =>
     client.new(
       input.connection,
@@ -379,20 +398,20 @@ it.each(['google', 'x', 'github'] as const)(
         ),
       )
     } else {
-      connection.receive({ type: 'cancel' })
+      connection.receive({ type: 'user-denied' })
       await expect(pending).resolves.toEqual({ status: 'denied' })
     }
   },
 )
 
-it('Google never reads the notary method [LIBID-MOD-014]', async () => {
+it('Google never reads the notary method [LIBID-MOD-014]', () => {
   const ledger = {
     hash: testnet.hash,
     get notaryAddress(): () => string {
       throw new Error('must not read')
     },
   }
-  const ceremony = ccdpClientFromConfig(config).new(
+  ccdpClientFromConfig(config).new(
     new Connection(),
     id,
     'google',
@@ -400,7 +419,6 @@ it('Google never reads the notary method [LIBID-MOD-014]', async () => {
     new Uint8Array(32),
     new Uint8Array(),
   )
-  await ceremony.cancel()
 })
 
 it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014]', () => {
@@ -524,7 +542,7 @@ it('preserves opaque failure text and operation context for the application', as
   const { connection, ceremony } = setup()
   const result = ceremony.proveUserIdentity()
   connection.receive({
-    type: 'abort',
+    type: 'ceremony-failed',
     event: 'authorization',
     message: 'Invalid OAuth return or provider authorization error.',
   })
@@ -573,10 +591,10 @@ it.each(['google', 'x', 'github'] as const)(
       ...(platformId === 'google' ? [] : ['notarization']),
       'zk-proving',
     ])
-    const rejection = expect(result).rejects.toMatchObject({ name: 'CancelError' })
-    await ceremony.cancel()
+    const rejection = expect(result).rejects.toMatchObject({ name: 'CeremonyError' })
+    await c.close()
     await rejection
-    expect(events.at(-1)).toMatchObject({ status: 'cancelled' })
+    expect(events.at(-1)).toMatchObject({ status: 'failed' })
     expect(
       events.some(
         (e) => 'event' in e && e.event === 'prover' && 'phase' in e && e.phase === 'finished',
@@ -585,14 +603,10 @@ it.each(['google', 'x', 'github'] as const)(
   },
 )
 
-it.each(['success', 'denied', 'cancelled', 'failed', 'closed', 'invalid-result', 'setup'] as const)(
+it.each(['success', 'denied', 'failed', 'closed', 'invalid-result', 'setup'] as const)(
   'finishes exactly once for %s, before settling the promise [LIBID-BROWSER-008]',
   async (outcome) => {
     const { ceremony, connection } = setup()
-    let close!: () => void
-    connection.closed = new Promise<never>((resolve) => {
-      close = () => resolve(undefined as never)
-    })
     if (outcome === 'setup') connection.handlers.set('event', () => {})
     const events: CeremonyEvent[] = []
     let settled = false
@@ -602,7 +616,7 @@ it.each(['success', 'denied', 'cancelled', 'failed', 'closed', 'invalid-result',
       if (event.status !== 'active') {
         settledAtFinish.push(settled)
         // Observer reentry must not turn a success into cancellation or emit twice.
-        void ceremony.cancel()
+        void connection.close()
       }
     })
     const result = ceremony.proveUserIdentity().then(
@@ -627,20 +641,19 @@ it.each(['success', 'denied', 'cancelled', 'failed', 'closed', 'invalid-result',
           identity,
           proof: outcome === 'success' ? proof : {},
         })
-      else if (outcome === 'denied') connection.receive({ type: 'cancel' })
-      else if (outcome === 'cancelled') await ceremony.cancel()
-      else if (outcome === 'closed') close()
+      else if (outcome === 'denied') connection.receive({ type: 'user-denied' })
+      else if (outcome === 'closed') await connection.close()
       else
         connection.receive({
-          type: 'abort',
+          type: 'ceremony-failed',
           event: 'zk-proof-generation',
           message: 'Proof engine failed.',
         })
     }
     await result
-    close()
+    await connection.close()
     connection.receive({ type: 'identity-proof', identity, proof })
-    await ceremony.cancel()
+    await connection.close()
     expect(events.filter((e) => e.status !== 'active')).toEqual([
       expect.objectContaining({
         status: ['closed', 'invalid-result', 'setup'].includes(outcome)
@@ -656,15 +669,21 @@ it.each(['success', 'denied', 'cancelled', 'failed', 'closed', 'invalid-result',
   },
 )
 
-it('stops event delivery after an observer cancels synchronously', async () => {
-  const { ceremony } = setup()
+it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08]', async () => {
+  const { ceremony, connection } = setup()
   const events: CeremonyEvent[] = []
-  ceremony.onEvent((event) => {
-    if (event.status === 'active') void ceremony.cancel()
-  })
   ceremony.onEvent((event) => events.push(event))
-  await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ name: 'CancelError' })
-  expect(events).toEqual([expect.objectContaining({ status: 'cancelled' })])
+  const result = ceremony.proveUserIdentity()
+  const rejection = expect(result).rejects.toBeInstanceOf(CeremonyError)
+  await connection.close()
+  await rejection
+  const count = events.length
+  connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 2 })
+  connection.receive({ type: 'user-denied' })
+  connection.receive({ type: 'identity-proof', identity, proof })
+  expect(events).toHaveLength(count)
+  expect(events.at(-1)).toMatchObject({ status: 'failed' })
+  expect(connection.send).not.toHaveBeenCalled()
 })
 
 it('only core readiness events advance the protocol; preserves occurrence times [LIBID-BROWSER-006]', async () => {
@@ -679,7 +698,7 @@ it('only core readiness events advance the protocol; preserves occurrence times 
   c.receive({ type: 'event', event: 'prover-fallback', timestamp: 4 })
   expect(c.send).not.toHaveBeenCalled()
   c.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 7 })
-  c.receive({ type: 'cancel' })
+  c.receive({ type: 'user-denied' })
   await expect(result).resolves.toEqual({ status: 'denied' })
   expect(events).toContainEqual({ event: 'prover-fallback', timestamp: 4, status: 'active' })
   expect(events).toContainEqual({
@@ -697,12 +716,12 @@ it('cancellation at authorization entry prevents provider navigation', async () 
   const { ceremony, connection } = setup()
   ceremony.onEvent((event) => {
     if (event.status === 'active' && event.event === 'authorization' && event.phase === 'started')
-      void ceremony.cancel()
+      void connection.close()
   })
   const result = ceremony.proveUserIdentity()
   connection.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
-  await expect(result).rejects.toMatchObject({ name: 'CancelError' })
-  expect(connection.navigateAway).not.toHaveBeenCalled()
+  await expect(result).rejects.toMatchObject({ name: 'CeremonyError' })
+  expect(connection.navigations).toEqual([])
 })
 
 it('readiness without the optional authorization observation still permits denial', async () => {
@@ -714,7 +733,7 @@ it('readiness without the optional authorization observation still permits denia
   const result = ceremony.proveUserIdentity()
   c.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
   c.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 2 })
-  c.receive({ type: 'cancel' })
+  c.receive({ type: 'user-denied' })
   await expect(result).resolves.toEqual({ status: 'denied' })
   expect(events.at(-1)).toMatchObject({ status: 'denied' })
   expect(stages).toContain('proof-preparation')
@@ -816,8 +835,8 @@ it('rejects unavailable explicit versions before reading ledger or reserving the
   }
   expect(ledger.hash).not.toHaveBeenCalled()
   expect(c.handlers.size).toBe(0)
-  const run = client.new(c, id, 'google', ledger, new Uint8Array(32), new Uint8Array(), 1)
-  await run.cancel()
+  client.new(c, id, 'google', ledger, new Uint8Array(32), new Uint8Array(), 1)
+  await c.close()
 })
 
 it('a lost optional operation start does not prevent accepted proof delivery [LIBID-BROWSER-008]', async () => {
@@ -828,4 +847,17 @@ it('a lost optional operation start does not prevent accepted proof delivery [LI
   c.receive({ type: 'event', event: 'proof', phase: 'finished', timestamp: 4 })
   c.receive({ type: 'identity-proof', identity, proof })
   await expect(result).resolves.toMatchObject({ status: 'accepted' })
+})
+
+it('reports closure before the first start without mislabeling it as a repeat [LIBID-BROWSER-013]', async () => {
+  const { ceremony, connection } = setup()
+  await connection.close()
+  await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({
+    name: 'CeremonyError',
+    event: 'prefetch-dispatch',
+    message: 'Popup connection ended',
+  })
+  await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
+  expect(connection.send).not.toHaveBeenCalled()
+  expect(connection.navigate).not.toHaveBeenCalled()
 })

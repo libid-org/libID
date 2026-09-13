@@ -59,9 +59,9 @@ synthetic fixture; the package does not claim those fixtures are production ledg
 Construct the client once per application configuration lifetime. It fetches and
 validates public Bridge configuration once; `enabledPlatforms` is a frozen catalog
 intersection. Each `new` captures its configuration and copies input bytes. A live
-ID cannot be reused by that client. A Ceremony is one-shot. `cancel()` rejects active
-work with `CancelError`; OAuth denial resolves `{ status: 'denied' }`. Failure or
-connection loss rejects. Start fresh OAuth after loss; there is no recovery API.
+ID cannot be reused by that client. A Ceremony is one-shot. OAuth denial resolves
+`{ status: 'denied' }`; failure or connection loss rejects with `CeremonyError`.
+The application cancels by closing its supplied popup connection. Start fresh OAuth after loss; there is no recovery API.
 
 Ceremony never closes the supplied connection. Late CCDP messages are decoded and
 ignored after settlement, so application continuation can still use the connection.

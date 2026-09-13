@@ -28,7 +28,11 @@ export function proofProgress(platform: string): (event: CeremonyEvent) => numbe
   const total = [...remaining.values()].reduce((sum, weight) => sum + weight, 0)
   let completed = 0
   return (event) => {
-    if (event.status !== 'active' || event.phase !== 'finished' || event.operationId !== undefined)
+    if (
+      event.status !== 'active' ||
+      event.phase !== 'finished' ||
+      event.instrumentation?.operationId !== undefined
+    )
       return
     const weight = remaining.get(event.event)
     if (weight === undefined) return

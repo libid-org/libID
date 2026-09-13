@@ -53,7 +53,7 @@ anchor.addEventListener('click', (event) => {
     new Uint8Array([1]),
   )
   anchor.href = ceremony.launchUrl
-  Object.assign(window, { cancel: () => ceremony.cancel(), ceremony })
+  Object.assign(window, { cancel: () => connection!.close(), ceremony })
   ceremony.onEvent((event) => (window as unknown as { events: unknown[] }).events.push(event))
   void ceremony
     .proveUserIdentity()

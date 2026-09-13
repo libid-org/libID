@@ -1,6 +1,6 @@
 import type { Message, PopupConnection } from '@libid/popup'
 import { expect, it, vi } from 'vitest'
-import { Abort } from './ccdp/index.js'
+import { CeremonyFailed } from './ccdp/index.js'
 import { CeremonyError, ceremonyError, errorMessage, reportFailure } from './errors.js'
 
 it('preserves unexpected error text and context without serializing the exception [LIBID-OAUTH-022]', () => {
@@ -11,13 +11,17 @@ it('preserves unexpected error text and context without serializing the exceptio
   const send = vi.fn()
   reportFailure({ send } as unknown as PopupConnection<Message>, error)
   const message = send.mock.calls[0][0]
-  expect(Abort.decode(message)).toBe(message)
-  expect(message).toEqual({ type: 'abort', event: 'identity-fetch', message: 'Invalid GitHub id' })
-  expect(Abort.decode({ ...message, message: 'A new dependency error' }).message).toBe(
+  expect(CeremonyFailed.decode(message)).toBe(message)
+  expect(message).toEqual({
+    type: 'ceremony-failed',
+    event: 'identity-fetch',
+    message: 'Invalid GitHub id',
+  })
+  expect(CeremonyFailed.decode({ ...message, message: 'A new dependency error' }).message).toBe(
     'A new dependency error',
   )
   for (const extra of [{ cause }, { stack: cause.stack }, { code: 'fixed' }])
-    expect(() => Abort.decode({ ...message, ...extra })).toThrow()
+    expect(() => CeremonyFailed.decode({ ...message, ...extra })).toThrow()
 })
 
 it('bounds display text and rejects arbitrary objects instead of stringifying their contents', () => {

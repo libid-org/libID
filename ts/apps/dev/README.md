@@ -68,8 +68,12 @@ pnpm dev:app
 
 Choose a platform and complete provider consent. Multiple ceremonies can run at
 once, including for the same platform. Each history row has its own status and
-Cancel button. Success and denial close only that run’s popup; cancelled and
-failed popups remain open for DevTools inspection.
+Close button. Success and denial close only that run’s popup automatically;
+failed popups remain open for DevTools inspection and can be closed with the same
+button while its connection remains usable. If the transport fails, the row asks
+you to close the window manually. Closing an active popup ends the run as a
+connection failure, without a CCDP message or separate cancellation state. With a native-anchor launch, Close
+becomes available after the popup authenticates and can be controlled.
 Results are available in `window.results`, a Map keyed by each row's
 `data-ceremony-id`. Independent verification is part of the
 [qualification walkthrough](../../packages/ceremony/docs/qualification.md#repeatable-opt-in-real-consent).

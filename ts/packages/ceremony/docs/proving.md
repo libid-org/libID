@@ -54,8 +54,8 @@ then returns `identity` and `oauthProof` separately; it does not repeat evidence
 parsing or identity extraction. Prover inputs, workers, witnesses,
 and outputs are cleared after delivery, denial, failure, or context destruction.
 Application-local cancellation sends no CCDP message; the composition navigates
-or closes the popup to end its work. The coordinated message migration is tracked
-in [Qualification](qualification.md#pending-contract-updates).
+or closes the popup to end its work; the development app uses closure. There is
+no remote cancellation handler. Native AbortSignals still stop workers on local failure.
 
 ## Proof delivery
 

@@ -89,7 +89,7 @@ for (const [platform, name] of [
   ['github', 'GitHub'],
 ]) {
   for (const blocked of [false, true]) {
-    test(`${name} popup launch${blocked ? ' through the native anchor' : ''}, cancellation and retry`, async ({
+    test(`${name} popup launch${blocked ? ' through the native anchor' : ''}, closure and retry`, async ({
       page,
       context,
     }) => {
@@ -110,10 +110,20 @@ for (const [platform, name] of [
         }),
       )
       // Only transport setup is exercised here. No simulated proof delivery or OAuth consent.
+      const popupModule = await servePopup(context)
       await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
         route.fulfill({
           contentType: 'text/html',
-          body: '<!doctype html><title>Prefetch test boundary</title>',
+          body: `<!doctype html><title>Prefetch test boundary</title><script type="module">
+            import { PopupConnection, PopupWindow } from '${popupModule}';
+            ${blocked ? 'await new Promise(resolve => { window.authenticate = resolve });' : ''}
+            const connection = PopupConnection.accept(PopupWindow.current(), {
+              connectionId: new URLSearchParams(location.hash.slice(1)).get('ceremonyId'),
+              allowedApplicationOrigins: ['http://localhost:4692'],
+            });
+            await connection.ready;
+            window.connected = true;
+          </script>`,
         }),
       )
       await page.goto('/')
@@ -124,6 +134,17 @@ for (const [platform, name] of [
       else await launch.click()
       const popup = await opened
       await expect(popup).toHaveURL(/\/ccdp\/v1\/prefetch#/)
+      if (blocked) {
+        await expect(
+          page.locator('#history tr').first().getByRole('button', { name: 'Close' }),
+        ).toBeDisabled()
+        await popup.waitForFunction(
+          () =>
+            typeof (window as unknown as { authenticate?: unknown }).authenticate === 'function',
+        )
+        await popup.evaluate(() => (window as unknown as { authenticate(): void }).authenticate())
+      }
+      await popup.waitForFunction(() => (window as unknown as { connected: boolean }).connected)
       expect(new URLSearchParams(new URL(popup.url()).hash.slice(1)).get('platformId')).toBe(
         platform,
       )
@@ -135,24 +156,19 @@ for (const [platform, name] of [
       await expect(rows.first().getByRole('cell').nth(1)).toHaveText(name)
       await expect(rows.first().locator('.run-outcome')).toHaveText('Running')
       await expect(
-        page.locator('#history tr').first().getByRole('button', { name: 'Cancel ceremony' }),
+        page.locator('#history tr').first().getByRole('button', { name: 'Close' }),
       ).toBeEnabled()
-      await page
-        .locator('#history tr')
-        .first()
-        .getByRole('button', { name: 'Cancel ceremony' })
-        .click()
+      await page.locator('#history tr').first().getByRole('button', { name: 'Close' }).click()
       await expect(page.locator('#history tr').first().locator('.run-status')).toHaveText(
-        'Ceremony cancelled.',
+        'Popup connection ended',
       )
-      expect(popup.isClosed()).toBe(false)
-      await popup.close()
+      await expect.poll(() => popup.isClosed()).toBe(true)
       for (const button of await page.locator('#platforms').getByRole('button').all())
         await expect(button).toBeEnabled()
       expect(await page.evaluate(() => [...window.results.values()])).toEqual([
-        { status: 'cancelled' },
+        { status: 'failed' },
       ])
-      await expect(rows.first().locator('.run-outcome')).toHaveText('Cancelled')
+      await expect(rows.first().locator('.run-outcome')).toHaveText('Failed (prefetch-dispatch)')
       await expect(rows.first().getByRole('cell').nth(3)).toHaveText(/^\d+\.\d s$/)
       await expect(rows.first().getByRole('cell').nth(4)).toHaveText('—')
       await expect(rows.first().locator('.operation-timings li')).toContainText('Prefetch dispatch')
@@ -161,19 +177,17 @@ for (const [platform, name] of [
         const secondOpened = page.waitForEvent('popup')
         await page.getByRole('button', { name: 'X', exact: true }).click()
         const secondPopup = await secondOpened
+        await secondPopup.waitForFunction(
+          () => (window as unknown as { connected: boolean }).connected,
+        )
         await expect(rows).toHaveCount(2)
         await expect(rows.first().getByRole('cell').nth(1)).toHaveText('X')
         await expect(rows.first().locator('.run-outcome')).toHaveText('Running')
         await expect(rows.nth(1).getByRole('cell').nth(1)).toHaveText('Google')
-        await expect(rows.nth(1).locator('.run-outcome')).toHaveText('Cancelled')
-        await page
-          .locator('#history tr')
-          .first()
-          .getByRole('button', { name: 'Cancel ceremony' })
-          .click()
-        await expect(rows.first().locator('.run-outcome')).toHaveText('Cancelled')
-        expect(secondPopup.isClosed()).toBe(false)
-        await secondPopup.close()
+        await expect(rows.nth(1).locator('.run-outcome')).toHaveText('Failed (prefetch-dispatch)')
+        await page.locator('#history tr').first().getByRole('button', { name: 'Close' }).click()
+        await expect(rows.first().locator('.run-outcome')).toHaveText('Failed (prefetch-dispatch)')
+        await expect.poll(() => secondPopup.isClosed()).toBe(true)
         await page.reload()
         await expect(rows).toHaveCount(0)
         await expect(page.locator('#history-empty')).toBeVisible()
@@ -183,63 +197,80 @@ for (const [platform, name] of [
 }
 
 for (const blocked of [false, true]) {
-  test(`failure keeps the popup open${blocked ? ' through the native anchor' : ''} until manually closed`, async ({
-    page,
-    context,
-  }) => {
-    if (blocked)
-      await page.addInitScript(() => {
-        window.open = () => null
-      })
-    await page.route(configUrl, (route) => route.fulfill({ json: config }))
-    await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
-      route.fulfill({
-        contentType: 'text/html',
-        body: '<!doctype html><title>Failure test boundary</title>',
-      }),
-    )
-    await page.goto('/')
-    const launch = page.getByRole('button', { name: 'Google', exact: true })
-    await expect(launch).toBeEnabled()
-    const opened = page.waitForEvent('popup')
-    await launch.click()
-    const popup = await opened
-    await expect(popup).toHaveURL(/\/ccdp\/v1\/prefetch#/)
-    // A synthetic failure over the actual popup transport; no OAuth or proof is simulated.
-    // Serve the real package at the popup origin, avoiding cross-origin dev-server imports.
-    const popupModule = await servePopup(context)
-    await popup.evaluate(async (moduleUrl) => {
-      const { PopupConnection, PopupWindow } = await import(/* @vite-ignore */ moduleUrl)
-      const id = new URLSearchParams(location.hash.slice(1)).get('ceremonyId')
-      const connection = PopupConnection.accept(
-        PopupWindow.current(location.hash, { scope: '/' }),
-        {
-          connectionId: id,
-          allowedApplicationOrigins: ['http://localhost:4692'],
-        },
+  for (const transportFailure of [false, true]) {
+    test(`${transportFailure ? 'transport' : 'ceremony'} failure keeps the popup open${blocked ? ' through the native anchor' : ''} until manually closed`, async ({
+      page,
+      context,
+    }) => {
+      if (blocked)
+        await page.addInitScript(() => {
+          window.open = () => null
+        })
+      await page.route(configUrl, (route) => route.fulfill({ json: config }))
+      await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
+        route.fulfill({
+          contentType: 'text/html',
+          body: '<!doctype html><title>Failure test boundary</title>',
+        }),
       )
-      await connection.ready
-      connection.send({
-        type: 'abort',
-        event: 'identity-fetch',
-        message: '<img src=x onerror=alert(1)> Invalid GitHub id',
-      })
-    }, popupModule)
-    await expect(page.locator('.run-status')).toContainText('Invalid GitHub id')
-    await expect(
-      page.locator('#history tr').first().getByRole('button', { name: 'Cancel ceremony' }),
-    ).toBeDisabled()
-    await expect(page.locator('#history')).toContainText('Failed (identity-fetch)')
-    expect(popup.isClosed()).toBe(false)
-    await expect(page.locator('#history tr').first().locator('.run-status')).toHaveText(
-      '<img src=x onerror=alert(1)> Invalid GitHub id',
-    )
-    await expect(page.locator('.run-status img')).toHaveCount(0)
-    await expect(launch).toBeEnabled()
-    await expect(page.getByRole('button', { name: 'Close popup' })).toHaveCount(0)
-    await popup.close()
-    await expect(launch).toBeEnabled()
-  })
+      await page.goto('/')
+      const launch = page.getByRole('button', { name: 'Google', exact: true })
+      await expect(launch).toBeEnabled()
+      const opened = page.waitForEvent('popup')
+      await launch.click()
+      const popup = await opened
+      await expect(popup).toHaveURL(/\/ccdp\/v1\/prefetch#/)
+      // A synthetic failure over the actual popup transport; no OAuth or proof is simulated.
+      // Serve the real package at the popup origin, avoiding cross-origin dev-server imports.
+      const popupModule = await servePopup(context)
+      await popup.evaluate(
+        async ({ moduleUrl, transportFailure }) => {
+          const { PopupConnection, PopupWindow } = await import(/* @vite-ignore */ moduleUrl)
+          const id = new URLSearchParams(location.hash.slice(1)).get('ceremonyId')
+          const connection = PopupConnection.accept(
+            PopupWindow.current(location.hash, { scope: '/' }),
+            {
+              connectionId: id,
+              allowedApplicationOrigins: ['http://localhost:4692'],
+            },
+          )
+          await connection.ready
+          connection.send(
+            transportFailure
+              ? { type: 'event' }
+              : {
+                  type: 'ceremony-failed',
+                  event: 'identity-fetch',
+                  message: '<img src=x onerror=alert(1)> Invalid GitHub id',
+                },
+          )
+        },
+        { moduleUrl: popupModule, transportFailure },
+      )
+      if (transportFailure) {
+        await expect(page.locator('.run-actions')).toHaveText('Close the popup window manually.')
+        await expect(page.locator('.run-outcome')).toHaveText('Failed (prefetch-dispatch)')
+        expect(popup.isClosed()).toBe(false)
+        await popup.close()
+        return
+      }
+      await expect(page.locator('.run-status')).toContainText('Invalid GitHub id')
+      await expect(
+        page.locator('#history tr').first().getByRole('button', { name: 'Close' }),
+      ).toBeEnabled()
+      await expect(page.locator('#history')).toContainText('Failed (identity-fetch)')
+      expect(popup.isClosed()).toBe(false)
+      await expect(page.locator('#history tr').first().locator('.run-status')).toHaveText(
+        '<img src=x onerror=alert(1)> Invalid GitHub id',
+      )
+      await expect(page.locator('.run-status img')).toHaveCount(0)
+      await expect(launch).toBeEnabled()
+      await page.locator('#history tr').first().getByRole('button', { name: 'Close' }).click()
+      await expect.poll(() => popup.isClosed()).toBe(true)
+      await expect(page.locator('#history')).toContainText('Failed (identity-fetch)')
+      await expect(launch).toBeEnabled()
+    })
+  }
 }
 
 test('private configuration and generated files are not served', async ({ request }) => {
@@ -265,6 +296,7 @@ for (const [platform, name, outcome = 'failed'] of [
   ['x', 'X'],
   ['github', 'GitHub'],
   ['google', 'Google', 'success'],
+  ['google', 'Google', 'denied'],
 ]) {
   test(`${name} operation timings preserve occurrences and freeze on ${outcome}`, async ({
     page,
@@ -306,6 +338,21 @@ for (const [platform, name, outcome = 'failed'] of [
     await send('authorization', 'finished', 0)
     await send('prover', 'started', 10)
     await popup.waitForFunction(() => (window as unknown as { requested?: boolean }).requested)
+    if (outcome === 'denied') {
+      await popup.evaluate(() => {
+        ;(
+          window as unknown as { eventConnection: { send(value: unknown): void } }
+        ).eventConnection.send({ type: 'user-denied' })
+      })
+      await expect.poll(() => popup.isClosed()).toBe(true)
+      await expect(page.locator('.run-outcome')).toHaveText('Denied')
+      await expect(page.locator('.run-status')).toHaveText('Authorization was denied.')
+      await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeDisabled()
+      const row = await page.locator('#history').textContent()
+      await page.clock.runFor(2000)
+      await expect(page.locator('#history')).toHaveText(row!)
+      return
+    }
     await send('zk-proof-preparation', 'started', 20)
     await expect(page.locator('.run-status')).toHaveText('Preparing your identity proof')
     if (platform !== 'google') {
@@ -345,7 +392,7 @@ for (const [platform, name, outcome = 'failed'] of [
                 signingKeyModulus: new Uint8Array(256),
               },
             }
-          : { type: 'abort', event: 'identity-fetch', message: 'Invalid GitHub id' },
+          : { type: 'ceremony-failed', event: 'identity-fetch', message: 'Invalid GitHub id' },
       )
     }, outcome === 'success')
     await expect(page.locator('#history')).toContainText(
@@ -405,7 +452,7 @@ for (const blocked of [false, true]) {
     const third = await launch('X')
     expect(new Set([first.id, second.id, third.id]).size).toBe(3)
     await expect(page.locator('#history tr')).toHaveCount(3)
-    await expect(page.getByRole('button', { name: 'Close popup' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Close', exact: true })).toHaveCount(3)
     for (const run of [first, second, third]) {
       expect(run.popup.isClosed()).toBe(false)
       await run.popup.evaluate(() =>
@@ -467,16 +514,16 @@ for (const blocked of [false, true]) {
     expect(first.popup.isClosed()).toBe(false)
     expect(third.popup.isClosed()).toBe(false)
 
-    await first.row.getByRole('button', { name: 'Cancel ceremony' }).click()
-    await expect(first.row.locator('.run-outcome')).toHaveText('Cancelled')
-    expect(first.popup.isClosed()).toBe(false)
-    await expect(third.row.getByRole('button', { name: 'Cancel ceremony' })).toBeEnabled()
+    await first.row.getByRole('button', { name: 'Close' }).click()
+    await expect(first.row.locator('.run-outcome')).toHaveText('Failed (prover)')
+    await expect.poll(() => first.popup.isClosed()).toBe(true)
+    await expect(third.row.getByRole('button', { name: 'Close' })).toBeEnabled()
     expect(third.popup.isClosed()).toBe(false)
     await third.popup.evaluate(() => {
       const connection = (window as unknown as { eventConnection: { send(value: unknown): void } })
         .eventConnection
       connection.send({
-        type: 'abort',
+        type: 'ceremony-failed',
         event: 'identity-fetch',
         message: 'Identity request failed',
       })
@@ -488,7 +535,7 @@ for (const blocked of [false, true]) {
         Object.fromEntries([...window.results].map(([id, result]) => [id, result.status])),
       ),
     ).toEqual({
-      [first.id]: 'cancelled',
+      [first.id]: 'failed',
       [second.id]: 'accepted',
       [third.id]: 'failed',
     })
@@ -496,7 +543,9 @@ for (const blocked of [false, true]) {
     const fourth = await launch('Google')
     await third.popup.close()
     await page.evaluate(() => {
+      const encode = TextEncoder.prototype.encode
       TextEncoder.prototype.encode = () => {
+        TextEncoder.prototype.encode = encode
         throw new Error('Input preparation failed after opening the popup')
       }
     })
@@ -508,34 +557,19 @@ for (const blocked of [false, true]) {
     )
     if (failedPopup) {
       expect(failedPopup.isClosed()).toBe(false)
-      await failedPopup.close()
+      await page.locator('#history tr').first().getByRole('button', { name: 'Close' }).click()
+      await expect.poll(() => failedPopup.isClosed()).toBe(true)
+      await expect(page.locator('#history tr').first().locator('.run-outcome')).toHaveText(
+        'Failed to start',
+      )
     }
     await expect(fourth.row.locator('.run-outcome')).toHaveText('Running')
     expect(fourth.popup.isClosed()).toBe(false)
-    await fourth.row.getByRole('button', { name: 'Cancel ceremony' }).click()
-    await expect(fourth.row.locator('.run-outcome')).toHaveText('Cancelled')
-    expect(fourth.popup.isClosed()).toBe(false)
-    // A return after OAuth cancellation cannot revive the retired run.
-    await fourth.popup.evaluate(() =>
-      location.replace((window as unknown as { returnUrl: string }).returnUrl),
-    )
-    await fourth.popup.waitForFunction(
-      () => !!(window as unknown as { eventConnection?: unknown }).eventConnection,
-    )
-    await fourth.popup.evaluate(() => {
-      const connection = (window as unknown as { eventConnection: { send(value: unknown): void } })
-        .eventConnection
-      connection.send({
-        type: 'event',
-        event: 'prover',
-        phase: 'started',
-        timestamp: performance.timeOrigin + performance.now(),
-      })
-    })
-    await expect(fourth.row.locator('.run-outcome')).toHaveText('Cancelled')
-    expect(await page.evaluate((id) => window.results.get(id)?.status, fourth.id)).toBe('cancelled')
+    await fourth.row.getByRole('button', { name: 'Close' }).click()
+    await expect(fourth.row.locator('.run-outcome')).toHaveText('Failed (authorization)')
+    await expect.poll(() => fourth.popup.isClosed()).toBe(true)
+    await expect(fourth.row.locator('.run-outcome')).toHaveText('Failed (authorization)')
+    expect(await page.evaluate((id) => window.results.get(id)?.status, fourth.id)).toBe('failed')
     await expect(second.row.locator('.run-outcome')).toHaveText('Proof received')
-    await first.popup.close()
-    await fourth.popup.close()
   })
 }

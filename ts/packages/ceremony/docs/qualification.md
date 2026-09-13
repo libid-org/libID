@@ -27,25 +27,42 @@ The implementation differences below are explicit, not competing contracts.
    origin and GitHub's token request includes the frozen `redirectUri`.
    The spec fixes `/auth/callback`, removes `callbackPath` from config, and
    removes `redirectUri` from that token request. Client, CCDP, tests, and the
-   separately deployed Bridge need a coordinated change. This docs-only
-   reconciliation does not implement it.
+   separately deployed Bridge need a coordinated change; it remains separate
+   from the outcome/event migration below.
 
-2. **Outcome messages and local-only cancellation.**
-   Current code uses bidirectional `Cancel`, technical-failure `Abort`, and
-   emits `status: 'cancelled'`.
-   The contract uses `UserDenied` (`type: 'user-denied'`) only from Prover to Application
-   for valid OAuth denial, and `CeremonyFailed` (`type: 'ceremony-failed'`) for
-   technical failure, preserving its event and message fields.
-   Client `cancel()` retires the local run without
-   sending a CCDP message or event/status update; the composition navigates or
-   closes the popup separately. Update wire codecs, Client/document handlers,
-   event and stage types, UI, and cancellation/race tests together. Existing
-   cancellation tests do not qualify this changed contract.
+## Outcome and event migration
 
-3. **Nested event instrumentation.**
-   CCDP `Event` groups `operationId` and `attributes` inside optional
-   `instrumentation`. The current wire codec and document forwarding still use
-   top-level fields; update them and their shape tests together.
+The codecs and documents follow spec PR #13 at
+`d266091d8638d375cb0a809e6b081e414c1218d8`: valid platform denial uses
+`UserDenied`, technical failure uses `CeremonyFailed`, and optional event metadata
+is nested under `instrumentation`. Retired message names and top-level metadata
+are rejected. Application and CCDP artifacts must be updated together.
+
+The application cancels by closing its supplied connection. The package exposes
+neither `Ceremony.cancel()` nor `CancelError`; the development app exposes a plain
+Close button and observes the resulting connection failure. Connection loss is never
+provider denial. Native-anchor Close stays disabled until
+authentication provides a controllable popup. No cancellation notification
+is sent to Callback or Prover. Cancellation while retaining the same connection
+for further navigation is outside the current API; completed/denied connections
+remain available for normal application continuation.
+
+The migration passed 428 unit tests, package/build/browser type checks, and
+style checks. All 85 development browser cases passed before review; after the
+closure/readiness fixes, all 40 targeted launch, cancellation, and concurrent-run
+cases passed across Chromium, Firefox, WebKit, and mobile emulation. The 64
+selected ceremony browser cases passed across desktop HTTP/HTTPS and mobile
+emulation, including actual popup navigation, denial, failure, exact-origin
+rejection, and released-key verification of browser-generated Google fixture
+proofs. All 17 distribution/native-loader/SWS checks passed, including the separately
+run native SWS cache-invalidation check. These checks add no
+live-OAuth, matched-notary concurrency, or physical-device qualification.
+
+The subsequent Close-button simplification passed all 90 development browser
+cases, including automatic success/denial closure and independent concurrent
+runs. After extending Close to a popup whose input preparation failed, all ten
+concurrency/startup rechecks passed. Closing a failed popup preserves its original
+outcome.
 
 4. **Platform-independent notary input.**
    Client still skips the ledger notary address for Google, and the wire decoder

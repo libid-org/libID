@@ -54,7 +54,7 @@ it('a failed mandatory readiness send reports failure instead of silently contin
   await startPrefetch(fragment)
   expect(dispatchPrefetch).toHaveBeenCalledOnce()
   expect(connection.send).toHaveBeenLastCalledWith({
-    type: 'abort',
+    type: 'ceremony-failed',
     event: 'prefetch-dispatch',
     message: 'send failed',
   })

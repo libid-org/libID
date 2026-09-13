@@ -32,7 +32,9 @@ it.each(['google', 'x', 'github'] as const)(
       let previous = 0
       for (const event of order) {
         expect(progress({ ...finished(event), phase: 'started' })).toBeUndefined()
-        expect(progress({ ...finished(event), operationId: 'another-operation' })).toBeUndefined()
+        expect(
+          progress({ ...finished(event), instrumentation: { operationId: 'another-operation' } }),
+        ).toBeUndefined()
         const next = progress(finished(event))!
         expect(next).toBeGreaterThan(previous)
         expect(next).toBeLessThanOrEqual(1)

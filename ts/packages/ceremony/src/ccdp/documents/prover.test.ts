@@ -50,6 +50,7 @@ vi.mock('./ui.js', () => ({
 
 afterEach(() => {
   vi.clearAllMocks()
+  connection.closed = new Promise(() => {})
   connection.send.mockReset()
   ui.trackProof.mockReset()
   ui.finishProof.mockReset()
@@ -75,6 +76,7 @@ it.each(['google', 'x', 'github'])(
       undefined,
       expect.objectContaining({ allowedApplicationOrigins: ['https://app.test'] }),
     )
+    expect(connection.on.mock.calls.map(([codec]) => codec.type)).toEqual(['prove-identity'])
     const handler = connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')?.[1]
     expect(connection.send).toHaveBeenCalledWith({
       type: 'event',
@@ -129,7 +131,7 @@ it('reports retrospective fallback before readiness and preserves producer times
   })
   await vi.waitFor(() =>
     expect(connection.send).toHaveBeenCalledWith({
-      type: 'abort',
+      type: 'ceremony-failed',
       event: 'prover',
       message: 'Invalid GitHub id',
     }),
@@ -145,12 +147,16 @@ it('reports retrospective fallback before readiness and preserves producer times
   ).toBe(false)
 })
 
-it.each(['delivered', 'send-failed', 'ui-failed', 'cancelled-during-paint'])(
+it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
   'gives the UI a paint opportunity before delivery: %s [LIBID-BROWSER-024]',
   async (outcome) => {
     vi.stubGlobal('location', { origin: 'https://ccdp.test' })
     vi.stubGlobal('crossOriginIsolated', true)
     vi.stubGlobal('Worker', vi.fn())
+    let close!: () => void
+    connection.closed = new Promise<void>((resolve) => {
+      close = resolve
+    })
     prove.mockResolvedValueOnce({
       identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
       proof: {},
@@ -192,19 +198,19 @@ it.each(['delivered', 'send-failed', 'ui-failed', 'cancelled-during-paint'])(
     await vi.waitFor(() => expect(ui.finishProof).toHaveBeenCalledOnce())
     if (outcome !== 'ui-failed') {
       expect(connection.send.mock.calls.some(([m]) => m.type === 'identity-proof')).toBe(false)
-      if (outcome === 'cancelled-during-paint')
-        connection.on.mock.calls.find(([codec]) => codec.type === 'cancel')![1]({ type: 'cancel' })
+      if (outcome === 'closed-during-paint') close()
+      await Promise.resolve()
       painted()
     }
     await vi.waitFor(() => expect(ui.stop).toHaveBeenCalled())
-    if (outcome === 'cancelled-during-paint') {
+    if (outcome === 'closed-during-paint') {
       expect(ui.delivered).not.toHaveBeenCalled()
-      expect(
-        connection.send.mock.calls.some(([m]) => ['identity-proof', 'abort'].includes(m.type)),
-      ).toBe(false)
+      expect(connection.send.mock.calls.some(([m]) => m.type === 'identity-proof')).toBe(false)
     } else if (outcome === 'send-failed') {
       expect(ui.delivered).not.toHaveBeenCalled()
-      expect(connection.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'abort' }))
+      expect(connection.send).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'ceremony-failed' }),
+      )
     } else {
       expect(ui.delivered).toHaveBeenCalledOnce()
       const index = connection.send.mock.calls.findIndex(
@@ -213,7 +219,9 @@ it.each(['delivered', 'send-failed', 'ui-failed', 'cancelled-during-paint'])(
       expect(connection.send.mock.invocationCallOrder[index]).toBeLessThan(
         ui.delivered.mock.invocationCallOrder[0],
       )
-      expect(connection.send.mock.calls.some(([message]) => message.type === 'abort')).toBe(false)
+      expect(
+        connection.send.mock.calls.some(([message]) => message.type === 'ceremony-failed'),
+      ).toBe(false)
     }
     expect(
       connection.send.mock.calls.some(

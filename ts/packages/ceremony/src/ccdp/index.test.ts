@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { origin } from '../primitives.js'
-import { Abort, Cancel, Event, IdentityProof, ProveIdentity, redirect } from './index.js'
+import {
+  CeremonyFailed,
+  Event,
+  IdentityProof,
+  ProveIdentity,
+  redirect,
+  UserDenied,
+} from './index.js'
 import { prefetchFragment, proverFragment, readPrefetch, readProver } from './navigation.js'
 
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 
 describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
   const samples = [
-    [Abort, { type: 'abort', event: 'proof', message: 'Unexpected proving failure.' }],
+    [
+      CeremonyFailed,
+      { type: 'ceremony-failed', event: 'proof', message: 'Unexpected proving failure.' },
+    ],
     [
       ProveIdentity,
       {
@@ -20,7 +30,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         notaryAddress: null,
       },
     ],
-    [Cancel, { type: 'cancel' }],
+    [UserDenied, { type: 'user-denied' }],
     [Event, { type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 }],
     [Event, { type: 'event', event: 'prover', phase: 'started', timestamp: 2 }],
     [
@@ -170,20 +180,20 @@ it('supports bounded extension observations and disambiguated operations [LIBID-
       type: 'event',
       event: 'resource-request',
       timestamp: 1,
-      attributes: { bytes: 1024, cache: 'hit' },
+      instrumentation: { attributes: { bytes: 1024, cache: 'hit' } },
     },
     {
       type: 'event',
       event: 'tls-session',
       phase: 'started',
-      operationId: 'identity',
+      instrumentation: { operationId: 'identity' },
       timestamp: 1,
     },
     {
       type: 'event',
       event: 'tls-session',
       phase: 'finished',
-      operationId: 'identity',
+      instrumentation: { operationId: 'identity' },
       timestamp: 2,
     },
     { type: 'event', event: 'prover-fallback', timestamp: 3 },
@@ -192,13 +202,15 @@ it('supports bounded extension observations and disambiguated operations [LIBID-
   for (const event of [
     { event: 'prover-fallback', phase: 'started' },
     { event: 'prover' },
-    { event: 'prover', phase: 'started', operationId: 'extra' },
+    { event: 'prover', phase: 'started', instrumentation: { operationId: 'extra' } },
     { event: 'some-event', phase: 'unknown' },
-    { event: 'unknown', operationId: '' },
-    { event: 'unknown', attributes: { data: {} } },
+    { event: 'unknown', instrumentation: { operationId: '' } },
+    { event: 'unknown', instrumentation: { attributes: { data: {} } } },
     {
       event: 'unknown',
-      attributes: Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`field-${i}`, i])),
+      instrumentation: {
+        attributes: Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`field-${i}`, i])),
+      },
     },
   ])
     expect(() => Event.decode({ type: 'event', timestamp: 1, ...event })).toThrow()
@@ -241,3 +253,45 @@ it.each([
     ).toThrow()
   },
 )
+
+it('accepts only the current outcome names [TEST-CCDP-05]', () => {
+  for (const type of ['cancel', 'denied', 'abort']) {
+    const value =
+      type === 'abort' ? { type, event: 'prover', message: 'Retired message' } : { type }
+    for (const codec of [UserDenied, CeremonyFailed, ProveIdentity, IdentityProof, Event])
+      expect(() => codec.decode(value)).toThrow()
+  }
+})
+
+it('validates the exact optional instrumentation record [TEST-CCDP-06]', () => {
+  const value = { type: 'event', event: 'session', phase: 'started', timestamp: 1 }
+  for (const instrumentation of [
+    {},
+    { operationId: 'first' },
+    { attributes: {} },
+    { operationId: 'first', attributes: { bytes: 1, cached: true, source: 'worker' } },
+  ])
+    expect(Event.decode({ ...value, instrumentation })).toMatchObject({ instrumentation })
+  expect(Event.decode(value)).not.toHaveProperty('instrumentation')
+  for (const instrumentation of [
+    null,
+    undefined,
+    [],
+    new Date(),
+    { unknown: true },
+    { operationId: null },
+    { operationId: undefined },
+    { operationId: '' },
+    { operationId: 'x'.repeat(65) },
+    { attributes: null },
+    { attributes: undefined },
+    { attributes: [] },
+    { attributes: { bytes: Infinity } },
+    { attributes: { bytes: NaN } },
+    { attributes: { text: 'x'.repeat(129) } },
+    { attributes: Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`field-${i}`, i])) },
+  ])
+    expect(() => Event.decode({ ...value, instrumentation })).toThrow()
+  for (const extra of [{ operationId: 'first' }, { attributes: {} }])
+    expect(() => Event.decode({ ...value, ...extra })).toThrow()
+})
