@@ -66,9 +66,12 @@ pnpm dev:services
 pnpm dev:app
 ```
 
-Choose a platform and complete provider consent. Failed popups remain open for
-DevTools inspection. Successful proof delivery leaves the result in `window.result`
-for inspection; independent verification is part of the
+Choose a platform and complete provider consent. Multiple ceremonies can run at
+once, including for the same platform. Each history row has its own status and
+Cancel button. Success and denial close only that run’s popup; cancelled and
+failed popups remain open for DevTools inspection.
+Results are available in `window.results`, a Map keyed by each row's
+`data-ceremony-id`. Independent verification is part of the
 [qualification walkthrough](../../packages/ceremony/docs/qualification.md#repeatable-opt-in-real-consent).
 
 ## Checks

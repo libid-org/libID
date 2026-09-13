@@ -183,8 +183,9 @@ CEREMONY_BROWSER=chromium \
 
 The headed runner uses no OAuth mocks and pauses for manual consent and
 foreground/suspension/outcome checkpoints. Its ignored report contains only
-checkpoint labels, browser version, and optional result status, not verification
-claims. Repeat approved/denied, signed-in/out, and native-app installed/absent
+checkpoint labels, browser version, and optional per-run statuses from the
+Application's `window.results` Map; these are outcomes, not cryptographic
+verification. Repeat approved/denied, signed-in/out, and native-app installed/absent
 cases. Never bypass CAPTCHA, MFA, or platform consent.
 
 For transport diagnosis, run the existing smoke server and
