@@ -162,3 +162,16 @@ Index: all 158 stable IDs from [Test plan](test-plan.md). No requirement is dele
 | LIBID-BROWSER-028 | External | Build-owned fallback integration exists; actual adapter/signaling and private openerless handoff qualification remain. |
 | LIBID-BROWSER-029 | Deferred / partial | User deferred full metrics/span collection. Coarse package-owned progress and focused measurements exist; complete prescribed spans/timings/export remain untested and unclaimed. |
 | LIBID-BROWSER-030 | Partial | [Prover document tests](../src/ccdp/documents/prover.test.ts) check navigation timeOrigin, ordering and direct-path absence; [client tests](../src/ccdp/client/ceremony.test.ts) preserve retrospective timestamps. Independent browser delay/missing-connection combinations remain. |
+
+## Exact-origin handoff
+
+[TEST-CCDP-03 and TEST-CCDP-04](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#conformance)
+map to [fragment codecs](../src/ccdp/index.test.ts),
+[Callback](../src/ccdp/documents/callback.test.ts),
+[Prover](../src/ccdp/documents/prover.test.ts), and
+[actual-popup handoff](../e2e/flow.spec.ts) checks. These cover exact origin
+selection rather than allowlist order or OAuth fields, invalid/missing/duplicate
+origin inputs, port preservation through isolation, and a different origin in
+the same opener window. The popup PR owns restored/fallback carrier admission
+and transport-version tests; real WebRTC and physical-device qualification remain
+separate requirements.

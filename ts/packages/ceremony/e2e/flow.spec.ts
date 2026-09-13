@@ -502,3 +502,46 @@ test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASS
   expect(result).toEqual(['ready', 'ready'])
   expect(await count()).toBeGreaterThan(before)
 })
+
+test('Prover rejects a changed Application origin in the same opener window [TEST-CCDP-04]', async ({
+  app,
+  bridge,
+  ccdp,
+  page,
+  context,
+}) => {
+  await context.route('https://accounts.google.com/**', async (route) => {
+    const state = new URL(route.request().url()).searchParams.get('state')
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<script>location.replace(${JSON.stringify(`${bridge}/callback#error=access_denied&state=${state}`)})</script>`,
+    })
+  })
+  // A second origin admitted by Callback's deployment. The retained WindowProxy
+  // is unchanged, but this new document is not the Application Callback bound.
+  await context.route(`${ccdp}/changed-application`, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: `<script>
+      window.addEventListener('message', event => {
+        if (event.data?.type !== 'message-port') return
+        const channel = new MessageChannel()
+        event.source.postMessage(event.data, event.origin, [channel.port2])
+      })
+    </script>`,
+    }),
+  )
+  await context.route(`${ccdp}/ccdp/v1/prover`, async (route) => {
+    // Callback already authenticated and constructed the private fragment.
+    await page.goto(`${ccdp}/changed-application`)
+    await route.continue()
+  })
+  await page.goto(app)
+  await page.waitForFunction(() => window.ready)
+  const popupPromise = context.waitForEvent('page')
+  await page.locator('#launch').click()
+  const popup = await popupPromise
+  await expect(popup.locator('body')).toContainText('handshake-rejected')
+  expect(await popup.evaluate(() => location.hash)).toBe('')
+  expect(new URL(page.url()).origin).toBe(ccdp)
+})

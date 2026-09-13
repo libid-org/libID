@@ -67,8 +67,9 @@ continuity, so ceremony does not coordinate duplicate provers or inspect browser
 The [document entrypoints](documents.md) are compiler inputs, not public package
 APIs. Callback is a self-contained HTML artifact; Prefetch/Prover embed their
 clearing bootstrap and entry code. The Worker composes byte caching with popup's
-keeper handler. Callback installs no Worker. The implementation's outstanding
-origin-continuity update is explicit in [qualification](qualification.md#pending-contract-updates).
+keeper handler. Callback installs no Worker. It forwards popup's authenticated
+Application origin in the private fragment; Prover restricts acceptance to that
+exact origin, including after isolation replacement.
 
 ### Lightweight declarations, shared execution resources
 

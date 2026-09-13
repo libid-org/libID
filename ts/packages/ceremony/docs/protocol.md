@@ -3,8 +3,8 @@
 The [CCDP specification](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md) owns documents, private navigation
 inputs, messages, core events, ordering, and terminal outcomes. This guide owns
 only their TypeScript implementation. [Qualification](qualification.md#pending-contract-updates)
-records the two outstanding coordinated contract updates; the protocol is not
-silently redefined here to match them.
+records the remaining coordinated Bridge migration. Callback and Prover implement
+the exact-origin handoff using popup's authenticated peer metadata.
 
 ## Implementation guide
 

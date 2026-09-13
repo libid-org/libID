@@ -18,7 +18,7 @@ orchestration tests is not cryptographic, live-OAuth, or physical-device evidenc
 | HTTP framing | Spec PR #31 at `860075a4bf288dc7fee20866ed3536dc260f4574` |
 
 The [normative browser contracts](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md) are maintained separately.
-The two implementation differences below are explicit, not competing contracts.
+The remaining implementation difference below is explicit, not a competing contract.
 
 ## Pending contract updates
 
@@ -29,13 +29,29 @@ The two implementation differences below are explicit, not competing contracts.
    removes `redirectUri` from that token request. Client, CCDP, tests, and the
    separately deployed Bridge need a coordinated change. This docs-only
    reconciliation does not implement it.
-2. **Carry Callback's authenticated Application origin to Prover.**
-   Current Callback authenticates its explicit allowlist, but Prover accepts
-   `'*'`. The spec requires a private `applicationOrigin` fragment field derived
-   from Callback's authenticated peer and exact admission at Prover, including
-   fallback/replacement. This needs authenticated-peer-origin access from popup
-   and a coordinated navigation-codec/document/test update. Do not claim the
-   restriction is implemented or that a retained window reference establishes it.
+
+## Authenticated-origin handoff
+
+Callback forwards `connection.peerOrigin` in the private `applicationOrigin`
+fragment field. It obtains the value only after popup authentication, never from
+OAuth parameters or deployment allowlist order. Prover validates the canonical
+origin and supplies `[applicationOrigin]` to popup acceptance. Missing/invalid
+origin input fails locally before acceptance; a different authenticated peer
+fails before readiness, including through port preservation or isolation fallback.
+
+This implements spec PR #13's exact-origin handoff at
+`f2959118357a227885042b8d1e42c5e44bb38cd5` and depends on popup's
+ConnectionVersion 2 origin metadata in PR #25. Application, Callback, Prover,
+and the root Worker must use that transport version together. Popup owns the
+binding and its preservation; ceremony adds no handshake or transport records.
+The fixed Callback/Bridge migration above remains separate.
+
+The origin update passed 108 popup unit tests, 426 ceremony unit tests, and
+package/build/browser type checks. Fifteen focused popup browser cases passed
+in Chromium, Firefox, and WebKit. Twenty-four ceremony browser cases passed
+across desktop HTTP/HTTPS and mobile-emulation profiles, including actual
+Callback navigation and rejection of a changed origin in the same opener window.
+This does not qualify real WebRTC, new live OAuth flows, or physical devices.
 
 ## Evidence obtained
 

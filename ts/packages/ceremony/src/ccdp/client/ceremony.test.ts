@@ -9,6 +9,7 @@ import { type CeremonyEvent, ccdpClientFromConfig } from './ceremony.js'
 import { validateCeremonyConfig } from './config.js'
 
 class Connection implements PopupConnection<Message> {
+  readonly peerOrigin = 'https://ccdp.test'
   ready = Promise.resolve()
   closed = new Promise<never>(() => {})
   send = vi.fn()
