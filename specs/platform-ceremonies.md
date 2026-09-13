@@ -81,19 +81,25 @@ REQ-COMMON-15A.
   contains every fixed route it requires. Necessity: cross-component
   interoperability between the Canonical Runtime build and server deployment.
 - REQ-PLAT-03 (upholds SP-CLIENT-01):
-  The Canonical Runtime MUST derive the local identity fields exclusively from
-  the Platform Profile's canonical source in the exact Submission it
-  returns.
+  The Prover MUST derive the local identity fields exclusively from the
+  Platform Profile's canonical sources in the evidence it returns.
   Those fields are not an authority decision; only the Consumer's
-  acceptance of that exact Submission is. For X and GitHub, the Canonical Runtime MUST parse the exact revealed identity-response bytes that the
+  acceptance of the resulting Submission is. For X and GitHub, the Prover
+  MUST parse the exact revealed identity-response bytes that the
   Platform Verifier extracts, using the same canonical extraction and
-  normalization rules. The Canonical Runtime MUST reject a detached proof
-  output, sidecar value, or caller value that supplies or overrides `userId`,
-  handle, or `metadataObservedAt`.
+  normalization rules. The Prover MUST take `metadataObservedAt` from the
+  profile's evidence-time source in §2.2, not from a detached identity value.
+  The Prover MUST reject a caller-supplied or detached value used as an
+  alternative source for `userId`, handle, or `metadataObservedAt`.
 
 This is a data-source invariant, not a browser-flow requirement. It defines
 the identity fields returned to callers and used by any composition-owned UI;
-it does not create a ceremony-owned confirmation page.
+it does not create a ceremony-owned confirmation page. CCDP's separate
+`IdentityProof.identity` record transports Prover's derivation alongside the
+proof; it is not another evidence source. Application validates that delivery's
+structure and selected platform/client binding without repeating the evidence
+extraction. Common REQ-COMMON-19E still binds the derivation to the exact evidence
+used in the resulting Submission.
 
 ### 2.1 Canonical platform user identifiers
 
@@ -926,7 +932,6 @@ bearer can feed `/user` before the final token attestation arrives. That bearer
 and any early witness material are provisional; proof delivery waits for both
 final, structurally checked and correlated attestations. Neither session's
 failure can be turned into a partial successful ceremony.
-
 - REQ-PLAT-43B:
   The Prover MUST reject redirects from the token endpoint. Necessity: a
   followed redirect would notarize a session other than the pinned endpoint.
@@ -1019,7 +1024,6 @@ body; common REQ-COMMON-18A holds the request range to the signed layout.
   signature and revealing the token request's method and path.
   The Platform Verifier MUST compare the attested authority and the revealed
   method and path with this profile under common REQ-COMMON-21A.
-
 - REQ-PLAT-46 (upholds SP-EXCHANGE-01):
   The Prover MUST require the disclosed serialized `code` value to
   equal the canonical form serialization of the code it consumed at redirect
@@ -1365,9 +1369,11 @@ Platform Verifier, Notary Service, Consumer.
   acceptance of that exact Submission makes the claim authoritative.
 - TEST-PLAT-17A (exercises REQ-PLAT-03, REQ-PLAT-31A, REQ-PLAT-51A):
   Pair authenticated X or GitHub identity-response bytes for account B with a
-  detached `userId`, handle, or metadata value for account A. The Canonical Runtime
-  rejects the extra representation; without it, the Canonical Runtime and the
-  Platform Verifier both derive account B byte for byte. Replacing the proof,
+  detached `userId`, handle, or metadata value for account A offered as an
+  extraction input. Prover rejects that alternative source; without it, Prover
+  and the Platform Verifier both derive account B byte for byte. Prover may
+  deliver its derived identity separately through CCDP, and Application accepts
+  its valid structure without repeating evidence extraction. Replacing the proof,
   attestation, platform, or version after deriving the local identity fields
   discards them and requires rederivation from the replacement Submission.
 - TEST-PLAT-18 (exercises REQ-PLAT-25, REQ-PLAT-26, REQ-PLAT-27, REQ-PLAT-28, REQ-PLAT-28A):
