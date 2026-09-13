@@ -1,4 +1,4 @@
-import { uint } from '../primitives.js'
+import { origin, uint } from '../primitives.js'
 import { CCDP_VERSION, PLATFORM, UUID } from './index.js'
 
 export interface OAuthReturn {
@@ -45,20 +45,31 @@ export function readPrefetch(fragment: string) {
   return { ceremonyId, platformId, platformCeremonyVersion: Number(version) }
 }
 
-export function proverFragment(ceremonyId: string, input: OAuthReturn): URLSearchParams {
-  return new URLSearchParams({ ceremonyId, oauthQuery: input.query, oauthFragment: input.fragment })
+export function proverFragment(
+  ceremonyId: string,
+  applicationOrigin: string,
+  input: OAuthReturn,
+): URLSearchParams {
+  return new URLSearchParams({
+    ceremonyId,
+    applicationOrigin,
+    oauthQuery: input.query,
+    oauthFragment: input.fragment,
+  })
 }
 
 export function readProver(fragment: string) {
-  const p = fields(fragment, ['ceremonyId', 'oauthQuery', 'oauthFragment'])
+  const p = fields(fragment, ['ceremonyId', 'applicationOrigin', 'oauthQuery', 'oauthFragment'])
   const ceremonyId = p.get('ceremonyId')!,
+    applicationOrigin = p.get('applicationOrigin')!,
     query = p.get('oauthQuery')!,
     hash = p.get('oauthFragment')!
   if (
     !UUID.test(ceremonyId) ||
+    !origin(applicationOrigin) ||
     (query !== '' && !query.startsWith('?')) ||
     (hash !== '' && !hash.startsWith('#'))
   )
     throw new TypeError('Invalid Prover input')
-  return { ceremonyId, oauthReturn: { query, fragment: hash } }
+  return { ceremonyId, applicationOrigin, oauthReturn: { query, fragment: hash } }
 }
