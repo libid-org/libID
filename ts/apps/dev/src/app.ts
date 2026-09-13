@@ -58,6 +58,7 @@ const operationNames: Record<string, string> = {
   'prefetch-dispatch': 'Prefetch dispatch',
   authorization: 'Authorization',
   prover: 'Prover',
+  'prover-fallback': 'Prover fallback',
   'token-fetch': 'Token fetch',
   'token-attestation': 'Token attestation',
   'identity-fetch': 'Identity fetch',
@@ -130,13 +131,16 @@ function beginRun(platform: PlatformId, id: string) {
     close,
     onEvent(event: CeremonyEvent) {
       if (finished) return
-      if ('event' in event && 'phase' in event && operationNames[event.event]) {
+      if (
+        (event.status === 'active' || event.status === 'completed') &&
+        operationNames[event.event]
+      ) {
         if (event.event === 'prefetch-dispatch' && event.phase === 'started')
           started = event.timestamp
         if (event.event === 'authorization' && event.phase === 'finished')
           returnedAt = event.timestamp
         const op = operations.get(event.event)
-        if (event.phase === 'started' && !op) {
+        if ((event.phase === 'started' || event.event === 'prover-fallback') && !op) {
           const cell = document.createElement('li')
           operations.set(event.event, {
             name: operationNames[event.event],
@@ -145,6 +149,11 @@ function beginRun(platform: PlatformId, id: string) {
           })
           timings.append(cell)
         } else if (event.phase === 'finished' && op) op.finished = event.timestamp
+        // The single-shot fallback observation begins the interval ending at Prover readiness.
+        if (event.event === 'prover' && event.phase === 'started') {
+          const fallback = operations.get('prover-fallback')
+          if (fallback) fallback.finished = event.timestamp
+        }
       }
       if (event.status !== 'active')
         finish(
