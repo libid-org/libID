@@ -25,8 +25,8 @@ leaf parses the retained OAuth query/fragment from the private navigation
 handoff. It enforces that profile's exact return transport and field grammar,
 client checks, and state matching against the authenticated ceremony ID and
 CCDP version before any token exchange or proof work. A valid denial produces
-cancellation; a malformed or mismatched return produces technical failure.
-The Prover entrypoint maps those outcomes to `Cancel` or
+an OAuth-denied outcome; a malformed or mismatched return produces technical failure.
+The Prover entrypoint maps those outcomes to `Denied` or
 `Abort` without adding message logic to the platform leaf.
 
 For accepted OAuth, the leaf joins the selected asset fetches, constructs its
@@ -52,8 +52,10 @@ or verify `OAuthProof`, call a Ledger Verifier, or persist credential-bearing st
 Ceremony Client structurally validates the identity and selected proof variant,
 then returns `identity` and `oauthProof` separately; it does not repeat evidence
 parsing or identity extraction. Prover inputs, workers, witnesses,
-and outputs are cleared after delivery, `Cancel`, `Abort`, failure, or context
-destruction.
+and outputs are cleared after delivery, denial, failure, or context destruction.
+Application-local cancellation sends no CCDP message; the composition navigates
+or closes the popup to end its work. The coordinated message migration is tracked
+in [Qualification](qualification.md#pending-contract-updates).
 
 ## Proof delivery
 
