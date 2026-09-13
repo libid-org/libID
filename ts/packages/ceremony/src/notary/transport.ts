@@ -28,7 +28,10 @@ function validateByteArray(value: unknown, maximum: number): asserts value is nu
   }
 }
 
-/** Decode one complete, EOF-delimited frame emitted by notary PR #6. */
+/**
+ * Decode the reclaimed-channel record: u32 big-endian JSON byte length, then UTF-8 JSON.
+ * The channel reader requires EOF; trailing bytes, extra records and malformed byte arrays reject.
+ */
 export function decodeAttestationFrame(frame: Uint8Array): NotaryAttestation {
   if (frame.length < 4) invalid('truncated length')
   const length = new DataView(frame.buffer, frame.byteOffset, 4).getUint32(0)

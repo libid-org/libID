@@ -67,7 +67,11 @@ export interface CCDPClient {
   readonly enabledPlatforms: readonly PlatformId[]
   /** Compatible versions in ascending order; returns an immutable list, empty for disabled platforms. */
   enabledVersions<P extends PlatformId>(platformId: P): readonly SupportedCeremonyVersion<P>[]
-  /** Snapshot inputs before OAuth. Omitted version selects the highest compatible version. */
+  /**
+   * Snapshot ledger hash/address and input bytes before OAuth; invalid inputs throw synchronously.
+   * Use the supplied connection's UUID as ceremonyId and one connection per live run.
+   * Omitted version selects the highest compatible version, not a disclosure preference.
+   */
   new: <P extends PlatformId>(
     conn: PopupConnection<Message>,
     ceremonyId: string,

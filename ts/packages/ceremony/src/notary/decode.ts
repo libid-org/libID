@@ -20,6 +20,7 @@ export interface DecodedDirection {
 
 export interface DecodedAttestedData {
   authorityId: Uint8Array
+  /** Signed Unix seconds as canonical decimal text, preserving the complete u64 range. */
   createdAt: string
   sentTranscriptLength: number
   receivedTranscriptLength: number
@@ -126,7 +127,12 @@ function readDirection(cursor: Cursor, transcriptLength: number): DecodedDirecti
   return { revealed, commitments }
 }
 
-/** Decode the signed libid-rs bincode 2.0.1 fixed-int big-endian preimage. */
+/**
+ * Decode the signed libid-rs bincode 2.0.1 fixed-int big-endian preimage, without re-encoding.
+ * Collection/byte-string lengths are u64; transcript lengths and offsets are u32.
+ * Bounds are checked before allocation or conversion to number; the cross-language
+ * fixture and its digest are pinned in decode.test.ts.
+ */
 export function decodeAttestedData(bytes: Uint8Array): DecodedAttestedData {
   if (bytes.length > MAX_ATTESTED_DATA_BYTES) invalid('input exceeds size limit')
   const cursor = new Cursor(bytes)
