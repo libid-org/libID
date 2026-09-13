@@ -25,7 +25,6 @@ ts/packages/*/playwright-report/
 .ceremony-local/
 ts/packages/ceremony/.cache/
 ts/packages/ceremony/dist-artifacts/
-ts/qualification/ceremony/results/
 
 # Shared development application
 ts/apps/dev/.cache/

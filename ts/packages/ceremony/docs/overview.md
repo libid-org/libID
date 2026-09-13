@@ -137,16 +137,19 @@ pnpm --filter @libid/ceremony test
 pnpm --filter @libid/ceremony test:distribution
 pnpm --filter @libid/ceremony test:e2e:install
 CEREMONY_SWS_URL=http://127.0.0.1:8080 pnpm --filter @libid/ceremony test:distribution
-CEREMONY_SWS_URL=http://127.0.0.1:8080 pnpm --filter @libid/ceremony test:e2e
+pnpm --filter @libid/ceremony test:e2e
 ```
 
 Browser tests use `build:qualification-artifacts` to emit
 `.cache/qualification-assets`; this changes the output directory, not ledger
 code or decoding. Build the test SWS image from it and set
 `CEREMONY_ARTIFACT_DIR` to its absolute path for `test:distribution`.
-Browser checks use the HTTP/HTTPS origins configured in `playwright.config.ts`
-and actual popup code; `CEREMONY_SWS_URL` is required and transparently forwards CCDP requests to
-the real image, preserving native compression, validators and range responses. Tests
-include controlled real Google proofs verified in a separate Node process against
-the released key. They do not automate real consent. Live consent and devices use
-the opt-in walkthrough in [Qualification](qualification.md).
+The e2e command builds its artifacts and starts/stops its own SWS and matched
+notary containers through Playwright. Browser checks use the configured HTTP/HTTPS
+origins and actual popup code, preserving native static-server compression,
+validators and range responses. They include Google and bearer-link fixture
+proofs verified in Node against released keys, plus real concurrent notary
+sessions. The separate CI browser job runs the same command. See
+[Browser tests](browser-tests.md) for setup and
+[Qualification](qualification.md#repeatable-manual-consent-checks) for manual consent
+and physical-device checkpoints.

@@ -5,17 +5,11 @@ import {
   bearerVerificationKey,
 } from '../src/barretenberg/circuits/bearer_link/bearer_link.assets.js'
 import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer_link/inputs.js'
-import fixture from '../src/barretenberg/circuits/oidc_google/google-v1.fixture.json'
-import { buildGoogleWitness } from '../src/barretenberg/circuits/oidc_google/inputs.js'
 import { ProofEngine } from '../src/barretenberg/engine.js'
 import { Notarization } from '../src/notary/session.js'
-import {
-  circuit as google,
-  verificationKey as googleKey,
-} from '../src/platforms/google/1/google.assets.js'
 
 Object.assign(window, {
-  async proveFixture(platform: 'google' | 'bearer') {
+  async proveBearerFixture() {
     const bearer = `AAAA${'x'.repeat(96)}`
     const opening = (start: number) => {
       const blinder = Uint8Array.from({ length: 16 }, (_, i) => i + start)
@@ -26,13 +20,10 @@ Object.assign(window, {
         hash: sha256(Uint8Array.from([...new TextEncoder().encode(bearer), ...blinder])),
       }
     }
-    const inputs =
-      platform === 'google'
-        ? buildGoogleWitness(fixture.idToken, fixture.jwk).inputs
-        : buildBearerLinkWitness(bearer, opening(0), opening(16))
+    const inputs = buildBearerLinkWitness(bearer, opening(0), opening(16))
     const engine = new ProofEngine({
-      circuitUrl: assetUrl(platform === 'google' ? google : bearerCircuit),
-      verificationKeyUrl: assetUrl(platform === 'google' ? googleKey : bearerVerificationKey),
+      circuitUrl: assetUrl(bearerCircuit),
+      verificationKeyUrl: assetUrl(bearerVerificationKey),
       threads: 2,
     })
     try {
@@ -46,16 +37,11 @@ Object.assign(window, {
       engine.destroy()
     }
   },
-  async notarySmoke(count = 2, notaryAddress = 'http://localhost:4687') {
-    const abort = new AbortController(),
-      engine = new ProofEngine({
-        circuitUrl: assetUrl(bearerCircuit),
-        verificationKeyUrl: assetUrl(bearerVerificationKey),
-        threads: 2,
-      })
+  async notarizeRequests(count: number) {
+    const abort = new AbortController()
     const timer = setTimeout(() => abort.abort(new Error('Notary smoke timed out')), 120000)
     try {
-      const notary = new Notarization(notaryAddress, abort.signal)
+      const notary = new Notarization('http://localhost:4987', abort.signal)
       const results = await Promise.all(
         Array.from({ length: count }, async () => {
           const url = 'https://api.x.com/2/users/me',
@@ -81,12 +67,10 @@ Object.assign(window, {
           }
         }),
       )
-      clearTimeout(timer)
       return results
     } finally {
       clearTimeout(timer)
       abort.abort()
-      engine.destroy()
     }
   },
 })

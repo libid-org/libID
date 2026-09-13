@@ -7,12 +7,7 @@ import { packageDir } from '../build/release.ts'
 import { prepareCallback } from './callback.ts'
 import { makeCertificate } from './tls.mjs'
 
-const sws = process.env.CEREMONY_SWS_URL
-
-if (!sws)
-  throw new Error(
-    'CEREMONY_SWS_URL must point to the pinned SWS serving the qualification artifact',
-  )
+const sws = 'http://127.0.0.1:4980'
 
 const artifactDir = join(packageDir, '.cache/qualification-assets')
 

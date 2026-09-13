@@ -1,12 +1,12 @@
-import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import { readArchive } from '../../packages/ceremony/build/archive.ts'
-import { loadAssetCatalog } from '../../packages/ceremony/build/assets.ts'
+import { Barretenberg, UltraHonkVerifierBackend } from '@aztec/bb.js'
+import { readArchive } from '../build/archive.ts'
+import { loadAssetCatalog } from '../build/assets.ts'
 
-const require = createRequire(new URL('../../packages/ceremony/package.json', import.meta.url))
-export async function verifyBrowserProof(name, result) {
-  const { Barretenberg, UltraHonkVerifierBackend } = require('@aztec/bb.js')
+/** Verify fixture browser output in Node with the released key and reject a changed public input. */
+export async function verifyBrowserProof(
+  name: string,
+  result: { proof: number[]; publicInputs: string[] },
+): Promise<void> {
   const catalog = await loadAssetCatalog()
   const circuit = catalog.circuits.find((asset) => asset.member === `${name}.json`)
   if (!circuit) throw new Error('Unknown circuit')
@@ -17,7 +17,7 @@ export async function verifyBrowserProof(name, result) {
     const proofData = {
       proof: Uint8Array.from(result.proof),
       publicInputs: result.publicInputs,
-      verificationKey: new Uint8Array(files.get('vk')),
+      verificationKey: new Uint8Array(files.get('vk')!),
     }
     if (!(await verifier.verifyProof(proofData, { verifierTarget: 'evm' })))
       throw new Error('Released-key verification failed')
@@ -25,13 +25,7 @@ export async function verifyBrowserProof(name, result) {
     publicInputs[0] = `0x${(BigInt(publicInputs[0]) ^ 1n).toString(16).padStart(64, '0')}`
     if (await verifier.verifyProof({ ...proofData, publicInputs }, { verifierTarget: 'evm' }))
       throw new Error('Mutated public input was accepted')
-    return true
   } finally {
     await api.destroy()
   }
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await verifyBrowserProof(process.argv[2], JSON.parse(readFileSync(process.argv[3], 'utf8')))
-  console.log('Released-key verification and mutation rejection passed')
 }

@@ -33,7 +33,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit && pnpm typecheck:build",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "pnpm build:qualification-artifacts && node e2e/build-smoke.mjs && playwright test",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
     "test:e2e:install": "playwright install chromium firefox webkit",
     "build:ccdp-artifacts": "node build/distribution.ts",

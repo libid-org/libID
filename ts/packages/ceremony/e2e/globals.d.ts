@@ -19,14 +19,13 @@ declare global {
     ceremonyClosed: unknown
     afterReady: boolean
     after(): Promise<void>
-    proveFixture(platform: 'google' | 'bearer'): Promise<{
+    proveBearerFixture(): Promise<{
       proof: number[]
       publicInputs: string[]
       runtime: { effectiveThreads: number; sharedMemory: boolean }
     }>
-    notarySmoke(
-      count?: number,
-      notaryAddress?: string,
+    notarizeRequests(
+      count: number,
     ): Promise<{ sent: number; received: number; attestedData: number }[]>
   }
 }
