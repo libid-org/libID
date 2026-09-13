@@ -115,6 +115,8 @@ async function preload(message: Preload): Promise<void> {
       }
     }),
     span('proof-wasm-load', async () => {
+      // Bundled worker URLs cannot infer wasm-bindgen's original sibling WASM paths.
+      // Noir must share these initialized ACVM/ABI modules, not load a second copy.
       await Promise.all([
         initACVM({ module_or_path: message.acvmUrl }),
         initAbi({ module_or_path: message.abiUrl }),

@@ -75,7 +75,7 @@ you to close the window manually. Closing an active popup ends the run as a
 connection failure, without a CCDP message or separate cancellation state. With a native-anchor launch, Close
 becomes available after the popup authenticates and can be controlled.
 Results are available in `window.results`, a Map keyed by each row's
-`data-ceremony-id`. See the [manual qualification checkpoints](../../packages/ceremony/docs/qualification.md#repeatable-manual-consent-checks); the displayed outcomes alone do not establish cryptographic verification.
+`data-ceremony-id`. See the [manual qualification checkpoints](../../packages/ceremony/docs/testing.md#manual-consent-and-device-checks); the displayed outcomes alone do not establish cryptographic verification.
 
 ## Checks
 

@@ -1,480 +1,92 @@
-# `@libid/ceremony` notarization architecture
+# Browser notarization
 
-Origins follow the [canonical and loopback policy](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#origin-policy).
-The implementation's shared validators admit HTTP on exactly `localhost` and
-`127.0.0.1` at arbitrary ports; browser notary transport maps those origins to WS.
-This does not relax platform TLS or Prover isolation.
-
-This document defines the browser-side `notary` module: how it
-runs a TLSNotary session, applies platform-selected transcript disclosures, and
-returns a byte-exact attestation with its decoded view plus private commitment
-openings. The enclosing pipeline is defined in [Proving](proving.md), browser placement in
-[CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md), asset serving in [Distribution](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md#proving-assets),
-and GitHub's confidential exchange in
-[OAuth Bridge](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#github-token-endpoint). Exact proof semantics
-remain normative in the
-[common ceremony rules](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ceremony-common.md) and
-[identity-platform ceremonies](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md).
-
-## Boundary and rationale
-
-The module is one internal TypeScript adapter over the pinned upstream
-TLSNotary JavaScript/WASM client. Browser notarization uses the launch Proxy
-profile: the Notary Service opens the pinned platform connection. The adapter
-owns the browser transport, disclosure call, reclaimed-channel attestation
-delivery, and output correlation. Each closed platform-version prover leaf owns
-its exact HTTP request, response parser, and revealed transcript ranges.
-
-Keeping platform logic in TypeScript avoids rebuilding a custom WASM facade
-for every profile change without creating a security boundary: the prover
-origin loads both TypeScript and WASM. The adapter still isolates upstream API
-churn from platform code. It ships inside the selected versioned prover root; the
-separately fetched notarization client is the pinned `tlsn_wasm.js` module and
-its deterministic sibling `tlsn_wasm_bg.wasm`.
-
-### Notary address
-
-The adapter receives the canonical `notaryAddress` read from the ledger and frozen
-by [CCDPClient](client.md#notary-selection), through `ProveIdentity`.
-It owns no profile defaults, ledger classification, or environment override.
-X uses that address for both browser sessions. GitHub passes it unchanged in
-its Bridge token request and uses it locally for identity notarization. Neither
-Prover nor Bridge remaps the address, and failure never selects a different
-notary. Platforms that do not notarize ignore the supplied address and never
-invoke this adapter.
-
-The address is only network routing, not a caller-selected platform request,
-disclosure layout, or Notary Service behavior. Ledger Verifier governance
-independently decides which notary signatures are authoritative. No browser
-signature check or notary-key input is introduced by this selection. Asset
-declarations, prefetch, and proof formats do not depend on the address.
-
-## Internal contract
-
-```ts
-interface ByteRange {
-  start: number // inclusive
-  end: number   // exclusive
-}
-
-interface Reveals {
-  sent: readonly ByteRange[]
-  received: readonly ByteRange[]
-}
-
-interface ExactHttpRequest {
-  url: string
-  method: 'GET' | 'POST'
-  headers: Readonly<Record<string, Uint8Array>>
-  body: Uint8Array
-}
-
-interface Transcript {
-  sent: Uint8Array
-  received: Uint8Array
-}
-
-const MAX_SENT_DATA = 4 * 1024
-const MAX_RECEIVED_DATA = 32 * 1024
-
-interface CommitmentOpening {
-  direction: 'sent' | 'received'
-  start: number
-  end: number
-  blinder: Uint8Array
-}
-
-interface NotaryAttestation {
-  attestedData: Uint8Array
-  signature: Uint8Array // exactly 65 bytes
-  decoded: DecodedAttestedData
-}
-
-interface RevealResult {
-  openings: readonly CommitmentOpening[]
-  attestation: Promise<NotaryAttestation>
-}
-
-interface NotarizationSession {
-  send(request: ExactHttpRequest): Promise<Transcript>
-  reveal(reveals: Reveals): Promise<RevealResult>
-}
-
-declare class Notarization {
-  readonly signal: AbortSignal
-  constructor(notaryAddress: string, signal: AbortSignal)
-  prepare(url: string): Promise<NotarizationSession>
-}
-```
-
-The platform leaf supplies its code-owned canonical HTTPS request URL and the
-ceremony's resolved notary address before preparation. The latter is a canonical
-HTTPS origin, distinct from the platform target; all sessions reuse it unchanged.
-The request URL contains no credentials or fragment. The adapter derives the
-TLS server name and port from it before constructing the TLSNotary prover and
-performing setup; it neither accepts a separate hostname nor follows redirects.
-`send` requires the exact prepared URL, while headers and body may wait for the
-bearer. Thus independent setup needs no credential, but has a fixed TLS target.
-Each session accepts one `send`, followed by one `reveal`.
-`send` exposes the complete local transcript before reveal/finalization;
-`reveal` exposes the private commitment openings as soon as available, while its
-`attestation` promise covers final channel retrieval, decoding, and correlation.
-Platform code selects reveals from that session's transcript. This staged API
-keeps independent setup, token parsing, and witness construction off the final
-attestation critical path; it is not a generic session/job framework.
-
-Early transcript and opening values are provisional. The adapter retains what
-it needs to correlate them against the final signed bytes before resolving
-`attestation`. The pipeline observes failures immediately, tears down sibling
-work on failure/cancellation, and delivers nothing until all final attestation
-promises succeed. The supplied signal covers preparation and every later stage,
-including an idle prepared session. An already-aborted signal opens nothing;
-later abort rejects pending operations, closes the socket, releases session-owned
-runtime and private buffers, and prevents later sends. Successful sessions release
-their own prover and message channel; the shared WASM worker remains alive until
-the ceremony aborts its controller in `finally`. Any session failure aborts all
-sessions in that runtime. Cleanup removes the session abort listener. The platform
-pipeline aborts its shared controller on cancellation, sibling failure, or
-abandonment in `finally`; no separate session disposal API is needed.
-
-Session operations and openings are internal to the prover; `NotaryAttestation`
-and its decoded view are also returned in the public platform proof.
-`CommitmentOpening.blinder` is exactly 16 bytes. Header order is not semantic:
-selection operates on the actual
-serialized transcript, while the Platform Verifier checks request framing and
-profile-significant fields without requiring relative header position. Request
-body bytes remain exact because a platform's form grammar may depend on them.
-The adapter applies the code-owned `MAX_SENT_DATA = 4 KiB` and
-`MAX_RECEIVED_DATA = 32 KiB` ceilings to all three calls; no caller,
-server response, or CCDP input can change them. Exceeding either ceiling fails
-the notarization instead of truncating the transcript.
-
-These are adapter-enforced transcript acceptance bounds, not TLSNotary Proxy
-setup parameters. The pinned Proxy implementation does not enforce the SDK's
-`max_sent_data` or `max_recv_data` options. The adapter checks actual sent and
-received transcript lengths before resolving `send`, exposing them to platform
-parsing, or permitting reveal. A post-receive length check bounds acceptance,
-not memory or network consumption during reception; any receive-time resource
-cap needs separate enforcement.
-
-The transcript exists only long enough for the platform module to parse its
-private response and build its witness. It never crosses CCDP or the public
-ceremony API. The adapter correlates the raw TLSNotary commitments with the
-signed attestation before final completion, discards duplicate commitment hashes,
-and exposes only the range and private blinder for each opening.
-
-## Canonical attested-data decoder
-
-`notary` owns one read-only decoder for the signed attested-data
-bytes. It does not expose an encoder and never reserializes a received record.
-The decoder returns this view, attached as `NotaryAttestation.decoded` and
-exposed through the public platform proof. Its types are client-safe; the
-decoder implementation stays in the Prover:
-
-```ts
-const MAX_ATTESTED_DATA_BYTES = 2 * 1024 * 1024
-
-interface DecodedRevealedRange {
-  start: number
-  bytes: Uint8Array
-}
-
-interface DecodedRangeCommitment {
-  start: number
-  end: number
-  commitment: Uint8Array // exactly 32 bytes
-}
-
-interface DecodedDirection {
-  revealed: readonly DecodedRevealedRange[]
-  commitments: readonly DecodedRangeCommitment[]
-}
-
-interface DecodedAttestedData {
-  authorityId: Uint8Array // exactly 32 bytes
-  createdAt: string // canonical unsigned decimal u64, signed Unix seconds
-  sentTranscriptLength: number
-  receivedTranscriptLength: number
-  sent: DecodedDirection
-  received: DecodedDirection
-}
-
-declare function decodeAttestedData(bytes: Uint8Array): DecodedAttestedData
-```
-
-The wire is bincode 2.0.1 with fixed-width big-endian integers and fields in
-the order shown below. Collection and byte-string lengths are unsigned 64-bit
-integers; transcript offsets and lengths are unsigned 32-bit integers.
-
-```text
-AttestedData =
-  bytes32 authorityId
-  u64     createdAt
-  u32     sentTranscriptLength
-  u32     receivedTranscriptLength
-  Direction sent
-  Direction received
-
-Direction =
-  u64 revealedCount
-  RevealedRange[revealedCount]
-  u64 commitmentCount
-  RangeCommitment[commitmentCount]
-
-RevealedRange = u32 start || u64 byteLength || bytes[byteLength]
-RangeCommitment = u32 start || u32 end || bytes32 commitment
-```
-
-Before allocating or converting to a JavaScript `number`, the decoder rejects
-an input over `MAX_ATTESTED_DATA_BYTES` and bounds every count and length against
-the remaining input and signed transcript length. It rejects truncation,
-trailing bytes, overflow, empty or unordered ranges, overlaps, out-of-bounds
-ranges, malformed commitments, and values that cannot be represented exactly.
-`createdAt` is decoded losslessly and exposed as canonical unsigned decimal
-text (`0` or a nonzero digit followed by digits, no leading zeroes), bounded by
-`18446744073709551615`. This preserves the full u64 range without a `bigint`
-transport requirement. Every accepted offset and transcript length fits exactly
-in a JavaScript `number`.
-
-`decoded` contains only data present in the original signed record, not the
-private transcript, bearer, or commitment openings. It is convenient for
-inspection and UI, not a second signed representation. The Client checks its
-shape and bounds but does not re-decode `attestedData` or authenticate the view.
-Ledger serialization omits `decoded` and preserves the original signed bytes;
-the Ledger Verifier derives all authoritative values from those bytes. Decoded
-reveals remain evidence-bearing data and must not enter progress or metrics.
-
-The decoder is pinned to the complete cross-language fixture from the rebased
-[`libid-rs` encoder](https://github.com/libid-org/libid-rs/blob/239a4bb426ac72591fe30006f22660e164a98d96/crates/libid-ceremony/src/attestation.rs).
-The implementation test copies those exact bytes and checks this `keccak256`:
-
-```text
-48162f05bdb27b19b3544bf2aae608745861bf357bb31e07f536b6fb50e95936
-```
-
-The decoded values and every malformed variant are asserted by the
-[conformance plan](test-plan.md).
+The [notary module](../src/notary/) adapts the pinned TLSNotary WASM Proxy API.
+Platform code owns exact requests, response parsing and disclosure selection;
+the adapter owns sessions, transcript bounds, final-frame delivery and correlation.
+The [platform specification](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md)
+owns authoritative request/evidence rules.
 
 ## Session lifecycle
 
-### Network transport
+[Notarization](../src/notary/session.ts) owns one WASM runtime/thread pool per
+ceremony. Each `prepare(url)` creates a separate TLS session and WebSocket.
+Preparation needs a fixed HTTPS target but no bearer, so independent sessions
+can prepare concurrently.
 
-The adapter validates the already resolved [notary address](notarization.md#notary-address),
-changes only its scheme from `https` to `wss`, and opens the exact
-`/notarize-proxy` path with no query:
+| Operation | Available output |
+|---|---|
+| `prepare(url)` | One prepared session bound to that exact URL. |
+| `session.send(request)` | Original sent/received transcript after one request. |
+| `session.reveal(ranges)` | Private commitment openings and a pending `attestation` promise. |
+| `await result.attestation` | Complete decoded and correlated final attestation. |
 
-```text
-https://notary.lib.id
-    -> wss://notary.lib.id/notarize-proxy
-https://testnet.notary.lib.id
-    -> wss://testnet.notary.lib.id/notarize-proxy
-```
+Transcript parsing and witness construction can use early material while final
+attestations remain pending. That material is provisional: delivery must join
+all final attestations and the generated proof. A late failure discards the
+speculative result. See [X/GitHub scheduling](pipelines.md).
 
-The same WebSocket carries the complete TLSNotary Proxy byte stream and the
-final attestation. This flow performs no `POST /session`, carries no
-`sessionId`, and polls no HTTP endpoint; the live channel is the correlation.
-Redirects, credentials, query parameters, fragments, and any path other than
-`/notarize-proxy` are rejected.
+The supplied abort signal releases the shared worker, including idle prepared
+sessions. Any session failure aborts sibling work. Successful sessions release
+their own prover/channel; the platform's `finally` abort releases the shared
+runtime. Types and exact method constraints stay beside the implementation.
 
-After both TLSNotary drivers finish, the Notary Service writes one outer frame:
-a four-byte unsigned big-endian length followed by that many UTF-8 JSON bytes.
-The JSON object contains exactly `attested_data` and `notary_signature`, each an
-array of integer bytes in `[0, 255]`. The frame is at most 10 MiB;
-`attested_data` remains subject to `MAX_ATTESTED_DATA_BYTES`, and
-`notary_signature` is exactly 65 bytes. The adapter maps those fields to the
-camel-case fields without changing either byte string, requires end-of-stream,
-then attaches the validated decoder result as `decoded`. The Notary Service's
-wire record does not gain that field. A malformed length or UTF-8/JSON value,
-unknown or duplicate field, trailing byte, second frame, or missing close fails.
+## Transport and bounds
 
-### Integration qualification
+The adapter receives the client's frozen notary origin. HTTPS maps to WSS
+`/notarize-proxy`; allowed loopback HTTP maps to WS. Platform requests remain
+HTTPS. There is no session-creation HTTP request, polling endpoint, alternate
+notary selection or browser notary-key lookup.
 
-The selected RC3 browser bundle and matched notary deliver the final attestation
-over the reclaimed WebSocket, without HTTP session creation or polling.
-[Qualification](qualification.md#evidence-obtained) records real single/concurrent
-browser probes and their limits. The selected TLSN revision includes channel
-reclamation; the integration history is available in
-[TLSNotary #1178](https://github.com/tlsnotary/tlsn/pull/1178).
-Successful unauthenticated probes do not qualify real token and identity sessions.
+[session.worker.ts](../src/notary/session.worker.ts) overlaps socket connection
+with shared WASM initialization, then performs target-specific TLS setup.
+After TLSNotary finishes, it reclaims the same channel for one length-prefixed
+JSON attestation frame and requires EOF. [transport.ts](../src/notary/transport.ts)
+owns frame bounds and exact decoding. The separate finalization deadline prevents
+an unfinished frame/close from retaining a worker indefinitely; it does not
+establish X's authorization-code deadline.
 
-```mermaid
-sequenceDiagram
-    participant M as Platform module
-    participant T as Notarization Client
-    participant W as Browser TLSNotary Prover
-    participant N as Notary Service
-    participant P as Platform HTTPS server
+The adapter admits at most 4 KiB sent and 32 KiB received transcript bytes before
+exposing them to parsing/reveal. These are post-receive acceptance limits: the
+pinned Proxy runtime does not enforce the supplied setup limits as reception
+memory/network caps. Keep that limitation explicit when qualifying resource use.
 
-    M->>T: notary.prepare(url)
-    T->>N: Open wss://<notary-origin>/notarize-proxy
-    T->>W: setup(IoChannel)
-    W->>N: TLSNotary setup messages (Proxy profile)
-    N-->>W: TLSNotary setup messages (Proxy profile)
-    T-->>M: Prepared session
-    M->>T: send(request)
-    T->>W: sendRequest(request)
-    W->>N: TLSNotary request messages (Proxy profile)
-    N->>P: Forward encrypted TLS records
-    P-->>N: Return encrypted TLS records
-    N-->>W: TLSNotary response messages (Proxy profile)
-    W-->>T: Complete local transcript
-    T-->>M: Transcript available for response parsing
-    M->>T: reveal(selected ranges)
-    T->>W: reveal(ranges and complement commitments)
-    W->>N: Reveal proof and commitments
-    N-->>W: Accept authenticated partial transcript
-    W-->>T: Commitment openings
-    T-->>M: Openings and pending attestation
-    T->>W: finish()
-    N->>N: finish()
-    N-->>T: Signed attested-data bytes and signature
-    T->>T: Decode and correlate signed output and openings
-    T-->>M: Resolve attestation with decoded view
-```
+## Evidence handling
 
-`finish()` releases each TLSNotary driver from its side of the original
-JavaScript `IoChannel`. Once its verifier finishes, the Notary Service writes
-the one length-prefixed signed-data/signature record on that same channel and
-closes it; it reads no application-level request. The verified session already supplies
-all signed data, so no ceremony ID, request ID, platform, or token/identity tag
-crosses this boundary.
+[notarize.ts](../src/notary/notarize.ts) validates selected ranges, merges adjacent
+reveals as TLSNotary does, and commits the complement. It correlates private
+openings, transcript lengths, reveals and commitments with final attested bytes.
+Missing coverage, wrong framing or correlation failure rejects completion.
 
-The adapter is also indifferent to application sequencing. Platform code
-retains which session produced each result. Within one X ceremony, both
-sessions connect and perform setup concurrently; only sending the identity
-request waits for the bearer parsed from the token transcript. Reveal and final
-attestation work may overlap that request and proof generation. Independent
-sessions and ceremonies use separate channels. The final Platform Verifier checks each attestation's
-exact authority, method, path, framing, and proof position rather than trusting
-browser execution order.
+[decode.ts](../src/notary/decode.ts) reads the canonical signed serialization once.
+It preserves full-width timestamps without lossy number conversion and returns
+`NotaryAttestation { attestedData, signature, decoded }`. It never re-encodes signed
+bytes. Its cross-language fixture and digest live beside the decoder tests.
+The decoded view contains only signed record data, not private transcript bytes,
+bearers, blinders or witnesses.
 
-## Disclosure and commitments
+Client checks the delivered view's structure, not its agreement with signed
+bytes. Neither endpoint verifies notary signatures locally. The ledger verifier
+must authenticate the original bytes and derive authoritative identity and
+proof inputs from them; convenience views are not alternative evidence.
 
-The Notary Service does not choose disclosures. After the platform responds,
-the platform module selects ascending, non-overlapping revealed ranges from its
-local transcript. One adapter helper validates those ranges, merges adjacent
-intervals to match TLSNotary's range-set serialization, and commits their
-complement over the complete signed transcript length. Every byte is therefore
-revealed or committed by construction, with no separately maintained committed
-range list that could leave a gap or overlap.
+## HTTP and platform policy
 
-Every committed range uses SHA-256 and a fresh 16-byte blinder. For a bearer:
+[http.ts](../src/notary/http.ts) and [transcript.ts](../src/notary/transcript.ts)
+handle shared byte framing and request checks. Platform selectors remain under
+`platforms/<id>/1/transcript.ts`. JSON whitespace and header order do not establish
+identity: selectors work from actual wire offsets, and numeric GitHub IDs are
+preserved losslessly. Additional headers are admitted subject to the profile's
+required fields and forbidden-header rules; duplicate required headers and
+alternate Authorization framing reject.
 
-```text
-SHA256(bearer || blinder)
-```
+The browser call sites are X's token and identity requests and GitHub's identity
+request. GitHub's confidential token exchange belongs to Bridge; its
+[browser admission code](../src/platforms/github/1/token.ts) checks request bindings,
+canonical encoding and opening correlation before using the returned bearer.
+GitHub's request uses the browser User-Agent. Exact header values and forbidden
+names are owned by code and the specification, not copied here.
 
-The Notary Service learns the range, its blinded commitment, and any revealed
-framing, but neither the bearer nor blinder. It signs the verifier-produced
-attested data containing the transcript lengths, reveals, commitments,
-authority, and evidence time. It receives no caller-supplied identity, handle,
-OAuth client, chain, transaction, or extracted bearer.
-
-For X and GitHub, `bearer-link` later proves that one private bearer opens the
-token-exchange and identity-request commitments under their independent
-blinders. The Platform Verifier reconstructs both public commitments from the
-verified attestations; they appear in `decoded` for inspection, not as separate
-proof-input fields.
-
-## Platform call sites
-
-The adapter has exactly three browser call sites at launch:
-
-| Platform operation | Request | Selected disclosure |
-|---|---|---|
-| X token exchange | `POST /2/oauth2/token` | reveal the profile request and access-token framing; commit the returned bearer |
-| X identity request | `GET /2/users/me` | reveal request framing except the bearer and the response's `id` and `username` framing |
-| GitHub identity request | `GET /user` | reveal request framing except the bearer and the response's `id` and `login` framing |
-
-X and GitHub reuse the request-side bearer selector. Their response selectors
-differ only in platform JSON grammar. X token exchange differs because its
-bearer occurs in the response. Exact fields, bounds, and layouts belong to the
-selected normative platform version; no caller-defined profile or plugin
-exists.
-
-GitHub's confidential token exchange is server-side and does not use this
-browser module. Its HTTP contract is defined in
-[OAuth Bridge](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md#github-token-endpoint), while the GitHub platform module
-owns browser-side response validation and subsequent `/user` orchestration.
-
-## Attestation handoff
-
-The adapter preserves `attestedData` and its signature byte-for-byte. It reuses
-the decoded view needed for bounds and commitment correlation as `decoded`,
-without another parse, normalization, or re-encoding. Platform proofs place
-both attestations in their named fields alongside `bearerLinkProof` and the
-platform-extracted `identity`. Private transcripts, access tokens, blinders,
-and raw TLSNotary objects never enter the result. Exposing the complete signed
-view requires no new reveals and creates no additional notary or ledger field.
-
-Malformed signed data, range ordering, coverage, commitment correlation,
-same-channel framing, cancellation, or a partial result rejects final completion
-and invalidates any speculative witness or proof built from the early material.
-Neither this adapter, the platform Prover, nor the Ceremony Client verifies
-notary signatures locally. Exact signature length/encoding, canonical decoding,
-request bindings, and commitment/opening correlation remain required at their
-existing owners; they do not establish signature authenticity. A structurally
-valid forgery can survive browser checks, so delivery and convenience views
-remain unverified. The Ledger Verifier's trusted-notary signature and
-platform-profile checks remain mandatory over the original signed bytes.
-
-[Test plan](test-plan.md) owns the executable notarization requirements.
-
-## Implementation guide
-
-Shared TLSNotary adapter for X and GitHub: exact HTTP requests, bounded transcripts,
-selective disclosures and correlation with canonical final attestations.
-
-- [Platform pipelines](pipelines.md): token/identity overlap and delivery dependencies.
-- [Remaining qualification](qualification.md#remaining-qualification): matched service, timing and profile gaps.
-
-[session.ts](../src/notary/session.ts) documents the ceremony-owned runtime,
-independent sessions, provisional openings and cancellation contract.
-[session.worker.ts](../src/notary/session.worker.ts) owns socket/runtime overlap
-and finalization. Real runtime concurrency still requires the qualification above.
-[transport.ts](../src/notary/transport.ts) frames final output.
-[decode.ts](../src/notary/decode.ts) owns canonical decoding, `NotaryAttestation` and
-its delivered-projection shape validator, consumed by platform proof validators.
-[notarize.ts](../src/notary/notarize.ts) correlates transcripts and openings.
-[http.ts](../src/notary/http.ts) decodes HTTP responses, preserving numeric
-identity IDs, and [transcript.ts](../src/notary/transcript.ts) provides byte-range
-and request-binding helpers. Provider-specific reveal selection stays in each platform.
-Original attestations and signatures are preserved; local signature verification is
-outside the adapter's responsibility.
-
-[Client](../src/ccdp/client/ceremony.ts) snapshots the ledger's notary address before OAuth.
-X uses it for both sessions; GitHub sends it unchanged to the Bridge and uses it
-for the browser identity session. Prover performs no ledger lookup.
-
-## Token layout alignment
-
-The token layouts follow [spec PR #31 at 860075a](https://github.com/libid-org/libid/blob/860075a4bf288dc7fee20866ed3536dc260f4574/specs/platform-ceremonies.md),
-REQ-PLAT-56A/B/C and §6.4. X reveals its entire request as one range. GitHub
-admits one revealed prefix followed by one committed suffix covering the trailing
-`&client_secret=…` field, matching the
-[released Rust layout builder](https://github.com/libid-org/libid-rs/blob/82bc4e286d762531ba3ac86996db4afc6ea38f56/crates/libid-transcript/src/ceremony.rs).
-Both paths require exactly one Host, Content-Type and Content-Length. Header names
-are compared without case distinctions and with underscores treated as hyphens;
-optional HTTP whitespace around values is accepted. Content-Length must use
-canonical decimal spelling and match the complete body, including GitHub's signed
-committed suffix. Bare CR/LF, folded or malformed headers and duplicate required
-headers are rejected. Authority comes from the attested TLS server identity.
-
-Additional token headers are permitted, except Authorization and the shared
-REQ-COMMON-39B forbidden names: Cookie, Content-Encoding, Transfer-Encoding and
-HTTP method-override headers. The constructors still send Accept and Connection;
-the parser does not require those headers or fix their values.
-
-**Identity header alignment:** X sends its four required headers. GitHub sends six,
-including `X-GitHub-Api-Version: 2022-11-28` and `navigator.userAgent` without a
-libID identifier. The shared parser admits additional headers except those
-forbidden by REQ-COMMON-39B, including case and underscore variants. It retains
-required-header values, rejects a second Authorization header under any scheme,
-and discloses the complete request except exactly one bearer range. Offsets count
-wire bytes, including when additional headers contain non-ASCII values.
-
-Regression coverage is in [transcript tests](../src/notary/transcript.test.ts),
-[GitHub admission](../src/platforms/github/1/token.test.ts), and
-[attestation correlation](../src/notary/notarize.test.ts). This covers
-adjacent GitHub `id`/`login` disclosures as well as token requests. Fixtures model
-native range coalescing; they do not establish a live notarized ceremony.
+The browser bundle release is pinned in [notary.assets.ts](../src/notary/notary.assets.ts).
+Use a matched service/TLSN/MPZ set. Mocked concurrency cannot detect WASM runtime
+deadlocks; [runtime browser tests](../e2e/runtime.spec.ts) use real sessions, while
+[qualification](qualification.md) retains the live authenticated/device gaps.

@@ -1,101 +1,71 @@
-# Ceremony measurements
+# Events and measurements
 
-The [operation event feed](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#event) is the input for UI, debugging,
-tracing and metrics. There is no second metrics-record format. Core meanings and
-protocol consequences belong to CCDP; the [client guide](client.md#progress-cancellation-and-recovery)
-defines public subscriptions and the stage projection.
+The [client subscriptions](client.md#events-and-presentation) and popup UI consume
+one operation feed. Core event meanings and readiness consequences belong to
+[CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#event).
+There is no separate metrics-record format or telemetry SDK in the documents.
+Application owns export, sampling, consent and retention. Full resource accounting
+and export are deferred; this guide preserves their required measurement rules.
 
-## Collection boundary
+## Producers and presentation
 
-Application owns export, sampling, consent and retention. It may adapt `onEvent`
-to its existing recorder or tracing library; no telemetry SDK, collector URL or
-export configuration belongs in popup documents. Documents can observe their own
-local feed without waiting for Application scheduling. Observer exceptions and
-filtering never suppress protocol processing or required readiness sends.
+[events.ts](../src/events.ts) owns occurrences, subscriptions, terminal status and
+monotonic stage projection. [Barretenberg events](../src/barretenberg/events.ts)
+and each platform's `events.ts` own additional operations and separate progress
+weights. Pipeline producers use `operation()` or explicit start/finish emission
+around concurrent branches. Failed operations need not fabricate a finish.
 
-Protocol observations do not grant additional authority. Only accepted
-`IdentityProof` delivery gives the client a completed ceremony. A document that
-has sent its proof cannot claim that Application accepted it.
+Popup UI uses that local feed without an Application roundtrip. Its native bar
+counts selected completed operations once, including cache hits; nested parent
+operations add no duplicate work. Weights are work estimates, not elapsed-time
+percentages. [progress.ts](../src/ccdp/documents/progress.ts) owns accounting and
+[ui.ts](../src/ccdp/documents/ui.ts) owns presentation and the bounded paint
+opportunity before delivery. A full bar/local delivery cannot claim Client
+acceptance. The application may close immediately on the accepted result.
 
-## Spans and observations
+## Timing
 
-An operation's `started` and `finished` occurrences form a span using their
-original epoch-millisecond timestamps. Core operations occur once per ceremony.
-Repeated extension operations that can overlap use `instrumentation.operationId` to pair their
-occurrences. It is an instrumentation identifier, never a protocol credential.
-Phase-less extension observations are valid; `prover-fallback` is the only
-phase-less core event. Interrupted spans need no fabricated finish.
+Events carry producer occurrence timestamps in epoch milliseconds, including
+through workers and retrospective forwarding. Repeated overlapping extension
+operations use `instrumentation.operationId` for pairing; core operations occur
+once. A phase-less observation is not a span. `prover-fallback` is the only
+phase-less core event.
 
-`instrumentation.attributes` carries bounded scalar measurements and coarse facts. Producers
-choose code-owned names and values; transport limits do not make arbitrary data
-safe to export. Exclude credentials, identity data, callback parameters, proofs,
+- Total duration: `prefetch-dispatch.started` to the terminal client update.
+- Post-authorization waiting: `authorization.finished` to the terminal update.
+  Callback emits that boundary after capture/clearing and authentication; it
+  does not measure the instant the user clicked consent.
+- Fallback interval: replacement navigation's `performance.timeOrigin`, reported
+  as `prover-fallback`, through `prover.started`. It excludes pre-navigation source
+  work and is not a counterfactual extra-cost measurement.
+- Interrupted/missing intervals are unavailable, not zero. Never sum overlapping
+  preparation, witness and attestation spans as elapsed time. Stages describe
+  presentation, not an exclusive execution waterfall.
+
+## Resource accounting
+
+Distinguish a resource request, an actual network download and a single-flight
+joiner. Several requests can share one retrieval; a cached response is not a
+new download. Attribute earlier Service Worker downloads where they occurred,
+without counting them again when Prover joins. Missing earlier observations
+remain unavailable.
+
+A native fetch call may reuse HTTP cache, so counting calls does not establish
+network traffic or transferred bytes. Use observed transfer data where the
+browser and resource policy expose it. The current feed does not claim complete
+coverage; [traceability](traceability.md) retains those gaps.
+
+## Export boundary
+
+Instrumentation contains bounded scalar attributes, not arbitrary diagnostic
+payloads. Exclude credentials, identity data, callback parameters, proofs,
 witnesses, attestations, transcripts and raw exceptions. Do not use URLs, origins,
-user IDs or error text as attribute values or metric labels.
+user IDs or error text as metric labels. Export selected fields rather than
+copying an entire event.
 
-The current proof engine emits its fine-grained operations through this same
-feed; see [the proving events](proving.md#operation-events). The development app
-shows operation durations, overall outcome and post-authorization waiting time.
-Full resource/cache accounting and a telemetry exporter remain deferred; a missing
-measurement must not be filled with a plausible number.
-
-## Timing and accounting
-
-- Total ceremony duration runs from `prefetch-dispatch.started` to the client’s
-  terminal update, when observed. A caller cancelling by popup closure records
-  its own decision time before unsubscribing and closing. There is no
-  separate root ceremony event, and a missing endpoint is not a completed span.
-- Post-authorization waiting runs from `authorization.finished` to that terminal
-  update. Callback records this after capture/clearing and authentication; it is
-  not a direct measurement of the instant the user clicked consent. If that
-  observation is unavailable, so is the interval.
-- `prover.started` minus `prover-fallback` measures the replacement document’s
-  navigation through Prover readiness. It excludes source-document work and does
-  not estimate the extra cost relative to successful direct isolation.
-- Backend/input preparation, witness execution and attestation work may overlap.
-  Do not sum those spans as elapsed time or infer an exclusive stage waterfall.
-- Distinguish resource requests, actual network downloads and single-flight
-  joiners. Three concurrent requests can produce one retrieval and two joiners;
-  serving a cached response is no new download.
-- Attribute downloads to where they occurred, including earlier Service Worker
-  fetching. A later Prover join must not count the bytes or duration again.
-  Missing earlier-worker observations are unavailable, not zero.
-- A native `fetch` invocation may hit the browser HTTP cache. Invocation counts
-  alone do not establish network-download counts or transferred bytes. Resource
-  Timing may supply those details where available and permitted by the response.
-
-Retrospective delivery preserves timestamps. Consumers can order a display by
-occurrence, but must not reorder protocol processing or invent a globally
-sequential execution order from concurrent work.
-
-## Failure details and telemetry
-
-`CeremonyFailed` and local failures yield one terminal lifecycle update with operation
-context and display text. They are separate from wire `Event`; a failed operation
-need not have emitted its start. Denial yields the denied status without
-fabricating `prover.finished`. Connection loss produces a failed update. The
-application records its own cancellation intent and may unsubscribe before closing;
-the package exports no cancellation status or cancellation-specific exception.
-
-The display text follows [CeremonyFailed’s boundary](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md#ceremonyfailed): a bounded opaque
-caught message, not an error-code catalog or serialized exception. It can help
-debug failures such as `Invalid GitHub id`. Bounding and rendering it as text do
-not guarantee that dependency messages contain no sensitive data. Telemetry
-adapters must omit `message` and any local exception/cause; copying all fields
-from `onEvent` into an exporter is not supported.
-
-If CeremonyFailed cannot be delivered, reporting emits a fixed local diagnostic without
-the caught message. A failing logger or observer never creates another protocol
-failure. DevTools can inspect a retained local cause where needed; there is no
-package-owned developer modal or automatic raw-error export.
-
-## Qualification
-
-Focused checks exercise timestamp preservation, concurrent operation pairing,
-interrupted spans, monotonic stages, observer independence, one terminal update
-for success/denial/failure, and application-owned cancellation timings.
-Browser checks use the actual popup transport. Mocked events establish
-presentation and coordination behavior, not
-proof generation, live TLSNotary concurrency or physical-device behavior.
-
-[The requirement index](test-plan.md) and [traceability](traceability.md) retain
-those distinctions and the deferred resource-accounting coverage.
+A failed lifecycle update includes bounded opaque display text and operation
+context. Bounding text is not credential redaction; omit `message` and retained
+local causes from telemetry. Undeliverable failure reporting uses a fixed local
+diagnostic. Logger, UI and observer errors cannot create another protocol failure
+or suppress readiness. Only Client acceptance of `IdentityProof` creates the
+completed lifecycle update.

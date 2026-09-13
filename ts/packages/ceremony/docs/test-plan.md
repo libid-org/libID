@@ -4,7 +4,7 @@ This plan tests the `@libid/ceremony` package architecture in
 [Architecture](architecture.md) and its browser protocol in
 [CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md), its deployment in [Distribution](distribution.md), its
 proof-generation subsystem in [Proving](proving.md), and the [OAuth bridge
-contract](oauth-bridge.md).
+contract](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md).
 Generic popup creation, connection, carrier, continuity, control, and local
 diagnostic behavior is qualified by the
 [popup package test plan](../../popup/TEST_PLAN.md). Rows here test only ceremony's
@@ -25,8 +25,8 @@ post-ceremony recovery belong to their respective composition test plans.
 Keep simulations labeled and separate from real-platform qualification.
 GitHub qualification requires the real confidential
 exchange, correlated token attestation, browser `/user` notarization, and
-generated proof. PoC timings or placeholder success labels do not substitute
-for these checks.
+generated proof. Timings or simulated success labels do not substitute for these
+checks.
 
 ## Package and asset isolation
 

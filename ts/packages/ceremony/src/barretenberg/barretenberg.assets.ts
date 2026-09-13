@@ -1,5 +1,7 @@
 import * as assets from '../assets/index.js'
 
+// One shared CRS serves every current circuit. The browser loader uses 4 MiB chunks
+// (at least 2^17 points); oidc_google needs 2^18. Capacity is checked in build/circuits.ts.
 export const SRS_SIZE = 2 ** 18
 
 export const acvm = assets.file(
@@ -26,6 +28,8 @@ export const bbWasm = {
   ],
 }
 
+// bb.js 5.2.0 browser fetches ignore crsPath as an override. Keep these external
+// and matched to its native URLs/ranges; build/loaders.test.ts observes real loaders.
 const primary = 'https://crs.aztec-cdn.foundation',
   fallback = 'https://crs.aztec-labs.com'
 

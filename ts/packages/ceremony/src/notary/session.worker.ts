@@ -216,6 +216,8 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
           : null,
       })
       const raw = prover.transcript()
+      // Proxy setup limits are not enforced by the pinned SDK. This bounds acceptance
+      // before parsing/reveal, not memory or traffic consumed while receiving.
       if (raw.sent.length > 4096 || raw.recv.length > 32768)
         throw new Error('Transcript acceptance limit exceeded')
       transcript = { sent: Uint8Array.from(raw.sent), recv: Uint8Array.from(raw.recv) }
