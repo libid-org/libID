@@ -2,6 +2,7 @@ import type { LedgerId } from '@libid/ledger'
 import { mainnet, testnet } from '@libid/ledger/testing'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import { describe, expect, it, vi } from 'vitest'
+import { CancelError, CeremonyError } from '../../errors.js'
 import { deriveAuthorizationDigest } from '../../platforms/authorization.js'
 import { platforms } from '../../platforms/index.js'
 import { b64urlEncode } from '../../primitives.js'
@@ -133,11 +134,20 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
   it('cancellation wins over late delivery and preserves the popup [LIBID-BROWSER-005]', async () => {
     const { connection: c, ceremony } = setup()
     const result = ceremony.proveUserIdentity()
-    const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+    const rejection = expect(result).rejects.toBeInstanceOf(CancelError)
     await ceremony.cancel()
     c.receive({ type: 'identity-proof', identity, proof })
     await rejection
     expect(c.close).not.toHaveBeenCalled()
+  })
+  it('protocol Abort remains a failure even with cancellation-like text [LIBID-OAUTH-022]', async () => {
+    const { connection, ceremony } = setup()
+    const events: CeremonyEvent[] = []
+    ceremony.onEvent((event) => events.push(event))
+    const result = ceremony.proveUserIdentity()
+    connection.receive({ type: 'abort', event: 'authorization', message: 'Ceremony canceled' })
+    await expect(result).rejects.toBeInstanceOf(CeremonyError)
+    expect(events.at(-1)).toMatchObject({ status: 'failed', event: 'authorization' })
   })
   it('rejects invalid predecessors', async () => {
     const { connection: c, ceremony } = setup()
@@ -175,7 +185,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       new Uint8Array(),
     )
     const result = next.proveUserIdentity()
-    const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+    const rejection = expect(result).rejects.toMatchObject({ name: 'CancelError' })
     await next.cancel()
     await rejection
   })
@@ -563,7 +573,7 @@ it.each(['google', 'x', 'github'] as const)(
       ...(platformId === 'google' ? [] : ['notarization']),
       'zk-proving',
     ])
-    const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+    const rejection = expect(result).rejects.toMatchObject({ name: 'CancelError' })
     await ceremony.cancel()
     await rejection
     expect(events.at(-1)).toMatchObject({ status: 'cancelled' })
@@ -653,7 +663,7 @@ it('stops event delivery after an observer cancels synchronously', async () => {
     if (event.status === 'active') void ceremony.cancel()
   })
   ceremony.onEvent((event) => events.push(event))
-  await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ name: 'AbortError' })
+  await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ name: 'CancelError' })
   expect(events).toEqual([expect.objectContaining({ status: 'cancelled' })])
 })
 
@@ -691,7 +701,7 @@ it('cancellation at authorization entry prevents provider navigation', async () 
   })
   const result = ceremony.proveUserIdentity()
   connection.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
-  await expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  await expect(result).rejects.toMatchObject({ name: 'CancelError' })
   expect(connection.navigateAway).not.toHaveBeenCalled()
 })
 
