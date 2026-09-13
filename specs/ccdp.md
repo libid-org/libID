@@ -425,6 +425,19 @@ ceremony outcome.
 
 ### Event
 
+```ts
+interface Event {
+  type: 'event'
+  event: string
+  phase?: 'started' | 'finished'
+  timestamp: number
+  instrumentation?: {
+    operationId?: string
+    attributes?: Record<string, string | number | boolean>
+  }
+}
+```
+
 - REQ-CCDP-06: Each Participant MUST emit and interpret the core events, extension
   boundary, and timestamps defined below. Necessity: readiness gates and
   observations must have the same meaning at independently deployed endpoints.
@@ -432,16 +445,18 @@ ceremony outcome.
 One event stream carries protocol readiness, operation timing, and additional
 platform observations. The same observations can drive UI or tracing; they do
 not require separate wire protocols. `Event(name, phase)` below abbreviates
-this record, not a distinct message type:
+this record, not a distinct message type.
 
-| Field | Contract |
-|---|---|
-| `type` | Exactly `event` |
-| `event` | Nonempty core or implementation-defined operation name |
-| `phase` | `started` or `finished` for an operation; omitted for a single-shot observation |
-| `timestamp` | Finite, nonnegative occurrence time in milliseconds on the browser's epoch-relative performance timeline |
-| `operationId` | Optional, nonempty instrumentation-only identifier pairing repeated concurrent instances of the same operation |
-| `attributes` | Optional bounded record of event-defined scalar measurements or facts: strings, finite numbers, or booleans |
+`event` is a nonempty core or implementation-defined operation name. `phase`
+marks an operation's start or finish and is omitted for a single-shot
+observation. `timestamp` is a finite, nonnegative
+occurrence time in milliseconds on the browser's epoch-relative performance
+timeline.
+
+`instrumentation` is an optional plain record containing only the optional
+fields shown above. Its `operationId` is a nonempty identifier pairing repeated
+concurrent instances of the same operation. Its `attributes` is a bounded plain
+record of event-defined scalar measurements or facts; numeric values are finite.
 
 Optional fields are absent when unused, not null. Event names, attribute names,
 string values, and record sizes are bounded by the implementation. Names and
@@ -472,7 +487,8 @@ inapplicable operation emits nothing.
 
 `prover-fallback` is the only single-shot core event. Each core operation has
 one start and, on success, one finish per ceremony; these occurrences omit
-`operationId`. X uses all six proving operations. GitHub omits `token-fetch`:
+`instrumentation.operationId`. X uses all six proving operations. GitHub omits
+`token-fetch`:
 its `token-attestation` covers the complete Bridge request returning both the
 token and its attestation. Its identity operations match X's. Google uses only
 the two ZK operations.
@@ -488,8 +504,7 @@ No event adds browser cryptographic verification of proofs or attestations.
 accepted exactly once from its designated document at the matching phase.
 `authorization.finished` is emitted once before Callback departs, but does not
 require acknowledgement or introduce another gate before Prover readiness.
-Additional attributes, operation IDs, or extension events cannot satisfy,
-duplicate, or bypass a gate.
+Instrumentation or extension events cannot satisfy, duplicate, or bypass a gate.
 
 #### Extensions and observation
 
@@ -500,8 +515,8 @@ validate the envelope and may ignore unknown extension names or attributes;
 they never treat those as readiness, cancellation, or success. Core names with
 wrong phase, sender, order, or cardinality are invalid, not extensions.
 
-Repeated overlapping extension operations use `operationId` to pair starts and
-finishes; the identifier has no routing or authorization role and must not
+Repeated overlapping extension operations use `instrumentation.operationId`
+to pair starts and finishes; the identifier has no routing or authorization role and must not
 reuse ceremony IDs, OAuth state, credentials, or identity values. Observations
 and attributes contain no OAuth parameters, URLs or origins, identity data,
 proofs, witnesses, attestations, or raw exceptions.
@@ -591,8 +606,8 @@ cryptographic properties delegated to the common and platform specifications.
   Public Prefetch authenticates its exact peer; Callback rejects an unlisted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Canonical HTTP loopback works at arbitrary ports.
 - TEST-CCDP-05 (exercises REQ-CCDP-05):
   Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel` records and Application-sent `Denied` are invalid. Proof payloads are structurally checked under the selected platform version.
-- TEST-CCDP-06 (exercises REQ-CCDP-06):
-  Only the designated core occurrences open gates; extensions cannot do so. Overlap, occurrence timestamps, and retrospective fallback timing are preserved.
+- TEST-CCDP-06 (exercises REQ-CCDP-05, REQ-CCDP-06):
+  Only the designated core occurrences open gates; extensions cannot do so. Omitted instrumentation and either or both nested fields are accepted when valid; null, unknown instrumentation members, nonfinite attribute numbers, and top-level operationId/attributes are rejected. Overlap, occurrence timestamps, and retrospective fallback timing are preserved.
 - TEST-CCDP-07 (exercises REQ-CCDP-07):
   The four phases preserve navigation ownership and credential privacy; approval enters execution, bound denial exits before proving, and malformed returns abort.
 - TEST-CCDP-08 (exercises REQ-CCDP-08):
