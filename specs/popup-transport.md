@@ -194,7 +194,11 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   An endpoint MUST accept a peer only when the peer's authenticated origin
   is a member of its Origin Allowlist, and MUST bind that exact observed origin
   for the life of the resulting Carrier. Sequential Participating Documents
-  MAY bind different members. Upholds SP-POPUP-01.
+  MAY bind different members. The Endpoint MUST expose the selected Carrier's
+  authenticated peer origin to the Carried Protocol. The Endpoint MUST expose no
+  authenticated peer origin when it has no selected Carrier. The
+  Endpoint MUST check the bound origin against its own Origin Allowlist before
+  accepting a preserved, replacement, or Fallback Carrier. Upholds SP-POPUP-01.
 - REQ-POPUP-ALLOW-03:
   On the opener path, the Application Endpoint MUST accept peer traffic only
   from the window it created or, on the native-anchor path, from the one
@@ -510,7 +514,9 @@ this specification.
   An empty set or a duplicate, noncanonical, credentialed, or disallowed-HTTP
   member is rejected; a peer on an origin outside the allowlist never becomes
   an endpoint; sequential Participating Documents on two allowlisted origins bind
-  under one Logical Connection. Under the wildcard, a Popup Endpoint binds
+  under one Logical Connection. Each Endpoint exposes the exact authenticated
+  origin, not the allowlist; before selection and after local retirement it exposes
+  none. Under the wildcard, a Popup Endpoint binds
   any permitted origin exactly, rejects an opaque or disallowed-HTTP one, and an
   Application Endpoint rejects the wildcard. A handshake from another window
   or an unlisted popup origin leaves the Application Endpoint untouched. HTTP on exact
@@ -556,7 +562,9 @@ this specification.
   In each supported engine, a same-origin replacement into and out of
   Opener Isolation preserves a transferable Carrier within the published bound; a
   Non-participating Document beyond the bound loses it and the next
-  Participating Document re-authenticates.
+  Participating Document re-authenticates. The restored Endpoint exposes the
+  preserved peer origin; a destination allowlist excluding that origin rejects
+  before delivery and does not substitute fresh authentication for the mismatch.
 - TEST-POPUP-10 (exercises REQ-POPUP-CONT-04, REQ-POPUP-CONT-05, REQ-POPUP-LIFE-05):
   A cross-site replacement re-authenticates over the opener without
   attempting Carrier preservation; a cross-site destination under Opener
