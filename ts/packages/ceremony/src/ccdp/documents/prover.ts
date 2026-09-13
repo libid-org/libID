@@ -72,7 +72,7 @@ export async function startProver(fragment: string): Promise<void> {
     connection = PopupConnection.accept(PopupWindow.current(fragment, { scope: '/' }), {
       fallback,
       connectionId: retained.ceremonyId,
-      allowedApplicationOrigins: '*',
+      allowedApplicationOrigins: [retained.applicationOrigin],
       isolationFallbackUrl: location.origin + route('prover/fallback'),
     })
     connection.on(Cancel, () => {

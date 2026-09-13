@@ -24,9 +24,10 @@ error without importing another script or requiring an obsolete transport.
 The Bridge inserts only deployment data. Callback validates and freezes it,
 accepts a connection, reports authorization return, then navigates using its
 private capture. It installs no Worker and never parses the platform outcome.
-The pending exact-origin handoff is recorded in
-[qualification](qualification.md#pending-contract-updates); current code still
-authenticates on Callback without carrying that restriction to Prover.
+After authentication, Callback reads `connection.peerOrigin` and places it in
+`applicationOrigin` in the private Prover fragment. The value never comes from
+OAuth parameters or the allowlist's first entry. Missing authenticated origin
+fails locally before navigation.
 
 ### Prefetch and Worker
 
@@ -41,7 +42,8 @@ and TLSN sessions are not preserved across OAuth.
 
 ### Prover
 
-Prover passes its captured fragment and root Worker scope into popup construction,
+Prover validates the fragment origin and supplies `[applicationOrigin]` as its
+exact admission policy. It passes its captured fragment and root Worker scope into popup construction,
 and supplies the same-origin isolation fallback URL. Popup completes any
 replacement before exposing readiness. Prover registers handlers, awaits the
 connection and canonical root-worker claim, checks shared-memory/worker support,

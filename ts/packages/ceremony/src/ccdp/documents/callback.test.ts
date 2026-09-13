@@ -19,12 +19,14 @@ const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 
 const v1Inputs = [['https://app.test', 'https://ccdp.test'], 'https://ccdp.test']
 
-let config: unknown,
+let peerOrigin: string | null,
+  config: unknown,
   locationInput: { search: string; hash: string; pathname: string; origin: string }
 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => {})
+  peerOrigin = 'https://app.test'
   config = v1Inputs
   locationInput = {
     search: '',
@@ -45,7 +47,14 @@ beforeEach(() => {
   })
   accept.mockImplementation(() => {
     expect(locationInput.search + locationInput.hash).toBe('')
-    return { ready: Promise.resolve(), closed: new Promise(() => {}), on: vi.fn(), navigate, send }
+    return {
+      peerOrigin,
+      ready: Promise.resolve(),
+      closed: new Promise(() => {}),
+      on: vi.fn(),
+      navigate,
+      send,
+    }
   })
 })
 
@@ -56,6 +65,7 @@ afterEach(() => {
 
 it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010]', async () => {
   const original = locationInput.hash
+  peerOrigin = 'https://other-app.test'
   config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']
   startCallback()
   await Promise.resolve()
@@ -66,7 +76,12 @@ it('clears before acceptance and preserves exact private return with shared depl
   })
   expect(navigate).toHaveBeenCalledWith(
     'https://other-ccdp.test/ccdp/v1/prover',
-    new URLSearchParams({ ceremonyId: id, oauthQuery: '', oauthFragment: original }),
+    new URLSearchParams({
+      ceremonyId: id,
+      applicationOrigin: 'https://other-app.test',
+      oauthQuery: '',
+      oauthFragment: original,
+    }),
   )
   expect(send).toHaveBeenCalledExactlyOnceWith({
     type: 'event',
@@ -174,3 +189,27 @@ it('does not prevent private navigation when the advisory readiness send fails',
   await Promise.resolve()
   expect(navigate).toHaveBeenCalledOnce()
 })
+
+it('takes the selected peer from authentication, never from OAuth fields or allowlist order [TEST-CCDP-04]', async () => {
+  config = [
+    ['https://other-app.test', 'https://app.test', 'https://ccdp.test'],
+    'https://ccdp.test',
+  ]
+  locationInput.hash += '&applicationOrigin=https%3A%2F%2Fother-app.test'
+  startCallback()
+  await Promise.resolve()
+  const fragment = navigate.mock.calls[0][1] as URLSearchParams
+  expect(fragment.get('applicationOrigin')).toBe('https://app.test')
+  expect(fragment.get('oauthFragment')).toContain('applicationOrigin=')
+})
+
+it.each([null, 'null', 'https://app.test/'])(
+  'fails locally when the authenticated peer origin is unavailable or invalid: %s [TEST-CCDP-04]',
+  async (value) => {
+    peerOrigin = value
+    startCallback()
+    await vi.waitFor(() => expect(console.error).toHaveBeenCalled())
+    expect(navigate).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+  },
+)

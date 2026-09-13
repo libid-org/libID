@@ -2,7 +2,8 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { ProverContext } from '../../platforms/context.js'
 import { startProver } from './prover.js'
 
-const { connection, prove } = vi.hoisted(() => ({
+const { accept, connection, prove } = vi.hoisted(() => ({
+  accept: vi.fn(),
   connection: {
     ready: Promise.resolve(),
     closed: new Promise(() => {}),
@@ -13,7 +14,12 @@ const { connection, prove } = vi.hoisted(() => ({
 }))
 
 vi.mock('@libid/popup', () => ({
-  PopupConnection: { accept: () => connection },
+  PopupConnection: {
+    accept: (...args: unknown[]) => {
+      accept(...args)
+      return connection
+    },
+  },
   PopupWindow: { current: vi.fn() },
 }))
 
@@ -46,9 +52,14 @@ it.each(['google', 'x', 'github'])(
     await startProver(
       new URLSearchParams({
         ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        applicationOrigin: 'https://app.test',
         oauthQuery: '',
         oauthFragment: '#error=access_denied',
       }).toString(),
+    )
+    expect(accept).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ allowedApplicationOrigins: ['https://app.test'] }),
     )
     const handler = connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')?.[1]
     expect(connection.send).toHaveBeenCalledWith({
@@ -87,6 +98,7 @@ it('reports retrospective fallback before readiness and preserves producer times
   await startProver(
     new URLSearchParams({
       ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+      applicationOrigin: 'https://app.test',
       oauthQuery: '',
       oauthFragment: '#error=access_denied',
     }).toString(),

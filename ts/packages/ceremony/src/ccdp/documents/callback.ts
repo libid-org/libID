@@ -71,7 +71,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
       timestamp: now(),
     })
     ui.stop()
-    reportFailure(connection, failure)
+    reportFailure(origin(connection?.peerOrigin) ? connection : undefined, failure)
   }
   try {
     retained = input
@@ -92,6 +92,9 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     void connection.ready
       .then(async () => {
         if (ended || !retained) return
+        const applicationOrigin = connection!.peerOrigin
+        if (!origin(applicationOrigin))
+          throw new TypeError('Authenticated Application origin unavailable')
         const event = { event: 'authorization', phase: 'finished', timestamp: now() } as const
         try {
           connection!.send({ type: 'event', ...event })
@@ -99,7 +102,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
           /* A lost observation does not gate navigation. */
         }
         events.emit({ ...event, status: 'active' })
-        const fragment = proverFragment(id, retained)
+        const fragment = proverFragment(id, applicationOrigin, retained)
         await connection!.navigate(ccdpOrigin + route('prover'), fragment)
         cleanup()
         ui.stop()

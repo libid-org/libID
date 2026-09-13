@@ -96,14 +96,21 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
   })
   it('preserves private return components with one outer encoding [LIBID-OAUTH-026]', () => {
     const input = { query: `?code=a%2Bb&state=v1.${id}`, fragment: '' }
-    expect(readProver(String(proverFragment(id, input)))).toEqual({
+    expect(readProver(String(proverFragment(id, 'https://app.test', input)))).toEqual({
       ceremonyId: id,
+      applicationOrigin: 'https://app.test',
       oauthReturn: input,
     })
     expect(readPrefetch(String(prefetchFragment(id, 'x', 1))).platformId).toBe('x')
     for (const extra of [`&ceremonyId=${id}`, '&other=1'])
-      expect(() => readProver(String(proverFragment(id, input)) + extra)).toThrow()
-    expect(() => readProver(`ceremonyId=${id}&oauthQuery=%FF&oauthFragment=`)).toThrow()
+      expect(() =>
+        readProver(String(proverFragment(id, 'https://app.test', input)) + extra),
+      ).toThrow()
+    expect(() =>
+      readProver(
+        `ceremonyId=${id}&applicationOrigin=https%3A%2F%2Fapp.test&oauthQuery=%FF&oauthFragment=`,
+      ),
+    ).toThrow()
   })
 })
 
@@ -196,3 +203,41 @@ it('supports bounded extension observations and disambiguated operations [LIBID-
   ])
     expect(() => Event.decode({ type: 'event', timestamp: 1, ...event })).toThrow()
 })
+
+it.each(['https://app.test', 'http://localhost:4681', 'http://127.0.0.1:4681'])(
+  'preserves the exact Application origin %s in the private fragment [TEST-CCDP-03]',
+  (applicationOrigin) => {
+    const fragment = proverFragment(id, applicationOrigin, {
+      query: '?code=a%2Bb',
+      fragment: '#state=x',
+    })
+    expect([...fragment.keys()]).toEqual([
+      'ceremonyId',
+      'applicationOrigin',
+      'oauthQuery',
+      'oauthFragment',
+    ])
+    expect(readProver(String(fragment)).applicationOrigin).toBe(applicationOrigin)
+    fragment.append('applicationOrigin', applicationOrigin)
+    expect(() => readProver(String(fragment))).toThrow()
+    fragment.delete('applicationOrigin')
+    expect(() => readProver(String(fragment))).toThrow()
+  },
+)
+
+it.each([
+  '',
+  '*',
+  'null',
+  'http://app.test',
+  'https://app.test/',
+  'https://app.test:443',
+  'https://u@app.test',
+])(
+  'rejects invalid Application origin %s before accepting Prover [TEST-CCDP-04]',
+  (applicationOrigin) => {
+    expect(() =>
+      readProver(String(proverFragment(id, applicationOrigin, { query: '', fragment: '' }))),
+    ).toThrow()
+  },
+)
