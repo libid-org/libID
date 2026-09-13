@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { PopupConnection } from './connection.js'
 import type { PopupDiagnostic } from './diagnostics.js'
 import { PopupError } from './diagnostics.js'
-import type { Carrier, CarrierConstructor, Message } from './message.js'
+import {
+  type Carrier,
+  type CarrierConstructor,
+  CONNECTION_VERSION,
+  type Message,
+} from './message.js'
 import { PortCarrier } from './port.js'
 import {
   APP_ORIGIN,
@@ -95,7 +100,7 @@ function acceptPopup(
 /** Both ends of a test carrier over one MessageChannel. */
 function carrierPair(): [PortCarrier, PortCarrier] {
   const channel = new MessageChannel()
-  return [new PortCarrier(channel.port1), new PortCarrier(channel.port2)]
+  return [new PortCarrier(channel.port1, POPUP_ORIGIN), new PortCarrier(channel.port2, APP_ORIGIN)]
 }
 
 describe('validation [POPUP-CONNECTION-007]', () => {
@@ -533,7 +538,7 @@ describe('cross-origin replacement [POPUP-CONNECTION-008/009]', () => {
     const pair = fakePair()
     const app = connectMulti(pair)
     pair.appView.dispatch({
-      data: { type: 'message-port', connectionVersion: 1, connectionId: ID },
+      data: { type: 'message-port', connectionVersion: CONNECTION_VERSION, connectionId: ID },
       origin: 'https://evil.example',
       source: pair.popupProxy,
     })
@@ -642,7 +647,7 @@ describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
       })
       await tick()
       pair.popupView.dispatch({
-        data: { type: 'message-port', connectionVersion: 1, connectionId: ID },
+        data: { type: 'message-port', connectionVersion: CONNECTION_VERSION, connectionId: ID },
         origin,
         source: pair.appProxy,
         ports: [new MessageChannel().port1],
@@ -1281,6 +1286,7 @@ describe('lifecycle outcome [POPUP-CONNECTION-006] [POPUP-DIAGNOSTIC-002]', () =
     // A synchronous test carrier so the handler's throw surfaces to the test.
     let deliver: (value: unknown) => void = () => {}
     const carrier: Carrier = {
+      peerOrigin: APP_ORIGIN,
       send: () => {},
       on: (handler) => {
         deliver = handler
@@ -1352,7 +1358,7 @@ describe('selection order at accept level [POPUP-CONNECTION-002]', () => {
     const side = acceptPopup(pair, { fallback })
     await tick()
     pair.popupView.dispatch({
-      data: { type: 'message-port', connectionVersion: 2, connectionId: ID },
+      data: { type: 'message-port', connectionVersion: CONNECTION_VERSION + 1, connectionId: ID },
       origin: APP_ORIGIN,
       source: pair.appProxy,
       ports: [new MessageChannel().port1],
@@ -1390,4 +1396,87 @@ describe('selection order at accept level [POPUP-CONNECTION-002]', () => {
     )
     expect(() => popup.send(new Ready(1))).not.toThrow()
   })
+})
+
+describe('authenticated peer origin [POPUP-CONNECTION-007] [POPUP-KEEPER-001]', () => {
+  it('exposes the selected peer on both sides and clears it on retirement', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const side = acceptPopup(pair)
+    expect(app.connection.peerOrigin).toBeNull()
+    expect(side.endpoint.peerOrigin).toBeNull()
+    const popup = await side.connection
+    await app.connection.ready
+    expect(app.connection.peerOrigin).toBe(POPUP_ORIGIN)
+    expect(popup.peerOrigin).toBe(APP_ORIGIN)
+    await app.connection.navigateAway('https://provider.example/')
+    expect(app.connection.peerOrigin).toBeNull()
+    await popup.close()
+    expect(popup.peerOrigin).toBeNull()
+    await app.connection.close()
+  })
+
+  it.each([
+    { allowedOrigin: APP_ORIGIN, isolate: false },
+    { allowedOrigin: 'https://other-app.example', isolate: false },
+    { allowedOrigin: 'https://other-app.example', isolate: true },
+  ])(
+    'restores the binding and enforces the destination allowlist %s',
+    async ({ allowedOrigin, isolate }) => {
+      const pair = fakePair()
+      const scope = fakeScope()
+      const app = connectApp(pair)
+      const first = await acceptPopup(pair, { worker: scope.worker }).connection
+      const navigating = first.navigate(`${POPUP_ORIGIN}/next`)
+      expect(first.peerOrigin).toBeNull() // Detached before the keeper can acknowledge.
+      await navigating
+      const fallback = vi.fn()
+      const next = PopupConnection.accept(
+        new CurrentWindow(
+          { ...pair.popupWindow, opener: null } as Window,
+          registrationWith(scope.worker),
+        ),
+        {
+          connectionId: ID,
+          allowedApplicationOrigins: [allowedOrigin],
+          fallback,
+          ...(isolate && { isolationFallbackUrl: `${POPUP_ORIGIN}/isolated` }),
+        },
+      )
+      if (allowedOrigin === APP_ORIGIN) {
+        await next.ready
+        expect(next.peerOrigin).toBe(APP_ORIGIN)
+        const received = vi.fn()
+        next.on(Start, received)
+        app.connection.send(new Start())
+        await tick()
+        expect(received).toHaveBeenCalledOnce()
+        await next.close()
+      } else {
+        await expect(next.ready).rejects.toThrow('handshake-rejected')
+        expect(next.peerOrigin).toBeNull()
+        expect(scope.pending).toHaveLength(1) // No second keep or isolation navigation.
+      }
+      expect(fallback).not.toHaveBeenCalled()
+      await app.connection.close()
+    },
+  )
+
+  it.each([undefined, 'null', `${APP_ORIGIN}/`, 'https://other-app.example'])(
+    'rejects fallback origin %s before carrier subscription',
+    async (peerOrigin) => {
+      const pair = fakePair()
+      const carrier = {
+        peerOrigin,
+        send: vi.fn(),
+        on: vi.fn(),
+        close: vi.fn(),
+      } as unknown as Carrier
+      const side = acceptPopup(pair, { opener: false, fallback: carrier })
+      await expect(side.endpoint.ready).rejects.toThrow('handshake-rejected')
+      expect(side.endpoint.peerOrigin).toBeNull()
+      expect(carrier.on).not.toHaveBeenCalled()
+      expect(carrier.close).toHaveBeenCalledOnce()
+    },
+  )
 })

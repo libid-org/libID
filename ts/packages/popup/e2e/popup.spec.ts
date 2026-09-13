@@ -205,6 +205,16 @@ test('[POPUP-CONTROL-002] [POPUP-CONNECTION-003] [POPUP-KEEPER-003] one port sur
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(await popup.evaluate(() => crossOriginIsolated)).toBe(true)
   expect(await diag(popup)).toEqual(['carrier-restored'])
+  expect(
+    await popup.evaluate(
+      () => (window as unknown as { __conn: { peerOrigin: string } }).__conn.peerOrigin,
+    ),
+  ).toBe(APP_A)
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __conn: { peerOrigin: string } }).__conn.peerOrigin,
+    ),
+  ).toBe(POPUP)
   await ping(page, 2)
   expect(await expectPong(page, 2)).toMatchObject({ path: '/isolated', isolated: true })
   // B2 qualification: the COOP switch makes the retained handle report closed.
@@ -215,6 +225,16 @@ test('[POPUP-CONTROL-002] [POPUP-CONNECTION-003] [POPUP-KEEPER-003] one port sur
   await nextDocument(popup, () => navigate(page, `${POPUP}/p#c=${id}`))
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(await diag(popup)).toEqual(['carrier-restored'])
+  expect(
+    await popup.evaluate(
+      () => (window as unknown as { __conn: { peerOrigin: string } }).__conn.peerOrigin,
+    ),
+  ).toBe(APP_A)
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __conn: { peerOrigin: string } }).__conn.peerOrigin,
+    ),
+  ).toBe(POPUP)
   await ping(page, 3)
   expect(await expectPong(page, 3)).toMatchObject({ path: '/p', isolated: false })
 

@@ -9,6 +9,7 @@ import { CARRIER_CLAIM_TIMEOUT_MS, decodeKeeperRequest, KEEP } from './keeper.js
 
 interface Held {
   port: MessagePort
+  peerOrigin: string
   release: () => void
 }
 
@@ -66,6 +67,7 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
       }, CARRIER_CLAIM_TIMEOUT_MS)
       held.set(connectionId, {
         port,
+        peerOrigin: request.peerOrigin,
         release: () => {
           clearTimeout(timer)
           release()
@@ -87,7 +89,7 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
     }
     held.delete(connectionId)
     existing.release()
-    reply.postMessage({ port: true }, [existing.port])
+    reply.postMessage({ port: true, peerOrigin: existing.peerOrigin }, [existing.port])
   })
 }
 

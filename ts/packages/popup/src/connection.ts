@@ -17,6 +17,7 @@ import {
   type Carrier,
   type CarrierConstructor,
   decodeControl,
+  isAllowedOrigin,
   isCanonicalWebUrl,
   isConnectionId,
   isNavigationCarrier,
@@ -42,6 +43,8 @@ export interface PopupConnection<Out extends Message, In extends Message = Out> 
   readonly ready: Promise<void>
   /** Settles exactly once, when the logical connection ends; never rejects. */
   readonly closed: Promise<ConnectionEnd>
+  /** Authenticated peer of the selected carrier; null before selection or after retirement. */
+  readonly peerOrigin: string | null
   send(message: Out): void
   on<N extends In>(message: MessageType<N>, handler: (message: N) => void): () => void
   /**
@@ -145,13 +148,17 @@ abstract class Endpoint<Out extends Message, In extends Message>
   protected carrier: Carrier | null = null
   protected ended = false
   private readonly registrations = new Map<string, Registration<In>>()
+  private boundOrigin: string | null = null
   private unsubscribe: (() => void) | null = null
   private readonly startedAt = performance.now()
   private resolveReady!: () => void
   private rejectReady!: (error: PopupError) => void
   private settleClosed!: (end: ConnectionEnd) => void
 
-  protected constructor(protected readonly report: Reporter) {
+  protected constructor(
+    protected readonly report: Reporter,
+    private readonly allowedOrigins: OriginAllowlist,
+  ) {
     this.ready = new Promise((resolve, reject) => {
       this.resolveReady = resolve
       this.rejectReady = reject
@@ -161,6 +168,10 @@ abstract class Endpoint<Out extends Message, In extends Message>
     })
     // A consumer that only awaits `closed` must not see an unhandled rejection.
     this.ready.catch(() => {})
+  }
+
+  get peerOrigin(): string | null {
+    return this.boundOrigin
   }
 
   send(message: Out): void {
@@ -204,11 +215,21 @@ abstract class Endpoint<Out extends Message, In extends Message>
 
   /** Installs the selected carrier; the class is reported when it was chosen here. */
   protected install(carrier: Carrier, code?: DiagnosticCode): void {
+    if (!this.checkPeer(carrier)) return
     this.dropCarrier()
     this.carrier = carrier
+    this.boundOrigin = carrier.peerOrigin
     this.unsubscribe = carrier.on((value) => this.receive(value))
     if (code) this.report(code)
     this.resolveReady()
+  }
+
+  /** Rejects an invalid binding before either delivery or isolation handoff. */
+  protected checkPeer(carrier: Carrier): boolean {
+    if (isAllowedOrigin(carrier.peerOrigin, this.allowedOrigins)) return true
+    carrier.close()
+    this.fail('handshake-rejected')
+    return false
   }
 
   protected abstract onControl(control: PopupControl): void
@@ -247,6 +268,7 @@ abstract class Endpoint<Out extends Message, In extends Message>
   }
 
   protected dropCarrier(): void {
+    this.boundOrigin = null
     this.unsubscribe?.()
     this.unsubscribe = null
     this.carrier?.close()
@@ -291,9 +313,9 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
     private readonly popup: OpenedWindow,
     options: ConnectOptions,
   ) {
-    super(createReporter(options.onDiagnostic))
-    const connectionId = requireConnectionId(options.connectionId)
     const allowedPopupOrigins = requireOrigins(options.allowedPopupOrigins, 'allowedPopupOrigins')
+    super(createReporter(options.onDiagnostic), allowedPopupOrigins)
+    const connectionId = requireConnectionId(options.connectionId)
     if (popup.connected) throw new Error('PopupWindow is already connected')
     popup.connected = true
 
@@ -310,7 +332,8 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
         connectionId,
       },
       {
-        onPort: (port) => this.install(new PortCarrier(port), 'carrier-message-port'),
+        onPort: (port, peerOrigin) =>
+          this.install(new PortCarrier(port, peerOrigin), 'carrier-message-port'),
         onFail: () => this.fail('handshake-rejected'),
       },
     )
@@ -342,7 +365,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
    */
   protected override install(carrier: Carrier, code?: DiagnosticCode): void {
     super.install(carrier, code)
-    if (!isNavigationCarrier(carrier)) return
+    if (this.ended || !isNavigationCarrier(carrier)) return
     this.stopReplacement = carrier[onReplacement]((pending) => {
       pending.then(
         (next) => {
@@ -435,12 +458,12 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     private readonly popup: CurrentWindow,
     options: AcceptOptions,
   ) {
-    super(createReporter(options.onDiagnostic))
-    this.connectionId = requireConnectionId(options.connectionId)
     const allowedOrigins: OriginAllowlist =
       options.allowedApplicationOrigins === '*'
         ? '*'
         : requireOrigins(options.allowedApplicationOrigins, 'allowedApplicationOrigins')
+    super(createReporter(options.onDiagnostic), allowedOrigins)
+    this.connectionId = requireConnectionId(options.connectionId)
     this.isolationFallback =
       options.isolationFallbackUrl === undefined
         ? null
@@ -463,7 +486,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       if (workers.length > 0) {
         const port = await this.claimFrom(workers)
         if (this.ended) return port?.close()
-        if (port) return this.admit(new PortCarrier(port), 'carrier-restored')
+        if (port) return this.admit(port, 'carrier-restored')
         this.report('claim-empty')
       }
       const opener = this.popup.opener
@@ -476,7 +499,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
           signal: this.controller.signal,
         })
         if (this.ended) return port?.close()
-        if (port) return this.admit(new PortCarrier(port), 'carrier-message-port')
+        if (port) return this.admit(port, 'carrier-message-port')
         this.report('opener-timeout')
       }
       if (!fallback) return this.fail('fallback-unavailable', true)
@@ -503,11 +526,11 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   }
 
   /** Asks every worker at once; at most one holds this connection's port. */
-  private async claimFrom(workers: ServiceWorker[]): Promise<MessagePort | null> {
+  private async claimFrom(workers: ServiceWorker[]): Promise<PortCarrier | null> {
     const ports = await Promise.all(workers.map((w) => new PortKeeper(w).claim(this.connectionId)))
     const [port = null, ...extra] = ports.filter((p) => p !== null)
-    for (const p of extra) p.close()
-    return port
+    for (const p of extra) p.port.close()
+    return port ? new PortCarrier(port.port, port.peerOrigin) : null
   }
 
   /**
@@ -524,6 +547,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   ): Promise<void> {
     const { location } = this.popup.view
     if (!this.isolationFallback || this.popup.isolated) return this.install(carrier, code)
+    if (!this.checkPeer(carrier)) return
     this.report(code)
     if (sameDocument(this.isolationFallback, location)) {
       // Already the fallback and still not isolated: the host's policy is
@@ -608,7 +632,10 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     const { location } = this.popup.view
     const carrier = this.carrier
     if (carrier instanceof PortCarrier) {
-      await this.keepThrough(carrier.detach(), url, viaOperation)
+      const peerOrigin = carrier.peerOrigin
+      const port = carrier.detach()
+      this.dropCarrier()
+      await this.keepThrough(port, peerOrigin, url, viaOperation)
       this.release() // the port is the worker's now; this endpoint is done
       location.replace(url)
       return
@@ -636,7 +663,12 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
    * Fails the endpoint and throws when no worker is active, the keep is
    * refused, or the connection ended meanwhile.
    */
-  private async keepThrough(port: MessagePort, url: string, viaOperation: boolean): Promise<void> {
+  private async keepThrough(
+    port: MessagePort,
+    peerOrigin: string,
+    url: string,
+    viaOperation: boolean,
+  ): Promise<void> {
     const failed: (code: PopupErrorCode) => never = (code) => {
       port.close() // a no-op once transferred; releases a port the worker never took
       this.fail(code, viaOperation)
@@ -653,7 +685,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     if (!worker) failed('continuity-unsupported')
     const startedAt = performance.now()
     try {
-      await new PortKeeper(worker).keep(this.connectionId, port)
+      await new PortKeeper(worker).keep(this.connectionId, port, peerOrigin)
     } catch {
       failed('keep-failed')
     }

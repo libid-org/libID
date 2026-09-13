@@ -3,7 +3,7 @@
 // other module shares. Nothing here touches a browser global.
 
 /** Exact-matched in every private transport record; never negotiated. */
-export const CONNECTION_VERSION = 1 as const
+export const CONNECTION_VERSION = 2 as const
 export type ConnectionVersion = typeof CONNECTION_VERSION
 
 export interface Message {
@@ -17,6 +17,8 @@ export interface MessageType<M extends Message> {
 
 /** A connection-internal adapter from a native resource to delivery. */
 export interface Carrier {
+  /** Exact peer origin established by this carrier's authentication. */
+  readonly peerOrigin: string
   send(value: Message): void
   on(handler: (value: unknown) => void): () => void
   close(): void

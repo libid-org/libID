@@ -8,7 +8,7 @@ import {
   PortKeeper,
 } from './keeper.js'
 import { CONNECTION_VERSION } from './message.js'
-import { fakeScope, ID, OTHER_ID, tick } from './testing/fakes.js'
+import { APP_ORIGIN, fakeScope, ID, OTHER_ID, tick } from './testing/fakes.js'
 
 const nextMessage = (port: MessagePort): Promise<unknown> =>
   new Promise((resolve) => {
@@ -22,14 +22,14 @@ describe('PortKeeper [POPUP-KEEPER-001/004]', () => {
     const destination = new PortKeeper(scope.worker)
     const channel = new MessageChannel()
 
-    await source.keep(ID, channel.port1)
+    await source.keep(ID, channel.port1, APP_ORIGIN)
     expect(scope.pending).toHaveLength(1)
     // Posted while the worker owns the port: arrives after the claim.
     channel.port2.postMessage({ type: 'queued' })
 
     const claimed = await destination.claim(ID)
-    expect(claimed).not.toBeNull()
-    const pending = nextMessage(claimed as MessagePort)
+    expect(claimed?.peerOrigin).toBe(APP_ORIGIN)
+    const pending = nextMessage(claimed!.port)
     await tick()
     expect(await pending).toEqual({ type: 'queued' })
     // One-use: the entry is gone.
@@ -50,8 +50,8 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
     const keeper = new PortKeeper(scope.worker)
     const first = new MessageChannel()
     const second = new MessageChannel()
-    await keeper.keep(ID, first.port1)
-    await expect(keeper.keep(ID, second.port1)).rejects.toThrow('keep-failed')
+    await keeper.keep(ID, first.port1, APP_ORIGIN)
+    await expect(keeper.keep(ID, second.port1, APP_ORIGIN)).rejects.toThrow('keep-failed')
     expect(await keeper.claim(ID)).toBeNull()
     await expect(scope.pending[0]).resolves.toBeUndefined()
   })
@@ -82,13 +82,25 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
   })
 
   it('decodes exact requests only', () => {
-    const ok = { type: KEEP, connectionVersion: CONNECTION_VERSION, connectionId: ID }
+    const ok = {
+      type: KEEP,
+      connectionVersion: CONNECTION_VERSION,
+      connectionId: ID,
+      peerOrigin: APP_ORIGIN,
+    }
     expect(decodeKeeperRequest(ok)).toEqual(ok)
-    expect(decodeKeeperRequest({ ...ok, type: CLAIM })?.type).toBe(CLAIM)
+    expect(
+      decodeKeeperRequest({ type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId: ID })
+        ?.type,
+    ).toBe(CLAIM)
     for (const bad of [
-      { ...ok, connectionVersion: 2 },
+      { ...ok, connectionVersion: CONNECTION_VERSION + 1 },
       { ...ok, connectionId: ID.toUpperCase() },
       { ...ok, extra: 1 },
+      { ...ok, peerOrigin: undefined },
+      { ...ok, peerOrigin: 'https://app.example/' },
+      { ...ok, peerOrigin: 'null' },
+      { ...ok, type: CLAIM },
       { ...ok, type: 'other' },
       null,
       'keep',
@@ -106,13 +118,15 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
     }
     const keeper = new PortKeeper(worker)
     await expect(keeper.claim(ID)).rejects.toThrow('claim-failed')
-    await expect(keeper.keep(ID, new MessageChannel().port1)).rejects.toThrow('keep-failed')
+    await expect(keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN)).rejects.toThrow(
+      'keep-failed',
+    )
   })
 
   it('keeps ids isolated', async () => {
     const scope = fakeScope()
     const keeper = new PortKeeper(scope.worker)
-    await keeper.keep(ID, new MessageChannel().port1)
+    await keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN)
     expect(await keeper.claim(OTHER_ID)).toBeNull()
     expect(await keeper.claim(ID)).not.toBeNull()
   })
@@ -126,7 +140,7 @@ describe('expiry [POPUP-KEEPER-003]', () => {
     const scope = fakeScope()
     const keeper = new PortKeeper(scope.worker)
     const channel = new MessageChannel()
-    const kept = keeper.keep(ID, channel.port1)
+    const kept = keeper.keep(ID, channel.port1, APP_ORIGIN)
     await vi.advanceTimersByTimeAsync(10)
     await kept
     await vi.advanceTimersByTimeAsync(CARRIER_CLAIM_TIMEOUT_MS + 1)

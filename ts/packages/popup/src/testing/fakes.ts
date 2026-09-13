@@ -261,10 +261,12 @@ export function fakeSignaling(): FakeSignaling {
   const replacementHandlers = new Set<(c: Promise<Carrier>) => void>()
   function endpoint(
     port: MessagePort,
+    peerOrigin: string,
     replacements: Set<(c: Promise<Carrier>) => void>,
   ): NavigationCarrier {
     let open = true
     const carrier: NavigationCarrier = {
+      peerOrigin,
       send: (value: Message) => {
         if (!open) throw new Error('retired')
         port.postMessage(value)
@@ -283,7 +285,7 @@ export function fakeSignaling(): FakeSignaling {
       [prepareNavigation]: async (target) => {
         // Arm authentication; no replacement carrier exists until the
         // destination connects. Sends on the old port meanwhile are lost.
-        const round = newRound(null)
+        const round = newRound(null, new URL(target).origin)
         prepared = round
         for (const handler of replacementHandlers) handler(round.applicationSide)
         return target
@@ -297,15 +299,15 @@ export function fakeSignaling(): FakeSignaling {
     return carrier
   }
 
-  function newRound(resolveApplication: ((c: Carrier) => void) | null) {
+  function newRound(resolveApplication: ((c: Carrier) => void) | null, popupOrigin = POPUP_ORIGIN) {
     let resolve!: (carrier: Carrier) => void
     const applicationSide = new Promise<Carrier>((done) => (resolve = done))
     return {
       applicationSide,
       connect() {
         const channel = new MessageChannel()
-        const applicationCarrier = endpoint(channel.port1, replacementHandlers)
-        const popupSide = endpoint(channel.port2, new Set())
+        const applicationCarrier = endpoint(channel.port1, popupOrigin, replacementHandlers)
+        const popupSide = endpoint(channel.port2, APP_ORIGIN, new Set())
         resolveApplication?.(applicationCarrier)
         resolve(applicationCarrier)
         return popupSide

@@ -20,7 +20,7 @@ Continuity is best-effort: preserving the logical connection does not promise
 delivery across carrier retirement or replay messages lost during navigation.
 
 ```ts
-type ConnectionVersion = 1
+type ConnectionVersion = 2
 ```
 
 `ConnectionVersion` exact-matches the connection's private authentication,
@@ -345,6 +345,7 @@ declare class PopupWindow {
 interface PopupConnection<Out extends Message, In extends Message = Out> {
   readonly ready: Promise<void>
   readonly closed: Promise<ConnectionEnd>
+  readonly peerOrigin: string | null
   send(message: Out): void
   on<N extends In>(
     message: MessageType<N>,
@@ -616,6 +617,7 @@ it to the same connection-internal delivery operations:
 
 ```ts
 interface Carrier {
+  readonly peerOrigin: string
   send(value: Message): void
   on(handler: (value: unknown) => void): () => void
   close(): void
@@ -744,3 +746,18 @@ The package supplies one `ConnectionVersion` to both endpoints; there is no
 runtime negotiation. Compatible implementation changes keep the version.
 Breaking private authentication, carrier, signaling, framing, or continuity
 controls increment it independently of every caller protocol.
+
+## Authenticated peer origin
+
+`connection.peerOrigin` exposes the exact origin authenticated by the selected
+carrier. It is available after `ready`; it is `null` before selection and after
+local carrier retirement or closure. It describes the bound document, not the
+current location of a retained window. A fresh carrier may select a different
+allowlisted peer and updates the value; it never derives one from the allowlist.
+
+The MessagePort handshake retains the browser-stamped `MessageEvent.origin`.
+The keeper carries that origin with the preserved port, and the destination
+checks it against its own allowlist before readiness or delivery. Fallback
+constructors likewise return their authenticated `peerOrigin`; malformed or
+unlisted origins fail with `handshake-rejected` before subscription. Origin
+metadata is not a protocol message or diagnostic and needs no extra handshake.

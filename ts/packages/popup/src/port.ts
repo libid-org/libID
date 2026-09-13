@@ -60,7 +60,7 @@ export interface ListenOptions {
 
 export interface ListenHandlers {
   /** The application's authenticated endpoint for one popup document. */
-  onPort: (port: MessagePort) => void
+  onPort: (port: MessagePort, peerOrigin: string) => void
   /** The expected peer sent a malformed handshake or acknowledgement. */
   onFail: () => void
 }
@@ -111,7 +111,7 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
       }
       pending = null
       port.onmessage = null
-      handlers.onPort(port)
+      handlers.onPort(port, event.origin)
     }
     try {
       // The response targets the exact origin the browser stamped on the request.
@@ -145,10 +145,10 @@ export interface RequestOptions {
  * `handshake-rejected` when the opener answers wrongly and `connection-closed`
  * on abort; every rejection closes reachable ports.
  */
-export function requestApplicationPort(options: RequestOptions): Promise<MessagePort | null> {
+export function requestApplicationPort(options: RequestOptions): Promise<PortCarrier | null> {
   const { view, opener, allowedOrigins, connectionId, signal } = options
   return new Promise((resolve, reject) => {
-    const finish = (error: Error | null, port: MessagePort | null = null): void => {
+    const finish = (error: Error | null, port: PortCarrier | null = null): void => {
       view.removeEventListener('message', listener)
       clearTimeout(timer)
       signal.removeEventListener('abort', onAbort)
@@ -174,7 +174,7 @@ export function requestApplicationPort(options: RequestOptions): Promise<Message
         finish(new PopupError('handshake-rejected'))
         return
       }
-      finish(null, port)
+      finish(null, new PortCarrier(port, event.origin))
     }
     const onAbort = (): void => finish(new PopupError('connection-closed'))
     const timer = setTimeout(() => finish(null), options.timeoutMs ?? OPENER_HANDSHAKE_TIMEOUT_MS)
@@ -198,7 +198,10 @@ export class PortCarrier implements Carrier {
   /** Whether handlers were ever installed; assigning them starts the port. */
   private started = false
 
-  constructor(port: MessagePort) {
+  constructor(
+    port: MessagePort,
+    readonly peerOrigin: string,
+  ) {
     this.port = port
   }
 

@@ -229,8 +229,8 @@ declare function installPortKeeper(): void
 declare class PortKeeper {
   constructor(worker: Pick<ServiceWorker, 'postMessage'>)
 
-  keep(connectionId: string, port: MessagePort): Promise<void>
-  claim(connectionId: string): Promise<MessagePort | null>
+  keep(connectionId: string, port: MessagePort, peerOrigin: string): Promise<void>
+  claim(connectionId: string): Promise<{ port: MessagePort; peerOrigin: string } | null>
 }
 ```
 
@@ -284,7 +284,7 @@ declare function listenForPopupPorts(
     connectionId: string
   },
   handlers: {
-    onPort: (port: MessagePort) => void
+    onPort: (port: MessagePort, peerOrigin: string) => void
     onFail: () => void // the expected peer sent a malformed record
   },
 ): () => void
@@ -296,10 +296,10 @@ declare function requestApplicationPort(options: {
   connectionId: string
   signal: AbortSignal
   timeoutMs?: number
-}): Promise<MessagePort | null> // null when the opener stays silent
+}): Promise<PortCarrier | null> // null when the opener stays silent
 
 declare class PortCarrier implements Carrier {
-  constructor(port: MessagePort)
+  constructor(port: MessagePort, readonly peerOrigin: string)
   /** Surrenders the port for `PortKeeper.keep`; this carrier is closed afterwards. */
   detach(): MessagePort
 }
@@ -328,3 +328,19 @@ removes the window listener and closes every reachable port. The concrete
 error type is private. `PortCarrier` starts the port, forwards unchanged
 structured-clone values, closes idempotently, and `detach` surrenders the
 port for preservation.
+
+### Preserved origin binding
+
+The successful handshake yields a `PortCarrier` with the browser-stamped peer
+origin. Keep records and successful claim replies include `peerOrigin` alongside
+the transferred port; claims without an entry contain only `{ port: false }`.
+The worker retains this metadata only for that port's existing bounded lifetime.
+The destination validates its shape and canonical origin, then checks its own
+allowlist before installing the restored carrier. A malformed or mismatching
+binding fails locally and does not select a fallback. Same-origin worker code
+is already inside the transport's trust boundary.
+
+ConnectionVersion 2 adds the origin to private keeper records. Deploy the updated
+Application, popup documents, and worker together; an older keeper cannot preserve this binding and is not treated
+as authenticated-origin evidence. There is no compatibility path that guesses
+an origin or silently restores a port without it.

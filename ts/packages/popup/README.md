@@ -116,6 +116,7 @@ carrier change: sends into a retired carrier can succeed locally and be lost.
 interface PopupConnection<Out extends Message, In extends Message = Out> {
   readonly ready: Promise<void>
   readonly closed: Promise<ConnectionEnd>
+  readonly peerOrigin: string | null
   send(message: Out): void
   on<N extends In>(
     message: MessageType<N>,
@@ -323,6 +324,7 @@ participating document:
 type CarrierConstructor = (signal: AbortSignal) => Promise<Carrier>
 
 interface Carrier {
+  readonly peerOrigin: string
   send(value: Message): void
   on(handler: (value: unknown) => void): () => void
   close(): void
@@ -345,3 +347,10 @@ WebKit, mobile Chrome, mobile WebKit) through both creation paths, isolation
 round trips over one preserved port, port expiry, and every fail-closed path.
 [TEST_PLAN.md](TEST_PLAN.md) records which rows each layer covers and which
 remain deferred or manual.
+
+## Authenticated peer origin
+
+After `ready`, `connection.peerOrigin` identifies the authenticated peer; it is
+`null` without a selected carrier. [Origin binding](docs/connection.md#authenticated-peer-origin)
+describes preservation and fallback. ConnectionVersion 2 requires updated
+Application, popup documents, and worker together.

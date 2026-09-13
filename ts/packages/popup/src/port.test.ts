@@ -57,7 +57,7 @@ const request = (
 const requestPort = async (pair: FakePair, overrides = {}): Promise<MessagePort> => {
   const port = await request(pair, overrides)
   if (!port) throw new Error('expected a port')
-  return port
+  return port.detach()
 }
 
 async function roundTrip(app: MessagePort, popup: MessagePort): Promise<unknown[]> {
@@ -100,7 +100,7 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
       h.pair.popupView.addEventListener('message', observer)
       h.pair.appProxy.postMessage(handshake(), '*')
     })
-    transferred.postMessage({ ...handshake(), connectionVersion: 2 })
+    transferred.postMessage({ ...handshake(), connectionVersion: CONNECTION_VERSION + 1 })
     await tick()
     expect(h.ports).toHaveLength(0)
     expect(h.fails).toBe(1)
@@ -147,7 +147,7 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
       h.stop()
     }
     for (const bad of [
-      { data: { ...handshake(), connectionVersion: 2 } },
+      { data: { ...handshake(), connectionVersion: CONNECTION_VERSION + 1 } },
       { data: { ...handshake(), extra: 1 } },
       { data: handshake(), ports: [new MessageChannel().port1] },
     ]) {
@@ -218,7 +218,7 @@ describe('popup request', () => {
         },
         { data: handshake(), origin: APP_ORIGIN, source: pair.appProxy, ports: [] },
         {
-          data: { ...handshake(), connectionVersion: 2 },
+          data: { ...handshake(), connectionVersion: CONNECTION_VERSION + 1 },
           origin: APP_ORIGIN,
           source: pair.appProxy,
           ports: [new MessageChannel().port1],
@@ -263,7 +263,7 @@ describe('popup request', () => {
 describe('PortCarrier [POPUP-PORT-002]', () => {
   it('forwards ordered structured-clone values without reallocation', async () => {
     const channel = new MessageChannel()
-    const carrier = new PortCarrier(channel.port1)
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN)
     const received: unknown[] = []
     carrier.on((value) => void received.push(value))
     const bytes = new Uint8Array([1, 2, 3])
@@ -279,7 +279,7 @@ describe('PortCarrier [POPUP-PORT-002]', () => {
 
   it('detaches the same entangled port and closes itself', async () => {
     const channel = new MessageChannel()
-    const carrier = new PortCarrier(channel.port1)
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN)
     const handler = vi.fn()
     carrier.on(handler)
     const port = carrier.detach()

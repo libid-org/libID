@@ -111,3 +111,9 @@ satisfy these rows.
 | POPUP-DIAGNOSTIC-001 | Every emitted diagnostic contains only its stable package code, monotonic-derived timestamp, and any code-defined finite nonnegative duration or count; privacy-forbidden values and raw exceptions never reach the callback or console. |
 | POPUP-DIAGNOSTIC-002 | A rejecting caller operation reports through rejection and the optional callback. An otherwise undeliverable asynchronous failure emits one sanitized `console.error` and optional callback event without network reporting, durable storage, retry, or caller result. Callback or console failure is inert. |
 | POPUP-DIAGNOSTIC-003 | `fallback-unavailable` is absent when MessagePort succeeds and emitted exactly once only when fallback is selected without a constructor. An early supplied-constructor rejection remains observed and silent unless its path is selected. |
+
+Authenticated-origin regression coverage extends POPUP-CONNECTION-007 and
+POPUP-KEEPER-001: both endpoint origins before/after readiness and retirement;
+origin preservation with queued delivery; destination allowlist rejection on
+restoration; and missing, malformed, or unlisted fallback origins rejected before
+subscription. Real browser coverage exercises restored origins through isolation.

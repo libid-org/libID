@@ -4,7 +4,13 @@
 // ./worker.ts; this file owns the wire records both sides share.
 
 import { PopupError } from './diagnostics.js'
-import { CONNECTION_VERSION, hasExactKeys, isConnectionId, isRecord } from './message.js'
+import {
+  CONNECTION_VERSION,
+  hasExactKeys,
+  isAllowedOrigin,
+  isConnectionId,
+  isRecord,
+} from './message.js'
 
 export const CARRIER_CLAIM_TIMEOUT_MS = 5_000
 export const KEEPER_REPLY_TIMEOUT_MS = 2_000
@@ -12,27 +18,29 @@ export const KEEPER_REPLY_TIMEOUT_MS = 2_000
 export const KEEP = 'libid-popup-keep'
 export const CLAIM = 'libid-popup-claim'
 
-export interface KeeperRequest {
-  type: typeof KEEP | typeof CLAIM
+export type KeeperRequest = {
   connectionVersion: typeof CONNECTION_VERSION
   connectionId: string
-}
+} & ({ type: typeof KEEP; peerOrigin: string } | { type: typeof CLAIM })
 
 export function decodeKeeperRequest(value: unknown): KeeperRequest | null {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ['type', 'connectionVersion', 'connectionId']) ||
+    !hasExactKeys(
+      value,
+      value.type === KEEP
+        ? ['type', 'connectionVersion', 'connectionId', 'peerOrigin']
+        : ['type', 'connectionVersion', 'connectionId'],
+    ) ||
     (value.type !== KEEP && value.type !== CLAIM) ||
     value.connectionVersion !== CONNECTION_VERSION ||
-    !isConnectionId(value.connectionId)
+    !isConnectionId(value.connectionId) ||
+    (value.type === KEEP &&
+      (typeof value.peerOrigin !== 'string' || !isAllowedOrigin(value.peerOrigin, '*')))
   ) {
     return null
   }
-  return {
-    type: value.type,
-    connectionVersion: CONNECTION_VERSION,
-    connectionId: value.connectionId,
-  }
+  return value as KeeperRequest
 }
 
 /** The subset of ServiceWorker the keeper needs; injectable for tests. */
@@ -111,8 +119,12 @@ export class PortKeeper {
   constructor(private readonly worker: KeeperWorker) {}
 
   /** Resolves only after the worker owns the port. */
-  async keep(connectionId: string, port: MessagePort): Promise<void> {
-    const reply = await this.exchange(KEEP, connectionId, [port], 'keep-failed')
+  async keep(connectionId: string, port: MessagePort, peerOrigin: string): Promise<void> {
+    const reply = await this.exchange(
+      { type: KEEP, connectionVersion: CONNECTION_VERSION, connectionId, peerOrigin },
+      [port],
+      'keep-failed',
+    )
     if (!reply || !isRecord(reply.data) || reply.data.ok !== true || reply.ports.length !== 0) {
       throw new PopupError('keep-failed')
     }
@@ -124,13 +136,24 @@ export class PortKeeper {
    * worker on the origin never blocks a fresh handshake; a malformed
    * answer is a failure.
    */
-  async claim(connectionId: string): Promise<MessagePort | null> {
-    const reply = await this.exchange(CLAIM, connectionId, [], 'claim-failed')
+  async claim(connectionId: string): Promise<{ port: MessagePort; peerOrigin: string } | null> {
+    const reply = await this.exchange(
+      { type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId },
+      [],
+      'claim-failed',
+    )
     if (!reply) return null
     const { data, ports } = reply
-    if (isRecord(data) && hasExactKeys(data, ['port'])) {
-      if (data.port === false && ports.length === 0) return null
-      if (data.port === true && ports.length === 1) return ports[0]
+    if (isRecord(data)) {
+      if (hasExactKeys(data, ['port']) && data.port === false && ports.length === 0) return null
+      if (
+        hasExactKeys(data, ['port', 'peerOrigin']) &&
+        data.port === true &&
+        ports.length === 1 &&
+        typeof data.peerOrigin === 'string' &&
+        isAllowedOrigin(data.peerOrigin, '*')
+      )
+        return { port: ports[0], peerOrigin: data.peerOrigin }
     }
     for (const port of ports) port.close()
     throw new PopupError('claim-failed')
@@ -138,8 +161,7 @@ export class PortKeeper {
 
   /** One request with its own reply port; null when the worker stays silent. */
   private exchange(
-    type: KeeperRequest['type'],
-    connectionId: string,
+    message: KeeperRequest,
     transfer: MessagePort[],
     code: 'keep-failed' | 'claim-failed',
   ): Promise<MessageEvent | null> {
@@ -154,7 +176,6 @@ export class PortKeeper {
       }
       const timer = setTimeout(() => finish(null), KEEPER_REPLY_TIMEOUT_MS)
       reply.port1.onmessage = (event: MessageEvent): void => finish(null, event)
-      const message: KeeperRequest = { type, connectionVersion: CONNECTION_VERSION, connectionId }
       try {
         this.worker.postMessage(message, [...transfer, reply.port2])
       } catch {
