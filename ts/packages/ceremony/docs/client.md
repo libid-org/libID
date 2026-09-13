@@ -119,8 +119,7 @@ ledger catalog, network classification, or chain-specific parser.
 
 During `new`, the client reads `ledgerId.hash()` once, requires and copies
 exactly 32 hash bytes as `chainId`, and validates/copies `operationDomain` and
-`transactionData`. For a platform that uses notarization, it also reads and
-validates `ledgerId.notaryAddress()` once as described in
+`transactionData`. It also reads and validates `ledgerId.notaryAddress()` once as described in
 [notary selection](#notary-selection).
 Missing methods, thrown errors, or invalid returned values fail before OAuth.
 Later changes to supplied objects or buffers cannot change the ceremony. All
@@ -270,8 +269,8 @@ the chosen platform, version, client ID, redirect URI, and CCDP origin. CCDP
 
 ### Notary selection
 
-For a platform that uses notarization, `new` takes the address directly from
-the supplied ledger:
+`new` takes the address directly from the supplied ledger, without branching on
+the platform:
 
 ```ts
 const notaryAddress = ledgerId.notaryAddress()
@@ -285,10 +284,12 @@ definitions own their addresses; tests and local development can supply a
 [ledger fixture](../../ledger/docs/identity.md#api) with a different address and the same
 Chain Profile hash.
 
-Google does not call `notaryAddress()` and retains and sends null instead.
-Prover validates and uses the supplied address unchanged for all browser
-sessions and forwards the same value to GitHub's token
-endpoint. Neither Prover nor Bridge selects or switches notaries on failure.
+The client sends that address for every platform. The selected platform decides
+whether to use it; Google ignores it and opens no notary connection. CCDP also
+accepts null when the selected platform does not need notarization.
+Prover validates a supplied address and uses it unchanged for all notarized
+browser sessions, forwarding the same value to GitHub's token endpoint.
+Neither Prover nor Bridge selects or switches notaries on failure.
 Assets and prefetch caches are unchanged.
 The address selects a network destination, not a trusted signing key; ledger
 verification remains authoritative.

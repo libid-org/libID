@@ -47,6 +47,13 @@ The implementation differences below are explicit, not competing contracts.
    `instrumentation`. The current wire codec and document forwarding still use
    top-level fields; update them and their shape tests together.
 
+4. **Platform-independent notary input.**
+   Client still skips the ledger notary address for Google, and the wire decoder
+   requires null for Google or an address for every other platform. Remove those
+   branches: Client passes its ledger-selected address uniformly, the wire accepts
+   a canonical address or null, and only a platform using notarization requires
+   an address. Update Client/codec tests; unused addresses open no notary session.
+
 ## Authenticated-origin handoff
 
 Callback forwards `connection.peerOrigin` in the private `applicationOrigin`
