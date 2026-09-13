@@ -3,7 +3,7 @@ import { mainnet, testnet } from '@libid/ledger/testing'
 import type { Message, MessageType, PopupConnection } from '@libid/popup'
 import { describe, expect, it, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
-import { deriveAuthorizationDigest } from '../../platforms/authorization.js'
+import { deriveAuthorizationDigest, deriveCodeChallenge } from '../../platforms/authorization.js'
 import { platforms } from '../../platforms/index.js'
 import { b64urlEncode } from '../../primitives.js'
 import { type CeremonyEvent, ccdpClientFromConfig } from './ceremony.js'
@@ -98,7 +98,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       clientId: 'client',
       redirectUri: config.redirectUri,
       codeVerifier: null,
-      notaryAddress: null,
+      notaryAddress: testnet.notaryAddress(),
     })
     c.receive({ type: 'identity-proof', identity, proof })
     const result = await pending
@@ -358,7 +358,7 @@ it.each(['google', 'x', 'github'] as const)(
       platforms: { [platformId]: { clientId: 'client', ceremonyVersions: [1] } },
     }).new(connection, id, platformId, ledger, domain, data)
     expect(ledger.hash).toHaveBeenCalledOnce()
-    expect(ledger.notaryAddress).toHaveBeenCalledTimes(platformId === 'google' ? 0 : 1)
+    expect(ledger.notaryAddress).toHaveBeenCalledOnce()
     hash.fill(9)
     domain.fill(9)
     data.fill(9)
@@ -378,9 +378,16 @@ it.each(['google', 'x', 'github'] as const)(
     const authorization = new URL(connection.navigateAway.mock.calls[0][0])
     connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
     const message = connection.send.mock.calls[0][0]
-    expect(message.notaryAddress).toBe(
-      platformId === 'google' ? null : 'https://local-notary.test:8443',
-    )
+    expect(message.notaryAddress).toBe('https://local-notary.test:8443')
+    if (platformId === 'google') {
+      expect(message.codeVerifier).toBeNull()
+      expect(authorization.searchParams.has('code_challenge')).toBe(false)
+    } else {
+      expect(message.codeVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      expect(authorization.searchParams.get('code_challenge')).toBe(
+        deriveCodeChallenge(message.codeVerifier),
+      )
+    }
     for (const key of ['ledgerId', 'chainId', 'isTestnet']) expect(message).not.toHaveProperty(key)
     if (platformId === 'google') {
       connection.receive({ type: 'identity-proof', identity, proof })
@@ -403,23 +410,6 @@ it.each(['google', 'x', 'github'] as const)(
     }
   },
 )
-
-it('Google never reads the notary method [LIBID-MOD-014]', () => {
-  const ledger = {
-    hash: testnet.hash,
-    get notaryAddress(): () => string {
-      throw new Error('must not read')
-    },
-  }
-  ccdpClientFromConfig(config).new(
-    new Connection(),
-    id,
-    'google',
-    ledger,
-    new Uint8Array(32),
-    new Uint8Array(),
-  )
-})
 
 it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014]', () => {
   const connection = new Connection()
@@ -447,7 +437,7 @@ it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-
   expect(connection.navigate).not.toHaveBeenCalled()
 })
 
-it.each(['x', 'github'] as const)(
+it.each(['google', 'x', 'github'] as const)(
   'rejects invalid notary addresses before OAuth for %s [LIBID-OAUTH-021]',
   (platformId) => {
     const connection = new Connection()

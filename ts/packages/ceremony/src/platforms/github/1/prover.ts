@@ -25,7 +25,7 @@ export async function prove(
   context: ProverContext,
 ): Promise<{ identity: Identity<'github'>; proof: GitHubProofV1 } | null> {
   const { request, emit, signal } = context
-  const { codeVerifier } = request
+  const { codeVerifier, notaryAddress } = request
   signal.throwIfAborted()
   if (!isFormClientId(request.clientId)) throw new Error('Invalid profile client identifier')
   const returned = parseCodeOAuthReturn(context.oauthReturn, 'https://github.com/login/oauth')
@@ -34,6 +34,7 @@ export async function prove(
   if (returned.outcome === 'denied') return null
   if (returned.outcome !== 'accepted')
     throw new CeremonyError('authorization', 'GitHub authorization failed')
+  if (notaryAddress === null) throw new CeremonyError('prover', 'Missing notary address')
   const controller = new AbortController(),
     abort = () => controller.abort(signal.reason)
   signal.addEventListener('abort', abort, { once: true })
@@ -43,7 +44,7 @@ export async function prove(
     emit,
   })
   try {
-    const notary = new Notarization(request.notaryAddress!, controller.signal)
+    const notary = new Notarization(notaryAddress, controller.signal)
     const identitySession = notary.prepare('https://api.github.com/user').catch((e) => {
       throw ceremonyError(e, 'identity-fetch')
     })
@@ -57,7 +58,7 @@ export async function prove(
           code: returned.code,
           codeVerifier,
           redirectUri: request.redirectUri,
-          notaryAddress: request.notaryAddress!,
+          notaryAddress: notaryAddress,
         }).slice().buffer,
         credentials: 'omit',
         redirect: 'error',

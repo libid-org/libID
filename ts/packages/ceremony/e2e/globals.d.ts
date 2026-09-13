@@ -9,7 +9,7 @@ declare global {
     completed: IdentityResult<'google'>[]
     testEvents: Events
     testView: {
-      trackProof(platform: string): void
+      trackProof(weights: Readonly<Record<string, number>>): void
       finishProof(): Promise<void>
       delivered(): void
       stop(): void

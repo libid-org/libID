@@ -246,3 +246,52 @@ fields, aliases, malformed escapes, mixed outcomes and wrong/missing GitHub
 issuers reject before token exchange. Valid equivalent percent encodings decode
 once without requiring URLSearchParams' preferred spelling. X does not inherit
 GitHub's issuer requirement.
+
+## Adding a platform
+
+Provider-specific decisions belong under `src/platforms/<id>/<version>/`.
+The shared Client and codecs own shape, origin, timing and lifecycle rules;
+platform code owns authorization, required inputs, evidence and proof semantics.
+
+For another version-one platform:
+
+1. Implement `url.ts` (including its `pkce` choice), `types.ts` (client ID,
+   identity and proof validation), `events.ts` (permitted core proving operations
+   and separate UI weights), `<id>.assets.ts`, and `prover.ts`. Reuse the common
+   code-return parser, notary sessions or Barretenberg backend when their exact
+   contracts fit. Parsers, reveal layouts, fixtures and vectors stay beside
+   their platform or circuit owner.
+2. Add the light definition to [the catalog](../src/platforms/index.ts).
+   It derives `PlatformId`, discovery, version selection and result types.
+   No provider branch is needed in Client, message decoding or progress code.
+3. Register the lazy Prover import in
+   [the document dispatcher](../src/ccdp/documents/prover.ts), and the resource
+   set in [the asset catalog](../src/platforms/platforms.assets.ts). Both are checked
+   against the catalog at compile time, so a missing registration fails the build.
+   These are deliberately separate import boundaries: Application code must not
+   pull in proof runtimes, and prefetch discovers bytes without starting them.
+   Add a newly introduced circuit to the build's circuit-capacity list there.
+   Prefetch's emitted JavaScript dependencies come from the selected runtime
+   graph; do not duplicate those dependency URLs in the platform resource list.
+4. Ensure the Bridge advertises the implemented pair. A platform needing
+   confidential exchange also needs its Bridge endpoint. Add the display name
+   and development OAuth configuration to the dev app when enabling it there.
+5. Preserve the applicable test IDs: canonical authorization/evidence vectors,
+   bad returns and missing inputs, selected assets with external loaders blocked,
+   real-popup browser flows, and real proofs verified against the matching
+   released verifier. Mocked delivery alone does not qualify a platform.
+
+`notaryAddress` is frozen and forwarded uniformly. A platform ignores it when
+unused, or requires it before opening notary sessions. The wire's nullability
+does not grant permission to use a default notary. `codeVerifier` has the same
+separation between wire syntax and profile semantics: the URL module declares
+PKCE use, Client derives the value or sends null, and the selected pipeline
+checks its requirement. Google currently requires null; X/GitHub require the
+derived 43-character verifier.
+
+Adding a platform therefore needs its implementation and three registration
+points, plus Bridge/deployment qualification. There is no runtime plugin API.
+Adding a *second ceremony version* has two additional current limitations: the
+Prover dispatcher admits only version 1, and distribution's runtime-entry lookup
+uses the version-one path. Both must change together before registering v2;
+Client version discovery alone is not an implemented or qualified new ceremony.

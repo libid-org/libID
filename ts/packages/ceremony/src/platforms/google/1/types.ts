@@ -1,4 +1,4 @@
-import { fixedBytes, hasExactKeys, isRecord } from '../../../primitives.js'
+import { fixedBytes, hasExactKeys, isRecord, text } from '../../../primitives.js'
 import { type Identity, isIdentity, proofBytes } from '../../types.js'
 
 export const MAX_HONK_PROOF_BYTES = 4 * 1024 * 1024
@@ -38,3 +38,6 @@ export function validateIdentity(value: unknown): Identity<'google'> {
 }
 
 export const printableWithoutQuote = /^[\x20-\x21\x23-\x7e]+$/
+
+/** Client identifier constraints for this platform. */
+export const isClientId = (value: unknown): value is string => text(value, MAX_AUD_BYTES)
