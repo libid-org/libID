@@ -1,6 +1,6 @@
 import {
+  CancelError,
   type CCDPClient,
-  type Ceremony,
   type CeremonyEvent,
   CeremonyStage,
   createCCDPClient,
@@ -14,32 +14,19 @@ import { sha256 } from '@noble/hashes/sha2.js'
 
 declare global {
   interface Window {
-    result?: IdentityResult | { status: 'failed' | 'cancelled' }
+    results: Map<string, IdentityResult | { status: 'failed' | 'cancelled' }>
   }
 }
 const settings = { bridge: 'http://localhost:4682', ccdp: 'http://localhost:4683' }
 const ledger: LedgerId = { ...testnet, notaryAddress: () => 'http://localhost:4687' }
 const platforms = document.querySelector<HTMLElement>('#platforms')!
-const cancel = document.querySelector<HTMLButtonElement>('#cancel')!
-const close = document.querySelector<HTMLButtonElement>('#close')!
 const status = document.querySelector<HTMLElement>('#status')!
-const result = document.querySelector<HTMLElement>('#result')!
+window.results = new Map()
 document.querySelector('#bridge')!.textContent = settings.bridge
 document.querySelector('#ccdp')!.textContent = settings.ccdp
 document.querySelector('#notary')!.textContent = ledger.notaryAddress()
 const names: Record<PlatformId, string> = { google: 'Google', x: 'X', github: 'GitHub' }
 let client: CCDPClient | undefined
-let active: Ceremony | undefined
-let connection: PopupConnection<Message> | undefined
-function controls() {
-  const ready = !!client?.enabledPlatforms.length && !active && !connection
-  for (const launch of platforms.querySelectorAll('a')) {
-    launch.setAttribute('aria-disabled', String(!ready))
-    launch.tabIndex = ready ? 0 : -1
-  }
-  cancel.disabled = !active
-  close.disabled = !connection
-}
 async function initialize() {
   try {
     client = await createCCDPClient({ oauthBridge: settings.bridge })
@@ -66,8 +53,6 @@ async function initialize() {
   } catch {
     status.textContent =
       'Could not load Bridge configuration. Check its address, certificate and application allowlist, then reload this page.'
-  } finally {
-    controls()
   }
 }
 const operationNames: Record<string, string> = {
@@ -81,9 +66,11 @@ const operationNames: Record<string, string> = {
   'zk-proof-preparation': 'ZK proof preparation',
   'zk-proof-generation': 'ZK proof generation',
 }
-function beginRun(platform: PlatformId) {
+/** One row owns its timings and presentation; its controls are bound to that run only. */
+function beginRun(platform: PlatformId, id: string) {
   const now = () => performance.timeOrigin + performance.now()
   const row = document.createElement('tr')
+  row.dataset.ceremonyId = id
   const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—', '—'].map(
     (text) => {
       const cell = document.createElement('td')
@@ -92,6 +79,14 @@ function beginRun(platform: PlatformId) {
       return cell
     },
   )
+  const outcome = document.createElement('strong')
+  outcome.className = 'run-outcome'
+  outcome.textContent = 'Running'
+  const message = document.createElement('p')
+  message.className = 'run-status'
+  message.setAttribute('role', 'status')
+  message.textContent = 'Opening authorization…'
+  cells[2]!.replaceChildren(outcome, message)
   document.querySelector('#history')!.prepend(row)
   document.querySelector<HTMLElement>('#history-empty')!.hidden = true
   const timings = document.createElement('ol')
@@ -99,6 +94,14 @@ function beginRun(platform: PlatformId) {
   const timingsCell = document.createElement('td')
   timingsCell.append(timings)
   row.append(timingsCell)
+  const actions = document.createElement('td')
+  const cancel = document.createElement('button')
+  cancel.type = 'button'
+  cancel.textContent = 'Cancel ceremony'
+  cancel.disabled = true
+  actions.append(cancel)
+  actions.className = 'run-actions'
+  row.append(actions)
   const operations = new Map<
     string,
     { name: string; started: number; finished?: number; cell: HTMLLIElement }
@@ -115,15 +118,18 @@ function beginRun(platform: PlatformId) {
       op.cell.textContent = `${op.name} · ${duration(op.started, op.finished ?? timestamp)}${op.finished === undefined ? (finished ? ' (interrupted)' : ' (running)') : ''}`
   }
   const timer = setInterval(render, 100)
-  const finish = (outcome: string, timestamp = now()) => {
+  const finish = (text: string, timestamp = now()) => {
     if (finished) return
     finished = true
     clearInterval(timer)
     render(timestamp)
-    cells[2]!.textContent = outcome
+    outcome.textContent = text
+    cancel.disabled = true
   }
   return {
     finish,
+    message,
+    cancel,
     onEvent(event: CeremonyEvent) {
       if (finished) return
       if ('event' in event && 'phase' in event && operationNames[event.event]) {
@@ -158,26 +164,21 @@ function beginRun(platform: PlatformId) {
   }
 }
 function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformId) {
-  if (!client || launch.getAttribute('aria-disabled') === 'true') {
+  if (!client) {
     event.preventDefault()
     return
   }
   const id = crypto.randomUUID()
-  const run = beginRun(platform)
+  const run = beginRun(platform, id)
   launch.target = `ceremony-dev-${id}`
   // Keep creation and the native-anchor fallback inside the same user gesture.
-  const popup = PopupWindow.open(launch.target, 'width=480,height=720')
-  window.result = undefined
-  result.textContent = 'Waiting for a result.'
-  let current: PopupConnection<Message>
-  let ceremony: Ceremony
   try {
-    current = PopupConnection.connect(popup, {
+    const popup = PopupWindow.open(launch.target, 'width=480,height=720')
+    const current = PopupConnection.connect<Message>(popup, {
       connectionId: id,
       allowedPopupOrigins: [...new Set([settings.bridge, settings.ccdp])],
     })
-    connection = current
-    ceremony = client.new(
+    const ceremony = client.new(
       current,
       id,
       platform,
@@ -185,88 +186,55 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
       sha256(new TextEncoder().encode('libid/ceremony/dev')),
       new TextEncoder().encode('Ceremony development walkthrough'),
     )
-  } catch {
-    event.preventDefault()
-    status.textContent = 'Could not start the ceremony. Close any remaining popup and retry.'
-    window.result = { status: 'failed' }
-    result.textContent = 'No ceremony started.'
-    run.finish('Failed to start')
-    void connection?.close().catch(() => {})
-    connection = undefined
-    controls()
-    return
-  }
-  active = ceremony
-  launch.href = ceremony.launchUrl
-  if (popup.opened) event.preventDefault()
-  status.textContent = 'Opening authorization…'
-  controls()
-  const off = ceremony.onEvent(run.onEvent)
-  const offStage = ceremony.onStage((event) => {
-    status.textContent =
-      event.status === 'active'
-        ? CeremonyStage.message(event.stage, names[platform])
-        : event.status === 'failed'
-          ? (event.message ?? 'Ceremony failed.')
-          : event.status
-  })
-  let failed = false
-  void current.closed.then(() => {
-    if (connection === current) {
-      connection = undefined
-      if (failed) status.textContent = 'Popup closed. Start a fresh attempt.'
+    launch.href = ceremony.launchUrl
+    if (popup.opened) event.preventDefault()
+    run.cancel.disabled = false
+    run.cancel.onclick = () => {
+      run.cancel.disabled = true
+      void ceremony.cancel().catch(() => {
+        run.message.textContent = 'Cancellation failed. Close the popup to end this attempt.'
+      })
     }
-    controls()
-  })
-  void ceremony
-    .proveUserIdentity()
-    .then((outcome) => {
-      window.result = outcome
-      result.textContent =
-        outcome.status === 'denied'
-          ? 'Authorization was denied.'
-          : 'Proof received. Independent verification has not been run. No transaction was submitted.'
-      status.textContent = 'Ceremony finished.'
+    const off = ceremony.onEvent(run.onEvent)
+    const offStage = ceremony.onStage((event) => {
+      if (event.status === 'active')
+        run.message.textContent = CeremonyStage.message(event.stage, names[platform])
     })
-    .catch((error: unknown) => {
-      const cancelled = error instanceof Error && error.name === 'AbortError'
-      failed = !cancelled
-      window.result = { status: cancelled ? 'cancelled' : 'failed' }
-      result.textContent = cancelled
-        ? 'Ceremony cancelled.'
-        : error instanceof Error
-          ? error.message
-          : 'Ceremony failed.'
-      status.textContent =
-        failed && connection === current
-          ? 'Ceremony failed. The popup is open for inspection; close it before starting another attempt.'
-          : 'Ceremony stopped.'
-    })
-    .finally(async () => {
-      off()
-      offStage()
-      if (!failed) {
+    void ceremony
+      .proveUserIdentity()
+      .then(async (outcome) => {
+        window.results.set(id, outcome)
+        run.message.textContent =
+          outcome.status === 'denied'
+            ? 'Authorization was denied.'
+            : 'Proof received. Independent verification has not been run. No transaction was submitted.'
         try {
           await current.close()
         } catch {
-          status.textContent = 'Could not close the popup automatically. Close its window manually.'
+          run.message.textContent =
+            'Could not close the popup automatically. Close its window manually.'
         }
-      }
-      active = undefined
-      controls()
-    })
+      })
+      .catch((error: unknown) => {
+        const cancelled = error instanceof CancelError
+        window.results.set(id, { status: cancelled ? 'cancelled' : 'failed' })
+        run.message.textContent = cancelled
+          ? 'Ceremony cancelled.'
+          : error instanceof Error
+            ? error.message
+            : 'Ceremony failed.'
+      })
+      .finally(() => {
+        off()
+        offStage()
+        run.cancel.disabled = true
+        run.cancel.onclick = null
+      })
+  } catch {
+    event.preventDefault()
+    run.message.textContent = 'Could not start the ceremony. Close any remaining popup and retry.'
+    window.results.set(id, { status: 'failed' })
+    run.finish('Failed to start')
+  }
 }
-cancel.addEventListener('click', () => {
-  cancel.disabled = true
-  void active?.cancel().catch(() => {
-    status.textContent = 'Cancellation failed. Close the popup to end this attempt.'
-  })
-})
-close.addEventListener('click', () => {
-  close.disabled = true
-  void connection?.close().catch(() => {
-    status.textContent = 'Could not close the popup automatically. Close its window manually.'
-    controls()
-  })
-})
 void initialize()

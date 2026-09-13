@@ -25,7 +25,9 @@ try {
       throw new Error('Checkpoint must be pass, fail, or unavailable')
     checkpoints.push(answer)
   }
-  const reportedOutcome = await page.evaluate(() => window.result?.status ?? 'unavailable')
+  const reportedOutcomes = await page.evaluate(() =>
+    [...(window.results?.values() ?? [])].map(({ status }) => status),
+  )
   mkdirSync(new URL('./results/', import.meta.url), { recursive: true })
   writeFileSync(
     new URL('./results/walkthrough.json', import.meta.url),
@@ -34,7 +36,7 @@ try {
       engine,
       version: browser.version(),
       checkpoints,
-      reportedOutcome,
+      reportedOutcomes,
       qualified: false,
     }),
   )
