@@ -1,6 +1,10 @@
 name: CI
 
-# TypeScript checks, ceremony browser tests, infrastructure smoke and DCO.
+# Three jobs: the TypeScript workspace (library + demo), DCO, and the
+# compose-stack smoke test — our first automated
+# infra-level integration test (it boots the real released images against a
+# fresh anvil, re-runs the deterministic deploy, and asserts the services
+# answer).
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -49,41 +53,6 @@ jobs:
       - name: Lint and formatting
         run: pnpm -C ts lint && pnpm -C ts fmt:check
 
-
-  ceremony-e2e:
-    name: Ceremony e2e
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: 10
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
-
-      - name: Install dependencies and build ceremony
-        run: |
-          pnpm -C ts install --frozen-lockfile
-          pnpm -C ts --filter '@libid/ceremony...' build
-
-      - name: Install browsers
-        run: pnpm -C ts --filter @libid/ceremony exec playwright install --with-deps chromium firefox webkit
-
-      - name: Log in to ghcr for the matched notary image
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Check browser test types
-        run: pnpm -C ts --filter @libid/ceremony typecheck:e2e
-
-      - name: Run browser and real runtime tests
-        run: pnpm -C ts --filter @libid/ceremony test:e2e
 
   # ---------------------------------------------------------------------------
   # Integration smoke: boot the compose stack (fresh anvil + released

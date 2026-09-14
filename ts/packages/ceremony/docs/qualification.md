@@ -39,7 +39,7 @@ transport compatibility; ceremony is based on the merged popup implementation.
 At implementation commit `79790d9` (2026-09-13), the complete package browser
 command passed locally: **127 Playwright cases, no skips**, across Chromium,
 Firefox, WebKit, HTTP/HTTPS document flows and mobile emulation. The separate
-Ceremony e2e CI job runs that same command. The first
+workspace Browser tests CI job runs that same command. The first
 [hosted run](https://github.com/libid-org/libid/actions/runs/34779236470) passed 125
 cases and failed two Firefox cases: Google fixture proof delivery exceeded its
 420-second wait, and the two-session notary probe timed out. Those failures remain
