@@ -214,9 +214,8 @@ holds the package write permission, and pushes
 prefix) and `ghcr.io/libid-org/ccdp:main`, printing the pushed digest in the
 run summary. Every image carries the built commit in its
 `org.opencontainers.image.revision` label, with the source repository and the
-version (`main`, the release version, or the sha tag) in the matching OCI
-labels. The workflow can also be dispatched by hand for a dry run, which never
-pushes.
+version (`main` when published, else the sha tag) in the matching OCI labels.
+The workflow can also be dispatched by hand for a dry run, which never pushes.
 
 Publishing a GitHub Release `v<version>` runs
 [release.yml](../../../../.github/workflows/release.yml), which publishes
@@ -228,11 +227,12 @@ image built and tested when that commit landed on `main` — the same digest,
 which the job verifies for every new tag and prints next to the source digest
 in the run summary. Before retagging, the job reads the image's revision label
 and refuses to promote unless it names the released commit. Promotion needs no
-retention seed because it publishes that exact image. Only when the commit has
-no `sha-` image (a release cut before the job existed, or whose `main` run
-failed) does the release fall back to the reusable workflow: a full build, test
-and push under the version tags and `sha-<commit sha>`, seeded from `:main` as
-described next.
+retention seed because it publishes that exact image. A release never builds.
+Without a `sha-` image (the commit never landed on `main`, or its `main` run
+failed) the job fails and names the fix: merge to `main`, let `ccdp-publish`
+run, then re-publish the release. Only images published from `main` enter the
+`:main` retention history described next; an image built anywhere else would
+be missing from it, and its assets could vanish from the next deployment.
 
 Before building, the workflow pulls the previously published `:main` image and
 copies `/home/sws/public` and `/home/sws/distribution-graph.json` out of it into
