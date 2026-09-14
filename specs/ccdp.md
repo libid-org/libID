@@ -62,7 +62,7 @@ the distinction is immaterial.
 | Actor | Browser authority | Responsibility |
 |---|---|---|
 | Application | application origin | hosts the application document, owns the operation and ceremony state, and drives the protocol |
-| OAuth Bridge | OAuth bridge origin | publishes ceremony configuration, serves the complete Callback document obtained from the Distribution with bridge-owned inputs, owns OAuth registrations, and performs enabled confidential OAuth exchanges |
+| OAuth Bridge | OAuth bridge origin | publishes ceremony configuration, serves the complete Callback document obtained from the Distribution with bridge-owned inputs, and owns OAuth registrations |
 | CCDP Distribution | CCDP origin | contains the versioned [resources](#documents-and-routes) and proving assets used by any number of OAuth Bridges; it may be the canonical libID distribution or an operator-selected replacement |
 | OAuth Platform | OAuth-platform origin set | hosts authorization/login documents and issues the OAuth return |
 
@@ -316,6 +316,7 @@ interface ProveIdentity {
   redirectUri: string
   codeVerifier: string | null
   notaryAddress: string | null
+  tokenExchangeCredential?: string
 }
 ```
 
@@ -323,7 +324,8 @@ The Application sends the exact `platformId` and `platformCeremonyVersion`
 selected at launch. Prover requires that pair to be supported by its loaded
 implementation; this message selects its profile. The message is valid only after
 `Event(prover, started)`. The remaining fields are the frozen client
-identifier and redirect, derived code verifier, and resolved notary address.
+identifier and redirect, derived code verifier, resolved notary address, and
+optional public token-exchange credential.
 `redirectUri` is the canonical OAuth Bridge origin with the fixed
 `/auth/callback` path and no
 query or fragment. The Application derives it before OAuth; public bridge
@@ -345,16 +347,23 @@ sessions, including the GitHub token request. It neither selects defaults nor
 accepts a separate profile, ledger identifier, hash, or testnet flag. The address
 changes network routing, not the proof statement or trusted signing keys.
 
+When present, `tokenExchangeCredential` is the nonempty printable ASCII value
+without whitespace frozen from the selected public platform configuration.
+Application forwards it unchanged; null, empty, wrongly typed, or
+whitespace/control-bearing values are invalid. The selected platform requires
+it before an exchange that needs it, and otherwise does not use it. GitHub
+uses it as `client_secret`. It is public application configuration, not a user
+access token, a signing key, or proof of the caller's authority. Prover performs
+no configuration fetch.
+
 The Application origin is trusted for this transient input because it already
 supplies the operation being authorized. It retains the authorization nonce;
 only the derived code verifier crosses this boundary. The message contains no
 authorization digest, operation field, separate OAuth state, Job revision,
 composition state, connector, or carrier kind.
 
-For GitHub, Prover derives the fixed OAuth Bridge token route from the origin of
-`redirectUri`; no second bridge origin or endpoint field is carried. Prover
-exact-validates the CCDP record and selected platform/version before credential
-use. That profile parses the retained query/fragment pair, enforcing exact
+Prover exact-validates the CCDP record and selected platform/version before
+credential use. That profile parses the retained query/fragment pair, enforcing exact
 transport, fields, client/redirect checks applicable to the response, and
 success/denial grammar. It matches OAuth `state` to
 `v<CCDPVersion>.<ceremonyId>` using the versioned resource and the ID of the
@@ -499,11 +508,9 @@ inapplicable operation emits nothing.
 
 `prover-fallback` is the only single-shot core event. Each core operation has
 one start and, on success, one finish per ceremony; these occurrences omit
-`instrumentation.operationId`. X uses all six proving operations. GitHub omits
-`token-fetch`:
-its `token-attestation` covers the complete Bridge request returning both the
-token and its attestation. Its identity operations match X's. Google uses only
-the two ZK operations.
+`instrumentation.operationId`. X and GitHub use all six proving operations;
+their token can become available before its attestation finishes. Google uses
+only the two ZK operations.
 
 The six proving operations start only after `ProveIdentity` and valid OAuth
 acceptance. They may overlap according to the selected profile's dependencies.
@@ -626,7 +633,14 @@ cryptographic properties delegated to the common and platform specifications.
   A valid notary address is accepted for any platform, including one that does
   not notarize; null is accepted when unused but rejected before work requiring
   notarization. Malformed non-null addresses are rejected under the origin policy.
+  An optional public token-exchange credential is delivered unchanged; null,
+  empty, wrong-type, or whitespace/control-bearing values reject. A platform
+  requiring it rejects omission before exchange. No configuration fetch or
+  Bridge token request is made by Prover.
 - TEST-CCDP-06 (exercises REQ-CCDP-05, REQ-CCDP-06):
+  X and GitHub each emit token-fetch and token-attestation independently;
+  token availability does not imply attestation completion, and proof delivery
+  waits for both attestations and the ZK proof.
   Only the designated core occurrences open gates; extensions cannot do so. Omitted instrumentation and either or both nested fields are accepted when valid; null, unknown instrumentation members, nonfinite attribute numbers, and top-level operationId/attributes are rejected. Overlap, occurrence timestamps, and retrospective fallback timing are preserved.
 - TEST-CCDP-07 (exercises REQ-CCDP-07):
   The four phases preserve navigation ownership and credential privacy; approval enters execution, bound denial exits before proving, and malformed returns abort.
