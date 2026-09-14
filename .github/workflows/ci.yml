@@ -1,6 +1,6 @@
 name: CI
 
-# TypeScript checks, workspace browser tests, infrastructure smoke and DCO.
+# TypeScript checks, workspace browser tests, infrastructure smoke, CCDP image and DCO.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -157,6 +157,157 @@ jobs:
         if: failure()
         working-directory: harness
         run: docker compose logs
+
+  # ---------------------------------------------------------------------------
+  # CCDP image: build the static ceremony artifact and the pinned SWS image for
+  # linux/amd64, prove the image against the running container and the pinned
+  # native binary, and publish it to ghcr on pushes to main. The build is
+  # seeded from the previously published image so immutable assets stay
+  # available through the compatibility window (see "Publication and upgrades"
+  # in ts/packages/ceremony/docs/distribution.md). Pull requests build and
+  # test only.
+  # ---------------------------------------------------------------------------
+  ccdp-image:
+    name: CCDP image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/libid-org/ccdp
+      ARTIFACTS: ts/packages/ceremony/dist-artifacts
+      SWS_VERSION: v3.0.0-beta.1
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm -C ts install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -C ts --filter '@libid/ceremony...' build
+
+      - name: Log in to ghcr
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # The previous publication's served tree and graph let build/distribution.ts
+      # retain its immutable assets and verify reused URLs are unchanged. No
+      # previous image (first publication, or a package this token cannot read)
+      # is a logged skip, not a failure.
+      - name: Seed retention from the previously published image
+        run: |
+          set -euo pipefail
+          if ! docker pull --platform linux/amd64 "$IMAGE:main"; then
+            echo "No previous image at $IMAGE:main; building without retained assets."
+            if [ "$PUBLISH" = "true" ]; then
+              echo "::warning::Retention seed unavailable; this publication retains no previous immutable assets."
+            fi
+            exit 0
+          fi
+          previous=$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE:main")
+          cid=$(docker create --platform linux/amd64 "$IMAGE:main")
+          mkdir -p "$ARTIFACTS"
+          docker cp "$cid:/home/sws/public" "$ARTIFACTS/public"
+          docker cp "$cid:/home/sws/distribution-graph.json" "$ARTIFACTS/distribution-graph.json"
+          docker rm "$cid" >/dev/null
+          echo "Seeded $(find "$ARTIFACTS/public" -type f | wc -l) files from $previous"
+
+      - name: Build the CCDP artifact
+        env:
+          # Authenticated release-asset digest lookups; anonymous ones are rate limited per address.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm -C ts --filter @libid/ceremony build:ccdp-artifacts
+
+      - name: Build the image (linux/amd64)
+        run: |
+          set -euo pipefail
+          tags=(-t "$IMAGE:sha-${GITHUB_SHA:0:7}")
+          if [ "$PUBLISH" = "true" ]; then tags+=(-t "$IMAGE:main"); fi
+          docker buildx build --platform linux/amd64 --load "${tags[@]}" \
+            -f ts/packages/ceremony/ccdp.Dockerfile "$ARTIFACTS"
+          docker image inspect -f 'built {{.Os}}/{{.Architecture}} {{.Id}}' "$IMAGE:sha-${GITHUB_SHA:0:7}"
+
+      - name: Run the image hardened and wait for /health
+        run: |
+          set -euo pipefail
+          docker run -d --name ccdp --read-only --cap-drop ALL --security-opt no-new-privileges \
+            -p 127.0.0.1:28787:8787 "$IMAGE:sha-${GITHUB_SHA:0:7}"
+          for _ in $(seq 1 50); do
+            if curl -fsS -o /dev/null http://127.0.0.1:28787/health; then
+              echo "CCDP image answers /health"
+              exit 0
+            fi
+            sleep 0.2
+          done
+          docker logs ccdp
+          echo "::error::CCDP image did not answer /health"
+          exit 1
+
+      # The same-length ETag regression and the header-matching canary need the
+      # native binary; its bytes must hash to the digest GitHub recorded for
+      # the release asset.
+      - name: Fetch the pinned SWS binary, verified against its release digest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          asset="static-web-server-$SWS_VERSION-x86_64-unknown-linux-musl.tar.gz"
+          digest=$(gh api "repos/static-web-server/static-web-server/releases/tags/$SWS_VERSION" \
+            --jq ".assets[] | select(.name == \"$asset\") | .digest")
+          [ -n "$digest" ] || { echo "::error::release $SWS_VERSION records no digest for $asset"; exit 1; }
+          curl -fsSL -o "$RUNNER_TEMP/sws.tar.gz" \
+            "https://github.com/static-web-server/static-web-server/releases/download/$SWS_VERSION/$asset"
+          echo "${digest#sha256:}  $RUNNER_TEMP/sws.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/sws"
+          tar -xzf "$RUNNER_TEMP/sws.tar.gz" -C "$RUNNER_TEMP/sws"
+          bin=$(find "$RUNNER_TEMP/sws" -type f -name static-web-server)
+          "$bin" --version
+          echo "CEREMONY_SWS_BINARY=$bin" >> "$GITHUB_ENV"
+
+      - name: Distribution tests against the running image and the native binary
+        env:
+          CEREMONY_SWS_URL: http://127.0.0.1:28787
+          CEREMONY_SWS_TEST_PORT: "28790"
+        run: |
+          set -euo pipefail
+          pnpm -C ts --filter @libid/ceremony test:distribution 2>&1 | tee "$RUNNER_TEMP/distribution-tests.log"
+          # Both inputs above are set, so nothing may have been skipped.
+          if grep -Eq 'skipped [1-9]' "$RUNNER_TEMP/distribution-tests.log"; then
+            echo "::error::distribution tests were skipped; the server/binary inputs did not reach them"
+            exit 1
+          fi
+
+      - name: Push the image
+        if: env.PUBLISH == 'true'
+        run: |
+          set -euo pipefail
+          docker push "$IMAGE:sha-${GITHUB_SHA:0:7}"
+          docker push "$IMAGE:main"
+          digest=$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE:sha-${GITHUB_SHA:0:7}")
+          {
+            echo "### CCDP image published"
+            echo
+            echo "- \`$digest\`"
+            echo "- \`$IMAGE:sha-${GITHUB_SHA:0:7}\`, \`$IMAGE:main\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summary (not published)
+        if: env.PUBLISH != 'true'
+        run: echo "### CCDP image built and tested; not pushed on ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs ccdp || true
 
   # ---------------------------------------------------------------------------
   # DCO: every commit carries a Signed-off-by trailer. Plain git over the
