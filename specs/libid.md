@@ -26,8 +26,8 @@ specifications.
 
 - [Ceremony Cross-Document Protocol](ccdp.md) defines its documents, routes,
   private navigation inputs, messages, events, and phases over popup transport.
-- [OAuth Bridge](oauth-bridge.md) defines public configuration, callback ingress,
-  and the confidential GitHub token-exchange HTTP contract.
+- [OAuth Bridge](oauth-bridge.md) defines public platform configuration and
+  callback ingress.
 - [CCDP Distribution](ccdp-distribution.md) defines static resource responses,
   Callback configuration insertion, isolation policies, and compatible publication.
 
@@ -67,8 +67,8 @@ what that transaction means. [Common §5.1](ceremony-common.md#51-verification-p
 owns this path.
 
 The Application, OAuth Bridge, and CCDP Distribution may have different operators.
-They control their frontend, redirect deployment, OAuth registrations, token
-service, and distributed browser code respectively. Those deployments are
+They control their frontend, redirect deployment, public OAuth configuration,
+and distributed browser code respectively. Those deployments are
 trusted for the local browser ceremony, but not to choose authoritative identity fields,
 change the proof-bound operation, or widen proof validity. The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
@@ -80,7 +80,7 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
 | Application operator | configures clients and deployment assets; starts or withholds work | deployment availability and declared configuration | identity fields, proof target, or proof validity |
-| OAuth Bridge operator | holds OAuth client registrations and any confidential secret; configures and serves Callback; exchanges GitHub codes | correct Callback configuration, credential handling, and availability | ledger identity, digest, notary-key, or validity decisions |
+| OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
 | CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges | correct code and asset supply under ASM-CCDP-01 | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
@@ -110,7 +110,7 @@ root and verifier.
 | Platform endpoints, fields, trust roots, and proof projections | [Identity-platform ceremonies](platform-ceremonies.md) |
 | Popup origin allowlists, message model, delivery, navigation, closure, and continuity guarantees | [Popup transport](popup-transport.md) |
 | Ceremony documents, routes, private fragments, messages, events, and phase transitions | [CCDP](ccdp.md) |
-| Public ceremony configuration, callback ingress, GitHub token HTTP API | [OAuth Bridge](oauth-bridge.md) |
+| Public ceremony configuration and callback ingress | [OAuth Bridge](oauth-bridge.md) |
 | Static response policies, aggregate Callback artifact, immutable asset publication | [CCDP Distribution](ccdp-distribution.md) |
 | Package APIs, UI projections, build tooling, and qualification evidence | implementation documentation (non-normative) |
 | Transaction dispatch and author authentication | Consumer protocol |

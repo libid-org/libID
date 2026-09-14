@@ -123,12 +123,11 @@ fetches distributed assets, including Prefetch, Prover, the Service Worker,
 and dedicated workers, admits `'self'` in `connect-src`; same-origin HTTP
 assets must not be accidentally excluded by an HTTPS-only source list.
 
-Prover additionally admits `https: wss:` for declared external assets,
-validated third-party OAuth Bridges, and secure notary WebSockets. Its local
-Bridge HTTP sources are `http://localhost:* http://127.0.0.1:*`; its local
-notary WS sources are `ws://localhost:* ws://127.0.0.1:*`. Both Prover responses
-include these fixed sources for default and custom ports. Dedicated workers
-include the corresponding sources where they perform Bridge or notary requests.
+Prover additionally admits `https: wss:` for declared external assets and
+secure notary WebSockets. Its local notary WS sources are
+`ws://localhost:* ws://127.0.0.1:*`. Both Prover responses include these fixed
+sources for default and custom ports. Dedicated workers include the
+corresponding sources where they perform asset or notary requests.
 No resource admits a general `http:` or `ws:` source. Generated policy does
 not add `upgrade-insecure-requests` or otherwise force local requests to TLS.
 Script and worker loading remains same-origin under either permitted scheme;
@@ -155,13 +154,12 @@ same-origin or `blob:` children only for workers that spawn them. The Service
 Worker only caches bytes and keeps ports: it needs no WASM compilation permission.
 
 Each request-invariant Prover response supports multiple platform profiles and
-arbitrary OAuth Bridges satisfying the [origin policy](ccdp.md#origin-policy).
-CSP cannot express a runtime-selected exact Bridge origin, so its HTTPS class
-and fixed localhost HTTP sources are not per-Bridge compartmentalization.
-Prover derives GitHub's fixed token route only from the
-validated `redirectUri` frozen by the Application; no message supplies another
-Bridge endpoint. Compromised Prover code can use every network class admitted
-by the response.
+arbitrary notary origins satisfying the [origin policy](ccdp.md#origin-policy).
+Prover makes no OAuth Bridge HTTP request. Token and identity exchanges use
+the browser notarization adapter, with code-owned platform destinations rather
+than caller-selected endpoints. CSP does not constrain the runtime-selected
+notary to an exact origin: compromised Prover code can use every network class
+admitted by the response.
 
 ### Callback artifact
 
