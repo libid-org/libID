@@ -224,23 +224,29 @@ the image only when asked to. Two jobs in
 every pull request with a read-only token and builds and tests without
 pushing. `ccdp-publish` runs on every push to `main`, is the only CI job that
 holds the package write permission, and pushes
-`ghcr.io/libid-org/ccdp:sha-<short sha>` and `ghcr.io/libid-org/ccdp:main`,
-printing the pushed digest in the run summary. The workflow can also be
-dispatched by hand for a dry run, which never pushes.
+`ghcr.io/libid-org/ccdp:sha-<commit sha>` (the full 40-hex sha, never a
+prefix) and `ghcr.io/libid-org/ccdp:main`, printing the pushed digest in the
+run summary. Every image carries the built commit in its
+`org.opencontainers.image.revision` label, with the source repository and the
+version (`main`, the release version, or the sha tag) in the matching OCI
+labels. The workflow can also be dispatched by hand for a dry run, which never
+pushes.
 
 Publishing a GitHub Release `v<version>` runs
 [release.yml](../../../../.github/workflows/release.yml), which publishes
 `ghcr.io/libid-org/ccdp:<version>` and, for a stable version (no `-` prerelease
 suffix, the npm dist-tag rule), `ghcr.io/libid-org/ccdp:latest`. The release
-promotes rather than rebuilds: it retags the `sha-<short sha>` image of the
+promotes rather than rebuilds: it retags the `sha-<commit sha>` image of the
 released commit registry-side, so the release image is byte-identical to the
 image built and tested when that commit landed on `main` — the same digest,
 which the job verifies for every new tag and prints next to the source digest
-in the run summary. Promotion needs no retention seed because it publishes that
-exact image. Only when the commit has no `sha-` image (a release cut before the
-job existed, or whose `main` run failed) does the release fall back to the
-reusable workflow: a full build, test and push under the version tags and
-`sha-<short sha>`, seeded from `:main` as described next.
+in the run summary. Before retagging, the job reads the image's revision label
+and refuses to promote unless it names the released commit. Promotion needs no
+retention seed because it publishes that exact image. Only when the commit has
+no `sha-` image (a release cut before the job existed, or whose `main` run
+failed) does the release fall back to the reusable workflow: a full build, test
+and push under the version tags and `sha-<commit sha>`, seeded from `:main` as
+described next.
 
 Before building, the workflow pulls the previously published `:main` image and
 copies `/home/sws/public` and `/home/sws/distribution-graph.json` out of it into
