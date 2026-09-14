@@ -41,9 +41,10 @@ dist-artifacts/
 
 `distribution-graph.json` is private build/test metadata and an input for retaining
 previous immutable resources. It is not a runtime manifest or public resource.
-The [container recipe](../ccdp.Dockerfile) copies `public/` and `sws.toml`, and
-places `distribution-graph.json` at `/home/sws/` outside the served root so the
-next build can read retention state back out of a published image (see
+The [container recipe](../ccdp.Dockerfile) replaces the base image's served
+tree (it ships a placeholder `index.html`) with `public/`, copies `sws.toml`,
+and places `distribution-graph.json` at `/home/sws/` outside the served root so
+the next build can read retention state back out of a published image (see
 [Publication and upgrades](#publication-and-upgrades)).
 Exact internal rewrites serve the document routes without `.html`; direct
 navigation to their physical `.html` files does not execute a ceremony.
