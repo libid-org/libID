@@ -216,37 +216,56 @@ connection. Ceremony includes no WebRTC implementation or signaling service.
 
 ## Publication and upgrades
 
-The `ccdp-image` job in [ci.yml](../../../../.github/workflows/ci.yml) builds the
-artifact and the `linux/amd64` image on every pull request and push to `main`,
-runs the distribution checks against the running container and the pinned native
-binary, and on `main` pushes `ghcr.io/libid-org/ccdp:main` and
-`ghcr.io/libid-org/ccdp:sha-<short sha>`, printing the pushed digest in the run
-summary. Pull requests build and test without pushing.
+The reusable [ccdp-image.yml](../../../../.github/workflows/ccdp-image.yml)
+workflow builds the artifact and the `linux/amd64` image, runs the distribution
+checks against the running container and the pinned native binary, and pushes
+the image only when asked to. The `ccdp-image` job in
+[ci.yml](../../../../.github/workflows/ci.yml) calls it on every pull request
+and push to `main`; on `main` it pushes `ghcr.io/libid-org/ccdp:sha-<short sha>`
+and `ghcr.io/libid-org/ccdp:main`, printing the pushed digest in the run
+summary. Pull requests build and test without pushing. The workflow can also be
+dispatched by hand for a dry run with `push` left off.
 
-Before building, the job pulls the previously published `:main` image and copies
-`/home/sws/public` and `/home/sws/distribution-graph.json` out of it into the
-build output. The build then checks reused immutable URLs for identical bytes
-and policies, retains the previous immutable assets, and replaces the output
-only after success, so the compatibility window holds without a persistent
-build directory. A first publication, or a run whose previous image cannot be
-pulled, retains nothing and says so in its log (with a warning when publishing).
-Changing the bytes or policy of an already published immutable URL fails the
-build by design; publish changed content under a new mount.
+Publishing a GitHub Release `v<version>` runs
+[release.yml](../../../../.github/workflows/release.yml), which publishes
+`ghcr.io/libid-org/ccdp:<version>` and, for a stable version (no `-` prerelease
+suffix, the npm dist-tag rule), `ghcr.io/libid-org/ccdp:latest`. The release
+promotes rather than rebuilds: it retags the `sha-<short sha>` image of the
+released commit registry-side, so the release image is byte-identical to the
+image built and tested when that commit landed on `main` — the same digest,
+which the job verifies for every new tag and prints next to the source digest
+in the run summary. Promotion needs no retention seed because it publishes that
+exact image. Only when the commit has no `sha-` image (a release cut before the
+job existed, or whose `main` run failed) does the release fall back to the
+reusable workflow: a full build, test and push under the version tags and
+`sha-<short sha>`, seeded from `:main` as described next.
+
+Before building, the workflow pulls the previously published `:main` image and
+copies `/home/sws/public` and `/home/sws/distribution-graph.json` out of it into
+the build output. The build then checks reused immutable URLs for identical
+bytes and policies, retains the previous immutable assets, and replaces the
+output only after success, so the compatibility window holds without a
+persistent build directory. A first publication, or a run whose previous image
+cannot be pulled, retains nothing and says so in its log (with a warning when
+publishing). Changing the bytes or policy of an already published immutable URL
+fails the build by design; publish changed content under a new mount.
 
 Local release builds follow the same rule: build into the existing accumulated
 output and preserve the whole of it, including `distribution-graph.json`,
 between builds. A fresh empty output cannot retain resources from a previous
 deployment.
 
-Promote the complete image, pinned by digest. Retention currently covers
-immutable assets, not an automatic archive of every protocol version: only v1 is
-emitted. Adding or retiring protocol versions needs explicit build support and a
+Deploy the complete image pinned by digest (the one in the run summary), not by
+a tag, which can move. Retention currently covers immutable assets, not an
+automatic archive of every protocol version: only v1 is emitted. Adding or
+retiring protocol versions needs explicit build support and a
 compatibility-window plan. Application, Callback, Prover and root Worker must
 remain compatible.
 
-Before promotion run [distribution and browser checks](testing.md), including
-the actual dependency loaders and served headers. A compiler-only build does
-not qualify live CRS, consent, production Bridge behavior or physical devices.
+Before an image goes to a deployment, run
+[distribution and browser checks](testing.md), including the actual dependency
+loaders and served headers. A compiler-only build does not qualify live CRS,
+consent, production Bridge behavior or physical devices.
 The current [qualification gaps](qualification.md) remain release gates; the
 published image is continuous-integration output, and promoting it to a
 deployment is a separate, deliberate step.
