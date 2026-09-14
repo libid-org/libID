@@ -5,8 +5,14 @@ name: CCDP image
 # binary, and — when `push` is true — publishes it to ghcr. Called by ci.yml
 # (build and test on pull requests; publish `:sha-<short sha>` and `:main`
 # from main) and by release.yml when a release has no main image to promote
-# (publish `:<version>`, plus `:latest` for stable versions). Dispatch it by
-# hand for a dry run with `push` left false.
+# (publish `:<version>`, plus `:latest` for stable versions). A manual
+# dispatch is a dry run: it builds and tests and never pushes.
+#
+# No `permissions` here: a called workflow runs with its caller's token and
+# can only narrow it, so each caller declares what its run needs —
+# `packages: read` for pull requests, which execute PR-controlled build code,
+# and `packages: write` only for the runs that push. A dispatch runs with the
+# repository's default token, which is read-only.
 #
 # The image is always tagged `ghcr.io/libid-org/ccdp:sha-<short sha>` of the
 # built commit — the reference the checks run against and the one release.yml
@@ -30,29 +36,18 @@ on:
         type: string
         default: ""
   workflow_dispatch:
-    inputs:
-      push:
-        description: Push the image to ghcr once the checks pass.
-        type: boolean
-        default: false
-      tags:
-        description: Image references to tag besides ghcr.io/libid-org/ccdp:sha-<short sha>, one per line.
-        type: string
-        default: ""
 
 jobs:
   image:
     name: Build, test and push
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write
     env:
       IMAGE: ghcr.io/libid-org/ccdp
       ARTIFACTS: ts/packages/ceremony/dist-artifacts
       SWS_VERSION: v3.0.0-beta.1
-      PUSH: ${{ inputs.push }}
+      # A dispatch has no inputs, so this is "false" unless a caller asked.
+      PUSH: ${{ inputs.push == true }}
       EXTRA_TAGS: ${{ inputs.tags }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -120,7 +115,9 @@ jobs:
 
       - name: Build the CCDP artifact
         env:
-          # Authenticated release-asset digest lookups; anonymous ones are rate limited per address.
+          # Only authenticates release-asset digest lookups, which are rate
+          # limited per address when anonymous. Nothing here needs more than
+          # the read-only token a pull request run carries.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm -C ts --filter @libid/ceremony build:ccdp-artifacts
 
@@ -184,7 +181,7 @@ jobs:
           fi
 
       - name: Push the image
-        if: inputs.push
+        if: env.PUSH == 'true'
         run: |
           set -euo pipefail
           for ref in $REFS; do docker push "$ref"; done
@@ -197,7 +194,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary (not pushed)
-        if: inputs.push == false
+        if: env.PUSH != 'true'
         run: echo "### CCDP image built and tested; not pushed (push is false on ${{ github.event_name }})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Container logs on failure
