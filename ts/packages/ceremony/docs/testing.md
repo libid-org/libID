@@ -29,10 +29,10 @@ pnpm -C ts --filter @libid/ceremony test:distribution
 ```
 
 These Node tests exercise archive handling, emitted resources and header rules,
-release-digest verification, circuit capacity and the installed dependency
-loaders. **HTTP and native-binary checks are conditional**: a default run skips
-them unless their service/binary inputs are supplied. A green default run is not
-the complete distribution qualification.
+circuit capacity and the installed dependency loaders. **HTTP and native-binary
+checks are conditional**: a default run skips them unless their service/binary
+inputs are supplied. A green default run is not the complete distribution
+qualification.
 
 To include served-response checks (exact routes and policies, negotiation,
 uncacheable 404s and the `/health` probe), [build and run the emitted SWS image](distribution.md#build-and-serve)
@@ -51,7 +51,7 @@ point SWS at that same artifact. To include the same-length ETag regression and 
 Those tests start their own servers on `CEREMONY_SWS_TEST_PORT` (default 4687) and
 the next port; set `CEREMONY_SWS_TEST_PORT=4988` when the dev notary already
 occupies 4687. These inputs are test-only. The workspace **CCDP image** CI job runs
-all of them against the freshly built image and a digest-verified binary.
+all of them against the freshly built image and the pinned binary.
 
 ## Browser tests
 

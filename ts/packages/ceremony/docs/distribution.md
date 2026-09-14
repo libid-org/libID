@@ -101,20 +101,6 @@ installed package integrity comes from the workspace lockfile. Developers own
 release URLs and immutable mounts. There is no handwritten asset checksum list
 or browser hashing step.
 
-GitHub records a `sha256` digest for every release asset and returns it in the
-release's API document. [release.ts](../build/release.ts) reads that document
-for each `https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>`
-source and requires the downloaded bytes, fresh or cached, to hash to the
-recorded digest; a mismatch fails the build. A release that records no digest
-for the asset warns and continues. When the document cannot be fetched
-(offline, rate limited) a cached download is used with a warning; without a
-cache the build fails. Set `GH_TOKEN` or `GITHUB_TOKEN` to authenticate the
-lookup: anonymous GitHub API requests are limited to 60 per hour per address,
-which shared CI runners can exhaust. This checks integrity against what GitHub
-currently publishes, not a pin; re-uploading an asset changes its digest too.
-Changed bytes at a retained immutable URL are caught by the retention check at
-the next publication.
-
 External declarations retain their URL, range, optional exact byte count and
 fallback URLs. They emit no local body or response headers. They contribute to
 prefetch metadata, the fetch allowlist and generated CSP. Native bb.js chooses
@@ -286,6 +272,6 @@ deployment is a separate, deliberate step.
 [bundle.ts](../build/bundle.ts) records emitted dependencies;
 [assets.ts](../build/assets.ts) resolves declarations;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
-[release.ts](../build/release.ts) caches and digest-verifies downloads;
+[release.ts](../build/release.ts) caches downloads;
 [circuits.ts](../build/circuits.ts) checks capacity;
 [sws.ts](../build/sws.ts) writes files, sidecars and native server configuration.
