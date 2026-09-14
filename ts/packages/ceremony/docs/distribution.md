@@ -247,10 +247,12 @@ copies `/home/sws/public` and `/home/sws/distribution-graph.json` out of it into
 the build output. The build then checks reused immutable URLs for identical
 bytes and policies, retains the previous immutable assets, and replaces the
 output only after success, so the compatibility window holds without a
-persistent build directory. A first publication, or a run whose previous image
-cannot be pulled, retains nothing and says so in its log (with a warning when
-publishing). Changing the bytes or policy of an already published immutable URL
-fails the build by design; publish changed content under a new mount.
+persistent build directory. Only the registry's answer that the image does not
+exist (a first publication) skips the seed, with a warning when publishing; any
+other pull failure fails the run, so a publication never drops retained assets
+silently and is re-run instead. Changing the bytes or policy of an already
+published immutable URL fails the build by design; publish changed content
+under a new mount.
 
 Local release builds follow the same rule: build into the existing accumulated
 output and preserve the whole of it, including `distribution-graph.json`,
