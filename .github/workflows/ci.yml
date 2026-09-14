@@ -163,7 +163,7 @@ jobs:
   # linux/amd64, prove the image against the running container and the pinned
   # native binary, and publish it to ghcr on pushes to main. The steps live in
   # the reusable ccdp-image.yml, which release.yml shares: a release promotes
-  # the `sha-<short sha>` image published here to the release version, and
+  # the `sha-<commit sha>` image published here to the release version, and
   # rebuilds through the same workflow only when that image is missing.
   #
   # Two callers so the token matches the run. Pull requests execute
@@ -188,7 +188,7 @@ jobs:
     uses: ./.github/workflows/ccdp-image.yml
     with:
       push: true
-      # `sha-<short sha>` is always tagged; `:main` seeds the next build's retention.
+      # `sha-<commit sha>` is always tagged; `:main` seeds the next build's retention.
       tags: ghcr.io/libid-org/ccdp:main
 
   # ---------------------------------------------------------------------------
