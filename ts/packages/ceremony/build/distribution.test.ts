@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { test } from 'node:test'
 import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { packageDir } from './release.ts'
-import { headerSources } from './sws.ts'
+import { errorHeaders } from './sws.ts'
 
 const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
   graph: DistributionMetadata = JSON.parse(
@@ -18,16 +18,23 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
   assert.equal((config.general as TomlTable)['text-charset'], false)
   assert.equal(Object.hasOwn(config.general as object, 'port'), false)
   assert.equal((config.general as TomlTable).health, true)
-  // Every file gets both exact rule forms with its declared headers; no wildcard source.
-  const rules = new Map(
-    ((config.advanced as TomlTable).headers as { source: string; headers: unknown }[]).map(
-      (rule) => [rule.source, rule.headers],
-    ),
+  assert.equal((config.general as TomlTable)['redirect-trailing-slash'], true)
+  // The error policy catch-all first, then exactly one exact rule per file with its declared headers.
+  const [first, ...exact] = (config.advanced as TomlTable).headers as {
+    source: string
+    headers: unknown
+  }[]
+  assert.deepEqual(first, { source: '/**', headers: errorHeaders })
+  for (const rule of exact) assert.doesNotMatch(rule.source, /[*?[\]{}]/, rule.source)
+  assert.deepEqual(
+    new Map(exact.map((rule) => [rule.source, rule.headers])),
+    new Map(Object.entries(graph.files).map(([path, physical]) => [physical, graph.headers[path]])),
   )
-  for (const source of rules.keys()) assert.doesNotMatch(source, /[*?[\]{}]/, source)
-  for (const [path, physical] of Object.entries(graph.files))
-    for (const source of headerSources(physical))
-      assert.deepEqual(rules.get(source), graph.headers[path], source)
+  assert.equal(exact.length, Object.keys(graph.files).length)
+  assert.deepEqual(graph.headers['/404.html'], {
+    'Content-Type': 'text/html; charset=utf-8',
+    ...errorHeaders,
+  })
   for (const [path, headers] of Object.entries(graph.headers)) {
     const physical = graph.files[path],
       body = readFileSync(join(out, 'public', physical))
@@ -94,41 +101,60 @@ test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018]', {
   skip: !process.env.CEREMONY_SWS_URL,
 }, async () => {
   for (const [path, expected] of Object.entries(graph.headers)) {
-    if (path === '/404.html') continue
-    const response = await fetch(process.env.CEREMONY_SWS_URL + path, {
-      headers: { 'Accept-Encoding': 'br' },
-    })
-    assert.equal(response.status, 200, path)
-    for (const [key, value] of Object.entries(expected))
-      assert.equal(response.headers.get(key), value, `${path} ${key}`)
     const physical = graph.files[path]
-    assert.deepEqual(
-      Buffer.from(await response.arrayBuffer()),
-      readFileSync(join(out, 'public', physical)),
-    )
+    // A document's route and its physical `.html` file answer alike; nothing declared redirects.
+    for (const request of new Set([path, physical])) {
+      const response = await fetch(process.env.CEREMONY_SWS_URL + request, {
+        headers: { 'Accept-Encoding': 'br' },
+      })
+      assert.equal(response.status, 200, request)
+      assert.equal(response.redirected, false, request)
+      for (const [key, value] of Object.entries(expected))
+        assert.equal(response.headers.get(key), value, `${request} ${key}`)
+      assert.deepEqual(
+        Buffer.from(await response.arrayBuffer()),
+        readFileSync(join(out, 'public', physical)),
+        request,
+      )
+    }
   }
-  assert.equal((await fetch(`${process.env.CEREMONY_SWS_URL}/ccdp/v99/prover`)).status, 404)
 })
 
-test('actual SWS answers the health probe and serves uncacheable 404s [KIT-001A]', {
+test('actual SWS answers the health probe and serves every 404 with the error policy [KIT-001A]', {
   skip: !process.env.CEREMONY_SWS_URL,
 }, async () => {
-  const health = await fetch(`${process.env.CEREMONY_SWS_URL}/health`)
+  const url = process.env.CEREMONY_SWS_URL
+  const health = await fetch(`${url}/health`)
   assert.equal(health.status, 200)
-  // Error responses are matched on the raw request path: no header rule may make a 404 cacheable.
-  // `/` included: the image must not serve the base image's placeholder index.
+  // Error responses are matched on the raw request path, where only the catch-all applies: every
+  // 404 carries exactly the error policy and no validator. `<file>/<name>` is the form a per-file
+  // rule must never be keyed on; `/` must not serve the base image's placeholder index.
+  const asset = Object.keys(graph.headers).find((p) => /^\/ccdp\/assets\/.*\.js$/.test(p))!
   for (const path of [
     '/',
-    '/ccdp/assets/does/not/exist.js',
-    '/ccdp/assets/',
-    '/ccdp/v99/prover',
     '/nope',
+    '/ccdp/v99/prover',
+    '/ccdp/assets/',
+    '/ccdp/assets/does/not/exist.js',
+    `${asset}/${basename(asset)}`,
+    '/ccdp/v1/prefetch.html/prefetch.html',
+    '/ccdp/v1/prefetch/prefetch.html',
+    '/404.html/404.html',
   ]) {
-    const missing = await fetch(process.env.CEREMONY_SWS_URL + path)
+    const missing = await fetch(url + path)
     assert.equal(missing.status, 404, path)
-    for (const name of ['cache-control', 'last-modified', 'expires'])
+    assert.equal(missing.redirected, false, path)
+    assert.match(missing.headers.get('content-type') ?? '', /^text\/html/, path)
+    for (const [name, value] of Object.entries(errorHeaders))
+      assert.equal(missing.headers.get(name), value, `${path} ${name}`)
+    for (const name of ['etag', 'last-modified', 'expires', 'content-encoding'])
       assert.equal(missing.headers.get(name), null, `${path} ${name}`)
   }
+  // The one redirect SWS issues: a directory path to its slash form, which is the same 404.
+  const directory = await fetch(`${url}/ccdp/assets`, { redirect: 'manual' })
+  assert.equal(directory.status, 308)
+  assert.equal(directory.headers.get('location'), '/ccdp/assets/')
+  assert.equal(directory.headers.get('cache-control'), errorHeaders['Cache-Control'])
 })
 
 test('aggregate Callback insertion preserves executable hashes and rejects malformed artifacts [KIT-009] [KIT-010] [CSP-007]', async () => {

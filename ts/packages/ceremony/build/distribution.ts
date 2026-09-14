@@ -10,7 +10,7 @@ import { bundle } from './bundle.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { responseHeaders } from './profiles.ts'
 import { packageDir } from './release.ts'
-import { writeDistribution } from './sws.ts'
+import { errorHeaders, writeDistribution } from './sws.ts'
 
 export type DistributionMetadata = Pick<ResolvedAssets, 'requestsByProfile' | 'allowedRequests'> & {
   headers: Record<string, Record<string, string>>
@@ -168,11 +168,11 @@ try {
       put('/ccdp/v1/worker.js', item.code, 'worker')
     } else put(`/${item.fileName}`, item.type === 'chunk' ? item.code : item.source, 'asset')
   }
+  // The page every 404 serves; requested directly it declares the same error policy.
   put(
     '/404.html',
     '<!doctype html><html lang="en"><meta charset="utf-8"><title>Not found</title><p>Not found.</p></html>',
-    'prefetch',
-    { 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'" },
+    { 'Content-Type': 'text/html; charset=utf-8', ...errorHeaders },
   )
   // Retain old immutable assets and their effective policy through the compatibility window.
   const previousGraph = join(out, 'distribution-graph.json')

@@ -8,7 +8,7 @@ import { setTimeout } from 'node:timers/promises'
 import { parse, stringify, type TomlTable } from 'smol-toml'
 import { document } from '../src/ccdp/headers.ts'
 import { cache } from './release.ts'
-import { headerSources, writeDistribution } from './sws.ts'
+import { errorHeaders, writeDistribution } from './sws.ts'
 
 // The native tests below start their own SWS on this port and the next one.
 const testPort = Number(process.env.CEREMONY_SWS_TEST_PORT ?? 4687)
@@ -93,7 +93,7 @@ test('rebuild removes obsolete compression sidecars [LIBID-ASSET-023]', () => {
   }
 })
 
-test('emitted header rules are exact, in both matching forms, with the health probe on', () => {
+test('emitted header rules: the error policy catch-all, then one exact rule per file; health probe on', () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-rules-'))
   try {
@@ -108,18 +108,19 @@ test('emitted header rules are exact, in both matching forms, with the health pr
     const config = parse(readFileSync(join(dir, 'sws.toml'), 'utf8'))
     assert.equal((config.general as TomlTable).health, true)
     assert.equal((config.general as TomlTable)['security-headers'], false)
-    const rules = (config.advanced as TomlTable).headers as { source: string; headers: unknown }[]
-    // Sources are globs: an exact path only, never a namespace that also matches error responses.
-    for (const rule of rules) assert.doesNotMatch(rule.source, /[*?[\]{}]/, rule.source)
-    assert.deepEqual(
-      rules.map((rule) => rule.source),
-      [...headerSources('/ccdp/assets/a.js'), ...headerSources('/ccdp/v1/prefetch.html')],
-    )
-    assert.deepEqual(headerSources('/ccdp/assets/a.js'), [
-      '/ccdp/assets/a.js',
-      '/ccdp/assets/a.js/a.js',
+    // Plain-path matching of the rules below depends on the trailing-slash redirect staying on.
+    assert.equal((config.general as TomlTable)['redirect-trailing-slash'], true)
+    assert.deepEqual((config.advanced as TomlTable).rewrites, [
+      { source: '/ccdp/v1/prefetch', destination: '/ccdp/v1/prefetch.html' },
     ])
-    for (const rule of rules.slice(0, 2)) assert.deepEqual(rule.headers, headers)
+    // The catch-all first, so every later exact rule overwrites it on its own file. Exact
+    // physical paths only: no route (rewritten before matching) and no appended-name form
+    // (`/ccdp/assets/a.js/a.js`), which is the raw path of the 404 beneath the file.
+    assert.deepEqual((config.advanced as TomlTable).headers, [
+      { source: '/**', headers: errorHeaders },
+      { source: '/ccdp/assets/a.js', headers },
+      { source: '/ccdp/v1/prefetch.html', headers: document },
+    ])
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -163,51 +164,73 @@ test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-02
 })
 
 // Canary: pins how the pinned SWS matches `[[advanced.headers]]` sources (see
-// headerSources in sws.ts). A failure on a newer SWS means the matching changed;
-// revisit headerSources and docs/distribution.md before updating the assertions.
-test('native SWS header-rule matching canary: appended file name after rewrites, raw path on errors [KIT-001A]', {
+// sws.ts). A failure on a newer SWS means the matching changed; revisit sws.ts
+// and docs/distribution.md before updating the assertions.
+test('native SWS header-rule matching canary: plain path after rewrites, raw path and catch-all on errors [KIT-001A]', {
   skip: !process.env.CEREMONY_SWS_BINARY,
 }, async () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-canary-'))
   const port = testPort + 1
+  const asset = { 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Served': 'applied' }
   writeDistribution(
     dir,
     new Map([
-      ['/ccdp/assets/served.js', { bytes: Buffer.from('export {}'), headers: {} }],
-      ['/ccdp/v1/prefetch', { bytes: Buffer.from('<p>prefetch</p>'), headers: {} }],
-      ['/404.html', { bytes: Buffer.from('Not found'), headers: {} }],
+      ['/ccdp/assets/served.js', { bytes: Buffer.from('export {}'), headers: asset }],
+      ['/ccdp/v1/prefetch', { bytes: Buffer.from('<p>prefetch</p>'), headers: { ...document } }],
+      ['/404.html', { bytes: Buffer.from('Not found'), headers: { ...errorHeaders } }],
     ]),
   )
   localize(dir, port, (config) => {
-    ;(config.advanced as TomlTable).headers = [
-      // A resolved file: the request path with its file name appended matches, the plain path does not.
+    const advanced = config.advanced as TomlTable
+    // Probes after the emitted rules, each keyed on a form the emitted rules must not use.
+    advanced.headers = [
+      ...(advanced.headers as TomlTable[]),
+      // The appended-name form: never a resolved file, only the raw path of the 404 beneath it.
       { source: '/ccdp/assets/served.js/served.js', headers: { 'X-Appended': 'applied' } },
-      { source: '/ccdp/assets/served.js', headers: { 'X-Plain': 'applied' } },
-      // The rewritten (physical) path is matched, not the requested route.
-      { source: '/ccdp/v1/prefetch.html/prefetch.html', headers: { 'X-Rewritten': 'applied' } },
-      { source: '/ccdp/v1/prefetch/prefetch.html', headers: { 'X-Requested': 'applied' } },
-      // No file resolved: the raw request path matches, so a namespace wildcard would too.
-      { source: '/ccdp/assets/missing.js', headers: { 'X-Error': 'applied' } },
-      { source: '/ccdp/assets/**', headers: { 'X-Namespace': 'applied' } },
+      // The requested route: rewritten before matching.
+      { source: '/ccdp/v1/prefetch', headers: { 'X-Requested': 'applied' } },
+      // On an error, every matching rule applies in config order; later ones overwrite.
+      { source: '/ccdp/assets/missing.js', headers: { 'Cache-Control': 'max-age=1' } },
     ]
   })
   const server = await serve(dir, port)
   try {
     const served = await fetch(`${server.url}/ccdp/assets/served.js`)
     assert.equal(served.status, 200)
-    assert.equal(served.headers.get('x-appended'), 'applied')
-    assert.equal(served.headers.get('x-plain'), null)
-    assert.equal(served.headers.get('x-namespace'), 'applied')
-    const prefetch = await fetch(`${server.url}/ccdp/v1/prefetch`)
-    assert.equal(prefetch.status, 200)
-    assert.equal(prefetch.headers.get('x-rewritten'), 'applied')
-    assert.equal(prefetch.headers.get('x-requested'), null)
+    assert.equal(served.headers.get('x-served'), 'applied')
+    assert.equal(served.headers.get('x-appended'), null)
+    // The exact rule overwrites the catch-all's names it declares; the others keep the catch-all's value.
+    assert.equal(served.headers.get('cache-control'), asset['Cache-Control'])
+    assert.equal(
+      served.headers.get('content-security-policy'),
+      errorHeaders['Content-Security-Policy'],
+    )
+    for (const path of ['/ccdp/v1/prefetch', '/ccdp/v1/prefetch.html']) {
+      const page = await fetch(server.url + path)
+      assert.equal(page.status, 200, path)
+      assert.equal(page.redirected, false, path)
+      assert.equal(page.headers.get('cache-control'), document['Cache-Control'], path)
+      assert.equal(page.headers.get('x-requested'), null, path)
+    }
+    const beneath = await fetch(`${server.url}/ccdp/assets/served.js/served.js`)
+    assert.equal(beneath.status, 404)
+    assert.equal(beneath.headers.get('x-appended'), 'applied')
+    assert.equal(beneath.headers.get('x-served'), null)
+    assert.equal(beneath.headers.get('cache-control'), errorHeaders['Cache-Control'])
     const missing = await fetch(`${server.url}/ccdp/assets/missing.js`)
     assert.equal(missing.status, 404)
-    assert.equal(missing.headers.get('x-error'), 'applied')
-    assert.equal(missing.headers.get('x-namespace'), 'applied')
-    assert.equal(missing.headers.get('cache-control'), null)
+    assert.equal(missing.headers.get('cache-control'), 'max-age=1')
+    // Nothing else names an unknown path: only the catch-all applies.
+    const unknown = await fetch(`${server.url}/nope`)
+    assert.equal(unknown.status, 404)
+    for (const [name, value] of Object.entries(errorHeaders))
+      assert.equal(unknown.headers.get(name), value, name)
+    assert.equal(unknown.headers.get('x-served'), null)
+    // The health probe answers before any header rule.
+    const health = await fetch(`${server.url}/health`)
+    assert.equal(health.status, 200)
+    assert.equal(health.headers.get('cache-control'), null)
   } finally {
     await server.stop()
     rmSync(dir, { recursive: true, force: true })
