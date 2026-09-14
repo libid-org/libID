@@ -116,7 +116,9 @@ test('actual SWS answers the health probe and serves uncacheable 404s [KIT-001A]
   const health = await fetch(`${process.env.CEREMONY_SWS_URL}/health`)
   assert.equal(health.status, 200)
   // Error responses are matched on the raw request path: no header rule may make a 404 cacheable.
+  // `/` included: the image must not serve the base image's placeholder index.
   for (const path of [
+    '/',
     '/ccdp/assets/does/not/exist.js',
     '/ccdp/assets/',
     '/ccdp/v99/prover',
