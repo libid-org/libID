@@ -156,9 +156,9 @@ the tests account for:
   and keeps the redirect on, so [sws.ts](../build/sws.ts) never emits that form:
   keyed on `<file>/<name>`, it equals the raw path of the 404 beneath the file
   and made that 404 immutable. A response that resolved no file (every 404, and
-  the `308` a directory path such as `/ccdp/assets` gets to `/ccdp/assets/`) is
-  matched on the raw request path, and every matching rule applies in config
-  order, later rules overwriting. The first emitted rule is therefore the
+  the `308` a directory path such as `/ccdp/assets` gets to `/ccdp/assets/`,
+  which returns 404) is matched on the raw request path, and every matching rule
+  applies in config order, later rules overwriting. The first emitted rule is therefore the
   catch-all `/**` carrying the error policy, `Cache-Control: no-store`,
   `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: same-origin`
   and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`,
