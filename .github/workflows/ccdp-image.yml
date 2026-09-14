@@ -92,26 +92,35 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       # The previous publication's served tree and graph let build/distribution.ts
-      # retain its immutable assets and verify reused URLs are unchanged. No
-      # previous image (first publication, or a package this token cannot read)
-      # is a logged skip, not a failure.
+      # retain its immutable assets and verify reused URLs are unchanged. Only
+      # the registry's word that the image does not exist (first publication,
+      # or a package without a `:main` tag yet; "manifest unknown" for the
+      # read-only pull-request token too) skips the seed. Any other pull
+      # failure — network, registry, auth — fails the run, so a publication
+      # never drops retained assets silently and is simply re-run.
       - name: Seed retention from the previously published image
         run: |
           set -euo pipefail
-          if ! docker pull --platform linux/amd64 "$IMAGE:main"; then
+          if docker pull --platform linux/amd64 "$IMAGE:main" 2>"$RUNNER_TEMP/pull.err"; then
+            previous=$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE:main")
+            cid=$(docker create --platform linux/amd64 "$IMAGE:main")
+            mkdir -p "$ARTIFACTS"
+            docker cp "$cid:/home/sws/public" "$ARTIFACTS/public"
+            docker cp "$cid:/home/sws/distribution-graph.json" "$ARTIFACTS/distribution-graph.json"
+            docker rm "$cid" >/dev/null
+            echo "Seeded $(find "$ARTIFACTS/public" -type f | wc -l) files from $previous"
+            exit 0
+          fi
+          cat "$RUNNER_TEMP/pull.err"
+          if grep -qiE 'manifest unknown|not found|name unknown' "$RUNNER_TEMP/pull.err"; then
             echo "No previous image at $IMAGE:main; building without retained assets."
             if [ "$PUSH" = "true" ]; then
               echo "::warning::Retention seed unavailable; this publication retains no previous immutable assets."
             fi
             exit 0
           fi
-          previous=$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE:main")
-          cid=$(docker create --platform linux/amd64 "$IMAGE:main")
-          mkdir -p "$ARTIFACTS"
-          docker cp "$cid:/home/sws/public" "$ARTIFACTS/public"
-          docker cp "$cid:/home/sws/distribution-graph.json" "$ARTIFACTS/distribution-graph.json"
-          docker rm "$cid" >/dev/null
-          echo "Seeded $(find "$ARTIFACTS/public" -type f | wc -l) files from $previous"
+          echo "::error::Could not pull $IMAGE:main; fix the cause (or re-run) rather than building without retained assets."
+          exit 1
 
       - name: Build the CCDP artifact
         env:
