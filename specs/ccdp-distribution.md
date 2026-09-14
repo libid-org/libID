@@ -28,9 +28,10 @@ Browsers prefetch and fetch external resources at their declared absolute
 URLs; the static build does not download or mirror them. External asset availability and readable CORS remain release-qualified
 dependencies rather than guarantees supplied by this host.
 
-The OAuth Bridge separately serves ceremony configuration, the registered
-Callback document, and enabled confidential platform endpoints. It retrieves
-the public Callback artifact server-side and inserts its deployment data before
+The OAuth Bridge separately serves ceremony configuration and the registered
+Callback document. Any profile-defined Bridge service is separate from this
+static Distribution. The Bridge retrieves the public Callback artifact
+server-side and inserts its deployment data before
 serving it; this does not change the document's OAuth Bridge origin. Requests
 to the OAuth Platform, OAuth Bridge, Notary Service, and public platform APIs are
 protocol traffic rather than CCDP assets.
@@ -155,10 +156,10 @@ Worker only caches bytes and keeps ports: it needs no WASM compilation permissio
 
 Each request-invariant Prover response supports multiple platform profiles and
 arbitrary notary origins satisfying the [origin policy](ccdp.md#origin-policy).
-Prover makes no OAuth Bridge HTTP request. Token and identity exchanges use
-the browser notarization adapter, with code-owned platform destinations rather
-than caller-selected endpoints. CSP does not constrain the runtime-selected
-notary to an exact origin: compromised Prover code can use every network class
+For browser-exchange profiles, token and identity exchanges use the browser
+notarization adapter, with code-owned platform destinations rather than
+caller-selected endpoints. CSP does not constrain the runtime-selected notary
+to an exact origin: compromised Prover code can use every network class
 admitted by the response.
 
 ### Callback artifact

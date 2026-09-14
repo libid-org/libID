@@ -26,8 +26,14 @@ The OAuth bridge owns:
 For Callback, the bridge is a configuration-inserting, cached proxy to the
 [CCDP Distribution](ccdp-distribution.md#callback-artifact). It neither
 implements the document nor requires a TypeScript build. It serves no other
-CCDP resources and stores no ceremony state. Token exchanges and notarization
-are Prover work; the Bridge implements neither.
+CCDP resources. The browser-exchange profiles covered here require no Bridge
+ceremony state, token exchange, or notarization.
+
+Bridge-assisted OAuth is a platform-profile choice, not prohibited by CCDP.
+Another platform or later ceremony version can define a Bridge service together
+with its HTTP contract, credential custody, and trust/evidence requirements.
+The route surface below requires no such service for the browser-exchange
+profiles; it does not preclude one where a profile requires it.
 
 The bridge and Distribution may be cross-site and independently operated;
 both are code-supply-chain trust boundaries. The Distribution requires no
@@ -102,7 +108,7 @@ a shared Distribution requires no reciprocal configuration.
 - REQ-BRIDGE-02 (upholds SP-CCDP-01): The Bridge MUST enforce the route,
   method, and origin-admission rules below before performing route work.
 
-The bridge exposes only:
+For the profiles covered here, the bridge exposes only:
 
 | Method | Route | Availability | Purpose | Origin enforcement |
 |---|---|---|---|---|
@@ -115,10 +121,10 @@ authority input. The callback document is therefore public and
 request-invariant; its browser protocol authenticates the application after it
 loads.
 
-No separate Callback script, prover, proving-asset, preparation, continuation,
-polling, status, result, cancellation, token-exchange, notarization, browser TLS
-bridge, or proof-recovery route exists on the OAuth bridge. Unsupported methods
-fail without route work.
+For these profiles, no separate Callback script, prover, proving-asset,
+preparation, continuation, polling, status, result, cancellation, token-exchange,
+notarization, browser TLS bridge, or proof-recovery route exists on the OAuth
+bridge. Unsupported methods fail without route work.
 Except for the OAuth-platform-mandated callback query, bridge routes accept
 no query or request body.
 
@@ -229,8 +235,8 @@ platform-mandated callback queries are not forwarded to the Distribution.
 
 - REQ-BRIDGE-05: Withdrawn.
 
-The Bridge exposes no token endpoint. Prover performs the platform exchange
-and notarization; the [platform profile](platform-ceremonies.md#6-github-ceremony)
+This GitHub profile requires no Bridge token endpoint. Prover performs the
+exchange and notarization; the [platform profile](platform-ceremonies.md#6-github-ceremony)
 owns their semantics.
 
 ## Compatibility
@@ -256,7 +262,8 @@ authentication or confidentiality of the configuration. The public
 `tokenExchangeCredential` carries no user authority and is not an application
 authentication boundary. Platform ceremony rules own the consequences of
 publishing it and the downstream checks; renaming the field does not hide it.
-The Bridge receives no notary address and opens no token or notary connection.
+For these profiles, the Bridge receives no notary address and opens no token or
+notary connection.
 Callback query redaction remains necessary because OAuth codes, unlike public
 application credentials, are transient user-ceremony inputs.
 
@@ -271,7 +278,8 @@ cryptographic soundness.
 - TEST-BRIDGE-02 (exercises REQ-BRIDGE-02):
   Disallowed and missing origins reject according to each route's rules before
   dependency work; explicit bad Origin cannot use the same-origin GET exception.
-  The former token route performs no exchange or notary work, including on POST.
+  For the browser-exchange profiles, the former token route performs no exchange
+  or notary work, including on POST.
 - TEST-BRIDGE-03 (exercises REQ-BRIDGE-03):
   Exact public config includes GitHub's public token-exchange credential and has
   no redirect field, user token, or notary selection. Missing required, empty,
