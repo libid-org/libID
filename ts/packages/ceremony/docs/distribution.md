@@ -48,7 +48,10 @@ the next build can read retention state back out of a published image (see
 [Publication and upgrades](#publication-and-upgrades)).
 Exact internal rewrites serve the document routes without `.html`; direct
 navigation to their physical `.html` files does not execute a ceremony.
-Unknown routes return 404, with no SPA fallback and no caching headers.
+Unknown routes return 404 with no SPA fallback and an explicit error policy
+(`Cache-Control: no-store` and the inert `404.html` headers, see
+[Native server behavior](#native-server-behavior)): absent cache headers would
+leave a 404 heuristically cacheable.
 
 ## Source declarations
 
@@ -145,15 +148,25 @@ The pinned SWS 3.0.0-beta.1 has behavior that the generated configuration and
 the tests account for:
 
 - **Header rule matching.** `[[advanced.headers]]` sources are globs matched
-  against the request path after internal rewrites. When a file was resolved and
-  `redirect-trailing-slash = false`, SWS first appends `/<resolved file name>`, so
-  a served `/ccdp/v1/prefetch` (rewritten to `/ccdp/v1/prefetch.html`) is matched
-  as `/ccdp/v1/prefetch.html/prefetch.html`. Responses that resolved no file, such
-  as 404s, are matched on the raw request path. [sws.ts](../build/sws.ts) therefore
-  emits two exact rules per file, the physical path and that path with its name
-  appended, with identical headers, and no namespace wildcard: a `/ccdp/assets/**`
-  rule also matched every 404 beneath it and marked those responses immutable.
-  The [canary test](testing.md#distribution-checks) pins this matching against the
+  against the request path after internal rewrites, so one exact rule per
+  physical file (`/ccdp/v1/prefetch.html`) covers its route and its direct
+  `.html` request. SWS appends `/<resolved file name>` before matching only for
+  a directory-index request (`/dir/`, or any resolved file when
+  `redirect-trailing-slash = false`). The distribution serves no directory index
+  and keeps the redirect on, so [sws.ts](../build/sws.ts) never emits that form:
+  keyed on `<file>/<name>`, it equals the raw path of the 404 beneath the file
+  and made that 404 immutable. A response that resolved no file (every 404, and
+  the `308` a directory path such as `/ccdp/assets` gets to `/ccdp/assets/`) is
+  matched on the raw request path, and every matching rule applies in config
+  order, later rules overwriting. The first emitted rule is therefore the
+  catch-all `/**` carrying the error policy, `Cache-Control: no-store`,
+  `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: same-origin`
+  and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`,
+  which `/404.html` itself declares. Each exact rule after it overwrites the
+  names it declares on its own file; a 200 keeps the catch-all's value for a
+  name its declaration omits (the CSP on a plain asset, inert outside documents
+  and workers, which all declare their own). The
+  [canary test](testing.md#distribution-checks) pins this matching against the
   real binary; when it fails on a newer SWS, revisit `sws.ts` and this section.
 - **`./config.toml` precedence.** A `config.toml` in the working directory is read
   instead of the `--config-file`/`SERVER_CONFIG_FILE` path. Run local binaries from
