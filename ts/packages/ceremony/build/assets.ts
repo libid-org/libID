@@ -188,11 +188,6 @@ export async function resolveAssets() {
         archives.set(asset.source, archive)
       }
       const files = await archive
-      if (first)
-        for (const [member, body] of files) {
-          const target = `/ccdp/assets/${asset.mount}/${member}`
-          register(target, body, assetHeaders(member))
-        }
       const member = selectMember(files, asset.member)
       path = `/ccdp/assets/${asset.mount}/${member}`
       bytes = files.get(member)!

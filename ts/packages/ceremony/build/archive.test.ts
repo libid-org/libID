@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib'
 import { Header } from 'tar'
 import { executionWorker } from '../src/ccdp/headers.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
-import { assetHeaders, externalRequest, loadAssetCatalog } from './assets.ts'
+import { assetHeaders, externalRequest, loadAssetCatalog, resolveAssets } from './assets.ts'
 import { cache, packageDir } from './release.ts'
 
 function tar(entries: { path: string; type?: 'File' | 'SymbolicLink' | 'Link'; body?: string }[]) {
@@ -75,6 +75,11 @@ test('safe archives preserve paths and wildcard selectors select exactly once [L
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('asset resolution publishes only declared files and archive members [LIBID-ASSET-024]', async () => {
+  const { local, urls } = await resolveAssets()
+  assert.deepEqual(new Set(local.keys()), new Set(Object.values(urls)))
 })
 
 test('policy cannot override server metadata or weaken immutable resources [LIBID-ASSET-026]', () => {
