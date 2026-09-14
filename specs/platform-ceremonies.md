@@ -553,8 +553,8 @@ response header. The two delimiter reveals are what anchor the committed range i
 received direction, which would otherwise reveal no byte at all and leave that
 range indistinguishable from a `refresh_token` value.
 
-Those reveals and the in-circuit `code_verifier` opening of REQ-COMMON-15
-reduce the hidden request surface, but revealing a range does not reject a form
+Those reveals and the Platform Verifier's `code_verifier` comparison under
+REQ-COMMON-15A bind the request, but revealing a range does not reject a form
 delimiter inside it. REQ-PLAT-63 therefore holds the complete body to the exact
 five-field form; X, like GitHub, does not depend on ASM-PROV-07.
 
