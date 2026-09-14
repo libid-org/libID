@@ -6,6 +6,7 @@ import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { packageDir } from './release.ts'
+import { headerSources } from './sws.ts'
 
 const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
   graph: DistributionMetadata = JSON.parse(
@@ -16,6 +17,17 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
   assert.equal((config.general as TomlTable)['text-charset'], false)
   assert.equal(Object.hasOwn(config.general as object, 'port'), false)
+  assert.equal((config.general as TomlTable).health, true)
+  // Every file gets both exact rule forms with its declared headers; no wildcard source.
+  const rules = new Map(
+    ((config.advanced as TomlTable).headers as { source: string; headers: unknown }[]).map(
+      (rule) => [rule.source, rule.headers],
+    ),
+  )
+  for (const source of rules.keys()) assert.doesNotMatch(source, /[*?[\]{}]/, source)
+  for (const [path, physical] of Object.entries(graph.files))
+    for (const source of headerSources(physical))
+      assert.deepEqual(rules.get(source), graph.headers[path], source)
   for (const [path, headers] of Object.entries(graph.headers)) {
     const physical = graph.files[path],
       body = readFileSync(join(out, 'public', physical))
@@ -96,6 +108,25 @@ test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018]', {
     )
   }
   assert.equal((await fetch(`${process.env.CEREMONY_SWS_URL}/ccdp/v99/prover`)).status, 404)
+})
+
+test('actual SWS answers the health probe and serves uncacheable 404s [KIT-001A]', {
+  skip: !process.env.CEREMONY_SWS_URL,
+}, async () => {
+  const health = await fetch(`${process.env.CEREMONY_SWS_URL}/health`)
+  assert.equal(health.status, 200)
+  // Error responses are matched on the raw request path: no header rule may make a 404 cacheable.
+  for (const path of [
+    '/ccdp/assets/does/not/exist.js',
+    '/ccdp/assets/',
+    '/ccdp/v99/prover',
+    '/nope',
+  ]) {
+    const missing = await fetch(process.env.CEREMONY_SWS_URL + path)
+    assert.equal(missing.status, 404, path)
+    for (const name of ['cache-control', 'last-modified', 'expires'])
+      assert.equal(missing.headers.get(name), null, `${path} ${name}`)
+  }
 })
 
 test('aggregate Callback insertion preserves executable hashes and rejects malformed artifacts [KIT-009] [KIT-010] [CSP-007]', async () => {

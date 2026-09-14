@@ -10,7 +10,7 @@ services:
       - ../.cache/qualification-assets/public:/home/sws/public:ro
       - ../.cache/qualification-assets/sws.toml:/etc/sws.toml:ro
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8787/ccdp/callback.html"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8787/health"]
       interval: 1s
       timeout: 2s
       retries: 30
