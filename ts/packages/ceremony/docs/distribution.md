@@ -92,8 +92,9 @@ The real declarations live in [notary.assets.ts](../src/notary/notary.assets.ts)
 and [barretenberg.assets.ts](../src/barretenberg/barretenberg.assets.ts).
 
 An archive source is an HTTPS URL or local path; relative paths resolve from the
-ceremony package. The build reads it once and mounts all regular files beneath
-`/ccdp/assets/<mount>/`, retaining their relative directories. A member selector
+ceremony package. The build reads it once and publishes only declared members beneath
+`/ccdp/assets/<mount>/`, retaining their relative directories. Declare any companion
+files needed by archive-relative imports as members too. A member selector
 must match exactly one file; `*` matches within a directory component, never
 across `/`, and the final filename is exact. Traversal, links, duplicates,
 conflicting bodies/policies and sidecar collisions fail the build.
