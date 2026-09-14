@@ -1062,11 +1062,16 @@ and no `authorization` needle to count.
   field.
 - REQ-COMMON-19F (upholds SP-BIND-01, SP-EXCHANGE-01):
   The Platform Verifier reading a JSON field from revealed attestation bytes
-  MUST first remove every JSON whitespace byte (`0x20`, `0x09`, `0x0a`,
-  `0x0d`) that touches a structural byte (`:`, `,`, `{`, `}`, `[`, `]`) on
-  either side, and no other byte. The Platform Verifier MUST match the
-  field's delimiter, count its positions under REQ-COMMON-19A, read its
-  value, and judge its terminator over the bytes that removal leaves. The
+  MUST first remove each maximal run of JSON whitespace bytes (`0x20`,
+  `0x09`, `0x0a`, `0x0d`) whose immediately preceding or immediately
+  following byte is a structural byte (`:`, `,`, `{`, `}`, `[`, `]`), and no
+  other byte. The Platform Verifier MUST match the field's delimiter, read
+  its value, and judge its terminator inside one revealed range, over the
+  bytes that removal leaves of that range. The Platform Verifier MUST count
+  the delimiter's positions under REQ-COMMON-19A over the concatenation of
+  every revealed range of that direction, in transcript order, after the same
+  removal, so that a delimiter a range boundary splits is still counted. The
+  Platform Verifier MUST NOT read a value from that concatenation. The
   Implementation MUST reveal a member as the transcript carries it, its JSON
   whitespace inside the revealed range at its offsets. The Implementation
   MUST NOT commit that whitespace with a bearer. Every compact delimiter this
@@ -1075,11 +1080,16 @@ and no `authorization` needle to count.
   Proving Circuit is outside this rule: REQ-COMMON-19 and REQ-COMMON-19D fix
   what it asserts at the offset the prover supplies. Necessity: a platform
   may pretty-print the response it serves for the media type a profile pins,
-  and GitHub does for `/user`. Removing whitespace only where it touches a
-  structural byte leaves every reader one exact template and makes a member
-  in any spelling the same member, so a second copy spelled with spaces is
-  still the duplicate REQ-COMMON-19A rejects, while `123 456` still does not
-  read as `123456`.
+  and GitHub does for `/user`. Removing a run only where a structural byte
+  bounds it leaves every reader one exact template and makes a member in any
+  spelling the same member, so a second copy spelled with spaces is still the
+  duplicate REQ-COMMON-19A rejects, while `123 456` still does not read as
+  `123456`. Reading and counting want opposite things: a read that crossed a
+  range boundary would let a prover assemble, from fragments the notary
+  signed at unrelated offsets, a document that never crossed the wire, and a
+  count that stopped at one range would miss a second delimiter the prover
+  cut a boundary through. The concatenation can only over-count, which fails
+  closed.
 - REQ-COMMON-20 (upholds SP-EXCHANGE-01):
   The Proving Circuit MUST constrain every variable value it opens or
   extracts to the charset the profile states, including values that are never
@@ -1317,8 +1327,14 @@ the constructions that role implements.
   its bytes are revealed at their transcript offsets; a second copy of the
   field spelled with whitespace is rejected as a duplicate; a byte JSON does
   not call whitespace, such as `0x0b`, in any of those positions is rejected;
-  an integer with whitespace between its digits is rejected; and a member
-  whose whitespace an HTTP chunk boundary splits is not built as a layout.
+  an integer with whitespace between its digits is rejected; a member whose
+  whitespace an HTTP chunk boundary splits is not built as a layout; a field
+  assembled from two revealed ranges, the member's opening in one and its
+  value's tail in another, is rejected as absent, however the ranges are
+  ordered; a second copy of the delimiter cut in two by a range boundary is
+  rejected as a duplicate; and a bearer prefix whose whitespace is pushed
+  into the committed range, so that the revealed prefix ends before the
+  value's opening quote, is rejected.
 - TEST-COMMON-11 (exercises REQ-COMMON-21, REQ-COMMON-21A, REQ-COMMON-21B, REQ-COMMON-21C):
   The Platform Verifier rejects an authenticated foreign authority, method,
   or path. The request constructor refuses a media type or `redirect_uri`
@@ -1369,7 +1385,7 @@ the constructions that role implements.
   submitters; the current fee is readable before the Submission is submitted; and a
   verification whose native value differs from the current fee is
   rejected.
-- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-40, REQ-COMMON-43):
+- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-39A, REQ-COMMON-39B, REQ-COMMON-40, REQ-COMMON-43):
   An identity attestation whose ranges do not sum to the signed request
   transcript length, or whose ranges leave a gap or an overlap, is
   rejected; an attestation carrying no signed total transcript length for
@@ -1380,7 +1396,16 @@ the constructions that role implements.
   occurrence inside another header's value is not counted, because the
   needle is line-anchored; and an attestation whose committed range is not
   immediately preceded by `\r\nauthorization: Bearer ` and immediately
-  followed by `\r\n` in the raw bytes is rejected. Every case above runs on
+  followed by `\r\n` in the raw bytes is rejected. A second `authorization`
+  header under another scheme, such as `Basic`, is rejected for a duplicate
+  needle occurrence; a request carrying a header the profile does not list,
+  such as `accept-encoding`, passes; a header whose name normalizes to
+  `cookie`, `content-encoding`, `transfer-encoding`,
+  `x-http-method-override`, `x-http-method` or `x-method-override` -- in
+  another letter case, with `_` for `-`, or padded before the colon -- is
+  rejected; and revealed request bytes carrying a bare line feed, a bare
+  carriage return, or a line beginning with a space or a horizontal tab are
+  rejected. Every case above runs on
   an identity-session attestation. A GitHub token-exchange attestation, whose
   only committed credential is the `client_secret` in its form body, passes
   verification with no coverage, needle, or framing check applied to that

@@ -473,10 +473,10 @@ Neither the authority nor the attestation timestamp is a transcript range.
 The authority reaches the Platform Verifier as
 the TLS server identity the Notary Service authenticated under common
 REQ-COMMON-21, carried in the attested data: the transcript
-holds the authority only in a `Host` header this table hides, and a revealed
-`Host` header is prover-composed text that says nothing about which server
-answered. The timestamp is the signed creation time of the attested data
-itself, which is why common REQ-COMMON-25 can forbid inferring it from a
+holds the authority only in a `host` header, which the first row reveals and
+REQ-PLAT-56A holds to the pinned authority, and that header is
+prover-composed text that says nothing about which server answered. The
+timestamp is the signed creation time of the attested data itself, which is why common REQ-COMMON-25 can forbid inferring it from a
 response header. The two delimiter reveals are what anchor the committed range in the
 received direction, which would otherwise reveal no byte at all and leave that
 range indistinguishable from a `refresh_token` value.
@@ -526,7 +526,8 @@ REQ-PLAT-56A does not forbid.
   normalizes, and values exactly once the optional whitespace around them is
   removed. The Platform Verifier MUST reject a head carrying `authorization`
   or any name common REQ-COMMON-39B forbids, under any spelling of the name.
-  The Platform Verifier MUST ignore every other header. Necessity: common REQ-COMMON-21B fixes the media type
+  The Platform Verifier MUST ignore every other header, `content-length`
+  excepted, which REQ-PLAT-56B holds to the body it frames. Necessity: common REQ-COMMON-21B fixes the media type
   because it "selects the platform's request parser", and a media type nothing
   compares is a pin in name only. The forbidden headers change what the
   platform does with the request in a way no revealed byte shows: which client
@@ -589,7 +590,8 @@ REQ-PLAT-56A does not forbid.
 four headers, in any order, and may carry others: `authorization: Bearer
 <access_token>`, `accept: application/json`, `host: api.x.com`, and
 `connection: close`. The Platform Verifier compares the request line and the
-`authorization` line and no other header.
+`authorization` line, refuses the names common REQ-COMMON-39B forbids, and
+compares no other header.
 
 Per common §9, the identity session reveals exactly these request ranges;
 the bearer value is the only committed request range, and every other
@@ -885,8 +887,8 @@ as the TLS server identity the Notary Service authenticated under common
 REQ-COMMON-21, carried in the attested data, because the
 transcript holds the authority only in a `Host` header, and that header is
 prover-composed text that says nothing about which server answered. Revealing
-it, as REQ-PLAT-56A now requires, does not make it the authority: it is
-compared against the profile's fixed list like every other header, while the
+it, as REQ-PLAT-56A now requires, does not make it the authority: it is one
+of the two headers the verifier holds to a pinned value, while the
 authority continues to reach the verifier as the authenticated TLS server
 identity. The timestamp is the signed creation time of the attested
 data itself, which is why common REQ-COMMON-25 can forbid inferring it from a
@@ -981,8 +983,9 @@ six headers, in any order, and may carry others:
 `x-github-api-version: 2022-11-28`, `host: api.github.com`,
 `connection: close`, and a `user-agent` of the Canonical Runtime's choosing,
 which GitHub requires of every API request and answers `403` without. The
-Platform Verifier compares the request line and the `authorization` line and
-no other header.
+Platform Verifier compares the request line and the `authorization` line,
+refuses the names common REQ-COMMON-39B forbids, and compares no other
+header.
 
 Per common §9, the identity session reveals exactly these request ranges;
 the bearer value is the only committed request range, and every other
@@ -1151,7 +1154,7 @@ Platform Verifier, Notary Service, Consumer.
 - TEST-PLAT-09B (exercises REQ-PLAT-30A, REQ-PLAT-32A):
   An X transcript that reveals plaintext `access_token` bytes in either
   session, or omits the bearer hash commitment, is rejected.
-- TEST-PLAT-09C (exercises REQ-PLAT-29C, REQ-PLAT-56):
+- TEST-PLAT-09C (exercises REQ-PLAT-29C, REQ-PLAT-56, REQ-PLAT-56A, REQ-PLAT-56B, REQ-PLAT-56C):
   The Platform Verifier rejects an X attestation that hides the `grant_type`
   or `redirect_uri` range, and the Canonical Runtime rejects a revealed value
   differing from the canonical form serialization of its deployment profile.
@@ -1159,7 +1162,18 @@ Platform Verifier, Notary Service, Consumer.
   as literal unencoded bytes. The Platform Verifier rejects an
   attestation whose revealed `grant_type` is `refresh_token`, and one whose
   `grant_type` differs from `authorization_code` in any byte, even when every
-  other revealed range and the proof itself check out.
+  other revealed range and the proof itself check out. The Platform Verifier
+  accepts a token request whose headers arrive in another order, or carry a
+  header the profile does not name, and one whose required names are spelled
+  in another letter case, with `_` for `-`, or padded before the colon; it
+  rejects a head missing `host` or `content-type`, carrying either twice, or
+  carrying `authorization`, `cookie`, `content-encoding`, `transfer-encoding`
+  or a method-override name under any spelling; it rejects a head with no
+  empty line or a second one, with no `content-length` or two, or with a
+  count that is not the body's length, is not decimal digits, or carries a
+  leading zero, and accepts the count wherever it sits in the head; and it
+  rejects a head carrying a bare line feed, a bare carriage return, an
+  obsolete line fold, or a line with no colon.
 - TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52):
   An opened bearer range that is empty, over 4096 bytes, or outside printable
   ASCII fails to prove; a revealed identity response missing `id` or the
@@ -1183,13 +1197,18 @@ Platform Verifier, Notary Service, Consumer.
   verifier. A successful result returns the bearer, opening, and attestation
   from one notarized session; substitution, a mixed-session tuple, and a
   partial result on failure are rejected.
-- TEST-PLAT-14 (exercises REQ-PLAT-41, REQ-PLAT-42, REQ-PLAT-43, REQ-PLAT-43B, REQ-PLAT-43D, REQ-PLAT-43E):
+- TEST-PLAT-14 (exercises REQ-PLAT-41, REQ-PLAT-42, REQ-PLAT-43, REQ-PLAT-43B, REQ-PLAT-43D, REQ-PLAT-43E, REQ-PLAT-56A, REQ-PLAT-56B, REQ-PLAT-56C):
   A request selecting an endpoint, client, or return URL is rejected; no state
   survives the call; a caller outside the authenticated isolated-prover
   boundary is refused; a redirected token exchange is rejected; an attestation
-  revealing a range outside the seven marked rows, or revealing the bearer
-  range instead of committing it, is rejected; and no proof exposes the bearer
-  or a value from which it can be recovered.
+  revealing a range outside the rows marked `yes`, revealing the bearer
+  range instead of committing it, or hiding the request line, is rejected;
+  and no proof exposes the bearer or a value from which it can be recovered.
+  The head vectors of TEST-PLAT-09C run on the exchange request too: an
+  unlisted header passes, a forbidden or a missing required name is rejected,
+  and the `content-length` count is held to the revealed body prefix and the
+  committed `client_secret` together, so a count that stops at the revealed
+  bytes is rejected.
 - TEST-PLAT-15 (exercises REQ-PLAT-44, REQ-PLAT-45, REQ-PLAT-47, REQ-PLAT-48, REQ-PLAT-48A, REQ-PLAT-49, REQ-PLAT-50):
   A token-exchange attestation with a bad notary signature, a foreign
   endpoint, a foreign client, a foreign `code_verifier`, a foreign serialized
