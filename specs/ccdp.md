@@ -635,8 +635,8 @@ cryptographic properties delegated to the common and platform specifications.
   notarization. Malformed non-null addresses are rejected under the origin policy.
   An optional public token-exchange credential is delivered unchanged; null,
   empty, wrong-type, or whitespace/control-bearing values reject. A platform
-  requiring it rejects omission before exchange. No configuration fetch or
-  Bridge token request is made by Prover.
+  requiring it rejects omission before exchange. No configuration fetch is made
+  by Prover.
 - TEST-CCDP-06 (exercises REQ-CCDP-05, REQ-CCDP-06):
   X and GitHub each emit token-fetch and token-attestation independently;
   token availability does not imply attestation completion, and proof delivery
@@ -784,10 +784,11 @@ context loss. Only valid OAuth acceptance enters Phase 4.
 #### 4. Prover execution
 
 This phase begins only after [Prover](#prover-get-prover) has validated and
-accepted the OAuth return in Phase 3. It performs the selected profile's token
-exchange, notarization, and proof-generation steps as applicable. It sends the
-applicable [core operation events](#core-events) and may add implementation or
-platform events. Each operation's `finished` reports only that operation;
+accepted the OAuth return in Phase 3. It runs the selected profile's token
+exchange, notarization, and proof-generation steps as applicable. The profile
+determines which work runs in Prover and which, if any, uses a Bridge service.
+It sends the applicable [core operation events](#core-events) and may add
+implementation or platform events. Each operation's `finished` reports only that operation;
 events from overlapping operations are not forced into a global order.
 After all required proof and evidence work completes, Prover sends one
 [`IdentityProof`](#identityproof), unless failure or context loss ends its work.
