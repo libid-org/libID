@@ -48,6 +48,9 @@ jobs:
       IMAGE: ghcr.io/libid-org/ccdp
       ARTIFACTS: ts/packages/ceremony/dist-artifacts
       SWS_VERSION: v3.0.0-beta.1
+      # sha256 of static-web-server-$SWS_VERSION-x86_64-unknown-linux-musl.tar.gz,
+      # computed from the downloaded release asset; recompute when bumping SWS_VERSION.
+      SWS_SHA256: c4b043f61eb63ea0fb6b13d42cc29d5732e893ab17fcee320982dcf57574378b
       # A dispatch has no inputs, so this is "false" unless a caller asked.
       PUSH: ${{ inputs.push == true }}
       EXTRA_TAGS: ${{ inputs.tags }}
@@ -133,11 +136,6 @@ jobs:
           exit 1
 
       - name: Build the CCDP artifact
-        env:
-          # Only authenticates release-asset digest lookups, which are rate
-          # limited per address when anonymous. Nothing here needs more than
-          # the read-only token a pull request run carries.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm -C ts --filter @libid/ceremony build:ccdp-artifacts
 
       # The OCI labels carry the built commit inside the image, where a moved
@@ -173,20 +171,14 @@ jobs:
           exit 1
 
       # The same-length ETag regression and the header-matching canary need the
-      # native binary; its bytes must hash to the digest GitHub recorded for
-      # the release asset.
-      - name: Fetch the pinned SWS binary, verified against its release digest
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # native binary; its bytes must hash to the sha256 pinned in SWS_SHA256.
+      - name: Fetch the pinned SWS binary and check its sha256
         run: |
           set -euo pipefail
           asset="static-web-server-$SWS_VERSION-x86_64-unknown-linux-musl.tar.gz"
-          digest=$(gh api "repos/static-web-server/static-web-server/releases/tags/$SWS_VERSION" \
-            --jq ".assets[] | select(.name == \"$asset\") | .digest")
-          [ -n "$digest" ] || { echo "::error::release $SWS_VERSION records no digest for $asset"; exit 1; }
           curl -fsSL -o "$RUNNER_TEMP/sws.tar.gz" \
             "https://github.com/static-web-server/static-web-server/releases/download/$SWS_VERSION/$asset"
-          echo "${digest#sha256:}  $RUNNER_TEMP/sws.tar.gz" | sha256sum -c -
+          echo "$SWS_SHA256  $RUNNER_TEMP/sws.tar.gz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/sws"
           tar -xzf "$RUNNER_TEMP/sws.tar.gz" -C "$RUNNER_TEMP/sws"
           bin=$(find "$RUNNER_TEMP/sws" -type f -name static-web-server)
