@@ -41,10 +41,13 @@ dist-artifacts/
 
 `distribution-graph.json` is private build/test metadata and an input for retaining
 previous immutable resources. It is not a runtime manifest or public resource.
-The [container recipe](../ccdp.Dockerfile) copies only `public/` and `sws.toml`.
+The [container recipe](../ccdp.Dockerfile) copies `public/` and `sws.toml`, and
+places `distribution-graph.json` at `/home/sws/` outside the served root so the
+next build can read retention state back out of a published image (see
+[Publication and upgrades](#publication-and-upgrades)).
 Exact internal rewrites serve the document routes without `.html`; direct
 navigation to their physical `.html` files does not execute a ceremony.
-Unknown routes return 404, with no SPA fallback.
+Unknown routes return 404, with no SPA fallback and no caching headers.
 
 ## Source declarations
 
@@ -97,6 +100,20 @@ installed package integrity comes from the workspace lockfile. Developers own
 release URLs and immutable mounts. There is no handwritten asset checksum list
 or browser hashing step.
 
+GitHub records a `sha256` digest for every release asset and returns it in the
+release's API document. [release.ts](../build/release.ts) reads that document
+for each `https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>`
+source and requires the downloaded bytes, fresh or cached, to hash to the
+recorded digest; a mismatch fails the build. A release that records no digest
+for the asset warns and continues. When the document cannot be fetched
+(offline, rate limited) a cached download is used with a warning; without a
+cache the build fails. Set `GH_TOKEN` or `GITHUB_TOKEN` to authenticate the
+lookup: anonymous GitHub API requests are limited to 60 per hour per address,
+which shared CI runners can exhaust. This checks integrity against what GitHub
+currently publishes, not a pin; re-uploading an asset changes its digest too.
+Changed bytes at a retained immutable URL are caught by the retention check at
+the next publication.
+
 External declarations retain their URL, range, optional exact byte count and
 fallback URLs. They emit no local body or response headers. They contribute to
 prefetch metadata, the fetch allowlist and generated CSP. Native bb.js chooses
@@ -135,12 +152,46 @@ also change file metadata, even when their length is unchanged. Do not normalize
 all releases to one fixed timestamp. The native-server regression in
 [testing](testing.md#distribution-checks) checks this behavior.
 
+### Native server behavior
+
+The pinned SWS 3.0.0-beta.1 has behavior that the generated configuration and
+the tests account for:
+
+- **Header rule matching.** `[[advanced.headers]]` sources are globs matched
+  against the request path after internal rewrites. When a file was resolved and
+  `redirect-trailing-slash = false`, SWS first appends `/<resolved file name>`, so
+  a served `/ccdp/v1/prefetch` (rewritten to `/ccdp/v1/prefetch.html`) is matched
+  as `/ccdp/v1/prefetch.html/prefetch.html`. Responses that resolved no file, such
+  as 404s, are matched on the raw request path. [sws.ts](../build/sws.ts) therefore
+  emits two exact rules per file, the physical path and that path with its name
+  appended, with identical headers, and no namespace wildcard: a `/ccdp/assets/**`
+  rule also matched every 404 beneath it and marked those responses immutable.
+  The [canary test](testing.md#distribution-checks) pins this matching against the
+  real binary; when it fails on a newer SWS, revisit `sws.ts` and this section.
+- **`./config.toml` precedence.** A `config.toml` in the working directory is read
+  instead of the `--config-file`/`SERVER_CONFIG_FILE` path. Run local binaries from
+  a directory without one; the image's working directory, `/home/sws`, has none.
+- **Unknown keys.** Unrecognized TOML options are ignored, not rejected, so a
+  misspelled option does not fail startup. The tests check the emitted values.
+- **`security-headers` stays off.** It would add HSTS
+  (`max-age=63072000; includeSubDomains; preload`), `X-Frame-Options` and a
+  `frame-ancestors 'self'` CSP to every response, overriding declared policy.
+  HSTS belongs to the ingress on the CCDP origin.
+- **HEAD responses carry no `Content-Length`.** GET responses do; harmless.
+- **Health and port.** `health = true` answers `GET /health` with 200 and no custom
+  headers, and the image inherits `EXPOSE 8787`.
+
 ## Bridge and popup integration
 
 Run the image behind transparent HTTPS ingress on a dedicated cookie-free CCDP
 origin. Preserve paths, response headers, validators and compression negotiation.
 The server may use plain HTTP internally. Browser HTTP is allowed only for the
 supported loopback origins; production platform requests still use HTTPS.
+
+The container listens on 8787 and answers `GET /health` with 200; use that path
+for readiness and liveness probes. Terminate TLS and set HSTS at the ingress;
+the server emits none. The container writes nothing, so run it read-only with
+all capabilities dropped, as CI does.
 
 Configure the independently deployed Bridge with the CCDP origin and admitted
 application origins. It fetches `/ccdp/callback.html`, inserts deployment JSON
@@ -164,22 +215,40 @@ connection. Ceremony includes no WebRTC implementation or signaling service.
 
 ## Publication and upgrades
 
-Build into the existing accumulated output when preparing a compatible update.
-The build checks reused immutable URLs for identical bytes and policies, retains
-old immutable assets, and replaces the output only after success. Preserve the
-whole output, including `distribution-graph.json`, between release builds.
-A fresh empty output cannot retain resources from a previous deployment.
+The `ccdp-image` job in [ci.yml](../../../../.github/workflows/ci.yml) builds the
+artifact and the `linux/amd64` image on every pull request and push to `main`,
+runs the distribution checks against the running container and the pinned native
+binary, and on `main` pushes `ghcr.io/libid-org/ccdp:main` and
+`ghcr.io/libid-org/ccdp:sha-<short sha>`, printing the pushed digest in the run
+summary. Pull requests build and test without pushing.
 
-Promote the complete image. Retention currently covers immutable assets, not an
-automatic archive of every protocol version: only v1 is emitted. Adding or
-retiring protocol versions needs explicit build support and a compatibility-window
-plan. Application, Callback, Prover and root Worker must remain compatible.
+Before building, the job pulls the previously published `:main` image and copies
+`/home/sws/public` and `/home/sws/distribution-graph.json` out of it into the
+build output. The build then checks reused immutable URLs for identical bytes
+and policies, retains the previous immutable assets, and replaces the output
+only after success, so the compatibility window holds without a persistent
+build directory. A first publication, or a run whose previous image cannot be
+pulled, retains nothing and says so in its log (with a warning when publishing).
+Changing the bytes or policy of an already published immutable URL fails the
+build by design; publish changed content under a new mount.
 
-Before publication run [distribution and browser checks](testing.md), including
+Local release builds follow the same rule: build into the existing accumulated
+output and preserve the whole of it, including `distribution-graph.json`,
+between builds. A fresh empty output cannot retain resources from a previous
+deployment.
+
+Promote the complete image, pinned by digest. Retention currently covers
+immutable assets, not an automatic archive of every protocol version: only v1 is
+emitted. Adding or retiring protocol versions needs explicit build support and a
+compatibility-window plan. Application, Callback, Prover and root Worker must
+remain compatible.
+
+Before promotion run [distribution and browser checks](testing.md), including
 the actual dependency loaders and served headers. A compiler-only build does
 not qualify live CRS, consent, production Bridge behavior or physical devices.
-The current [qualification gaps](qualification.md) remain release gates; no
-CCDP publication workflow is provided by these build commands.
+The current [qualification gaps](qualification.md) remain release gates; the
+published image is continuous-integration output, and promoting it to a
+deployment is a separate, deliberate step.
 
 ## Build owners
 
@@ -187,6 +256,6 @@ CCDP publication workflow is provided by these build commands.
 [bundle.ts](../build/bundle.ts) records emitted dependencies;
 [assets.ts](../build/assets.ts) resolves declarations;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
-[release.ts](../build/release.ts) caches downloads;
+[release.ts](../build/release.ts) caches and digest-verifies downloads;
 [circuits.ts](../build/circuits.ts) checks capacity;
 [sws.ts](../build/sws.ts) writes files, sidecars and native server configuration.

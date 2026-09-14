@@ -28,12 +28,14 @@ pnpm -C ts --filter @libid/ceremony build:ccdp-artifacts
 pnpm -C ts --filter @libid/ceremony test:distribution
 ```
 
-These Node tests exercise archive handling, emitted resources, circuit capacity
-and the installed dependency loaders. **HTTP and native ETag checks are conditional**:
-a default run skips them unless their service/binary inputs are supplied. A green
-default run is not the complete distribution qualification.
+These Node tests exercise archive handling, emitted resources and header rules,
+release-digest verification, circuit capacity and the installed dependency
+loaders. **HTTP and native-binary checks are conditional**: a default run skips
+them unless their service/binary inputs are supplied. A green default run is not
+the complete distribution qualification.
 
-To include served-response checks, [build and run the emitted SWS image](distribution.md#build-and-serve)
+To include served-response checks (exact routes and policies, negotiation,
+uncacheable 404s and the `/health` probe), [build and run the emitted SWS image](distribution.md#build-and-serve)
 on port 8080, then run:
 
 ```sh
@@ -42,10 +44,14 @@ CEREMONY_SWS_URL=http://127.0.0.1:8080 \
 ```
 
 For another output directory, set `CEREMONY_ARTIFACT_DIR` to its absolute path and
-point SWS at that same artifact. To include the same-length ETag regression, also
-set `CEREMONY_SWS_BINARY` to a locally runnable binary extracted from the pinned
-SWS image. That test starts its own server; set `CEREMONY_SWS_TEST_PORT=4988` when
-the dev notary already occupies its default 4687. These inputs are test-only.
+point SWS at that same artifact. To include the same-length ETag regression and the
+[header-matching canary](distribution.md#native-server-behavior), also set
+`CEREMONY_SWS_BINARY` to a locally runnable `static-web-server` from the
+[pinned release](https://github.com/static-web-server/static-web-server/releases/tag/v3.0.0-beta.1).
+Those tests start their own servers on `CEREMONY_SWS_TEST_PORT` (default 4687) and
+the next port; set `CEREMONY_SWS_TEST_PORT=4988` when the dev notary already
+occupies 4687. These inputs are test-only. The workspace **CCDP image** CI job runs
+all of them against the freshly built image and a digest-verified binary.
 
 ## Browser tests
 
