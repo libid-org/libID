@@ -1,28 +1,39 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { stringify } from 'smol-toml'
 import { safePath } from './archive.ts'
 
 /**
- * Header rule sources for one served file.
+ * Policy of every response that resolved no file: 404s (unknown routes,
+ * missing assets, `/ccdp/assets/`, `<file>/<name>`) and the trailing-slash
+ * redirect of a directory path. Absent cache headers would leave a 404
+ * heuristically cacheable (RFC 9110 §15.5.5), so the policy is explicit.
  *
  * SWS 3.0.0-beta.1 (`src/custom_headers.rs`) matches `[[advanced.headers]]`
- * sources against the request path after internal rewrites. When a file was
- * resolved and `redirect-trailing-slash = false`, it first appends
- * `/<resolved file name>`, so a served `/ccdp/v1/prefetch` (rewritten to
- * `/ccdp/v1/prefetch.html`) is matched as `/ccdp/v1/prefetch.html/prefetch.html`.
- * Responses that resolved no file, such as 404s, are matched on the raw
- * request path.
- *
- * Both forms are emitted with identical headers so a future SWS that stops
- * appending the name still applies every declared policy; inserting the same
- * values twice is harmless. No wildcard source is emitted: a `/ccdp/assets/**`
- * rule also matched every 404 beneath it and marked those responses immutable.
- * The canary in `sws.test.ts` pins the current matching against the real
- * binary so a change fails loudly; then revisit this and docs/distribution.md.
+ * sources against the request path after `advanced.rewrites`, so one exact
+ * rule per physical file (`/ccdp/v1/prefetch.html`) covers its route and its
+ * direct `.html` request. `/<resolved file name>` is appended before matching
+ * only for a directory-index request (`/dir/`, or any resolved file with
+ * `redirect-trailing-slash = false`); this distribution serves no directory
+ * index and keeps the redirect on, so that form is never emitted: keyed on
+ * `<file>/<name>`, it equals the raw path of the 404 beneath the file. A
+ * response that resolved no file is matched on the raw request path, and
+ * every matching rule applies in config order, later rules overwriting.
+ * Hence the catch-all `/**` carrying this policy comes first: an exact rule
+ * overwrites the names it declares on its own file, nothing else inherits a
+ * cacheable policy, and a 200 keeps the catch-all's value for a name its
+ * declaration omits (the CSP on a plain asset, inert outside documents and
+ * workers, which all declare their own). The canary in `sws.test.ts` pins
+ * this matching against the real binary; when it fails on a newer SWS,
+ * revisit this file and docs/distribution.md.
  */
-export const headerSources = (physical: string) => [physical, `${physical}/${basename(physical)}`]
+export const errorHeaders = {
+  'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+} as const
 
 /** Emit static files and native SWS configuration; no response metadata overrides. */
 export function writeDistribution(
@@ -37,7 +48,9 @@ export function writeDistribution(
       throw new Error(`Resource conflicts with negotiated sidecar: ${path}`)
   }
   const rewrites: { source: string; destination: string }[] = []
-  const rules: { source: string; headers: Record<string, string> }[] = []
+  const rules: { source: string; headers: Record<string, string> }[] = [
+    { source: '/**', headers: { ...errorHeaders } },
+  ]
   for (const [path, { bytes, headers }] of records) {
     const physical = /^\/ccdp\/v[1-9][0-9]*\/(prefetch|prover|prover\/fallback)$/.test(path)
       ? `${path.replace(/\/fallback$/, '-fallback')}.html`
@@ -56,7 +69,7 @@ export function writeDistribution(
     const gzip = gzipSync(bytes, { level: 6 })
     if (gzip.length < bytes.length) writeFileSync(`${target}.gz`, gzip)
     else rmSync(`${target}.gz`, { force: true })
-    for (const source of headerSources(physical)) rules.push({ source, headers })
+    rules.push({ source: physical, headers })
   }
   const config = {
     general: {
@@ -71,7 +84,8 @@ export function writeDistribution(
       // Would add HSTS and framing policy to every response; HSTS belongs to the ingress.
       'security-headers': false,
       'directory-listing': false,
-      'redirect-trailing-slash': false,
+      // The header rules above assume it: off, every resolved file is matched with its name appended.
+      'redirect-trailing-slash': true,
       // `GET /health` answers 200 for readiness and liveness probes.
       health: true,
       'text-charset': false,
