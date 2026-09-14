@@ -219,12 +219,14 @@ connection. Ceremony includes no WebRTC implementation or signaling service.
 The reusable [ccdp-image.yml](../../../../.github/workflows/ccdp-image.yml)
 workflow builds the artifact and the `linux/amd64` image, runs the distribution
 checks against the running container and the pinned native binary, and pushes
-the image only when asked to. The `ccdp-image` job in
-[ci.yml](../../../../.github/workflows/ci.yml) calls it on every pull request
-and push to `main`; on `main` it pushes `ghcr.io/libid-org/ccdp:sha-<short sha>`
-and `ghcr.io/libid-org/ccdp:main`, printing the pushed digest in the run
-summary. Pull requests build and test without pushing. The workflow can also be
-dispatched by hand for a dry run with `push` left off.
+the image only when asked to. Two jobs in
+[ci.yml](../../../../.github/workflows/ci.yml) call it. `ccdp-image` runs on
+every pull request with a read-only token and builds and tests without
+pushing. `ccdp-publish` runs on every push to `main`, is the only CI job that
+holds the package write permission, and pushes
+`ghcr.io/libid-org/ccdp:sha-<short sha>` and `ghcr.io/libid-org/ccdp:main`,
+printing the pushed digest in the run summary. The workflow can also be
+dispatched by hand for a dry run, which never pushes.
 
 Publishing a GitHub Release `v<version>` runs
 [release.yml](../../../../.github/workflows/release.yml), which publishes

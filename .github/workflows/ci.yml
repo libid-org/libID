@@ -164,18 +164,31 @@ jobs:
   # native binary, and publish it to ghcr on pushes to main. The steps live in
   # the reusable ccdp-image.yml, which release.yml shares: a release promotes
   # the `sha-<short sha>` image published here to the release version, and
-  # rebuilds through the same workflow only when that image is missing. Pull
-  # requests build and test only.
+  # rebuilds through the same workflow only when that image is missing.
+  #
+  # Two callers so the token matches the run. Pull requests execute
+  # PR-controlled build code, so they get a read-only token (the called
+  # workflow inherits these permissions and cannot widen them) and never push.
+  # Only a push to main holds `packages: write`, and only it publishes.
   # ---------------------------------------------------------------------------
   ccdp-image:
     name: CCDP image
+    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/ccdp-image.yml
+
+  ccdp-publish:
+    name: CCDP image (publish)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/ccdp-image.yml
     with:
-      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      # `sha-<short sha>` is always tagged; every reference is pushed only from main.
+      push: true
+      # `sha-<short sha>` is always tagged; `:main` seeds the next build's retention.
       tags: ghcr.io/libid-org/ccdp:main
 
   # ---------------------------------------------------------------------------
