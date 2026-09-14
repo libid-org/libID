@@ -74,9 +74,12 @@ below. Conditional caching may return `304 Not Modified`; otherwise query
 values, request headers, `Origin`, `Referer`, cookies, and user agent cannot
 select different bytes, policy, embedded configuration, or implementation. A
 nonempty query may receive the same static resource, but its clearing bootstrap
-rejects before protocol execution. Only `GET` and `HEAD` are defined. Unknown
-paths and versions return an inert failure without fallback or redirect; other
-methods execute no CCDP code.
+rejects before protocol execution. Only `GET` and `HEAD` are defined. Protocol
+resources never redirect. Unknown paths and versions return an inert failure
+without fallback or redirect. For a directory path that serves no resource,
+the Distribution MAY instead redirect to the same-origin path with a trailing
+slash appended. That destination returns an inert failure; neither response
+executes CCDP code. Other methods execute no CCDP code.
 
 The not-found response is static HTML containing no script, style, link, form,
 redirect, or protocol data.
@@ -404,7 +407,7 @@ above. The package's build and deployment tests may qualify them with any
 serving software that produces these observable responses.
 
 - TEST-DIST-01 (exercises REQ-DIST-01):
-  GET/HEAD serve invariant decoded bytes and policy; conditional/encoding responses preserve them; unknown paths are inert. Both isolation profiles support allowed local and external requests without admitting remote executable code.
+  GET/HEAD serve invariant decoded bytes and policy; conditional/encoding responses preserve them. Protocol and asset resources never redirect; unknown paths are inert. Any directory slash redirect stays on the same origin and ends in an inert failure. Both isolation profiles support allowed local and external requests without admitting remote executable code.
 - TEST-DIST-02 (exercises REQ-DIST-02):
   Exactly one data marker is inserted safely; executable hashes remain valid; missing/duplicate slots fail. Query and fragment state select a supported bundled Callback without another script request; missing/retired versions fail locally.
 - TEST-DIST-03 (exercises REQ-DIST-03):
