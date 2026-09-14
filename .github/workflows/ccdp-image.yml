@@ -3,7 +3,7 @@ name: CCDP image
 # Builds the static ceremony artifact and the pinned SWS image for linux/amd64,
 # proves the image against the running container and the pinned native
 # binary, and — when `push` is true — publishes it to ghcr. Called by ci.yml
-# (build and test on pull requests; publish `:sha-<short sha>` and `:main`
+# (build and test on pull requests; publish `:sha-<commit sha>` and `:main`
 # from main) and by release.yml when a release has no main image to promote
 # (publish `:<version>`, plus `:latest` for stable versions). A manual
 # dispatch is a dry run: it builds and tests and never pushes.
@@ -14,9 +14,11 @@ name: CCDP image
 # and `packages: write` only for the runs that push. A dispatch runs with the
 # repository's default token, which is read-only.
 #
-# The image is always tagged `ghcr.io/libid-org/ccdp:sha-<short sha>` of the
-# built commit — the reference the checks run against and the one release.yml
-# promotes; `tags` adds further references (any whitespace separates them).
+# The image is always tagged `ghcr.io/libid-org/ccdp:sha-<commit sha>` (the
+# full 40-hex sha, so two commits can never share a tag) — the reference the
+# checks run against and the one release.yml promotes after checking that
+# the image's `org.opencontainers.image.revision` label names the released
+# commit; `tags` adds further references (any whitespace separates them).
 # The build is seeded from the previously published `:main` image so immutable
 # assets stay available through the compatibility window (see "Publication and
 # upgrades" in ts/packages/ceremony/docs/distribution.md).
@@ -32,7 +34,7 @@ on:
         type: boolean
         default: false
       tags:
-        description: Image references to tag besides ghcr.io/libid-org/ccdp:sha-<short sha>, one per line.
+        description: Image references to tag besides ghcr.io/libid-org/ccdp:sha-<commit sha>, one per line.
         type: string
         default: ""
   workflow_dispatch:
@@ -69,11 +71,14 @@ jobs:
 
       # SHA_REF is the commit's own tag; REFS is every reference the image gets
       # (SHA_REF first). Each extra reference must be a tag of this image.
+      # IMAGE_VERSION, the `org.opencontainers.image.version` label, is the
+      # first extra tag (`main`, or the release version) or else the sha tag.
       - name: Resolve the image references
         run: |
           set -euo pipefail
-          sha_ref="$IMAGE:sha-${GITHUB_SHA:0:7}"
+          sha_ref="$IMAGE:sha-$GITHUB_SHA"
           refs="$sha_ref"
+          version=""
           for ref in $EXTRA_TAGS; do
             case "$ref" in
               "$IMAGE":*) ;;
@@ -83,10 +88,15 @@ jobs:
               *" $ref "*) ;;
               *) refs="$refs $ref" ;;
             esac
+            : "${version:=${ref#"$IMAGE":}}"
           done
-          echo "Image references: $refs (push: $PUSH)"
-          echo "SHA_REF=$sha_ref" >> "$GITHUB_ENV"
-          echo "REFS=$refs" >> "$GITHUB_ENV"
+          : "${version:=${sha_ref#"$IMAGE":}}"
+          echo "Image references: $refs (push: $PUSH, version label: $version)"
+          {
+            echo "SHA_REF=$sha_ref"
+            echo "REFS=$refs"
+            echo "IMAGE_VERSION=$version"
+          } >> "$GITHUB_ENV"
 
       - name: Log in to ghcr
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -130,14 +140,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm -C ts --filter @libid/ceremony build:ccdp-artifacts
 
+      # The OCI labels carry the built commit inside the image, where a moved
+      # or reused tag cannot change it; release.yml refuses to promote an
+      # image whose revision label is not the released commit.
       - name: Build the image (linux/amd64)
         run: |
           set -euo pipefail
           tags=()
           for ref in $REFS; do tags+=(-t "$ref"); done
           docker buildx build --platform linux/amd64 --load "${tags[@]}" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.version=$IMAGE_VERSION" \
             -f ts/packages/ceremony/ccdp.Dockerfile "$ARTIFACTS"
-          docker image inspect -f 'built {{.Os}}/{{.Architecture}} {{.Id}}' "$SHA_REF"
+          docker image inspect "$SHA_REF" \
+            -f 'built {{.Os}}/{{.Architecture}} {{.Id}} revision {{index .Config.Labels "org.opencontainers.image.revision"}}'
 
       - name: Run the image hardened and wait for /health
         run: |
