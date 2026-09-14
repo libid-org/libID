@@ -58,8 +58,8 @@ pnpm -C ts --filter @libid/ceremony test:e2e
 
 The command builds qualification artifacts and runtime fixtures. Playwright owns
 startup, readiness and teardown for pinned SWS/notary containers and the browser
-harness. A separate **Ceremony e2e** CI job runs the same command. No OAuth
-credentials are required. Release downloads and real unauthenticated requests to
+harness. The workspace **Browser tests** CI job runs the same command alongside
+the popup and dev-app suites. No OAuth credentials are required. Release downloads and real unauthenticated requests to
 X need network access; unavailable services fail rather than silently skip.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
