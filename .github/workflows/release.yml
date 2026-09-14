@@ -118,9 +118,9 @@ jobs:
   # rebuild — so the release image is byte-identical to the tested one and
   # needs no retention seed. The tag is the full sha and the image's own
   # revision label must name this commit, so a promotion cannot pick up
-  # another commit's image. Only when no such image exists (a release cut
-  # before that job existed, or whose main run failed) does the next job build,
-  # test and push it from source through the reusable workflow.
+  # another commit's image. A release never builds: without that image the
+  # job fails, because only images published from main enter the `:main`
+  # retention history every later build seeds from.
   # ---------------------------------------------------------------------------
   publish-ccdp-image:
     name: Publish the CCDP image
@@ -130,9 +130,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      promoted: ${{ steps.promote.outputs.promoted }}
-      tags: ${{ steps.tags.outputs.tags }}
     env:
       IMAGE: ghcr.io/libid-org/ccdp
     steps:
@@ -161,14 +158,13 @@ jobs:
 
       # `--prefer-index=false`: with a single source, imagetools would otherwise
       # wrap a plain manifest in a new index, which has a different digest.
-      # "not found" is the one inspect failure that means "build instead"; any
-      # other (registry, auth) fails the job rather than silently rebuilding.
-      # Before retagging, the image's `org.opencontainers.image.revision` label
-      # (baked in by ccdp-image.yml) must equal the released commit: the tag
-      # alone is a mutable pointer. `.Image` is one config for a plain
+      # "not found" means the commit never published from main (or its run
+      # failed): the fix is to merge and let ccdp-publish run, never to build
+      # here. Before retagging, the image's `org.opencontainers.image.revision`
+      # label (baked in by ccdp-image.yml) must equal the released commit: the
+      # tag alone is a mutable pointer. `.Image` is one config for a plain
       # manifest and a per-platform map for an index.
       - name: Promote the tested main image of this commit
-        id: promote
         env:
           TAGS: ${{ steps.tags.outputs.tags }}
         run: |
@@ -177,14 +173,12 @@ jobs:
           if ! digest=$(docker buildx imagetools inspect "$source" --format '{{json .Manifest.Digest}}' \
               2>"$RUNNER_TEMP/inspect.err" | jq -r .); then
             cat "$RUNNER_TEMP/inspect.err"
-            if ! grep -qiE 'not found|manifest unknown|name unknown' "$RUNNER_TEMP/inspect.err"; then
-              echo "::error::could not inspect $source; fix the cause (or re-run) rather than rebuilding"
-              exit 1
+            if grep -qiE 'not found|manifest unknown|name unknown' "$RUNNER_TEMP/inspect.err"; then
+              echo "::error::no tested main image for $GITHUB_SHA: merge to main and let ccdp-publish run, then re-publish the release"
+            else
+              echo "::error::could not inspect $source; fix the cause and re-run"
             fi
-            echo "No image at $source (this commit never published from main); building it from source instead."
-            echo "### CCDP image: no tested main image at \`$source\`; building from source" >> "$GITHUB_STEP_SUMMARY"
-            echo "promoted=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
           echo "$source is $digest"
           revision=$(docker buildx imagetools inspect "$IMAGE@$digest" --format '{{json .Image}}' \
@@ -209,16 +203,3 @@ jobs:
             [ "$got" = "$digest" ] || { echo "::error::$ref resolved to $got, not $digest"; exit 1; }
             echo "- \`$ref\` = \`$got\`" >> "$GITHUB_STEP_SUMMARY"
           done
-          echo "promoted=true" >> "$GITHUB_OUTPUT"
-
-  build-ccdp-image:
-    name: CCDP image from source
-    needs: [publish-ccdp-image]
-    if: needs.publish-ccdp-image.outputs.promoted != 'true'
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/ccdp-image.yml
-    with:
-      push: true
-      tags: ${{ needs.publish-ccdp-image.outputs.tags }}

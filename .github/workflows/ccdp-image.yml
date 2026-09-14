@@ -4,9 +4,9 @@ name: CCDP image
 # proves the image against the running container and the pinned native
 # binary, and — when `push` is true — publishes it to ghcr. Called by ci.yml
 # (build and test on pull requests; publish `:sha-<commit sha>` and `:main`
-# from main) and by release.yml when a release has no main image to promote
-# (publish `:<version>`, plus `:latest` for stable versions). A manual
-# dispatch is a dry run: it builds and tests and never pushes.
+# from main). A manual dispatch is a dry run: it builds and tests and never
+# pushes. release.yml never builds; it promotes the `:sha-<commit sha>` image
+# published from main.
 #
 # No `permissions` here: a called workflow runs with its caller's token and
 # can only narrow it, so each caller declares what its run needs —
@@ -75,7 +75,7 @@ jobs:
       # SHA_REF is the commit's own tag; REFS is every reference the image gets
       # (SHA_REF first). Each extra reference must be a tag of this image.
       # IMAGE_VERSION, the `org.opencontainers.image.version` label, is the
-      # first extra tag (`main`, or the release version) or else the sha tag.
+      # first extra tag (`main`) or else the sha tag.
       - name: Resolve the image references
         run: |
           set -euo pipefail
