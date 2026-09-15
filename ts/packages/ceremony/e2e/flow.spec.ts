@@ -89,95 +89,78 @@ test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async
   expect((await request.get(`${ccdp}/ccdp/v99/prover`)).status()).toBe(404)
 })
 
-// Fixture teardown runs before its request client is disposed, including on timeout.
-const migrationTest = test.extend<{
-  heldCircuit: { asset: string; control: string; before: number }
-}>({
-  heldCircuit: async ({ ccdp, request }, use) => {
-    const graph = JSON.parse(
-      readFileSync(
-        new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
-        'utf8',
-      ),
-    )
-    const asset = graph.requestsByProfile['google/1'].find((r: { url: string }) =>
-      r.url.endsWith('/oidc_google.json'),
-    ).url
-    const control = `${ccdp}/qualification-control?asset=${encodeURIComponent(asset)}`
-    try {
-      const before = (await (await request.get(`${control}&hold=1`)).json()).count
-      await use({ asset, control, before })
-    } finally {
-      await request.get(`${control}&release=1`)
-    }
-  },
-})
-
-migrationTest(
-  'migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020]',
-  async ({
-    app,
-    bridge,
-    ccdp,
-    page,
-    context,
-    request,
-    heldCircuit: { asset, control, before },
-  }) => {
-    const seed = await context.newPage()
-    await seed.goto(`${ccdp}/ccdp/v1/seed`)
-    await seed.evaluate(async () => {
-      for (const scope of ['/', '/ccdp/v1/']) {
-        const r = await navigator.serviceWorker.register('/ccdp/v1/worker.js', {
-          scope,
-          type: 'module',
-        })
-        await new Promise<void>((resolve) => {
-          const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
-          poll()
-        })
-      }
-    })
-    await seed.close()
-    await context.route('https://accounts.google.com/**', async (route) => {
-      const state = new URL(route.request().url()).searchParams.get('state')
-      await route.fulfill({
-        contentType: 'text/html',
-        body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
+test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020]', async ({
+  app,
+  bridge,
+  ccdp,
+  page,
+  context,
+  request,
+  assetControl,
+}) => {
+  const graph = JSON.parse(
+    readFileSync(
+      new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
+      'utf8',
+    ),
+  )
+  const asset = graph.requestsByProfile['google/1'].find((r: { url: string }) =>
+    r.url.endsWith('/oidc_google.json'),
+  ).url
+  const control = assetControl(asset)
+  const before = (await (await request.get(`${control}&hold=1`)).json()).count
+  const seed = await context.newPage()
+  await seed.goto(`${ccdp}/ccdp/v1/seed`)
+  await seed.evaluate(async () => {
+    for (const scope of ['/', '/ccdp/v1/']) {
+      const r = await navigator.serviceWorker.register('/ccdp/v1/worker.js', {
+        scope,
+        type: 'module',
       })
+      await new Promise<void>((resolve) => {
+        const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
+        poll()
+      })
+    }
+  })
+  await seed.close()
+  await context.route('https://accounts.google.com/**', async (route) => {
+    const state = new URL(route.request().url()).searchParams.get('state')
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
     })
-    await page.goto(app)
-    await page.waitForFunction(() => window.ready)
-    const popupPromise = context.waitForEvent('page')
-    await page.locator('#launch').click()
-    const popup = await popupPromise
-    await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
-    expect(
-      await popup.evaluate(async () =>
-        (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname),
-      ),
-    ).toEqual(['/'])
-    const fetched = popup.evaluate(
-      async (asset) => (await fetch(asset)).arrayBuffer().then((b) => b.byteLength),
-      asset,
-    )
-    // Observe rejection if an assertion fails and teardown closes the popup.
-    void fetched.catch(() => {})
-    await expect
-      .poll(async () => (await (await request.get(control)).json()).count)
-      .toBe(before + 1)
-    await request.get(`${control}&release=1`)
-    expect(await fetched).toBeGreaterThan(0)
-    expect((await (await request.get(control)).json()).count).toBe(before + 1)
-    await page.evaluate(() => window.after())
-    await expect.poll(() => page.evaluate(() => window.afterReady)).toBe(true)
-  },
-)
+  })
+  await page.goto(app)
+  await page.waitForFunction(() => window.ready)
+  const popupPromise = context.waitForEvent('page')
+  await page.locator('#launch').click()
+  const popup = await popupPromise
+  await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
+  expect(
+    await popup.evaluate(async () =>
+      (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname),
+    ),
+  ).toEqual(['/'])
+  const fetched = popup.evaluate(
+    async (asset) => (await fetch(asset)).arrayBuffer().then((b) => b.byteLength),
+    asset,
+  )
+  // Observe rejection if an assertion fails and teardown closes the popup.
+  void fetched.catch(() => {})
+  await expect.poll(async () => (await (await request.get(control)).json()).count).toBe(before + 1)
+  await request.get(`${control}&release=1`)
+  expect(await fetched).toBeGreaterThan(0)
+  expect((await (await request.get(control)).json()).count).toBe(before + 1)
+  await page.evaluate(() => window.after())
+  await expect.poll(() => page.evaluate(() => window.afterReady)).toBe(true)
+})
 
 test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-ASSET-017]', async ({
   ccdp,
   browser,
   request,
+  assetControl,
 }, testInfo) => {
   const graph = JSON.parse(
     readFileSync(
@@ -191,7 +174,7 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
         r.url.startsWith('/') && !r.range && r.url.endsWith('.js'),
     )
     .sort((a: { bytes: number }, b: { bytes: number }) => a.bytes - b.bytes)[0]
-  const control = `${ccdp}/qualification-control?asset=${encodeURIComponent(asset.url)}`
+  const control = assetControl(asset.url)
   const before = (await (await request.get(control)).json()).count
   const args = [...(testInfo.project.use.launchOptions?.args ?? [])]
   if (browser.browserType().name() === 'chromium' && ccdp.startsWith('https:'))
@@ -249,11 +232,7 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
     }
     expect((await (await request.get(control)).json()).count).toBe(before + 1)
   } finally {
-    try {
-      await request.get(`${control}&restore=1`)
-    } finally {
-      await context.close()
-    }
+    await context.close()
   }
 })
 
@@ -418,27 +397,23 @@ test('popup paint wait skips hidden documents and tolerates stopped animation fr
 
 test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async ({
   app,
-  ccdp,
   page,
   context,
+  assetControl,
 }) => {
   let oauth = 0
   await context.route('https://accounts.google.com/**', (route) => {
     oauth++
     return route.abort()
   })
-  const control = `${ccdp}/qualification-control?asset=/ccdp/v1/worker.js`
+  const control = assetControl('/ccdp/v1/worker.js')
   await context.request.get(`${control}&fail`)
-  try {
-    await page.goto(app)
-    await page.waitForFunction(() => window.ready)
-    await page.locator('#launch').click()
-    await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'failed' })
-    expect(oauth).toBe(0)
-    expect(await page.evaluate(() => window.failureEvent)).toBe('prefetch-dispatch')
-  } finally {
-    await context.request.get(`${control}&restore`)
-  }
+  await page.goto(app)
+  await page.waitForFunction(() => window.ready)
+  await page.locator('#launch').click()
+  await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'failed' })
+  expect(oauth).toBe(0)
+  expect(await page.evaluate(() => window.failureEvent)).toBe('prefetch-dispatch')
 })
 
 test('two independently supplied connections cannot replace each other [LIBID-BROWSER-014]', async ({
