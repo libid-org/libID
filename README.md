@@ -39,6 +39,9 @@ transact.
 Besides the protocol specifications under [`specs/`](specs/), this repo
 carries the browser claim library and the integration harness:
 
+- [`site/`](site/) — the static project website and Cloudflare deployment
+  configuration. Documentation and specification sources stay in `docs/` and
+  `specs/`; the site currently provides placeholder pages for both.
 - [`ts/packages/claim`](ts/packages/claim) — **`@libid/claim`**, the browser
   library for the OAuth handle-claim flows. GitHub (backend-driven MPC-TLS),
   X (in-browser TLSNotary ProxyMode + a Noir/UltraHonk proof), and Google
