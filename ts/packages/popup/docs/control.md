@@ -1,7 +1,8 @@
 # Popup control
 
 This document defines popup navigation and the control protocol by which an
-application asks its connected popup to navigate or close itself.
+application asks its connected popup to navigate or close itself, and the popup
+reports an unexpected document departure.
 It is independent of caller protocols: navigation and popup lifetime are
 composition decisions, not protocol results.
 
@@ -30,7 +31,11 @@ interface ClosePopup {
   type: 'close-popup'
 }
 
-type PopupControl = Navigate | ClosePopup
+interface DocumentDeparted {
+  type: 'document-departed'
+}
+
+type PopupControl = Navigate | ClosePopup | DocumentDeparted
 ```
 
 These discriminators are connection-reserved. They cannot appear in a
@@ -40,7 +45,8 @@ Each discriminator is its own compatibility boundary. An incompatible shape or
 semantic change introduces a new message and decoder rather than a shared
 protocol-version field. Unknown controls fail closed.
 
-Both records are application-to-popup only. The receiver exact-validates a
+Navigation and close commands are Application → Popup; departure is Popup →
+Application. The receiver exact-validates a
 plain record, discriminator, and field set before acting. They travel only over
 an already version-authenticated carrier. A navigation
 URL must equal the serialization of an absolute URL with no credentials,
@@ -94,13 +100,13 @@ group switch. A same-tab or full-page presentation MUST NOT send
 `ClosePopup`. This is a window-creation invariant; there is no reliable post-COOP
 runtime probe for script closability.
 
-The first accepted popup control is terminal and one-shot for its receiving
+The first accepted navigation or close command is terminal and one-shot for its receiving
 document. `Navigate` may continue the logical connection in the destination;
 `ClosePopup` terminates it. A duplicate, replay, race loser, unknown control,
 wrong-direction record, or record on another connection performs no browser
 operation.
 
-Neither control message has a remote acknowledgement. A pending native-anchor
+None of these control messages has a remote acknowledgement. A pending native-anchor
 call resolves after the connection accepts that the same activation owns the
 navigation; it does not claim that navigation was observed. Navigation can destroy
 the receiver and COOP prevents the application from reliably observing either
@@ -110,9 +116,46 @@ delivery. The composition must commit the authoritative successor state before
 acting and treat connection loss or an unavailable popup as neither success,
 cancellation, nor proof of delivery.
 
+## Document departure
+
+`DocumentDeparted` is sent only Popup → Application over the selected
+authenticated carrier. It carries no caller data.
+The application settles `closed` once and releases the connection, without
+attempting to close the browser window or interpreting the departure as denial.
+A notification from a retired carrier cannot terminate a successor connection.
+
+A popup sends it on explicit local close or unexpected `pagehide`. A non-cancelling
+`beforeunload` listener keeps WebKit's window-close lifecycle running; it sends
+nothing and never prompts. Both listeners are removed before planned navigation.
+While attached, `beforeunload` may prevent Firefox's back/forward caching; it does
+not change the protocol's document replacement or best-effort mobile guarantees.
+
+Package-owned navigation and isolation fallback suppress it, including when continuity work
+is still pending. A failed send is inert: no acknowledgement, retry or secondary
+failure is possible. `pagehide` can mean close, reload or Back and may be skipped
+by mobile termination. Non-participating provider pages send nothing. Neither a
+COOP-severed handle nor a silent carrier establishes document departure.
+
+## Unavailable window
+
+Provider documents cannot send `DocumentDeparted`. The application polls its
+retained handle every 250 ms. Without a carrier, pending authenticated handshake,
+or pending fallback, an unavailable handle terminates the connection with
+`popup-unavailable` on the
+first observation. This means closure or opener severance (including COOP), not
+a confirmed physical close or denial. The application never closes the window
+as a side effect of this failure.
+
+A selected carrier suppresses this check, including through package-owned
+isolation. A pending fallback keeps the connection recoverable indefinitely;
+resolution installs its authenticated carrier, rejection removes the remaining
+fallback, and explicit close aborts recovery. Native-anchor launch has no handle
+to poll until its first authenticated binding. Terminal cleanup stops polling.
+
 ## Security boundary
 
-- Only the application endpoint of the selected connection can send a control;
+- Only the application endpoint of the selected connection can send navigation
+  or close commands; only the popup can report document departure. In either case,
   cookies, URLs, storage, opener state, and caller payload fields cannot
   authorize one.
 - The connection binding prevents one concurrent operation from

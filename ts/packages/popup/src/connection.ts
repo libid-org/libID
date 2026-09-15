@@ -1,7 +1,7 @@
 // The logical connection (docs/connection.md, docs/control.md): one
 // application endpoint that may see several popup documents, and one popup
 // endpoint per document. Both share registration, routing, and closure; the
-// popup side additionally consumes the two reserved controls.
+// popup side consumes navigation/close controls and reports document departure.
 
 import {
   createReporter,
@@ -41,7 +41,11 @@ export type ConnectionEnd = { outcome: 'closed' } | { outcome: 'failed'; code: P
 export interface PopupConnection<Out extends Message, In extends Message = Out> {
   /** Settles when this endpoint has selected its first carrier, or rejects if it failed first. */
   readonly ready: Promise<void>
-  /** Settles exactly once, when the logical connection ends; never rejects. */
+  /**
+   * Settles once on explicit close, reported document departure, or detected failure.
+   * Never rejects. An unreachable handle fails only without a carrier or pending recovery.
+   * Silence alone does not establish closure.
+   */
   readonly closed: Promise<ConnectionEnd>
   /** Authenticated peer of the selected carrier; null before selection or after retirement. */
   readonly peerOrigin: string | null
@@ -66,6 +70,7 @@ export interface PopupConnection<Out extends Message, In extends Message = Out> 
 export interface ConnectOptions {
   connectionId: string
   allowedPopupOrigins: readonly string[]
+  /** Armed once; pending recovery survives handle loss without a connection-layer timeout. */
   fallback?: CarrierConstructor
   onDiagnostic?: (event: PopupDiagnostic) => void
 }
@@ -219,7 +224,9 @@ abstract class Endpoint<Out extends Message, In extends Message>
     this.dropCarrier()
     this.carrier = carrier
     this.boundOrigin = carrier.peerOrigin
-    this.unsubscribe = carrier.on((value) => this.receive(value))
+    this.unsubscribe = carrier.on((value) => {
+      if (this.carrier === carrier) this.receive(value)
+    })
     if (code) this.report(code)
     this.resolveReady()
   }
@@ -308,6 +315,8 @@ abstract class Endpoint<Out extends Message, In extends Message>
 class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpoint<Out, In> {
   private readonly stopListening: () => void
   private stopReplacement: (() => void) | null = null
+  private fallbackPending: boolean
+  private handshakePending = false
 
   constructor(
     private readonly popup: OpenedWindow,
@@ -318,6 +327,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
     const connectionId = requireConnectionId(options.connectionId)
     if (popup.connected) throw new Error('PopupWindow is already connected')
     popup.connected = true
+    this.fallbackPending = options.fallback !== undefined
 
     this.report(popup.opened ? 'window-opened' : 'window-blocked')
     this.stopListening = listenForPopupPorts(
@@ -335,27 +345,44 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
         onPort: (port, peerOrigin) =>
           this.install(new PortCarrier(port, peerOrigin), 'carrier-message-port'),
         onFail: () => this.fail('handshake-rejected'),
+        onPending: (pending) => {
+          this.handshakePending = pending
+        },
       },
     )
+
+    // Provider pages cannot report departure. A closed handle also means COOP
+    // severance, so fail only when neither a carrier nor recovery is available.
+    const poll = setInterval(() => this.checkWindow(), 250)
+    this.controller.signal.addEventListener('abort', () => clearInterval(poll), { once: true })
 
     if (options.fallback) {
       // Armed exactly once for the logical connection; observed, never awaited.
       const { fallback } = options
       new Promise<Carrier>((resolve) => resolve(fallback(this.controller.signal))).then(
         (carrier) => {
+          this.fallbackPending = false
           if (this.ended) carrier.close()
           else this.install(carrier, 'carrier-fallback')
         },
         () => {
-          // A rejected standby is silent unless its path was selected.
+          // Losing standby alone is harmless while the opener/carrier still works.
+          this.fallbackPending = false
+          this.checkWindow()
         },
       )
     }
   }
 
-  protected onControl(): void {
-    // Controls are application-to-popup only.
-    this.fail('control-rejected')
+  private checkWindow(): void {
+    if (this.ended || this.carrier || this.fallbackPending || this.handshakePending) return
+    // Native-anchor creation has no handle until the first authenticated binding.
+    if (this.popup.opened && !this.popup.direct) this.fail('popup-unavailable')
+  }
+
+  protected onControl(control: PopupControl): void {
+    if (control.type === 'document-departed') this.release()
+    else this.fail('control-rejected')
   }
 
   /**
@@ -468,6 +495,16 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       options.isolationFallbackUrl === undefined
         ? null
         : resolveFallback(options.isolationFallbackUrl, popup.view.location, popup.fragment)
+    const departed = () => {
+      if (this.ended || this.controlsDone) return
+      this.notifyDeparture()
+      this.release()
+    }
+    // WebKit otherwise skips pagehide when closing a window. This listener never
+    // prompts or reports departure; a beforeunload can still be cancelled.
+    const beforeUnload = () => {}
+    popup.view.addEventListener('beforeunload', beforeUnload, { signal: this.controller.signal })
+    popup.view.addEventListener('pagehide', departed, { signal: this.controller.signal })
     void this.select(allowedOrigins, options.fallback)
   }
 
@@ -566,6 +603,10 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   }
 
   protected onControl(control: PopupControl): void {
+    if (control.type === 'document-departed') {
+      this.fail('control-rejected')
+      return
+    }
     if (this.controlsDone) return
     this.controlsDone = true
     if (control.type === 'navigate') {
@@ -693,7 +734,17 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     this.report('keep-acknowledged', performance.now() - startedAt)
   }
 
+  /** Sending during departure is best-effort and cannot create a reporting failure. */
+  private notifyDeparture(): void {
+    try {
+      this.carrier?.send({ type: 'document-departed' })
+    } catch {
+      // No acknowledgement or retry can outlive this document reliably.
+    }
+  }
+
   private closePopup(): void {
+    this.notifyDeparture()
     this.release()
     this.popup.view.close()
   }

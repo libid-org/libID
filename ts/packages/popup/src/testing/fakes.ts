@@ -33,15 +33,30 @@ type Listener = (event: MessageEvent) => void
 
 export interface FakeView extends View {
   readonly listeners: Set<Listener>
+  pagehide(): void
+  beforeunload(): void
   dispatch(event: { data: unknown; origin: string; source: unknown; ports?: MessagePort[] }): void
 }
 
 export function fakeView(): FakeView {
   const listeners = new Set<Listener>()
+  const lifecycle = new EventTarget()
   return {
     listeners,
-    addEventListener: (_type, listener) => void listeners.add(listener),
-    removeEventListener: (_type, listener) => void listeners.delete(listener),
+    addEventListener: (type, listener, options?: AddEventListenerOptions | boolean) => {
+      if (type === 'message') listeners.add(listener)
+      else lifecycle.addEventListener(type, listener as EventListener, options)
+    },
+    removeEventListener: (type, listener) => {
+      if (type === 'message') listeners.delete(listener)
+      else lifecycle.removeEventListener(type, listener as EventListener)
+    },
+    pagehide: () => {
+      lifecycle.dispatchEvent(new Event('pagehide'))
+    },
+    beforeunload: () => {
+      lifecycle.dispatchEvent(new Event('beforeunload', { cancelable: true }))
+    },
     dispatch(event) {
       const message = { ports: [], ...event } as unknown as MessageEvent
       // Tasks, not microtasks: listeners run after the current stack.

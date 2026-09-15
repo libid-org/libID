@@ -165,6 +165,62 @@ control, must initiate its own departure. `close` uses an
 available retained handle and otherwise uses popup control, then releases both
 the connection and popup.
 
+### Observing closure
+
+`connection.closed` also settles with `{ outcome: 'closed' }` when the connected
+popup reports an unexpected document departure, including ordinary user closure,
+Back or reload. The notification uses the authenticated carrier and works after
+COOP severs the opener. Expected package navigation and isolation fallback do
+not end the application's connection.
+
+This is best-effort `pagehide` reporting, not a guaranteed window-close event.
+Mobile termination may skip it, and provider pages run no package code. During
+periods without a carrier, the application polls its retained handle every 250 ms.
+If that handle becomes unavailable and no fallback is pending, the connection
+fails with `popup-unavailable` immediately on detection, without a grace period.
+The error covers both window closure and provider COOP severance; it cannot
+identify which happened. `PopupError.code` identifies the failure; the host owns
+user-facing wording.
+
+A selected carrier survives handle severance. A pending fallback keeps recovery
+open without a connection timeout until it resolves, rejects, or the caller
+closes. Native-anchor launches gain the same detection after authentication binds
+the handle; closure before that binding remains unobservable. Browser suspension
+may delay polling. No heartbeat currently treats silence as closure. Neither
+`closed` nor `failed` implies OAuth denial.
+
+### Connection failures inside the popup
+
+`closed` describes this endpoint's lifecycle, not the physical window or a user
+intent. On Application, `{ outcome: 'failed', code: 'popup-unavailable' }` means
+its retained handle became unavailable without a carrier or pending fallback;
+it cannot distinguish user closure from COOP severance. A popup-originated
+`DocumentDeparted` instead produces `{ outcome: 'closed' }` and can also mean
+Back or reload. Planned Prover isolation preserves the carrier.
+
+An Application failure does not stop an external provider page or notify a
+severed popup. When the user returns to a participating popup document, that
+document must handle its own `ready` rejection and show the failure locally:
+
+```ts
+try {
+  await connection.ready
+} catch (error) {
+  status.textContent = error instanceof PopupError
+    ? `Could not connect (${error.code}).`
+    : 'Could not connect.'
+}
+```
+
+Without an opener or fallback, `ready` rejects with `fallback-unavailable`.
+An opener that exists but does not answer gets the existing 30-second handshake
+wait before fallback selection. An available fallback is awaited; a rejection
+reports `fallback-failed`. Authentication failures report `handshake-rejected`.
+These are connection/setup failures, not OAuth denial or proof of user closure.
+The package provides programmatic errors; the host translates their codes into
+UI text. Preserve `end.code` if observing `closed` too, so a generic closure handler cannot replace
+the actual readiness error. No message from Application is needed to display it.
+
 ### Transitions that carry a reply
 
 Delivery on one carrier is ordered, and a `navigate` control is delivered in
@@ -360,5 +416,5 @@ remain deferred or manual.
 
 After `ready`, `connection.peerOrigin` identifies the authenticated peer; it is
 `null` without a selected carrier. [Origin binding](docs/connection.md#authenticated-peer-origin)
-describes preservation and fallback. ConnectionVersion 2 requires updated
-Application, popup documents, and worker together.
+describes preservation and fallback. Application, popup documents, and worker
+use the same connection protocol version.

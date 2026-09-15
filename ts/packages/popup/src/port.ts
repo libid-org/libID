@@ -63,6 +63,8 @@ export interface ListenHandlers {
   onPort: (port: MessagePort, peerOrigin: string) => void
   /** The expected peer sent a malformed handshake or acknowledgement. */
   onFail: () => void
+  /** Whether a validated handshake is awaiting its port acknowledgement. */
+  onPending?: (pending: boolean) => void
 }
 
 /**
@@ -82,6 +84,7 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
       pending.onmessage = null
       pending.close()
       pending = null
+      handlers.onPending?.(false)
     }
   }
 
@@ -102,6 +105,7 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
     const channel = new MessageChannel()
     const port = channel.port1
     pending = port
+    handlers.onPending?.(true)
     port.onmessage = (ack: MessageEvent): void => {
       if (pending !== port) return
       if (!isExactHandshake(ack.data, connectionId) || ack.ports.length !== 0) {
@@ -110,6 +114,7 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
         return
       }
       pending = null
+      handlers.onPending?.(false)
       port.onmessage = null
       handlers.onPort(port, event.origin)
     }

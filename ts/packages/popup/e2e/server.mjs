@@ -71,7 +71,7 @@ const appPage = html(`
       // The anchor keeps its fragment for the native path; the scripted path
       // passes fragment fields through the structured argument.
       const [base, hash = ''] = anchor.href.split('#')
-      void connection.navigate(base, new URLSearchParams(hash)).catch((error) => window.__events.push({ type: 'error', code: error.message }))
+      void connection.navigate(base, new URLSearchParams(hash)).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
       if (popupWindow.opened) event.preventDefault()
     })
   </script>
@@ -119,17 +119,17 @@ const popupPage = html(`
         connection.send({ type: 'pong', n: ping.n, path: location.pathname, isolated: crossOriginIsolated })
       })
       connection.on(Go, (go) => {
-        connection.navigate(go.url, new URLSearchParams(go.fragment ?? '')).catch((error) => window.__events.push({ type: 'error', code: error.message }))
+        connection.navigate(go.url, new URLSearchParams(go.fragment ?? '')).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
       })
       connection.on(Away, (away) => {
-        connection.navigateAway(away.url, new URLSearchParams(away.fragment ?? '')).catch((error) => window.__events.push({ type: 'error', code: error.message }))
+        connection.navigateAway(away.url, new URLSearchParams(away.fragment ?? '')).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
       })
       await connection.ready
       connection.send({ type: 'pong', n: 0, path: location.pathname, isolated: crossOriginIsolated })
       document.getElementById('status').textContent = 'connected'
     } catch (error) {
-      window.__events.push({ type: 'error', code: error.message })
-      document.getElementById('status').textContent = 'failed: ' + error.message
+      window.__events.push({ type: 'error', code: error.code ?? error.message })
+      document.getElementById('status').textContent = 'failed: ' + (error.code ?? error.message)
     }
   </script>
 `)
@@ -184,6 +184,8 @@ function popupHandler(req, res, page = popupPage) {
     case '/dip-broken/fallback':
       // COOP without COEP: never isolated, so the fallback must not loop.
       return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'same-origin' }, page)
+    case '/external-isolated':
+      return send(res, 200, { ...HTML, ...ISOLATED }, externalPage)
     case '/external':
       return send(res, 200, HTML, externalPage)
     default:

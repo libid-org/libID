@@ -54,12 +54,14 @@ describe('navigation url [POPUP-CONTROL-002]', () => {
 describe('controls [POPUP-CONTROL-004]', () => {
   it('decodes exact records only', () => {
     expect(decodeControl({ type: 'close-popup' })).toEqual({ type: 'close-popup' })
+    expect(decodeControl({ type: 'document-departed' })).toEqual({ type: 'document-departed' })
     expect(decodeControl({ type: 'navigate', url: 'https://p.example/' })).toEqual({
       type: 'navigate',
       url: 'https://p.example/',
     })
     for (const bad of [
       { type: 'close-popup', extra: 1 },
+      { type: 'document-departed', extra: 1 },
       { type: 'navigate' },
       { type: 'navigate', url: 'http://p.example/' },
       { type: 'navigate', url: 'https://p.example/', extra: 1 },
@@ -70,9 +72,10 @@ describe('controls [POPUP-CONTROL-004]', () => {
     }
   })
 
-  it('reserves both discriminators', () => {
+  it('reserves control discriminators', () => {
     expect(isReservedType('navigate')).toBe(true)
     expect(isReservedType('close-popup')).toBe(true)
+    expect(isReservedType('document-departed')).toBe(true)
     expect(isReservedType('ready')).toBe(false)
   })
 })
