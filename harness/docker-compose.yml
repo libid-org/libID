@@ -1,5 +1,6 @@
 # The libID integration stack: anvil + a one-shot contract deploy + the
-# notary + the libID server, all from released images/binaries. The
+# notary + the libID server. Keeper/notary carry a driver-close backport;
+# other services use released images/binaries. The
 # demo UI and its static assets stay host-side (vite dev server) — see
 # boot.sh, which orchestrates the whole thing.
 #
@@ -60,7 +61,10 @@ services:
     entrypoint: ["bash", "/deploy.sh"]
 
   notary:
-    image: ghcr.io/libid-org/notary:0.2.0
+    build:
+      context: .
+      dockerfile: compose/legacy-rust.Dockerfile
+      target: notary
     depends_on:
       deploy:
         condition: service_completed_successfully
@@ -91,7 +95,10 @@ services:
   # For a long-lived local rotation loop, run instead:
   #   docker compose run --rm keeper --config /input/keeper.toml run
   keeper:
-    image: ghcr.io/libid-org/keeper:0.2.0
+    build:
+      context: .
+      dockerfile: compose/legacy-rust.Dockerfile
+      target: keeper
     depends_on:
       deploy:
         condition: service_completed_successfully
