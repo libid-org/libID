@@ -52,7 +52,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Integration smoke: boot the compose stack (fresh anvil + released
-  # libid-deploy + released notary/backend/keeper images) and assert the
+  # libid-deploy/backend plus backported notary/keeper builds) and assert the
   # seams: the declarative deploy converged onto the declared canonical
   # addresses, the RPC answers, the notary serves its signer identity, the
   # keeper's real MPC-TLS JWKS rotation landed roots on-chain, and the
@@ -79,7 +79,7 @@ jobs:
         env:
           GH_OAUTH_CLIENT_ID: dummy
           GH_OAUTH_CLIENT_SECRET: dummy
-        run: docker compose up -d --wait --wait-timeout 300
+        run: docker compose up -d --wait --build --wait-timeout 300
 
       - name: Deploy service exited 0 (declarative convergence check passed)
         working-directory: harness

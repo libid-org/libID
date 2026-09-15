@@ -1,0 +1,113 @@
+# Backport of libid-rs 8954d8480b2f7856aa11c87efd8a35f9fa6880c3 onto v0.2.0.
+# https://github.com/libid-org/libid-rs/commit/8954d8480b2f7856aa11c87efd8a35f9fa6880c3
+# Keep the legacy TLSN wire format while accepting clean late mux completion.
+--- a/crates/libid-tlsn/src/session.rs
++++ b/crates/libid-tlsn/src/session.rs
+@@ -6,7 +6,10 @@
+     StatusCode,
+ };
+ use hyper_util::rt::TokioIo;
+-use std::future::IntoFuture;
++use std::{
++    future::IntoFuture,
++    sync::atomic::{AtomicBool, Ordering},
++};
+ use tlsn::{
+     attestation::{
+         request::{
+@@ -337,6 +340,10 @@
+     // dropping this future — aborts the driver instead of detaching it.
+     let mut driver_task = AbortOnDrop::new(tokio::spawn(driver));
+ 
++    // Backport libid-rs 8954d848: clean mux completion after the session ran
++    // is the peer closing, not an early disconnect.
++    let established = AtomicBool::new(false);
++    let established = &established;
+     let setup = async {
+         info!("Setting up MPC-TLS");
+         let prover = handle
+@@ -524,6 +531,7 @@
+                 detail: format!("prove: {e}"),
+             })?;
+         info!("MPC-TLS proof complete");
++        established.store(true, Ordering::Release);
+         on_progress(ProverStep::MpcProofFinalized);
+ 
+         let tls_transcript = prover.tls_transcript().clone();
+@@ -589,17 +597,24 @@
+     // connection to the verifier died under the session — a protocol request
+     // already submitted to it may then never resolve, so fail instead of
+     // pending forever.
++    let mut finished_driver = None;
+     let (body, recv_segments, att_request, secrets, handshake) = tokio::select! {
+         biased;
+         res = &mut setup => res?,
+         driver_res = driver_task.handle_mut() => {
+-            return Err(driver_finished_early(driver_res));
++            if !established.load(Ordering::Acquire) {
++                return Err(driver_finished_early(driver_res));
++            }
++            finished_driver = Some(driver_res);
++            (&mut setup).await?
+         }
+     };
+ 
+-    let recovered_compat: Compat<T> = driver_task
+-        .into_inner()
+-        .await
++    let driver_res = match finished_driver {
++        Some(res) => res,
++        None => driver_task.into_inner().await,
++    };
++    let recovered_compat: Compat<T> = driver_res
+         .map_err(|e| Error::MpcTlsFailed {
+             detail: format!("driver task join: {e}"),
+         })?
+@@ -629,6 +644,10 @@
+     // dropping this future — aborts the driver instead of detaching it.
+     let mut driver_task = AbortOnDrop::new(tokio::spawn(driver));
+ 
++    // Backport libid-rs 8954d848: clean mux completion after the session ran
++    // is the peer closing, not an early disconnect.
++    let established = AtomicBool::new(false);
++    let established = &established;
+     let setup = async {
+         let verifier = handle
+             .new_verifier(
+@@ -676,6 +695,7 @@
+         let verifier = verifier.run().await.map_err(|e| Error::MpcTlsFailed {
+             detail: format!("run: {e}"),
+         })?;
++        established.store(true, Ordering::Release);
+ 
+         let tls_transcript = verifier.tls_transcript().clone();
+ 
+@@ -732,17 +752,24 @@
+     // connection died under the session (e.g. a health probe that connected
+     // and immediately closed) — a protocol request already submitted to it
+     // may then never resolve, so fail instead of pending forever.
++    let mut finished_driver = None;
+     let (server_name, transcript, tls_transcript, transcript_commitments) = tokio::select! {
+         biased;
+         res = &mut setup => res?,
+         driver_res = driver_task.handle_mut() => {
+-            return Err(driver_finished_early(driver_res));
++            if !established.load(Ordering::Acquire) {
++                return Err(driver_finished_early(driver_res));
++            }
++            finished_driver = Some(driver_res);
++            (&mut setup).await?
+         }
+     };
+ 
+-    let recovered_compat: Compat<T> = driver_task
+-        .into_inner()
+-        .await
++    let driver_res = match finished_driver {
++        Some(res) => res,
++        None => driver_task.into_inner().await,
++    };
++    let recovered_compat: Compat<T> = driver_res
+         .map_err(|e| Error::MpcTlsFailed {
+             detail: format!("driver task join: {e}"),
+         })?
