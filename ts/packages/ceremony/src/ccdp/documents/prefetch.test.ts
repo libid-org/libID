@@ -10,7 +10,8 @@ const { connection, rootWorker, dispatchPrefetch } = vi.hoisted(() => ({
 }))
 vi.mock('virtual:ceremony-assets', () => ({ requestsByProfile: { 'google/1': [] } }))
 vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
-vi.mock('@libid/popup', () => ({
+vi.mock('@libid/popup', async (original) => ({
+  ...(await original<typeof import('@libid/popup')>()),
   PopupConnection: { accept: () => connection },
   PopupWindow: { current: vi.fn() },
 }))

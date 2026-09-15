@@ -1,14 +1,18 @@
+import { type ConnectionEnd, PopupError } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
+import type { Events } from '../../events.js'
 import type { ProverContext } from '../../platforms/context.js'
 import { platforms } from '../../platforms/index.js'
 import type { IdentityProof } from '../index.js'
+import { popupErrorMessages } from '../ui-messages.js'
 import { startProver } from './prover.js'
 
-const { accept, connection, prove, ui } = vi.hoisted(() => ({
+const { accept, connection, prove, ui, terminal } = vi.hoisted(() => ({
   accept: vi.fn(),
+  terminal: vi.fn(),
   connection: {
     ready: Promise.resolve(),
-    closed: new Promise(() => {}),
+    closed: new Promise<ConnectionEnd>(() => {}),
     send: vi.fn(),
     on: vi.fn(),
   },
@@ -24,7 +28,8 @@ const { accept, connection, prove, ui } = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@libid/popup', () => ({
+vi.mock('@libid/popup', async (original) => ({
+  ...(await original<typeof import('@libid/popup')>()),
   PopupConnection: {
     accept: (...args: unknown[]) => {
       accept(...args)
@@ -46,12 +51,16 @@ vi.mock('../../platforms/github/1/prover.js', () => ({ prove }))
 
 vi.mock('./ui.js', () => ({
   view: vi.fn(),
-  eventView: () => ui,
+  eventView: (events: Events) => {
+    events.onEvent(terminal)
+    return ui
+  },
 }))
 
 afterEach(() => {
   vi.clearAllMocks()
   connection.closed = new Promise(() => {})
+  connection.ready = Promise.resolve()
   connection.send.mockReset()
   ui.trackProof.mockReset()
   ui.finishProof.mockReset()
@@ -155,8 +164,8 @@ it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
     vi.stubGlobal('crossOriginIsolated', true)
     vi.stubGlobal('Worker', vi.fn())
     let close!: () => void
-    connection.closed = new Promise<void>((resolve) => {
-      close = resolve
+    connection.closed = new Promise<ConnectionEnd>((resolve) => {
+      close = () => resolve({ outcome: 'closed' })
     })
     prove.mockResolvedValueOnce({
       identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
@@ -229,5 +238,55 @@ it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
         ([message]) => message.event === 'prover' && message.phase === 'finished',
       ),
     ).toBe(false)
+  },
+)
+
+it.each(['before', 'after'])(
+  'shows the transport failure locally %s readiness [TEST-CCDP-08]',
+  async (when) => {
+    vi.stubGlobal('location', { origin: 'https://ccdp.test' })
+    vi.stubGlobal('crossOriginIsolated', true)
+    vi.stubGlobal('Worker', vi.fn())
+    const error = new PopupError('fallback-failed')
+    let close!: (end: ConnectionEnd) => void
+    connection.closed = new Promise<ConnectionEnd>((resolve) => {
+      close = resolve
+    })
+    let rejectReady!: (error: Error) => void
+    if (when === 'before')
+      connection.ready = new Promise<void>((_, reject) => {
+        rejectReady = reject
+      })
+    const run = startProver(
+      new URLSearchParams({
+        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        applicationOrigin: 'https://app.test',
+        oauthQuery: '',
+        oauthFragment: '',
+      }).toString(),
+    )
+    if (when === 'after') await run
+    connection.send.mockImplementation(() => {
+      throw new Error('unreachable')
+    })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      close({ outcome: 'failed', code: error.code })
+      if (when === 'before') rejectReady(error)
+      await run
+      await vi.waitFor(() =>
+        expect(terminal).toHaveBeenCalledWith({
+          status: 'failed',
+          event: 'prover',
+          message: popupErrorMessages[error.code],
+          timestamp: expect.any(Number),
+        }),
+      )
+      expect(prove).not.toHaveBeenCalled()
+      expect(ui.stop).toHaveBeenCalledOnce()
+      expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
+    } finally {
+      log.mockRestore()
+    }
   },
 )

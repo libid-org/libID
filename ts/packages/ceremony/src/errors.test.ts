@@ -1,6 +1,7 @@
-import type { Message, PopupConnection } from '@libid/popup'
+import { type Message, type PopupConnection, PopupError } from '@libid/popup'
 import { expect, it, vi } from 'vitest'
 import { CeremonyFailed } from './ccdp/index.js'
+import { popupErrorMessages } from './ccdp/ui-messages.js'
 import { CeremonyError, ceremonyError, errorMessage, reportFailure } from './errors.js'
 
 it('preserves unexpected error text and context without serializing the exception [LIBID-OAUTH-022]', () => {
@@ -55,4 +56,16 @@ it('records undeliverable failures without logging opaque text or changing outco
   } finally {
     log.mockRestore()
   }
+})
+
+it('translates popup codes into CCDP copy while preserving the transport cause', () => {
+  const cause = new PopupError('fallback-unavailable')
+  const error = ceremonyError(cause, 'authorization')
+  expect(cause.message).toBe('fallback-unavailable')
+  expect(error.cause).toBe(cause)
+  expect(error.event).toBe('authorization')
+  expect(error.message).toBe(popupErrorMessages['fallback-unavailable'])
+  expect(error.message).toContain('The sign-in provider may have isolated this window')
+  // Matching text in an ordinary exception is not a transport code.
+  expect(errorMessage(new Error('fallback-unavailable'))).toBe('fallback-unavailable')
 })

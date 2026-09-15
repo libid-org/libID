@@ -588,7 +588,7 @@ test('Prover rejects a changed Application origin in the same opener window [TES
   const popupPromise = context.waitForEvent('page')
   await page.locator('#launch').click()
   const popup = await popupPromise
-  await expect(popup.locator('body')).toContainText('handshake-rejected')
+  await expect(popup.locator('body')).toContainText('connection failed authentication')
   expect(await popup.evaluate(() => location.hash)).toBe('')
   expect(new URL(page.url()).origin).toBe(ccdp)
 })

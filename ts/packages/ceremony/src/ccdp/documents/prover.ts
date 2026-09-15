@@ -1,5 +1,5 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
+import { type Message, PopupConnection, PopupError, PopupWindow } from '@libid/popup'
 import { claimRootWorker } from '../../assets/registration.js'
 import { ceremonyError, reportFailure } from '../../errors.js'
 import { type CoreEvent, coreEvents, Events, now, type OperationEvent } from '../../events.js'
@@ -7,6 +7,7 @@ import type { ProverContext } from '../../platforms/context.js'
 import { implementationFor, type PlatformId } from '../../platforms/index.js'
 import { Event as EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
+import { messages } from '../ui-messages.js'
 import { eventView } from './ui.js'
 
 const implementations: Record<
@@ -69,7 +70,7 @@ export async function startProver(fragment: string): Promise<void> {
   try {
     retained = readProver(fragment)
     ui = eventView(events, '')
-    ui.message('Preparing your identity proof')
+    ui.message(messages.proofPreparation)
     connection = PopupConnection.accept(PopupWindow.current(fragment, { scope: '/' }), {
       fallback,
       connectionId: retained.ceremonyId,
@@ -85,7 +86,7 @@ export async function startProver(fragment: string): Promise<void> {
         request.platformCeremonyVersion !== 1 ||
         !Object.hasOwn(implementations, request.platformId)
       ) {
-        fail(new Error('Invalid proving request'))
+        fail(new Error(messages.invalidProvingRequest))
         return
       }
       started = true
@@ -125,8 +126,9 @@ export async function startProver(fragment: string): Promise<void> {
         })
         .catch(fail)
     })
-    void connection.closed.then(() => {
-      if (!ended) fail(new Error('Prover connection closed'))
+    void connection.closed.then((end) => {
+      if (!ended)
+        fail(end.outcome === 'failed' ? new PopupError(end.code) : new Error(messages.proverClosed))
     })
     await connection.ready
     if (ended) return
@@ -135,7 +137,7 @@ export async function startProver(fragment: string): Promise<void> {
       typeof SharedArrayBuffer === 'undefined' ||
       typeof Worker === 'undefined'
     )
-      throw new Error('Prover isolation unavailable')
+      throw new Error(messages.isolationUnavailable)
     await claimRootWorker()
     if (ended) return
     ready = true

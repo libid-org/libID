@@ -1,6 +1,6 @@
 import type { LedgerId } from '@libid/ledger'
 import { mainnet, testnet } from '@libid/ledger/testing'
-import type { Message, MessageType, PopupConnection } from '@libid/popup'
+import type { ConnectionEnd, Message, MessageType, PopupConnection } from '@libid/popup'
 import { describe, expect, it, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
 import { deriveAuthorizationDigest, deriveCodeChallenge } from '../../platforms/authorization.js'
@@ -12,10 +12,10 @@ import { validateCeremonyConfig } from './config.js'
 class Connection implements PopupConnection<Message> {
   readonly peerOrigin = 'https://ccdp.test'
   ready = Promise.resolve()
-  private end!: () => void
+  end!: (outcome?: ConnectionEnd) => void
   ended = false
-  closed = new Promise<{ outcome: 'closed' }>((resolve) => {
-    this.end = () => resolve({ outcome: 'closed' })
+  closed = new Promise<ConnectionEnd>((resolve) => {
+    this.end = (outcome = { outcome: 'closed' }) => resolve(outcome)
   })
   send = vi.fn()
   navigate = vi.fn(async (_url: string, _fragment?: URLSearchParams) => {})
@@ -584,7 +584,7 @@ it.each(['google', 'x', 'github'] as const)(
     const rejection = expect(result).rejects.toMatchObject({ name: 'CeremonyError' })
     await c.close()
     await rejection
-    expect(events.at(-1)).toMatchObject({ status: 'failed' })
+    expect(events.at(-1)).toMatchObject({ status: 'closed' })
     expect(
       events.some(
         (e) => 'event' in e && e.event === 'prover' && 'phase' in e && e.phase === 'finished',
@@ -646,7 +646,7 @@ it.each(['success', 'denied', 'failed', 'closed', 'invalid-result', 'setup'] as 
     await connection.close()
     expect(events.filter((e) => e.status !== 'active')).toEqual([
       expect.objectContaining({
-        status: ['closed', 'invalid-result', 'setup'].includes(outcome)
+        status: ['invalid-result', 'setup'].includes(outcome)
           ? 'failed'
           : outcome === 'success'
             ? 'completed'
@@ -672,7 +672,7 @@ it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08
   connection.receive({ type: 'user-denied' })
   connection.receive({ type: 'identity-proof', identity, proof })
   expect(events).toHaveLength(count)
-  expect(events.at(-1)).toMatchObject({ status: 'failed' })
+  expect(events.at(-1)).toMatchObject({ status: 'closed' })
   expect(connection.send).not.toHaveBeenCalled()
 })
 
@@ -850,4 +850,32 @@ it('reports closure before the first start without mislabeling it as a repeat [L
   await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
   expect(connection.send).not.toHaveBeenCalled()
   expect(connection.navigate).not.toHaveBeenCalled()
+})
+it.each(['closed', 'failed'] as const)(
+  'preserves popup %s in errors and both terminal subscriptions',
+  async (outcome) => {
+    const { connection, ceremony } = setup()
+    const events = vi.fn(),
+      stages = vi.fn()
+    ceremony.onEvent(events)
+    ceremony.onStage(stages)
+    const pending = ceremony.proveUserIdentity()
+    const rejection = expect(pending).rejects.toMatchObject({
+      name: 'CeremonyError',
+      status: outcome,
+      event: 'prefetch-dispatch',
+      ...(outcome === 'failed' ? { cause: { name: 'PopupError', code: 'decode-rejected' } } : {}),
+    })
+    connection.end(outcome === 'closed' ? { outcome } : { outcome, code: 'decode-rejected' })
+    await rejection
+    expect(events).toHaveBeenLastCalledWith(expect.objectContaining({ status: outcome }))
+    expect(stages).toHaveBeenLastCalledWith(expect.objectContaining({ status: outcome }))
+    expect(connection.send).not.toHaveBeenCalled()
+  },
+)
+
+it('preserves closure before proving starts', async () => {
+  const { connection, ceremony } = setup()
+  await connection.close()
+  await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ status: 'closed' })
 })

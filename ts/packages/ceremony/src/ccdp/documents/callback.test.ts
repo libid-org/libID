@@ -1,19 +1,33 @@
+import { type ConnectionEnd, PopupError } from '@libid/popup'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { Events } from '../../events.js'
+import { popupErrorMessages } from '../ui-messages.js'
 import { startCallback } from './callback.js'
 
-const { accept, current, view, navigate, send } = vi.hoisted(() => ({
+const { accept, current, view, navigate, send, terminal } = vi.hoisted(() => ({
   accept: vi.fn(),
   current: vi.fn(),
   view: vi.fn(),
   navigate: vi.fn(),
   send: vi.fn(),
+  terminal: vi.fn(),
 }))
 
 vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
 
-vi.mock('@libid/popup', () => ({ PopupConnection: { accept }, PopupWindow: { current } }))
+vi.mock('@libid/popup', async (original) => ({
+  ...(await original<typeof import('@libid/popup')>()),
+  PopupConnection: { accept },
+  PopupWindow: { current },
+}))
 
-vi.mock('./ui.js', () => ({ view, eventView: () => ({ stop: vi.fn(), message: vi.fn() }) }))
+vi.mock('./ui.js', () => ({
+  view,
+  eventView: (events: Events) => {
+    events.onEvent(terminal)
+    return { stop: vi.fn(), message: vi.fn() }
+  },
+}))
 
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 
@@ -211,5 +225,40 @@ it.each([null, 'null', 'https://app.test/'])(
     await vi.waitFor(() => expect(console.error).toHaveBeenCalled())
     expect(navigate).not.toHaveBeenCalled()
     expect(send).not.toHaveBeenCalled()
+  },
+)
+
+it.each(['ready-first', 'closed-first'])(
+  'keeps the connection failure visible locally when Application is unreachable: %s [TEST-CCDP-08]',
+  async (order) => {
+    const error = new PopupError('fallback-unavailable')
+    let rejectReady!: (error: Error) => void
+    let close!: (end: ConnectionEnd) => void
+    accept.mockReturnValueOnce({
+      peerOrigin: null,
+      ready: new Promise<void>((_, reject) => {
+        rejectReady = reject
+      }),
+      closed: new Promise<ConnectionEnd>((resolve) => {
+        close = resolve
+      }),
+      navigate,
+      send,
+    })
+    startCallback()
+    if (order === 'ready-first') rejectReady(error)
+    close({ outcome: 'failed', code: error.code })
+    if (order === 'closed-first') rejectReady(error)
+    await vi.waitFor(() =>
+      expect(terminal).toHaveBeenCalledWith({
+        status: 'failed',
+        event: 'authorization',
+        message: popupErrorMessages[error.code],
+        timestamp: expect.any(Number),
+      }),
+    )
+    expect(navigate).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+    expect(console.error).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
   },
 )
