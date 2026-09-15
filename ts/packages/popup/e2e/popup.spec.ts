@@ -102,10 +102,7 @@ const navigate = (page: Page, url: string) =>
   )
 
 /** Run an action that replaces the popup document and wait for the new one. */
-async function nextDocument(
-  popup: Page,
-  action: () => Promise<unknown> = async () => {},
-): Promise<void> {
+async function nextDocument(popup: Page, action: () => Promise<unknown>): Promise<void> {
   const before = await popup.evaluate(() => performance.timeOrigin)
   await action()
   await expect
@@ -341,7 +338,7 @@ test('[POPUP-KEEPER-003] [POPUP-CONNECTION-003] a long non-participating hop exp
   const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
   await nextDocument(popup, () => navigate(page, `${POPUP}/external?delay=5500&next=${next}`))
   await expect(popup.locator('#status')).toHaveText('external')
-  await nextDocument(popup)
+  await nextDocument(popup, () => popup.getByRole('button', { name: 'Return' }).click())
   await expect(popup.locator('#status')).toHaveText('connected')
   // Expired in the worker: the fresh document found nothing and used its opener.
   expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
@@ -372,8 +369,8 @@ test('[POPUP-KEEPER-003] a short non-participating hop keeps the port', async ({
   await expectPong(page, 0)
   await popup.evaluate(() => navigator.serviceWorker.ready)
   const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
-  await nextDocument(popup, () => navigate(page, `${POPUP}/external?delay=200&next=${next}`))
-  await nextDocument(popup)
+  await nextDocument(popup, () => navigate(page, `${POPUP}/external?next=${next}`))
+  await nextDocument(popup, () => popup.getByRole('button', { name: 'Return' }).click())
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(await diag(popup)).toEqual(['carrier-restored'])
   await ping(page, 6)
@@ -454,9 +451,9 @@ test('[POPUP-CONTROL-005] navigateAway leaves for a provider page directly and t
   await expectPong(page, 0)
   await popup.evaluate(() => navigator.serviceWorker.ready)
   const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
-  await nextDocument(popup, () => navigateAway(page, `${POPUP}/external?delay=200&next=${next}`))
+  await nextDocument(popup, () => navigateAway(page, `${POPUP}/external?next=${next}`))
   expect((await diag(page)).at(-1)).toBe('control-direct')
-  await nextDocument(popup)
+  await nextDocument(popup, () => popup.getByRole('button', { name: 'Return' }).click())
   await expect(popup.locator('#status')).toHaveText('connected')
   // Nothing was kept: the returning document found no port and used its opener.
   expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
@@ -478,10 +475,10 @@ test('[POPUP-CONTROL-005] popup-side navigateAway keeps no port', async ({ page 
           url: url.split('#')[0],
           fragment: url.split('#')[1] ?? '',
         }),
-      `${POPUP}/external?delay=200&next=${next}`,
+      `${POPUP}/external?next=${next}`,
     ),
   )
-  await nextDocument(popup)
+  await nextDocument(popup, () => popup.getByRole('button', { name: 'Return' }).click())
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
 })
