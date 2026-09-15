@@ -25,11 +25,23 @@ for (const [platform, count] of [
     page,
   }) => {
     test.setTimeout(480000)
-    const [proof, attestations] = await page.evaluate(
-      async ({ platform, count }) =>
-        Promise.all([window.proveBearerFixture(), window.notarizeRequests(count, platform)]),
-      { platform, count },
-    )
+    const logs: string[] = []
+    page.on('console', (message) => {
+      const text = message.text()
+      if (/sdk-core\/src\/prover\.rs|session driver|HTTP connection error/.test(text))
+        logs.push(text)
+    })
+    const [proof, attestations] = await page
+      .evaluate(
+        async ({ platform, count }) =>
+          Promise.all([window.proveBearerFixture(), window.notarizeRequests(count, platform)]),
+        { platform, count },
+      )
+      .catch((error: unknown) => {
+        // These sessions contain only the synthetic, unauthenticated requests above.
+        console.error('Notary runtime progress:', JSON.stringify(logs))
+        throw error
+      })
     await verifyBrowserProof('bearer_link', proof)
     expect(attestations).toHaveLength(count)
     for (const attestation of attestations) {
