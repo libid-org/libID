@@ -184,7 +184,6 @@ Attestation Count: The number of entries in the closed attestation list a
 - ASM-PROV-03:
   An Identity Platform binds an authorization code to the account that approved
   it, and accepts that code exactly once.
-- ASM-PROV-04: Withdrawn.
 - ASM-PROV-05:
   Google signs ID Tokens with a key published at its JWKS endpoint, and
   includes the requested `nonce` verbatim.
@@ -984,7 +983,6 @@ which the following identity-header rules could apply.
   header's value, and a request with one honest `authorization` header
   cannot commit a range positioned somewhere else. Two fixed comparisons
   at known offsets replace a derived one.
-- REQ-COMMON-43: Withdrawn.
 - REQ-COMMON-19 (upholds SP-EXCHANGE-01):
   The Proving Circuit extracting a JSON string field MUST receive the field's
   offset as a private input supplied by the prover; the circuit performs no
@@ -1125,7 +1123,6 @@ constant.
   a client identifier, client secret, or `redirect_uri`, as a compiled
   constant. Necessity: a compiled deployment value fragments the verifying
   key per deployment.
-- REQ-COMMON-22: Withdrawn.
 - REQ-COMMON-22A (upholds SP-CLIENT-01):
   The Proving Circuit MUST NOT expose a client secret, or any value derived
   from one, as a public proof input.

@@ -754,7 +754,6 @@ stays in the form body so the authenticated client identifier and the complete
 request grammar have one representation; an `Authorization` header remains
 forbidden by REQ-PLAT-56A.
 
-- REQ-PLAT-35: Withdrawn.
 - REQ-PLAT-61 (upholds SP-EXCHANGE-01, SP-BIND-01, SP-CLIENT-01):
   The Prover and Platform Verifier MUST require the complete request body to
   be the common §6 canonical form serialization of exactly the five fields in
@@ -815,7 +814,6 @@ forbidden by REQ-PLAT-56A.
   The Prover MUST correlate the bearer, its commitment opening, and the final
   token attestation with the same browser notarization session.
   The Prover MUST reject a mixed-session tuple or a partial final result.
-- REQ-PLAT-54: Withdrawn.
 - REQ-PLAT-55 (upholds SP-CLIENT-01):
   The Canonical Runtime MUST treat the bearer commitment opening as private
   witness material for the Proving Circuit.
@@ -829,9 +827,6 @@ and any early witness material are provisional; proof delivery waits for both
 final, structurally checked and correlated attestations. Neither session's
 failure can be turned into a partial successful ceremony.
 
-- REQ-PLAT-41: Withdrawn.
-- REQ-PLAT-42: Withdrawn.
-- REQ-PLAT-43: Withdrawn.
 - REQ-PLAT-43B:
   The Prover MUST reject redirects from the token endpoint. Necessity: a
   followed redirect would notarize a session other than the pinned endpoint.
