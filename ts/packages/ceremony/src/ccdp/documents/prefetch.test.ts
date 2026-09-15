@@ -23,12 +23,22 @@ const fragment = new URLSearchParams({
   platformId: 'google',
   ceremonyVersion: '1',
 }).toString()
-afterEach(() => vi.clearAllMocks())
+afterEach(() => {
+  vi.clearAllMocks()
+  vi.restoreAllMocks()
+})
 it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () => {
-  let ready!: () => void, dispatched!: () => void
+  let elapsed = 25
+  vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
+  let ready!: () => void, activated!: () => void, dispatched!: () => void
   connection.ready = new Promise<void>((resolve) => {
     ready = resolve
   })
+  rootWorker.mockReturnValueOnce(
+    new Promise<void>((resolve) => {
+      activated = resolve
+    }),
+  )
   dispatchPrefetch.mockReturnValueOnce(
     new Promise<void>((resolve) => {
       dispatched = resolve
@@ -36,16 +46,31 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
   )
   const run = startPrefetch(fragment)
   expect(connection.send).not.toHaveBeenCalled()
+  expect(rootWorker).not.toHaveBeenCalled()
+  elapsed = 2025
   ready()
+  await vi.waitFor(() => expect(rootWorker).toHaveBeenCalledOnce())
+  expect(dispatchPrefetch).not.toHaveBeenCalled()
+  elapsed = 2100
+  activated()
   await vi.waitFor(() => expect(dispatchPrefetch).toHaveBeenCalledOnce())
   expect(connection.send).not.toHaveBeenCalled()
+  elapsed = 2130
   dispatched()
   await run
   expect(connection.send).toHaveBeenCalledExactlyOnceWith({
     type: 'event',
     event: 'prefetch-dispatch',
     phase: 'finished',
-    timestamp: expect.any(Number),
+    timestamp: performance.timeOrigin + 2130,
+    instrumentation: {
+      attributes: {
+        'document-startup-ms': 25,
+        'connection-ms': 2000,
+        'worker-ready-ms': 75,
+        'dispatch-ms': 30,
+      },
+    },
   })
 })
 it('a failed mandatory readiness send reports failure instead of silently continuing', async () => {

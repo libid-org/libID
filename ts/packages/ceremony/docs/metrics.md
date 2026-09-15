@@ -42,6 +42,23 @@ phase-less core event.
   preparation, witness and attestation spans as elapsed time. Stages describe
   presentation, not an exclusive execution waterfall.
 
+### Prefetch breakdown
+
+`prefetch-dispatch.finished` carries four durations in `instrumentation.attributes`:
+
+- `document-startup-ms`: navigation start to Prefetch entry execution, including
+  document/module loading and evaluation; not the browser's `load` event.
+- `connection-ms`: entry execution through authenticated popup readiness.
+- `worker-ready-ms`: root Worker registration, activation and legacy-scope cleanup.
+- `dispatch-ms`: request to Worker dispatch acknowledgement, including cache lookups
+  and any cached CRS body reads currently needed before acknowledgement.
+
+These consecutive intervals use the Prefetch document's monotonic clock. They
+exclude Application work before navigation, and do not measure asset download
+completion or proving initialization. The dev app displays them in the existing
+Prefetch operation's collapsed details. They identify the wait's location without
+claiming whether it came from disk, worker startup or network activity.
+
 ## Resource accounting
 
 Distinguish a resource request, an actual network download and a single-flight
@@ -63,7 +80,7 @@ witnesses, attestations, transcripts and raw exceptions. Do not use URLs, origin
 user IDs or error text as metric labels. Export selected fields rather than
 copying an entire event.
 
-A failed lifecycle update includes bounded opaque display text and operation
+A failed or closed lifecycle update includes bounded opaque display text and operation
 context. Bounding text is not credential redaction; omit `message` and retained
 local causes from telemetry. Undeliverable failure reporting uses a fixed local
 diagnostic. Logger, UI and observer errors cannot create another protocol failure

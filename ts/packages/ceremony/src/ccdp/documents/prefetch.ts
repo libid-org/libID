@@ -11,6 +11,7 @@ import { eventView } from './ui.js'
 
 /** Authenticate the Prefetch page and acknowledge selected fetch dispatch before OAuth navigation. */
 export async function startPrefetch(fragment: string): Promise<void> {
+  const started = performance.now()
   let connection: PopupConnection<Message> | undefined
   const events = new Events()
   const ui = eventView(events, '')
@@ -30,9 +31,25 @@ export async function startPrefetch(fragment: string): Promise<void> {
       allowedApplicationOrigins: '*',
     })
     await connection.ready
+    const connected = performance.now()
     const registration = await rootWorker()
+    const workerReady = performance.now()
     await dispatchPrefetch(registration, profile)
-    const event = { event: 'prefetch-dispatch', phase: 'finished', timestamp: now() } as const
+    const dispatched = performance.now()
+    const event = {
+      event: 'prefetch-dispatch',
+      phase: 'finished',
+      timestamp: performance.timeOrigin + dispatched,
+      instrumentation: {
+        attributes: {
+          // Navigation to entry execution includes document and module loading.
+          'document-startup-ms': started,
+          'connection-ms': connected - started,
+          'worker-ready-ms': workerReady - connected,
+          'dispatch-ms': dispatched - workerReady,
+        },
+      },
+    } as const
     connection.send({ type: 'event', ...event })
     events.emit({ ...event, status: 'active' })
   } catch (error) {
