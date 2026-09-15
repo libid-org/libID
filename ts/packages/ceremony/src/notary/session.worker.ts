@@ -116,15 +116,12 @@ function socketIo(socket: WebSocket): Io {
       return new Promise((resolve, reject) => readers.push({ resolve, reject }))
     },
     write(data) {
+      // The pinned SDK catches synchronous throws but discards write promises.
       if (socket.readyState !== WebSocket.OPEN) {
-        return Promise.reject(new Error('notary WebSocket is not open'))
+        throw new Error('notary WebSocket is not open')
       }
-      try {
-        socket.send(data)
-        return Promise.resolve()
-      } catch (error) {
-        return Promise.reject(error)
-      }
+      socket.send(data)
+      return Promise.resolve()
     },
     close() {
       if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {

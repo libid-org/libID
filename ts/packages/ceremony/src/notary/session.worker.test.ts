@@ -164,7 +164,10 @@ async function preparing() {
     resolve = ok
     reject = fail
   })
-  const hooks = { init: vi.fn(() => gate), setup: vi.fn() }
+  const hooks = {
+    init: vi.fn(() => gate),
+    setup: vi.fn<(io: { write(data: Uint8Array): Promise<void> }) => void>(),
+  }
   const port = { postMessage: vi.fn(), close: vi.fn() }
   vi.stubGlobal('self', {
     addEventListener: (_: string, handler: typeof receive) => {
@@ -184,7 +187,7 @@ async function preparing() {
     },
   )
   await import('./session.worker.js')
-  const source = `export default async()=>globalThis.tlsnConnectTest.init();export async function initialize(){};export class Prover {async setup(){globalThis.tlsnConnectTest.setup()}}`
+  const source = `export default async()=>globalThis.tlsnConnectTest.init();export async function initialize(){};export class Prover {async setup(io){globalThis.tlsnConnectTest.setup(io)}}`
   receive({
     data: {
       type: 'prepare',
@@ -259,3 +262,31 @@ it('rejects a socket closed while runtime initialization was pending [LIBID-PROV
   })
   expect(w.hooks.setup).not.toHaveBeenCalled()
 })
+
+it.each(['closed', 'send throws'])(
+  'surfaces %s socket writes to the SDK without awaiting its discarded Promise',
+  async (failure) => {
+    const w = await preparing()
+    w.open()
+    w.resolve()
+    await expect.poll(() => w.hooks.setup.mock.calls.length).toBe(1)
+    const [io] = w.hooks.setup.mock.calls[0]
+    const expected = new Error(
+      failure === 'closed' ? 'notary WebSocket is not open' : 'Socket send failed',
+    )
+    if (failure === 'closed') w.socket.readyState = 3
+    else
+      w.socket.send = () => {
+        throw expected
+      }
+    let caught: unknown
+    try {
+      // The pinned SDK catches synchronous throws but does not await write promises.
+      // Consume a rejected promise only to keep the failing regression test handled.
+      void io.write(new Uint8Array([1])).catch(() => {})
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toEqual(expected)
+  },
+)
