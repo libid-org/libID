@@ -89,69 +89,90 @@ test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async
   expect((await request.get(`${ccdp}/ccdp/v99/prover`)).status()).toBe(404)
 })
 
-test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020]', async ({
-  app,
-  bridge,
-  ccdp,
-  page,
-  context,
-  request,
-}) => {
-  const graph = JSON.parse(
-    readFileSync(
-      new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
-      'utf8',
-    ),
-  )
-  const asset = graph.requestsByProfile['google/1'].find((r: { url: string }) =>
-    r.url.endsWith('/oidc_google.json'),
-  ).url
-  const control = `${ccdp}/qualification-control?asset=${encodeURIComponent(asset)}`
-  const before = (await (await request.get(`${control}&hold=1`)).json()).count
-  const seed = await context.newPage()
-  await seed.goto(`${ccdp}/ccdp/v1/seed`)
-  await seed.evaluate(async () => {
-    for (const scope of ['/', '/ccdp/v1/']) {
-      const r = await navigator.serviceWorker.register('/ccdp/v1/worker.js', {
-        scope,
-        type: 'module',
-      })
-      await new Promise<void>((resolve) => {
-        const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
-        poll()
-      })
+// Fixture teardown runs before its request client is disposed, including on timeout.
+const migrationTest = test.extend<{
+  heldCircuit: { asset: string; control: string; before: number }
+}>({
+  heldCircuit: async ({ ccdp, request }, use) => {
+    const graph = JSON.parse(
+      readFileSync(
+        new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
+        'utf8',
+      ),
+    )
+    const asset = graph.requestsByProfile['google/1'].find((r: { url: string }) =>
+      r.url.endsWith('/oidc_google.json'),
+    ).url
+    const control = `${ccdp}/qualification-control?asset=${encodeURIComponent(asset)}`
+    try {
+      const before = (await (await request.get(`${control}&hold=1`)).json()).count
+      await use({ asset, control, before })
+    } finally {
+      await request.get(`${control}&release=1`)
     }
-  })
-  await seed.close()
-  await context.route('https://accounts.google.com/**', async (route) => {
-    const state = new URL(route.request().url()).searchParams.get('state')
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
-    })
-  })
-  await page.goto(app)
-  await page.waitForFunction(() => window.ready)
-  const popupPromise = context.waitForEvent('page')
-  await page.locator('#launch').click()
-  const popup = await popupPromise
-  await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
-  expect(
-    await popup.evaluate(async () =>
-      (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname),
-    ),
-  ).toEqual(['/'])
-  const fetched = popup.evaluate(
-    async (asset) => (await fetch(asset)).arrayBuffer().then((b) => b.byteLength),
-    asset,
-  )
-  await expect.poll(async () => (await (await request.get(control)).json()).count).toBe(before + 1)
-  await request.get(`${control}&release=1`)
-  expect(await fetched).toBeGreaterThan(0)
-  expect((await (await request.get(control)).json()).count).toBe(before + 1)
-  await page.evaluate(() => window.after())
-  await expect.poll(() => page.evaluate(() => window.afterReady)).toBe(true)
+  },
 })
+
+migrationTest(
+  'migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020]',
+  async ({
+    app,
+    bridge,
+    ccdp,
+    page,
+    context,
+    request,
+    heldCircuit: { asset, control, before },
+  }) => {
+    const seed = await context.newPage()
+    await seed.goto(`${ccdp}/ccdp/v1/seed`)
+    await seed.evaluate(async () => {
+      for (const scope of ['/', '/ccdp/v1/']) {
+        const r = await navigator.serviceWorker.register('/ccdp/v1/worker.js', {
+          scope,
+          type: 'module',
+        })
+        await new Promise<void>((resolve) => {
+          const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
+          poll()
+        })
+      }
+    })
+    await seed.close()
+    await context.route('https://accounts.google.com/**', async (route) => {
+      const state = new URL(route.request().url()).searchParams.get('state')
+      await route.fulfill({
+        contentType: 'text/html',
+        body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
+      })
+    })
+    await page.goto(app)
+    await page.waitForFunction(() => window.ready)
+    const popupPromise = context.waitForEvent('page')
+    await page.locator('#launch').click()
+    const popup = await popupPromise
+    await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
+    expect(
+      await popup.evaluate(async () =>
+        (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname),
+      ),
+    ).toEqual(['/'])
+    const fetched = popup.evaluate(
+      async (asset) => (await fetch(asset)).arrayBuffer().then((b) => b.byteLength),
+      asset,
+    )
+    // Observe rejection if an assertion fails and teardown closes the popup.
+    void fetched.catch(() => {})
+    await expect
+      .poll(async () => (await (await request.get(control)).json()).count)
+      .toBe(before + 1)
+    await request.get(`${control}&release=1`)
+    expect(await fetched).toBeGreaterThan(0)
+    expect((await (await request.get(control)).json()).count).toBe(before + 1)
+    await page.evaluate(() => window.after())
+    await expect.poll(() => page.evaluate(() => window.afterReady)).toBe(true)
+  },
+)
 
 test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-ASSET-017]', async ({
   ccdp,
