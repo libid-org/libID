@@ -524,12 +524,32 @@ test('[POPUP-CONNECTION-010] a reply sent before navigate reaches the popup befo
   expect(await diag(popup)).toEqual(['carrier-message-port'])
 })
 
+/** Isolation tests need the keeper installed before their automatic handoff. */
+async function prepareKeeper(page: Page, nestedScope: string): Promise<void> {
+  await page.goto(`${POPUP}/health`)
+  await page.evaluate(async (scope) => {
+    await Promise.all(
+      ['/', scope].map((scope) => navigator.serviceWorker.register('/sw.js', { scope })),
+    )
+  }, nestedScope)
+  await expect
+    .poll(() =>
+      page.evaluate(async () =>
+        (await navigator.serviceWorker.getRegistrations()).map((r) => r.active?.state),
+      ),
+    )
+    .toEqual(['activated', 'activated'])
+}
+
 test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or by its COOP fallback, delivering once', async ({
   page,
 }) => {
   const id = freshId()
   // Send the instant the handshake completes: the value must reach the
   // isolated document exactly once whichever path the engine takes.
+  // Worker startup is a fixture prerequisite, not part of the two-second
+  // continuity exchange. Keep both scopes to exercise nested registration lookup.
+  await prepareKeeper(page, '/dip')
   const { popup } = await open(page, { id, href: `${POPUP}/dip#c=${id}`, pingOnHandshake: 77 })
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(await popup.evaluate(() => crossOriginIsolated)).toBe(true)
@@ -538,7 +558,9 @@ test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or 
   expect((await events(page)).filter((e) => (e as Pong).n === 77)).toHaveLength(1)
   const popupDiag = await diag(popup)
   const viaFallback = popup.url().includes('/dip/fallback')
-  expect(popupDiag).toEqual(viaFallback ? ['carrier-restored'] : ['carrier-message-port'])
+  expect(popupDiag).toEqual(
+    viaFallback ? ['carrier-restored'] : ['claim-empty', 'carrier-message-port'],
+  )
   // The application saw exactly one carrier for the whole transition.
   expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(1)
   await ping(page, 78)
@@ -549,6 +571,7 @@ test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed wit
   page,
 }) => {
   const id = freshId()
+  await prepareKeeper(page, '/dip-broken')
   const { popup } = await open(page, { id, href: `${POPUP}/dip-broken#c=${id}` })
   await expect(popup.locator('#status')).toHaveText(/connected|failed/)
   test.skip(
