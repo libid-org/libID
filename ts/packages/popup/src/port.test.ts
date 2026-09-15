@@ -227,7 +227,7 @@ describe('popup request', () => {
     for (const event of cases) {
       const pending = request(pair)
       pair.popupView.dispatch(event)
-      await expect(pending).rejects.toThrow('handshake-rejected')
+      await expect(pending).rejects.toMatchObject({ code: 'handshake-rejected' })
     }
     expect(pair.popupView.listeners.size).toBe(0)
   })

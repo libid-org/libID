@@ -591,9 +591,9 @@ describe('navigateAway [POPUP-CONTROL-005]', () => {
     await acceptPopup(pair).connection
     await tick()
     pair.popupProxy.closed = true
-    await expect(app.connection.navigateAway('https://provider.example/')).rejects.toThrow(
-      'popup-unavailable',
-    )
+    await expect(app.connection.navigateAway('https://provider.example/')).rejects.toMatchObject({
+      code: 'popup-unavailable',
+    })
     expect(pair.popupProxy.replaced).toEqual([])
 
     const blocked = connectApp(fakePair(), { blocked: true })
@@ -656,7 +656,7 @@ describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
         source: pair.appProxy,
         ports: [new MessageChannel().port1],
       })
-      await expect(pending.ready).rejects.toThrow('handshake-rejected')
+      await expect(pending.ready).rejects.toMatchObject({ code: 'handshake-rejected' })
     }
   })
 
@@ -762,6 +762,45 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     expect(pair.popupProxy.replaced).toHaveLength(1)
     // Still one application carrier throughout.
     expect(codes(app.events).filter((c) => c === 'carrier-message-port')).toHaveLength(1)
+  })
+
+  it('waits for the pending handshake when COOP precedes acknowledgement delivery', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover')
+    const scope = fakeScope()
+    const intervals = vi.spyOn(globalThis, 'setInterval')
+    const postToPopup = pair.popupProxy.postMessage.bind(pair.popupProxy)
+    let acknowledge!: () => void
+    vi.spyOn(pair.popupProxy, 'postMessage').mockImplementationOnce((message, origin, transfer) => {
+      const port = transfer![0] as MessagePort
+      const post = port.postMessage.bind(port)
+      vi.spyOn(port, 'postMessage').mockImplementationOnce((value) => {
+        // The popup can complete its worker handoff before the app processes this ACK.
+        acknowledge = () => post(value)
+      })
+      postToPopup(message, origin, transfer)
+    })
+    const app = connectApp(pair)
+    const side = acceptIsolating(pair, { worker: scope.worker })
+    const ended = vi.fn()
+    void app.connection.closed.then(ended)
+    try {
+      await side.endpoint.closed
+      expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}${FALLBACK}`])
+      pair.popupProxy.closed = true
+      expect(app.connection.peerOrigin).toBeNull()
+      const poll = intervals.mock.calls[0][0] as () => void
+      poll()
+      await Promise.resolve()
+      expect(ended).not.toHaveBeenCalled()
+      acknowledge()
+      await app.connection.ready
+      expect(app.connection.peerOrigin).toBe(POPUP_ORIGIN)
+    } finally {
+      await app.connection.close()
+      await side.endpoint.close()
+      intervals.mockRestore()
+    }
   })
 
   it('fails without looping when the fallback itself is not isolated', async () => {
@@ -1123,7 +1162,7 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     pair.setIsolated(true)
     hub.failNext = true
     const second = acceptWith(pair, hub, '/prover/fallback')
-    await expect(second.endpoint.ready).rejects.toThrow('fallback-failed')
+    await expect(second.endpoint.ready).rejects.toMatchObject({ code: 'fallback-failed' })
     // The application is not told and still awaits its first carrier, so it
     // cannot send into a gap: there is none.
     let appEnded = false
@@ -1149,7 +1188,7 @@ describe('fallback seam [POPUP-CONNECTION-002/004/005] [POPUP-DIAGNOSTIC-003]', 
   it('fails closed with fallback-unavailable exactly once when no opener and no constructor', async () => {
     const pair = fakePair()
     const side = acceptPopup(pair, { opener: false })
-    await expect(side.connection).rejects.toThrow('fallback-unavailable')
+    await expect(side.connection).rejects.toMatchObject({ code: 'fallback-unavailable' })
     expect(codes(side.events)).toEqual(['fallback-unavailable', 'connection-failed'])
   })
 
@@ -1367,7 +1406,7 @@ describe('selection order at accept level [POPUP-CONNECTION-002]', () => {
       source: pair.appProxy,
       ports: [new MessageChannel().port1],
     })
-    await expect(side.connection).rejects.toThrow('handshake-rejected')
+    await expect(side.connection).rejects.toMatchObject({ code: 'handshake-rejected' })
     expect(fallback).not.toHaveBeenCalled()
     expect(codes(side.events)).toEqual(['handshake-rejected', 'connection-failed'])
   })
@@ -1457,7 +1496,7 @@ describe('authenticated peer origin [POPUP-CONNECTION-007] [POPUP-KEEPER-001]', 
         expect(received).toHaveBeenCalledOnce()
         await next.close()
       } else {
-        await expect(next.ready).rejects.toThrow('handshake-rejected')
+        await expect(next.ready).rejects.toMatchObject({ code: 'handshake-rejected' })
         expect(next.peerOrigin).toBeNull()
         expect(scope.pending).toHaveLength(1) // No second keep or isolation navigation.
       }
@@ -1477,10 +1516,236 @@ describe('authenticated peer origin [POPUP-CONNECTION-007] [POPUP-KEEPER-001]', 
         close: vi.fn(),
       } as unknown as Carrier
       const side = acceptPopup(pair, { opener: false, fallback: carrier })
-      await expect(side.endpoint.ready).rejects.toThrow('handshake-rejected')
+      await expect(side.endpoint.ready).rejects.toMatchObject({ code: 'handshake-rejected' })
       expect(side.endpoint.peerOrigin).toBeNull()
       expect(carrier.on).not.toHaveBeenCalled()
       expect(carrier.close).toHaveBeenCalledOnce()
     },
   )
+})
+
+describe('reported document departure [POPUP-CONNECTION-006]', () => {
+  it.each([false, true])(
+    'ends exactly once on pagehide with a severed handle: %s',
+    async (severed) => {
+      const pair = fakePair()
+      const app = connectApp(pair)
+      const popup = await acceptPopup(pair).connection
+      const ends = vi.fn()
+      void app.connection.closed.then(ends)
+      if (severed) pair.popupProxy.closed = true
+      await tick()
+      expect(ends).not.toHaveBeenCalled()
+      pair.popupView.pagehide()
+      pair.popupView.pagehide()
+      await tick()
+      expect(ends).toHaveBeenCalledExactlyOnceWith({ outcome: 'closed' })
+      await expect(popup.closed).resolves.toEqual({ outcome: 'closed' })
+      expect(codes(app.events)).not.toContain('connection-failed')
+      expect(() => app.connection.send({ type: 'document-departed' } as never)).toThrow('reserved')
+    },
+  )
+
+  it('notifies the application when the popup closes itself', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const popup = await acceptPopup(pair).connection
+    await popup.close()
+    await tick()
+    expect(pair.popupProxy.closed).toBe(true)
+    await expect(app.connection.closed).resolves.toEqual({ outcome: 'closed' })
+  })
+
+  it('does not report expected navigation, or departure over a retired carrier', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const scope = fakeScope()
+    const popup = await acceptPopup(pair, { worker: scope.worker }).connection
+    const ends = vi.fn()
+    void app.connection.closed.then(ends)
+    await popup.navigate(`${POPUP_ORIGIN}/next`)
+    pair.popupView.pagehide()
+    await tick()
+    expect(ends).not.toHaveBeenCalled()
+    pair.relocate(POPUP_ORIGIN, '/next')
+    await acceptPopup(pair, { worker: scope.worker }).connection
+    await app.connection.navigateAway('https://provider.example/consent')
+    pair.popupView.pagehide()
+    await tick()
+    expect(ends).not.toHaveBeenCalled()
+    await app.connection.close()
+  })
+
+  it('rejects a departure notification in the wrong direction', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const pair = fakePair()
+      const app = connectApp(pair)
+      const popup = await acceptPopup(pair).connection
+      await app.connection.ready
+      ;(app.connection as unknown as { carrier: Carrier }).carrier.send({
+        type: 'document-departed',
+      })
+      await tick()
+      await expect(popup.closed).resolves.toEqual({ outcome: 'failed', code: 'control-rejected' })
+      expect(pair.popupProxy.closed).toBe(false)
+      await app.connection.close()
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  it('a failed departure send still closes locally without reporting another failure', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const popup = await acceptPopup(pair).connection
+    const carrier = (popup as unknown as { carrier: Carrier }).carrier
+    vi.spyOn(carrier, 'send').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+    pair.popupView.pagehide()
+    await expect(popup.closed).resolves.toEqual({ outcome: 'closed' })
+    await app.connection.close()
+  })
+})
+
+describe('unreachable window [POPUP-CONNECTION-006]', () => {
+  for (const blocked of [false, true])
+    it(`fails on provider closure after ${blocked ? 'native-anchor' : 'scripted'} binding`, async () => {
+      const pair = fakePair()
+      const app = connectApp(pair, { blocked })
+      const popup = await acceptPopup(pair).connection
+      await app.connection.ready
+      await app.connection.navigateAway('https://provider.example/consent')
+      // No package code or departure message runs on the provider page.
+      pair.popupProxy.closed = true
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        await expect(app.connection.closed).resolves.toEqual({
+          outcome: 'failed',
+          code: 'popup-unavailable',
+        })
+        expect(pair.appView.listeners.size).toBe(0)
+        expect(new PopupError('popup-unavailable').message).toBe('popup-unavailable')
+      } finally {
+        log.mockRestore()
+        await app.connection.close()
+        await popup.close()
+      }
+    })
+
+  it('keeps an unbound anchor pending and stops polling on explicit closure', async () => {
+    vi.useFakeTimers()
+    const app = connectApp(fakePair(), { blocked: true })
+    const ended = vi.fn()
+    void app.connection.closed.then(ended)
+    try {
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(ended).not.toHaveBeenCalled()
+      await app.connection.close()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      await app.connection.close()
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects readiness when the handle is lost before any carrier is selected', async () => {
+    vi.useFakeTimers()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const ready = app.connection.ready.catch((error) => error)
+    pair.popupProxy.closed = true
+    try {
+      await vi.advanceTimersByTimeAsync(250)
+      expect(await ready).toMatchObject({ code: 'popup-unavailable' })
+      await expect(app.connection.closed).resolves.toEqual({
+        outcome: 'failed',
+        code: 'popup-unavailable',
+      })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      await app.connection.close()
+      vi.useRealTimers()
+      log.mockRestore()
+    }
+  })
+
+  it('does not mistake isolation with a preserved carrier for disconnection', async () => {
+    vi.useFakeTimers()
+    const pair = fakePair()
+    const [carrier, peer] = carrierPair()
+    const app = connectApp(pair, { fallback: carrier })
+    await app.connection.ready
+    pair.popupProxy.closed = true
+    const ended = vi.fn()
+    void app.connection.closed.then(ended)
+    try {
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(ended).not.toHaveBeenCalled()
+      expect(app.connection.peerOrigin).toBe(POPUP_ORIGIN)
+    } finally {
+      await app.connection.close()
+      peer.close()
+      vi.useRealTimers()
+    }
+  })
+
+  for (const outcome of ['connected', 'rejected', 'closed'] as const)
+    it(`waits for fallback without a deadline until ${outcome}`, async () => {
+      vi.useFakeTimers()
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const pair = fakePair()
+      const [carrier, peer] = carrierPair()
+      const dispose = vi.spyOn(carrier, 'close')
+      let resolve!: (carrier: Carrier) => void
+      let reject!: () => void
+      let signal!: AbortSignal
+      const connection = PopupConnection.connect<Messages>(
+        new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView),
+        {
+          connectionId: ID,
+          allowedPopupOrigins: [POPUP_ORIGIN],
+          fallback: (abort) => {
+            signal = abort
+            return new Promise<Carrier>((yes, no) => {
+              resolve = yes
+              reject = no
+            })
+          },
+        },
+      )
+      pair.popupProxy.closed = true
+      const ended = vi.fn()
+      void connection.closed.then(ended)
+      try {
+        await vi.advanceTimersByTimeAsync(60_000)
+        expect(ended).not.toHaveBeenCalled()
+        if (outcome === 'closed') await connection.close()
+        if (outcome === 'rejected') reject()
+        else resolve(carrier)
+        await vi.advanceTimersByTimeAsync(250)
+        if (outcome === 'connected') {
+          await connection.ready
+          expect(connection.peerOrigin).toBe(POPUP_ORIGIN)
+          expect(ended).not.toHaveBeenCalled()
+        } else {
+          await expect(connection.closed).resolves.toEqual(
+            outcome === 'closed'
+              ? { outcome: 'closed' }
+              : { outcome: 'failed', code: 'popup-unavailable' },
+          )
+          expect(signal.aborted).toBe(true)
+          expect(vi.getTimerCount()).toBe(0)
+          if (outcome === 'closed') expect(dispose).toHaveBeenCalledTimes(1)
+        }
+      } finally {
+        await connection.close()
+        carrier.close()
+        peer.close()
+        vi.useRealTimers()
+        log.mockRestore()
+      }
+    })
 })

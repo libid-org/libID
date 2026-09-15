@@ -340,7 +340,6 @@ allowlist before installing the restored carrier. A malformed or mismatching
 binding fails locally and does not select a fallback. Same-origin worker code
 is already inside the transport's trust boundary.
 
-ConnectionVersion 2 adds the origin to private keeper records. Deploy the updated
-Application, popup documents, and worker together; an older keeper cannot preserve this binding and is not treated
-as authenticated-origin evidence. There is no compatibility path that guesses
-an origin or silently restores a port without it.
+Application, popup documents, and worker use the same connection protocol
+version. A keeper must preserve this binding; there is no path that guesses an
+origin or silently restores a port without it.

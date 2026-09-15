@@ -387,8 +387,13 @@ test('[POPUP-CONNECTION-002] [POPUP-CONNECTION-005] direct navigation into isola
   const { popup } = await open(page, { id, href: `${POPUP}/isolated#c=${id}` })
   await expect(popup.locator('#status')).toHaveText('failed: fallback-unavailable')
   expect(await diag(popup)).toEqual(['fallback-unavailable', 'connection-failed'])
-  await page.waitForTimeout(300)
-  expect(await diag(page)).toEqual(['window-opened', 'control-direct'])
+  await expect
+    .poll(() => events(page))
+    .toContainEqual({
+      type: 'end',
+      outcome: 'failed',
+      code: 'popup-unavailable',
+    })
 })
 
 test('[POPUP-CONTROL-002] malformed navigation fails before any browser operation', async ({
@@ -560,4 +565,70 @@ test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed wit
     'isolation-unavailable',
     'connection-failed',
   ])
+})
+
+for (const isolated of [false, true])
+  test(`[POPUP-CONNECTION-006] user closure notifies the app${isolated ? ' after opener severance' : ''}`, async ({
+    page,
+  }) => {
+    const { id, popup } = await open(page)
+    await expectPong(page, 0)
+    if (isolated) {
+      await nextDocument(popup, () => navigate(page, `${POPUP}/isolated#c=${id}`))
+      await expect(popup.locator('#status')).toHaveText('connected')
+      expect(
+        await page.evaluate(() => (window as unknown as { __handle: Window }).__handle.closed),
+      ).toBe(true)
+    }
+    expect((await events(page)).some((event) => (event as { type: string }).type === 'end')).toBe(
+      false,
+    )
+    await popup.close({ runBeforeUnload: true })
+    await expect.poll(() => events(page)).toContainEqual({ type: 'end', outcome: 'closed' })
+  })
+
+test('[POPUP-CONNECTION-006] unplanned departure ends the connection without claiming window closure', async ({
+  page,
+}) => {
+  const { popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.goto(`${POPUP}/external`)
+  await expect.poll(() => events(page)).toContainEqual({ type: 'end', outcome: 'closed' })
+  expect(popup.isClosed()).toBe(false)
+})
+
+for (const blocked of [false, true])
+  test(`[POPUP-CONNECTION-006] provider-page closure is detected${blocked ? ' after native-anchor binding' : ''}`, async ({
+    page,
+  }) => {
+    const { popup } = await open(page, { blocked })
+    await expectPong(page, 0)
+    await nextDocument(popup, () => navigateAway(page, `${POPUP_B}/external`))
+    await expect(popup.locator('#status')).toHaveText('external')
+    // The non-participating page cannot send a departure notification.
+    await popup.close()
+    await expect
+      .poll(() => events(page))
+      .toContainEqual({
+        type: 'end',
+        outcome: 'failed',
+        code: 'popup-unavailable',
+      })
+  })
+
+test('[POPUP-CONNECTION-006] provider COOP without recovery fails even while the window stays open', async ({
+  page,
+}) => {
+  const { popup } = await open(page)
+  await expectPong(page, 0)
+  await nextDocument(popup, () => navigateAway(page, `${POPUP_B}/external-isolated`))
+  await expect(popup.locator('#status')).toHaveText('external')
+  await expect
+    .poll(() => events(page))
+    .toContainEqual({
+      type: 'end',
+      outcome: 'failed',
+      code: 'popup-unavailable',
+    })
+  expect(popup.isClosed()).toBe(false)
 })

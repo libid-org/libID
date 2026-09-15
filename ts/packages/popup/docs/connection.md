@@ -20,7 +20,7 @@ Continuity is best-effort: preserving the logical connection does not promise
 delivery across carrier retirement or replay messages lost during navigation.
 
 ```ts
-type ConnectionVersion = 2
+type ConnectionVersion = 1
 ```
 
 `ConnectionVersion` exact-matches the connection's private authentication,
@@ -315,10 +315,9 @@ opener relationship long enough to authenticate and transfer the carrier port.
 The anchor is a compatibility hedge for an environment or embedding policy
 which rejects scripted popup creation, not a second user flow. It must exist
 before activation so the fallback proceeds in the same tap. Both paths use the
-same target and create one script-closable top-level traversable. The scripted
-path exposes `popup.closed` only to decide whether a no-carrier direct operation
-can be attempted; before fallback binding no handle exists to observe. Closure
-is never delivery, cancellation, or another caller-protocol outcome.
+same target and create one script-closable top-level traversable, using the
+retained handle for direct operations and unavailable-window detection. Before native-anchor binding no handle exists to
+observe. Closure is never delivery, cancellation, or another caller-protocol outcome.
 
 The application lifecycle object and both connection endpoints expose:
 
@@ -476,9 +475,16 @@ Both constructors return synchronously and select carriers afterwards, so
 handlers registered before the caller yields precede every delivery; `ready`
 settles once a carrier is selected and rejects with the failure code if the
 endpoint failed first. `closed` settles exactly once with the connection's
-terminal outcome, the only channel through which a failure without an
-invoking operation reaches the caller. For each inbound carrier
-value, the connection reads only a bounded string `type` from a plain record,
+terminal outcome, including an authenticated best-effort document-departure
+notification. Without a selected carrier or a pending fallback, an unavailable
+retained handle instead fails with `popup-unavailable`: closure and provider COOP
+severance are indistinguishable but neither can recover on this path. Detection
+polls every 250 ms with no additional timeout; terminal cleanup stops polling.
+A pending fallback has no connection-layer deadline; its rejection removes that
+recovery option, while resolution installs the authenticated carrier. Existing
+carriers remain usable despite handle severance. Unobserved loss and silence
+alone still remain pending. This is the only channel through which a failure
+without an invoking operation reaches the caller. For each inbound carrier value, the connection reads only a bounded string `type` from a plain record,
 selects the registered `MessageType`, calls `decode` exactly once, and invokes
 that handler. An unknown or unregistered type, malformed routing discriminator,
 or thrown decode closes the connection and delivers no message. An exception
@@ -486,6 +492,18 @@ the handler itself throws is the caller's, propagates to the event loop, and
 changes no connection state. The registered set therefore enforces participant
 direction without hardcoding protocol types in the connection; the handler
 still enforces state and order.
+
+The endpoint's terminal outcome does not establish the physical window's state.
+An Application endpoint can fail while an external provider continues running;
+the returned popup then independently attempts connection. Its host MUST handle
+`ready` rejection locally and retain the failure code if it also observes `closed`.
+In particular, a simultaneous failed `closed` outcome must not mask readiness
+failure with a generic "connection closed" message. `PopupError.code` identifies
+the failure; the host owns its display text.
+`PopupError.message` contains the code without user-facing explanation. An absent
+opener with no configured fallback fails locally with `fallback-unavailable`,
+without needing Application to send a message. A silent opener retains the
+existing bounded handshake wait before fallback selection.
 
 `navigate` is available on both connection endpoints. The application endpoint
 always sends the private control defined by [popup control](control.md) when a
@@ -743,9 +761,10 @@ continuity.
 ## Versioning
 
 The package supplies one `ConnectionVersion` to both endpoints; there is no
-runtime negotiation. Compatible implementation changes keep the version.
-Breaking private authentication, carrier, signaling, framing, or continuity
-controls increment it independently of every caller protocol.
+runtime negotiation. The unpublished implementation remains at version 1.
+After publication, breaking private authentication, carrier, signaling, framing,
+or continuity changes increment it independently of every caller protocol;
+compatible changes keep the version.
 
 ## Authenticated peer origin
 

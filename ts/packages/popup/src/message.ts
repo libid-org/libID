@@ -1,9 +1,9 @@
 // The wire leaf: the transport version, the caller-owned message contract,
-// the carrier seam, the two reserved controls, and the validators every
+// the carrier seam, the reserved controls, and the validators every
 // other module shares. Nothing here touches a browser global.
 
 /** Exact-matched in every private transport record; never negotiated. */
-export const CONNECTION_VERSION = 2 as const
+export const CONNECTION_VERSION = 1 as const
 export type ConnectionVersion = typeof CONNECTION_VERSION
 
 export interface Message {
@@ -56,11 +56,20 @@ export interface ClosePopup {
   readonly type: 'close-popup'
 }
 
-export type PopupControl = Navigate | ClosePopup
+/** Best-effort notification that a participating popup document has departed. */
+export interface DocumentDeparted {
+  readonly type: 'document-departed'
+}
+
+export type PopupControl = Navigate | ClosePopup | DocumentDeparted
 
 export const MAX_TYPE_LENGTH = 64
 
-const RESERVED_TYPES: ReadonlySet<string> = new Set(['navigate', 'close-popup'])
+const RESERVED_TYPES: ReadonlySet<string> = new Set([
+  'navigate',
+  'close-popup',
+  'document-departed',
+])
 
 export function isReservedType(type: string): boolean {
   return RESERVED_TYPES.has(type)
@@ -105,8 +114,8 @@ export function isCanonicalWebUrl(url: string): boolean {
 }
 
 export function decodeControl(value: Record<string, unknown>): PopupControl | null {
-  if (value.type === 'close-popup') {
-    return hasExactKeys(value, ['type']) ? { type: 'close-popup' } : null
+  if (value.type === 'close-popup' || value.type === 'document-departed') {
+    return hasExactKeys(value, ['type']) ? { type: value.type } : null
   }
   if (value.type === 'navigate') {
     return hasExactKeys(value, ['type', 'url']) &&
