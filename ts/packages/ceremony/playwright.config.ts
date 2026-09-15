@@ -47,6 +47,7 @@ export default defineConfig({
       // Compose can exit during startup while leaving healthy sibling containers running.
       command: `trap '${compose} down' EXIT; trap 'exit 1' INT TERM; ${compose} up --abort-on-container-exit`,
       url: 'http://127.0.0.1:4986/index.html',
+      stdout: 'pipe',
       reuseExistingServer: false,
       timeout: 300000,
       gracefulShutdown: { signal: 'SIGTERM', timeout: 30000 },
