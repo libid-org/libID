@@ -20,6 +20,14 @@
       table { width: 100%; border-collapse: collapse; }
       th, td { text-align: left; padding: .5rem; border-bottom: 1px solid GrayText; }
       .operation-timings { margin: 0; padding-left: 1.25rem; font-size: .875rem; }
+      .operation-timings [data-status="running"] { color: light-dark(#5b21b6, #c4b5fd); font-weight: 600; }
+      .operation-timings [data-status="running"]::marker { content: "● "; }
+      .operation-timings [data-status="completed"] { color: light-dark(#4b5563, #b6bdc8); }
+      .operation-timings [data-status="completed"]::marker { content: "✓ "; }
+      .operation-timings [data-status="interrupted"] { color: light-dark(#92400e, #fcd34d); }
+      .operation-timings [data-status="interrupted"]::marker { content: "– "; }
+      .operation-timings summary { cursor: pointer; }
+      .operation-timings dl { grid-template-columns: max-content auto; gap: .2rem .6rem; margin: .4rem 0 .8rem; }
       td { vertical-align: top; }
       .run-status { white-space: pre-wrap; overflow-wrap: anywhere; margin: .25rem 0; font-size: .875rem; }
       .run-actions button { display: block; white-space: nowrap; margin-bottom: .5rem; }
@@ -41,11 +49,11 @@
     <p class="muted">Consent happens in the provider’s window. The popup closes after success or denial. Failed attempts stay open for inspection. Use Close to close a popup.</p>
     <section aria-labelledby="history-heading">
       <h2 id="history-heading">Run history</h2>
-      <p class="muted">Newest first. Cleared when you reload this page. Post-consent starts when the OAuth return reconnects.</p>
+      <p class="muted">Newest first. Cleared when you reload this page.</p>
       <p id="history-empty">No ceremonies started.</p>
       <div class="history-scroll">
         <table aria-labelledby="history-heading">
-          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col" title="From authenticated OAuth return to completion; excludes provider redirect time.">Post-consent</th><th scope="col">Operations</th><th scope="col">Actions</th></tr></thead>
+          <thead><tr><th scope="col">Started</th><th scope="col">Platform</th><th scope="col">Outcome</th><th scope="col">Duration</th><th scope="col">Operations</th><th scope="col">Actions</th></tr></thead>
           <tbody id="history"></tbody>
         </table>
       </div>

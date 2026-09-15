@@ -91,7 +91,7 @@ responses. Real OAuth and proving checks are documented in the
 [ceremony qualification guide](../../packages/ceremony/docs/qualification.md).
 
 Run history shows core operation durations from their occurrence timestamps, plus
-total and post-authorization waiting time. The status uses the package’s stage
+total ceremony time. The status uses the package’s stage
 projection. Timings freeze at the terminal outcome and clear on page reload;
 interrupted operations are marked, and overlapping durations are not added together.
 
