@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { afterEach, expect, it, vi } from 'vitest'
+import { type OperationEvent, validateEvent } from '../events.js'
+import { decodeAttestedData } from './decode.js'
 import { type ExactHttpRequest, Notarization } from './session.js'
 
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
@@ -106,8 +109,11 @@ it.each(['abort', 'session-error'])(
   async (failure) => {
     const { messages, terminate } = runtime()
     const abort = new AbortController()
-    const notary = new Notarization('https://notary.test', abort.signal)
-    const ready = notary.prepare(target)
+    const events: OperationEvent[] = []
+    const notary = new Notarization('https://notary.test', abort.signal, (event) =>
+      events.push(event),
+    )
+    const ready = notary.prepare(target, 'token-attestation')
     const port = messages[0].port
     port.postMessage({ type: 'prepared' })
     const session = await ready
@@ -128,6 +134,9 @@ it.each(['abort', 'session-error'])(
     if (failure === 'abort') abort.abort()
     else port.postMessage({ type: 'error' })
     await checks
+    expect(events).toEqual([
+      expect.objectContaining({ event: 'token-attestation', phase: 'started' }),
+    ])
     expect(terminate).toHaveBeenCalledOnce()
     await expect(session.send(request)).rejects.toThrow()
   },
@@ -147,4 +156,107 @@ it('exposes late worker failure after preparation through the runtime signal [LI
   expect(parent.signal.aborted).toBe(false)
   expect(terminate).toHaveBeenCalledOnce()
   await expect(session.send(request)).rejects.toMatchObject({ message: 'Notary worker failed' })
+})
+
+it.each([
+  { event: 'token-attestation', response: 'HTTP/1.1 200 OK\r\n\r\n\r\n\r\n', headerBytes: 19 },
+  { event: 'identity-attestation', response: 'HTTP/1.1 200 OK\r\nX: é\r\n\r\n', headerBytes: 26 },
+  { event: 'token-attestation', response: 'No header boundary', headerBytes: undefined },
+])(
+  'measures $event response $response and openings separately from finalization without exposing evidence or blocking delivery [LIBID-PROVER-007]',
+  async ({ event, response, headerBytes }) => {
+    let clock = 0
+    vi.stubGlobal('performance', { timeOrigin: 10000, now: () => clock })
+    const { messages } = runtime()
+    const events: OperationEvent[] = []
+    const abort = new AbortController()
+    const notary = new Notarization('https://notary.test', abort.signal, (event) => {
+      events.push(event)
+      throw new Error('Broken diagnostic observer')
+    })
+    try {
+      const ready = notary.prepare(target, event)
+      const port = messages[0].port
+      port.postMessage({ type: 'prepared' })
+      const session = await ready
+      const sent = session.send(request)
+      const received = new Uint8Array(40)
+      received.set(new TextEncoder().encode(response))
+      port.postMessage({
+        type: 'sent',
+        transcript: { sent: new Uint8Array(60), received },
+      })
+      await sent
+      clock = 10
+      const pending = session.reveal({ sent: [], received: [] })
+      clock = 160
+      port.postMessage({ type: 'revealed', openings: [] })
+      const revealed = await pending
+      expect(events).toEqual([{ event, phase: 'started', timestamp: 10010 }])
+      const attestedData = Uint8Array.from(
+        Buffer.from(
+          readFileSync(
+            new URL('./libid-rs-239a4bb-attested-data.fixture.hex', import.meta.url),
+            'utf8',
+          ).trim(),
+          'hex',
+        ),
+      )
+      const attestation = {
+        attestedData,
+        signature: new Uint8Array(65),
+        decoded: decodeAttestedData(attestedData),
+      }
+      clock = 190
+      port.postMessage({ type: 'attestation', attestation })
+      await expect(revealed.attestation).resolves.toEqual(attestation)
+      expect(events).toEqual([
+        { event, phase: 'started', timestamp: 10010 },
+        {
+          event,
+          phase: 'finished',
+          timestamp: 10190,
+          instrumentation: {
+            attributes: {
+              'openings-ms': 150,
+              'finalization-ms': 30,
+              'sent-bytes': 60,
+              'received-bytes': 40,
+              ...(headerBytes === undefined
+                ? {}
+                : {
+                    'response-header-bytes': headerBytes,
+                    'response-body-bytes': 40 - headerBytes,
+                  }),
+              'committed-sent-bytes': 20,
+              'committed-received-bytes': 30,
+              'commitment-count': 2,
+            },
+          },
+        },
+      ])
+      for (const emitted of events) expect(() => validateEvent(emitted)).not.toThrow()
+    } finally {
+      abort.abort()
+    }
+  },
+)
+
+it('rejects reveal when its start event synchronously aborts the session', async () => {
+  const { messages, terminate } = runtime()
+  const abort = new AbortController()
+  const reason = new Error('Connection ended during event forwarding')
+  const notary = new Notarization('https://notary.test', abort.signal, () => abort.abort(reason))
+  const ready = notary.prepare(target, 'token-attestation')
+  const port = messages[0].port
+  port.postMessage({ type: 'prepared' })
+  const session = await ready
+  const sent = session.send(request)
+  port.postMessage({
+    type: 'sent',
+    transcript: { sent: new Uint8Array(), received: new Uint8Array() },
+  })
+  await sent
+  await expect(session.reveal({ sent: [], received: [] })).rejects.toBe(reason)
+  expect(terminate).toHaveBeenCalledOnce()
 })

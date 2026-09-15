@@ -6,7 +6,7 @@ import {
 import { ProofEngine } from '../../../barretenberg/engine.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { CeremonyError, ceremonyError } from '../../../errors.js'
-import { now, operation } from '../../../events.js'
+import { operation } from '../../../events.js'
 import { responseJson } from '../../../notary/http.js'
 import { bearerOpening } from '../../../notary/notarize.js'
 import { Notarization } from '../../../notary/session.js'
@@ -63,15 +63,15 @@ export async function prove(
       redirectUri: request.redirectUri,
       codeVerifier: request.codeVerifier,
     }
-    const notary = new Notarization(notaryAddress, controller.signal)
+    const notary = new Notarization(notaryAddress, controller.signal, emit)
     const tokenRequest = buildTokenRequest(input)
     const tokenSession = observe(
-      notary.prepare(tokenRequest.url).catch((e) => {
+      notary.prepare(tokenRequest.url, 'token-attestation').catch((e) => {
         throw ceremonyError(e, 'token-fetch')
       }),
     )
     const identitySession = observe(
-      notary.prepare('https://api.x.com/2/users/me').catch((e) => {
+      notary.prepare('https://api.x.com/2/users/me', 'identity-attestation').catch((e) => {
         throw ceremonyError(e, 'identity-fetch')
       }),
     )
@@ -88,20 +88,14 @@ export async function prove(
       const bearer = selection.accessToken
       return { session, selection, bearer }
     })
-    emit({ event: 'token-attestation', phase: 'started', timestamp: now() })
     const tokenReveal = observe(
       session
         .reveal({ sent: selection.ranges.sent, received: selection.ranges.recv })
         .then((value) => {
           const attestation = observe(
-            value.attestation
-              .then((result) => {
-                emit({ event: 'token-attestation', phase: 'finished', timestamp: now() })
-                return result
-              })
-              .catch((e) => {
-                throw ceremonyError(e, 'token-attestation')
-              }),
+            value.attestation.catch((e) => {
+              throw ceremonyError(e, 'token-attestation')
+            }),
           )
           return { ...value, attestation }
         })
@@ -129,20 +123,14 @@ export async function prove(
         throw new Error('Invalid identity response')
       return { identity, ranges, extracted }
     })
-    emit({ event: 'identity-attestation', phase: 'started', timestamp: now() })
     const identityReveal = observe(
       identity
         .reveal({ sent: ranges.sent, received: ranges.recv })
         .then((value) => {
           const attestation = observe(
-            value.attestation
-              .then((result) => {
-                emit({ event: 'identity-attestation', phase: 'finished', timestamp: now() })
-                return result
-              })
-              .catch((e) => {
-                throw ceremonyError(e, 'identity-attestation')
-              }),
+            value.attestation.catch((e) => {
+              throw ceremonyError(e, 'identity-attestation')
+            }),
           )
           return { ...value, attestation }
         })

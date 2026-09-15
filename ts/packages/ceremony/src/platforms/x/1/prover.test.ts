@@ -3,8 +3,9 @@ import type { OperationEvent } from '../../../events.js'
 import type { ProverContext } from '../../context.js'
 import { prove as proveX } from './prover.js'
 
-const { prepare, generate, destroy } = vi.hoisted(() => ({
+const { prepare, initialize, generate, destroy } = vi.hoisted(() => ({
   prepare: vi.fn(),
+  initialize: vi.fn(),
   generate: vi.fn(),
   destroy: vi.fn(),
 }))
@@ -27,6 +28,9 @@ vi.mock('../../../barretenberg/circuits/bearer_link/inputs.js', () => ({
 vi.mock('../../../notary/notarize.js', () => ({ bearerOpening: () => ({}) }))
 vi.mock('../../../notary/session.js', () => ({
   Notarization: class {
+    constructor(address: string, signal: AbortSignal, emit: (event: OperationEvent) => void) {
+      initialize(address, signal, emit)
+    }
     prepare = prepare
   },
 }))
@@ -60,7 +64,7 @@ function transcript(body: unknown) {
 }
 
 it.each(['accepted', 'failed'])(
-  'records independent attestation completion and waits for every output: %s [LIBID-PROVER-007] [LIBID-PROVER-013] [LIBID-PROVER-014]',
+  'overlaps identity fetch with token openings and waits for every output: %s [LIBID-PROVER-007] [LIBID-PROVER-013] [LIBID-PROVER-014]',
   async (outcome) => {
     // Synthetic sessions isolate orchestration; real TLSN concurrency has a separate qualification gate.
     const tokenResponse = deferred<ReturnType<typeof transcript>>()
@@ -109,13 +113,17 @@ it.each(['accepted', 'failed'])(
     expect(identity.send).not.toHaveBeenCalled()
     tokenResponse.resolve(transcript({ access_token: 'fixture' }))
     await vi.waitFor(() => expect(identity.reveal).toHaveBeenCalledOnce())
-    // Identity can finish while token openings are still pending; its timestamp must not wait for that join.
-    identityAttestation.resolve(new Uint8Array([2]))
-    await vi.waitFor(() =>
-      expect(events).toContainEqual(
-        expect.objectContaining({ event: 'identity-attestation', phase: 'finished' }),
-      ),
+    // Event timing lives in the real session tests; this fake isolates the platform joins.
+    expect(initialize).toHaveBeenCalledWith(
+      'https://notary.test',
+      expect.any(AbortSignal),
+      context.emit,
     )
+    expect(prepare.mock.calls.map(([, event]) => event)).toEqual([
+      'token-attestation',
+      'identity-attestation',
+    ])
+    identityAttestation.resolve(new Uint8Array([2]))
     expect(generate).not.toHaveBeenCalled()
     tokenOpenings.resolve({ openings: [], attestation: tokenAttestation.promise })
     await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce())
@@ -123,14 +131,11 @@ it.each(['accepted', 'failed'])(
     if (outcome === 'accepted') tokenAttestation.resolve(new Uint8Array([3]))
     else tokenAttestation.reject(new Error('Final attestation failed'))
     await checked
-    for (const name of ['token-fetch', 'identity-fetch', 'identity-attestation'])
+    for (const name of ['token-fetch', 'identity-fetch'])
       expect(events.filter((event) => event.event === name).map((event) => event.phase)).toEqual([
         'started',
         'finished',
       ])
-    expect(
-      events.filter((event) => event.event === 'token-attestation').map((event) => event.phase),
-    ).toEqual(outcome === 'accepted' ? ['started', 'finished'] : ['started'])
     expect(destroy).toHaveBeenCalledOnce()
   },
 )

@@ -1,4 +1,5 @@
 import { resolve as resolveAsset } from '../assets/index.js'
+import { now, type OperationEvent } from '../events.js'
 import { origin, webUrl } from '../primitives.js'
 import type { NotaryAttestation } from './decode.js'
 import type { ByteRange } from './notarize.js'
@@ -53,14 +54,34 @@ export class Notarization {
   constructor(
     private readonly notaryAddress: string,
     signal: AbortSignal,
+    private readonly emit?: (event: OperationEvent) => void,
   ) {
     signal.throwIfAborted()
     if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
     this.signal = AbortSignal.any([signal, this.#failure.signal])
   }
 
-  /** Start target-specific setup without a bearer. Calls may overlap within this ceremony. */
-  async prepare(url: string): Promise<NotarizationSession> {
+  /** Start target-specific setup without a bearer; event names the later reveal/attestation operation. */
+  async prepare(url: string, event?: string): Promise<NotarizationSession> {
+    const emit = this.emit
+    const responseSizes: Record<string, number> = {}
+    function report(
+      phase: 'started' | 'finished',
+      timestamp: number,
+      attributes?: Record<string, number>,
+    ) {
+      if (!emit || !event) return
+      try {
+        emit({
+          event,
+          phase,
+          timestamp,
+          ...(attributes ? { instrumentation: { attributes } } : {}),
+        })
+      } catch {
+        // Observers cannot change the session outcome.
+      }
+    }
     const signal = this.signal
     signal.throwIfAborted()
     if (
@@ -160,6 +181,18 @@ export class Notarization {
         try {
           port.postMessage({ type: 'send', request })
           const value = await result
+          if (emit && event) {
+            const bytes = value.transcript.received
+            const end = bytes.findIndex(
+              (byte, i) =>
+                byte === 13 && bytes[i + 1] === 10 && bytes[i + 2] === 13 && bytes[i + 3] === 10,
+            )
+            // Raw wire sizes: headers include status/separator; body includes any chunk framing.
+            if (end >= 0) {
+              responseSizes['response-header-bytes'] = end + 4
+              responseSizes['response-body-bytes'] = bytes.length - end - 4
+            }
+          }
           stage = 'sent'
           return value.transcript
         } catch (error) {
@@ -171,6 +204,9 @@ export class Notarization {
         signal.throwIfAborted()
         if (ended || stage !== 'sent') throw new Error('Invalid notarization reveal')
         stage = 'revealing'
+        const started = now()
+        report('started', started)
+        signal.throwIfAborted()
         const result = wait<{ openings: CommitmentOpening[] }>('revealed')
         const attestation = wait<{ attestation: NotaryAttestation }>('attestation').then(
           (v) => v.attestation,
@@ -178,7 +214,34 @@ export class Notarization {
         void attestation.catch(() => {})
         try {
           port.postMessage({ type: 'reveal', reveals })
-          return { openings: (await result).openings, attestation }
+          const openings = (await result).openings
+          const opened = now()
+          // Parent-side intervals include worker delivery/correlation, not just TLSN execution.
+          if (emit && event)
+            void attestation.then(
+              ({ decoded }) => {
+                const timestamp = now()
+                report('finished', timestamp, {
+                  'openings-ms': opened - started,
+                  'finalization-ms': timestamp - opened,
+                  'sent-bytes': decoded.sentTranscriptLength,
+                  'received-bytes': decoded.receivedTranscriptLength,
+                  ...responseSizes,
+                  'committed-sent-bytes': decoded.sent.commitments.reduce(
+                    (sum, r) => sum + r.end - r.start,
+                    0,
+                  ),
+                  'committed-received-bytes': decoded.received.commitments.reduce(
+                    (sum, r) => sum + r.end - r.start,
+                    0,
+                  ),
+                  'commitment-count':
+                    decoded.sent.commitments.length + decoded.received.commitments.length,
+                })
+              },
+              () => {},
+            )
+          return { openings, attestation }
         } catch (error) {
           fail(error)
           throw error

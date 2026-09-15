@@ -90,3 +90,23 @@ The browser bundle release is pinned in [notary.assets.ts](../src/notary/notary.
 Use a matched service/TLSN/MPZ set. Mocked concurrency cannot detect WASM runtime
 deadlocks; [runtime browser tests](../e2e/runtime.spec.ts) use real sessions, while
 [qualification](qualification.md) retains the live authenticated/device gaps.
+
+## Attestation measurements
+
+`token-attestation` and `identity-attestation` start after the response is fetched
+and selected, when TLSNotary reveal begins. Their `finished` events carry numeric
+`instrumentation.attributes`: transcript/committed byte counts, commitment count,
+`openings-ms` from reveal dispatch until openings arrive, and `finalization-ms`
+from openings until the final correlated attestation arrives. The former includes
+TLSNotary proof work; the latter is the remaining completion wait. These are
+parent-observed intervals including worker delivery, not isolated computation
+timings. Fetching identity can overlap token attestation.
+
+`response-header-bytes` and `response-body-bytes` split the raw response at its
+first CRLF/CRLF: headers include the status line and separator; body includes any
+chunk framing. A missing boundary leaves those attributes absent. Only counts
+are retained for instrumentation; transcript contents are never forwarded.
+
+The notary session owns both event occurrences, using the operation name supplied
+by its platform. Failure leaves the operation unfinished. The dev history keeps
+operation timings visible and collapses their attributes beneath each operation.
