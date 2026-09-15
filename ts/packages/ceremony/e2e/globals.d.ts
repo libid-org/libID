@@ -7,6 +7,7 @@ declare global {
     failureEvent?: string
     ready: boolean
     completed: IdentityResult<'google'>[]
+    runs: { events: CeremonyEvent[]; diagnostics: string[]; outcome?: string; closed?: unknown }[]
     testEvents: Events
     testView: {
       trackProof(weights: Readonly<Record<string, number>>): void

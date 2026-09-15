@@ -18,6 +18,7 @@ Object.assign(window, {
   result: undefined,
   events: [],
   completed: [],
+  runs: [],
   ceremonyClosed: undefined,
   async after() {
     await connection!.navigate(`${ccdp}/after`, new URLSearchParams({ id: activeId }))
@@ -25,6 +26,8 @@ Object.assign(window, {
 })
 
 anchor.addEventListener('click', (event) => {
+  const run: Window['runs'][number] = { events: [], diagnostics: [] }
+  window.runs.push(run)
   const id = crypto.randomUUID()
   activeId = id
   anchor.target = `ceremony-${id}`
@@ -32,6 +35,7 @@ anchor.addEventListener('click', (event) => {
   connection = PopupConnection.connect(popup, {
     connectionId: id,
     allowedPopupOrigins: [bridge, ccdp],
+    onDiagnostic: ({ code }) => run.diagnostics.push(code),
   })
   connection.on(
     {
@@ -43,7 +47,10 @@ anchor.addEventListener('click', (event) => {
     },
     () => Object.assign(window, { afterReady: true }),
   )
-  connection.closed.then((closed) => Object.assign(window, { ceremonyClosed: closed }))
+  connection.closed.then((closed) => {
+    run.closed = closed
+    Object.assign(window, { ceremonyClosed: closed })
+  })
   const ceremony = client.new(
     connection,
     id,
@@ -54,18 +61,23 @@ anchor.addEventListener('click', (event) => {
   )
   anchor.href = ceremony.launchUrl
   Object.assign(window, { cancel: () => connection!.close(), ceremony })
-  ceremony.onEvent((event) => (window as unknown as { events: unknown[] }).events.push(event))
+  ceremony.onEvent((event) => {
+    run.events.push(event)
+    window.events.push(event)
+  })
   void ceremony
     .proveUserIdentity()
     .then((result) => {
+      run.outcome = result.status
       window.completed.push(result)
       Object.assign(window, { result })
     })
-    .catch((error: unknown) =>
+    .catch((error: unknown) => {
+      run.outcome = 'failed'
       Object.assign(window, {
         result: { status: 'failed' },
         failureEvent: error instanceof CeremonyError ? error.event : undefined,
-      }),
-    )
+      })
+    })
   if (popup.opened) event.preventDefault()
 })
