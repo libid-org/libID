@@ -2,7 +2,7 @@
 //
 // Everything here is deterministic and byte-exact against the circuit's
 // expectations: the proof only verifies on-chain if every offset, limb,
-// and padded byte matches what `jwt_email` (libid-org/libid-circuits) and
+// and padded byte matches what `jwt_email` (libid-org/libID-circuits) and
 // the Solidity verifier expect. `circuitInputs.test.ts` checks each
 // transform from first principles; the harness's Google claim run is the
 // end-to-end judge.

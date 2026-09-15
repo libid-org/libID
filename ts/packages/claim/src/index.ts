@@ -16,7 +16,7 @@
 /// (COOP same-origin + COEP require-corp).
 ///
 /// Toolchain note: @aztec/bb.js and the @noir-lang packages are pinned to
-/// EXACTLY the toolchain that built the libid-org/libid-circuits release
+/// EXACTLY the toolchain that built the libid-org/libID-circuits release
 /// (see its manifest.json). Stable bb.js (5.0.x/5.1.x) cannot deserialize
 /// the released beta.20 ACIR, and any drift changes the derived vk — the
 /// on-chain verifiers are generated from those exact vk bytes. Bumping the
