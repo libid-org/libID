@@ -33,7 +33,7 @@ npx wrangler@4 deploy --config site/wrangler.jsonc
 
 For Cloudflare Workers Builds, use `site` as the root directory, leave the build
 command empty, and set the deploy command to `npx wrangler@4 deploy`. Set the
-Worker name to `libid-site`, or change it in the config. Connect the desired domain
+Worker name to `libid`, or change it in the config. Connect the desired domain
 in the Worker settings after deployment.
 
 Uses [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/);
