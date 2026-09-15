@@ -41,9 +41,9 @@ Bridge registration and receives no application allowlists.
 
 ## Deployment configuration
 
-- REQ-BRIDGE-01 (upholds SP-CCDP-01): The Bridge MUST derive its fixed redirect
-  URI, effective origin allowlist, and Callback inputs from the deployment
-  configuration below, not incoming requests.
+- REQ-BRIDGE-01 (upholds SP-CCDP-01): The Bridge MUST derive its effective
+  origin allowlist and Callback inputs from the deployment configuration below,
+  not incoming requests.
 
 One bridge deployment has these inputs. Every origin follows the
 [CCDP origin policy](ccdp.md#origin-policy), including HTTP on exact
@@ -51,15 +51,16 @@ One bridge deployment has these inputs. Every origin follows the
 
 | Input | Contract |
 |---|---|
-| Bridge origin | Canonical origin used by every bridge route and the derived OAuth redirect URI |
 | `allowedAppOrigins` | Nonempty, duplicate-free set of canonical application origins admitted by the bridge |
 | CCDP origin | One canonical origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Platform profiles | Public OAuth client ID, supported ceremony versions, and an optional public `clientCredential` for each enabled platform |
 | Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
 
-Every enabled platform's OAuth registration uses
-`{bridgeOrigin}/auth/callback` as its `redirect_uri`. The path is fixed, not a
-deployment option. No separate redirect URI is configured.
+Every enabled platform's OAuth registration uses `/auth/callback` on the
+externally reachable Bridge origin as its `redirect_uri`. The path is fixed,
+not a deployment option. The operator registers that external URL with the
+platform; the Bridge process requires neither its own public-origin setting nor
+a redirect URI. Application-side redirect construction is defined below.
 
 `allowedAppOrigins` has no protocol maximum. A duplicate or invalid member is a
 deployment error rather than something the bridge normalizes. After resolving
@@ -69,10 +70,11 @@ CCDP origin does not duplicate it. When `ccdpOrigin` is omitted, this adds
 `https://lib.id`; when overridden, only the replacement is added automatically.
 `https://lib.id` then remains allowed only if explicitly listed.
 
-The effective set governs configuration GET and callback connection
-authentication. It is embedded into Callback, not separately
-configured, and never inferred from a request's `Origin`, `Referer`, query,
-fragment, or body.
+The effective set governs explicit `Origin` admission for configuration GET
+and all callback connection authentication. Configuration GET also admits the
+same-origin browser case defined below. The set is embedded into Callback, not
+separately configured, and never inferred from a request's `Origin`, `Referer`,
+query, fragment, or body.
 
 The CCDP origin is likewise deployment data. It is returned to the
 application in public configuration and embedded into the callback document so
@@ -98,10 +100,10 @@ neither enumerates versions nor reads input declarations from the artifact.
 Input-contract versioning and Bridge awareness are introduced only if that
 contract actually becomes incompatible, not for an ordinary CCDP version bump.
 
-One platform configuration generates both the public profile entries and the
-OAuth registrations used by the callback. The bridge advertises only
-platform/version pairs supported by its selected CCDP Distribution. Selecting
-a shared Distribution requires no reciprocal configuration.
+The public profile entries match the OAuth registrations used by Callback.
+The bridge advertises only platform/version pairs supported by its selected
+CCDP Distribution. Selecting a shared Distribution requires no reciprocal
+configuration.
 
 ## Route surface
 
@@ -160,8 +162,8 @@ The response rules are:
 - `PlatformCeremonyVersion` is an unsigned 16-bit integer.
 - `ccdpOrigin` is the configured canonical origin under the
   [origin policy](ccdp.md#origin-policy), with no credentials, path, query, or
-  fragment. The Application accepts the localhost HTTP exception for this field and
-  the configured Bridge origin.
+  fragment. The Application accepts the localhost HTTP exception for this field
+  and the Bridge origin it uses.
 - Each platform entry has one public client ID and a nonempty, duplicate-free
   list of supported ceremony versions. List order has no meaning.
 - `clientCredential`, when present, is a nonempty printable ASCII string
@@ -181,10 +183,14 @@ When present, `Origin` must exactly match an `allowedOrigins` member. A
 successful cross-origin response sets that exact origin in
 `Access-Control-Allow-Origin`, permits no credentials, and never uses `*`.
 A same-origin browser GET may omit `Origin`: accept that case only when
-`Sec-Fetch-Site` is `same-origin` and the Bridge's configured public origin is
-itself in `allowedOrigins`. It needs no CORS response header. Do not infer
-admission from `Referer`, the request host, or absent Fetch Metadata; an explicit
-invalid, `null`, or unlisted `Origin` always fails.
+`Sec-Fetch-Site` is exactly `same-origin`. This browser-supplied relationship
+requires neither knowledge of the Bridge's public origin nor its membership in
+`allowedOrigins`; the response needs no CORS header. Missing or other
+`Sec-Fetch-Site` values reject this absent-Origin case. Do not infer admission from
+`Referer`, `Host`, or forwarding headers; an explicit invalid, `null`, or
+unlisted `Origin` always fails, even with `Sec-Fetch-Site: same-origin`.
+This exception admits only the public, read-only configuration response; it
+does not change Callback's connection allowlist.
 
 Both cases use `Content-Type: application/json`, `Cache-Control: no-store`,
 `Vary: Origin, Sec-Fetch-Site`, and `X-Content-Type-Options: nosniff`. Rejected
@@ -275,9 +281,16 @@ cryptographic soundness.
 
 - TEST-BRIDGE-01 (exercises REQ-BRIDGE-01):
   Default Distribution origin is added once; a replacement is added instead. Invalid/duplicate configured origins fail, and HTTP loopback works at any port.
+  Configuration and Callback work without a server public-origin or redirect-URI
+  setting; the Application derives the fixed callback URL from its Bridge origin.
 - TEST-BRIDGE-02 (exercises REQ-BRIDGE-02):
-  Disallowed and missing origins reject according to each route's rules before
-  dependency work; explicit bad Origin cannot use the same-origin GET exception.
+  A configuration GET without Origin succeeds with exactly
+  `Sec-Fetch-Site: same-origin`, even when the Bridge origin is not allowlisted;
+  missing, `same-site`, `cross-site`, `none`, or malformed Fetch Metadata reject
+  that case. An allowed explicit Origin succeeds even with cross-site metadata;
+  an invalid, `null`, or unlisted Origin rejects even with same-origin metadata.
+  Rejections occur before dependency work; accepted same-origin GET does not
+  admit an otherwise unlisted Application to Callback.
   For the browser-exchange profiles, the former token route performs no exchange
   or notary work, including on POST.
 - TEST-BRIDGE-03 (exercises REQ-BRIDGE-03):
