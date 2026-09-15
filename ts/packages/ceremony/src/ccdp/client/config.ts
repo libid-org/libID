@@ -1,10 +1,11 @@
 import { platforms as catalog, type PlatformId, supportedPlatforms } from '../../platforms/index.js'
 import { hasExactKeys, isRecord, origin, uint } from '../../primitives.js'
-import { redirect } from '../index.js'
+import { isClientCredential } from '../index.js'
 
 export interface PlatformConfig {
   clientId: string
   ceremonyVersions: readonly number[]
+  clientCredential?: string
 }
 
 /** Validated Bridge configuration with its registered redirect URI resolved once. */
@@ -16,16 +17,12 @@ export interface CeremonyConfig {
 
 export const CONFIG_PATH = '/api/v1/ceremony/config'
 
-/** Validate the Bridge wire shape, resolve callbackPath against its origin and freeze the result. */
+/** Validate public configuration and derive the fixed callback URL from the supplied Bridge origin. */
 export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
   if (
     !origin(bridge) ||
     !isRecord(v) ||
-    !hasExactKeys(v, ['callbackPath', 'ccdpOrigin', 'platforms']) ||
-    typeof v.callbackPath !== 'string' ||
-    !v.callbackPath.startsWith('/') ||
-    v.callbackPath.startsWith('//') ||
-    !redirect(`${bridge}${v.callbackPath}`) ||
+    !hasExactKeys(v, ['ccdpOrigin', 'platforms']) ||
     !origin(v.ccdpOrigin) ||
     !isRecord(v.platforms)
   )
@@ -35,7 +32,14 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
     if (!supportedPlatforms.includes(key as PlatformId)) continue
     if (
       !isRecord(p) ||
-      !hasExactKeys(p, ['clientId', 'ceremonyVersions']) ||
+      !hasExactKeys(p, [
+        'clientId',
+        'ceremonyVersions',
+        ...(Object.hasOwn(p, 'clientCredential') ? ['clientCredential'] : []),
+      ]) ||
+      ((catalog[key as PlatformId].requiresClientCredential ||
+        Object.hasOwn(p, 'clientCredential')) &&
+        !isClientCredential(p.clientCredential)) ||
       !catalog[key as PlatformId].isClientId(p.clientId) ||
       !Array.isArray(p.ceremonyVersions) ||
       !p.ceremonyVersions.length ||
@@ -46,10 +50,11 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
     platforms[key] = Object.freeze({
       clientId: p.clientId,
       ceremonyVersions: Object.freeze([...p.ceremonyVersions]),
+      ...(typeof p.clientCredential === 'string' ? { clientCredential: p.clientCredential } : {}),
     })
   }
   return Object.freeze({
-    redirectUri: `${bridge}${v.callbackPath}`,
+    redirectUri: new URL('/auth/callback', bridge).href,
     ccdpOrigin: v.ccdpOrigin,
     platforms: Object.freeze(platforms),
   })

@@ -1,128 +1,60 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { CeremonyError } from '../../../errors.js'
-import type { NotarizationSession } from '../../../notary/session.js'
+import { afterEach, expect, it, vi } from 'vitest'
+import type { OperationEvent } from '../../../events.js'
 import type { ProverContext } from '../../context.js'
-import { prove } from './prover.js'
+import { prove as proveGitHub } from './prover.js'
 
-const { admit, prepare, send, created, destroy, runtimeFailure } = vi.hoisted(() => ({
-  admit: vi.fn(),
+const { prepare, initialize, generate, destroy } = vi.hoisted(() => ({
   prepare: vi.fn(),
-  send: vi.fn(),
-  created: vi.fn(),
+  initialize: vi.fn(),
+  generate: vi.fn(),
   destroy: vi.fn(),
-  runtimeFailure: { current: new AbortController() },
 }))
 
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
-
 vi.mock('../../../assets/index.js', async (original) => ({
   ...(await original<typeof import('../../../assets/index.js')>()),
   resolve: () => 'https://ccdp.test/asset',
 }))
-
 vi.mock('../../../barretenberg/engine.js', () => ({
   ProofEngine: class {
+    prove = generate
     destroy = destroy
   },
 }))
-
-vi.mock('./token.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./token.js')>()),
-  decodeTokenResponse: () => ({ accessToken: 'test-bearer' }),
-  admitTokenResponse: admit,
+vi.mock('../../../barretenberg/circuits/bearer_link/inputs.js', () => ({
+  buildBearerLinkWitness: () => ({}),
+  validateBearerLinkPublicInputs: () => true,
 }))
-
+vi.mock('../../../notary/notarize.js', () => ({ bearerOpening: () => ({}) }))
 vi.mock('../../../notary/session.js', () => ({
   Notarization: class {
-    readonly signal: AbortSignal
-
-    constructor(address: string, signal: AbortSignal) {
-      this.signal = AbortSignal.any([signal, runtimeFailure.current.signal])
-      created(address, signal)
+    constructor(address: string, signal: AbortSignal, emit: (event: OperationEvent) => void) {
+      initialize(address, signal, emit)
     }
     prepare = prepare
   },
 }))
-
-beforeEach(() => {
-  runtimeFailure.current = new AbortController()
-  admit.mockReset().mockReturnValue({})
-  send.mockReset()
-  prepare.mockReset().mockResolvedValue({ send })
-})
+vi.mock('./token.js', async (original) => ({
+  ...(await original<typeof import('./token.js')>()),
+  selectToken: () => ({
+    accessToken: 'fixture',
+    ranges: { sent: [], received: [] },
+    bearerRange: { start: 0, end: 7 },
+  }),
+}))
+vi.mock('./transcript.js', async (original) => ({
+  ...(await original<typeof import('./transcript.js')>()),
+  selectIdentity: () => ({
+    userId: '1',
+    userName: 'fixture',
+    ranges: { sent: [], received: [] },
+    bearerRange: { start: 0, end: 7 },
+  }),
+}))
 
 afterEach(() => {
+  vi.resetAllMocks()
   vi.unstubAllGlobals()
-  vi.clearAllMocks()
-})
-
-function context(outcome: Record<string, string>): ProverContext {
-  const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
-  return {
-    ceremonyId,
-    signal: new AbortController().signal,
-    emit: vi.fn(),
-    request: {
-      type: 'prove-identity',
-      platformId: 'github',
-      platformCeremonyVersion: 1,
-      clientId: 'client',
-      codeVerifier: 'a'.repeat(43),
-      redirectUri: 'https://bridge.test/callback',
-      notaryAddress: 'https://notary.test',
-    },
-    oauthReturn: {
-      fragment: '',
-      query:
-        '?' +
-        new URLSearchParams({
-          state: `v1.${ceremonyId}`,
-          iss: 'https://github.com/login/oauth',
-          ...outcome,
-        }),
-    },
-  }
-}
-
-it('returns detailed GitHub denial before any token exchange', async () => {
-  const fetch = vi.fn()
-  vi.stubGlobal('fetch', fetch)
-  const input = context({ error: 'access_denied', error_description: 'Denied', error_uri: '/help' })
-  await expect(prove(input)).resolves.toBeNull()
-  expect(input.emit).not.toHaveBeenCalled()
-  expect(fetch).not.toHaveBeenCalled()
-  expect(created).not.toHaveBeenCalled()
-})
-
-it('rejects a mismatched issuer before token exchange', async () => {
-  const fetch = vi.fn()
-  vi.stubGlobal('fetch', fetch)
-  await expect(prove(context({ code: 'test', iss: 'https://other.test' }))).rejects.toMatchObject({
-    event: 'authorization',
-  })
-  expect(fetch).not.toHaveBeenCalled()
-  expect(created).not.toHaveBeenCalled()
-})
-
-it('classifies token admission failure and retains its local cause', async () => {
-  const cause = new Error('synthetic private admission detail')
-  admit.mockImplementation(() => {
-    throw cause
-  })
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } })),
-  )
-  const input = context({ code: 'test' })
-  await expect(prove(input)).rejects.toMatchObject({
-    event: 'token-attestation',
-    cause,
-  })
-  expect(input.emit).toHaveBeenCalledExactlyOnceWith(
-    expect.objectContaining({ event: 'token-attestation', phase: 'started' }),
-  )
-  expect(created.mock.calls[0][1].aborted).toBe(true)
-  expect(send).not.toHaveBeenCalled()
 })
 
 function deferred<T>() {
@@ -135,150 +67,215 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-it.each(['setup', 'token'])(
-  'overlaps GitHub setup and token exchange when %s finishes first [LIBID-PROVER-004]',
-  async (first) => {
-    const setup = deferred<NotarizationSession>(),
-      token = deferred<Response>()
-    prepare.mockReturnValue(setup.promise)
-    const fetch = vi.fn<typeof globalThis.fetch>(() => token.promise)
-    vi.stubGlobal('fetch', fetch)
+function transcript(body: unknown) {
+  const json = JSON.stringify(body)
+  return {
+    sent: new Uint8Array(),
+    received: new TextEncoder().encode(
+      `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${json.length}\r\n\r\n${json}`,
+    ),
+  }
+}
+
+it.each(['accepted', 'failed'])(
+  'overlaps identity fetch with token openings and waits for every output: %s [LIBID-PROVER-007] [LIBID-PROVER-013] [LIBID-PROVER-014]',
+  async (outcome) => {
     vi.stubGlobal('navigator', { userAgent: 'browser fixture' })
-    // Stop at the first authenticated HTTP send; this test does not simulate proofs.
-    const sent = new Error('reached identity HTTP request')
-    send.mockRejectedValue(sent)
-    const input = context({ code: 'test' })
-    const result = prove(input).catch((error) => error)
-    expect(prepare).toHaveBeenCalledExactlyOnceWith('https://api.github.com/user')
-    expect(fetch).toHaveBeenCalledOnce()
-    const posted = JSON.parse(new TextDecoder().decode(fetch.mock.calls[0][1]!.body as ArrayBuffer))
-    expect(posted.redirectUri).toBe('https://bridge.test/callback')
-    expect(send).not.toHaveBeenCalled()
-    const ready = () => setup.resolve({ send, reveal: vi.fn() })
-    const returned = () =>
-      token.resolve(new Response('{}', { headers: { 'Content-Type': 'application/json' } }))
-    if (first === 'setup') {
-      ready()
-      await setup.promise
-      expect(admit).not.toHaveBeenCalled()
-      expect(send).not.toHaveBeenCalled()
-      returned()
-    } else {
-      returned()
-      await vi.waitFor(() => expect(admit).toHaveBeenCalledOnce())
-      expect(send).not.toHaveBeenCalled()
-      ready()
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    // Synthetic sessions isolate orchestration; real TLSN concurrency has a separate qualification gate.
+    const tokenResponse = deferred<ReturnType<typeof transcript>>()
+    const tokenOpenings = deferred<{ openings: []; attestation: Promise<Uint8Array> }>()
+    const tokenAttestation = deferred<Uint8Array>()
+    const identityAttestation = deferred<Uint8Array>()
+    const token = {
+      send: vi.fn(() => tokenResponse.promise),
+      reveal: vi.fn(() => tokenOpenings.promise),
     }
-    expect(await result).toMatchObject({ message: sent.message, event: 'identity-fetch' })
-    expect(send).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        url: 'https://api.github.com/user',
-        headers: expect.objectContaining({
-          Authorization: new TextEncoder().encode('Bearer test-bearer'),
-        }),
-      }),
+    const identity = {
+      send: vi.fn(async () => transcript({ id: 1, login: 'fixture' })),
+      reveal: vi.fn(async () => ({ openings: [], attestation: identityAttestation.promise })),
+    }
+    prepare.mockResolvedValueOnce(token).mockResolvedValueOnce(identity)
+    generate.mockResolvedValue({ proof: new Uint8Array([1]), publicInputs: [] })
+    const events: OperationEvent[] = []
+    const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+    const context: ProverContext = {
+      ceremonyId,
+      signal: new AbortController().signal,
+      emit: (event) => events.push(event),
+      request: {
+        type: 'prove-identity',
+        platformId: 'github',
+        platformCeremonyVersion: 1,
+        clientId: 'client',
+        clientCredential: 'public-fixture',
+        codeVerifier: 'a'.repeat(43),
+        redirectUri: 'https://bridge.test/callback',
+        notaryAddress: 'https://notary.test',
+      },
+      oauthReturn: {
+        query: `?code=fixture&state=v1.${ceremonyId}&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth`,
+        fragment: '',
+      },
+    }
+    let settled = false
+    const result = proveGitHub(context).finally(() => {
+      settled = true
+    })
+    const checked =
+      outcome === 'accepted'
+        ? expect(result).resolves.toMatchObject({ identity: { userId: '1' } })
+        : expect(result).rejects.toMatchObject({
+            event: 'token-attestation',
+            message: 'Final attestation failed',
+          })
+    expect(prepare.mock.calls.map(([url]) => url)).toEqual([
+      'https://github.com/login/oauth/access_token',
+      'https://api.github.com/user',
+    ])
+    expect(fetch).not.toHaveBeenCalled()
+    expect(identity.send).not.toHaveBeenCalled()
+    tokenResponse.resolve(transcript({ access_token: 'fixture' }))
+    await vi.waitFor(() => expect(identity.reveal).toHaveBeenCalledOnce())
+    // Event timing lives in the real session tests; this fake isolates the platform joins.
+    expect(initialize).toHaveBeenCalledWith(
+      'https://notary.test',
+      expect.any(AbortSignal),
+      context.emit,
     )
-    expect(admit.mock.invocationCallOrder[0]).toBeLessThan(send.mock.invocationCallOrder[0])
-    expect(created.mock.calls[0][1].aborted).toBe(true)
+    expect(prepare.mock.calls.map(([, event]) => event)).toEqual([
+      'token-attestation',
+      'identity-attestation',
+    ])
+    identityAttestation.resolve(new Uint8Array([2]))
+    expect(generate).not.toHaveBeenCalled()
+    tokenOpenings.resolve({ openings: [], attestation: tokenAttestation.promise })
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce())
+    expect(settled).toBe(false)
+    if (outcome === 'accepted') tokenAttestation.resolve(new Uint8Array([3]))
+    else tokenAttestation.reject(new Error('Final attestation failed'))
+    await checked
+    for (const name of ['token-fetch', 'identity-fetch'])
+      expect(events.filter((event) => event.event === name).map((event) => event.phase)).toEqual([
+        'started',
+        'finished',
+      ])
+    expect(fetch).not.toHaveBeenCalled()
     expect(destroy).toHaveBeenCalledOnce()
   },
 )
 
-it('setup failure cancels the Bridge fetch without masking its notary error [LIBID-PROVER-004]', async () => {
-  const setup = deferred<NotarizationSession>()
-  prepare.mockReturnValue(setup.promise)
-  let fetchSignal!: AbortSignal
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(
-      (_url, options) =>
-        new Promise((_resolve, reject) => {
-          fetchSignal = options.signal
-          fetchSignal.addEventListener(
-            'abort',
-            () => reject(new DOMException('fetch aborted', 'AbortError')),
-            { once: true },
-          )
-        }),
-    ),
-  )
-  const result = prove(context({ code: 'test' })).catch((error) => error)
-  const failure = new CeremonyError('identity-fetch', 'Notary failed')
-  setup.reject(failure)
-  expect(await result).toBe(failure)
-  expect(fetchSignal.aborted).toBe(true)
-  expect(admit).not.toHaveBeenCalled()
-  expect(send).not.toHaveBeenCalled()
-  expect(destroy).toHaveBeenCalledOnce()
-})
-
-it('cancellation stops both pending GitHub branches [LIBID-PROVER-018]', async () => {
-  let setupSignal!: AbortSignal, fetchSignal!: AbortSignal
-  prepare.mockImplementation(
-    () =>
-      new Promise((_resolve, reject) => {
-        setupSignal = created.mock.calls[0][1]
-        setupSignal.addEventListener('abort', () => reject(setupSignal.reason), { once: true })
-      }),
-  )
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(
-      (_url, options) =>
-        new Promise((_resolve, reject) => {
-          fetchSignal = options.signal
-          fetchSignal.addEventListener('abort', () => reject(fetchSignal.reason), { once: true })
-        }),
-    ),
-  )
-  const input = context({ code: 'test' }),
-    abort = new AbortController()
-  input.signal = abort.signal
-  const result = prove(input).catch((error) => error)
-  abort.abort()
-  expect(await result).toMatchObject({ message: abort.signal.reason.message })
-  expect(setupSignal.aborted).toBe(true)
-  expect(fetchSignal.aborted).toBe(true)
-  expect(send).not.toHaveBeenCalled()
-  expect(destroy).toHaveBeenCalledOnce()
-})
-
-it('prepared-runtime failure aborts the pending Bridge request [LIBID-PROVER-018]', async () => {
-  let fetchSignal!: AbortSignal
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(
-      (_url, options) =>
-        new Promise((_resolve, reject) => {
-          fetchSignal = options.signal
-          fetchSignal.addEventListener(
-            'abort',
-            () => reject(new DOMException('fetch aborted', 'AbortError')),
-            { once: true },
-          )
-        }),
-    ),
-  )
-  const result = prove(context({ code: 'test' })).catch((error) => error)
-  await prepare.mock.results[0].value
-  // Unlike setup rejection, this failure happens after preparation has resolved.
-  const failure = new CeremonyError('identity-fetch', 'Notary failed')
-  runtimeFailure.current.abort(failure)
-  expect(await result).toBe(failure)
-  expect(fetchSignal.aborted).toBe(true)
-  expect(send).not.toHaveBeenCalled()
-  expect(destroy).toHaveBeenCalledOnce()
-})
-
 it.each(['notaryAddress', 'codeVerifier'] as const)(
-  'requires %s before any credential-bearing work [LIBID-OAUTH-021]',
+  'requires %s before notarization [LIBID-OAUTH-021]',
   async (field) => {
-    const fetch = vi.fn()
-    vi.stubGlobal('fetch', fetch)
-    const input = context({ code: 'test' })
-    input.request[field] = null
-    await expect(prove(input)).rejects.toBeInstanceOf(CeremonyError)
-    expect(fetch).not.toHaveBeenCalled()
-    expect(created).not.toHaveBeenCalled()
+    const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+    const context: ProverContext = {
+      ceremonyId,
+      signal: new AbortController().signal,
+      emit: vi.fn(),
+      request: {
+        type: 'prove-identity',
+        platformId: 'github',
+        platformCeremonyVersion: 1,
+        clientId: 'client',
+        clientCredential: 'public-fixture',
+        redirectUri: 'https://bridge.test/callback',
+        codeVerifier: 'A'.repeat(43),
+        notaryAddress: 'https://notary.test',
+      },
+      oauthReturn: {
+        query: `?code=fixture&state=v1.${ceremonyId}&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth`,
+        fragment: '',
+      },
+    }
+    context.request[field] = null
+    await expect(proveGitHub(context)).rejects.toBeInstanceOf(Error)
+    expect(prepare).not.toHaveBeenCalled()
+    expect(generate).not.toHaveBeenCalled()
+  },
+)
+
+it.each([
+  ['denial', '?error=access_denied', null],
+  ['wrong issuer', '?code=fixture&iss=https://other.test', 'authorization'],
+  ['missing credential', '?code=fixture', 'token-fetch'],
+] as const)('handles %s before any exchange', async (name, query, event) => {
+  const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+  const context: ProverContext = {
+    ceremonyId,
+    signal: new AbortController().signal,
+    emit: vi.fn(),
+    request: {
+      type: 'prove-identity',
+      platformId: 'github',
+      platformCeremonyVersion: 1,
+      clientId: 'client',
+      redirectUri: 'https://bridge.test/auth/callback',
+      codeVerifier: 'a'.repeat(43),
+      notaryAddress: 'https://notary.test',
+      ...(name === 'missing credential' ? {} : { clientCredential: 'public-fixture' }),
+    },
+    oauthReturn: {
+      fragment: '',
+      query: `${query}&state=v1.${ceremonyId}${name === 'wrong issuer' ? '' : '&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth'}`,
+    },
+  }
+  if (event === null) await expect(proveGitHub(context)).resolves.toBeNull()
+  else await expect(proveGitHub(context)).rejects.toMatchObject({ event })
+  expect(prepare).not.toHaveBeenCalled()
+  expect(generate).not.toHaveBeenCalled()
+})
+
+it.each(['closed', 'identity setup failed'])(
+  'retires both sessions and proving when %s [LIBID-PROVER-004]',
+  async (failure) => {
+    const abort = new AbortController()
+    const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+    const context: ProverContext = {
+      ceremonyId,
+      signal: abort.signal,
+      emit: vi.fn(),
+      request: {
+        type: 'prove-identity',
+        platformId: 'github',
+        platformCeremonyVersion: 1,
+        clientId: 'client',
+        clientCredential: 'public-fixture',
+        redirectUri: 'https://bridge.test/auth/callback',
+        codeVerifier: 'a'.repeat(43),
+        notaryAddress: 'https://notary.test',
+      },
+      oauthReturn: {
+        fragment: '',
+        query: `?code=fixture&state=v1.${ceremonyId}&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth`,
+      },
+    }
+    prepare.mockImplementation(() => {
+      const signal: AbortSignal = initialize.mock.calls[0][1]
+      return new Promise((_, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const identitySetup = deferred<never>()
+    prepare
+      .mockImplementationOnce(prepare.getMockImplementation()!)
+      .mockReturnValueOnce(identitySetup.promise)
+    const result = proveGitHub(context)
+    const checked = expect(result).rejects.toMatchObject({
+      event: failure === 'closed' ? 'token-fetch' : 'identity-fetch',
+      message: failure,
+    })
+    expect(prepare).toHaveBeenCalledTimes(2)
+    expect(initialize).toHaveBeenCalledOnce()
+    expect(initialize.mock.calls[0][0]).toBe(context.request.notaryAddress)
+    if (failure === 'closed') {
+      abort.abort(new Error(failure))
+      identitySetup.reject(new Error(failure))
+    } else identitySetup.reject(new Error(failure))
+    await checked
+    expect(initialize.mock.calls[0][1].aborted).toBe(true)
+    expect(generate).not.toHaveBeenCalled()
+    expect(destroy).toHaveBeenCalledOnce()
   },
 )

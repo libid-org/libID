@@ -26,6 +26,7 @@ export type { Identity } from './types.js'
 
 export const platforms = {
   google: {
+    requiresClientCredential: false,
     isClientId: googleClientId,
     versions: {
       1: {
@@ -37,10 +38,12 @@ export const platforms = {
     },
   },
   x: {
+    requiresClientCredential: false,
     isClientId: xClientId,
     versions: { 1: { ...xUrl, ...xEvents, validateIdentity: xIdentity, validateProof: xProof } },
   },
   github: {
+    requiresClientCredential: true,
     isClientId: githubClientId,
     versions: {
       1: {

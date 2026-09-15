@@ -6,11 +6,10 @@ import { type BrowserContext, expect, test } from '@playwright/test'
 const configUrl = 'http://localhost:4682/api/v1/ceremony/config'
 const ccdp = 'http://localhost:4683'
 const config = {
-  callbackPath: '/auth/callback',
   ccdpOrigin: ccdp,
   platforms: {
     google: { clientId: '407408718192.apps.googleusercontent.com', ceremonyVersions: [1] },
-    github: { clientId: 'test-client', ceremonyVersions: [2] },
+    github: { clientId: 'test-client', ceremonyVersions: [2], clientCredential: 'fixture-public' },
   },
 }
 // Real popup transport with synthetic ceremony documents; no OAuth or proof qualification.
@@ -39,7 +38,7 @@ async function serveCeremony(context: BrowserContext) {
       const connection = PopupConnection.accept(PopupWindow.current(location.hash, { scope: '/' }), {
         connectionId: id, allowedApplicationOrigins: ['http://localhost:4692'],
       });
-      ${prover ? `connection.on({ type: 'prove-identity', decode: value => value }, () => { window.requested = true });` : ''}
+      ${prover ? `connection.on({ type: 'prove-identity', decode: value => value }, value => { window.requested = true; window.proveIdentity = value });` : ''}
       await connection.ready;
       ${prover ? 'window.eventConnection = connection;' : "connection.send({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: performance.timeOrigin + performance.now() });"}
     </script>`
@@ -104,7 +103,11 @@ for (const [platform, name] of [
             platforms: {
               ...config.platforms,
               x: { clientId: 'test-client', ceremonyVersions: [1] },
-              github: { clientId: 'test-client', ceremonyVersions: [1] },
+              github: {
+                clientId: 'test-client',
+                ceremonyVersions: [1],
+                clientCredential: 'fixture-public',
+              },
             },
           },
         }),
@@ -308,7 +311,13 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
       route.fulfill({
         json: {
           ...config,
-          platforms: { [platform]: { clientId: 'client', ceremonyVersions: [1] } },
+          platforms: {
+            [platform]: {
+              clientId: 'client',
+              ceremonyVersions: [1],
+              ...(platform === 'github' ? { clientCredential: 'bridge-provided' } : {}),
+            },
+          },
         },
       }),
     )
@@ -590,3 +599,69 @@ for (const blocked of [false, true]) {
     await expect(second.row.locator('.run-outcome')).toHaveText('Proof received')
   })
 }
+
+for (const credential of ['bridge-provided', undefined, null, '']) {
+  test(`validates the Bridge client credential: ${JSON.stringify(credential)}`, async ({
+    page,
+  }) => {
+    await page.route(configUrl, (route) =>
+      route.fulfill({
+        json: {
+          ...config,
+          platforms: {
+            github: {
+              clientId: 'test-client',
+              ceremonyVersions: [1],
+              clientCredential: credential,
+            },
+          },
+        },
+      }),
+    )
+    await page.goto('/')
+    if (credential)
+      await expect(page.getByRole('button', { name: 'GitHub', exact: true })).toBeEnabled()
+    else await expect(page.getByRole('status')).toContainText('Could not load Bridge configuration')
+  })
+}
+
+for (const blocked of [false, true])
+  test(`GitHub consent-page closure fails the run${blocked ? ' after native-anchor launch' : ''}`, async ({
+    page,
+    context,
+  }) => {
+    if (blocked)
+      await page.addInitScript(() => {
+        window.open = () => null
+      })
+    await page.route(configUrl, (route) =>
+      route.fulfill({
+        json: {
+          ...config,
+          platforms: {
+            github: {
+              ...config.platforms.github,
+              ceremonyVersions: [1],
+              clientCredential: 'test-public-credential',
+            },
+          },
+        },
+      }),
+    )
+    await serveCeremony(context)
+    await page.goto('/')
+    await expect(page.getByRole('status')).toContainText('Ready.')
+    const opened = page.waitForEvent('popup')
+    await page.getByRole('button', { name: 'GitHub', exact: true }).click()
+    const popup = await opened
+    await expect(popup).toHaveURL(/^https:\/\/github\.com\/login\/oauth\/authorize/)
+    await popup.waitForFunction(() => 'returnUrl' in window)
+    await popup.close()
+    const row = page.locator('#history tr').first()
+    await expect(row.locator('.run-outcome')).toHaveText('Failed (authorization)')
+    await expect(row.locator('.run-status')).toContainText('closed or isolated')
+    await expect(row.locator('.run-actions')).toBeEmpty()
+    await expect
+      .poll(() => page.evaluate(() => [...window.results.values()]))
+      .toEqual([{ status: 'failed' }])
+  })

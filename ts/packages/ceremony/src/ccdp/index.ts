@@ -9,6 +9,10 @@ export const MAX_REDIRECT_URI_BYTES = 2048
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
+/** Public OAuth application credential; no whitespace or control bytes. */
+export const isClientCredential = (value: unknown): value is string =>
+  typeof value === 'string' && /^[\x21-\x7e]+$/.test(value)
+
 export const PLATFORM = /^[a-z][a-z0-9-]{0,63}$/
 
 export function redirect(value: unknown): value is string {
@@ -62,6 +66,7 @@ export interface ProveIdentity {
   redirectUri: string
   codeVerifier: string | null
   notaryAddress: string | null
+  clientCredential?: string
 }
 
 export const ProveIdentity = {
@@ -74,6 +79,7 @@ export const ProveIdentity = {
       'redirectUri',
       'codeVerifier',
       'notaryAddress',
+      ...(isRecord(value) && Object.hasOwn(value, 'clientCredential') ? ['clientCredential'] : []),
     ])
     if (
       typeof value.platformId !== 'string' ||
@@ -81,6 +87,7 @@ export const ProveIdentity = {
       !uint(value.platformCeremonyVersion, 65535) ||
       !text(value.clientId, 512) ||
       !redirect(value.redirectUri) ||
+      (Object.hasOwn(value, 'clientCredential') && !isClientCredential(value.clientCredential)) ||
       !(value.notaryAddress === null || origin(value.notaryAddress)) ||
       !(
         value.codeVerifier === null ||

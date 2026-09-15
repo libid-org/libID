@@ -32,7 +32,7 @@ for (const native of [false, true])
       const state = new URL(route.request().url()).searchParams.get('state')
       await route.fulfill({
         contentType: 'text/html',
-        body: `<!doctype html><script>location.replace(${JSON.stringify(`${bridge}/callback#error=access_denied&state=${state}`)})</script>`,
+        body: `<!doctype html><script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
       })
     })
     await page.goto(`${app}?ledger=${native ? 'test:mainnet' : 'test:testnet'}`)
@@ -127,7 +127,7 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
     const state = new URL(route.request().url()).searchParams.get('state')
     await route.fulfill({
       contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/callback#error=access_denied&state=${state}`)})</script>`,
+      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
     })
   })
   await page.goto(app)
@@ -264,7 +264,7 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
     const state = new URL(route.request().url()).searchParams.get('state')
     await route.fulfill({
       contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/callback#id_token=${fixture.idToken}&state=${state}&version_info=synthetic&provider_meta=future&release.rev=1`)})</script>`,
+      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#id_token=${fixture.idToken}&state=${state}&version_info=synthetic&provider_meta=future&release.rev=1`)})</script>`,
     })
   })
   await page.goto(app)
@@ -432,7 +432,7 @@ test('two independently supplied connections cannot replace each other [LIBID-BR
     states.add(state)
     await route.fulfill({
       contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/callback#error=access_denied&state=${state}`)})</script>`,
+      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
     })
   })
   await page.goto(app)
@@ -456,7 +456,7 @@ test('Callback clears unsupported versions and unconfigured direct visits locall
   const outbound: string[] = []
   await page.route('**/*', async (route) => {
     if (new URL(route.request().url()).pathname === '//auth/callback')
-      await route.fulfill({ response: await page.request.get(`${bridge}/callback`) })
+      await route.fulfill({ response: await page.request.get(`${bridge}/auth/callback`) })
     else if (route.request().isNavigationRequest()) await route.continue()
     else {
       outbound.push(route.request().resourceType())
@@ -464,8 +464,8 @@ test('Callback clears unsupported versions and unconfigured direct visits locall
     }
   })
   for (const path of [
-    `/callback?state=v99.${id}`,
-    `/callback#state=v99.${id}`,
+    `/auth/callback?state=v99.${id}`,
+    `/auth/callback#state=v99.${id}`,
     `//auth/callback?state=v99.${id}`,
   ]) {
     // A hash-only navigation in the previous Callback document does not rerun its entry.
@@ -561,7 +561,7 @@ test('Prover rejects a changed Application origin in the same opener window [TES
     const state = new URL(route.request().url()).searchParams.get('state')
     await route.fulfill({
       contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/callback#error=access_denied&state=${state}`)})</script>`,
+      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
     })
   })
   // A second origin admitted by Callback's deployment. The retained WindowProxy
@@ -591,4 +591,48 @@ test('Prover rejects a changed Application origin in the same opener window [TES
   await expect(popup.locator('body')).toContainText('connection failed authentication')
   expect(await popup.evaluate(() => location.hash)).toBe('')
   expect(new URL(page.url()).origin).toBe(ccdp)
+})
+
+test('provider isolation ends Application and returning Callback reports its own connection failure [TEST-CCDP-08] [LIBID-BROWSER-005]', async ({
+  app,
+  bridge,
+  page,
+  context,
+}) => {
+  await context.route('https://accounts.google.com/**', async (route) => {
+    const state = new URL(route.request().url()).searchParams.get('state')
+    // Serve COOP over HTTP: WebKit does not apply it to the intercepted response.
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<script>location.replace(${JSON.stringify(`${bridge}/isolating-provider?state=${encodeURIComponent(state!)}`)})</script>`,
+    })
+  })
+  await page.goto(app)
+  await page.waitForFunction(() => window.ready)
+  const opened = context.waitForEvent('page')
+  await page.locator('#launch').click()
+  const popup = await opened
+  await expect(popup.locator('#return')).toBeVisible()
+  expect(await popup.evaluate(() => window.opener === null)).toBe(true)
+  // Background polling may be suspended; observe from the active application.
+  await page.bringToFront()
+  await expect
+    .poll(() => page.evaluate(() => window.ceremonyClosed))
+    .toEqual({
+      outcome: 'failed',
+      code: 'popup-unavailable',
+    })
+  // Consent can continue even though Application has lost the window handle.
+  expect(popup.isClosed()).toBe(false)
+  await popup.locator('#return').click()
+  await expect(popup.locator('[role="status"]')).toContainText(
+    'Unable to reconnect to the application',
+  )
+  await expect(popup.locator('[role="status"]')).toContainText(
+    'The sign-in provider may have isolated this window',
+  )
+  await expect(popup.locator('progress')).toHaveCount(0)
+  await expect(popup).toHaveURL(`${bridge}/auth/callback`)
+  expect(await popup.evaluate(() => window.opener)).toBeNull()
+  expect(await page.evaluate(() => window.completed)).toEqual([])
 })

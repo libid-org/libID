@@ -40,7 +40,8 @@ Edit configuration directly where it is used:
 - [vite.config.ts](vite.config.ts): frontend port.
 
 The setup includes shared development OAuth credentials and a public development
-notary signing key; no environment file is needed. OAuth registrations must use
+notary signing key; no environment file is needed. Bridge publishes the GitHub
+`clientCredential` from its platform configuration. OAuth registrations must use
 **`http://localhost:4682/auth/callback`**. To connect another application, add its
 exact origin to `allowed_app_origins` in `bridge-config.toml`.
 

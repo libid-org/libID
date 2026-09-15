@@ -85,11 +85,15 @@ for (const secure of [true, false]) {
         }
         if (port === 4682) {
           if (path === '/api/v1/ceremony/config') {
-            if (!allowedOrigins.includes(req.headers.origin)) return send('Forbidden', {}, 403)
+            const origin = req.headers.origin
+            const admitted =
+              origin === undefined
+                ? req.headers['sec-fetch-site'] === 'same-origin'
+                : allowedOrigins.includes(origin)
+            if (!admitted) return send('Forbidden', { Vary: 'Origin, Sec-Fetch-Site' }, 403)
             return send(
               JSON.stringify({
                 ccdpOrigin: ccdp,
-                callbackPath: '/callback',
                 platforms: {
                   google: {
                     clientId: '407408718192.apps.googleusercontent.com',
@@ -99,12 +103,25 @@ for (const secure of [true, false]) {
               }),
               {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': req.headers.origin,
-                Vary: 'Origin',
+                ...(origin === undefined ? {} : { 'Access-Control-Allow-Origin': origin }),
+                Vary: 'Origin, Sec-Fetch-Site',
               },
             )
           }
-          if (path === '/callback') return send(callback.body, callback.headers)
+          if (path === '/isolating-provider') {
+            const state = new URL(req.url, app).searchParams.get('state')
+            const target = `${scheme}://localhost:${4682 + offset}/auth/callback#error=access_denied&state=${encodeURIComponent(state ?? '')}`
+            return send(
+              html(
+                `<button id="return">Return</button><script>document.querySelector('#return').onclick = () => location.replace(${JSON.stringify(target)})</script>`,
+              ),
+              {
+                'Cross-Origin-Opener-Policy': 'same-origin',
+                'Cross-Origin-Embedder-Policy': 'require-corp',
+              },
+            )
+          }
+          if (path === '/auth/callback') return send(callback.body, callback.headers)
         }
         if (port === 4683) {
           if (path === '/qualification-control') {

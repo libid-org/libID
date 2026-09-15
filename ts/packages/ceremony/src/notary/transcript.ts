@@ -86,22 +86,21 @@ export function decodePrintable(value: Uint8Array, name: string, maximum: number
   }
 }
 
-/** Read a fully disclosed token head; length includes any committed body suffix. */
+/** Read the fully disclosed request, with Content-Length bound to its complete body. */
 export function tokenRequestBody(
   request: Uint8Array,
   requestLine: string,
   host: string,
-  length = request.length,
 ): Uint8Array {
   const bodyStart =
     findUnique(request, new Uint8Array([13, 10, 13, 10]), 'token head terminator') + 4
   const head = request.subarray(0, bodyStart - 4)
   const [line, ...headers] = new TextDecoder('latin1').decode(head).split('\r\n')
-  if (line !== requestLine || length < request.length) invalid('token request framing')
+  if (line !== requestLine) invalid('token request framing')
   const expected = new Map([
     ['host', host],
     ['content-type', 'application/x-www-form-urlencoded'],
-    ['content-length', String(length - bodyStart)],
+    ['content-length', String(request.length - bodyStart)],
   ])
   const seen = new Set<string>()
   for (const header of headers) {

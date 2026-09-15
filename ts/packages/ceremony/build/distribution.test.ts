@@ -211,17 +211,12 @@ test('CCDP contains no ledger implementation or build-time notary mapping [LIBID
       assert.ok(!policy.includes('notary.lib.id'), path)
     if (path === '/ccdp/v1/prover' || path === '/ccdp/v1/prover/fallback') {
       const sources = policy.split('connect-src ')[1].split(';')[0].trim().split(/\s+/)
-      for (const source of [
-        "'self'",
-        'https:',
-        'wss:',
-        'http://localhost:*',
-        'http://127.0.0.1:*',
-        'ws://localhost:*',
-        'ws://127.0.0.1:*',
-      ])
+      for (const source of ["'self'", 'https:', 'wss:', 'ws://localhost:*', 'ws://127.0.0.1:*'])
         assert.ok(sources.includes(source), path)
-      assert.ok(!sources.includes('http:') && !sources.includes('ws:'), path)
+      assert.ok(
+        !sources.some((source) => source.startsWith('http:')) && !sources.includes('ws:'),
+        path,
+      )
     }
   }
 })

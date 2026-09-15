@@ -58,16 +58,20 @@ siblings rather than leaving work or a promise rejection behind.
 
 ## GitHub
 
-[github/1/prover.ts](../src/platforms/github/1/prover.ts) starts proof initialization,
-browser identity-session setup and the Bridge token request concurrently. Bridge
-returns its token, complete token attestation and opening together; there is no
-streamed token response or separate `token-fetch` operation.
+[github/1/prover.ts](../src/platforms/github/1/prover.ts) uses the same browser
+scheduling as X: two Proxy sessions in one notary runtime, with identity HTTP
+waiting only for a usable bearer and its prepared session. `token-fetch` ends
+before token attestation; proof generation can overlap both final attestations.
+Any failure aborts sibling work and prevents delivery.
 
-[Token admission](../src/platforms/github/1/token.ts) checks structure, request
-bindings and bearer/opening correlation before `/user` uses the token. It does
-not verify the notary signature locally. Identity setup failure cancels the
-Bridge request with its original operation context. Identity reveal exposes its
-opening so proof generation can overlap final identity attestation.
+[The token request](../src/platforms/github/1/token.ts) contains five canonical
+form fields in order: `client_id`, `code`, `redirect_uri`, `code_verifier`,
+`client_secret`. The last is GitHub's public application credential, frozen from
+Bridge configuration and forwarded unchanged in `ProveIdentity`. The complete
+request is revealed; the response bearer and both commitment openings remain
+private. There is no Bridge token endpoint call or ordinary browser HTTP exchange.
+The [public-client profile](https://github.com/libid-org/libid/blob/5e0e1f690369a7e4c5b61634342ae7fdb975795e/specs/platform-ceremonies.md)
+owns this request layout; deployed verifiers must accept that layout.
 
 X and GitHub share the `bearer_link` circuit, but retain their own transcript
 selectors and proof validators. Delivery includes proof and both attestations;
@@ -89,9 +93,10 @@ For another version-one platform:
    Both are checked against the platform catalog. Add any new circuit to the
    capacity list in the asset catalog. Emitted JavaScript dependencies come from
    the compiler graph; do not copy those URLs into the resource set.
-4. Have Bridge advertise the implemented version and implement confidential
-   exchange if required. Add development configuration and presentation there
-   when enabling the platform in the [dev app](../../../apps/dev/README.md).
+4. Have Bridge advertise the implemented version and any required public
+   token-exchange credential; set `requiresClientCredential` in the catalog.
+   A future Bridge service needs an explicit platform-profile contract. Add
+   configuration and presentation in the [dev app](../../../apps/dev/README.md).
 5. Add canonical vectors, malformed-return/input cases, selected-asset/native-loader
    checks, actual-popup browser flows and released-key-verified real proofs.
    Map applicable [stable test IDs](test-plan.md) in [traceability](traceability.md).
