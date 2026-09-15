@@ -460,7 +460,31 @@ test('two independently supplied connections cannot replace each other [LIBID-BR
   await page.waitForFunction(() => window.ready)
   await page.locator('#launch').click()
   await page.locator('#launch').click()
-  await expect.poll(() => page.evaluate(() => window.completed.length)).toBe(2)
+  try {
+    await expect.poll(() => page.evaluate(() => window.completed.length)).toBe(2)
+  } catch (error) {
+    console.log(
+      'Concurrent ceremony failure',
+      JSON.stringify({
+        states: states.size,
+        runs: await page.evaluate(() => window.runs),
+        popups: await Promise.all(
+          context
+            .pages()
+            .filter((popup) => popup !== page)
+            .map((popup) =>
+              popup
+                .evaluate(() => ({
+                  path: location.pathname,
+                  status: document.querySelector('[role="status"]')?.textContent,
+                }))
+                .catch(() => 'document unavailable'),
+            ),
+        ),
+      }),
+    )
+    throw error
+  }
   expect(states.size).toBe(2)
   expect(await page.evaluate(() => window.completed)).toEqual([
     { status: 'denied' },

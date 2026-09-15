@@ -41,7 +41,16 @@ Object.assign(window, {
   },
   async notarizeRequests(count: number, platform: 'x' | 'github' = 'x') {
     const abort = new AbortController()
-    const timer = setTimeout(() => abort.abort(new Error('Notary smoke timed out')), 120000)
+    const pending = Array.from({ length: count }, () => 'prepare')
+    const timer = setTimeout(
+      () =>
+        abort.abort(
+          new Error(
+            `Notary smoke timed out: ${JSON.stringify({ platform, hardwareConcurrency: navigator.hardwareConcurrency, pending })}`,
+          ),
+        ),
+      120000,
+    )
     try {
       const notary = new Notarization('http://localhost:4987', abort.signal)
       const results = await Promise.all(
@@ -69,12 +78,16 @@ Object.assign(window, {
                   body: new Uint8Array(),
                 }
           const session = await notary.prepare(request.url)
+          pending[index] = 'send'
           const transcript = await session.send(request)
+          pending[index] = 'reveal'
           const result = await session.reveal({
             sent: [{ start: 0, end: transcript.sent.length }],
             received: [{ start: 0, end: transcript.received.length }],
           })
+          pending[index] = 'attestation'
           const attestation = await result.attestation
+          pending[index] = 'done'
           return {
             sent: transcript.sent.length,
             received: transcript.received.length,
