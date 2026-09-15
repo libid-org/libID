@@ -40,7 +40,7 @@ async function serveCeremony(context: BrowserContext) {
       });
       ${prover ? `connection.on({ type: 'prove-identity', decode: value => value }, value => { window.requested = true; window.proveIdentity = value });` : ''}
       await connection.ready;
-      ${prover ? 'window.eventConnection = connection;' : "connection.send({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: performance.timeOrigin + performance.now() });"}
+      ${prover ? 'window.eventConnection = connection;' : "connection.send({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: performance.timeOrigin + performance.now(), instrumentation: { attributes: { 'document-startup-ms': 25, 'connection-ms': 2000, 'worker-ready-ms': 75, 'dispatch-ms': 30 } } });"}
     </script>`
   await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
     route.fulfill({ contentType: 'text/html', body: document(false) }),
@@ -173,7 +173,6 @@ for (const [platform, name] of [
       ])
       await expect(rows.first().locator('.run-outcome')).toHaveText('Interrupted')
       await expect(rows.first().getByRole('cell').nth(3)).toHaveText(/^\d+\.\d s$/)
-      await expect(rows.first().getByRole('cell').nth(4)).toHaveText('—')
       await expect(rows.first().locator('.operation-timings li')).toContainText('Prefetch dispatch')
       await expect(rows.first().locator('.operation-timings li')).toContainText('(interrupted)')
       if (platform === 'google' && !blocked) {
@@ -300,6 +299,7 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
   ['github', 'GitHub'],
   ['google', 'Google', 'success'],
   ['google', 'Google', 'denied'],
+  ['google', 'Google', 'closed'],
   ['google', 'Google', 'success', true],
   ['google', 'Google', 'failed', true],
 ] as const) {
@@ -328,6 +328,20 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
     await page.getByRole('button', { name, exact: true }).click()
     const popup = await opened
     await popup.waitForFunction(() => !!(window as unknown as { returnUrl?: string }).returnUrl)
+    const prefetchDetails = page.locator('.operation-timings details').filter({
+      has: page.locator('summary', { hasText: /^Prefetch dispatch/ }),
+    })
+    await expect(prefetchDetails.locator('dl')).toBeHidden()
+    await prefetchDetails.locator('summary').click()
+    await expect(prefetchDetails.locator('dt')).toHaveText([
+      'document startup',
+      'connection',
+      'worker ready',
+      'dispatch',
+    ])
+    await expect(prefetchDetails.locator('dd')).toHaveText(['25 ms', '2000 ms', '75 ms', '30 ms'])
+    await prefetchDetails.locator('summary').click()
+    await expect(prefetchDetails.locator('dl')).toBeHidden()
     await page.clock.runFor(5000)
     await popup.evaluate(() =>
       location.replace((window as unknown as { returnUrl: string }).returnUrl),
@@ -337,14 +351,25 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
     )
     const returnedAt = await page.evaluate(() => performance.timeOrigin + performance.now())
     // Explicit occurrence times test transport delay independently of the app's delivery clock.
-    const send = async (event: string, phase: 'started' | 'finished' | undefined, offset: number) =>
+    const send = async (
+      event: string,
+      phase: 'started' | 'finished' | undefined,
+      offset: number,
+      attributes?: Record<string, number>,
+    ) =>
       popup.evaluate(
-        ({ event, phase, timestamp }) => {
+        ({ event, phase, timestamp, attributes }) => {
           ;(
             window as unknown as { eventConnection: { send(value: unknown): void } }
-          ).eventConnection.send({ type: 'event', event, ...(phase ? { phase } : {}), timestamp })
+          ).eventConnection.send({
+            type: 'event',
+            event,
+            ...(phase ? { phase } : {}),
+            timestamp,
+            ...(attributes ? { instrumentation: { attributes } } : {}),
+          })
         },
-        { event, phase, timestamp: returnedAt + offset },
+        { event, phase, timestamp: returnedAt + offset, attributes },
       )
     await send('authorization', 'finished', 0)
     if (fallback) {
@@ -363,6 +388,32 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
     if (fallback) await expect(fallbackTiming).toHaveText('Prover fallback · 0.6 s')
     else await expect(fallbackTiming).toHaveCount(0)
     await popup.waitForFunction(() => (window as unknown as { requested?: boolean }).requested)
+    if (platform === 'github')
+      expect(
+        await popup.evaluate(
+          () =>
+            (window as unknown as { proveIdentity: { clientCredential: string } }).proveIdentity
+              .clientCredential,
+        ),
+      ).toBe('bridge-provided')
+    if (outcome === 'closed') {
+      await popup.evaluate(() =>
+        (
+          window as unknown as { eventConnection: { close(): Promise<void> } }
+        ).eventConnection.close(),
+      )
+      await expect(page.locator('.run-outcome')).toHaveText('Interrupted')
+      await expect(page.locator('.run-status')).toHaveText('Popup connection ended')
+      await expect(page.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0)
+      await expect(page.locator('.operation-timings [data-status="running"]')).toHaveCount(0)
+      expect(await page.evaluate(() => [...window.results.values()])).toEqual([
+        { status: 'closed' },
+      ])
+      const row = await page.locator('#history').textContent()
+      await page.clock.runFor(2000)
+      await expect(page.locator('#history')).toHaveText(row!)
+      return
+    }
     if (outcome === 'denied') {
       await popup.evaluate(() => {
         ;(
@@ -371,6 +422,10 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
       })
       await expect.poll(() => popup.isClosed()).toBe(true)
       await expect(page.locator('.run-outcome')).toHaveText('Denied')
+      await expect(page.locator('.operation-timings [data-status="running"]')).toHaveCount(0)
+      await expect(
+        page.locator('.operation-timings li').filter({ hasText: /^Proving ·/ }),
+      ).toHaveAttribute('data-status', 'interrupted')
       await expect(page.locator('.run-status')).toHaveText('Authorization was denied.')
       await expect(page.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0)
       const row = await page.locator('#history').textContent()
@@ -380,24 +435,107 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
     }
     await send('zk-proof-preparation', 'started', fallback ? 720 : 20)
     await expect(page.locator('.run-status')).toHaveText('Preparing your identity proof')
+    const preparation = page
+      .locator('.operation-timings li')
+      .filter({ hasText: 'ZK proof preparation' })
+    await expect(preparation).toHaveAttribute('data-status', 'running')
+    await expect(preparation).toHaveCSS('font-weight', '600')
+    const runningColor = await preparation.evaluate((element) => getComputedStyle(element).color)
+    const attributes = {
+      'openings-ms': 150,
+      'finalization-ms': 30,
+      'sent-bytes': 60,
+      'received-bytes': 40,
+      'committed-sent-bytes': 20,
+      'committed-received-bytes': 30,
+      'commitment-count': 2,
+    }
     if (platform !== 'google') {
-      const token = platform === 'x' ? 'token-fetch' : 'token-attestation'
+      const token = 'token-fetch'
       await send(token, 'started', 20)
       await send(token, 'finished', 1000)
+      await send('token-attestation', 'started', 1000)
       await send('identity-fetch', 'started', 1000)
       await send('identity-fetch', 'finished', 2000)
       await send('identity-attestation', 'started', 2000)
+      await send('token-attestation', 'finished', 1180, {
+        ...attributes,
+        'response-header-bytes': 19,
+        'response-body-bytes': 21,
+      })
+      const details = page.locator('.operation-timings details').filter({
+        has: page.locator('summary', { hasText: /attestation/ }),
+      })
+      await expect(details).toHaveCount(1)
+      await expect(details.locator('summary')).toHaveText('Token attestation · 0.2 s')
+      // Token completion arrives after identity fetch, but occurred earlier.
+      await expect
+        .poll(() => page.locator('.operation-timings li span').allTextContents())
+        .toEqual([
+          expect.stringMatching(/^Prefetch dispatch ·/),
+          expect.stringMatching(/^Authorization ·/),
+          expect.stringMatching(/^Token fetch ·/),
+          expect.stringMatching(/^Token attestation ·/),
+          expect.stringMatching(/^Identity fetch ·/),
+          expect.stringMatching(/^Proving ·.*\(running\)$/),
+          expect.stringMatching(/^ZK proof preparation ·.*\(running\)$/),
+          expect.stringMatching(/^Identity attestation ·.*\(running\)$/),
+        ])
+      await expect(details.locator('dl')).toBeHidden()
+      await details.locator('summary').click()
+      await expect(details.locator('dd')).toHaveText([
+        '150 ms',
+        '30 ms',
+        '60 B',
+        '40 B',
+        '20 B',
+        '30 B',
+        '2',
+        '19 B',
+        '21 B',
+      ])
+      await expect(details.locator('dl')).toBeVisible()
+      await page.clock.runFor(100)
+      await expect(details.locator('dl')).toBeVisible()
+      await details.locator('summary').press('Enter')
+      await expect(details.locator('dl')).toBeHidden()
     }
     await send('zk-proof-generation', 'started', 2500)
     await send('zk-proof-preparation', 'finished', 2600)
+    await expect(preparation).toHaveAttribute('data-status', 'completed')
+    await expect(preparation).toHaveCSS('font-weight', '400')
+    expect(await preparation.evaluate((element) => getComputedStyle(element).color)).not.toBe(
+      runningColor,
+    )
+    expect(
+      await preparation.evaluate((element) => getComputedStyle(element, '::marker').content),
+    ).toContain('✓')
     await send('zk-proof-generation', 'finished', 3500)
     await expect(page.locator('.run-status')).toHaveText('Creating your identity proof with ZK')
     await expect(page.locator('.operation-timings')).toContainText('ZK proof generation · 1.0 s')
     await expect(page.locator('#history tr').first().locator('.run-outcome')).toHaveText('Running')
     // This synthetic delivery checks UI only; no browser proof generation is claimed.
     await page.clock.runFor(4500)
-    if (platform !== 'google') await send('identity-attestation', 'finished', 4000)
-    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000))
+    if (platform !== 'google') {
+      await send('identity-attestation', 'finished', 4000, { ...attributes, 'openings-ms': 1970 })
+      const details = page.locator('.operation-timings details').filter({
+        has: page.locator('summary', { hasText: /attestation/ }),
+      })
+      await expect(details).toHaveCount(2)
+      await expect(details.locator('summary')).toHaveText([
+        'Token attestation · 0.2 s',
+        'Identity attestation · 2.0 s',
+      ])
+      for (const item of await details.all()) await expect(item.locator('dl')).toBeHidden()
+      // Missing header/body observations do not turn into zero-valued measurements.
+      await expect(details.last().locator('dt')).not.toContainText([
+        'response header',
+        'response body',
+      ])
+    }
+    // pauseAt affects both documents; their clocks can differ after navigation.
+    const times = await Promise.all([page, popup].map((p) => p.evaluate(() => Date.now())))
+    await page.clock.pauseAt(Math.max(...times) + 1000)
     await popup.evaluate((success) => {
       const connection = (window as unknown as { eventConnection: { send(value: unknown): void } })
         .eventConnection
@@ -427,13 +565,32 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
     if (outcome === 'success') await expect.poll(() => popup.isClosed()).toBe(true)
     else expect(popup.isClosed()).toBe(false)
     const timings = page.locator('.operation-timings li')
-    await expect(timings).toHaveCount((platform === 'google' ? 5 : 8) + Number(fallback))
+    await expect(timings).toHaveCount((platform === 'google' ? 5 : 9) + Number(fallback))
+    await expect
+      .poll(async () =>
+        (await timings.locator('span').allTextContents()).map((text) => text.split(' · ')[0]),
+      )
+      .toEqual([
+        'Prefetch dispatch',
+        'Authorization',
+        ...(fallback ? ['Prover fallback'] : []),
+        ...(platform === 'google' ? [] : ['Token fetch', 'Token attestation', 'Identity fetch']),
+        'ZK proof preparation',
+        'ZK proof generation',
+        ...(platform === 'google' ? [] : ['Identity attestation']),
+        'Proving',
+      ])
+    await expect(page.locator('.operation-timings [data-status="running"]')).toHaveCount(0)
+    await expect(timings.filter({ hasText: /^Proving ·/ })).toHaveAttribute(
+      'data-status',
+      outcome === 'success' ? 'completed' : 'interrupted',
+    )
+    await expect(preparation).toHaveAttribute('data-status', 'completed')
     if (fallback) await expect(fallbackTiming).toHaveText('Prover fallback · 0.6 s')
     const cells = page.locator('#history tr').first().getByRole('cell')
     const total = Number.parseFloat((await cells.nth(3).textContent())!)
-    const postConsent = Number.parseFloat((await cells.nth(4).textContent())!)
-    expect(postConsent).toBeGreaterThanOrEqual(4.5)
-    expect(total - postConsent).toBeGreaterThanOrEqual(4.9)
+    await expect(cells).toHaveCount(6)
+    expect(total).toBeGreaterThanOrEqual(9.4)
     const row = await page.locator('#history').textContent()
     await page.clock.runFor(2000)
     await expect(page.locator('#history')).toHaveText(row!)
@@ -561,7 +718,7 @@ for (const blocked of [false, true]) {
         Object.fromEntries([...window.results].map(([id, result]) => [id, result.status])),
       ),
     ).toEqual({
-      [first.id]: 'failed',
+      [first.id]: 'closed',
       [second.id]: 'accepted',
       [third.id]: 'failed',
     })

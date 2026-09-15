@@ -58,13 +58,14 @@ async function initialize() {
 const operationNames: Record<string, string> = {
   'prefetch-dispatch': 'Prefetch dispatch',
   authorization: 'Authorization',
-  prover: 'Prover',
+  prover: 'Proving',
   'prover-fallback': 'Prover fallback',
   'token-fetch': 'Token fetch',
   'token-attestation': 'Token attestation',
   'identity-fetch': 'Identity fetch',
   'identity-attestation': 'Identity attestation',
   'zk-proof-preparation': 'ZK proof preparation',
+  'proof-backend-initialization': 'ZK backend initialization',
   'zk-proof-generation': 'ZK proof generation',
 }
 /** One row owns its timings and presentation; its controls are bound to that run only. */
@@ -72,14 +73,12 @@ function beginRun(platform: PlatformId, id: string) {
   const now = () => performance.timeOrigin + performance.now()
   const row = document.createElement('tr')
   row.dataset.ceremonyId = id
-  const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—', '—'].map(
-    (text) => {
-      const cell = document.createElement('td')
-      cell.textContent = text
-      row.append(cell)
-      return cell
-    },
-  )
+  const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—'].map((text) => {
+    const cell = document.createElement('td')
+    cell.textContent = text
+    row.append(cell)
+    return cell
+  })
   const outcome = document.createElement('strong')
   outcome.className = 'run-outcome'
   outcome.textContent = 'Running'
@@ -105,18 +104,19 @@ function beginRun(platform: PlatformId, id: string) {
   row.append(actions)
   const operations = new Map<
     string,
-    { name: string; started: number; finished?: number; cell: HTMLLIElement }
+    { name: string; started: number; finished?: number; cell: HTMLLIElement; label: HTMLElement }
   >()
   let started: number | undefined,
-    returnedAt: number | undefined,
     finished = false
   const duration = (start: number, end: number) =>
     `${Math.max(0, (end - start) / 1000).toFixed(1)} s`
   const render = (timestamp = now()) => {
     if (started !== undefined) cells[3]!.textContent = duration(started, timestamp)
-    if (returnedAt !== undefined) cells[4]!.textContent = duration(returnedAt, timestamp)
-    for (const op of operations.values())
-      op.cell.textContent = `${op.name} · ${duration(op.started, op.finished ?? timestamp)}${op.finished === undefined ? (finished ? ' (interrupted)' : ' (running)') : ''}`
+    for (const op of operations.values()) {
+      op.cell.dataset.status =
+        op.finished !== undefined ? 'completed' : finished ? 'interrupted' : 'running'
+      op.label.textContent = `${op.name} · ${duration(op.started, op.finished ?? timestamp)}${op.finished === undefined ? (finished ? ' (interrupted)' : ' (running)') : ''}`
+    }
   }
   const timer = setInterval(render, 100)
   const finish = (text: string, timestamp = now()) => {
@@ -138,22 +138,61 @@ function beginRun(platform: PlatformId, id: string) {
       ) {
         if (event.event === 'prefetch-dispatch' && event.phase === 'started')
           started = event.timestamp
-        if (event.event === 'authorization' && event.phase === 'finished')
-          returnedAt = event.timestamp
         const op = operations.get(event.event)
         if ((event.phase === 'started' || event.event === 'prover-fallback') && !op) {
           const cell = document.createElement('li')
+          const label = document.createElement('span')
+          cell.append(label)
           operations.set(event.event, {
             name: operationNames[event.event],
             started: event.timestamp,
             cell,
+            label,
           })
           timings.append(cell)
-        } else if (event.phase === 'finished' && op) op.finished = event.timestamp
+        } else if (event.phase === 'finished' && op) {
+          op.finished = event.timestamp
+          const attributes =
+            event.status === 'active' ? event.instrumentation?.attributes : undefined
+          if (attributes && Object.keys(attributes).length) {
+            const details = document.createElement('details')
+            const summary = document.createElement('summary')
+            const values = document.createElement('dl')
+            for (const [key, value] of Object.entries(attributes)) {
+              const term = document.createElement('dt')
+              const description = document.createElement('dd')
+              term.textContent = key.replace(/-(ms|bytes)$/, '').replaceAll('-', ' ')
+              term.title =
+                key === 'openings-ms'
+                  ? 'TLSNotary proof work until commitment openings arrive, including worker delivery.'
+                  : key === 'finalization-ms'
+                    ? 'From openings until the final correlated attestation arrives.'
+                    : ''
+              description.textContent =
+                typeof value === 'number' && key.endsWith('-ms')
+                  ? `${value.toFixed(0)} ms`
+                  : typeof value === 'number' && key.endsWith('-bytes')
+                    ? `${value} B`
+                    : String(value)
+              values.append(term, description)
+            }
+            summary.append(op.label)
+            details.append(summary, values)
+            op.cell.replaceChildren(details)
+          }
+        }
         // The single-shot fallback observation begins the interval ending at Prover readiness.
         if (event.event === 'prover' && event.phase === 'started') {
           const fallback = operations.get('prover-fallback')
           if (fallback) fallback.finished = event.timestamp
+        }
+        const ordered = [...operations.values()].sort(
+          (a, b) => (a.finished ?? Infinity) - (b.finished ?? Infinity) || a.started - b.started,
+        )
+        // Move existing rows only when necessary, preserving expanded details.
+        for (const [index, { cell }] of ordered.entries()) {
+          const next = timings.children[index]
+          if (next !== cell) timings.insertBefore(cell, next ?? null)
         }
       }
       if (event.status !== 'active')
