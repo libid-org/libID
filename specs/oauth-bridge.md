@@ -54,7 +54,7 @@ One bridge deployment has these inputs. Every origin follows the
 | Bridge origin | Canonical origin used by every bridge route and the derived OAuth redirect URI |
 | `allowedAppOrigins` | Nonempty, duplicate-free set of canonical application origins admitted by the bridge |
 | CCDP origin | One canonical origin selected by the operator; defaults to `https://lib.id` when omitted |
-| Platform profiles | Public OAuth client ID, supported ceremony versions, and an optional public `tokenExchangeCredential` for each enabled platform |
+| Platform profiles | Public OAuth client ID, supported ceremony versions, and an optional public `clientCredential` for each enabled platform |
 | Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
 
 Every enabled platform's OAuth registration uses
@@ -146,7 +146,7 @@ is no request-time version negotiation.
 interface PlatformConfig {
   clientId: string
   ceremonyVersions: readonly number[] // unsigned 16-bit integers
-  tokenExchangeCredential?: string
+  clientCredential?: string
 }
 
 interface CeremonyConfig {
@@ -164,7 +164,7 @@ The response rules are:
   the configured Bridge origin.
 - Each platform entry has one public client ID and a nonempty, duplicate-free
   list of supported ceremony versions. List order has no meaning.
-- `tokenExchangeCredential`, when present, is a nonempty printable ASCII string
+- `clientCredential`, when present, is a nonempty printable ASCII string
   without whitespace. It is an intentionally public OAuth application credential,
   not a user access token. GitHub requires it and uses it as `client_secret`;
   other profiles omit it unless their token exchange needs one. Missing required
@@ -259,7 +259,7 @@ browser code delivery and configuration, not for ledger acceptance.
 
 CORS and Origin checks protect browser admission, not non-browser
 authentication or confidentiality of the configuration. The public
-`tokenExchangeCredential` carries no user authority and is not an application
+`clientCredential` carries no user authority and is not an application
 authentication boundary. Platform ceremony rules own the consequences of
 publishing it and the downstream checks; renaming the field does not hide it.
 For these profiles, the Bridge receives no notary address and opens no token or

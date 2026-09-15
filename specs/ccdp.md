@@ -316,7 +316,7 @@ interface ProveIdentity {
   redirectUri: string
   codeVerifier: string | null
   notaryAddress: string | null
-  tokenExchangeCredential?: string
+  clientCredential?: string
 }
 ```
 
@@ -347,7 +347,7 @@ sessions, including the GitHub token request. It neither selects defaults nor
 accepts a separate profile, ledger identifier, hash, or testnet flag. The address
 changes network routing, not the proof statement or trusted signing keys.
 
-When present, `tokenExchangeCredential` is the nonempty printable ASCII value
+When present, `clientCredential` is the nonempty printable ASCII value
 without whitespace frozen from the selected public platform configuration.
 Application forwards it unchanged; null, empty, wrongly typed, or
 whitespace/control-bearing values are invalid. The selected platform requires
