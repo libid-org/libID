@@ -166,9 +166,9 @@ for (const [platform, name] of [
       for (const button of await page.locator('#platforms').getByRole('button').all())
         await expect(button).toBeEnabled()
       expect(await page.evaluate(() => [...window.results.values()])).toEqual([
-        { status: 'failed' },
+        { status: 'closed' },
       ])
-      await expect(rows.first().locator('.run-outcome')).toHaveText('Failed (prefetch-dispatch)')
+      await expect(rows.first().locator('.run-outcome')).toHaveText('Interrupted')
       await expect(rows.first().getByRole('cell').nth(3)).toHaveText(/^\d+\.\d s$/)
       await expect(rows.first().getByRole('cell').nth(4)).toHaveText('—')
       await expect(rows.first().locator('.operation-timings li')).toContainText('Prefetch dispatch')
@@ -184,9 +184,9 @@ for (const [platform, name] of [
         await expect(rows.first().getByRole('cell').nth(1)).toHaveText('X')
         await expect(rows.first().locator('.run-outcome')).toHaveText('Running')
         await expect(rows.nth(1).getByRole('cell').nth(1)).toHaveText('Google')
-        await expect(rows.nth(1).locator('.run-outcome')).toHaveText('Failed (prefetch-dispatch)')
+        await expect(rows.nth(1).locator('.run-outcome')).toHaveText('Interrupted')
         await page.locator('#history tr').first().getByRole('button', { name: 'Close' }).click()
-        await expect(rows.first().locator('.run-outcome')).toHaveText('Failed (prefetch-dispatch)')
+        await expect(rows.first().locator('.run-outcome')).toHaveText('Interrupted')
         await expect.poll(() => secondPopup.isClosed()).toBe(true)
         await page.reload()
         await expect(rows).toHaveCount(0)
@@ -248,7 +248,7 @@ for (const blocked of [false, true]) {
         { moduleUrl: popupModule, transportFailure },
       )
       if (transportFailure) {
-        await expect(page.locator('.run-actions')).toHaveText('Close the popup window manually.')
+        await expect(page.locator('.run-actions')).toBeEmpty()
         await expect(page.locator('.run-outcome')).toHaveText('Failed (prefetch-dispatch)')
         expect(popup.isClosed()).toBe(false)
         await popup.close()
@@ -363,7 +363,7 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
       await expect.poll(() => popup.isClosed()).toBe(true)
       await expect(page.locator('.run-outcome')).toHaveText('Denied')
       await expect(page.locator('.run-status')).toHaveText('Authorization was denied.')
-      await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0)
       const row = await page.locator('#history').textContent()
       await page.clock.runFor(2000)
       await expect(page.locator('#history')).toHaveText(row!)
@@ -532,7 +532,7 @@ for (const blocked of [false, true]) {
     expect(third.popup.isClosed()).toBe(false)
 
     await first.row.getByRole('button', { name: 'Close' }).click()
-    await expect(first.row.locator('.run-outcome')).toHaveText('Failed (prover)')
+    await expect(first.row.locator('.run-outcome')).toHaveText('Interrupted')
     await expect.poll(() => first.popup.isClosed()).toBe(true)
     await expect(third.row.getByRole('button', { name: 'Close' })).toBeEnabled()
     expect(third.popup.isClosed()).toBe(false)
@@ -583,10 +583,10 @@ for (const blocked of [false, true]) {
     await expect(fourth.row.locator('.run-outcome')).toHaveText('Running')
     expect(fourth.popup.isClosed()).toBe(false)
     await fourth.row.getByRole('button', { name: 'Close' }).click()
-    await expect(fourth.row.locator('.run-outcome')).toHaveText('Failed (authorization)')
+    await expect(fourth.row.locator('.run-outcome')).toHaveText('Interrupted')
     await expect.poll(() => fourth.popup.isClosed()).toBe(true)
-    await expect(fourth.row.locator('.run-outcome')).toHaveText('Failed (authorization)')
-    expect(await page.evaluate((id) => window.results.get(id)?.status, fourth.id)).toBe('failed')
+    await expect(fourth.row.locator('.run-outcome')).toHaveText('Interrupted')
+    expect(await page.evaluate((id) => window.results.get(id)?.status, fourth.id)).toBe('closed')
     await expect(second.row.locator('.run-outcome')).toHaveText('Proof received')
   })
 }

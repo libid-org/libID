@@ -6,6 +6,7 @@ import { startWorker } from '../../assets/worker.js'
 import { ceremonyError, reportFailure } from '../../errors.js'
 import { Events, now } from '../../events.js'
 import { readPrefetch } from '../navigation.js'
+import { messages } from '../ui-messages.js'
 import { eventView } from './ui.js'
 
 /** Authenticate the Prefetch page and acknowledge selected fetch dispatch before OAuth navigation. */
@@ -16,7 +17,7 @@ export async function startPrefetch(fragment: string): Promise<void> {
   try {
     const input = readPrefetch(fragment),
       profile = `${input.platformId}/${input.platformCeremonyVersion}`
-    if (!Object.hasOwn(requestsByProfile, profile)) throw new Error('Unsupported profile')
+    if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
     events.emit({
       event: 'prefetch-dispatch',
       phase: 'started',

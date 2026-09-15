@@ -70,10 +70,10 @@ Choose a platform and complete provider consent. Multiple ceremonies can run at
 once, including for the same platform. Each history row has its own status and
 Close button. Success and denial close only that run’s popup automatically;
 failed popups remain open for DevTools inspection and can be closed with the same
-button while its connection remains usable. If the transport fails, the row asks
-you to close the window manually. Closing an active popup ends the run as a
-connection failure, without a CCDP message or separate cancellation state. With a native-anchor launch, Close
-becomes available after the popup authenticates and can be controlled.
+button while its connection remains usable. The Close control disappears when
+the connection ends. Reported closure marks the run Interrupted; detected
+transport failure reports its error. With a native-anchor launch, Close becomes
+available after the popup authenticates and can be controlled.
 Results are available in `window.results`, a Map keyed by each row's
 `data-ceremony-id`. See the [manual qualification checkpoints](../../packages/ceremony/docs/testing.md#manual-consent-and-device-checks); the displayed outcomes alone do not establish cryptographic verification.
 

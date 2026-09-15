@@ -1,5 +1,5 @@
 import type { LedgerId } from '@libid/ledger'
-import type { Message, MessageType, PopupConnection } from '@libid/popup'
+import { type Message, type MessageType, type PopupConnection, PopupError } from '@libid/popup'
 import { CeremonyError, ceremonyError } from '../../errors.js'
 import {
   deriveAuthorizationDigest,
@@ -25,6 +25,7 @@ import {
   UUID,
 } from '../index.js'
 import { oauthState, prefetchFragment, route } from '../navigation.js'
+import { messages } from '../ui-messages.js'
 import { type CeremonyConfig, fetchCeremonyConfig } from './config.js'
 
 export type { CeremonyEvent, CeremonyStage, StageEvent } from '../../events.js'
@@ -237,10 +238,11 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
     Object.defineProperty(this, 'launchUrl', { writable: false })
-    void this.connection.closed.then(() => {
-      const error = new Error('Popup connection ended')
-      if (this.state === 'new') this.startFailure = ceremonyError(error, 'prefetch-dispatch')
-      this.fail(error)
+    void this.connection.closed.then((end) => {
+      this.fail(
+        end.outcome === 'closed' ? new Error(messages.connectionEnded) : new PopupError(end.code),
+        end.outcome,
+      )
     })
   }
 
@@ -395,7 +397,6 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       this.listen(CeremonyFailed, (message) =>
         this.fail(new CeremonyError(message.event, message.message)),
       )
-      void this.connection.ready.catch(() => this.fail(new Error('Popup connection failed')))
       this.publish({ event: 'prefetch-dispatch', phase: 'started', timestamp: now() })
       if (this.state === 'prefetch')
         void this.connection
@@ -404,24 +405,27 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     } catch {
       for (const remove of binding.remove.splice(0)) remove()
       if (bindings.get(this.connection) === binding) bindings.delete(this.connection)
-      this.fail(new Error('Unable to initialize ceremony connection'))
+      this.fail(new Error(messages.connectionInitializationFailed))
     }
     return result
   }
 
-  private fail(error: Error): void {
+  private fail(error: Error, status: 'failed' | 'closed' = 'failed'): void {
     if (this.state === 'done') return
     const reject = this.reject
-    const failure = ceremonyError(
-      error,
+    const event =
       this.state === 'prefetch' || this.state === 'new'
         ? 'prefetch-dispatch'
         : this.state === 'oauth'
           ? 'authorization'
-          : 'prover',
-    )
+          : 'prover'
+    const failure =
+      status === 'closed'
+        ? new CeremonyError(event, error.message, { cause: error, status })
+        : ceremonyError(error, event)
+    if (this.state === 'new') this.startFailure = failure
     this.finish({
-      status: 'failed',
+      status: failure.status,
       event: failure.event,
       message: failure.message,
       timestamp: now(),

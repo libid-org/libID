@@ -121,6 +121,26 @@ relax platform HTTPS or the Prover's isolation requirement.
 
 ## Results and errors
 
+Popup transport failure reports `failed`, including a window that becomes
+unavailable during consent without a recovery carrier. The error explains that
+closure and provider isolation (COOP) cannot be distinguished. An available
+fallback keeps the ceremony pending until reconnection, fallback failure, or
+explicit application closure. This does not alter OAuth denial handling.
+
+Application ending its connection cannot stop a provider page after opener
+severance. On return, Callback and Prover display their own connection failures
+locally, stop the progress indicator and further work, and preserve the transport
+error rather than replacing it with a generic closure message. The user can
+return to Application and start a new ceremony. No successful report back to
+Application is required; an undeliverable failure leaves only the sanitized local
+diagnostic. This identifies a connection/setup failure, not which component
+caused it.
+
+[CCDP UI messages](../src/ccdp/ui-messages.ts) groups stage labels, document UI text,
+error-page text, and translations of popup error codes. Popup returns programmatic
+errors; ceremony translates them before display or forwarding. Unexpected
+exceptions retain their bounded opaque text for debugging.
+
 `proveUserIdentity()` resolves either `{ status: 'denied' }` or an accepted result
 containing separate `identity` and `oauthProof` values:
 
@@ -145,7 +165,12 @@ and combine the result with the original operation inputs; convenience views
 are not authoritative ledger evidence.
 
 Technical failure and connection loss reject with `CeremonyError`, carrying
-`event` (failing operation) and bounded opaque `message`. Display text with
+`event` (operation context), bounded opaque `message`, and `status`:
+`'failed'` for technical failures or `'closed'` for a reported connection closure.
+Closure emits a neutral interruption through both subscriptions and rejects the
+pending operation; it is not OAuth denial. Popup detection remains best-effort,
+including after opener severance. Closure after an accepted result or denial
+cannot overwrite that terminal outcome. Display text with
 `textContent`; do not interpret it as a stable error code or export it as
 telemetry. A caught dependency message is not guaranteed free of sensitive data.
 An OAuth denial resolves normally; closing a consent page without a valid denial
@@ -157,7 +182,7 @@ Subscribe before starting; subscriptions do not replay past observations.
 `onEvent` combines local and received operation occurrences into one timeline.
 Active events have `event`, optional `phase`, `timestamp` and optional
 `instrumentation`. Client derives exactly one terminal lifecycle update before
-the promise settles. Status is `active | completed | denied | failed`.
+the promise settles. Status is `active | completed | denied | failed | closed`.
 Only accepted proof delivery produces `prover.finished` with `completed` status;
 early outcomes do not fabricate a finished operation.
 

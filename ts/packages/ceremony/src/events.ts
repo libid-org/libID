@@ -1,3 +1,4 @@
+import { messages } from './ccdp/ui-messages.js'
 import { ceremonyError } from './errors.js'
 import { isRecord, text } from './primitives.js'
 
@@ -29,13 +30,13 @@ export interface OperationEvent {
   }
 }
 
-export type CeremonyStatus = 'active' | 'completed' | 'denied' | 'failed'
+export type CeremonyStatus = 'active' | 'completed' | 'denied' | 'failed' | 'closed'
 
 export type CeremonyEvent =
   | (OperationEvent & { status: 'active' })
   | { event: 'prover'; phase: 'finished'; timestamp: number; status: 'completed' }
   | { status: 'denied'; timestamp: number }
-  | { status: 'failed'; event: string; message: string; timestamp: number }
+  | { status: 'failed' | 'closed'; event: string; message: string; timestamp: number }
 
 export const now = () => performance.timeOrigin + performance.now()
 
@@ -109,11 +110,11 @@ export interface StageEvent {
 export const CeremonyStage = {
   message(stage: CeremonyStage, platform: string): string {
     return {
-      preparation: 'Preparing your ceremony',
-      authorization: `Authorize with ${platform}`,
-      'proof-preparation': 'Preparing your identity proof',
-      notarization: 'Notarizing your identity data',
-      'zk-proving': 'Creating your identity proof with ZK',
+      preparation: messages.preparation,
+      authorization: messages.authorization(platform),
+      'proof-preparation': messages.proofPreparation,
+      notarization: messages.notarization,
+      'zk-proving': messages.zkProving,
     }[stage]
   },
 }

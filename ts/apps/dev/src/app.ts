@@ -1,3 +1,4 @@
+import { CeremonyError } from '@libid/ceremony'
 import {
   type CCDPClient,
   type CeremonyEvent,
@@ -13,7 +14,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 
 declare global {
   interface Window {
-    results: Map<string, IdentityResult | { status: 'failed' }>
+    results: Map<string, IdentityResult | { status: 'failed' | 'closed' }>
   }
 }
 const settings = { bridge: 'http://localhost:4682', ccdp: 'http://localhost:4683' }
@@ -159,9 +160,11 @@ function beginRun(platform: PlatformId, id: string) {
         finish(
           event.status === 'completed'
             ? 'Proof received'
-            : event.status === 'denied'
-              ? 'Denied'
-              : `Failed (${'event' in event ? event.event : 'ceremony'})`,
+            : event.status === 'closed'
+              ? 'Interrupted'
+              : event.status === 'denied'
+                ? 'Denied'
+                : `Failed (${'event' in event ? event.event : 'ceremony'})`,
           event.timestamp,
         )
       else render()
@@ -190,10 +193,9 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
         run.close.disabled = false
       })
       .catch(() => {})
-    void current.closed.then((end) => {
-      run.close.disabled = true
+    void current.closed.then(() => {
       run.close.onclick = null
-      if (end.outcome === 'failed') run.close.replaceWith('Close the popup window manually.')
+      run.close.remove()
     })
     run.close.onclick = () => {
       void current.close().catch(() => {
@@ -231,7 +233,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
         }
       })
       .catch((error: unknown) => {
-        window.results.set(id, { status: 'failed' })
+        window.results.set(id, { status: error instanceof CeremonyError ? error.status : 'failed' })
         run.message.textContent = error instanceof Error ? error.message : 'Ceremony failed.'
       })
       .finally(() => {

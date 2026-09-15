@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join, resolve } from 'node:path'
 import type { Rollup } from 'vite'
 import type { AssetRequest } from '../src/assets/index.js'
+import { messages } from '../src/ccdp/ui-messages.ts'
 import { safePath } from './archive.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { assetHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
@@ -133,12 +134,12 @@ try {
   )
   if (!primary) throw new Error('Missing Prover entry')
   const document = (path: string, code: string, profile: ResponseProfile) => {
-    const capture = `(()=>{const query=location.search,fragment=location.hash,path=location.pathname;history.replaceState(null,'',path);if(query||path!==${JSON.stringify(path)}||fragment.length>65536){document.getElementById('libid-root').textContent='Unable to continue. Return to your application.';return}Object.defineProperty(window,'__libidCeremonyInput',{value:fragment,configurable:true})})()`
+    const capture = `(()=>{const query=location.search,fragment=location.hash,path=location.pathname;history.replaceState(null,'',path);if(query||path!==${JSON.stringify(path)}||fragment.length>65536){document.getElementById('libid-root').textContent=${JSON.stringify(messages.returnToApplication(messages.unableToContinue))};return}Object.defineProperty(window,'__libidCeremonyInput',{value:fragment,configurable:true})})()`
     const entry = code
     const scripts = [capture, entry].map((s) => s.replace(/<\/script/gi, '<\\/script'))
     put(
       path,
-      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>libID</title><body><main id="libid-root"></main><script>${scripts[0]}</script><script type="module">${scripts[1]}</script></body></html>`,
+      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${messages.brand}</title><body><main id="libid-root"></main><script>${scripts[0]}</script><script type="module">${scripts[1]}</script></body></html>`,
       profile,
       responseHeaders(profile, { ...options, inline: scripts }),
     )
@@ -156,7 +157,7 @@ try {
     const code = item.code.replace(/<\/script/gi, '<\\/script')
     put(
       '/ccdp/callback.html',
-      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>libID</title><body><main id="libid-root"></main><script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script></body></html>`,
+      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${messages.brand}</title><body><main id="libid-root"></main><script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script></body></html>`,
       'callback',
       responseHeaders('callback', { ...options, inline: [code] }),
     )
@@ -171,7 +172,7 @@ try {
   // The page every 404 serves; requested directly it declares the same error policy.
   put(
     '/404.html',
-    '<!doctype html><html lang="en"><meta charset="utf-8"><title>Not found</title><p>Not found.</p></html>',
+    `<!doctype html><html lang="en"><meta charset="utf-8"><title>${messages.notFoundTitle}</title><p>${messages.notFound}</p></html>`,
     { 'Content-Type': 'text/html; charset=utf-8', ...errorHeaders },
   )
   // Retain old immutable assets and their effective policy through the compatibility window.
