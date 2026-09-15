@@ -233,6 +233,9 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       redirectUri: config.redirectUri,
       codeVerifier,
       notaryAddress: input.notaryAddress,
+      ...(platform.clientCredential === undefined
+        ? {}
+        : { clientCredential: platform.clientCredential }),
     }
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)

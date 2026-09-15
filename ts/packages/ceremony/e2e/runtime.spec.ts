@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures.js'
 import { verifyBrowserProof } from './verify.js'
 
-// Controlled circuit inputs and unauthenticated X requests; no live OAuth credentials.
+// Controlled circuit inputs and unauthenticated X/GitHub requests; no live OAuth credentials.
 test.beforeEach(async ({ page }) => {
   await page.goto('http://localhost:4986/index.html')
   await page.waitForFunction(() => typeof window.proveBearerFixture === 'function')
@@ -16,14 +16,19 @@ test('real bearer-link fixture proof [LIBID-PROVER-001] [LIBID-PROVER-015]', asy
   await verifyBrowserProof('bearer_link', result)
 })
 
-for (const count of [1, 2])
-  test(`real notary: ${count} session(s) alongside proving [LIBID-PROVER-019]`, async ({
+for (const [platform, count] of [
+  ['x', 1],
+  ['x', 2],
+  ['github', 2],
+] as const)
+  test(`real ${platform} notary: ${count} session(s) alongside proving [LIBID-PROVER-019]`, async ({
     page,
   }) => {
     test.setTimeout(480000)
     const [proof, attestations] = await page.evaluate(
-      async (count) => Promise.all([window.proveBearerFixture(), window.notarizeRequests(count)]),
-      count,
+      async ({ platform, count }) =>
+        Promise.all([window.proveBearerFixture(), window.notarizeRequests(count, platform)]),
+      { platform, count },
     )
     await verifyBrowserProof('bearer_link', proof)
     expect(attestations).toHaveLength(count)

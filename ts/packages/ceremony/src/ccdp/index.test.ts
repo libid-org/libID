@@ -69,6 +69,9 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
       ]) {
         const value = { ...message, platformId, notaryAddress }
         expect(ProveIdentity.decode(value)).toBe(value)
+        expect(() =>
+          ProveIdentity.decode({ ...value, tokenExchangeCredential: 'retired' }),
+        ).toThrow()
       }
       for (const notaryAddress of [
         undefined,
@@ -94,6 +97,9 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
       for (const codeVerifier of [null, 'A'.repeat(43)]) {
         const value = { ...samples[1][1], platformId, codeVerifier }
         expect(ProveIdentity.decode(value)).toBe(value)
+        expect(() =>
+          ProveIdentity.decode({ ...value, tokenExchangeCredential: 'retired' }),
+        ).toThrow()
       }
       for (const codeVerifier of [
         undefined,
@@ -105,6 +111,29 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
         expect(() => ProveIdentity.decode({ ...samples[1][1], platformId, codeVerifier })).toThrow()
     }
   })
+  it('validates the optional public credential independently of platform [TEST-CCDP-05]', () => {
+    for (const platformId of ['google', 'x', 'github', 'new-platform']) {
+      const base = { ...samples[1][1], platformId }
+      const value = { ...base, clientCredential: 'public&credential=1' }
+      expect(ProveIdentity.decode(value)).toBe(value)
+      expect(() => ProveIdentity.decode({ ...value, tokenExchangeCredential: 'retired' })).toThrow()
+      expect(ProveIdentity.decode(base)).toBe(base)
+      for (const clientCredential of [
+        undefined,
+        null,
+        '',
+        1,
+        [],
+        'has space',
+        'tail\n',
+        '\t',
+        'é',
+        '\x7f',
+      ])
+        expect(() => ProveIdentity.decode({ ...base, clientCredential })).toThrow()
+    }
+  })
+
   it('rejects malformed event records and terminal claims without coercion', () => {
     const message = samples[5][1]
     for (const timestamp of [NaN, Infinity, -1, '0'])

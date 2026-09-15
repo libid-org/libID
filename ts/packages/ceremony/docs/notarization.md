@@ -54,7 +54,8 @@ memory/network caps. Keep that limitation explicit when qualifying resource use.
 
 [notarize.ts](../src/notary/notarize.ts) validates selected ranges, merges adjacent
 reveals as TLSNotary does, and commits the complement. It correlates private
-openings, transcript lengths, reveals and commitments with final attested bytes.
+openings, transcript lengths, reveals and commitments with final attested bytes,
+including the authority identifier for the prepared HTTPS host.
 Missing coverage, wrong framing or correlation failure rejects completion.
 
 [decode.ts](../src/notary/decode.ts) reads the canonical signed serialization once.
@@ -79,11 +80,10 @@ preserved losslessly. Additional headers are admitted subject to the profile's
 required fields and forbidden-header rules; duplicate required headers and
 alternate Authorization framing reject.
 
-The browser call sites are X's token and identity requests and GitHub's identity
-request. GitHub's confidential token exchange belongs to Bridge; its
-[browser admission code](../src/platforms/github/1/token.ts) checks request bindings,
-canonical encoding and opening correlation before using the returned bearer.
-GitHub's request uses the browser User-Agent. Exact header values and forbidden
+Both X and GitHub obtain token and identity through browser Proxy sessions.
+GitHub's [token selector](../src/platforms/github/1/token.ts) checks the complete
+request against the frozen canonical form before using the returned bearer.
+GitHub's identity request uses the browser User-Agent. Exact header values and forbidden
 names are owned by code and the specification, not copied here.
 
 The browser bundle release is pinned in [notary.assets.ts](../src/notary/notary.assets.ts).

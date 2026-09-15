@@ -17,7 +17,7 @@ const proofOperations = [
 const platformOperations = {
   google: ['signing-key-fetch'],
   x: ['token-fetch', 'token-attestation', 'identity-fetch', 'identity-attestation'],
-  github: ['token-attestation', 'identity-fetch', 'identity-attestation'],
+  github: ['token-fetch', 'token-attestation', 'identity-fetch', 'identity-attestation'],
 }
 const finished = (event: string) =>
   ({
@@ -73,5 +73,5 @@ it('keeps late attestations separate from finished ZK work [LIBID-BROWSER-024]',
   expect(identity).toBeGreaterThan(token)
   expect(identity).toBe(1)
   expect(progressFor('google')(finished('identity-attestation'))).toBeUndefined()
-  expect(progressFor('github')(finished('token-fetch'))).toBeUndefined()
+  expect(progressFor('github')(finished('token-fetch'))).toBeGreaterThan(0)
 })

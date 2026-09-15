@@ -63,7 +63,7 @@ import * as assets from '../assets/index.js'
 
 const release = assets.archive(
   'https://github.com/libid-org/notary/releases/download/v0.3.0-rc.3/tlsn-wasm-0.3.0-rc.3.tar.gz',
-  'tlsn/v0.3.0-rc.3-csp1',
+  'tlsn/v0.3.0-rc.3-csp2',
 )
 const module = release.member('tlsn_wasm.js', {
   ...assets.headers.immutable,
@@ -202,12 +202,11 @@ the Bridge injects no code and needs no per-version entry-script table.
 The runnable reference configuration is in
 [the dev app](../../../apps/dev/README.md), not this package.
 
-The current integration still uses config `callbackPath` and GitHub request
-`redirectUri`; both require the [coordinated fixed-path migration](qualification.md#pending-contract-updates).
-Client freezes the redirect URI once and the GitHub adapter checks its binding.
-GitHub's requested notary host selects the Bridge's native MPC-TLS destination
-with its configured TCP port. Browser sessions use that origin's HTTP/WebSocket
-port. Bridge egress/DNS controls and artifact refresh are server responsibilities.
+Client derives fixed `/auth/callback` from the supplied Bridge origin and
+freezes the redirect URI once; public configuration carries no callback path. X and GitHub use the supplied notary
+origin's Proxy WebSocket for both token and identity sessions. Prover performs no
+Bridge fetch; its HTTPS fetch sources serve proving assets, while WSS (or the
+exact loopback WS exception) serves notarization. Bridge owns Callback refresh.
 
 Optional opener-independent fallback is supplied through
 [build/popup.ts](../build/popup.ts): a module exporting `fallback` and its required

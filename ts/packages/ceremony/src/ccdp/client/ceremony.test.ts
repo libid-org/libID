@@ -46,7 +46,6 @@ class Connection implements PopupConnection<Message> {
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 
 const wireConfig = {
-  callbackPath: '/auth/callback',
   ccdpOrigin: 'https://ccdp.test',
   platforms: { google: { clientId: 'client', ceremonyVersions: [1] } },
 }
@@ -226,7 +225,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     for (const host of ['localhost', '127.0.0.1']) {
       const bridge = `http://${host}:4682`
       for (const ccdpOrigin of [`http://${host}`, `http://${host}:4683`]) {
-        const local = { ...wireConfig, ccdpOrigin, callbackPath: '/auth/callback' }
+        const local = { ...wireConfig, ccdpOrigin }
         expect(validateCeremonyConfig(local, bridge)).toMatchObject({
           ccdpOrigin,
           redirectUri: `${bridge}/auth/callback`,
@@ -246,23 +245,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     )
     for (const patch of [
       { ccdpOrigin: 'https://ccdp.test/' },
-      ...[
-        undefined,
-        null,
-        0,
-        '',
-        'callback',
-        '//elsewhere.test/callback',
-        'https://elsewhere.test/callback',
-        '/a/../callback',
-        '/callback?',
-        '/callback#',
-        '/callback?x=1',
-        '/callback#x',
-        '/callback\\elsewhere',
-        '/ callback',
-        `/${'a'.repeat(2048)}`,
-      ].map((callbackPath) => ({ callbackPath })),
+      { callbackPath: '/auth/callback' },
       { redirectUri: 'https://bridge.test/auth/callback' },
       { allowedAppOrigins: [] },
     ])
@@ -564,8 +547,7 @@ it.each(['google', 'x', 'github'] as const)(
     emit('authorization', 'finished', 20)
     emit('prover', 'started', 30)
     emit('zk-proof-preparation', 'started', 40)
-    if (platformId !== 'google')
-      emit(platformId === 'x' ? 'token-fetch' : 'token-attestation', 'started', 50)
+    if (platformId !== 'google') emit('token-fetch', 'started', 50)
     emit('zk-proof-generation', 'started', 60)
     emit('zk-proof-preparation', 'finished', 70)
     emit('zk-proof-generation', 'finished', 80)
@@ -851,6 +833,59 @@ it('reports closure before the first start without mislabeling it as a repeat [L
   expect(connection.send).not.toHaveBeenCalled()
   expect(connection.navigate).not.toHaveBeenCalled()
 })
+
+it('freezes and forwards the public credential from validated configuration [TEST-BRIDGE-03]', async () => {
+  const profile = {
+    clientId: 'client',
+    ceremonyVersions: [1],
+    clientCredential: 'public&original=1',
+  }
+  const config = validateCeremonyConfig(
+    { ...wireConfig, platforms: { github: profile } },
+    'https://bridge.test',
+  )
+  const client = ccdpClientFromConfig(config)
+  profile.clientCredential = 'replacement'
+  const connection = new Connection()
+  const ceremony = client.new(
+    connection,
+    id,
+    'github',
+    testnet,
+    new Uint8Array(32),
+    new Uint8Array(),
+  )
+  const pending = ceremony.proveUserIdentity()
+  const rejected = expect(pending).rejects.toBeInstanceOf(CeremonyError)
+  connection.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
+  connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 2 })
+  expect(connection.send).toHaveBeenCalledWith(
+    expect.objectContaining({ clientCredential: 'public&original=1' }),
+  )
+  expect(Object.isFrozen(config.platforms.github)).toBe(true)
+  await connection.close()
+  await rejected
+})
+
+it('requires the GitHub public credential and validates optional credentials for other profiles [TEST-BRIDGE-03]', () => {
+  for (const platformId of ['github', 'x', 'google']) {
+    const profile = { clientId: 'client', ceremonyVersions: [1] }
+    const validate = (value: object) =>
+      validateCeremonyConfig(
+        { ...wireConfig, platforms: { [platformId]: value } },
+        'https://bridge.test',
+      )
+    if (platformId === 'github') expect(() => validate(profile)).toThrow()
+    else expect(() => validate(profile)).not.toThrow()
+    expect(() => validate({ ...profile, clientCredential: 'public' })).not.toThrow()
+    expect(() =>
+      validate({ ...profile, clientCredential: 'public', tokenExchangeCredential: 'retired' }),
+    ).toThrow()
+    for (const clientCredential of [undefined, null, '', 1, 'with space', 'tail\n', 'é'])
+      expect(() => validate({ ...profile, clientCredential })).toThrow()
+  }
+})
+
 it.each(['closed', 'failed'] as const)(
   'preserves popup %s in errors and both terminal subscriptions',
   async (outcome) => {

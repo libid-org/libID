@@ -26,6 +26,7 @@ declare global {
     }>
     notarizeRequests(
       count: number,
+      platform?: 'x' | 'github',
     ): Promise<{ sent: number; received: number; attestedData: number }[]>
   }
 }

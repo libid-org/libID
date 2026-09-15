@@ -7,6 +7,8 @@ import {
 import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer_link/inputs.js'
 import { ProofEngine } from '../src/barretenberg/engine.js'
 import { Notarization } from '../src/notary/session.js'
+import { buildTokenRequest } from '../src/platforms/github/1/token.js'
+import { identityRequest } from '../src/platforms/github/1/transcript.js'
 
 Object.assign(window, {
   async proveBearerFixture() {
@@ -37,24 +39,37 @@ Object.assign(window, {
       engine.destroy()
     }
   },
-  async notarizeRequests(count: number) {
+  async notarizeRequests(count: number, platform: 'x' | 'github' = 'x') {
     const abort = new AbortController()
     const timer = setTimeout(() => abort.abort(new Error('Notary smoke timed out')), 120000)
     try {
       const notary = new Notarization('http://localhost:4987', abort.signal)
       const results = await Promise.all(
-        Array.from({ length: count }, async () => {
-          const url = 'https://api.x.com/2/users/me',
-            session = await notary.prepare(url)
-          const transcript = await session.send({
-            url,
-            method: 'GET',
-            headers: {
-              Host: new TextEncoder().encode('api.x.com'),
-              Connection: new TextEncoder().encode('close'),
-            },
-            body: new Uint8Array(),
-          })
+        Array.from({ length: count }, async (_, index) => {
+          // Deliberately invalid fixture credentials exercise both public GitHub endpoints,
+          // not a successful OAuth exchange or authenticated identity.
+          const request =
+            platform === 'github'
+              ? index === 0
+                ? buildTokenRequest({
+                    clientId: 'fixture',
+                    code: 'fixture',
+                    redirectUri: 'http://localhost:4682/auth/callback',
+                    codeVerifier: 'A'.repeat(43),
+                    clientCredential: 'fixture',
+                  })
+                : identityRequest('fixture')
+              : {
+                  url: 'https://api.x.com/2/users/me',
+                  method: 'GET' as const,
+                  headers: {
+                    Host: new TextEncoder().encode('api.x.com'),
+                    Connection: new TextEncoder().encode('close'),
+                  },
+                  body: new Uint8Array(),
+                }
+          const session = await notary.prepare(request.url)
+          const transcript = await session.send(request)
           const result = await session.reveal({
             sent: [{ start: 0, end: transcript.sent.length }],
             received: [{ start: 0, end: transcript.received.length }],

@@ -103,6 +103,15 @@ exists. An omitted version chooses the highest compatible one; pass the trailing
 version argument explicitly when selecting a particular disclosure behavior.
 Unsupported selections fail synchronously without starting OAuth.
 
+Client derives fixed `/auth/callback` from its configured Bridge origin; public
+configuration contains no callback path or redirect URI.
+
+GitHub configuration must include `clientCredential`, a nonempty printable
+ASCII public OAuth application credential without whitespace. Client freezes and
+forwards it unchanged in `ProveIdentity`; Prover never refetches configuration.
+The field is optional for other platforms and validated whenever present. There
+is no per-ceremony credential override.
+
 ## Ledger and notary inputs
 
 [`@libid/ledger`](../../ledger/README.md) owns the ledger interface. Production

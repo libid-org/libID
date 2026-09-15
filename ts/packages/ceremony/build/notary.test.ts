@@ -46,7 +46,7 @@ test('all asset-fetching contexts explicitly admit their own origin [CSP-003] [C
       .trim()
       .split(/\s+/)
     assert.ok(sources.includes("'self'"))
-    assert.ok(!sources.includes('http:') && !sources.includes('ws:'))
+    assert.ok(!sources.some((source) => source.startsWith('http:')) && !sources.includes('ws:'))
     assert.ok(!headers['Content-Security-Policy'].includes('upgrade-insecure-requests'))
   }
 })

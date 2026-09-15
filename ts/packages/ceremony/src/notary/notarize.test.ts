@@ -1,4 +1,5 @@
 import { sha256 } from '@noble/hashes/sha2.js'
+import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
 import {
   type ByteRange,
@@ -58,7 +59,7 @@ function encodeAttestation(
   commitments = plan.commit,
 ): Uint8Array {
   return concat(
-    new Uint8Array(32).fill(9),
+    keccak_256(encoder.encode('api.x.com')),
     u64(1_770_000_000),
     u32(transcript.sent.length),
     u32(transcript.recv.length),
@@ -178,8 +179,17 @@ describe('correlateAttestation', () => {
     recv: recv.map(({ hash }) => hash),
   })
 
+  it('rejects a signed authority differing from the session target', () => {
+    const changed = attestedData.slice()
+    changed[0] ^= 1
+    expect(() =>
+      correlateAttestation('api.x.com', transcript, plan, { sent, recv }, changed),
+    ).toThrow(/authority/)
+  })
+
   it('matches unordered TLSNotary openings to signed ranges in each direction', () => {
     const result = correlateAttestation(
+      'api.x.com',
       transcript,
       plan,
       { sent: [...sent].reverse(), recv: [...recv].reverse() },
@@ -213,6 +223,7 @@ describe('correlateAttestation', () => {
     )
     expect(
       correlateAttestation(
+        'api.x.com',
         transcript,
         onePlan,
         { sent: [{ hash, blinder }], recv: [] },
@@ -241,7 +252,9 @@ describe('correlateAttestation', () => {
     ],
     ['cross-direction opening', { sent: recv, recv: sent }, /one hidden/],
   ] as const)('rejects %s', (_name, output, reason) => {
-    expect(() => correlateAttestation(transcript, plan, output, attestedData)).toThrow(reason)
+    expect(() => correlateAttestation('api.x.com', transcript, plan, output, attestedData)).toThrow(
+      reason,
+    )
   })
 
   it('rejects a plan changed after complement derivation', () => {
@@ -249,17 +262,17 @@ describe('correlateAttestation', () => {
       ...plan,
       commit: { ...plan.commit, sent: [plan.commit.sent[0], plan.commit.sent[0]] },
     }
-    expect(() => correlateAttestation(transcript, changed, { sent, recv }, attestedData)).toThrow(
-      /not the reveal complement/,
-    )
+    expect(() =>
+      correlateAttestation('api.x.com', transcript, changed, { sent, recv }, attestedData),
+    ).toThrow(/not the reveal complement/)
   })
 
   it('requires the TLSNotary server-identity reveal', () => {
     const changed = structuredClone(plan) as NotarizationPlan
     Object.assign(changed.reveal, { server_identity: false })
-    expect(() => correlateAttestation(transcript, changed, { sent, recv }, attestedData)).toThrow(
-      /server identity/,
-    )
+    expect(() =>
+      correlateAttestation('api.x.com', transcript, changed, { sent, recv }, attestedData),
+    ).toThrow(/server identity/)
   })
 
   it('rejects an opening that ambiguously matches equal hidden plaintext ranges', () => {
@@ -278,6 +291,7 @@ describe('correlateAttestation', () => {
     })
     expect(() =>
       correlateAttestation(
+        'api.x.com',
         repeated,
         repeatedPlan,
         { sent: [duplicate, duplicate], recv: [] },
@@ -368,7 +382,9 @@ describe('correlateAttestation', () => {
       /commitment range changed/,
     ],
   ] as const)('rejects a changed %s', (_name, signed, reason) => {
-    expect(() => correlateAttestation(transcript, plan, { sent, recv }, signed)).toThrow(reason)
+    expect(() =>
+      correlateAttestation('api.x.com', transcript, plan, { sent, recv }, signed),
+    ).toThrow(reason)
   })
 })
 
@@ -406,11 +422,11 @@ it('coalesces adjacent disclosures in both directions before signing [LIBID-PROV
     recv: openings.recv.map((o) => o.hash),
   })
   expect(
-    correlateAttestation(transcript, plan, openings, signed).decoded.received.revealed,
+    correlateAttestation('api.x.com', transcript, plan, openings, signed).decoded.received.revealed,
   ).toHaveLength(1)
   const changed = { ...transcript, recv: transcript.recv.slice() }
   changed.recv[3] ^= 1
-  expect(() => correlateAttestation(changed, plan, openings, signed)).toThrow(
+  expect(() => correlateAttestation('api.x.com', changed, plan, openings, signed)).toThrow(
     /revealed range changed/,
   )
 })

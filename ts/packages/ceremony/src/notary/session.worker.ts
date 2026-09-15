@@ -272,7 +272,13 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
         clearTimeout(timer)
       }
       const wire = decodeAttestationFrame(frame)
-      const { decoded } = correlateAttestation(transcript, plan, raw, wire.attestedData)
+      const { decoded } = correlateAttestation(
+        new URL(target).hostname,
+        transcript,
+        plan,
+        raw,
+        wire.attestedData,
+      )
       await io.close()
       prover.free()
       prover = undefined

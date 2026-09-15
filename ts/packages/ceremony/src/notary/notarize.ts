@@ -1,4 +1,5 @@
 import { sha256 } from '@noble/hashes/sha2.js'
+import { keccak_256 } from '@noble/hashes/sha3.js'
 import { bytesEqual } from '../primitives.js'
 import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
 import type { CommitmentOpening } from './session.js'
@@ -226,6 +227,7 @@ export function correlateOpenings(
 
 /** Validate TLSNotary openings against both the transcript and signed record. */
 export function correlateAttestation(
+  authority: string,
   transcript: Transcript,
   plan: NotarizationPlan,
   openings: RevealOutput,
@@ -233,6 +235,8 @@ export function correlateAttestation(
 ): CorrelatedAttestation {
   requireExactPlan(transcript, plan)
   const decoded = decodeAttestedData(attestedData)
+  if (!bytesEqual(decoded.authorityId, keccak_256(new TextEncoder().encode(authority))))
+    invalid('attested authority changed')
   if (
     decoded.sentTranscriptLength !== transcript.sent.length ||
     decoded.receivedTranscriptLength !== transcript.recv.length
