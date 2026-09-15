@@ -103,13 +103,8 @@ const navigate = (page: Page, url: string) =>
 
 /** Run an action that replaces the popup document and wait for the new one. */
 async function nextDocument(popup: Page, action: () => Promise<unknown>): Promise<void> {
-  const before = await popup.evaluate(() => performance.timeOrigin)
-  await action()
-  await expect
-    .poll(() => popup.evaluate(() => performance.timeOrigin).catch(() => before), {
-      timeout: 15_000,
-    })
-    .not.toBe(before)
+  await popup.waitForLoadState('domcontentloaded')
+  await Promise.all([popup.waitForEvent('domcontentloaded', { timeout: 15_000 }), action()])
 }
 
 async function expectPong(page: Page, n: number): Promise<Pong> {
