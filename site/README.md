@@ -1,46 +1,30 @@
 # libID website
 
-Plain HTML, CSS, and a small theme switch. No build step or runtime dependencies.
+One static site and Cloudflare Worker: landing page at `/`, Starlight at `/docs/`.
+Add Markdown/MDX with `title` frontmatter in [`docs/pages/`](../docs/pages/).
+Specs stay in `specs/`; their landing-page link is inactive for now.
 
-## Layout
+## Local
 
-- `../docs/` — documentation source content.
-- `../specs/` — protocol specification source content.
-- `public/` — published website files, including `/docs/` and `/specs/` placeholders.
-- `wrangler.jsonc` — Cloudflare Workers static assets configuration.
-
-Keep content in the root directories. Once a docs engine is chosen, configure it
-to read those sources and publish to `/docs/` and `/specs/`. Only `public/` is
-uploaded today; source documents are not published yet.
-
-## Preview and check
-
-From the repository root:
+Node.js 22.12+, pnpm 10.30.3. From the repository root:
 
 ```sh
-python3 -m http.server 8787 --bind 127.0.0.1 --directory site/public
-node site/theme.test.mjs
+pnpm -C site install --frozen-lockfile
+pnpm -C site dev
 ```
 
-Open <http://localhost:8787>. To preview Cloudflare's routing, run
-`npx wrangler@4 dev --config site/wrangler.jsonc` instead.
+Run `pnpm -C site build`, then `pnpm -C site preview` to test search.
+Run `pnpm -C site test` for theme checks.
 
-## Deploy
+## Cloudflare
 
-```sh
-npx wrangler@4 deploy --config site/wrangler.jsonc
-```
+Worker: **libid**. Root: `/`. Production branch: `main`.
+Environment: `NODE_VERSION=22`, `PNPM_VERSION=10.30.3`.
 
-For Cloudflare Workers Builds, use `site` as the root directory, leave the build
-command empty, and set the deploy command to `npx wrangler@4 deploy`. Set the
-Worker name to `libid`, or change it in the config. Connect the desired domain
-in the Worker settings after deployment.
+| Command | Value |
+| --- | --- |
+| Build | `pnpm -C site install --frozen-lockfile && pnpm -C site build` |
+| Deploy | `pnpm -C site run deploy` |
+| Non-production deploy | `pnpm -C site run deploy:preview` |
 
-Uses [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/);
-no Worker script is needed.
-
-## Font
-
-JetBrains Mono Regular is self-hosted from the official
-[v2.304 release](https://github.com/JetBrains/JetBrainsMono/tree/v2.304).
-Its SIL Open Font License is included in `public/fonts/OFL.txt`.
+Only `dist/` is deployed. The bundled JetBrains Mono license is in `public/fonts/OFL.txt`.

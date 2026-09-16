@@ -7,15 +7,14 @@ const script = readFileSync(new URL("public/theme.js", import.meta.url), "utf8")
 // Exercise saved preferences, both toggle directions, and blocked storage.
 for (const saved of [null, "dark", "light", "invalid", "blocked"]) {
   let stored = saved;
-  let click;
-  const button = {
+  const buttons = Array.from({ length: 2 }, () => ({
     hidden: true,
     setAttribute(name, value) { this[name] = value; },
-    addEventListener(event, listener) { click = listener; },
-  };
+    addEventListener(event, listener) { this.click = listener; },
+  }));
   const document = {
-    documentElement: { dataset: { theme: "dark" } },
-    querySelector: () => button,
+    documentElement: { dataset: {} },
+    querySelectorAll: () => buttons,
     addEventListener: (event, listener) => listener(),
   };
   runInNewContext(script, {
@@ -34,11 +33,14 @@ for (const saved of [null, "dark", "light", "invalid", "blocked"]) {
     },
   });
   const initial = saved === "light" ? "light" : "dark";
-  assert.equal(button.hidden, false);
+  let activeButton = 0;
   for (const expected of [initial, initial === "light" ? "dark" : "light", initial]) {
     assert.equal(document.documentElement.dataset.theme, expected);
-    assert.equal(button["aria-pressed"], String(expected === "light"));
-    click();
+    for (const button of buttons) {
+      assert.equal(button.hidden, false);
+      assert.equal(button["aria-pressed"], String(expected === "light"));
+    }
+    buttons[activeButton++ % buttons.length].click();
     if (saved !== "blocked") assert.equal(stored, document.documentElement.dataset.theme);
   }
 }

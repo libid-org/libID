@@ -1,0 +1,38 @@
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --sl-font: 'JetBrains Mono', monospace;
+  --sl-font-mono: var(--sl-font);
+  --sl-color-white: #eee9dc;
+  --sl-color-gray-1: #ddd7ca;
+  --sl-color-gray-2: #b2aea5;
+  --sl-color-gray-3: #8b877f;
+  --sl-color-gray-4: #514f49;
+  --sl-color-gray-5: #292827;
+  --sl-color-gray-6: #1c1b1a;
+  --sl-color-black: #0d0d0d;
+  --sl-color-accent-low: #292827;
+  --sl-color-accent: #b2aea5;
+  --sl-color-accent-high: #eee9dc;
+}
+
+:root[data-theme='light'] {
+  --sl-color-white: #0d0d0d;
+  --sl-color-gray-1: #292823;
+  --sl-color-gray-2: #514f49;
+  --sl-color-gray-3: #656158;
+  --sl-color-gray-4: #aaa497;
+  --sl-color-gray-5: #d5cfc2;
+  --sl-color-gray-6: #e3ded1;
+  --sl-color-gray-7: #e9e4d7;
+  --sl-color-black: #eee9dc;
+  --sl-color-accent-low: #e3ded1;
+  --sl-color-accent: #514f49;
+  --sl-color-accent-high: #0d0d0d;
+}
