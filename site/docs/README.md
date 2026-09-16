@@ -14,6 +14,8 @@ at **https://docs.lib.id**. The landing page remains a separate site and Worker.
   content loader and automatic sidebar.
 - `public/fonts` and `public/favicon.svg` — symlinks to the landing page's assets,
   including the font license. Astro copies them into the built site.
+- `public/theme.js` — shared landing-page theme toggle, used by the desktop and
+  mobile Starlight controls. Each origin remembers its own theme preference.
 - `dist/` — generated output, ignored by Git.
 
 ## Develop
