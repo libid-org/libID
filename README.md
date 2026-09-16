@@ -40,7 +40,7 @@ Besides the protocol specifications under [`specs/`](specs/), this repo
 carries the browser claim library and the integration harness:
 
 - [`site/`](site/) — the static project website and Cloudflare deployment
-  configuration. [`site/docs/`](site/docs/) runs Starlight at `docs.lib.id`,
+  configuration. Starlight serves the docs at `lib.id/docs/`,
   publishing Markdown from [`docs/pages/`](docs/pages/). Specification sources
   stay in `specs/`.
 - [`ts/packages/claim`](ts/packages/claim) — **`@libid/claim`**, the browser
