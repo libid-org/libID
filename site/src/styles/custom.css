@@ -36,3 +36,10 @@
   --sl-color-accent: #514f49;
   --sl-color-accent-high: #0d0d0d;
 }
+
+@media (min-width: 50rem) {
+  .site-title {
+    width: calc(var(--sl-sidebar-width) - 2 * var(--sl-nav-pad-x));
+    justify-content: center;
+  }
+}
