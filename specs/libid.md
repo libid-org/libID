@@ -1,3 +1,11 @@
+---
+title: libID protocol specification
+slug: specs
+sidebar:
+  label: Protocol overview
+  order: 1
+---
+
 # libID protocol specification
 
 Status: proposed normative libID protocol specification.

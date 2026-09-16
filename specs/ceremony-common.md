@@ -1,3 +1,9 @@
+---
+title: Common ceremony rules
+sidebar:
+  order: 2
+---
+
 # Common ceremony rules
 
 Part of the [libID protocol specification](libid.md).

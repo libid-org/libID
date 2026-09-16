@@ -1,3 +1,9 @@
+---
+title: Identity-platform ceremonies
+sidebar:
+  order: 3
+---
+
 # Identity-platform ceremonies
 
 Part of the [libID protocol specification](libid.md).

@@ -1,8 +1,8 @@
 # libID website
 
-One static site and Cloudflare Worker: landing page at `/`, Starlight at `/docs/`.
+One static site and Cloudflare Worker: landing page at `/`, Starlight at `/docs/` and `/specs/`.
 Add Markdown/MDX with `title` frontmatter in [`docs/pages/`](../docs/pages/).
-Specs stay in `specs/`; their landing-page link is inactive for now.
+Specs are published directly from [`specs/`](../specs/).
 
 ## Local
 
@@ -14,7 +14,7 @@ pnpm -C site dev
 ```
 
 Run `pnpm -C site build`, then `pnpm -C site preview` to test search.
-Run `pnpm -C site test` for theme checks.
+Run `pnpm -C site test` for theme and spec-link checks.
 
 ## Cloudflare
 
