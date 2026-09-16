@@ -8,7 +8,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "test": "node theme.test.mjs",
+    "test": "node theme.test.mjs && node specs.test.mjs",
     "deploy": "wrangler deploy",
     "deploy:preview": "wrangler versions upload"
   },
