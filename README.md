@@ -40,8 +40,9 @@ Besides the protocol specifications under [`specs/`](specs/), this repo
 carries the browser claim library and the integration harness:
 
 - [`site/`](site/) — the static project website and Cloudflare deployment
-  configuration. Documentation and specification sources stay in `docs/` and
-  `specs/`; the site currently provides placeholder pages for both.
+  configuration. [`site/docs/`](site/docs/) runs Starlight at `docs.lib.id`,
+  publishing Markdown from [`docs/pages/`](docs/pages/). Specification sources
+  stay in `specs/`.
 - [`ts/packages/claim`](ts/packages/claim) — **`@libid/claim`**, the browser
   library for the OAuth handle-claim flows. GitHub (backend-driven MPC-TLS),
   X (in-browser TLSNotary ProxyMode + a Noir/UltraHonk proof), and Google
