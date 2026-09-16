@@ -1,11 +1,11 @@
 ---
 import DefaultSidebar from '@astrojs/starlight/components/Sidebar.astro';
-const { siteTitleHref } = Astro.locals.starlightRoute;
+const isSpecs = Astro.url.pathname.startsWith('/specs/');
 ---
 
 <nav class="section-switch" aria-label="Documentation section">
-  <a href="/docs/" aria-current={siteTitleHref === '/docs/' ? 'true' : undefined}>Docs</a>
-  <a href="/specs/" aria-current={siteTitleHref === '/specs/' ? 'true' : undefined}>Specs</a>
+  <a href="/docs/" aria-current={!isSpecs ? 'true' : undefined}>Docs</a>
+  <a href="/specs/" aria-current={isSpecs ? 'true' : undefined}>Specs</a>
 </nav>
 <DefaultSidebar />
 

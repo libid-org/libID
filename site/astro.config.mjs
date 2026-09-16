@@ -8,7 +8,7 @@ export default defineConfig({
   markdown: { processor: unified({ remarkPlugins: [specMarkdown] }) },
   integrations: [
     starlight({
-      title: 'libID Docs',
+      title: 'libID',
       description: 'Every social account is already a multichain identity.',
       favicon: '/favicon.svg',
       customCss: ['./src/styles/custom.css'],
