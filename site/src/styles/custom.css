@@ -25,6 +25,10 @@
 
 .site-title { color: var(--logo); }
 
+.social-icons a { color: var(--text); }
+.social-icons a:hover,
+.social-icons a:focus-visible { color: var(--accent); }
+
 @media (min-width: 50rem) {
   .site-title {
     width: calc(var(--sl-sidebar-width) - 2 * var(--sl-nav-pad-x));
