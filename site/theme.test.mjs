@@ -7,6 +7,7 @@ const script = readFileSync(new URL("public/theme.js", import.meta.url), "utf8")
 // Exercise saved preferences, both toggle directions, and blocked storage.
 for (const saved of [null, "dark", "light", "invalid", "blocked"]) {
   let stored = saved;
+  const favicon = { href: "/favicon.svg" };
   const buttons = Array.from({ length: 2 }, () => ({
     hidden: true,
     setAttribute(name, value) { this[name] = value; },
@@ -14,6 +15,10 @@ for (const saved of [null, "dark", "light", "invalid", "blocked"]) {
   }));
   const document = {
     documentElement: { dataset: {} },
+    querySelector(selector) {
+      assert.equal(selector, 'link[rel~="icon"]');
+      return favicon;
+    },
     querySelectorAll: () => buttons,
     addEventListener: (event, listener) => listener(),
   };
@@ -36,6 +41,7 @@ for (const saved of [null, "dark", "light", "invalid", "blocked"]) {
   let activeButton = 0;
   for (const expected of [initial, initial === "light" ? "dark" : "light", initial]) {
     assert.equal(document.documentElement.dataset.theme, expected);
+    assert.equal(favicon.href, expected === "light" ? "/favicon-light.svg" : "/favicon.svg");
     for (const button of buttons) {
       assert.equal(button.hidden, false);
       assert.equal(button["aria-pressed"], String(expected === "light"));
