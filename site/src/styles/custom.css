@@ -9,15 +9,15 @@
 :root {
   --sl-font: 'JetBrains Mono', monospace;
   --sl-font-mono: var(--sl-font);
-  --sl-color-white: #fbf1c7;
-  --sl-color-gray-1: #ebdbb2;
-  --sl-color-gray-2: #d5c4a1;
-  --sl-color-gray-3: #a89984;
-  --sl-color-gray-4: #665c54;
-  --sl-color-gray-5: #504945;
-  --sl-color-gray-6: #3c3836;
-  --sl-color-black: #282828;
-  --sl-color-accent-low: #3c3836;
+  --sl-color-white: #fdf3cc;
+  --sl-color-gray-1: #e8ddc2;
+  --sl-color-gray-2: #e8ddc2;
+  --sl-color-gray-3: #948b7f;
+  --sl-color-gray-4: #71675c;
+  --sl-color-gray-5: #443b36;
+  --sl-color-gray-6: #231e1b;
+  --sl-color-black: #1c1714;
+  --sl-color-accent-low: #312a25;
   --sl-color-accent: #fabd2f;
   --sl-color-accent-high: #fabd2f;
 }

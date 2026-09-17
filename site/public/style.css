@@ -8,11 +8,11 @@
 
 :root {
   color-scheme: dark;
-  --background: #282828;
-  --glow: #32302f;
-  --text: #ebdbb2;
-  --muted: #bdae93;
-  --line: #504945;
+  --background: #1c1714;
+  --glow: #231e1b;
+  --text: #e8ddc2;
+  --muted: #948b7f;
+  --line: #443b36;
   --link: #fabd2f;
 }
 
