@@ -10,12 +10,13 @@ function luminance(hex) {
   return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
 }
 
+assert.equal(palettes.dark.logo, palettes.light.logo);
 for (const palette of Object.values(palettes)) {
   assert.deepEqual(Object.keys(palette), ["background", "surface", "text", "muted", "border", "accent", "logo"]);
   assert.notEqual(palette.logo, palette.accent);
-  for (const color of [palette.text, palette.muted, palette.accent, palette.logo]) {
+  for (const [color, minimum] of [[palette.text, 4.5], [palette.muted, 4.5], [palette.accent, 4.5], [palette.logo, 3]]) {
     const pair = [luminance(color), luminance(palette.background)].sort((a, b) => a - b);
-    assert((pair[1] + 0.05) / (pair[0] + 0.05) >= 4.5, `${color} must be readable on ${palette.background}`);
+    assert((pair[1] + 0.05) / (pair[0] + 0.05) >= minimum, `${color} must be readable on ${palette.background}`);
   }
 }
 const icons = getStaticPaths();

@@ -1,3 +1,5 @@
+const logo = '#b57614';
+
 export const palettes = {
   dark: {
     background: '#1c1714',
@@ -6,7 +8,7 @@ export const palettes = {
     muted: '#948b7f',
     border: '#443b36',
     accent: '#83a598',
-    logo: '#fabd2f',
+    logo,
   },
   light: {
     background: '#fbf1c7',
@@ -15,6 +17,6 @@ export const palettes = {
     muted: '#665c54',
     border: '#bdae93',
     accent: '#076678',
-    logo: '#906100',
+    logo,
   },
 };
