@@ -11,8 +11,9 @@ function luminance(hex) {
 }
 
 for (const palette of Object.values(palettes)) {
-  assert.deepEqual(Object.keys(palette), ["background", "surface", "text", "muted", "border", "accent"]);
-  for (const color of [palette.text, palette.muted, palette.accent]) {
+  assert.deepEqual(Object.keys(palette), ["background", "surface", "text", "muted", "border", "accent", "logo"]);
+  assert.notEqual(palette.logo, palette.accent);
+  for (const color of [palette.text, palette.muted, palette.accent, palette.logo]) {
     const pair = [luminance(color), luminance(palette.background)].sort((a, b) => a - b);
     assert((pair[1] + 0.05) / (pair[0] + 0.05) >= 4.5, `${color} must be readable on ${palette.background}`);
   }
@@ -24,7 +25,7 @@ for (const { props } of icons) {
   assert.equal(response.headers.get("Content-Type"), "image/svg+xml");
   const svg = await response.text();
   assert(svg.includes(`fill="${props.palette.background}"`));
-  assert(svg.includes(`stroke="${props.palette.accent}"`));
+  assert(svg.includes(`stroke="${props.palette.logo}"`));
 }
 
 const script = readFileSync(new URL("public/theme.js", import.meta.url), "utf8");

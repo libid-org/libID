@@ -23,6 +23,8 @@
   --sl-color-accent-high: var(--accent);
 }
 
+.site-title { color: var(--logo); }
+
 @media (min-width: 50rem) {
   .site-title {
     width: calc(var(--sl-sidebar-width) - 2 * var(--sl-nav-pad-x));

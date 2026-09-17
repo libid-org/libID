@@ -5,7 +5,8 @@ export const palettes = {
     text: '#e8ddc2',
     muted: '#948b7f',
     border: '#443b36',
-    accent: '#fabd2f',
+    accent: '#83a598',
+    logo: '#fabd2f',
   },
   light: {
     background: '#fbf1c7',
@@ -13,6 +14,7 @@ export const palettes = {
     text: '#3c3836',
     muted: '#665c54',
     border: '#bdae93',
-    accent: '#906100',
+    accent: '#076678',
+    logo: '#906100',
   },
 };

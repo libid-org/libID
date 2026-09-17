@@ -26,7 +26,7 @@ main { width: 100%; text-align: center; }
 h1 { margin: 0; font-size: clamp(2.5rem, 8vw, 4rem); font-weight: 400; }
 
 .wordmark {
-  color: var(--accent);
+  color: var(--logo);
   font-size: clamp(5rem, 15vw, 8rem);
   line-height: 1.15;
   letter-spacing: -0.075em;
