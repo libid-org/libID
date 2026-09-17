@@ -9,39 +9,19 @@
 :root {
   --sl-font: 'JetBrains Mono', monospace;
   --sl-font-mono: var(--sl-font);
-  --sl-color-white: #fdf3cc;
-  --sl-color-gray-1: #e8ddc2;
-  --sl-color-gray-2: #e8ddc2;
-  --sl-color-gray-3: #948b7f;
-  --sl-color-gray-4: #71675c;
-  --sl-color-gray-5: #443b36;
-  --sl-color-gray-6: #231e1b;
-  --sl-color-black: #1c1714;
-  --sl-color-accent-low: #312a25;
-  --sl-color-accent: #fabd2f;
-  --sl-color-accent-high: #fabd2f;
+  --sl-color-white: var(--text);
+  --sl-color-gray-1: var(--text);
+  --sl-color-gray-2: var(--text);
+  --sl-color-gray-3: var(--muted);
+  --sl-color-gray-4: color-mix(in srgb, var(--muted), var(--border));
+  --sl-color-gray-5: var(--border);
+  --sl-color-gray-6: var(--surface);
+  --sl-color-gray-7: var(--surface);
+  --sl-color-black: var(--background);
+  --sl-color-accent-low: var(--surface);
+  --sl-color-accent: var(--accent);
+  --sl-color-accent-high: var(--accent);
 }
-
-:root[data-theme='light'] {
-  --sl-color-white: #282828;
-  --sl-color-gray-1: #3c3836;
-  --sl-color-gray-2: #504945;
-  --sl-color-gray-3: #665c54;
-  --sl-color-gray-4: #a89984;
-  --sl-color-gray-5: #bdae93;
-  --sl-color-gray-6: #ebdbb2;
-  --sl-color-gray-7: #f2e5bc;
-  --sl-color-black: #fbf1c7;
-  --sl-color-accent-low: #f2e5bc;
-  --sl-color-accent: #af3a03;
-  --sl-color-accent-high: #af3a03;
-}
-
-.site-title {
-  color: #fabd2f;
-}
-
-:root[data-theme='light'] .site-title { color: #b57614; }
 
 @media (min-width: 50rem) {
   .site-title {
