@@ -1,3 +1,7 @@
+---
+import ThemeProvider from '../components/ThemeProvider.astro';
+---
+
 <!doctype html>
 <html lang="en" data-theme="dark">
   <head>
@@ -8,7 +12,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preload" href="/fonts/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/style.css">
-    <script is:inline src="/theme.js"></script>
+    <ThemeProvider />
   </head>
   <body>
     <button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false" hidden>

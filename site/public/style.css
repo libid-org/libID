@@ -6,24 +6,6 @@
   font-display: swap;
 }
 
-:root {
-  color-scheme: dark;
-  --background: #0d0d0d;
-  --glow: #1c1b1a;
-  --text: #eee9dc;
-  --muted: #b2aea5;
-  --line: #514f49;
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-  --background: #eee9dc;
-  --glow: #e3ded1;
-  --text: #0d0d0d;
-  --muted: #514f49;
-  --line: #b2aea5;
-}
-
 * { box-sizing: border-box; }
 
 body {
@@ -32,7 +14,7 @@ body {
   display: grid;
   place-items: center;
   padding: 6rem 1.5rem;
-  background: radial-gradient(ellipse at 50% 42%, var(--glow), transparent 70%), var(--background);
+  background: radial-gradient(ellipse at 50% 42%, var(--surface), transparent 70%), var(--background);
   color: var(--text);
   font-family: "JetBrains Mono", monospace;
   font-weight: 400;
@@ -44,6 +26,7 @@ main { width: 100%; text-align: center; }
 h1 { margin: 0; font-size: clamp(2.5rem, 8vw, 4rem); font-weight: 400; }
 
 .wordmark {
+  color: var(--logo);
   font-size: clamp(5rem, 15vw, 8rem);
   line-height: 1.15;
   letter-spacing: -0.075em;
@@ -59,19 +42,25 @@ h1 { margin: 0; font-size: clamp(2.5rem, 8vw, 4rem); font-weight: 400; }
   text-wrap: balance;
 }
 
-nav { display: flex; justify-content: center; gap: 0.75rem; margin-top: 2.5rem; }
+nav { display: flex; justify-content: center; gap: 2rem; margin-top: 2rem; }
 
-a {
+nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 6rem;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
   color: var(--text);
-  font-size: 0.875rem;
+  font-size: 1rem;
   line-height: 1.5;
-  text-decoration: none;
-  padding: 0.75rem 0.875rem;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--text) 3%, transparent);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.4em;
 }
 
-a:hover, a:focus-visible { background: color-mix(in srgb, var(--text) 7%, transparent); }
+nav a:hover, nav a:focus-visible { text-decoration-color: currentColor; }
 
 :focus-visible { outline: 2px solid var(--text); outline-offset: 6px; }
 
@@ -93,7 +82,7 @@ a:hover, a:focus-visible { background: color-mix(in srgb, var(--text) 7%, transp
 
 .theme-toggle[hidden] { display: none; }
 .theme-toggle svg { width: 20px; height: 20px; }
-.theme-toggle:hover { color: var(--text); border-color: var(--line); }
+.theme-toggle:hover { color: var(--text); border-color: var(--border); }
 .theme-toggle[aria-pressed="true"] { color: var(--text); }
 
 @media (max-width: 480px) {

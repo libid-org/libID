@@ -3,6 +3,7 @@
 One static site and Cloudflare Worker: landing page at `/`, Starlight at `/docs/` and `/specs/`.
 Add Markdown/MDX with `title` frontmatter in [`docs/pages/`](../docs/pages/).
 Specs are published directly from [`specs/`](../specs/).
+Six UI colors per theme and one shared logo color live in [`src/palette.mjs`](src/palette.mjs), used by all pages and generated favicons.
 
 ## Local
 
