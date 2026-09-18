@@ -79,11 +79,7 @@ export function decodePrintable(value: Uint8Array, name: string, maximum: number
   if (value.length === 0 || value.length > maximum) return invalid(`${name} length is invalid`)
   for (const byte of value)
     if (byte < 0x20 || byte > 0x7e) invalid(`${name} is not printable ASCII`)
-  try {
-    return decoder.decode(value)
-  } catch {
-    return invalid(`${name} is not ASCII`)
-  }
+  return decoder.decode(value)
 }
 
 /** Read the fully disclosed request, with Content-Length bound to its complete body. */

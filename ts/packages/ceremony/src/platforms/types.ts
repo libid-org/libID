@@ -14,7 +14,7 @@ export const proofBytes = (v: unknown): v is Uint8Array =>
 export function isIdentity<P extends PlatformId>(
   v: unknown,
   platform: P,
-  limits = [512, 255, 255],
+  limits: readonly [number, number, number],
 ): v is Identity<P> {
   return (
     isRecord(v) &&

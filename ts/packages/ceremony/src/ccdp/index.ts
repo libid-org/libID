@@ -138,5 +138,3 @@ export const IdentityProof = {
     return value as unknown as IdentityProof
   },
 } as const satisfies MessageType<IdentityProof>
-
-export type CCDPMessage = ProveIdentity | IdentityProof | UserDenied | CeremonyFailed | Event

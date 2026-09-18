@@ -67,9 +67,8 @@ export function buildTokenRequest(input: TokenRequestInput): ExactHttpRequest {
   return {
     url: 'https://api.x.com/2/oauth2/token',
     method: 'POST',
-    // Concrete launch encoding qualified by the reclaimed-notary PoC. The
-    // attested TLS server identity, not this prover-written Host field, is
-    // the verifier's authority input.
+    // The attested TLS server identity, not this prover-written Host field,
+    // is the verifier's authority input.
     headers: {
       Host: ascii('api.x.com'),
       'Content-Type': ascii('application/x-www-form-urlencoded'),

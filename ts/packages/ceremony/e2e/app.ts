@@ -60,7 +60,6 @@ anchor.addEventListener('click', (event) => {
     new Uint8Array([1]),
   )
   anchor.href = ceremony.launchUrl
-  Object.assign(window, { cancel: () => connection!.close(), ceremony })
   ceremony.onEvent((event) => {
     run.events.push(event)
     window.events.push(event)

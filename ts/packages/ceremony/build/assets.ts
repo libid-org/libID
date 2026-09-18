@@ -235,7 +235,6 @@ export async function resolveAssets() {
     local,
     bodyHashes,
     sizes,
-    hashBody: hash,
     requestsByProfile: {} as Record<string, AssetRequest[]>,
     allowedRequests: [] as AssetRequest[],
   }

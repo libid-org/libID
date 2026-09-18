@@ -33,8 +33,7 @@ mkdirSync(join(staging, 'public'), { recursive: true })
 
 try {
   const data = await resolveAssets(),
-    records = new Map<string, { bytes: Buffer; headers: Record<string, string> }>(),
-    workerFiles = new Set<string>()
+    records = new Map<string, { bytes: Buffer; headers: Record<string, string> }>()
   const options = {
     externalOrigins: [
       ...new Set(
@@ -65,7 +64,6 @@ try {
   }
   for (const [path, record] of data.local) put(path, record.bytes, record.headers)
   const emitted = await bundle('src/ccdp/documents/prover.ts', data, { invoke: 'startProver' })
-  for (const path of emitted.workerFiles) workerFiles.add(path)
   const graph = emitted.graph
   const workerProfile = (file: string): ResponseProfile => {
     const modules = graph.get(file)?.modules ?? []
@@ -77,7 +75,7 @@ try {
       put(
         `/${item.fileName}`,
         item.type === 'chunk' ? item.code : item.source,
-        workerFiles.has(item.fileName) && item.fileName.endsWith('.js')
+        emitted.workerFiles.has(item.fileName) && item.fileName.endsWith('.js')
           ? workerProfile(item.fileName)
           : 'asset',
       )
@@ -135,8 +133,7 @@ try {
   if (!primary) throw new Error('Missing Prover entry')
   const document = (path: string, code: string, profile: ResponseProfile) => {
     const capture = `(()=>{const query=location.search,fragment=location.hash,path=location.pathname;history.replaceState(null,'',path);if(query||path!==${JSON.stringify(path)}||fragment.length>65536){document.getElementById('libid-root').textContent=${JSON.stringify(messages.returnToApplication(messages.unableToContinue))};return}Object.defineProperty(window,'__libidCeremonyInput',{value:fragment,configurable:true})})()`
-    const entry = code
-    const scripts = [capture, entry].map((s) => s.replace(/<\/script/gi, '<\\/script'))
+    const scripts = [capture, code].map((s) => s.replace(/<\/script/gi, '<\\/script'))
     put(
       path,
       `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${messages.brand}</title><body><main id="libid-root"></main><script>${scripts[0]}</script><script type="module">${scripts[1]}</script></body></html>`,
@@ -196,7 +193,7 @@ try {
     }
   }
   const files = writeDistribution(staging, records)
-  // Qualification metadata belongs to this output, outside public/ and the deployment image.
+  // Keep graph metadata outside public/; the image retains it for subsequent builds.
   writeFileSync(
     join(staging, 'distribution-graph.json'),
     JSON.stringify({

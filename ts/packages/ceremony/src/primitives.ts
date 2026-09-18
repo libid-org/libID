@@ -2,27 +2,12 @@
 // when its consumers span two or more entrypoint bundles (client, popup,
 // prover); anything narrower lives beside its one consumer.
 
-const B64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
-
-const B64URL_REV = new Int8Array(128).fill(-1)
-
-for (let i = 0; i < B64URL.length; i++) B64URL_REV[B64URL.charCodeAt(i)] = i
-
 /** Encode bytes as canonical unpadded base64url. */
 export function b64urlEncode(bytes: Uint8Array): string {
-  let out = ''
-  let acc = 0
-  let bits = 0
-  for (const byte of bytes) {
-    acc = (acc << 8) | byte
-    bits += 8
-    while (bits >= 6) {
-      bits -= 6
-      out += B64URL[(acc >> bits) & 0x3f]
-    }
-  }
-  if (bits > 0) out += B64URL[(acc << (6 - bits)) & 0x3f]
-  return out
+  return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
 }
 
 /**
@@ -31,24 +16,11 @@ export function b64urlEncode(bytes: Uint8Array): string {
  * rejected. Returns null instead of throwing — every caller is a validator.
  */
 export function b64urlDecode(s: string): Uint8Array | null {
-  if (s.length % 4 === 1) return null
-  const out = new Uint8Array(Math.floor((s.length * 3) / 4))
-  let acc = 0
-  let bits = 0
-  let o = 0
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i)
-    const v = c < 128 ? B64URL_REV[c] : -1
-    if (v < 0) return null
-    acc = ((acc << 6) | v) & 0x3fff
-    bits += 6
-    if (bits >= 8) {
-      bits -= 8
-      out[o++] = (acc >> bits) & 0xff
-    }
-  }
-  if (bits > 0 && (acc & ((1 << bits) - 1)) !== 0) return null
-  return out
+  if (/[^A-Za-z0-9_-]/.test(s) || s.length % 4 === 1) return null
+  const bytes = Uint8Array.from(atob(s.replaceAll('-', '+').replaceAll('_', '/')), (c) =>
+    c.charCodeAt(0),
+  )
+  return b64urlEncode(bytes) === s ? bytes : null
 }
 
 /** Byte equality. Not constant-time; never used to compare secrets. */
