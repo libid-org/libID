@@ -20,6 +20,8 @@ specifications.
   invariants shared by every identity platform.
 - [Identity-platform ceremonies](platform-ceremonies.md) define the launch
   profiles for Google, X, and GitHub.
+- [Chain profiles](chain-profiles.md) define what those constructions commit
+  on one destination chain.
 
 ## System model and specification ownership
 
@@ -87,7 +89,7 @@ root and verifier.
 | Subject | Single normative owner |
 |---|---|
 | Authorization Digest, PKCE, extraction, client binding, evidence time | [Common ceremony rules](ceremony-common.md) |
-| Chain ID, Transaction Author, Block Time, and transaction-data encoding | consumer protocol Chain Profile |
+| Chain ID, Transaction Author, Block Time, and transaction-data encoding | [Chain profiles](chain-profiles.md), with the Consumer's protocol fixing each transaction kind's arguments |
 | Platform endpoints, fields, trust roots, and proof projections | [Identity-platform ceremonies](platform-ceremonies.md) |
 | Redirect transport, interruption behavior, and UI control flow | browser architecture |
 | Transaction dispatch and author authentication | Consumer protocol |
