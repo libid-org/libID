@@ -44,8 +44,10 @@ what that transaction means. [Common §5.1](ceremony-common.md#51-verification-p
 owns this path.
 
 The application operator controls its frontend, redirect deployment, OAuth
-clients, and GitHub Token Service, but is not trusted to choose identity fields,
-change the proof-bound operation, or widen proof validity. The identity platform
+registrations and public application credentials, but is not trusted to choose
+identity fields, change the proof-bound operation, or widen proof validity.
+GitHub token exchange and identity notarization run in the browser; there is
+no confidential exchange service. The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
 transcripts and their creation times. Verifier governance selects accepted
 verifier artifacts, trust roots, and protocol parameters. The Consumer Chain
