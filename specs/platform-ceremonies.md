@@ -550,7 +550,9 @@ REQ-PLAT-56A does not forbid.
 - REQ-PLAT-56C (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject a head carrying a line feed not preceded by
   a carriage return, a carriage return not followed by a line feed, a line
-  beginning with a space or a tab, or a line with no colon. Necessity: a
+  beginning with a space or a tab, or a header field line with no colon.
+  The colon requirement excludes the separately validated request line and the
+  empty line terminating the head. Necessity: a
   parser accepting a bare line feed, a bare carriage return or a fold ends the
   head somewhere this one does not, moving bytes between head and body, and a
   line no colon splits is not a header field, so a parser that tolerates one
@@ -1173,7 +1175,8 @@ Platform Verifier, Notary Service, Consumer.
   count that is not the body's length, is not decimal digits, or carries a
   leading zero, and accepts the count wherever it sits in the head; and it
   rejects a head carrying a bare line feed, a bare carriage return, an
-  obsolete line fold, or a line with no colon.
+  obsolete line fold, or a header field line with no colon. An otherwise valid
+  request with a colon-free request line and its terminating empty line passes.
 - TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52):
   An opened bearer range that is empty, over 4096 bytes, or outside printable
   ASCII fails to prove; a revealed identity response missing `id` or the
