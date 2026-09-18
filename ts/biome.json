@@ -10,11 +10,9 @@
       "!packages/claim-full/assets",
       "!packages/ceremony/.cache",
       "!packages/ceremony/dist-artifacts",
-      "!packages/ceremony/test-results",
-      "!packages/ceremony/playwright-report",
-      "!apps/dev/.cache",
-      "!apps/dev/test-results",
-      "!apps/dev/playwright-report"
+      "!**/test-results",
+      "!**/playwright-report",
+      "!apps/dev/.cache"
     ]
   },
   "formatter": {
