@@ -1,0 +1,101 @@
+# @libid/dev
+
+Local application for testing real ceremonies with the OAuth Bridge, notary and
+CCDP distribution. It uses a synthetic ledger fixture and submits no transactions.
+
+## Run
+
+Use the workspace's Node and pnpm setup, plus Docker with Compose. Docker Desktop
+on macOS needs amd64 emulation for the notary image. No host Rust toolchain or
+local certificates are needed.
+
+From the TypeScript workspace:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Open **http://localhost:4691**. The command builds dependencies and CCDP, starts
+Docker services, waits for Bridge readiness, then starts the frontend. The first
+build takes longer; later launches reuse cached downloads and container layers.
+Ctrl-C stops the app and that checkout's containers.
+
+| Service | Local URL |
+|---|---|
+| Application | http://localhost:4691 |
+| OAuth Bridge | http://localhost:4682 |
+| CCDP | http://localhost:4683 |
+| Notary HTTP/WebSocket | http://localhost:4687 |
+
+These are separate browser origins. Ports are fixed and services bind to loopback.
+
+## Configure and develop
+
+Edit configuration directly where it is used:
+
+- [compose.yaml](compose.yaml): services.
+- [bridge-config.toml](bridge-config.toml): Bridge configuration and development OAuth credentials.
+- [src/app.ts](src/app.ts): Bridge/CCDP URLs and the local ledger/notary fixture.
+- [vite.config.ts](vite.config.ts): frontend port.
+
+The setup includes shared development OAuth credentials and a public development
+notary signing key; no environment file is needed. Bridge publishes the GitHub
+`clientCredential` from its platform configuration. OAuth registrations must use
+**`http://localhost:4682/auth/callback`**. To connect another application, add its
+exact origin to `allowed_app_origins` in `bridge-config.toml`.
+
+Frontend edits reload through Vite. After changing ceremony or popup source,
+run this in another terminal while `pnpm dev` stays running:
+
+```sh
+pnpm dev:ccdp
+```
+
+It rebuilds the packages and static distribution, then recreates only CCDP.
+Bridge, notary and the app stay running; no Docker images are built. Refresh
+the app and start a fresh ceremony to use updated Prover/Prefetch code.
+Bridge caches Callback for up to five minutes, so restart `pnpm dev` after
+Callback changes to apply them immediately. Also restart after changing service
+configuration or dependency images; unchanged Bridge builds reuse Docker layers.
+
+To run services and frontend separately:
+
+```sh
+pnpm dev:services
+# Another terminal:
+pnpm dev:app
+```
+
+Choose a platform and complete provider consent. Multiple ceremonies can run at
+once, including for the same platform. Each history row has its own status and
+Close button. Success and denial close only that run’s popup automatically;
+failed popups remain open for DevTools inspection and can be closed with the same
+button while its connection remains usable. The Close control disappears when
+the connection ends. Reported closure marks the run Interrupted; detected
+transport failure reports its error. With a native-anchor launch, Close becomes
+available after the popup authenticates and can be controlled.
+Results are available in `window.results`, a Map keyed by each row's
+`data-ceremony-id`. See the [manual qualification checkpoints](../../packages/ceremony/docs/testing.md#manual-consent-and-device-checks); the displayed outcomes alone do not establish cryptographic verification.
+
+## Checks
+
+```sh
+pnpm --filter @libid/dev typecheck
+pnpm --filter @libid/dev... build
+pnpm --filter @libid/dev test:e2e
+```
+
+The browser tests use port 4692 and cover frontend behavior with intercepted
+responses. Real OAuth and proving checks are documented in the
+[ceremony qualification guide](../../packages/ceremony/docs/qualification.md).
+
+Run history shows core operation durations from their occurrence timestamps, plus
+total ceremony time. The status uses the package’s stage
+projection. Timings freeze at the terminal outcome and clear on page reload;
+interrupted operations are marked, and overlapping durations are not added together.
+
+When isolation fallback occurs, **Prover fallback** shows navigation through Prover
+readiness, using `prover-fallback` and `prover.started` occurrence timestamps. It
+excludes work before navigation and does not measure the difference from a run
+without fallback. Direct runs have no fallback row.

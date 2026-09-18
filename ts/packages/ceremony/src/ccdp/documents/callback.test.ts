@@ -1,0 +1,264 @@
+import { type ConnectionEnd, PopupError } from '@libid/popup'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { Events } from '../../events.js'
+import { popupErrorMessages } from '../ui-messages.js'
+import { startCallback } from './callback.js'
+
+const { accept, current, view, navigate, send, terminal } = vi.hoisted(() => ({
+  accept: vi.fn(),
+  current: vi.fn(),
+  view: vi.fn(),
+  navigate: vi.fn(),
+  send: vi.fn(),
+  terminal: vi.fn(),
+}))
+
+vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
+
+vi.mock('@libid/popup', async (original) => ({
+  ...(await original<typeof import('@libid/popup')>()),
+  PopupConnection: { accept },
+  PopupWindow: { current },
+}))
+
+vi.mock('./ui.js', () => ({
+  view,
+  eventView: (events: Events) => {
+    events.onEvent(terminal)
+    return { stop: vi.fn(), message: vi.fn() }
+  },
+}))
+
+const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+
+const v1Inputs = [['https://app.test', 'https://ccdp.test'], 'https://ccdp.test']
+
+let peerOrigin: string | null,
+  config: unknown,
+  locationInput: { search: string; hash: string; pathname: string; origin: string }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  peerOrigin = 'https://app.test'
+  config = v1Inputs
+  locationInput = {
+    search: '',
+    hash: `#state=v1.${id}&error=access_denied`,
+    pathname: '/callback',
+    origin: 'https://bridge.test',
+  }
+  vi.stubGlobal('location', locationInput)
+  vi.stubGlobal('history', {
+    replaceState: vi.fn(() => {
+      locationInput.search = ''
+      locationInput.hash = ''
+    }),
+  })
+  vi.stubGlobal('document', { getElementById: () => ({ textContent: JSON.stringify(config) }) })
+  view.mockImplementation(() => {
+    expect(locationInput.search + locationInput.hash).toBe('')
+  })
+  accept.mockImplementation(() => {
+    expect(locationInput.search + locationInput.hash).toBe('')
+    return {
+      peerOrigin,
+      ready: Promise.resolve(),
+      closed: new Promise(() => {}),
+      on: vi.fn(),
+      navigate,
+      send,
+    }
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
+
+it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010]', async () => {
+  const original = locationInput.hash
+  peerOrigin = 'https://other-app.test'
+  config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']
+  startCallback()
+  await Promise.resolve()
+  expect(accept).toHaveBeenCalledWith(undefined, {
+    fallback: undefined,
+    connectionId: id,
+    allowedApplicationOrigins: ['https://other-app.test', 'https://other-ccdp.test'],
+  })
+  expect(navigate).toHaveBeenCalledWith(
+    'https://other-ccdp.test/ccdp/v1/prover',
+    new URLSearchParams({
+      ceremonyId: id,
+      applicationOrigin: 'https://other-app.test',
+      oauthQuery: '',
+      oauthFragment: original,
+    }),
+  )
+  expect(send).toHaveBeenCalledExactlyOnceWith({
+    type: 'event',
+    event: 'authorization',
+    phase: 'finished',
+    timestamp: expect.any(Number),
+  })
+  expect(send.mock.invocationCallOrder[0]).toBeLessThan(navigate.mock.invocationCallOrder[0])
+})
+
+it.each(['2', '99', '99999999999999999999'])(
+  'rejects unbundled/retired version %s locally [LIBID-ASSET-015]',
+  (version) => {
+    locationInput.hash = `#state=v${version}.${id}`
+    startCallback()
+    expect(view).toHaveBeenCalledWith(expect.stringContaining('no longer supported'))
+    expect(accept).not.toHaveBeenCalled()
+    expect(current).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+  },
+)
+
+it.each([
+  { search: `?state=v1.${id}`, hash: `#state=v1.${id}` },
+  { hash: `#state=v01.${id}` },
+  { hash: `#state=v0.${id}` },
+  { hash: `#state=v1.${id.toUpperCase()}` },
+  { hash: '#state=v1.invalid' },
+  { hash: `#state=v1.${id}%FF` },
+  { hash: '#code=x' },
+  { hash: `#${'x'.repeat(32768)}` },
+])('clears malformed or oversized return before fixed local failure [KIT-010]', (input) => {
+  Object.assign(locationInput, input)
+  startCallback()
+  expect(view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
+  expect(accept).not.toHaveBeenCalled()
+})
+
+it.each(
+  [
+    null,
+    {},
+    { versionedInputs: { 1: v1Inputs } },
+    [],
+    [['https://app.test']],
+    [[], 'https://ccdp.test'],
+    [['https://app.test'], 'https://ccdp.test'], // Missing effective CCDP admission.
+    [['https://app.test', 'https://app.test'], 'https://ccdp.test'],
+    [['https://app.test/path'], 'https://ccdp.test'],
+    [['https://app.test'], 'https://ccdp.test/path'],
+    ['https://app.test', 'https://ccdp.test'],
+    [[null], 'https://ccdp.test'],
+    [['https://app.test'], null],
+  ].map((input) => ({ input })),
+)('rejects malformed deployment data before connection setup [KIT-010]', ({ input }) => {
+  config = input
+  startCallback()
+  expect(view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
+  expect(accept).not.toHaveBeenCalled()
+})
+
+it('clears a double-slash callback path without treating it as another host [CSP-005]', () => {
+  locationInput.pathname = '//auth/callback'
+  startCallback()
+  expect(history.replaceState).toHaveBeenCalledWith(null, '', 'https://bridge.test//auth/callback')
+  expect(accept).toHaveBeenCalledOnce()
+})
+
+it.each([[], [null], [{ optional: { nested: [1, 2] } }]].map((trailing) => ({ trailing })))(
+  'ignores optional trailing inputs and deeply freezes the parsed list [LIBID-ASSET-015] [KIT-010]',
+  async ({ trailing }) => {
+    config = [...v1Inputs, ...trailing]
+    const parse = vi.spyOn(JSON, 'parse')
+    try {
+      startCallback()
+      await Promise.resolve()
+      const inputs = parse.mock.results[0].value
+      expect(Object.isFrozen(inputs)).toBe(true)
+      expect(Object.isFrozen(inputs[0])).toBe(true)
+      if (inputs[2]?.optional) {
+        expect(Object.isFrozen(inputs[2].optional.nested)).toBe(true)
+        expect(() => inputs[2].optional.nested.push(3)).toThrow()
+      }
+      expect(accept).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({
+          allowedApplicationOrigins: ['https://app.test', 'https://ccdp.test'],
+        }),
+      )
+      expect(navigate).toHaveBeenCalledWith(
+        'https://ccdp.test/ccdp/v1/prover',
+        expect.any(URLSearchParams),
+      )
+    } finally {
+      parse.mockRestore()
+    }
+  },
+)
+
+it('does not prevent private navigation when the advisory readiness send fails', async () => {
+  send.mockImplementationOnce(() => {
+    throw new Error('transport send failure')
+  })
+  startCallback()
+  await Promise.resolve()
+  expect(navigate).toHaveBeenCalledOnce()
+})
+
+it('takes the selected peer from authentication, never from OAuth fields or allowlist order [TEST-CCDP-04]', async () => {
+  config = [
+    ['https://other-app.test', 'https://app.test', 'https://ccdp.test'],
+    'https://ccdp.test',
+  ]
+  locationInput.hash += '&applicationOrigin=https%3A%2F%2Fother-app.test'
+  startCallback()
+  await Promise.resolve()
+  const fragment = navigate.mock.calls[0][1] as URLSearchParams
+  expect(fragment.get('applicationOrigin')).toBe('https://app.test')
+  expect(fragment.get('oauthFragment')).toContain('applicationOrigin=')
+})
+
+it.each([null, 'null', 'https://app.test/'])(
+  'fails locally when the authenticated peer origin is unavailable or invalid: %s [TEST-CCDP-04]',
+  async (value) => {
+    peerOrigin = value
+    startCallback()
+    await vi.waitFor(() => expect(console.error).toHaveBeenCalled())
+    expect(navigate).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+  },
+)
+
+it.each(['ready-first', 'closed-first'])(
+  'keeps the connection failure visible locally when Application is unreachable: %s [TEST-CCDP-08]',
+  async (order) => {
+    const error = new PopupError('fallback-unavailable')
+    let rejectReady!: (error: Error) => void
+    let close!: (end: ConnectionEnd) => void
+    accept.mockReturnValueOnce({
+      peerOrigin: null,
+      ready: new Promise<void>((_, reject) => {
+        rejectReady = reject
+      }),
+      closed: new Promise<ConnectionEnd>((resolve) => {
+        close = resolve
+      }),
+      navigate,
+      send,
+    })
+    startCallback()
+    if (order === 'ready-first') rejectReady(error)
+    close({ outcome: 'failed', code: error.code })
+    if (order === 'closed-first') rejectReady(error)
+    await vi.waitFor(() =>
+      expect(terminal).toHaveBeenCalledWith({
+        status: 'failed',
+        event: 'authorization',
+        message: popupErrorMessages[error.code],
+        timestamp: expect.any(Number),
+      }),
+    )
+    expect(navigate).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+    expect(console.error).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
+  },
+)

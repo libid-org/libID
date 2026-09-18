@@ -102,17 +102,9 @@ const navigate = (page: Page, url: string) =>
   )
 
 /** Run an action that replaces the popup document and wait for the new one. */
-async function nextDocument(
-  popup: Page,
-  action: () => Promise<unknown> = async () => {},
-): Promise<void> {
-  const before = await popup.evaluate(() => performance.timeOrigin)
-  await action()
-  await expect
-    .poll(() => popup.evaluate(() => performance.timeOrigin).catch(() => before), {
-      timeout: 15_000,
-    })
-    .not.toBe(before)
+async function nextDocument(popup: Page, action: () => Promise<unknown>): Promise<void> {
+  await popup.waitForLoadState('domcontentloaded')
+  await Promise.all([popup.waitForEvent('domcontentloaded', { timeout: 15_000 }), action()])
 }
 
 async function expectPong(page: Page, n: number): Promise<Pong> {
@@ -341,7 +333,7 @@ test('[POPUP-KEEPER-003] [POPUP-CONNECTION-003] a long non-participating hop exp
   const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
   await nextDocument(popup, () => navigate(page, `${POPUP}/external?delay=5500&next=${next}`))
   await expect(popup.locator('#status')).toHaveText('external')
-  await nextDocument(popup)
+  await nextDocument(popup, () => popup.getByRole('button', { name: 'Return' }).click())
   await expect(popup.locator('#status')).toHaveText('connected')
   // Expired in the worker: the fresh document found nothing and used its opener.
   expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
@@ -372,8 +364,8 @@ test('[POPUP-KEEPER-003] a short non-participating hop keeps the port', async ({
   await expectPong(page, 0)
   await popup.evaluate(() => navigator.serviceWorker.ready)
   const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
-  await nextDocument(popup, () => navigate(page, `${POPUP}/external?delay=200&next=${next}`))
-  await nextDocument(popup)
+  await nextDocument(popup, () => navigate(page, `${POPUP}/external?next=${next}`))
+  await nextDocument(popup, () => popup.getByRole('button', { name: 'Return' }).click())
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(await diag(popup)).toEqual(['carrier-restored'])
   await ping(page, 6)
@@ -454,9 +446,9 @@ test('[POPUP-CONTROL-005] navigateAway leaves for a provider page directly and t
   await expectPong(page, 0)
   await popup.evaluate(() => navigator.serviceWorker.ready)
   const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
-  await nextDocument(popup, () => navigateAway(page, `${POPUP}/external?delay=200&next=${next}`))
+  await nextDocument(popup, () => navigateAway(page, `${POPUP}/external?next=${next}`))
   expect((await diag(page)).at(-1)).toBe('control-direct')
-  await nextDocument(popup)
+  await nextDocument(popup, () => popup.getByRole('button', { name: 'Return' }).click())
   await expect(popup.locator('#status')).toHaveText('connected')
   // Nothing was kept: the returning document found no port and used its opener.
   expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
@@ -478,10 +470,10 @@ test('[POPUP-CONTROL-005] popup-side navigateAway keeps no port', async ({ page 
           url: url.split('#')[0],
           fragment: url.split('#')[1] ?? '',
         }),
-      `${POPUP}/external?delay=200&next=${next}`,
+      `${POPUP}/external?next=${next}`,
     ),
   )
-  await nextDocument(popup)
+  await nextDocument(popup, () => popup.getByRole('button', { name: 'Return' }).click())
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(await diag(popup)).toEqual(['claim-empty', 'carrier-message-port'])
 })
@@ -527,12 +519,32 @@ test('[POPUP-CONNECTION-010] a reply sent before navigate reaches the popup befo
   expect(await diag(popup)).toEqual(['carrier-message-port'])
 })
 
+/** Isolation tests need the keeper installed before their automatic handoff. */
+async function prepareKeeper(page: Page, nestedScope: string): Promise<void> {
+  await page.goto(`${POPUP}/health`)
+  await page.evaluate(async (scope) => {
+    await Promise.all(
+      ['/', scope].map((scope) => navigator.serviceWorker.register('/sw.js', { scope })),
+    )
+  }, nestedScope)
+  await expect
+    .poll(() =>
+      page.evaluate(async () =>
+        (await navigator.serviceWorker.getRegistrations()).map((r) => r.active?.state),
+      ),
+    )
+    .toEqual(['activated', 'activated'])
+}
+
 test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or by its COOP fallback, delivering once', async ({
   page,
 }) => {
   const id = freshId()
   // Send the instant the handshake completes: the value must reach the
   // isolated document exactly once whichever path the engine takes.
+  // Worker startup is a fixture prerequisite, not part of the two-second
+  // continuity exchange. Keep both scopes to exercise nested registration lookup.
+  await prepareKeeper(page, '/dip')
   const { popup } = await open(page, { id, href: `${POPUP}/dip#c=${id}`, pingOnHandshake: 77 })
   await expect(popup.locator('#status')).toHaveText('connected')
   expect(await popup.evaluate(() => crossOriginIsolated)).toBe(true)
@@ -541,7 +553,9 @@ test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or 
   expect((await events(page)).filter((e) => (e as Pong).n === 77)).toHaveLength(1)
   const popupDiag = await diag(popup)
   const viaFallback = popup.url().includes('/dip/fallback')
-  expect(popupDiag).toEqual(viaFallback ? ['carrier-restored'] : ['carrier-message-port'])
+  expect(popupDiag).toEqual(
+    viaFallback ? ['carrier-restored'] : ['claim-empty', 'carrier-message-port'],
+  )
   // The application saw exactly one carrier for the whole transition.
   expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(1)
   await ping(page, 78)
@@ -552,6 +566,7 @@ test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed wit
   page,
 }) => {
   const id = freshId()
+  await prepareKeeper(page, '/dip-broken')
   const { popup } = await open(page, { id, href: `${POPUP}/dip-broken#c=${id}` })
   await expect(popup.locator('#status')).toHaveText(/connected|failed/)
   test.skip(

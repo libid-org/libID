@@ -1,0 +1,64 @@
+{
+  "name": "@libid/ceremony",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser OAuth identity ceremonies using an externally supplied popup connection.",
+  "license": "(MIT OR Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libid-org/libid.git",
+    "directory": "ts/packages/ceremony"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ccdp/client": {
+      "types": "./dist/ccdp/client/index.d.ts",
+      "default": "./dist/ccdp/client/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "docs",
+    "!src/**/*.test.ts",
+    "!src/**/*.fixture.*",
+    "build",
+    "ccdp.Dockerfile"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit && pnpm typecheck:build",
+    "test": "vitest run",
+    "test:e2e": "pnpm build:qualification-artifacts && node e2e/build-smoke.mjs && playwright test",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
+    "test:e2e:install": "playwright install chromium firefox webkit",
+    "build:ccdp-artifacts": "node build/distribution.ts",
+    "test:distribution": "node --test build/*.test.ts",
+    "typecheck:build": "tsc -p tsconfig.scripts.json",
+    "build:qualification-artifacts": "node build/distribution.ts --out-dir .cache/qualification-assets"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/estree": "^1.0.8",
+    "@types/node": "^22.0.0",
+    "smol-toml": "^1.8.0",
+    "tar": "^7.5.22",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.0"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "5.2.0",
+    "@libid/ledger": "workspace:^",
+    "@libid/popup": "workspace:^",
+    "@noble/hashes": "^2.3.0",
+    "@noir-lang/acvm_js": "1.0.0-beta.25",
+    "@noir-lang/noir_js": "1.0.0-beta.25",
+    "@noir-lang/noirc_abi": "1.0.0-beta.25"
+  },
+  "sideEffects": false
+}
