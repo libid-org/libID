@@ -35,7 +35,7 @@ describe('b64url codec', () => {
   })
 
   it('round-trips arbitrary bytes', () => {
-    for (const len of [1, 2, 3, 31, 32, 33, 255]) {
+    for (const len of [1, 2, 3, 31, 32, 33, 255, 8192, 65536]) {
       const bytes = new Uint8Array(len).map((_, i) => (i * 37 + len) & 0xff)
       expect(b64urlDecode(b64urlEncode(bytes))).toEqual(bytes)
     }

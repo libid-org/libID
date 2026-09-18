@@ -1,19 +1,19 @@
+import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
 import { b64urlEncode } from '../primitives.js'
 import {
   deriveAuthorizationDigest,
   deriveCodeChallenge,
   deriveCodeVerifier,
-  operationDomainFromString,
 } from './authorization.js'
 
 const hex = (bytes: Uint8Array) =>
   Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 
 // The ceremony-common §5 conformance vector (TEST-COMMON-01).
-const operationDomain = operationDomainFromString('libid.claim-identity')
+const operationDomain = keccak_256(new TextEncoder().encode('libid.claim-identity'))
 
-const chainId = operationDomainFromString('example:1')
+const chainId = keccak_256(new TextEncoder().encode('example:1'))
 
 const authorizationNonce = new Uint8Array(32).fill(0x55)
 

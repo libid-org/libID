@@ -74,11 +74,5 @@ export function deriveCodeChallenge(codeVerifier: string): string {
   return b64urlEncode(sha256(new TextEncoder().encode(codeVerifier)))
 }
 
-/** `keccak256(UTF8(domainString))` — how a Consumer fixes an operation domain
- *  (REQ-COMMON-01A); exposed for compositions and tests. */
-export function operationDomainFromString(domainString: string): Uint8Array {
-  return keccak_256(new TextEncoder().encode(domainString))
-}
-
 /** Form-authenticated client IDs must be byte-identical under form serialization. */
 export const isFormClientId = (value: string): boolean => /^[A-Za-z0-9*._-]+$/.test(value)

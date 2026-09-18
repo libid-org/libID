@@ -1,8 +1,6 @@
 import { fixedBytes, hasExactKeys, isRecord, text } from '../../../primitives.js'
 import { type Identity, isIdentity, proofBytes } from '../../types.js'
 
-export const MAX_HONK_PROOF_BYTES = 4 * 1024 * 1024
-
 export const MAX_EMAIL_BYTES = 62,
   MAX_SUB_BYTES = 31,
   MAX_AUD_BYTES = 128,

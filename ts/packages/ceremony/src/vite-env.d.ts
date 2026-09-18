@@ -5,8 +5,6 @@ declare module 'virtual:ceremony-assets' {
   >
   export const allowedRequests: readonly import('./assets/index.js').AssetRequest[]
   export const urls: Record<string, string>
-  export const profiles: Record<string, readonly import('./assets/index.js').Asset[]>
-  export const local: readonly string[]
 }
 
 declare module 'virtual:ceremony-popup-fallback' {

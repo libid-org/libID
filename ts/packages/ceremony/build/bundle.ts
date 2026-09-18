@@ -5,7 +5,7 @@ import { build, transformWithEsbuild } from 'vite'
 import type { ResolvedAssets } from './assets.ts'
 import { assetPlugin } from './assets.ts'
 import { popupPlugin } from './popup.ts'
-import { packageDir } from './release.ts'
+import { hash, packageDir } from './release.ts'
 
 type Edit = readonly [start: number, end: number, replacement: string]
 
@@ -169,9 +169,8 @@ export async function bundle(
     record(worker),
   ]
   const assetName = (asset: Rollup.PreRenderedAsset) => {
-    const owned = Object.entries(data.bodyHashes ?? {}).find(
-      ([, hash]) => hash === data.hashBody?.(asset.source),
-    )
+    const digest = hash(asset.source)
+    const owned = Object.entries(data.bodyHashes).find(([, bodyHash]) => bodyHash === digest)
     return owned ? owned[0].slice(1) : `ccdp/assets/${data.policyId}/[name]-[hash][extname]`
   }
   const result = await build({
