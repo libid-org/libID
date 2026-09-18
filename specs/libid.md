@@ -21,6 +21,15 @@ specifications.
 - [Identity-platform ceremonies](platform-ceremonies.md) define the launch
   profiles for Google, X, and GitHub.
 
+## Browser transport
+
+- [Popup transport](popup-transport.md) defines the logical connection
+  between an application document and its popup: origin allowlists, the
+  message model, delivery guarantees, navigation and closure, continuity
+  across popup-document replacement, and failure semantics. Browser
+  protocols cite it instead of restating opener, isolation, and continuity
+  mechanics.
+
 ## System model and specification ownership
 
 libID turns an identity-platform authorization into a proof that a Consumer
@@ -89,6 +98,7 @@ root and verifier.
 | Authorization Digest, PKCE, extraction, client binding, evidence time | [Common ceremony rules](ceremony-common.md) |
 | Chain ID, Transaction Author, Block Time, and transaction-data encoding | consumer protocol Chain Profile |
 | Platform endpoints, fields, trust roots, and proof projections | [Identity-platform ceremonies](platform-ceremonies.md) |
+| Popup origin allowlists, message model, delivery, navigation, closure, and continuity guarantees | [Popup transport](popup-transport.md) |
 | Redirect transport, interruption behavior, and UI control flow | browser architecture |
 | Transaction dispatch and author authentication | Consumer protocol |
 | Verification dispatch, replay recording, trust roots, and version governance | [Common ceremony rules](ceremony-common.md) |
