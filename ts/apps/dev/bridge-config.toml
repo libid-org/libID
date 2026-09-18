@@ -15,5 +15,4 @@ versions = [1]
 id = "github"
 client_id = "Iv23lioEM9NAR9vO8CmT"
 versions = [1]
-# Intentionally public credential for the shared development app; uses PKCE.
 client_credential = "b020b671192879cb993d1cdd7852c920fe745020"

@@ -52,7 +52,7 @@ async function initialize() {
       : 'The Bridge has no compatible platforms enabled.'
   } catch {
     status.textContent =
-      'Could not load Bridge configuration. Check its address, certificate and application allowlist, then reload this page.'
+      'Could not load Bridge configuration. Check its address and application allowlist, then reload this page.'
   }
 }
 const operationNames: Record<string, string> = {
