@@ -760,9 +760,11 @@ forbidden by REQ-PLAT-56A.
   the table, in that order, each occurring once with a nonempty value.
   The Prover and Platform Verifier MUST reject malformed encoding, noncanonical
   spelling, an extra or duplicate field, or bytes outside that complete body.
-  The Prover and Platform Verifier MUST enforce the common and profile
-  charsets for `client_id`, `code`, `redirect_uri`, and `code_verifier`,
-  and require `client_secret` to be printable ASCII without whitespace.
+  The Prover and Platform Verifier MUST enforce common REQ-COMMON-16B's
+  charset for `client_id`, common §7's canonical unpadded base64url encoding
+  of exactly 32 bytes for `code_verifier`, and printable ASCII without
+  whitespace for `client_secret`. The decoded `code` and `redirect_uri` are
+  nonempty UTF-8 strings with no additional charset restriction.
   Verification: decode each value once, apply its field constraints, serialize
   the ordered tuple with the common serializer, and compare the complete body
   byte for byte. Field names are the exact literal names in the table. Encoded
@@ -771,6 +773,10 @@ forbidden by REQ-PLAT-56A.
   No `grant_type`, `refresh_token`, device-flow field, or other extension is
   admitted; the pinned endpoint receives only this authorization-code request.
   Acceptance does not depend on GitHub rejecting malformed or duplicate forms.
+  The Prover additionally compares `code` and `redirect_uri` with its captured
+  code and frozen redirect under REQ-PLAT-46 and REQ-PLAT-48A. Those local
+  expected values are not Platform Verifier inputs; its digest-to-verifier
+  comparison remains common REQ-COMMON-15A.
 
 - REQ-PLAT-35A (upholds SP-CLIENT-01):
   The Proving Circuit MUST NOT expose `client_secret`, or any value derived
@@ -1174,6 +1180,10 @@ Platform Verifier, Notary Service, Consumer.
   exact name/serialization check. A credential with encoded delimiters remains
   one value and passes; raw delimiters creating more fields fail. Refresh or
   device-grant fields fail. All accepted lengths cover the complete body.
+  Invalid client-identifier bytes, a noncanonical or wrong-length PKCE verifier,
+  and invalid UTF-8 in `code` or `redirect_uri` fail. Canonical form escaping in
+  those two strings passes the form check; a mismatch with the captured code
+  or frozen redirect still fails the Prover's local comparisons.
 - TEST-PLAT-13 (exercises REQ-PLAT-37, REQ-PLAT-38, REQ-PLAT-62):
   Prover sends the frozen client/credential/redirect and ceremony code/verifier
   through its token Proxy session, using the same selected notary as identity.
