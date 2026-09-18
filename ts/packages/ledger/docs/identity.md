@@ -30,7 +30,7 @@ ledger hash while selecting a local notary; no environment override is needed:
 ```ts
 const localLedger: LedgerId = {
   hash: () => targetLedger.hash(),
-  notaryAddress: () => 'https://localhost:8443',
+  notaryAddress: () => 'http://localhost:4687',
 }
 ```
 

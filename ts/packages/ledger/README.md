@@ -15,7 +15,7 @@ import { testnet } from '@libid/ledger/testing'
 
 const localLedger = {
   hash: () => testnet.hash(),
-  notaryAddress: () => 'https://localhost:4687',
+  notaryAddress: () => 'http://localhost:4687',
 }
 ```
 

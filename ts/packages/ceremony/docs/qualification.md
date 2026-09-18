@@ -42,14 +42,13 @@ transport compatibility; ceremony consumes `@libid/popup`.
 
 ## Evidence obtained
 
-At implementation commit `79790d9` (2026-09-13), the complete package browser
-command passed locally: **127 Playwright cases, no skips**, across Chromium,
-Firefox, WebKit, HTTP/HTTPS document flows and mobile emulation. The separate
-workspace Browser tests CI job runs that same command. The first
-[hosted run](https://github.com/libid-org/libid/actions/runs/34779236470) passed 125
-cases and failed two Firefox cases: Google fixture proof delivery exceeded its
-420-second wait, and the two-session notary probe timed out. Those failures remain
-unresolved; the local pass is not evidence of CI stability.
+At implementation commit `0a3b14d` (2026-09-15), the
+[hosted GitHub Actions run](https://github.com/libid-org/libid/actions/runs/35000802410)
+passed TypeScript, Browser tests, CCDP image/distribution and DCO checks. The browser job passed **140 ceremony, 143 popup and 145 dev-app
+cases**, with two existing popup feature skips and no retries. The ceremony
+suite runs Chromium, Firefox, WebKit, HTTP/HTTPS document flows and mobile
+emulation. This supersedes the earlier failing hosted run; it does not establish
+live-service or physical-device qualification.
 
 | Evidence | What it establishes / limit |
 |---|---|
@@ -62,13 +61,8 @@ unresolved; the local pass is not evidence of CI stability.
 | Bridge integration checks | The pinned standalone Bridge image built successfully. Against the running container, public configuration/credential forwarding, origin admission, response headers, fixed Callback insertion, and removal of the old routes passed. Six Google/GitHub simulated-denial round trips passed through the actual Bridge and emitted CCDP in Chromium, Firefox and WebKit. Only provider returns were intercepted; these checks establish neither live consent nor proof verification. |
 | Reported manual use | The developer reported successful manual runs with the updated Bridge and browser GitHub exchange. These observations do not replace a repeatable released-verifier/device qualification record. |
 
-An earlier intermittent WebKit multi-popup timeout passed unchanged retries; its
-cause was not diagnosed. Later complete-suite success does not establish a fix
-for that earlier observation.
-
 ## Remaining qualification
 
-- Diagnose the hosted Firefox proof-delivery and concurrent-notary timeouts above.
 - Real approval and denial for every platform against the selected deployed
   services, including X/GitHub browser token/identity correlation and GitHub's
   fully disclosed five-field token request, followed by released-verifier acceptance.

@@ -36,5 +36,4 @@ The [CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-archite
 [Distribution](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md),
 and [platform](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md)
 specifications own interoperability and proof semantics. Package docs explain
-this implementation. [Pending contract updates](docs/qualification.md#pending-contract-updates)
-identify the coordinated changes still required.
+this implementation.
