@@ -58,7 +58,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "==> docker compose up"
-docker compose -f "$HARNESS/docker-compose.yml" up -d --wait --build
+docker compose -f "$HARNESS/docker-compose.yml" up -d --wait
 
 # ── health checks ──────────────────────────────────────────────────────────
 check() { # name command...

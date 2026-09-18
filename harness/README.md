@@ -2,7 +2,7 @@
 
 Everything needed to run a real, manual, end-to-end handle claim against a
 local chain: anvil, the factory-first contract stack (declaratively applied
-by libid-deploy 0.6.0), the notary, libid-server-rs and keeper
+by libid-deploy 0.6.0), the released notary, libid-server-rs and keeper
 images, and the buttons-only demo UI on top of `@libid/claim`.
 
 The local addresses **equal the canonical cross-network addresses**: every
@@ -45,7 +45,7 @@ which does, in order:
    `harness/.env` (compose interpolation) and `ts/apps/demo/.env.local`
    (VITE_ vars, including the anvil #4 dev-fallback signer so no wallet
    extension is needed). Both outputs are generated, never committed.
-3. **`docker compose up --wait --build`** — the stack below.
+3. **`docker compose up --wait`** — the stack below.
 4. Health checks (anvil RPC, notary `/info`, backend `/health`) + a status
    table.
 5. The vite dev server, foreground, at `http://localhost:5173`. Exit tears
@@ -57,16 +57,9 @@ which does, in order:
 |---|---|---|
 | `anvil` | `ghcr.io/foundry-rs/foundry:v1.5.1` | chain 31337, `--code-size-limit 65536` (the Honk verifiers exceed EIP-170); the default Arachnid CREATE2 predeploy is kept on purpose — `ensure_*` is idempotent and the canonical addresses are the same either way |
 | `deploy` | `debian:bookworm-slim` (one-shot) | downloads released `libid-deploy` 0.6.0 for the container arch, fresh-applies the declarative network file on its read-only mount, **asserts convergence** (below) |
-| `notary` | local build of 0.2.0 with the driver-close fix | MPC-TLS/ProxyMode notary; TCP 7047 + HTTP/WS 7048; also serves the JWKS notarization duty |
-| `keeper` | local build of 0.2.0 with the driver-close fix (one-shot) | one real rotation tick: MPC-TLS reading of Google's live JWKS through the notary, then `rotate()` on `identity_jwks_roots` and `google_oidc_verifier` |
+| `notary` | `ghcr.io/libid-org/notary:0.2.0` | MPC-TLS/ProxyMode notary; TCP 7047 + HTTP/WS 7048; also serves the JWKS notarization duty |
+| `keeper` | `ghcr.io/libid-org/keeper:0.2.0` (one-shot) | one real rotation tick: MPC-TLS reading of Google's live JWKS through the notary, then `rotate()` on `identity_jwks_roots` and `google_oidc_verifier` |
 | `libid-server-rs` | `ghcr.io/libid-org/libid-server-rs:0.2.2` | GitHub OAuth + MPC-TLS proof service on 8722; also serves the Google fragment relay |
-
-Keeper and notary are built from pinned 0.2.0 sources with the upstream
-[session-driver fix](https://github.com/libid-org/libid-rs/commit/8954d8480b2f7856aa11c87efd8a35f9fa6880c3)
-backported. Their lockfiles and legacy wire format stay unchanged. Docker caches
-the build; replace these targets with matched released images once available.
-This covers the keeper rotation path; the legacy backend retains its released
-MPC-TLS client.
 
 Two addresses that look confusable and are not: the notary's
 `VERIFYING_CONTRACT_ADDRESS` (and the backend's, same value) is
