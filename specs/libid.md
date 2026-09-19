@@ -22,6 +22,19 @@ specifications.
   protocols cite it instead of restating opener, isolation, and continuity
   mechanics.
 
+## Browser ceremony and services
+
+- [Ceremony Cross-Document Protocol](ccdp.md) defines its documents, routes,
+  private navigation inputs, messages, events, and phases over popup transport.
+- [OAuth Bridge](oauth-bridge.md) defines public platform configuration and
+  callback ingress.
+- [CCDP Distribution](ccdp-distribution.md) defines static resource responses,
+  Callback configuration insertion, isolation policies, and compatible publication.
+
+These chapters are normative browser/service boundaries. TypeScript APIs, build
+tooling, UI projections, dependency pins, and qualification evidence belong to
+the implementation documentation, not this specification.
+
 ## System model and specification ownership
 
 libID turns an identity-platform authorization into a proof that a Consumer
@@ -43,7 +56,8 @@ User -> Identity Platform -> Canonical Runtime -> Proving Circuit -> Consumer
 
 The Consumer never verifies evidence itself. It calls the Proof Verifier,
 which selects the Platform Verifier registered for the named identity platform
-and Platform Ceremony Version, which in turn obtains
+and ledger-local Verifier Version. Several Verifier Versions may implement the
+same Platform Ceremony Version. The selected Platform Verifier obtains
 attestation authenticity from the Notary Service once for each attestation
 that profile carries. Google carries none, so its path reaches no Notary
 Service and pays no fee; X and GitHub carry two each. The result travels
@@ -52,8 +66,10 @@ Authorized Transaction Data, and client identifier, and the Consumer decides
 what that transaction means. [Common §5.1](ceremony-common.md#51-verification-path)
 owns this path.
 
-The application operator controls its frontend, redirect deployment, OAuth
-clients, and GitHub Token Service, but is not trusted to choose identity fields,
+The Application, OAuth Bridge, and CCDP Distribution may have different operators.
+They control their frontend, redirect deployment, public OAuth configuration,
+and distributed browser code respectively. Those deployments are
+trusted for the local browser ceremony, but not to choose authoritative identity fields,
 change the proof-bound operation, or widen proof validity. The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
 transcripts and their creation times. Verifier governance selects accepted
@@ -64,6 +80,8 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
 | Application operator | configures clients and deployment assets; starts or withholds work | deployment availability and declared configuration | identity fields, proof target, or proof validity |
+| OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
+| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges | correct code and asset supply under ASM-CCDP-01 | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots, parameters, and the Supported Version Set | correct authority lifecycle | user consent |
@@ -91,7 +109,10 @@ root and verifier.
 | Chain ID, Transaction Author, Block Time, and transaction-data encoding | consumer protocol Chain Profile |
 | Platform endpoints, fields, trust roots, and proof projections | [Identity-platform ceremonies](platform-ceremonies.md) |
 | Popup origin allowlists, message model, delivery, navigation, closure, and continuity guarantees | [Popup transport](popup-transport.md) |
-| Redirect transport, interruption behavior, and UI control flow | browser architecture |
+| Ceremony documents, routes, private fragments, messages, events, and phase transitions | [CCDP](ccdp.md) |
+| Public ceremony configuration and callback ingress | [OAuth Bridge](oauth-bridge.md) |
+| Static response policies, aggregate Callback artifact, immutable asset publication | [CCDP Distribution](ccdp-distribution.md) |
+| Package APIs, UI projections, build tooling, and qualification evidence | implementation documentation (non-normative) |
 | Transaction dispatch and author authentication | Consumer protocol |
 | Verification dispatch, replay recording, trust roots, and version governance | [Common ceremony rules](ceremony-common.md) |
 

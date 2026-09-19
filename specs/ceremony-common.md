@@ -229,6 +229,14 @@ identity-platform signing root, notary key, Platform Verifier, verifier governan
 browser supply chain, or Consumer Chain invalidates the properties that depend
 on it.
 
+Browser result acceptance is not ledger verification. Prover performs canonical
+parsing and local request/commitment consistency checks; Application validates
+the delivered structure. Neither performs local notary-signature verification
+or a separate Google nonce-versus-expected-digest comparison. Well-formed
+mismatches or forgeries can survive those browser checks but still fail the
+applicable downstream proof, digest-binding, trusted signing-key, or
+notary-signature check before an authoritative effect.
+
 - SP-BIND-01:
   Evidence produced by a ceremony discharges only for the Authorized
   Transaction Data committed in its Authorization Digest. Depends on
@@ -237,15 +245,18 @@ on it.
   conformance tests (supporting, not proving) plus the collision resistance of
   SHA-256 and keccak256.
 - SP-CLIENT-01:
-  The Canonical Runtime rejects evidence issued to an OAuth client other than
-  the one fixed by its immutable ceremony profile. Depends on ASM-PROV-04,
+  The browser Prover rejects a parsed OAuth client identifier differing from
+  the one fixed by its immutable ceremony profile. This checks local consistency,
+  not the authenticity of an attestation's claimed identifier; ledger
+  verification authenticates that identifier independently. Depends on ASM-PROV-04,
   ASM-PROV-05, ASM-PROV-07, ASM-NOTARY-01, ASM-PROOF-01, and ASM-BROWSER-01.
   Evidence: checked invariant in the Canonical Runtime, plus conformance tests
   (supporting).
 - SP-DELIVERY-01:
-  An authorization response for one OAuth client reaches only an origin
-  registered to that client, so a site borrowing another deployment's client
-  cannot receive its evidence. Depends on ASM-PROV-01, ASM-BROWSER-01.
+  The Identity Platform delivers an OAuth client's initial authorization
+  response only to that client's registered redirect origin. Subsequent browser
+  release follows REQ-COMMON-30, so borrowing another deployment's client does
+  not authorize receipt of its response. Depends on ASM-PROV-01, ASM-BROWSER-01.
   Evidence: external audit of the registered redirect URI list, plus
   conformance tests (supporting).
 - SP-EXCHANGE-01:
@@ -671,9 +682,11 @@ attestation to verify carries no value at all.
   The Deployment MUST register with each Identity Platform only redirect URIs
   whose origins it controls.
 - REQ-COMMON-30 (upholds SP-DELIVERY-01):
-  The Canonical Runtime MUST forward an authorization response only over a live
-  browser channel authenticated to an exact origin in the deployment-configured
-  allowed application-origin set. The set MAY contain more than one origin.
+  The Canonical Runtime MUST release an authorization response beyond Callback
+  only after authenticating the exact Application origin against the deployment
+  allowlist. The Canonical Runtime MUST carry the response only to the configured
+  Prover, preserving that authenticated origin restriction as defined by CCDP
+  (REQ-CCDP-03, REQ-CCDP-04). The set MAY contain more than one origin.
 - REQ-COMMON-31 (upholds SP-DELIVERY-01):
   The Canonical Runtime MUST ignore a forwarding target supplied in the
   redirect request.
@@ -942,16 +955,39 @@ and no `authorization` needle to count.
   removing every space and horizontal tab. The
   Platform Verifier MUST leave carriage-return and line-feed bytes in
   place. The Platform Verifier MUST require exactly one occurrence of the normalized,
-  line-anchored credential header needle `\r\nauthorization:bearer` across
-  all revealed request bytes, counting the region before the committed
-  range and the region after it together. Necessity: HTTP field names and
-  the auth-scheme token are case-insensitive and the colon admits optional
-  whitespace, so a literal search over raw bytes is evadable; removing only
-  bytes absent from the needle can create a spurious match, an over-reject
-  which is safe, but can never hide a real one; and keeping CR and LF is
-  what makes the needle count header lines rather than any substring, so a
-  second genuine `authorization` header is rejected whatever the Identity
-  Platform would have done with it.
+  line-anchored credential header needle `\r\nauthorization:` across
+  all revealed request bytes, whatever auth scheme follows it, counting the
+  region before the committed range and the region after it together.
+  Necessity: HTTP field names are case-insensitive and the colon admits
+  optional whitespace, so a literal search over raw bytes is evadable;
+  removing only bytes absent from the needle can create a spurious match, an
+  over-reject which is safe, but can never hide a real one; keeping CR and LF
+  is what makes the needle count header lines rather than any substring; and
+  counting under any scheme is what rejects a second `authorization` header
+  whatever it carries. A count of `bearer` lines alone leaves a second header
+  under Basic or a platform's own token scheme uncounted, and the Identity
+  Platform answering for whichever credential it honoured, which is the
+  committed bearer or someone else's.
+- REQ-COMMON-39A (upholds SP-EXCHANGE-01):
+  For that same identity-session request, the Platform Verifier MUST reject
+  revealed request bytes carrying a line feed not preceded by a carriage
+  return, a carriage return not followed by a line feed, or a line beginning
+  with a space or a horizontal tab. Necessity: the count of REQ-COMMON-39
+  reads header lines, and each of the three is a byte some parser reads as a
+  line boundary this one does not, so a second header could sit where the
+  count sees none.
+- REQ-COMMON-39B (upholds SP-EXCHANGE-01):
+  For that same identity-session request, the Platform Verifier MUST reject a
+  revealed header line whose name, normalized as REQ-COMMON-39 normalizes
+  and with `_` read as `-`, is `cookie`, `content-encoding`,
+  `transfer-encoding`, `x-http-method-override`, `x-http-method` or
+  `x-method-override`. Necessity: each changes what the Identity Platform
+  does with the request in a way no revealed byte shows. `cookie` is the case
+  that matters: another credential a platform might honour over the
+  committed bearer, and that bearer is the one thing the cross-bind to the
+  token exchange fixes. The underscore folds because a CGI-style stack reads
+  `content_encoding` as `content-encoding`. `authorization` is not on this
+  list only because REQ-COMMON-39 already holds it to one line.
 - REQ-COMMON-40 (upholds SP-EXCHANGE-01):
   For that same identity-session request, the Platform Verifier MUST require
   the raw transcript bytes immediately before the committed range to be
@@ -1037,6 +1073,36 @@ and no `authorization` needle to count.
   more than one position. Necessity: an authenticated response value the
   account holder influences, such as a display name, can embed a lookalike
   field.
+- REQ-COMMON-19F (upholds SP-BIND-01, SP-EXCHANGE-01):
+  The Platform Verifier reading a JSON field from revealed attestation bytes
+  MUST first remove each maximal run of JSON whitespace bytes (`0x20`,
+  `0x09`, `0x0a`, `0x0d`) whose immediately preceding or immediately
+  following byte is a structural byte (`:`, `,`, `{`, `}`, `[`, `]`), and no
+  other byte. The Platform Verifier MUST match the field's delimiter, read
+  its value, and judge its terminator inside one revealed range, over the
+  bytes that removal leaves of that range. The Platform Verifier MUST count
+  the delimiter's positions under REQ-COMMON-19A over the concatenation of
+  every revealed range of that direction, in transcript order, after the same
+  removal, so that a delimiter a range boundary splits is still counted. The
+  Platform Verifier MUST NOT read a value from that concatenation. The
+  Implementation MUST reveal a member as the transcript carries it, its JSON
+  whitespace inside the revealed range at its offsets. The Implementation
+  MUST NOT commit that whitespace with a bearer. Every compact delimiter this
+  specification spells, such as `"login":"` or `"access_token":"`, names the
+  member that removal leaves, not the bytes a platform must serve. The
+  Proving Circuit is outside this rule: REQ-COMMON-19 and REQ-COMMON-19D fix
+  what it asserts at the offset the prover supplies. Necessity: a platform
+  may pretty-print the response it serves for the media type a profile pins,
+  and GitHub does for `/user`. Removing a run only where a structural byte
+  bounds it leaves every reader one exact template and makes a member in any
+  spelling the same member, so a second copy spelled with spaces is still the
+  duplicate REQ-COMMON-19A rejects, while `123 456` still does not read as
+  `123456`. Reading and counting want opposite things: a read that crossed a
+  range boundary would let a prover assemble, from fragments the notary
+  signed at unrelated offsets, a document that never crossed the wire, and a
+  count that stopped at one range would miss a second delimiter the prover
+  cut a boundary through. The concatenation can only over-count, which fails
+  closed.
 - REQ-COMMON-20 (upholds SP-EXCHANGE-01):
   The Proving Circuit MUST constrain every variable value it opens or
   extracts to the charset the profile states, including values that are never
@@ -1267,6 +1333,21 @@ the constructions that role implements.
   format, or required security properties is invalid. A destination chain
   cannot support it without selecting a compatible Notary Service. A profile
   whose Attestation Count is zero remains valid without either.
+- TEST-COMMON-10A (exercises REQ-COMMON-19F, REQ-COMMON-19A):
+  A revealed member spelled with each JSON whitespace byte, alone and as a
+  run, between its name and its colon, between its colon and its value, and
+  between its integer and its terminator, reads as the compact member, and
+  its bytes are revealed at their transcript offsets; a second copy of the
+  field spelled with whitespace is rejected as a duplicate; a byte JSON does
+  not call whitespace, such as `0x0b`, in any of those positions is rejected;
+  an integer with whitespace between its digits is rejected; a member whose
+  whitespace an HTTP chunk boundary splits is not built as a layout; a field
+  assembled from two revealed ranges, the member's opening in one and its
+  value's tail in another, is rejected as absent, however the ranges are
+  ordered; a second copy of the delimiter cut in two by a range boundary is
+  rejected as a duplicate; and a bearer prefix whose whitespace is pushed
+  into the committed range, so that the revealed prefix ends before the
+  value's opening quote, is rejected.
 - TEST-COMMON-11 (exercises REQ-COMMON-21, REQ-COMMON-21A, REQ-COMMON-21B, REQ-COMMON-21C):
   The Platform Verifier rejects an authenticated foreign authority, method,
   or path. The request constructor refuses a media type or `redirect_uri`
@@ -1285,7 +1366,9 @@ the constructions that role implements.
 - TEST-COMMON-14 (exercises REQ-COMMON-30, REQ-COMMON-31):
   Each of two configured application origins can complete its own authenticated
   live channel; an unlisted origin is rejected, and a redirect request carrying
-  a forwarding target cannot change either result.
+  a forwarding target cannot change either result. Callback privately carries
+  the return only to the configured Prover; that Prover authenticates the same
+  Application origin before credential use.
 - TEST-COMMON-15 (exercises REQ-COMMON-29):
   Every redirect URI registered against each production client resolves to an
   origin the deployment controls. Verification: audit of the platform client
@@ -1311,13 +1394,14 @@ the constructions that role implements.
   moves no value; and a call whose native value differs from the quoted value
   is rejected at every hop.
 - TEST-COMMON-17 (exercises REQ-COMMON-33, REQ-COMMON-34B, REQ-COMMON-33A, REQ-COMMON-34, REQ-COMMON-34A, REQ-COMMON-34C, REQ-COMMON-34D, REQ-COMMON-34E):
-  An attestation carrying a foreign notary signature is rejected; a
+  At ledger verification, the trusted Notary Service rejects an attestation
+  carrying a foreign notary signature; a
   verification whose fee was not delivered is rejected; the charged fee is
   identical across differing attested content, authors, payers, and
   submitters; the current fee is readable before the Submission is submitted; and a
   verification whose native value differs from the current fee is
   rejected.
-- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-40, REQ-COMMON-43):
+- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-39A, REQ-COMMON-39B, REQ-COMMON-40, REQ-COMMON-43):
   An identity attestation whose ranges do not sum to the signed request
   transcript length, or whose ranges leave a gap or an overlap, is
   rejected; an attestation carrying no signed total transcript length for
@@ -1328,7 +1412,16 @@ the constructions that role implements.
   occurrence inside another header's value is not counted, because the
   needle is line-anchored; and an attestation whose committed range is not
   immediately preceded by `\r\nauthorization: Bearer ` and immediately
-  followed by `\r\n` in the raw bytes is rejected. Every case above runs on
+  followed by `\r\n` in the raw bytes is rejected. A second `authorization`
+  header under another scheme, such as `Basic`, is rejected for a duplicate
+  needle occurrence; a request carrying a header the profile does not list,
+  such as `accept-encoding`, passes; a header whose name normalizes to
+  `cookie`, `content-encoding`, `transfer-encoding`,
+  `x-http-method-override`, `x-http-method` or `x-method-override` -- in
+  another letter case, with `_` for `-`, or padded before the colon -- is
+  rejected; and revealed request bytes carrying a bare line feed, a bare
+  carriage return, or a line beginning with a space or a horizontal tab are
+  rejected. Every case above runs on
   an identity-session attestation. A GitHub token-exchange attestation, whose
   only committed credential is the `client_secret` in its form body, passes
   verification with no coverage, needle, or framing check applied to that
