@@ -159,14 +159,17 @@ function buildTokenFormBody(params: {
   redirectUri: string
   clientId: string
 }): string {
-  const fields: Array<[string, string]> = [
+  // The profile's five fields in the profile's order, written by the form
+  // serializer the verifier holds the body to (`X_TOKEN_FIELDS` in
+  // libid-contracts): `encodeURIComponent` is a URI encoder, not that
+  // serializer, and spells a space and `!~'()` differently.
+  return new URLSearchParams([
     ['grant_type', 'authorization_code'],
+    ['client_id', params.clientId],
     ['code', params.code],
     ['redirect_uri', params.redirectUri],
     ['code_verifier', params.codeVerifier],
-    ['client_id', params.clientId],
-  ]
-  return fields.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  ]).toString()
 }
 
 // ── Notary session lifecycle ────────────────────────────────────────────────
