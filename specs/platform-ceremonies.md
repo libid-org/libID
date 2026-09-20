@@ -433,6 +433,10 @@ sessions.
 | 4 | `redirect_uri` | immutable redirect URI |
 | 5 | `code_verifier` | PKCE verifier per common §7 |
 
+The whole request is revealed. The table fixes field order for canonical
+serialization under common §6, not to protect a hidden suffix; REQ-PLAT-63
+holds the complete body to that serialization.
+
 - REQ-PLAT-29 (upholds SP-EXCHANGE-01):
   The Implementation MUST reveal the token request's `code` range. The
   Canonical Runtime MUST require that revealed serialized value to equal the
@@ -445,6 +449,34 @@ sessions.
   identity session sends it inside a header. Necessity: the range is opened
   to link two attestations, so it needs a bound and a charset; the circuit
   verifies no other property of the token response.
+- REQ-PLAT-63 (upholds SP-EXCHANGE-01, SP-BIND-01, SP-CLIENT-01):
+  The Prover and Platform Verifier MUST require the complete request body to
+  be the common §6 canonical form serialization of exactly the five fields in
+  the table, in that order, each occurring once with a nonempty value.
+  The Prover and Platform Verifier MUST reject malformed encoding, noncanonical
+  spelling, an extra or duplicate field, or bytes outside that complete body.
+  The Prover and Platform Verifier MUST enforce common REQ-COMMON-16B's
+  charset for `client_id` and common §7's canonical unpadded base64url
+  encoding of exactly 32 bytes for `code_verifier`. The decoded `code` and
+  `redirect_uri` are nonempty UTF-8 strings with no additional charset
+  restriction. The `grant_type` value is the exact ASCII bytes
+  `authorization_code`, which REQ-PLAT-56 compares.
+  Verification: walk the body once, requiring each literal field name from
+  the table in order, `=`, a nonempty value in the common serializer's output
+  alphabet, `&` between pairs and nothing after the last pair; decode `code`
+  and `redirect_uri` once and apply their constraints. Field names are the
+  exact literal names in the table. Encoded value bytes are never reparsed as
+  another form. A value containing a form delimiter is safe only as the
+  serializer's encoded value, not as another field. No `refresh_token`,
+  device-flow field, or other grant field is admitted; the pinned endpoint
+  receives only this authorization-code request. Acceptance does not depend
+  on X rejecting malformed or duplicate forms. The Canonical Runtime's
+  comparisons of `code`, `grant_type` and `redirect_uri` under REQ-PLAT-29
+  and REQ-PLAT-29C are separate local checks; the Platform Verifier's
+  digest-to-verifier comparison remains common REQ-COMMON-15A. Necessity:
+  revealing a range does not reject a form delimiter inside it, and the
+  circuit does not scan for duplicates under common REQ-COMMON-19C; holding
+  the whole body removes the platform's parser from the soundness argument.
 
 The request is one revealed range: the request line, every header and the
 body. The rows below name what the Platform Verifier reads out of it, not
@@ -483,8 +515,8 @@ range indistinguishable from a `refresh_token` value.
 
 Those reveals and the in-circuit `code_verifier` opening of REQ-COMMON-15
 reduce the hidden request surface, but revealing a range does not reject a form
-delimiter inside it. The X profile therefore retains ASM-PROV-07 as a soundness
-dependency.
+delimiter inside it. REQ-PLAT-63 therefore holds the complete body to the exact
+five-field form; X, like GitHub, does not depend on ASM-PROV-07.
 
 - REQ-PLAT-29A (upholds SP-CLIENT-01):
   The Implementation MUST reveal the `client_id` range of the token request in
@@ -506,7 +538,8 @@ dependency.
   reads; the Platform Verifier compares the revealed `grant_type` itself
   under REQ-PLAT-56. Revealing them narrows the body a prover can compose
   without being observed; it does
-  not by itself exclude a duplicate field, which remains ASM-PROV-07. The
+  not by itself exclude a duplicate field, which REQ-PLAT-63 rejects over the
+  complete body. The
   Platform Verifier enforces the disclosure: an attestation hiding either
   range does not match the profile layout of common REQ-COMMON-17A and
   REQ-COMMON-18A and fails verification.
@@ -1139,7 +1172,7 @@ Platform Verifier, Notary Service, Consumer.
 - TEST-PLAT-09B (exercises REQ-PLAT-30A, REQ-PLAT-32A):
   An X transcript that reveals plaintext `access_token` bytes in either
   session, or omits the bearer hash commitment, is rejected.
-- TEST-PLAT-09C (exercises REQ-PLAT-29C, REQ-PLAT-56, REQ-PLAT-56A, REQ-PLAT-56B, REQ-PLAT-56C):
+- TEST-PLAT-09C (exercises REQ-PLAT-29C, REQ-PLAT-56, REQ-PLAT-56A, REQ-PLAT-56B, REQ-PLAT-56C, REQ-PLAT-63):
   The Platform Verifier rejects an X attestation that hides the `grant_type`
   or `redirect_uri` range, and the Canonical Runtime rejects a revealed value
   differing from the canonical form serialization of its deployment profile.
@@ -1158,7 +1191,17 @@ Platform Verifier, Notary Service, Consumer.
   count that is not the body's length, is not decimal digits, or carries a
   leading zero, and accepts the count wherever it sits in the head; and it
   rejects a head carrying a bare line feed, a bare carriage return, an
-  obsolete line fold, or a line with no colon.
+  obsolete line fold, or a line with no colon. The canonical five-field body
+  passes; missing, empty, additional, duplicate, reordered, malformed, or
+  noncanonical fields fail even if X were to accept them. Encoded duplicate
+  names cannot evade the exact name/serialization check. A value with encoded
+  delimiters remains one value and passes; raw delimiters creating more
+  fields fail. Refresh or device-grant fields fail. Invalid
+  client-identifier bytes, a noncanonical or wrong-length PKCE verifier, and
+  invalid UTF-8 in `code` or `redirect_uri` fail. Canonical form escaping in
+  those two strings passes the form check; a mismatch with the consumed code
+  or the deployment profile's redirect still fails under REQ-PLAT-29 and
+  REQ-PLAT-29C.
 - TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52):
   An opened bearer range that is empty, over 4096 bytes, or outside printable
   ASCII fails to prove; a revealed identity response missing `id` or the
@@ -1249,11 +1292,13 @@ Platform Verifier, Notary Service, Consumer.
   before any token request starts, as is a redirect whose `state` matches no
   live local ceremony or a ceremony already consumed.
 - TEST-PLAT-19 (exercises REQ-COMMON-32; supports ASM-PROV-07):
-  Recurring integration probes send each profile-listed X token
-  request field twice, in both orders and using both literal and percent-encoded
-  equivalent field names, and send the otherwise valid request under alternate
-  media types. The production endpoint rejects every probe and issues no
-  bearer.
+  For each production Platform Profile that cites ASM-PROV-07, recurring
+  integration probes send each profile-listed token request field twice, in
+  both orders and using both literal and percent-encoded equivalent field
+  names, and send the otherwise valid request under alternate media types.
+  The production endpoint rejects every probe and issues no bearer. No launch
+  profile cites ASM-PROV-07: X and GitHub hold the complete token body under
+  REQ-PLAT-63 and REQ-PLAT-61, so the launch probe set is empty.
 - TEST-PLAT-21 (exercises REQ-PLAT-38, REQ-PLAT-49, REQ-PLAT-55):
   A same-session bearer opening opens the token attestation commitment; a
   missing, mismatched, or other-session opening fails. The opening remains
@@ -1301,11 +1346,11 @@ platform behavior rather than a proven property. The Implementation claiming
 conformance MUST run a recurring check that each platform still rejects a
 mismatched `code_verifier`.
 
-X still relies on ASM-PROV-07 for decoded-form uniqueness and uses
-TEST-PLAT-19's recurring probes. GitHub instead rejects noncanonical or extra
-fields over its fully revealed request under REQ-PLAT-61; it no longer relies
-on GitHub rejecting duplicate fields. Both still assume the platform honors
-the canonical request, PKCE, and one-use authorization-code semantics.
+X and GitHub each reject noncanonical, extra or duplicate fields over the
+fully revealed token request, under REQ-PLAT-63 and REQ-PLAT-61; neither
+depends on ASM-PROV-07, and TEST-PLAT-19 has no launch profile to probe for
+it. Both still assume the platform honors the canonical request, PKCE, and
+one-use authorization-code semantics.
 
 The Prover can withhold work or supply malformed evidence. Local request and
 commitment checks detect structural substitution, not a well-formed forged
