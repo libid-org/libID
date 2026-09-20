@@ -457,14 +457,14 @@ holds the complete body to that serialization.
   spelling, an extra or duplicate field, or bytes outside that complete body.
   The Prover and Platform Verifier MUST enforce common REQ-COMMON-16B's
   charset for `client_id` and common §7's canonical unpadded base64url
-  encoding of exactly 32 bytes for `code_verifier`. The decoded `code` and
-  `redirect_uri` are nonempty UTF-8 strings with no additional charset
-  restriction. The `grant_type` value is the exact ASCII bytes
-  `authorization_code`, which REQ-PLAT-56 compares.
+  encoding of exactly 32 bytes for `code_verifier`. `code` and
+  `redirect_uri` are nonempty values with no further constraint: the Platform
+  Verifier reads neither, and the Canonical Runtime compares them under
+  REQ-PLAT-29 and REQ-PLAT-29C. The `grant_type` value is the exact ASCII
+  bytes `authorization_code`, which REQ-PLAT-56 compares.
   Verification: walk the body once, requiring each literal field name from
   the table in order, `=`, a nonempty value in the common serializer's output
-  alphabet, `&` between pairs and nothing after the last pair; decode `code`
-  and `redirect_uri` once and apply their constraints. Field names are the
+  alphabet, `&` between pairs and nothing after the last pair. Field names are the
   exact literal names in the table. Encoded value bytes are never reparsed as
   another form. A value containing a form delimiter is safe only as the
   serializer's encoded value, not as another field. No `refresh_token`,
@@ -794,13 +794,14 @@ forbidden by REQ-PLAT-56A.
   The Prover and Platform Verifier MUST reject malformed encoding, noncanonical
   spelling, an extra or duplicate field, or bytes outside that complete body.
   The Prover and Platform Verifier MUST enforce common REQ-COMMON-16B's
-  charset for `client_id`, common §7's canonical unpadded base64url encoding
-  of exactly 32 bytes for `code_verifier`, and printable ASCII without
-  whitespace for `client_secret`. The decoded `code` and `redirect_uri` are
-  nonempty UTF-8 strings with no additional charset restriction.
-  Verification: decode each value once, apply its field constraints, serialize
-  the ordered tuple with the common serializer, and compare the complete body
-  byte for byte. Field names are the exact literal names in the table. Encoded
+  charset for `client_id` and common §7's canonical unpadded base64url
+  encoding of exactly 32 bytes for `code_verifier`. `code`, `redirect_uri`
+  and `client_secret` are nonempty values with no further constraint: the
+  Platform Verifier reads none of them, and the Prover compares `code` and
+  `redirect_uri` under REQ-PLAT-46 and REQ-PLAT-48A.
+  Verification: walk the body once, requiring each literal field name from
+  the table in order, `=`, a nonempty value in the common serializer's output
+  alphabet, `&` between pairs and nothing after the last pair. Field names are the exact literal names in the table. Encoded
   value bytes are never reparsed as another form. A credential containing a form
   delimiter is safe only as the serializer's encoded value, not as another field.
   No `grant_type`, `refresh_token`, device-flow field, or other extension is
@@ -1197,11 +1198,10 @@ Platform Verifier, Notary Service, Consumer.
   names cannot evade the exact name/serialization check. A value with encoded
   delimiters remains one value and passes; raw delimiters creating more
   fields fail. Refresh or device-grant fields fail. Invalid
-  client-identifier bytes, a noncanonical or wrong-length PKCE verifier, and
-  invalid UTF-8 in `code` or `redirect_uri` fail. Canonical form escaping in
-  those two strings passes the form check; a mismatch with the consumed code
-  or the deployment profile's redirect still fails under REQ-PLAT-29 and
-  REQ-PLAT-29C.
+  client-identifier bytes and a noncanonical or wrong-length PKCE verifier
+  fail. Canonical form escaping in `code` and `redirect_uri` passes the form
+  check; a mismatch with the consumed code or the deployment profile's
+  redirect still fails under REQ-PLAT-29 and REQ-PLAT-29C.
 - TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52):
   An opened bearer range that is empty, over 4096 bytes, or outside printable
   ASCII fails to prove; a revealed identity response missing `id` or the
@@ -1223,10 +1223,10 @@ Platform Verifier, Notary Service, Consumer.
   exact name/serialization check. A credential with encoded delimiters remains
   one value and passes; raw delimiters creating more fields fail. Refresh or
   device-grant fields fail. All accepted lengths cover the complete body.
-  Invalid client-identifier bytes, a noncanonical or wrong-length PKCE verifier,
-  and invalid UTF-8 in `code` or `redirect_uri` fail. Canonical form escaping in
-  those two strings passes the form check; a mismatch with the captured code
-  or frozen redirect still fails the Prover's local comparisons.
+  Invalid client-identifier bytes and a noncanonical or wrong-length PKCE
+  verifier fail. Canonical form escaping in `code` and `redirect_uri` passes
+  the form check; a mismatch with the captured code or frozen redirect still
+  fails the Prover's local comparisons.
 - TEST-PLAT-13 (exercises REQ-PLAT-37, REQ-PLAT-38, REQ-PLAT-62):
   Prover sends the frozen client/credential/redirect and ceremony code/verifier
   through its token Proxy session, using the same selected notary as identity.
