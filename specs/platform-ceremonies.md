@@ -464,8 +464,9 @@ holds the complete body to that serialization.
   bytes `authorization_code`, which REQ-PLAT-56 compares.
   Verification: walk the body once, requiring each literal field name from
   the table in order, `=`, a nonempty value in the common serializer's output
-  alphabet, `&` between pairs and nothing after the last pair. Field names are the
-  exact literal names in the table. Encoded value bytes are never reparsed as
+  alphabet, `&` between pairs and nothing after the last pair. Field names
+  are the exact literal names in the table. Encoded value bytes are never
+  reparsed as
   another form. A value containing a form delimiter is safe only as the
   serializer's encoded value, not as another field. No `refresh_token`,
   device-flow field, or other grant field is admitted; the pinned endpoint
@@ -801,9 +802,10 @@ forbidden by REQ-PLAT-56A.
   `redirect_uri` under REQ-PLAT-46 and REQ-PLAT-48A.
   Verification: walk the body once, requiring each literal field name from
   the table in order, `=`, a nonempty value in the common serializer's output
-  alphabet, `&` between pairs and nothing after the last pair. Field names are the exact literal names in the table. Encoded
-  value bytes are never reparsed as another form. A credential containing a form
-  delimiter is safe only as the serializer's encoded value, not as another field.
+  alphabet, `&` between pairs and nothing after the last pair. Field names
+  are the exact literal names in the table. Encoded value bytes are never
+  reparsed as another form. A credential containing a form delimiter is safe
+  only as the serializer's encoded value, not as another field.
   No `grant_type`, `refresh_token`, device-flow field, or other extension is
   admitted; the pinned endpoint receives only this authorization-code request.
   Acceptance does not depend on GitHub rejecting malformed or duplicate forms.
