@@ -47,12 +47,21 @@ for (const native of [false, true])
     try {
       await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
     } catch (error) {
-      console.log({
-        path: new URL(popup.url()).pathname,
-        text: await popup.locator('body').innerText(),
-        errors,
-        events: await page.evaluate(() => window.events),
-      })
+      console.log(
+        'Popup flow failure:',
+        JSON.stringify({
+          path: new URL(popup.url()).pathname,
+          popup: await popup
+            .evaluate(() => ({
+              status: document.querySelector('[role="status"]')?.textContent,
+              readyState: document.readyState,
+              worker: navigator.serviceWorker.controller?.state,
+            }))
+            .catch(() => 'document unavailable'),
+          errors,
+          runs: await page.evaluate(() => window.runs).catch(() => 'application unavailable'),
+        }),
+      )
       throw error
     }
     expect(await popup.evaluate(() => location.hash)).toBe('')
