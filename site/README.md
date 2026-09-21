@@ -1,0 +1,31 @@
+# libID website
+
+One static site and Cloudflare Worker: landing page at `/`, Starlight at `/docs/` and `/specs/`.
+Add Markdown/MDX with `title` frontmatter in [`docs/pages/`](../docs/pages/).
+Specs are published directly from [`specs/`](../specs/).
+Six UI colors per theme and one shared logo color live in [`src/palette.mjs`](src/palette.mjs), used by all pages and generated favicons.
+
+## Local
+
+Node.js 22.12+, pnpm 10.30.3. From the repository root:
+
+```sh
+pnpm -C site install --frozen-lockfile
+pnpm -C site dev
+```
+
+Run `pnpm -C site build`, then `pnpm -C site preview` to test search.
+Run `pnpm -C site test` for theme and spec-link checks.
+
+## Cloudflare
+
+Worker: **libid**. Root: `/`. Production branch: `main`.
+Environment: `NODE_VERSION=22`, `PNPM_VERSION=10.30.3`.
+
+| Command | Value |
+| --- | --- |
+| Build | `pnpm -C site install --frozen-lockfile && pnpm -C site build` |
+| Deploy | `pnpm -C site run deploy` |
+| Non-production deploy | `pnpm -C site run deploy:preview` |
+
+Only `dist/` is deployed. The bundled JetBrains Mono license is in `public/fonts/OFL.txt`.

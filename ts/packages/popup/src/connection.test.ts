@@ -1,0 +1,1751 @@
+import { describe, expect, it, vi } from 'vitest'
+import { PopupConnection } from './connection.js'
+import type { PopupDiagnostic } from './diagnostics.js'
+import { PopupError } from './diagnostics.js'
+import {
+  type Carrier,
+  type CarrierConstructor,
+  CONNECTION_VERSION,
+  type Message,
+} from './message.js'
+import { PortCarrier } from './port.js'
+import {
+  APP_ORIGIN,
+  type FakePair,
+  type FakeProxy,
+  fakePair,
+  fakeScope,
+  fakeSignaling,
+  ID,
+  noRegistration,
+  OTHER_ID,
+  POPUP_ORIGIN,
+  registrationWith,
+  tick,
+} from './testing/fakes.js'
+import { CurrentWindow, OpenedWindow, PopupWindow } from './window.js'
+
+class Ready implements Message {
+  static readonly type = 'ready'
+  readonly type = Ready.type
+  constructor(readonly version: number) {}
+  static decode(value: unknown): Ready {
+    const v = value as { version?: unknown }
+    if (typeof v.version !== 'number') throw new Error('bad ready')
+    return new Ready(v.version)
+  }
+}
+class Start implements Message {
+  static readonly type = 'start'
+  readonly type = Start.type
+  static decode(value: unknown): Start {
+    if ((value as { type: string }).type !== 'start') throw new Error('bad start')
+    return new Start()
+  }
+}
+type Messages = Ready | Start
+
+const codes = (events: PopupDiagnostic[]) => events.map((e) => e.code)
+
+interface Side {
+  events: PopupDiagnostic[]
+}
+
+/** An application endpoint over a fake pair with a scripted or blocked handle. */
+function connectApp(pair: FakePair, opts: { blocked?: boolean; fallback?: Carrier } = {}) {
+  const side: Side = { events: [] }
+  const popup = new OpenedWindow(
+    opts.blocked ? null : (pair.popupProxy as unknown as WindowProxy),
+    pair.appView,
+  )
+  const connection = PopupConnection.connect<Messages>(popup, {
+    connectionId: ID,
+    allowedPopupOrigins: [POPUP_ORIGIN],
+    onDiagnostic: (e) => void side.events.push(e),
+    ...(opts.fallback && { fallback: () => Promise.resolve(opts.fallback as Carrier) }),
+  })
+  return { connection, popup, ...side }
+}
+
+/** A popup endpoint over the same pair. */
+function acceptPopup(
+  pair: FakePair,
+  opts: {
+    worker?: Parameters<typeof registrationWith>[0]
+    fallback?: Carrier | CarrierConstructor
+    opener?: boolean
+  } = {},
+) {
+  const side: Side = { events: [] }
+  const view = opts.opener === false ? { ...pair.popupWindow, opener: null } : pair.popupWindow
+  const popup = new CurrentWindow(
+    view as Window,
+    opts.worker === undefined ? noRegistration : registrationWith(opts.worker),
+  )
+  const { fallback } = opts
+  const endpoint = PopupConnection.accept<Messages>(popup, {
+    connectionId: ID,
+    allowedApplicationOrigins: [APP_ORIGIN],
+    onDiagnostic: (e) => void side.events.push(e),
+    ...(fallback && {
+      fallback: typeof fallback === 'function' ? fallback : () => Promise.resolve(fallback),
+    }),
+  })
+  // Resolves with the endpoint once its carrier is selected; rejects as `ready` does.
+  const connection = endpoint.ready.then(() => endpoint)
+  connection.catch(() => {}) // tests that only inspect `endpoint` must not leak a rejection
+  return { connection, endpoint, ...side }
+}
+
+/** Both ends of a test carrier over one MessageChannel. */
+function carrierPair(): [PortCarrier, PortCarrier] {
+  const channel = new MessageChannel()
+  return [new PortCarrier(channel.port1, POPUP_ORIGIN), new PortCarrier(channel.port2, APP_ORIGIN)]
+}
+
+describe('validation [POPUP-CONNECTION-007]', () => {
+  it('rejects bad ids and origins before any browser work', async () => {
+    const pair = fakePair()
+    const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    expect(() =>
+      PopupConnection.connect(popup, {
+        connectionId: ID.toUpperCase(),
+        allowedPopupOrigins: [POPUP_ORIGIN],
+      }),
+    ).toThrow(TypeError)
+    expect(() =>
+      PopupConnection.connect(popup, {
+        connectionId: ID,
+        allowedPopupOrigins: [`${POPUP_ORIGIN}/`],
+      }),
+    ).toThrow(TypeError)
+    expect(pair.appView.listeners.size).toBe(0)
+    const current = new CurrentWindow(pair.popupWindow, noRegistration)
+    expect(() =>
+      PopupConnection.accept(current, {
+        connectionId: 'nope',
+        allowedApplicationOrigins: [APP_ORIGIN],
+      }),
+    ).toThrow(TypeError)
+    expect(() =>
+      PopupConnection.accept(current, { connectionId: ID, allowedApplicationOrigins: [] }),
+    ).toThrow(TypeError)
+    expect(pair.popupView.listeners.size).toBe(0)
+  })
+
+  it('requires the matching PopupWindow kind and one connect per object', () => {
+    const pair = fakePair()
+    const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    const current = new CurrentWindow(pair.popupWindow, noRegistration)
+    expect(() =>
+      PopupConnection.connect(current, { connectionId: ID, allowedPopupOrigins: [POPUP_ORIGIN] }),
+    ).toThrow(TypeError)
+    PopupConnection.connect(popup, { connectionId: ID, allowedPopupOrigins: [POPUP_ORIGIN] })
+    expect(() =>
+      PopupConnection.connect(popup, { connectionId: ID, allowedPopupOrigins: [POPUP_ORIGIN] }),
+    ).toThrow('already connected')
+  })
+
+  it('PopupWindow.open rejects reserved and empty targets [POPUP-WINDOW-001/003]', () => {
+    for (const target of ['', '_blank', '_self', '_parent', '_top', '_custom']) {
+      expect(() => PopupWindow.open(target)).toThrow(TypeError)
+    }
+  })
+
+  it('PopupWindow.open always requests a separate window and keeps the opener [POPUP-WINDOW-001]', () => {
+    const open = vi.fn(() => null)
+    vi.stubGlobal('window', {
+      open,
+      outerWidth: 1280,
+      screen: { availWidth: 1920, availLeft: 0, availTop: 0 },
+    })
+    try {
+      PopupWindow.open('libid-popup')
+      PopupWindow.open('libid-popup', 'width=480,height=720')
+      expect(open.mock.calls).toEqual([
+        ['about:blank', 'libid-popup', 'popup,left=0,top=0'],
+        ['about:blank', 'libid-popup', 'popup,width=480,height=720,left=0,top=0'],
+      ])
+      expect(() => PopupWindow.open('libid-popup', 'noopener')).toThrow(TypeError)
+      expect(() => PopupWindow.open('libid-popup', 'width=1,NoReferrer')).toThrow(TypeError)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('PopupWindow.current rejects an embedded document', () => {
+    const frame = { top: {} }
+    vi.stubGlobal('window', frame)
+    expect(() => PopupWindow.current()).toThrow('top-level popup')
+    vi.unstubAllGlobals()
+  })
+
+  it('treats inaccessible popup handles and openers as absent', () => {
+    const inaccessible = Object.defineProperty({}, 'closed', {
+      get: () => {
+        throw new DOMException('discarded')
+      },
+    }) as WindowProxy
+    expect(new OpenedWindow(inaccessible, fakePair().appView).direct).toBe(false)
+    expect(new CurrentWindow({ opener: inaccessible } as Window, noRegistration).opener).toBeNull()
+  })
+})
+
+describe('MessagePort selection and delivery', () => {
+  it('connects, exchanges typed messages, and keeps decode identity [POPUP-API-001/002]', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const readies: Ready[] = []
+    app.connection.on(Ready, (r) => void readies.push(r))
+    const popup = await acceptPopup(pair).connection
+    const starts: Start[] = []
+    popup.on(Start, (s) => void starts.push(s))
+    await tick()
+    expect(codes(app.events)).toEqual(['window-opened', 'carrier-message-port'])
+
+    popup.send(new Ready(1))
+    app.connection.send(new Start())
+    await tick()
+    expect(readies).toHaveLength(1)
+    expect(readies[0]).toBeInstanceOf(Ready)
+    expect(readies[0].version).toBe(1)
+    expect(starts).toHaveLength(1)
+  })
+
+  it('rejects reserved and duplicate registrations and sends [POPUP-API-001/002]', () => {
+    const pair = fakePair()
+    const { connection } = connectApp(pair)
+    const off = connection.on(Ready, () => {})
+    expect(() => connection.on(Ready, () => {})).toThrow('already registered')
+    off()
+    expect(() => connection.on(Ready, () => {})).not.toThrow()
+    expect(() =>
+      connection.on({ type: 'navigate', decode: () => new Ready(1) } as never, () => {}),
+    ).toThrow('reserved')
+    expect(() => connection.send({ type: 'close-popup' } as never)).toThrow('reserved')
+  })
+
+  it('throws on send without a carrier and queues nothing [POPUP-CONNECTION-004]', () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    expect(() => app.connection.send(new Start())).toThrow('send-unavailable')
+    expect(codes(app.events)).toContain('send-unavailable')
+  })
+
+  it('closes the logical connection when its active carrier rejects a send', async () => {
+    const pair = fakePair()
+    connectApp(pair)
+    const side = acceptPopup(pair)
+    const popup = await side.connection
+    await tick()
+
+    expect(() => popup.send({ type: 'start', uncloneable: () => {} } as never)).toThrow()
+    expect(codes(side.events)).toContain('connection-failed')
+    expect(() => popup.send(new Start())).toThrow('send-unavailable')
+  })
+
+  it('closes on unknown, malformed, or decoder-rejected input [POPUP-API-003]', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const bad of [
+      { type: 'unknown' },
+      { type: 'ready', version: 'x' },
+      'text',
+      { type: '' },
+    ]) {
+      const pair = fakePair()
+      const app = connectApp(pair)
+      const handler = vi.fn()
+      app.connection.on(Ready, handler)
+      const popup = await acceptPopup(pair).connection
+      await tick()
+      // Bypass the typed API: push a raw value over the popup's carrier.
+      ;(popup as unknown as { carrier: Carrier }).carrier.send(bad as Message)
+      await tick()
+      expect(handler).not.toHaveBeenCalled()
+      expect(codes(app.events).slice(-2)).toEqual(['decode-rejected', 'connection-failed'])
+      expect(() => app.connection.send(new Start())).toThrow('send-unavailable')
+    }
+    error.mockRestore()
+  })
+
+  it('keeps concurrent connections isolated by id [POPUP-API-004]', async () => {
+    const a = fakePair()
+    const b = fakePair()
+    // Both applications share one page (view) but bind different popups.
+    const appA = connectApp(a)
+    const appB = new OpenedWindow(b.popupProxy as unknown as WindowProxy, a.appView)
+    const eventsB: PopupDiagnostic[] = []
+    const connB = PopupConnection.connect<Messages>(appB, {
+      connectionId: OTHER_ID,
+      allowedPopupOrigins: [POPUP_ORIGIN],
+      onDiagnostic: (e) => void eventsB.push(e),
+    })
+    const readyA = vi.fn()
+    const readyB = vi.fn()
+    appA.connection.on(Ready, readyA)
+    connB.on(Ready, readyB)
+    // Popup A's handshake reaches both listeners on the shared page.
+    const popupA = await acceptPopup(a).connection
+    await tick()
+    expect(codes(appA.events)).toContain('carrier-message-port')
+    expect(codes(eventsB)).not.toContain('handshake-rejected')
+    expect(codes(eventsB)).not.toContain('connection-failed')
+    popupA.send(new Ready(7))
+    await tick()
+    expect(readyA).toHaveBeenCalledTimes(1)
+    expect(readyB).not.toHaveBeenCalled()
+  })
+})
+
+describe('native-anchor path [POPUP-WINDOW-002] [POPUP-CONTROL-001]', () => {
+  it('performs no browser operation while binding is pending, then binds', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair, { blocked: true })
+    expect(app.popup.opened).toBe(false)
+    await expect(app.connection.navigate('https://popup.example/p')).resolves.toBeUndefined()
+    expect(pair.popupProxy.replaced).toEqual([])
+    await acceptPopup(pair).connection
+    await tick()
+    expect(app.popup.opened).toBe(true)
+    expect(codes(app.events)).toEqual(['window-blocked', 'window-bound', 'carrier-message-port'])
+  })
+})
+
+describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
+  it('navigates directly without a carrier and over the carrier with one', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    await app.connection.navigate('https://popup.example/p')
+    expect(pair.popupProxy.replaced).toEqual(['https://popup.example/p'])
+    expect(codes(app.events).at(-1)).toBe('control-direct')
+
+    const scope = fakeScope()
+    await acceptPopup(pair, { worker: scope.worker }).connection
+    await tick()
+    await app.connection.navigate('https://popup.example/isolated')
+    expect(codes(app.events).at(-1)).toBe('control-connected')
+    await tick(20)
+    // The popup kept its port with the worker and replaced itself.
+    expect(scope.pending).toHaveLength(1)
+    expect(pair.popupProxy.replaced).toEqual([
+      'https://popup.example/p',
+      'https://popup.example/isolated',
+    ])
+  })
+
+  it('rejects malformed navigation before any browser operation', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    for (const bad of [
+      'http://popup.example/p',
+      'https://u:p@popup.example/p',
+      '/p',
+      'https://popup.example',
+    ]) {
+      await expect(app.connection.navigate(bad)).rejects.toThrow(TypeError)
+    }
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(codes(app.events).filter((c) => c === 'control-rejected')).toHaveLength(4)
+  })
+
+  it('continues the same connection in the next document after a connected navigation', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const readies: number[] = []
+    app.connection.on(Ready, (r) => void readies.push(r.version))
+    const scope = fakeScope()
+    await acceptPopup(pair, { worker: scope.worker }).connection
+    await tick()
+    await app.connection.navigate('https://popup.example/isolated')
+    await tick(20)
+    // The destination document claims and continues with the same port.
+    const next = await acceptPopup(pair, { worker: scope.worker, opener: false })
+    const nextEvents = next.events
+    const connection = await next.connection
+    expect(codes(nextEvents)).toEqual(['carrier-restored'])
+    connection.send(new Ready(2))
+    await tick()
+    expect(readies).toEqual([2])
+  })
+
+  it('claims from every registration on the origin [POPUP-KEEPER-005]', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const stale = fakeScope()
+    const root = fakeScope()
+    await acceptPopup(pair, { worker: root.worker }).connection
+    await tick()
+    await app.connection.navigate('https://popup.example/isolated')
+    await tick(20)
+    expect(root.pending).toHaveLength(1)
+    // The destination is controlled by a stale nested registration holding
+    // nothing; the port is still found in the root worker.
+    const events: PopupDiagnostic[] = []
+    const endpoint = PopupConnection.accept<Messages>(
+      new CurrentWindow(
+        { ...pair.popupWindow, opener: null } as Window,
+        registrationWith(stale.worker, root.worker),
+      ),
+      {
+        connectionId: ID,
+        allowedApplicationOrigins: [APP_ORIGIN],
+        onDiagnostic: (e) => void events.push(e),
+      },
+    )
+    await endpoint.ready
+    expect(codes(events)).toEqual(['carrier-restored'])
+  })
+
+  it('fails closed without continuity instead of navigating', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const pair = fakePair()
+    connectApp(pair)
+    const popupSide = acceptPopup(pair)
+    const popup = await popupSide.connection
+    await tick()
+    await expect(popup.navigate('https://popup.example/isolated')).rejects.toThrow(
+      'continuity-unsupported',
+    )
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(codes(popupSide.events)).toContain('connection-failed')
+    error.mockRestore()
+  })
+
+  it('closes directly with a live handle, over the carrier after severing, and is idempotent', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const popupSide = acceptPopup(pair)
+    await popupSide.connection
+    await tick()
+    await app.connection.close()
+    expect(pair.popupProxy.closed).toBe(true)
+    await expect(app.connection.close()).resolves.toBeUndefined()
+    expect(codes(app.events).filter((c) => c === 'connection-closed')).toHaveLength(1)
+
+    // Severed: the handle reports closed but the port is alive.
+    const pair2 = fakePair()
+    const app2 = connectApp(pair2)
+    const popup2Side = acceptPopup(pair2)
+    await popup2Side.connection
+    await tick()
+    const closeSpy = vi.spyOn(pair2.popupWindow, 'close')
+    pair2.popupProxy.closed = true
+    await app2.connection.close()
+    await tick()
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+    expect(codes(popup2Side.events)).toContain('connection-closed')
+    expect(() => app2.connection.send(new Start())).toThrow('send-unavailable')
+  })
+
+  it('rejects wrong-direction, duplicate, and post-terminal controls', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // Wrong direction: a control arriving at the application fails it.
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const popup = await acceptPopup(pair).connection
+    await tick()
+    ;(popup as unknown as { carrier: Carrier }).carrier.send({ type: 'close-popup' })
+    await tick()
+    expect(codes(app.events).slice(-2)).toEqual(['control-rejected', 'connection-failed'])
+
+    // Duplicate: the second control performs no browser operation.
+    const pair2 = fakePair()
+    const app2 = connectApp(pair2)
+    const scope = fakeScope()
+    await acceptPopup(pair2, { worker: scope.worker }).connection
+    await tick()
+    const raw = (app2.connection as unknown as { carrier: Carrier }).carrier
+    raw.send({ type: 'navigate', url: 'https://popup.example/a' } as Message)
+    raw.send({ type: 'navigate', url: 'https://popup.example/b' } as Message)
+    raw.send({ type: 'close-popup' })
+    await tick(20)
+    expect(pair2.popupProxy.replaced).toEqual(['https://popup.example/a'])
+    expect(pair2.popupProxy.closed).toBe(false)
+    error.mockRestore()
+  })
+})
+
+describe('ordering across a transition [POPUP-CONNECTION-010]', () => {
+  it('delivers a reply sent before navigate to the popup before it leaves cross-origin', async () => {
+    const pair = fakePair()
+    const events: PopupDiagnostic[] = []
+    const popupWindow = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    const app = PopupConnection.connect<Messages>(popupWindow, {
+      connectionId: ID,
+      allowedPopupOrigins: [POPUP_ORIGIN, 'https://popup-b.example'],
+      onDiagnostic: (e) => void events.push(e),
+    })
+    // Application-driven transition: reply, then navigate.
+    app.on(Ready, () => {
+      app.send(new Start())
+      void app.navigate('https://popup-b.example/p')
+    })
+    const side = acceptPopup(pair)
+    const order: string[] = []
+    side.endpoint.on(Start, () => void order.push('start'))
+    const popup = await side.connection
+    await tick()
+    popup.send(new Ready(1))
+    await tick(20)
+    expect(order).toEqual(['start'])
+    expect(pair.popupProxy.replaced).toEqual(['https://popup-b.example/p'])
+    expect(codes(events).at(-1)).toBe('control-connected')
+  })
+})
+
+describe('cross-origin replacement [POPUP-CONNECTION-008/009]', () => {
+  const OTHER_POPUP = 'https://popup-b.example'
+
+  /** An application admitting two popup origins over a pair on the given one. */
+  function connectMulti(pair: FakePair) {
+    const events: PopupDiagnostic[] = []
+    const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    const connection = PopupConnection.connect<Messages>(popup, {
+      connectionId: ID,
+      allowedPopupOrigins: [POPUP_ORIGIN, OTHER_POPUP],
+      onDiagnostic: (e) => void events.push(e),
+    })
+    return { connection, popup, events }
+  }
+
+  it('retires the popup endpoint instead of keeping the port, then the next origin re-handshakes', async () => {
+    const pair = fakePair()
+    const app = connectMulti(pair)
+    const scope = fakeScope()
+    const first = acceptPopup(pair, { worker: scope.worker })
+    const popup = await first.connection
+    await tick()
+
+    await app.connection.navigate(`${OTHER_POPUP}/p`)
+    await tick(20)
+    expect(scope.pending).toHaveLength(0) // no keep
+    expect(pair.popupProxy.replaced).toEqual([`${OTHER_POPUP}/p`])
+    expect(codes(first.events).at(-1)).toBe('connection-closed')
+    expect(() => popup.send(new Ready(1))).toThrow('send-unavailable')
+
+    // The destination document on the other origin authenticates afresh over
+    // the same opener; the application accepts it under the same connection.
+    pair.relocate(OTHER_POPUP)
+    const readies: number[] = []
+    app.connection.on(Ready, (r) => void readies.push(r.version))
+    const nextSide = acceptPopup(pair)
+    const nextConnection = await nextSide.connection
+    await tick()
+    expect(codes(nextSide.events)).toEqual(['carrier-message-port'])
+    expect(codes(app.events).filter((c) => c === 'carrier-message-port')).toHaveLength(2)
+    nextConnection.send(new Ready(5))
+    await tick()
+    expect(readies).toEqual([5])
+  })
+
+  it('ignores a handshake from an origin outside the set and stays live', async () => {
+    const pair = fakePair()
+    const app = connectMulti(pair)
+    pair.appView.dispatch({
+      data: { type: 'message-port', connectionVersion: CONNECTION_VERSION, connectionId: ID },
+      origin: 'https://evil.example',
+      source: pair.popupProxy,
+    })
+    await tick()
+    expect(codes(app.events)).toEqual(['window-opened'])
+    await acceptPopup(pair).connection
+    await tick()
+    expect(codes(app.events)).toContain('carrier-message-port')
+  })
+})
+
+describe('navigateAway [POPUP-CONTROL-005]', () => {
+  it('navigates the handle directly, retires the carrier, and stays open for the next document', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const scope = fakeScope()
+    const first = acceptPopup(pair, { worker: scope.worker })
+    const popup = await first.connection
+    await tick()
+
+    await app.connection.navigateAway('https://provider.example/consent')
+    expect(pair.popupProxy.replaced).toEqual(['https://provider.example/consent'])
+    expect(codes(app.events).at(-1)).toBe('control-direct')
+    expect(scope.pending).toHaveLength(0) // nothing kept
+    expect(() => app.connection.send(new Start())).toThrow('send-unavailable')
+    await tick()
+    // The popup document is gone with the provider page; its endpoint saw no control.
+    expect(codes(first.events)).not.toContain('connection-closed')
+    void popup
+
+    // The provider returns to a participating document: a fresh handshake.
+    pair.relocate(POPUP_ORIGIN)
+    const readies: number[] = []
+    app.connection.on(Ready, (r) => void readies.push(r.version))
+    const next = await acceptPopup(pair).connection
+    await tick()
+    expect(codes(app.events).filter((c) => c === 'carrier-message-port')).toHaveLength(2)
+    next.send(new Ready(9))
+    await tick()
+    expect(readies).toEqual([9])
+  })
+
+  it('rejects without direct control and is a no-op while anchor binding is pending', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    await acceptPopup(pair).connection
+    await tick()
+    pair.popupProxy.closed = true
+    await expect(app.connection.navigateAway('https://provider.example/')).rejects.toMatchObject({
+      code: 'popup-unavailable',
+    })
+    expect(pair.popupProxy.replaced).toEqual([])
+
+    const blocked = connectApp(fakePair(), { blocked: true })
+    await expect(
+      blocked.connection.navigateAway('https://provider.example/'),
+    ).resolves.toBeUndefined()
+    await expect(blocked.connection.navigateAway('http://provider.example/')).rejects.toThrow(
+      TypeError,
+    )
+  })
+
+  it('on the popup side replaces the document without keeping the port', async () => {
+    const pair = fakePair()
+    connectApp(pair)
+    const scope = fakeScope()
+    const side = acceptPopup(pair, { worker: scope.worker })
+    const popup = await side.connection
+    await tick()
+    await popup.navigateAway('https://provider.example/consent')
+    expect(pair.popupProxy.replaced).toEqual(['https://provider.example/consent'])
+    expect(scope.pending).toHaveLength(0)
+    expect(codes(side.events).at(-1)).toBe('connection-closed')
+    await expect(popup.navigate('https://popup.example/p')).rejects.toThrow('connection-closed')
+  })
+})
+
+describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
+  it("accepts any HTTPS opener origin under '*' and binds it exactly", async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const events: PopupDiagnostic[] = []
+    const popup = new CurrentWindow(pair.popupWindow, noRegistration)
+    const connection = PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: '*',
+      onDiagnostic: (e) => void events.push(e),
+    })
+    await connection.ready
+    await tick()
+    expect(codes(events)).toEqual(['carrier-message-port'])
+    const starts = vi.fn()
+    connection.on(Start, starts)
+    app.connection.send(new Start())
+    await tick()
+    expect(starts).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects an opaque or non-HTTPS observed origin even under '*'", async () => {
+    for (const origin of ['null', 'http://app.example']) {
+      const pair = fakePair()
+      const popup = new CurrentWindow(pair.popupWindow, noRegistration)
+      const pending = PopupConnection.accept<Messages>(popup, {
+        connectionId: ID,
+        allowedApplicationOrigins: '*',
+      })
+      await tick()
+      pair.popupView.dispatch({
+        data: { type: 'message-port', connectionVersion: CONNECTION_VERSION, connectionId: ID },
+        origin,
+        source: pair.appProxy,
+        ports: [new MessageChannel().port1],
+      })
+      await expect(pending.ready).rejects.toMatchObject({ code: 'handshake-rejected' })
+    }
+  })
+
+  it('keeps an empty list invalid and never accepts a wildcard on the application side', async () => {
+    const pair = fakePair()
+    const popup = new CurrentWindow(pair.popupWindow, noRegistration)
+    expect(() =>
+      PopupConnection.accept(popup, { connectionId: ID, allowedApplicationOrigins: [] }),
+    ).toThrow(TypeError)
+    const opened = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    expect(() =>
+      PopupConnection.connect(opened, { connectionId: ID, allowedPopupOrigins: '*' as never }),
+    ).toThrow(TypeError)
+  })
+})
+
+describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
+  const FALLBACK = '/prover/fallback'
+
+  /** A popup endpoint on `path` with the fallback option, over a pair. */
+  function acceptIsolating(
+    pair: FakePair,
+    opts: {
+      worker?: Parameters<typeof registrationWith>[0]
+      fallback?: string
+      opener?: boolean
+    } = {},
+  ) {
+    const events: PopupDiagnostic[] = []
+    const view = opts.opener === false ? { ...pair.popupWindow, opener: null } : pair.popupWindow
+    const popup = new CurrentWindow(
+      view as Window,
+      opts.worker === undefined ? noRegistration : registrationWith(opts.worker),
+      pair.popupWindow.location.hash, // captured as the host bootstrap would
+    )
+    const endpoint = PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: [APP_ORIGIN],
+      isolationFallbackUrl: opts.fallback ?? FALLBACK,
+      onDiagnostic: (e) => void events.push(e),
+    })
+    return { endpoint, events }
+  }
+
+  it('installs without navigating when the document is already isolated', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    pair.setIsolated(true)
+    const app = connectApp(pair)
+    const side = acceptIsolating(pair)
+    await side.endpoint.ready
+    await tick() // the application installs its carrier on the echo, one task later
+    expect(codes(side.events)).toEqual(['carrier-message-port'])
+    expect(pair.popupProxy.replaced).toEqual([])
+    const starts = vi.fn()
+    side.endpoint.on(Start, starts)
+    app.connection.send(new Start())
+    await tick()
+    expect(starts).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the port before navigating, with ready pending and nothing delivered', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    const app = connectApp(pair)
+    const scope = fakeScope()
+    const side = acceptIsolating(pair, { worker: scope.worker })
+    const starts = vi.fn()
+    side.endpoint.on(Start, starts)
+    await tick(20)
+    // The application already sent into the handshake port; it must travel.
+    app.connection.send(new Start())
+    await tick(20)
+    expect(starts).not.toHaveBeenCalled()
+    expect(scope.pending).toHaveLength(1)
+    expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}${FALLBACK}#c=1`])
+    expect(codes(side.events)).toEqual([
+      'claim-empty',
+      'carrier-message-port',
+      'isolation-fallback',
+      'keep-acknowledged',
+      'connection-closed',
+    ])
+    let settled = false
+    void side.endpoint.ready.then(
+      () => (settled = true),
+      () => (settled = true),
+    )
+    await tick()
+    expect(settled).toBe(false)
+    expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
+
+    // The isolated fallback document restores the port and receives the value once.
+    pair.relocate(POPUP_ORIGIN, FALLBACK, '#c=1')
+    pair.setIsolated(true)
+    const next = acceptIsolating(pair, { worker: scope.worker })
+    const restored = vi.fn()
+    next.endpoint.on(Start, restored)
+    await next.endpoint.ready
+    await tick()
+    expect(codes(next.events)).toEqual(['carrier-restored'])
+    expect(restored).toHaveBeenCalledTimes(1)
+    expect(pair.popupProxy.replaced).toHaveLength(1)
+    // Still one application carrier throughout.
+    expect(codes(app.events).filter((c) => c === 'carrier-message-port')).toHaveLength(1)
+  })
+
+  it('waits for the pending handshake when COOP precedes acknowledgement delivery', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover')
+    const scope = fakeScope()
+    const intervals = vi.spyOn(globalThis, 'setInterval')
+    const postToPopup = pair.popupProxy.postMessage.bind(pair.popupProxy)
+    let acknowledge!: () => void
+    vi.spyOn(pair.popupProxy, 'postMessage').mockImplementationOnce((message, origin, transfer) => {
+      const port = transfer![0] as MessagePort
+      const post = port.postMessage.bind(port)
+      vi.spyOn(port, 'postMessage').mockImplementationOnce((value) => {
+        // The popup can complete its worker handoff before the app processes this ACK.
+        acknowledge = () => post(value)
+      })
+      postToPopup(message, origin, transfer)
+    })
+    const app = connectApp(pair)
+    const side = acceptIsolating(pair, { worker: scope.worker })
+    const ended = vi.fn()
+    void app.connection.closed.then(ended)
+    try {
+      await side.endpoint.closed
+      expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}${FALLBACK}`])
+      pair.popupProxy.closed = true
+      expect(app.connection.peerOrigin).toBeNull()
+      const poll = intervals.mock.calls[0][0] as () => void
+      poll()
+      await Promise.resolve()
+      expect(ended).not.toHaveBeenCalled()
+      acknowledge()
+      await app.connection.ready
+      expect(app.connection.peerOrigin).toBe(POPUP_ORIGIN)
+    } finally {
+      await app.connection.close()
+      await side.endpoint.close()
+      intervals.mockRestore()
+    }
+  })
+
+  it('fails without looping when the fallback itself is not isolated', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, FALLBACK, '#c=1')
+    connectApp(pair)
+    const side = acceptIsolating(pair, { worker: fakeScope().worker })
+    await expect(side.endpoint.ready).rejects.toThrow('isolation-unavailable')
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(await side.endpoint.closed).toEqual({ outcome: 'failed', code: 'isolation-unavailable' })
+  })
+
+  it('rejects an invalid, non-HTTPS, or cross-origin fallback synchronously', () => {
+    const pair = fakePair()
+    for (const bad of ['http://popup.example/x', 'https://other.example/x', 'https://:bad']) {
+      const popup = new CurrentWindow(pair.popupWindow, noRegistration)
+      expect(() =>
+        PopupConnection.accept(popup, {
+          connectionId: ID,
+          allowedApplicationOrigins: [APP_ORIGIN],
+          isolationFallbackUrl: bad,
+        }),
+      ).toThrow(TypeError)
+    }
+    expect(pair.popupView.listeners.size).toBe(0)
+  })
+
+  it('carries the captured fragment to the fallback and rejects one spelled inline', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1&x=y%20z')
+    connectApp(pair)
+    // The bootstrap cleared the URL after capturing; the snapshot still travels.
+    const captured = pair.popupWindow.location.hash
+    pair.relocate(POPUP_ORIGIN, '/prover', '')
+    const popup = new CurrentWindow(
+      pair.popupWindow,
+      registrationWith(fakeScope().worker),
+      captured,
+    )
+    const events: PopupDiagnostic[] = []
+    PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: [APP_ORIGIN],
+      isolationFallbackUrl: '/f',
+      onDiagnostic: (e) => void events.push(e),
+    })
+    await tick(20)
+    expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}/f#c=1&x=y%20z`])
+    expect(codes(events)).toContain('keep-acknowledged')
+    for (const bad of ['/f#own', '/f#']) {
+      expect(() =>
+        PopupConnection.accept(new CurrentWindow(pair.popupWindow, noRegistration), {
+          connectionId: ID,
+          allowedApplicationOrigins: [APP_ORIGIN],
+          isolationFallbackUrl: bad,
+        }),
+      ).toThrow(TypeError)
+    }
+  })
+
+  it('aborts on close during the hop and reports a refused keep as failure', async () => {
+    /** A worker holding nothing that answers keeps as told, or never. */
+    const worker = (keepReply: { ok: boolean } | null) => ({
+      postMessage(message: unknown, transfer: Transferable[]) {
+        const reply = transfer[transfer.length - 1] as MessagePort
+        const { type } = message as { type: string }
+        if (type === 'libid-popup-claim') reply.postMessage({ port: false })
+        else if (keepReply) reply.postMessage(keepReply)
+      },
+    })
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    connectApp(pair)
+    const refused = acceptIsolating(pair, { worker: worker({ ok: false }) })
+    await expect(refused.endpoint.ready).rejects.toThrow('keep-failed')
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(await refused.endpoint.closed).toEqual({ outcome: 'failed', code: 'keep-failed' })
+
+    const pair2 = fakePair()
+    pair2.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    connectApp(pair2)
+    const closing = acceptIsolating(pair2, { worker: worker(null) })
+    await tick(20) // handshake done; the keep is now waiting on the silent worker
+    expect(codes(closing.events)).toContain('isolation-fallback')
+    await closing.endpoint.close()
+    expect(await closing.endpoint.closed).toEqual({ outcome: 'closed' })
+    await tick()
+    expect(pair2.popupProxy.replaced).toEqual([])
+  })
+
+  it('leaves behavior unchanged when the option is absent', async () => {
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    connectApp(pair)
+    const side = acceptPopup(pair)
+    await side.connection
+    expect(codes(side.events)).toEqual(['carrier-message-port'])
+    expect(pair.popupProxy.replaced).toEqual([])
+  })
+})
+
+describe('loopback HTTP [POPUP-CONNECTION-009/011]', () => {
+  it.each(['localhost', '127.0.0.1'])(
+    'authenticates and preserves isolation continuity on %s',
+    async (host) => {
+      const applicationOrigin = `http://${host}:4683`
+      const popupOrigin = `http://${host}:4684`
+      const pair = fakePair(popupOrigin, applicationOrigin)
+      pair.relocate(popupOrigin, '/prover', '#private=captured')
+      const scope = fakeScope(popupOrigin)
+      const app = PopupConnection.connect<Messages>(
+        new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView),
+        { connectionId: ID, allowedPopupOrigins: [popupOrigin] },
+      )
+      const accept = (allowedApplicationOrigins: readonly string[] | '*') =>
+        PopupConnection.accept<Messages>(
+          new CurrentWindow(
+            pair.popupWindow,
+            registrationWith(scope.worker),
+            pair.popupWindow.location.hash,
+          ),
+          { connectionId: ID, allowedApplicationOrigins, isolationFallbackUrl: '/prover/fallback' },
+        )
+      const first = accept([applicationOrigin])
+      const premature = vi.fn()
+      first.on(Start, premature)
+      await app.ready
+      await expect(first.closed).resolves.toEqual({ outcome: 'closed' })
+      app.send(new Start())
+      expect(pair.popupProxy.replaced).toEqual([`${popupOrigin}/prover/fallback#private=captured`])
+      expect(premature).not.toHaveBeenCalled()
+
+      pair.relocate(popupOrigin, '/prover/fallback', '#private=captured')
+      pair.setIsolated(true)
+      const next = accept([applicationOrigin])
+      const received = vi.fn()
+      next.on(Start, received)
+      await next.ready
+      await tick()
+      expect(received).toHaveBeenCalledTimes(1)
+
+      // A normal HTTP departure retires the port; a fresh wildcard handshake
+      // then admits the same canonical local application origin.
+      await app.navigateAway(`${popupOrigin}/external`)
+      pair.relocate(popupOrigin, '/prover/fallback')
+      const fresh = accept('*')
+      fresh.on(Start, received)
+      await fresh.ready
+      await tick()
+      app.send(new Start())
+      await tick()
+      expect(received).toHaveBeenCalledTimes(2)
+      await app.navigate(`${popupOrigin}/next`, new URLSearchParams('p=1'))
+      await expect(fresh.closed).resolves.toEqual({ outcome: 'closed' })
+      expect(pair.popupProxy.replaced.at(-1)).toBe(`${popupOrigin}/next#p=1`)
+      await app.close()
+    },
+  )
+})
+
+describe('structured fragments [POPUP-CONNECTION-013]', () => {
+  it('serializes fragment fields into the Navigate control and direct navigation', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const params = new URLSearchParams({ c: ID, next: 'a b&c' })
+    // Direct control before any carrier: the handle receives the composed URL.
+    await app.connection.navigate('https://popup.example/p', params)
+    expect(pair.popupProxy.replaced).toEqual([`https://popup.example/p#${params.toString()}`])
+    // Over the carrier the control carries the same serialization.
+    const side = acceptPopup(pair)
+    await side.connection
+    await tick()
+    const snapshot = params.toString()
+    await app.connection.navigate('https://popup-b.example/p', params)
+    params.set('next', 'mutated after the call')
+    await tick(20)
+    expect(pair.popupProxy.replaced.at(-1)).toBe(`https://popup-b.example/p#${snapshot}`)
+    // An empty fragment adds nothing.
+    const bare = connectApp(fakePair())
+    await bare.connection.navigate('https://popup.example/p', new URLSearchParams())
+    expect(bare.popup.handle && (bare.popup.handle as unknown as FakeProxy).replaced).toEqual([
+      'https://popup.example/p',
+    ])
+  })
+
+  it('rejects an inline fragment in every public URL argument, including an empty one', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const side = acceptPopup(pair)
+    const popup = await side.connection
+    await tick()
+    for (const bad of ['https://popup.example/x#c=1', 'https://popup.example/x#']) {
+      await expect(app.connection.navigate(bad)).rejects.toThrow(TypeError)
+      await expect(app.connection.navigateAway(bad)).rejects.toThrow(TypeError)
+      await expect(popup.navigate(bad)).rejects.toThrow(TypeError)
+      await expect(popup.navigateAway(bad)).rejects.toThrow(TypeError)
+    }
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(() => popup.send(new Ready(1))).not.toThrow()
+  })
+
+  it('keeps a popup-initiated destination and fragment private to the popup', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const scope = fakeScope()
+    const side = acceptPopup(pair, { worker: scope.worker })
+    const popup = await side.connection
+    await tick()
+    const before = codes(app.events).length
+    await popup.navigate(`${POPUP_ORIGIN}/next`, new URLSearchParams({ secret: 'value' }))
+    await tick(20)
+    expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}/next#secret=value`])
+    // The application saw no control, no diagnostic, and no message.
+    expect(codes(app.events)).toHaveLength(before)
+    expect(scope.pending).toHaveLength(1) // continuity only; the keeper carries no URL
+  })
+
+  it('adopts the captured fragment from a bootstrap that cleared the URL', () => {
+    const view = { top: null as unknown, location: { hash: '#c=1' } }
+    view.top = view
+    vi.stubGlobal('window', view)
+    vi.stubGlobal('navigator', {})
+    try {
+      const captured = PopupWindow.current('#c=1&t=2') as CurrentWindow
+      view.location.hash = ''
+      expect(captured.fragment).toBe('c=1&t=2')
+      expect((PopupWindow.current() as CurrentWindow).fragment).toBe('')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-014]', () => {
+  const PROVER = 'https://popup-b.example'
+
+  /** Application with a signaling-backed fallback, popup with its opener severed. */
+  function severedPair(hub: ReturnType<typeof fakeSignaling>) {
+    const pair = fakePair()
+    pair.appProxy.closed = true // the popup's opener is gone
+    const events: PopupDiagnostic[] = []
+    const popupWindow = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    const app = PopupConnection.connect<Messages>(popupWindow, {
+      connectionId: ID,
+      allowedPopupOrigins: [POPUP_ORIGIN, PROVER],
+      fallback: hub.application,
+      onDiagnostic: (e) => void events.push(e),
+    })
+    return { pair, app, events }
+  }
+
+  function acceptWith(
+    pair: FakePair,
+    hub: ReturnType<typeof fakeSignaling>,
+    isolationFallbackUrl?: string,
+  ) {
+    const events: PopupDiagnostic[] = []
+    const popup = new CurrentWindow(
+      pair.popupWindow,
+      noRegistration,
+      pair.popupWindow.location.hash,
+    )
+    const endpoint = PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: [APP_ORIGIN],
+      fallback: hub.popup,
+      ...(isolationFallbackUrl && { isolationFallbackUrl }),
+      onDiagnostic: (e) => void events.push(e),
+    })
+    return { endpoint, events }
+  }
+
+  it.each([POPUP_ORIGIN, PROVER])(
+    'hops to %s before establishing a replacement, losing gap sends',
+    async (targetOrigin) => {
+      const hub = fakeSignaling()
+      const { pair, app, events } = severedPair(hub)
+      const first = acceptWith(pair, hub)
+      await first.endpoint.ready
+      await app.ready
+      expect(codes(events)).toContain('carrier-fallback')
+
+      // Navigation prepares round two but cannot authenticate it before the
+      // destination exists. An ordered reply still reaches the old document.
+      const replies = vi.fn()
+      first.endpoint.on(Start, replies)
+      app.send(new Start())
+      await app.navigate(`${targetOrigin}/prover`, new URLSearchParams('c=1'))
+      await tick(20)
+      expect(replies).toHaveBeenCalledTimes(1)
+      expect(pair.popupProxy.replaced).toEqual([`${targetOrigin}/prover#c=1`])
+      expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(1)
+      expect(await first.endpoint.closed).toEqual({ outcome: 'closed' })
+      const rounds = hub.carriers.length
+
+      // The non-isolated destination hops without spending a connection: no
+      // constructor call, no new round, nothing delivered.
+      pair.relocate(targetOrigin, '/prover', '#c=1')
+      const second = acceptWith(pair, hub, '/prover/fallback')
+      const leaked = vi.fn()
+      second.endpoint.on(Start, leaked)
+      await tick(20)
+      expect(pair.popupProxy.replaced.at(-1)).toBe(`${targetOrigin}/prover/fallback#c=1`)
+      expect(codes(second.events)).toEqual(['isolation-fallback', 'connection-closed'])
+      expect(hub.carriers).toHaveLength(rounds)
+      expect(leaked).not.toHaveBeenCalled()
+      expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(1)
+      expect(() => app.send(new Start())).not.toThrow() // silent loss on the retired side
+      let settled = false
+      void second.endpoint.ready.then(
+        () => (settled = true),
+        () => (settled = true),
+      )
+      await tick()
+      expect(settled).toBe(false)
+
+      // The isolated fallback consumes the prepared round and both directions work.
+      pair.relocate(targetOrigin, '/prover/fallback', '#c=1')
+      pair.setIsolated(true)
+      const third = acceptWith(pair, hub, '/prover/fallback')
+      const starts = vi.fn()
+      third.endpoint.on(Start, starts)
+      await third.endpoint.ready
+      expect(codes(third.events)).toEqual(['carrier-fallback'])
+      expect(hub.carriers).toHaveLength(rounds + 2)
+      const readies: number[] = []
+      app.on(Ready, (r) => void readies.push(r.version))
+      app.send(new Start())
+      third.endpoint.send(new Ready(4))
+      await tick()
+      expect(starts).toHaveBeenCalledTimes(1) // only the post-authentication send
+      expect(readies).toEqual([4])
+      expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(2)
+      expect(codes(events)).not.toContain('connection-closed')
+      expect(codes(events)).not.toContain('connection-failed')
+    },
+  )
+
+  it('closes before the hop without navigating', async () => {
+    const hub = fakeSignaling()
+    const { pair } = severedPair(hub)
+    const side = acceptWith(pair, hub, '/prover/fallback')
+    await side.endpoint.close()
+    await tick(20)
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(codes(side.events)).not.toContain('isolation-fallback')
+    expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
+  })
+
+  it('reports a failed reconnection through the destination only', async () => {
+    const hub = fakeSignaling()
+    const { pair, app, events } = severedPair(hub)
+    const first = acceptWith(pair, hub, '/prover/fallback')
+    await tick(20) // left for the fallback without a carrier
+    expect(pair.popupProxy.replaced).toHaveLength(1)
+    expect(hub.carriers).toHaveLength(0)
+    void first
+    pair.relocate(POPUP_ORIGIN, '/prover/fallback', '')
+    pair.setIsolated(true)
+    hub.failNext = true
+    const second = acceptWith(pair, hub, '/prover/fallback')
+    await expect(second.endpoint.ready).rejects.toMatchObject({ code: 'fallback-failed' })
+    // The application is not told and still awaits its first carrier, so it
+    // cannot send into a gap: there is none.
+    let appEnded = false
+    void app.closed.then(() => (appEnded = true))
+    await tick()
+    expect(appEnded).toBe(false)
+    expect(() => app.send(new Start())).toThrow('send-unavailable')
+    expect(codes(events)).not.toContain('connection-failed')
+  })
+
+  it('fails without looping when the fallback document stays non-isolated', async () => {
+    const hub = fakeSignaling()
+    const { pair } = severedPair(hub)
+    pair.relocate(POPUP_ORIGIN, '/prover/fallback', '')
+    const side = acceptWith(pair, hub, '/prover/fallback')
+    await expect(side.endpoint.ready).rejects.toThrow('isolation-unavailable')
+    expect(pair.popupProxy.replaced).toEqual([])
+    expect(hub.carriers).toHaveLength(0)
+  })
+})
+
+describe('fallback seam [POPUP-CONNECTION-002/004/005] [POPUP-DIAGNOSTIC-003]', () => {
+  it('fails closed with fallback-unavailable exactly once when no opener and no constructor', async () => {
+    const pair = fakePair()
+    const side = acceptPopup(pair, { opener: false })
+    await expect(side.connection).rejects.toMatchObject({ code: 'fallback-unavailable' })
+    expect(codes(side.events)).toEqual(['fallback-unavailable', 'connection-failed'])
+  })
+
+  it('emits no fallback diagnostic when MessagePort succeeds', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const side = acceptPopup(pair)
+    await side.connection
+    await tick()
+    expect(codes(app.events).concat(codes(side.events))).not.toContain('fallback-unavailable')
+  })
+
+  it('invokes the application constructor once, installs the carrier only when it resolves, and aborts on close', async () => {
+    const pair = fakePair()
+    const [appCarrier, popupCarrier] = carrierPair()
+    const signals: AbortSignal[] = []
+    let resolveFallback: (c: Carrier) => void = () => {}
+    const fallback = vi.fn((signal: AbortSignal) => {
+      signals.push(signal)
+      return new Promise<Carrier>((resolve) => {
+        resolveFallback = resolve
+      })
+    })
+    const popup = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
+    const events: PopupDiagnostic[] = []
+    const connection = PopupConnection.connect<Messages>(popup, {
+      connectionId: ID,
+      allowedPopupOrigins: [POPUP_ORIGIN],
+      fallback,
+      onDiagnostic: (e) => void events.push(e),
+    })
+    expect(fallback).toHaveBeenCalledTimes(1)
+    expect(signals[0].aborted).toBe(false)
+    expect(() => connection.send(new Start())).toThrow('send-unavailable')
+
+    // MessagePort wins first; the standby stays armed.
+    await acceptPopup(pair).connection
+    await tick()
+    expect(codes(events)).toContain('carrier-message-port')
+
+    // The popup's next document commits fallback: resolution replaces the port carrier.
+    const readies: number[] = []
+    connection.on(Ready, (r) => void readies.push(r.version))
+    resolveFallback(appCarrier)
+    await tick()
+    expect(codes(events).at(-1)).toBe('carrier-fallback')
+    popupCarrier.send(new Ready(3))
+    await tick()
+    expect(readies).toEqual([3])
+
+    await connection.close()
+    expect(signals[0].aborted).toBe(true)
+  })
+
+  it('the popup commits its constructor only after MessagePort is unavailable', async () => {
+    const pair = fakePair()
+    const [appCarrier, popupCarrier] = carrierPair()
+    const fallback = vi.fn(() => Promise.resolve(popupCarrier))
+    const popup = new CurrentWindow({ ...pair.popupWindow, opener: null } as Window, noRegistration)
+    const events: PopupDiagnostic[] = []
+    const connection = PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: [APP_ORIGIN],
+      fallback,
+      onDiagnostic: (e) => void events.push(e),
+    })
+    await connection.ready
+    expect(fallback).toHaveBeenCalledTimes(1)
+    expect(codes(events)).toEqual(['carrier-fallback'])
+    const starts = vi.fn()
+    connection.on(Start, starts)
+    appCarrier.send(new Start())
+    await tick()
+    expect(starts).toHaveBeenCalledTimes(1)
+    // Navigation over a non-port carrier fails closed [POPUP-CONNECTION-008].
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(connection.navigate('https://popup.example/next')).rejects.toThrow(
+      'continuity-unsupported',
+    )
+    error.mockRestore()
+  })
+
+  it('the popup with an opener never invokes its constructor', async () => {
+    const pair = fakePair()
+    connectApp(pair)
+    const [, popupCarrier] = carrierPair()
+    const fallback = vi.fn(() => Promise.resolve(popupCarrier))
+    const side = acceptPopup(pair, { fallback })
+    await side.connection
+    expect(fallback).not.toHaveBeenCalled()
+    expect(codes(side.events)).toEqual(['carrier-message-port'])
+  })
+})
+
+describe('loss is never an outcome [POPUP-CONNECTION-006]', () => {
+  it('a closed popup port delivers nothing and resolves no caller operation', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const handler = vi.fn()
+    app.connection.on(Ready, handler)
+    const popup = await acceptPopup(pair).connection
+    await tick()
+    ;(popup as unknown as { carrier: Carrier }).carrier.close()
+    await tick()
+    expect(handler).not.toHaveBeenCalled()
+    expect(codes(app.events)).not.toContain('connection-closed')
+    expect(codes(app.events)).not.toContain('connection-failed')
+  })
+})
+
+describe('lifecycle outcome [POPUP-CONNECTION-006] [POPUP-DIAGNOSTIC-002]', () => {
+  it('settles closed on close and failed with the code on a fail-closed path', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const side = acceptPopup(pair)
+    const popup = await side.connection
+    await tick()
+    await expect(app.connection.ready).resolves.toBeUndefined()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    ;(popup as unknown as { carrier: Carrier }).carrier.send({ type: 'unknown' })
+    await tick()
+    expect(await app.connection.closed).toEqual({ outcome: 'failed', code: 'decode-rejected' })
+    await popup.close()
+    expect(await popup.closed).toEqual({ outcome: 'closed' })
+    error.mockRestore()
+  })
+
+  it('rejects ready with a PopupError when selection fails, before any carrier', async () => {
+    const pair = fakePair()
+    const side = acceptPopup(pair, { opener: false })
+    const failure = await side.endpoint.ready.catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(PopupError)
+    expect((failure as PopupError).code).toBe('fallback-unavailable')
+    expect(await side.endpoint.closed).toEqual({ outcome: 'failed', code: 'fallback-unavailable' })
+  })
+
+  it('lets a throwing caller handler propagate without failing the connection', async () => {
+    // A synchronous test carrier so the handler's throw surfaces to the test.
+    let deliver: (value: unknown) => void = () => {}
+    const carrier: Carrier = {
+      peerOrigin: APP_ORIGIN,
+      send: () => {},
+      on: (handler) => {
+        deliver = handler
+        return () => {}
+      },
+      close: () => {},
+    }
+    const pair = fakePair()
+    const popup = new CurrentWindow({ ...pair.popupWindow, opener: null } as Window, noRegistration)
+    const events: PopupDiagnostic[] = []
+    const connection = PopupConnection.accept<Messages>(popup, {
+      connectionId: ID,
+      allowedApplicationOrigins: [APP_ORIGIN],
+      fallback: () => Promise.resolve(carrier),
+      onDiagnostic: (e) => void events.push(e),
+    })
+    connection.on(Start, () => {
+      throw new Error('user secret https://leak.example')
+    })
+    await connection.ready
+    expect(() => deliver({ type: 'start' })).toThrow('user secret')
+    expect(codes(events)).toEqual(['carrier-fallback'])
+    expect(() => connection.send(new Ready(1))).not.toThrow()
+  })
+})
+
+describe('selection order at accept level [POPUP-CONNECTION-002]', () => {
+  it('treats a silent worker as holding nothing and continues over the opener', async () => {
+    vi.useFakeTimers()
+    try {
+      const pair = fakePair()
+      const app = connectApp(pair)
+      const silent = { postMessage: () => {} }
+      const side = acceptPopup(pair, { worker: silent })
+      await vi.advanceTimersByTimeAsync(2_100)
+      await side.connection
+      expect(codes(side.events)).toEqual(['claim-empty', 'carrier-message-port'])
+      expect(codes(app.events)).toContain('carrier-message-port')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('commits the fallback when the opener stays silent, and when it is closed', async () => {
+    vi.useFakeTimers()
+    try {
+      const pair = fakePair()
+      pair.appView.listeners.clear() // no application listening: the opener never answers
+      const [, popupCarrier] = carrierPair()
+      const side = acceptPopup(pair, { fallback: popupCarrier })
+      await vi.advanceTimersByTimeAsync(30_100)
+      await side.connection
+      expect(codes(side.events)).toEqual(['opener-timeout', 'carrier-fallback'])
+    } finally {
+      vi.useRealTimers()
+    }
+    const pair = fakePair()
+    pair.appProxy.closed = true
+    const [, popupCarrier] = carrierPair()
+    const side = acceptPopup(pair, { fallback: popupCarrier })
+    await side.connection
+    expect(codes(side.events)).toEqual(['carrier-fallback'])
+  })
+
+  it('keeps an authentication failure terminal even with a fallback supplied', async () => {
+    const pair = fakePair()
+    const [, popupCarrier] = carrierPair()
+    const fallback = vi.fn(() => Promise.resolve(popupCarrier))
+    const side = acceptPopup(pair, { fallback })
+    await tick()
+    pair.popupView.dispatch({
+      data: { type: 'message-port', connectionVersion: CONNECTION_VERSION + 1, connectionId: ID },
+      origin: APP_ORIGIN,
+      source: pair.appProxy,
+      ports: [new MessageChannel().port1],
+    })
+    await expect(side.connection).rejects.toMatchObject({ code: 'handshake-rejected' })
+    expect(fallback).not.toHaveBeenCalled()
+    expect(codes(side.events)).toEqual(['handshake-rejected', 'connection-failed'])
+  })
+
+  it('aborts the popup-side fallback signal on close', async () => {
+    const pair = fakePair()
+    const [, popupCarrier] = carrierPair()
+    const signals: AbortSignal[] = []
+    const side = acceptPopup(pair, {
+      opener: false,
+      fallback: (signal) => {
+        signals.push(signal)
+        return Promise.resolve(popupCarrier)
+      },
+    })
+    const popup = await side.connection
+    expect(signals[0].aborted).toBe(false)
+    await popup.close()
+    expect(signals[0].aborted).toBe(true)
+  })
+
+  it('rejects a fragment-only navigation without touching the carrier', async () => {
+    const pair = fakePair()
+    connectApp(pair)
+    const side = acceptPopup(pair, { worker: fakeScope().worker })
+    const popup = await side.connection
+    await tick()
+    await expect(popup.navigate(`${POPUP_ORIGIN}/p`, new URLSearchParams('other'))).rejects.toThrow(
+      TypeError,
+    )
+    expect(() => popup.send(new Ready(1))).not.toThrow()
+  })
+})
+
+describe('authenticated peer origin [POPUP-CONNECTION-007] [POPUP-KEEPER-001]', () => {
+  it('exposes the selected peer on both sides and clears it on retirement', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const side = acceptPopup(pair)
+    expect(app.connection.peerOrigin).toBeNull()
+    expect(side.endpoint.peerOrigin).toBeNull()
+    const popup = await side.connection
+    await app.connection.ready
+    expect(app.connection.peerOrigin).toBe(POPUP_ORIGIN)
+    expect(popup.peerOrigin).toBe(APP_ORIGIN)
+    await app.connection.navigateAway('https://provider.example/')
+    expect(app.connection.peerOrigin).toBeNull()
+    await popup.close()
+    expect(popup.peerOrigin).toBeNull()
+    await app.connection.close()
+  })
+
+  it.each([
+    { allowedOrigin: APP_ORIGIN, isolate: false },
+    { allowedOrigin: 'https://other-app.example', isolate: false },
+    { allowedOrigin: 'https://other-app.example', isolate: true },
+  ])(
+    'restores the binding and enforces the destination allowlist %s',
+    async ({ allowedOrigin, isolate }) => {
+      const pair = fakePair()
+      const scope = fakeScope()
+      const app = connectApp(pair)
+      const first = await acceptPopup(pair, { worker: scope.worker }).connection
+      const navigating = first.navigate(`${POPUP_ORIGIN}/next`)
+      expect(first.peerOrigin).toBeNull() // Detached before the keeper can acknowledge.
+      await navigating
+      const fallback = vi.fn()
+      const next = PopupConnection.accept(
+        new CurrentWindow(
+          { ...pair.popupWindow, opener: null } as Window,
+          registrationWith(scope.worker),
+        ),
+        {
+          connectionId: ID,
+          allowedApplicationOrigins: [allowedOrigin],
+          fallback,
+          ...(isolate && { isolationFallbackUrl: `${POPUP_ORIGIN}/isolated` }),
+        },
+      )
+      if (allowedOrigin === APP_ORIGIN) {
+        await next.ready
+        expect(next.peerOrigin).toBe(APP_ORIGIN)
+        const received = vi.fn()
+        next.on(Start, received)
+        app.connection.send(new Start())
+        await tick()
+        expect(received).toHaveBeenCalledOnce()
+        await next.close()
+      } else {
+        await expect(next.ready).rejects.toMatchObject({ code: 'handshake-rejected' })
+        expect(next.peerOrigin).toBeNull()
+        expect(scope.pending).toHaveLength(1) // No second keep or isolation navigation.
+      }
+      expect(fallback).not.toHaveBeenCalled()
+      await app.connection.close()
+    },
+  )
+
+  it.each([undefined, 'null', `${APP_ORIGIN}/`, 'https://other-app.example'])(
+    'rejects fallback origin %s before carrier subscription',
+    async (peerOrigin) => {
+      const pair = fakePair()
+      const carrier = {
+        peerOrigin,
+        send: vi.fn(),
+        on: vi.fn(),
+        close: vi.fn(),
+      } as unknown as Carrier
+      const side = acceptPopup(pair, { opener: false, fallback: carrier })
+      await expect(side.endpoint.ready).rejects.toMatchObject({ code: 'handshake-rejected' })
+      expect(side.endpoint.peerOrigin).toBeNull()
+      expect(carrier.on).not.toHaveBeenCalled()
+      expect(carrier.close).toHaveBeenCalledOnce()
+    },
+  )
+})
+
+describe('reported document departure [POPUP-CONNECTION-006]', () => {
+  it.each([false, true])(
+    'ends exactly once on pagehide with a severed handle: %s',
+    async (severed) => {
+      const pair = fakePair()
+      const app = connectApp(pair)
+      const popup = await acceptPopup(pair).connection
+      const ends = vi.fn()
+      void app.connection.closed.then(ends)
+      if (severed) pair.popupProxy.closed = true
+      await tick()
+      expect(ends).not.toHaveBeenCalled()
+      pair.popupView.pagehide()
+      pair.popupView.pagehide()
+      await tick()
+      expect(ends).toHaveBeenCalledExactlyOnceWith({ outcome: 'closed' })
+      await expect(popup.closed).resolves.toEqual({ outcome: 'closed' })
+      expect(codes(app.events)).not.toContain('connection-failed')
+      expect(() => app.connection.send({ type: 'document-departed' } as never)).toThrow('reserved')
+    },
+  )
+
+  it('notifies the application when the popup closes itself', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const popup = await acceptPopup(pair).connection
+    await popup.close()
+    await tick()
+    expect(pair.popupProxy.closed).toBe(true)
+    await expect(app.connection.closed).resolves.toEqual({ outcome: 'closed' })
+  })
+
+  it('does not report expected navigation, or departure over a retired carrier', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const scope = fakeScope()
+    const popup = await acceptPopup(pair, { worker: scope.worker }).connection
+    const ends = vi.fn()
+    void app.connection.closed.then(ends)
+    await popup.navigate(`${POPUP_ORIGIN}/next`)
+    pair.popupView.pagehide()
+    await tick()
+    expect(ends).not.toHaveBeenCalled()
+    pair.relocate(POPUP_ORIGIN, '/next')
+    await acceptPopup(pair, { worker: scope.worker }).connection
+    await app.connection.navigateAway('https://provider.example/consent')
+    pair.popupView.pagehide()
+    await tick()
+    expect(ends).not.toHaveBeenCalled()
+    await app.connection.close()
+  })
+
+  it('rejects a departure notification in the wrong direction', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const pair = fakePair()
+      const app = connectApp(pair)
+      const popup = await acceptPopup(pair).connection
+      await app.connection.ready
+      ;(app.connection as unknown as { carrier: Carrier }).carrier.send({
+        type: 'document-departed',
+      })
+      await tick()
+      await expect(popup.closed).resolves.toEqual({ outcome: 'failed', code: 'control-rejected' })
+      expect(pair.popupProxy.closed).toBe(false)
+      await app.connection.close()
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  it('a failed departure send still closes locally without reporting another failure', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const popup = await acceptPopup(pair).connection
+    const carrier = (popup as unknown as { carrier: Carrier }).carrier
+    vi.spyOn(carrier, 'send').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+    pair.popupView.pagehide()
+    await expect(popup.closed).resolves.toEqual({ outcome: 'closed' })
+    await app.connection.close()
+  })
+})
+
+describe('unreachable window [POPUP-CONNECTION-006]', () => {
+  for (const blocked of [false, true])
+    it(`fails on provider closure after ${blocked ? 'native-anchor' : 'scripted'} binding`, async () => {
+      const pair = fakePair()
+      const app = connectApp(pair, { blocked })
+      const popup = await acceptPopup(pair).connection
+      await app.connection.ready
+      await app.connection.navigateAway('https://provider.example/consent')
+      // No package code or departure message runs on the provider page.
+      pair.popupProxy.closed = true
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        await expect(app.connection.closed).resolves.toEqual({
+          outcome: 'failed',
+          code: 'popup-unavailable',
+        })
+        expect(pair.appView.listeners.size).toBe(0)
+        expect(new PopupError('popup-unavailable').message).toBe('popup-unavailable')
+      } finally {
+        log.mockRestore()
+        await app.connection.close()
+        await popup.close()
+      }
+    })
+
+  it('keeps an unbound anchor pending and stops polling on explicit closure', async () => {
+    vi.useFakeTimers()
+    const app = connectApp(fakePair(), { blocked: true })
+    const ended = vi.fn()
+    void app.connection.closed.then(ended)
+    try {
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(ended).not.toHaveBeenCalled()
+      await app.connection.close()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      await app.connection.close()
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects readiness when the handle is lost before any carrier is selected', async () => {
+    vi.useFakeTimers()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const ready = app.connection.ready.catch((error) => error)
+    pair.popupProxy.closed = true
+    try {
+      await vi.advanceTimersByTimeAsync(250)
+      expect(await ready).toMatchObject({ code: 'popup-unavailable' })
+      await expect(app.connection.closed).resolves.toEqual({
+        outcome: 'failed',
+        code: 'popup-unavailable',
+      })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      await app.connection.close()
+      vi.useRealTimers()
+      log.mockRestore()
+    }
+  })
+
+  it('does not mistake isolation with a preserved carrier for disconnection', async () => {
+    vi.useFakeTimers()
+    const pair = fakePair()
+    const [carrier, peer] = carrierPair()
+    const app = connectApp(pair, { fallback: carrier })
+    await app.connection.ready
+    pair.popupProxy.closed = true
+    const ended = vi.fn()
+    void app.connection.closed.then(ended)
+    try {
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(ended).not.toHaveBeenCalled()
+      expect(app.connection.peerOrigin).toBe(POPUP_ORIGIN)
+    } finally {
+      await app.connection.close()
+      peer.close()
+      vi.useRealTimers()
+    }
+  })
+
+  for (const outcome of ['connected', 'rejected', 'closed'] as const)
+    it(`waits for fallback without a deadline until ${outcome}`, async () => {
+      vi.useFakeTimers()
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const pair = fakePair()
+      const [carrier, peer] = carrierPair()
+      const dispose = vi.spyOn(carrier, 'close')
+      let resolve!: (carrier: Carrier) => void
+      let reject!: () => void
+      let signal!: AbortSignal
+      const connection = PopupConnection.connect<Messages>(
+        new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView),
+        {
+          connectionId: ID,
+          allowedPopupOrigins: [POPUP_ORIGIN],
+          fallback: (abort) => {
+            signal = abort
+            return new Promise<Carrier>((yes, no) => {
+              resolve = yes
+              reject = no
+            })
+          },
+        },
+      )
+      pair.popupProxy.closed = true
+      const ended = vi.fn()
+      void connection.closed.then(ended)
+      try {
+        await vi.advanceTimersByTimeAsync(60_000)
+        expect(ended).not.toHaveBeenCalled()
+        if (outcome === 'closed') await connection.close()
+        if (outcome === 'rejected') reject()
+        else resolve(carrier)
+        await vi.advanceTimersByTimeAsync(250)
+        if (outcome === 'connected') {
+          await connection.ready
+          expect(connection.peerOrigin).toBe(POPUP_ORIGIN)
+          expect(ended).not.toHaveBeenCalled()
+        } else {
+          await expect(connection.closed).resolves.toEqual(
+            outcome === 'closed'
+              ? { outcome: 'closed' }
+              : { outcome: 'failed', code: 'popup-unavailable' },
+          )
+          expect(signal.aborted).toBe(true)
+          expect(vi.getTimerCount()).toBe(0)
+          if (outcome === 'closed') expect(dispose).toHaveBeenCalledTimes(1)
+        }
+      } finally {
+        await connection.close()
+        carrier.close()
+        peer.close()
+        vi.useRealTimers()
+        log.mockRestore()
+      }
+    })
+})

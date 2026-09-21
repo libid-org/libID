@@ -1,0 +1,12 @@
+---
+import { palettes } from '../palette.mjs';
+
+const css = Object.entries(palettes).map(([theme, colors]) => {
+  const selector = theme === 'dark' ? ':root' : ':root[data-theme="light"]';
+  const variables = Object.entries(colors).map(([name, color]) => `--${name}:${color};`).join('');
+  return `${selector}{color-scheme:${theme};${variables}}`;
+}).join('\n');
+---
+
+<style is:inline set:html={css}></style>
+<script is:inline src="/theme.js"></script>

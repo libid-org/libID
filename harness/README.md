@@ -36,7 +36,7 @@ which does, in order:
 
 1. **asset staging** — builds `@libid/claim-full` (which fetches its
    bundled assets: the tlsn wasm bundle from the `libid-org/notary`
-   release, the compiled circuits from `libid-org/libid-circuits`
+   release, the compiled circuits from `libid-org/libID-circuits`
    sha256-verified against the release manifest, and noir's acvm/abi wasm
    from `node_modules`) and runs its `libid-claim-assets` bin to copy the
    tree into `ts/apps/demo/public/` (gitignored).

@@ -3,8 +3,8 @@
 // the published tarball never run it — the assets ship inside the tarball.
 //
 //   assets/tlsn_wasm.js, tlsn_wasm_bg.wasm, spawn.js   ← libid-org/notary release
-//   assets/circuits/x_token.json          (X)          ← libid-org/libid-circuits
-//   assets/circuits/jwt_email.json        (Google)     ← libid-org/libid-circuits
+//   assets/circuits/x_token.json          (X)          ← libid-org/libID-circuits
+//   assets/circuits/jwt_email.json        (Google)     ← libid-org/libID-circuits
 //   assets/circuits/manifest.json                      ← the release manifest (provenance)
 //   assets/wasm/acvm_js_bg.wasm, noirc_abi_wasm_bg.wasm ← @noir-lang/* in node_modules
 //
@@ -98,7 +98,7 @@ function findFile(dir, name) {
 }
 
 // ── toolchain tie check (fails the build on any drift) ─────────────────────
-const manifestUrl = `https://github.com/libid-org/libid-circuits/releases/download/${CIRCUITS_RELEASE}/manifest.json`
+const manifestUrl = `https://github.com/libid-org/libID-circuits/releases/download/${CIRCUITS_RELEASE}/manifest.json`
 const manifest = JSON.parse((await fetchBytes(manifestUrl)).toString('utf8'))
 
 const bbPin = claimPkg.dependencies['@aztec/bb.js']
@@ -158,7 +158,7 @@ try {
 
   // ── circuits (verified against the release manifest) ─────────────────────
   const circVer = CIRCUITS_RELEASE.replace(/^v/, '')
-  const circBase = `https://github.com/libid-org/libid-circuits/releases/download/${CIRCUITS_RELEASE}`
+  const circBase = `https://github.com/libid-org/libID-circuits/releases/download/${CIRCUITS_RELEASE}`
   const stageCircuit = async (suffix, jsonName) => {
     const tarName = `libid-circuits-${circVer}-${suffix}.tar.gz`
     const entry = manifest.tarballs[tarName]

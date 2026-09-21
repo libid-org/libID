@@ -1,0 +1,27 @@
+<button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false" hidden>
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <circle cx="12" cy="12" r="4"></circle>
+    <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"></path>
+  </svg>
+</button>
+
+<style>
+  .theme-toggle {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    padding: 11px;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    cursor: pointer;
+  }
+
+  .theme-toggle[hidden] { display: none; }
+  .theme-toggle svg { width: 20px; height: 20px; }
+  .theme-toggle:hover { color: var(--sl-color-white); border-color: var(--sl-color-gray-4); }
+  .theme-toggle[aria-pressed='true'] { color: var(--sl-color-white); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--sl-color-white); outline-offset: 6px; }
+</style>

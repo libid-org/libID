@@ -39,6 +39,10 @@ transact.
 Besides the protocol specifications under [`specs/`](specs/), this repo
 carries the browser claim library and the integration harness:
 
+- [`site/`](site/) — the static project website and Cloudflare deployment
+  configuration. Starlight serves the docs at `lib.id/docs/`,
+  publishing Markdown from [`docs/pages/`](docs/pages/). Specification sources
+  stay in `specs/`.
 - [`ts/packages/claim`](ts/packages/claim) — **`@libid/claim`**, the browser
   library for the OAuth handle-claim flows. GitHub (backend-driven MPC-TLS),
   X (in-browser TLSNotary ProxyMode + a Noir/UltraHonk proof), and Google
@@ -56,19 +60,19 @@ carries the browser claim library and the integration harness:
 
 ## Repositories
 
-- [`libid`](https://github.com/libid-org/libid) — protocol specifications,
+- [`libID`](https://github.com/libid-org/libID) — protocol specifications,
   project overview, the `@libid/claim` browser library, and the
   integration harness.
-- [`libid-rs`](https://github.com/libid-org/libid-rs) — Rust application
+- [`libID-rs`](https://github.com/libid-org/libID-rs) — Rust application
   backends and zero-knowledge proof tooling.
-- [`libid-contracts`](https://github.com/libid-org/libid-contracts) — Solidity
+- [`libID-contracts`](https://github.com/libid-org/libID-contracts) — Solidity
   contracts for EVM-compatible chains.
-- [`libid-circuits`](https://github.com/libid-org/libid-circuits) — the Noir
+- [`libID-circuits`](https://github.com/libid-org/libID-circuits) — the Noir
   circuits; releases ship the compiled circuits + verification keys the
   claim flows load.
 - [`notary`](https://github.com/libid-org/notary) — the notary service
   (MPC-TLS / ProxyMode verifier + attestation signer).
-- [`libid-server-rs`](https://github.com/libid-org/libid-server-rs) — the
+- [`libID-server-rs`](https://github.com/libid-org/libID-server-rs) — the
   deployable libID server for GitHub OAuth and MPC-TLS proof generation.
 - [`chain-configurations`](https://github.com/libid-org/chain-configurations)
   — desired-state deployment files and the `libid-deploy` binary.

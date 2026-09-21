@@ -1,0 +1,33 @@
+---
+import ThemeProvider from '../components/ThemeProvider.astro';
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>libID — Identity, bridged.</title>
+    <meta name="description" content="Every social account is already a multichain identity">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="preload" href="/fonts/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/style.css">
+    <ThemeProvider />
+  </head>
+  <body>
+    <button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false" hidden>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"></path>
+      </svg>
+    </button>
+    <main>
+      <h1 class="wordmark">libID</h1>
+      <p class="description">Every social account is already<br class="wide-break"> a multichain identity</p>
+      <nav aria-label="Explore libID">
+        <a href="/docs/">Docs</a>
+        <a href="/specs/">Specs</a>
+      </nav>
+    </main>
+  </body>
+</html>

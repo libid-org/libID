@@ -1,0 +1,778 @@
+// The logical connection (docs/connection.md, docs/control.md): one
+// application endpoint that may see several popup documents, and one popup
+// endpoint per document. Both share registration, routing, and closure; the
+// popup side consumes navigation/close controls and reports document departure.
+
+import {
+  createReporter,
+  type DiagnosticCode,
+  type PopupDiagnostic,
+  PopupError,
+  type PopupErrorCode,
+  type Reporter,
+  reportUndeliverable,
+} from './diagnostics.js'
+import { activeRegistration, bounded, PortKeeper } from './keeper.js'
+import {
+  type Carrier,
+  type CarrierConstructor,
+  decodeControl,
+  isAllowedOrigin,
+  isCanonicalWebUrl,
+  isConnectionId,
+  isNavigationCarrier,
+  isReservedType,
+  type Message,
+  type MessageType,
+  type Navigate,
+  type OriginAllowlist,
+  onReplacement,
+  type PopupControl,
+  prepareNavigation,
+  requireOrigins,
+  routingType,
+} from './message.js'
+import { listenForPopupPorts, PortCarrier, requestApplicationPort } from './port.js'
+import { CurrentWindow, OpenedWindow, type PopupWindow } from './window.js'
+
+/** How a logical connection ended. */
+export type ConnectionEnd = { outcome: 'closed' } | { outcome: 'failed'; code: PopupErrorCode }
+
+export interface PopupConnection<Out extends Message, In extends Message = Out> {
+  /** Settles when this endpoint has selected its first carrier, or rejects if it failed first. */
+  readonly ready: Promise<void>
+  /**
+   * Settles once on explicit close, reported document departure, or detected failure.
+   * Never rejects. An unreachable handle fails only without a carrier or pending recovery.
+   * Silence alone does not establish closure.
+   */
+  readonly closed: Promise<ConnectionEnd>
+  /** Authenticated peer of the selected carrier; null before selection or after retirement. */
+  readonly peerOrigin: string | null
+  send(message: Out): void
+  on<N extends In>(message: MessageType<N>, handler: (message: N) => void): () => void
+  /**
+   * Continuity-preserving navigation between participating documents. `url`
+   * carries no fragment; `fragment` supplies one as opaque protocol data,
+   * serialized at the call.
+   */
+  navigate(url: string, fragment?: URLSearchParams): Promise<void>
+  /**
+   * Navigation to a non-participating document. The destination never
+   * crosses any carrier: the application navigates its retained handle
+   * directly and the popup replaces itself locally. The current carrier is
+   * retired, not preserved.
+   */
+  navigateAway(url: string, fragment?: URLSearchParams): Promise<void>
+  close(): Promise<void>
+}
+
+export interface ConnectOptions {
+  connectionId: string
+  allowedPopupOrigins: readonly string[]
+  /** Armed once; pending recovery survives handle loss without a connection-layer timeout. */
+  fallback?: CarrierConstructor
+  onDiagnostic?: (event: PopupDiagnostic) => void
+}
+
+export interface AcceptOptions {
+  connectionId: string
+  /** Explicit origins, or `'*'` for any canonical HTTPS (or localhost HTTP) origin the browser observed. */
+  allowedApplicationOrigins: readonly string[] | '*'
+  /**
+   * Requires cross-origin isolation. A non-isolated document preserves an
+   * available MessagePort through the worker, or defers fallback construction
+   * until after replacement. The same-origin destination resolves against
+   * the current document and inherits its captured fragment; it must not
+   * spell a fragment itself.
+   */
+  isolationFallbackUrl?: string
+  fallback?: CarrierConstructor
+  onDiagnostic?: (event: PopupDiagnostic) => void
+}
+
+function requireConnectionId(value: string): string {
+  if (!isConnectionId(value)) {
+    throw new TypeError('connectionId must be a canonical lowercase RFC 4122 UUIDv4')
+  }
+  return value
+}
+
+/**
+ * The navigation target from a fragment-free URL and optional opaque
+ * parameters, serialized now so later mutation of `fragment` is invisible.
+ */
+function destination(url: string, fragment: URLSearchParams | undefined, report: Reporter): string {
+  if (!isCanonicalWebUrl(url) || url.includes('#')) {
+    report('control-rejected')
+    throw new TypeError(
+      'navigation requires a canonical absolute HTTPS (or localhost HTTP) URL without credentials or fragment',
+    )
+  }
+  const serialized = fragment?.toString() ?? ''
+  return serialized === '' ? url : `${url}#${serialized}`
+}
+
+const stripFragment = (url: string): string => url.split('#', 1)[0]
+
+/** Same origin, path, and query; fragments do not distinguish documents. */
+const sameDocument = (url: URL, location: Location): boolean =>
+  url.origin === location.origin &&
+  url.pathname === location.pathname &&
+  url.search === location.search
+
+/** The same-origin HTTPS (or localhost HTTP) fallback, carrying the captured fragment. */
+function resolveFallback(value: string, location: Location, fragment: string): URL {
+  let url: URL
+  try {
+    url = new URL(value, location.href)
+  } catch {
+    throw new TypeError('isolationFallbackUrl must be a URL')
+  }
+  if (!isCanonicalWebUrl(url.href) || url.origin !== location.origin || value.includes('#')) {
+    throw new TypeError(
+      'isolationFallbackUrl must be a same-origin HTTPS (or localhost HTTP) URL without fragment',
+    )
+  }
+  url.hash = fragment
+  return url
+}
+
+interface Registration<In extends Message> {
+  decode: (value: unknown) => In
+  handler: (message: In) => void
+}
+
+/** Shared endpoint state: registrations, carrier subscription, lifecycle. */
+abstract class Endpoint<Out extends Message, In extends Message>
+  implements PopupConnection<Out, In>
+{
+  readonly ready: Promise<void>
+  readonly closed: Promise<ConnectionEnd>
+  protected readonly controller = new AbortController()
+  protected carrier: Carrier | null = null
+  protected ended = false
+  private readonly registrations = new Map<string, Registration<In>>()
+  private boundOrigin: string | null = null
+  private unsubscribe: (() => void) | null = null
+  private readonly startedAt = performance.now()
+  private resolveReady!: () => void
+  private rejectReady!: (error: PopupError) => void
+  private settleClosed!: (end: ConnectionEnd) => void
+
+  protected constructor(
+    protected readonly report: Reporter,
+    private readonly allowedOrigins: OriginAllowlist,
+  ) {
+    this.ready = new Promise((resolve, reject) => {
+      this.resolveReady = resolve
+      this.rejectReady = reject
+    })
+    this.closed = new Promise((resolve) => {
+      this.settleClosed = resolve
+    })
+    // A consumer that only awaits `closed` must not see an unhandled rejection.
+    this.ready.catch(() => {})
+  }
+
+  get peerOrigin(): string | null {
+    return this.boundOrigin
+  }
+
+  send(message: Out): void {
+    if (isReservedType(message.type)) {
+      throw new TypeError(`"${message.type}" is a reserved discriminator`)
+    }
+    this.transmit(message)
+  }
+
+  /** Sends over the active carrier; a carrier that rejects the value fails the connection. */
+  protected transmit(value: Message): void {
+    if (this.ended || !this.carrier) {
+      this.report('send-unavailable')
+      throw new PopupError('send-unavailable')
+    }
+    try {
+      this.carrier.send(value)
+    } catch (error) {
+      this.fail('send-unavailable', true)
+      throw error
+    }
+  }
+
+  on<N extends In>(message: MessageType<N>, handler: (message: N) => void): () => void {
+    const { type } = message
+    if (isReservedType(type)) throw new TypeError(`"${type}" is a reserved discriminator`)
+    if (this.registrations.has(type)) throw new TypeError(`"${type}" is already registered`)
+    const registration: Registration<In> = {
+      decode: (value) => message.decode(value),
+      handler: handler as (message: In) => void,
+    }
+    this.registrations.set(type, registration)
+    return () => {
+      if (this.registrations.get(type) === registration) this.registrations.delete(type)
+    }
+  }
+
+  abstract navigate(url: string, fragment?: URLSearchParams): Promise<void>
+  abstract navigateAway(url: string, fragment?: URLSearchParams): Promise<void>
+  abstract close(): Promise<void>
+
+  /** Installs the selected carrier; the class is reported when it was chosen here. */
+  protected install(carrier: Carrier, code?: DiagnosticCode): void {
+    if (!this.checkPeer(carrier)) return
+    this.dropCarrier()
+    this.carrier = carrier
+    this.boundOrigin = carrier.peerOrigin
+    this.unsubscribe = carrier.on((value) => {
+      if (this.carrier === carrier) this.receive(value)
+    })
+    if (code) this.report(code)
+    this.resolveReady()
+  }
+
+  /** Rejects an invalid binding before either delivery or isolation handoff. */
+  protected checkPeer(carrier: Carrier): boolean {
+    if (isAllowedOrigin(carrier.peerOrigin, this.allowedOrigins)) return true
+    carrier.close()
+    this.fail('handshake-rejected')
+    return false
+  }
+
+  protected abstract onControl(control: PopupControl): void
+
+  /**
+   * Routes one inbound value. Transport-level rejection fails the
+   * connection; an exception thrown by a caller handler is the caller's and
+   * propagates to the event loop untouched.
+   */
+  private receive(value: unknown): void {
+    if (this.ended) return
+    const type = routingType(value)
+    if (type === null) {
+      this.fail('decode-rejected')
+      return
+    }
+    if (isReservedType(type)) {
+      const control = decodeControl(value as Record<string, unknown>)
+      if (control) this.onControl(control)
+      else this.fail('control-rejected')
+      return
+    }
+    const registration = this.registrations.get(type)
+    if (!registration) {
+      this.fail('decode-rejected')
+      return
+    }
+    let message: In
+    try {
+      message = registration.decode(value)
+    } catch {
+      this.fail('decode-rejected')
+      return
+    }
+    registration.handler(message)
+  }
+
+  protected dropCarrier(): void {
+    this.boundOrigin = null
+    this.unsubscribe?.()
+    this.unsubscribe = null
+    this.carrier?.close()
+    this.carrier = null
+  }
+
+  /**
+   * Fails the connection closed. A failure reached through a caller
+   * operation reports through that operation; any other is undeliverable
+   * and gets the one sanitized console line.
+   */
+  protected fail(code: PopupErrorCode, viaOperation = false): void {
+    if (this.ended) return
+    if (viaOperation) this.report(code)
+    else reportUndeliverable(this.report, code)
+    this.end({ outcome: 'failed', code })
+  }
+
+  protected release(): void {
+    if (this.ended) return
+    this.end({ outcome: 'closed' })
+  }
+
+  private end(end: ConnectionEnd): void {
+    this.ended = true
+    this.controller.abort()
+    this.dropCarrier()
+    this.report(
+      end.outcome === 'closed' ? 'connection-closed' : 'connection-failed',
+      performance.now() - this.startedAt,
+    )
+    if (end.outcome === 'failed') this.rejectReady(new PopupError(end.code))
+    this.settleClosed(end)
+  }
+}
+
+class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpoint<Out, In> {
+  private readonly stopListening: () => void
+  private stopReplacement: (() => void) | null = null
+  private fallbackPending: boolean
+  private handshakePending = false
+
+  constructor(
+    private readonly popup: OpenedWindow,
+    options: ConnectOptions,
+  ) {
+    const allowedPopupOrigins = requireOrigins(options.allowedPopupOrigins, 'allowedPopupOrigins')
+    super(createReporter(options.onDiagnostic), allowedPopupOrigins)
+    const connectionId = requireConnectionId(options.connectionId)
+    if (popup.connected) throw new Error('PopupWindow is already connected')
+    popup.connected = true
+    this.fallbackPending = options.fallback !== undefined
+
+    this.report(popup.opened ? 'window-opened' : 'window-blocked')
+    this.stopListening = listenForPopupPorts(
+      {
+        view: popup.view,
+        source: popup.handle,
+        onBind: (source) => {
+          popup.bind(source)
+          this.report('window-bound')
+        },
+        allowedPopupOrigins,
+        connectionId,
+      },
+      {
+        onPort: (port, peerOrigin) =>
+          this.install(new PortCarrier(port, peerOrigin), 'carrier-message-port'),
+        onFail: () => this.fail('handshake-rejected'),
+        onPending: (pending) => {
+          this.handshakePending = pending
+        },
+      },
+    )
+
+    // Provider pages cannot report departure. A closed handle also means COOP
+    // severance, so fail only when neither a carrier nor recovery is available.
+    const poll = setInterval(() => this.checkWindow(), 250)
+    this.controller.signal.addEventListener('abort', () => clearInterval(poll), { once: true })
+
+    if (options.fallback) {
+      // Armed exactly once for the logical connection; observed, never awaited.
+      const { fallback } = options
+      new Promise<Carrier>((resolve) => resolve(fallback(this.controller.signal))).then(
+        (carrier) => {
+          this.fallbackPending = false
+          if (this.ended) carrier.close()
+          else this.install(carrier, 'carrier-fallback')
+        },
+        () => {
+          // Losing standby alone is harmless while the opener/carrier still works.
+          this.fallbackPending = false
+          this.checkWindow()
+        },
+      )
+    }
+  }
+
+  private checkWindow(): void {
+    if (this.ended || this.carrier || this.fallbackPending || this.handshakePending) return
+    // Native-anchor creation has no handle until the first authenticated binding.
+    if (this.popup.opened && !this.popup.direct) this.fail('popup-unavailable')
+  }
+
+  protected onControl(control: PopupControl): void {
+    if (control.type === 'document-departed') this.release()
+    else this.fail('control-rejected')
+  }
+
+  /**
+   * A carrier that cannot cross a document replacement reports its own
+   * replacement, prepared by the popup before it navigated; the application
+   * installs the authenticated result under the same logical connection.
+   */
+  protected override install(carrier: Carrier, code?: DiagnosticCode): void {
+    super.install(carrier, code)
+    if (this.ended || !isNavigationCarrier(carrier)) return
+    this.stopReplacement = carrier[onReplacement]((pending) => {
+      pending.then(
+        (next) => {
+          if (this.ended || this.carrier !== carrier) next.close()
+          else this.install(next, 'carrier-fallback')
+        },
+        () => {
+          // A failed replacement leaves the retired carrier in place; the
+          // destination reports the failure through its own readiness.
+        },
+      )
+    })
+  }
+
+  protected override dropCarrier(): void {
+    this.stopReplacement?.()
+    this.stopReplacement = null
+    super.dropCarrier()
+  }
+
+  async navigate(url: string, fragment?: URLSearchParams): Promise<void> {
+    if (this.ended) throw new PopupError('connection-closed')
+    const target = destination(url, fragment, this.report)
+    if (this.carrier) {
+      const control: Navigate = { type: 'navigate', url: target }
+      this.transmit(control)
+      this.report('control-connected')
+      return
+    }
+    if (this.popup.direct) {
+      this.popup.replace(target)
+      this.report('control-direct')
+      return
+    }
+    // Native-anchor binding pending: the activation's own navigation proceeds.
+    if (!this.popup.opened) return
+    this.report('popup-unavailable')
+    throw new PopupError('popup-unavailable')
+  }
+
+  async navigateAway(url: string, fragment?: URLSearchParams): Promise<void> {
+    if (this.ended) throw new PopupError('connection-closed')
+    const target = destination(url, fragment, this.report)
+    if (!this.popup.opened) return
+    if (!this.popup.direct) {
+      this.report('popup-unavailable')
+      throw new PopupError('popup-unavailable')
+    }
+    // Retire the carrier; the window listener stays armed for the next
+    // participating document.
+    this.dropCarrier()
+    this.popup.replace(target)
+    this.report('control-direct')
+  }
+
+  async close(): Promise<void> {
+    if (this.ended) return
+    if (this.popup.direct) {
+      this.popup.closeHandle()
+    } else if (this.carrier) {
+      try {
+        this.carrier.send({ type: 'close-popup' })
+      } catch {
+        // A dead carrier cannot carry the control; local release still runs.
+      }
+    }
+    this.release()
+  }
+
+  protected override release(): void {
+    if (this.ended) return
+    this.stopListening()
+    super.release()
+  }
+
+  protected override fail(code: PopupErrorCode, viaOperation = false): void {
+    if (this.ended) return
+    this.stopListening()
+    super.fail(code, viaOperation)
+  }
+}
+
+class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Out, In> {
+  /** The first accepted control is terminal for this document. */
+  private controlsDone = false
+  private readonly connectionId: string
+  private readonly isolationFallback: URL | null
+
+  constructor(
+    private readonly popup: CurrentWindow,
+    options: AcceptOptions,
+  ) {
+    const allowedOrigins: OriginAllowlist =
+      options.allowedApplicationOrigins === '*'
+        ? '*'
+        : requireOrigins(options.allowedApplicationOrigins, 'allowedApplicationOrigins')
+    super(createReporter(options.onDiagnostic), allowedOrigins)
+    this.connectionId = requireConnectionId(options.connectionId)
+    this.isolationFallback =
+      options.isolationFallbackUrl === undefined
+        ? null
+        : resolveFallback(options.isolationFallbackUrl, popup.view.location, popup.fragment)
+    const departed = () => {
+      if (this.ended || this.controlsDone) return
+      this.notifyDeparture()
+      this.release()
+    }
+    // WebKit otherwise skips pagehide when closing a window. This listener never
+    // prompts or reports departure; a beforeunload can still be cancelled.
+    const beforeUnload = () => {}
+    popup.view.addEventListener('beforeunload', beforeUnload, { signal: this.controller.signal })
+    popup.view.addEventListener('pagehide', departed, { signal: this.controller.signal })
+    void this.select(allowedOrigins, options.fallback)
+  }
+
+  /**
+   * Selects this document's one carrier: a preserved port, then the opener
+   * handshake, then the fallback. Runs after construction returns, so
+   * registrations the caller makes synchronously precede the first delivery.
+   */
+  private async select(
+    allowedOrigins: OriginAllowlist,
+    fallback: CarrierConstructor | undefined,
+  ): Promise<void> {
+    try {
+      // A preserved port can only be held by an already active worker.
+      const workers = (await this.popup.registrations()).flatMap((r) => r.active ?? [])
+      if (workers.length > 0) {
+        const port = await this.claimFrom(workers)
+        if (this.ended) return port?.close()
+        if (port) return this.admit(port, 'carrier-restored')
+        this.report('claim-empty')
+      }
+      const opener = this.popup.opener
+      if (opener) {
+        const port = await requestApplicationPort({
+          view: this.popup.view,
+          opener,
+          allowedOrigins,
+          connectionId: this.connectionId,
+          signal: this.controller.signal,
+        })
+        if (this.ended) return port?.close()
+        if (port) return this.admit(port, 'carrier-message-port')
+        this.report('opener-timeout')
+      }
+      if (!fallback) return this.fail('fallback-unavailable', true)
+      if (this.isolationFallback && !this.popup.isolated) {
+        if (this.ended) return
+        // Nothing exists to preserve yet, so the hop precedes the carrier:
+        // the destination establishes the only one from the same still-
+        // unused round, and no connection is spent on this document.
+        if (sameDocument(this.isolationFallback, this.popup.view.location)) {
+          return this.fail('isolation-unavailable', true)
+        }
+        this.report('isolation-fallback')
+        this.release()
+        this.popup.view.location.replace(this.isolationFallback.href)
+        return
+      }
+      const carrier = await fallback(this.controller.signal)
+      if (this.ended) return carrier.close()
+      return this.install(carrier, 'carrier-fallback')
+    } catch (error) {
+      if (this.ended) return
+      this.fail(error instanceof PopupError ? error.code : 'fallback-failed', true)
+    }
+  }
+
+  /** Asks every worker at once; at most one holds this connection's port. */
+  private async claimFrom(workers: ServiceWorker[]): Promise<PortCarrier | null> {
+    const ports = await Promise.all(workers.map((w) => new PortKeeper(w).claim(this.connectionId)))
+    const [port = null, ...extra] = ports.filter((p) => p !== null)
+    for (const p of extra) p.port.close()
+    return port ? new PortCarrier(port.port, port.peerOrigin) : null
+  }
+
+  /**
+   * Installs an authenticated port, unless this document must be isolated
+   * and is not: then the port, still unstarted so every value the
+   * application already sent stays queued inside it, is kept through the
+   * worker and the document replaces itself with the isolated fallback,
+   * where the port continues. `ready` stays pending here; the replacement
+   * becomes ready instead.
+   */
+  private async admit(
+    carrier: PortCarrier,
+    code: 'carrier-restored' | 'carrier-message-port',
+  ): Promise<void> {
+    const { location } = this.popup.view
+    if (!this.isolationFallback || this.popup.isolated) return this.install(carrier, code)
+    if (!this.checkPeer(carrier)) return
+    this.report(code)
+    if (sameDocument(this.isolationFallback, location)) {
+      // Already the fallback and still not isolated: the host's policy is
+      // not taking effect. Never loop.
+      carrier.close()
+      return this.fail('isolation-unavailable', true)
+    }
+    this.controlsDone = true
+    this.report('isolation-fallback')
+    this.carrier = carrier // retired by release(), never started for delivery
+    try {
+      await this.leaveFor(this.isolationFallback.href, true)
+    } catch {
+      // already failed through `ready`
+    }
+  }
+
+  protected onControl(control: PopupControl): void {
+    if (control.type === 'document-departed') {
+      this.fail('control-rejected')
+      return
+    }
+    if (this.controlsDone) return
+    this.controlsDone = true
+    if (control.type === 'navigate') {
+      void this.replaceDocument(control.url, false).catch(() => {})
+    } else {
+      this.closePopup()
+    }
+  }
+
+  async navigate(url: string, fragment?: URLSearchParams): Promise<void> {
+    if (this.ended) throw new PopupError('connection-closed')
+    const target = destination(url, fragment, this.report)
+    if (url === stripFragment(this.popup.view.location.href)) {
+      // A fragment navigation keeps this document; there is nothing to preserve.
+      throw new TypeError('navigation requires a different document')
+    }
+    if (this.controlsDone) throw new PopupError('popup-unavailable')
+    this.controlsDone = true
+    // Acts locally: the destination and its fragment reach no control,
+    // diagnostic, or signal.
+    await this.replaceDocument(target, true)
+  }
+
+  async navigateAway(url: string, fragment?: URLSearchParams): Promise<void> {
+    if (this.ended) throw new PopupError('connection-closed')
+    const target = destination(url, fragment, this.report)
+    if (this.controlsDone) throw new PopupError('popup-unavailable')
+    this.controlsDone = true
+    this.release()
+    this.popup.view.location.replace(target)
+  }
+
+  async close(): Promise<void> {
+    if (this.ended) return
+    this.closePopup()
+  }
+
+  /**
+   * Replaces this document. A same-origin target keeps the port through the
+   * worker first; a cross-origin target cannot, so the endpoint retires and
+   * the destination authenticates a fresh carrier through its opener or
+   * fallback. Failure is reported through the invoking operation when there
+   * is one, otherwise as undeliverable.
+   */
+  private async replaceDocument(url: string, viaOperation: boolean): Promise<void> {
+    const { location } = this.popup.view
+    const carrier = this.carrier
+    if (new URL(url).origin !== location.origin && !(carrier && isNavigationCarrier(carrier))) {
+      // Nothing crosses an origin: the destination authenticates afresh.
+      this.release()
+      location.replace(url)
+      return
+    }
+    await this.leaveFor(url, viaOperation)
+  }
+
+  /**
+   * Leaves this document for `url` with continuity: a port is kept through
+   * the worker; a navigation carrier prepares its replacement first and is
+   * then retired; any other carrier cannot continue. Failure is reported
+   * through the invoking operation when there is one and rethrown.
+   */
+  private async leaveFor(url: string, viaOperation: boolean): Promise<void> {
+    const { location } = this.popup.view
+    const carrier = this.carrier
+    if (carrier instanceof PortCarrier) {
+      const peerOrigin = carrier.peerOrigin
+      const port = carrier.detach()
+      this.dropCarrier()
+      await this.keepThrough(port, peerOrigin, url, viaOperation)
+      this.release() // the port is the worker's now; this endpoint is done
+      location.replace(url)
+      return
+    }
+    if (!carrier || !isNavigationCarrier(carrier)) {
+      this.fail('continuity-unsupported', viaOperation)
+      throw new PopupError('continuity-unsupported')
+    }
+    let target: string
+    try {
+      target = await carrier[prepareNavigation](url)
+    } catch {
+      this.fail('continuity-unsupported', viaOperation)
+      throw new PopupError('continuity-unsupported')
+    }
+    if (this.ended) throw new PopupError('connection-closed')
+    // Retire before leaving; nothing the application sends from here on
+    // reaches a document until the destination authenticates its successor.
+    this.release()
+    location.replace(target)
+  }
+
+  /**
+   * Hands one port to the worker for the next same-origin document at `url`.
+   * Fails the endpoint and throws when no worker is active, the keep is
+   * refused, or the connection ended meanwhile.
+   */
+  private async keepThrough(
+    port: MessagePort,
+    peerOrigin: string,
+    url: string,
+    viaOperation: boolean,
+  ): Promise<void> {
+    const failed: (code: PopupErrorCode) => never = (code) => {
+      port.close() // a no-op once transferred; releases a port the worker never took
+      this.fail(code, viaOperation)
+      throw new PopupError(code)
+    }
+    // The registration that will control the destination is the one its
+    // document claims from, whichever one controls this document. The host
+    // may still be registering it here, so wait briefly for it to activate.
+    const registration = await bounded(
+      activeRegistration(async () => (await this.popup.registrations(url))[0]),
+    )
+    const worker = registration?.active ?? null
+    if (this.ended) failed('connection-closed')
+    if (!worker) failed('continuity-unsupported')
+    const startedAt = performance.now()
+    try {
+      await new PortKeeper(worker).keep(this.connectionId, port, peerOrigin)
+    } catch {
+      failed('keep-failed')
+    }
+    if (this.ended) throw new PopupError('connection-closed')
+    this.report('keep-acknowledged', performance.now() - startedAt)
+  }
+
+  /** Sending during departure is best-effort and cannot create a reporting failure. */
+  private notifyDeparture(): void {
+    try {
+      this.carrier?.send({ type: 'document-departed' })
+    } catch {
+      // No acknowledgement or retry can outlive this document reliably.
+    }
+  }
+
+  private closePopup(): void {
+    this.notifyDeparture()
+    this.release()
+    this.popup.view.close()
+  }
+}
+
+export const PopupConnection = {
+  connect<Out extends Message, In extends Message = Out>(
+    popupWindow: PopupWindow,
+    options: ConnectOptions,
+  ): PopupConnection<Out, In> {
+    if (!(popupWindow instanceof OpenedWindow)) {
+      throw new TypeError('connect requires the PopupWindow returned by PopupWindow.open')
+    }
+    return new ApplicationEndpoint<Out, In>(popupWindow, options)
+  },
+
+  /**
+   * Constructs the popup endpoint synchronously so handlers registered before
+   * the caller yields precede every delivery; `ready` settles once a carrier
+   * is selected.
+   */
+  accept<Out extends Message, In extends Message = Out>(
+    popupWindow: PopupWindow,
+    options: AcceptOptions,
+  ): PopupConnection<Out, In> {
+    if (!(popupWindow instanceof CurrentWindow)) {
+      throw new TypeError('accept requires the PopupWindow returned by PopupWindow.current')
+    }
+    return new PopupEndpoint<Out, In>(popupWindow, options)
+  },
+}

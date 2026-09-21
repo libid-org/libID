@@ -2,7 +2,7 @@
  * Noir witness builder for the new X token-only ZK circuit.
  *
  * Sizing constants MUST match the Noir globals in
- * `circuits/x-token/src/main.nr` (libid-org/libid-circuits).
+ * `circuits/x-token/src/main.nr` (libid-org/libID-circuits).
  */
 
 import { keccak256, sha256, toBytes } from 'viem'
