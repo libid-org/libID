@@ -1,0 +1,49 @@
+name: CCDP custom image
+
+# A trial image of the CCDP Distribution from any commit, published as
+# ghcr.io/libid-org/ccdp:custom-<tag> by the same workflow and checks as a
+# main publication. Run it on the branch to build, or push ccdp-custom/<tag>.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Suffix of the image tag custom-<tag> (letters, digits, ., _, -)
+        type: string
+        required: true
+  push:
+    branches: ["ccdp-custom/**"]
+
+concurrency:
+  group: ccdp-custom-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Image tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      ref: ${{ steps.tag.outputs.ref }}
+    steps:
+      - id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          suffix="${INPUT_TAG:-${BRANCH#ccdp-custom/}}"
+          printf '%s' "$suffix" | grep -Eq '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}$' \
+            || { echo "::error::'$suffix' is not usable as an image tag suffix"; exit 1; }
+          echo "ref=ghcr.io/libid-org/ccdp:custom-$suffix" | tee -a "$GITHUB_OUTPUT"
+
+  image:
+    name: CCDP image
+    needs: tag
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ccdp-image.yml
+    with:
+      push: true
+      tags: ${{ needs.tag.outputs.ref }}
