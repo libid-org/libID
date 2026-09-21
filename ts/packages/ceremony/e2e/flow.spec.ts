@@ -452,6 +452,7 @@ test('two independently supplied connections cannot replace each other [LIBID-BR
                 .evaluate(() => ({
                   path: location.pathname,
                   status: document.querySelector('[role="status"]')?.textContent,
+                  worker: navigator.serviceWorker.controller?.state,
                 }))
                 .catch(() => 'document unavailable'),
             ),

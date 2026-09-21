@@ -1,6 +1,6 @@
 import { route } from '../ccdp/navigation.js'
 
-/** Activate the canonical root registration and retire only the known legacy nested scope. */
+/** Register the canonical root worker and retire only the known legacy nested scope. */
 export async function rootWorker(): Promise<ServiceWorkerRegistration> {
   const registration = await navigator.serviceWorker.register(route('worker.js'), {
     scope: '/',
@@ -9,10 +9,11 @@ export async function rootWorker(): Promise<ServiceWorkerRegistration> {
   })
   if (registration.scope !== `${location.origin}/`)
     throw new Error('Incorrect Service Worker scope')
-  const newest = registration.installing ?? registration.waiting ?? registration.active
-  if (newest?.state !== 'activated') {
-    const worker = newest
-    if (!worker) throw new Error('Missing Service Worker')
+  const worker = registration.installing ?? registration.waiting ?? registration.active
+  if (!worker) throw new Error('Missing Service Worker')
+  // An active worker can handle messages while activating. WebKit can retain that
+  // state in another document; the dispatch acknowledgement is our readiness gate.
+  if (worker !== registration.active) {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => done(new Error('Service Worker activation timed out')), 15000)
       const done = (error?: Error) => {
@@ -21,7 +22,7 @@ export async function rootWorker(): Promise<ServiceWorkerRegistration> {
         error ? reject(error) : resolve()
       }
       const changed = () => {
-        if (worker.state === 'activated') done()
+        if (worker.state === 'activating' || worker.state === 'activated') done()
         else if (worker.state === 'redundant') done(new Error('Service Worker failed'))
       }
       worker.addEventListener('statechange', changed)
