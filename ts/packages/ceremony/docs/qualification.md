@@ -63,6 +63,10 @@ live-service or physical-device qualification.
 
 ## Remaining qualification
 
+- Resolve the pinned notary/TLSN ProxyMode hang on provider EOF before the TLS
+  handshake. A delayed-send browser probe reproduces the GitHub identity stall
+  without concurrent proving. Other CI timeout causes remain unconfirmed; passing
+  runtime probes do not establish that the intermittent Firefox failures are fixed.
 - Real approval and denial for every platform against the selected deployed
   services, including X/GitHub browser token/identity correlation and GitHub's
   fully disclosed five-field token request, followed by released-verifier acceptance.

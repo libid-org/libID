@@ -11,8 +11,9 @@ sessions, and no initialized runtime survives OAuth navigation.
 registration, including when a stale nested registration uses the same script.
 It retires that known nested registration only when its workers use the canonical
 script URL; unrelated registrations remain untouched. It waits for the selected
-worker to activate and never dispatches to an older active worker while an update
-is installing or waiting.
+worker to become active and never dispatches to an older active worker while an
+update is installing or waiting. The dispatch acknowledgement establishes readiness;
+WebKit can leave another document's state stuck at `activating` after activation.
 
 [prefetch.ts](../src/ccdp/documents/prefetch.ts) is a dual document/Worker entry.
 The [Worker](../src/assets/worker.ts) combines popup's port keeper with asset
