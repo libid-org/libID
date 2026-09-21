@@ -199,12 +199,17 @@ async function preparing() {
     },
   })
   await expect.poll(() => hooks.init.mock.calls.length).toBe(1)
-  expect(socket).toBeDefined()
+  expect(socket).toBeUndefined()
   return {
     hooks,
     port,
-    socket,
-    resolve,
+    get socket() {
+      return socket
+    },
+    async resolve() {
+      resolve()
+      await expect.poll(() => socket).toBeDefined()
+    },
     reject,
     open() {
       socket.readyState = Socket.OPEN
@@ -213,48 +218,46 @@ async function preparing() {
   }
 }
 
-it.each(['runtime', 'socket'])(
-  'overlaps runtime and socket startup when %s finishes first [LIBID-PROVER-018]',
-  async (first) => {
-    const w = await preparing()
-    if (first === 'runtime') w.resolve()
-    else w.open()
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(w.hooks.setup).not.toHaveBeenCalled()
-    expect(w.port.postMessage).not.toHaveBeenCalled()
-    if (first === 'runtime') w.open()
-    else w.resolve()
-    await expect.poll(() => w.port.postMessage.mock.calls.length).toBe(1)
-    expect(w.port.postMessage).toHaveBeenCalledWith({ type: 'prepared' })
-    expect(w.hooks.setup).toHaveBeenCalledOnce()
-  },
-)
+it('opens the socket only after runtime startup, then waits for connection [LIBID-PROVER-018]', async () => {
+  const w = await preparing()
+  expect(w.socket).toBeUndefined()
+  expect(w.hooks.setup).not.toHaveBeenCalled()
+  await w.resolve()
+  expect(w.hooks.setup).not.toHaveBeenCalled()
+  expect(w.port.postMessage).not.toHaveBeenCalled()
+  w.open()
+  await expect.poll(() => w.port.postMessage.mock.calls.length).toBe(1)
+  expect(w.port.postMessage).toHaveBeenCalledWith({ type: 'prepared' })
+  expect(w.hooks.setup).toHaveBeenCalledOnce()
+})
 
 it.each(['runtime', 'socket-error', 'socket-close'])(
-  '%s failure retires preparation without waiting for its sibling [LIBID-PROVER-018]',
+  '%s failure retires preparation [LIBID-PROVER-018]',
   async (failure) => {
     const w = await preparing()
     if (failure === 'runtime') w.reject(new Error('WASM failed'))
-    else if (failure === 'socket-error') w.socket.dispatchEvent(new Event('error'))
-    else w.socket.close()
+    else {
+      await w.resolve()
+      if (failure === 'socket-error') w.socket.dispatchEvent(new Event('error'))
+      else w.socket.close()
+    }
     await expect.poll(() => w.port.close.mock.calls.length).toBe(1)
     expect(w.port.postMessage).toHaveBeenCalledExactlyOnceWith({
       type: 'error',
       message: expect.any(String),
     })
-    expect(w.socket.readyState).toBe(3)
-    w.resolve()
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    if (failure === 'runtime') expect(w.socket).toBeUndefined()
+    else expect(w.socket.readyState).toBe(3)
     expect(w.hooks.setup).not.toHaveBeenCalled()
     expect(w.port.postMessage).toHaveBeenCalledOnce()
   },
 )
 
-it('rejects a socket closed while runtime initialization was pending [LIBID-PROVER-018]', async () => {
+it('rejects a socket closed immediately after opening [LIBID-PROVER-018]', async () => {
   const w = await preparing()
+  await w.resolve()
   w.open()
   w.socket.close()
-  w.resolve()
   await expect.poll(() => w.port.close.mock.calls.length).toBe(1)
   expect(w.port.postMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'error',
@@ -267,8 +270,8 @@ it.each(['closed', 'send throws'])(
   'surfaces %s socket writes to the SDK without awaiting its discarded Promise',
   async (failure) => {
     const w = await preparing()
+    await w.resolve()
     w.open()
-    w.resolve()
     await expect.poll(() => w.hooks.setup.mock.calls.length).toBe(1)
     const [io] = w.hooks.setup.mock.calls[0]
     const expected = new Error(

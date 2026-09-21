@@ -179,11 +179,12 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
     if (data.type === 'prepare' && stage === 'new') {
       stage = 'preparing'
       target = String(data.url)
-      // Socket connection and shared WASM initialization overlap; TLS setup needs both.
+      // The notary limits idle sockets; finish cold WASM startup before connecting.
+      const tlsn = await initialize(data)
       const socket = new WebSocket(deriveNotaryWebSocketUrl(String(data.notaryAddress)))
       io = socketIo(socket)
-      const [tlsn] = await Promise.all([initialize(data), waitForOpen(socket)])
-      // Opening earlier is insufficient if the peer disconnected while WASM initialized.
+      await waitForOpen(socket)
+      // The peer may close between the open event and this continuation.
       if (socket.readyState !== WebSocket.OPEN) throw new Error('notary WebSocket closed')
       prover = new tlsn.Prover({
         server_name: new URL(target).hostname,

@@ -62,8 +62,8 @@ Declare a dependency once in its owner's `*.assets.ts`. The internal
 import * as assets from '../assets/index.js'
 
 const release = assets.archive(
-  'https://github.com/libid-org/notary/releases/download/v0.3.0-rc.3/tlsn-wasm-0.3.0-rc.3.tar.gz',
-  'tlsn/v0.3.0-rc.3-csp2',
+  'https://github.com/libid-org/notary/releases/download/v0.3.1/tlsn-wasm-0.3.1.tar.gz',
+  'tlsn/v0.3.1',
 )
 const module = release.member('tlsn_wasm.js', {
   ...assets.headers.immutable,

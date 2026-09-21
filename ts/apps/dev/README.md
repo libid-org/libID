@@ -5,9 +5,8 @@ CCDP distribution. It uses a synthetic ledger fixture and submits no transaction
 
 ## Run
 
-Use the workspace's Node and pnpm setup, plus Docker with Compose. Docker Desktop
-on macOS needs amd64 emulation for the notary image. No host Rust toolchain or
-local certificates are needed.
+Use the workspace's Node and pnpm setup, plus Docker with Compose. No host Rust
+toolchain, architecture emulation or local certificates are needed.
 
 From the TypeScript workspace:
 
@@ -29,6 +28,8 @@ Ctrl-C stops the app and that checkout's containers.
 | Notary HTTP/WebSocket | http://localhost:4687 |
 
 These are separate browser origins. Ports are fixed and services bind to loopback.
+A local Caddy proxy supplies the notary’s required client-IP header; repeated
+development runs have no per-client rate quotas.
 
 ## Configure and develop
 

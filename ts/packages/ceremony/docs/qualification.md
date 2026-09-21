@@ -7,16 +7,17 @@ retains its untested property even when related tests pass.
 
 ## Pinned integration
 
-These are the component revisions used for the recorded evidence, not a second
-configuration source. Change actual pins in the linked declarations/configuration.
+These are the current integration pins, not a second configuration source. Change
+actual pins in the linked declarations/configuration. Historical evidence below
+retains the release and implementation versions that it exercised.
 
 | Input | Evidence baseline / owner |
 |---|---|
 | Browser specification | PR #13, `374035cf922665507163b07cf81e98afeaf2188b`; [CCDP](https://github.com/libid-org/libid/blob/374035cf922665507163b07cf81e98afeaf2188b/specs/ccdp.md). |
-| Circuits | v0.3.0, `91bc3446eeaa50ab2056d88dd9941374aa4fa34c`; [circuit declarations](../src/barretenberg/circuits/). |
+| Circuits | v0.4.0, `b618e41eaf8bd0ec5f6e74b3efc2480dbec7e00a`; [circuit declarations](../src/barretenberg/circuits/). |
 | Noir / bb.js | 1.0.0-beta.25 / 5.2.0; [package.json](../package.json), explicit EVM proof settings in [engine.worker.ts](../src/barretenberg/engine.worker.ts). |
-| Notary browser/runtime | v0.3.0-rc.3, `37e195035e6b11683b09233a8815ae703e3cc55f`; [declaration](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml). |
-| TLSN / MPZ | `94aaaf33f3361d1218f9abb4c82b5c58a9199460` / `1dd2349d52aeea038d77fb0816f781c6b714fe77`, matched by the notary release. |
+| Notary browser/runtime | v0.3.1, `4ac4b95e9ece4418c6356145ebbcb55d7a61da5d`; [declaration](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml). |
+| TLSN / MPZ | `550220ee18a8c0bb60217d58cb73f5fd2e74e441` / `4db9454a0b6380f1a23a7b4807989d866f838fff`, matched by the notary release. |
 | Development Bridge | `ea8121f4e05c39a0b383ecb383e2625feb088c91` (PR #8), standalone HTTP Bridge without libid-rs or TLSNotary dependencies; [Compose pin](../../../apps/dev/compose.yaml). |
 | SWS | 3.0.0-beta.1; exact image digest in [ccdp.Dockerfile](../ccdp.Dockerfile). |
 | HTTP framing | Spec PR #31, `5afdf08`; [platform rules](https://github.com/libid-org/libid/blob/5afdf08/specs/platform-ceremonies.md). |
@@ -42,6 +43,16 @@ transport compatibility; ceremony consumes `@libid/popup`.
 
 ## Evidence obtained
 
+The 2026-09-21 release bump exercised notary 0.3.1 and circuits 0.4.0:
+465 final unit tests and 19 distribution/loader/served-header checks passed
+(two unchanged native-binary checks were not selected). Across Chromium,
+Firefox and WebKit, 18 browser checks covered released-key-verified Google and
+bearer-link proofs, mounted WASM initialization and matched notary concurrency;
+after the idle-socket startup adjustment, all nine affected notary/proof cases
+passed again. Circuit JSON and verification keys are byte-identical to 0.3.0;
+the added Solidity files are not mounted. Live consent and ARM execution were
+not rerun.
+
 At implementation commit `0a3b14d` (2026-09-15), the
 [hosted GitHub Actions run](https://github.com/libid-org/libid/actions/runs/35000802410)
 passed TypeScript, Browser tests, CCDP image/distribution and DCO checks. The browser job passed **140 ceremony, 143 popup and 145 dev-app
@@ -64,7 +75,10 @@ live-service or physical-device qualification.
 ## Remaining qualification
 
 - Resolve the pinned notary/TLSN ProxyMode hang on provider EOF before the TLS
-  handshake. A delayed-send browser probe reproduces the GitHub identity stall
+  handshake. The separate [TLSN fix](https://github.com/libid-org/tlsn/pull/4)
+  and [notary fix](https://github.com/libid-org/notary/pull/21) are not in 0.3.1;
+  adopt a matching released server/WASM pair in a later bump. A delayed-send browser
+  probe reproduces the GitHub identity stall
   without concurrent proving. Other CI timeout causes remain unconfirmed; passing
   runtime probes do not establish that the intermittent Firefox failures are fixed.
 - Real approval and denial for every platform against the selected deployed
