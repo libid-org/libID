@@ -1,9 +1,8 @@
 import * as assets from '../assets/index.js'
 
 const release = assets.archive(
-  'https://github.com/libid-org/notary/releases/download/v0.3.0-rc.3/tlsn-wasm-0.3.0-rc.3.tar.gz',
-  // Preserve the original release mount's immutable worker policy.
-  'tlsn/v0.3.0-rc.3-csp2',
+  'https://github.com/libid-org/notary/releases/download/v0.3.1/tlsn-wasm-0.3.1.tar.gz',
+  'tlsn/v0.3.1',
 )
 
 export const tlsnModule = release.member('tlsn_wasm.js', {

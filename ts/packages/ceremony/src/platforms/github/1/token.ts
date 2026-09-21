@@ -61,7 +61,7 @@ export function selectToken(transcript: Transcript, input: TokenRequestInput) {
   // Exact equality to the frozen tuple rejects duplicate/extra fields and noncanonical encoding.
   if (!bytesEqual(body, tokenBody(input))) throw new Error('GitHub token request changed')
   const token = quotedRange(transcript.received, 'access_token')
-  // libid-circuits v0.3.0 bearer-link private-input width.
+  // libid-circuits v0.4.0 bearer-link private-input width.
   const accessToken = decodePrintable(token.value, 'access token', 128)
   return {
     accessToken,

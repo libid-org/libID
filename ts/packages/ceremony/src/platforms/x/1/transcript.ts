@@ -20,7 +20,7 @@ const USER_ID = encoder.encode('"id"')
 
 const USERNAME = encoder.encode('"username"')
 
-// libid-circuits v0.3.0 bearer-link private-input width.
+// libid-circuits v0.4.0 bearer-link private-input width.
 const MAX_BEARER_BYTES = 128
 
 const PKCE = /^[A-Za-z0-9_-]{43}$/

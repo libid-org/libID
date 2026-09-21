@@ -99,7 +99,7 @@ function findOffset(payload: Uint8Array, pattern: string): number {
   throw new Error(`missing canonical signed claim ${pattern.slice(0, pattern.indexOf(':'))}`)
 }
 
-/** Build the exact libid-circuits v0.3.0 `oidc_google` witness. */
+/** Build the exact libid-circuits v0.4.0 `oidc_google` witness. */
 export function buildGoogleWitness(idToken: string, jwk: unknown): BuiltGoogleWitness {
   const token = parseGoogleIdToken(idToken)
   if (

@@ -37,8 +37,9 @@ The adapter receives the client's frozen notary origin. HTTPS maps to WSS
 HTTPS. There is no session-creation HTTP request, polling endpoint, alternate
 notary selection or browser notary-key lookup.
 
-[session.worker.ts](../src/notary/session.worker.ts) overlaps socket connection
-with shared WASM initialization, then performs target-specific TLS setup.
+[session.worker.ts](../src/notary/session.worker.ts) initializes the shared WASM
+runtime before opening session sockets, so cold loading does not consume the
+notary’s idle-socket deadline. Target-specific TLS setups still run concurrently.
 After TLSNotary finishes, it reclaims the same channel for one length-prefixed
 JSON attestation frame and requires EOF. [transport.ts](../src/notary/transport.ts)
 owns frame bounds and exact decoding. The separate finalization deadline prevents

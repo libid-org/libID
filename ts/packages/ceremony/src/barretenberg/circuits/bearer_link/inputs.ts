@@ -16,7 +16,7 @@ function validateOpening(opening: CorrelatedCommitment, name: string, bearerLeng
   }
 }
 
-/** Construct the exact libid-circuits v0.3.0 `bearer_link` witness. */
+/** Construct the exact libid-circuits v0.4.0 `bearer_link` witness. */
 export function buildBearerLinkWitness(
   bearer: string,
   token: CorrelatedCommitment,

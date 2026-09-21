@@ -1,8 +1,8 @@
 import * as resource from '../../../assets/index.js'
 
 export const release = resource.archive(
-  'https://github.com/libid-org/libid-circuits/releases/download/v0.3.0/libid-circuits-0.3.0-oidc-google.tar.gz',
-  'circuits/v0.3.0/oidc-google',
+  'https://github.com/libid-org/libid-circuits/releases/download/v0.4.0/libid-circuits-0.4.0-oidc-google.tar.gz',
+  'circuits/v0.4.0/oidc-google',
 )
 
 export const circuit = release.member('oidc_google.json', {
