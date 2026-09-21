@@ -235,7 +235,8 @@ A trial image of a commit that has not reached `main` comes from
 branch to build with a tag, or push a branch named `ccdp-custom/<tag>`, and it
 publishes `ghcr.io/libid-org/ccdp:custom-<tag>` (with the sha tag) through the
 same workflow and checks. A custom image is outside the `:main` retention
-history: deploy it by digest and replace it whole.
+history: deploy it as its `sha-<commit sha>` tag pinned by digest, and replace it
+whole.
 
 Publishing a GitHub Release `v<version>` runs
 [release.yml](../../../../.github/workflows/release.yml), which publishes
