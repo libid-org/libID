@@ -28,6 +28,11 @@ needed to make the system accessible, self-hostable, and reusable by
 application developers, wallet providers, and other integrators without
 introducing a central point of failure.
 
+Our focus is browser-side zero-knowledge proving and TLS notarization: users
+generate proofs in their own browsers, while the notary verifies and signs the
+notarized sessions. All current browser proofs complete in under eight seconds
+in practical runs.
+
 Beyond identity bridging, libID seeks closer collaboration with online
 platforms through integrations that benefit both platforms and their users.
 These integrations will **enable users to prove their activity and transact
