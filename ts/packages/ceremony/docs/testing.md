@@ -66,7 +66,7 @@ The command builds qualification artifacts and runtime fixtures. Playwright owns
 startup, readiness and teardown for pinned SWS/notary containers and the browser
 harness. The workspace **Browser tests** CI job runs the same command alongside
 the popup and dev-app suites. No OAuth credentials are required. Release downloads and real unauthenticated requests to
-X need network access; unavailable services fail rather than silently skip.
+X/GitHub need network access; unavailable services fail rather than silently skip.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
 Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987 and

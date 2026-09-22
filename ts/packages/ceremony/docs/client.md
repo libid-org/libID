@@ -218,9 +218,9 @@ Ceremony never closes the supplied connection, including after success or denial
 The example chooses automatic closure; an application may instead continue its
 own flow in the popup. Late CCDP traffic becomes inert after settlement.
 
-To stop a live run, call `connection.close()`. This causes a failed lifecycle
-update and `CeremonyError`, not an OAuth denial, cancel message or `CancelError`.
-An application wanting a separate cancellation label records its own intent.
+To stop a live run, call `connection.close()`. This produces a `closed` lifecycle
+update and rejects with `CeremonyError.status = closed`. An application wanting
+a separate cancellation label records its own intent.
 Closing the popup cannot recall a request already dispatched to the Bridge.
 
 A Ceremony is one-shot. Loss, reload or retry requires fresh OAuth and a new
