@@ -1,9 +1,10 @@
 # Started by services.ts after building CCDP.
 services:
   notary:
-    image: ghcr.io/libid-org/notary:0.3.1
+    image: ghcr.io/libid-org/notary:0.4.0
     environment:
       NOTARY_HOST: 0.0.0.0
+      NOTARY_CLIENT_IP_HEADER: peer
       NOTARY_LIMITS_STORE: memory
       # Repeated local runs should not consume deployment rate quotas.
       NOTARY_MAX_SESSIONS_PER_IP: "0"
@@ -12,24 +13,10 @@ services:
       # Public development key, never a production notary identity.
       SIGNING_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
     ports:
-      - "127.0.0.1:4687:7049"
+      - "127.0.0.1:4687:7048"
       # Shared namespace lets Bridge retrieve CCDP through localhost.
       - "127.0.0.1:4682:8722"
       - "127.0.0.1:4683:4683"
-
-  # Supply the client-IP header required by the notary's public WebSocket route.
-  notary-proxy:
-    image: caddy:2.11.4-alpine
-    network_mode: service:notary
-    command: ["caddy", "reverse-proxy", "--from", "http://:7049", "--to", "http://127.0.0.1:7048"]
-    depends_on:
-      notary:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7049/healthcheck"]
-      interval: 1s
-      timeout: 2s
-      retries: 30
 
   bridge:
     build: https://github.com/libid-org/libid-server-rs.git#ea8121f4e05c39a0b383ecb383e2625feb088c91
@@ -37,7 +24,7 @@ services:
     depends_on:
       ccdp:
         condition: service_healthy
-      notary-proxy:
+      notary:
         condition: service_healthy
     command: ["--config", "/bridge.toml"]
     configs:
