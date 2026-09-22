@@ -1,9 +1,11 @@
 import type { CeremonyEvent } from '../src/ccdp/client/index.js'
 import type { Events } from '../src/events.js'
 import type { IdentityResult } from '../src/index.js'
+import type { Notarization } from '../src/notary/session.js'
 
 declare global {
   interface Window {
+    Notarization: typeof Notarization
     failureEvent?: string
     ready: boolean
     completed: IdentityResult<'google'>[]

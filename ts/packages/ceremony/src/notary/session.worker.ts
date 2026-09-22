@@ -249,26 +249,8 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
         }
       }
       reply({ type: 'revealed', openings })
-      // Final channel completion has a deadline independent of proof generation.
-      const finalIo = io
-      let timer: ReturnType<typeof setTimeout> | undefined
-      let frame: Uint8Array
-      try {
-        frame = await Promise.race([
-          (async () => {
-            await prover!.finish()
-            return readFinalFrame(finalIo)
-          })(),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(() => {
-              void finalIo.close()
-              reject(new Error('Notary finalization timed out'))
-            }, 30000)
-          }),
-        ])
-      } finally {
-        clearTimeout(timer)
-      }
+      await prover.finish()
+      const frame = await readFinalFrame(io)
       const wire = decodeAttestationFrame(frame)
       const { decoded } = correlateAttestation(
         new URL(target).hostname,

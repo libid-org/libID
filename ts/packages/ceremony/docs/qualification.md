@@ -52,9 +52,6 @@ require separate qualification.
   and primary DIP notarization. Emulation cannot establish these properties.
 - Optional opener-independent carrier/signaling and real openerless returns.
   Ceremony supplies the integration point, not a WebRTC implementation.
-- **LIBID-BROWSER-010:** X's request-direction deadline has no observable issuance
-  anchor or request-direction-only completion contract in the pinned SDK.
-  A response-completion timeout would reject valid responses and cannot substitute.
 - Released-verifier acceptance of the header/framing and JSON-whitespace
   rules with real platform evidence. Matching Rust/browser parsers alone is insufficient.
 - Production Bridge conditional/compressed Callback refresh, redirect rejection,
