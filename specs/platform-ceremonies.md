@@ -130,19 +130,28 @@ replace the immutable `userId`.
 
 ### 2.1a Handle normalization
 
-Proof layers work with raw bytes; normalization is a consumption-time
-derivation, layered strictly:
+Proof layers work with raw bytes and normalization is a consumption-time
+derivation, layered strictly, with one exception: in a digest profile
+(§2.1b) the Proving Circuit applies that same normalization before it
+digests, because the Consumer receives no bytes to normalize.
 
 - REQ-PLAT-08A (upholds SP-BIND-01):
-  The Proving Circuit and the Notary Service MUST NOT case-fold, trim, or
-  otherwise transform identity bytes. The Consumer MUST receive the handle as
-  the raw authenticated bytes of its platform source.
+  The Notary Service MUST NOT case-fold, trim, or otherwise transform
+  identity bytes. The Proving Circuit of a profile that exposes identity
+  bytes MUST NOT transform them. The Consumer MUST receive the handle of
+  such a profile as the raw authenticated bytes of its platform source. The
+  Proving Circuit of a profile that exposes identity digests (§2.1b) MUST
+  apply exactly the profile's published normalization to the handle bytes
+  it digests, and no other transform, so that the digest equals the one the
+  Consumer derives from the normalized handle.
 - REQ-PLAT-08B (upholds SP-BIND-01):
-  The Consumer MUST derive the normalized handle from the
-  proof-verified raw bytes on its own write path. The Consumer MUST
-  NOT accept a caller-supplied normalized handle or pre-hashed handle key.
-  Necessity: the handle arrives inside a proof; a caller supplying the
-  derived key could name any handle it liked.
+  The Consumer MUST derive the normalized handle from the proof-verified raw
+  bytes on its own write path, or the handle key from the proof-verified
+  handle digest where the profile exposes digests. The Consumer MUST NOT
+  accept a caller-supplied normalized handle or pre-hashed handle key. The
+  Consumer MAY accept caller-supplied raw bytes only where the proof binds
+  their digest, under REQ-PLAT-08D. Necessity: the handle arrives inside a proof;
+  a caller supplying the derived key could name any handle it liked.
 - REQ-PLAT-08C:
   A browser-side normalization exists only for display and local checks. No
   proof statement or Consumer behavior may rely on it. Necessity: a check
@@ -163,7 +172,64 @@ such table is ineligible.
   Every implementation reproduces the shared handle vector table byte for
   byte; a caller-supplied normalized handle or pre-hashed key is rejected;
   and identity bytes transformed before derivation by the Consumer
-  fail conformance.
+  fail conformance. For a profile that exposes digests, the Proving Circuit
+  reproduces the table's case-folding, character-set, and shape rows and
+  refuses the inputs of its trimming rows, which a signed claim never
+  carries.
+
+### 2.1b Identity disclosure
+
+A digest profile is a Platform Profile whose Proving Circuit exposes the
+handle and the canonical `userId` as keccak256 digests rather than bytes;
+Google is one (§3.3). The Consumer keys every identity on those digests,
+so an identity is resolvable by whoever knows its handle or `userId`
+whether or not the bytes were ever published. What a digest profile adds
+is the choice of publishing them.
+
+- REQ-PLAT-08D (upholds SP-BIND-01, SP-PRIV-01):
+  For a digest profile, the Consumer MUST derive the identity's keys from
+  the `userId` digest and the handle digest the Platform Verifier returns,
+  in every Submission. The Transaction Author MAY include the plaintext
+  `userId` and handle in a Submission, both or neither. Where a Submission
+  carries them, the Consumer MUST normalize the handle under §2.1a. The
+  Consumer MUST reject a Submission whose plaintext does not hash, as
+  `keccak256` of the `userId` bytes and of the normalized handle, to the
+  two digests. The Consumer MUST accept
+  a Submission that carries neither as an undisclosed binding. The Consumer
+  MUST reject a request to publish a name for an undisclosed binding.
+- REQ-PLAT-08E (upholds SP-PRIV-01):
+  The Consumer MUST offer the owner of an undisclosed binding a disclosure
+  call that takes the plaintext `userId` and handle. The Consumer MUST
+  accept a disclosure only when the keys derived from it are the ones the
+  caller's binding currently holds. The Consumer MUST refuse a disclosure of
+  a key retired by a later claim of the same account. The Consumer MUST NOT
+  require a new proof for a disclosure; the preimages are the evidence. The
+  Consumer MUST clear any name the Transaction Author had published for the
+  platform when it accepts a Submission that carries no plaintext.
+  Necessity: a published name is
+  read as the wallet's current handle, and a wallet must not display, or
+  disclose under its name, a handle it no longer holds.
+- REQ-PLAT-08F (upholds SP-PRIV-01):
+  The Consumer MUST state in every binding or disclosure event it emits
+  whether the event carries plaintext. The Consumer MUST put the plaintext
+  `userId` and handle in an event only when the Submission or disclosure
+  carried them. Necessity: an event that
+  carried plaintext is public for good; a reader distinguishes an identity
+  whose plaintext is known from one currently displaying a name only if the
+  events say which is which. A private Submission after a disclosure leaves
+  the plaintext known and the name unpublished, and its event says
+  undisclosed; all three hold at once.
+- TEST-PLAT-20A (exercises REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F):
+  The same Google account submitted with and without its plaintext lands on
+  the same two keys. A Submission without plaintext, made with recognizable
+  test values, carries neither the email nor the `userId` in its decoded
+  payload or its decoded events. A Submission whose plaintext does not hash
+  to the digests is rejected. A request to publish a name for an undisclosed
+  binding is rejected. A disclosure of a handle retired by a later claim of
+  the same account is rejected, and a disclosure of the current one
+  publishes it. A Submission without plaintext after a disclosure leaves the
+  binding resolvable by its handle, its name unpublished, and its event
+  marked undisclosed.
 
 ### 2.2 Metadata ordering and validity ceilings
 
@@ -203,8 +269,12 @@ block an otherwise valid authority operation.
 
 ```text
 identityPlatform = "google"
-platformCeremonyVersion = 1
+platformCeremonyVersion = 2
 ```
+
+Version 1 exposes the raw `sub` and `email` bytes as public inputs; version
+2 exposes their digests (REQ-PLAT-16B). A Consumer that implements §2.1b
+accepts version 2 only.
 
 Google uses direct authentication-only OIDC and has no server-side token
 exchange. Identity evidence is the signed ID Token delivered in the redirect
@@ -303,14 +373,39 @@ require a verifier that dispatches on the header `alg`; none exists here.
   |---|---|
   | Authorization Digest | signed `nonce`, decoded as exactly 32 bytes |
   | client-identifier digest | `SHA256` of the signed `aud` |
-  | canonical `userId` | signed `sub` |
-  | raw `email` bytes | signed `email`; the Consumer derives the normalized handle |
+  | `userId` digest | `keccak256` of the signed `sub`, exactly as signed (REQ-PLAT-16D) |
+  | handle digest | `keccak256` of the signed `email` after the normalization of §2.1a (REQ-PLAT-16D) |
   | evidence timestamp | signed `exp`; used for both `metadataObservedAt` and `proofValidUntil` |
   | RSA modulus | exact `n` that verified the JWS; `e = 65537` is profile-fixed |
 
   The Proving Circuit MUST NOT expose a detached second representation of a
-  claim. Proofs are over raw bytes; normalization, such as lowercasing the
-  handle, is the Consumer's decision at consumption time.
+  claim: the `sub` and `email` bytes appear in no public input, only their
+  digests do, and each digest is the inner hash of the Consumer's key for
+  that identity, so a claim disclosed in plaintext and one left undisclosed
+  key the same binding.
+- REQ-PLAT-16C (upholds SP-BIND-01, SP-PRIV-01):
+  The Platform Verifier MUST return the `userId` digest and the handle
+  digest as the digests of common REQ-COMMON-05E. Where the Submission
+  carries the plaintext `sub` and `email`, the Platform Verifier MUST pass
+  them to the Consumer unchanged and unchecked. The Platform Verifier MUST
+  NOT derive a normalized handle or a key from them; the check that they
+  hash to the digests is the Consumer's under REQ-PLAT-08D, because it
+  needs the normalization of §2.1a. Necessity: one party owns the equality, and it is
+  the one that owns the normalization.
+- REQ-PLAT-16D (upholds SP-BIND-01, SP-PRIV-01):
+  The Proving Circuit MUST admit a `sub` only under REQ-PLAT-04 and
+  REQ-PLAT-05, nonempty and of bytes `0x20` through `0x7e`. The Proving
+  Circuit MUST digest exactly the signed `sub` bytes. The Proving Circuit
+  MUST admit an `email` only when the normalization of §2.1a admits it. The
+  Proving Circuit MUST refuse an `email` that normalization would trim. The
+  Proving Circuit MUST digest exactly the normalized `email` bytes. The
+  Proving Circuit MUST fail to prove, rather than truncate, a value longer
+  than its buffer for it; the buffer lengths are constants of the Platform
+  Ceremony Version. A `sub` or `email` whose JSON encoding escapes a byte
+  cannot satisfy the byte comparison of common REQ-COMMON-19 and
+  REQ-COMMON-19B, which excludes the closing delimiter, and so fails to
+  prove. Necessity: a verifier that receives a digest inspects nothing,
+  so every check the bytes need happens where the bytes are.
 - REQ-PLAT-17 (upholds SP-BIND-01):
   The Proving Circuit MUST prove the signed `iss` equals
   `https://accounts.google.com`.
@@ -1141,6 +1236,16 @@ Platform Verifier, Notary Service, Consumer.
   whose supplied `aud` bytes do not hash to the audience public input is
   rejected, and an accepted one returns those exact bytes as the client
   identifier.
+- TEST-PLAT-06A (exercises REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-16D):
+  `Alice@Gmail.com` and `alice@gmail.com` prove the same handle digest, and
+  it equals `keccak256` of the normalized handle the Consumer derives from
+  the plaintext. An `email` with a space, two `@`, an empty local part, a
+  byte outside the normalization's alphabet, or bytes past its signed length
+  cannot satisfy the circuit; neither can an empty `sub`, a `sub` byte
+  outside `0x20` through `0x7e`, or a `sub` or `email` longer than its
+  buffer. The public inputs carry no `sub` or `email` byte. The Platform
+  Verifier returns both digests, returns plaintext the Submission carried
+  byte for byte, and returns none where the Submission carried none.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
   A proof at or after `proofValidUntil`, and a token-attestation creation time
   more than `maxFutureAttestationSkew` ahead of Block Time, are rejected. An
@@ -1288,8 +1393,8 @@ Platform Verifier, Notary Service, Consumer.
 ## 9. Security Considerations
 
 This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01, and
-SP-FRESH-01 for the launch platforms, under the assumptions of
-[common §3](ceremony-common.md#3-assumptions).
+SP-FRESH-01 for the launch platforms, and SP-PRIV-01 for Google, under the
+assumptions of [common §3](ceremony-common.md#3-assumptions).
 
 Google is the only platform whose evidence is a bearer artifact: an ID Token
 is complete evidence to whoever holds it. Its delivery is therefore
@@ -1344,6 +1449,19 @@ exist.
 Google's JWKS rotation makes the trusted modulus set a liveness dependency
 (REQ-PLAT-24): every Google ceremony fails closed while Google signs with an
 untrusted modulus.
+
+Google is the launch digest profile (§2.1b): its `sub` and `email` reach the
+chain only as keccak256 digests, and the Consumer keys the binding on them.
+The confidentiality this buys is stated in
+[common §12](ceremony-common.md#12-security-considerations) together with
+what it does not buy: a guessed address or a `sub` held by another relying
+party confirms the binding by hashing, the binding's existence and
+observation time stay public, and a name that resolves through an ENS
+gateway or an off-chain resolver is the address itself. The normalization
+of §2.1a now runs inside the Proving Circuit for this profile
+(REQ-PLAT-16D), which fixes the profile's handle rules into the Platform
+Ceremony Version: a change to those rules is a new version, never an edit,
+or a disclosed claim stops hashing to its own key.
 
 ## 10. References
 

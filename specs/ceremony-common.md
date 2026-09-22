@@ -224,6 +224,11 @@ Attestation Count: The number of entries in the closed attestation list a
 - ASM-BROWSER-01:
   The Canonical Runtime executes unmodified, and the user agent enforces the
   same-origin policy over authorization responses.
+- ASM-HASH-01:
+  keccak256 is preimage resistant: given a digest, no party recovers a
+  preimage except by hashing candidates and comparing. A digest is not a
+  secret: a low-entropy preimage, such as an email address, is recovered by
+  hashing guesses, and this assumption gives no protection against that.
 
 ## 4. Security properties
 
@@ -267,6 +272,12 @@ on it.
   Within one Consumer deployment, one ceremony authorizes at most
   one authoritative effect. Depends on ASM-CHAIN-01, ASM-CHAIN-02. Evidence:
   checked invariant in the Consumer.
+- SP-PRIV-01:
+  An identity a Consumer holds undisclosed is recoverable from no chain
+  artifact, whether Submission calldata, event, or storage, except by hashing
+  a candidate handle or user identifier and comparing it with the identity's
+  keys. Depends on ASM-HASH-01, ASM-PROOF-01. Evidence: conformance tests
+  (supporting, not proving) plus the preimage resistance of keccak256.
 
 ## 5. Authorization digest
 
@@ -550,12 +561,14 @@ an identity session — so one Submission on either path pays two fees.
   Platform Verifier MUST treat each of those decisions as final. The Platform Verifier MUST NOT call
   the Notary Service where its Platform Profile
   requires no attestation.
-- REQ-COMMON-05E (upholds SP-CLIENT-01):
+- REQ-COMMON-05E (upholds SP-CLIENT-01, SP-PRIV-01):
   The Platform Verifier MUST return its verified fields: the Authorization
   Digest it recomputed, the operation domain and Authorized Transaction Data
   it decoded, the Platform Ceremony Version it implements, the client
-  identifier, the canonical `userId`, the raw handle bytes, and
-  `metadataObservedAt`. Necessity: an authenticated `userId`, handle, and
+  identifier, the canonical `userId` and the raw handle bytes where its
+  Platform Profile exposes them, the `userId` digest and the handle digest
+  where its Platform Profile exposes those instead (platform REQ-PLAT-16C),
+  and `metadataObservedAt`. Necessity: an authenticated `userId`, handle, and
   observation time are what the ceremony exists to produce; the digest is the
   Consumer's replay nullifier, which it cannot recompute without reading the
   payload. The Consumer trusts these fields as it trusts the Platform Verifier
@@ -1452,7 +1465,7 @@ the constructions that role implements.
 ## 12. Security Considerations
 
 This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01,
-SP-FRESH-01, and SP-REPLAY-01 under the assumptions of §3.
+SP-FRESH-01, SP-REPLAY-01, and SP-PRIV-01 under the assumptions of §3.
 
 Replay within one Consumer deployment is prevented by `authorizationNonce`
 and REQ-COMMON-03. Replay across Consumer Chains whose Chain Profiles use
@@ -1494,11 +1507,27 @@ liveness dependency only: they cannot forge evidence, but an unbounded fee
 stops every ceremony for the platforms whose profiles carry attestations, and
 leaves a profile with no attestation unaffected.
 
-The handle, the platform user identifier, and the client identifier are
-published deliberately. A binding exists to be read, and each of these values
-is already discoverable from the identity platform, so the protocol treats
-none of them as confidential. Only the bearer, the client secret, and the
-transcript bytes outside a profile's revealed ranges stay withheld for good.
+The client identifier is published deliberately: a binding exists to be
+read, and the client is discoverable from the identity platform. The handle
+and the platform user identifier are published where a Platform Profile
+exposes them as bytes, X and GitHub at launch, whose handles are public on
+the platform itself; a Platform Profile that exposes them as digests, Google
+at launch, keeps both confidential until their owner discloses them
+(platform §2.1b), and that confidentiality is SP-PRIV-01. The bearer, the
+client secret, and the transcript bytes outside a profile's revealed ranges
+stay withheld for good.
+
+SP-PRIV-01 is a statement about the chain's artifacts, not about the
+identity. The keys an undisclosed identity is stored under are unsalted
+digests of its normalized handle and its user identifier, so that whoever
+already knows an address can resolve it; by the same arithmetic, whoever
+suspects an address, or holds the user identifier from another relying
+party, confirms the binding by hashing it (ASM-HASH-01). The property does
+not hide that a Transaction Author holds some identity on the platform, nor
+when it was observed, and it says nothing about the query a resolver
+receives off chain: a resolver that logs the handles it is asked for holds
+what the chain does not. A salted commitment would refuse the guess and the
+honest resolver alike; this protocol does not offer one.
 For a PKCE profile, the raw `authorizationNonce` is withheld until the token
 exchange completes, per REQ-COMMON-14. The Submission publishes it afterwards
 as the same nonce already required to recompute the Authorization Digest,

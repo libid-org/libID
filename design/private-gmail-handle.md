@@ -1,10 +1,10 @@
 # A private mode for Gmail handles
 
-**Status: design proposal.** Nothing here is built. It is not a protocol spec
-in the sense of `specs/` and defines no `ASM-*`/`SP-*`/`REQ-*` identifiers; it
-names the ones that would have to change, and the parts that carry trust
-assumptions graduate into `specs/platform-ceremonies.md` and
-`specs/ceremony-common.md` if the design is approved.
+**Status: design proposal, with its specification written.** Nothing here
+is built. This note is the rationale; the normative text is in
+`specs/platform-ceremonies.md` (§2.1b, REQ-PLAT-08D to 08F, REQ-PLAT-16C
+and 16D, TEST-PLAT-06A and 20A, Google version 2) and
+`specs/ceremony-common.md` (ASM-HASH-01, SP-PRIV-01, REQ-COMMON-05E, §12).
 
 ## The thing that must work
 
@@ -350,41 +350,24 @@ choice: private, public, public and published.
 
 ### Spec changes
 
-- REQ-PLAT-08A: a carve-out for a profile whose circuit exposes a digest
-  instead of bytes. The circuit MAY apply the profile's published
-  normalization to the bytes it digests, and MUST apply exactly that
-  normalization, so the digest equals what the Consumer computes from the
-  plaintext.
-- REQ-PLAT-08B: the Consumer MUST NOT accept a caller-supplied normalized
-  handle or pre-hashed key; it MAY accept caller-supplied raw bytes when the
-  proof binds their digest, and MUST derive the key from the digest.
-- REQ-PLAT-16B: row three becomes "digest of the signed `sub`" and row four
-  "digest of the normalized `email`". The sentence forbidding a detached
-  second representation stays true, since the raw bytes are no longer
-  exposed at all.
-- A new REQ-PLAT-16C: the Platform Verifier MUST return both digests to the
-  Consumer, and MUST pass any plaintext the Submission carries through
-  unchanged and unchecked; the equality check is the Consumer's, under
-  REQ-PLAT-08B, because it needs the handle normalized.
-- REQ-PLAT-16D, the id's validation in the circuit: `sub` nonempty,
-  printable ASCII, no quote, digested over exactly its length; a `sub`
-  beyond the profile's buffer fails to prove.
-- REQ-COMMON-05E: "the canonical `userId`, the raw handle bytes" becomes
-  "the canonical `userId` and the raw handle bytes, or neither when the
-  profile discloses digests, and both digests".
-- §12: the handle and the user identifier are confidential by default for a
-  digest profile; the client identifier stays published.
-- New assumption and property, in the skill's chain: an assumption that
-  keccak256 is preimage resistant, with the explicit note that it does not
-  protect a low-entropy preimage from enumeration; a property that an
-  undisclosed handle is recoverable from no chain artifact except by
-  guessing its exact preimage; the requirements above upholding it; and a
-  test, TEST-PLAT-20A, that the same account claimed public and private
-  lands on the same two nodes, and that a private claim's decoded calldata
-  and decoded events carry neither the email nor the account id.
-- A new Google `ceremonyVersion`, since the public inputs change. The
-  platform's `rules` do not change, so the old version retires without a
-  namespace split.
+Written, on this branch. The map, for a reader coming from the specs:
+
+- `platform-ceremonies.md`: §2.1a's lead-in and REQ-PLAT-08A/08B admit a
+  circuit that normalizes what it digests and a Consumer that keys on
+  digests; a new §2.1b defines the digest profile with REQ-PLAT-08D (keys
+  from the digests, plaintext accepted only when it hashes to them, both or
+  neither), 08E (the disclosure call, what it refuses, the publication a
+  private claim clears), 08F (the event's disclosed flag) and
+  TEST-PLAT-20A; REQ-PLAT-16B lists the two digests as public inputs;
+  REQ-PLAT-16C has the verifier return them and pass plaintext through
+  unchecked; REQ-PLAT-16D moves the `sub` and `email` validation into the
+  circuit; TEST-PLAT-06A exercises the three; Google is Platform Ceremony
+  Version 2; §9 states what the digests protect and what they do not.
+- `ceremony-common.md`: ASM-HASH-01, SP-PRIV-01, REQ-COMMON-05E returns
+  the digests where a profile exposes them, §12 replaces "published
+  deliberately" for the handle and user identifier with the digest
+  profile's confidentiality and its limits.
+- `libid.md`: one sentence among the enforceable guarantees.
 
 ## The recommendation
 
