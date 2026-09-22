@@ -28,8 +28,8 @@ Ctrl-C stops the app and that checkout's containers.
 | Notary HTTP/WebSocket | http://localhost:4687 |
 
 These are separate browser origins. Ports are fixed and services bind to loopback.
-A local Caddy proxy supplies the notary’s required client-IP header; repeated
-development runs have no per-client rate quotas.
+Browsers connect directly to the notary in peer mode; repeated development runs
+have no per-client rate quotas.
 
 ## Configure and develop
 

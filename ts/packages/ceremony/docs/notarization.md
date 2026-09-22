@@ -11,7 +11,9 @@ owns authoritative request/evidence rules.
 [Notarization](../src/notary/session.ts) owns one WASM runtime/thread pool per
 ceremony. Each `prepare(url)` creates a separate TLS session and WebSocket.
 Preparation needs a fixed HTTPS target but no bearer, so independent sessions
-can prepare concurrently.
+can prepare concurrently. The notary connects to the target only when `send`
+starts TLS; preparation does not establish target reachability, so target
+connection failures reject `send`.
 
 | Operation | Available output |
 |---|---|
