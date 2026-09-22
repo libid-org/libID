@@ -1,5 +1,6 @@
 import { type ConnectionEnd, PopupError } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
+import { CeremonyError } from '../../errors.js'
 import type { Events } from '../../events.js'
 import type { ProverContext } from '../../platforms/context.js'
 import { platforms } from '../../platforms/index.js'
@@ -114,48 +115,62 @@ it.each(['google', 'x', 'github'] as const)(
   },
 )
 
-it('reports retrospective fallback before readiness and preserves producer timestamps [CSP-016]', async () => {
-  vi.stubGlobal('location', { origin: 'https://ccdp.test', pathname: '/ccdp/v1/prover/fallback' })
-  vi.stubGlobal('crossOriginIsolated', true)
-  vi.stubGlobal('Worker', vi.fn())
-  prove.mockImplementationOnce(async (context) => {
-    context.emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: 12 })
-    throw new Error('Invalid GitHub id')
-  })
-  await startProver(
-    new URLSearchParams({
-      ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
-      applicationOrigin: 'https://app.test',
-      oauthQuery: '',
-      oauthFragment: '#error=access_denied',
-    }).toString(),
-  )
-  expect(connection.send.mock.calls.slice(0, 2).map(([m]) => m)).toEqual([
-    { type: 'event', event: 'prover-fallback', timestamp: performance.timeOrigin },
-    { type: 'event', event: 'prover', phase: 'started', timestamp: expect.any(Number) },
-  ])
-  connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]({
-    type: 'prove-identity',
-    platformId: 'github',
-    platformCeremonyVersion: 1,
-  })
-  await vi.waitFor(() =>
+it.each([
+  { error: new Error('Invalid GitHub id'), event: 'prover' },
+  {
+    error: new CeremonyError('token-attestation', 'Notarization request timed out'),
+    event: 'token-attestation',
+  },
+])(
+  'reports fallback and gracefully retires failure: $error.message [CSP-016]',
+  async ({ error, event }) => {
+    vi.stubGlobal('location', { origin: 'https://ccdp.test', pathname: '/ccdp/v1/prover/fallback' })
+    vi.stubGlobal('crossOriginIsolated', true)
+    vi.stubGlobal('Worker', vi.fn())
+    prove.mockImplementationOnce(async (context) => {
+      context.emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: 12 })
+      throw error
+    })
+    await startProver(
+      new URLSearchParams({
+        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        applicationOrigin: 'https://app.test',
+        oauthQuery: '',
+        oauthFragment: '#error=access_denied',
+      }).toString(),
+    )
+    expect(connection.send.mock.calls.slice(0, 2).map(([m]) => m)).toEqual([
+      { type: 'event', event: 'prover-fallback', timestamp: performance.timeOrigin },
+      { type: 'event', event: 'prover', phase: 'started', timestamp: expect.any(Number) },
+    ])
+    connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]({
+      type: 'prove-identity',
+      platformId: 'github',
+      platformCeremonyVersion: 1,
+    })
+    await vi.waitFor(() =>
+      expect(connection.send).toHaveBeenCalledWith({
+        type: 'ceremony-failed',
+        event,
+        message: error.message,
+      }),
+    )
     expect(connection.send).toHaveBeenCalledWith({
-      type: 'ceremony-failed',
-      event: 'prover',
-      message: 'Invalid GitHub id',
-    }),
-  )
-  expect(connection.send).toHaveBeenCalledWith({
-    type: 'event',
-    event: 'proof-worker-bootstrap',
-    phase: 'started',
-    timestamp: 12,
-  })
-  expect(
-    connection.send.mock.calls.some(([m]) => m.event === 'prover' && m.phase === 'finished'),
-  ).toBe(false)
-})
+      type: 'event',
+      event: 'proof-worker-bootstrap',
+      phase: 'started',
+      timestamp: 12,
+    })
+    expect(connection.send.mock.calls.filter(([m]) => m.type === 'ceremony-failed')).toHaveLength(1)
+    expect(connection.send.mock.calls.some(([m]) => m.type === 'identity-proof')).toBe(false)
+    expect(terminal.mock.calls.filter(([e]) => e.status === 'failed')).toHaveLength(1)
+    expect(prove.mock.calls[0][0].signal.aborted).toBe(true)
+    expect(ui.stop).toHaveBeenCalledOnce()
+    expect(
+      connection.send.mock.calls.some(([m]) => m.event === 'prover' && m.phase === 'finished'),
+    ).toBe(false)
+  },
+)
 
 it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
   'gives the UI a paint opportunity before delivery: %s [LIBID-BROWSER-024]',

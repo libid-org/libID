@@ -34,7 +34,7 @@ export interface RevealResult {
 }
 
 export interface NotarizationSession {
-  /** Send one exact request after setup and return its original transcript bytes. */
+  /** Send once after setup; starts the 10-second deadline through final attestation. */
   send(request: ExactHttpRequest): Promise<Transcript>
   /** Reveal once after send; proof preparation may use openings before attestation completes. */
   reveal(reveals: Reveals): Promise<RevealResult>
@@ -103,6 +103,7 @@ export class Notarization {
     const failRuntime = (error: unknown) => this.#failure.abort(error)
     let stage = 'preparing',
       ended = false
+    let timer: ReturnType<typeof setTimeout> | undefined
     const waiters = new Map<
       string,
       { resolve: (v: unknown) => void; reject: (e: unknown) => void }
@@ -115,6 +116,7 @@ export class Notarization {
       return promise
     }
     function cleanup() {
+      clearTimeout(timer)
       ended = true
       port.close()
       signal.removeEventListener('abort', abort)
@@ -177,6 +179,7 @@ export class Notarization {
         if (ended || stage !== 'prepared' || request.url !== url)
           throw new Error('Invalid notarization send')
         stage = 'sending'
+        timer = setTimeout(() => fail(new Error('Notarization request timed out')), 10000)
         const result = wait<{ transcript: Transcript }>('sent')
         try {
           port.postMessage({ type: 'send', request })

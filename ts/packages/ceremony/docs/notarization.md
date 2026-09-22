@@ -30,7 +30,13 @@ speculative result. See [X/GitHub scheduling](pipelines.md).
 The supplied abort signal releases the shared worker, including idle prepared
 sessions. Any session failure aborts sibling work. Successful sessions release
 their own prover/channel; the platform's `finally` abort releases the shared
-runtime. Types and exact method constraints stay beside the implementation.
+runtime. Each request has one 10-second timeout from `send()` until its final
+attestation arrives. The budget includes response receipt, disclosure selection,
+openings and finalization; it does not restart between these steps. WASM/session
+preparation, idle bearer waiting and ZK proving are outside that budget. Timeout
+rejects pending calls and terminates the shared worker without waiting for SDK
+completion. The platform retires its proof engine, and Prover reports one failure
+and stops its UI. Types and exact method constraints stay beside the implementation.
 
 ## Transport and bounds
 
@@ -44,9 +50,8 @@ runtime before opening session sockets, so cold loading does not consume the
 notary’s idle-socket deadline. Target-specific TLS setups still run concurrently.
 After TLSNotary finishes, it reclaims the same channel for one length-prefixed
 JSON attestation frame and requires EOF. [transport.ts](../src/notary/transport.ts)
-owns frame bounds and exact decoding. The separate finalization deadline prevents
-an unfinished frame/close from retaining a worker indefinitely; it does not
-establish X's authorization-code deadline.
+owns frame bounds and exact decoding. The shared request timeout also covers an
+unfinished final frame or missing EOF.
 
 The adapter admits at most 4 KiB sent and 32 KiB received transcript bytes before
 exposing them to parsing/reveal. These are post-receive acceptance limits: the

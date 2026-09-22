@@ -97,7 +97,9 @@ it.each(['accepted', 'failed'])(
       reveal: vi.fn(async () => ({ openings: [], attestation: identityAttestation.promise })),
     }
     prepare.mockResolvedValueOnce(token).mockResolvedValueOnce(identity)
-    generate.mockResolvedValue({ proof: new Uint8Array([1]), publicInputs: [] })
+    if (outcome === 'accepted')
+      generate.mockResolvedValue({ proof: new Uint8Array([1]), publicInputs: [] })
+    else generate.mockReturnValue(new Promise(() => {})) // Failure must not await ZK completion.
     const events: OperationEvent[] = []
     const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
     const context: ProverContext = {

@@ -15,7 +15,6 @@ class Socket extends EventTarget {
 }
 
 afterEach(() => {
-  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.resetModules()
 })
@@ -58,7 +57,7 @@ async function worker(sent: number, recv: number) {
       },
     },
   })
-  return { postMessage, close, receive: port.onmessage! }
+  return { postMessage, close }
 }
 
 it.each([
@@ -80,17 +79,6 @@ it.each([
     }
   },
 )
-
-it('missing final EOF terminates rather than hanging indefinitely', async () => {
-  const result = await worker(0, 0)
-  await expect.poll(() => result.postMessage.mock.calls.some(([m]) => m.type === 'sent')).toBe(true)
-  vi.useFakeTimers()
-  result.receive({ data: { type: 'reveal', reveals: { sent: [], received: [] } } })
-  await vi.advanceTimersByTimeAsync(30001)
-  expect(result.postMessage.mock.calls.some(([m]) => m.type === 'error')).toBe(true)
-  expect(result.postMessage.mock.calls.some(([m]) => m.type === 'attestation')).toBe(false)
-  expect(result.close).toHaveBeenCalledOnce()
-})
 
 it('initializes one WASM pool and overlaps setup while keeping per-session transcripts', async () => {
   let receive!: (event: { data: unknown }) => void

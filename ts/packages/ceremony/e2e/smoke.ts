@@ -11,6 +11,7 @@ import { buildTokenRequest } from '../src/platforms/github/1/token.js'
 import { identityRequest } from '../src/platforms/github/1/transcript.js'
 
 Object.assign(window, {
+  Notarization,
   async proveBearerFixture() {
     const bearer = `AAAA${'x'.repeat(96)}`
     const opening = (start: number) => {

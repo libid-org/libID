@@ -15,6 +15,7 @@ const ports: MessagePort[] = []
 
 afterEach(() => {
   for (const port of ports.splice(0)) port.close()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
@@ -66,6 +67,7 @@ it('rejects invalid origins, targets and pre-aborted work before creating a work
 })
 
 it('shares one worker, routes overlapping replies per session and keeps it alive until ceremony cleanup', async () => {
+  vi.useFakeTimers()
   const { messages, worker, terminate } = runtime()
   const abort = new AbortController()
   const notary = new Notarization('https://notary.test', abort.signal)
@@ -98,6 +100,8 @@ it('shares one worker, routes overlapping replies per session and keeps it alive
   const final = await other
   two.postMessage({ type: 'attestation', attestation: { fixture: 'identity' } })
   await expect(final.attestation).resolves.toEqual({ fixture: 'identity' })
+  expect(vi.getTimerCount()).toBe(0)
+  await vi.advanceTimersByTimeAsync(10000)
   expect(terminate).not.toHaveBeenCalled()
   abort.abort()
   expect(terminate).toHaveBeenCalledOnce()
@@ -107,6 +111,7 @@ it('shares one worker, routes overlapping replies per session and keeps it alive
 it.each(['abort', 'session-error'])(
   '%s rejects sibling preparation and pending attestations and terminates the shared worker',
   async (failure) => {
+    vi.useFakeTimers()
     const { messages, terminate } = runtime()
     const abort = new AbortController()
     const events: OperationEvent[] = []
@@ -138,6 +143,7 @@ it.each(['abort', 'session-error'])(
       expect.objectContaining({ event: 'token-attestation', phase: 'started' }),
     ])
     expect(terminate).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
     await expect(session.send(request)).rejects.toThrow()
   },
 )
@@ -260,3 +266,50 @@ it('rejects reveal when its start event synchronously aborts the session', async
   await expect(session.reveal({ sent: [], received: [] })).rejects.toBe(reason)
   expect(terminate).toHaveBeenCalledOnce()
 })
+
+it.each(['send', 'reveal', 'attestation'])(
+  '%s stalls share one 10-second request deadline and abort sibling work [LIBID-BROWSER-010]',
+  async (stage) => {
+    vi.useFakeTimers()
+    const { messages, terminate } = runtime()
+    const notary = new Notarization('https://notary.test', new AbortController().signal)
+    const ready = notary.prepare(target)
+    // Neither cold preparation nor an idle session waiting for its bearer uses the budget.
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(notary.signal.aborted).toBe(false)
+    const port = messages[0].port
+    port.postMessage({ type: 'prepared' })
+    const session = await ready
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(notary.signal.aborted).toBe(false)
+    const sent = session.send(request)
+    const sibling = notary.prepare(target)
+    let pending: Promise<unknown> = sent
+    await vi.advanceTimersByTimeAsync(5000)
+    if (stage !== 'send') {
+      port.postMessage({
+        type: 'sent',
+        transcript: { sent: new Uint8Array(), received: new Uint8Array() },
+      })
+      await sent
+      const revealing = session.reveal({ sent: [], received: [] })
+      pending = revealing
+      if (stage === 'attestation') {
+        port.postMessage({ type: 'revealed', openings: [] })
+        pending = (await revealing).attestation
+      }
+    }
+    const checks = Promise.all([
+      expect(pending).rejects.toThrow('Notarization request timed out'),
+      expect(sibling).rejects.toThrow('Notarization request timed out'),
+    ])
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(notary.signal.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    await checks
+    expect(notary.signal.aborted).toBe(true)
+    expect(terminate).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
+    await expect(session.send(request)).rejects.toThrow('Notarization request timed out')
+  },
+)
