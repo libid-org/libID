@@ -19,7 +19,8 @@ Change dependency pins in the linked declarations and configuration.
 | SWS | 3.0.0-beta.1; exact image digest in [ccdp.Dockerfile](../ccdp.Dockerfile). |
 
 The released `bearer_link` circuit accepts bearers of at most 128 bytes. The
-platform profile's 4096-byte bound does not expand this circuit limit.
+X and GitHub specifications allow up to 4096 bytes; both implementations enforce
+the circuit's narrower limit.
 [Specifications](../README.md#specifications) own proof and protocol requirements;
 [platform pipelines](pipelines.md) describe this implementation.
 
@@ -29,8 +30,11 @@ platform profile's 4096-byte bound does not expand this circuit limit.
 TypeScript, browser tests, CCDP image/distribution, integration smoke and DCO.
 Browser coverage comprises 140 ceremony, 143 popup and 145 dev-app cases, with
 two popup feature skips and no retries. It spans Chromium, Firefox, WebKit,
-HTTP/HTTPS document flows and mobile emulation. Live consent and physical devices
-require separate qualification.
+HTTP/HTTPS document flows and mobile emulation. Manual wallet PoC testing reports
+successful live Google, X and GitHub ceremony completion on desktop and mobile
+using the current ceremony package. Manual end-to-end runs also establish real
+verifier acceptance for all three platforms. Exact browser/device and verifier
+versions are not recorded.
 
 | Coverage | What it establishes / limit |
 |---|---|
@@ -40,20 +44,19 @@ require separate qualification.
 | Google and bearer-link fixture proofs | Actual isolated browser workers generate proofs verified in Node against released keys, including altered-public-input rejection. Controlled Google token/time/JWKS inputs do not establish live consent or JWKS CORS; WebKit intercepts fixture JWKS at the page boundary. |
 | Real matched-notary runtime tests | One/two X sessions and both GitHub endpoints run through the pinned notary in direct peer mode alongside a separately verified fixture proof. Unauthenticated requests and deliberately invalid credentials establish runtime/channel execution and authority correlation, not authenticated token/identity evidence. The separate fixture proof is not bound to these attestations. |
 | Development app checks | Independent concurrent rows, closure, timings, fallback display and immediate success/denial closure, using intercepted responses. |
-| Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through the pinned Bridge and emitted CCDP. Provider returns are intercepted; live consent, proof verification and production refresh behavior remain separate gates. |
+| Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through the pinned Bridge and emitted CCDP. Provider returns are intercepted; manual live success and verifier acceptance are described above. Production refresh behavior remains a separate gate. |
 
 ## Remaining qualification
 
-- Real approval and denial for every platform against the selected deployed
-  services, including X/GitHub browser token/identity correlation and GitHub's
-  fully disclosed five-field token request, followed by released-verifier acceptance.
-- Physical iOS/Android devices, Vanadium/JIT behavior, app-installed/absent handoff,
+- Live denial and interruption paths for each platform.
+- The full physical iOS/Android matrix beyond successful mobile completion:
+  Vanadium/JIT behavior, app-installed/absent handoff,
   background suspension, memory pressure, eviction, public WSS/mobile networks
   and primary DIP notarization. Emulation cannot establish these properties.
 - Optional opener-independent carrier/signaling and real openerless returns.
   Ceremony supplies the integration point, not a WebRTC implementation.
-- Released-verifier acceptance of the header/framing and JSON-whitespace
-  rules with real platform evidence. Matching Rust/browser parsers alone is insufficient.
+- Full verifier conformance coverage for header/framing and JSON-whitespace
+  variants beyond the responses exercised by successful live runs.
 - Production Bridge conditional/compressed Callback refresh, redirect rejection,
   atomic last-good replacement and ingress log redaction. The browser harness does not implement that lifecycle.
 - Live CRS primary/fallback availability, readable CORS and Range under both
