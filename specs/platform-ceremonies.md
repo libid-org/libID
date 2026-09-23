@@ -104,9 +104,12 @@ it does not create a ceremony-owned confirmation page.
 
 - REQ-PLAT-04:
   The Implementation MUST accept a Google `sub` of bytes `0x20` through `0x7e`
-  only. The Implementation MUST reject empty, control, non-ASCII, and
-  over-255-byte values. Necessity: identity compatibility across
-  implementations.
+  only, other than `"` and `\`. The Implementation MUST reject empty,
+  control, non-ASCII, and over-255-byte values. Necessity: identity
+  compatibility across implementations; a value holding a backslash is one
+  whose JSON encoding may escape a byte, and an implementation that
+  decodes the escape and one that reads the signed bytes would key it
+  differently.
 - REQ-PLAT-05:
   The Implementation MUST NOT trim or case-convert a Google `sub`. Necessity:
   identity compatibility.
@@ -253,7 +256,14 @@ state, set and cleared as below.
   without plaintext after a disclosure leaves the identity disclosed, its
   name published or cleared under REQ-PLAT-08D, and its own event without
   plaintext.
-- TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F):
+- REQ-PLAT-08G (upholds SP-BIND-01):
+  For a digest profile, the Consumer's handle rules for the platform MUST be
+  the normalization the profile's Proving Circuit applies. The Consumer MUST
+  refuse a change to those rules once it has bound any identity of that
+  platform. Necessity: the Consumer holds only digests, so it cannot re-key
+  a binding under new rules, and a disclosed handle normalized under rules
+  the circuit does not apply stops hashing to its own key.
+- TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08G):
   The same Google account submitted with and without its plaintext lands on
   the same two keys. A Submission without plaintext, made with recognizable
   test values, carries neither the email nor the `userId` in its decoded
@@ -271,7 +281,8 @@ state, set and cleared as below.
   leaves the binding resolvable by its handle and its event without
   plaintext. The Canonical Runtime returns no `sub` or `email` to the
   application for a Submission that does not disclose, and places the
-  signed `sub` and `email` byte for byte in one that does.
+  signed `sub` and `email` byte for byte in one that does. A change to
+  Google's handle rules is refused once a Google identity is bound.
 
 ### 2.2 Metadata ordering and validity ceilings
 
@@ -403,7 +414,7 @@ require a verifier that dispatches on the header `alg`; none exists here.
   REQ-PLAT-23. JWK decoding and canonical-encoding validation happen where a
   modulus is admitted to the trusted set, per REQ-PLAT-24; the JWK encoding
   appears in no signed artifact, so proving it would add nothing.
-- REQ-PLAT-16B (upholds SP-BIND-01, SP-CLIENT-01, SP-FRESH-01):
+- REQ-PLAT-16B (upholds SP-BIND-01, SP-CLIENT-01, SP-FRESH-01, SP-PRIV-01):
   The Proving Circuit MUST expose exactly the following Google public inputs,
   each derived from the signed payload or verified signing key:
 
@@ -431,19 +442,20 @@ require a verifier that dispatches on the header `alg`; none exists here.
   needs the normalization of §2.1a. Necessity: one party owns the equality, and it is
   the one that owns the normalization.
 - REQ-PLAT-16D (upholds SP-BIND-01, SP-PRIV-01):
-  The Proving Circuit MUST admit a `sub` only under REQ-PLAT-04 and
-  REQ-PLAT-05, nonempty and of bytes `0x20` through `0x7e`. The Proving
-  Circuit MUST digest exactly the signed `sub` bytes. The Proving Circuit
-  MUST admit an `email` only when the normalization of §2.1a admits it. The
-  Proving Circuit MUST refuse an `email` that normalization would trim. The
-  Proving Circuit MUST digest exactly the normalized `email` bytes. The
-  Proving Circuit MUST fail to prove, rather than truncate, a value longer
-  than its buffer for it; the buffer lengths are constants of the Platform
-  Ceremony Version. A `sub` or `email` whose JSON encoding escapes a byte
-  cannot satisfy the byte comparison of common REQ-COMMON-19 and
-  REQ-COMMON-19B, which excludes the closing delimiter, and so fails to
-  prove. Necessity: a verifier that receives a digest inspects nothing,
-  so every check the bytes need happens where the bytes are.
+  The Proving Circuit MUST admit a `sub` only as REQ-PLAT-04 and
+  REQ-PLAT-05 admit one, nonempty, of bytes `0x20` through `0x7e`, and
+  holding neither `"` nor `\`. The Proving Circuit MUST digest exactly the signed
+  `sub` bytes. The Proving Circuit MUST admit an `email` only when the
+  normalization of §2.1a admits it. The Proving Circuit MUST refuse an
+  `email` that normalization would trim. The Proving Circuit MUST digest
+  exactly the normalized `email` bytes. The Proving Circuit MUST fail to
+  prove, rather than truncate, a `sub` longer than 31 bytes or an `email`
+  longer than 62 bytes; these are the Google profile's buffer lengths, and
+  62 is the handle rules' own maximum. No value the circuit digests holds
+  an escaped byte: every JSON escape begins with `\`, which the `sub` rule
+  refuses and the `email` alphabet does not contain. Necessity: a verifier
+  that receives a digest inspects nothing, so every check the bytes need
+  happens where the bytes are.
 - REQ-PLAT-17 (upholds SP-BIND-01):
   The Proving Circuit MUST prove the signed `iss` equals
   `https://accounts.google.com`.
@@ -1280,8 +1292,8 @@ Platform Verifier, Notary Service, Consumer.
   the plaintext. An `email` with a space, two `@`, an empty local part, a
   byte outside the normalization's alphabet, or bytes past its signed length
   cannot satisfy the circuit; neither can an empty `sub`, a `sub` byte
-  outside `0x20` through `0x7e`, or a `sub` or `email` longer than its
-  buffer. The public inputs carry no `sub` or `email` byte. The Platform
+  outside `0x20` through `0x7e`, a `sub` holding `\` (as `12\/3` does), a
+  32-byte `sub`, or a 63-byte `email`. The public inputs carry no `sub` or `email` byte. The Platform
   Verifier returns both digests, returns plaintext the Submission carried
   byte for byte, and returns none where the Submission carried none.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
@@ -1497,9 +1509,9 @@ party confirms the binding by hashing, the binding's existence and
 observation time stay public, and a name that resolves through an ENS
 gateway or an off-chain resolver is the address itself. The normalization
 of §2.1a runs inside the Proving Circuit for this profile (REQ-PLAT-16D), so
-the profile's handle rules are part of its proof statement: rules that the
-Consumer and the circuit do not share make a disclosed claim stop hashing to
-its own key.
+the profile's handle rules are part of its proof statement, and the
+Consumer holds them fixed once it has bound a Google identity
+(REQ-PLAT-08G).
 
 ## 10. References
 
