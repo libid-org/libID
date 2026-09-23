@@ -51,7 +51,7 @@ One bridge deployment has these inputs. Every origin follows the
 
 | Input | Contract |
 |---|---|
-| `allowedAppOrigins` | Nonempty, duplicate-free set of application allowlist members — canonical application origins and [origin patterns](popup-transport.md#6-origin-allowlists-and-binding) — admitted by the bridge |
+| `allowedAppOrigins` | Nonempty, duplicate-free set of application allowlist members — canonical application origins and [origin patterns](popup-transport.md#6-origin-allowlists-and-binding) over a suffix of at least two labels — admitted by the bridge |
 | CCDP origin | One canonical origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Platform profiles | Public OAuth client ID, supported ceremony versions, and an optional public `clientCredential` for each enabled platform |
 | Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
@@ -63,19 +63,33 @@ platform; the Bridge process requires neither its own public-origin setting nor
 a redirect URI. Application-side redirect construction is defined below.
 
 `allowedAppOrigins` has no protocol maximum. A member is either a canonical
-application origin or an origin pattern, which admits the direct subdomains of
-one host; the [popup transport](popup-transport.md#6-origin-allowlists-and-binding)
-owns the pattern spelling, well-formedness, and matching rule, and the bridge
-applies them unchanged. Well-formedness is narrower than what a URL parser
-accepts: a suffix carrying a port, a trailing dot, or an empty label parses and
-round-trips unchanged, and each is refused. An IPv4-literal suffix is refused as
-well: an address has no labels to delegate, so `https://*.127.0.0.1` admits no
-subdomain. The HTTP exception on exact `localhost` and `127.0.0.1` covers those
-hosts themselves, and there is no loopback pattern. A member containing `*` that
-is not a well-formed pattern is refused too, never read as an exact origin; no
-browser stamps such an origin, so admitting one hides a typo until a ceremony
-hangs. A duplicate, invalid, or malformed-pattern member is a deployment error
-rather than something the bridge normalizes. After resolving
+application origin or an origin pattern: a star, a dot, and a DNS suffix, such
+as `*.handles.link`, carrying no scheme. The
+[popup transport](popup-transport.md#6-origin-allowlists-and-binding) owns the
+pattern spelling, well-formedness, and matching rule, and the bridge applies
+them unchanged, admitting exactly the origins the browser side admits. A pattern
+admits an HTTPS origin on the default port whose host ends in the suffix at a
+label boundary, however many labels stand before it; the suffix itself is not
+admitted, and no pattern admits the HTTP exception hosts `localhost` and
+`127.0.0.1`.
+
+Well-formedness is narrower than what a URL parser accepts. The suffix is DNS
+labels only: lowercase alphanumeric with interior hyphens, its last label
+beginning with a letter, which is what refuses an address literal such as
+`*.127.0.0.1`. A scheme prefix, a port, a path, a partial-label star, an empty
+label, and a trailing dot are each malformed. A member carrying `*` that is not
+a well-formed pattern is refused, never read as an exact origin; no browser
+stamps such an origin, so admitting one hides a typo until a ceremony fails.
+
+The bridge refuses two members the browser side admits, at startup, naming the
+member and its position: `*`, because a bridge publishes no all-origins
+allowlist, and a suffix of fewer than two labels, such as `*.link`, because a
+whole top-level domain is not an allowlist. Refusal narrows admission instead of
+widening it, so every origin the bridge admits the browser side admits too and
+the two cannot desynchronise; and an operator reads the error at startup rather
+than watching a ceremony that never becomes ready. A duplicate, invalid, or
+refused member is a deployment error rather than something the bridge
+normalizes. After resolving
 the default or configured `ccdpOrigin`, the bridge derives one effective set:
 `allowedOrigins = allowedAppOrigins ∪ {ccdpOrigin}`. Adding an already-listed
 CCDP origin does not duplicate it. The union and its duplicate detection
@@ -118,9 +132,9 @@ contract actually becomes incompatible, not for an ordinary CCDP version bump.
 
 An origin pattern widens the member type of an existing input position instead
 of adding an input. For a Callback published before patterns, that is an
-incompatible interpretation rather than compatible evolution: it accepts the
-member as an ordinary origin and then matches it against no peer, so the
-ceremony does not fail and never becomes ready. The
+incompatible interpretation rather than compatible evolution: a pattern parses
+as no origin, so such a Callback rejects the whole list and every ceremony it
+serves ends in local failure text. The
 [artifact contract](ccdp-distribution.md#configuration-insertion) carries the
 widening as a deployment rule rather than an input-contract version: a bridge
 must not be configured with a pattern member until the Callback in its selected
@@ -313,21 +327,21 @@ cryptographic soundness.
   Default Distribution origin is added once; a replacement is added instead. Invalid/duplicate configured origins fail, and HTTP loopback works at any port.
   Configuration and Callback work without a server public-origin or redirect-URI
   setting; the Application derives the fixed callback URL from its Bridge origin.
-  A well-formed pattern member starts the bridge and admits a direct subdomain
-  of its suffix; a malformed pattern member fails at startup instead of falling
-  through to exact-origin validation. The suffix itself, a deeper label, a host
-  ending in the suffix text without a label boundary, a host the suffix only
-  prefixes, another scheme, and a port variant stay refused. Startup refuses
-  each of `https://*.handles.link:8443`, `https://*.handles.link.`,
-  `https://*..handles.link`, `https://*..`, `https://*.link`, `https://*.`,
-  `http://*.handles.link`, `https://*.HANDLES.link`, `https://*.*.handles.link`,
-  `https://*.handles.link/`, `https://*.127.0.0.1`, and `https://*handles.link`;
-  the first three round-trip through a URL parser unchanged, the IP literal has
-  no labels to delegate, and the last carries a star without being a pattern. A
-  pattern configured as the CCDP origin fails at startup: that input is one exact
-  origin, and it reaches the Callback's `frame-src`. The union remains literal: a
-  pattern covering the CCDP origin leaves that origin an exact member, and
-  members whose admitted origins overlap configure successfully.
+  A `*.handles.link` member starts the bridge and admits `https://app.handles.link`
+  and `https://a.b.c.handles.link` alike, so depth below the suffix changes
+  nothing. The suffix itself, a host ending in the suffix text without a label
+  boundary, a host the suffix only prefixes, another scheme, and a port variant
+  stay refused. A refused member fails at startup, naming the member and its
+  position, instead of falling through to exact-origin validation: `*` and
+  `*.link` by the bridge's own guard, and `https://*.handles.link`,
+  `*.handles.link:8443`, `*.handles.link/`, `*.handles.link.`,
+  `*..handles.link`, `*.`, `*.HANDLES.link`, `*.*.handles.link`, `*.127.0.0.1`,
+  and `*handles.link` as malformed patterns; the first of those carries a
+  scheme, the last carries a star without being a pattern. A pattern configured
+  as the CCDP origin fails at startup: that input is one exact origin, and it
+  reaches the Callback's `frame-src`. The union remains literal: a pattern
+  covering the CCDP origin leaves that origin an exact member, and members whose
+  admitted origins overlap configure successfully.
 - TEST-BRIDGE-02 (exercises REQ-BRIDGE-02):
   A configuration GET without Origin succeeds with exactly
   `Sec-Fetch-Site: same-origin`, even when the Bridge origin is not allowlisted;

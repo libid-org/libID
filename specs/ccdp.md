@@ -261,7 +261,10 @@ member or an origin pattern, before navigating with the captured
 return to the configured CCDP origin. Admission tests canonicality first, ahead
 of membership of either kind: a claimed peer origin containing `*` fails there,
 so a member's own spelling never authenticates itself and never becomes the
-bound origin. It sets `applicationOrigin` in the Prover
+bound origin. The popup endpoint Callback constructs owns that admission test
+and the well-formedness of every member; Callback itself checks only that the
+list is one it can hand on and that the configured CCDP origin is a literal
+member of it. It sets `applicationOrigin` in the Prover
 fragment from that connection's authenticated peer origin, never from OAuth
 parameters, request headers, an allowlist member spelling, or an
 Application-supplied value. Prover requires
@@ -685,11 +688,12 @@ can reactivate an earlier phase.
   request headers, and message fields do not substitute for connection
   authentication: every accepted peer is authenticated against the origin the
   browser reports and bound to that one exact spelling, whether an exact
-  allowlist member or an origin pattern admitted it. A pattern makes same-site
-  placement decisive inside one configured suffix, and an operator configuring
-  one asserts control of every direct subdomain of that suffix and places the
-  whole namespace inside the trust boundary. Placement elsewhere on the same
-  site, including the suffix itself and deeper labels, grants nothing.
+  allowlist member or an origin pattern admitted it. A pattern makes placement
+  under one configured suffix decisive: an operator configuring one places the
+  entire subdomain namespace of that suffix, at every depth, inside the trust
+  boundary, and asserts control of every host that can ever appear there.
+  Placement elsewhere grants nothing, including the suffix itself and a host
+  the suffix only prefixes.
 - Documents use only the frozen locations and fragments defined here. Messages
   select no document implementation or popup navigation destination.
   `ProveIdentity` carries the frozen platform selection and service-routing

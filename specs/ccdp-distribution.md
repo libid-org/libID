@@ -211,7 +211,7 @@ using the Bridge's [effective allowlist](oauth-bridge.md#deployment-configuratio
 
 ```json
 [
-  ["https://app.example", "https://*.app.example", "https://lib.id"],
+  ["https://app.example", "*.app.example", "https://lib.id"],
   "https://lib.id"
 ]
 ```
@@ -225,10 +225,12 @@ holds the configured CCDP origin as an exact member, and that origin itself.
 Origins use the
 [CCDP origin policy](ccdp.md#origin-policy), including its HTTP localhost
 exception, and the second position is always one exact origin. The Bridge
-validates every member before insertion, so Callback receives canonical origins
-and well-formed patterns and normalizes neither. These match the effective admission
-set and public `CeremonyConfig` respectively. The list contains no secrets.
-Neither URL input nor an upstream artifact supplies deployment values.
+validates every member before insertion and normalizes none. In the browser,
+Callback checks the second position and its literal membership in the first,
+and the popup endpoint it constructs checks the members themselves. These match
+the effective admission set and public `CeremonyConfig` respectively. The list
+contains no secrets. Neither URL input nor an upstream artifact supplies
+deployment values.
 
 Compatible evolution preserves existing positions, types, and meanings. New
 optional trailing inputs may be defaulted when absent by newer implementations
@@ -239,9 +241,9 @@ support; no such versioning is defined until needed.
 
 Admitting an origin pattern widens the member type of the allowlist position.
 For a Callback published before patterns, that is an incompatible interpretation
-rather than compatible evolution: it accepts the member as an ordinary origin
-and matches it against no peer, so the ceremony does not fail and never becomes
-ready. The widening defines no input-contract version; a deployment must not
+rather than compatible evolution: a pattern parses as no origin, so such a
+Callback rejects the whole list and renders local failure text for every
+ceremony. The widening defines no input-contract version; a deployment must not
 configure a pattern member until the Callback its selected Distribution
 publishes admits Applications through one.
 
@@ -263,8 +265,9 @@ network use:
    `history.replaceState` while retaining the same path;
 2. requires exactly one routing `state` and reads its `v<version>.` prefix;
 3. rejects a malformed version or one absent from its bundled implementations;
-4. requires a JSON input list, validates the inputs used by the selected
-   implementation, and freezes the list and captured location; and
+4. requires a JSON input list, validates the inputs the selected implementation
+   reads itself, leaves each allowlist member to the popup endpoint that
+   receives it, and freezes the list and captured location; and
 5. enters the selected Callback implementation once, without dynamic import.
 
 Oversized or malformed input is cleared and renders only fixed failure text.
@@ -283,9 +286,9 @@ No platform credential is parsed here. The selected Callback
 authenticates the Application against its configured allowlist, through an exact
 member or a pattern member admitting the observed origin, and binds that one
 exact origin before the captured return can leave this document, then follows
-[CCDP](ccdp.md#callback-get-redirecturi). A claimed origin that is not canonical
-fails ahead of both membership tests, so a member's own spelling is never the
-bound origin.
+[CCDP](ccdp.md#callback-get-redirecturi). The popup endpoint holding the
+allowlist runs that test. A claimed origin that is not canonical fails ahead of
+both membership tests, so a member's own spelling is never the bound origin.
 
 #### Served response
 
