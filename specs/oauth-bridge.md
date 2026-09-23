@@ -68,8 +68,8 @@ application origin, an
 whose spelling, well-formedness, and matching rule the popup transport owns and
 the bridge applies unchanged. A member carrying `*` is either `*` itself or a
 well-formed pattern; any other spelling carrying `*` is refused rather than
-read as an exact origin. The bridge adds no member refusal of its own; how wide
-the resulting allowlist is belongs to its operator.
+read as an exact origin. The bridge narrows no member on width; how wide the
+resulting allowlist is belongs to its operator.
 
 Among the origins its members admit, the bridge admits a subset: it never
 admits one the browser side refuses, and it may refuse one the browser side
