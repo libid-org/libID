@@ -9,3 +9,12 @@
 - Do not use `Co-authored-by:` for AI assistance; keep the human author and
   committer unchanged.
 - Preserve any required `Signed-off-by:` trailer alongside the attribution.
+
+## Commit messages
+
+- Every commit you create must follow
+  [Conventional Commits](https://www.conventionalcommits.org/):
+  `<type>[optional scope][!]: <description>`.
+- Use semantic types such as `feat`, `fix`, `docs`, `refactor`, `test`, `build`,
+  `ci`, `chore`, `perf`, or `revert`.
+- Mark breaking changes with `!` before `:` or a `BREAKING CHANGE:` footer.
