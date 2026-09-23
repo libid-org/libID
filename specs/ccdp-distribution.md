@@ -224,10 +224,10 @@ duplicate-free allowlist whose members are canonical origins or
 holds the configured CCDP origin as an exact member, and that origin itself.
 Origins use the
 [CCDP origin policy](ccdp.md#origin-policy), including its HTTP localhost
-exception, and the second position is always one exact origin. The Bridge
-validates every member before insertion and normalizes none. In the browser,
-Callback checks the second position and its literal membership in the first,
-and the popup endpoint it constructs checks the members themselves. These match
+exception; the second position is one exact origin. The Bridge validates every
+member before insertion and normalizes none. In the browser, Callback checks the
+second position and its literal membership in the first, and the popup endpoint
+it constructs checks the members themselves. These match
 the effective admission set and public `CeremonyConfig` respectively. The list
 contains no secrets. Neither URL input nor an upstream artifact supplies
 deployment values.
@@ -239,13 +239,11 @@ require no Bridge change. A new required input or incompatible interpretation
 instead requires an explicit input-contract version and corresponding Bridge
 support; no such versioning is defined until needed.
 
-Admitting an origin pattern widens the member type of the allowlist position.
-For a Callback published before patterns, that is an incompatible interpretation
-rather than compatible evolution: a pattern parses as no origin, so such a
-Callback rejects the whole list and renders local failure text for every
-ceremony. The widening defines no input-contract version; a deployment must not
-configure a pattern member until the Callback its selected Distribution
-publishes admits Applications through one.
+Admitting an origin pattern widens the member type of the allowlist position,
+an incompatible interpretation for a Callback published before patterns rather
+than compatible evolution. The widening defines no input-contract version; a
+deployment must not configure a pattern member until the Callback its selected
+Distribution publishes admits Applications through one.
 
 This is a data-insertion contract, not a UI template or renderer API. Callback
 owns its code and presentation. Its dependencies are
@@ -283,12 +281,11 @@ Missing or malformed required inputs likewise render fixed local
 failure text without establishing a connection or emitting a protocol message.
 
 No platform credential is parsed here. The selected Callback
-authenticates the Application against its configured allowlist, through an exact
-member or a pattern member admitting the observed origin, and binds that one
-exact origin before the captured return can leave this document, then follows
+authenticates the Application against its configured allowlist, by exact member
+or by pattern member, and binds the observed exact origin before the captured
+return can leave this document, then follows
 [CCDP](ccdp.md#callback-get-redirecturi). The popup endpoint holding the
-allowlist runs that test. A claimed origin that is not canonical fails ahead of
-both membership tests, so a member's own spelling is never the bound origin.
+allowlist runs that test; a noncanonical claimed origin fails before membership.
 
 #### Served response
 
