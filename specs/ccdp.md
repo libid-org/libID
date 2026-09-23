@@ -256,16 +256,24 @@ the exact Application peer. The Application exact-authenticates the configured
 CCDP origin.
 
 Callback exact-authenticates the Application against its containing OAuth
-Bridge's explicit deployment allowlist before navigating with the captured
-return to the configured CCDP origin. It sets `applicationOrigin` in the Prover
-fragment from that connection's authenticated peer origin, never from OAuth
-parameters, request headers, or an Application-supplied value. Prover requires
-that field to satisfy the canonical origin rule above and accepts only
-`allowedApplicationOrigins: [applicationOrigin]`. Its connection authenticates
-the peer against that exact origin before readiness or proof requests, including
-after an isolation replacement or fallback-carrier selection. Missing or invalid
-origin input, an unavailable authenticated peer origin, or an origin mismatch
-fails locally before protocol readiness; it never falls back to open admission.
+Bridge's explicit deployment allowlist, which admits a peer by exact member,
+by origin pattern, or by `*`, before navigating with the captured return to
+the configured CCDP origin. Admission tests canonicality before membership of
+any kind, so a claimed peer origin containing `*` fails there. The popup
+endpoint Callback constructs owns that admission test and the well-formedness
+of every member; Callback itself checks only that the list is one it can hand
+on and that the configured CCDP origin is a literal member of it. It sets
+`applicationOrigin` in the Prover fragment from that connection's
+authenticated peer origin, never from OAuth parameters, request headers, a
+pattern member's spelling, or an Application-supplied value. Prover requires
+that field to satisfy the canonical origin rule above and to contain no `*`,
+and accepts only `allowedApplicationOrigins: [applicationOrigin]`. Every
+document reading the field back applies the same two checks. Its connection
+authenticates the peer against that exact origin before readiness or proof
+requests, including after an isolation replacement or fallback-carrier
+selection. Missing or invalid origin input, an unavailable authenticated peer
+origin, or an origin mismatch fails locally before protocol readiness; it
+never falls back to open admission.
 
 This is defense in depth against the opener navigating to another origin
 between Callback authentication and Prover's fresh handshake: a retained window
@@ -624,7 +632,7 @@ cryptographic properties delegated to the common and platform specifications.
 - TEST-CCDP-03 (exercises REQ-CCDP-03):
   Separate query/fragment bytes survive private navigation and isolation replacement, are cleared before use, and never appear in Application/control/signaling records. Duplicate or malformed fields fail.
 - TEST-CCDP-04 (exercises REQ-CCDP-04):
-  Public Prefetch authenticates its exact peer; Callback rejects an unlisted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Canonical HTTP loopback works at arbitrary ports.
+  Public Prefetch authenticates its exact peer; Callback rejects an unadmitted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Callback rejects a peer claiming a pattern member's own spelling, and Prover rejects a fragment carrying one. An exact member authenticates a peer observed at exactly that origin, and Prover receives that origin as `applicationOrigin`. Canonical HTTP loopback works at arbitrary ports.
 - TEST-CCDP-05 (exercises REQ-CCDP-05):
   Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel`, `denied`, and `abort` records and Application-sent `UserDenied` are invalid. Proof payloads are structurally checked under the selected platform version.
   An unknown discriminator or rejected decoder fails the logical connection;
@@ -674,9 +682,13 @@ can reactivate an earlier phase.
   no ceremony action; malformed or unregistered records still fail transport
   under REQ-POPUP-MSG-04.
   Valid event extensions may be observed but never advance the protocol.
-- Browser-observed exact origins establish authority. Same-site placement,
-  navigation history, request headers, and message fields do not substitute for
-  connection authentication.
+- Browser-observed exact origins establish authority. Navigation history,
+  request headers, and message fields do not substitute for connection
+  authentication. Every accepted peer is bound to the one exact origin the
+  browser reports, whether an exact allowlist member, an origin pattern, or `*`
+  admitted it. A pattern member places every host under its suffix at any depth,
+  and `*` places every origin, inside the trust boundary the
+  [transport assumes](popup-transport.md#3-assumptions) the operator controls.
 - Documents use only the frozen locations and fragments defined here. Messages
   select no document implementation or popup navigation destination.
   `ProveIdentity` carries the frozen platform selection and service-routing
