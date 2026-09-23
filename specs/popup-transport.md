@@ -52,10 +52,8 @@ Origin Allowlist: The immutable set of members under which an endpoint
    Endpoint's application origins (§6). A member is an exact origin, an
    Origin Pattern, or `'*'`.
 
-Origin Pattern: An Origin Allowlist member spelled `*.` followed by a suffix
-   of one or more DNS labels, admitting every HTTPS origin whose host ends in
-   that suffix, at any depth (§6). It carries no scheme and is a member kind
-   of its own, alongside an exact origin and `'*'`.
+Origin Pattern: An Origin Allowlist member that admits every HTTPS origin
+   whose host ends in a given DNS suffix, at any depth (§6).
 
 Carrier: The native browser channel the Logical Connection currently uses.
    The transport selects one authenticated Carrier per Participating Document;
@@ -118,12 +116,8 @@ Continuity: Best-effort preservation of the Logical Connection across
   that service is outside the authenticated-peer guarantee.
 - ASM-POPUP-07:
   The suffix of an Origin Pattern names a subdomain namespace the deployment
-  controls, however deep hosts appear under it. Every host under that suffix
-  is an admitted origin, so whoever can create or take over such a host is
-  inside the trust boundary. A suffix of one label is a whole top-level
-  domain, and the pattern admits every host in it. The transport consults no
-  public suffix list and cannot tell a namespace a deployment controls from
-  one it delegates.
+  controls at every depth. Whoever can create or take over a host under it is
+  inside the trust boundary. The transport consults no public suffix list.
 
 ## 4. Security properties
 
@@ -132,20 +126,16 @@ hostile document on an origin outside the allowlist holding a reference to eithe
 window, and an unauthenticated peer that learned the Connection ID. They assume
 an unmodified implementation and user agent (ASM-POPUP-01), trusted admitted
 origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
-Where an Origin Pattern is configured, the admitted origins include every
-host under its suffix, at any depth, and control of that namespace is part of
-the trust boundary (ASM-POPUP-07).
+Where an Origin Pattern is configured, the trusted admitted origins include
+every host under its suffix (ASM-POPUP-07).
 
 - SP-POPUP-01:
   Only a document on an origin in the peer's Origin Allowlist becomes an
   endpoint of the Logical Connection, and only after the transport has
-  authenticated both endpoint origins. An endpoint deployed with the
-  wildcard allowlist accepts any origin admitted by REQ-POPUP-ALLOW-01;
-  it still binds one exact authenticated peer origin. An endpoint listing an
-  Origin Pattern accepts every host under that pattern's suffix, at any
-  depth, as a trusted admitted origin, and binds one exact authenticated
-  peer origin just the same. Both endpoints admit under the same member
-  kinds, so neither side is narrowed to exact origins by the transport.
+  authenticated both endpoint origins. An endpoint deployed with `'*'` or an
+  Origin Pattern accepts every origin that member admits under
+  REQ-POPUP-ALLOW-01 as a trusted admitted origin; it still binds one exact
+  authenticated peer origin.
   Depends on ASM-POPUP-01, on ASM-POPUP-07 where an Origin Pattern is
   configured, and, when fallback is selected, ASM-POPUP-06.
   Evidence: supporting conformance tests TEST-POPUP-02, TEST-POPUP-03,
@@ -213,56 +203,33 @@ the trust boundary (ASM-POPUP-07).
   `'*'` as a member, admitting every origin satisfying the same URL rules
   while still authenticating its peer.
   An Origin Pattern is spelled `*.` followed by a suffix and carries no
-  scheme: `*.example.test`, never `https://*.example.test`. The suffix is one
-  or more DNS labels separated by `.`. A label is lowercase ASCII letters and
-  digits, hyphens permitted only between them. The final label begins with a
-  letter, which is what refuses an IP-literal suffix: neither `*.127.0.0.1`
-  nor `*.1.2.3.4` is a member. A suffix of one label is well formed, so
-  `*.com` is a member. The Endpoint MUST reject a pattern carrying a scheme,
-  port, path, query, fragment, credentials, uppercase, underscore, trailing
-  dot, empty label, or second `*`. The Endpoint MUST reject every other
-  member holding a `*` rather than read it as an exact origin.
+  scheme. The suffix is one or more DNS labels separated by `.`. A label is
+  lowercase ASCII letters and digits, hyphens permitted only between them,
+  and the final label begins with a letter. The Endpoint MUST reject a
+  pattern carrying a scheme, port, path, query, fragment, credentials,
+  uppercase, underscore, trailing dot, empty label, or second `*`. The
+  Endpoint MUST reject every other member holding a `*` rather than read it
+  as an exact origin.
   An Origin Pattern admits a peer when the authenticated origin is canonical
-  under the rules above, begins with `https://`, and has a remainder — host
-  and port together — ending in the pattern's suffix including that suffix's
-  leading `.`. Nesting is unbounded: `*.example.test` admits
-  `https://a.b.c.example.test` as it admits `https://a.example.test`. The
-  port sits inside that remainder, so a pattern admits the default HTTPS port
-  and no other. There is likewise no plaintext Origin Pattern: the HTTP
-  exception covers exact members only, so `*.localhost`, well formed as it
-  is, admits `https://x.localhost` and nothing over HTTP. The label preceding
-  the suffix may be empty, so `https://.example.test` is admitted; the
-  transport requires no nonempty label there, and a host no user agent stamps
-  reaches an endpoint only across the fallback authentication boundary of
-  ASM-POPUP-06.
-  The host preceding the suffix has no grammar beyond that, because the user
-  agent produced it and the transport does not rule on which hosts are
-  plausible. Both spellings are already canonical, so the comparison is byte
-  for byte, with no case, IDN, or trailing-dot normalization at match time. A
-  peer origin is therefore a member of an Origin Allowlist when an exact
-  member equals it, when `'*'` admits it, or when an Origin Pattern admits it;
-  an Origin Pattern overlapping an exact member is not a repeated member.
-  Both endpoints construct, validate, and match by these rules; the
-  Application Endpoint's allowlist of popup origins takes `'*'` and an Origin
-  Pattern exactly as the Popup Endpoint's allowlist of application origins
-  does, and §13 states what that widens. Upholds SP-POPUP-01.
+  under the rules above, begins with `https://`, and ends in the pattern's
+  suffix including that suffix's leading `.`. It admits the default HTTPS
+  port and no other. The transport applies no further grammar to the host
+  preceding the suffix, which may be empty. Membership compares byte for
+  byte, with no case, IDN, or trailing-dot normalization. An Origin Pattern
+  overlapping an exact member is not a repeated member. Both endpoints
+  construct, validate, and match by these rules. Upholds SP-POPUP-01.
 - REQ-POPUP-ALLOW-02:
   An endpoint MUST accept a peer only when the peer's authenticated origin
   is a member of its Origin Allowlist, and MUST bind that exact observed
   origin for the life of the resulting Carrier. The Endpoint MUST establish
   that the authenticated origin is canonical under REQ-POPUP-ALLOW-01 and
-  holds no `*` before testing membership of any kind. A peer offering `'*'`
-  or a starred spelling such as `https://*.example.test` as its own origin is
-  therefore refused by every branch, the literal-membership one included. An
-  Origin Pattern carries no scheme, so it is not an origin in any
-  serialization and never matches itself. The bound origin is always the
-  observed spelling, never the `'*'` or Origin Pattern member that admitted
-  it. Sequential Participating Documents MAY bind different admitted
-  origins. The Endpoint
-  MUST expose the selected Carrier's authenticated peer origin to the
-  Carried Protocol. The Endpoint MUST expose no authenticated peer origin
-  when it has no selected Carrier. The Endpoint MUST check the bound origin
-  against its own Origin Allowlist before accepting a preserved,
+  holds no `*` before testing membership of any kind. The bound origin is
+  always the observed spelling, never the `'*'` or Origin Pattern member that
+  admitted it. Sequential Participating Documents MAY bind different admitted
+  origins. The Endpoint MUST expose the selected Carrier's authenticated peer
+  origin to the Carried Protocol. The Endpoint MUST expose no authenticated
+  peer origin when it has no selected Carrier. The Endpoint MUST check the
+  bound origin against its own Origin Allowlist before accepting a preserved,
   replacement, or Fallback Carrier. Upholds SP-POPUP-01.
 - REQ-POPUP-ALLOW-03:
   On the opener path, the Application Endpoint MUST accept peer traffic only
@@ -585,11 +552,10 @@ this specification.
   either endpoint binds any permitted origin exactly and rejects an opaque
   or disallowed-HTTP one. A handshake from another window or an unlisted
   popup origin leaves the Application Endpoint untouched. HTTP on exact
-  `localhost` and `127.0.0.1`
-  works with explicit allowlists and the wildcard at arbitrary valid ports;
-  different ports do not match. HTTP lookalikes, other loopback spellings,
-  private-network hosts, credentials, and noncanonical default-port
-  spellings fail. An endpoint listing `*.example.test` binds
+  `localhost` and `127.0.0.1` works with explicit allowlists and the wildcard
+  at arbitrary valid ports; different ports do not match. HTTP lookalikes,
+  other loopback spellings, private-network hosts, credentials, and
+  noncanonical default-port spellings fail. An endpoint listing `*.example.test` binds
   `https://improve-account-linking.example.test`,
   `https://a.b.c.example.test`, `https://x_y.example.test`,
   `https://xn--80ak6aa92e.example.test`, and `https://.example.test`, each as
@@ -698,28 +664,21 @@ this specification.
   Protocol that grants nothing to an unknown peer. An endpoint listing an
   Origin Pattern accepts every host under that suffix at any depth, so it
   must carry a Carried Protocol that grants nothing to a document the
-  deployment has not itself placed under that suffix, and the deployment
-  asserts control of the whole namespace (ASM-POPUP-07). A suffix whose
-  subdomains outsiders can register — a public suffix, a hosting or
-  customer-subdomain namespace — admits those outsiders as peers, and the
-  transport consults no public suffix list to notice. A suffix of one label
-  is well formed, so `*.com` is a member that admits every host in that
-  top-level domain, at any depth; the transport does not distinguish it from
-  a namespace the deployment owns, and an operator who configures it has
-  chosen that trust boundary. An Origin Pattern also admits
-  `https://.example.test`, whose empty leading label no user agent stamps;
-  the refusal of such a host, if a deployment wants one, belongs to whatever
-  authenticates a Fallback Carrier's claimed peer (ASM-POPUP-06). The
-  Application Endpoint holds the same member kinds as the Popup Endpoint, so
-  widening its allowlist widens which origin may answer the handshake it
-  opened. That is the side a ceremony's outcome arrives on: whichever popup
-  origin the Application Endpoint admits is the origin whose Protocol
-  Messages it accepts as that outcome, and a pattern there places every host
-  under its suffix in that position. A member holding a `*` that spells no
-  Origin Pattern is a configuration mistake rather than a narrower origin:
-  no user agent stamps
-  such an origin, so reading it as an exact member would leave the typo to
-  surface as a ceremony that never becomes ready. Loopback HTTP admits local
+  deployment has not itself placed there; the deployment asserts control of
+  the whole namespace (ASM-POPUP-07). A suffix whose subdomains outsiders can register
+  — a public suffix, a hosting or customer-subdomain namespace — admits those
+  outsiders as peers, and the transport consults no public suffix list to
+  notice; `*.com` is a well-formed member that admits an entire top-level
+  domain. An Origin Pattern also admits `https://.example.test`, whose empty
+  leading label no user agent stamps; refusing such a host belongs to
+  whatever authenticates a Fallback Carrier's claimed peer (ASM-POPUP-06).
+  The Application Endpoint holds the same member kinds as the Popup Endpoint,
+  so a pattern there places every host under its suffix in the position of
+  the origin whose Protocol Messages it accepts as a ceremony's outcome. A
+  member holding a `*` that spells no Origin Pattern is a configuration
+  mistake rather than a narrower origin: no user agent stamps such an origin,
+  so reading it as an exact member would leave the typo to surface as a
+  ceremony that never becomes ready. Loopback HTTP admits local
   development without weakening exact origin or port matching; it grants no
   exception for arbitrary HTTP hosts.
 - A Fallback Carrier's authentication is an additional deployment trust
