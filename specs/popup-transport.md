@@ -567,8 +567,8 @@ this specification.
   `*.EXAMPLE.test`, `*.example_test`, `*.example.test.`, `*..example.test`,
   `*.`, `*.-example.test`, `*.example-.test`, `**.example.test`,
   `*example.test`, `*.127.0.0.1`, and `*.1.2.3.4`; a member holding a `*`
-  that is not a well-formed Origin Pattern never falls through to
-  exact-member validation. A peer offering `*.example.test` or
+  that is not a well-formed Origin Pattern is refused rather than admitted
+  as an exact member. A peer offering `*.example.test` or
   `https://*.example.test` as its own origin binds nothing, at an endpoint
   listing that pattern and at one listing `'*'`, whether the spelling
   arrives as an observed origin or as a Fallback Carrier's claimed peer
