@@ -141,17 +141,21 @@ digests, because the Consumer receives no bytes to normalize.
   bytes MUST NOT transform them. The Consumer MUST receive the handle of
   such a profile as the raw authenticated bytes of its platform source. The
   Proving Circuit of a profile that exposes identity digests (§2.1b) MUST
-  apply exactly the profile's published normalization to the handle bytes
-  it digests, and no other transform, so that the digest equals the one the
-  Consumer derives from the normalized handle.
+  apply the profile's published normalization to the handle bytes it
+  digests, refusing any input that normalization would trim rather than
+  trimming it (REQ-PLAT-16D), and no other transform, so that the digest
+  equals the one the Consumer derives from the normalized handle.
 - REQ-PLAT-08B (upholds SP-BIND-01):
   The Consumer MUST derive the normalized handle from the proof-verified raw
   bytes on its own write path, or the handle key from the proof-verified
   handle digest where the profile exposes digests. The Consumer MUST NOT
-  accept a caller-supplied normalized handle or pre-hashed handle key. The
-  Consumer MAY accept caller-supplied raw bytes only where the proof binds
-  their digest, under REQ-PLAT-08D. Necessity: the handle arrives inside a proof;
-  a caller supplying the derived key could name any handle it liked.
+  accept a caller-supplied pre-hashed handle key. The Consumer MUST
+  normalize whatever handle bytes it receives, taking none as already
+  normalized, and store and emit the normalized form. Where the profile exposes digests, the Consumer MAY accept
+  caller-supplied handle bytes only under REQ-PLAT-08D or REQ-PLAT-08E,
+  whose digest or key comparison binds them to a proof. Necessity: the
+  handle arrives inside a proof; a caller supplying the derived key could
+  name any handle it liked.
 - REQ-PLAT-08C:
   A browser-side normalization exists only for display and local checks. No
   proof statement or Consumer behavior may rely on it. Necessity: a check
@@ -186,50 +190,79 @@ so an identity is resolvable by whoever knows its handle or `userId`
 whether or not the bytes were ever published. What a digest profile adds
 is the choice of publishing them.
 
+Two facts about such an identity are kept apart. An identity is
+**disclosed** once any transaction has carried its plaintext `userId` and
+handle to the Consumer Chain; disclosure is history and nothing undoes it.
+A wallet's name on a platform is **published** while the Consumer holds a
+handle for that wallet and platform to display; publication is Consumer
+state, set and cleared as below.
+
 - REQ-PLAT-08D (upholds SP-BIND-01, SP-PRIV-01):
   For a digest profile, the Consumer MUST derive the identity's keys from
   the `userId` digest and the handle digest the Platform Verifier returns,
-  in every Submission. The Transaction Author MAY include the plaintext
-  `userId` and handle in a Submission, both or neither. Where a Submission
-  carries them, the Consumer MUST normalize the handle under §2.1a. The
-  Consumer MUST reject a Submission whose plaintext does not hash, as
-  `keccak256` of the `userId` bytes and of the normalized handle, to the
-  two digests. The Consumer MUST accept
-  a Submission that carries neither as an undisclosed binding. The Consumer
-  MUST reject a request to publish a name for an undisclosed binding.
-- REQ-PLAT-08E (upholds SP-PRIV-01):
-  The Consumer MUST offer the owner of an undisclosed binding a disclosure
-  call that takes the plaintext `userId` and handle. The Consumer MUST
-  accept a disclosure only when the keys derived from it are the ones the
-  caller's binding currently holds. The Consumer MUST refuse a disclosure of
-  a key retired by a later claim of the same account. The Consumer MUST NOT
-  require a new proof for a disclosure; the preimages are the evidence. The
-  Consumer MUST clear any name the Transaction Author had published for the
-  platform when it accepts a Submission that carries no plaintext.
-  Necessity: a published name is
-  read as the wallet's current handle, and a wallet must not display, or
-  disclose under its name, a handle it no longer holds.
+  in every Submission. The Consumer's Authorized Transaction Data for a
+  binding MUST carry whether the Submission discloses the identity. The
+  Consumer MUST reject a Submission that carries one of the plaintext
+  `userId` and handle without the other. The Consumer MUST reject a
+  Submission that carries plaintext its Authorized Transaction Data says
+  it does not disclose, or carries none where that data says it does.
+  Where a Submission carries plaintext, the Consumer MUST normalize the
+  handle under §2.1a. The Consumer MUST reject such a Submission unless
+  `keccak256` of the `userId` bytes equals the `userId` digest and
+  `keccak256` of the normalized handle equals the handle digest. The
+  Consumer MUST reject a Submission that asks to publish a name and
+  carries no plaintext. On accepting a Submission that carries no
+  plaintext, the Consumer MUST keep the name the Transaction Author
+  published for the platform when that name's handle key equals the
+  Submission's handle key. The Consumer MUST clear that name when the keys
+  differ. Necessity: the choice to disclose is the user's, so it is
+  committed in the Authorization Digest with the rest of the operation; and
+  a published name is read as the wallet's current handle, which a private
+  re-proof of the same handle leaves true and a claim of another handle
+  makes false.
+- REQ-PLAT-08E (upholds SP-BIND-01):
+  For a digest profile, the Consumer MUST offer a disclosure call that
+  takes a platform, a plaintext `userId`, and a handle. The Consumer MUST
+  normalize the handle under §2.1a, derive the identity key and the handle
+  key from the plaintext, and accept the call only when the caller owns
+  both keys, the identity key's current handle key is that handle key, and
+  that handle key's current identity key is that identity key. On
+  acceptance the Consumer MUST publish the normalized handle as the
+  caller's name for the platform. The Consumer MUST NOT require a new proof
+  for a disclosure; the preimages are the evidence. Necessity: testing the
+  pairing in both directions is what refuses a handle retired by a later
+  claim of the same account, and a handle one of the caller's accounts took
+  from another of them, so a wallet displays only a handle it holds. A
+  refused call protects the display, not the plaintext: its calldata is
+  public whether or not the Consumer accepts it.
 - REQ-PLAT-08F (upholds SP-PRIV-01):
   The Consumer MUST state in every binding or disclosure event it emits
   whether the event carries plaintext. The Consumer MUST put the plaintext
   `userId` and handle in an event only when the Submission or disclosure
-  carried them. Necessity: an event that
-  carried plaintext is public for good; a reader distinguishes an identity
-  whose plaintext is known from one currently displaying a name only if the
-  events say which is which. A private Submission after a disclosure leaves
-  the plaintext known and the name unpublished, and its event says
-  undisclosed; all three hold at once.
+  call carried them. The Consumer MUST put the normalized handle in an
+  event, never the bytes as submitted. Necessity: an event that carried plaintext is public
+  for good, and a reader distinguishes a disclosed identity from one
+  currently published only if the events say which is which. A Submission
+  without plaintext after a disclosure leaves the identity disclosed, its
+  name published or cleared under REQ-PLAT-08D, and its own event without
+  plaintext.
 - TEST-PLAT-20A (exercises REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F):
   The same Google account submitted with and without its plaintext lands on
   the same two keys. A Submission without plaintext, made with recognizable
   test values, carries neither the email nor the `userId` in its decoded
-  payload or its decoded events. A Submission whose plaintext does not hash
-  to the digests is rejected. A request to publish a name for an undisclosed
-  binding is rejected. A disclosure of a handle retired by a later claim of
-  the same account is rejected, and a disclosure of the current one
-  publishes it. A Submission without plaintext after a disclosure leaves the
-  binding resolvable by its handle, its name unpublished, and its event
-  marked undisclosed.
+  payload or its decoded events. A Submission is rejected when its
+  plaintext does not hash to the digests, when it carries only one of the
+  two, when it carries plaintext its Authorized Transaction Data says it
+  does not disclose, when it carries none where that data says it does,
+  and when it asks to publish a name without plaintext. A private re-proof
+  of the published handle keeps the name; a private claim of another handle
+  clears it. A disclosure call is rejected for a handle retired by a later
+  claim of the same account, for a handle another account of the same
+  wallet took over, and from a caller that does not own both keys; a
+  disclosure of the current pair publishes it, and its event carries the
+  normalized handle. A Submission without plaintext after a disclosure
+  leaves the binding resolvable by its handle and its event without
+  plaintext.
 
 ### 2.2 Metadata ordering and validity ceilings
 
