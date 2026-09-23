@@ -66,8 +66,13 @@ a redirect URI. Application-side redirect construction is defined below.
 application origin or an origin pattern, which admits the direct subdomains of
 one host; the [popup transport](popup-transport.md#6-origin-allowlists-and-binding)
 owns the pattern spelling, well-formedness, and matching rule, and the bridge
-applies them unchanged. A duplicate, invalid, or malformed-pattern member is a
-deployment error rather than something the bridge normalizes. After resolving
+applies them unchanged. Well-formedness is narrower than what a URL parser
+accepts: a suffix carrying a port, a trailing dot, or an empty label parses and
+round-trips unchanged, and each is refused. A member containing `*` that is not
+a well-formed pattern is refused too, never read as an exact origin; no browser
+stamps such an origin, so admitting one hides a typo until a ceremony hangs. A
+duplicate, invalid, or malformed-pattern member is a deployment error rather
+than something the bridge normalizes. After resolving
 the default or configured `ccdpOrigin`, the bridge derives one effective set:
 `allowedOrigins = allowedAppOrigins ∪ {ccdpOrigin}`. Adding an already-listed
 CCDP origin does not duplicate it. The union and its duplicate detection
@@ -198,8 +203,10 @@ The response rules are:
   or application-specific value.
 
 When present, `Origin` must be admitted by `allowedOrigins`: it equals an exact
-member, or a pattern member admits it under the transport's matching rule. A
-successful cross-origin response sets the exact requesting origin in
+member, or a pattern member admits it under the transport's matching rule.
+Admission tests canonicality first, ahead of membership of either kind, so an
+`Origin` containing `*` fails and a member's own spelling never admits itself.
+A successful cross-origin response sets the exact requesting origin in
 `Access-Control-Allow-Origin`, never a pattern, permits no credentials, and
 never uses `*`.
 A same-origin browser GET may omit `Origin`: accept that case only when
@@ -307,9 +314,15 @@ cryptographic soundness.
   of its suffix; a malformed pattern member fails at startup instead of falling
   through to exact-origin validation. The suffix itself, a deeper label, a host
   ending in the suffix text without a label boundary, a host the suffix only
-  prefixes, another scheme, and a port variant stay refused. The union remains
-  literal: a pattern covering the CCDP origin leaves that origin an exact
-  member, and members whose admitted origins overlap configure successfully.
+  prefixes, another scheme, and a port variant stay refused. Startup refuses
+  each of `https://*.handles.link:8443`, `https://*.handles.link.`,
+  `https://*..handles.link`, `https://*..`, `https://*.link`, `https://*.`,
+  `http://*.handles.link`, `https://*.HANDLES.link`, `https://*.*.handles.link`,
+  `https://*.handles.link/`, and `https://*handles.link`; the first three
+  round-trip through a URL parser unchanged, and the last carries a star without
+  being a pattern. The union remains literal: a pattern covering the CCDP origin
+  leaves that origin an exact member, and members whose admitted origins overlap
+  configure successfully.
 - TEST-BRIDGE-02 (exercises REQ-BRIDGE-02):
   A configuration GET without Origin succeeds with exactly
   `Sec-Fetch-Site: same-origin`, even when the Bridge origin is not allowlisted;
@@ -317,7 +330,8 @@ cryptographic soundness.
   that case. An allowed explicit Origin succeeds even with cross-site metadata;
   an invalid, `null`, or unadmitted Origin rejects even with same-origin metadata.
   An Origin admitted only by a pattern member succeeds, and the response echoes
-  that exact origin rather than the pattern.
+  that exact origin rather than the pattern. An Origin spelling a configured
+  pattern rejects, although that spelling is literally a member.
   Rejections occur before dependency work; accepted same-origin GET does not
   admit an otherwise unadmitted Application to Callback.
   For the browser-exchange profiles, the former token route performs no exchange

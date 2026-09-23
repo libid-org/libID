@@ -283,7 +283,9 @@ No platform credential is parsed here. The selected Callback
 authenticates the Application against its configured allowlist, through an exact
 member or a pattern member admitting the observed origin, and binds that one
 exact origin before the captured return can leave this document, then follows
-[CCDP](ccdp.md#callback-get-redirecturi).
+[CCDP](ccdp.md#callback-get-redirecturi). A claimed origin that is not canonical
+fails ahead of both membership tests, so a member's own spelling is never the
+bound origin.
 
 #### Served response
 
