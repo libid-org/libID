@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { b64urlDecode, b64urlEncode, bytesEqual, hasExactKeys, isRecord } from './primitives.js'
+import {
+  b64urlDecode,
+  b64urlEncode,
+  bytesEqual,
+  hasExactKeys,
+  isRecord,
+  origin,
+  webUrl,
+} from './primitives.js'
 
 const utf8 = (s: string) => new TextEncoder().encode(s)
 
@@ -76,4 +84,13 @@ describe('exact-record helpers', () => {
     expect(hasExactKeys({ a: 1, b: 2, c: 3 }, ['a', 'b'])).toBe(false)
     expect(hasExactKeys({}, [])).toBe(true)
   })
+})
+
+it('keeps admission patterns out of service URLs and exact peer origins', () => {
+  for (const value of ['*', '*.lib.id', 'https://*.lib.id', 'https://*']) {
+    expect(origin(value), value).toBe(false)
+    expect(webUrl(`${value}/`), value).toBe(false)
+  }
+  expect(origin('https://app.lib.id')).toBe(true)
+  expect(webUrl('https://app.lib.id/path')).toBe(true)
 })

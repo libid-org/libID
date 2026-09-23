@@ -262,3 +262,21 @@ it.each(['ready-first', 'closed-first'])(
     expect(console.error).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
   },
 )
+
+it.each(['*', '*.lib.id'])(
+  'passes Bridge admission pattern %s to Popup and retains only the exact authenticated origin',
+  async (pattern) => {
+    config = [[pattern, 'https://ccdp.test'], 'https://ccdp.test']
+    peerOrigin = 'https://wallet.preview.lib.id'
+    startCallback()
+    await Promise.resolve()
+    expect(accept).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        allowedApplicationOrigins: [pattern, 'https://ccdp.test'],
+      }),
+    )
+    const fragment = navigate.mock.calls[0][1] as URLSearchParams
+    expect(fragment.get('applicationOrigin')).toBe(peerOrigin)
+  },
+)

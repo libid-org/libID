@@ -69,6 +69,7 @@ export function webUrl(value: unknown): value is string {
     return (
       (u.protocol === 'https:' ||
         (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) &&
+      !u.hostname.includes('*') &&
       !u.username &&
       !u.password &&
       u.href === value

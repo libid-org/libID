@@ -39,6 +39,12 @@ are private. See the [client guide](client.md) for application use.
    readiness, isolation checks and root-worker claim, Prover requests inputs
    through `prover.started`, runs the selected pipeline and sends one outcome.
 
+Bridge admission entries can contain `*` or `*.lib.id` patterns. Callback passes
+them to Popup for matching. A subdomain pattern admits only HTTPS at the default
+port, excludes the apex, and includes nested subdomains. The private handoff to
+Prover always carries the one authenticated concrete Application origin; patterns
+do not enter that binding. Bridge service URLs and CCDP destinations remain exact.
+
 The [CCDP specification](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md)
 owns the five messages, routes and permitted transitions. Message companions
 check exact shape and bounds; the receiving Client/document enforces state and
