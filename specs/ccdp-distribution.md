@@ -211,7 +211,7 @@ using the Bridge's [effective allowlist](oauth-bridge.md#deployment-configuratio
 
 ```json
 [
-  ["https://app.example", "https://lib.id"],
+  ["https://app.example", "*.app.example", "https://lib.id"],
   "https://lib.id"
 ]
 ```
@@ -219,19 +219,33 @@ using the Bridge's [effective allowlist](oauth-bridge.md#deployment-configuratio
 There is no version-keyed wrapper, input-declaration block, or Bridge-side
 CCDP version list. Every bundled Callback implementation receives a deeply
 frozen copy of the same list. The first two positions require a nonempty,
-duplicate-free allowlist of canonical origins containing the configured CCDP
-origin, and that origin itself. Both use the
+duplicate-free allowlist whose members are canonical origins,
+[origin patterns](popup-transport.md#6-origin-allowlists-and-binding), or `*`,
+and which holds the configured CCDP origin as an exact member, and that origin
+itself.
+Origins use the
 [CCDP origin policy](ccdp.md#origin-policy), including its HTTP localhost
-exception. These match the effective admission
-set and public `CeremonyConfig` respectively. The list contains no secrets.
-Neither URL input nor an upstream artifact supplies deployment values.
+exception; the second position is one exact origin. The Bridge validates every
+member before insertion and normalizes none. In the browser, Callback checks the
+second position and its literal membership in the first, and the popup endpoint
+it constructs checks the members themselves. These match
+the effective admission set and public `CeremonyConfig` respectively. The list
+contains no secrets. Neither URL input nor an upstream artifact supplies
+deployment values.
 
 Compatible evolution preserves existing positions, types, and meanings. New
 optional trailing inputs may be defaulted when absent by newer implementations
 and ignored by older ones. New CCDP versions using that compatible contract
-require no Bridge change. A new required input or incompatible interpretation
-instead requires an explicit input-contract version and corresponding Bridge
-support; no such versioning is defined until needed.
+require no Bridge change. A new required input, or an incompatible
+interpretation of an existing one, requires an explicit input-contract version
+and corresponding Bridge support, except as a coordinated upgrade.
+
+A coordinated upgrade widens the member type of an existing position and adds
+no input. It takes no input-contract version, and instead binds deployment
+order: a deployment must not configure a widened member until the Callback its
+selected Distribution publishes reads that member kind. Admitting origin
+patterns and `*` in the allowlist position is such an upgrade. No input-contract
+version is defined until a change falls outside this exception.
 
 This is a data-insertion contract, not a UI template or renderer API. Callback
 owns its code and presentation. Its dependencies are
@@ -251,8 +265,9 @@ network use:
    `history.replaceState` while retaining the same path;
 2. requires exactly one routing `state` and reads its `v<version>.` prefix;
 3. rejects a malformed version or one absent from its bundled implementations;
-4. requires a JSON input list, validates the inputs used by the selected
-   implementation, and freezes the list and captured location; and
+4. requires a JSON input list, validates the inputs the selected implementation
+   reads itself, leaves each allowlist member to the popup endpoint that
+   receives it, and freezes the list and captured location; and
 5. enters the selected Callback implementation once, without dynamic import.
 
 Oversized or malformed input is cleared and renders only fixed failure text.
@@ -268,9 +283,11 @@ Missing or malformed required inputs likewise render fixed local
 failure text without establishing a connection or emitting a protocol message.
 
 No platform credential is parsed here. The selected Callback
-authenticates the Application against its configured allowlist before the
+authenticates the Application against its configured allowlist, by exact member,
+by pattern member, or by `*`, and binds the observed exact origin before the
 captured return can leave this document, then follows
-[CCDP](ccdp.md#callback-get-redirecturi).
+[CCDP](ccdp.md#callback-get-redirecturi). The popup endpoint holding the
+allowlist runs that test; a noncanonical claimed origin fails before membership.
 
 #### Served response
 
