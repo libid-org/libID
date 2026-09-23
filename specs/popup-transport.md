@@ -47,9 +47,13 @@ Application Endpoint: The connection endpoint in the Application Document.
 Popup Endpoint: The connection endpoint in one Participating Document. Each
    Participating Document constructs its own.
 
-Origin Allowlist: The immutable set of origins an endpoint accepts as its
-   peer: the Application Endpoint's popup origins and the Popup Endpoint's
-   application origins (§6).
+Origin Allowlist: The immutable set of members under which an endpoint
+   accepts a peer: the Application Endpoint's popup origins and the Popup
+   Endpoint's application origins (§6). A member is an exact origin, an
+   Origin Pattern, or `'*'`.
+
+Origin Pattern: An Origin Allowlist member that admits origins by DNS
+   suffix (§6).
 
 Carrier: The native browser channel the Logical Connection currently uses.
    The transport selects one authenticated Carrier per Participating Document;
@@ -110,6 +114,10 @@ Continuity: Best-effort preservation of the Logical Connection across
   signaling service it relies on is trusted not to substitute peers. A
   Connection ID alone is insufficient. Compromise of an admitted origin or
   that service is outside the authenticated-peer guarantee.
+- ASM-POPUP-07:
+  The suffix of an Origin Pattern names a subdomain namespace the deployment
+  controls at every depth. Whoever can create or take over a host under it is
+  inside the trust boundary. The transport consults no public suffix list.
 
 ## 4. Security properties
 
@@ -122,10 +130,12 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
 - SP-POPUP-01:
   Only a document on an origin in the peer's Origin Allowlist becomes an
   endpoint of the Logical Connection, and only after the transport has
-  authenticated both endpoint origins. A Popup Endpoint deployed with the
-  wildcard allowlist accepts any origin admitted by REQ-POPUP-ALLOW-01;
-  it still binds one exact authenticated peer origin. Depends on
-  ASM-POPUP-01 and, when fallback is selected, ASM-POPUP-06.
+  authenticated both endpoint origins. An endpoint deployed with `'*'` or an
+  Origin Pattern accepts every origin that member admits under
+  REQ-POPUP-ALLOW-01 as a trusted admitted origin; it still binds one exact
+  authenticated peer origin.
+  Depends on ASM-POPUP-01, on ASM-POPUP-07 where an Origin Pattern is
+  configured, and, when fallback is selected, ASM-POPUP-06.
   Evidence: supporting conformance tests TEST-POPUP-02, TEST-POPUP-03,
   TEST-POPUP-08.
 - SP-POPUP-02:
@@ -179,26 +189,45 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
 ## 6. Origin allowlists and binding
 
 - REQ-POPUP-ALLOW-01:
-  Each endpoint MUST be constructed with a nonempty Origin Allowlist of
-  canonical HTTPS origins without duplicates, with HTTP also admitted on
-  exactly `localhost` and `127.0.0.1`. Any valid port is permitted; matching
-  uses the exact canonical origin, including its scheme and effective port.
-  The implementation MUST reject an empty set, opaque origin, malformed,
-  noncanonical, credentialed, or repeated member, or any other HTTP host,
-  before carrier work. It MUST NOT resolve a hostname to decide whether it
-  qualifies for the HTTP exception. A Popup Endpoint MAY instead use `'*'`,
-  admitting every origin satisfying the same URL rules while still
-  authenticating its peer. An Application Endpoint MUST NOT accept a
-  wildcard. Upholds SP-POPUP-01.
+  Each endpoint MUST be constructed with a nonempty Origin Allowlist without
+  duplicates, holding exact origins, Origin Patterns, and `'*'` in any
+  combination. An exact member is a canonical HTTPS origin, with HTTP also
+  admitted on exactly `localhost` and `127.0.0.1`; any valid port is
+  permitted, and it admits only the identical canonical origin, including its
+  scheme and effective port. The implementation MUST reject an empty set,
+  opaque origin, malformed, noncanonical, credentialed, or repeated member, or
+  any other HTTP host, before carrier work. It MUST NOT resolve a hostname to
+  decide whether it qualifies for the HTTP exception. `'*'` admits every
+  origin satisfying the same URL rules, and the Endpoint still authenticates
+  its peer.
+  An Origin Pattern is spelled `*.` followed by a suffix and carries no
+  scheme. The suffix is one or more DNS labels separated by `.`. A label is
+  lowercase ASCII letters and digits, hyphens permitted only between them,
+  and the final label begins with a letter. The Endpoint MUST reject a
+  pattern carrying a scheme, port, path, query, fragment, credentials,
+  uppercase, underscore, trailing dot, empty label, or second `*`. The
+  Endpoint MUST reject every other member holding a `*` rather than read it
+  as an exact origin.
+  An Origin Pattern admits a peer when the authenticated origin is canonical
+  under the rules above, begins with `https://`, and ends in the pattern's
+  suffix including that suffix's leading `.`. It admits the default HTTPS
+  port and no other. The host preceding the suffix may be empty. Membership
+  compares byte for byte, with no case, IDN, or trailing-dot normalization.
+  An Origin Pattern overlapping an exact member is not a repeated member.
+  Both endpoints construct, validate, and match by these rules. Upholds
+  SP-POPUP-01.
 - REQ-POPUP-ALLOW-02:
   An endpoint MUST accept a peer only when the peer's authenticated origin
-  is a member of its Origin Allowlist, and MUST bind that exact observed origin
-  for the life of the resulting Carrier. Sequential Participating Documents
-  MAY bind different members. The Endpoint MUST expose the selected Carrier's
-  authenticated peer origin to the Carried Protocol. The Endpoint MUST expose no
-  authenticated peer origin when it has no selected Carrier. The
-  Endpoint MUST check the bound origin against its own Origin Allowlist before
-  accepting a preserved, replacement, or Fallback Carrier. Upholds SP-POPUP-01.
+  is a member of its Origin Allowlist, and MUST bind that exact observed
+  origin for the life of the resulting Carrier. The Endpoint MUST establish
+  that the authenticated origin is canonical under REQ-POPUP-ALLOW-01 and
+  holds no `*` before testing membership of any kind. Sequential
+  Participating Documents MAY bind different admitted origins. The Endpoint
+  MUST expose the selected Carrier's authenticated peer origin to the Carried
+  Protocol. The Endpoint MUST expose no authenticated peer origin when it has
+  no selected Carrier. The Endpoint MUST check the bound origin against its
+  own Origin Allowlist before accepting a preserved, replacement, or Fallback
+  Carrier. Upholds SP-POPUP-01.
 - REQ-POPUP-ALLOW-03:
   On the opener path, the Application Endpoint MUST accept peer traffic only
   from the window it created or, on the native-anchor path, from the one
@@ -214,11 +243,11 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   On the opener path, an endpoint MUST ignore an attempt from an unexpected
   source without state change. The Application Endpoint MUST also ignore
   attempts from unlisted popup origins. The Popup Endpoint MUST reject an
-  authentication response from its exact opener with an unapproved origin;
-  either endpoint MUST reject malformed authentication from its expected
-  peer. An opener-independent Carrier MUST enforce
-  equivalent peer, origin, role, and connection binding through its own
-  authentication mechanism, not require a window-message event.
+  authentication response from its exact opener whose origin its Origin
+  Allowlist does not admit; either endpoint MUST reject malformed
+  authentication from its expected peer. An opener-independent Carrier MUST
+  enforce equivalent peer, origin, role, and connection binding through its
+  own authentication mechanism, not require a window-message event.
   Upholds SP-POPUP-01, SP-POPUP-02.
 - REQ-POPUP-ALLOW-05:
   On the opener path, an event that does not carry the transport's own
@@ -511,19 +540,41 @@ this specification.
   Uppercase, noncanonical, wrong-version, wrong-variant, and malformed
   Connection IDs are rejected before any carrier work.
 - TEST-POPUP-02 (exercises REQ-POPUP-ALLOW-01, REQ-POPUP-ALLOW-02):
-  An empty set or a duplicate, noncanonical, credentialed, or disallowed-HTTP
-  member is rejected; a peer on an origin outside the allowlist never becomes
-  an endpoint; sequential Participating Documents on two allowlisted origins bind
-  under one Logical Connection. Each Endpoint exposes the exact authenticated
-  origin, not the allowlist; before selection and after local retirement it exposes
-  none. Under the wildcard, a Popup Endpoint binds
-  any permitted origin exactly, rejects an opaque or disallowed-HTTP one, and an
-  Application Endpoint rejects the wildcard. A handshake from another window
-  or an unlisted popup origin leaves the Application Endpoint untouched. HTTP on exact
+  An empty set or a duplicate, noncanonical, credentialed, or
+  disallowed-HTTP member is rejected; a peer on an origin outside the
+  allowlist never becomes an endpoint; sequential Participating Documents on
+  two allowlisted origins bind under one Logical Connection. Each Endpoint
+  exposes the exact authenticated origin, not the allowlist; before
+  selection and after local retirement it exposes none. Under the wildcard,
+  either endpoint binds any permitted origin exactly and rejects an opaque
+  or disallowed-HTTP one. A handshake from another window or an unlisted
+  popup origin leaves the Application Endpoint untouched. HTTP on exact
   `localhost` and `127.0.0.1` works with explicit allowlists and the wildcard
   at arbitrary valid ports; different ports do not match. HTTP lookalikes,
   other loopback spellings, private-network hosts, credentials, and
-  noncanonical default-port spellings fail.
+  noncanonical default-port spellings fail. An endpoint listing `*.example.test` binds
+  `https://improve-account-linking.example.test`,
+  `https://a.b.c.example.test`, `https://x_y.example.test`,
+  `https://xn--80ak6aa92e.example.test`, and `https://.example.test`, each as
+  the exact observed origin and never as the pattern spelling. The same
+  endpoint refuses `https://example.test`, `https://evilexample.test`,
+  `https://example.test.evil.test`, `https://x.example.test.`,
+  `https://X.example.test`, `http://x.example.test`, and
+  `https://x.example.test:8443`. Construction accepts `*.com` and
+  `*.localhost`; the `*.localhost` endpoint binds `https://x.localhost` and
+  refuses `http://x.localhost`. Construction refuses `https://*.example.test`
+  for its scheme, `*.example.test:8443`, `*.example.test/`,
+  `*.EXAMPLE.test`, `*.example_test`, `*.example.test.`, `*..example.test`,
+  `*.`, `*.-example.test`, `*.example-.test`, `**.example.test`,
+  `*example.test`, `*.127.0.0.1`, and `*.1.2.3.4`; a member holding a `*`
+  that is neither `'*'` nor a well-formed Origin Pattern is refused rather
+  than admitted as an exact member. A peer offering `*.example.test` or
+  `https://*.example.test` as its own origin binds nothing, at an endpoint
+  listing that pattern and at one listing `'*'`, whether the spelling
+  arrives as an observed origin or as a Fallback Carrier's claimed peer
+  origin. An Application Endpoint constructs and admits under `'*'` and an
+  Origin Pattern exactly as a Popup Endpoint does. A pattern and an exact
+  member it overlaps coexist in one allowlist.
 - TEST-POPUP-03 (exercises REQ-POPUP-ALLOW-03, REQ-POPUP-ALLOW-04, REQ-POPUP-ALLOW-05):
   Wrong source, origin, version, or direction selects nothing; a valid
   attempt for another Connection ID and unrelated traffic from the Popup
@@ -605,12 +656,26 @@ this specification.
   REQ-POPUP-ALLOW-05; fallback must independently authenticate its peers.
 - Origin Allowlists are deployment configuration. Listing an origin that
   serves attacker-controlled documents accepts that attacker as a peer; the
-  transport cannot distinguish them. A wildcard Popup Endpoint accepts every
-  permitted origin under REQ-POPUP-ALLOW-01, so it must carry a
-  Carried Protocol that grants nothing to an unknown application, and the
-  Application Endpoint's exact allowlist remains the only origin check on
-  that side. Loopback HTTP admits local development without weakening exact
-  origin or port matching; it grants no exception for arbitrary HTTP hosts.
+  transport cannot distinguish them. A wildcard endpoint accepts every
+  permitted origin under REQ-POPUP-ALLOW-01, so it must carry a Carried
+  Protocol that grants nothing to an unknown peer. An endpoint listing an
+  Origin Pattern accepts every host under that suffix at any depth, so it
+  must carry a Carried Protocol that grants nothing to a document the
+  deployment has not itself placed there; the deployment asserts control of
+  the whole namespace (ASM-POPUP-07). A suffix whose subdomains outsiders can register
+  — a public suffix, a hosting or customer-subdomain namespace — admits those
+  outsiders as peers, and the transport consults no public suffix list to
+  notice; `*.com` is a well-formed member that admits an entire top-level
+  domain. An Origin Pattern also admits `https://.example.test`: a user agent
+  serializes and stamps that origin, so it reaches an endpoint on the native
+  path as any other host does, and refusing it is a deployment's own choice.
+  The Application Endpoint holds the same member kinds as the Popup Endpoint,
+  so a pattern there places every host under its suffix in the position of
+  the origin whose Protocol Messages it accepts as a ceremony's outcome. A
+  member holding a `*` that is neither `'*'` nor an Origin Pattern is a
+  configuration mistake rather than a narrower origin. Loopback HTTP admits local
+  development without weakening exact origin or port matching; it grants no
+  exception for arbitrary HTTP hosts.
 - A Fallback Carrier's authentication is an additional deployment trust
   boundary (ASM-POPUP-06). It does not establish a browser-stamped opener
   relationship. Origin admission does not authenticate individual scripts
