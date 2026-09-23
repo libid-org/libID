@@ -51,7 +51,7 @@ One bridge deployment has these inputs. Every origin follows the
 
 | Input | Contract |
 |---|---|
-| `allowedAppOrigins` | Nonempty, duplicate-free set of canonical application origins and [origin patterns](popup-transport.md#6-origin-allowlists-and-binding) over a suffix of at least two labels |
+| `allowedAppOrigins` | Nonempty, duplicate-free set of canonical application origins, [origin patterns](popup-transport.md#6-origin-allowlists-and-binding), and `*` |
 | CCDP origin | One canonical origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Platform profiles | Public OAuth client ID, supported ceremony versions, and an optional public `clientCredential` for each enabled platform |
 | Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
@@ -62,20 +62,22 @@ not a deployment option. The operator registers that external URL with the
 platform; the Bridge process requires neither its own public-origin setting nor
 a redirect URI. Application-side redirect construction is defined below.
 
-`allowedAppOrigins` has no protocol maximum. A member is either a canonical
-application origin or an
-[origin pattern](popup-transport.md#6-origin-allowlists-and-binding), whose
-spelling, well-formedness, and matching rule the popup transport owns and the
-bridge applies unchanged. The bridge admits a subset of the origins the browser
-side admits: it never admits one the browser side refuses, and it may refuse one
-the browser side admits.
+`allowedAppOrigins` has no protocol maximum. A member is a canonical
+application origin, an
+[origin pattern](popup-transport.md#6-origin-allowlists-and-binding), or `*`,
+whose spelling, well-formedness, and matching rule the popup transport owns and
+the bridge applies unchanged. A member carrying `*` is either `*` itself or a
+well-formed pattern; any other spelling carrying `*` is refused rather than
+read as an exact origin. The bridge adds no member refusal of its own; how wide
+the resulting allowlist is belongs to its operator.
 
-The bridge refuses two members the browser side admits, at startup and naming
-the member and its position: `*`, and a suffix of fewer than two labels such as
-`*.link`; neither is an allowlist a bridge publishes. A duplicate, invalid, or
-refused member is a deployment error rather than something the bridge
-normalizes. After resolving the default or configured `ccdpOrigin`, the bridge
-derives one effective set: `allowedOrigins = allowedAppOrigins ∪ {ccdpOrigin}`.
+Among the origins its members admit, the bridge admits a subset: it never
+admits one the browser side refuses, and it may refuse one the browser side
+admits where a byte in that origin is one its own policy composition cannot
+name. A duplicate or invalid member is a deployment error rather than something
+the bridge normalizes. After resolving the default or configured `ccdpOrigin`,
+the bridge derives one effective set:
+`allowedOrigins = allowedAppOrigins ∪ {ccdpOrigin}`.
 Adding an already-listed CCDP origin does not duplicate it. The union and its
 duplicate detection compare member spellings literally: a pattern covering the
 CCDP origin does not absorb it, that origin stays an exact member of the
@@ -111,16 +113,11 @@ The Bridge injects the same input list regardless of CCDP version. New versions
 with compatible inputs work on artifact refresh without a Bridge rebuild or
 configuration change. Callback owns browser version selection; the Bridge
 neither enumerates versions nor reads input declarations from the artifact.
-Input-contract versioning and Bridge awareness are introduced only if that
-contract actually becomes incompatible, not for an ordinary CCDP version bump.
-
-An origin pattern widens the member type of an existing input position instead
-of adding an input, an incompatible interpretation for a Callback published
-before patterns. The
-[artifact contract](ccdp-distribution.md#configuration-insertion) carries that
-widening as a deployment rule rather than an input-contract version: a bridge
-must not be configured with a pattern member until the Callback in its selected
-Distribution admits Applications through one.
+The [artifact contract](ccdp-distribution.md#configuration-insertion) owns when
+an input change takes an input-contract version and when a deployment instead
+coordinates by order. Admitting origin patterns and `*` coordinates by order: a
+bridge must not be configured with either until the Callback in its selected
+Distribution reads that member kind.
 
 The public profile entries match the OAuth registrations used by Callback.
 The bridge advertises only platform/version pairs supported by its selected
@@ -202,10 +199,11 @@ The response rules are:
   or application-specific value.
 
 When present, `Origin` must be admitted by `allowedOrigins`. Admission tests
-canonicality before membership, so an `Origin` containing `*` fails and a
-member's own spelling never admits itself. A successful cross-origin response
-sets the exact requesting origin in `Access-Control-Allow-Origin`, never a
-pattern member, permits no credentials, and never uses `*`.
+canonicality before membership of any kind, so an `Origin` containing `*` fails
+and a pattern member's own spelling never admits itself. A successful
+cross-origin response sets the exact requesting origin in
+`Access-Control-Allow-Origin`, never a pattern member, permits no credentials,
+and never uses `*`.
 A same-origin browser GET may omit `Origin`: accept that case only when
 `Sec-Fetch-Site` is exactly `same-origin`. This browser-supplied relationship
 requires neither knowledge of the Bridge's public origin nor its membership in
@@ -310,15 +308,17 @@ cryptographic soundness.
   A `*.handles.link` member starts the bridge and admits `https://app.handles.link`
   and `https://a.b.c.handles.link`. The suffix itself, a host ending in the
   suffix text without a label boundary, a host the suffix only prefixes, another
-  scheme, and a port variant stay refused. A refused member fails at startup,
-  naming the member and its position, instead of falling through to exact-origin
-  validation: `*` and `*.link` by the bridge's own guard, and
+  scheme, and a port variant stay refused. A `*.link` member starts the bridge
+  and admits `https://handles.link`; a `*` member starts it and admits every
+  canonical application origin. A member carrying `*` that is neither `*` nor a
+  well-formed pattern fails at startup, naming the member and its position,
+  instead of falling through to exact-origin validation:
   `https://*.handles.link`, `*.handles.link:8443`, `*.handles.link/`,
   `*.handles.link.`, `*..handles.link`, `*.`, `*.HANDLES.link`,
-  `*.*.handles.link`, `*.127.0.0.1`, and `*handles.link` as malformed patterns.
-  A pattern configured as the CCDP origin fails at startup. The union remains
-  literal: a pattern covering the CCDP origin leaves that origin an exact
-  member, and members whose admitted origins overlap configure successfully.
+  `*.*.handles.link`, `*.127.0.0.1`, and `*handles.link`. A pattern or `*`
+  configured as the CCDP origin fails at startup. The union remains literal: a
+  pattern covering the CCDP origin leaves that origin an exact member, and
+  members whose admitted origins overlap configure successfully.
 - TEST-BRIDGE-02 (exercises REQ-BRIDGE-02):
   A configuration GET without Origin succeeds with exactly
   `Sec-Fetch-Site: same-origin`, even when the Bridge origin is not allowlisted;

@@ -219,9 +219,10 @@ using the Bridge's [effective allowlist](oauth-bridge.md#deployment-configuratio
 There is no version-keyed wrapper, input-declaration block, or Bridge-side
 CCDP version list. Every bundled Callback implementation receives a deeply
 frozen copy of the same list. The first two positions require a nonempty,
-duplicate-free allowlist whose members are canonical origins or
-[origin patterns](popup-transport.md#6-origin-allowlists-and-binding) and which
-holds the configured CCDP origin as an exact member, and that origin itself.
+duplicate-free allowlist whose members are canonical origins,
+[origin patterns](popup-transport.md#6-origin-allowlists-and-binding), or `*`,
+and which holds the configured CCDP origin as an exact member, and that origin
+itself.
 Origins use the
 [CCDP origin policy](ccdp.md#origin-policy), including its HTTP localhost
 exception; the second position is one exact origin. The Bridge validates every
@@ -235,15 +236,16 @@ deployment values.
 Compatible evolution preserves existing positions, types, and meanings. New
 optional trailing inputs may be defaulted when absent by newer implementations
 and ignored by older ones. New CCDP versions using that compatible contract
-require no Bridge change. A new required input or incompatible interpretation
-instead requires an explicit input-contract version and corresponding Bridge
-support; no such versioning is defined until needed.
+require no Bridge change. A new required input, or an incompatible
+interpretation of an existing one, requires an explicit input-contract version
+and corresponding Bridge support, except as a coordinated upgrade.
 
-Admitting an origin pattern widens the member type of the allowlist position,
-an incompatible interpretation for a Callback published before patterns rather
-than compatible evolution. The widening defines no input-contract version; a
-deployment must not configure a pattern member until the Callback its selected
-Distribution publishes admits Applications through one.
+A coordinated upgrade widens the member type of an existing position and adds
+no input. It takes no input-contract version, and instead binds deployment
+order: a deployment must not configure a widened member until the Callback its
+selected Distribution publishes reads that member kind. Admitting origin
+patterns and `*` in the allowlist position is such an upgrade. No input-contract
+version is defined until a change falls outside this exception.
 
 This is a data-insertion contract, not a UI template or renderer API. Callback
 owns its code and presentation. Its dependencies are
@@ -281,9 +283,9 @@ Missing or malformed required inputs likewise render fixed local
 failure text without establishing a connection or emitting a protocol message.
 
 No platform credential is parsed here. The selected Callback
-authenticates the Application against its configured allowlist, by exact member
-or by pattern member, and binds the observed exact origin before the captured
-return can leave this document, then follows
+authenticates the Application against its configured allowlist, by exact member,
+by pattern member, or by `*`, and binds the observed exact origin before the
+captured return can leave this document, then follows
 [CCDP](ccdp.md#callback-get-redirecturi). The popup endpoint holding the
 allowlist runs that test; a noncanonical claimed origin fails before membership.
 
