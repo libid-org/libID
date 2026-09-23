@@ -69,7 +69,7 @@ export interface PopupConnection<Out extends Message, In extends Message = Out> 
 
 export interface ConnectOptions {
   connectionId: string
-  allowedPopupOrigins: readonly string[]
+  allowedPopupOrigins: OriginAllowlist
   /** Armed once; pending recovery survives handle loss without a connection-layer timeout. */
   fallback?: CarrierConstructor
   onDiagnostic?: (event: PopupDiagnostic) => void
@@ -77,8 +77,8 @@ export interface ConnectOptions {
 
 export interface AcceptOptions {
   connectionId: string
-  /** Explicit origins, or `'*'` for any canonical HTTPS (or localhost HTTP) origin the browser observed. */
-  allowedApplicationOrigins: readonly string[] | '*'
+  /** Admission patterns; the selected peer is always bound to its exact origin. */
+  allowedApplicationOrigins: OriginAllowlist
   /**
    * Requires cross-origin isolation. A non-isolated document preserves an
    * available MessagePort through the worker, or defers fallback construction
@@ -485,10 +485,10 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     private readonly popup: CurrentWindow,
     options: AcceptOptions,
   ) {
-    const allowedOrigins: OriginAllowlist =
-      options.allowedApplicationOrigins === '*'
-        ? '*'
-        : requireOrigins(options.allowedApplicationOrigins, 'allowedApplicationOrigins')
+    const allowedOrigins = requireOrigins(
+      options.allowedApplicationOrigins,
+      'allowedApplicationOrigins',
+    )
     super(createReporter(options.onDiagnostic), allowedOrigins)
     this.connectionId = requireConnectionId(options.connectionId)
     this.isolationFallback =

@@ -108,6 +108,7 @@ export function isCanonicalWebUrl(url: string): boolean {
     (parsed.protocol === 'https:' ||
       (parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname))) &&
     parsed.href === url &&
+    !parsed.hostname.includes('*') &&
     parsed.username === '' &&
     parsed.password === ''
   )
@@ -144,29 +145,45 @@ export function canonicalOrigin(value: unknown): string | null {
   }
 }
 
-/** Either an explicit allowlist or any canonical HTTPS (or localhost HTTP) origin the browser observed. */
+/** Exact web origins, HTTPS subdomains (`*.lib.id`, default port), or `*`. */
 export type OriginAllowlist = readonly string[] | '*'
 
+// DNS labels only; no scheme, port, path, partial-label glob, or IP suffix.
+const SUBDOMAIN_PATTERN = /^\*\.(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z](?:[a-z0-9-]*[a-z0-9])?$/
+
 export function isAllowedOrigin(origin: string, allowlist: OriginAllowlist): boolean {
-  if (allowlist === '*')
-    return canonicalOrigin(origin) === origin && isCanonicalWebUrl(`${origin}/`)
-  return allowlist.includes(origin)
+  if (canonicalOrigin(origin) !== origin || !isCanonicalWebUrl(`${origin}/`)) return false
+  if (allowlist === '*') return true
+  return allowlist.some(
+    (pattern) =>
+      pattern === '*' ||
+      pattern === origin ||
+      (SUBDOMAIN_PATTERN.test(pattern) &&
+        origin.startsWith('https://') &&
+        origin.slice(8).endsWith(pattern.slice(1))),
+  )
 }
 
-/**
- * A nonempty, duplicate-free set of canonical HTTPS (or localhost HTTP) origins, frozen.
- * Throws `TypeError` naming the option otherwise.
- */
+/** Copies and freezes a nonempty, duplicate-free origin allowlist; rejects invalid entries. */
 export function requireOrigins(value: unknown, option: string): readonly string[] {
+  if (value === '*') return Object.freeze(['*'])
   if (!Array.isArray(value) || value.length === 0) {
     throw new TypeError(`${option} must list at least one origin`)
   }
-  const origins = value.map((origin) => canonicalOrigin(origin))
-  if (origins.some((origin) => origin === null || !isCanonicalWebUrl(`${origin}/`))) {
-    throw new TypeError(`${option} must contain canonical HTTPS (or localhost HTTP) origins`)
+  const origins = [...value]
+  if (
+    origins.some(
+      (origin) =>
+        typeof origin !== 'string' ||
+        (origin !== '*' &&
+          !SUBDOMAIN_PATTERN.test(origin) &&
+          (canonicalOrigin(origin) !== origin || !isCanonicalWebUrl(`${origin}/`))),
+    )
+  ) {
+    throw new TypeError(`${option} must contain canonical web origins, *.domain patterns, or *`)
   }
   if (new Set(origins).size !== origins.length) {
     throw new TypeError(`${option} must not repeat an origin`)
   }
-  return Object.freeze(origins as string[])
+  return Object.freeze(origins)
 }

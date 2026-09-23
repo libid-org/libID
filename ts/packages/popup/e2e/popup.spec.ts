@@ -632,3 +632,68 @@ test('[POPUP-CONNECTION-006] provider COOP without recovery fails even while the
     })
   expect(popup.isClosed()).toBe(false)
 })
+
+for (const allowedOrigins of [['*'], ['*.lib.id']] as const) {
+  for (const native of [false, true]) {
+    test(`wildcard admission ${JSON.stringify(allowedOrigins)} binds exact peers${native ? ' with native anchor' : ''}`, async ({
+      page,
+      context,
+      request,
+    }) => {
+      // Route fixture bytes under real default-port HTTPS browser origins.
+      const module = await (await request.get(`${POPUP}/popup.js`)).body()
+      const appOrigin = 'https://wallet.preview.lib.id'
+      const popupOrigin = 'https://popup.lib.id'
+      const id = freshId()
+      const allowlist = JSON.stringify(allowedOrigins)
+      await context.route(/^https:\/\/(wallet\.preview|popup)\.lib\.id\//, async (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname === '/popup.js') {
+          await route.fulfill({ contentType: 'text/javascript', body: module })
+          return
+        }
+        const body =
+          url.origin === appOrigin
+            ? `<a id="launch" target="${id}" href="${popupOrigin}/#c=${id}">Open</a>
+            <script type="module">
+              import { PopupConnection, PopupWindow } from '/popup.js'
+              document.querySelector('a').onclick = (event) => {
+                const popup = PopupWindow.open('${id}')
+                const connection = PopupConnection.connect(popup, {connectionId:'${id}', allowedPopupOrigins:${allowlist}})
+                window.connection = connection
+                connection.on({type:'ready',decode:value=>value}, value => { window.peer = connection.peerOrigin; window.received = value.peer })
+                void connection.navigate('${popupOrigin}/', new URLSearchParams({c:'${id}'}))
+                if (popup.opened) event.preventDefault()
+              }
+            </script>`
+            : `<script type="module">
+              import { PopupConnection, PopupWindow } from '/popup.js'
+              const connection = PopupConnection.accept(PopupWindow.current(), {connectionId:'${id}', allowedApplicationOrigins:${allowlist}})
+              await connection.ready
+              connection.send({type:'ready',peer:connection.peerOrigin})
+            </script>`
+        await route.fulfill({ contentType: 'text/html', body })
+      })
+      await page.goto(appOrigin)
+      if (native)
+        await page.evaluate(() => {
+          window.open = () => null
+        })
+      const opened = context.waitForEvent('page')
+      await page.click('#launch')
+      const popup = await opened
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const state = window as unknown as { peer?: string; received?: string }
+            return [state.peer, state.received]
+          }),
+        )
+        .toEqual([popupOrigin, appOrigin])
+      await page.evaluate(() =>
+        (window as unknown as { connection: { close(): Promise<void> } }).connection.close(),
+      )
+      await expect.poll(() => popup.isClosed()).toBe(true)
+    })
+  }
+}
