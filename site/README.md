@@ -33,7 +33,10 @@ Worker Previews. Branch previews use `<preview-name>.previews.lib.id`; the
 existing production and preview `workers.dev` URLs remain enabled.
 
 Enable non-production branch builds and Worker Previews in Cloudflare's build
-settings, using the commands above. `deploy:preview` uses the current Git branch
+settings, using the commands above. After switching to Worker Previews, set the
+Preview command to `pnpm -C site run deploy:preview`: the default
+`npx wrangler preview` runs at the repository root and misses `site/wrangler.jsonc`.
+`deploy:preview` uses the current Git branch
 as the Preview name and updates its isolated deployment. For a local preview
 deployment, build the site first, then run `pnpm -C site run deploy:preview`.
 
