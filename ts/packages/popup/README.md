@@ -96,13 +96,15 @@ handlers registered before the caller yields precede every delivery; `ready`
 settles once a carrier is selected and rejects with a `PopupError` if the
 endpoint failed first.
 
-`allowedApplicationOrigins` is an explicit list of canonical HTTPS origins or
-`'*'`. Canonical HTTP on exactly `localhost` and `127.0.0.1` is also admitted,
-at any valid port, for allowlists, navigation and isolation fallback. The
-wildcard follows that same policy and still authenticates the exact peer;
-other HTTP hosts are rejected. Empty lists and duplicates remain invalid.
-The application's `allowedPopupOrigins` is always explicit. See the
-[normative origin rules](../../../specs/popup-transport.md#6-origin-allowlists-and-binding).
+Both `allowedApplicationOrigins` and `allowedPopupOrigins` accept lists of
+canonical HTTPS origins, `*`, and `*.lib.id`-style patterns. Subdomain patterns
+match HTTPS on the default port, include nested subdomains, and exclude the
+apex. Either option can also be the literal `'*'`. Canonical HTTP on exactly
+`localhost` and `127.0.0.1` is admitted at any valid port; other HTTP hosts are
+rejected. Empty lists, duplicate entries and malformed patterns are rejected.
+Admission always binds the exact authenticated peer. Navigation and isolation
+fallback destinations remain concrete URLs. See the
+[origin policy](docs/connection.md).
 
 The caller supplies a fresh `crypto.randomUUID()` value for each logical
 connection; the exact accepted grammar and non-reuse rule are defined by the

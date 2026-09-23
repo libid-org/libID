@@ -55,7 +55,7 @@ The carrier neither interprets those values nor persists or recovers them.
   connection ID and unrelated traffic from the bound `WindowProxy` while it
   shows a non-participating document, so concurrent connections never reject
   each other and a provider page cannot terminate the connection. An attempt
-  must then exact-match its browser-stamped origin, source (the bound
+  must then admit its browser-stamped origin and exact-match its source (the bound
   `WindowProxy` after binding), record shape, direction, and connection
   version. The popup additionally requires exactly one transferred port.
 - The wildcard-targeted request contains no capability or application-level
@@ -280,7 +280,7 @@ declare function listenForPopupPorts(
     view: Window
     source: WindowProxy | null // retained handle, or null until native-anchor binding
     onBind: (source: WindowProxy) => void
-    allowedPopupOrigins: readonly string[]
+    allowedPopupOrigins: readonly string[] | '*'
     connectionId: string
   },
   handlers: {

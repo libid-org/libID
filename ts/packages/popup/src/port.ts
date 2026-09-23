@@ -54,7 +54,7 @@ export interface ListenOptions {
   /** The retained handle, or null until native-anchor binding. */
   source: WindowProxy | null
   onBind: (source: WindowProxy) => void
-  allowedPopupOrigins: readonly string[]
+  allowedPopupOrigins: OriginAllowlist
   connectionId: string
 }
 
@@ -90,7 +90,7 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
 
   const listener = (event: MessageEvent): void => {
     if (!isAttempt(event.data, connectionId)) return
-    if (!allowedPopupOrigins.includes(event.origin)) return
+    if (!isAllowedOrigin(event.origin, allowedPopupOrigins)) return
     if (source !== null ? event.source !== source : !isWindow(event.source)) return
     if (!isExactHandshake(event.data, connectionId) || event.ports.length !== 0) {
       dropPending()

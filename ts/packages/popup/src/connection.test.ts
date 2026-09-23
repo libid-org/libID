@@ -620,7 +620,7 @@ describe('navigateAway [POPUP-CONTROL-005]', () => {
   })
 })
 
-describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
+describe('wildcard allowlists [POPUP-CONNECTION-009]', () => {
   it("accepts any HTTPS opener origin under '*' and binds it exactly", async () => {
     const pair = fakePair()
     const app = connectApp(pair)
@@ -660,7 +660,7 @@ describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
     }
   })
 
-  it('keeps an empty list invalid and never accepts a wildcard on the application side', async () => {
+  it('keeps an empty list invalid on either side', async () => {
     const pair = fakePair()
     const popup = new CurrentWindow(pair.popupWindow, noRegistration)
     expect(() =>
@@ -668,10 +668,33 @@ describe('popup-side wildcard allowlist [POPUP-CONNECTION-009]', () => {
     ).toThrow(TypeError)
     const opened = new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView)
     expect(() =>
-      PopupConnection.connect(opened, { connectionId: ID, allowedPopupOrigins: '*' as never }),
+      PopupConnection.connect(opened, { connectionId: ID, allowedPopupOrigins: [] }),
     ).toThrow(TypeError)
   })
 })
+
+it.each(['*', ['*'], ['*.example']] as const)(
+  'authenticates wildcard admission on both endpoints and binds concrete peers: %s',
+  async (origins) => {
+    const pair = fakePair()
+    const app = PopupConnection.connect(
+      new OpenedWindow(pair.popupProxy as unknown as WindowProxy, pair.appView),
+      { connectionId: ID, allowedPopupOrigins: origins },
+    )
+    const popup = PopupConnection.accept(new CurrentWindow(pair.popupWindow, noRegistration), {
+      connectionId: ID,
+      allowedApplicationOrigins: origins,
+    })
+    await Promise.all([app.ready, popup.ready])
+    expect(app.peerOrigin).toBe(POPUP_ORIGIN)
+    expect(popup.peerOrigin).toBe(APP_ORIGIN)
+    const received = vi.fn()
+    popup.on(Start, received)
+    app.send(new Start())
+    await vi.waitFor(() => expect(received).toHaveBeenCalledOnce())
+    await app.close()
+  },
+)
 
 describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
   const FALLBACK = '/prover/fallback'

@@ -222,19 +222,22 @@ a host serve one document with Document-Isolation-Policy for engines that
 honour it and a COOP fallback for the rest, with no protocol change.
 
 `connect` copies `allowedPopupOrigins`, and `accept` copies
-`allowedApplicationOrigins`. Both must be nonempty, duplicate-free sets of
-canonical HTTPS origins; either constructor rejects an invalid member or
-duplicate. HTTP is also accepted on exactly `localhost` and `127.0.0.1`, at
-any valid port, without hostname resolution. This same URL policy applies to
-navigation and isolation fallback. Scheme and effective port remain part of
-exact origin matching; lookalikes, other HTTP hosts, and noncanonical
-spellings are rejected. `accept` alone also takes the literal `'*'`, admitting
-any origin satisfying that policy while still authenticating its exact peer.
-`connect` never accepts a wildcard. Every initial
-or later participating popup document must authenticate from one exact
-popup-origin member, and each popup endpoint binds one exact observed
-application origin. The sets admit participants; they neither select
-navigation destinations nor turn an external document into a participant.
+`allowedApplicationOrigins`. Both accept nonempty, duplicate-free lists of:
+
+- Canonical HTTPS origins (HTTP is also accepted on exactly `localhost` and
+  `127.0.0.1`, at any valid port).
+- `*.lib.id`-style patterns: lowercase DNS suffixes matching subdomains at any
+  depth, HTTPS and default port only. The apex `lib.id` needs its own entry.
+- `*`, admitting any canonical web origin under that URL policy. Either option
+  can also be the literal `'*'` instead of an array.
+
+Invalid entries and duplicates are rejected, including in a list containing `*`.
+Patterns govern admission only. Handshakes, MessagePort replies, restored ports
+and fallback carriers bind the exact authenticated peer origin; they never use
+an admission pattern as a message destination. Scheme and port remain part of
+exact entries. The URL policy also applies to navigation and isolation fallback,
+whose destinations must be concrete URLs. Admission neither selects destinations
+nor turns an external document into a participant.
 
 There is no public role field or per-operation role branch. Callers never
 supply a keeper, route, or phase.
@@ -380,7 +383,7 @@ declare const PopupConnection: {
     popupWindow: PopupWindow,
     options: {
       connectionId: string
-      allowedPopupOrigins: readonly string[]
+      allowedPopupOrigins: readonly string[] | '*'
       fallback?: CarrierConstructor
       onDiagnostic?: (event: PopupDiagnostic) => void
     },
