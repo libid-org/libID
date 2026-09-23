@@ -67,7 +67,10 @@ application origin or an origin pattern: a star, a dot, and a DNS suffix, such
 as `*.handles.link`, carrying no scheme. The
 [popup transport](popup-transport.md#6-origin-allowlists-and-binding) owns the
 pattern spelling, well-formedness, and matching rule, and the bridge applies
-them unchanged, admitting exactly the origins the browser side admits. A pattern
+them unchanged, admitting a subset of the origins the browser side admits. The
+Bridge never admits an origin the browser side refuses. It may refuse one the
+browser side admits, where a byte in that origin is one its own policy
+composition cannot name. A pattern
 admits an HTTPS origin on the default port whose host ends in the suffix at a
 label boundary, however many labels stand before it; the suffix itself is not
 admitted, and no pattern admits the HTTP exception hosts `localhost` and
