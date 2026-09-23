@@ -71,10 +71,11 @@ well-formed pattern; any other spelling carrying `*` is refused rather than
 read as an exact origin. The bridge narrows no member on width; how wide the
 resulting allowlist is belongs to its operator.
 
-Among the origins its members admit, the bridge admits a subset: it never
-admits one the browser side refuses, and it may refuse one the browser side
-admits where a byte in that origin is one its own policy composition cannot
-name. A duplicate or invalid member is a deployment error rather than something
+The bridge admits the origins its members admit on the browser side, neither
+more nor fewer: a member and an origin carry one meaning across the two.
+Only `ccdpOrigin` becomes a policy source, and it alone is held to the
+alphabet a source expression can carry.
+A duplicate or invalid member is a deployment error rather than something
 the bridge normalizes. After resolving the default or configured `ccdpOrigin`,
 the bridge derives one effective set:
 `allowedOrigins = allowedAppOrigins ∪ {ccdpOrigin}`.
