@@ -497,6 +497,11 @@ which receives the ID Token and can send the address itself.
   its own node tag without disturbing this one.
 - **Changing X and GitHub.** Their handles are public where they live.
 - **Per-chain variants.** The node is chain-independent today and stays so.
+- **Hiding the address from the application.** Out of reach while the
+  application owns the Google client: the ID Token lands where it controls,
+  and it can ask Google for the email directly. `neutral-google-client.md`
+  checks whether one libID-operated client, with a confirmation screen the
+  runtime owns, could close that gap, and what it would cost.
 
 ## Open decisions
 
