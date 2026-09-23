@@ -19,7 +19,7 @@ services:
       - "127.0.0.1:4683:4683"
 
   bridge:
-    image: ghcr.io/libid-org/libid-server-rs:0.3.0
+    image: ghcr.io/libid-org/libid-server-rs:0.4.0
     network_mode: service:notary
     depends_on:
       ccdp:
