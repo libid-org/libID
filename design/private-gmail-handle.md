@@ -1,10 +1,8 @@
 # A private mode for Gmail handles
 
 **Status: design proposal, with its specification written.** Nothing here
-is built. This note is the rationale; the normative text is in
-`specs/platform-ceremonies.md` (§2.1b, REQ-PLAT-08D to 08F, REQ-PLAT-16C
-and 16D, TEST-PLAT-06A and 20A) and
-`specs/ceremony-common.md` (ASM-HASH-01, SP-PRIV-01, REQ-COMMON-05E, §12).
+is built. This note is the rationale; the normative text is on this branch,
+and "Spec changes" below maps it.
 
 ## The thing that must work
 
@@ -94,8 +92,9 @@ what the verifier does for the audience today: the payload carries the
 plaintext, the digest is recomputed and compared
 (`GooglePlatformVerifier.sol:206-210`, REQ-PLAT-19A), here by the Consumer,
 which owns normalization. In private mode the payload carries no plaintext,
-and the node is derived from the hash alone. The public-input count stays 56 and no
-offset in the verifier moves; only the meaning of two slots changes. A new
+and the node is derived from the hash alone. The digest takes the two slots
+the email's bytes held, so the email alone moves no offset; the `sub`
+digest below adds the one slot that does. A new
 verification key and a regenerated `OidcGoogleHonkVerifier.sol` follow
 regardless, as they do for any circuit change. **Recommended.**
 
@@ -166,7 +165,7 @@ but the case is permanent code and permanent audit surface.
 
 **Poseidon.** Cheapest in a circuit and no precedent anywhere in libID's
 Solidity, Rust or TypeScript. The contract would compute Poseidon in `_write`
-and `resolveHandle`, and so would the gateway. Not for a first version.
+and `resolveHandle`, and so would the gateway. Not for this design.
 
 Measured on a scratch copy of the circuit at the pinned toolchain, with the
 fold-and-shape loop included in both variants (`nargo compile`, then
@@ -220,32 +219,46 @@ joins with every relying party's user table.
 
 ### Where the mode lives
 
-**The presence of the plaintext in the payload.** `GoogleProof` gains
+**In the operation the user authorizes, carried out by the presence of the
+plaintext.** The Consumer's Authorized Transaction Data for a claim is the
+triple `(target, feeAmount, feeReceiver)` (`IdentityNames.sol:481-491`); it
+becomes `(target, feeAmount, feeReceiver, disclose)`, so the choice is
+committed in the Authorization Digest the way the fee is, and the user sees
+it when they consent. A platform that exposes bytes has only one true
+answer, and its claims carry `disclose = true`. `GoogleProof` gains
 `bytes userId` and `bytes email` beside `clientIdentifier`
-(`GooglePlatformVerifier.sol:76-84`), both present or both empty; empty means
-private. The verifier passes the submitted bytes through as `userId` and
-`handle`, possibly empty, and returns the two digests the proof bound as
-new `VerifiedClaim.userIdHash` and `handleHash`; it checks nothing about the
-bytes, because the check needs the handle normalized and normalization is
-the Consumer's (REQ-PLAT-08B). `IdentityNames._write` is the one place the
-equality holds: it derives both nodes from the digests in both modes; when
-the plaintext is present it normalizes the handle, requires
-`keccak256(bytes(userId)) == userIdHash` and `keccak256(bytes(normalized))
-== handleHash`, and only then stores or publishes the strings.
-`publishName` with empty plaintext reverts. X and GitHub verifiers return
-zero digests and keep the plaintext path they have. **Recommended:** two
-optional payload fields, no change to the signature of `claim`, and the
-user decides at submission time, after proving. It keeps REQ-PLAT-08B honest
-in the form that matters: the Consumer still derives the key from a
-proof-bound value and still refuses a caller-supplied key; the plaintext is
-accepted only because the proof binds its digest.
+(`GooglePlatformVerifier.sol:76-84`), both present exactly when `disclose`
+says so. The Canonical Runtime fills them from the ID Token it verified,
+and hands the email to the application only for a disclosing claim, so an
+application that asked for a private one has nothing to attach.
 
-**An explicit flag on `claim`.** Rejected. Two sources of truth for one fact,
-and nothing to do when they disagree.
+The verifier passes the submitted bytes through, marked unverified, and
+returns the two digests the proof bound as new `VerifiedClaim.userIdHash`
+and `handleHash`; it checks nothing about the bytes, because the check
+needs the handle normalized and normalization is the Consumer's
+(REQ-PLAT-08B). `IdentityNames._write` is the one place the equality holds:
+it derives both nodes from the digests in both modes; it refuses plaintext
+that `disclose` does not authorize, a missing plaintext it does, and one of
+the two without the other; when the plaintext is present it normalizes the
+handle, requires `keccak256(bytes(userId)) == userIdHash` and
+`keccak256(bytes(normalized)) == handleHash`, and only then stores or
+emits the strings, the handle normalized. `publishName` without plaintext
+reverts. X and GitHub verifiers return zero digests and keep the plaintext
+path they have. **Recommended.** It keeps REQ-PLAT-08B honest in the form
+that matters: the Consumer still derives the key from a proof-bound value
+and still refuses a caller-supplied key; the plaintext is accepted only
+because the proof binds its digest and the user authorized sending it.
 
-**A mode bit as a circuit public input.** Rejected. It bakes the disclosure
-choice into the proof, costs an input, and stops the user from changing their
-mind between proving and submitting.
+**The presence of the plaintext alone, chosen at submission time.**
+Rejected. The application assembles the transaction, and whoever assembles
+it would decide whether the address is published; the application operator
+is trusted with no identity field (`libid.md`, roles). The cost of the
+recommendation is that the choice is fixed before proving; making a
+private binding public later is the `publish` call below, and nothing
+turns a public one private anyway.
+
+**A mode bit as a circuit public input.** Rejected. It costs an input and
+adds nothing the Authorization Digest does not already commit.
 
 The event gains `bool disclosed` and keeps `string userId` and `string
 handle`, both empty when private. `disclosed` is a fact about the event:
@@ -272,7 +285,9 @@ contract already has its inverse, `unpublish`, so the call is
 derive both nodes, require that the caller owns them and that the binding is
 live, set `published`, emit `IdentityPublished(owner, platformId, idNode,
 handleNode, userId, handle)`. No proof is needed; the preimages are the
-proof. The address is public from that block on.
+proof. The address is public from the block the call is sent in, whether
+or not it is accepted: a refused `publish` still leaves its calldata on
+chain.
 
 A handle is retired when the same account claims again under another one:
 the old node's owner is cleared and `HandleRetired` emitted
@@ -283,23 +298,31 @@ plaintext of an address the wallet no longer holds and set `published` to
 it, so `reverseOf`, which returns the stored string as it is (`:770`), would
 name that address until the next claim; `primaryOf` already refuses a
 published string whose node the wallet does not own (`:787-792`). So
-`publish` requires the handle node to be the account's current one and the
-wallet to own it, and the owner of a private binding can publish exactly
-what they hold.
+`publish` requires the pairing in both directions, `handleOfId[idNode] ==
+handleNode` and `idOfHandle[handleNode] == idNode`, and the wallet to own
+both nodes. One direction is not enough: a wallet holding two Google
+accounts, whose first account's handle was reassigned to its second, owns
+both of the first account's nodes while `handleOfId` still names the
+retired handle, and only `idOfHandle` says the handle is the second
+account's now. The owner of a private binding can publish exactly what
+they hold.
 
 The same scenario settles one more rule. A claim from a wallet that has
 already published refreshes the published string to the handle just proved,
 so a rename never leaves a stale name on display (`:626-633`). A private
-claim carries no plaintext to refresh with, so it deletes the publication
-instead; otherwise `reverseOf` keeps showing the old address after the
-account moved on.
+claim carries no plaintext to refresh with. When it re-proves the handle
+already published, whose normalized string hashes to the claim's
+`handleHash`, the publication stays, as the contract already keeps a
+display a `publishName: false` claim still vouches for; when it proves
+another handle, it deletes the publication, or `reverseOf` would keep
+showing the old address after the account moved on.
 
 Two facts therefore live apart. **Disclosure** is history: once any event
 has carried an identity's plaintext, a private claim, a private refresh of
 the same nodes, or `unpublish` afterwards, the plaintext is known and stays
 known. **Publication** is state: whether the wallet currently displays the
 name, set by `publishName` on a disclosed claim or by `publish`, cleared by
-`unpublish` or by a private claim. The sequence private claim, `publish`,
+`unpublish` or by a private claim of another handle. The sequence private claim, `publish`,
 private refresh ends with the plaintext known, the publication cleared, and
 the last event saying `disclosed: false`, all three true at once.
 
@@ -330,51 +353,67 @@ by decision; a `GET /v1/resolve/node/{platform}/{handleNode}` where the
 client hashes, so the server never sees the address, can be added later for
 clients that want it, as the ENS gateway already works.
 
-**ENS gateway.** Because the node is the same in both modes, a private
-binding resolves as `alice.google.handles.link` with no change at all: the
-gateway derives the node from the labels and falls back to
-`resolveHandle` over RPC (`bin/usernames-api/src/ens.rs:416`). That is
-the decided behaviour; the `disclosed` field still tells an indexer which
-bindings have a string to display.
+**ENS gateway.** The node is the same in both modes, so a private binding
+can resolve as `alice.google.handles.link`, and that is the decided
+behaviour. It does not follow without work: the gateway reads the indexer's
+store, not the chain (`bin/usernames-api/src/ens.rs:409-420` calls the
+store's `resolve_handle`), and that lookup selects by the handle string
+(`db.rs:1186-1199`), which a private binding does not have. The gateway
+resolves private bindings once `resolve_handle` selects by node, the same
+change the resolve route needs above, and not before; the rollout ships
+the two together.
 
 **TypeScript claim SDK.** The Google proof type carries `email` as a required
 string; it becomes optional, absent for private. Client-side normalization
 must produce the bytes the circuit hashes, and `handle.ts` already
 reproduces the shared vector table, so the only new obligation is that the
 circuit input builder feeds the circuit the raw bytes and expects the digest
-of the folded ones. The local result may keep returning the email to the
-caller; it never leaves the browser.
+of the folded ones. The local result carries the email only for a
+disclosing claim (REQ-PLAT-03); for a private one the application receives
+the digests, and the email stays inside the Canonical Runtime.
 
 **Demo.** The "publish the handle on chain" checkbox becomes a three-way
-choice: private, public, public and published.
+choice made before the ceremony starts, since `disclose` is in the digest:
+private, public, public and published.
 
 ### Spec changes
 
 Written, on this branch. The map, for a reader coming from the specs:
 
 - `platform-ceremonies.md`: §2.1a's lead-in and REQ-PLAT-08A/08B admit a
-  circuit that normalizes what it digests and a Consumer that keys on
-  digests; a new §2.1b defines the digest profile with REQ-PLAT-08D (keys
-  from the digests, plaintext accepted only when it hashes to them, both or
-  neither), 08E (the disclosure call, what it refuses, the publication a
-  private claim clears), 08F (the event's disclosed flag) and
-  TEST-PLAT-20A; REQ-PLAT-16B lists the two digests as public inputs;
-  REQ-PLAT-16C has the verifier return them and pass plaintext through
-  unchecked; REQ-PLAT-16D moves the `sub` and `email` validation into the
-  circuit; TEST-PLAT-06A exercises the three; §9 states what the digests
-  protect and what they do not. The Google profile stays Platform Ceremony
-  Version 1: nothing is released, so its statement is edited in place.
-- `ceremony-common.md`: ASM-HASH-01, SP-PRIV-01, REQ-COMMON-05E returns
-  the digests where a profile exposes them, §12 replaces "published
-  deliberately" for the handle and user identifier with the digest
-  profile's confidentiality and its limits.
+  circuit that normalizes what it digests, refusing where the table trims,
+  and a Consumer that keys on digests and normalizes every handle it
+  receives. A new §2.1b defines disclosure (history) and publication
+  (state), and holds REQ-PLAT-08D (keys from the digests, the disclosure
+  choice in the Authorized Transaction Data, plaintext only when authorized
+  and only when it hashes to the digests, both or neither, a private claim
+  keeping or clearing the publication), 08E (the disclosure call, its
+  two-way pairing check, and what a refusal does not protect), 08F (the
+  event's disclosed flag, the normalized handle), 08G (rules fixed once a
+  digest platform has bound anything) and TEST-PLAT-20A. REQ-PLAT-03 has
+  the Canonical Runtime release the plaintext only for a disclosing claim;
+  REQ-PLAT-04 and 16D refuse a backslash in `sub`; REQ-PLAT-16B lists the
+  two digests as public inputs; 16C has the verifier return them and pass
+  plaintext through unchecked; 16D moves the `sub` and `email` validation
+  into the circuit and states the 31- and 62-byte buffers; TEST-PLAT-06A
+  exercises the three; §9 states what the digests protect and what they do
+  not. The Google profile stays Platform Ceremony Version 1: nothing is
+  released, so its statement is edited in place.
+- `ceremony-common.md`: ASM-HASH-01, ASM-ZK-01, SP-PRIV-01 (plaintext
+  reaches the chain only in a transaction that discloses it), REQ-COMMON-05E
+  returns the digests, and the plaintext marked unverified, where a profile
+  exposes digests; REQ-COMMON-45 selects only zero-knowledge artifacts for
+  a digest profile; §12 replaces "published deliberately" for the handle
+  and user identifier with the digest profile's confidentiality and its
+  limits.
 - `libid.md`: one sentence among the enforceable guarantees.
 
 ## The recommendation
 
 Hash in the circuit, normalize in the circuit, keccak256 over the email and
-over `sub`, mode by presence of the plaintexts in the payload, private by
-default for Google alone, `publish` in the first version, ENS forward names
+over `sub`, the mode chosen by the user in the authorized operation and
+carried out by the presence of the plaintexts, private by default for
+Google alone, `publish` to go public later, ENS forward names
 resolving for private bindings as for public ones, and the resolve routes as
 they are. This is the one combination where neither the email nor the
 account id reaches calldata, where both nodes are identical across modes
@@ -398,14 +437,19 @@ logs, or the visibility of the binding itself.
    empty local part and a garbage tail each fail to prove.
 3. **Contracts** (`libid-contracts`): the Google verifier regenerated, `bytes
    userId` and `bytes email` in the payload, `userIdHash` and `handleHash`
-   in `VerifiedClaim`, the equality checks and the hash-derived nodes in
-   `_write`, `disclosed` in the event, `publish`, the circuit pin. Done when
+   in `VerifiedClaim`, `disclose` in the claim's Authorized Transaction
+   Data, the equality checks and the hash-derived nodes in `_write`,
+   `disclosed` in the event, `publish` with its two-way pairing check,
+   `setPlatform` refusing a Google rules change once Google has bound
+   anything, the circuit pin. Done when
    the same account claimed public and then private lands on the same two
    nodes; when a private transaction, made with recognizable test values,
    carries no plaintext email or account id in its decoded calldata or its
    decoded events, the payload fields being empty and the event strings
    empty, rather than a byte search over proof bytes that can contain
-   anything; and when `publishName` without plaintext reverts.
+   anything; and when `publishName` without plaintext, plaintext `disclose`
+   does not authorize, and a `publish` of a pair either direction of the
+   mapping disputes all revert.
 4. **Indexer, SDK, demo**: nullable handle and id, node-keyed resolve for
    both, `IdentityPublished` filling the plaintext rows and the publication
    state, optional `userId` and `email`, the three-way choice. Done when
@@ -434,11 +478,16 @@ logs, or the visibility of the binding itself.
 Decided: `alice.google.handles.link` resolves for a private binding, so the
 name is the address and a wallet that resolves it has confirmed it, and with
 it that confirming a suspected address by hashing it is accepted; `sub` is
-hidden with the handle; private to public is a `publish` call in the first
-version, not a new claim; the resolve routes keep the plaintext in the
+hidden with the handle; private to public is a `publish` call, not a new
+claim; the resolve routes keep the plaintext in the
 request line, the indexer's operator being trusted with what people resolve;
-and `publish` refuses a handle retired by a later claim of the same account,
-as set out under "Default, and moving between modes".
+`publish` refuses a handle retired by a later claim of the same account, or
+taken over by another account of the same wallet, as set out under
+"Default, and moving between modes"; the user, not the application,
+chooses disclosure, in the Authorized Transaction Data; a private claim of
+the published handle keeps the publication; Google's handle rules are
+fixed once Google has bound anything; and the verifier artifact is
+zero-knowledge, which the privacy rests on as much as on the hash.
 
 Nothing in this note is left open.
 
