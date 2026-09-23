@@ -28,9 +28,16 @@ Environment: `NODE_VERSION=22`, `PNPM_VERSION=10.30.3`.
 | Deploy | `pnpm -C site run deploy` |
 | Non-production deploy | `pnpm -C site run deploy:preview` |
 
-`wrangler.jsonc` manages `lib.id` for production and `previews.lib.id` for
-Worker Previews. Branch previews use `<preview-name>.previews.lib.id`; the
-existing production and preview `workers.dev` URLs remain enabled.
+`wrangler.jsonc` manages the `lib.id` and `www.lib.id` production custom domains
+and `previews.lib.id` for Worker Previews. Cloudflare manages their DNS and HTTPS
+certificates. Configure a zone-level Single Redirect rule matching
+`http.host eq "www.lib.id"`, with a dynamic target of
+`concat("https://lib.id", http.request.uri.path)`, status `301`, and query-string
+preservation enabled. The custom-domain entry provisions the hostname; the
+redirect rule sends visitors to the apex domain.
+
+Branch previews use `<preview-name>.previews.lib.id`; the existing production
+and preview `workers.dev` URLs remain enabled.
 
 Enable non-production branch builds and Worker Previews in Cloudflare's build
 settings, using the commands above. After switching to Worker Previews, set the

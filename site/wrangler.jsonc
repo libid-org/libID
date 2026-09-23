@@ -6,6 +6,7 @@
   "preview_urls": true,
   "routes": [
     { "pattern": "lib.id", "custom_domain": true, "previews_enabled": false },
+    { "pattern": "www.lib.id", "custom_domain": true, "previews_enabled": false },
     {
       "pattern": "previews.lib.id",
       "custom_domain": true,
