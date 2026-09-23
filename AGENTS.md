@@ -15,9 +15,9 @@
 - Every commit you create or amend must include a DCO `Signed-off-by:` trailer
   matching the commit author's real name and email. Use `git commit -s` or
   `git commit --amend -s`.
-- Before committing, verify that `git config user.name` and `git config
-  user.email` identify the intended human author. Never invent an identity or
-  sign off on another person's behalf.
+- Before committing, verify that `git config user.name` and
+  `git config user.email` identify the intended human author. Never invent an
+  identity or sign off on another person's behalf.
 - Preserve existing sign-offs during rebases, amendments, and cherry-picks.
 - Before pushing, verify every outgoing commit contains the required matching
   trailer.
