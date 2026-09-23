@@ -132,6 +132,7 @@ describe('origin sets [POPUP-CONNECTION-009]', () => {
       ['null'],
       'https://a.example',
       undefined,
+      Array(1),
     ]) {
       expect(() => requireOrigins(bad, 'x'), JSON.stringify(bad)).toThrow(TypeError)
     }
@@ -178,4 +179,53 @@ it('admits only canonical explicit loopback HTTP for navigation and origins', ()
   }
   expect(isAllowedOrigin('http://localhost:4684', ['http://localhost:4683'])).toBe(false)
   expect(isAllowedOrigin('https://localhost:4683', ['http://localhost:4683'])).toBe(false)
+})
+
+it('admits wildcard subdomains only over canonical default-port HTTPS', () => {
+  const patterns = requireOrigins(['*.lib.id', 'https://lib.id:8443'], 'origins')
+  for (const origin of ['https://app.lib.id', 'https://nested.app.lib.id', 'https://lib.id:8443']) {
+    expect(isAllowedOrigin(origin, patterns), origin).toBe(true)
+  }
+  for (const origin of [
+    'https://lib.id',
+    'https://app.lib.id:8443',
+    'http://app.lib.id',
+    'https://app.lib.id:443',
+    'https://app.lib.id/',
+    'https://APP.lib.id',
+    'https://evil-lib.id',
+    'https://lib.id.evil.test',
+    'https://app.lib.id.',
+    'https://user@app.lib.id',
+    'null',
+    'file://',
+  ])
+    expect(isAllowedOrigin(origin, patterns), origin).toBe(false)
+  expect(requireOrigins('*', 'origins')).toEqual(['*'])
+  expect(isAllowedOrigin('https://app.lib.id:8443', ['*'])).toBe(true)
+  expect(isAllowedOrigin('null', ['*'])).toBe(false)
+})
+
+it('rejects malformed wildcard configuration even beside an unrestricted entry', () => {
+  for (const pattern of [
+    '*.Lib.id',
+    'https://*.lib.id',
+    '*.lib.id:443',
+    '*.lib.id/',
+    '*lib.id',
+    'app.*.id',
+    '**.lib.id',
+    '*.',
+    '*.lib..id',
+    '*.-lib.id',
+    '*.lib-.id',
+    '*.127.0.0.1',
+    '*.lib.id.',
+  ])
+    expect(() => requireOrigins(['*', pattern], 'origins'), pattern).toThrow(TypeError)
+  expect(() => requireOrigins(['*', '*'], 'origins')).toThrow(TypeError)
+  const input = ['*.lib.id']
+  const copied = requireOrigins(input, 'origins')
+  input.push('*')
+  expect(copied).toEqual(['*.lib.id'])
 })
