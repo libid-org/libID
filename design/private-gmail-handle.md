@@ -199,7 +199,10 @@ emptiness to the verifier, which rejects an empty `userId` after unpacking
 inspect nothing, so the circuit takes over the whole of the id's validation,
 which REQ-PLAT-04 already states for every implementation: `sub_len` at
 least 1; every byte within `sub_len` in `0x20` through `0x7e`, so no control
-byte, no non-ASCII byte and, as today, no quote; the padding zero; and the
+byte, no non-ASCII byte and, as today, no quote; no backslash, which today's
+circuit accepts and REQ-PLAT-04 now refuses, because every JSON escape
+begins with one and an escaped `sub` would digest its escaped form; the
+padding zero; and the
 digest over exactly `sub_len` bytes. `SUB_MAX` stays a profile
 constant: 31 today, a Google `sub` being 21 digits, and a `sub` longer than
 the constant fails to prove rather than truncating. The spec's 255 is the
@@ -434,7 +437,8 @@ logs, or the visibility of the binding itself.
    library, `handle_hash` in place of `email_packed` and `sub_hash` in place
    of `sub_packed`, a gate count in the commit. Done when `Alice@Gmail.com`
    and `alice@gmail.com` prove the same digest, and a space, two `@`, an
-   empty local part and a garbage tail each fail to prove.
+   empty local part and a garbage tail each fail to prove, as does a `sub`
+   holding a backslash.
 3. **Contracts** (`libid-contracts`): the Google verifier regenerated, `bytes
    userId` and `bytes email` in the payload, `userIdHash` and `handleHash`
    in `VerifiedClaim`, `disclose` in the claim's Authorized Transaction

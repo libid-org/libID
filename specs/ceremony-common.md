@@ -594,7 +594,7 @@ an identity session — so one Submission on either path pays two fees.
   Governance Process MUST select only artifacts that enforce the proof
   statement of the Platform Ceremony Version the verifier implements. For a
   digest profile, the Verifier Governance Process MUST select only artifacts
-  that accept zero-knowledge proofs alone (ASM-ZK-01). The Platform Verifier
+  that verify zero-knowledge proofs (ASM-ZK-01). The Platform Verifier
   MUST reject a Submission whose proof does not verify under that
   artifact. The Platform Verifier MUST NOT accept a caller-supplied artifact,
   verifying key, or externally computed verification result. Necessity:

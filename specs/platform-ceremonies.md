@@ -211,8 +211,11 @@ state, set and cleared as below.
   For a digest profile, the Consumer MUST derive the identity's keys from
   the `userId` digest and the handle digest the Platform Verifier returns,
   in every Submission. The Consumer's Authorized Transaction Data for a
-  binding MUST carry whether the Submission discloses the identity. The
-  Consumer MUST reject a Submission that carries one of the plaintext
+  binding MUST carry whether the Submission discloses the identity. For a
+  profile that exposes identity bytes, the Consumer MUST reject a
+  Submission whose Authorized Transaction Data does not disclose, since
+  the bytes it carries are the disclosure. The Consumer MUST reject a
+  Submission that carries one of the plaintext
   `userId` and handle without the other. The Consumer MUST reject a
   Submission that carries plaintext its Authorized Transaction Data says
   it does not disclose, or carries none where that data says it does.
@@ -271,7 +274,9 @@ state, set and cleared as below.
   plaintext does not hash to the digests, when it carries only one of the
   two, when it carries plaintext its Authorized Transaction Data says it
   does not disclose, when it carries none where that data says it does,
-  and when it asks to publish a name without plaintext. A private re-proof
+  and when it asks to publish a name without plaintext; an X or GitHub
+  Submission whose Authorized Transaction Data does not disclose is
+  rejected. A private re-proof
   of the published handle keeps the name; a private claim of another handle
   clears it. A disclosure call is rejected for a handle retired by a later
   claim of the same account, for a handle another account of the same
