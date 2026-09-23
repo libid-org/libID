@@ -54,7 +54,7 @@ function stop(code: number) {
 }
 process.once('SIGINT', () => stop(0))
 process.once('SIGTERM', () => stop(0))
-const compose = spawn('docker', [...composeArgs, 'up', '--build', '--abort-on-container-failure'], {
+const compose = spawn('docker', [...composeArgs, 'up', '--abort-on-container-failure'], {
   stdio: 'inherit',
   detached: true,
 })
@@ -78,7 +78,7 @@ if (process.argv.includes('--app')) {
         await response.body?.cancel()
         if (response.status === 200) break
       } catch {
-        /* Compose may still be building or starting the Bridge. */
+        /* Compose may still be pulling or starting the Bridge. */
       }
       await delay(500)
     }
