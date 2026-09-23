@@ -269,12 +269,8 @@ block an otherwise valid authority operation.
 
 ```text
 identityPlatform = "google"
-platformCeremonyVersion = 2
+platformCeremonyVersion = 1
 ```
-
-Version 1 exposes the raw `sub` and `email` bytes as public inputs; version
-2 exposes their digests (REQ-PLAT-16B). A Consumer that implements §2.1b
-accepts version 2 only.
 
 Google uses direct authentication-only OIDC and has no server-side token
 exchange. Identity evidence is the signed ID Token delivered in the redirect
@@ -1458,10 +1454,10 @@ what it does not buy: a guessed address or a `sub` held by another relying
 party confirms the binding by hashing, the binding's existence and
 observation time stay public, and a name that resolves through an ENS
 gateway or an off-chain resolver is the address itself. The normalization
-of §2.1a now runs inside the Proving Circuit for this profile
-(REQ-PLAT-16D), which fixes the profile's handle rules into the Platform
-Ceremony Version: a change to those rules is a new version, never an edit,
-or a disclosed claim stops hashing to its own key.
+of §2.1a runs inside the Proving Circuit for this profile (REQ-PLAT-16D), so
+the profile's handle rules are part of its proof statement: rules that the
+Consumer and the circuit do not share make a disclosed claim stop hashing to
+its own key.
 
 ## 10. References
 

@@ -3,7 +3,7 @@
 **Status: design proposal, with its specification written.** Nothing here
 is built. This note is the rationale; the normative text is in
 `specs/platform-ceremonies.md` (§2.1b, REQ-PLAT-08D to 08F, REQ-PLAT-16C
-and 16D, TEST-PLAT-06A and 20A, Google version 2) and
+and 16D, TEST-PLAT-06A and 20A) and
 `specs/ceremony-common.md` (ASM-HASH-01, SP-PRIV-01, REQ-COMMON-05E, §12).
 
 ## The thing that must work
@@ -148,7 +148,7 @@ The choice decides whether Google's `handleNode` stays what it is today.
 
 **keccak256 of the normalized bytes.** The digest is the inner hash of
 `handleNode` exactly (`IdentityNodes.sol:39-41`), so the node of a private
-claim, a public claim, an old-version claim and an ENS lookup is one value.
+claim, a public claim and an ENS lookup is one value.
 The contract, the indexer's node arithmetic (`usernames-core/src/nodes.rs`),
 the TypeScript resolver and the ENS gateway keep their derivation untouched.
 The pinned Noir (`toolchain.env`: nargo 1.0.0-beta.25, bb 5.2.0) has no
@@ -361,8 +361,9 @@ Written, on this branch. The map, for a reader coming from the specs:
   TEST-PLAT-20A; REQ-PLAT-16B lists the two digests as public inputs;
   REQ-PLAT-16C has the verifier return them and pass plaintext through
   unchecked; REQ-PLAT-16D moves the `sub` and `email` validation into the
-  circuit; TEST-PLAT-06A exercises the three; Google is Platform Ceremony
-  Version 2; §9 states what the digests protect and what they do not.
+  circuit; TEST-PLAT-06A exercises the three; §9 states what the digests
+  protect and what they do not. The Google profile stays Platform Ceremony
+  Version 1: nothing is released, so its statement is edited in place.
 - `ceremony-common.md`: ASM-HASH-01, SP-PRIV-01, REQ-COMMON-05E returns
   the digests where a profile exposes them, §12 replaces "published
   deliberately" for the handle and user identifier with the digest
@@ -376,8 +377,8 @@ over `sub`, mode by presence of the plaintexts in the payload, private by
 default for Google alone, `publish` in the first version, ENS forward names
 resolving for private bindings as for public ones, and the resolve routes as
 they are. This is the one combination where neither the email nor the
-account id reaches calldata, where both nodes are identical across modes,
-versions and readers, where the verifier reuses a pattern it already has for
+account id reaches calldata, where both nodes are identical across modes
+and readers, where the verifier reuses a pattern it already has for
 the audience, and where the payload change is two optional fields.
 
 It does not protect against confirmation of a suspected address or account
@@ -395,7 +396,7 @@ logs, or the visibility of the binding itself.
    of `sub_packed`, a gate count in the commit. Done when `Alice@Gmail.com`
    and `alice@gmail.com` prove the same digest, and a space, two `@`, an
    empty local part and a garbage tail each fail to prove.
-3. **Contracts** (`libid-contracts`): a new Google verifier version, `bytes
+3. **Contracts** (`libid-contracts`): the Google verifier regenerated, `bytes
    userId` and `bytes email` in the payload, `userIdHash` and `handleHash`
    in `VerifiedClaim`, the equality checks and the hash-derived nodes in
    `_write`, `disclosed` in the event, `publish`, the circuit pin. Done when
