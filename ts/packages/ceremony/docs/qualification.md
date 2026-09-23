@@ -18,6 +18,10 @@ Change dependency pins in the linked declarations and configuration.
 | Development Bridge | v0.3.0, `aadb4170c7e2fe57dfcc8dd9e556dc7257df758b`; [Compose pin](../../../apps/dev/compose.yaml). |
 | SWS | 3.0.0-beta.1; exact image digest in [ccdp.Dockerfile](../ccdp.Dockerfile). |
 
+Bridge v0.3.0 accepts exact admission lists. Wildcard deployment requires the
+separate Bridge update. Browser tests cover both wildcard forms in Popup and
+`*` through the emitted Callback handoff; Callback units cover pattern forwarding.
+
 The released `bearer_link` circuit accepts bearers of at most 128 bytes. The
 X and GitHub specifications allow up to 4096 bytes; both implementations enforce
 the circuit's narrower limit.

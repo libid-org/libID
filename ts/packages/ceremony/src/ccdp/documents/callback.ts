@@ -45,9 +45,6 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
   const [allowedApplicationOrigins, ccdpOrigin] = inputs
   if (
     !Array.isArray(allowedApplicationOrigins) ||
-    !allowedApplicationOrigins.length ||
-    new Set(allowedApplicationOrigins).size !== allowedApplicationOrigins.length ||
-    allowedApplicationOrigins.some((o) => !origin(o)) ||
     !origin(ccdpOrigin) ||
     !allowedApplicationOrigins.includes(ccdpOrigin)
   )
@@ -77,10 +74,11 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
   try {
     retained = input
     ui.message(messages.returning)
+    // Popup owns validation and matching of the Bridge's admission patterns.
     connection = PopupConnection.accept(PopupWindow.current(), {
       fallback,
       connectionId: id,
-      allowedApplicationOrigins: [...allowedApplicationOrigins],
+      allowedApplicationOrigins,
     })
 
     void connection.closed.then((end) => {

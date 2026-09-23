@@ -4,74 +4,86 @@ import fixture from '../src/barretenberg/circuits/oidc_google/google-v1.fixture.
 }
 import { buildGooglePublicInputs } from '../src/barretenberg/circuits/oidc_google/publicInputs.js'
 import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
+import { prepareCallback } from './callback.js'
 import { expect, test } from './fixtures.js'
 import { verifyBrowserProof } from './verify.js'
 
-for (const native of [false, true])
-  test(`actual popup: private callback, isolation, denial, and application continuation${native ? ' with native anchor' : ''} [LIBID-BROWSER-001] [LIBID-BROWSER-005]`, async ({
-    app,
-    bridge,
-    page,
-    context,
-  }) => {
-    const errors: string[] = []
-    const callbackScripts: string[] = []
-    await context.route('**/*', async (route) => {
-      const request = route.request()
-      if (
-        request.resourceType() === 'script' &&
-        !request.serviceWorker() &&
-        new URL(request.frame().url()).origin === bridge
-      ) {
-        callbackScripts.push(new URL(request.url()).pathname)
-        await route.abort()
-      } else await route.fallback()
-    })
-    context.on('page', (p) => p.on('pageerror', (e) => errors.push(e.message)))
-    await context.route('https://accounts.google.com/**', async (route) => {
-      const state = new URL(route.request().url()).searchParams.get('state')
-      await route.fulfill({
-        contentType: 'text/html',
-        body: `<!doctype html><script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
+for (const wildcard of [false, true])
+  for (const native of [false, true])
+    test(`actual popup: private callback, isolation, denial, and application continuation${native ? ' with native anchor' : ''}${wildcard ? ' with wildcard Callback admission' : ''} [LIBID-BROWSER-001] [LIBID-BROWSER-005]`, async ({
+      app,
+      bridge,
+      ccdp,
+      page,
+      context,
+      request,
+    }) => {
+      if (wildcard) {
+        const artifact = await request.get(`${ccdp}/ccdp/callback.html`)
+        const callback = prepareCallback(await artifact.text(), artifact.headers(), [
+          ['*', ccdp],
+          ccdp,
+        ])
+        await context.route(`${bridge}/auth/callback`, (route) => route.fulfill(callback))
+      }
+      const errors: string[] = []
+      const callbackScripts: string[] = []
+      await context.route('**/*', async (route) => {
+        const request = route.request()
+        if (
+          request.resourceType() === 'script' &&
+          !request.serviceWorker() &&
+          new URL(request.frame().url()).origin === bridge
+        ) {
+          callbackScripts.push(new URL(request.url()).pathname)
+          await route.abort()
+        } else await route.fallback()
       })
-    })
-    await page.goto(`${app}?ledger=${native ? 'test:mainnet' : 'test:testnet'}`)
-    await page.waitForFunction(() => window.ready)
-    if (native)
-      await page.evaluate(() => {
-        window.open = () => null
+      context.on('page', (p) => p.on('pageerror', (e) => errors.push(e.message)))
+      await context.route('https://accounts.google.com/**', async (route) => {
+        const state = new URL(route.request().url()).searchParams.get('state')
+        await route.fulfill({
+          contentType: 'text/html',
+          body: `<!doctype html><script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
+        })
       })
-    const popupPromise = context.waitForEvent('page')
-    await page.locator('#launch').click()
-    const popup = await popupPromise
-    try {
-      await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
-    } catch (error) {
-      console.log(
-        'Popup flow failure:',
-        JSON.stringify({
-          path: new URL(popup.url()).pathname,
-          popup: await popup
-            .evaluate(() => ({
-              status: document.querySelector('[role="status"]')?.textContent,
-              readyState: document.readyState,
-              worker: navigator.serviceWorker.controller?.state,
-            }))
-            .catch(() => 'document unavailable'),
-          errors,
-          runs: await page.evaluate(() => window.runs).catch(() => 'application unavailable'),
-        }),
-      )
-      throw error
-    }
-    expect(await popup.evaluate(() => location.hash)).toBe('')
-    expect(await popup.evaluate(() => crossOriginIsolated)).toBe(true)
-    expect(await page.evaluate(() => window.ceremonyClosed)).toBeUndefined()
-    await page.evaluate(() => window.after())
-    await expect.poll(() => page.evaluate(() => window.afterReady)).toBe(true)
-    expect(errors).toEqual([])
-    expect(callbackScripts).toEqual([])
-  })
+      await page.goto(`${app}?ledger=${native ? 'test:mainnet' : 'test:testnet'}`)
+      await page.waitForFunction(() => window.ready)
+      if (native)
+        await page.evaluate(() => {
+          window.open = () => null
+        })
+      const popupPromise = context.waitForEvent('page')
+      await page.locator('#launch').click()
+      const popup = await popupPromise
+      try {
+        await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
+      } catch (error) {
+        console.log(
+          'Popup flow failure:',
+          JSON.stringify({
+            path: new URL(popup.url()).pathname,
+            popup: await popup
+              .evaluate(() => ({
+                status: document.querySelector('[role="status"]')?.textContent,
+                readyState: document.readyState,
+                worker: navigator.serviceWorker.controller?.state,
+              }))
+              .catch(() => 'document unavailable'),
+            errors,
+            runs: await page.evaluate(() => window.runs).catch(() => 'application unavailable'),
+          }),
+        )
+        throw error
+      }
+      expect(await popup.evaluate(() => location.hash)).toBe('')
+      expect(await popup.evaluate(() => crossOriginIsolated)).toBe(true)
+      expect(await page.evaluate(() => window.ceremonyClosed)).toBeUndefined()
+      await page.evaluate(() => window.after())
+      await expect.poll(() => page.evaluate(() => window.afterReady)).toBe(true)
+      expect(errors).toEqual([])
+      expect(callbackScripts).toEqual([])
+    })
 
 test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async ({
   request,
