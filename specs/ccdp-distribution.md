@@ -211,7 +211,7 @@ using the Bridge's [effective allowlist](oauth-bridge.md#deployment-configuratio
 
 ```json
 [
-  ["https://app.example", "https://lib.id"],
+  ["https://app.example", "https://*.app.example", "https://lib.id"],
   "https://lib.id"
 ]
 ```
@@ -219,10 +219,14 @@ using the Bridge's [effective allowlist](oauth-bridge.md#deployment-configuratio
 There is no version-keyed wrapper, input-declaration block, or Bridge-side
 CCDP version list. Every bundled Callback implementation receives a deeply
 frozen copy of the same list. The first two positions require a nonempty,
-duplicate-free allowlist of canonical origins containing the configured CCDP
-origin, and that origin itself. Both use the
+duplicate-free allowlist whose members are canonical origins or
+[origin patterns](popup-transport.md#6-origin-allowlists-and-binding) and which
+holds the configured CCDP origin as an exact member, and that origin itself.
+Origins use the
 [CCDP origin policy](ccdp.md#origin-policy), including its HTTP localhost
-exception. These match the effective admission
+exception, and the second position is always one exact origin. The Bridge
+validates every member before insertion, so Callback receives canonical origins
+and well-formed patterns and normalizes neither. These match the effective admission
 set and public `CeremonyConfig` respectively. The list contains no secrets.
 Neither URL input nor an upstream artifact supplies deployment values.
 
@@ -232,6 +236,14 @@ and ignored by older ones. New CCDP versions using that compatible contract
 require no Bridge change. A new required input or incompatible interpretation
 instead requires an explicit input-contract version and corresponding Bridge
 support; no such versioning is defined until needed.
+
+Admitting an origin pattern widens the member type of the allowlist position.
+For a Callback published before patterns, that is an incompatible interpretation
+rather than compatible evolution: it accepts the member as an ordinary origin
+and matches it against no peer, so the ceremony does not fail and never becomes
+ready. The widening defines no input-contract version; a deployment must not
+configure a pattern member until the Callback its selected Distribution
+publishes admits Applications through one.
 
 This is a data-insertion contract, not a UI template or renderer API. Callback
 owns its code and presentation. Its dependencies are
@@ -268,8 +280,9 @@ Missing or malformed required inputs likewise render fixed local
 failure text without establishing a connection or emitting a protocol message.
 
 No platform credential is parsed here. The selected Callback
-authenticates the Application against its configured allowlist before the
-captured return can leave this document, then follows
+authenticates the Application against its configured allowlist, through an exact
+member or a pattern member admitting the observed origin, and binds that one
+exact origin before the captured return can leave this document, then follows
 [CCDP](ccdp.md#callback-get-redirecturi).
 
 #### Served response
