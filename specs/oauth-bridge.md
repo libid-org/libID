@@ -68,11 +68,14 @@ one host; the [popup transport](popup-transport.md#6-origin-allowlists-and-bindi
 owns the pattern spelling, well-formedness, and matching rule, and the bridge
 applies them unchanged. Well-formedness is narrower than what a URL parser
 accepts: a suffix carrying a port, a trailing dot, or an empty label parses and
-round-trips unchanged, and each is refused. A member containing `*` that is not
-a well-formed pattern is refused too, never read as an exact origin; no browser
-stamps such an origin, so admitting one hides a typo until a ceremony hangs. A
-duplicate, invalid, or malformed-pattern member is a deployment error rather
-than something the bridge normalizes. After resolving
+round-trips unchanged, and each is refused. An IPv4-literal suffix is refused as
+well: an address has no labels to delegate, so `https://*.127.0.0.1` admits no
+subdomain. The HTTP exception on exact `localhost` and `127.0.0.1` covers those
+hosts themselves, and there is no loopback pattern. A member containing `*` that
+is not a well-formed pattern is refused too, never read as an exact origin; no
+browser stamps such an origin, so admitting one hides a typo until a ceremony
+hangs. A duplicate, invalid, or malformed-pattern member is a deployment error
+rather than something the bridge normalizes. After resolving
 the default or configured `ccdpOrigin`, the bridge derives one effective set:
 `allowedOrigins = allowedAppOrigins ∪ {ccdpOrigin}`. Adding an already-listed
 CCDP origin does not duplicate it. The union and its duplicate detection
@@ -318,11 +321,13 @@ cryptographic soundness.
   each of `https://*.handles.link:8443`, `https://*.handles.link.`,
   `https://*..handles.link`, `https://*..`, `https://*.link`, `https://*.`,
   `http://*.handles.link`, `https://*.HANDLES.link`, `https://*.*.handles.link`,
-  `https://*.handles.link/`, and `https://*handles.link`; the first three
-  round-trip through a URL parser unchanged, and the last carries a star without
-  being a pattern. The union remains literal: a pattern covering the CCDP origin
-  leaves that origin an exact member, and members whose admitted origins overlap
-  configure successfully.
+  `https://*.handles.link/`, `https://*.127.0.0.1`, and `https://*handles.link`;
+  the first three round-trip through a URL parser unchanged, the IP literal has
+  no labels to delegate, and the last carries a star without being a pattern. A
+  pattern configured as the CCDP origin fails at startup: that input is one exact
+  origin, and it reaches the Callback's `frame-src`. The union remains literal: a
+  pattern covering the CCDP origin leaves that origin an exact member, and
+  members whose admitted origins overlap configure successfully.
 - TEST-BRIDGE-02 (exercises REQ-BRIDGE-02):
   A configuration GET without Origin succeeds with exactly
   `Sec-Fetch-Site: same-origin`, even when the Bridge origin is not allowlisted;
@@ -331,7 +336,7 @@ cryptographic soundness.
   an invalid, `null`, or unadmitted Origin rejects even with same-origin metadata.
   An Origin admitted only by a pattern member succeeds, and the response echoes
   that exact origin rather than the pattern. An Origin spelling a configured
-  pattern rejects, although that spelling is literally a member.
+  pattern rejects, because a member spelling is never an observed origin.
   Rejections occur before dependency work; accepted same-origin GET does not
   admit an otherwise unadmitted Application to Callback.
   For the browser-exchange profiles, the former token route performs no exchange
