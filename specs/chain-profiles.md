@@ -1,3 +1,7 @@
+---
+title: Chain profiles
+---
+
 # Chain profiles
 
 Part of the [libID protocol specification](libid.md).

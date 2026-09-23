@@ -2,6 +2,18 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "libid",
   "compatibility_date": "2026-09-15",
+  "workers_dev": true,
+  "preview_urls": true,
+  "routes": [
+    { "pattern": "lib.id", "custom_domain": true, "previews_enabled": false },
+    {
+      "pattern": "previews.lib.id",
+      "custom_domain": true,
+      "enabled": false,
+      "previews_enabled": true
+    }
+  ],
+  "previews": {},
   "assets": {
     "directory": "./dist",
     "not_found_handling": "404-page"

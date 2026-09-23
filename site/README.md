@@ -28,4 +28,13 @@ Environment: `NODE_VERSION=22`, `PNPM_VERSION=10.30.3`.
 | Deploy | `pnpm -C site run deploy` |
 | Non-production deploy | `pnpm -C site run deploy:preview` |
 
+`wrangler.jsonc` manages `lib.id` for production and `previews.lib.id` for
+Worker Previews. Branch previews use `<preview-name>.previews.lib.id`; the
+existing production and preview `workers.dev` URLs remain enabled.
+
+Enable non-production branch builds and Worker Previews in Cloudflare's build
+settings, using the commands above. `deploy:preview` uses the current Git branch
+as the Preview name and updates its isolated deployment. For a local preview
+deployment, build the site first, then run `pnpm -C site run deploy:preview`.
+
 Only `dist/` is deployed. The bundled JetBrains Mono license is in `public/fonts/OFL.txt`.
