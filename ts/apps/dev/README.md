@@ -6,7 +6,7 @@ CCDP distribution. It uses a synthetic ledger fixture and submits no transaction
 ## Run
 
 Use the workspace's Node and pnpm setup, plus Docker with Compose. No host Rust
-toolchain, architecture emulation or local certificates are needed.
+toolchain or local certificates are needed.
 
 From the TypeScript workspace:
 
@@ -58,7 +58,7 @@ Bridge, notary and the app stay running; no Docker images are built. Refresh
 the app and start a fresh ceremony to use updated Prover/Prefetch code.
 Bridge caches Callback for up to five minutes, so restart `pnpm dev` after
 Callback changes to apply them immediately. Also restart after changing service
-configuration or dependency images; unchanged Bridge builds reuse Docker layers.
+configuration or dependency images. Bridge runs from its released container image.
 
 To run services and frontend separately:
 
