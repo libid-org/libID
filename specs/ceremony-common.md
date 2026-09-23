@@ -230,14 +230,22 @@ Attestation Count: The number of entries in the closed attestation list a
   secret: a low-entropy preimage, such as an email address, is recovered by
   hashing guesses, and this assumption gives no protection against that.
 - ASM-ZK-01:
-  The proof system of a digest profile is zero-knowledge: a proof that the
-  verifier artifact selected for it accepts reveals nothing of the witness
-  beyond the proof's public inputs.
+  The proof system of a digest profile is zero-knowledge in its
+  zero-knowledge proving mode: a proof made in that mode with fresh prover
+  randomness reveals nothing of the witness beyond the proof's public
+  inputs. No verifier can tell what randomness a proof was made with, so
+  this holds only for proofs the Canonical Runtime makes as REQ-COMMON-45A
+  requires.
 
 ## 4. Security properties
 
 The properties below survive a malicious application operator under their
-cited assumptions. They assume an unmodified Canonical Runtime, the selected
+cited assumptions, except SP-PRIV-01. A Google ID Token reaches the
+application's own origin, so an application operator holds the handle and
+the `sub` in plaintext and can send them anywhere, the chain included.
+Against such an operator SP-PRIV-01 still bounds the Consumer and the Proof
+Verifier, which put no plaintext on chain that a transaction did not carry;
+against an honest application it bounds everyone who reads the chain. They assume an unmodified Canonical Runtime, the selected
 verifier artifact, the Consumer, and verifier configuration. Compromise of the
 applicable
 identity-platform signing root, notary key, Platform Verifier, verifier governance,
@@ -277,14 +285,13 @@ on it.
   one authoritative effect. Depends on ASM-CHAIN-01, ASM-CHAIN-02. Evidence:
   checked invariant in the Consumer.
 - SP-PRIV-01:
-  For a digest profile, an identity's plaintext `userId` and handle reach
-  the Consumer Chain only in a Submission whose Authorization Digest commits
-  their disclosure, or in a disclosure call; the Canonical Runtime releases
-  them to no other party. Short of such a transaction, no chain artifact,
-  whether calldata, proof bytes, event, or storage, yields them except by
-  hashing a candidate handle or user identifier and comparing it with the
-  identity's keys. Depends on ASM-HASH-01, ASM-PROOF-01, ASM-ZK-01,
-  ASM-BROWSER-01. Evidence: conformance tests (supporting, not proving)
+  For a digest profile, the Consumer and the Proof Verifier put an
+  identity's handle on the Consumer Chain in plaintext only from an
+  accepted Submission or disclosure call that carried it, and its `userId`
+  never. No chain artifact, whether calldata, proof bytes, event, or
+  storage, yields a handle or `userId` that no transaction carried, except
+  by hashing a candidate and comparing it with the identity's keys. Depends
+  on ASM-HASH-01, ASM-PROOF-01, ASM-ZK-01, ASM-BROWSER-01. Evidence: conformance tests (supporting, not proving)
   plus the preimage resistance of keccak256.
 
 ## 5. Authorization digest
@@ -577,14 +584,14 @@ an identity session — so one Submission on either path pays two fees.
   Platform Profile exposes them, the `userId` digest and the handle digest
   where its Platform Profile exposes those instead (platform REQ-PLAT-16C),
   and `metadataObservedAt`. Where its Platform Profile exposes digests and
-  the Submission carries the plaintext `userId` and handle, the Platform
-  Verifier MUST also return those bytes, marked unverified. Necessity: an
+  the Submission carries the plaintext handle, the Platform Verifier MUST
+  also return those bytes, marked unverified. Necessity: an
   authenticated `userId`, handle, and observation time are what the ceremony
   exists to produce; the digest is the Consumer's replay nullifier, which it
   cannot recompute without reading the payload. The Consumer trusts the
   verified fields as it trusts the Platform Verifier the Verifier Governance
-  Process installed. The Consumer trusts the unverified plaintext only once
-  it hashes to the digests (platform REQ-PLAT-08D); a Consumer that reads it
+  Process installed. The Consumer trusts the unverified handle only once it
+  hashes to the handle digest (platform REQ-PLAT-08D); a Consumer that reads it
   otherwise binds whatever identity a Submission names.
 - REQ-COMMON-45 (upholds SP-BIND-01, SP-EXCHANGE-01, SP-PRIV-01):
   The Platform Verifier MUST verify the proof carried in the Submission
@@ -594,7 +601,7 @@ an identity session — so one Submission on either path pays two fees.
   Governance Process MUST select only artifacts that enforce the proof
   statement of the Platform Ceremony Version the verifier implements. For a
   digest profile, the Verifier Governance Process MUST select only artifacts
-  that verify zero-knowledge proofs (ASM-ZK-01). The Platform Verifier
+  that accept only proofs in the zero-knowledge proving mode (ASM-ZK-01). The Platform Verifier
   MUST reject a Submission whose proof does not verify under that
   artifact. The Platform Verifier MUST NOT accept a caller-supplied artifact,
   verifying key, or externally computed verification result. Necessity:
@@ -602,6 +609,13 @@ an identity session — so one Submission on either path pays two fees.
   role performed the acceptance; with no rule placing that work anywhere, no
   role is obliged to run it, and every public input the surrounding rules
   compare is then a number the caller wrote down.
+- REQ-COMMON-45A (upholds SP-PRIV-01):
+  For a digest profile, the Canonical Runtime MUST make every proof in the
+  proof system's zero-knowledge proving mode, with prover randomness drawn
+  fresh for that proof. Necessity: the proof bytes sit in calldata beside
+  the public inputs, and whether they reveal the email and `sub` is decided
+  when they are made; the verifier accepts a proof whatever randomness it
+  was made with (ASM-ZK-01).
 - REQ-COMMON-46 (upholds SP-BIND-01):
   The Proof Verifier MUST pass the Submission Payload and the native value to
   the Platform Verifier it selected without decoding either. The Platform
@@ -1463,14 +1477,15 @@ the constructions that role implements.
   Notary Service; a Submission on a two-count profile is quoted and charged
   exactly two fees; and a Submission whose second attestation verification
   rejects leaves no fee delivered for the first.
-- TEST-COMMON-22 (exercises REQ-COMMON-45):
+- TEST-COMMON-22 (exercises REQ-COMMON-45, REQ-COMMON-45A):
   A Submission whose proof does not verify under the artifact selected for
   the Platform Verifier registered under its identity platform and Verifier
   Version is rejected; a proof verifying only under another platform's or
   another ceremony version's artifact is rejected; a caller-supplied artifact, verifying key, or precomputed
   verification result changes no decision; and for a digest profile, a
-  proof of the right statement made without the zero-knowledge option is
-  rejected.
+  proof of the right statement made outside the zero-knowledge proving mode
+  is rejected, and two proofs the Canonical Runtime makes of one witness
+  differ.
 - TEST-COMMON-23 (exercises REQ-COMMON-02, REQ-COMMON-46):
   The Platform Verifier recomputes the digest from the operation domain,
   nonce and transaction data it decoded, the ceremony version it implements,
@@ -1535,16 +1550,18 @@ client secret, and the transcript bytes outside a profile's revealed ranges
 stay withheld for good.
 
 SP-PRIV-01 is a statement about the chain's artifacts, not about the
-identity. Whether a Submission discloses is part of the operation the user
-authorizes, committed in its Authorization Digest like the fee (platform
-REQ-PLAT-08D), and the Canonical Runtime hands the plaintext to the
-application only when that operation discloses it (platform REQ-PLAT-03);
-an application operator that never receives the plaintext cannot attach it,
-and one that asks for a disclosing operation is the consent-screen case
-below. A transaction that carries plaintext publishes it when it is sent:
-a Submission or disclosure call the Consumer refuses still leaves its
-calldata on chain. The proof bytes hide the witness only because the proof
-system is zero-knowledge (ASM-ZK-01, REQ-COMMON-45). The keys an undisclosed identity is stored under are unsalted
+identity, and it does not survive a malicious application operator (§4).
+The ID Token, and the email and `sub` in it, reach the application's
+origin, so whether a Submission carries the handle is the application's
+choice, made for the user; an operator that wants the address public can
+send it, and no Consumer check can tell that from the user's wish. What
+the property does bound is the chain: the Consumer and the Proof Verifier
+emit and store nothing a transaction did not carry, and a transaction that
+carries a handle publishes it when it is sent, since a Submission or
+disclosure call the Consumer refuses still leaves its calldata on chain.
+The proof bytes hide the witness only because the Canonical Runtime proves
+in the zero-knowledge mode with fresh randomness (ASM-ZK-01,
+REQ-COMMON-45A). The keys an undisclosed identity is stored under are unsalted
 digests of its normalized handle and its user identifier, so that whoever
 already knows an address can resolve it; by the same arithmetic, whoever
 suspects an address, or holds the user identifier from another relying

@@ -74,21 +74,21 @@ REQ-COMMON-15A.
   interoperability between the Canonical Runtime build and server deployment.
 - REQ-PLAT-03 (upholds SP-CLIENT-01):
   The Canonical Runtime MUST derive the local identity fields exclusively from
-  the Platform Profile's canonical source in the exact Submission it
-  returns.
+  the Platform Profile's canonical source: for X and GitHub, in the exact
+  Submission it returns; for a digest profile, in the signed ID Token whose
+  digests that Submission's proof carries.
   Those fields are not an authority decision; only the Consumer's
   acceptance of that exact Submission is. For X and GitHub, the Canonical Runtime MUST parse the exact revealed identity-response bytes that the
   Platform Verifier extracts, using the same canonical extraction and
   normalization rules. The Canonical Runtime MUST reject a detached proof
   output, sidecar value, or caller value that supplies or overrides `userId`,
   handle, or `metadataObservedAt`. For a digest profile (§2.1b), the
-  Canonical Runtime MUST derive the local `userId` and handle from the
-  signed ID Token whose digests the Submission's proof carries, the `sub`
-  exactly and the `email` as signed. The Canonical Runtime MUST place them
-  in the Submission as its plaintext, byte for byte, exactly when the
-  Authorized Transaction Data says the Submission discloses them. The
-  Canonical Runtime MUST NOT return them to the application for a
-  Submission that does not disclose them.
+  Canonical Runtime MUST derive the local `userId` from the signed `sub`
+  exactly, and the local handle from the signed `email` normalized under
+  §2.1a, of the ID Token it verified under §3.2. The Canonical Runtime MUST
+  place the signed `email` bytes in the Submission as its plaintext handle
+  only when its caller asks to disclose the handle. The Canonical Runtime
+  MUST NOT place the `sub` in any Submission.
 
 This is a data-source invariant, not a browser-flow requirement. It defines
 the identity fields returned to callers and used by any composition-owned UI;
@@ -98,15 +98,16 @@ it does not create a ceremony-owned confirmation page.
 
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
-| Google | signed ID-Token `sub` | its exact 1–255 case-sensitive ASCII bytes | normalized email |
+| Google | signed ID-Token `sub` | its exact 1–31 case-sensitive ASCII bytes | normalized email |
 | X | `/2/users/me.data.id` JSON string | canonical nonzero unsigned 64-bit decimal | normalized `username` |
 | GitHub | `/user.id` JSON integer token | canonical nonzero unsigned 64-bit decimal | normalized `login` |
 
 - REQ-PLAT-04:
   The Implementation MUST accept a Google `sub` of bytes `0x20` through `0x7e`
   only, other than `"` and `\`. The Implementation MUST reject empty,
-  control, non-ASCII, and over-255-byte values. Necessity: identity
-  compatibility across implementations; a value holding a backslash is one
+  control, non-ASCII, and over-31-byte values. Necessity: identity
+  compatibility across implementations; 31 bytes is the Proving Circuit's
+  buffer (REQ-PLAT-16D), and a Google `sub` is 21 digits; a value holding a backslash is one
   whose JSON encoding may escape a byte, and an implementation that
   decodes the escape and one that reads the signed bytes would key it
   differently.
@@ -195,99 +196,93 @@ such table is ineligible.
 
 A digest profile is a Platform Profile whose Proving Circuit exposes the
 handle and the canonical `userId` as keccak256 digests rather than bytes;
-Google is one (§3.3). The Consumer keys every identity on those digests,
-so an identity is resolvable by whoever knows its handle or `userId`
-whether or not the bytes were ever published. What a digest profile adds
-is the choice of publishing them.
+Google is one (§3.3). A Consumer knows a platform's profile is one because
+its Platform Verifier returns digests where another returns bytes (common
+REQ-COMMON-05E). The Consumer keys every identity on those digests, so an
+identity is resolvable by whoever knows its handle or `userId` whether or
+not either was ever sent in plaintext. What a digest profile adds is the
+choice of sending the handle. Its `userId` is never sent: nothing the
+Consumer or a reader does needs it as text, and it is the one value that
+also names the account at every other relying party.
 
-Two facts about such an identity are kept apart. An identity is
-**disclosed** once any transaction has carried its plaintext `userId` and
-handle to the Consumer Chain; disclosure is history and nothing undoes it.
-A wallet's name on a platform is **published** while the Consumer holds a
-handle for that wallet and platform to display; publication is Consumer
-state, set and cleared as below.
+Two facts about such an identity are kept apart. A handle is **disclosed**
+once a Submission or disclosure call the Consumer accepted has carried it;
+disclosure is history and nothing undoes it. A refused transaction leaves
+no disclosure on record, although its calldata is public all the same
+(common §12). A wallet's name on a platform is **published** while the
+Consumer holds a handle for that wallet and platform to display;
+publication is Consumer state, set and cleared as below.
 
 - REQ-PLAT-08D (upholds SP-BIND-01, SP-PRIV-01):
   For a digest profile, the Consumer MUST derive the identity's keys from
   the `userId` digest and the handle digest the Platform Verifier returns,
-  in every Submission. The Consumer's Authorized Transaction Data for a
-  binding MUST carry whether the Submission discloses the identity. For a
-  profile that exposes identity bytes, the Consumer MUST reject a
-  Submission whose Authorized Transaction Data does not disclose, since
-  the bytes it carries are the disclosure. The Consumer MUST reject a
-  Submission that carries one of the plaintext
-  `userId` and handle without the other. The Consumer MUST reject a
-  Submission that carries plaintext its Authorized Transaction Data says
-  it does not disclose, or carries none where that data says it does.
-  Where a Submission carries plaintext, the Consumer MUST normalize the
-  handle under §2.1a. The Consumer MUST reject such a Submission unless
-  `keccak256` of the `userId` bytes equals the `userId` digest and
-  `keccak256` of the normalized handle equals the handle digest. The
-  Consumer MUST reject a Submission that asks to publish a name and
-  carries no plaintext. On accepting a Submission that carries no
-  plaintext, the Consumer MUST keep the name the Transaction Author
-  published for the platform when that name's handle key equals the
-  Submission's handle key. The Consumer MUST clear that name when the keys
-  differ. Necessity: the choice to disclose is the user's, so it is
-  committed in the Authorization Digest with the rest of the operation; and
-  a published name is read as the wallet's current handle, which a private
-  re-proof of the same handle leaves true and a claim of another handle
-  makes false.
+  in every Submission. Where a Submission carries the plaintext handle, the
+  Consumer MUST normalize it under §2.1a. The Consumer MUST reject such a
+  Submission unless `keccak256` of the normalized handle equals the handle
+  digest. The Consumer MUST reject a Submission that asks to publish a name
+  and carries no handle. On accepting a Submission that carries no handle,
+  the Consumer MUST keep the name the Transaction Author published for the
+  platform when that name's handle key is the handle key the identity holds
+  once the Submission is applied. The Consumer MUST clear that name when
+  the keys differ. Necessity: a published name is read as the wallet's
+  current handle, which a private re-proof of the same handle leaves true,
+  a proof of another handle makes false, and an older proof that leaves the
+  identity's handle where it was does not change.
 - REQ-PLAT-08E (upholds SP-BIND-01):
   For a digest profile, the Consumer MUST offer a disclosure call that
-  takes a platform, a plaintext `userId`, and a handle. The Consumer MUST
-  normalize the handle under §2.1a, derive the identity key and the handle
-  key from the plaintext, and accept the call only when the caller owns
-  both keys, the identity key's current handle key is that handle key, and
-  that handle key's current identity key is that identity key. On
-  acceptance the Consumer MUST publish the normalized handle as the
-  caller's name for the platform. The Consumer MUST NOT require a new proof
-  for a disclosure; the preimages are the evidence. Necessity: testing the
-  pairing in both directions is what refuses a handle retired by a later
-  claim of the same account, and a handle one of the caller's accounts took
-  from another of them, so a wallet displays only a handle it holds. A
-  refused call protects the display, not the plaintext: its calldata is
-  public whether or not the Consumer accepts it.
+  takes a platform and a plaintext handle. The Consumer MUST normalize the
+  handle under §2.1a and derive its handle key. The Consumer MUST accept
+  the call only when that handle key's current identity key names an
+  identity whose current handle key is that handle key, and the caller owns
+  both keys. On acceptance the Consumer MUST publish the normalized handle
+  as the caller's name for the platform. The Consumer MUST NOT require a
+  new proof or the `userId` for a disclosure; the handle's preimage is the
+  evidence, and the identity key follows from the handle key. Necessity:
+  testing the pairing in both directions is what refuses a handle retired
+  by a later claim of the same account, and a handle one of the caller's
+  accounts took from another of them, so a wallet displays only a handle it
+  holds. A refused call protects the display, not the handle: its calldata
+  is public whether or not the Consumer accepts it.
 - REQ-PLAT-08F (upholds SP-PRIV-01):
   The Consumer MUST state in every binding or disclosure event it emits
-  whether the event carries plaintext. The Consumer MUST put the plaintext
-  `userId` and handle in an event only when the Submission or disclosure
-  call carried them. The Consumer MUST put the normalized handle in an
-  event, never the bytes as submitted. Necessity: an event that carried plaintext is public
-  for good, and a reader distinguishes a disclosed identity from one
-  currently published only if the events say which is which. A Submission
-  without plaintext after a disclosure leaves the identity disclosed, its
-  name published or cleared under REQ-PLAT-08D, and its own event without
-  plaintext.
+  whether the event carries the handle. The Consumer MUST put the
+  normalized handle in the event of every accepted Submission that carried
+  it and of every accepted disclosure call. The Consumer MUST NOT put a
+  handle in any other event of a digest profile. The Consumer MUST NOT put
+  the `userId` of a digest profile in any event. Necessity: an event that
+  carried a handle is public for good, and a reader distinguishes a
+  disclosed handle from a currently published name only if the events say
+  which is which. A Submission without the handle after a disclosure leaves
+  the handle disclosed, its name published or cleared under REQ-PLAT-08D,
+  and its own event without the handle.
 - REQ-PLAT-08G (upholds SP-BIND-01):
-  For a digest profile, the Consumer's handle rules for the platform MUST be
-  the normalization the profile's Proving Circuit applies. The Consumer MUST
-  refuse a change to those rules once it has bound any identity of that
-  platform. Necessity: the Consumer holds only digests, so it cannot re-key
-  a binding under new rules, and a disclosed handle normalized under rules
-  the circuit does not apply stops hashing to its own key.
+  For a digest profile, the Consumer MUST normalize the platform's handles
+  with the handle table the profile publishes (§2.1a), whose case-folding,
+  character-set, and shape rows the Proving Circuit reproduces
+  (TEST-PLAT-20). The Consumer MUST refuse a change to that normalization
+  once it has bound any identity of that platform. Necessity: the Consumer
+  holds only digests, so it cannot re-key a binding under new rules, and a
+  disclosed handle normalized under rules the circuit does not apply stops
+  hashing to its own key.
 - TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08G):
-  The same Google account submitted with and without its plaintext lands on
-  the same two keys. A Submission without plaintext, made with recognizable
-  test values, carries neither the email nor the `userId` in its decoded
-  payload or its decoded events. A Submission is rejected when its
-  plaintext does not hash to the digests, when it carries only one of the
-  two, when it carries plaintext its Authorized Transaction Data says it
-  does not disclose, when it carries none where that data says it does,
-  and when it asks to publish a name without plaintext; an X or GitHub
-  Submission whose Authorized Transaction Data does not disclose is
-  rejected. A private re-proof
-  of the published handle keeps the name; a private claim of another handle
-  clears it. A disclosure call is rejected for a handle retired by a later
-  claim of the same account, for a handle another account of the same
-  wallet took over, and from a caller that does not own both keys; a
-  disclosure of the current pair publishes it, and its event carries the
-  normalized handle. A Submission without plaintext after a disclosure
-  leaves the binding resolvable by its handle and its event without
-  plaintext. The Canonical Runtime returns no `sub` or `email` to the
-  application for a Submission that does not disclose, and places the
-  signed `sub` and `email` byte for byte in one that does. A change to
-  Google's handle rules is refused once a Google identity is bound.
+  The same Google account submitted with and without its handle lands on
+  the same two keys. A Submission without the handle, made with
+  recognizable test values, carries neither the email nor the `sub` in its
+  decoded payload or its decoded events, and a Submission with the handle
+  carries no `sub` in either. A Submission is rejected when its handle does
+  not hash to the handle digest, and when it asks to publish a name without
+  the handle. A private re-proof of the published handle keeps the name; a
+  private claim of another handle clears it; an older private proof
+  accepted without moving the identity's handle leaves the name. A
+  disclosure call is rejected for a handle retired by a later claim of the
+  same account, for a handle another account of the same wallet took over,
+  and from a caller that does not own both keys; a disclosure of the
+  current handle publishes it, and its event carries the normalized handle.
+  A Submission without the handle after a disclosure leaves the binding
+  resolvable by its handle and its event without the handle. The Canonical
+  Runtime places the signed `email` in a Submission only when asked to
+  disclose and places no `sub` in any. A change to Google's handle
+  normalization is refused once a Google identity is bound.
 
 ### 2.2 Metadata ordering and validity ceilings
 
@@ -435,16 +430,18 @@ require a verifier that dispatches on the header `alg`; none exists here.
   The Proving Circuit MUST NOT expose a detached second representation of a
   claim: the `sub` and `email` bytes appear in no public input, only their
   digests do, and each digest is the inner hash of the Consumer's key for
-  that identity, so a claim disclosed in plaintext and one left undisclosed
+  that identity, so a claim that carries its handle and one that does not
   key the same binding.
 - REQ-PLAT-16C (upholds SP-BIND-01, SP-PRIV-01):
   The Platform Verifier MUST return the `userId` digest and the handle
   digest as the digests of common REQ-COMMON-05E. Where the Submission
-  carries the plaintext `sub` and `email`, the Platform Verifier MUST pass
-  them to the Consumer unchanged and unchecked. The Platform Verifier MUST
-  NOT derive a normalized handle or a key from them; the check that they
-  hash to the digests is the Consumer's under REQ-PLAT-08D, because it
-  needs the normalization of §2.1a. Necessity: one party owns the equality, and it is
+  carries the plaintext `email`, the Platform Verifier MUST pass those bytes
+  to the Consumer unchanged and unchecked, as the unverified handle of
+  REQ-COMMON-05E. The Google Submission Payload MUST carry no plaintext
+  `sub`. The Platform Verifier MUST NOT derive a normalized handle or a key
+  from the `email`; the check that it hashes to the handle digest is the
+  Consumer's under REQ-PLAT-08D, because it needs the normalization of
+  §2.1a. Necessity: one party owns the equality, and it is
   the one that owns the normalization.
 - REQ-PLAT-16D (upholds SP-BIND-01, SP-PRIV-01):
   The Proving Circuit MUST admit a `sub` only as REQ-PLAT-04 and
@@ -1299,8 +1296,9 @@ Platform Verifier, Notary Service, Consumer.
   cannot satisfy the circuit; neither can an empty `sub`, a `sub` byte
   outside `0x20` through `0x7e`, a `sub` holding `\` (as `12\/3` does), a
   32-byte `sub`, or a 63-byte `email`. The public inputs carry no `sub` or `email` byte. The Platform
-  Verifier returns both digests, returns plaintext the Submission carried
-  byte for byte, and returns none where the Submission carried none.
+  Verifier returns both digests, returns the `email` a Submission carried
+  byte for byte, and returns none where the Submission carried none; the
+  payload has no field for a `sub`.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
   A proof at or after `proofValidUntil`, and a token-attestation creation time
   more than `maxFutureAttestationSkew` ahead of Block Time, are rejected. An
@@ -1405,8 +1403,9 @@ Platform Verifier, Notary Service, Consumer.
   and semantic public inputs across two chains using different conforming
   verifier artifacts. A destination chain does not support the pair without a
   conforming artifact or, for a TLSNotary profile, a compatible Notary Service.
-  No local identity field originates outside proof public inputs and the exact
-  revealed attestation bytes carried by its Submission. Only the Consumer's
+  No local identity field originates outside proof public inputs, the exact
+  revealed attestation bytes carried by its Submission, and, for a digest
+  profile, the signed ID Token whose digests its proof carries. Only the Consumer's
   acceptance of that exact Submission makes the claim authoritative.
 - TEST-PLAT-17A (exercises REQ-PLAT-03, REQ-PLAT-31A, REQ-PLAT-51A):
   Pair authenticated X or GitHub identity-response bytes for account B with a
