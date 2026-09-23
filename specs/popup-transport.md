@@ -567,8 +567,8 @@ this specification.
   `*.EXAMPLE.test`, `*.example_test`, `*.example.test.`, `*..example.test`,
   `*.`, `*.-example.test`, `*.example-.test`, `**.example.test`,
   `*example.test`, `*.127.0.0.1`, and `*.1.2.3.4`; a member holding a `*`
-  that is not a well-formed Origin Pattern is refused rather than admitted
-  as an exact member. A peer offering `*.example.test` or
+  that is neither `'*'` nor a well-formed Origin Pattern is refused rather
+  than admitted as an exact member. A peer offering `*.example.test` or
   `https://*.example.test` as its own origin binds nothing, at an endpoint
   listing that pattern and at one listing `'*'`, whether the spelling
   arrives as an observed origin or as a Fallback Carrier's claimed peer
@@ -666,14 +666,14 @@ this specification.
   — a public suffix, a hosting or customer-subdomain namespace — admits those
   outsiders as peers, and the transport consults no public suffix list to
   notice; `*.com` is a well-formed member that admits an entire top-level
-  domain. An Origin Pattern also admits `https://.example.test`, whose empty
-  leading label no user agent stamps; refusing such a host belongs to
-  whatever authenticates a Fallback Carrier's claimed peer (ASM-POPUP-06).
+  domain. An Origin Pattern also admits `https://.example.test`: a user agent
+  serializes and stamps that origin, so it reaches an endpoint on the native
+  path as any other host does, and refusing it is a deployment's own choice.
   The Application Endpoint holds the same member kinds as the Popup Endpoint,
   so a pattern there places every host under its suffix in the position of
   the origin whose Protocol Messages it accepts as a ceremony's outcome. A
-  member holding a `*` that spells no Origin Pattern is a configuration
-  mistake rather than a narrower origin. Loopback HTTP admits local
+  member holding a `*` that is neither `'*'` nor an Origin Pattern is a
+  configuration mistake rather than a narrower origin. Loopback HTTP admits local
   development without weakening exact origin or port matching; it grants no
   exception for arbitrary HTTP hosts.
 - A Fallback Carrier's authentication is an additional deployment trust
