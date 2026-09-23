@@ -81,7 +81,14 @@ REQ-COMMON-15A.
   Platform Verifier extracts, using the same canonical extraction and
   normalization rules. The Canonical Runtime MUST reject a detached proof
   output, sidecar value, or caller value that supplies or overrides `userId`,
-  handle, or `metadataObservedAt`.
+  handle, or `metadataObservedAt`. For a digest profile (§2.1b), the
+  Canonical Runtime MUST derive the local `userId` and handle from the
+  signed ID Token whose digests the Submission's proof carries, the `sub`
+  exactly and the `email` as signed. The Canonical Runtime MUST place them
+  in the Submission as its plaintext, byte for byte, exactly when the
+  Authorized Transaction Data says the Submission discloses them. The
+  Canonical Runtime MUST NOT return them to the application for a
+  Submission that does not disclose them.
 
 This is a data-source invariant, not a browser-flow requirement. It defines
 the identity fields returned to callers and used by any composition-owned UI;
@@ -246,7 +253,7 @@ state, set and cleared as below.
   without plaintext after a disclosure leaves the identity disclosed, its
   name published or cleared under REQ-PLAT-08D, and its own event without
   plaintext.
-- TEST-PLAT-20A (exercises REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F):
+- TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F):
   The same Google account submitted with and without its plaintext lands on
   the same two keys. A Submission without plaintext, made with recognizable
   test values, carries neither the email nor the `userId` in its decoded
@@ -262,7 +269,9 @@ state, set and cleared as below.
   disclosure of the current pair publishes it, and its event carries the
   normalized handle. A Submission without plaintext after a disclosure
   leaves the binding resolvable by its handle and its event without
-  plaintext.
+  plaintext. The Canonical Runtime returns no `sub` or `email` to the
+  application for a Submission that does not disclose, and places the
+  signed `sub` and `email` byte for byte in one that does.
 
 ### 2.2 Metadata ordering and validity ceilings
 

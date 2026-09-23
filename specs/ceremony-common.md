@@ -229,6 +229,10 @@ Attestation Count: The number of entries in the closed attestation list a
   preimage except by hashing candidates and comparing. A digest is not a
   secret: a low-entropy preimage, such as an email address, is recovered by
   hashing guesses, and this assumption gives no protection against that.
+- ASM-ZK-01:
+  The proof system of a digest profile is zero-knowledge: a proof that the
+  verifier artifact selected for it accepts reveals nothing of the witness
+  beyond the proof's public inputs.
 
 ## 4. Security properties
 
@@ -273,11 +277,15 @@ on it.
   one authoritative effect. Depends on ASM-CHAIN-01, ASM-CHAIN-02. Evidence:
   checked invariant in the Consumer.
 - SP-PRIV-01:
-  An identity a Consumer holds undisclosed is recoverable from no chain
-  artifact, whether Submission calldata, event, or storage, except by hashing
-  a candidate handle or user identifier and comparing it with the identity's
-  keys. Depends on ASM-HASH-01, ASM-PROOF-01. Evidence: conformance tests
-  (supporting, not proving) plus the preimage resistance of keccak256.
+  For a digest profile, an identity's plaintext `userId` and handle reach
+  the Consumer Chain only in a Submission whose Authorization Digest commits
+  their disclosure, or in a disclosure call; the Canonical Runtime releases
+  them to no other party. Short of such a transaction, no chain artifact,
+  whether calldata, proof bytes, event, or storage, yields them except by
+  hashing a candidate handle or user identifier and comparing it with the
+  identity's keys. Depends on ASM-HASH-01, ASM-PROOF-01, ASM-ZK-01,
+  ASM-BROWSER-01. Evidence: conformance tests (supporting, not proving)
+  plus the preimage resistance of keccak256.
 
 ## 5. Authorization digest
 
@@ -568,18 +576,25 @@ an identity session — so one Submission on either path pays two fees.
   identifier, the canonical `userId` and the raw handle bytes where its
   Platform Profile exposes them, the `userId` digest and the handle digest
   where its Platform Profile exposes those instead (platform REQ-PLAT-16C),
-  and `metadataObservedAt`. Necessity: an authenticated `userId`, handle, and
-  observation time are what the ceremony exists to produce; the digest is the
-  Consumer's replay nullifier, which it cannot recompute without reading the
-  payload. The Consumer trusts these fields as it trusts the Platform Verifier
-  the Verifier Governance Process installed.
-- REQ-COMMON-45 (upholds SP-BIND-01, SP-EXCHANGE-01):
+  and `metadataObservedAt`. Where its Platform Profile exposes digests and
+  the Submission carries the plaintext `userId` and handle, the Platform
+  Verifier MUST also return those bytes, marked unverified. Necessity: an
+  authenticated `userId`, handle, and observation time are what the ceremony
+  exists to produce; the digest is the Consumer's replay nullifier, which it
+  cannot recompute without reading the payload. The Consumer trusts the
+  verified fields as it trusts the Platform Verifier the Verifier Governance
+  Process installed. The Consumer trusts the unverified plaintext only once
+  it hashes to the digests (platform REQ-PLAT-08D); a Consumer that reads it
+  otherwise binds whatever identity a Submission names.
+- REQ-COMMON-45 (upholds SP-BIND-01, SP-EXCHANGE-01, SP-PRIV-01):
   The Platform Verifier MUST verify the proof carried in the Submission
   Payload under the exact verifier artifact the Verifier Governance Process
   selected for it. The Verifier Governance Process MAY select a different
   artifact for each Consumer Chain and each Verifier Version. The Verifier
   Governance Process MUST select only artifacts that enforce the proof
-  statement of the Platform Ceremony Version the verifier implements. The Platform Verifier
+  statement of the Platform Ceremony Version the verifier implements. For a
+  digest profile, the Verifier Governance Process MUST select only artifacts
+  that accept zero-knowledge proofs alone (ASM-ZK-01). The Platform Verifier
   MUST reject a Submission whose proof does not verify under that
   artifact. The Platform Verifier MUST NOT accept a caller-supplied artifact,
   verifying key, or externally computed verification result. Necessity:
@@ -1452,8 +1467,10 @@ the constructions that role implements.
   A Submission whose proof does not verify under the artifact selected for
   the Platform Verifier registered under its identity platform and Verifier
   Version is rejected; a proof verifying only under another platform's or
-  another ceremony version's artifact is rejected; and a caller-supplied artifact, verifying key, or precomputed
-  verification result changes no decision.
+  another ceremony version's artifact is rejected; a caller-supplied artifact, verifying key, or precomputed
+  verification result changes no decision; and for a digest profile, a
+  proof of the right statement made without the zero-knowledge option is
+  rejected.
 - TEST-COMMON-23 (exercises REQ-COMMON-02, REQ-COMMON-46):
   The Platform Verifier recomputes the digest from the operation domain,
   nonce and transaction data it decoded, the ceremony version it implements,
@@ -1518,7 +1535,16 @@ client secret, and the transcript bytes outside a profile's revealed ranges
 stay withheld for good.
 
 SP-PRIV-01 is a statement about the chain's artifacts, not about the
-identity. The keys an undisclosed identity is stored under are unsalted
+identity. Whether a Submission discloses is part of the operation the user
+authorizes, committed in its Authorization Digest like the fee (platform
+REQ-PLAT-08D), and the Canonical Runtime hands the plaintext to the
+application only when that operation discloses it (platform REQ-PLAT-03);
+an application operator that never receives the plaintext cannot attach it,
+and one that asks for a disclosing operation is the consent-screen case
+below. A transaction that carries plaintext publishes it when it is sent:
+a Submission or disclosure call the Consumer refuses still leaves its
+calldata on chain. The proof bytes hide the witness only because the proof
+system is zero-knowledge (ASM-ZK-01, REQ-COMMON-45). The keys an undisclosed identity is stored under are unsalted
 digests of its normalized handle and its user identifier, so that whoever
 already knows an address can resolve it; by the same arithmetic, whoever
 suspects an address, or holds the user identifier from another relying
