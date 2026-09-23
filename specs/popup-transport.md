@@ -47,9 +47,10 @@ Application Endpoint: The connection endpoint in the Application Document.
 Popup Endpoint: The connection endpoint in one Participating Document. Each
    Participating Document constructs its own.
 
-Origin Allowlist: The immutable set of origins an endpoint accepts as its
-   peer: the Application Endpoint's popup origins and the Popup Endpoint's
-   application origins (§6).
+Origin Allowlist: The immutable set of members under which an endpoint
+   accepts a peer: the Application Endpoint's popup origins and the Popup
+   Endpoint's application origins (§6). A member is an exact origin, an
+   Origin Pattern, or `'*'`.
 
 Origin Pattern: An Origin Allowlist member spelled `https://*.` followed by a
    suffix host, admitting the direct subdomains of that suffix (§6). It is a
@@ -212,24 +213,28 @@ trust boundary (ASM-POPUP-07).
   a member unless it is well formed. Well formed means the scheme is exactly
   `https`, the suffix is the host of a canonical origin — lowercase, ASCII,
   and free of port, path, query, fragment, credentials, trailing dot, and
-  empty label — the suffix holds at least one `.`, and the suffix holds no
-  `*`. Beyond `'*'` and a well-formed Origin Pattern, the Endpoint MUST
-  reject every member holding a `*` rather than read it as an exact origin.
-  There is no plaintext and no loopback Origin Pattern; the HTTP exception
-  covers exact members only. The Popup Endpoint MUST admit a peer under an
-  Origin Pattern only when the authenticated origin is canonical under the
-  rules above and consists of `https://`, then one nonempty label holding no
-  `.`, then `.`, then the pattern's suffix, and nothing further. The label
-  has no grammar beyond that, because the user agent produced the host and
-  the transport does not rule on which hosts are plausible. Both spellings
-  are already canonical, so the comparison is byte for byte, with no case,
-  IDN, or trailing-dot normalization at match time. A peer origin is
-  therefore a member of an Origin Allowlist when an exact member equals it,
-  when `'*'` admits it, or when an Origin Pattern admits it; an Origin
-  Pattern overlapping an exact member is not a repeated member. An
+  empty label — the suffix holds at least one `.`, the suffix holds no `*`,
+  and the suffix is a domain name rather than an IP literal. Beyond `'*'`
+  and a well-formed Origin Pattern, the Endpoint MUST reject every member
+  holding a `*` rather than read it as an exact origin. There is no
+  plaintext and no loopback Origin Pattern: the HTTP exception covers exact
+  members only, and a pattern over an IP literal, `https://*.127.0.0.1`
+  included, is refused whatever its scheme. The Popup Endpoint MUST admit a
+  peer under an Origin Pattern only when the authenticated origin is
+  canonical under the rules above and consists of `https://`, then one
+  nonempty label holding no `.`, then `.`, then the pattern's suffix, and
+  nothing further. The label has no grammar beyond that, because the user
+  agent produced the host and the transport does not rule on which hosts are
+  plausible. Both spellings are already canonical, so the comparison is byte
+  for byte, with no case, IDN, or trailing-dot normalization at match time. A
+  peer origin is therefore a member of an Origin Allowlist when an exact
+  member equals it, when `'*'` admits it, or when an Origin Pattern admits it;
+  an Origin Pattern overlapping an exact member is not a repeated member. An
   Application Endpoint MUST NOT accept a wildcard or an Origin Pattern. The
-  Application Endpoint MUST reject a member beginning with `https://*.`
-  before carrier work, whatever its suffix. Upholds SP-POPUP-01.
+  Application Endpoint MUST reject every member holding a `*` before carrier
+  work — a member beginning with `https://*.` whatever its suffix, and any
+  other starred spelling rather than read it as an exact origin. Upholds
+  SP-POPUP-01.
 - REQ-POPUP-ALLOW-02:
   An endpoint MUST accept a peer only when the peer's authenticated origin
   is a member of its Origin Allowlist, and MUST bind that exact observed
@@ -582,16 +587,16 @@ this specification.
   `https://x.example.test:8443`. Construction refuses a pattern whose suffix
   holds no dot, an empty label, a second `*`, a port, a path, credentials, a
   trailing dot, or a noncanonical host, and refuses `http://*.localhost`,
-  `https://*..example.test`, and a bare `https://*.`; a member beginning
-  with `https://*.` that is not well formed never falls through to
-  exact-member validation, and `https://*example.test` is refused for its
-  `*` instead of being read as an exact origin. A peer offering
+  `https://*.127.0.0.1`, `https://*..example.test`, and a bare `https://*.`;
+  a member beginning with `https://*.` that is not well formed never falls
+  through to exact-member validation, and `https://*example.test` is refused
+  for its `*` instead of being read as an exact origin. A peer offering
   `https://*.example.test` as its own origin binds nothing, at an endpoint
   listing that pattern and at one listing `'*'`, whether the spelling
   arrives as an observed origin or as a Fallback Carrier's claimed peer
   origin. An Application Endpoint rejects an Origin Pattern as it rejects
-  the wildcard. A pattern and an exact member it overlaps coexist in one
-  allowlist.
+  the wildcard, and rejects `https://*example.test` for its `*` as well. A
+  pattern and an exact member it overlaps coexist in one allowlist.
 - TEST-POPUP-03 (exercises REQ-POPUP-ALLOW-03, REQ-POPUP-ALLOW-04, REQ-POPUP-ALLOW-05):
   Wrong source, origin, version, or direction selects nothing; a valid
   attempt for another Connection ID and unrelated traffic from the Popup
