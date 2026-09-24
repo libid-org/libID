@@ -60,8 +60,9 @@ carries the browser claim library and the integration harness:
   library: connect a wallet (or a dev key), claim a handle, resolve it.
 - [`harness/`](harness) — the integration harness: a docker-compose stack
   (anvil + deterministic contract deploy + released notary and
-  libid-server-rs images) plus asset staging and one `boot.sh` for a
-  real, manual end-to-end claim. See [`harness/README.md`](harness/README.md).
+  libID-bridge-rs images from before the rename) plus asset staging and one
+  `boot.sh` for a real, manual end-to-end claim. See
+  [`harness/README.md`](harness/README.md).
 
 ## Repositories
 
@@ -77,8 +78,9 @@ carries the browser claim library and the integration harness:
   claim flows load.
 - [`notary`](https://github.com/libid-org/notary) — the notary service
   (MPC-TLS / ProxyMode verifier + attestation signer).
-- [`libID-server-rs`](https://github.com/libid-org/libID-server-rs) — the
-  deployable libID server for GitHub OAuth and MPC-TLS proof generation.
+- [`libID-bridge-rs`](https://github.com/libid-org/libID-bridge-rs) — the
+  deployable OAuth bridge that publishes ceremony configuration and serves
+  the callback document; proving and notarization run in the browser.
 - [`chain-configurations`](https://github.com/libid-org/chain-configurations)
   — desired-state deployment files and the `libid-deploy` binary.
 - [`keeper`](https://github.com/libid-org/keeper) — permissionlessly keeps
