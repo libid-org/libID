@@ -114,7 +114,12 @@ GitHub; the Proving Circuit proves only what cannot be read from that
 evidence, which is Google's signature relation and, on X and GitHub, that one
 hidden bearer opens both sessions' commitments. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
-an effect (REQ-COMMON-03, REQ-COMMON-03A). The Canonical Runtime
+an effect (REQ-COMMON-03, REQ-COMMON-03A). For a profile that exposes identity
+digests, Google at launch, the Consumer keys the binding on the digests and
+puts the handle on chain only from a transaction that carried it, and the
+user identifier never (SP-PRIV-01); it does not prevent confirmation of a
+guessed identity by hashing, nor an application operator, who receives the
+ID Token, from sending the handle itself. The Canonical Runtime
 locally enforces the selected OAuth client and redirect profile. The protocol
 assumes the named identity-platform parser,
 PKCE, delivery, notary, browser, verifier-soundness, and chain behaviors. It
