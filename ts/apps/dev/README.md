@@ -37,7 +37,7 @@ Edit configuration directly where it is used:
 
 - [compose.yaml](compose.yaml): services.
 - [bridge-config.toml](bridge-config.toml): Bridge configuration and development OAuth credentials.
-- [src/app.ts](src/app.ts): Bridge/CCDP URLs and the local ledger/notary fixture.
+- [src/app.ts](src/app.ts): Bridge URL and the local ledger/notary fixture; Bridge configuration selects CCDP.
 - [vite.config.ts](vite.config.ts): frontend port.
 
 The setup includes shared development OAuth credentials and a public development

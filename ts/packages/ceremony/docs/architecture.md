@@ -1,15 +1,16 @@
 # Architecture
 
 Ceremony obtains identity evidence for an application-owned operation. The caller
-supplies a popup connection and keeps control of its lifetime. Prover extracts
-identity and builds evidence; Client checks the result structure and assembles
-`OAuthProof`. Neither performs final cryptographic verification in the browser.
+supplies a popup connection and keeps control of its lifetime. Client can configure
+that connection through `@libid/popup`, using its discovered Bridge/CCDP origins.
+Prover extracts identity and builds evidence; Client checks the result structure
+and assembles `OAuthProof`. Neither performs final cryptographic verification in the browser.
 
 ## Ownership
 
 | Owner | Responsibility |
 |---|---|
-| [ccdp/client](../src/ccdp/client/ceremony.ts) | Fetch/freeze Bridge config, derive authorization inputs, run one ceremony, validate and assemble its result. |
+| [ccdp/client](../src/ccdp/client/ceremony.ts) | Fetch/freeze Bridge config, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
 | [ccdp/index](../src/ccdp/index.ts), [navigation](../src/ccdp/navigation.ts) | Browser-free message companions and route/fragment codecs. |
 | [ccdp/documents](../src/ccdp/documents/) | Callback, Prefetch/Worker and Prover entrypoints; native package-owned UI. |
 | [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its execution pipeline. |

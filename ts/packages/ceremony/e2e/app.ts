@@ -1,5 +1,5 @@
 import { mainnet, testnet } from '@libid/ledger/testing'
-import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
+import { type Message, type PopupConnection, PopupWindow } from '@libid/popup'
 import { CeremonyError, createCCDPClient } from '../src/ccdp/client/index.js'
 
 const bridge = `${location.protocol}//localhost:${Number(location.port) + 1}`,
@@ -32,9 +32,8 @@ anchor.addEventListener('click', (event) => {
   activeId = id
   anchor.target = `ceremony-${id}`
   const popup = PopupWindow.open(anchor.target, 'width=480,height=720')
-  connection = PopupConnection.connect(popup, {
+  connection = client.connect(popup, {
     connectionId: id,
-    allowedPopupOrigins: [bridge, ccdp],
     onDiagnostic: ({ code }) => run.diagnostics.push(code),
   })
   connection.on(

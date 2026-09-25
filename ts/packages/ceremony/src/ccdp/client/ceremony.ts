@@ -1,5 +1,12 @@
 import type { LedgerId } from '@libid/ledger'
-import { type Message, type MessageType, type PopupConnection, PopupError } from '@libid/popup'
+import {
+  type ConnectOptions,
+  type Message,
+  type MessageType,
+  PopupConnection,
+  PopupError,
+  type PopupWindow,
+} from '@libid/popup'
 import { CeremonyError, ceremonyError } from '../../errors.js'
 import {
   deriveAuthorizationDigest,
@@ -64,6 +71,14 @@ interface Input<P extends PlatformId> {
 
 /** Application-scoped Bridge configuration used to construct independent ceremony runs. */
 export interface CCDPClient {
+  /**
+   * Connect an application-owned popup, admitting only this Bridge and its configured CCDP.
+   * Other popup options pass through; the caller retains the connection and owns closure.
+   */
+  connect<Out extends Message = Message, In extends Message = Out>(
+    popup: PopupWindow,
+    options: Omit<ConnectOptions, 'allowedPopupOrigins'>,
+  ): PopupConnection<Out, In>
   /** Intersection of supported platforms and versions advertised by the Bridge. */
   readonly enabledPlatforms: readonly PlatformId[]
   /** Compatible versions in ascending order; returns an immutable list, empty for disabled platforms. */
@@ -93,6 +108,7 @@ export async function createCCDPClient(options: { oauthBridge: string }): Promis
 
 /** Internal construction from an already validated, frozen Bridge configuration. */
 export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
+  const popupOrigins = [...new Set([new URL(config.redirectUri).origin, config.ccdpOrigin])]
   const liveIds = new Set<string>()
   const enabledVersions = <P extends PlatformId>(platform: P) =>
     commonVersions(platform, config.platforms[platform]?.ceremonyVersions ?? [])
@@ -102,6 +118,15 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
   return Object.freeze({
     enabledPlatforms,
     enabledVersions,
+    connect<Out extends Message = Message, In extends Message = Out>(
+      popup: PopupWindow,
+      options: Omit<ConnectOptions, 'allowedPopupOrigins'>,
+    ): PopupConnection<Out, In> {
+      return PopupConnection.connect<Out, In>(popup, {
+        ...options,
+        allowedPopupOrigins: popupOrigins,
+      })
+    },
     new<P extends PlatformId>(
       conn: PopupConnection<Message>,
       id: string,
