@@ -1,0 +1,30 @@
+{
+  "name": "@libid/dev",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared local libID services and development application.",
+  "license": "(MIT OR Apache-2.0)",
+  "scripts": {
+    "dev": "pnpm build:deps && node services.ts --app",
+    "dev:services": "pnpm build:deps && node services.ts",
+    "dev:ccdp": "pnpm build:deps && node services.ts --ccdp",
+    "dev:app": "pnpm build:deps && vite",
+    "build:deps": "pnpm --filter '@libid/dev^...' build",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@libid/ceremony": "workspace:^",
+    "@libid/ledger": "workspace:^",
+    "@libid/popup": "workspace:^",
+    "@noble/hashes": "^2.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.6"
+  }
+}

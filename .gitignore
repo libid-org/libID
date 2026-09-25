@@ -20,3 +20,18 @@ harness/.env
 ts/packages/popup/e2e/dist/
 ts/packages/*/test-results/
 ts/packages/*/playwright-report/
+
+# Ceremony local tooling and qualification output
+.ceremony-local/
+ts/packages/ceremony/.cache/
+ts/packages/ceremony/dist-artifacts/
+
+# Shared development application
+ts/apps/dev/.cache/
+ts/apps/dev/.env*
+!ts/apps/dev/.env.example
+ts/apps/dev/test-results/
+ts/apps/dev/playwright-report/
+
+# Updating the checkout does not move developers' untracked old credentials.
+ts/packages/ceremony/dev/.env*

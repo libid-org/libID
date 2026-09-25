@@ -7,9 +7,13 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "lint": "biome lint .",
+    "lint": "biome lint . && biome check --formatter-enabled=false --only=assist/source/organizeImports packages/ceremony",
     "fmt": "biome format --write .",
-    "fmt:check": "biome format ."
+    "fmt:check": "biome format .",
+    "dev": "pnpm --filter @libid/dev dev",
+    "dev:services": "pnpm --filter @libid/dev dev:services",
+    "dev:ccdp": "pnpm --filter @libid/dev dev:ccdp",
+    "dev:app": "pnpm --filter @libid/dev dev:app"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.8"

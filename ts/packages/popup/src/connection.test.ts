@@ -320,11 +320,11 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     expect(codes(app.events).at(-1)).toBe('control-direct')
 
     const scope = fakeScope()
-    await acceptPopup(pair, { worker: scope.worker }).connection
-    await tick()
+    const popup = await acceptPopup(pair, { worker: scope.worker }).connection
+    await app.connection.ready
     await app.connection.navigate('https://popup.example/isolated')
     expect(codes(app.events).at(-1)).toBe('control-connected')
-    await tick(20)
+    expect(await popup.closed).toEqual({ outcome: 'closed' })
     // The popup kept its port with the worker and replaced itself.
     expect(scope.pending).toHaveLength(1)
     expect(pair.popupProxy.replaced).toEqual([
@@ -354,10 +354,10 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     const readies: number[] = []
     app.connection.on(Ready, (r) => void readies.push(r.version))
     const scope = fakeScope()
-    await acceptPopup(pair, { worker: scope.worker }).connection
-    await tick()
+    const popup = await acceptPopup(pair, { worker: scope.worker }).connection
+    await app.connection.ready
     await app.connection.navigate('https://popup.example/isolated')
-    await tick(20)
+    expect(await popup.closed).toEqual({ outcome: 'closed' })
     // The destination document claims and continues with the same port.
     const next = await acceptPopup(pair, { worker: scope.worker, opener: false })
     const nextEvents = next.events
@@ -373,10 +373,10 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     const app = connectApp(pair)
     const stale = fakeScope()
     const root = fakeScope()
-    await acceptPopup(pair, { worker: root.worker }).connection
-    await tick()
+    const popup = await acceptPopup(pair, { worker: root.worker }).connection
+    await app.connection.ready
     await app.connection.navigate('https://popup.example/isolated')
-    await tick(20)
+    expect(await popup.closed).toEqual({ outcome: 'closed' })
     expect(root.pending).toHaveLength(1)
     // The destination is controlled by a stale nested registration holding
     // nothing; the port is still found in the root worker.
@@ -452,13 +452,13 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     const pair2 = fakePair()
     const app2 = connectApp(pair2)
     const scope = fakeScope()
-    await acceptPopup(pair2, { worker: scope.worker }).connection
-    await tick()
+    const popup2 = await acceptPopup(pair2, { worker: scope.worker }).connection
+    await app2.connection.ready
     const raw = (app2.connection as unknown as { carrier: Carrier }).carrier
     raw.send({ type: 'navigate', url: 'https://popup.example/a' } as Message)
     raw.send({ type: 'navigate', url: 'https://popup.example/b' } as Message)
     raw.send({ type: 'close-popup' })
-    await tick(20)
+    expect(await popup2.closed).toEqual({ outcome: 'closed' })
     expect(pair2.popupProxy.replaced).toEqual(['https://popup.example/a'])
     expect(pair2.popupProxy.closed).toBe(false)
     error.mockRestore()
@@ -486,7 +486,7 @@ describe('ordering across a transition [POPUP-CONNECTION-010]', () => {
     const popup = await side.connection
     await tick()
     popup.send(new Ready(1))
-    await tick(20)
+    expect(await popup.closed).toEqual({ outcome: 'closed' })
     expect(order).toEqual(['start'])
     expect(pair.popupProxy.replaced).toEqual(['https://popup-b.example/p'])
     expect(codes(events).at(-1)).toBe('control-connected')
@@ -517,7 +517,7 @@ describe('cross-origin replacement [POPUP-CONNECTION-008/009]', () => {
     await tick()
 
     await app.connection.navigate(`${OTHER_POPUP}/p`)
-    await tick(20)
+    expect(await popup.closed).toEqual({ outcome: 'closed' })
     expect(scope.pending).toHaveLength(0) // no keep
     expect(pair.popupProxy.replaced).toEqual([`${OTHER_POPUP}/p`])
     expect(codes(first.events).at(-1)).toBe('connection-closed')
@@ -749,10 +749,10 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     const side = acceptIsolating(pair, { worker: scope.worker })
     const starts = vi.fn()
     side.endpoint.on(Start, starts)
-    await tick(20)
+    await app.connection.ready
     // The application already sent into the handshake port; it must travel.
     app.connection.send(new Start())
-    await tick(20)
+    expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
     expect(starts).not.toHaveBeenCalled()
     expect(scope.pending).toHaveLength(1)
     expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}${FALLBACK}#c=1`])
@@ -770,7 +770,6 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     )
     await tick()
     expect(settled).toBe(false)
-    expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
 
     // The isolated fallback document restores the port and receives the value once.
     pair.relocate(POPUP_ORIGIN, FALLBACK, '#c=1')
@@ -864,13 +863,13 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
       captured,
     )
     const events: PopupDiagnostic[] = []
-    PopupConnection.accept<Messages>(popup, {
+    const endpoint = PopupConnection.accept<Messages>(popup, {
       connectionId: ID,
       allowedApplicationOrigins: [APP_ORIGIN],
       isolationFallbackUrl: '/f',
       onDiagnostic: (e) => void events.push(e),
     })
-    await tick(20)
+    expect(await endpoint.closed).toEqual({ outcome: 'closed' })
     expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}/f#c=1&x=y%20z`])
     expect(codes(events)).toContain('keep-acknowledged')
     for (const bad of ['/f#own', '/f#']) {
@@ -905,8 +904,15 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     const pair2 = fakePair()
     pair2.relocate(POPUP_ORIGIN, '/prover', '#c=1')
     connectApp(pair2)
-    const closing = acceptIsolating(pair2, { worker: worker(null) })
-    await tick(20) // handshake done; the keep is now waiting on the silent worker
+    const silent = worker(null)
+    const sent = vi.spyOn(silent, 'postMessage')
+    const closing = acceptIsolating(pair2, { worker: silent })
+    await vi.waitFor(() =>
+      expect(sent).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'libid-popup-keep' }),
+        expect.any(Array),
+      ),
+    )
     expect(codes(closing.events)).toContain('isolation-fallback')
     await closing.endpoint.close()
     expect(await closing.endpoint.closed).toEqual({ outcome: 'closed' })
@@ -999,7 +1005,7 @@ describe('structured fragments [POPUP-CONNECTION-013]', () => {
     const snapshot = params.toString()
     await app.connection.navigate('https://popup-b.example/p', params)
     params.set('next', 'mutated after the call')
-    await tick(20)
+    expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
     expect(pair.popupProxy.replaced.at(-1)).toBe(`https://popup-b.example/p#${snapshot}`)
     // An empty fragment adds nothing.
     const bare = connectApp(fakePair())
@@ -1034,7 +1040,6 @@ describe('structured fragments [POPUP-CONNECTION-013]', () => {
     await tick()
     const before = codes(app.events).length
     await popup.navigate(`${POPUP_ORIGIN}/next`, new URLSearchParams({ secret: 'value' }))
-    await tick(20)
     expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}/next#secret=value`])
     // The application saw no control, no diagnostic, and no message.
     expect(codes(app.events)).toHaveLength(before)
@@ -1112,11 +1117,10 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
       first.endpoint.on(Start, replies)
       app.send(new Start())
       await app.navigate(`${targetOrigin}/prover`, new URLSearchParams('c=1'))
-      await tick(20)
+      expect(await first.endpoint.closed).toEqual({ outcome: 'closed' })
       expect(replies).toHaveBeenCalledTimes(1)
       expect(pair.popupProxy.replaced).toEqual([`${targetOrigin}/prover#c=1`])
       expect(codes(events).filter((c) => c === 'carrier-fallback')).toHaveLength(1)
-      expect(await first.endpoint.closed).toEqual({ outcome: 'closed' })
       const rounds = hub.carriers.length
 
       // The non-isolated destination hops without spending a connection: no
@@ -1125,7 +1129,7 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
       const second = acceptWith(pair, hub, '/prover/fallback')
       const leaked = vi.fn()
       second.endpoint.on(Start, leaked)
-      await tick(20)
+      expect(await second.endpoint.closed).toEqual({ outcome: 'closed' })
       expect(pair.popupProxy.replaced.at(-1)).toBe(`${targetOrigin}/prover/fallback#c=1`)
       expect(codes(second.events)).toEqual(['isolation-fallback', 'connection-closed'])
       expect(hub.carriers).toHaveLength(rounds)
@@ -1167,7 +1171,7 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     const { pair } = severedPair(hub)
     const side = acceptWith(pair, hub, '/prover/fallback')
     await side.endpoint.close()
-    await tick(20)
+    await tick()
     expect(pair.popupProxy.replaced).toEqual([])
     expect(codes(side.events)).not.toContain('isolation-fallback')
     expect(await side.endpoint.closed).toEqual({ outcome: 'closed' })
@@ -1177,10 +1181,9 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
     const hub = fakeSignaling()
     const { pair, app, events } = severedPair(hub)
     const first = acceptWith(pair, hub, '/prover/fallback')
-    await tick(20) // left for the fallback without a carrier
+    expect(await first.endpoint.closed).toEqual({ outcome: 'closed' })
     expect(pair.popupProxy.replaced).toHaveLength(1)
     expect(hub.carriers).toHaveLength(0)
-    void first
     pair.relocate(POPUP_ORIGIN, '/prover/fallback', '')
     pair.setIsolated(true)
     hub.failNext = true

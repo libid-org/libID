@@ -1,6 +1,6 @@
 name: CI
 
-# TypeScript checks, workspace browser tests, infrastructure smoke and DCO.
+# TypeScript checks, workspace browser tests, infrastructure smoke, CCDP image and DCO.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -157,6 +157,38 @@ jobs:
         if: failure()
         working-directory: harness
         run: docker compose logs
+
+  # ---------------------------------------------------------------------------
+  # CCDP image: build the static ceremony artifact and the pinned SWS image for
+  # linux/amd64, prove the image against the running container and the pinned
+  # native binary, and publish it to ghcr on pushes to main. The steps live in
+  # the reusable ccdp-image.yml. A release only promotes the `sha-<commit sha>`
+  # image published here to the release version; it never builds one.
+  #
+  # Two callers so the token matches the run. Pull requests execute
+  # PR-controlled build code, so they get a read-only token (the called
+  # workflow inherits these permissions and cannot widen them) and never push.
+  # Only a push to main holds `packages: write`, and only it publishes.
+  # ---------------------------------------------------------------------------
+  ccdp-image:
+    name: CCDP image
+    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/ccdp-image.yml
+
+  ccdp-publish:
+    name: CCDP image (publish)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ccdp-image.yml
+    with:
+      push: true
+      # `sha-<commit sha>` is always tagged; `:main` seeds the next build's retention.
+      tags: ghcr.io/libid-org/ccdp:main
 
   # ---------------------------------------------------------------------------
   # DCO: every commit carries a Signed-off-by trailer. Plain git over the

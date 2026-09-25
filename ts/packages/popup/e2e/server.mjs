@@ -134,15 +134,18 @@ const popupPage = html(`
   </script>
 `)
 
-// Non-participating: like a provider page, it eventually sends the user
-// back to a participating document without touching the package.
+// Non-participating: the test controls when the user returns, so even a
+// slow runner can observe this document before leaving it.
 const externalPage = html(`
   <p id="status">external</p>
+  <button id="return" disabled>Return</button>
   <script>
     const params = new URLSearchParams(location.search)
     const next = params.get('next')
     const delay = Number(params.get('delay') ?? '0')
-    if (next) setTimeout(() => location.replace(next), delay)
+    const button = document.getElementById('return')
+    button.onclick = () => location.replace(next)
+    if (next) setTimeout(() => { button.disabled = false }, delay)
   </script>
 `)
 
