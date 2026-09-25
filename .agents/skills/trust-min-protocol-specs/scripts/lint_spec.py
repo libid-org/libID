@@ -39,8 +39,9 @@ from pathlib import Path
 
 KEYWORDS = r"MUST NOT|MUST|SHALL NOT|SHALL|SHOULD NOT|SHOULD|REQUIRED|RECOMMENDED|NOT RECOMMENDED|OPTIONAL|MAY"
 KW_RE = re.compile(rf"\b({KEYWORDS})\b")
-ID_RE = re.compile(r"\b((?:REQ|SP|ASM|TEST)-[A-Z0-9]+-[0-9]+[A-Z]?)\b")
-ID_DEF_RE = re.compile(r"^\s*(?:[-*]\s*)?((?:REQ|SP|ASM|TEST)-[A-Z0-9]+-[0-9]+[A-Z]?)\s*(?:\([^)]*\))?\s*[:—–-]\s*")
+ID_PATTERN = r"(?:REQ|SP|ASM|TEST)(?:-[A-Z0-9]+)+-[0-9]+[A-Z]?"
+ID_RE = re.compile(rf"\b({ID_PATTERN})\b")
+ID_DEF_RE = re.compile(rf"^\s*(?:[-*]\s*)?({ID_PATTERN})\s*(?:\([^)]*\))?\s*[:—–-]\s*")
 SENTINEL_RE = re.compile(r"\{\{[^{}]+\}\}")
 TEMPLATE_MARK = "<!-- TEMPLATE:"
 LINK_RE = re.compile(r"\]\((?!https?://|#|mailto:)([^)]+)\)")
@@ -256,6 +257,7 @@ FIXTURES = {
     "E1-fake-heading": ("# Doc\nWe address security considerations later.\n## My Security Considerations Notes\nThe Backend MUST act.\n", "ERROR", "E1", None),
     "E2": ("# Doc\n## Security Considerations\nUse {{NAME}} here.\n", "ERROR", "E2", None),
     "E3-same-file-x2": ("# Doc\n## Security Considerations\nREQ-A-01: The Backend MUST x.\nREQ-A-01: The Backend MUST y.\nREQ-A-01: The Backend MUST z.\n", "ERROR", "E3", 2),
+    "E3-namespaced": ("# Doc\n## Security Considerations\nREQ-POPUP-CONT-05A: The Backend MUST x.\nREQ-POPUP-CONT-05A: The Backend MUST y.\n", "ERROR", "E3", 1),
     "E4": ("# Doc\n## Security Considerations\nSee [x](missing-file.md).\n", "ERROR", "E4", None),
     "E5": ("# Doc\n## Security Considerations\n<!-- TEMPLATE: fill this in -->\n", "ERROR", "E5", None),
     "W1": ("# Doc\n## Overview (non-normative)\n### Sub\nThe Client MUST not be here.\n\n## Security Considerations\n", "WARN", "W1", None),
@@ -312,6 +314,19 @@ def self_test():
         out = buf.getvalue()
         ok = out.count("E3 ") == 1 and "E8" in out and "SP-NOPE-01" in out and "REQ-FENCED-99" not in out
         print(f"{'PASS' if ok else 'FAIL'} cross-file")
+        failed += not ok
+    with tempfile.TemporaryDirectory() as d:
+        a = Path(d) / "a.md"; b = Path(d) / "b.md"
+        a.write_text("# A\nASM-POPUP-01: assumption.\nSP-POPUP-01: Goal. Depends on ASM-POPUP-01. Evidence: audit.\nREQ-POPUP-CONT-05A (upholds SP-POPUP-01): The Backend MUST act.\nREQ-POPUP-CONT-06 (upholds SP-POPUP-01): The Backend MUST stop.\n## Security Considerations\n")
+        b.write_text("# B\nTEST-POPUP-01 (exercises REQ-POPUP-CONT-05A): valid vector.\nSee REQ-POPUP-CONT-99.\n## Security Considerations\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run([a, b])
+        errors = [line for line in buf.getvalue().splitlines() if line.startswith("ERROR:")]
+        ok = (len(errors) == 2
+              and any("E8 REQ-POPUP-CONT-99 " in line for line in errors)
+              and any("E10 REQ-POPUP-CONT-06 " in line for line in errors))
+        print(f"{'PASS' if ok else 'FAIL'} namespaced-traceability")
         failed += not ok
     with tempfile.TemporaryDirectory() as d:
         a = Path(d) / "a.md"; b = Path(d) / "b.md"

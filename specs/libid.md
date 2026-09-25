@@ -23,6 +23,15 @@ specifications.
 - [Chain profiles](chain-profiles.md) define what those constructions commit
   on one destination chain.
 
+## Browser transport
+
+- [Popup transport](popup-transport.md) defines the logical connection
+  between an application document and its popup: origin allowlists, the
+  message model, delivery guarantees, navigation and closure, continuity
+  across popup-document replacement, and failure semantics. Browser
+  protocols cite it instead of restating opener, isolation, and continuity
+  mechanics.
+
 ## System model and specification ownership
 
 libID turns an identity-platform authorization into a proof that a Consumer
@@ -91,6 +100,7 @@ root and verifier.
 | Authorization Digest, PKCE, extraction, client binding, evidence time | [Common ceremony rules](ceremony-common.md) |
 | Chain ID, Transaction Author, Block Time, and transaction-data encoding | [Chain profiles](chain-profiles.md), with the Consumer's protocol fixing each transaction kind's arguments |
 | Platform endpoints, fields, trust roots, and proof projections | [Identity-platform ceremonies](platform-ceremonies.md) |
+| Popup origin allowlists, message model, delivery, navigation, closure, and continuity guarantees | [Popup transport](popup-transport.md) |
 | Redirect transport, interruption behavior, and UI control flow | browser architecture |
 | Transaction dispatch and author authentication | Consumer protocol |
 | Verification dispatch, replay recording, trust roots, and version governance | [Common ceremony rules](ceremony-common.md) |
