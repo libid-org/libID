@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { type BrowserContext, expect, test } from '@playwright/test'
 
 const configUrl = 'http://localhost:4682/api/v1/ceremony/config'
-const ccdp = 'http://localhost:4683'
+// Deliberately differs from the development deployment: the Bridge selects CCDP.
+const ccdp = 'http://localhost:4684'
 const config = {
   ccdpOrigin: ccdp,
   platforms: {
@@ -137,6 +138,7 @@ for (const [platform, name] of [
       else await launch.click()
       const popup = await opened
       await expect(popup).toHaveURL(/\/ccdp\/v1\/prefetch#/)
+      await expect(page.locator('#ccdp')).toHaveText(ccdp)
       if (blocked) {
         await expect(
           page.locator('#history tr').first().getByRole('button', { name: 'Close' }),
@@ -222,6 +224,7 @@ for (const blocked of [false, true]) {
       await launch.click()
       const popup = await opened
       await expect(popup).toHaveURL(/\/ccdp\/v1\/prefetch#/)
+      await expect(page.locator('#ccdp')).toHaveText(ccdp)
       // A synthetic failure over the actual popup transport; no OAuth or proof is simulated.
       // Serve the real package at the popup origin, avoiding cross-origin dev-server imports.
       const popupModule = await servePopup(context)

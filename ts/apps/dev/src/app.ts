@@ -9,7 +9,7 @@ import {
 } from '@libid/ceremony/ccdp/client'
 import type { LedgerId } from '@libid/ledger'
 import { testnet } from '@libid/ledger/testing'
-import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
+import { PopupWindow } from '@libid/popup'
 import { sha256 } from '@noble/hashes/sha2.js'
 
 declare global {
@@ -17,19 +17,18 @@ declare global {
     results: Map<string, IdentityResult | { status: 'failed' | 'closed' }>
   }
 }
-const settings = { bridge: 'http://localhost:4682', ccdp: 'http://localhost:4683' }
+const oauthBridge = 'http://localhost:4682'
 const ledger: LedgerId = { ...testnet, notaryAddress: () => 'http://localhost:4687' }
 const platforms = document.querySelector<HTMLElement>('#platforms')!
 const status = document.querySelector<HTMLElement>('#status')!
 window.results = new Map()
-document.querySelector('#bridge')!.textContent = settings.bridge
-document.querySelector('#ccdp')!.textContent = settings.ccdp
+document.querySelector('#bridge')!.textContent = oauthBridge
 document.querySelector('#notary')!.textContent = ledger.notaryAddress()
 const names: Record<PlatformId, string> = { google: 'Google', x: 'X', github: 'GitHub' }
 let client: CCDPClient | undefined
 async function initialize() {
   try {
-    client = await createCCDPClient({ oauthBridge: settings.bridge })
+    client = await createCCDPClient({ oauthBridge })
     platforms.replaceChildren(
       ...client.enabledPlatforms.map((platform) => {
         const launch = document.createElement('a')
@@ -221,9 +220,8 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
   // Keep creation and the native-anchor fallback inside the same user gesture.
   try {
     const popup = PopupWindow.open(launch.target, 'width=480,height=720')
-    const current = PopupConnection.connect<Message>(popup, {
+    const current = client.connect(popup, {
       connectionId: id,
-      allowedPopupOrigins: [...new Set([settings.bridge, settings.ccdp])],
     })
     run.close.disabled = !popup.opened
     // A native-anchor popup supplies its window handle only when it authenticates.
@@ -249,6 +247,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
       sha256(new TextEncoder().encode('libid/ceremony/dev')),
       new TextEncoder().encode('Ceremony development walkthrough'),
     )
+    document.querySelector('#ccdp')!.textContent = new URL(ceremony.launchUrl).origin
     launch.href = ceremony.launchUrl
     if (popup.opened) event.preventDefault()
     const off = ceremony.onEvent(run.onEvent)

@@ -2,8 +2,10 @@
 
 Create one client per Bridge configuration lifetime. It fetches public
 configuration once; create a new client to pick up a changed deployment.
-The application must also know its intended CCDP origin to configure popup's
-origin allowlist.
+Bridge selects the CCDP origin. `client.connect(popup, options)` configures
+`@libid/popup` with both exact origins, without duplicating CCDP configuration
+in the application. It returns the ordinary popup connection for application
+composition; window creation and closure remain application-owned.
 
 ## Launch a ceremony
 
@@ -14,7 +16,7 @@ ledger, 32-byte operation-domain hash and opaque transaction bytes.
 ```ts
 import { CeremonyStage, createCCDPClient } from '@libid/ceremony/ccdp/client'
 import type { LedgerId } from '@libid/ledger'
-import { PopupConnection, PopupWindow } from '@libid/popup'
+import { PopupWindow } from '@libid/popup'
 
 async function bindGoogleAction(
   anchor: HTMLAnchorElement,
@@ -24,7 +26,6 @@ async function bindGoogleAction(
   transactionData: Uint8Array,
 ) {
   const bridgeOrigin = 'https://bridge.example'
-  const ccdpOrigin = 'https://proofs.example'
   const client = await createCCDPClient({ oauthBridge: bridgeOrigin })
 
   anchor.addEventListener('click', (event) => {
@@ -32,9 +33,8 @@ async function bindGoogleAction(
     const target = `ceremony-${id}`
     // Keep window creation synchronous with the user's activation.
     const popup = PopupWindow.open(target)
-    const connection = PopupConnection.connect(popup, {
+    const connection = client.connect(popup, {
       connectionId: id,
-      allowedPopupOrigins: [bridgeOrigin, ccdpOrigin],
     })
     try {
       const ceremony = client.new(
@@ -75,6 +75,12 @@ concurrent runs, independent Close controls and timing history. Each live run
 needs its own target, connection and fresh lowercase UUIDv4. Use the same UUID
 for popup's `connectionId` and `client.new`'s ceremony ID. Reserve no CCDP message
 handlers yourself on that connection.
+
+`connect` accepts popup's `ConnectOptions` except `allowedPopupOrigins`; the client
+supplies that allowlist from its frozen Bridge configuration. Fallback and
+diagnostic options pass through to the popup package. It adds no message handlers
+or navigation. The returned connection supports other application protocols;
+`client.new()` also continues to accept independently constructed connections.
 
 `new(connection, id, platformId, ledger, operationDomain, transactionData, version?)`
 is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`
