@@ -190,9 +190,6 @@ Attestation Count: The number of entries in the closed attestation list a
 - ASM-PROV-03:
   An Identity Platform binds an authorization code to the account that approved
   it, and accepts that code exactly once.
-- ASM-PROV-04:
-  A confidential-client Identity Platform rejects a token request that does not
-  carry the registered client secret.
 - ASM-PROV-05:
   Google signs ID Tokens with a key published at its JWKS endpoint, and
   includes the requested `nonce` verbatim.
@@ -201,14 +198,17 @@ Attestation Count: The number of entries in the closed attestation list a
   each authoritative field appears exactly once at the JSON location fixed by
   its Platform Profile.
 - ASM-PROV-07:
-  At the exact token endpoint and method fixed by a Platform Profile, the
+  For profiles relying on platform-side decoded-form uniqueness (X), at the
+  exact token endpoint and method fixed by that profile, the
   Identity Platform accepts token redemption only under the profile's media
   type and rejects a form body containing more than one decoded occurrence of
   any profile-listed field. Necessity: launch circuits deliberately avoid
   proving the complete form grammar; without this parser property a prover
   could witness one `code` or `code_verifier` while the platform consumes
-  another. Evidence: recurring integration probes against each production
-  endpoint.
+  another. GitHub instead enforces the complete canonical request in its
+  Platform Verifier under REQ-PLAT-61 and does not depend on this assumption.
+  Evidence: recurring integration probes against each dependent profile's
+  production endpoint.
 - ASM-NOTARY-01:
   The configured notary key is unforgeable, signs only transcripts it
   observed, and stamps their creation time from a clock within ordinary skew
@@ -244,8 +244,8 @@ on it.
   SHA-256 and keccak256.
 - SP-CLIENT-01:
   The Canonical Runtime rejects evidence issued to an OAuth client other than
-  the one fixed by its immutable ceremony profile. Depends on ASM-PROV-04,
-  ASM-PROV-05, ASM-PROV-07, ASM-NOTARY-01, ASM-PROOF-01, and ASM-BROWSER-01.
+  the one fixed by its immutable ceremony profile. Depends on ASM-PROV-05,
+  ASM-PROV-07 where applicable, ASM-NOTARY-01, ASM-PROOF-01, and ASM-BROWSER-01.
   Evidence: checked invariant in the Canonical Runtime, plus conformance tests
   (supporting).
 - SP-DELIVERY-01:
@@ -685,7 +685,7 @@ attestation to verify carries no value at all.
   redirect request.
 - REQ-COMMON-32 (upholds SP-BIND-01, SP-EXCHANGE-01):
   The Deployment MUST run recurring integration probes establishing
-  ASM-PROV-07 for every production form-encoded token endpoint. The Deployment
+  ASM-PROV-07 for each production Platform Profile that relies on it. The Deployment
   MUST make the affected Platform Profile ineligible for new ceremonies when
   a probe fails.
 
@@ -837,7 +837,8 @@ check matches the full `"field":"` delimiter,
 the value, and its closing quote. JSON unsigned integers and booleans use the
 typed local matches of REQ-COMMON-19D. A form-field check asserts a field
 boundary, the exact ASCII name and `=`, the value, and the next `&` or body end.
-Because the authenticated parser outputs satisfy ASM-PROV-06 and ASM-PROV-07,
+Because authenticated response fields satisfy ASM-PROV-06, and form uniqueness
+is either enforced by the Platform Verifier or assumed under ASM-PROV-07,
 these local checks provide the required field meaning without the impractical
 proving cost of a complete JSON or form parser. Hidden ranges stay behind the
 pinned attestation format's range commitments; the circuit links transcripts
@@ -917,12 +918,9 @@ credential header. The committed range is then the only region the Platform Veri
 cannot read, and its offset and length follow from the revealed
 ranges around it.
 
-A credential committed in a request body is a different case and keeps its
-own rules: the profile orders it last under REQ-COMMON-22 and constrains its
-charset to exclude a form delimiter, as REQ-PLAT-35 does for GitHub's
-`client_secret` in the token exchange. The coverage, uniqueness, and framing
-rules below do not reach it, because a form body has no header line to frame
-and no `authorization` needle to count.
+GitHub's token request is fully revealed under REQ-PLAT-43D and its complete
+form is validated under REQ-PLAT-61. It has no hidden request credential to
+which the following identity-header rules could apply.
 
 - REQ-COMMON-35 (upholds SP-EXCHANGE-01):
   For an identity-session request that commits a credential inside an HTTP
@@ -991,15 +989,6 @@ and no `authorization` needle to count.
   header's value, and a request with one honest `authorization` header
   cannot commit a range positioned somewhere else. Two fixed comparisons
   at known offsets replace a derived one.
-- REQ-COMMON-43 (upholds SP-EXCHANGE-01):
-  The Platform Verifier MUST NOT apply REQ-COMMON-35, REQ-COMMON-39, or
-  REQ-COMMON-40 to a credential its Platform Profile commits in a request
-  body. The Platform Profile MUST instead order such a credential last under
-  REQ-COMMON-22 and constrain its charset to exclude a form delimiter.
-  Necessity: GitHub's token exchange commits `client_secret` in a form body,
-  so a verifier reading the three rules above as universal would demand a
-  CRLF-framed `authorization: Bearer ` prefix around that body range and
-  reject every valid exchange.
 - REQ-COMMON-19 (upholds SP-EXCHANGE-01):
   The Proving Circuit extracting a JSON string field MUST receive the field's
   offset as a private input supplied by the prover; the circuit performs no
@@ -1059,7 +1048,8 @@ and no `authorization` needle to count.
   at byte zero or immediately after `&`, followed by the exact ASCII field
   name, `=`, the charset-constrained value, and then `&` or the authenticated
   body end. The circuit does not scan the rest of the body for duplicates;
-  that property is ASM-PROV-07.
+  a profile relying on the platform for that property cites ASM-PROV-07.
+  GitHub instead checks its fully revealed body under REQ-PLAT-61.
 - REQ-COMMON-19A (upholds SP-EXCHANGE-01):
   The Platform Verifier extracting a field from revealed attestation bytes
   MUST reject a transcript in which the field's full delimiter matches at
@@ -1139,20 +1129,18 @@ constant.
   a client identifier, client secret, or `redirect_uri`, as a compiled
   constant. Necessity: a compiled deployment value fragments the verifying
   key per deployment.
-- REQ-COMMON-22 (upholds SP-EXCHANGE-01):
-  The Platform Profile MUST order any redacted credential last in the request
-  body.
 - REQ-COMMON-22A (upholds SP-CLIENT-01):
   The Proving Circuit MUST NOT expose a client secret, or any value derived
   from one, as a public proof input.
 
-An undisclosed range still reaches the platform. Ordering a credential last
-and constraining its charset prevents that credential from injecting a form
-delimiter. Range tiling proves that no transcript bytes are omitted, but does
-not by itself exclude a second form field inside a revealed or hidden range.
-Disclosure makes such bytes auditable but does not constrain their decoded
-form semantics. Launch therefore retains ASM-PROV-07 as a soundness dependency
-for every form-encoded token request.
+Disclosure alone does not enforce decoded form semantics. GitHub pairs full
+request disclosure with REQ-PLAT-61's canonical, complete five-field check;
+a hidden suffix or a second form field is rejected by its Platform Verifier.
+X retains ASM-PROV-07 as its decoded-form soundness dependency.
+
+REQ-COMMON-22A prevents adding request credentials to the circuit's public
+inputs. It does not forbid revealing an intentionally public application
+credential in an attestation; that disclosure is fixed by the Platform Profile.
 
 ### 9.1 Attestation verification and its fee
 
@@ -1307,7 +1295,7 @@ the constructions that role implements.
   Submission whose supplied bytes its evidence does not authenticate is
   rejected. X and GitHub reject an empty identifier and every identifier byte
   outside `[A-Za-z0-9*._-]` rather than returning a form serialization.
-- TEST-COMMON-10 (exercises REQ-COMMON-17A, REQ-COMMON-17B, REQ-COMMON-18, REQ-COMMON-18A, REQ-COMMON-19, REQ-COMMON-19A, REQ-COMMON-19B, REQ-COMMON-19C, REQ-COMMON-19E, REQ-COMMON-20, REQ-COMMON-22):
+- TEST-COMMON-10 (exercises REQ-COMMON-17A, REQ-COMMON-17B, REQ-COMMON-18, REQ-COMMON-18A, REQ-COMMON-19, REQ-COMMON-19A, REQ-COMMON-19B, REQ-COMMON-19C, REQ-COMMON-19E, REQ-COMMON-20):
   An authenticated JSON response carrying a second copy of a templated field
   in its revealed bytes is rejected; a transcript whose
   extraction delimiter matches at two positions in the revealed bytes is
@@ -1391,7 +1379,7 @@ the constructions that role implements.
   submitters; the current fee is readable before the Submission is submitted; and a
   verification whose native value differs from the current fee is
   rejected.
-- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-39A, REQ-COMMON-39B, REQ-COMMON-40, REQ-COMMON-43):
+- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-39A, REQ-COMMON-39B, REQ-COMMON-40):
   An identity attestation whose ranges do not sum to the signed request
   transcript length, or whose ranges leave a gap or an overlap, is
   rejected; an attestation carrying no signed total transcript length for
@@ -1412,10 +1400,9 @@ the constructions that role implements.
   rejected; and revealed request bytes carrying a bare line feed, a bare
   carriage return, or a line beginning with a space or a horizontal tab are
   rejected. Every case above runs on
-  an identity-session attestation. A GitHub token-exchange attestation, whose
-  only committed credential is the `client_secret` in its form body, passes
-  verification with no coverage, needle, or framing check applied to that
-  range.
+  an identity-session attestation. GitHub token requests instead pass the
+  complete-disclosure and form checks in TEST-PLAT-12 and TEST-PLAT-14;
+  the identity-header needle and bearer framing rules do not apply to them.
 - TEST-COMMON-19 (exercises REQ-COMMON-37, REQ-COMMON-38, REQ-COMMON-44):
   An opened bearer containing a carriage-return or line-feed byte fails to
   prove, and an attestation whose range commitments use an algorithm other
@@ -1497,8 +1484,10 @@ leaves a profile with no attestation unaffected.
 The handle, the platform user identifier, and the client identifier are
 published deliberately. A binding exists to be read, and each of these values
 is already discoverable from the identity platform, so the protocol treats
-none of them as confidential. Only the bearer, the client secret, and the
-transcript bytes outside a profile's revealed ranges stay withheld for good.
+none of them as confidential. GitHub's application credential is also public,
+including in its revealed token request; knowing it does not authenticate the
+presenter. The bearer, commitment openings, and transcript bytes outside a
+profile's revealed ranges are withheld from published evidence.
 For a PKCE profile, the raw `authorizationNonce` is withheld until the token
 exchange completes, per REQ-COMMON-14. The Submission publishes it afterwards
 as the same nonce already required to recompute the Authorization Digest,
