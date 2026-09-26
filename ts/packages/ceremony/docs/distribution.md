@@ -230,6 +230,14 @@ run summary. Every image carries the built commit in its
 version (`main` when published, else the sha tag) in the matching OCI labels.
 The workflow can also be dispatched by hand for a dry run, which never pushes.
 
+A trial image of a commit that has not reached `main` comes from
+[ccdp-custom.yml](../../../../.github/workflows/ccdp-custom.yml): run it on the
+branch to build with a tag, or push a branch named `ccdp-custom/<tag>`, and it
+publishes `ghcr.io/libid-org/ccdp:custom-<tag>` (with the sha tag) through the
+same workflow and checks. A custom image is outside the `:main` retention
+history: deploy it as its `sha-<commit sha>` tag pinned by digest, and replace it
+whole.
+
 Publishing a GitHub Release `v<version>` runs
 [release.yml](../../../../.github/workflows/release.yml), which publishes
 `ghcr.io/libid-org/ccdp:<version>` and, for a stable version (no `-` prerelease
