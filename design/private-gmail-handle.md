@@ -191,7 +191,7 @@ per-platform inner hash is written into the spec as a Google exception.
 The same treatment, with the validation moving where the bytes are:
 `sub_hash: pub [Field; 2]` replaces `sub_packed`, keccak256 over the signed
 `sub` bytes exactly as signed, since the spec keeps the id case-sensitive and
-untransformed (`platform-ceremonies.md` §2.1: "its exact 1–255
+untransformed (`platform-ceremonies.md` §2.1: "its exact 1–31
 case-sensitive ASCII bytes"), so the digest is the inner hash of `idNode`
 (`IdentityNodes.sol:32-34`) and that node does not change either.
 
@@ -206,12 +206,12 @@ byte, no non-ASCII byte and, as today, no quote; no backslash, which today's
 circuit accepts and REQ-PLAT-04 now refuses, because every JSON escape
 begins with one and an escaped `sub` would digest its escaped form; the
 padding zero; and the
-digest over exactly `sub_len` bytes. `SUB_MAX` stays a profile
-constant: 31 today, a Google `sub` being 21 digits, and a `sub` longer than
-the constant fails to prove rather than truncating. The spec's 255 is the
-identity's general bound, not this profile's; raising `SUB_MAX` to it costs
-a second keccak block and is a measurement away if a longer Google `sub`
-ever appears. A 32-byte digest needs two field elements where the packed id
+digest over exactly `sub_len` bytes. `SUB_MAX` is 31, the profile's bound
+in REQ-PLAT-04, a Google `sub` being 21 digits, and a `sub` longer than it
+fails to prove rather than truncating. That Google issues no longer `sub`
+is part of ASM-PROV-05, a liveness dependency: an account outside it could
+not be bound, and none would be misbound. Raising the bound costs a second
+keccak block. A 32-byte digest needs two field elements where the packed id
 needed one, so the public-input count becomes 57 and the offsets after slot
 34 move by one. Measured the same way as above, the two digests together
 cost:
@@ -277,6 +277,10 @@ about earlier events, and it cannot, because a handle once emitted is
 public for good. An empty string is unambiguous, since the normalizer
 rejects an empty handle, but the bool is what an indexer reads without
 parsing. A separate indexed `handleHash` would duplicate `handleNode`.
+The event's `published` says whether this claim wrote the wallet's name,
+which a private claim never does; `publish` emits `IdentityPublished` and
+`unpublish` emits `NameUnpublished`, so an indexer can mirror the stored
+name from the log.
 
 ### Default, and moving between modes
 
@@ -287,60 +291,71 @@ rationale intact and is recorded here only as the alternative not taken.
 **X and GitHub stay as they are.** Their handles are public on the platform
 by construction, their circuits reveal transcript bytes the notary attested,
 and §12's reasoning holds for them. The zero `handleHash` leaves the door
-open.
+open. The name rules below are every platform's, since the slot is shared:
+on X and GitHub too, a claim of a wallet's second account stops replacing
+the first account's name.
 
 **Private to public, later.** By decision a call, not a new claim, and the
 contract already has its inverse, `unpublish`, so the call is
 `publish(platformId, string handle)`: normalize the handle, derive its
-node, find the identity through `idOfHandle`, require the pairing below and
-that the caller owns both nodes, set `published`, emit
+node, require that the caller holds it (below), set `published`, emit
 `IdentityPublished(owner, platformId, idNode, handleNode, handle)`. No
 proof is needed and no `sub`: the handle's preimage is the proof, and the
 identity follows from the handle's node. The address is public from the block the call is sent in, whether
 or not it is accepted: a refused `publish` still leaves its calldata on
 chain.
 
-A handle is retired when the same account claims again under another one:
-the old node's owner is cleared and `HandleRetired` emitted
-(`IdentityNames.sol:660-667`), and the old name is free for another account
-to take. `publish` refuses a retired handle, by decision, however well the
-caller knows its preimage. Accepting would have emitted the
-plaintext of an address the wallet no longer holds and set `published` to
-it, so `reverseOf`, which returns the stored string as it is (`:770`), would
-name that address until the next claim; `primaryOf` already refuses a
-published string whose node the wallet does not own (`:787-792`). So
-`publish` requires the pairing in both directions, `idOfHandle[handleNode]`
-naming an `idNode` with `handleOfId[idNode] == handleNode`, and the wallet
-to own both nodes. One direction is not enough: a wallet holding two Google
-accounts, whose first account's handle was reassigned to its second, owns
-both of the first account's nodes while `handleOfId` still names the
-retired handle, and only `idOfHandle` says the handle is the second
-account's now. The owner of a private binding can publish exactly what
-they hold.
+A wallet **holds** a handle while it owns the handle's node, and that one
+test decides both `publish` and what reads as a name. Ownership means
+holding because of retirement: when an account claims again under another
+handle, the old node's owner is cleared and `HandleRetired` emitted
+(`IdentityNames.sol:660-667`), unless another account has proved that
+handle in the meantime, in which case the node is that account's. So a
+retired handle has no owner, and `publish` refuses it however well the
+caller knows its preimage. A handle one of the wallet's accounts took from
+another of them is owned by the wallet, and `publish` accepts it: the
+wallet holds it through the second account. The two-way pairing check
+(`idOfHandle[handleNode]` naming an `idNode` whose `handleOfId` is that
+node, and the wallet owning both) gives the same answer in every state the
+contract can reach, because `_write` sets both owners and both pairings
+together and retirement clears the only owner a moved pairing leaves
+behind; the owner check is the simpler statement of it, and it is exactly
+the test `primaryOf` already makes (`:787-792`).
 
-The same scenario settles one more rule. A claim from a wallet that has
-already published refreshes the published string to the handle just proved,
-so a rename never leaves a stale name on display (`:626-633`). A private
-claim carries no email to refresh with. The publication stays when the
-published string hashes to the handle the identity holds once the claim is
-written, as the contract already keeps a display a `publishName: false`
-claim still vouches for; otherwise it is deleted, or `reverseOf` would keep
-showing the old address after the account moved on. Comparing with the
-handle held after the write, not with the claim's own `handleHash`, is
-what keeps an older proof accepted without moving the handle from clearing
-a correct name.
+**The name, per platform, like an ENS primary name.** A wallet may hold
+several accounts of one platform. It has one name there,
+`published[wallet][platformId]`, the handle it chose to show, and the
+stored string counts only while the wallet holds it: `primaryOf` answers
+the stored handle, re-normalized under the current rules, only while its
+node's owner is the wallet, and answers nothing otherwise. That is ENS's
+rule for primary names, forward-resolve before trusting the reverse
+record, made by the contract so no reader can skip it. Nothing therefore
+has to clear a name when its handle moves: a rename that retires the
+handle, another account proving it, or a rules change each make
+`primaryOf` go empty on their own, and an indexer mirroring
+`names.published` applies the same test. The slot is written only by
+
+- a claim that carries the handle and asks to publish it;
+- a claim that carries the handle for the account whose handle is the
+  current name (`idOfHandle[node(name)] == idNode`), so a rename of the
+  named account refreshes the name rather than leaving the old string;
+- `publish`, and cleared only by `unpublish`.
+
+A claim for another account of the same wallet never touches the slot, and
+a private claim carries no handle to store and never touches it either.
+After a private rename the old string stays stored and reads as no name,
+since the retired node has no owner; the wallet publishes the new handle
+when it chooses, which is the disclosure step.
 
 Two facts therefore live apart. **Disclosure** is history: once an
 accepted claim or `publish` has carried a handle, the handle is known and
 stays known, whatever private claim or `unpublish` follows. A refused
 transaction discloses nothing on record, but its calldata is public all
-the same; no event marks it. **Publication** is state: whether the wallet
-currently displays the name, set by `publishName` on a claim carrying the
-email or by `publish`, cleared by `unpublish` or by a private claim that
-moves the identity to another handle. The sequence private claim,
-`publish`, private refresh of the same handle ends with the handle known,
-the publication kept, and the last event saying `disclosed: false`, all
-three true at once.
+the same; no event marks it. **Publication** is state: whether `primaryOf`
+answers the handle now. The sequence private claim, `publish`, private
+refresh of the same handle ends with the handle known, the name
+published, and the last event saying `disclosed: false`, all three true at
+once.
 
 **Public to private.** Impossible, and the note should say so where users
 read it. The log line exists. `unpublish` already documents this for the
@@ -360,8 +375,10 @@ handle and the id when the event carries none; `/v1/resolve/id` moves to
 the node the same way. The indexer keeps the two facts apart as the
 contract does: `IdentityPublished` fills a `names.handles` row whose
 plaintext was null and sets `names.published`; a later private event never
-nulls a plaintext row, only `names.published` follows the publication
-state. Responses carry `disclosed`, meaning an accepted event carried this
+nulls a plaintext row. `names.published` mirrors the stored slot from the
+events, which say whether a claim wrote it, and a response reports it as
+published only while the wallet owns the handle's node, the test
+`primaryOf` makes. Responses carry `disclosed`, meaning an accepted event carried this
 handle, and `published`, the current state; an undisclosed identity
 returns `handle: null`, and a Google identity `userId: null`. `disclosed:
 false` does not promise the handle never reached the chain: a refused
@@ -402,34 +419,47 @@ Written, on this branch. The map, for a reader coming from the specs:
 - `platform-ceremonies.md`: §2.1a's lead-in and REQ-PLAT-08A/08B admit a
   circuit that normalizes what it digests, refusing where the table trims,
   and a Consumer that keys on digests and normalizes every handle it
-  receives. A new §2.1b defines the digest profile, how a Consumer knows
-  one, that its `userId` is never sent, disclosure (history of accepted
-  transactions) and publication (state), and holds REQ-PLAT-08D (keys from
-  the digests, a handle accepted only when it hashes to its digest, keep or
-  clear the publication against the handle held after the write), 08E (the
-  disclosure call on the handle alone, its two-way pairing check, and what
-  a refusal does not protect), 08F (the event's flag, the normalized handle
-  where one was carried, never the `sub`), 08G (the published handle table,
-  fixed once a digest platform has bound anything) and TEST-PLAT-20A.
+  receives. §2.1b defines, for every platform, the identity key and handle
+  key and what holding a handle means (REQ-PLAT-08H, 08I: keys from the
+  inner digests only, and retirement), and the per-platform name
+  (REQ-PLAT-08J, 08K: written only by a claim carrying the handle that asks
+  to publish or renames the named account, by the disclosure call, or
+  cleared by withdrawal; read only while the wallet holds it), with
+  TEST-PLAT-20B. For a digest profile it defines the profile, the Consumer's
+  configured record of it (08L), that its `userId` is never sent, what
+  "carries" means (a nonempty field), disclosure (history) and publication
+  (state), and holds REQ-PLAT-08D (keys from the digests, a handle accepted
+  only when it hashes to its digest), 08E (the disclosure call on the handle
+  alone, accepted only when the caller holds it, and what a refusal does
+  not protect), 08F (the event's flags, the normalized handle where one was
+  carried, never the `sub`), 08G (the published handle table, fixed once a
+  digest platform has bound anything) and TEST-PLAT-20A. §7 requires a new
+  profile to say whether it is a digest profile.
   REQ-PLAT-03 and TEST-PLAT-17 name the ID Token as a digest profile's
   local source; REQ-PLAT-04 and the §2.1 table bound a Google `sub` at 31
-  bytes and refuse a backslash; REQ-PLAT-16B lists the two digests as
+  bytes and refuse a backslash, both checked on the signed bytes; REQ-PLAT-16B lists the two digests as
   public inputs; 16C has the verifier return them, pass the email through
   unchecked, and carry no `sub`; 16D moves the `sub` and `email` validation
   into the circuit and states the 31- and 62-byte buffers; TEST-PLAT-06A
   exercises the three; §9 states what the digests protect and what they do
   not. The Google profile stays Platform Ceremony Version 1: nothing is
   released, so its statement is edited in place.
-- `ceremony-common.md`: ASM-HASH-01, ASM-ZK-01 (the zero-knowledge proving
-  mode), SP-PRIV-01 (the Consumer puts on chain only what a transaction
+- `ceremony-common.md`: the digest profile as a term; ASM-PROV-05 gains the
+  Google `sub` shape as a liveness clause; ASM-HASH-01, ASM-ZK-01 (the
+  zero-knowledge proving mode), SP-PRIV-01 (the Consumer puts on chain only what a transaction
   carried, and no `sub`), with §4 stating that it does not survive a
   malicious application operator; REQ-COMMON-05E returns the digests, and
   the handle marked unverified, where a profile exposes digests;
   REQ-COMMON-45 and 45A have governance select zero-knowledge artifacts and
-  the Canonical Runtime prove in that mode with fresh randomness; §12
-  replaces "published deliberately" for the handle and user identifier with
-  the digest profile's confidentiality and its limits.
-- `libid.md`: one sentence among the enforceable guarantees.
+  the Canonical Runtime prove in that mode with fresh randomness from a
+  cryptographically secure source; REQ-COMMON-19E treats a digest profile's
+  plaintext handle as a comparison, not an extraction, and lets the
+  Canonical Runtime read the signed token the Submission's proof digests;
+  §12 replaces "published deliberately" for the handle and user identifier
+  with what a digest profile keeps off the chain and its limits.
+- `libid.md`: one sentence among the enforceable guarantees, and the
+  application operator's row in the trust table, which now includes
+  whether a Google handle is sent.
 
 ## The recommendation
 
@@ -461,25 +491,32 @@ which receives the ID Token and can send the address itself.
    holding a backslash.
 3. **Contracts** (`libid-contracts`): the Google verifier regenerated, `bytes
    email` in the payload, `userIdHash` and `handleHash` in `VerifiedClaim`,
-   the equality check and the hash-derived nodes in `_write`, keep-or-clear
-   against the handle held after the write, `disclosed` in the event,
-   `publish(platformId, handle)` with its two-way pairing check,
-   `setPlatform` refusing a Google rules change once Google has bound
-   anything, the circuit pin. Done when
+   the equality check and the hash-derived nodes in `_write`; `_write`
+   storing the name only for a claim carrying the handle that asks to
+   publish or whose account's handle is the current name
+   (`idOfHandle[node(name)] == idNode`), never for a private claim or a
+   claim of another account; `disclosed` in the event;
+   `publish(platformId, handle)` accepted only when the caller owns the
+   handle's node; a per-platform digest-profile flag beside the rules in
+   `setPlatform`, checked against every verifier result; `setPlatform`
+   refusing a Google rules change once Google has bound anything; the
+   circuit pin. Done when
    the same account claimed public and then private lands on the same two
    nodes; when a private transaction, made with recognizable test values,
    carries no plaintext email or account id in its decoded calldata or its
    decoded events, the payload fields being empty and the event strings
    empty, rather than a byte search over proof bytes that can contain
    anything; when no transaction, private or not, carries the `sub`; and
-   when `publishName` without the email, and a `publish` of a handle either
-   direction of the mapping disputes, both revert.
+   when `publishName` without the email, and a `publish` of a handle the
+   caller does not own, both revert; and when a wallet holding two accounts
+   of one platform keeps the first account's name through any claim of the
+   second.
 4. **Indexer, SDK, demo**: nullable handle and id, node-keyed resolve for
    both, the ENS gateway on the node-keyed lookup, `IdentityPublished`
    filling the handle row and the publication state, optional `email` and
    no `sub`, the three-way choice. Done when resolve and the gateway find a
    private binding by exact address or account id, search never returns
-   it, `reverseOf` is empty for it, and the sequence private claim,
+   it, `reverseOf` and `primaryOf` are empty for it, and the sequence private claim,
    `publish`, private refresh of the same handle reads back as known,
    published, last event undisclosed. The node-keyed lookups are proven against the
    chain, not against a hand-computed hash: one test claims on a local
@@ -512,12 +549,14 @@ hidden with the handle and never sent, not even when the handle is;
 private to public is a `publish` call on the handle alone, not a new
 claim; the resolve routes keep the plaintext in the
 request line, the indexer's operator being trusted with what people resolve;
-`publish` refuses a handle retired by a later claim of the same account, or
-taken over by another account of the same wallet, as set out under
-"Default, and moving between modes"; the application chooses whether a
+`publish` accepts a handle only while the wallet holds it, so it refuses
+one retired by a later claim of the same account, as set out under
+"Default, and moving between modes"; a wallet may hold several accounts of
+one platform and has one name there, which no claim of another account
+and no private claim writes, and which reads as a name only while the
+wallet holds it; the application chooses whether a
 claim carries the email, and the privacy is against readers of the chain,
-not against a malicious application; a private claim keeps the publication
-while the identity still holds the published handle; Google's handle rules
+not against a malicious application; Google's handle rules
 are fixed once Google has bound anything; and the proof is made in the
 zero-knowledge mode with fresh randomness, which the privacy rests on as
 much as on the hash.
