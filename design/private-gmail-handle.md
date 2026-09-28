@@ -106,7 +106,13 @@ the "detached second representation of a claim" REQ-PLAT-16B forbids.
 **Two circuits, one per mode.** Rejected. Two artifacts, two verifiers, two
 normalizers that must agree byte for byte or the same address lands on two
 nodes. The plaintext-in-payload option gives the user the same choice with
-one artifact.
+one artifact. A public-only circuit would still hash the `sub`, so what it
+saves is the email's fold and keccak: about one second of browser proving
+out of seven (see "Measured proving time"). In exchange, a disagreement
+between the contract's normalizer and the circuit's would split one address
+across two nodes with nothing to notice it, where the one circuit refuses
+the public claim because the two digests differ. The user would also have to
+choose the mode before proving rather than at submission.
 
 ### Where normalization happens
 
@@ -180,7 +186,7 @@ fold-and-shape loop included in both variants (`nargo compile`, then
 | fold + SHA-256 | 49,918 | 192,254 | +7.1% |
 | fold + keccak256 (library v0.1.3) | 49,911 | 203,878 | +13.6% |
 
-Proving time was not measured; it grows roughly with the gate count. The
+Proving time is measured in "Measured proving time" below. The
 recommendation is keccak256: a seventh more proving work in the browser
 against no change to any node, any reader, or any invariant. SHA-256 is the
 fallback if the browser prover's time budget cannot take it, and then the
@@ -222,6 +228,53 @@ cost:
 
 A quarter more proving work than today, against a wallet that no longer
 joins with every relying party's user table.
+
+### Measured proving time
+
+Three builds of the circuit, each proving a valid witness: an RSA-2048 key
+generated for the run signs a Google-shaped ID token, since the circuit
+takes the modulus as a public input. **Today** is `oidc-google` unchanged.
+**Public-only** is today with the `sub` digest of the previous section and
+the email still published as bytes, which is what a second, public circuit
+would be. **One circuit** adds the email's fold, shape checks and keccak256
+to it, which is this design. Every proof verified. The digest the one
+circuit exposes equals `cast keccak` of the lowercased email, an
+independent check of the fold.
+
+| Circuit | ACIR opcodes | Honk gates | Public inputs |
+|---|---|---|---|
+| today | 44,612 | 179,443 | 56 |
+| public-only | 45,567 | 200,011 | 57 |
+| one circuit | 50,518 | 223,663 | 57 |
+
+The one-circuit build here counts 81 gates more than the table in the
+previous section; the two builds were written separately, and the
+difference does not move any figure below. All three sit under 2^18 gates, the SRS size
+the ceremony's proof worker loads, with 38,481 to spare in the largest.
+
+Median proving time, in seconds, witness generation excluded:
+
+| Circuit | bb.js WASM, 1 thread | 4 threads | 8 threads | native `bb` |
+|---|---|---|---|---|
+| today | 14.13 | 5.64 | 5.81 | 1.69 |
+| public-only | 16.12 | 6.26 | 6.91 | 1.90 |
+| one circuit | 17.70 | 7.27 | 7.84 | 2.15 |
+
+Four threads is what the proof worker uses on a machine with four or more.
+There, one circuit proves in 7.3 s, 1.6 s more than today, and a
+public-only circuit would save 1.0 s of it on a public claim, about 14%.
+Witness generation (`noir_js` execute) takes 0.4 s for each. Peak memory
+of the native prover is 293, 324 and 369 MB. Eight threads is no faster
+than four on this four-core machine.
+
+Method: bb.js 5.2.0 and `noir_js` 1.0.0-beta.25 in Node 22 with the proof
+worker's settings (`BackendType.Wasm`, `srsSize` 2^18, keccak oracle, ZK,
+a verification key supplied, as the worker supplies the released one), one fresh backend per proof,
+three proofs per cell and seven at four threads; native `bb prove -t evm`
+at bb 5.2.0, six runs. Machine: Intel Core i7-1165G7 (4 cores, 8
+threads), 15 GB RAM, Ubuntu 24.04. A browser runs the same WASM, but its
+worker overhead and thread scheduling were not measured, so these are the
+proving cost itself rather than a user's wait.
 
 ### Where the mode lives
 
@@ -599,3 +652,6 @@ unless a revision is named; spec references are against `libid`
   `bin/libid-deploy/src/platforms.rs` (174-206).
 - Gate counts: `nargo info` and `bb gates` on scratch copies of the circuit
   at nargo 1.0.0-beta.25 and bb 5.2.0, with `noir-lang/keccak256` v0.1.3.
+- Proving times: `libid-circuits` `origin/main` `e59b804`, the three builds
+  and the harness described under "Measured proving time"; the worker's
+  settings are those of libID PR #28's `engine.worker.ts`.
