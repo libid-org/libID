@@ -120,7 +120,14 @@ Platform Profile: The immutable, independently versioned definition of one
    defines neither of those two. Every Platform Verifier registered for that
    platform and version MUST enforce the same profile, but its implementation
    and deployment are ledger-specific. The Consumer holds none of the profile
-   constants.
+   constants except, for each platform, its handle normalization and whether
+   its profile is a digest profile (platform §2.1a, §2.1b).
+
+Digest profile: A Platform Profile whose Proving Circuit exposes the handle
+   and the canonical `userId` as keccak256 digests rather than as bytes. Its
+   Platform Verifier returns those digests (REQ-COMMON-05E), and a
+   Submission may carry the plaintext handle beside them but never the
+   `userId` (platform §2.1b). Google is the launch digest profile.
 
 Proving Circuit: The zero-knowledge circuit whose proof a Platform Verifier
    checks. It proves only what cannot be read from authenticated evidence.
@@ -195,7 +202,13 @@ Attestation Count: The number of entries in the closed attestation list a
   carry the registered client secret.
 - ASM-PROV-05:
   Google signs ID Tokens with a key published at its JWKS endpoint, and
-  includes the requested `nonce` verbatim.
+  includes the requested `nonce` verbatim. Google issues every account a
+  `sub` of 1 to 31 bytes from `0x20` through `0x7e` holding neither `"` nor
+  `\`; observed values are 21 decimal digits. That clause is a liveness
+  dependency only: an account whose `sub` falls outside it cannot be bound
+  under the Google profile (platform REQ-PLAT-04), and none is bound to the
+  wrong identity. Evidence for the clause: recurring integration probes of
+  issued tokens.
 - ASM-PROV-06:
   An Identity Platform emits a well-formed authenticated response in which
   each authoritative field appears exactly once at the JSON location fixed by
@@ -611,8 +624,9 @@ an identity session — so one Submission on either path pays two fees.
   compare is then a number the caller wrote down.
 - REQ-COMMON-45A (upholds SP-PRIV-01):
   For a digest profile, the Canonical Runtime MUST make every proof in the
-  proof system's zero-knowledge proving mode, with prover randomness drawn
-  fresh for that proof. Necessity: the proof bytes sit in calldata beside
+  proof system's zero-knowledge proving mode. The Canonical Runtime MUST
+  draw that proof's prover randomness freshly from a cryptographically
+  secure random source. Necessity: the proof bytes sit in calldata beside
   the public inputs, and whether they reveal the email and `sub` is decided
   when they are made; the verifier accepts a proof whatever randomness it
   was made with (ASM-ZK-01).
@@ -1070,12 +1084,19 @@ and no `authorization` needle to count.
   Platform Profile MUST name exactly one role whose extraction of that field
   is authoritative. The Platform Profile MUST make the Proving Circuit
   authoritative where those bytes stay hidden, and the Platform Verifier
-  authoritative where they are revealed to the Consumer Chain. The Platform
+  authoritative where they are revealed to the Consumer Chain as evidence.
+  Bytes a Submission carries beside a digest the proof exposes, as a digest
+  profile's plaintext handle is, are not evidence: the Proving Circuit stays
+  authoritative for that field, and the Consumer's check that they hash to
+  the digest is a comparison (platform REQ-PLAT-08D). The Platform
   Profile MUST make the Canonical Runtime authoritative only for a field no
   proof statement and no Consumer Chain component reads. The Canonical Runtime
   MAY repeat an extraction another role owns, over the same bytes by the same
-  algorithm, for display and local checks. The Canonical Runtime MUST return
-  that repeat only with the exact Submission whose bytes it read. The
+  algorithm, for display and local checks. For a digest profile those bytes
+  are the signed token whose digests the Submission's proof exposes, which the
+  Submission itself need not contain (platform REQ-PLAT-03). The Canonical
+  Runtime MUST return that repeat only with the exact Submission built from
+  the bytes it read. The
   Canonical Runtime MUST discard and rederive the local identity fields if any
   proof, attestation, identity platform, Platform Ceremony Version, or other
   Submission field changes. The Canonical Runtime MUST NOT label those fields
@@ -1543,9 +1564,12 @@ The client identifier is published deliberately: a binding exists to be
 read, and the client is discoverable from the identity platform. The handle
 and the platform user identifier are published where a Platform Profile
 exposes them as bytes, X and GitHub at launch, whose handles are public on
-the platform itself; a Platform Profile that exposes them as digests, Google
-at launch, keeps both confidential until their owner discloses them
-(platform §2.1b), and that confidentiality is SP-PRIV-01. The bearer, the
+the platform itself. A digest profile, Google at launch, puts neither on
+chain in plaintext unless a transaction carries it (SP-PRIV-01): the
+`userId` is never sent, and the handle is sent only where the application
+building the Submission chooses to send it (platform §2.1b). That is not
+secrecy: whoever guesses the handle, or holds the `userId` from another
+relying party, confirms it by hashing (ASM-HASH-01). The bearer, the
 client secret, and the transcript bytes outside a profile's revealed ranges
 stay withheld for good.
 

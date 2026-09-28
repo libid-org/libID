@@ -55,7 +55,9 @@ owns this path.
 
 The application operator controls its frontend, redirect deployment, OAuth
 clients, and GitHub Token Service, but is not trusted to choose identity fields,
-change the proof-bound operation, or widen proof validity. The identity platform
+change the proof-bound operation, or widen proof validity. It does hold the
+Google ID Token, so whether a Google handle reaches the chain is its choice
+([common §12](ceremony-common.md#12-security-considerations)). The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
 transcripts and their creation times. Verifier governance selects accepted
 verifier artifacts, trust roots, and protocol parameters. The Consumer Chain
@@ -64,7 +66,7 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
-| Application operator | configures clients and deployment assets; starts or withholds work | deployment availability and declared configuration | identity fields, proof target, or proof validity |
+| Application operator | configures clients and deployment assets; starts or withholds work; receives a Google ID Token in plaintext | deployment availability and declared configuration; for a digest profile, sending the handle only when the user asks, on which SP-PRIV-01 rests | identity fields, proof target, or proof validity |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots, parameters, and the Supported Version Set | correct authority lifecycle | user consent |
