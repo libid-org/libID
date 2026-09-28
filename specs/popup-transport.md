@@ -68,8 +68,9 @@ Carried Protocol: The protocol layered on this transport, which owns every
 Protocol Message: A value the Carried Protocol sends over the Logical
    Connection.
 
-Control: One of the two transport-owned messages, `navigate` and
-   `close-popup`, sent only by the Application Endpoint.
+Control: A transport-owned message: `navigate` and `close-popup` travel
+   Application to Popup; `document-departed` travels Popup to Application
+   (§9).
 
 Direct Control: The Application Document's ability to navigate or close the
    Popup through its retained window handle while that handle is usable.
@@ -270,9 +271,9 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   code units. The transport reads only `type` for routing and never
   interprets any other field.
 - REQ-POPUP-MSG-02:
-  The discriminators `navigate` and `close-popup` are reserved for Controls.
-  The Carried Protocol MUST NOT send or register either; an implementation MUST
-  reject the attempt synchronously.
+  The discriminators `navigate`, `close-popup`, and `document-departed` are
+  reserved for Controls. The Carried Protocol MUST NOT send or register any
+  of them; an implementation MUST reject the attempt synchronously.
 - REQ-POPUP-MSG-03:
   The Carried Protocol registers, per discriminator, exactly one decoder and
   handler. For each inbound value the transport MUST select the registered
@@ -323,10 +324,11 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   succeeds locally and is lost. The Carried Protocol MUST derive outcomes only
   from messages it receives.
 - REQ-POPUP-DELIVER-06:
-  Protocol Messages sent over a Carrier before a Control are delivered to the
-  Popup Endpoint's handlers before the Popup acts on that Control, whatever
-  the destination. A transition that must carry the Application Endpoint's
-  reply is therefore driven by the Application Endpoint, which replies and
+  The Endpoint receiving a Control MUST deliver earlier Protocol Messages
+  sent over that Carrier to its handlers before acting on the Control. This
+  also applies to messages preceding `document-departed` at the Application
+  Endpoint. A transition that must carry the Application Endpoint's reply is
+  therefore driven by the Application Endpoint, which replies and
   then navigates, or the Popup navigates only after receiving the reply. The
   transport buffers nothing and retransmits nothing; navigation away by the
   Application Endpoint does not wait for the Carrier and MUST NOT be used to
@@ -353,15 +355,18 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   fails the Logical Connection. A same-origin continuity owner that does not
   answer is treated as holding nothing.
 - REQ-POPUP-CONTROL-01:
-  Controls travel from the Application Endpoint to the Popup Endpoint only.
-  A Control received by the Application Endpoint MUST fail the Logical
-  Connection. Controls carry only the selected navigation URL, including
-  caller-supplied fragment data, or the closure instruction; they do not
-  encapsulate Protocol Messages. Popup-local navigation sends no Control.
+  `navigate` and `close-popup` travel only from the Application Endpoint to
+  the Popup Endpoint. `document-departed` travels only from the Popup Endpoint
+  to the Application Endpoint over the selected authenticated Carrier.
+  The Endpoint MUST fail the Logical Connection on a Control received in the
+  wrong direction. Navigation Controls carry only the selected URL, including
+  caller-supplied fragment data; closure and departure Controls carry no
+  caller data. Controls do not encapsulate Protocol Messages. Popup-local
+  navigation sends no Control.
 - REQ-POPUP-CONTROL-02:
-  The first accepted Control is terminal for the receiving Participating
-  Document. A later, duplicate, replayed, unknown, or malformed Control MUST
-  perform no browser operation.
+  The first accepted Application-to-Popup Control is terminal for the
+  receiving Participating Document. A later, duplicate, replayed, unknown,
+  or malformed Control MUST perform no browser operation.
 - REQ-POPUP-CONTROL-03:
   A navigation destination MUST be the serialization of an absolute URL
   without credentials whose scheme and host satisfy REQ-POPUP-ALLOW-01.
@@ -404,6 +409,27 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   ASM-POPUP-05. A same-tab or full-page presentation MUST NOT be closed
   through the transport; there is no reliable runtime probe for
   closability after Opener Isolation.
+- REQ-POPUP-CONTROL-08 (upholds SP-POPUP-02, SP-POPUP-05):
+  The Popup Endpoint with a selected Carrier MUST attempt `document-departed`
+  before releasing that Carrier when closing itself or observing its document
+  depart. The Popup Endpoint MUST suppress lifecycle-observed departure
+  notifications during navigation it initiates or accepts, including isolation
+  replacement and pending Continuity preparation; explicit popup-local close
+  still attempts the notification. The Popup Endpoint MUST NOT delay local teardown
+  or cause a secondary failure if the notification attempt fails.
+  The Application Endpoint receiving this notification over its selected
+  Carrier MUST release the Logical Connection with the terminal outcome
+  `closed`, exactly once. The Application Endpoint MUST NOT close the Popup
+  or infer a Carried Protocol outcome from the notification. The Application
+  Endpoint MUST ignore notifications from retired Carriers.
+
+  Departure reporting is best-effort: a browser may omit the lifecycle
+  observation or lose the notification. Departure may mean close, reload,
+  or Back; it does not establish physical window closure or OAuth denial.
+  Application-side navigation away sends no Control, so the Popup may report
+  departure; the Application has already retired that Carrier and ignores it.
+  Non-participating Documents send no departure notification. Neither silence
+  nor a severed opener establishes reported departure.
 - REQ-POPUP-LIFE-03:
   A connected navigation to a Non-participating Document leaves the
   Application Endpoint without a usable Carrier until the next Participating
@@ -414,8 +440,11 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   synchronously.
 - REQ-POPUP-LIFE-04:
   Any navigation of the Popup outside the transport's own operation loses
-  the current Carrier. A later Participating Document MAY establish a fresh
-  Carrier under the same Logical Connection; nothing is recovered.
+  the current Carrier and may report departure under REQ-POPUP-CONTROL-08.
+  A later Participating Document MAY establish a fresh Carrier under the
+  same Logical Connection only while that connection remains open; nothing
+  is recovered. The Application Endpoint MUST NOT accept a replacement
+  Carrier after the Logical Connection has closed or failed.
 - REQ-POPUP-LIFE-05:
   A Participating Document under Opener Isolation has no opener. It MUST
   obtain a preserved Carrier (§10) or authenticate a Fallback Carrier. A
@@ -592,16 +621,35 @@ this specification.
   sending without a Carrier fails synchronously and queues nothing.
 - TEST-POPUP-06 (exercises REQ-POPUP-DELIVER-01 to REQ-POPUP-DELIVER-06):
   Values arrive in order and once; nothing arrives before mutual
-  authentication; a closed peer delivers nothing and produces no outcome; a
+  authentication; silent Carrier loss produces no outcome; a
   reply sent before a navigation Control reaches the Popup's handler before
-  the Popup leaves for a cross-origin destination.
-- TEST-POPUP-07 (exercises REQ-POPUP-CONTROL-01 to REQ-POPUP-CONTROL-06, REQ-POPUP-LIFE-06):
-  Controls are application-to-popup and one-shot; malformed destinations
+  the Popup leaves for a cross-origin destination. A Protocol Message sent
+  before popup-local close reaches the Application's handler before its
+  departure notification settles the connection.
+- TEST-POPUP-07 (exercises REQ-POPUP-CONTROL-01 to REQ-POPUP-CONTROL-06, REQ-POPUP-CONTROL-08, REQ-POPUP-LIFE-04, REQ-POPUP-LIFE-06):
+  Navigation and closure Controls are application-to-popup and one-shot;
+  Controls in the wrong direction fail the connection; malformed destinations
   fail before any browser operation; navigation uses the Carrier when
   selected and Direct Control otherwise; navigation away sends nothing over
   the Carrier, keeps nothing, rejects without Direct Control, and the next
   Participating Document authenticates afresh; closure works directly with a
   usable handle and over the Carrier after Opener Isolation, and is idempotent.
+
+  The Carried Protocol cannot send or register `document-departed`. Explicit
+  popup-local close and an observed unexpected departure attempt the
+  notification over the selected authenticated Carrier, including after
+  opener severance. Receipt settles `closed` once, aborts pending work,
+  performs no browser closure, and implies no Carried Protocol outcome.
+  A duplicate or later authentication cannot alter the terminal outcome;
+  a retired Carrier's notification cannot terminate a successor connection.
+  A Popup receiving the notification fails for wrong direction. Lifecycle
+  departure during navigation initiated or accepted by the Popup, including
+  isolation replacement and pending Continuity, sends none; explicit local
+  close still attempts notification and aborts pending work. Application-side
+  navigation away may cause a notification, which the Application ignores on
+  its retired Carrier. A failed send
+  does not prevent local teardown or create another failure. Non-participating
+  Documents and unobserved departures generate no synthetic notification.
 - TEST-POPUP-08 (exercises REQ-POPUP-LIFE-02, REQ-POPUP-LIFE-05):
   A document without opener and without a Fallback Carrier fails closed
   exactly once; an authentication failure never commits the fallback; a
