@@ -435,7 +435,8 @@ sessions.
 
 The whole request is revealed. The table fixes field order for canonical
 serialization under common §6, not to protect a hidden suffix; REQ-PLAT-63
-holds the complete body to that serialization.
+holds the complete body to the canonical form grammar of common
+REQ-COMMON-07A.
 
 - REQ-PLAT-29 (upholds SP-EXCHANGE-01):
   The Implementation MUST reveal the token request's `code` range. The
@@ -451,24 +452,18 @@ holds the complete body to that serialization.
   verifies no other property of the token response.
 - REQ-PLAT-63 (upholds SP-EXCHANGE-01, SP-BIND-01, SP-CLIENT-01):
   The Prover and Platform Verifier MUST require the complete request body to
-  be the common §6 canonical form serialization of exactly the five fields in
-  the table, in that order, each occurring once with a nonempty value.
+  satisfy the canonical form grammar of common REQ-COMMON-07A for exactly the
+  five fields in the table, in that order.
   The Prover and Platform Verifier MUST reject malformed encoding, noncanonical
   spelling, an extra or duplicate field, or bytes outside that complete body.
   The Prover and Platform Verifier MUST enforce common REQ-COMMON-16B's
   charset for `client_id` and common §7's canonical unpadded base64url
   encoding of exactly 32 bytes for `code_verifier`. `code` and
   `redirect_uri` are nonempty values with no further constraint: the Platform
-  Verifier reads neither, and the Canonical Runtime compares them under
+  Verifier reads neither and judges only their bytes under REQ-COMMON-07A,
+  and the Canonical Runtime compares them with the values it serialized under
   REQ-PLAT-29 and REQ-PLAT-29C. The `grant_type` value is the exact ASCII
-  bytes `authorization_code`, which REQ-PLAT-56 compares.
-  Verification: walk the body once, requiring each literal field name from
-  the table in order, `=`, a nonempty value in the common serializer's output
-  alphabet, `&` between pairs and nothing after the last pair. Field names
-  are the exact literal names in the table. Encoded value bytes are never
-  reparsed as
-  another form. A value containing a form delimiter is safe only as the
-  serializer's encoded value, not as another field. No `refresh_token`,
+  bytes `authorization_code`, which REQ-PLAT-56 compares. No `refresh_token`,
   device-flow field, or other grant field is admitted; the pinned endpoint
   receives only this authorization-code request. Acceptance does not depend
   on X rejecting malformed or duplicate forms. The Canonical Runtime's
@@ -790,22 +785,17 @@ forbidden by REQ-PLAT-56A.
 
 - REQ-PLAT-61 (upholds SP-EXCHANGE-01, SP-BIND-01, SP-CLIENT-01):
   The Prover and Platform Verifier MUST require the complete request body to
-  be the common §6 canonical form serialization of exactly the five fields in
-  the table, in that order, each occurring once with a nonempty value.
+  satisfy the canonical form grammar of common REQ-COMMON-07A for exactly the
+  five fields in the table, in that order.
   The Prover and Platform Verifier MUST reject malformed encoding, noncanonical
   spelling, an extra or duplicate field, or bytes outside that complete body.
   The Prover and Platform Verifier MUST enforce common REQ-COMMON-16B's
   charset for `client_id` and common §7's canonical unpadded base64url
   encoding of exactly 32 bytes for `code_verifier`. `code`, `redirect_uri`
   and `client_secret` are nonempty values with no further constraint: the
-  Platform Verifier reads none of them, and the Prover compares `code` and
-  `redirect_uri` under REQ-PLAT-46 and REQ-PLAT-48A.
-  Verification: walk the body once, requiring each literal field name from
-  the table in order, `=`, a nonempty value in the common serializer's output
-  alphabet, `&` between pairs and nothing after the last pair. Field names
-  are the exact literal names in the table. Encoded value bytes are never
-  reparsed as another form. A credential containing a form delimiter is safe
-  only as the serializer's encoded value, not as another field.
+  Platform Verifier reads none of them and judges only their bytes under
+  REQ-COMMON-07A, and the Prover compares `code` and `redirect_uri` with the
+  values it serialized under REQ-PLAT-46 and REQ-PLAT-48A.
   No `grant_type`, `refresh_token`, device-flow field, or other extension is
   admitted; the pinned endpoint receives only this authorization-code request.
   Acceptance does not depend on GitHub rejecting malformed or duplicate forms.
@@ -1203,7 +1193,10 @@ Platform Verifier, Notary Service, Consumer.
   client-identifier bytes and a noncanonical or wrong-length PKCE verifier
   fail. Canonical form escaping in `code` and `redirect_uri` passes the form
   check; a mismatch with the consumed code or the deployment profile's
-  redirect still fails under REQ-PLAT-29 and REQ-PLAT-29C.
+  redirect still fails under REQ-PLAT-29 and REQ-PLAT-29C. A `code` or
+  `redirect_uri` whose canonical escapes decode to bytes that are not UTF-8
+  passes the form check, which the Implementation never emits, and fails
+  those comparisons.
 - TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52):
   An opened bearer range that is empty, over 4096 bytes, or outside printable
   ASCII fails to prove; a revealed identity response missing `id` or the
@@ -1228,7 +1221,10 @@ Platform Verifier, Notary Service, Consumer.
   Invalid client-identifier bytes and a noncanonical or wrong-length PKCE
   verifier fail. Canonical form escaping in `code` and `redirect_uri` passes
   the form check; a mismatch with the captured code or frozen redirect still
-  fails the Prover's local comparisons.
+  fails the Prover's local comparisons. A `client_secret` whose canonical
+  escapes decode to bytes that are not UTF-8 passes: the Platform Verifier
+  judges its bytes and decodes nothing. The same in `code` or `redirect_uri`
+  passes the form check and fails the Prover's local comparisons.
 - TEST-PLAT-13 (exercises REQ-PLAT-37, REQ-PLAT-38, REQ-PLAT-62):
   Prover sends the frozen client/credential/redirect and ceremony code/verifier
   through its token Proxy session, using the same selected notary as identity.

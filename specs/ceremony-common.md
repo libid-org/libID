@@ -658,6 +658,27 @@ attestation to verify carries no value at all.
   emits for the expected unencoded value. The Canonical Runtime MUST NOT
   compare that range directly with the unencoded value or apply a second,
   permissive decoder.
+- REQ-COMMON-07A (upholds SP-EXCHANGE-01, SP-CLIENT-01):
+  The Platform Verifier MUST accept a complete revealed form body only as the
+  profile's listed fields in the listed order, each the literal name, `=` and
+  a nonempty value in the serializer's output alphabet, with `&` between
+  pairs and nothing after the last. The output alphabet is the bytes the
+  serializer passes through, `A`-`Z`, `a`-`z`, `0`-`9`, `*`, `-`, `.` and
+  `_`, the `+` it writes for a space, and `%` followed by two uppercase
+  hexadecimal digits spelling a byte that is neither passed through nor the
+  space. The Platform Verifier MUST NOT decode a value. The Platform Verifier
+  MUST NOT require that a value's escapes decode to UTF-8 or to any character
+  set: a value it reads is held to a charset inside the pass-through set, and
+  what any other value decodes to is not judged. Necessity: every byte has
+  one spelling under the serializer, so a body every token of which is
+  canonical is the serialization of what it decodes to, and a value in the
+  alphabet cannot become another field. REQ-COMMON-07 and this rule judge
+  different things by design: REQ-COMMON-07 governs what the Implementation
+  sends, from UTF-8 input it alone holds; this rule governs the bytes the
+  Platform Verifier judges. A value whose escapes decode to bytes that are
+  not UTF-8 is canonical and passes the Platform Verifier, though the
+  Implementation never emits one; a decoding check would be the second
+  decoder REQ-COMMON-07 forbids.
 - REQ-COMMON-08:
   The Implementation MUST emit each field listed in the platform profile
   exactly once, in the listed order. The Implementation MUST emit no other
@@ -1275,8 +1296,12 @@ the constructions that role implements.
   Two ceremonies over identical Authorized Transaction Data yield distinct
   digests, and a digest carrying a foreign `platformCeremonyVersion` is
   rejected.
-- TEST-COMMON-05 (exercises REQ-COMMON-07, REQ-COMMON-08, REQ-COMMON-10):
-  The §6 serializer vector reproduces byte for byte.
+- TEST-COMMON-05 (exercises REQ-COMMON-07, REQ-COMMON-07A, REQ-COMMON-08, REQ-COMMON-10):
+  The §6 serializer vector reproduces byte for byte. Under the canonical form
+  grammar a lowercase escape, an escape of a passed-through byte or of the
+  space, a truncated escape, a raw space or a raw delimiter in a value fails;
+  a value whose escapes decode to bytes that are not UTF-8 passes, and no
+  serializer input produces it.
 - TEST-COMMON-06 (exercises REQ-COMMON-09, REQ-COMMON-11):
   A request carrying an appended caller parameter is rejected, and a redirected
   notarized request is abandoned.
