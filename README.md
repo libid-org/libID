@@ -28,6 +28,11 @@ needed to make the system accessible, self-hostable, and reusable by
 application developers, wallet providers, and other integrators without
 introducing a central point of failure.
 
+Our focus is browser-side zero-knowledge proving and TLS notarization: users
+generate proofs in their own browsers, while the notary verifies and signs the
+notarized sessions. All current browser proofs complete in under eight seconds
+in practical runs.
+
 Beyond identity bridging, libID seeks closer collaboration with online
 platforms through integrations that benefit both platforms and their users.
 These integrations will **enable users to prove their activity and transact
@@ -39,6 +44,10 @@ transact.
 Besides the protocol specifications under [`specs/`](specs/), this repo
 carries the browser claim library and the integration harness:
 
+- [`site/`](site/) — the static project website and Cloudflare deployment
+  configuration. Starlight serves the docs at `lib.id/docs/`,
+  publishing Markdown from [`docs/pages/`](docs/pages/). Specification sources
+  stay in `specs/`.
 - [`ts/packages/claim`](ts/packages/claim) — **`@libid/claim`**, the browser
   library for the OAuth handle-claim flows. GitHub (backend-driven MPC-TLS),
   X (in-browser TLSNotary ProxyMode + a Noir/UltraHonk proof), and Google
@@ -51,25 +60,27 @@ carries the browser claim library and the integration harness:
   library: connect a wallet (or a dev key), claim a handle, resolve it.
 - [`harness/`](harness) — the integration harness: a docker-compose stack
   (anvil + deterministic contract deploy + released notary and
-  libid-server-rs images) plus asset staging and one `boot.sh` for a
-  real, manual end-to-end claim. See [`harness/README.md`](harness/README.md).
+  libID-bridge-rs images from before the rename) plus asset staging and one
+  `boot.sh` for a real, manual end-to-end claim. See
+  [`harness/README.md`](harness/README.md).
 
 ## Repositories
 
-- [`libid`](https://github.com/libid-org/libid) — protocol specifications,
+- [`libID`](https://github.com/libid-org/libID) — protocol specifications,
   project overview, the `@libid/claim` browser library, and the
   integration harness.
-- [`libid-rs`](https://github.com/libid-org/libid-rs) — Rust application
+- [`libID-rs`](https://github.com/libid-org/libID-rs) — Rust application
   backends and zero-knowledge proof tooling.
-- [`libid-contracts`](https://github.com/libid-org/libid-contracts) — Solidity
+- [`libID-contracts`](https://github.com/libid-org/libID-contracts) — Solidity
   contracts for EVM-compatible chains.
-- [`libid-circuits`](https://github.com/libid-org/libid-circuits) — the Noir
+- [`libID-circuits`](https://github.com/libid-org/libID-circuits) — the Noir
   circuits; releases ship the compiled circuits + verification keys the
   claim flows load.
 - [`notary`](https://github.com/libid-org/notary) — the notary service
   (MPC-TLS / ProxyMode verifier + attestation signer).
-- [`libid-server-rs`](https://github.com/libid-org/libid-server-rs) — the
-  deployable libID server for GitHub OAuth and MPC-TLS proof generation.
+- [`libID-bridge-rs`](https://github.com/libid-org/libID-bridge-rs) — the
+  deployable OAuth bridge that publishes ceremony configuration and serves
+  the callback document; proving and notarization run in the browser.
 - [`chain-configurations`](https://github.com/libid-org/chain-configurations)
   — desired-state deployment files and the `libid-deploy` binary.
 - [`keeper`](https://github.com/libid-org/keeper) — permissionlessly keeps

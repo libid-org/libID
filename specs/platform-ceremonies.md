@@ -1,3 +1,9 @@
+---
+title: Identity-platform ceremonies
+sidebar:
+  order: 3
+---
+
 # Identity-platform ceremonies
 
 Part of the [libID protocol specification](libid.md).
@@ -579,7 +585,9 @@ REQ-PLAT-56A does not forbid.
 - REQ-PLAT-56C (upholds SP-EXCHANGE-01):
   The Platform Verifier MUST reject a head carrying a line feed not preceded by
   a carriage return, a carriage return not followed by a line feed, a line
-  beginning with a space or a tab, or a line with no colon. Necessity: a
+  beginning with a space or a tab, or a header field line with no colon.
+  The colon requirement excludes the separately validated request line and the
+  empty line terminating the head. Necessity: a
   parser accepting a bare line feed, a bare carriage return or a fold ends the
   head somewhere this one does not, moving bytes between head and body, and a
   line no colon splits is not a header field, so a parser that tolerates one
@@ -1184,19 +1192,20 @@ Platform Verifier, Notary Service, Consumer.
   count that is not the body's length, is not decimal digits, or carries a
   leading zero, and accepts the count wherever it sits in the head; and it
   rejects a head carrying a bare line feed, a bare carriage return, an
-  obsolete line fold, or a line with no colon. The canonical five-field body
-  passes; missing, empty, additional, duplicate, reordered, malformed, or
-  noncanonical fields fail even if X were to accept them. Encoded duplicate
-  names cannot evade the exact name/serialization check. A value with encoded
-  delimiters remains one value and passes; raw delimiters creating more
-  fields fail. Refresh or device-grant fields fail. Invalid
-  client-identifier bytes and a noncanonical or wrong-length PKCE verifier
-  fail. Canonical form escaping in `code` and `redirect_uri` passes the form
-  check; a mismatch with the consumed code or the deployment profile's
-  redirect still fails under REQ-PLAT-29 and REQ-PLAT-29C. A `code` or
-  `redirect_uri` whose canonical escapes decode to bytes that are not UTF-8
-  passes the form check, which the Implementation never emits, and fails
-  those comparisons.
+  obsolete line fold, or a header field line with no colon. An otherwise valid
+  request with a colon-free request line and its terminating empty line passes.
+  The canonical five-field body passes; missing, empty, additional, duplicate,
+  reordered, malformed, or noncanonical fields fail even if X were to accept
+  them. Encoded duplicate names cannot evade the exact name/serialization
+  check. A value with encoded delimiters remains one value and passes; raw
+  delimiters creating more fields fail. Refresh or device-grant fields fail.
+  Invalid client-identifier bytes and a noncanonical or wrong-length PKCE
+  verifier fail. Canonical form escaping in `code` and `redirect_uri` passes
+  the form check; a mismatch with the consumed code or the deployment
+  profile's redirect still fails under REQ-PLAT-29 and REQ-PLAT-29C. A `code`
+  or `redirect_uri` whose canonical escapes decode to bytes that are not UTF-8
+  passes the form check, which the Implementation never emits, and fails those
+  comparisons.
 - TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52):
   An opened bearer range that is empty, over 4096 bytes, or outside printable
   ASCII fails to prove; a revealed identity response missing `id` or the

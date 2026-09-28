@@ -1,0 +1,37 @@
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --sl-font: 'JetBrains Mono', monospace;
+  --sl-font-mono: var(--sl-font);
+  --sl-color-white: var(--text);
+  --sl-color-gray-1: var(--text);
+  --sl-color-gray-2: var(--text);
+  --sl-color-gray-3: var(--muted);
+  --sl-color-gray-4: color-mix(in srgb, var(--muted), var(--border));
+  --sl-color-gray-5: var(--border);
+  --sl-color-gray-6: var(--surface);
+  --sl-color-gray-7: var(--surface);
+  --sl-color-black: var(--background);
+  --sl-color-accent-low: var(--surface);
+  --sl-color-accent: var(--accent);
+  --sl-color-accent-high: var(--accent);
+}
+
+.site-title { color: var(--logo); }
+
+.social-icons a { color: var(--text); }
+.social-icons a:hover,
+.social-icons a:focus-visible { color: var(--accent); }
+
+@media (min-width: 50rem) {
+  .site-title {
+    width: calc(var(--sl-sidebar-width) - 2 * var(--sl-nav-pad-x));
+    justify-content: center;
+  }
+}

@@ -1,10 +1,6 @@
 name: CI
 
-# Three jobs: the TypeScript workspace (library + demo), DCO, and the
-# compose-stack smoke test — our first automated
-# infra-level integration test (it boots the real released images against a
-# fresh anvil, re-runs the deterministic deploy, and asserts the services
-# answer).
+# TypeScript checks, workspace browser tests, infrastructure smoke and DCO.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -216,3 +212,49 @@ jobs:
             missing=1
           done
           exit "$missing"
+
+  # ---------------------------------------------------------------------------
+  # Browser tests: each workspace owns its suite, browser installation and
+  # test servers. Ceremony also exercises real proving and matched-notary
+  # containers, with release downloads and external network requests.
+  # ---------------------------------------------------------------------------
+  browser:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm -C ts install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm -C ts build
+
+      # Each package that has a Playwright suite installs the browsers it
+      # needs and runs its own suite; packages without one are skipped.
+      - name: Install browsers
+        run: pnpm -C ts -r --if-present run test:e2e:install
+
+      - name: Check browser test types
+        run: pnpm -C ts -r --if-present run typecheck:e2e
+
+      - name: Log in to ghcr for the matched notary image
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # Run suites serially so proof generation has the runner to itself.
+      # Keep running independent suites after a failure; the job still fails.
+      - name: Browser tests
+        run: pnpm -C ts -r --workspace-concurrency=1 --no-bail --if-present run test:e2e

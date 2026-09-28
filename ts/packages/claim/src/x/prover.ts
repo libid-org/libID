@@ -145,7 +145,7 @@ export interface XProverOptions {
   walletAddress: `0x${string}`
   /** Same-origin URL of the compiled token circuit JSON. Defaults to
    *  `${origin}/circuits/x_token.json` (libid-claim-assets stages it
-   *  there; see libid-org/libid-circuits releases). */
+   *  there; see libid-org/libID-circuits releases). */
   circuitUrl?: string
   onStatus?: (s: ProverStatus, msg?: string) => void
   /** Aborts proving when the user cancels (before submit). */

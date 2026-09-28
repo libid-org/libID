@@ -1,0 +1,219 @@
+// Four cross-origin documents: an allowed application, an unlisted
+// application, and two popup origins with a participating page, an isolated
+// participating page, a non-participating page, and the worker script.
+// The page scripts are the smallest caller protocol that exercises every
+// documented path; they own nothing the package cares about.
+
+import { readFileSync } from 'node:fs'
+import { createServer as createHttpServer } from 'node:http'
+import { createServer } from 'node:https'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { makeCertificate } from './tls.mjs'
+
+// Four distinct origins under `.localhost`, which every engine resolves
+// locally without DNS. They are cross-origin, which is what the transport's
+// rules depend on; site-level behavior is not exercised here.
+export const ORIGINS = {
+  appA: 'https://app-a.localhost:4581',
+  appB: 'https://app-b.localhost:4582',
+  popup: 'https://popup.localhost:4583',
+  popupB: 'https://popup-b.localhost:4584',
+}
+
+const dist = join(dirname(fileURLToPath(import.meta.url)), 'dist')
+const popupModule = readFileSync(join(dist, 'popup.js'))
+const workerModule = readFileSync(join(dist, 'sw.js'))
+
+// Test protocol: Ping (app → popup), Pong (popup → app), Go (app → popup,
+// asks the popup to navigate itself).
+const protocol = `
+  const message = (type, decode) => ({ type, decode })
+  const Ping = message('ping', (v) => { if (typeof v.n !== 'number') throw new Error('ping'); return v })
+  const Pong = message('pong', (v) => { if (typeof v.n !== 'number') throw new Error('pong'); return v })
+  // Go and Away carry a fragment-free url plus serialized opaque fragment
+  // fields; the popup rebuilds URLSearchParams for the structured API.
+  const Go = message('go', (v) => { if (typeof v.url !== 'string') throw new Error('go'); return v })
+  const Away = message('away', (v) => { if (typeof v.url !== 'string') throw new Error('away'); return v })
+  window.__events = []
+  window.__diag = []
+  const onDiagnostic = (d) => {
+    window.__diag.push(d.code)
+    window.__onDiag?.(d.code)
+  }
+`
+
+const html = (body) => `<!doctype html><meta charset="utf-8"><title>popup e2e</title>${body}`
+
+const appPage = html(`
+  <a id="go" href="${ORIGINS.popup}/p" target="libid-popup">open</a>
+  <script type="module">
+    import { PopupConnection, PopupWindow } from '/popup.js'
+    ${protocol}
+    // Capture the raw handle so the spec can qualify \`closed\` after COOP.
+    const realOpen = window.open.bind(window)
+    window.open = (...args) => (window.__handle = realOpen(...args))
+    const anchor = document.getElementById('go')
+    anchor.addEventListener('click', (event) => {
+      const popupWindow = PopupWindow.open(anchor.target, 'width=480,height=720')
+      const connection = PopupConnection.connect(popupWindow, {
+        connectionId: window.__id,
+        allowedPopupOrigins: ['${ORIGINS.popup}', '${ORIGINS.popupB}'],
+        onDiagnostic,
+      })
+      connection.on(Pong, (pong) => {
+        window.__events.push(pong)
+        window.__onPong?.(pong)
+      })
+      window.__conn = connection
+      window.__popupWindow = popupWindow
+      connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
+      // The anchor keeps its fragment for the native path; the scripted path
+      // passes fragment fields through the structured argument.
+      const [base, hash = ''] = anchor.href.split('#')
+      void connection.navigate(base, new URLSearchParams(hash)).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
+      if (popupWindow.opened) event.preventDefault()
+    })
+  </script>
+`)
+
+const popupPage = html(`
+  <p id="status">popup</p>
+  <script type="module">
+    import { PopupConnection, PopupWindow } from '/popup.js'
+    ${protocol}
+    // Capture the fragment and clear it from the URL before the package
+    // sees it; the captured value is handed to PopupWindow.current().
+    const captured = location.hash
+    history.replaceState(null, '', location.pathname + location.search)
+    const id = new URLSearchParams(captured.slice(1)).get('c') ?? ''
+    window.__isolated = crossOriginIsolated
+    // /p-any is the same document deployed for any opener origin. /dip and
+    // /dip-broken require isolation and name their COOP fallback.
+    const allowedApplicationOrigins = location.pathname === '/p-any' ? '*' : ['${ORIGINS.appA}']
+    const isolationFallbackUrl = location.pathname.startsWith('/dip-broken')
+      ? '/dip-broken/fallback'
+      : location.pathname.startsWith('/dip')
+        ? '/dip/fallback'
+        : undefined
+    // Accept first: the claim must run before any other network work, and
+    // handlers registered before yielding precede every delivery.
+    // ?scope=/ pins continuity to the root registration, as Ceremony does.
+    const scope = new URLSearchParams(location.search).get('scope') ?? undefined
+    const connection = PopupConnection.accept(PopupWindow.current(captured, { scope }), {
+      connectionId: id,
+      allowedApplicationOrigins,
+      isolationFallbackUrl,
+      onDiagnostic,
+    })
+    window.__conn = connection
+    connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
+    // The host registers the worker in every participating document. A
+    // stale nested registration of the same script controls this document
+    // too; continuity must still go through the root one.
+    navigator.serviceWorker.register('/sw.js', { scope: location.pathname }).catch(() => {})
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {})
+    try {
+      connection.on(Ping, (ping) => {
+        window.__events.push(ping)
+        connection.send({ type: 'pong', n: ping.n, path: location.pathname, isolated: crossOriginIsolated })
+      })
+      connection.on(Go, (go) => {
+        connection.navigate(go.url, new URLSearchParams(go.fragment ?? '')).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
+      })
+      connection.on(Away, (away) => {
+        connection.navigateAway(away.url, new URLSearchParams(away.fragment ?? '')).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
+      })
+      await connection.ready
+      connection.send({ type: 'pong', n: 0, path: location.pathname, isolated: crossOriginIsolated })
+      document.getElementById('status').textContent = 'connected'
+    } catch (error) {
+      window.__events.push({ type: 'error', code: error.code ?? error.message })
+      document.getElementById('status').textContent = 'failed: ' + (error.code ?? error.message)
+    }
+  </script>
+`)
+
+// Non-participating: like a provider page, it eventually sends the user
+// back to a participating document without touching the package.
+const externalPage = html(`
+  <p id="status">external</p>
+  <script>
+    const params = new URLSearchParams(location.search)
+    const next = params.get('next')
+    const delay = Number(params.get('delay') ?? '0')
+    if (next) setTimeout(() => location.replace(next), delay)
+  </script>
+`)
+
+const send = (res, status, headers, body) => {
+  res.writeHead(status, { 'Cache-Control': 'no-store', ...headers })
+  res.end(body)
+}
+
+const HTML = { 'Content-Type': 'text/html; charset=utf-8' }
+const JS = { 'Content-Type': 'text/javascript; charset=utf-8' }
+const ISOLATED = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+}
+// Isolation without COOP: the opener survives where the engine supports DIP.
+const DIP = {
+  'Cross-Origin-Opener-Policy': 'unsafe-none',
+  'Document-Isolation-Policy': 'isolate-and-require-corp',
+}
+
+function popupHandler(req, res, page = popupPage) {
+  const url = new URL(req.url, 'https://popup.invalid')
+  switch (url.pathname) {
+    case '/health':
+      return send(res, 200, {}, 'ok')
+    case '/popup.js':
+      return send(res, 200, JS, popupModule)
+    case '/sw.js':
+      return send(res, 200, { ...JS, 'Service-Worker-Allowed': '/' }, workerModule)
+    case '/p':
+    case '/p-any':
+      return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'unsafe-none' }, page)
+    case '/isolated':
+    case '/dip/fallback':
+      return send(res, 200, { ...HTML, ...ISOLATED }, page)
+    case '/dip':
+    case '/dip-broken':
+      return send(res, 200, { ...HTML, ...DIP }, page)
+    case '/dip-broken/fallback':
+      // COOP without COEP: never isolated, so the fallback must not loop.
+      return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'same-origin' }, page)
+    case '/external-isolated':
+      return send(res, 200, { ...HTML, ...ISOLATED }, externalPage)
+    case '/external':
+      return send(res, 200, HTML, externalPage)
+    default:
+      return send(res, 404, {}, '')
+  }
+}
+
+function appHandler(req, res, page = appPage) {
+  const url = new URL(req.url, ORIGINS.appA)
+  if (url.pathname === '/popup.js') return send(res, 200, JS, popupModule)
+  if (url.pathname === '/') return send(res, 200, HTML, page)
+  return send(res, 404, {}, '')
+}
+
+const tls = makeCertificate(Object.values(ORIGINS).map((origin) => new URL(origin).hostname))
+for (const [origin, handler] of [
+  [ORIGINS.popup, popupHandler],
+  [ORIGINS.popupB, popupHandler],
+  [ORIGINS.appA, appHandler],
+  [ORIGINS.appB, appHandler],
+]) {
+  createServer(tls, handler).listen(Number(new URL(origin).port))
+}
+
+// Exercise both exact HTTP loopback names with the same documents and worker.
+const localPage = (page) =>
+  page
+    .replaceAll(ORIGINS.appA, 'http://127.0.0.1:4585')
+    .replaceAll(ORIGINS.popup, 'http://localhost:4586')
+createHttpServer((req, res) => appHandler(req, res, localPage(appPage))).listen(4585)
+createHttpServer((req, res) => popupHandler(req, res, localPage(popupPage))).listen(4586)

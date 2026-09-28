@@ -1,0 +1,91 @@
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 6rem 1.5rem;
+  background: radial-gradient(ellipse at 50% 42%, var(--surface), transparent 70%), var(--background);
+  color: var(--text);
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+
+main { width: 100%; text-align: center; }
+
+h1 { margin: 0; font-size: clamp(2.5rem, 8vw, 4rem); font-weight: 400; }
+
+.wordmark {
+  color: var(--logo);
+  font-size: clamp(5rem, 15vw, 8rem);
+  line-height: 1.15;
+  letter-spacing: -0.075em;
+  padding-right: 0.075em;
+}
+
+.description {
+  max-width: 38rem;
+  margin: 1.8rem auto 0;
+  color: var(--muted);
+  font-size: clamp(0.8125rem, 1.6vw, 0.9375rem);
+  line-height: 1.9;
+  text-wrap: balance;
+}
+
+nav { display: flex; justify-content: center; gap: 2rem; margin-top: 2rem; }
+
+nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 6rem;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.5;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.4em;
+}
+
+nav a:hover, nav a:focus-visible { text-decoration-color: currentColor; }
+
+:focus-visible { outline: 2px solid var(--text); outline-offset: 6px; }
+
+.theme-toggle {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 11px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.theme-toggle[hidden] { display: none; }
+.theme-toggle svg { width: 20px; height: 20px; }
+.theme-toggle:hover { color: var(--text); border-color: var(--border); }
+.theme-toggle[aria-pressed="true"] { color: var(--text); }
+
+@media (max-width: 480px) {
+  .wide-break { display: none; }
+  .theme-toggle { top: 1rem; right: 1rem; }
+}

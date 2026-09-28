@@ -1,0 +1,333 @@
+// In-memory stand-ins for the browser surfaces the package touches: two
+// windows that postMessage each other with browser-stamped origin and
+// source, and a Service Worker scope wired to a keeper client. Real Node
+// MessageChannel ports flow through unchanged, so port semantics are real.
+
+import type { KeeperWorker } from '../keeper.js'
+import {
+  type Carrier,
+  type CarrierConstructor,
+  type Message,
+  type NavigationCarrier,
+  onReplacement,
+  prepareNavigation,
+} from '../message.js'
+import type { View } from '../window.js'
+import { installPortKeeperOn } from '../worker.js'
+
+export const APP_ORIGIN = 'https://app.example'
+export const POPUP_ORIGIN = 'https://popup.example'
+export const ID = '1c037b6a-2f08-4b17-9f9e-0d9a6a5b3c2d'
+export const OTHER_ID = '2d148c7b-3f19-4c28-8a0f-1e0b7b6c4d3e'
+
+/**
+ * Lets pending deliveries land. Fake window dispatch is synchronous; real
+ * MessagePort values arrive in the event loop's poll phase, which a timer
+ * firing after a stall can precede, so two further loop turns follow it.
+ */
+export const tick = async (ms = 5): Promise<void> => {
+  for (const delay of [ms, 0, 0]) await new Promise((resolve) => setTimeout(resolve, delay))
+}
+
+type Listener = (event: MessageEvent) => void
+
+export interface FakeView extends View {
+  readonly listeners: Set<Listener>
+  pagehide(): void
+  beforeunload(): void
+  dispatch(event: { data: unknown; origin: string; source: unknown; ports?: MessagePort[] }): void
+}
+
+export function fakeView(): FakeView {
+  const listeners = new Set<Listener>()
+  const lifecycle = new EventTarget()
+  return {
+    listeners,
+    addEventListener: (type, listener, options?: AddEventListenerOptions | boolean) => {
+      if (type === 'message') listeners.add(listener)
+      else lifecycle.addEventListener(type, listener as EventListener, options)
+    },
+    removeEventListener: (type, listener) => {
+      if (type === 'message') listeners.delete(listener)
+      else lifecycle.removeEventListener(type, listener as EventListener)
+    },
+    pagehide: () => {
+      lifecycle.dispatchEvent(new Event('pagehide'))
+    },
+    beforeunload: () => {
+      lifecycle.dispatchEvent(new Event('beforeunload', { cancelable: true }))
+    },
+    dispatch(event) {
+      const message = { ports: [], ...event } as unknown as MessageEvent
+      // Tasks, not microtasks: listeners run after the current stack.
+      setTimeout(() => {
+        for (const listener of [...listeners]) listener(message)
+      }, 0)
+    },
+  }
+}
+
+/** A WindowProxy as seen from the other side of the opener relationship. */
+export interface FakeProxy {
+  closed: boolean
+  postMessage(message: unknown, targetOrigin: string, transfer?: Transferable[]): void
+  location: {
+    origin: string
+    href: string
+    pathname: string
+    search: string
+    hash: string
+    replace(url: string): void
+  }
+  close(): void
+  replaced: string[]
+}
+
+/** Two documents that see each other as opener and popup. */
+export interface FakePair {
+  appView: FakeView
+  popupView: FakeView
+  /** The handle the application retains (or binds); posts into the popup. */
+  popupProxy: FakeProxy
+  /** The popup's `opener`; posts into the application. */
+  appProxy: FakeProxy
+  /** The popup document as a Window for CurrentWindow. */
+  popupWindow: Window
+  /** Replace the popup document; proxies keep identity. */
+  relocate(origin: string, path?: string, hash?: string): void
+  /** What `crossOriginIsolated` reports in the popup document. */
+  setIsolated(isolated: boolean): void
+}
+
+export function fakePair(popupOrigin = POPUP_ORIGIN, applicationOrigin = APP_ORIGIN): FakePair {
+  const appView = fakeView()
+  const popupView = fakeView()
+  const state = { popupOrigin, path: '/p', hash: '', isolated: false }
+  const makeProxy = (
+    target: FakeView,
+    targetOrigin: () => string,
+    stampedOrigin: () => string,
+    self: () => FakeProxy,
+  ): FakeProxy => {
+    const proxy: FakeProxy = {
+      closed: false,
+      replaced: [],
+      postMessage(message, origin, transfer = []) {
+        if (proxy.closed) return
+        if (origin !== '*' && origin !== targetOrigin()) return
+        target.dispatch({
+          data: structuredClone(message),
+          origin: stampedOrigin(),
+          source: self(),
+          ports: transfer as MessagePort[],
+        })
+      },
+      location: {
+        get origin() {
+          return targetOrigin()
+        },
+        get href() {
+          return `${targetOrigin()}${state.path}${state.hash}`
+        },
+        get pathname() {
+          return state.path
+        },
+        search: '',
+        get hash() {
+          return state.hash
+        },
+        replace: (url) => void proxy.replaced.push(url),
+      },
+      close: () => {
+        proxy.closed = true
+      },
+    }
+    return proxy
+  }
+  // Each proxy stamps the *sender's* identity as `source`.
+  let appProxy!: FakeProxy
+  let popupProxy!: FakeProxy
+  const popupOriginNow = () => state.popupOrigin
+  popupProxy = makeProxy(
+    popupView,
+    popupOriginNow,
+    () => applicationOrigin,
+    () => appProxy,
+  )
+  appProxy = makeProxy(
+    appView,
+    () => applicationOrigin,
+    popupOriginNow,
+    () => popupProxy,
+  )
+
+  const popupWindow = {
+    addEventListener: popupView.addEventListener,
+    removeEventListener: popupView.removeEventListener,
+    get opener() {
+      return appProxy
+    },
+    location: popupProxy.location,
+    close: popupProxy.close,
+    get crossOriginIsolated() {
+      return state.isolated
+    },
+  } as unknown as Window
+  return {
+    appView,
+    popupView,
+    popupProxy,
+    appProxy,
+    popupWindow,
+    relocate(origin, path = '/p', hash = '') {
+      state.popupOrigin = origin
+      state.path = path
+      state.hash = hash
+      popupView.listeners.clear()
+    },
+    setIsolated(isolated) {
+      state.isolated = isolated
+    },
+  }
+}
+
+export interface FakeScope {
+  /** Post as a same-origin document client. */
+  worker: KeeperWorker
+  /** Post as a client from another origin. */
+  foreignWorker: KeeperWorker
+  pending: Promise<unknown>[]
+  /** The host's own traffic through the same worker. */
+  postRaw(message: unknown, ports: MessagePort[]): void
+}
+
+/** The real worker handler on a fake ServiceWorkerGlobalScope. */
+export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
+  const handlers = new Map<string, (event: unknown) => void>()
+  const pending: Promise<unknown>[] = []
+  installPortKeeperOn({
+    location: { origin },
+    addEventListener: (type: string, handler: (event: unknown) => void) => {
+      handlers.set(type, handler)
+    },
+    skipWaiting: () => Promise.resolve(),
+    clients: { claim: () => Promise.resolve() },
+  } as unknown as ServiceWorkerGlobalScope)
+  const post = (url: string): KeeperWorker => ({
+    postMessage(message, transfer) {
+      setTimeout(() => {
+        handlers.get('message')?.({
+          data: structuredClone(message),
+          ports: transfer,
+          source: { url },
+          waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
+        })
+      }, 0)
+    },
+  })
+  return {
+    worker: post(`${origin}/p`),
+    foreignWorker: post('https://evil.example/p'),
+    pending,
+    postRaw: (message, ports) => post(`${origin}/p`).postMessage(message, ports),
+  }
+}
+
+export const registrationWith =
+  (...workers: (KeeperWorker | null)[]) =>
+  () =>
+    Promise.resolve(workers.map((active) => ({ active }) as unknown as ServiceWorkerRegistration))
+
+export const noRegistration = () => Promise.resolve([])
+
+/**
+ * A stand-in for a non-transferable carrier and its signaling service. Each
+ * round creates one MessageChannel only when the destination connects. The
+ * application receives a pending promise during preparation, not an already
+ * authenticated carrier with an unowned port that would queue gap messages.
+ */
+export interface FakeSignaling {
+  application: CarrierConstructor
+  popup: CarrierConstructor
+  /** Every carrier ever handed out, in order, for inspection. */
+  carriers: Carrier[]
+  /** Reject the next popup-side construction. */
+  failNext: boolean
+}
+
+export function fakeSignaling(): FakeSignaling {
+  const hub: FakeSignaling = {
+    application: () => new Promise((resolve) => (resolveInitial = resolve)),
+    popup: async () => {
+      if (hub.failNext) {
+        hub.failNext = false
+        throw new Error('signaling failed')
+      }
+      const round = prepared ?? newRound(resolveInitial)
+      prepared = null
+      return round.connect()
+    },
+    carriers: [],
+    failNext: false,
+  }
+  let resolveInitial: (carrier: Carrier) => void = () => {}
+  let prepared: ReturnType<typeof newRound> | null = null
+
+  const replacementHandlers = new Set<(c: Promise<Carrier>) => void>()
+  function endpoint(
+    port: MessagePort,
+    peerOrigin: string,
+    replacements: Set<(c: Promise<Carrier>) => void>,
+  ): NavigationCarrier {
+    let open = true
+    const carrier: NavigationCarrier = {
+      peerOrigin,
+      send: (value: Message) => {
+        if (!open) throw new Error('retired')
+        port.postMessage(value)
+      },
+      on: (handler) => {
+        port.onmessage = (e) => handler(e.data)
+        port.start()
+        return () => {
+          port.onmessage = null
+        }
+      },
+      close: () => {
+        open = false
+        port.close()
+      },
+      [prepareNavigation]: async (target) => {
+        // Arm authentication; no replacement carrier exists until the
+        // destination connects. Sends on the old port meanwhile are lost.
+        const round = newRound(null, new URL(target).origin)
+        prepared = round
+        for (const handler of replacementHandlers) handler(round.applicationSide)
+        return target
+      },
+      [onReplacement]: (handler) => {
+        replacements.add(handler)
+        return () => replacements.delete(handler)
+      },
+    }
+    hub.carriers.push(carrier)
+    return carrier
+  }
+
+  function newRound(resolveApplication: ((c: Carrier) => void) | null, popupOrigin = POPUP_ORIGIN) {
+    let resolve!: (carrier: Carrier) => void
+    const applicationSide = new Promise<Carrier>((done) => (resolve = done))
+    return {
+      applicationSide,
+      connect() {
+        const channel = new MessageChannel()
+        const applicationCarrier = endpoint(channel.port1, popupOrigin, replacementHandlers)
+        const popupSide = endpoint(channel.port2, APP_ORIGIN, new Set())
+        resolveApplication?.(applicationCarrier)
+        resolve(applicationCarrier)
+        return popupSide
+      },
+    }
+  }
+  return hub
+}

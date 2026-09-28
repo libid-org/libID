@@ -15,13 +15,14 @@ serves exactly the layout `@libid/claim`'s default same-origin URLs expect:
 | staged path | consumer |
 |---|---|
 | `/tlsn_wasm.js`, `/tlsn_wasm_bg.wasm`, `/spawn.js` | X flow's MPC-TLS prover (libid-org/notary release) |
-| `/circuits/x_token.json` | X token circuit (libid-org/libid-circuits release) |
-| `/circuits/jwt_email.json` | Google OIDC circuit (libid-org/libid-circuits release) |
+| `/circuits/x_token.json` | X token circuit (libid-org/libID-circuits release) |
+| `/circuits/jwt_email.json` | Google OIDC circuit (libid-org/libID-circuits release) |
 | `/circuits/manifest.json` | the circuits release manifest (provenance) |
 | `/wasm/acvm_js_bg.wasm`, `/wasm/noirc_abi_wasm_bg.wasm` | noir witness generation (@noir-lang pins) |
 
-The GitHub flow needs none of these — its proof comes from the
-libid-server-rs.
+This legacy GitHub flow needs none of these — its proof comes from the
+pre-ceremony release of [`libID-bridge-rs`](https://github.com/libid-org/libID-bridge-rs)
+pinned by the [integration harness](../../../harness/README.md).
 
 Programmatic staging (build scripts, postinstall hooks):
 
