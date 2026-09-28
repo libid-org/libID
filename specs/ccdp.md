@@ -148,8 +148,8 @@ Worker. Authorization is an external document, not a CCDP resource.
 
 | Property | Contract |
 |---|---|
-| Location and context | CCDP origin; unversioned JSON that OAuth Bridges retrieve server-side; no browser participant fetches it |
-| Role | Names, per platform, the platform ceremony versions the Distribution bundles. The [Distribution](ccdp-distribution.md#version-list) owns its grammar and response policy; an OAuth Bridge advertises only pairs it names. |
+| Location and context | CCDP origin; unversioned JSON that the Application fetches cross-origin before Prefetch |
+| Role | Names, per platform, the platform ceremony versions the Distribution bundles. The [Distribution](ccdp-distribution.md#version-list) owns its grammar and response policy; the [OAuth Bridge contract](oauth-bridge.md#public-configuration) owns how the Application selects a version and client from it. |
 
 ### Common
 

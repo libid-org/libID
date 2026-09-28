@@ -54,7 +54,6 @@ One bridge deployment has these inputs. Every origin follows the
 | `allowedAppOrigins` | Nonempty, duplicate-free set of canonical application origins, [origin patterns](popup-transport.md#6-origin-allowlists-and-binding), and `*` |
 | CCDP origin | One canonical origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Platform profiles | For each enabled platform, one default public OAuth client and, optionally, one override client per `PlatformCeremonyVersion`; a client is a public client ID plus a public `clientCredential` exactly when the platform's ceremony sends one |
-| Ceremony versions | None configured; read from the selected Distribution's [version list](ccdp-distribution.md#version-list) |
 | Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
 
 Every enabled platform's OAuth registration uses `/auth/callback` on the
@@ -97,7 +96,7 @@ query, fragment, or body.
 The CCDP origin is likewise deployment data. It is returned to the
 application in public configuration and embedded into the callback document so
 Callback can navigate the popup to Prover. The bridge also resolves the fixed
-Callback artifact and version list paths against it; no separate URL is
+Callback artifact path against it; no separate Callback artifact URL is
 configured. Omitting it selects the canonical `https://lib.id`
 Distribution.
 
@@ -114,9 +113,7 @@ Platform acceptance of the registered redirect URI is a separate prerequisite.
 The Bridge injects the same input list regardless of CCDP version. New versions
 with compatible inputs work on artifact refresh without a Bridge rebuild or
 configuration change. Callback owns browser version selection; the Bridge
-selects no CCDP version, reads no declaration from the artifact, and takes its
-platform ceremony versions from the Distribution's
-[version list](ccdp-distribution.md#version-list).
+neither enumerates versions nor reads input declarations from the artifact.
 The [artifact contract](ccdp-distribution.md#configuration-insertion) owns when
 an input change takes an input-contract version and when a deployment instead
 coordinates by order. Admitting origin patterns and `*` coordinates by order: a
@@ -124,11 +121,10 @@ bridge must not be configured with either until the Callback in its selected
 Distribution reads that member kind.
 
 The public profile entries match the OAuth registrations used by Callback.
-The bridge advertises a platform exactly when it has a profile and the version
-list names a version for it, and then exactly the versions listed: a listed
-version without an override carries the default client, an override for an
-unlisted version is ignored, and a mismatch is not a deployment error.
-Selecting a shared Distribution requires no reciprocal configuration.
+The bridge publishes each configured profile as is; it cannot check an
+override against the Distribution, and the Application resolves the pairs that
+run under [Public configuration](#public-configuration). Selecting a shared
+Distribution requires no reciprocal configuration.
 
 ## Route surface
 
@@ -139,7 +135,7 @@ For the profiles covered here, the bridge exposes only:
 
 | Method | Route | Availability | Purpose | Origin enforcement |
 |---|---|---|---|---|
-| `GET` | `/api/v1/ceremony/config` | `503` until the first accepted version list | public platform and CCDP configuration | `Origin` admitted by `allowedOrigins`; absent `Origin` accepted only by the same-origin rule below |
+| `GET` | `/api/v1/ceremony/config` | always | public platform and CCDP configuration | `Origin` admitted by `allowedOrigins`; absent `Origin` accepted only by the same-origin rule below |
 | `GET` | `/auth/callback` | always | complete OAuth Callback document | none at HTTP ingress; callback authenticates its popup connection after clearing its input |
 
 Top-level navigation may omit `Origin`, and an OAuth-platform callback may
@@ -163,22 +159,20 @@ is no request-time version negotiation.
 
 ## Public configuration
 
-- REQ-BRIDGE-03: The Bridge and Application MUST produce and validate the
-  configuration record, its availability, and response policy below.
-  Necessity: each ceremony must freeze one mutually supported profile and
-  Distribution.
+- REQ-BRIDGE-03: The Bridge and Application MUST follow the configuration
+  record, response policy, and version resolution rules below. Necessity: each
+  ceremony must freeze one mutually supported profile and Distribution.
 
 `GET /api/v1/ceremony/config` returns `application/json` with this exact record:
 
 ```ts
-interface VersionConfig {
-  version: number // PlatformCeremonyVersion, unsigned 16-bit integer
+interface ClientConfig {
   clientId: string
   clientCredential?: string
 }
 
-interface PlatformConfig {
-  versions: readonly VersionConfig[]
+interface PlatformConfig extends ClientConfig {
+  versionOverrides?: Readonly<Record<string, ClientConfig>> // key: decimal PlatformCeremonyVersion
 }
 
 interface CeremonyConfig {
@@ -194,19 +188,20 @@ The response rules are:
   [origin policy](ccdp.md#origin-policy), with no credentials, path, query, or
   fragment. The Application accepts the localhost HTTP exception for this field
   and the Bridge origin it uses.
-- `platforms` holds exactly the platforms advertised under
-  [Deployment configuration](#deployment-configuration). Each entry's `versions`
-  is nonempty, unique by `version`, and ascending, and names the public client
-  published for each version; order has no meaning to a reader.
+- `platforms` holds exactly the configured platform profiles. Each entry is the
+  platform's default client; `versionOverrides`, present only when the
+  deployment overrides at least one version, maps the canonical decimal
+  spelling of a `PlatformCeremonyVersion` to a whole client. Any other key is
+  invalid. The record carries no version list.
 - `clientCredential` is present exactly when the platform's ceremony sends one,
-  as a nonempty printable ASCII string without whitespace. It is an
-  intentionally public OAuth application credential, not a user access token.
-  GitHub requires it and uses it as `client_secret`. A missing, unexpected,
-  null, empty, or wrongly typed credential is invalid. The selected platform
-  owns any additional constraints.
-- Unknown fields, malformed URLs, and unsupported numeric representations are
-  invalid. A platform absent from the client's closed local catalog is ignored;
-  known entries remain exact-validated before use.
+  in the default and in every override, as a nonempty printable ASCII string
+  without whitespace. It is an intentionally public OAuth application
+  credential, not a user access token. GitHub requires it and uses it as
+  `client_secret`. A missing, unexpected, null, empty, or wrongly typed
+  credential is invalid. The selected platform owns any additional constraints.
+- Unknown fields and malformed URLs are invalid. A platform absent from the
+  client's closed local catalog is ignored; known entries remain
+  exact-validated before use.
 - The record contains no redirect URI, confidential credential, user token,
   allowlist, artifact URL, CSP source, notary setting, platform display metadata,
   or application-specific value.
@@ -233,19 +228,20 @@ requests return no configuration. These browser admission checks do not make
 the public record a secret from non-browser clients. Request values do not
 alter the response record.
 
-The bridge retrieves `{ccdpOrigin}/ccdp/versions.json` under the
-[Callback artifact's retrieval rules](#callback-document), accepting each
-resource independently, and composes the record from the last accepted list.
-Until one is accepted, an admitted request receives `503` with
-`Retry-After: 5`, the headers a `200` would carry, and a JSON body whose
-`message` names the awaited Distribution URL; admission and rejection are as
-for `200`. A list refused later leaves the last record served.
-
-The Application fetches and validates this record without credentials. It derives `redirectUri` as
+The Application fetches and validates this record without credentials, then
+fetches `{ccdpOrigin}/ccdp/versions.json`, the Distribution's
+[version list](ccdp-distribution.md#version-list), cross-origin without
+credentials or redirects, and validates it by that contract. If either read
+fails, no ceremony is available. The Application enables a platform only when
+the record configures it and the list names a version the Application
+implements; it enables exactly those versions. A listed version
+without an override uses the platform's default client; an override for a
+version not enabled is ignored. An omitted version selects the highest enabled
+one. It derives `redirectUri` as
 `new URL('/auth/callback', oauthBridge).href` from its validated canonical
 OAuth Bridge origin, not from the response. It freezes the selected client ID,
 public token-exchange credential when present, derived redirect URI, CCDP origin,
-and mutually supported platform ceremony version in each live ceremony. It
+and enabled platform ceremony version in each live ceremony. It
 forwards the credential unchanged through CCDP's `ProveIdentity`; a configuration
 refresh does not replace it in a live ceremony.
 CCDP browser [resources](ccdp.md#documents-and-routes)
@@ -263,8 +259,9 @@ an HTTP redirect. Its [artifact contract](ccdp-distribution.md#callback-artifact
 owns the HTML, configuration slot, response policy, browser startup, version
 selection, and failure UI. The bridge only:
 
-- retrieves `{ccdpOrigin}/ccdp/callback.html` at startup and revalidates it
-  independently of callback requests, rejecting upstream redirects;
+- retrieves `{ccdpOrigin}/ccdp/callback.html`, its only Distribution request,
+  at startup and revalidates it independently of callback requests, rejecting
+  upstream redirects;
 - sends no callback query, OAuth return, incoming request headers, cookies, or
   credentials upstream; the configured source never depends on a request;
 - validates and inserts its unversioned input list using the artifact contract,
@@ -291,9 +288,8 @@ owns their semantics.
 ## Compatibility
 
 - REQ-BRIDGE-06: The Bridge MUST preserve the public API version's semantics
-  when refreshing compatible Callback artifacts or version lists. Necessity: a
-  browser artifact refresh must not silently change the public configuration
-  contract.
+  when refreshing compatible Callback artifacts. Necessity: a browser artifact
+  refresh must not silently change the public configuration contract.
 
 A breaking JSON request or response changes the bridge API version. CCDP,
 platform ceremony, prover release, and popup connection versions remain
@@ -304,9 +300,7 @@ version the Bridge's API.
 
 The Bridge participates in SP-CCDP-01 under ASM-CCDP-01 and ASM-CCDP-02.
 Its operator supplies OAuth registrations, public application credentials, and
-Callback deployment policy; its selected Distribution supplies the advertised
-platform ceremony versions, and a wrong list fails or withholds ceremonies
-without releasing anything. Its code and deployment are trusted for correct
+Callback deployment policy. Its code and deployment are trusted for correct
 browser code delivery and configuration, not for ledger acceptance.
 
 CORS and Origin checks protect browser admission, not non-browser
@@ -343,7 +337,8 @@ cryptographic soundness.
   configured as the CCDP origin fails at startup. The union remains literal: a
   pattern covering the CCDP origin leaves that origin an exact member, and
   members whose admitted origins overlap configure successfully. A profile
-  without a default client, or an override whose credential presence disagrees
+  without a default client, an override keyed by anything but a decimal
+  `PlatformCeremonyVersion`, or an override whose credential presence disagrees
   with its platform's ceremony, fails at startup.
 - TEST-BRIDGE-02 (exercises REQ-BRIDGE-02):
   A configuration GET without Origin succeeds with exactly
@@ -359,20 +354,21 @@ cryptographic soundness.
   For the browser-exchange profiles, the former token route performs no exchange
   or notary work, including on POST.
 - TEST-BRIDGE-03 (exercises REQ-BRIDGE-03):
-  Exact public config lists each advertised platform's versions ascending, each
-  with its client, including GitHub's public token-exchange credential, and has
-  no redirect field, user token, or notary selection. A listed version without
-  an override carries the default client; an override for an unlisted version,
-  a profile the version list omits, and a listed platform without a profile are
-  absent. Before the first accepted version list an admitted GET receives `503`
-  with `Retry-After` and the `200` headers while an unadmitted one is rejected;
-  a later refused list leaves the last record served. Missing required,
-  unexpected, empty, null, wrongly typed, or whitespace/control-bearing
-  credentials reject; malformed known profiles reject and unknown platforms are
-  ignored. Application freezes the credential and forwards the same value to
-  Prover despite later configuration changes.
+  Exact public config carries each configured platform's default client and its
+  overrides keyed by canonical decimal version, including GitHub's public
+  token-exchange credential, and has no version list, redirect field, user
+  token, or notary selection. Missing required, unexpected, empty, null, wrongly
+  typed, or whitespace/control-bearing credentials reject, in a default or an
+  override; a non-canonical override key rejects; malformed known profiles
+  reject and unknown platforms are ignored. The Application enables a platform
+  only when the record configures it and the version list names a version it
+  implements, uses the default client for a listed version without an override,
+  ignores an override for an unlisted version, selects the highest enabled
+  version when none is given, and enables nothing when the list fails to fetch
+  or validate. Application freezes the selected client and forwards the same
+  credential to Prover despite later configuration changes.
 - TEST-BRIDGE-04 (exercises REQ-BRIDGE-04):
   Callback queries/cookies/headers never reach the artifact request; failed refresh preserves the last valid HTML/policy pair, or serves inert unavailability.
 - TEST-BRIDGE-05: Withdrawn.
 - TEST-BRIDGE-06 (exercises REQ-BRIDGE-06):
-  Compatible bundled Callback updates need no Bridge rebuild; unsupported browser versions fail locally and do not change the Bridge API version. A refreshed version list changes the advertised versions without a Bridge rebuild or API version change.
+  Compatible bundled Callback updates need no Bridge rebuild; unsupported browser versions fail locally and do not change the Bridge API version.
