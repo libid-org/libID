@@ -55,7 +55,9 @@ owns this path.
 
 The application operator controls its frontend, redirect deployment, OAuth
 clients, and GitHub Token Service, but is not trusted to choose identity fields,
-change the proof-bound operation, or widen proof validity. The identity platform
+change the proof-bound operation, or widen proof validity. It does hold the
+Google ID Token, so whether a Google handle reaches the chain is its choice
+([common §12](ceremony-common.md#12-security-considerations)). The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
 transcripts and their creation times. Verifier governance selects accepted
 verifier artifacts, trust roots, and protocol parameters. The Consumer Chain
@@ -64,7 +66,7 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
-| Application operator | configures clients and deployment assets; starts or withholds work | deployment availability and declared configuration | identity fields, proof target, or proof validity |
+| Application operator | configures clients and deployment assets; starts or withholds work; receives a Google ID Token in plaintext | deployment availability and declared configuration; for a digest profile, sending the handle only when the user asks, on which SP-PRIV-01 rests | identity fields, proof target, or proof validity |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots, parameters, and the Supported Version Set | correct authority lifecycle | user consent |
@@ -114,7 +116,12 @@ GitHub; the Proving Circuit proves only what cannot be read from that
 evidence, which is Google's signature relation and, on X and GitHub, that one
 hidden bearer opens both sessions' commitments. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
-an effect (REQ-COMMON-03, REQ-COMMON-03A). The Canonical Runtime
+an effect (REQ-COMMON-03, REQ-COMMON-03A). For a profile that exposes identity
+digests, Google at launch, the Consumer keys the binding on the digests and
+puts the handle on chain only from a transaction that carried it, and the
+user identifier never (SP-PRIV-01); it does not prevent confirmation of a
+guessed identity by hashing, nor an application operator, who receives the
+ID Token, from sending the handle itself. The Canonical Runtime
 locally enforces the selected OAuth client and redirect profile. The protocol
 assumes the named identity-platform parser,
 PKCE, delivery, notary, browser, verifier-soundness, and chain behaviors. It
