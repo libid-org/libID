@@ -192,17 +192,20 @@ Attestation Count: The number of entries in the closed attestation list a
   each authoritative field appears exactly once at the JSON location fixed by
   its Platform Profile.
 - ASM-PROV-07:
-  For profiles relying on platform-side decoded-form uniqueness (X), at the
-  exact token endpoint and method fixed by that profile, the
-  Identity Platform accepts token redemption only under the profile's media
-  type and rejects a form body containing more than one decoded occurrence of
-  any profile-listed field. Necessity: launch circuits deliberately avoid
-  proving the complete form grammar; without this parser property a prover
-  could witness one `code` or `code_verifier` while the platform consumes
-  another. GitHub instead enforces the complete canonical request in its
-  Platform Verifier under REQ-PLAT-61 and does not depend on this assumption.
-  Evidence: recurring integration probes against each dependent profile's
-  production endpoint.
+  For a Platform Profile that reads a decoded form field from a token request
+  it does not hold whole, at the exact token endpoint and method fixed by that
+  profile, the Identity Platform accepts token redemption only under the
+  profile's media type and rejects a form body containing more than one
+  decoded occurrence of any profile-listed field. Necessity: a circuit that
+  extracts a field without proving the complete form grammar needs this
+  parser property; without it a prover could witness one `code` or
+  `code_verifier` while the platform consumes another. No launch profile
+  depends on this assumption: X and GitHub each hold the complete revealed
+  token body in the Platform Verifier under REQ-PLAT-63 and REQ-PLAT-61. A
+  future Platform Profile that reads a decoded form it does not hold whole
+  cites this assumption and joins the probes of REQ-COMMON-32. Evidence:
+  recurring integration probes against each citing profile's production
+  endpoint.
 - ASM-NOTARY-01:
   The configured notary key is unforgeable, signs only transcripts it
   observed, and stamps their creation time from a clock within ordinary skew
@@ -233,13 +236,15 @@ on it.
   Evidence produced by a ceremony discharges only for the Authorized
   Transaction Data committed in its Authorization Digest. Depends on
   ASM-PROV-02, ASM-PROV-05, ASM-PROV-06,
-  ASM-PROV-07, ASM-NOTARY-01, ASM-PROOF-01, ASM-CHAIN-01. Evidence:
+  ASM-PROV-07 for a profile that cites it, ASM-NOTARY-01, ASM-PROOF-01,
+  ASM-CHAIN-01. Evidence:
   conformance tests (supporting, not proving) plus the collision resistance of
   SHA-256 and keccak256.
 - SP-CLIENT-01:
   The Canonical Runtime rejects evidence issued to an OAuth client other than
   the one fixed by its immutable ceremony profile. Depends on ASM-PROV-05,
-  ASM-PROV-07 where applicable, ASM-NOTARY-01, ASM-PROOF-01, and ASM-BROWSER-01.
+  ASM-PROV-07 for a profile that cites it, ASM-NOTARY-01, ASM-PROOF-01, and
+  ASM-BROWSER-01.
   Evidence: checked invariant in the Canonical Runtime, plus conformance tests
   (supporting).
 - SP-DELIVERY-01:
@@ -250,8 +255,9 @@ on it.
   conformance tests (supporting).
 - SP-EXCHANGE-01:
   An attested token exchange redeems the authorization code produced by this
-  ceremony and no other. Depends on ASM-PROV-02, ASM-PROV-03, ASM-PROV-07,
-  ASM-NOTARY-01, ASM-PROOF-01, ASM-BROWSER-01. Evidence: conformance tests
+  ceremony and no other. Depends on ASM-PROV-02, ASM-PROV-03, ASM-PROV-07
+  for a profile that cites it, ASM-NOTARY-01, ASM-PROOF-01, ASM-BROWSER-01.
+  Evidence: conformance tests
   (supporting, not proving).
 - SP-FRESH-01:
   Evidence older than its authenticated ceiling is rejected. Depends on
@@ -652,6 +658,27 @@ attestation to verify carries no value at all.
   emits for the expected unencoded value. The Canonical Runtime MUST NOT
   compare that range directly with the unencoded value or apply a second,
   permissive decoder.
+- REQ-COMMON-07A (upholds SP-EXCHANGE-01, SP-CLIENT-01):
+  The Platform Verifier MUST accept a complete revealed form body only as the
+  profile's listed fields in the listed order, each the literal name, `=` and
+  a nonempty value in the serializer's output alphabet, with `&` between
+  pairs and nothing after the last. The output alphabet is the bytes the
+  serializer passes through, `A`-`Z`, `a`-`z`, `0`-`9`, `*`, `-`, `.` and
+  `_`, the `+` it writes for a space, and `%` followed by two uppercase
+  hexadecimal digits spelling a byte that is neither passed through nor the
+  space. The Platform Verifier MUST NOT decode a value. The Platform Verifier
+  MUST NOT require that a value's escapes decode to UTF-8 or to any character
+  set: a value it reads is held to a charset inside the pass-through set, and
+  what any other value decodes to is not judged. Necessity: every byte has
+  one spelling under the serializer, so a body every token of which is
+  canonical is the serialization of what it decodes to, and a value in the
+  alphabet cannot become another field. REQ-COMMON-07 and this rule judge
+  different things by design: REQ-COMMON-07 governs what the Implementation
+  sends, from UTF-8 input it alone holds; this rule governs the bytes the
+  Platform Verifier judges. A value whose escapes decode to bytes that are
+  not UTF-8 is canonical and passes the Platform Verifier, though the
+  Implementation never emits one; a decoding check would be the second
+  decoder REQ-COMMON-07 forbids.
 - REQ-COMMON-08:
   The Implementation MUST emit each field listed in the platform profile
   exactly once, in the listed order. The Implementation MUST emit no other
@@ -832,7 +859,8 @@ the value, and its closing quote. JSON unsigned integers and booleans use the
 typed local matches of REQ-COMMON-19D. A form-field check asserts a field
 boundary, the exact ASCII name and `=`, the value, and the next `&` or body end.
 Because authenticated response fields satisfy ASM-PROV-06, and form uniqueness
-is either enforced by the Platform Verifier or assumed under ASM-PROV-07,
+is enforced by the Platform Verifier over the revealed body under REQ-PLAT-61
+and REQ-PLAT-63, or assumed under ASM-PROV-07 by a profile that cites it,
 these local checks provide the required field meaning without the impractical
 proving cost of a complete JSON or form parser. Hidden ranges stay behind the
 pinned attestation format's range commitments; the circuit links transcripts
@@ -1043,7 +1071,8 @@ which the following identity-header rules could apply.
   name, `=`, the charset-constrained value, and then `&` or the authenticated
   body end. The circuit does not scan the rest of the body for duplicates;
   a profile relying on the platform for that property cites ASM-PROV-07.
-  GitHub instead checks its fully revealed body under REQ-PLAT-61.
+  X and GitHub instead check their fully revealed bodies under REQ-PLAT-63
+  and REQ-PLAT-61.
 - REQ-COMMON-19A (upholds SP-EXCHANGE-01):
   The Platform Verifier extracting a field from revealed attestation bytes
   MUST reject a transcript in which the field's full delimiter matches at
@@ -1128,9 +1157,9 @@ constant.
   from one, as a public proof input.
 
 Disclosure alone does not enforce decoded form semantics. GitHub pairs full
-request disclosure with REQ-PLAT-61's canonical, complete five-field check;
-a hidden suffix or a second form field is rejected by its Platform Verifier.
-X retains ASM-PROV-07 as its decoded-form soundness dependency.
+request disclosure with REQ-PLAT-61's canonical, complete five-field check,
+and X with REQ-PLAT-63's; a hidden suffix or a second form field is rejected
+by the Platform Verifier. Neither depends on ASM-PROV-07.
 
 REQ-COMMON-22A prevents adding request credentials to the circuit's public
 inputs. It does not forbid revealing an intentionally public application
@@ -1267,8 +1296,12 @@ the constructions that role implements.
   Two ceremonies over identical Authorized Transaction Data yield distinct
   digests, and a digest carrying a foreign `platformCeremonyVersion` is
   rejected.
-- TEST-COMMON-05 (exercises REQ-COMMON-07, REQ-COMMON-08, REQ-COMMON-10):
-  The §6 serializer vector reproduces byte for byte.
+- TEST-COMMON-05 (exercises REQ-COMMON-07, REQ-COMMON-07A, REQ-COMMON-08, REQ-COMMON-10):
+  The §6 serializer vector reproduces byte for byte. Under the canonical form
+  grammar a lowercase escape, an escape of a passed-through byte or of the
+  space, a truncated escape, a raw space or a raw delimiter in a value fails;
+  a value whose escapes decode to bytes that are not UTF-8 passes, and no
+  serializer input produces it.
 - TEST-COMMON-06 (exercises REQ-COMMON-09, REQ-COMMON-11):
   A request carrying an appended caller parameter is rejected, and a redirected
   notarized request is abandoned.
