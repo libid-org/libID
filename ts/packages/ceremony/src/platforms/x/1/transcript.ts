@@ -1,3 +1,4 @@
+import { isPkceValue } from '../../../ccdp/index.js'
 import { bearerTranscript, type TokenRequestInput } from '../../bearer-link/transcript.js'
 import { isUserName } from './types.js'
 
@@ -5,7 +6,7 @@ export const { identityUrl, buildTokenRequest, buildIdentityRequest, selectToken
   bearerTranscript({
     tokenUrl: 'https://api.x.com/2/oauth2/token',
     tokenFields(input: TokenRequestInput) {
-      if (!/^[A-Za-z0-9_-]{43}$/.test(input.codeVerifier))
+      if (!isPkceValue(input.codeVerifier))
         throw new Error('codeVerifier must be exactly 43 base64url characters')
       if (!input.clientId || !input.code || !input.redirectUri)
         throw new Error('X token request fields must be nonempty')

@@ -1,4 +1,4 @@
-import { resolve as resolveAsset } from '../assets/index.js'
+import { assetUrl } from '../assets/index.js'
 import { ceremonyError } from '../errors.js'
 import { now, type OperationEvent } from '../events.js'
 import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
@@ -121,10 +121,10 @@ export class ProofEngine {
       circuitUrl,
       verificationKeyUrl,
       threads: Math.max(1, Math.min(threads ?? 4, navigator.hardwareConcurrency || 1, 4)),
-      acvmUrl: resolveAsset(acvm),
-      abiUrl: resolveAsset(abi),
-      wasmPath: resolveAsset(bbWasm).replace('-threads.wasm', '.wasm'),
-      crsPath: new URL('.', resolveAsset(crs[0])).href,
+      acvmUrl: assetUrl(acvm),
+      abiUrl: assetUrl(abi),
+      wasmPath: assetUrl(bbWasm).replace('-threads.wasm', '.wasm'),
+      crsPath: new URL('.', assetUrl(crs[0])).href,
     }
   }
 

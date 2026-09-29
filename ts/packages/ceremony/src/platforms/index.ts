@@ -59,6 +59,9 @@ export const platforms = {
 
 export type PlatformId = keyof typeof platforms
 
+export const isPlatformId = (value: unknown): value is PlatformId =>
+  typeof value === 'string' && Object.hasOwn(platforms, value)
+
 export type SupportedCeremonyVersion<P extends PlatformId> = P extends PlatformId
   ? keyof (typeof platforms)[P]['versions'] & number
   : never

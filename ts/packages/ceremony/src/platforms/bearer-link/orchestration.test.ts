@@ -13,7 +13,7 @@ const { prepare, initialize, generate, destroy } = vi.hoisted(() => ({
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
 vi.mock('../../assets/index.js', async (original) => ({
   ...(await original<typeof import('../../assets/index.js')>()),
-  resolve: () => 'https://ccdp.test/asset',
+  assetUrl: () => 'https://ccdp.test/asset',
 }))
 vi.mock('../../barretenberg/engine.js', () => ({
   ProofEngine: class {

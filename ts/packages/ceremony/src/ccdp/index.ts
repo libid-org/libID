@@ -13,6 +13,10 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 export const isClientCredential = (value: unknown): value is string =>
   typeof value === 'string' && /^[\x21-\x7e]+$/.test(value)
 
+/** PKCE verifiers and S256 challenges: canonical unpadded base64url of 32 bytes. */
+export const isPkceValue = (value: unknown): value is string =>
+  typeof value === 'string' && value.length === 43 && b64urlDecode(value)?.length === 32
+
 export const PLATFORM = /^[a-z][a-z0-9-]{0,63}$/
 
 export function redirect(value: unknown): value is string {
@@ -89,12 +93,7 @@ export const ProveIdentity = {
       !redirect(value.redirectUri) ||
       (Object.hasOwn(value, 'clientCredential') && !isClientCredential(value.clientCredential)) ||
       !(value.notaryAddress === null || origin(value.notaryAddress)) ||
-      !(
-        value.codeVerifier === null ||
-        (typeof value.codeVerifier === 'string' &&
-          value.codeVerifier.length === 43 &&
-          b64urlDecode(value.codeVerifier)?.length === 32)
-      )
+      !(value.codeVerifier === null || isPkceValue(value.codeVerifier))
     )
       throw new TypeError('Invalid proving request')
     return value as unknown as ProveIdentity

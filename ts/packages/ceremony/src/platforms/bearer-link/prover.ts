@@ -1,4 +1,4 @@
-import { resolve as resolveAsset } from '../../assets/index.js'
+import { assetUrl } from '../../assets/index.js'
 import {
   bearerCircuit,
   bearerVerificationKey,
@@ -42,8 +42,8 @@ export async function proveBearerLink(
   const controller = new AbortController()
   const signal = AbortSignal.any([context.signal, controller.signal])
   const engine = new ProofEngine({
-    circuitUrl: resolveAsset(bearerCircuit),
-    verificationKeyUrl: resolveAsset(bearerVerificationKey),
+    circuitUrl: assetUrl(bearerCircuit),
+    verificationKeyUrl: assetUrl(bearerVerificationKey),
     emit,
   })
   // Observe every provisional branch immediately; any failure retires sibling work.

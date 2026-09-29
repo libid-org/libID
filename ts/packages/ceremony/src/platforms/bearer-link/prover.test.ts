@@ -25,7 +25,7 @@ const { prepare, generate, destroy } = vi.hoisted(() => ({
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
 vi.mock('../../assets/index.js', async (original) => ({
   ...(await original<typeof import('../../assets/index.js')>()),
-  resolve: () => 'https://ccdp.test/asset',
+  assetUrl: () => 'https://ccdp.test/asset',
 }))
 vi.mock('../../barretenberg/engine.js', () => ({
   ProofEngine: class {
@@ -210,7 +210,7 @@ for (const platform of ['x', 'github'] as const) {
           platformCeremonyVersion: 1,
           clientId: 'client',
           clientCredential: 'public-fixture',
-          codeVerifier: 'a'.repeat(43),
+          codeVerifier: 'A'.repeat(43), // canonical base64url of 32 zero bytes
           redirectUri: 'https://bridge.test/auth/callback',
           notaryAddress: 'https://notary.test',
         },

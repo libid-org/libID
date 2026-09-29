@@ -1,8 +1,8 @@
+import { isPkceValue } from '../../../ccdp/index.js'
+
 export const pkce = true
 
 const AUTHORIZATION_ENDPOINT = 'https://github.com/login/oauth/authorize'
-
-const PKCE = /^[A-Za-z0-9_-]{43}$/
 
 /** Build GitHub v1's fixed public authorization request. */
 export function buildAuthorizationUrl(input: {
@@ -11,7 +11,7 @@ export function buildAuthorizationUrl(input: {
   state: string
   codeChallenge: string | null
 }): string {
-  if (input.codeChallenge === null || !PKCE.test(input.codeChallenge)) {
+  if (input.codeChallenge === null || !isPkceValue(input.codeChallenge)) {
     throw new Error('codeChallenge must be exactly 43 base64url characters')
   }
   const query = new URLSearchParams([
