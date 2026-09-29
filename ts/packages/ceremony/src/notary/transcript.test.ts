@@ -7,7 +7,7 @@ import {
   selectTokenReveals,
 } from '../platforms/x/1/transcript.js'
 import { planNotarization } from './notarize.js'
-import type { ExactHttpRequest } from './session.js'
+import type { ExactHttpRequest } from './protocol.js'
 import { quotedRange } from './transcript.js'
 
 const utf8 = (value: string) => new TextEncoder().encode(value)
@@ -34,7 +34,7 @@ const request = buildTokenRequest(input)
 
 const transcript = {
   sent: serialize('POST /2/oauth2/token HTTP/1.1', request),
-  recv: utf8('HTTP/1.1 200 OK\r\n\r\n{"access_token":"token","token_type":"bearer"}'),
+  received: utf8('HTTP/1.1 200 OK\r\n\r\n{"access_token":"token","token_type":"bearer"}'),
 }
 
 describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C]', () => {
@@ -44,7 +44,7 @@ describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C]', () => {
     const plan = planNotarization(transcript, selected.ranges)
     expect(plan.reveal.sent).toEqual([{ start: 0, end: transcript.sent.length }])
     expect(plan.commit.sent).toEqual([])
-    expect(plan.commit.recv).toContainEqual({ ...selected.bearerRange, algorithm: 'SHA256' })
+    expect(plan.commit.received).toContainEqual({ ...selected.bearerRange, algorithm: 'SHA256' })
   })
   it('admits additional headers and normalizes required names and HTTP whitespace', () => {
     for (const sent of [
@@ -114,12 +114,12 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60]', () => {
       const received = utf8(`HTTP/1.1 200 OK\r\n\r\n${body}`)
       const selected = selectIdentity({ sent, received }, 'token')
       const plan = planNotarization(
-        { sent, recv: received },
-        { sent: selected.ranges.sent, recv: selected.ranges.received },
+        { sent, received: received },
+        { sent: selected.ranges.sent, received: selected.ranges.received },
       )
       expect(selected.userId).toBe('123')
       expect(selected.userName).toBe('alice')
-      expect(plan.reveal.recv.map((r) => text(received.slice(r.start, r.end)))).toEqual(
+      expect(plan.reveal.received.map((r) => text(received.slice(r.start, r.end)))).toEqual(
         body.startsWith('{"id"') ? ['"id":123,"login":"alice"'] : ['"login":"alice"', '"id":123}'],
       )
       expect(plan.commit.sent).toEqual([{ ...selected.bearerRange, algorithm: 'SHA256' }])
@@ -176,7 +176,7 @@ for (const platform of ['x', 'github'] as const) {
     )
     const select = (sent: Uint8Array) =>
       platform === 'x'
-        ? selectIdentityReveals({ sent, recv: received }, 'token').sent
+        ? selectIdentityReveals({ sent, received: received }, 'token').sent
         : selectIdentity({ sent, received }, 'token').ranges.sent
     it.each(['x-extra: value', 'x-extra: café 😀', 'x-extra:', 'x-extra:\tvalue'])(
       'reveals extra headers before and after Authorization without shifting its bearer: %s',
@@ -188,7 +188,7 @@ for (const platform of ['x', 'github'] as const) {
           ),
         )
         const ranges = select(sent)
-        const plan = planNotarization({ sent, recv: received }, { sent: ranges, recv: [] })
+        const plan = planNotarization({ sent, received: received }, { sent: ranges, received: [] })
         expect(plan.commit.sent).toHaveLength(1)
         const hole = plan.commit.sent[0]
         expect(text(sent.slice(hole.start, hole.end))).toBe('token')
@@ -229,20 +229,19 @@ for (const platform of ['x', 'github'] as const) {
 describe('JSON field whitespace [LIBID-PROVER-003/004]', () => {
   it.each([' ', '\t', '\r', '\n', ' \t\r\n'])('keeps X bearer offsets with %j', (ws) => {
     const prefix = `"access_token"${ws}:${ws}"`
-    const recv = utf8(`HTTP/1.1 200 OK\r\n\r\n{${prefix}token"}`)
-    const selected = selectTokenReveals({ ...transcript, recv }, input)
-    expect(text(recv.slice(selected.bearerRange.start, selected.bearerRange.end))).toBe('token')
-    expect(selected.ranges.recv.map(({ start, end }) => text(recv.slice(start, end)))).toEqual([
-      prefix,
-      '"',
-    ])
+    const received = utf8(`HTTP/1.1 200 OK\r\n\r\n{${prefix}token"}`)
+    const selected = selectTokenReveals({ ...transcript, received }, input)
+    expect(text(received.slice(selected.bearerRange.start, selected.bearerRange.end))).toBe('token')
+    expect(
+      selected.ranges.received.map(({ start, end }) => text(received.slice(start, end))),
+    ).toEqual([prefix, '"'])
     const request = buildIdentityRequest('token')
     const identity = utf8(`{"id"${ws}:${ws}"123", "username"${ws}:${ws}"alice"}`)
     const reveals = selectIdentityReveals(
-      { sent: serialize('GET /2/users/me HTTP/1.1', request), recv: identity },
+      { sent: serialize('GET /2/users/me HTTP/1.1', request), received: identity },
       'token',
     )
-    expect(reveals.recv.map(({ start, end }) => text(identity.slice(start, end)))).toEqual([
+    expect(reveals.received.map(({ start, end }) => text(identity.slice(start, end)))).toEqual([
       `"id"${ws}:${ws}"123"`,
       `"username"${ws}:${ws}"alice"`,
     ])

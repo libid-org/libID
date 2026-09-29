@@ -2,30 +2,16 @@ import { resolve as resolveAsset } from '../assets/index.js'
 import { now, type OperationEvent } from '../events.js'
 import { origin, webUrl } from '../primitives.js'
 import type { NotaryAttestation } from './decode.js'
-import type { ByteRange } from './notarize.js'
 import { tlsnModule, tlsnWasm } from './notary.assets.js'
-
-export interface ExactHttpRequest {
-  url: string
-  method: 'GET' | 'POST'
-  headers: Readonly<Record<string, Uint8Array>>
-  body: Uint8Array
-}
-
-export interface Transcript {
-  sent: Uint8Array
-  received: Uint8Array
-}
-
-export interface Reveals {
-  sent: readonly ByteRange[]
-  received: readonly ByteRange[]
-}
-
-export interface CommitmentOpening extends ByteRange {
-  direction: 'sent' | 'received'
-  blinder: Uint8Array
-}
+import type {
+  CommitmentOpening,
+  ExactHttpRequest,
+  FromWorker,
+  Prepare,
+  Reveals,
+  ToWorker,
+  Transcript,
+} from './protocol.js'
 
 /** Correlated provisional openings plus a separate promise for the final attestation. */
 export interface RevealResult {
@@ -105,12 +91,17 @@ export class Notarization {
       ended = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const waiters = new Map<
-      string,
-      { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+      FromWorker['type'],
+      { resolve: (v: FromWorker) => void; reject: (e: unknown) => void }
     >()
-    function wait<T>(type: string): Promise<T> {
-      const promise = new Promise<T>((resolve, reject) =>
-        waiters.set(type, { resolve: (v) => resolve(v as T), reject }),
+    function wait<T extends FromWorker['type']>(
+      type: T,
+    ): Promise<Extract<FromWorker, { type: T }>> {
+      const promise = new Promise<Extract<FromWorker, { type: T }>>((resolve, reject) =>
+        waiters.set(type, {
+          resolve: (v) => resolve(v as Extract<FromWorker, { type: T }>),
+          reject,
+        }),
       )
       void promise.catch(() => {})
       return promise
@@ -133,7 +124,7 @@ export class Notarization {
     }
     signal.addEventListener('abort', abort, { once: true })
     port.onmessageerror = () => fail(new Error('Invalid notarization message'))
-    port.onmessage = (event) => {
+    port.onmessage = (event: MessageEvent<FromWorker>) => {
       if (ended) return
       if (event.data.type === 'error') {
         fail(
@@ -162,7 +153,7 @@ export class Notarization {
           wasmUrl: resolveAsset(tlsnWasm),
           notaryAddress: this.notaryAddress,
           port: port2,
-        },
+        } satisfies Prepare,
         [port2],
       )
       await prepared
@@ -180,9 +171,9 @@ export class Notarization {
           throw new Error('Invalid notarization send')
         stage = 'sending'
         timer = setTimeout(() => fail(new Error('Notarization request timed out')), 10000)
-        const result = wait<{ transcript: Transcript }>('sent')
+        const result = wait('sent')
         try {
-          port.postMessage({ type: 'send', request })
+          port.postMessage({ type: 'send', request } satisfies ToWorker)
           const value = await result
           if (emit && event) {
             const bytes = value.transcript.received
@@ -210,36 +201,24 @@ export class Notarization {
         const started = now()
         report('started', started)
         signal.throwIfAborted()
-        const result = wait<{ openings: CommitmentOpening[] }>('revealed')
-        const attestation = wait<{ attestation: NotaryAttestation }>('attestation').then(
-          (v) => v.attestation,
-        )
+        const result = wait('revealed')
+        const final = wait('attestation')
+        const attestation = final.then((v) => v.attestation)
         void attestation.catch(() => {})
         try {
-          port.postMessage({ type: 'reveal', reveals })
+          port.postMessage({ type: 'reveal', reveals } satisfies ToWorker)
           const openings = (await result).openings
           const opened = now()
           // Parent-side intervals include worker delivery/correlation, not just TLSN execution.
           if (emit && event)
-            void attestation.then(
-              ({ decoded }) => {
+            void final.then(
+              ({ attributes }) => {
                 const timestamp = now()
                 report('finished', timestamp, {
                   'openings-ms': opened - started,
                   'finalization-ms': timestamp - opened,
-                  'sent-bytes': decoded.sentTranscriptLength,
-                  'received-bytes': decoded.receivedTranscriptLength,
+                  ...attributes,
                   ...responseSizes,
-                  'committed-sent-bytes': decoded.sent.commitments.reduce(
-                    (sum, r) => sum + r.end - r.start,
-                    0,
-                  ),
-                  'committed-received-bytes': decoded.received.commitments.reduce(
-                    (sum, r) => sum + r.end - r.start,
-                    0,
-                  ),
-                  'commitment-count':
-                    decoded.sent.commitments.length + decoded.received.commitments.length,
                 })
               },
               () => {},

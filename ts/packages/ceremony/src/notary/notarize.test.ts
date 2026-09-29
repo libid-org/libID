@@ -2,13 +2,12 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
 import {
-  type ByteRange,
   correlateAttestation,
   type HashOpening,
   type NotarizationPlan,
   planNotarization,
-  type Transcript,
 } from './notarize.js'
+import type { ByteRange, Transcript } from './protocol.js'
 
 const encoder = new TextEncoder()
 
@@ -55,16 +54,21 @@ function encodeDirection(
 function encodeAttestation(
   transcript: Transcript,
   plan: NotarizationPlan,
-  hashes: { sent: readonly Uint8Array[]; recv: readonly Uint8Array[] },
+  hashes: { sent: readonly Uint8Array[]; received: readonly Uint8Array[] },
   commitments = plan.commit,
 ): Uint8Array {
   return concat(
     keccak_256(encoder.encode('api.x.com')),
     u64(1_770_000_000),
     u32(transcript.sent.length),
-    u32(transcript.recv.length),
+    u32(transcript.received.length),
     encodeDirection(transcript.sent, plan.reveal.sent, commitments.sent, hashes.sent),
-    encodeDirection(transcript.recv, plan.reveal.recv, commitments.recv, hashes.recv),
+    encodeDirection(
+      transcript.received,
+      plan.reveal.received,
+      commitments.received,
+      hashes.received,
+    ),
   )
 }
 
@@ -78,7 +82,7 @@ function opening(transcript: Uint8Array, range: ByteRange, byte: number): HashOp
 
 const transcript: Transcript = {
   sent: encoder.encode('abcdefghij'),
-  recv: encoder.encode('0123456789ab'),
+  received: encoder.encode('0123456789ab'),
 }
 
 const ranges = {
@@ -86,7 +90,7 @@ const ranges = {
     { start: 0, end: 2 },
     { start: 4, end: 7 },
   ],
-  recv: [
+  received: [
     { start: 2, end: 5 },
     { start: 8, end: 12 },
   ],
@@ -95,13 +99,13 @@ const ranges = {
 describe('planNotarization', () => {
   it('validates and tiles both directions with the exact TLSNotary input shape', () => {
     expect(planNotarization(transcript, ranges)).toEqual({
-      reveal: { sent: ranges.sent, recv: ranges.recv, server_identity: true },
+      reveal: { sent: ranges.sent, received: ranges.received, server_identity: true },
       commit: {
         sent: [
           { start: 2, end: 4, algorithm: 'SHA256' },
           { start: 7, end: 10, algorithm: 'SHA256' },
         ],
-        recv: [
+        received: [
           { start: 0, end: 2, algorithm: 'SHA256' },
           { start: 5, end: 8, algorithm: 'SHA256' },
         ],
@@ -112,14 +116,14 @@ describe('planNotarization', () => {
   it('accepts full reveal and full commitment without empty complement ranges', () => {
     expect(
       planNotarization(
-        { sent: new Uint8Array(), recv: encoder.encode('abc') },
-        { sent: [], recv: [{ start: 0, end: 3 }] },
+        { sent: new Uint8Array(), received: encoder.encode('abc') },
+        { sent: [], received: [{ start: 0, end: 3 }] },
       ).commit,
-    ).toEqual({ sent: [], recv: [] })
+    ).toEqual({ sent: [], received: [] })
     expect(
       planNotarization(
-        { sent: encoder.encode('abc'), recv: new Uint8Array() },
-        { sent: [], recv: [] },
+        { sent: encoder.encode('abc'), received: new Uint8Array() },
+        { sent: [], received: [] },
       ).commit.sent,
     ).toEqual([{ start: 0, end: 3, algorithm: 'SHA256' }])
   })
@@ -127,13 +131,13 @@ describe('planNotarization', () => {
   it.each([
     [
       'sent ceiling',
-      { sent: new Uint8Array(4097), recv: new Uint8Array() },
-      { sent: [], recv: [] },
+      { sent: new Uint8Array(4097), received: new Uint8Array() },
+      { sent: [], received: [] },
     ],
     [
-      'recv ceiling',
-      { sent: new Uint8Array(), recv: new Uint8Array(32769) },
-      { sent: [], recv: [] },
+      'received ceiling',
+      { sent: new Uint8Array(), received: new Uint8Array(32769) },
+      { sent: [], received: [] },
     ],
   ])('rejects the %s', (_name, bytes, reveal) => {
     expect(() => planNotarization(bytes, reveal)).toThrow(/exceeds/)
@@ -166,24 +170,26 @@ describe('planNotarization', () => {
       ],
     ],
   ])('rejects %s reveal ranges', (_name, sent) => {
-    expect(() => planNotarization(transcript, { sent, recv: [] })).toThrow(/reveal ranges/)
+    expect(() => planNotarization(transcript, { sent, received: [] })).toThrow(/reveal ranges/)
   })
 })
 
 describe('correlateAttestation', () => {
   const plan = planNotarization(transcript, ranges)
   const sent = plan.commit.sent.map((range, index) => opening(transcript.sent, range, index + 1))
-  const recv = plan.commit.recv.map((range, index) => opening(transcript.recv, range, index + 3))
+  const received = plan.commit.received.map((range, index) =>
+    opening(transcript.received, range, index + 3),
+  )
   const attestedData = encodeAttestation(transcript, plan, {
     sent: sent.map(({ hash }) => hash),
-    recv: recv.map(({ hash }) => hash),
+    received: received.map(({ hash }) => hash),
   })
 
   it('rejects a signed authority differing from the session target', () => {
     const changed = attestedData.slice()
     changed[0] ^= 1
     expect(() =>
-      correlateAttestation('api.x.com', transcript, plan, { sent, recv }, changed),
+      correlateAttestation('api.x.com', transcript, plan, { sent, received }, changed),
     ).toThrow(/authority/)
   })
 
@@ -192,14 +198,14 @@ describe('correlateAttestation', () => {
       'api.x.com',
       transcript,
       plan,
-      { sent: [...sent].reverse(), recv: [...recv].reverse() },
+      { sent: [...sent].reverse(), received: [...received].reverse() },
       attestedData,
     )
     expect(result.sent).toEqual([
       { start: 2, end: 4, ...sent[0] },
       { start: 7, end: 10, ...sent[1] },
     ])
-    expect(result.recv.map(({ start, end }) => ({ start, end }))).toEqual([
+    expect(result.received.map(({ start, end }) => ({ start, end }))).toEqual([
       { start: 0, end: 2 },
       { start: 5, end: 8 },
     ])
@@ -216,7 +222,7 @@ describe('correlateAttestation', () => {
         { start: 0, end: 2 },
         { start: 4, end: transcript.sent.length },
       ],
-      recv: [{ start: 0, end: transcript.recv.length }],
+      received: [{ start: 0, end: transcript.received.length }],
     })
     const hash = Uint8Array.from(
       Buffer.from('2f83109b942b986213e9047e756ea35e066537f7a1297e9b368e7a481b53794f', 'hex'),
@@ -226,31 +232,31 @@ describe('correlateAttestation', () => {
         'api.x.com',
         transcript,
         onePlan,
-        { sent: [{ hash, blinder }], recv: [] },
-        encodeAttestation(transcript, onePlan, { sent: [hash], recv: [] }),
+        { sent: [{ hash, blinder }], received: [] },
+        encodeAttestation(transcript, onePlan, { sent: [hash], received: [] }),
       ).sent[0],
     ).toEqual({ start: 2, end: 4, hash, blinder })
   })
 
   it.each([
-    ['missing opening', { sent: sent.slice(1), recv }, /opening count/],
-    ['extra opening', { sent: [...sent, sent[0]], recv }, /opening count/],
+    ['missing opening', { sent: sent.slice(1), received }, /opening count/],
+    ['extra opening', { sent: [...sent, sent[0]], received }, /opening count/],
     [
       'short hash',
-      { sent: [{ ...sent[0], hash: new Uint8Array(31) }, sent[1]], recv },
+      { sent: [{ ...sent[0], hash: new Uint8Array(31) }, sent[1]], received },
       /hash must be exactly 32/,
     ],
     [
       'long blinder',
-      { sent: [{ ...sent[0], blinder: new Uint8Array(17) }, sent[1]], recv },
+      { sent: [{ ...sent[0], blinder: new Uint8Array(17) }, sent[1]], received },
       /blinder must be exactly 16/,
     ],
     [
       'changed hash',
-      { sent: [{ ...sent[0], hash: new Uint8Array(32) }, sent[1]], recv },
+      { sent: [{ ...sent[0], hash: new Uint8Array(32) }, sent[1]], received },
       /one hidden/,
     ],
-    ['cross-direction opening', { sent: recv, recv: sent }, /one hidden/],
+    ['cross-direction opening', { sent: received, received: sent }, /one hidden/],
   ] as const)('rejects %s', (_name, output, reason) => {
     expect(() => correlateAttestation('api.x.com', transcript, plan, output, attestedData)).toThrow(
       reason,
@@ -263,7 +269,7 @@ describe('correlateAttestation', () => {
       commit: { ...plan.commit, sent: [plan.commit.sent[0], plan.commit.sent[0]] },
     }
     expect(() =>
-      correlateAttestation('api.x.com', transcript, changed, { sent, recv }, attestedData),
+      correlateAttestation('api.x.com', transcript, changed, { sent, received }, attestedData),
     ).toThrow(/not the reveal complement/)
   })
 
@@ -271,30 +277,30 @@ describe('correlateAttestation', () => {
     const changed = structuredClone(plan) as NotarizationPlan
     Object.assign(changed.reveal, { server_identity: false })
     expect(() =>
-      correlateAttestation('api.x.com', transcript, changed, { sent, recv }, attestedData),
+      correlateAttestation('api.x.com', transcript, changed, { sent, received }, attestedData),
     ).toThrow(/server identity/)
   })
 
   it('rejects an opening that ambiguously matches equal hidden plaintext ranges', () => {
-    const repeated: Transcript = { sent: encoder.encode('xAxA'), recv: new Uint8Array() }
+    const repeated: Transcript = { sent: encoder.encode('xAxA'), received: new Uint8Array() }
     const repeatedPlan = planNotarization(repeated, {
       sent: [
         { start: 0, end: 1 },
         { start: 2, end: 3 },
       ],
-      recv: [],
+      received: [],
     })
     const duplicate = opening(repeated.sent, repeatedPlan.commit.sent[0], 7)
     const signed = encodeAttestation(repeated, repeatedPlan, {
       sent: [duplicate.hash, duplicate.hash],
-      recv: [],
+      received: [],
     })
     expect(() =>
       correlateAttestation(
         'api.x.com',
         repeated,
         repeatedPlan,
-        { sent: [duplicate, duplicate], recv: [] },
+        { sent: [duplicate, duplicate], received: [] },
         signed,
       ),
     ).toThrow(/does not identify one hidden range/)
@@ -317,7 +323,7 @@ describe('correlateAttestation', () => {
         changed[0] ^= 1
         return encodeAttestation({ ...transcript, sent: changed }, plan, {
           sent: sent.map(({ hash }) => hash),
-          recv: recv.map(({ hash }) => hash),
+          received: received.map(({ hash }) => hash),
         })
       })(),
       /revealed range changed/,
@@ -326,7 +332,7 @@ describe('correlateAttestation', () => {
       'signed hash',
       encodeAttestation(transcript, plan, {
         sent: [new Uint8Array(32), sent[1].hash],
-        recv: recv.map(({ hash }) => hash),
+        received: received.map(({ hash }) => hash),
       }),
       /signed commitment hash changed/,
     ],
@@ -334,7 +340,7 @@ describe('correlateAttestation', () => {
       'duplicate signed hash',
       encodeAttestation(transcript, plan, {
         sent: [sent[0].hash, sent[0].hash],
-        recv: recv.map(({ hash }) => hash),
+        received: received.map(({ hash }) => hash),
       }),
       /signed commitment hash changed/,
     ],
@@ -343,7 +349,7 @@ describe('correlateAttestation', () => {
       encodeAttestation(
         transcript,
         plan,
-        { sent: [sent[0].hash], recv: recv.map(({ hash }) => hash) },
+        { sent: [sent[0].hash], received: received.map(({ hash }) => hash) },
         { ...plan.commit, sent: [plan.commit.sent[0]] },
       ),
       /commitment count changed/,
@@ -355,7 +361,7 @@ describe('correlateAttestation', () => {
         plan,
         {
           sent: [sent[0].hash, sent[0].hash, sent[1].hash],
-          recv: recv.map(({ hash }) => hash),
+          received: received.map(({ hash }) => hash),
         },
         {
           ...plan.commit,
@@ -373,7 +379,7 @@ describe('correlateAttestation', () => {
       encodeAttestation(
         transcript,
         plan,
-        { sent: sent.map(({ hash }) => hash), recv: recv.map(({ hash }) => hash) },
+        { sent: sent.map(({ hash }) => hash), received: received.map(({ hash }) => hash) },
         {
           ...plan.commit,
           sent: [{ start: 2, end: 3, algorithm: 'SHA256' }, plan.commit.sent[1]],
@@ -383,7 +389,7 @@ describe('correlateAttestation', () => {
     ],
   ] as const)('rejects a changed %s', (_name, signed, reason) => {
     expect(() =>
-      correlateAttestation('api.x.com', transcript, plan, { sent, recv }, signed),
+      correlateAttestation('api.x.com', transcript, plan, { sent, received }, signed),
     ).toThrow(reason)
   })
 })
@@ -395,7 +401,7 @@ it('coalesces adjacent disclosures in both directions before signing [LIBID-PROV
       { start: 2, end: 4 },
       { start: 4, end: 7 },
     ],
-    recv: [
+    received: [
       { start: 2, end: 5 },
       { start: 5, end: 8 },
     ],
@@ -407,7 +413,7 @@ it('coalesces adjacent disclosures in both directions before signing [LIBID-PROV
     ...plan,
     reveal: {
       sent: [{ start: 0, end: 7 }],
-      recv: [{ start: 2, end: 8 }],
+      received: [{ start: 2, end: 8 }],
       server_identity: true as const,
     },
   }
@@ -415,17 +421,17 @@ it('coalesces adjacent disclosures in both directions before signing [LIBID-PROV
   expect(selected).toEqual(original)
   const openings = {
     sent: plan.commit.sent.map((range, i) => opening(transcript.sent, range, i + 1)),
-    recv: plan.commit.recv.map((range, i) => opening(transcript.recv, range, i + 4)),
+    received: plan.commit.received.map((range, i) => opening(transcript.received, range, i + 4)),
   }
   const signed = encodeAttestation(transcript, native, {
     sent: openings.sent.map((o) => o.hash),
-    recv: openings.recv.map((o) => o.hash),
+    received: openings.received.map((o) => o.hash),
   })
   expect(
     correlateAttestation('api.x.com', transcript, plan, openings, signed).decoded.received.revealed,
   ).toHaveLength(1)
-  const changed = { ...transcript, recv: transcript.recv.slice() }
-  changed.recv[3] ^= 1
+  const changed = { ...transcript, received: transcript.received.slice() }
+  changed.received[3] ^= 1
   expect(() => correlateAttestation('api.x.com', changed, plan, openings, signed)).toThrow(
     /revealed range changed/,
   )

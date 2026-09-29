@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { afterEach, expect, it, vi } from 'vitest'
 import { type OperationEvent, validateEvent } from '../events.js'
-import { decodeAttestedData } from './decode.js'
-import { type ExactHttpRequest, Notarization } from './session.js'
+import type { ExactHttpRequest } from './protocol.js'
+import { Notarization } from './session.js'
 
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
 
@@ -211,10 +211,19 @@ it.each([
       const attestation = {
         attestedData,
         signature: new Uint8Array(65),
-        decoded: decodeAttestedData(attestedData),
       }
       clock = 190
-      port.postMessage({ type: 'attestation', attestation })
+      port.postMessage({
+        type: 'attestation',
+        attestation,
+        attributes: {
+          'sent-bytes': 60,
+          'received-bytes': 40,
+          'committed-sent-bytes': 20,
+          'committed-received-bytes': 30,
+          'commitment-count': 2,
+        },
+      })
       await expect(revealed.attestation).resolves.toEqual(attestation)
       expect(events).toEqual([
         { event, phase: 'started', timestamp: 10010 },

@@ -2,6 +2,7 @@ import { resolve as resolveAsset } from '../assets/index.js'
 import { ceremonyError } from '../errors.js'
 import { now, type OperationEvent } from '../events.js'
 import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
+import type { FromWorker, Preload, ToWorker } from './protocol.js'
 
 /** Browser-generated bb output; structural checks here do not establish cryptographic validity. */
 export interface RawProof {
@@ -18,14 +19,6 @@ export interface ProofEngineOptions {
   threads?: number
 }
 
-type WorkerMessage =
-  | { type: 'engine-booted'; timestamp: number }
-  | { type: 'engine-ready' } // Ready for witness execution; bb may still be initializing.
-  | { type: 'engine-event'; event: OperationEvent }
-  | { type: 'engine-prepared'; timestamp: number }
-  | { type: 'engine-result'; result: RawProof }
-  | { type: 'engine-error'; error: string; event: string }
-
 /** One boot, one witness, one proof, then unconditional worker destruction. */
 export class ProofEngine {
   #worker: Worker | null = null
@@ -41,16 +34,7 @@ export class ProofEngine {
   #resolveResult: ((result: RawProof) => void) | null = null
   #rejectResult: ((error: Error) => void) | null = null
   #settled = false
-  #preload: {
-    type: 'engine-preload'
-    circuitUrl: string
-    verificationKeyUrl: string
-    threads: number
-    acvmUrl: string
-    abiUrl: string
-    wasmPath: string
-    crsPath: string
-  } | null = null
+  #preload: Preload | null = null
 
   constructor({
     circuitUrl,
@@ -97,7 +81,7 @@ export class ProofEngine {
         this.#rejectResult = reject
       })
       try {
-        this.#worker?.postMessage({ type: 'engine-prove', inputs })
+        this.#worker?.postMessage({ type: 'engine-prove', inputs } satisfies ToWorker)
       } catch (error) {
         this.#fail(error)
       }
@@ -116,7 +100,7 @@ export class ProofEngine {
     if (this.#settled) return
     const worker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' })
     this.#worker = worker
-    worker.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
+    worker.addEventListener('message', (event: MessageEvent<FromWorker>) => {
       try {
         this.#onMessage(event.data)
       } catch (error) {
@@ -144,7 +128,7 @@ export class ProofEngine {
     }
   }
 
-  #onMessage(message: WorkerMessage): void {
+  #onMessage(message: FromWorker): void {
     if (!message || typeof message !== 'object' || this.#settled) return
     switch (message.type) {
       case 'engine-booted':

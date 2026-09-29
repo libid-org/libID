@@ -1,5 +1,4 @@
-import type { ByteRange, RevealRanges, Transcript } from '../../../notary/notarize.js'
-import type { ExactHttpRequest } from '../../../notary/session.js'
+import type { ByteRange, ExactHttpRequest, Reveals, Transcript } from '../../../notary/protocol.js'
 import {
   decodePrintable,
   identityBearerRange,
@@ -33,7 +32,7 @@ export interface TokenRequestInput {
 }
 
 export interface TokenRevealSelection {
-  ranges: RevealRanges
+  ranges: Reveals
   accessToken: string
   bearerRange: ByteRange
 }
@@ -106,13 +105,13 @@ export function selectTokenReveals(
     return invalid('token request body changed')
   }
 
-  const accessToken = quotedRange(transcript.recv, 'access_token')
+  const accessToken = quotedRange(transcript.received, 'access_token')
   const token = decodePrintable(accessToken.value, 'access token', MAX_BEARER_BYTES)
   const valueStart = accessToken.valueStart
   return {
     ranges: {
       sent: [{ start: 0, end: transcript.sent.length }],
-      recv: [
+      received: [
         { start: accessToken.range.start, end: valueStart },
         { start: accessToken.range.end - 1, end: accessToken.range.end },
       ],
@@ -155,7 +154,7 @@ export function identityFromReveals(reveals: readonly Uint8Array[]): {
 }
 
 /** Reveal the complete fixed identity request except its bearer and the two identity fields. */
-export function selectIdentityReveals(transcript: Transcript, accessToken: string): RevealRanges {
+export function selectIdentityReveals(transcript: Transcript, accessToken: string): Reveals {
   const expectedRequest = buildIdentityRequest(accessToken)
   const { start: bearerStart, end: bearerEnd } = identityBearerRange(
     transcript.sent,
@@ -164,15 +163,15 @@ export function selectIdentityReveals(transcript: Transcript, accessToken: strin
     accessToken,
   )
 
-  const id = quotedRange(transcript.recv, 'id')
-  const username = quotedRange(transcript.recv, 'username')
+  const id = quotedRange(transcript.received, 'id')
+  const username = quotedRange(transcript.received, 'username')
   const response = [id.range, username.range].sort((a, b) => a.start - b.start)
-  identityFromReveals(response.map((range) => transcript.recv.slice(range.start, range.end)))
+  identityFromReveals(response.map((range) => transcript.received.slice(range.start, range.end)))
   return {
     sent: [
       { start: 0, end: bearerStart },
       { start: bearerEnd, end: transcript.sent.length },
     ],
-    recv: response,
+    received: response,
   }
 }

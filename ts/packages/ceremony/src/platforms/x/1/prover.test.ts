@@ -36,8 +36,8 @@ vi.mock('../../../notary/session.js', () => ({
 }))
 vi.mock('./transcript.js', async (original) => ({
   ...(await original<typeof import('./transcript.js')>()),
-  selectTokenReveals: () => ({ accessToken: 'fixture', ranges: { sent: [], recv: [] } }),
-  selectIdentityReveals: () => ({ sent: [{ end: 0 }, { start: 1 }], recv: [] }),
+  selectTokenReveals: () => ({ accessToken: 'fixture', ranges: { sent: [], received: [] } }),
+  selectIdentityReveals: () => ({ sent: [{ end: 0 }, { start: 1 }], received: [] }),
   identityFromReveals: () => ({ userId: '1', handle: 'fixture' }),
 }))
 

@@ -1,15 +1,10 @@
 import { parseJson } from '../json.js'
 import { hasExactKeys, isRecord, origin } from '../primitives.js'
-import { MAX_ATTESTED_DATA_BYTES } from './decode.js'
+import { MAX_ATTESTED_DATA_BYTES, type NotaryAttestation } from './decode.js'
 
 export const MAX_FRAME_BYTES = 10 * 1024 * 1024
 
 export const MAX_FRAME_PAYLOAD_BYTES = MAX_FRAME_BYTES - 4
-
-export interface NotaryAttestation {
-  attestedData: Uint8Array
-  signature: Uint8Array
-}
 
 function invalid(reason: string): never {
   throw new Error(`invalid notary transport: ${reason}`)

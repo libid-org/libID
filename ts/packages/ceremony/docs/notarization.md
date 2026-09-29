@@ -20,7 +20,7 @@ connection failures reject `send`.
 | `prepare(url)` | One prepared session bound to that exact URL. |
 | `session.send(request)` | Original sent/received transcript after one request. |
 | `session.reveal(ranges)` | Private commitment openings and a pending `attestation` promise. |
-| `await result.attestation` | Complete decoded and correlated final attestation. |
+| `await result.attestation` | Original signed bytes after final correlation. |
 
 Transcript parsing and witness construction can use early material while final
 attestations remain pending. That material is provisional: delivery must join
@@ -66,17 +66,15 @@ openings, transcript lengths, reveals and commitments with final attested bytes,
 including the authority identifier for the prepared HTTPS host.
 Missing coverage, wrong framing or correlation failure rejects completion.
 
-[decode.ts](../src/notary/decode.ts) reads the canonical signed serialization once.
-It preserves full-width timestamps without lossy number conversion and returns
-`NotaryAttestation { attestedData, signature, decoded }`. It never re-encodes signed
-bytes. Its cross-language fixture and digest live beside the decoder tests.
-The decoded view contains only signed record data, not private transcript bytes,
-bearers, blinders or witnesses.
+[decode.ts](../src/notary/decode.ts) reads the canonical signed serialization once
+inside the worker, preserving full-width timestamps. Correlation and diagnostic
+sizes use that internal record. The delivered `NotaryAttestation` contains only
+original `attestedData` and `signature` bytes. Signed bytes are never re-encoded;
+the cross-language fixture and digest live beside the decoder tests.
 
-Client checks the delivered view's structure, not its agreement with signed
-bytes. Neither endpoint verifies notary signatures locally. The ledger verifier
-must authenticate the original bytes and derive authoritative identity and
-proof inputs from them; convenience views are not alternative evidence.
+Client bounds the delivered bytes without reparsing them. Neither endpoint verifies
+notary signatures locally. The ledger verifier authenticates the original bytes
+and derives authoritative identity and proof inputs from them.
 
 ## HTTP and platform policy
 

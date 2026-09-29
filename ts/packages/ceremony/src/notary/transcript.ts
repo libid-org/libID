@@ -1,4 +1,4 @@
-import type { ByteRange } from './notarize.js'
+import type { ByteRange } from './protocol.js'
 
 const decoder = new TextDecoder('utf-8', { fatal: true })
 
