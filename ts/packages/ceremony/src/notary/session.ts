@@ -49,25 +49,6 @@ export class Notarization {
 
   /** Start target-specific setup without a bearer; event names the later reveal/attestation operation. */
   async prepare(url: string, event?: string): Promise<NotarizationSession> {
-    const emit = this.emit
-    const responseSizes: Record<string, number> = {}
-    function report(
-      phase: 'started' | 'finished',
-      timestamp: number,
-      attributes?: Record<string, number>,
-    ) {
-      if (!emit || !event) return
-      try {
-        emit({
-          event,
-          phase,
-          timestamp,
-          ...(attributes ? { instrumentation: { attributes } } : {}),
-        })
-      } catch {
-        // Observers cannot change the session outcome.
-      }
-    }
     const signal = this.signal
     signal.throwIfAborted()
     if (
@@ -84,151 +65,192 @@ export class Notarization {
       worker.onerror = (event) =>
         this.#failure.abort(new Error(event.message || 'Notary worker failed'))
     }
-    const worker = this.#worker
-    const { port1: port, port2 } = new MessageChannel()
-    const failRuntime = (error: unknown) => this.#failure.abort(error)
-    let stage: 'preparing' | 'prepared' | 'sending' | 'sent' | 'revealing' = 'preparing'
-    let ended = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const waiters = new Map<
-      FromWorker['type'],
-      { resolve: (v: FromWorker) => void; reject: (e: unknown) => void }
-    >()
-    function wait<T extends FromWorker['type']>(
-      type: T,
-    ): Promise<Extract<FromWorker, { type: T }>> {
-      const promise = new Promise<Extract<FromWorker, { type: T }>>((resolve, reject) =>
-        waiters.set(type, {
-          resolve: (v) => resolve(v as Extract<FromWorker, { type: T }>),
-          reject,
-        }),
-      )
-      void promise.catch(() => {})
-      return promise
-    }
-    function cleanup() {
-      clearTimeout(timer)
-      ended = true
-      port.close()
-      signal.removeEventListener('abort', abort)
-    }
-    function fail(error: unknown) {
-      if (ended) return
-      for (const w of waiters.values()) w.reject(error)
-      waiters.clear()
-      cleanup()
-      failRuntime(error)
-    }
-    function abort() {
-      fail(signal.reason)
-    }
-    signal.addEventListener('abort', abort, { once: true })
-    port.onmessageerror = () => fail(new Error('Invalid notarization message'))
-    port.onmessage = (event: MessageEvent<FromWorker>) => {
-      if (ended) return
-      if (event.data.type === 'error') {
-        fail(
-          new Error(
-            typeof event.data.message === 'string' ? event.data.message : 'Notarization failed',
-          ),
-        )
-        return
-      }
-      const waiter = waiters.get(event.data.type)
-      if (!waiter) {
-        fail(new Error('Unexpected notarization result'))
-        return
-      }
-      waiters.delete(event.data.type)
-      waiter.resolve(event.data)
-      if (event.data.type === 'attestation') cleanup()
-    }
-    const prepared = wait('prepared')
+    const session = new Session(
+      url,
+      this.signal,
+      (error) => this.#failure.abort(error),
+      this.emit,
+      event,
+    )
+    await session.prepare(this.#worker, this.notaryAddress)
+    return session
+  }
+}
+
+/** Owns one channel, its pending replies and the send-through-attestation deadline. */
+class Session implements NotarizationSession {
+  private phase: 'preparing' | 'prepared' | 'sending' | 'sent' | 'revealing' | 'ended' = 'preparing'
+  private readonly channel = new MessageChannel()
+  private readonly waiters = new Map<
+    FromWorker['type'],
+    { resolve: (value: FromWorker) => void; reject: (error: unknown) => void }
+  >()
+  private timer?: ReturnType<typeof setTimeout>
+  private readonly responseSizes: Record<string, number> = {}
+  private readonly abort = () => this.fail(this.signal.reason)
+
+  constructor(
+    private readonly url: string,
+    private readonly signal: AbortSignal,
+    private readonly failRuntime: (error: unknown) => void,
+    private readonly emit?: (event: OperationEvent) => void,
+    private readonly event?: string,
+  ) {
+    signal.addEventListener('abort', this.abort, { once: true })
+    this.channel.port1.onmessageerror = () => this.fail(new Error('Invalid notarization message'))
+    this.channel.port1.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data)
+  }
+
+  async prepare(worker: Worker, notaryAddress: string): Promise<void> {
+    const prepared = this.wait('prepared')
     try {
       worker.postMessage(
         {
           type: 'prepare',
-          url,
+          url: this.url,
           moduleUrl: resolveAsset(tlsnModule),
           wasmUrl: resolveAsset(tlsnWasm),
-          notaryAddress: this.notaryAddress,
-          port: port2,
+          notaryAddress,
+          port: this.channel.port2,
         } satisfies Prepare,
-        [port2],
+        [this.channel.port2],
       )
       await prepared
-      signal.throwIfAborted()
+      this.signal.throwIfAborted()
+      this.phase = 'prepared'
     } catch (error) {
-      port2.close()
-      fail(error)
+      this.channel.port2.close()
+      this.fail(error)
       throw error
     }
-    stage = 'prepared'
-    return {
-      async send(request) {
-        signal.throwIfAborted()
-        if (ended || stage !== 'prepared' || request.url !== url)
-          throw new Error('Invalid notarization send')
-        stage = 'sending'
-        timer = setTimeout(() => fail(new Error('Notarization request timed out')), 10000)
-        const result = wait('sent')
-        try {
-          port.postMessage({ type: 'send', request } satisfies ToWorker)
-          const value = await result
-          if (emit && event) {
-            const bytes = value.transcript.received
-            const end = bytes.findIndex(
-              (byte, i) =>
-                byte === 13 && bytes[i + 1] === 10 && bytes[i + 2] === 13 && bytes[i + 3] === 10,
-            )
-            // Raw wire sizes: headers include status/separator; body includes any chunk framing.
-            if (end >= 0) {
-              responseSizes['response-header-bytes'] = end + 4
-              responseSizes['response-body-bytes'] = bytes.length - end - 4
-            }
-          }
-          stage = 'sent'
-          return value.transcript
-        } catch (error) {
-          fail(error)
-          throw error
+  }
+
+  async send(request: ExactHttpRequest): Promise<Transcript> {
+    this.signal.throwIfAborted()
+    if (this.phase !== 'prepared' || request.url !== this.url)
+      throw new Error('Invalid notarization send')
+    this.phase = 'sending'
+    this.timer = setTimeout(() => this.fail(new Error('Notarization request timed out')), 10000)
+    const result = this.wait('sent')
+    try {
+      this.channel.port1.postMessage({ type: 'send', request } satisfies ToWorker)
+      const { transcript } = await result
+      this.signal.throwIfAborted()
+      if (this.emit && this.event) {
+        const bytes = transcript.received
+        const end = bytes.findIndex(
+          (byte, i) =>
+            byte === 13 && bytes[i + 1] === 10 && bytes[i + 2] === 13 && bytes[i + 3] === 10,
+        )
+        // Raw wire sizes: headers include status/separator; body includes any chunk framing.
+        if (end >= 0) {
+          this.responseSizes['response-header-bytes'] = end + 4
+          this.responseSizes['response-body-bytes'] = bytes.length - end - 4
         }
-      },
-      async reveal(reveals) {
-        signal.throwIfAborted()
-        if (ended || stage !== 'sent') throw new Error('Invalid notarization reveal')
-        stage = 'revealing'
-        const started = now()
-        report('started', started)
-        signal.throwIfAborted()
-        const result = wait('revealed')
-        const final = wait('attestation')
-        const attestation = final.then((v) => v.attestation)
-        void attestation.catch(() => {})
-        try {
-          port.postMessage({ type: 'reveal', reveals } satisfies ToWorker)
-          const openings = (await result).openings
-          const opened = now()
-          // Parent-side intervals include worker delivery/correlation, not just TLSN execution.
-          if (emit && event)
-            void final.then(
-              ({ attributes }) => {
-                const timestamp = now()
-                report('finished', timestamp, {
-                  'openings-ms': opened - started,
-                  'finalization-ms': timestamp - opened,
-                  ...attributes,
-                  ...responseSizes,
-                })
-              },
-              () => {},
-            )
-          return { openings, attestation }
-        } catch (error) {
-          fail(error)
-          throw error
-        }
-      },
+      }
+      this.phase = 'sent'
+      return transcript
+    } catch (error) {
+      this.fail(error)
+      throw error
+    }
+  }
+
+  async reveal(reveals: Reveals): Promise<RevealResult> {
+    this.signal.throwIfAborted()
+    if (this.phase !== 'sent') throw new Error('Invalid notarization reveal')
+    this.phase = 'revealing'
+    const started = now()
+    this.report('started', started)
+    this.signal.throwIfAborted()
+    const result = this.wait('revealed')
+    const final = this.wait('attestation')
+    const attestation = final.then((value) => value.attestation)
+    void attestation.catch(() => {})
+    try {
+      this.channel.port1.postMessage({ type: 'reveal', reveals } satisfies ToWorker)
+      const { openings } = await result
+      const opened = now()
+      // Parent-side intervals include worker delivery/correlation, not just TLSN execution.
+      if (this.emit && this.event)
+        void final.then(
+          ({ attributes }) => {
+            const timestamp = now()
+            this.report('finished', timestamp, {
+              'openings-ms': opened - started,
+              'finalization-ms': timestamp - opened,
+              ...attributes,
+              ...this.responseSizes,
+            })
+          },
+          () => {},
+        )
+      return { openings, attestation }
+    } catch (error) {
+      this.fail(error)
+      throw error
+    }
+  }
+
+  private wait<T extends FromWorker['type']>(type: T): Promise<Extract<FromWorker, { type: T }>> {
+    const promise = new Promise<Extract<FromWorker, { type: T }>>((resolve, reject) =>
+      this.waiters.set(type, {
+        resolve: (value) => resolve(value as Extract<FromWorker, { type: T }>),
+        reject,
+      }),
+    )
+    void promise.catch(() => {})
+    return promise
+  }
+
+  private receive(message: FromWorker): void {
+    if (this.phase === 'ended') return
+    if (message.type === 'error') {
+      this.fail(
+        new Error(typeof message.message === 'string' ? message.message : 'Notarization failed'),
+      )
+      return
+    }
+    const waiter = this.waiters.get(message.type)
+    if (!waiter || (message.type === 'attestation' && this.waiters.has('revealed'))) {
+      this.fail(new Error('Unexpected notarization result'))
+      return
+    }
+    this.waiters.delete(message.type)
+    waiter.resolve(message)
+    if (message.type === 'attestation') this.cleanup()
+  }
+
+  private cleanup(): void {
+    this.phase = 'ended'
+    clearTimeout(this.timer)
+    this.channel.port1.close()
+    this.signal.removeEventListener('abort', this.abort)
+  }
+
+  private fail(error: unknown): void {
+    if (this.phase === 'ended') return
+    for (const waiter of this.waiters.values()) waiter.reject(error)
+    this.waiters.clear()
+    this.cleanup()
+    this.failRuntime(error)
+  }
+
+  private report(
+    phase: 'started' | 'finished',
+    timestamp: number,
+    attributes?: Record<string, number>,
+  ): void {
+    if (!this.emit || !this.event) return
+    try {
+      this.emit({
+        event: this.event,
+        phase,
+        timestamp,
+        ...(attributes ? { instrumentation: { attributes } } : {}),
+      })
+    } catch {
+      // Observers cannot change the session outcome.
     }
   }
 }

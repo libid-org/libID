@@ -1,5 +1,5 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { type Message, PopupConnection, PopupError, PopupWindow } from '@libid/popup'
+import { PopupConnection, PopupError, PopupWindow } from '@libid/popup'
 import { ceremonyError, reportFailure } from '../../errors.js'
 import { Events, now } from '../../events.js'
 import { origin } from '../../primitives.js'
@@ -49,65 +49,55 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     !allowedApplicationOrigins.includes(ccdpOrigin)
   )
     throw new TypeError(messages.invalidCallbackInputs)
-  let connection: PopupConnection<Message> | undefined,
-    ended = false,
-    navigating = false,
-    retained: OAuthReturn | undefined
-  const cleanup = () => {
-    ended = true
-    retained = undefined
+  // Popup owns validation and matching of the Bridge's admission patterns.
+  const connection = PopupConnection.accept(PopupWindow.current(), {
+    fallback,
+    connectionId: id,
+    allowedApplicationOrigins,
+  })
+  let state: { phase: 'connecting'; input: OAuthReturn } | { phase: 'navigating' | 'ended' } = {
+    phase: 'connecting',
+    input,
   }
   const events = new Events()
   const ui = eventView(events, '')
-  const fail = (error?: unknown) => {
-    if (ended) return
+  const cleanup = () => {
+    state = { phase: 'ended' }
+    ui.stop()
+  }
+  const fail = (error: unknown) => {
+    if (state.phase === 'ended') return
     const failure = ceremonyError(error, 'authorization')
-    cleanup()
     events.emit({
       status: 'failed',
       event: failure.event,
       message: failure.message,
       timestamp: now(),
     })
-    ui.stop()
-    reportFailure(origin(connection?.peerOrigin) ? connection : undefined, failure)
+    cleanup()
+    reportFailure(origin(connection.peerOrigin) ? connection : undefined, failure)
   }
-  try {
-    retained = input
-    ui.message(messages.returning)
-    // Popup owns validation and matching of the Bridge's admission patterns.
-    connection = PopupConnection.accept(PopupWindow.current(), {
-      fallback,
-      connectionId: id,
-      allowedApplicationOrigins,
+  ui.message(messages.returning)
+  void connection.closed.then((end) => {
+    if (state.phase !== 'navigating' || end.outcome === 'failed')
+      fail(end.outcome === 'failed' ? new PopupError(end.code) : new Error(messages.callbackClosed))
+  })
+  void connection.ready
+    .then(async () => {
+      if (state.phase !== 'connecting') return
+      const applicationOrigin = connection.peerOrigin
+      if (!origin(applicationOrigin)) throw new TypeError(messages.missingApplicationOrigin)
+      const event = { event: 'authorization', phase: 'finished', timestamp: now() } as const
+      try {
+        connection.send({ type: 'event', ...event })
+      } catch {
+        /* A lost observation does not gate navigation. */
+      }
+      events.emit({ ...event, status: 'active' })
+      const fragment = proverFragment(id, applicationOrigin, state.input)
+      state = { phase: 'navigating' }
+      await connection.navigate(ccdpOrigin + route('prover'), fragment)
+      cleanup()
     })
-
-    void connection.closed.then((end) => {
-      if (!ended && (!navigating || end.outcome === 'failed'))
-        fail(
-          end.outcome === 'failed' ? new PopupError(end.code) : new Error(messages.callbackClosed),
-        )
-    })
-    void connection.ready
-      .then(async () => {
-        if (ended || !retained) return
-        const applicationOrigin = connection!.peerOrigin
-        if (!origin(applicationOrigin)) throw new TypeError(messages.missingApplicationOrigin)
-        const event = { event: 'authorization', phase: 'finished', timestamp: now() } as const
-        try {
-          connection!.send({ type: 'event', ...event })
-        } catch {
-          /* A lost observation does not gate navigation. */
-        }
-        events.emit({ ...event, status: 'active' })
-        const fragment = proverFragment(id, applicationOrigin, retained)
-        navigating = true
-        await connection!.navigate(ccdpOrigin + route('prover'), fragment)
-        cleanup()
-        ui.stop()
-      })
-      .catch(fail)
-  } catch (error) {
-    fail(error)
-  }
+    .catch(fail)
 }

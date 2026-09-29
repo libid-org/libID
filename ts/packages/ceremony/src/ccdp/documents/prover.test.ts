@@ -305,3 +305,66 @@ it.each(['before', 'after'])(
     }
   },
 )
+
+it.each(['before-ready', 'duplicate', 'after-denial'])(
+  'consumes the private return once: %s [LIBID-OAUTH-019]',
+  async (when) => {
+    vi.stubGlobal('location', { origin: 'https://ccdp.test' })
+    vi.stubGlobal('crossOriginIsolated', true)
+    vi.stubGlobal('Worker', vi.fn())
+    let ready!: () => void
+    connection.ready = new Promise<void>((resolve) => {
+      ready = resolve
+    })
+    let finish!: () => void
+    if (when !== 'before-ready')
+      prove.mockImplementationOnce(
+        () =>
+          new Promise<null>((resolve) => {
+            finish = () => resolve(null)
+          }),
+      )
+    const run = startProver(
+      new URLSearchParams({
+        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        applicationOrigin: 'https://app.test',
+        oauthQuery: '',
+        oauthFragment: '#error=access_denied',
+      }).toString(),
+    )
+    const request = { type: 'prove-identity', platformId: 'google', platformCeremonyVersion: 1 }
+    const receive = connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]
+    if (when === 'before-ready') {
+      receive(request)
+      ready()
+      await run
+      await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
+      expect(prove).not.toHaveBeenCalled()
+      expect(connection.send.mock.calls.some(([message]) => message.type === 'event')).toBe(false)
+    } else {
+      ready()
+      await run
+      receive(request)
+      await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
+      if (when === 'duplicate') {
+        receive(request)
+        await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
+        finish()
+      } else {
+        finish()
+        await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
+        receive(request)
+      }
+      await Promise.resolve()
+      expect(prove).toHaveBeenCalledOnce()
+      expect(prove.mock.calls[0][0].signal.aborted).toBe(true)
+    }
+    expect(connection.send.mock.calls.filter(([m]) => m.type === 'ceremony-failed')).toHaveLength(
+      when === 'after-denial' ? 0 : 1,
+    )
+    expect(connection.send.mock.calls.filter(([m]) => m.type === 'user-denied')).toHaveLength(
+      when === 'after-denial' ? 1 : 0,
+    )
+    expect(connection.send.mock.calls.some(([m]) => m.type === 'identity-proof')).toBe(false)
+  },
+)
