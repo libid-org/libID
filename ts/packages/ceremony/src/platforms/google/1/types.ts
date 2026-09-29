@@ -4,7 +4,7 @@ import {
   MAX_SUB_BYTES,
   RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/inputs.js'
-import { fixedBytes, hasExactKeys, isRecord, text } from '../../../primitives.js'
+import { fixedBytes, hasExactKeys, isRecord } from '../../../primitives.js'
 import { type Identity, isIdentity, proofBytes } from '../../types.js'
 
 export interface GoogleProofV1 {
@@ -29,14 +29,19 @@ export function validateProof(v: unknown): GoogleProofV1 {
 
 export function validateIdentity(value: unknown): Identity<'google'> {
   if (
-    !isIdentity(value, 'google', [MAX_AUD_BYTES, MAX_SUB_BYTES, MAX_EMAIL_BYTES]) ||
-    ![value.oauthClientId, value.userId, value.userName].every((s) => printableWithoutQuote.test(s))
+    !isIdentity(value, 'google', {
+      oauthClientId: isClientId,
+      userId: (s) => circuitText(s, MAX_SUB_BYTES),
+      userName: (s) => circuitText(s, MAX_EMAIL_BYTES),
+    })
   )
     throw new TypeError('Invalid google identity')
   return value
 }
 
-export const printableWithoutQuote = /^[\x20-\x21\x23-\x7e]+$/
+/** Circuit-bound claims are printable ASCII without quotes, so length is the byte length. */
+export const circuitText = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length <= max && /^[\x20-\x21\x23-\x7e]+$/.test(value)
 
-/** Client identifier constraints for this platform. */
-export const isClientId = (value: unknown): value is string => text(value, MAX_AUD_BYTES)
+/** Client identifier constraints for this platform: exactly what a signed `aud` can hold. */
+export const isClientId = (value: unknown): value is string => circuitText(value, MAX_AUD_BYTES)

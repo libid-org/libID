@@ -35,17 +35,14 @@ export function redirect(value: unknown): value is string {
 }
 
 /** Shared identity shape; each platform slice checks its own platform ID and byte limits. */
-export function isIdentityShape(
-  value: unknown,
-  limits: readonly [oauthClientId: number, userId: number, userName: number],
-): value is IdentityProof['identity'] {
+function isIdentityShape(value: unknown): value is IdentityProof['identity'] {
   return (
     isRecord(value) &&
     hasExactKeys(value, ['platformId', 'oauthClientId', 'userId', 'userName']) &&
     isSlug(value.platformId) &&
-    text(value.oauthClientId, limits[0]) &&
-    text(value.userId, limits[1]) &&
-    text(value.userName, limits[2])
+    text(value.oauthClientId, 512) &&
+    text(value.userId, 255) &&
+    text(value.userName, 255)
   )
 }
 
@@ -142,6 +139,6 @@ export interface IdentityProof {
 }
 
 export const IdentityProof = codec<IdentityProof>('identity-proof', {
-  identity: (value) => isIdentityShape(value, [512, 255, 255]),
+  identity: isIdentityShape,
   proof: () => true,
 })

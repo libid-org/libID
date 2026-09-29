@@ -112,9 +112,10 @@ its fallback on failure; Prefetch does not speculatively download both mirrors.
 The [pinned browser loader limitation](proving.md#dependency-asset-resolution)
 means current CRS resources must remain external.
 
-Each platform/version composes shared handles and its circuit/key in its own
-asset leaf. [platforms.assets.ts](../src/platforms/platforms.assets.ts) collects
-those sets. The compiler adds the selected execution chunks and nested-worker
+Each platform/version composes shared handles and its circuit/key in an asset
+leaf; X and GitHub share the bearer-link leaf.
+[platforms.assets.ts](../src/platforms/platforms.assets.ts) collects those sets and
+derives the circuit list whose capacity the build checks. The compiler adds the selected execution chunks and nested-worker
 edges, so their filenames are not declared again. Prefetch consumes metadata;
 it never imports execution to discover dependencies.
 

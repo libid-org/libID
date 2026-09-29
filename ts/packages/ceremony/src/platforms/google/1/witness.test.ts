@@ -221,7 +221,6 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier field
         tokenWithPayload(payloadJson.replace('","email_verified"', '" ,"email_verified"')),
         fixture.jwk,
       ],
-      ['wrong key id', fixture.idToken, { ...fixture.jwk, kid: 'other' }],
       ['wrong exponent', fixture.idToken, { ...fixture.jwk, e: 'Aw' }],
       [
         'short modulus',

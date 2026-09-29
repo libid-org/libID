@@ -94,21 +94,6 @@ export type IdentityResult<P extends PlatformId = PlatformId> =
   | { [K in P]: { status: 'accepted'; identity: Identity<K>; oauthProof: OAuthProof<K> } }[P]
   | { status: 'denied' }
 
-export function validateProofMessage<P extends PlatformId, V extends SupportedCeremonyVersion<P>>(
-  platformId: P,
-  version: V,
-  message: IdentityProof,
-): IdentityProof & { identity: Identity<P>; proof: ProofByPlatformVersion[P][V] } {
-  const implementation = platforms[platformId]?.versions[version as 1]
-  if (!implementation) throw new TypeError('Unsupported platform version')
-  implementation.validateIdentity(message.identity)
-  implementation.validateProof(message.proof)
-  return message as IdentityProof & {
-    identity: Identity<P>
-    proof: ProofByPlatformVersion[P][V]
-  }
-}
-
 export function assembleResult<P extends PlatformId>(
   platformId: P,
   version: SupportedCeremonyVersion<P>,
@@ -116,7 +101,9 @@ export function assembleResult<P extends PlatformId>(
   clientId: string,
   authorizationNonce: Uint8Array,
 ): IdentityResult<P> {
-  const { identity, proof } = validateProofMessage(platformId, version, message)
+  const implementation = implementationFor(platformId, version)
+  const identity = implementation.validateIdentity(message.identity)
+  const proof = implementation.validateProof(message.proof)
   if (identity.oauthClientId !== clientId) throw new TypeError('OAuth client ID mismatch')
   return {
     status: 'accepted',
@@ -134,8 +121,7 @@ export function commonVersions<P extends PlatformId>(
   platform: P,
   advertised: readonly number[],
 ): readonly SupportedCeremonyVersion<P>[] {
-  if (typeof platform !== 'string' || !Object.hasOwn(platforms, platform))
-    throw new TypeError('Unsupported platform')
+  if (!isPlatformId(platform)) throw new TypeError('Unsupported platform')
   return Object.freeze(
     Object.keys(platforms[platform].versions)
       .map(Number)

@@ -64,25 +64,37 @@ export function bytesToBigInt(bytes: Uint8Array): bigint {
   return value
 }
 
-/** Split an RSA integer into the ABI's least-significant-first hexadecimal limbs. */
-export function limbs(value: bigint): string[] {
+/** Split an RSA integer into the ABI's least-significant-first limbs. */
+export function limbs(value: bigint): bigint[] {
   const mask = (1n << LIMB_BITS) - 1n
   return Array.from(
     { length: NUM_LIMBS },
-    (_, index) => `0x${((value >> (LIMB_BITS * BigInt(index))) & mask).toString(16)}`,
+    (_, index) => (value >> (LIMB_BITS * BigInt(index))) & mask,
   )
 }
 
-function pad(bytes: Uint8Array, length: number): number[] {
+/** Zero-pad a value to its fixed circuit width. */
+export function pad(bytes: Uint8Array, length: number): Uint8Array {
   if (bytes.length > length) throw new Error(`value exceeds circuit limit ${length}`)
   const result = new Uint8Array(length)
   result.set(bytes)
-  return Array.from(result)
+  return result
 }
 
-function pack31(bytes: Uint8Array): string {
-  return `0x${bytesToBigInt(bytes).toString(16)}`
+/** Pack padded bytes into big-endian FIELD_PACK_BYTES-byte field elements. */
+export function pack31(bytes: Uint8Array): bigint[] {
+  return Array.from({ length: Math.ceil(bytes.length / FIELD_PACK_BYTES) }, (_, index) =>
+    bytesToBigInt(bytes.subarray(index * FIELD_PACK_BYTES, (index + 1) * FIELD_PACK_BYTES)),
+  )
 }
+
+/** The audience's SHA-256 as two big-endian 128-bit halves. */
+export function audienceHash(audience: Uint8Array): bigint[] {
+  const digest = sha256(audience)
+  return [bytesToBigInt(digest.subarray(0, 16)), bytesToBigInt(digest.subarray(16))]
+}
+
+const hex = (value: bigint) => `0x${value.toString(16)}`
 
 function findOffset(payload: Uint8Array, pattern: string): number {
   const needle = encoder.encode(pattern)
@@ -114,9 +126,8 @@ export function buildGoogleInputs(
   const emailBytes = encoder.encode(email)
   const subBytes = encoder.encode(sub)
   const audienceBytes = encoder.encode(aud)
-  const paddedEmail = new Uint8Array(pad(emailBytes, MAX_EMAIL_BYTES))
-  const paddedSub = new Uint8Array(pad(subBytes, MAX_SUB_BYTES))
-  const paddedAudience = new Uint8Array(pad(audienceBytes, MAX_AUD_BYTES))
+  const paddedEmail = pad(emailBytes, MAX_EMAIL_BYTES)
+  const paddedSub = pad(subBytes, MAX_SUB_BYTES)
   const expString = String(exp)
 
   const emailOffset = findOffset(token.payload, `"email":"${email}"`)
@@ -129,13 +140,12 @@ export function buildGoogleInputs(
 
   const modulusInteger = bytesToBigInt(modulus)
   const redc = (1n << (2n * 2048n + BARRETT_OVERFLOW_BITS)) / modulusInteger
-  const audienceDigest = sha256(audienceBytes)
 
   return {
-    signing_input: pad(signingInput, SIGNING_INPUT_MAX),
+    signing_input: Array.from(pad(signingInput, SIGNING_INPUT_MAX)),
     signing_input_len: String(signingInput.length),
     header_b64_len: String(token.headerB64.length),
-    payload_json: pad(token.payload, PAYLOAD_JSON_MAX),
+    payload_json: Array.from(pad(token.payload, PAYLOAD_JSON_MAX)),
     payload_json_len: String(token.payload.length),
     email_offset: String(emailOffset),
     nonce_offset: String(nonceOffset),
@@ -149,18 +159,15 @@ export function buildGoogleInputs(
     email_len: String(emailBytes.length),
     sub_bytes: Array.from(paddedSub),
     sub_len: String(subBytes.length),
-    audience_bytes: Array.from(paddedAudience),
+    audience_bytes: Array.from(pad(audienceBytes, MAX_AUD_BYTES)),
     audience_len: String(audienceBytes.length),
-    signature: limbs(bytesToBigInt(token.signature)),
-    redc: limbs(redc),
+    signature: limbs(bytesToBigInt(token.signature)).map(hex),
+    redc: limbs(redc).map(hex),
     authorization_digest: Array.from(authorizationDigest),
-    audience_hash: [pack31(audienceDigest.subarray(0, 16)), pack31(audienceDigest.subarray(16))],
-    sub_packed: [pack31(paddedSub)],
-    email_packed: [
-      pack31(paddedEmail.subarray(0, FIELD_PACK_BYTES)),
-      pack31(paddedEmail.subarray(FIELD_PACK_BYTES)),
-    ],
+    audience_hash: audienceHash(audienceBytes).map(hex),
+    sub_packed: pack31(paddedSub).map(hex),
+    email_packed: pack31(paddedEmail).map(hex),
     exp: expString,
-    modulus: limbs(modulusInteger),
+    modulus: limbs(modulusInteger).map(hex),
   }
 }

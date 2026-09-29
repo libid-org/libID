@@ -24,7 +24,8 @@ units cover pattern forwarding.
 
 The released `bearer_link` circuit accepts bearers of at most 128 bytes. The
 X and GitHub specifications allow up to 4096 bytes; both implementations enforce
-the circuit's narrower limit.
+the circuit's narrower limit on the token response, where they also reject the
+whitespace an HTTP bearer cannot carry.
 [Specifications](../README.md#specifications) own proof and protocol requirements;
 [platform pipelines](pipelines.md) describe this implementation.
 

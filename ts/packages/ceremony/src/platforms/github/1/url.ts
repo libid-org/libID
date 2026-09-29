@@ -1,6 +1,15 @@
 import { isPkceValue } from '../../../ccdp/index.js'
+import type { ReturnProfile } from '../../oauthReturn.js'
 
 export const pkce = true
+
+/** Query code return; success and error both carry the exact issuer. */
+export const oauthReturn: ReturnProfile = {
+  transport: 'query',
+  credential: 'code',
+  rejected: ['id_token', 'access_token', 'refresh_token'],
+  issuer: 'https://github.com/login/oauth',
+}
 
 const AUTHORIZATION_ENDPOINT = 'https://github.com/login/oauth/authorize'
 
