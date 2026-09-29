@@ -4,7 +4,7 @@ import { startPrefetch } from './prefetch.js'
 vi.hoisted(() => vi.stubGlobal('document', {}))
 afterAll(() => vi.unstubAllGlobals())
 const { connection, rootWorker, dispatchPrefetch } = vi.hoisted(() => ({
-  connection: { ready: Promise.resolve(), send: vi.fn() },
+  connection: { peerOrigin: 'https://app.test', ready: Promise.resolve(), send: vi.fn() },
   rootWorker: vi.fn(),
   dispatchPrefetch: vi.fn(),
 }))

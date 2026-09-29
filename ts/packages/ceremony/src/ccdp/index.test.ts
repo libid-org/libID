@@ -2,13 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { origin } from '../primitives.js'
 import {
   CeremonyFailed,
-  Event,
+  EventMessage,
   IdentityProof,
   ProveIdentity,
   redirect,
   UserDenied,
 } from './index.js'
-import { prefetchFragment, proverFragment, readPrefetch, readProver } from './navigation.js'
+import {
+  oauthState,
+  prefetchFragment,
+  proverFragment,
+  readOAuthState,
+  readPrefetch,
+  readProver,
+} from './navigation.js'
 
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 
@@ -31,10 +38,10 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
       },
     ],
     [UserDenied, { type: 'user-denied' }],
-    [Event, { type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 }],
-    [Event, { type: 'event', event: 'prover', phase: 'started', timestamp: 2 }],
+    [EventMessage, { type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 }],
+    [EventMessage, { type: 'event', event: 'prover', phase: 'started', timestamp: 2 }],
     [
-      Event,
+      EventMessage,
       {
         type: 'event',
         event: 'proof',
@@ -54,6 +61,8 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
   for (const [codec, value] of samples)
     it(codec.type, () => {
       expect(codec.decode(value)).toBe(value)
+      const { decode } = codec
+      expect(decode(value)).toBe(value)
       expect(() => codec.decode({ ...value, ceremonyId: id })).toThrow()
       expect(() => codec.decode({ ...value, type: 'other' })).toThrow()
       expect(() => codec.decode(Object.assign(new Date(), value))).toThrow()
@@ -116,6 +125,8 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
       const base = { ...samples[1][1], platformId }
       const value = { ...base, clientCredential: 'public&credential=1' }
       expect(ProveIdentity.decode(value)).toBe(value)
+      const longest = { ...base, clientCredential: 'x'.repeat(512) }
+      expect(ProveIdentity.decode(longest)).toBe(longest)
       expect(() => ProveIdentity.decode({ ...value, tokenExchangeCredential: 'retired' })).toThrow()
       expect(ProveIdentity.decode(base)).toBe(base)
       for (const clientCredential of [
@@ -129,6 +140,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
         '\t',
         'é',
         '\x7f',
+        'x'.repeat(513),
       ])
         expect(() => ProveIdentity.decode({ ...base, clientCredential })).toThrow()
     }
@@ -137,7 +149,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
   it('rejects malformed event records and terminal claims without coercion', () => {
     const message = samples[5][1]
     for (const timestamp of [NaN, Infinity, -1, '0'])
-      expect(() => Event.decode({ ...message, timestamp })).toThrow()
+      expect(() => EventMessage.decode({ ...message, timestamp })).toThrow()
     for (const extra of [
       { status: 'completed' },
       { stage: 'zk-proving' },
@@ -145,7 +157,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
       { proof: 'secret' },
       { attributes: { bytes: Infinity } },
     ])
-      expect(() => Event.decode({ ...message, ...extra })).toThrow()
+      expect(() => EventMessage.decode({ ...message, ...extra })).toThrow()
   })
   it('preserves private return components with one outer encoding [LIBID-OAUTH-026] [TEST-CCDP-03]', () => {
     const input = { query: `?code=a%2Bb&state=v1.${id}`, fragment: '' }
@@ -165,6 +177,13 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
       ),
     ).toThrow()
   })
+})
+
+it('reads the OAuth state it writes and any later CCDP version [LIBID-ASSET-015]', () => {
+  expect(readOAuthState(oauthState(id))).toEqual({ version: '1', ceremonyId: id })
+  expect(readOAuthState(`v2.${id}`)).toEqual({ version: '2', ceremonyId: id })
+  for (const state of [`v0.${id}`, `v01.${id}`, `1.${id}`, 'v1.invalid', `v1.${id.toUpperCase()}`])
+    expect(readOAuthState(state)).toBeNull()
 })
 
 it.each([
@@ -241,7 +260,7 @@ it('supports bounded extension observations and disambiguated operations [LIBID-
     },
     { type: 'event', event: 'prover-fallback', timestamp: 3 },
   ])
-    expect(Event.decode(event)).toBe(event)
+    expect(EventMessage.decode(event)).toBe(event)
   for (const event of [
     { event: 'prover-fallback', phase: 'started' },
     { event: 'prover' },
@@ -256,7 +275,7 @@ it('supports bounded extension observations and disambiguated operations [LIBID-
       },
     },
   ])
-    expect(() => Event.decode({ type: 'event', timestamp: 1, ...event })).toThrow()
+    expect(() => EventMessage.decode({ type: 'event', timestamp: 1, ...event })).toThrow()
 })
 
 it.each(['https://app.test', 'http://localhost:4681', 'http://127.0.0.1:4681'])(
@@ -301,7 +320,7 @@ it('accepts only the current outcome names [TEST-CCDP-05]', () => {
   for (const type of ['cancel', 'denied', 'abort']) {
     const value =
       type === 'abort' ? { type, event: 'prover', message: 'Retired message' } : { type }
-    for (const codec of [UserDenied, CeremonyFailed, ProveIdentity, IdentityProof, Event])
+    for (const codec of [UserDenied, CeremonyFailed, ProveIdentity, IdentityProof, EventMessage])
       expect(() => codec.decode(value)).toThrow()
   }
 })
@@ -314,8 +333,8 @@ it('validates the exact optional instrumentation record [TEST-CCDP-06]', () => {
     { attributes: {} },
     { operationId: 'first', attributes: { bytes: 1, cached: true, source: 'worker' } },
   ])
-    expect(Event.decode({ ...value, instrumentation })).toMatchObject({ instrumentation })
-  expect(Event.decode(value)).not.toHaveProperty('instrumentation')
+    expect(EventMessage.decode({ ...value, instrumentation })).toMatchObject({ instrumentation })
+  expect(EventMessage.decode(value)).not.toHaveProperty('instrumentation')
   for (const instrumentation of [
     null,
     undefined,
@@ -334,7 +353,7 @@ it('validates the exact optional instrumentation record [TEST-CCDP-06]', () => {
     { attributes: { text: 'x'.repeat(129) } },
     { attributes: Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`field-${i}`, i])) },
   ])
-    expect(() => Event.decode({ ...value, instrumentation })).toThrow()
+    expect(() => EventMessage.decode({ ...value, instrumentation })).toThrow()
   for (const extra of [{ operationId: 'first' }, { attributes: {} }])
-    expect(() => Event.decode({ ...value, ...extra })).toThrow()
+    expect(() => EventMessage.decode({ ...value, ...extra })).toThrow()
 })

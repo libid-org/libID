@@ -1,13 +1,21 @@
 import type { LedgerId } from '@libid/ledger'
 import { mainnet, testnet } from '@libid/ledger/testing'
-import type { ConnectionEnd, Message, MessageType, PopupConnection } from '@libid/popup'
+import {
+  type ConnectionEnd,
+  type Message,
+  type MessageType,
+  type PopupConnection,
+  PopupError,
+} from '@libid/popup'
 import { describe, expect, it, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
+import type { CeremonyEvent } from '../../events.js'
 import { deriveAuthorizationDigest, deriveCodeChallenge } from '../../platforms/authorization.js'
 import { platforms } from '../../platforms/index.js'
 import { b64urlEncode } from '../../primitives.js'
-import { type CeremonyEvent, ccdpClientFromConfig } from './ceremony.js'
-import { validateCeremonyConfig } from './config.js'
+import { popupErrorMessages } from '../ui-messages.js'
+import { ccdpClientFromConfig } from './ceremony.js'
+import { fetchCeremonyConfig, validateCeremonyConfig } from './config.js'
 
 class Connection implements PopupConnection<Message> {
   readonly peerOrigin = 'https://ccdp.test'
@@ -473,7 +481,36 @@ it.each([
   connection.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
   connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
   connection.receive({ type: 'identity-proof', identity, proof })
-  await expect(result).rejects.toThrow('sequence')
+  // Result validation keeps its own text; only ordering violations are sequence errors.
+  await expect(result).rejects.toMatchObject({
+    name: 'CeremonyError',
+    event: 'prover',
+    message: expect.not.stringContaining('sequence'),
+  })
+})
+
+it('keeps transport failure text instead of reporting it as an invalid sequence', async () => {
+  const { connection, ceremony } = setup()
+  connection.send.mockImplementation(() => {
+    throw new PopupError('send-unavailable')
+  })
+  const result = ceremony.proveUserIdentity()
+  connection.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
+  connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
+  await expect(result).rejects.toMatchObject({
+    event: 'prover',
+    message: popupErrorMessages['send-unavailable'],
+    cause: expect.any(PopupError),
+  })
+})
+
+it('keeps the Prefetch navigation error like the authorization navigation error', async () => {
+  const { connection, ceremony } = setup()
+  connection.navigate.mockRejectedValueOnce(new PopupError('keep-failed'))
+  await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({
+    event: 'prefetch-dispatch',
+    message: popupErrorMessages['keep-failed'],
+  })
 })
 
 // Compile-only API checks: rejected forms must remain rejected by TypeScript.
@@ -881,7 +918,16 @@ it('requires the GitHub public credential and validates optional credentials for
     expect(() =>
       validate({ ...profile, clientCredential: 'public', tokenExchangeCredential: 'retired' }),
     ).toThrow()
-    for (const clientCredential of [undefined, null, '', 1, 'with space', 'tail\n', 'é'])
+    for (const clientCredential of [
+      undefined,
+      null,
+      '',
+      1,
+      'with space',
+      'tail\n',
+      'é',
+      'x'.repeat(513),
+    ])
       expect(() => validate({ ...profile, clientCredential })).toThrow()
   }
 })
@@ -913,4 +959,24 @@ it('preserves closure before proving starts', async () => {
   const { connection, ceremony } = setup()
   await connection.close()
   await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ status: 'closed' })
+})
+
+it('fetches configuration once without credentials and bounds its body [LIBID-MOD-011]', async () => {
+  const fetch = vi.fn(async () => Response.json(wireConfig))
+  vi.stubGlobal('fetch', fetch)
+  try {
+    await expect(fetchCeremonyConfig('https://bridge.test')).resolves.toEqual(config)
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('https://bridge.test/api/v1/ceremony/config', {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-store',
+      redirect: 'error',
+    })
+    fetch.mockResolvedValueOnce(Response.json({ ...wireConfig, padding: 'x'.repeat(64 * 1024) }))
+    await expect(fetchCeremonyConfig('https://bridge.test')).rejects.toThrow('limit')
+    await expect(fetchCeremonyConfig('https://bridge.test/')).rejects.toThrow('oauthBridge')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })

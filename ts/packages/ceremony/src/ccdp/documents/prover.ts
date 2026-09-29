@@ -1,11 +1,11 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { type Message, PopupConnection, PopupError, PopupWindow } from '@libid/popup'
+import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { claimRootWorker } from '../../assets/registration.js'
-import { ceremonyError, reportFailure } from '../../errors.js'
-import { type CoreEvent, coreEvents, Events, now, type OperationEvent } from '../../events.js'
+import { ceremonyError, endError, reportFailure } from '../../errors.js'
+import { Events, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
 import type { ProverContext } from '../../platforms/context.js'
-import { implementationFor, type PlatformId } from '../../platforms/index.js'
-import { Event as EventMessage, IdentityProof, ProveIdentity } from '../index.js'
+import { implementationFor, isPlatformId, type PlatformId } from '../../platforms/index.js'
+import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
 import { eventView, view } from './ui.js'
@@ -48,7 +48,7 @@ class ProverDocument {
   private state: ProverState
   private readonly controller = new AbortController()
   private readonly events = new Events()
-  private readonly ui = eventView(this.events, '')
+  private readonly ui = eventView(this.events)
 
   constructor(
     private readonly connection: PopupConnection<Message>,
@@ -63,11 +63,7 @@ class ProverDocument {
       this.connection.on(ProveIdentity, (request) => {
         void this.prove(request).catch((error) => this.fail(error))
       })
-      void this.connection.closed.then((end) =>
-        this.fail(
-          end.outcome === 'failed' ? new PopupError(end.code) : new Error(messages.proverClosed),
-        ),
-      )
+      void this.connection.closed.then((end) => this.fail(endError(end, messages.proverClosed)))
       await this.connection.ready
       if (this.controller.signal.aborted) return
       if (
@@ -90,20 +86,22 @@ class ProverDocument {
 
   private async prove(request: ProveIdentity): Promise<void> {
     if (this.state.phase === 'ended') return
+    const { platformId } = request
+    // Only version 1 provers are bundled.
     if (
       this.state.phase !== 'ready' ||
       request.platformCeremonyVersion !== 1 ||
-      !Object.hasOwn(implementations, request.platformId)
+      !isPlatformId(platformId)
     )
       throw new Error(messages.invalidProvingRequest)
     const { input } = this.state
     this.state = { phase: 'proving' }
     try {
-      this.ui.trackProof(implementationFor(request.platformId as PlatformId, 1).progressWeights)
+      this.ui.trackProof(implementationFor(platformId, 1).progressWeights)
     } catch {
       /* Presentation cannot prevent proof execution. */
     }
-    const module = await implementations[request.platformId as PlatformId]()
+    const module = await implementations[platformId]()
     this.controller.signal.throwIfAborted()
     const result = await module.prove({
       request,
@@ -141,7 +139,7 @@ class ProverDocument {
     try {
       this.connection.send(message)
     } catch (error) {
-      if (coreEvents.includes(event.event as CoreEvent)) {
+      if (isCoreEvent(event.event)) {
         this.fail(error)
         return
       }
@@ -159,12 +157,7 @@ class ProverDocument {
   private fail(error: unknown): void {
     if (this.state.phase === 'ended') return
     const failure = ceremonyError(error, 'prover')
-    this.events.emit({
-      status: 'failed',
-      event: failure.event,
-      message: failure.message,
-      timestamp: now(),
-    })
+    this.events.emit(failureEvent(failure))
     this.cleanup()
     reportFailure(this.connection, failure)
   }

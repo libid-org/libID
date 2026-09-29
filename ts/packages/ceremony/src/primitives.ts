@@ -37,13 +37,24 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Exact-shape gate: the record owns exactly the listed keys — unknown
- * fields fail before use. Field types are the caller's next check.
+ * Exact-shape gate: the record owns every required key and nothing beyond the
+ * optional ones — unknown fields fail before use. Field types are the caller's
+ * next check.
  */
-export function hasExactKeys(rec: Record<string, unknown>, keys: readonly string[]): boolean {
-  if (Object.keys(rec).length !== keys.length) return false
-  for (const k of keys) if (!Object.hasOwn(rec, k)) return false
-  return true
+export function hasExactKeys(
+  rec: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): boolean {
+  return (
+    required.every((k) => Object.hasOwn(rec, k)) &&
+    Object.keys(rec).every((k) => required.includes(k) || optional.includes(k))
+  )
+}
+
+/** Lowercase protocol identifiers: platform IDs, event names and attribute keys. */
+export function isSlug(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value)
 }
 
 export const fixedBytes = (v: unknown, n: number): v is Uint8Array =>

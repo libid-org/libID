@@ -10,7 +10,10 @@ it('preserves unexpected error text and context without serializing the exceptio
   expect(error.cause).toBe(cause)
   expect(ceremonyError(error, 'prover')).toBe(error)
   const send = vi.fn()
-  reportFailure({ send } as unknown as PopupConnection<Message>, error)
+  reportFailure(
+    { send, peerOrigin: 'https://app.test' } as unknown as PopupConnection<Message>,
+    error,
+  )
   const message = send.mock.calls[0][0]
   expect(CeremonyFailed.decode(message)).toBe(message)
   expect(message).toEqual({
@@ -28,9 +31,11 @@ it('preserves unexpected error text and context without serializing the exceptio
 it('bounds display text and rejects arbitrary objects instead of stringifying their contents', () => {
   expect(errorMessage({ secret: 'value' })).toBe('Ceremony failed.')
   expect(errorMessage(new Error('bad\nvalue\0'))).toBe('bad value')
-  const long = errorMessage(new Error('💥'.repeat(2048)))
-  expect(new TextEncoder().encode(long).length).toBeLessThanOrEqual(2048)
-  expect(long.length).toBeGreaterThan(0)
+  expect(errorMessage(new Error('💥'.repeat(2048)))).toBe('💥'.repeat(512))
+  const long = errorMessage(new Error(`a${'💥'.repeat(600)}`))
+  expect(long).toBe(`a${'💥'.repeat(511)}`)
+  expect(new TextDecoder().decode(new TextEncoder().encode(long))).toBe(long)
+  expect(new CeremonyError('proof', `a${'💥'.repeat(600)}`).message).toBe(long)
 })
 
 it('records undeliverable failures without logging opaque text or changing outcomes [TEST-CCDP-08]', () => {
@@ -42,6 +47,7 @@ it('records undeliverable failures without logging opaque text or changing outco
     log.mockClear()
     reportFailure(
       {
+        peerOrigin: 'https://app.test',
         send() {
           throw new Error('connection closed')
         },
@@ -49,6 +55,14 @@ it('records undeliverable failures without logging opaque text or changing outco
       error,
     )
     expect(log).toHaveBeenCalledOnce()
+    log.mockClear()
+    // An unauthenticated or pattern-admitted peer never receives the failure.
+    for (const peerOrigin of [null, 'null', '*', 'https://app.test/']) {
+      const send = vi.fn()
+      reportFailure({ send, peerOrigin } as unknown as PopupConnection<Message>, error)
+      expect(send).not.toHaveBeenCalled()
+    }
+    expect(log).toHaveBeenCalledTimes(4)
     log.mockImplementation(() => {
       throw new Error('logger failed')
     })

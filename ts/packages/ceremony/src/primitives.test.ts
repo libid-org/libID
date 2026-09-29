@@ -84,6 +84,13 @@ describe('exact-record helpers', () => {
     expect(hasExactKeys({ a: 1, b: 2, c: 3 }, ['a', 'b'])).toBe(false)
     expect(hasExactKeys({}, [])).toBe(true)
   })
+
+  it('hasExactKeys admits listed optional keys only when present', () => {
+    expect(hasExactKeys({ a: 1 }, ['a'], ['b'])).toBe(true)
+    expect(hasExactKeys({ a: 1, b: 2 }, ['a'], ['b'])).toBe(true)
+    expect(hasExactKeys({ b: 2 }, ['a'], ['b'])).toBe(false)
+    expect(hasExactKeys({ a: 1, c: 3 }, ['a'], ['b'])).toBe(false)
+  })
 })
 
 it('keeps admission patterns out of service URLs and exact peer origins', () => {

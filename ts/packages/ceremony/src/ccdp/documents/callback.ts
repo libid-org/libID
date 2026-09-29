@@ -1,10 +1,9 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
-import { PopupConnection, PopupError, PopupWindow } from '@libid/popup'
-import { ceremonyError, reportFailure } from '../../errors.js'
-import { Events, now } from '../../events.js'
+import { PopupConnection, PopupWindow } from '@libid/popup'
+import { ceremonyError, endError, reportFailure } from '../../errors.js'
+import { Events, failureEvent, now } from '../../events.js'
 import { origin } from '../../primitives.js'
-import { UUID } from '../index.js'
-import { type OAuthReturn, proverFragment, route } from '../navigation.js'
+import { type OAuthReturn, proverFragment, readOAuthState, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
 import { eventView, view } from './ui.js'
 
@@ -21,24 +20,34 @@ export function startCallback(): void {
       ...new URLSearchParams(input.query).getAll('state'),
       ...new URLSearchParams(input.fragment.slice(1)).getAll('state'),
     ]
-    const state = states.length === 1 ? /^v([1-9][0-9]*)\.(.+)$/.exec(states[0]) : null
-    if (!state || !UUID.test(state[2])) throw new TypeError(messages.invalidOAuthState)
+    const state = states.length === 1 ? readOAuthState(states[0]) : null
+    if (!state) throw new TypeError(messages.invalidOAuthState)
     // This closed dispatch retains only implementations supported by this artifact.
-    if (state[1] !== '1') {
+    if (state.version !== '1') {
       view(messages.unsupportedVersion)
       return
     }
-    const inputs: unknown = JSON.parse(
-      document.getElementById('libid-callback-config')?.textContent ?? '',
-      (_key, value) => (value && typeof value === 'object' ? Object.freeze(value) : value),
-    )
-    if (!Array.isArray(inputs)) throw new TypeError(messages.invalidCallbackInputs)
-    callbackV1(input, state[2], inputs)
+    callbackV1(input, state.ceremonyId, deploymentInputs())
   } catch (error) {
     const failure = ceremonyError(error, 'authorization')
     view(messages.returnToApplication(failure.message))
     reportFailure(undefined, failure)
   }
+}
+
+/** A missing, malformed or non-list slot is invalid deployment data, not a parser message. */
+function deploymentInputs(): readonly unknown[] {
+  let inputs: unknown
+  try {
+    inputs = JSON.parse(
+      document.getElementById('libid-callback-config')?.textContent ?? '',
+      (_key, value) => (value && typeof value === 'object' ? Object.freeze(value) : value),
+    )
+  } catch {
+    /* Reported below. */
+  }
+  if (!Array.isArray(inputs)) throw new TypeError(messages.invalidCallbackInputs)
+  return inputs
 }
 
 function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]): void {
@@ -60,7 +69,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     input,
   }
   const events = new Events()
-  const ui = eventView(events, '')
+  const ui = eventView(events)
   const cleanup = () => {
     state = { phase: 'ended' }
     ui.stop()
@@ -68,19 +77,14 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
   const fail = (error: unknown) => {
     if (state.phase === 'ended') return
     const failure = ceremonyError(error, 'authorization')
-    events.emit({
-      status: 'failed',
-      event: failure.event,
-      message: failure.message,
-      timestamp: now(),
-    })
+    events.emit(failureEvent(failure))
     cleanup()
-    reportFailure(origin(connection.peerOrigin) ? connection : undefined, failure)
+    reportFailure(connection, failure)
   }
   ui.message(messages.returning)
   void connection.closed.then((end) => {
     if (state.phase !== 'navigating' || end.outcome === 'failed')
-      fail(end.outcome === 'failed' ? new PopupError(end.code) : new Error(messages.callbackClosed))
+      fail(endError(end, messages.callbackClosed))
   })
   void connection.ready
     .then(async () => {
