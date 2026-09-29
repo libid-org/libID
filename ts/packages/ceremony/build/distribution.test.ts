@@ -7,7 +7,7 @@ import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { parseCsp } from './profiles.ts'
 import { packageDir } from './sources.ts'
-import { errorHeaders } from './sws.ts'
+import { errorHeaders, nativeSkip } from './sws.ts'
 
 const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
   graph: DistributionMetadata = JSON.parse(
@@ -101,7 +101,7 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
 })
 
 test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018] [TEST-DIST-01]', {
-  skip: !process.env.CEREMONY_SWS_URL,
+  skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
   for (const [path, expected] of Object.entries(graph.headers)) {
     const physical = graph.files[path]
@@ -124,7 +124,7 @@ test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018] [TEST-DIST-01]', 
 })
 
 test('actual SWS answers the health probe and serves every 404 with the error policy [KIT-001A]', {
-  skip: !process.env.CEREMONY_SWS_URL,
+  skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
   const url = process.env.CEREMONY_SWS_URL
   const health = await fetch(`${url}/health`)
@@ -165,15 +165,15 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   const path = '/ccdp/callback.html'
   const html = readFileSync(join(out, 'public', path), 'utf8')
   const headers = graph.headers[path]
-  const a = prepareCallback(html, headers, [
-    ['https://app.test', 'https://ccdp.test'],
-    'https://ccdp.test',
-  ])
-  const b = prepareCallback(html, headers, [
-    ['https://other.test', 'https://ccdp.test'],
-    'https://ccdp.test',
-    { hostile: '</script><script>alert(1)</script>$&' },
-  ])
+  const inputs = {
+    allowedApplicationOrigins: ['https://app.test', 'https://ccdp.test'],
+    ccdpOrigin: 'https://ccdp.test',
+  }
+  const a = prepareCallback(html, headers, inputs)
+  const b = prepareCallback(html, headers, {
+    ...inputs,
+    allowedApplicationOrigins: ['https://other.test', '</script><script>alert(1)</script>$&'],
+  })
   assert.equal(a.headers['Content-Security-Policy'], b.headers['Content-Security-Policy'])
   assert.ok(b.body.includes('\\u003c/script>'))
   assert.ok(b.body.includes('$&'))
@@ -188,17 +188,9 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
     `${html}<script src="https://evil.test"></script>`,
     html.replace('type="module">', 'type="module">void 0;'),
   ])
-    assert.throws(() =>
-      prepareCallback(broken, headers, [
-        ['https://app.test', 'https://ccdp.test'],
-        'https://ccdp.test',
-      ]),
-    )
+    assert.throws(() => prepareCallback(broken, headers, inputs))
   assert.throws(() =>
-    prepareCallback(html, { ...headers, 'content-security-policy': "script-src 'self'" }, [
-      ['https://app.test'],
-      'https://ccdp.test',
-    ]),
+    prepareCallback(html, { ...headers, 'content-security-policy': "script-src 'self'" }, inputs),
   )
   assert.equal(Object.hasOwn(graph.headers, '/ccdp/v1/callback.js'), false)
 })
@@ -225,7 +217,7 @@ test('CCDP contains no ledger implementation or build-time notary mapping [LIBID
 })
 
 test('native SWS negotiates representations, HEAD, conditional requests and ranges [LIBID-ASSET-026] [LIBID-ASSET-016] [KIT-001B]', {
-  skip: !process.env.CEREMONY_SWS_URL,
+  skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
   const { request } = await import('node:http')
   const raw = (path: string, headers: Record<string, string>, method = 'GET') =>

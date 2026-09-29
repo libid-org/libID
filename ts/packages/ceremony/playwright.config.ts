@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { defineConfig, devices } from '@playwright/test'
+import { origins, runtime } from './e2e/topology.js'
 
 // A second invocation must never recreate another run's containers during startup.
 const compose = `docker compose -p ceremony-e2e-${randomUUID()} -f e2e/compose.yaml`
@@ -14,7 +15,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   use: {
-    baseURL: 'https://localhost:4881',
+    baseURL: origins(true).app,
     ignoreHTTPSErrors: true,
     trace: 'off',
     video: 'off',
@@ -26,7 +27,7 @@ export default defineConfig({
       // Full proofs/runtime qualification run once per engine in the desktop HTTPS projects.
       testIgnore: 'runtime.spec.ts',
       grepInvert: /@proof/,
-      use: { browserName, baseURL: 'http://localhost:4781', ignoreHTTPSErrors: false },
+      use: { browserName, baseURL: origins(false).app, ignoreHTTPSErrors: false },
     })),
     {
       name: 'chromium',
@@ -53,17 +54,18 @@ export default defineConfig({
   ],
   webServer: [
     {
-      // Compose can exit during startup while leaving healthy sibling containers running.
-      command: `trap '${compose} down' EXIT; trap 'exit 1' INT TERM; ${compose} up --abort-on-container-exit`,
-      url: 'http://127.0.0.1:4986/index.html',
+      // Build every input first, so a bare `playwright test` qualifies current artifacts. Compose
+      // can exit during startup while leaving healthy sibling containers running.
+      command: `node e2e/build.mjs || exit 1; trap '${compose} down' EXIT; trap 'exit 1' INT TERM; ${compose} up --abort-on-container-exit`,
+      url: `http://127.0.0.1:${runtime}/index.html`,
       stdout: 'pipe',
       reuseExistingServer: false,
       timeout: 300000,
       gracefulShutdown: { signal: 'SIGTERM', timeout: 30000 },
     },
     {
-      command: 'node e2e/build.mjs && node e2e/server.mjs',
-      url: 'https://localhost:4881',
+      command: 'node e2e/server.mjs',
+      url: origins(true).app,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60000,

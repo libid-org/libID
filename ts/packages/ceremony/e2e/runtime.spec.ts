@@ -1,11 +1,12 @@
 import { once } from 'node:events'
 import { connect, createServer, type Socket } from 'node:net'
 import { expect, test } from './fixtures.js'
+import { notary, runtime } from './topology.js'
 import { verifyBrowserProof } from './verify.js'
 
 // Controlled circuit inputs and unauthenticated X/GitHub requests; no live OAuth credentials.
 test.beforeEach(async ({ page }) => {
-  await page.goto('http://localhost:4986/index.html')
+  await page.goto(`http://localhost:${runtime}/index.html`)
   await page.waitForFunction(() => typeof window.proveBearerFixture === 'function')
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true)
 })
@@ -67,7 +68,7 @@ for (const stall of ['send', 'reveal'] as const)
     let stalled = false
     const sockets = new Set<Socket>()
     const relay = createServer((client) => {
-      const upstream = connect(4987, '127.0.0.1')
+      const upstream = connect(notary, '127.0.0.1')
       sockets.add(client).add(upstream)
       client.on('error', () => upstream.destroy())
       upstream.on('error', () => client.destroy())
