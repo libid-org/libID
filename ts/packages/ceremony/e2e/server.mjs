@@ -13,7 +13,8 @@ const artifactDir = join(packageDir, '.cache/qualification-assets')
 
 const counts = new Map(),
   holds = new Map(),
-  failures = new Set()
+  failures = new Set(),
+  fixtures = new Map()
 
 const graph = JSON.parse(readFileSync(join(artifactDir, 'distribution-graph.json')))
 
@@ -134,7 +135,28 @@ for (const secure of [true, false]) {
             const query = new URL(req.url, ccdp).searchParams,
               target = query.get('asset')
             if (query.has('fail')) failures.add(target)
-            if (query.has('restore')) failures.delete(target)
+            if (query.has('restore')) {
+              failures.delete(target)
+              fixtures.delete(target)
+            }
+            if (query.has('tlsn')) {
+              const mode = query.get('tlsn')
+              const asset = graph.requestsByProfile['github/1'].find(
+                (asset) => asset.url === target && asset.url.endsWith('/tlsn_wasm.js'),
+              )
+              if (!asset || !['valid', 'invalid'].includes(mode))
+                return send('Invalid fixture', {}, 400)
+              const code = Buffer.from(
+                `globalThis.__corruptAttestation = ${mode === 'invalid'};\n` +
+                  readFileSync(join(packageDir, '.cache/e2e/tlsn-fixture.js'), 'utf8'),
+              )
+              if (code.length > asset.bytes) throw new Error('TLSN fixture exceeds asset length')
+              // Keep the emitted graph's byte-length validation active. The fixture replaces
+              // the SDK and peer only; production session worker/correlation code still runs.
+              const body = Buffer.alloc(asset.bytes, ' ')
+              code.copy(body)
+              fixtures.set(target, body)
+            }
             if (query.has('hold')) holds.set(target, [])
             if (query.has('release')) {
               for (const resume of holds.get(target) ?? []) resume()
@@ -166,6 +188,7 @@ for (const secure of [true, false]) {
             counts.set(path, (counts.get(path) ?? 0) + 1)
             if (holds.has(path)) await new Promise((resolve) => holds.get(path).push(resolve))
           }
+          if (fixtures.has(path)) return send(fixtures.get(path), graph.headers[path])
           // Transparent HTTPS ingress to the real static server, including HEAD/ranges/304.
           const upstream = proxyRequest(
             new URL(req.url, sws),

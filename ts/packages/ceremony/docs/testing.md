@@ -55,6 +55,12 @@ all of them against the freshly built image and the pinned binary.
 
 ## Browser tests
 
+`e2e/bearer.spec.ts` runs complete X/GitHub ceremony handoffs using synthetic
+OAuth returns and a test-only TLSN SDK/peer. The emitted session worker and
+proof engine are real; Node verifies delivered proofs against the released key
+and the commitments in the final fixture attestations. The separate runtime
+suite exercises real TLSN/notary sessions. Neither substitutes for live consent.
+
 With Docker Compose running:
 
 ```sh

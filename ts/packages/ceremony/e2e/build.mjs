@@ -4,6 +4,7 @@ import { packageDir } from '../build/release.ts'
 
 for (const [entry, name] of [
   ['e2e/app.ts', 'app.js'],
+  ['e2e/tlsn.fixture.ts', 'tlsn-fixture.js'],
   ['src/ccdp/documents/ui.ts', 'ui.js'],
   ['src/events.ts', 'events.js'],
   ['src/platforms/google/1/events.ts', 'google-events.js'],
