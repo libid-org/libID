@@ -31,9 +31,9 @@ incomplete**; see [evidence and remaining gates](docs/qualification.md).
 
 ## Specifications
 
-The [CCDP](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp.md),
-[Bridge](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/oauth-bridge.md),
-[Distribution](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md),
-and [platform](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md)
+The [CCDP](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/ccdp.md),
+[Bridge](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/oauth-bridge.md),
+[Distribution](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/ccdp-distribution.md),
+and [platform](https://github.com/libid-org/libid/blob/9ae438ac0c4d554fd1fc0085ae8e67b0c5c3b0ed/specs/platform-ceremonies.md)
 specifications own interoperability and proof semantics. Package docs explain
 this implementation.

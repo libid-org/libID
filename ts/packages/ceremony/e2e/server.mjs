@@ -141,7 +141,7 @@ for (const secure of [true, false]) {
             }
             if (query.has('tlsn')) {
               const mode = query.get('tlsn')
-              const asset = graph.requestsByProfile['github/1'].find(
+              const asset = graph.allowedRequests.find(
                 (asset) => asset.url === target && asset.url.endsWith('/tlsn_wasm.js'),
               )
               if (!asset || !['valid', 'invalid'].includes(mode))

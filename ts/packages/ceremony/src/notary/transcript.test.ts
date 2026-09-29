@@ -42,6 +42,13 @@ const transcript = {
 
 describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C] [TEST-PLAT-09A] [TEST-PLAT-09B] [TEST-PLAT-09C]', () => {
   it('reveals the entire request, accepts reordered headers, and keeps the bearer committed', () => {
+    expect([...new URLSearchParams(text(request.body))]).toEqual([
+      ['grant_type', 'authorization_code'],
+      ['client_id', input.clientId],
+      ['code', input.code],
+      ['redirect_uri', input.redirectUri],
+      ['code_verifier', input.codeVerifier],
+    ])
     expect(text(request.headers['Content-Length'])).toBe(String(request.body.length))
     const selected = selectToken(transcript, input)
     const plan = planNotarization(transcript, selected.ranges)
@@ -139,6 +146,10 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60] [TEST-PLAT-
       ).toEqual([id, login])
     },
   )
+  it('rejects duplicate numeric IDs with different whitespace [TEST-COMMON-10]', () => {
+    const received = utf8('{"id":123,"id" : 456,"login":"alice"}')
+    expect(() => selectIdentity({ sent, received }, 'token')).toThrow('id is duplicated')
+  })
   it.each(['"123"', '0123', '123.4', '123e2', '123 4', '18446744073709551616'])(
     'still rejects invalid spaced IDs: %s',
     (id) => {
