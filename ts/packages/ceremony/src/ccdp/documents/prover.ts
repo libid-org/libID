@@ -3,19 +3,13 @@ import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { claimRootWorker } from '../../assets/registration.js'
 import { ceremonyError, endError, reportFailure } from '../../errors.js'
 import { Events, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
-import type { ProverContext } from '../../platforms/context.js'
-import { implementationFor, isPlatformId, type PlatformId } from '../../platforms/index.js'
+import { implementationFor, isPlatformId } from '../../platforms/index.js'
 import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
 import { eventView, view } from './ui.js'
 
-const implementations: Record<
-  PlatformId,
-  () => Promise<{
-    prove(context: ProverContext): Promise<Omit<IdentityProof, 'type'> | null>
-  }>
-> = {
+const implementations = {
   google: () => import('../../platforms/google/1/prover.js'),
   x: () => import('../../platforms/x/1/prover.js'),
   github: () => import('../../platforms/github/1/prover.js'),

@@ -37,18 +37,19 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Exact-shape gate: the record owns every required key and nothing beyond the
- * optional ones — unknown fields fail before use. Field types are the caller's
- * next check.
+ * Exact-shape gate: a plain record (see `isRecord`) that owns every required key
+ * and nothing beyond the optional ones — unknown fields fail before use. Field
+ * types are the caller's next check.
  */
 export function hasExactKeys(
-  rec: Record<string, unknown>,
+  value: unknown,
   required: readonly string[],
   optional: readonly string[] = [],
-): boolean {
+): value is Record<string, unknown> {
   return (
-    required.every((k) => Object.hasOwn(rec, k)) &&
-    Object.keys(rec).every((k) => required.includes(k) || optional.includes(k))
+    isRecord(value) &&
+    required.every((k) => Object.hasOwn(value, k)) &&
+    Object.keys(value).every((k) => required.includes(k) || optional.includes(k))
   )
 }
 

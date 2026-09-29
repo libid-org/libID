@@ -32,7 +32,7 @@ import {
   type SupportedCeremonyVersion,
   supportedPlatforms,
 } from '../../platforms/index.js'
-import { fixedBytes, hasExactKeys, isRecord, origin } from '../../primitives.js'
+import { fixedBytes, hasExactKeys, origin } from '../../primitives.js'
 import {
   CeremonyFailed,
   EventMessage,
@@ -99,8 +99,7 @@ export interface CCDPClient {
 
 /** Fetch and validate Bridge configuration once. Rejects unavailable or malformed configuration. */
 export async function createCCDPClient(options: { oauthBridge: string }): Promise<CCDPClient> {
-  if (!isRecord(options) || !hasExactKeys(options, ['oauthBridge']))
-    throw new TypeError('Invalid client options')
+  if (!hasExactKeys(options, ['oauthBridge'])) throw new TypeError('Invalid client options')
   return ccdpClientFromConfig(await fetchCeremonyConfig(options.oauthBridge))
 }
 
@@ -113,50 +112,31 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
   const enabledPlatforms = Object.freeze(
     supportedPlatforms.filter((p) => enabledVersions(p).length > 0),
   )
-  return Object.freeze({
+  // Contextually typed by CCDPClient, whose declarations carry the documented signatures.
+  const client: CCDPClient = {
     enabledPlatforms,
     enabledVersions,
-    connect<Out extends Message = Message, In extends Message = Out>(
-      popup: PopupWindow,
-      options: Omit<ConnectOptions, 'allowedPopupOrigins'>,
-    ): PopupConnection<Out, In> {
-      return PopupConnection.connect<Out, In>(popup, {
-        ...options,
-        allowedPopupOrigins: popupOrigins,
-      })
+    connect(popup, options) {
+      return PopupConnection.connect(popup, { ...options, allowedPopupOrigins: popupOrigins })
     },
-    new<P extends PlatformId>(
-      conn: PopupConnection<Message>,
-      id: string,
-      platformId: P,
-      ledgerId: LedgerId,
-      operationDomain: Uint8Array,
-      transactionData: Uint8Array,
-      ceremonyVersion?: SupportedCeremonyVersion<P>,
-    ): Ceremony<P> {
+    new(conn, id, platformId, ledgerId, operationDomain, transactionData, ceremonyVersion) {
       if (typeof id !== 'string' || !UUID.test(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
       const version = selectVersion(enabledVersions(platformId), ceremonyVersion)
-      const { chainId, notaryAddress } = snapshotLedger(ledgerId)
+      const ledger = snapshotLedger(ledgerId)
       if (!fixedBytes(operationDomain, 32)) throw new TypeError('Operation domain must be 32 bytes')
       if (!(transactionData instanceof Uint8Array) || transactionData.length > 0xffffffff)
         throw new TypeError('Invalid transaction bytes')
       if (liveIds.has(id)) throw new TypeError('Ceremony ID is already live')
-      const input = {
-        platformId,
-        version,
-        operationDomain,
-        transactionData,
-        chainId,
-        notaryAddress,
-      }
+      const input = { ...ledger, platformId, version, operationDomain, transactionData }
       const run = new Run(id, conn, input, config, () => {
         liveIds.delete(id)
       })
       liveIds.add(id)
       return run
     },
-  })
+  }
+  return Object.freeze(client)
 }
 
 /** An omitted version selects the highest compatible one. */
@@ -212,8 +192,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private authorizationUrl: string
   private readonly prefetchUrl: string
   private readonly fragment: URLSearchParams
-  private resolve: ((value: IdentityResult<P>) => void) | undefined
-  private reject: ((reason: Error) => void) | undefined
+  private result: PromiseWithResolvers<IdentityResult<P>> | undefined
   private binding: Binding | undefined
   private startFailure: CeremonyError | undefined
 
@@ -284,11 +263,6 @@ class Run<P extends PlatformId> implements Ceremony<P> {
 
   private publish(event: OperationEvent): void {
     this.events.emit({ ...event, status: 'active' })
-  }
-
-  private finish(event: Exclude<CeremonyEvent, { status: 'active' }>): void {
-    this.cleanup()
-    this.events.emit(event)
   }
 
   private receiveEvent({ type: _type, ...event }: EventMessage): void {
@@ -394,10 +368,8 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       if (bindings.get(this.connection) === binding) bindings.delete(this.connection)
     })
     this.state = 'prefetch'
-    const result = new Promise<IdentityResult<P>>((resolve, reject) => {
-      this.resolve = resolve
-      this.reject = reject
-    })
+    const result = Promise.withResolvers<IdentityResult<P>>()
+    this.result = result
     try {
       this.listen(binding, EventMessage, (event) => this.receiveEvent(event))
       this.listen(binding, IdentityProof, (m) => {
@@ -409,24 +381,15 @@ class Run<P extends PlatformId> implements Ceremony<P> {
           this.start.clientId,
           this.authorizationNonce,
         )
-        const resolve = this.resolve
-        this.finish({
-          event: 'prover',
-          phase: 'finished',
-          status: 'completed',
-          timestamp: now(),
-        })
-        resolve?.(result)
+        this.finish(
+          { event: 'prover', phase: 'finished', status: 'completed', timestamp: now() },
+          result,
+        )
       })
       this.listen(binding, UserDenied, () => {
         this.expect('proving')
         if (this.proofWorkStarted) throw sequenceError('Denial after proof work began')
-        const resolve = this.resolve
-        this.finish({
-          status: 'denied',
-          timestamp: now(),
-        })
-        resolve?.({ status: 'denied' })
+        this.finish({ status: 'denied', timestamp: now() }, { status: 'denied' })
       })
       this.listen(binding, CeremonyFailed, (message) =>
         this.fail(new CeremonyError(message.event, message.message)),
@@ -441,7 +404,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       if (bindings.get(this.connection) === binding) bindings.delete(this.connection)
       this.fail(new Error(messages.connectionInitializationFailed))
     }
-    return result
+    return result.promise
   }
 
   /** The operation a failure interrupts. */
@@ -452,14 +415,17 @@ class Run<P extends PlatformId> implements Ceremony<P> {
 
   private fail(error: unknown): void {
     if (this.state === 'done') return
-    const reject = this.reject
     const failure = ceremonyError(error, this.operation())
     if (this.state === 'new') this.startFailure = failure
-    this.finish(failureEvent(failure))
-    reject?.(failure)
+    this.finish(failureEvent(failure), failure)
   }
 
-  private cleanup(): void {
+  /** Release the run before its one terminal update, then settle with the captured resolvers. */
+  private finish(
+    event: Exclude<CeremonyEvent, { status: 'active' }>,
+    outcome: IdentityResult<P> | CeremonyError,
+  ): void {
+    const result = this.result
     if (this.binding) this.binding.active = false
     this.state = 'done'
     this.releaseId()
@@ -468,7 +434,9 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.start.codeVerifier = null
     this.authorizationUrl = ''
     this.authorizationNonce.fill(0)
-    this.resolve = undefined
-    this.reject = undefined
+    this.result = undefined
+    this.events.emit(event)
+    if (outcome instanceof CeremonyError) result?.reject(outcome)
+    else result?.resolve(outcome)
   }
 }
