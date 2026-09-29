@@ -1,4 +1,5 @@
 import { afterAll, afterEach, expect, it, vi } from 'vitest'
+import { CEREMONY_ID } from '../../testing/index.js'
 import { startPrefetch } from './prefetch.js'
 
 vi.hoisted(() => vi.stubGlobal('document', {}))
@@ -9,7 +10,6 @@ const { connection, rootWorker, dispatchPrefetch } = vi.hoisted(() => ({
   dispatchPrefetch: vi.fn(),
 }))
 vi.mock('virtual:ceremony-assets', () => ({ requestsByProfile: { 'google/1': [] } }))
-vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
 vi.mock('@libid/popup', async (original) => ({
   ...(await original<typeof import('@libid/popup')>()),
   PopupConnection: { accept: () => connection },
@@ -19,7 +19,7 @@ vi.mock('../../assets/registration.js', () => ({ rootWorker, dispatchPrefetch })
 vi.mock('../../assets/worker.js', () => ({ startWorker: vi.fn() }))
 vi.mock('./ui.js', () => ({ eventView: () => ({ stop: vi.fn() }) }))
 const fragment = new URLSearchParams({
-  ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+  ceremonyId: CEREMONY_ID,
   platformId: 'google',
   ceremonyVersion: '1',
 }).toString()

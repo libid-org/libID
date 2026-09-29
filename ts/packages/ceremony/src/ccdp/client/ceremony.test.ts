@@ -15,6 +15,7 @@ import { deriveAuthorizationDigest, deriveCodeChallenge } from '../../platforms/
 import { buildGooglePublicInputs } from '../../platforms/google/1/publicInputs.js'
 import { platforms } from '../../platforms/index.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
+import { CEREMONY_ID } from '../../testing/index.js'
 import { popupErrorMessages } from '../ui-messages.js'
 import { ccdpClientFromConfig } from './ceremony.js'
 import { fetchCeremonyConfig, validateCeremonyConfig } from './config.js'
@@ -53,7 +54,7 @@ class Connection implements PopupConnection<Message> {
   }
 }
 
-const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+const id = CEREMONY_ID
 
 const wireConfig = {
   ccdpOrigin: 'https://ccdp.test',

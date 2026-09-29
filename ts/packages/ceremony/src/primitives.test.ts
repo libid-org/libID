@@ -8,8 +8,7 @@ import {
   origin,
   webUrl,
 } from './primitives.js'
-
-const utf8 = (s: string) => new TextEncoder().encode(s)
+import { utf8 } from './testing/index.js'
 
 describe('b64url codec', () => {
   // RFC 4648 §10 vectors, unpadded.

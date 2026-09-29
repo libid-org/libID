@@ -1,12 +1,11 @@
 import { concatBytes } from '@noble/hashes/utils.js'
 import { expect, it } from 'vitest'
+import { utf8 } from '../testing/index.js'
 import { responseJson, responseSizes } from './http.js'
-
-const encode = (text: string) => new TextEncoder().encode(text)
 
 const response = (headers: string, body: string) => ({
   sent: new Uint8Array(),
-  received: encode(`HTTP/1.1 200 OK\r\n${headers}\r\n${body}`),
+  received: utf8(`HTTP/1.1 200 OK\r\n${headers}\r\n${body}`),
 })
 
 it('parses chunked JSON without altering the transcript used for range commitments', () => {
@@ -21,14 +20,14 @@ it('parses chunked JSON without altering the transcript used for range commitmen
 })
 
 it('decodes UTF-8 only after removing chunk framing that splits a character', () => {
-  const json = encode('{"id":1,"name":"é"}'),
+  const json = utf8('{"id":1,"name":"é"}'),
     split = json.indexOf(0xc3) + 1
   const received = concatBytes(
-    encode(`HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n${split.toString(16)}\r\n`),
+    utf8(`HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n${split.toString(16)}\r\n`),
     json.subarray(0, split),
-    encode(`\r\n${(json.length - split).toString(16)}\r\n`),
+    utf8(`\r\n${(json.length - split).toString(16)}\r\n`),
     json.subarray(split),
-    encode('\r\n0\r\n\r\n'),
+    utf8('\r\n0\r\n\r\n'),
   )
   expect(responseJson({ sent: new Uint8Array(), received })).toEqual({ id: 1, name: 'é' })
 })
@@ -66,7 +65,7 @@ it.each([
   'splits raw response sizes at the first head terminator: $response [LIBID-PROVER-007]',
   ({ response, headerBytes }) => {
     const received = new Uint8Array(40)
-    received.set(encode(response))
+    received.set(utf8(response))
     expect(responseSizes(received)).toEqual(
       headerBytes === undefined
         ? {}

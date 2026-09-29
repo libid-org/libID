@@ -1,6 +1,7 @@
 import { type ConnectionEnd, PopupError } from '@libid/popup'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Events } from '../../events.js'
+import { CEREMONY_ID } from '../../testing/index.js'
 import { messages, popupErrorMessages } from '../ui-messages.js'
 import { startCallback } from './callback.js'
 
@@ -12,8 +13,6 @@ const { accept, current, view, navigate, send, terminal } = vi.hoisted(() => ({
   send: vi.fn(),
   terminal: vi.fn(),
 }))
-
-vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
 
 vi.mock('@libid/popup', async (original) => ({
   ...(await original<typeof import('@libid/popup')>()),
@@ -29,7 +28,7 @@ vi.mock('./ui.js', () => ({
   },
 }))
 
-const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+const id = CEREMONY_ID
 
 const v1Inputs = [['https://app.test', 'https://ccdp.test'], 'https://ccdp.test']
 

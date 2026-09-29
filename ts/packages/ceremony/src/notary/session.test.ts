@@ -4,8 +4,6 @@ import { type OperationEvent, validateEvent } from '../events.js'
 import type { ExactHttpRequest } from './protocol.js'
 import { Notarization } from './session.js'
 
-vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
-
 vi.mock('../assets/index.js', async (original) => ({
   ...(await original<typeof import('../assets/index.js')>()),
   assetUrl: () => 'https://ccdp.test/asset',

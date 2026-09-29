@@ -1,5 +1,6 @@
 import { type Carrier, PopupWindow } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
+import { CEREMONY_ID } from '../../testing/index.js'
 import { ccdpClientFromConfig } from './ceremony.js'
 import { validateCeremonyConfig } from './config.js'
 
@@ -39,7 +40,7 @@ it.each([
     const onDiagnostic = vi.fn()
     // A JavaScript caller cannot widen the configuration-derived allowlist.
     const options = {
-      connectionId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+      connectionId: CEREMONY_ID,
       fallback,
       onDiagnostic,
       allowedPopupOrigins: ['*'],
