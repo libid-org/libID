@@ -144,6 +144,13 @@ Worker. Authorization is an external document, not a CCDP resource.
 | Location and context | CCDP origin; same-origin module Service Worker whose response sets `Service-Worker-Allowed: /` and which Prefetch registers with `scope: '/'` |
 | Role | Supports selected-profile fetches and the popup transport's same-origin continuity mechanism. It remains compatible with every live CCDP version and does not intercept unrelated origin traffic. |
 
+### Version list `GET /ccdp/versions.json`
+
+| Property | Contract |
+|---|---|
+| Location and context | CCDP origin; unversioned JSON that the Application fetches cross-origin before Prefetch |
+| Role | Names, per platform, the platform ceremony versions the Distribution bundles. The [Distribution](ccdp-distribution.md#version-list) owns its grammar and response policy; the [OAuth Bridge contract](oauth-bridge.md#public-configuration) owns how the Application selects a version and client from it. |
+
 ### Common
 
 #### Paths and versioning

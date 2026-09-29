@@ -20,7 +20,9 @@ One CCDP Distribution is served from one canonical `ccdpOrigin` under the
 and `127.0.0.1` hosts. It contains:
 
 - every protocol resource for each supported CCDP version, including one
-  self-contained Callback artifact containing its supported implementations; and
+  self-contained Callback artifact containing its supported implementations;
+- one [version list](#version-list) naming the platform ceremony versions it
+  bundles; and
 - their bundled JavaScript, workers, WASM, circuits, and libID-owned assets.
 
 The resource graph distinguishes distributed assets from external assets.
@@ -42,9 +44,9 @@ and proof generation.
 
 One Distribution may serve any number of independently operated OAuth Bridges.
 It does not enumerate or register them: each Bridge selects a `ccdpOrigin`,
-which serves the same public resources to all of them. A Bridge advertises only
-platform/version pairs present in its selected Distribution; no shared
-deployment system is required.
+which serves the same public resources to all of them. An Application runs only
+platform/version pairs that Distribution's [version list](#version-list) names
+and it implements; no shared deployment system is required.
 
 ## HTTP contract
 
@@ -63,7 +65,7 @@ The Distribution exposes the exact versioned
 roles, and execution contexts remain CCDP rules.
 
 Prefetch and Prover contain their clearing bootstrap and entry code directly,
-with no browser-visible manifest or second entry-script request. They may load implementation-private immutable chunks.
+with no browser-visible code manifest or second entry-script request. They may load implementation-private immutable chunks.
 
 The aggregate [Callback artifact](#callback-artifact) is retrieved server-side
 by OAuth Bridges; the contract below defines its configuration slot, embedded
@@ -85,8 +87,8 @@ executes CCDP code. Other methods execute no CCDP code.
 The not-found response is static HTML containing no script, style, link, form,
 redirect, or protocol data.
 
-Versioned protocol resources and the aggregate Callback artifact use
-`Cache-Control: no-cache` and an ETag so a path may receive compatible
+Versioned protocol resources, the aggregate Callback artifact, and the version
+list use `Cache-Control: no-cache` and an ETag so a path may receive compatible
 implementation updates. A breaking protocol change publishes new versioned
 routes and adds its implementation to the Callback artifact. The Bridge serves
 its configured Callback response with `no-store`, independently of its own
@@ -105,6 +107,7 @@ markup, executable code, or styling input is part of this contract.
 | Resource | Form | Additional response contract |
 |---|---|---|
 | [Callback artifact](#callback-artifact) | self-contained HTML template at `/ccdp/callback.html`, retrieved server-side by OAuth Bridges | `text/html; charset=utf-8`, `no-cache` and ETag, with exact executable hashes in CSP. No browser CORS permission is needed for this retrieval. The configured response follows [Served response](#served-response). |
+| [Version list](#version-list) | JSON at `/ccdp/versions.json`, fetched cross-origin by the Application | `application/json; charset=utf-8`, `no-cache` and ETag, `Access-Control-Allow-Origin: *`, and `Cross-Origin-Resource-Policy: cross-origin`. No other Distribution resource sends a CORS header. |
 | Prefetch | top-level non-isolated HTML | `Cross-Origin-Opener-Policy: unsafe-none` and no COEP. Script/worker sources remain same-origin; `connect-src` admits local assets and the pinned external asset origins. |
 | Prover | top-level HTML | `Document-Isolation-Policy: isolate-and-require-corp`, `Cross-Origin-Opener-Policy: unsafe-none`, and no COEP. |
 | Prover isolation fallback | top-level HTML at `/ccdp/v{CCDPVersion}/prover/fallback` | `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Same Prover entrypoint, fragment contract, and non-isolation response rules. |
@@ -321,6 +324,32 @@ the decoded body and composes the final HTML and headers as one unit. Upstream
 cache and transfer headers are not copied: the source artifact is revalidated,
 while the configured browser response is non-cacheable.
 
+### Version list
+
+- REQ-DIST-06: The Distribution MUST publish the version list below, naming
+  exactly the platform/version pairs whose Prover implementation it bundles;
+  the Application MUST validate it by that contract. Necessity: an Application
+  must select only pairs its Distribution supports.
+
+`GET /ccdp/versions.json` is one JSON object keyed by the exact platform
+identifier of each bundled platform profile. Each value is the platform
+ceremony versions bundled for that platform: a nonempty, duplicate-free,
+ascending array of unsigned 16-bit integers. Key order carries no meaning.
+
+```json
+{"github":[1],"google":[1],"x":[1]}
+```
+
+The path is unversioned, beside `/ccdp/callback.html`: the set is a property of
+the Distribution, not of one CCDP version. The Application fetches it
+cross-origin without credentials or redirects; the
+[Bridge contract](oauth-bridge.md#public-configuration) owns how it selects
+versions and clients from the list and the public record. A reader holds every
+value to this grammar and ignores a platform key it does not know. Any other
+violation, including a non-object top level, a value that is not such an array,
+an empty array, a duplicate, and a non-ascending array, refuses the whole
+resource.
+
 ### Prover isolation
 
 - REQ-DIST-03 (upholds SP-CCDP-01): The Prover and its host MUST preserve the
@@ -381,7 +410,8 @@ resources, including shared resources, so their downloads and caches are reusabl
 
 Activation is asset-complete: every immutable resource referenced by an updated
 protocol resource or Worker is retrievable with its final bytes and response
-metadata before that update becomes reachable.
+metadata before that update becomes reachable. The version list becomes
+reachable no earlier than the resources of every pair it names.
 The external Aztec request set is qualified before promotion; CDN availability
 cannot be made atomic with local deployment, and a later outage still fails
 proving if no usable cache is present.
@@ -406,6 +436,9 @@ Request-invariant Prover policy deliberately permits classes of secure network
 origins; runtime destination checks, not CSP, bind a ceremony to its Bridge and
 notary. Local HTTP exceptions are confined to the popup origin policy.
 
+The version list gates which platform ceremony versions an Application runs; a
+wrong list withholds or fails ceremonies and releases nothing.
+
 Callback deployment inputs are non-executable trusted configuration. Their
 insertion cannot depend on OAuth ingress, change script bytes, or introduce
 markup. The Bridge keeps that configured response separate from its upstream
@@ -418,9 +451,10 @@ authority; this document selects no ledger verification keys.
 
 ## Conformance
 
-Publishers, static hosts, and Bridge artifact consumers implement the roles
-above. The package's build and deployment tests may qualify them with any
-serving software that produces these observable responses.
+Publishers, static hosts, Bridge artifact consumers, and Application
+version-list readers implement the roles above. The package's build and
+deployment tests may qualify them with any serving software that produces
+these observable responses.
 
 - TEST-DIST-01 (exercises REQ-DIST-01):
   GET/HEAD serve invariant decoded bytes and policy; conditional/encoding responses preserve them. Protocol and asset resources never redirect; unknown paths are inert. Any directory slash redirect stays on the same origin and ends in an inert failure. Both isolation profiles support allowed local and external requests without admitting remote executable code.
@@ -432,3 +466,5 @@ serving software that produces these observable responses.
   Empty-cache Prefetch and execution use the same declared resource graph; shared resources are reusable, and ranged external responses remain readable under both isolation profiles.
 - TEST-DIST-05 (exercises REQ-DIST-05):
   Unchanged assets keep URLs, changed bytes get new URLs, both remain retrievable, and no updated document or Worker becomes reachable before all its local dependencies. External availability is qualified, not reported as atomic.
+- TEST-DIST-06 (exercises REQ-DIST-06):
+  GET and HEAD serve the version list as `application/json; charset=utf-8` with `no-cache`, an ETag, `nosniff`, `Access-Control-Allow-Origin: *`, and `Cross-Origin-Resource-Policy: cross-origin`, without redirect, and no other resource sends a CORS header; its pairs equal the bundled Prover implementations. A reader ignores an unknown platform key; a non-object body, a non-array or non-integer value under any key, and an empty, duplicate-bearing, or non-ascending array refuse the resource.
