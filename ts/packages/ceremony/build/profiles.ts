@@ -4,7 +4,7 @@ export type ResponseProfile =
   | 'proverFallback'
   | 'callback'
   | 'worker'
-  | 'executionWorker'
+  | 'notaryWorker'
   | 'proofWorker'
   | 'leafWorker'
   | 'asset'
@@ -16,10 +16,28 @@ import { popupFallback } from './popup.ts'
 export const scriptHash = (code: string) =>
   `'sha256-${createHash('sha256').update(code).digest('base64')}'`
 
+/** Directive name (lowercase) to its sources; a repeated directive is rejected, not ignored. */
+export function parseCsp(policy: string): Map<string, string[]> {
+  const directives = new Map<string, string[]>()
+  for (const clause of policy.split(';')) {
+    const [name, ...sources] = clause.trim().split(/\s+/)
+    if (!name) continue
+    if (directives.has(name.toLowerCase())) throw new Error('Duplicate CSP directive')
+    directives.set(name.toLowerCase(), sources)
+  }
+  return directives
+}
+
 const base = shared.csp.base
 
-const documents: readonly ResponseProfile[] = ['callback', 'prefetch', 'prover', 'proverFallback'],
-  isolatedWorkers: readonly ResponseProfile[] = ['executionWorker', 'proofWorker', 'leafWorker']
+const documents: readonly ResponseProfile[] = ['callback', 'prefetch', 'prover', 'proverFallback']
+
+/** Bundled workers under COEP; the notary session worker alone connects to notaries. */
+export const isolatedWorkers: readonly ResponseProfile[] = [
+  'notaryWorker',
+  'proofWorker',
+  'leafWorker',
+]
 
 export function responseHeaders(
   profile: ResponseProfile,
@@ -29,7 +47,7 @@ export function responseHeaders(
   }: {
     inline?: string[]
     externalOrigins?: string[]
-  },
+  } = {},
 ): Record<string, string> {
   const html = documents.includes(profile),
     immutable = profile === 'asset' || isolatedWorkers.includes(profile)
@@ -81,7 +99,7 @@ function executableCsp(
       : execution
         ? `${shared.csp.fetch} ${shared.csp.websocket}`
         : `'self' ${externalOrigins.join(' ')}`
-  const connectBlob = profile === 'executionWorker' ? ' blob:' : '',
+  const connectBlob = profile === 'notaryWorker' ? ' blob:' : '',
     styles = documents.includes(profile) ? "; style-src 'unsafe-inline'" : ''
   return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects} ${popupFallback.connectSources.join(' ')}${connectBlob}${styles}`
 }

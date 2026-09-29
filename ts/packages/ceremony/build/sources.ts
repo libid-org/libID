@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const packageDir = fileURLToPath(new URL('../', import.meta.url))
@@ -19,4 +19,9 @@ export async function download(url: string): Promise<Buffer> {
   mkdirSync(join(cache, 'downloads'), { recursive: true })
   writeFileSync(path, bytes)
   return bytes
+}
+
+/** Read an HTTPS source through the download cache, or a path relative to this package. */
+export async function readSource(source: string): Promise<Buffer> {
+  return source.startsWith('https:') ? download(source) : readFileSync(resolve(packageDir, source))
 }

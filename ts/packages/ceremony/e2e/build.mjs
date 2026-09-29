@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { build } from 'vite'
-import { packageDir } from '../build/release.ts'
+import { packageDir } from '../build/sources.ts'
 
 for (const [entry, name] of [
   ['e2e/app.ts', 'app.js'],

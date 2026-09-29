@@ -290,10 +290,12 @@ deployment is a separate, deliberate step.
 
 ## Build owners
 
-[distribution.ts](../build/distribution.ts) assembles and promotes the artifact;
+[distribution.ts](../build/distribution.ts) assembles and promotes the artifact
+and derives the prefetch manifest from the emitted Prover graph;
 [bundle.ts](../build/bundle.ts) records emitted dependencies;
+[input.ts](../build/input.ts) hands a document's launch fragment to its entry;
 [assets.ts](../build/assets.ts) resolves declarations;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
-[release.ts](../build/release.ts) caches downloads;
+[sources.ts](../build/sources.ts) reads declared sources and caches downloads;
 [circuits.ts](../build/circuits.ts) checks capacity;
 [sws.ts](../build/sws.ts) writes files, sidecars and native server configuration.

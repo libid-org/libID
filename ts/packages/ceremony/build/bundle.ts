@@ -1,11 +1,14 @@
 import { dirname, join, posix } from 'node:path'
-import type { ChunkMetadata, Plugin, Rollup } from 'vite'
-import { build, transformWithEsbuild } from 'vite'
+import type { NewExpression } from 'estree'
+import type { Plugin, Rollup } from 'vite'
+import { build } from 'vite'
+import type { AssetManifest } from './asset-plugin.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { assetPlugin } from './assets.ts'
-import { applyEdits, type Edit, replacement, walk } from './ast.ts'
+import { applyEdits, type Edit, parseModule, replacement, walk } from './ast.ts'
+import { consumeInput } from './input.ts'
 import { popupPlugin } from './popup.ts'
-import { hash, packageDir } from './release.ts'
+import { hash, packageDir } from './sources.ts'
 
 export type BundleNode = {
   entry: string | null
@@ -13,7 +16,8 @@ export type BundleNode = {
   dependencies: string[]
 }
 
-type ViteChunk = Rollup.OutputChunk & { viteMetadata?: ChunkMetadata }
+/** Vite's worker-URL import query; graph modules carry it as their id suffix. */
+export const workerUrl = '?worker&url'
 
 /** Compiler AST rewriting keeps inline module imports rooted at the distribution. */
 function absoluteImports(): Plugin {
@@ -45,6 +49,22 @@ function absoluteImports(): Plugin {
   }
 }
 
+/** The literal of `new Worker(new URL('<literal>', import.meta.url))`, if `node` is one. */
+function workerUrlLiteral({ callee, arguments: [url] }: NewExpression): string | undefined {
+  if (
+    callee.type === 'Identifier' &&
+    callee.name === 'Worker' &&
+    url?.type === 'NewExpression' &&
+    url.callee.type === 'Identifier' &&
+    url.callee.name === 'URL' &&
+    url.arguments[0]?.type === 'Literal' &&
+    typeof url.arguments[0].value === 'string' &&
+    url.arguments[1]?.type === 'MemberExpression' &&
+    url.arguments[1].object?.type === 'MetaProperty'
+  )
+    return url.arguments[0].value
+}
+
 /** Make native Worker URL dependencies ordinary bundler edges, including dependency workers. */
 function workerImports(): Plugin {
   return {
@@ -52,43 +72,22 @@ function workerImports(): Plugin {
     enforce: 'pre',
     async transform(source, id) {
       if (!source.includes('Worker') || id.includes('?')) return
-      const code = id.endsWith('.ts')
-        ? (await transformWithEsbuild(source, id, { loader: 'ts', target: 'es2022' })).code
-        : source
-      let ast: ReturnType<Rollup.PluginContext['parse']>
-      try {
-        ast = this.parse(code)
-      } catch {
-        return
-      }
+      const parsed = await parseModule(this, source, id).catch(() => undefined)
+      if (!parsed) return
       const edits: Edit[] = [],
         imports: string[] = []
-      walk(ast, (node) => {
-        if (
-          node.type === 'NewExpression' &&
-          node.callee.type === 'Identifier' &&
-          node.callee.name === 'Worker'
-        ) {
-          const url = node.arguments[0]
-          if (
-            url?.type === 'NewExpression' &&
-            url.callee.type === 'Identifier' &&
-            url.callee.name === 'URL' &&
-            url.arguments[0]?.type === 'Literal' &&
-            typeof url.arguments[0].value === 'string' &&
-            url.arguments[1]?.type === 'MemberExpression' &&
-            url.arguments[1].object?.type === 'MetaProperty'
-          ) {
-            const name = `__ceremonyWorker${imports.length}`
-            imports.push(
-              `import ${name} from ${JSON.stringify(`${join(dirname(id), url.arguments[0].value)}?worker&url`)};`,
-            )
-            edits.push(replacement(url, name))
-          }
-        }
+      walk(parsed.ast, (node) => {
+        if (node.type !== 'NewExpression') return
+        const literal = workerUrlLiteral(node)
+        if (literal === undefined) return
+        const name = `__ceremonyWorker${imports.length}`
+        imports.push(
+          `import ${name} from ${JSON.stringify(`${join(dirname(id), literal)}${workerUrl}`)};`,
+        )
+        edits.push(replacement(node.arguments[0], name))
       })
       if (!edits.length) return
-      return { code: `${imports.join('\n')}\n${applyEdits(code, edits)}`, map: null }
+      return { code: `${imports.join('\n')}\n${applyEdits(parsed.code, edits)}`, map: null }
     },
   }
 }
@@ -99,8 +98,18 @@ export async function bundle(
   {
     selfContained = false,
     invoke,
+    input = false,
     groupModules = true,
-  }: { selfContained?: boolean; invoke?: string; groupModules?: boolean } = {},
+    manifest,
+  }: {
+    /** One inlined chunk without module groups or imports. */
+    selfContained?: boolean
+    /** The entry export the generated entry starts, with the captured input when `input`. */
+    invoke?: string
+    input?: boolean
+    groupModules?: boolean
+    manifest?: AssetManifest
+  } = {},
 ) {
   const graph = new Map<string, BundleNode>(),
     workerFiles = new Set<string>()
@@ -117,7 +126,7 @@ export async function bundle(
               ...item.imports,
               ...item.dynamicImports,
               ...item.referencedFiles,
-              ...((item as ViteChunk).viteMetadata?.importedAssets ?? []),
+              ...(item.viteMetadata?.importedAssets ?? []),
             ],
           })
       }
@@ -129,17 +138,16 @@ export async function bundle(
       if (id === 'virtual:ceremony-entry') return `\0${id}`
     },
     load(id) {
-      if (id === '\0virtual:ceremony-entry' && selfContained)
-        return `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};${invoke}()`
-      if (id === '\0virtual:ceremony-entry')
-        return `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};if(typeof window!=='undefined'&&Object.hasOwn(window,'__libidCeremonyInput')){const fragment=window.__libidCeremonyInput;delete window.__libidCeremonyInput;void ${invoke}(fragment)}`
+      if (id !== '\0virtual:ceremony-entry') return
+      const start = input ? consumeInput(invoke!) : `${invoke}()`
+      return `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};${start}`
     },
   }
   const plugins = (worker: boolean) => [
     workerImports(),
     entryPlugin,
     popupPlugin(),
-    assetPlugin(data),
+    assetPlugin(data, manifest),
     absoluteImports(),
     record(worker),
   ]
@@ -148,6 +156,8 @@ export async function bundle(
     const owned = Object.entries(data.bodyHashes).find(([, bodyHash]) => bodyHash === digest)
     return owned ? owned[0].slice(1) : `ccdp/assets/${data.policyId}/[name]-[hash][extname]`
   }
+  const chunkName = `ccdp/assets/${data.policyId}/[name]-[hash].js`,
+    output = { entryFileNames: chunkName, chunkFileNames: chunkName, assetFileNames: assetName }
   const result = await build({
     configFile: false,
     root: packageDir,
@@ -157,13 +167,7 @@ export async function bundle(
     worker: {
       format: 'es',
       plugins: () => plugins(true),
-      rollupOptions: {
-        output: {
-          entryFileNames: `ccdp/assets/${data.policyId}/[name]-[hash].js`,
-          chunkFileNames: `ccdp/assets/${data.policyId}/[name]-[hash].js`,
-          assetFileNames: assetName,
-        },
-      },
+      rollupOptions: { output },
     },
     build: {
       write: false,
@@ -175,10 +179,8 @@ export async function bundle(
         input: invoke ? 'virtual:ceremony-entry' : join(packageDir, entry),
         preserveEntrySignatures: 'strict',
         output: {
+          ...output,
           inlineDynamicImports: selfContained,
-          entryFileNames: `ccdp/assets/${data.policyId}/[name]-[hash].js`,
-          chunkFileNames: `ccdp/assets/${data.policyId}/[name]-[hash].js`,
-          assetFileNames: assetName,
           manualChunks:
             selfContained || !groupModules
               ? undefined
@@ -199,8 +201,10 @@ export async function bundle(
   })
   for (const node of graph.values())
     for (const module of node.modules) {
-      if (module.endsWith('?worker&url')) {
-        const child = [...graph.entries()].find(([, v]) => v.entry === module.slice(0, -11))
+      if (module.endsWith(workerUrl)) {
+        const child = [...graph.entries()].find(
+          ([, v]) => v.entry === module.slice(0, -workerUrl.length),
+        )
         if (!child) throw new Error(`Missing worker graph entry: ${module}`)
         node.dependencies.push(child[0])
       }

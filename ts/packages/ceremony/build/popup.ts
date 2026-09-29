@@ -2,10 +2,10 @@ import type { Plugin } from 'vite'
 
 // Code-owned integration point for the optional carrier supplied by the application too.
 // A released adapter may provide `fallback`; its implementation belongs outside ceremony.
-export const popupFallback: { module?: string; connectSources: string[] } = {
-  module: undefined,
-  connectSources: [],
-}
+export const popupFallback: {
+  readonly module?: string
+  readonly connectSources: readonly string[]
+} = { connectSources: [] }
 
 export function popupPlugin(): Plugin {
   return {
