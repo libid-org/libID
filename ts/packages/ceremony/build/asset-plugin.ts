@@ -1,7 +1,8 @@
 import { dirname, join, resolve } from 'node:path'
-import type { Node } from 'estree'
+import type { CallExpression, Node, ObjectExpression } from 'estree'
 import { type Plugin, transformWithEsbuild } from 'vite'
 import type { ResolvedAssets } from './assets.ts'
+import { applyEdits, type Edit, replacement, span, walk } from './ast.ts'
 import { packageDir } from './release.ts'
 
 export function assetPlugin(
@@ -46,11 +47,46 @@ export function assetPlugin(
         )
           return node.property.name
       }
-      const edits: { start: number; end: number; text: string }[] = []
-      const span = (node: Node) => node as Node & { start: number; end: number }
-      const visit = (value: unknown) => {
-        if (!value || typeof value !== 'object') return
-        const node = value as Node
+      const isArchive = (node: Node) =>
+        (node.type === 'Identifier' && archives.has(node.name)) ||
+        (node.type === 'CallExpression' && method(node.callee) === 'archive')
+      const edits: Edit[] = []
+      // Resource sources and options are build inputs; the runtime keeps only mounts and members.
+      const stripCall = (node: CallExpression) => {
+        const args = node.arguments,
+          name = method(node.callee)
+        if (name === 'archive' || name === 'file') {
+          const [source, mount] = args
+          if (!source || !mount) throw new Error('Missing resource source/mount')
+          edits.push(replacement(source, 'undefined'))
+          if (args.length > 2) edits.push([span(mount).end, span(args.at(-1)!).end, ''])
+        }
+        const callee = node.callee
+        if (
+          callee.type === 'MemberExpression' &&
+          callee.property.type === 'Identifier' &&
+          callee.property.name === 'member' &&
+          isArchive(callee.object) &&
+          args.length > 1
+        )
+          edits.push([span(args[0]).end, span(args.at(-1)!).end, ''])
+      }
+      const stripBundledUrlModules = ({ properties: props }: ObjectExpression) => {
+        for (let i = 0; i < props.length; i++) {
+          const prop = props[i]
+          if (
+            prop.type === 'Property' &&
+            prop.key.type === 'Identifier' &&
+            prop.key.name === 'bundledUrlModules'
+          )
+            edits.push([
+              i ? span(props[i - 1]).end : span(prop).start,
+              i ? span(prop).end : props.length > 1 ? span(props[1]).start : span(prop).end,
+              '',
+            ])
+        }
+      }
+      walk(ast, (node) => {
         if (
           node.type === 'VariableDeclarator' &&
           node.id.type === 'Identifier' &&
@@ -58,63 +94,11 @@ export function assetPlugin(
           method(node.init.callee) === 'archive'
         )
           archives.add(node.id.name)
-        if (node.type === 'CallExpression') {
-          const name = method(node.callee)
-          if (name === 'archive' || name === 'file') {
-            const source = node.arguments[0],
-              mount = node.arguments[1]
-            if (!source || !mount) throw new Error('Missing resource source/mount')
-            edits.push({ start: span(source).start, end: span(source).end, text: 'undefined' })
-            if (node.arguments.length > 2)
-              edits.push({
-                start: span(mount).end,
-                end: span(node.arguments.at(-1)!).end,
-                text: '',
-              })
-          }
-          const callee = node.callee
-          if (
-            callee.type === 'MemberExpression' &&
-            callee.property.type === 'Identifier' &&
-            callee.property.name === 'member' &&
-            ((callee.object.type === 'Identifier' && archives.has(callee.object.name)) ||
-              (callee.object.type === 'CallExpression' &&
-                method(callee.object.callee) === 'archive')) &&
-            node.arguments.length > 1
-          )
-            edits.push({
-              start: span(node.arguments[0]).end,
-              end: span(node.arguments.at(-1)!).end,
-              text: '',
-            })
-        }
-        if (node.type === 'ObjectExpression') {
-          const props = node.properties
-          for (let i = 0; i < props.length; i++) {
-            const prop = props[i]
-            if (
-              prop.type === 'Property' &&
-              prop.key.type === 'Identifier' &&
-              prop.key.name === 'bundledUrlModules'
-            )
-              edits.push({
-                start: i ? span(props[i - 1]).end : span(prop).start,
-                end: i ? span(prop).end : props.length > 1 ? span(props[1]).start : span(prop).end,
-                text: '',
-              })
-          }
-        }
-        for (const child of Object.values(node)) {
-          if (Array.isArray(child)) child.forEach(visit)
-          else if (child && typeof child === 'object') visit(child)
-        }
-      }
-      visit(ast)
+        else if (node.type === 'CallExpression') stripCall(node)
+        else if (node.type === 'ObjectExpression') stripBundledUrlModules(node)
+      })
       if (!edits.length) return
-      let result = code
-      for (const edit of edits.sort((a, b) => b.start - a.start))
-        result = result.slice(0, edit.start) + edit.text + result.slice(edit.end)
-      return { code: result, map: null }
+      return { code: applyEdits(code, edits), map: null }
     },
     resolveId(id) {
       if (id === 'virtual:ceremony-assets') return `\0${id}`
