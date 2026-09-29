@@ -115,7 +115,9 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       'platformCeremonyVersion',
       'authorizationNonce',
       'proof',
+      'expiresAt',
     ])
+    expect(result.oauthProof.expiresAt).toBe(42)
     expect(new URL(c.navigateAway.mock.calls[0][0]).searchParams.get('redirect_uri')).toBe(
       config.redirectUri,
     )

@@ -101,7 +101,8 @@ includes proof and both attestations; the shared identity is a convenience view,
 For another version-one platform:
 
 1. Add `platforms/<id>/1/` with `url.ts` (including PKCE choice and return
-   profile), `types.ts` (client ID, identity and proof validation), event definitions
+   profile), `types.ts` (client ID, identity and proof validation, plus a
+   `proofExpiresAt` adapter), event definitions
    (core operations and separate UI weights), `<id>.assets.ts` and `prover.ts`;
    X/GitHub share `bearer.events.ts` and `bearer.assets.ts` instead. Reuse shared parsers,
    notary sessions and circuit adapters only where their contracts fit. Keep
