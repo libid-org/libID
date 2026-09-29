@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ExactHttpRequest } from '../../../notary/protocol.js'
-import type { TokenRequestInput } from '../../bearer-link/transcript.js'
+import type { TokenRequestInput } from '../../bearer-transcript.js'
 import { buildTokenRequest, selectToken } from './transcript.js'
 
 const encoder = new TextEncoder(),

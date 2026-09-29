@@ -1,6 +1,6 @@
-import { isBearer, MAX_BEARER_BYTES } from '../../barretenberg/circuits/bearer_link/inputs.js'
-import { isPkceValue, redirect } from '../../ccdp/index.js'
-import type { ExactHttpRequest, Transcript } from '../../notary/protocol.js'
+import { isBearer, MAX_BEARER_BYTES } from '../barretenberg/circuits/bearer_link/inputs.js'
+import { isPkceValue, redirect } from '../ccdp/index.js'
+import type { ExactHttpRequest, Transcript } from '../notary/protocol.js'
 import {
   decodePrintable,
   identityBearerRange,
@@ -8,10 +8,10 @@ import {
   quotedRange,
   skipJsonWhitespace,
   tokenRequestBody,
-} from '../../notary/transcript.js'
-import { bytesEqual } from '../../primitives.js'
-import { isFormClientId } from '../authorization.js'
-import { isUserId } from '../types.js'
+} from '../notary/transcript.js'
+import { bytesEqual } from '../primitives.js'
+import { isFormClientId } from './authorization.js'
+import { isUserId } from './types.js'
 
 export interface TokenRequestInput {
   clientId: string

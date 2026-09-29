@@ -1,32 +1,36 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import type { OperationEvent } from '../../events.js'
-import type { ProverContext } from '../context.js'
-import { proveBearerLink } from './prover.js'
+import type { OperationEvent } from '../events.js'
+import { proveBearerLink } from './bearer.js'
+import type { ProverContext } from './context.js'
 
-const { prepare, initialize, generate, destroy } = vi.hoisted(() => ({
+const { prepare, initialize, boot, generate, destroy } = vi.hoisted(() => ({
   prepare: vi.fn(),
   initialize: vi.fn(),
+  boot: vi.fn(),
   generate: vi.fn(),
   destroy: vi.fn(),
 }))
 
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
-vi.mock('../../assets/index.js', async (original) => ({
-  ...(await original<typeof import('../../assets/index.js')>()),
+vi.mock('../assets/index.js', async (original) => ({
+  ...(await original<typeof import('../assets/index.js')>()),
   assetUrl: () => 'https://ccdp.test/asset',
 }))
-vi.mock('../../barretenberg/engine.js', () => ({
+vi.mock('../barretenberg/engine.js', () => ({
   ProofEngine: class {
+    constructor() {
+      boot()
+    }
     prove = generate
     destroy = destroy
   },
 }))
-vi.mock('../../barretenberg/circuits/bearer_link/inputs.js', () => ({
+vi.mock('../barretenberg/circuits/bearer_link/inputs.js', () => ({
   buildBearerLinkWitness: () => ({}),
   validateBearerLinkPublicInputs: () => true,
 }))
-vi.mock('../../notary/notarize.js', () => ({ bearerOpening: () => ({}) }))
-vi.mock('../../notary/session.js', () => ({
+vi.mock('../notary/notarize.js', () => ({ bearerOpening: () => ({}) }))
+vi.mock('../notary/session.js', () => ({
   Notarization: class {
     constructor(address: string, signal: AbortSignal, emit: (event: OperationEvent) => void) {
       initialize(address, signal, emit)
@@ -145,6 +149,8 @@ it.each(['accepted', 'failed'])(
       'https://github.com/login/oauth/access_token',
       'https://api.github.com/user',
     ])
+    expect(boot).toHaveBeenCalledOnce()
+    expect(boot.mock.invocationCallOrder[0]).toBeLessThan(prepare.mock.invocationCallOrder[0])
     expect(fetch).not.toHaveBeenCalled()
     expect(identity.send).not.toHaveBeenCalled()
     tokenResponse.resolve(transcript({ access_token: 'fixture' }))
