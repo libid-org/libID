@@ -17,11 +17,11 @@ it('resolves exact build matches at the executing origin without fetching [LIBID
   const member = assets
     .archive('https://release.test/tlsn.tar.gz', 'tlsn/v1')
     .member('snippets/web-spawn-*/js/spawn.js', assets.headers.executionWorker)
-  expect(assets.resolve(member)).toBe(
+  expect(assets.assetUrl(member)).toBe(
     'https://ccdp.test/ccdp/assets/tlsn/v1/snippets/web-spawn-abcd/js/spawn.js',
   )
   const external = assets.external('https://cdn.test/g1.dat', { range: 'bytes=0-31' })
-  expect(assets.resolve(external)).toBe(external.source)
+  expect(assets.assetUrl(external)).toBe(external.source)
   expect(external.range).toBe('bytes=0-31')
   expect(fetch).not.toHaveBeenCalled()
 })

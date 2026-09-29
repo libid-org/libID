@@ -2,7 +2,8 @@ import { expect, it, vi } from 'vitest'
 
 const { load } = vi.hoisted(() => ({ load: vi.fn() }))
 
-vi.mock('./cache.js', () => ({
+vi.mock('./cache.js', async (original) => ({
+  ...(await original<typeof import('./cache.js')>()),
   AssetCache: class {
     load = load
   },

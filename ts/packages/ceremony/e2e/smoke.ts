@@ -1,5 +1,5 @@
 import { sha256 } from '@noble/hashes/sha2.js'
-import { resolve as assetUrl } from '../src/assets/index.js'
+import { assetUrl } from '../src/assets/index.js'
 import {
   bearerCircuit,
   bearerVerificationKey,

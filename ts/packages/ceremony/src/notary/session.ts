@@ -1,4 +1,4 @@
-import { resolve as resolveAsset } from '../assets/index.js'
+import { assetUrl } from '../assets/index.js'
 import { ceremonyError } from '../errors.js'
 import { now, type OperationEvent } from '../events.js'
 import { origin, webUrl } from '../primitives.js'
@@ -109,8 +109,8 @@ class Session implements NotarizationSession {
         {
           type: 'prepare',
           url: this.url,
-          moduleUrl: resolveAsset(tlsnModule),
-          wasmUrl: resolveAsset(tlsnWasm),
+          moduleUrl: assetUrl(tlsnModule),
+          wasmUrl: assetUrl(tlsnWasm),
           notaryAddress,
           port: this.channel.port2,
         } satisfies Prepare,

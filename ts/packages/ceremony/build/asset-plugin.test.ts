@@ -17,13 +17,13 @@ test('runtime lowering preserves named/chained calls and external request option
         load: (file) =>
           file === id
             ? `
-        import {archive as release,file,external,resolve,headers} from './assets/index.js';
+        import {archive as release,file,external,assetUrl,headers} from './assets/index.js';
         import * as assets from './assets/index.js';
         const a=release('https://secret-build-source.test/a.tar.gz','a/v1').member('snippets/x-*/worker.js',headers.executionWorker);
         const b=assets.archive('https://secret-build-source.test/b.tar.gz','b/v1');
         const c=file('npm:build-only/file.wasm','file/v1.wasm',headers.wasm);
         const request=external('https://CDN.test:443/g1',{range:'bytes=0-31',bytes:32,fallback:['https://fallback.test/g1']});
-        export const resolved=[resolve(a),resolve(b.member('data.json',headers.json)),resolve(c),resolve(request)];
+        export const resolved=[assetUrl(a),assetUrl(b.member('data.json',headers.json)),assetUrl(c),assetUrl(request)];
         export const options={range:request.range,bytes:request.bytes,fallback:request.fallback};
       `
             : undefined,

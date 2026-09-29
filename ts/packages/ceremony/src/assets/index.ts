@@ -55,7 +55,7 @@ export function external(
 }
 
 /** Resolve synchronously at the CCDP origin, or retain an external URL. Never fetches. */
-export function resolve(asset: Asset): string {
+export function assetUrl(asset: Asset): string {
   if (asset.isExternal) return asset.source
   const path = urls[`${asset.mount}/${asset.member ?? ''}`]
   if (!path) throw new Error('Missing built asset')

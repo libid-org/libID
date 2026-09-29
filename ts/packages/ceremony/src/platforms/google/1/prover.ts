@@ -1,4 +1,4 @@
-import { resolve as resolveAsset } from '../../../assets/index.js'
+import { assetUrl } from '../../../assets/index.js'
 import { ProofEngine } from '../../../barretenberg/engine.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { CeremonyError, ceremonyError } from '../../../errors.js'
@@ -42,8 +42,8 @@ export async function prove(
   )
     throw new CeremonyError('authorization', 'Invalid Google token')
   const engine = new ProofEngine({
-    circuitUrl: resolveAsset(circuit),
-    verificationKeyUrl: resolveAsset(verificationKey),
+    circuitUrl: assetUrl(circuit),
+    verificationKeyUrl: assetUrl(verificationKey),
     emit,
   })
   try {
