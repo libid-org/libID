@@ -17,7 +17,7 @@ concurrency:
 jobs:
   # ---------------------------------------------------------------------------
   # TypeScript: build, tests (including the wallet-product isolation guard),
-  # lint, formatting.
+  # complete source/test/build-script type checking, lint, formatting.
   # ---------------------------------------------------------------------------
   ts:
     name: TypeScript
@@ -42,6 +42,9 @@ jobs:
 
       - name: Build
         run: pnpm -C ts build
+
+      - name: Type checking
+        run: pnpm -C ts typecheck
 
       - name: Tests
         run: pnpm -C ts test

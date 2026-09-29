@@ -124,3 +124,9 @@ values, transcripts, openings, witnesses and live proofs out of shared logs and
 telemetry. DevTools can inspect a failed popup locally; publish only the relevant
 sanitized error and component versions. Update the affected traceability rows
 when a new qualification result is established.
+
+Full Google and bearer-link proofs, matched-notary concurrency and real timeout
+cleanup run once per desktop engine. HTTP and mobile-emulated projects retain
+popup interaction, Service Worker, dependency loading and emitted-policy checks;
+they do not repeat the expensive proof cases. This does not qualify physical
+mobile resource limits or live OAuth behavior.
