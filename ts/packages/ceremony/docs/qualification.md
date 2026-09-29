@@ -15,12 +15,12 @@ Change dependency pins in the linked declarations and configuration.
 | Noir / bb.js | 1.0.0-beta.25 / 5.2.0; [package.json](../package.json), explicit EVM proof settings in [engine.worker.ts](../src/barretenberg/engine.worker.ts). |
 | Notary browser/runtime | v0.4.0, `829d8eb8778d4f1c30a2ec1f4c7cbd55e47d318a`; [declaration](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml). |
 | TLSN / MPZ | `da0f8488dfc55db8ed4271f817124306a2c07c09` / `4db9454a0b6380f1a23a7b4807989d866f838fff`, matched by the notary release. |
-| Development Bridge | v0.3.0, `aadb4170c7e2fe57dfcc8dd9e556dc7257df758b`; [Compose pin](../../../apps/dev/compose.yaml). |
+| Development Bridge | v0.4.0; [Compose pin](../../../apps/dev/compose.yaml). |
 | SWS | 3.0.0-beta.1; exact image digest in [ccdp.Dockerfile](../ccdp.Dockerfile). |
 
-Bridge v0.3.0 accepts exact admission lists. Wildcard deployment requires the
-separate Bridge update. Browser tests cover both wildcard forms in Popup and
-`*` through the emitted Callback handoff; Callback units cover pattern forwarding.
+Bridge v0.4.0 supports exact and wildcard admission. Browser tests cover both
+wildcard forms in Popup and `*` through the emitted Callback handoff; Callback
+units cover pattern forwarding.
 
 The released `bearer_link` circuit accepts bearers of at most 128 bytes. The
 X and GitHub specifications allow up to 4096 bytes; both implementations enforce
@@ -30,11 +30,13 @@ the circuit's narrower limit.
 
 ## Current coverage
 
-[CI](https://github.com/libid-org/libID/actions/runs/35717662579) is green for
-TypeScript, browser tests, CCDP image/distribution, integration smoke and DCO.
-Browser coverage comprises 140 ceremony, 143 popup and 145 dev-app cases, with
-two popup feature skips and no retries. It spans Chromium, Firefox, WebKit,
-HTTP/HTTPS document flows and mobile emulation. Manual wallet PoC testing reports
+CI runs workspace type/unit checks, distribution/native-loader tests and browser
+coverage across Chromium, Firefox and WebKit. HTTP and mobile-emulated projects
+retain interaction and policy coverage; full proofs and matched-notary runtime
+qualification run once per desktop engine, without automatic retries. A configured
+test is not evidence that the current revision passed it.
+
+Manual wallet PoC testing reports
 successful live Google, X and GitHub ceremony completion on desktop and mobile
 using the current ceremony package. Manual end-to-end runs also establish real
 verifier acceptance for all three platforms. Exact browser/device and verifier
@@ -42,13 +44,13 @@ versions are not recorded.
 
 | Coverage | What it establishes / limit |
 |---|---|
-| Unit and type checks | Client lifecycle, exact codecs, canonical vectors, parsers, concurrency ordering and public types; mocks do not establish real proving or live-service behavior. |
+| Unit and type checks | Client lifecycle, exact codecs, canonical vectors, parsers, concurrency ordering and public types; the bearer pipeline tests retain real selectors/correlation/witness construction while mocking external runtimes; they do not establish real proving or live-service behavior. |
 | Distribution/native-loader/SWS checks | Emitted policies, compression/ranges, immutable retention and actual loader requests, including the running image and pinned native binary in CI. Live CDN availability is separate; local runs need the [explicit inputs](testing.md#distribution-checks). |
 | Actual-popup browser flows | Private Callback handoff, exact Application origin, readiness, denial/failure, concurrency, root Worker control and progress across desktop engines and emulation. |
 | Google and bearer-link fixture proofs | Actual isolated browser workers generate proofs verified in Node against released keys, including altered-public-input rejection. Controlled Google token/time/JWKS inputs do not establish live consent or JWKS CORS; WebKit intercepts fixture JWKS at the page boundary. |
 | Real matched-notary runtime tests | One/two X sessions and both GitHub endpoints run through the pinned notary in direct peer mode alongside a separately verified fixture proof. Unauthenticated requests and deliberately invalid credentials establish runtime/channel execution and authority correlation, not authenticated token/identity evidence. The separate fixture proof is not bound to these attestations. |
 | Development app checks | Independent concurrent rows, closure, timings, fallback display and immediate success/denial closure, using intercepted responses. |
-| Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through released Bridge v0.3.0 and emitted CCDP. Provider returns are intercepted; manual live success and verifier acceptance are described above. Production refresh behavior remains a separate gate. |
+| Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through released Bridge v0.4.0 and emitted CCDP. Provider returns are intercepted; manual live success and verifier acceptance are described above. Production refresh behavior remains a separate gate. |
 
 ## Remaining qualification
 

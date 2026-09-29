@@ -10,8 +10,8 @@ diagnostic behavior is qualified by the
 [popup package test plan](../../popup/TEST_PLAN.md). Rows here test only ceremony's
 use of that package.
 Normative proof and platform behavior come from the
-[common ceremony rules](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ceremony-common.md) and
-[identity-platform ceremonies](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md).
+[common ceremony rules](https://github.com/libid-org/libid/blob/main/specs/ceremony-common.md) and
+[identity-platform ceremonies](https://github.com/libid-org/libid/blob/main/specs/platform-ceremonies.md).
 
 Every row is one stable requirement and may require multiple positive and
 negative cases. Tests **must cite its ID**. Existing IDs retain their names;
@@ -159,7 +159,7 @@ checks.
 | KIT-018 | OAuth Bridge Callback pages and CCDP Distribution pages are each served from a dedicated cookie-free origin with no unrelated same-origin API in the reference deployments; their origins may differ. |
 | KIT-020 | The ceremony requires no canonical orchestration service, preparation endpoint, status server, action ledger, or proof-recovery service. Its browser network surface is the OAuth Bridge's public `CeremonyConfig`, complete Callback, plus the independent CCDP Distribution's Prefetch, Prover, Worker, and proving assets. Server-side Callback artifact refresh carries no ceremony data. |
 | KIT-021 | Publish a compatible Callback UI/code update and refresh the Bridge's artifact cache without rebuilding its binary or changing deployment inputs. New responses use the new bundled code and matching CSP hashes; live pages retain old code/configuration, and an older still-supported state selects its retained implementation in the new artifact. Conditional revalidation preserves an unchanged artifact; compressed source responses are decoded before data insertion and their transfer headers are not reused. Failed, malformed, or partial refresh retains the last valid result; without one, the callback route is inert/unavailable. OAuth requests never trigger refresh; no manual stylesheet/theme configuration is needed, and unapproved JavaScript stays blocked. |
-| KIT-022 | Configuration GET admits an exact allowed Origin with exact noncredentialed CORS. With no Origin it admits only `Sec-Fetch-Site: same-origin` when the configured Bridge origin is allowed. Reject missing metadata, same-site/cross-site/none metadata without Origin, explicit null/unlisted/malformed Origin, and an unlisted Bridge origin; Referer cannot grant admission. |
+| KIT-022 | Configuration GET admits an exact allowed Origin with exact noncredentialed CORS. With no Origin it admits only `Sec-Fetch-Site: same-origin` without requiring the Bridge origin in the application allowlist. Reject missing metadata, same-site/cross-site/none metadata without Origin, explicit null/unlisted/malformed Origin (including an explicit unlisted Bridge Origin); Referer cannot grant admission. |
 
 ## Browser isolation and response policy
 
@@ -223,7 +223,8 @@ Existing IDs remain unchanged. `LIBID-OAUTH-021` and `POPUP-CONNECTION-009` boun
 tests admit explicit canonical localhost HTTP and reject public HTTP, lookalikes,
 credentials and noncanonical spellings. `CSP-003` distribution checks admit only
 explicit loopback HTTP/WS sources. The `*-http` browser projects repeat the existing
-browser cases against the same artifact without TLS; HTTPS projects remain.
+interaction, loading and policy cases against the same artifact without TLS;
+full cryptographic proof cases run once per desktop engine. HTTPS projects remain.
 These runs do not replace real OAuth, physical-device or proof-verification gates.
 
 
