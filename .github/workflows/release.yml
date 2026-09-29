@@ -48,20 +48,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: 10
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
+      - uses: ./.github/actions/setup-ts
 
       - name: Update npm for OIDC trusted publishing
         run: npm install -g npm@latest && npm --version
-
-      - name: Install dependencies
-        run: pnpm -C ts install --frozen-lockfile
 
       - name: Build and test
         run: |
@@ -154,7 +144,9 @@ jobs:
           { echo "tags<<EOF"; echo "$tags"; echo "EOF"; } >> "$GITHUB_OUTPUT"
 
       - name: Log in to ghcr
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       # `--prefer-index=false`: with a single source, imagetools would otherwise
       # wrap a plain manifest in a new index, which has a different digest.
