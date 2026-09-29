@@ -465,6 +465,7 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
         ...attributes,
         'response-header-bytes': 19,
         'response-body-bytes': 21,
+        constructor: 1,
       })
       const details = page.locator('.operation-timings details').filter({
         has: page.locator('summary', { hasText: /attestation/ }),
@@ -496,7 +497,12 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
         '2',
         '19 B',
         '21 B',
+        '1',
       ])
+      await expect(details.locator('dt').filter({ hasText: /^constructor$/ })).toHaveAttribute(
+        'title',
+        '',
+      )
       await expect(details.locator('dl')).toBeVisible()
       await page.clock.runFor(100)
       await expect(details.locator('dl')).toBeVisible()
