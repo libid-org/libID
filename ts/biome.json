@@ -12,6 +12,7 @@
       "!packages/ceremony/dist-artifacts",
       "!**/test-results",
       "!**/playwright-report",
+      "!**/coverage",
       "!apps/dev/.cache"
     ]
   },

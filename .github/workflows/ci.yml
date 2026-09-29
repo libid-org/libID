@@ -41,6 +41,51 @@ jobs:
       - name: Lint and formatting
         run: pnpm -C ts lint && pnpm -C ts fmt:check
 
+  # ---------------------------------------------------------------------------
+  # Ceremony coverage badge: on pushes to main, publish the unit-test line
+  # coverage as a shields.io endpoint on the orphan `badges` branch, replaced
+  # each run. Only this job holds `contents: write`, pull requests never run
+  # it, and the token reaches only the final push step.
+  # ---------------------------------------------------------------------------
+  coverage-badge:
+    name: Ceremony coverage badge
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ts
+
+      - name: Build dependencies
+        run: pnpm -C ts --filter '@libid/ceremony^...' build
+
+      - name: Coverage
+        run: pnpm -C ts/packages/ceremony test:coverage
+
+      - name: Publish the badge
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          badge=$(mktemp -d)
+          node -e '
+            const { pct } = JSON.parse(require("fs").readFileSync(process.argv[1])).total.lines
+            const color = pct >= 90 ? "brightgreen" : pct >= 80 ? "yellow" : "red"
+            console.log(JSON.stringify({ schemaVersion: 1, label: "coverage", message: `${pct.toFixed(1)}%`, color }))
+          ' ts/packages/ceremony/coverage/coverage-summary.json > "$badge/ceremony-coverage.json"
+          cd "$badge"
+          git init -q -b badges
+          git add ceremony-coverage.json
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -qm "Ceremony coverage for $GITHUB_SHA"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
+
 
   # ---------------------------------------------------------------------------
   # Integration smoke: boot the compose stack (fresh anvil + released

@@ -1,5 +1,7 @@
 # @libid/ceremony
 
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Flibid-org%2FlibID%2Fbadges%2Fceremony-coverage.json)](docs/testing.md)
+
 Browser identity ceremonies for Google, X and GitHub over a caller-supplied
 `@libid/popup` connection. The application owns popup lifetime, ledger operations
 and submission; ceremony owns OAuth orchestration, proving and popup UI.

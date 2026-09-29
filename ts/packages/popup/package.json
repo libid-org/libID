@@ -30,6 +30,7 @@
     "build": "tsc -p tsconfig.build.json && node build/check-exports.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium firefox webkit",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json"
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
