@@ -3,7 +3,7 @@
 The [notary module](../src/notary/) adapts the pinned TLSNotary WASM Proxy API.
 Platform code owns exact requests, response parsing and disclosure selection;
 the adapter owns sessions, transcript bounds, final-frame delivery and correlation.
-The [platform specification](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md)
+The [platform specification](https://github.com/libid-org/libid/blob/9ae438ac0c4d554fd1fc0085ae8e67b0c5c3b0ed/specs/platform-ceremonies.md)
 owns authoritative request/evidence rules.
 
 ## Session lifecycle
@@ -72,7 +72,9 @@ sizes use that internal record. The delivered `NotaryAttestation` contains only
 original `attestedData` and `signature` bytes. Signed bytes are never re-encoded;
 the cross-language fixture and digest live beside the decoder tests.
 
-Client bounds the delivered bytes without reparsing them. Neither endpoint verifies
+Client bounds the delivered bytes without reparsing them. Applications forward this
+opaque evidence to their ledger adapter/verifier; the separate `Identity` is for
+local presentation. The decoder is internal to notarization. Neither endpoint verifies
 notary signatures locally. The ledger verifier authenticates the original bytes
 and derives authoritative identity and proof inputs from them.
 
@@ -89,7 +91,7 @@ alternate Authorization framing reject.
 Both X and GitHub obtain token and identity through browser Proxy sessions.
 GitHub's [token selector](../src/platforms/github/1/token.ts) checks the complete
 request against the frozen canonical form before using the returned bearer.
-GitHub's identity request uses the browser User-Agent. Exact header values and forbidden
+GitHub's identity request uses a fixed, generic User-Agent without browser or OS details. Exact header values and forbidden
 names are owned by code and the specification, not copied here.
 
 The browser bundle release is pinned in [notary.assets.ts](../src/notary/notary.assets.ts).

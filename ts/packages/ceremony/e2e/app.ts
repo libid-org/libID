@@ -1,11 +1,15 @@
 import { mainnet, testnet } from '@libid/ledger/testing'
 import { type Message, type PopupConnection, PopupWindow } from '@libid/popup'
 import { CeremonyError, createCCDPClient } from '../src/ccdp/client/index.js'
+import { supportedPlatforms } from '../src/index.js'
 
 const bridge = `${location.protocol}//localhost:${Number(location.port) + 1}`,
   ccdp = `${location.protocol}//localhost:${Number(location.port) + 2}`
 
 const client = await createCCDPClient({ oauthBridge: bridge })
+const platform =
+  supportedPlatforms.find((id) => id === new URL(location.href).searchParams.get('platform')) ??
+  'google'
 
 let activeId = ''
 
@@ -53,7 +57,7 @@ anchor.addEventListener('click', (event) => {
   const ceremony = client.new(
     connection,
     id,
-    'google',
+    platform,
     new URL(location.href).searchParams.get('ledger') === 'test:mainnet' ? mainnet : testnet,
     new Uint8Array(32),
     new Uint8Array([1]),
