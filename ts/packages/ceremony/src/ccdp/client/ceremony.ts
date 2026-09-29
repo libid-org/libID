@@ -356,21 +356,15 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   }
 
   proveUserIdentity(): Promise<IdentityResult<P>> {
+    const previous = bindings.get(this.connection)
+    if (this.state === 'new' && previous?.active)
+      this.fail(new CeremonyError('prefetch-dispatch', 'Connection already has an active ceremony'))
     if (this.startFailure) {
       const failure = this.startFailure
       this.startFailure = undefined
       return Promise.reject(failure)
     }
     if (this.state !== 'new') return Promise.reject(new Error('Ceremony is one-shot'))
-    const previous = bindings.get(this.connection)
-    if (previous?.active) {
-      const error = new CeremonyError(
-        'prefetch-dispatch',
-        'Connection already has an active ceremony',
-      )
-      this.fail(error)
-      return Promise.reject(error)
-    }
     for (const remove of previous?.remove ?? []) remove()
     const binding = { active: true, remove: [] as (() => void)[] }
     bindings.set(this.connection, binding)

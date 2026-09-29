@@ -1131,6 +1131,8 @@ it('binds one active ceremony per connection and rebinds it once that run finish
     event: 'prefetch-dispatch',
     message: 'Connection already has an active ceremony',
   })
+  // That rejection was the refused run's one start.
+  await expect(second.proveUserIdentity()).rejects.toThrow('one-shot')
   expect(connection.navigations).toHaveLength(1)
   reachProving(connection)
   connection.receive({ type: 'user-denied' })
