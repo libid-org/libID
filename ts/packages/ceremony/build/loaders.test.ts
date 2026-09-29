@@ -86,6 +86,12 @@ test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASS
       true,
     )
     const { NetCrs, NetGrumpkinCrs } = await import(pathToFileURL(join(bb, 'crs/net_crs.js')).href)
+    // The engine already passes crsPath (LIBID-ASSET-022); pinned bb.js browser loaders take only
+    // a point count. When this fails, bb.js honors a CRS base: observe the engine's base here and
+    // revisit distributed CRS.
+    const { Crs, GrumpkinCrs } = await import(pathToFileURL(join(bb, 'crs/browser/index.js')).href)
+    for (const loader of [Crs, GrumpkinCrs])
+      assert.match(String(loader.new), /^async new\(numPoints\)/)
     for (const fallback of [false, true]) {
       failPrimary = fallback
       const start = observations.length
