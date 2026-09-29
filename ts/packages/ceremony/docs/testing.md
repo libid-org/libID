@@ -5,6 +5,40 @@ from the repository root. [Qualification](qualification.md) records evidence and
 release gaps; [traceability](traceability.md) maps the stable
 [test requirements](test-plan.md) to assertions and remaining properties.
 
+## Layers
+
+Each layer replaces less than the one before it:
+
+| Layer | Command | Real | Replaced | CI |
+|---|---|---|---|---|
+| Unit and conformance | `test` | Package logic, validators, transcripts, witnesses | Browser, workers, network, TLSN runtime, proof engine | TypeScript |
+| Distribution | `test:distribution` | The emitted artifact, its headers and pins; SWS when supplied | Nothing inside the artifact | CCDP image |
+| Browser | `test:e2e` | Browsers, popup, documents, Service Worker, assets, proving and released-key verification; notary in `runtime.spec.ts` | Providers and, outside the runtime suite, the TLSN peer | Browser tests |
+| Dev app | `apps/dev` `test:e2e` | The dev UI over the real popup transport | Ceremony documents, OAuth, proofs | Browser tests |
+| Manual | [below](#manual-consent-and-device-checks) | Live providers, devices, the ledger verifier | — | — |
+
+Across layers:
+
+- Every test title cites its [test-plan](test-plan.md) ID. A simulated pass is
+  labeled as such and never counts as qualification.
+- Platform coverage iterates the catalog through typed fixture tables, never a
+  literal platform list.
+- Expectations are independent of the code under test: pinned external vectors
+  (libid-rs attested data, a real Google token with bb.js-produced public inputs,
+  released keys) and separately written values, not the production constants.
+- Shared test code lives once: connection and browser doubles in
+  `@libid/popup/testing`; ceremony values, HTTP, worker, CCDP and platform
+  builders in `src/testing`; harness helpers in `e2e/fixtures.ts`.
+
+Where a new test belongs:
+
+- a branch in one module: a unit test beside it;
+- a rule every platform must meet: a conformance section and a fixture field,
+  so every platform must supply it ([Adding a platform](#adding-a-platform));
+- behavior only a browser shows: an e2e spec, iterating `e2e/platforms.ts` when
+  it is per platform, and tagged `@proof` when it generates proofs;
+- whatever stays simulated or manual: its [traceability](traceability.md) row.
+
 ## Unit and type checks
 
 ```sh
@@ -33,15 +67,18 @@ per-platform unit tests iterate `supportedPlatforms` and read one typed
 instead of naming platforms. A catalog entry without a fixture fails `typecheck`
 at that table. The entry supplies:
 
-- the Bridge client (and public credential when `requiresClientCredential`), a
-  valid identity and proof with the digest it is bound to and its expected
-  expiry, boundary identity values, and platform-specific rejected identity
-  encodings and out-of-bound proof values;
+- the Bridge client (and public credential when `requiresClientCredential`), its
+  expected OAuth return rules, a valid identity and proof with the digest it is
+  bound to and its expected expiry, boundary and admitted client IDs, and
+  platform-specific rejected identity encodings and out-of-bound proof values;
 - accepted, denied and provider-error returns for a given OAuth state, the
   pipeline's weighted operations and its lazily imported `prover.ts`;
-- the pipeline and its evidence: bearer-link response bodies and transcript
-  module, or an OIDC signed ID token, JWK, nonce digest, released-verifier
-  public inputs and the well-formed changes that break its binding;
+- the pipeline and its evidence. A bearer-link platform supplies its response
+  bodies, transcript module, token endpoint and form, identity endpoint and
+  pinned headers. An OIDC platform supplies its signed ID token, JWK and
+  minimal JWK, nonce digest and its circuit input, released-verifier public
+  inputs, the well-formed changes that break its binding, and the token and key
+  rewrites it rejects, each with the operation that rejects it;
 - the normative test IDs each conformance section tags for this platform.
 
 The suite then checks catalog members, authorization-URL round-trip, client-ID
@@ -50,11 +87,18 @@ metadata, state, issuer, malformed/oversized/leaked fields and transports); the
 generated identity/proof reject matrix, result acceptance and expiry, and OIDC
 binding mismatches; and a `prove()` contract every platform meets whatever its
 pipeline (delivery, operation reporting, the run's signal and engine teardown,
-reordered engine inputs, startup cancellation), followed by each pipeline kind's
-own cases, replacing only the TLSN runtime and proof engine. A new pipeline kind
-adds its evidence shape, a stage for the shared contract (`typecheck` fails until
-it exists) and its own cases. Byte-layout vectors specific to one platform
-stay beside its source. Map newly tagged IDs in [traceability](traceability.md).
+changed engine public inputs, startup cancellation), followed by each pipeline
+kind's own cases (bearer-link transcripts, results and orchestration; OIDC
+binding, evidence and key sets), replacing only the TLSN runtime and proof
+engine. A check runs for every platform of a kind only when that kind's shared
+code enforces it; anything one platform alone requires comes from its fixture.
+A new pipeline kind adds its evidence shape, a stage for the shared contract
+(`typecheck` fails until it exists) and its own cases.
+
+Unit tests beside a platform's source keep only what the suite cannot reach
+through `prove()`, such as Google's circuit ABI vectors and the bearer guard in
+the bearer-link circuit inputs. Map newly tagged IDs in
+[traceability](traceability.md).
 
 ## Distribution checks
 
@@ -164,6 +208,12 @@ ceremony browser suite.
 Start the [shared dev app](../../../apps/dev/README.md) with `pnpm -C ts dev`.
 Use real registrations pointing to its exact callback URI. Complete consent
 manually; automated fixtures do not replace these checkpoints.
+
+In progress: the [Bridge live ceremony suite](https://github.com/libid-org/libID-bridge-rs/pull/12)
+authorizes real test accounts at GitHub, X and Google and notarizes real
+sessions through its own notary against the Platform Verifier's rules. It runs
+the Rust prover, not this package's browser prover, so the checkpoints below
+stay manual until a live suite drives the browser ceremony.
 
 1. For every platform, try approval and denial, signed-in/out state, cold and
    warm caches, and native provider apps installed/absent where applicable.
