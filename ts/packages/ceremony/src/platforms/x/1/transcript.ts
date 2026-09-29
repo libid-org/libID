@@ -121,7 +121,7 @@ export function selectTokenReveals(
   }
 }
 
-export function identityFromReveals(reveals: readonly Uint8Array[]): {
+function identityFromReveals(reveals: readonly Uint8Array[]): {
   userId: string
   handle: string
 } {
@@ -154,7 +154,7 @@ export function identityFromReveals(reveals: readonly Uint8Array[]): {
 }
 
 /** Reveal the complete fixed identity request except its bearer and the two identity fields. */
-export function selectIdentityReveals(transcript: Transcript, accessToken: string): Reveals {
+export function selectIdentity(transcript: Transcript, accessToken: string) {
   const expectedRequest = buildIdentityRequest(accessToken)
   const { start: bearerStart, end: bearerEnd } = identityBearerRange(
     transcript.sent,
@@ -166,12 +166,19 @@ export function selectIdentityReveals(transcript: Transcript, accessToken: strin
   const id = quotedRange(transcript.received, 'id')
   const username = quotedRange(transcript.received, 'username')
   const response = [id.range, username.range].sort((a, b) => a.start - b.start)
-  identityFromReveals(response.map((range) => transcript.received.slice(range.start, range.end)))
+  const { userId, handle } = identityFromReveals(
+    response.map((range) => transcript.received.slice(range.start, range.end)),
+  )
   return {
-    sent: [
-      { start: 0, end: bearerStart },
-      { start: bearerEnd, end: transcript.sent.length },
-    ],
-    received: response,
+    userId,
+    userName: handle,
+    bearerRange: { start: bearerStart, end: bearerEnd },
+    ranges: {
+      sent: [
+        { start: 0, end: bearerStart },
+        { start: bearerEnd, end: transcript.sent.length },
+      ],
+      received: response,
+    },
   }
 }

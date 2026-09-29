@@ -3,7 +3,7 @@
 Each platform/version owns authorization URLs, accepted OAuth returns, proof and
 identity validators, resource declarations, events and its execution pipeline.
 Shared Client, message and progress code consult that metadata instead of branching
-on provider names. The [normative profiles](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/platform-ceremonies.md)
+on provider names. The [normative profiles](https://github.com/libid-org/libid/blob/main/specs/platform-ceremonies.md)
 own authorization encodings and proof statements.
 
 ## Shared execution boundary
@@ -28,8 +28,9 @@ replacement notary. A second platform must not require another shared-code branc
 ## Google
 
 [google/1/prover.ts](../src/platforms/google/1/prover.ts) selects the JWK matching
-the captured token's `kid` and builds the released `oidc_google` witness. JWT/JWK
-input preparation overlaps [proof-worker startup](proving.md#worker-lifecycle).
+the once-parsed token's `kid`. [witness.ts](../src/platforms/google/1/witness.ts)
+adapts that token/key to the released `oidc_google` circuit encoder and assembles
+the identity and proof fields. JWT/JWK input preparation overlaps [proof-worker startup](proving.md#worker-lifecycle).
 Google creates no TLSNotary session.
 
 The signed nonce is parsed canonically as the candidate authorization digest;
@@ -41,7 +42,9 @@ subject and email as identity fields.
 
 ## X
 
-[x/1/prover.ts](../src/platforms/x/1/prover.ts) overlaps these dependencies:
+[x/1/prover.ts](../src/platforms/x/1/prover.ts) validates its return and transcript
+policy, then uses [the shared bearer-link pipeline](../src/platforms/bearer-link/prover.ts)
+to overlap these dependencies:
 
 1. Start the proof engine and prepare token/identity sessions in one
    ceremony-owned notary runtime. Each TLS session has its own channel.
@@ -58,8 +61,8 @@ siblings rather than leaving work or a promise rejection behind.
 
 ## GitHub
 
-[github/1/prover.ts](../src/platforms/github/1/prover.ts) uses the same browser
-scheduling as X: two Proxy sessions in one notary runtime, with identity HTTP
+[github/1/prover.ts](../src/platforms/github/1/prover.ts) uses that same
+concrete pipeline: two Proxy sessions in one notary runtime, with identity HTTP
 waiting only for a usable bearer and its prepared session. `token-fetch` ends
 before token attestation; proof generation can overlap both final attestations.
 Any failure aborts sibling work and prevents delivery.
@@ -82,8 +85,9 @@ the shared identity is a convenience view, not an additional circuit output.
 For another version-one platform:
 
 1. Add `platforms/<id>/1/` with `url.ts` (including PKCE choice), `types.ts`
-   (client ID, identity and proof validation), `events.ts` (core operations and
-   separate UI weights), `<id>.assets.ts` and `prover.ts`. Reuse shared parsers,
+   (client ID, identity and proof validation), event definitions (core operations and
+   separate UI weights; X/GitHub share `bearer-link/events.ts`), `<id>.assets.ts`
+   and `prover.ts`. Reuse shared parsers,
    notary sessions and circuit adapters only where their contracts fit. Keep
    platform-specific selectors and fixtures beside their tests.
 2. Register its lightweight definition in [the catalog](../src/platforms/index.ts).

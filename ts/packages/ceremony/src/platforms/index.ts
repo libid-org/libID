@@ -1,5 +1,5 @@
 import type { IdentityProof } from '../ccdp/index.js'
-import * as githubEvents from './github/1/events.js'
+import * as bearerEvents from './bearer-link/events.js'
 import {
   isClientId as githubClientId,
   validateIdentity as githubIdentity,
@@ -14,7 +14,6 @@ import {
 } from './google/1/types.js'
 import * as googleUrl from './google/1/url.js'
 import type { Identity } from './types.js'
-import * as xEvents from './x/1/events.js'
 import {
   isClientId as xClientId,
   validateIdentity as xIdentity,
@@ -40,7 +39,9 @@ export const platforms = {
   x: {
     requiresClientCredential: false,
     isClientId: xClientId,
-    versions: { 1: { ...xUrl, ...xEvents, validateIdentity: xIdentity, validateProof: xProof } },
+    versions: {
+      1: { ...xUrl, ...bearerEvents, validateIdentity: xIdentity, validateProof: xProof },
+    },
   },
   github: {
     requiresClientCredential: true,
@@ -48,7 +49,7 @@ export const platforms = {
     versions: {
       1: {
         ...githubUrl,
-        ...githubEvents,
+        ...bearerEvents,
         validateIdentity: githubIdentity,
         validateProof: githubProof,
       },
