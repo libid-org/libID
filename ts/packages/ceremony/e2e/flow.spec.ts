@@ -26,6 +26,8 @@ for (const wildcard of [false, true])
       }
       const errors: string[] = []
       const callbackScripts: string[] = []
+      const navigations: string[] = []
+      const failedRequests: string[] = []
       await context.route('**/*', async (route) => {
         const request = route.request()
         if (
@@ -37,7 +39,19 @@ for (const wildcard of [false, true])
           await route.abort()
         } else await route.fallback()
       })
-      context.on('page', (p) => p.on('pageerror', (e) => errors.push(e.message)))
+      context.on('page', (p) => {
+        p.on('pageerror', (e) => errors.push(e.message))
+        p.on('framenavigated', (frame) => {
+          const url = new URL(frame.url())
+          navigations.push(url.origin + url.pathname)
+        })
+      })
+      context.on('requestfailed', (request) => {
+        const url = new URL(request.url())
+        failedRequests.push(
+          `${request.resourceType()} ${url.origin}${url.pathname}: ${request.failure()?.errorText}`,
+        )
+      })
       await context.route('https://accounts.google.com/**', async (route) => {
         const state = new URL(route.request().url()).searchParams.get('state')
         await route.fulfill({
@@ -63,12 +77,16 @@ for (const wildcard of [false, true])
             path: new URL(popup.url()).pathname,
             popup: await popup
               .evaluate(() => ({
+                path: location.pathname,
                 status: document.querySelector('[role="status"]')?.textContent,
                 readyState: document.readyState,
                 worker: navigator.serviceWorker.controller?.state,
               }))
               .catch(() => 'document unavailable'),
             errors,
+            callbackScripts,
+            navigations,
+            failedRequests,
             runs: await page.evaluate(() => window.runs).catch(() => 'application unavailable'),
           }),
         )
