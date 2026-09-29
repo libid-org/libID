@@ -1,3 +1,4 @@
+import { FIELD_NAME, parseHead, trimField } from './http.js'
 import type { ByteRange } from './protocol.js'
 
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -26,7 +27,7 @@ function findFrom(haystack: Uint8Array, needle: Uint8Array, start = 0): number {
   return -1
 }
 
-export function findUnique(haystack: Uint8Array, needle: Uint8Array, name: string): number {
+function findUnique(haystack: Uint8Array, needle: Uint8Array, name: string): number {
   const start = findFrom(haystack, needle)
   if (start < 0) return invalid(`${name} is missing`)
   if (findFrom(haystack, needle, start + 1) >= 0) return invalid(`${name} is duplicated`)
@@ -82,36 +83,39 @@ export function decodePrintable(value: Uint8Array, name: string, maximum: number
   return decoder.decode(value)
 }
 
+/** Case-fold a request field name, treating `_` as `-` for forbidden and required names. */
+function requestName(name: string, reason: string): string {
+  if (!FIELD_NAME.test(name)) invalid(reason)
+  return name.toLowerCase().replaceAll('_', '-')
+}
+
 /** Read the fully disclosed request, with Content-Length bound to its complete body. */
 export function tokenRequestBody(
   request: Uint8Array,
   requestLine: string,
   host: string,
 ): Uint8Array {
-  const bodyStart =
-    findUnique(request, new Uint8Array([13, 10, 13, 10]), 'token head terminator') + 4
-  const head = request.subarray(0, bodyStart - 4)
-  const [line, ...headers] = new TextDecoder('latin1').decode(head).split('\r\n')
-  if (line !== requestLine) invalid('token request framing')
+  findUnique(request, new Uint8Array([13, 10, 13, 10]), 'token head terminator')
+  const head = parseHead(request) ?? invalid('token header framing')
+  if (head.startLine !== requestLine) invalid('token request framing')
   const expected = new Map([
     ['host', host],
     ['content-type', 'application/x-www-form-urlencoded'],
-    ['content-length', String(request.length - bodyStart)],
+    ['content-length', String(request.length - head.bodyStart)],
   ])
   const seen = new Set<string>()
-  for (const header of headers) {
-    const match = /^([!#$%&'*+.^_`|~0-9a-z-]+)[ \t]*:([\t\x20-\x7e\u0080-\uffff]*)$/i.exec(header)
-    if (!match) invalid('token header framing')
-    const name = match[1].toLowerCase().replaceAll('_', '-')
+  for (const field of head.fields) {
+    // Token requests tolerate whitespace before the colon; identity requests do not.
+    const name = requestName(field.name.replace(/[ \t]+$/, ''), 'token header framing')
     if (name === 'authorization' || FORBIDDEN_HEADERS.has(name)) invalid('forbidden token header')
     if (expected.has(name)) {
-      const value = match[2].replace(/^[ \t]+|[ \t]+$/g, '')
-      if (seen.has(name) || expected.get(name) !== value) invalid('token header value or duplicate')
+      if (seen.has(name) || expected.get(name) !== trimField(field.value))
+        invalid('token header value or duplicate')
       seen.add(name)
     }
   }
   if (seen.size !== expected.size) invalid('missing token header')
-  return request.subarray(bodyStart)
+  return request.subarray(head.bodyStart)
 }
 
 /** Locate the sole bearer hole while admitting additional identity headers. */
@@ -121,31 +125,25 @@ export function identityBearerRange(
   required: Record<string, Uint8Array>,
   bearer: string,
 ): ByteRange {
-  // Latin-1 decoding produces one code unit per wire byte, including UTF-8 header values.
-  const bytes = new TextDecoder('latin1')
-  const text = bytes.decode(sent)
-  const headEnd = text.indexOf('\r\n\r\n')
-  if (headEnd < 0 || headEnd !== text.length - 4) invalid('identity request framing')
-  const [line, ...headers] = text.slice(0, headEnd).split('\r\n')
-  if (line !== requestLine) invalid('identity request line')
+  const head = parseHead(sent)
+  if (!head || head.bodyStart !== sent.length) invalid('identity request framing')
+  if (head.startLine !== requestLine) invalid('identity request line')
+  // Latin-1 decoding matches the head's one code unit per wire byte, including UTF-8 values.
+  const latin1 = new TextDecoder('latin1')
   const expected = new Map(
-    Object.entries(required).map(([name, value]) => [name.toLowerCase(), bytes.decode(value)]),
+    Object.entries(required).map(([name, value]) => [name.toLowerCase(), latin1.decode(value)]),
   )
   const seen = new Set<string>()
-  let offset = line.length + 2,
-    start = -1
-  for (const header of headers) {
-    const match = /^([!#$%&'*+.^_`|~0-9a-z-]+):([\t\x20-\x7e\u0080-\uffff]*)$/i.exec(header)
-    if (!match) invalid('identity header framing')
-    const name = match[1].toLowerCase().replaceAll('_', '-')
+  let start = -1
+  for (const field of head.fields) {
+    const name = requestName(field.name, 'identity header framing')
     if (FORBIDDEN_HEADERS.has(name)) invalid('forbidden identity header')
     if (expected.has(name)) {
-      if (seen.has(name) || match[2] !== ` ${expected.get(name)}`)
+      if (seen.has(name) || field.value !== ` ${expected.get(name)}`)
         invalid('identity header value or duplicate')
       seen.add(name)
     }
-    if (name === 'authorization') start = offset + match[1].length + ': Bearer '.length
-    offset += header.length + 2
+    if (name === 'authorization') start = field.offset + field.name.length + ': Bearer '.length
   }
   if (seen.size !== expected.size || start < 0) invalid('missing identity header')
   return { start, end: start + bearer.length }

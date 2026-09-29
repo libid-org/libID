@@ -2,6 +2,7 @@ import { assetUrl } from '../assets/index.js'
 import { ceremonyError } from '../errors.js'
 import { now, type OperationEvent } from '../events.js'
 import { origin, webUrl } from '../primitives.js'
+import { safeEmit } from '../workers.js'
 import type { NotaryAttestation } from './decode.js'
 import { tlsnModule, tlsnWasm } from './notary.assets.js'
 import type {
@@ -52,12 +53,8 @@ export class Notarization {
   async prepare(url: string, event?: string): Promise<NotarizationSession> {
     const signal = this.signal
     signal.throwIfAborted()
-    if (
-      !webUrl(url) ||
-      new URL(url).protocol !== 'https:' ||
-      new URL(url).hash ||
-      new URL(url).port
-    )
+    const target = webUrl(url) ? new URL(url) : undefined
+    if (!target || target.protocol !== 'https:' || target.hash || target.port)
       throw new TypeError('Invalid notarization target')
     if (!this.#worker) {
       const worker = new Worker(new URL('./session.worker.ts', import.meta.url), { type: 'module' })
@@ -70,36 +67,49 @@ export class Notarization {
       url,
       this.signal,
       (error) => this.#failure.abort(error),
-      this.emit,
-      event,
+      event ? { event, emit: this.emit && safeEmit(this.emit) } : undefined,
     )
     await session.prepare(this.#worker, this.notaryAddress)
     return session
   }
 }
 
+type Reply = Exclude<FromWorker, { type: 'error' }>
+
+type Replies = { [T in Reply['type']]: Extract<Reply, { type: T }> }
+
 /** Owns one channel, its pending replies and the send-through-attestation deadline. */
 class Session implements NotarizationSession {
-  private phase: 'preparing' | 'prepared' | 'sending' | 'sent' | 'revealing' | 'ended' = 'preparing'
+  /** `busy` covers an in-flight prepare or send; reveal failures carry their operation. */
+  private phase: 'busy' | 'prepared' | 'sent' | 'revealing' | 'ended' = 'busy'
   private readonly channel = new MessageChannel()
-  private readonly waiters = new Map<
-    FromWorker['type'],
-    { resolve: (value: FromWorker) => void; reject: (error: unknown) => void }
-  >()
+  private readonly replies: { [T in keyof Replies]: PromiseWithResolvers<Replies[T]> } = {
+    prepared: Promise.withResolvers(),
+    sent: Promise.withResolvers(),
+    revealed: Promise.withResolvers(),
+    attestation: Promise.withResolvers(),
+  }
+  /** Replies currently awaited; any other reply fails the session. */
+  private readonly pending = new Set<keyof Replies>()
   private timer?: ReturnType<typeof setTimeout>
-  private readonly responseSizes: Record<string, number> = {}
   private readonly abort = () => this.fail(this.signal.reason)
 
   constructor(
     private readonly url: string,
     private readonly signal: AbortSignal,
     private readonly failRuntime: (error: unknown) => void,
-    private readonly emit?: (event: OperationEvent) => void,
-    private readonly event?: string,
+    /** The platform's reveal/attestation operation; `emit` is set when it is observed. */
+    private readonly observer?: { event: string; emit?: (event: OperationEvent) => void },
   ) {
     signal.addEventListener('abort', this.abort, { once: true })
     this.channel.port1.onmessageerror = () => this.fail(new Error('Invalid notarization message'))
-    this.channel.port1.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data)
+    this.channel.port1.onmessage = (event: MessageEvent<FromWorker>) => {
+      try {
+        this.receive(event.data)
+      } catch (error) {
+        this.fail(error)
+      }
+    }
   }
 
   async prepare(worker: Worker, notaryAddress: string): Promise<void> {
@@ -130,25 +140,13 @@ class Session implements NotarizationSession {
     this.signal.throwIfAborted()
     if (this.phase !== 'prepared' || request.url !== this.url)
       throw new Error('Invalid notarization send')
-    this.phase = 'sending'
+    this.phase = 'busy'
     this.timer = setTimeout(() => this.fail(new Error('Notarization request timed out')), 10000)
     const result = this.wait('sent')
     try {
       this.channel.port1.postMessage({ type: 'send', request } satisfies ToWorker)
       const { transcript } = await result
       this.signal.throwIfAborted()
-      if (this.emit && this.event) {
-        const bytes = transcript.received
-        const end = bytes.findIndex(
-          (byte, i) =>
-            byte === 13 && bytes[i + 1] === 10 && bytes[i + 2] === 13 && bytes[i + 3] === 10,
-        )
-        // Raw wire sizes: headers include status/separator; body includes any chunk framing.
-        if (end >= 0) {
-          this.responseSizes['response-header-bytes'] = end + 4
-          this.responseSizes['response-body-bytes'] = bytes.length - end - 4
-        }
-      }
       this.phase = 'sent'
       return transcript
     } catch (error) {
@@ -173,7 +171,7 @@ class Session implements NotarizationSession {
       const { openings } = await result
       const opened = now()
       // Parent-side intervals include worker delivery/correlation, not just TLSN execution.
-      if (this.emit && this.event)
+      if (this.observer?.emit)
         void final.then(
           ({ attributes }) => {
             const timestamp = now()
@@ -181,7 +179,6 @@ class Session implements NotarizationSession {
               'openings-ms': opened - started,
               'finalization-ms': timestamp - opened,
               ...attributes,
-              ...this.responseSizes,
             })
           },
           () => {},
@@ -193,13 +190,9 @@ class Session implements NotarizationSession {
     }
   }
 
-  private wait<T extends FromWorker['type']>(type: T): Promise<Extract<FromWorker, { type: T }>> {
-    const promise = new Promise<Extract<FromWorker, { type: T }>>((resolve, reject) =>
-      this.waiters.set(type, {
-        resolve: (value) => resolve(value as Extract<FromWorker, { type: T }>),
-        reject,
-      }),
-    )
+  private wait<T extends keyof Replies>(type: T): Promise<Replies[T]> {
+    this.pending.add(type)
+    const { promise } = this.replies[type]
     void promise.catch(() => {})
     return promise
   }
@@ -212,14 +205,18 @@ class Session implements NotarizationSession {
       )
       return
     }
-    const waiter = this.waiters.get(message.type)
-    if (!waiter || (message.type === 'attestation' && this.waiters.has('revealed'))) {
-      this.fail(new Error('Unexpected notarization result'))
-      return
-    }
-    this.waiters.delete(message.type)
-    waiter.resolve(message)
-    if (message.type === 'attestation') this.cleanup()
+    if (!this.settle(message)) this.fail(new Error('Unexpected notarization result'))
+    else if (message.type === 'attestation') this.cleanup()
+  }
+
+  /** Deliver a reply to its pending waiter; the final attestation must follow its openings. */
+  private settle<T extends keyof Replies>(message: Replies[T] & { type: T }): boolean {
+    const { type } = message
+    if (!this.pending.has(type) || (type === 'attestation' && this.pending.has('revealed')))
+      return false
+    this.pending.delete(type)
+    this.replies[type].resolve(message)
+    return true
   }
 
   private cleanup(): void {
@@ -232,10 +229,10 @@ class Session implements NotarizationSession {
   private fail(error: unknown): void {
     if (this.phase === 'ended') return
     // Preserve the originating operation before shared-runtime cancellation rejects siblings.
-    if (!this.signal.aborted && this.phase === 'revealing' && this.event)
-      error = ceremonyError(error, this.event)
-    for (const waiter of this.waiters.values()) waiter.reject(error)
-    this.waiters.clear()
+    if (!this.signal.aborted && this.phase === 'revealing' && this.observer)
+      error = ceremonyError(error, this.observer.event)
+    for (const type of this.pending) this.replies[type].reject(error)
+    this.pending.clear()
     this.cleanup()
     this.failRuntime(error)
   }
@@ -245,16 +242,11 @@ class Session implements NotarizationSession {
     timestamp: number,
     attributes?: Record<string, number>,
   ): void {
-    if (!this.emit || !this.event) return
-    try {
-      this.emit({
-        event: this.event,
-        phase,
-        timestamp,
-        ...(attributes ? { instrumentation: { attributes } } : {}),
-      })
-    } catch {
-      // Observers cannot change the session outcome.
-    }
+    this.observer?.emit?.({
+      event: this.observer.event,
+      phase,
+      timestamp,
+      ...(attributes ? { instrumentation: { attributes } } : {}),
+    })
   }
 }

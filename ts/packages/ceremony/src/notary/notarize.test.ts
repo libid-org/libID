@@ -1,7 +1,13 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { describe, expect, it } from 'vitest'
 import { concat, encodeAttestation, opening } from './fixtures/attestation.js'
-import { correlateAttestation, type NotarizationPlan, planNotarization } from './notarize.js'
+import {
+  correlateReveal,
+  type HashOpening,
+  type NotarizationPlan,
+  planNotarization,
+  verifyAttestation,
+} from './notarize.js'
 import type { ByteRange, Transcript } from './protocol.js'
 
 const encoder = new TextEncoder()
@@ -9,6 +15,21 @@ const encoder = new TextEncoder()
 const transcript: Transcript = {
   sent: encoder.encode('abcdefghij'),
   received: encoder.encode('0123456789ab'),
+}
+
+/** The worker's order: correlate provisional openings, then verify the signed record. */
+function correlateAttestation(
+  authority: string,
+  transcript: Transcript,
+  plan: NotarizationPlan,
+  openings: { sent: readonly HashOpening[]; received: readonly HashOpening[] },
+  attestedData: Uint8Array,
+) {
+  const correlated = correlateReveal(transcript, plan, openings)
+  return {
+    ...correlated,
+    decoded: verifyAttestation(authority, transcript, plan, correlated, attestedData),
+  }
 }
 
 const ranges = {
@@ -25,7 +46,7 @@ const ranges = {
 describe('planNotarization [TEST-COMMON-18]', () => {
   it('validates and tiles both directions with the exact TLSNotary input shape', () => {
     expect(planNotarization(transcript, ranges)).toEqual({
-      reveal: { sent: ranges.sent, received: ranges.received, server_identity: true },
+      reveal: { sent: ranges.sent, received: ranges.received },
       commit: {
         sent: [
           { start: 2, end: 4, algorithm: 'SHA256' },
@@ -189,24 +210,6 @@ describe('correlateAttestation [TEST-PLAT-15] [TEST-PLAT-21]', () => {
     )
   })
 
-  it('rejects a plan changed after complement derivation', () => {
-    const changed: NotarizationPlan = {
-      ...plan,
-      commit: { ...plan.commit, sent: [plan.commit.sent[0], plan.commit.sent[0]] },
-    }
-    expect(() =>
-      correlateAttestation('api.x.com', transcript, changed, { sent, received }, attestedData),
-    ).toThrow(/not the reveal complement/)
-  })
-
-  it('requires the TLSNotary server-identity reveal', () => {
-    const changed = structuredClone(plan) as NotarizationPlan
-    Object.assign(changed.reveal, { server_identity: false })
-    expect(() =>
-      correlateAttestation('api.x.com', transcript, changed, { sent, received }, attestedData),
-    ).toThrow(/server identity/)
-  })
-
   it('rejects an opening that ambiguously matches equal hidden plaintext ranges', () => {
     const repeated: Transcript = { sent: encoder.encode('xAxA'), received: new Uint8Array() }
     const repeatedPlan = planNotarization(repeated, {
@@ -340,7 +343,6 @@ it('coalesces adjacent disclosures in both directions before signing [LIBID-PROV
     reveal: {
       sent: [{ start: 0, end: 7 }],
       received: [{ start: 2, end: 8 }],
-      server_identity: true as const,
     },
   }
   expect(plan.reveal).toEqual(native.reveal)

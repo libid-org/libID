@@ -85,6 +85,7 @@ describe('decodeAttestationFrame', () => {
     ['large byte', frameJson({ ...validPayload(), attested_data: [256] }), /byte element/],
     ['fractional byte', frameJson({ ...validPayload(), attested_data: [1.5] }), /byte element/],
     ['string byte', frameJson({ ...validPayload(), attested_data: ['1'] }), /byte element/],
+    ['empty attested data', frameJson({ ...validPayload(), attested_data: [] }), /byte array/],
     [
       'oversize attested data',
       frameJson({ ...validPayload(), attested_data: new Array(2 * 1024 * 1024 + 1).fill(0) }),

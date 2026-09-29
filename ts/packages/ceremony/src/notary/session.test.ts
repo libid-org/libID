@@ -219,9 +219,13 @@ it.each([
       port.postMessage({
         type: 'attestation',
         attestation,
+        // The worker measures the response; the parent forwards it with its intervals.
         attributes: {
           'sent-bytes': 60,
           'received-bytes': 40,
+          ...(headerBytes === undefined
+            ? {}
+            : { 'response-header-bytes': headerBytes, 'response-body-bytes': 40 - headerBytes }),
           'committed-sent-bytes': 20,
           'committed-received-bytes': 30,
           'commitment-count': 2,

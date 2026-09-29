@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { ProofEngineOptions, RawProof } from '../../barretenberg/engine.js'
 import type { NotaryAttestation } from '../../notary/decode.js'
 import { concat, encodeAttestation, opening } from '../../notary/fixtures/attestation.js'
-import { correlateAttestation, planNotarization } from '../../notary/notarize.js'
+import { correlateReveal, planNotarization, verifyAttestation } from '../../notary/notarize.js'
 import type {
   CommitmentOpening,
   ExactHttpRequest,
@@ -143,13 +143,8 @@ for (const platform of ['x', 'github'] as const) {
               new URL(url).hostname,
             )
             if (outcome === 'attestation-mismatch' && index === 0) attestedData[0] ^= 1
-            const correlated = correlateAttestation(
-              new URL(url).hostname,
-              transcript,
-              plan,
-              raw,
-              attestedData,
-            )
+            const correlated = correlateReveal(transcript, plan, raw)
+            verifyAttestation(new URL(url).hostname, transcript, plan, correlated, attestedData)
             const openings: CommitmentOpening[] = (['sent', 'received'] as const).flatMap(
               (direction) =>
                 correlated[direction].map(({ start, end, blinder }) => ({

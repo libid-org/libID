@@ -1,15 +1,11 @@
 import { assetUrl } from '../assets/index.js'
 import { ceremonyError } from '../errors.js'
 import { now, type OperationEvent } from '../events.js'
+import { safeEmit, workerThreads } from '../workers.js'
 import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
-import type { FromWorker, Preload, ToWorker } from './protocol.js'
+import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
-/** Browser-generated bb output; structural checks here do not establish cryptographic validity. */
-export interface RawProof {
-  proof: Uint8Array
-  publicInputs: string[]
-  runtime: { effectiveThreads: number; sharedMemory: boolean }
-}
+export type { RawProof } from './protocol.js'
 
 export interface ProofEngineOptions {
   /** Compiled Noir circuit and matching released verification key, resolved by the asset graph. */
@@ -21,52 +17,50 @@ export interface ProofEngineOptions {
 
 /** One boot, one witness, one proof, then unconditional worker destruction. */
 export class ProofEngine {
-  #worker: Worker | null = null
+  #worker?: Worker
   readonly #emit: (event: OperationEvent) => void
-  #inputsAt: number | undefined
-  #backendAt: number | undefined
-  #prepared = false
-  readonly #ready: Promise<void>
-  #resolveReady!: () => void
-  #failure: Error | null = null
-  #used = false
-  #result: Promise<RawProof> | null = null
-  #resolveResult: ((result: RawProof) => void) | null = null
-  #rejectResult: ((error: Error) => void) | null = null
-  #settled = false
-  #preload: Preload | null = null
+  /** Sent once the worker boots. */
+  #preload?: Preload
+  /** Set by the single `prove` call; preparation finishes once inputs and backend are ready. */
+  #inputsAt?: number
+  #backendAt?: number
+  #phase: 'preparing' | 'prepared' | 'settled' = 'preparing'
+  /** Witness readiness and the proof; both reject with the engine's failure. */
+  readonly #ready = Promise.withResolvers<void>()
+  readonly #result = Promise.withResolvers<RawProof>()
 
-  constructor({
-    circuitUrl,
-    verificationKeyUrl,
-    emit = () => undefined,
-    threads,
-  }: ProofEngineOptions) {
+  constructor({ circuitUrl, verificationKeyUrl, emit, threads }: ProofEngineOptions) {
     const [url, keyUrl] = [circuitUrl, verificationKeyUrl].map((value) => {
       const url = new URL(value, location.href)
       if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.hash)
         throw new Error('invalid circuit resource URL')
       return url.href
     })
-    this.#emit = (event) => {
-      try {
-        emit(event)
-      } catch {
-        /* Observers cannot control proving. */
-      }
-    }
+    this.#emit = safeEmit(emit ?? (() => undefined))
+    void this.#ready.promise.catch(() => {})
+    void this.#result.promise.catch(() => {})
     this.#emit({ event: 'zk-proof-preparation', phase: 'started', timestamp: now() })
     this.#emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: now() })
-    this.#ready = new Promise<void>((resolve) => {
-      this.#resolveReady = resolve
-    })
-    void this.#start(url, keyUrl, threads).catch((error: unknown) => this.#fail(error))
+    try {
+      this.#preload = {
+        type: 'preload',
+        circuitUrl: url,
+        verificationKeyUrl: keyUrl,
+        threads: workerThreads(threads),
+        acvmUrl: assetUrl(acvm),
+        abiUrl: assetUrl(abi),
+        wasmPath: assetUrl(bbWasm).replace('-threads.wasm', '.wasm'),
+        crsPath: new URL('.', assetUrl(crs[0])).href,
+      }
+      this.#worker = this.#spawn()
+    } catch (error) {
+      this.#fail(error)
+    }
   }
 
   /** Execute one witness and proof; initialization overlaps until bb is needed. Aborting retires the worker. */
   async prove(inputs: Record<string, unknown>, signal?: AbortSignal): Promise<RawProof> {
-    if (this.#used) throw new Error('proof engine is single-use')
-    this.#used = true
+    if (this.#inputsAt !== undefined) throw new Error('proof engine is single-use')
     this.#inputsAt = now()
     this.#finishPreparation()
     const abort = () =>
@@ -74,18 +68,13 @@ export class ProofEngine {
     signal?.addEventListener('abort', abort, { once: true })
     if (signal?.aborted) abort()
     try {
-      await this.#ready
-      if (this.#failure) throw this.#failure
-      this.#result = new Promise<RawProof>((resolve, reject) => {
-        this.#resolveResult = resolve
-        this.#rejectResult = reject
-      })
+      await this.#ready.promise
       try {
-        this.#worker?.postMessage({ type: 'engine-prove', inputs } satisfies ToWorker)
+        this.#worker?.postMessage({ type: 'prove', inputs } satisfies ToWorker)
       } catch (error) {
         this.#fail(error)
       }
-      return await this.#result
+      return await this.#result.promise
     } finally {
       signal?.removeEventListener('abort', abort)
     }
@@ -93,13 +82,11 @@ export class ProofEngine {
 
   /** Retire pending work and the worker; repeated calls after settlement are harmless. */
   destroy(): void {
-    if (!this.#settled) this.#fail('proof engine destroyed')
+    this.#fail('proof engine destroyed')
   }
 
-  async #start(circuitUrl: string, verificationKeyUrl: string, threads?: number): Promise<void> {
-    if (this.#settled) return
+  #spawn(): Worker {
     const worker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' })
-    this.#worker = worker
     worker.addEventListener('message', (event: MessageEvent<FromWorker>) => {
       try {
         this.#onMessage(event.data)
@@ -107,58 +94,40 @@ export class ProofEngine {
         this.#fail(error)
       }
     })
-    worker.addEventListener('error', (event) => {
-      this.#fail(
-        [
-          event.message || 'proof worker failed',
-          event.filename || 'unknown worker source',
-          `${event.lineno}:${event.colno}`,
-        ].join(' · '),
-      )
-    })
-    this.#preload = {
-      type: 'engine-preload',
-      circuitUrl,
-      verificationKeyUrl,
-      threads: Math.max(1, Math.min(threads ?? 4, navigator.hardwareConcurrency || 1, 4)),
-      acvmUrl: assetUrl(acvm),
-      abiUrl: assetUrl(abi),
-      wasmPath: assetUrl(bbWasm).replace('-threads.wasm', '.wasm'),
-      crsPath: new URL('.', assetUrl(crs[0])).href,
-    }
+    // Worker file locations stay out of user-visible failure text.
+    worker.addEventListener('error', (event) => this.#fail(event.message || 'proof worker failed'))
+    return worker
   }
 
   #onMessage(message: FromWorker): void {
-    if (!message || typeof message !== 'object' || this.#settled) return
+    if (this.#phase === 'settled') return
     switch (message.type) {
-      case 'engine-booted':
+      case 'booted':
         this.#emit({
           event: 'proof-worker-bootstrap',
           phase: 'finished',
           timestamp: message.timestamp,
         })
-        if (this.#preload) {
-          this.#worker?.postMessage(this.#preload)
-          this.#preload = null
-        }
+        if (this.#preload) this.#worker?.postMessage(this.#preload)
+        this.#preload = undefined
         break
-      case 'engine-event':
+      case 'event':
         this.#emit(message.event)
         break
-      case 'engine-prepared':
+      case 'backend-ready':
         this.#backendAt = message.timestamp
         this.#finishPreparation()
         break
-      case 'engine-ready':
-        this.#resolveReady()
+      case 'witness-ready':
+        this.#ready.resolve()
         break
-      case 'engine-result':
-        this.#settled = true
+      case 'result':
+        this.#phase = 'settled'
         this.#worker?.terminate()
-        this.#resolveResult?.(message.result)
+        this.#result.resolve(message.result)
         break
-      case 'engine-error':
-        this.#fail(ceremonyError(message.error, message.event))
+      case 'error':
+        this.#fail(ceremonyError(message.message, message.event))
         break
       default:
         this.#fail('unexpected proof worker message')
@@ -166,8 +135,13 @@ export class ProofEngine {
   }
 
   #finishPreparation(): void {
-    if (this.#prepared || this.#inputsAt === undefined || this.#backendAt === undefined) return
-    this.#prepared = true
+    if (
+      this.#phase !== 'preparing' ||
+      this.#inputsAt === undefined ||
+      this.#backendAt === undefined
+    )
+      return
+    this.#phase = 'prepared'
     this.#emit({
       event: 'zk-proof-preparation',
       phase: 'finished',
@@ -176,12 +150,14 @@ export class ProofEngine {
   }
 
   #fail(reason: unknown): void {
-    if (this.#settled) return
-    this.#settled = true
+    if (this.#phase === 'settled') return
+    this.#phase = 'settled'
     this.#worker?.terminate()
-    const error = ceremonyError(reason, this.#used ? 'zk-proof-generation' : 'zk-proof-preparation')
-    this.#failure = error
-    this.#resolveReady()
-    this.#rejectResult?.(error)
+    const error = ceremonyError(
+      reason,
+      this.#inputsAt === undefined ? 'zk-proof-preparation' : 'zk-proof-generation',
+    )
+    this.#ready.reject(error)
+    this.#result.reject(error)
   }
 }

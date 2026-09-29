@@ -1,16 +1,22 @@
 import type { OperationEvent } from '../events.js'
-import type { RawProof } from './engine.js'
+
+/** Browser-generated bb output; structural checks here do not establish cryptographic validity. */
+export interface RawProof {
+  proof: Uint8Array
+  publicInputs: string[]
+  runtime: { effectiveThreads: number; sharedMemory: boolean }
+}
 
 export type FromWorker =
-  | { type: 'engine-booted'; timestamp: number }
-  | { type: 'engine-ready' } // Ready for witness execution; bb may still be initializing.
-  | { type: 'engine-event'; event: OperationEvent }
-  | { type: 'engine-prepared'; timestamp: number }
-  | { type: 'engine-result'; result: RawProof }
-  | { type: 'engine-error'; error: string; event: string }
+  | { type: 'booted'; timestamp: number }
+  | { type: 'witness-ready' } // Noir can execute the witness; bb may still be initializing.
+  | { type: 'event'; event: OperationEvent }
+  | { type: 'backend-ready'; timestamp: number }
+  | { type: 'result'; result: RawProof }
+  | { type: 'error'; message: string; event: string }
 
 export interface Preload {
-  type: 'engine-preload'
+  type: 'preload'
   circuitUrl: string
   verificationKeyUrl: string
   threads: number
@@ -20,4 +26,4 @@ export interface Preload {
   crsPath: string
 }
 
-export type ToWorker = Preload | { type: 'engine-prove'; inputs: Record<string, unknown> }
+export type ToWorker = Preload | { type: 'prove'; inputs: Record<string, unknown> }

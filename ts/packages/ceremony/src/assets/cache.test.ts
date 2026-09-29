@@ -62,6 +62,15 @@ it('allows unexposed range headers but rejects exposed mismatches and wrong leng
     expect(() => validateResponse(new Response(null, { status: 206, headers }), spec)).toThrow()
 })
 
+it('rejects a malformed Content-Range even without a requested range', () => {
+  for (const range of ['bytes 0-1/0x10', 'bytes 0-1', 'items 0-1/2'])
+    expect(() =>
+      validateResponse(new Response(null, { headers: { 'Content-Range': range } }), {
+        url: spec.url,
+      }),
+    ).toThrow('Unexpected asset range')
+})
+
 it('storage denial still fetches; failed bodies never become a reusable flight', async () => {
   vi.stubGlobal('caches', {
     open: async () => {

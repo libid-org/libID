@@ -63,8 +63,9 @@ memory/network caps. Keep that limitation explicit when qualifying resource use.
 
 [notarize.ts](../src/notary/notarize.ts) validates selected ranges, merges adjacent
 reveals as TLSNotary does, and commits the complement. It correlates private
-openings, transcript lengths, reveals and commitments with final attested bytes,
-including the authority identifier for the prepared HTTPS host.
+openings with planned commitments once, then verifies transcript lengths, reveals
+and those correlated hashes against the final attested bytes, including the
+authority identifier for the prepared HTTPS host.
 Missing coverage, wrong framing or correlation failure rejects completion.
 
 [decode.ts](../src/notary/decode.ts) reads the canonical signed serialization once
@@ -81,8 +82,10 @@ and derives authoritative identity and proof inputs from them.
 
 ## HTTP and platform policy
 
-[http.ts](../src/notary/http.ts) and [transcript.ts](../src/notary/transcript.ts)
-handle shared byte framing and request checks. X/GitHub
+[http.ts](../src/notary/http.ts) tokenizes HTTP heads on wire bytes for both
+directions and UTF-8-decodes a response body only after removing chunked framing.
+Each caller keeps its own field policy; [transcript.ts](../src/notary/transcript.ts)
+owns the request checks. X/GitHub
 [transcript machinery](../src/platforms/bearer-link/transcript.ts) consumes the fixed
 profiles declared under `platforms/<id>/1/transcript.ts`. JSON whitespace and header
 order do not establish identity: selectors work from actual wire offsets, and numeric GitHub IDs are
@@ -119,8 +122,9 @@ timings. Fetching identity can overlap token attestation.
 
 `response-header-bytes` and `response-body-bytes` split the raw response at its
 first CRLF/CRLF: headers include the status line and separator; body includes any
-chunk framing. A missing boundary leaves those attributes absent. Only counts
-are retained for instrumentation; transcript contents are never forwarded.
+chunk framing. A missing boundary leaves those attributes absent. The worker
+computes every count; the parent adds only its two intervals. Transcript contents
+are never forwarded as instrumentation.
 
 The notary session owns both event occurrences, using the operation name supplied
 by its platform. Failure leaves the operation unfinished. The dev history keeps
