@@ -83,7 +83,7 @@ function attributeList(attributes: Readonly<Record<string, string | number | boo
     const term = document.createElement('dt')
     const description = document.createElement('dd')
     term.textContent = key.replace(/-(ms|bytes)$/, '').replaceAll('-', ' ')
-    term.title = attributeTitles[key] ?? ''
+    term.title = Object.hasOwn(attributeTitles, key) ? attributeTitles[key] : ''
     description.textContent =
       typeof value === 'number' && key.endsWith('-ms')
         ? `${value.toFixed(0)} ms`
