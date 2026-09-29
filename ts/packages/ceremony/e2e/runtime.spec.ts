@@ -1,22 +1,19 @@
 import { once } from 'node:events'
 import { connect, createServer, type Socket } from 'node:net'
 import { expect, test } from './fixtures.js'
+import { notaryCases } from './platforms.js'
 import { notary, runtime } from './topology.js'
 import { verifyBrowserProof } from './verify.js'
 
-// Controlled circuit inputs and unauthenticated X/GitHub requests; no live OAuth credentials.
+// Controlled circuit inputs and smoke.ts's unauthenticated requests; no live OAuth credentials.
 test.beforeEach(async ({ page }) => {
   await page.goto(`http://localhost:${runtime}/index.html`)
   await page.waitForFunction(() => typeof window.proveBearerFixture === 'function')
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true)
 })
 
-for (const [platform, count] of [
-  ['x', 1],
-  ['x', 2],
-  ['github', 2],
-] as const)
-  test(`real ${platform} notary: ${count} session(s)${platform === 'github' ? ' alongside proving [LIBID-PROVER-001] [LIBID-PROVER-015]' : ''} [LIBID-PROVER-019]`, async ({
+for (const { platform, sessions: count, alongsideProving } of notaryCases)
+  test(`real ${platform} notary: ${count} session(s)${alongsideProving ? ' alongside proving [LIBID-PROVER-001] [LIBID-PROVER-015]' : ''} [LIBID-PROVER-019]`, async ({
     page,
   }) => {
     test.setTimeout(480000)
@@ -32,21 +29,21 @@ for (const [platform, count] of [
     })
     const [proof, attestations] = await page
       .evaluate(
-        async ({ platform, count }) =>
+        async ({ platform, count, alongsideProving }) =>
           // One shared-runtime coexistence check per engine; X still exercises
           // both one and two real sessions without regenerating the same proof.
           Promise.all([
-            platform === 'github' ? window.proveBearerFixture() : null,
+            alongsideProving ? window.proveBearerFixture() : null,
             window.notarizeRequests(count, platform),
           ]),
-        { platform, count },
+        { platform, count, alongsideProving },
       )
       .catch((error: unknown) => {
-        // These sessions contain only the synthetic, unauthenticated requests above.
+        // These sessions contain only smoke.ts's synthetic, unauthenticated requests.
         console.error('Notary runtime progress:', JSON.stringify(logs))
         throw error
       })
-    if (platform === 'github') {
+    if (alongsideProving) {
       expect(proof!.runtime.sharedMemory).toBe(true)
       expect(proof!.runtime.effectiveThreads).toBeGreaterThan(1)
       await verifyBrowserProof('bearer_link', proof!)

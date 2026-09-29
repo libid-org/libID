@@ -6,12 +6,39 @@ import {
 } from '../src/barretenberg/circuits/bearer_link/bearer_link.assets.js'
 import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer_link/inputs.js'
 import { ProofEngine } from '../src/barretenberg/engine.js'
+import type { ExactHttpRequest } from '../src/notary/protocol.js'
 import { Notarization } from '../src/notary/session.js'
 import {
   buildTokenRequest,
   buildIdentityRequest as identityRequest,
 } from '../src/platforms/github/1/transcript.js'
+import type { NotaryPlatform } from './platforms.js'
 import { notary } from './topology.js'
+
+/** The index-th unauthenticated request of a real-notary run, per table platform with sessions. */
+const notaryRequests: { [P in NotaryPlatform]: (index: number) => ExactHttpRequest } = {
+  x: () => ({
+    url: 'https://api.x.com/2/users/me',
+    method: 'GET',
+    headers: {
+      Host: new TextEncoder().encode('api.x.com'),
+      Connection: new TextEncoder().encode('close'),
+    },
+    body: new Uint8Array(),
+  }),
+  // Deliberately invalid fixture credentials exercise both public GitHub endpoints,
+  // not a successful OAuth exchange or authenticated identity.
+  github: (index) =>
+    index === 0
+      ? buildTokenRequest({
+          clientId: 'fixture',
+          code: 'fixture',
+          redirectUri: 'http://localhost:4682/auth/callback',
+          codeVerifier: 'A'.repeat(43),
+          clientCredential: 'fixture',
+        })
+      : identityRequest('fixture'),
+}
 
 Object.assign(window, {
   Notarization,
@@ -39,7 +66,7 @@ Object.assign(window, {
       engine.destroy()
     }
   },
-  async notarizeRequests(count: number, platform: 'x' | 'github' = 'x') {
+  async notarizeRequests(count: number, platform: NotaryPlatform = 'x') {
     const abort = new AbortController()
     const started = performance.now()
     const pending = Array.from({ length: count }, () => 'prepare')
@@ -56,28 +83,7 @@ Object.assign(window, {
       const notarization = new Notarization(`http://localhost:${notary}`, abort.signal)
       return await Promise.all(
         Array.from({ length: count }, async (_, index) => {
-          // Deliberately invalid fixture credentials exercise both public GitHub endpoints,
-          // not a successful OAuth exchange or authenticated identity.
-          const request =
-            platform === 'github'
-              ? index === 0
-                ? buildTokenRequest({
-                    clientId: 'fixture',
-                    code: 'fixture',
-                    redirectUri: 'http://localhost:4682/auth/callback',
-                    codeVerifier: 'A'.repeat(43),
-                    clientCredential: 'fixture',
-                  })
-                : identityRequest('fixture')
-              : {
-                  url: 'https://api.x.com/2/users/me',
-                  method: 'GET' as const,
-                  headers: {
-                    Host: new TextEncoder().encode('api.x.com'),
-                    Connection: new TextEncoder().encode('close'),
-                  },
-                  body: new Uint8Array(),
-                }
+          const request = notaryRequests[platform](index)
           const session = await notarization.prepare(request.url)
           pending[index] = 'send'
           const transcript = await session.send(request)
