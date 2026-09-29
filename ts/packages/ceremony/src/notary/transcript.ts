@@ -1,4 +1,4 @@
-import { FIELD_NAME, parseHead, trimField } from './http.js'
+import { FIELD_NAME, latin1, parseHead, trimField } from './http.js'
 import type { ByteRange } from './protocol.js'
 
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -17,40 +17,21 @@ function invalid(reason: string): never {
   throw new Error(`Invalid transcript: ${reason}`)
 }
 
-function findFrom(haystack: Uint8Array, needle: Uint8Array, start = 0): number {
-  outer: for (let i = start; i <= haystack.length - needle.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer
-    }
-    return i
-  }
-  return -1
-}
-
-function findUnique(haystack: Uint8Array, needle: Uint8Array, name: string): number {
-  const start = findFrom(haystack, needle)
-  if (start < 0) return invalid(`${name} is missing`)
-  if (findFrom(haystack, needle, start + 1) >= 0) return invalid(`${name} is duplicated`)
-  return start
-}
-
 /** JSON whitespace only; offsets always remain relative to the original bytes. */
 export function skipJsonWhitespace(bytes: Uint8Array, start: number): number {
   while ([32, 9, 10, 13].includes(bytes[start])) start++
   return start
 }
 
+/** Locate the sole ASCII `name` key followed by a colon; Latin-1 text offsets are byte offsets. */
 export function jsonField(
   transcript: Uint8Array,
   name: string,
 ): { start: number; valueStart: number } {
-  const key = new TextEncoder().encode(`"${name}"`)
+  const text = latin1.decode(transcript)
+  const key = `"${name}"`
   let found: { start: number; valueStart: number } | undefined
-  for (
-    let start = findFrom(transcript, key);
-    start >= 0;
-    start = findFrom(transcript, key, start + 1)
-  ) {
+  for (let start = text.indexOf(key); start >= 0; start = text.indexOf(key, start + 1)) {
     const colon = skipJsonWhitespace(transcript, start + key.length)
     if (transcript[colon] !== 58) continue
     if (found) return invalid(`${name} is duplicated`)
@@ -66,9 +47,8 @@ export function quotedRange(
   const field = jsonField(transcript, name)
   if (transcript[field.valueStart] !== 34) return invalid(`${name} is not a string`)
   const valueStart = field.valueStart + 1
-  let end = valueStart
-  while (end < transcript.length && transcript[end] !== 0x22) end++
-  if (end === transcript.length) return invalid(`${name} is unterminated`)
+  const end = transcript.indexOf(0x22, valueStart)
+  if (end < 0) return invalid(`${name} is unterminated`)
   return {
     range: { start: field.start, end: end + 1 },
     valueStart,
@@ -95,7 +75,10 @@ export function tokenRequestBody(
   requestLine: string,
   host: string,
 ): Uint8Array {
-  findUnique(request, new Uint8Array([13, 10, 13, 10]), 'token head terminator')
+  const text = latin1.decode(request)
+  const terminator = text.indexOf('\r\n\r\n')
+  if (terminator < 0) invalid('token head terminator is missing')
+  if (text.includes('\r\n\r\n', terminator + 1)) invalid('token head terminator is duplicated')
   const head = parseHead(request) ?? invalid('token header framing')
   if (head.startLine !== requestLine) invalid('token request framing')
   const expected = new Map([
@@ -129,7 +112,6 @@ export function identityBearerRange(
   if (!head || head.bodyStart !== sent.length) invalid('identity request framing')
   if (head.startLine !== requestLine) invalid('identity request line')
   // Latin-1 decoding matches the head's one code unit per wire byte, including UTF-8 values.
-  const latin1 = new TextDecoder('latin1')
   const expected = new Map(
     Object.entries(required).map(([name, value]) => [name.toLowerCase(), latin1.decode(value)]),
   )

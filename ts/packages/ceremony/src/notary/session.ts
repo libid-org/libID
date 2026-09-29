@@ -76,21 +76,20 @@ export class Notarization {
 
 type Reply = Exclude<FromWorker, { type: 'error' }>
 
-type Replies = { [T in Reply['type']]: Extract<Reply, { type: T }> }
+/** One awaited reply; the session awaits replies in protocol order. */
+interface Waiter {
+  type: Reply['type']
+  resolve(reply: Reply): void
+  reject(error: unknown): void
+}
 
 /** Owns one channel, its pending replies and the send-through-attestation deadline. */
 class Session implements NotarizationSession {
   /** `busy` covers an in-flight prepare or send; reveal failures carry their operation. */
   private phase: 'busy' | 'prepared' | 'sent' | 'revealing' | 'ended' = 'busy'
   private readonly channel = new MessageChannel()
-  private readonly replies: { [T in keyof Replies]: PromiseWithResolvers<Replies[T]> } = {
-    prepared: Promise.withResolvers(),
-    sent: Promise.withResolvers(),
-    revealed: Promise.withResolvers(),
-    attestation: Promise.withResolvers(),
-  }
-  /** Replies currently awaited; any other reply fails the session. */
-  private readonly pending = new Set<keyof Replies>()
+  /** Replies currently awaited, oldest first; any other reply fails the session. */
+  private readonly pending: Waiter[] = []
   private timer?: ReturnType<typeof setTimeout>
   private readonly abort = () => this.fail(this.signal.reason)
 
@@ -160,7 +159,8 @@ class Session implements NotarizationSession {
     if (this.phase !== 'sent') throw new Error('Invalid notarization reveal')
     this.phase = 'revealing'
     const started = now()
-    this.report('started', started)
+    const { event, emit } = this.observer ?? {}
+    if (event && emit) emit({ event, phase: 'started', timestamp: started })
     this.signal.throwIfAborted()
     const result = this.wait('revealed')
     const final = this.wait('attestation')
@@ -171,14 +171,19 @@ class Session implements NotarizationSession {
       const { openings } = await result
       const opened = now()
       // Parent-side intervals include worker delivery/correlation, not just TLSN execution.
-      if (this.observer?.emit)
+      if (event && emit)
         void final.then(
           ({ attributes }) => {
             const timestamp = now()
-            this.report('finished', timestamp, {
+            const intervals = {
               'openings-ms': opened - started,
               'finalization-ms': timestamp - opened,
-              ...attributes,
+            }
+            emit({
+              event,
+              phase: 'finished',
+              timestamp,
+              instrumentation: { attributes: { ...intervals, ...attributes } },
             })
           },
           () => {},
@@ -190,10 +195,11 @@ class Session implements NotarizationSession {
     }
   }
 
-  private wait<T extends keyof Replies>(type: T): Promise<Replies[T]> {
-    this.pending.add(type)
-    const { promise } = this.replies[type]
+  private wait<T extends Reply['type']>(type: T): Promise<Extract<Reply, { type: T }>> {
+    const { promise, resolve, reject } = Promise.withResolvers<Extract<Reply, { type: T }>>()
     void promise.catch(() => {})
+    // `receive` resolves a waiter only with a reply of its own type.
+    this.pending.push({ type, resolve: resolve as Waiter['resolve'], reject })
     return promise
   }
 
@@ -205,18 +211,15 @@ class Session implements NotarizationSession {
       )
       return
     }
-    if (!this.settle(message)) this.fail(new Error('Unexpected notarization result'))
-    else if (message.type === 'attestation') this.cleanup()
-  }
-
-  /** Deliver a reply to its pending waiter; the final attestation must follow its openings. */
-  private settle<T extends keyof Replies>(message: Replies[T] & { type: T }): boolean {
-    const { type } = message
-    if (!this.pending.has(type) || (type === 'attestation' && this.pending.has('revealed')))
-      return false
-    this.pending.delete(type)
-    this.replies[type].resolve(message)
-    return true
+    // In-order delivery also requires the final attestation to follow its openings.
+    const waiter = this.pending[0]
+    if (waiter?.type !== message.type) {
+      this.fail(new Error('Unexpected notarization result'))
+      return
+    }
+    this.pending.shift()
+    waiter.resolve(message)
+    if (message.type === 'attestation') this.cleanup()
   }
 
   private cleanup(): void {
@@ -231,22 +234,8 @@ class Session implements NotarizationSession {
     // Preserve the originating operation before shared-runtime cancellation rejects siblings.
     if (!this.signal.aborted && this.phase === 'revealing' && this.observer)
       error = ceremonyError(error, this.observer.event)
-    for (const type of this.pending) this.replies[type].reject(error)
-    this.pending.clear()
+    for (const waiter of this.pending.splice(0)) waiter.reject(error)
     this.cleanup()
     this.failRuntime(error)
-  }
-
-  private report(
-    phase: 'started' | 'finished',
-    timestamp: number,
-    attributes?: Record<string, number>,
-  ): void {
-    this.observer?.emit?.({
-      event: this.observer.event,
-      phase,
-      timestamp,
-      ...(attributes ? { instrumentation: { attributes } } : {}),
-    })
   }
 }

@@ -55,9 +55,7 @@ export async function rootWorker(): Promise<ServiceWorkerRegistration> {
   // still match a longer registration; popup port selection alone cannot fix it.
   const script = new URL(route('worker.js'), location.origin).href
   for (const old of await navigator.serviceWorker.getRegistrations()) {
-    const workers = [old.active, old.waiting, old.installing].filter(
-      (worker): worker is ServiceWorker => worker !== null,
-    )
+    const workers = [old.active, old.waiting, old.installing].filter((worker) => worker !== null)
     if (
       old.scope === `${location.origin}/ccdp/v1/` &&
       workers.length &&

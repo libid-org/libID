@@ -2,7 +2,7 @@ import { concatBytes } from '@noble/hashes/utils.js'
 import type { Transcript } from './protocol.js'
 
 // Latin-1 keeps one code unit per wire byte, so string offsets are transcript offsets.
-const latin1 = new TextDecoder('latin1')
+export const latin1 = new TextDecoder('latin1')
 
 /** RFC 9110 field-name token. */
 export const FIELD_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/i
@@ -15,11 +15,6 @@ interface HeadField {
   offset: number
 }
 
-/** Offset of the first CRLFCRLF head terminator, or -1. */
-function headEnd(bytes: Uint8Array): number {
-  return latin1.decode(bytes).indexOf('\r\n\r\n')
-}
-
 /**
  * Tokenize an HTTP/1.1 head at its first CRLFCRLF into exact CRLF lines. Undefined unless
  * every line is field text (no bare CR/LF or other controls) and every field line has a
@@ -28,9 +23,10 @@ function headEnd(bytes: Uint8Array): number {
 export function parseHead(
   bytes: Uint8Array,
 ): { startLine: string; fields: HeadField[]; bodyStart: number } | undefined {
-  const end = headEnd(bytes)
+  const text = latin1.decode(bytes)
+  const end = text.indexOf('\r\n\r\n')
   if (end < 0) return
-  const [startLine, ...lines] = latin1.decode(bytes.subarray(0, end)).split('\r\n')
+  const [startLine, ...lines] = text.slice(0, end).split('\r\n')
   if (!fieldText(startLine)) return
   const fields: HeadField[] = []
   let offset = startLine.length + 2
@@ -51,7 +47,7 @@ export const trimField = (value: string) => value.replace(/^[ \t]+|[ \t]+$/g, ''
 
 /** Raw wire sizes: headers include status and separator; the body includes any chunk framing. */
 export function responseSizes(received: Uint8Array): Record<string, number> {
-  const end = headEnd(received)
+  const end = latin1.decode(received).indexOf('\r\n\r\n')
   return end < 0
     ? {}
     : { 'response-header-bytes': end + 4, 'response-body-bytes': received.length - end - 4 }
@@ -94,29 +90,25 @@ function framingHeaders(fields: readonly HeadField[]): Map<string, string> {
   return headers
 }
 
+/** Whether CRLF starts at `at`; reads past the end are not CRLF, so this also bounds offsets. */
+const crlf = (bytes: Uint8Array, at: number) => bytes[at] === 13 && bytes[at + 1] === 10
+
 /** Decode a complete chunked body; extensions and trailers are rejected. */
 function decodeChunked(body: Uint8Array): Uint8Array {
   const chunks: Uint8Array[] = []
   let offset = 0
   for (;;) {
     let lineEnd = offset
-    while (lineEnd < body.length - 1 && (body[lineEnd] !== 13 || body[lineEnd + 1] !== 10))
-      lineEnd++
+    while (lineEnd < body.length - 1 && !crlf(body, lineEnd)) lineEnd++
     const sizeText = latin1.decode(body.subarray(offset, lineEnd))
     if (!/^[0-9a-fA-F]{1,8}$/.test(sizeText)) throw new Error('Invalid chunk size')
     const size = Number.parseInt(sizeText, 16)
     offset = lineEnd + 2
     if (size === 0) {
-      if (offset + 2 !== body.length || body[offset] !== 13 || body[offset + 1] !== 10)
-        throw new Error('Invalid final chunk')
+      if (offset + 2 !== body.length || !crlf(body, offset)) throw new Error('Invalid final chunk')
       break
     }
-    if (
-      offset + size + 2 > body.length ||
-      body[offset + size] !== 13 ||
-      body[offset + size + 1] !== 10
-    )
-      throw new Error('Truncated chunk')
+    if (!crlf(body, offset + size)) throw new Error('Truncated chunk')
     chunks.push(body.subarray(offset, offset + size))
     offset += size + 2
   }

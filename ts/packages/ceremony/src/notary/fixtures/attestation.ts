@@ -1,19 +1,12 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
+import { concatBytes as concat } from '@noble/hashes/utils.js'
 import type { HashOpening, NotarizationPlan } from '../notarize.js'
-import type { ByteRange, Transcript } from '../protocol.js'
+import type { ByteRange, Directions, Transcript } from '../protocol.js'
 
 const encoder = new TextEncoder()
 
-export function concat(...parts: readonly Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(parts.reduce((length, part) => length + part.length, 0))
-  let offset = 0
-  for (const part of parts) {
-    out.set(part, offset)
-    offset += part.length
-  }
-  return out
-}
+export { concat }
 
 function u32(value: number): Uint8Array {
   const bytes = new Uint8Array(4)
@@ -48,7 +41,7 @@ function encodeDirection(
 export function encodeAttestation(
   transcript: Transcript,
   plan: NotarizationPlan,
-  hashes: { sent: readonly Uint8Array[]; received: readonly Uint8Array[] },
+  hashes: Directions<readonly Uint8Array[]>,
   commitments = plan.commit,
   authority = 'api.x.com',
 ): Uint8Array {

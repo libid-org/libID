@@ -1,5 +1,8 @@
 import type { NotaryAttestation } from './decode.js'
 
+/** One value per transcript direction. */
+export type Directions<T> = { sent: T; received: T }
+
 export interface ByteRange {
   start: number
   end: number
@@ -12,15 +15,9 @@ export interface ExactHttpRequest {
   body: Uint8Array
 }
 
-export interface Transcript {
-  sent: Uint8Array
-  received: Uint8Array
-}
+export type Transcript = Directions<Uint8Array>
 
-export interface Reveals {
-  sent: readonly ByteRange[]
-  received: readonly ByteRange[]
-}
+export type Reveals = Directions<readonly ByteRange[]>
 
 export interface CommitmentOpening extends ByteRange {
   direction: 'sent' | 'received'

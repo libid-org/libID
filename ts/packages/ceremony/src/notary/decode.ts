@@ -1,4 +1,5 @@
 import { fixedBytes, hasExactKeys, isRecord } from '../primitives.js'
+import type { ByteRange, Directions } from './protocol.js'
 
 export const MAX_ATTESTED_DATA_BYTES = 2 * 1024 * 1024
 
@@ -7,9 +8,7 @@ export interface DecodedRevealedRange {
   bytes: Uint8Array
 }
 
-export interface DecodedRangeCommitment {
-  start: number
-  end: number
+export interface DecodedRangeCommitment extends ByteRange {
   commitment: Uint8Array
 }
 
@@ -18,14 +17,12 @@ export interface DecodedDirection {
   commitments: readonly DecodedRangeCommitment[]
 }
 
-export interface DecodedAttestedData {
+export interface DecodedAttestedData extends Directions<DecodedDirection> {
   authorityId: Uint8Array
   /** Signed Unix seconds as canonical decimal text, preserving the complete u64 range. */
   createdAt: string
   sentTranscriptLength: number
   receivedTranscriptLength: number
-  sent: DecodedDirection
-  received: DecodedDirection
 }
 
 /** Original signed bytes; ledger verification remains authoritative. */
@@ -51,17 +48,11 @@ class Cursor {
   }
 
   u32(): number {
-    if (this.remaining < 4) invalid('truncated integer')
-    const value = this.view.getUint32(this.offset)
-    this.offset += 4
-    return value
+    return this.view.getUint32(this.take(4, 'truncated integer'))
   }
 
   u64(): bigint {
-    if (this.remaining < 8) invalid('truncated integer')
-    const value = this.view.getBigUint64(this.offset)
-    this.offset += 8
-    return value
+    return this.view.getBigUint64(this.take(8, 'truncated integer'))
   }
 
   count(minimumItemBytes: number): number {
@@ -73,12 +64,16 @@ class Cursor {
   }
 
   bytes(length: number): Uint8Array {
-    if (!Number.isSafeInteger(length) || length < 0 || length > this.remaining) {
-      invalid('truncated byte string')
-    }
-    const value = this.input.slice(this.offset, this.offset + length)
+    if (!Number.isSafeInteger(length) || length < 0) invalid('truncated byte string')
+    const start = this.take(length, 'truncated byte string')
+    return this.input.slice(start, start + length)
+  }
+
+  /** Consume `length` bytes, returning their start offset. */
+  private take(length: number, reason: string): number {
+    if (length > this.remaining) invalid(reason)
     this.offset += length
-    return value
+    return this.offset - length
   }
 }
 
