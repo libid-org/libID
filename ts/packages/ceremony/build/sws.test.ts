@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
 import { parse, stringify, type TomlTable } from 'smol-toml'
 import { document } from '../src/ccdp/headers.ts'
-import { cache } from './release.ts'
+import { cache } from './sources.ts'
 import { errorHeaders, writeDistribution } from './sws.ts'
 
 // The native tests below start their own SWS on this port and the next one.

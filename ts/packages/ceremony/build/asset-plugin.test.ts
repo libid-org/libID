@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { build, type Rollup } from 'vite'
 import { assetPlugin } from './asset-plugin.ts'
-import { packageDir } from './release.ts'
+import { packageDir } from './sources.ts'
 
 test('runtime lowering preserves named/chained calls and external request options [LIBID-MOD-021] [LIBID-ASSET-022]', async () => {
   const id = join(packageDir, 'src/asset-lowering-fixture.ts')
@@ -35,8 +35,6 @@ test('runtime lowering preserves named/chained calls and external request option
           'file/v1.wasm/': '/ccdp/assets/file/v1.wasm',
         },
         moduleUrls: {},
-        requestsByProfile: {},
-        allowedRequests: [],
       }),
     ],
     build: { write: false, minify: false, lib: { entry: id, formats: ['es'] } },

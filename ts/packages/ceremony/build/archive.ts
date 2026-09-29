@@ -1,18 +1,14 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { Parser } from 'tar'
-import { download, packageDir } from './release.ts'
+import { readSource } from './sources.ts'
 
 export function safePath(path: string, selector = false): string {
+  const parts = path.split('/')
+  // Empty components also reject empty and absolute paths.
   if (
-    !path ||
-    path.includes('\\') ||
-    /[?#%:[\]{}]/.test(path) ||
-    [...path].some((c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) === 127) ||
-    path.startsWith('/') ||
-    path.split('/').some((p) => !p || p === '.' || p === '..') ||
+    /[\\?#%:[\]{} \p{Cc}]/u.test(path) ||
+    parts.some((p) => !p || p === '.' || p === '..') ||
     (!selector && path.includes('*')) ||
-    path.split('/').at(-1)!.includes('*')
+    parts.at(-1)!.includes('*')
   )
     throw new Error(`Invalid resource path: ${path}`)
   return path
@@ -20,9 +16,7 @@ export function safePath(path: string, selector = false): string {
 
 /** Read regular files into memory; archive entries never get filesystem write authority. */
 export async function readArchive(source: string): Promise<Map<string, Buffer>> {
-  const bytes = source.startsWith('https:')
-    ? await download(source)
-    : readFileSync(resolve(packageDir, source))
+  const bytes = await readSource(source)
   const files = new Map<string, Buffer>(),
     entries = new Set<string>()
   await new Promise<void>((resolve, reject) => {

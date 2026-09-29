@@ -35,6 +35,15 @@ export const errorHeaders = {
   'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
 } as const
 
+const sidecars = [
+  [
+    '.br',
+    (bytes: Buffer) =>
+      brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 6 } }),
+  ],
+  ['.gz', (bytes: Buffer) => gzipSync(bytes, { level: 6 })],
+] as const
+
 /** Emit static files and native SWS configuration; no response metadata overrides. */
 export function writeDistribution(
   out: string,
@@ -60,15 +69,12 @@ export function writeDistribution(
     const target = join(out, 'public', physical)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, bytes)
-    const compressed = brotliCompressSync(bytes, {
-      params: { [constants.BROTLI_PARAM_QUALITY]: 6 },
-    })
-    // Rebuilds must not leave a previous body available through content negotiation.
-    if (compressed.length < bytes.length) writeFileSync(`${target}.br`, compressed)
-    else rmSync(`${target}.br`, { force: true })
-    const gzip = gzipSync(bytes, { level: 6 })
-    if (gzip.length < bytes.length) writeFileSync(`${target}.gz`, gzip)
-    else rmSync(`${target}.gz`, { force: true })
+    for (const [extension, encode] of sidecars) {
+      const encoded = encode(bytes)
+      // Rebuilds must not leave a previous body available through content negotiation.
+      if (encoded.length < bytes.length) writeFileSync(target + extension, encoded)
+      else rmSync(target + extension, { force: true })
+    }
     rules.push({ source: physical, headers })
   }
   const config = {

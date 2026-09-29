@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, extname, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import type { Rollup } from 'vite'
 import { build } from 'vite'
@@ -9,8 +9,8 @@ import * as headers from '../src/ccdp/headers.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetPlugin } from './asset-plugin.ts'
 import { validateCircuitCapacity } from './circuits.ts'
-import { responseHeaders } from './profiles.ts'
-import { download, hash, packageDir } from './release.ts'
+import { isolatedWorkers, parseCsp, responseHeaders } from './profiles.ts'
+import { hash, packageDir, readSource } from './sources.ts'
 
 export { assetPlugin } from './asset-plugin.ts'
 
@@ -38,17 +38,16 @@ export async function loadAssetCatalog() {
   }
 }
 
-export function mediaType(path: string): string {
-  return path.endsWith('.js') || path.endsWith('.mjs')
-    ? headers.javascript['Content-Type']
-    : path.endsWith('.wasm')
-      ? headers.wasm['Content-Type']
-      : path.endsWith('.json')
-        ? headers.json['Content-Type']
-        : path.endsWith('.html')
-          ? 'text/html; charset=utf-8'
-          : 'application/octet-stream'
+const mediaTypes: Readonly<Record<string, string>> = {
+  '.js': headers.javascript['Content-Type'],
+  '.mjs': headers.javascript['Content-Type'],
+  '.wasm': headers.wasm['Content-Type'],
+  '.json': headers.json['Content-Type'],
+  '.html': headers.document['Content-Type'],
 }
+
+export const mediaType = (path: string): string =>
+  mediaTypes[extname(path)] ?? 'application/octet-stream'
 
 export function assetHeaders(path: string, policy: Readonly<Record<string, string>> = {}) {
   const seen = new Set<string>()
@@ -82,13 +81,7 @@ export function assetHeaders(path: string, policy: Readonly<Record<string, strin
 
 /** A declared worker CSP keeps the locked-down base and admits only same-origin WASM code. */
 function validateWorkerCsp(policy: string): void {
-  const directives = new Map<string, string[]>()
-  for (const clause of policy.split(';').filter((c) => c.trim())) {
-    const [rawName, ...values] = clause.trim().split(/\s+/)
-    const name = rawName.toLowerCase()
-    if (directives.has(name)) throw new Error('Duplicate CSP directive')
-    directives.set(name, values)
-  }
+  const directives = parseCsp(policy)
   for (const name of ['default-src', 'object-src', 'base-uri', 'form-action', 'frame-ancestors'])
     if (directives.get(name)?.join(' ') !== "'none'") throw new Error('Worker CSP base weakened')
   const scripts = directives.get('script-src') ?? [],
@@ -144,6 +137,9 @@ function installedFile(source: string): Buffer {
   return readFileSync(join(directory, safePath(path.slice(pkg.length + 1))))
 }
 
+/** The key of a local asset's built URL in `urls`, as the runtime assetUrl looks it up. */
+export const assetKey = (asset: LocalAsset) => `${asset.mount}/${asset.member ?? ''}`
+
 export async function resolveAssets() {
   const catalog = await loadAssetCatalog()
   const profiles = Object.fromEntries(
@@ -155,8 +151,7 @@ export async function resolveAssets() {
   const archives = new Map<string, Promise<Map<string, Buffer>>>()
   const urls: Record<string, string> = {},
     moduleUrls: Record<string, string> = {},
-    bodyHashes: Record<string, string> = {},
-    sizes: Record<string, number> = {}
+    bodyHashes: Record<string, string> = {}
   const local = new Map<string, { bytes: Buffer; headers: Record<string, string> }>()
   const selections = new Map<string, string>(),
     mounts = new Map<string, string>()
@@ -173,7 +168,6 @@ export async function resolveAssets() {
       continue
     }
     safePath(asset.mount)
-    const key = `${asset.mount}/${asset.member ?? ''}`
     let path: string, bytes: Buffer
     if (asset.member !== undefined) {
       if (mounts.has(asset.mount) && mounts.get(asset.mount) !== asset.source)
@@ -200,9 +194,7 @@ export async function resolveAssets() {
       path = `/ccdp/assets/${asset.mount}`
       bytes = asset.source.startsWith('npm:')
         ? installedFile(asset.source)
-        : asset.source.startsWith('https:')
-          ? await download(asset.source)
-          : readFileSync(resolve(packageDir, asset.source))
+        : await readSource(asset.source)
     }
     const policy = assetHeaders(path, asset.headers),
       signature = JSON.stringify(policy)
@@ -210,27 +202,19 @@ export async function resolveAssets() {
       throw new Error(`Conflicting asset policy: ${path}`)
     selections.set(path, signature)
     register(path, bytes, policy)
-    urls[key] = path
+    urls[assetKey(asset)] = path
     for (const module of asset.bundledUrlModules ?? []) moduleUrls[module] = path
   }
   const circuits = new Map(
     catalog.circuits.map((asset) => {
-      const path = urls[`${asset.mount}/${asset.member ?? ''}`]
-      return [asset.member!.replace(/\.json$/, ''), local.get(path)!.bytes]
+      return [asset.member!.replace(/\.json$/, ''), local.get(urls[assetKey(asset)])!.bytes]
     }),
   )
   await validateCircuitCapacity(circuits, catalog.SRS_SIZE)
-  for (const [path, { bytes }] of local) {
-    bodyHashes[path] = hash(bytes)
-    sizes[path] = bytes.length
-  }
+  for (const [path, { bytes }] of local) bodyHashes[path] = hash(bytes)
   // Bundled code changes URL when its execution policy changes, even if its code does not.
   const policyId = hash(
-    JSON.stringify(
-      ['executionWorker', 'proofWorker', 'leafWorker'].map((p) =>
-        responseHeaders(p as 'executionWorker', {}),
-      ),
-    ),
+    JSON.stringify(isolatedWorkers.map((profile) => responseHeaders(profile))),
   ).slice(0, 12)
   return {
     policyId,
@@ -239,9 +223,6 @@ export async function resolveAssets() {
     profiles,
     local,
     bodyHashes,
-    sizes,
-    requestsByProfile: {} as Record<string, AssetRequest[]>,
-    allowedRequests: [] as AssetRequest[],
   }
 }
 
