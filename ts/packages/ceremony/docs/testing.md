@@ -25,6 +25,37 @@ from the browser job.
 coverage into `coverage/`. On each push to `main`, CI publishes its line
 coverage to the `badges` branch for the README badge.
 
+## Adding a platform
+
+The [conformance suite](../src/platforms/conformance/conformance.test.ts) and other
+per-platform unit tests iterate `supportedPlatforms` and read one typed
+[fixture table](../src/platforms/conformance/fixtures.ts) (through `src/testing`)
+instead of naming platforms. A catalog entry without a fixture fails `typecheck`
+at that table. The entry supplies:
+
+- the Bridge client (and public credential when `requiresClientCredential`), a
+  valid identity and proof with the digest it is bound to and its expected
+  expiry, boundary identity values, and platform-specific rejected identity
+  encodings and out-of-bound proof values;
+- accepted, denied and provider-error returns for a given OAuth state, the
+  pipeline's weighted operations and its lazily imported `prover.ts`;
+- the pipeline and its evidence: bearer-link response bodies and transcript
+  module, or an OIDC signed ID token, JWK, nonce digest, released-verifier
+  public inputs and the well-formed changes that break its binding;
+- the normative test IDs each conformance section tags for this platform.
+
+The suite then checks catalog members, authorization-URL round-trip, client-ID
+and credential rules, weights and assets; the OAuth return matrix (outcomes,
+metadata, state, issuer, malformed/oversized/leaked fields and transports); the
+generated identity/proof reject matrix, result acceptance and expiry, and OIDC
+binding mismatches; and a `prove()` contract every platform meets whatever its
+pipeline (delivery, operation reporting, the run's signal and engine teardown,
+reordered engine inputs, startup cancellation), followed by each pipeline kind's
+own cases, replacing only the TLSN runtime and proof engine. A new pipeline kind
+adds its evidence shape, a stage for the shared contract (`typecheck` fails until
+it exists) and its own cases. Byte-layout vectors specific to one platform
+stay beside its source. Map newly tagged IDs in [traceability](traceability.md).
+
 ## Distribution checks
 
 ```sh

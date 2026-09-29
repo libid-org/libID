@@ -3,12 +3,13 @@ import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterEach, beforeEach, expect, it, type Mock, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
 import type { ProverContext } from '../../platforms/context.js'
-import { platforms } from '../../platforms/index.js'
+import { platforms, supportedPlatforms } from '../../platforms/index.js'
 import {
   CEREMONY_ID,
   type FakeDocumentUi,
   fakeDocumentUi,
   proveIdentity,
+  returnSamples,
 } from '../../testing/index.js'
 import type { IdentityProof } from '../index.js'
 import { messages, popupErrorMessages } from '../ui-messages.js'
@@ -79,18 +80,19 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-it.each(['google', 'x', 'github'] as const)(
+it.each(supportedPlatforms)(
   'passes validated %s routing to the platform without ledger decoding [LIBID-OAUTH-021]',
   async (platformId) => {
     vi.stubGlobal('location', { origin: 'https://ccdp.test' })
     vi.stubGlobal('crossOriginIsolated', true)
     vi.stubGlobal('Worker', vi.fn())
+    const { oauthReturn } = returnSamples(platformId).denied
     await startProver(
       new URLSearchParams({
         ceremonyId: CEREMONY_ID,
         applicationOrigin: 'https://app.test',
-        oauthQuery: '',
-        oauthFragment: '#error=access_denied',
+        oauthQuery: oauthReturn.query,
+        oauthFragment: oauthReturn.fragment,
       }).toString(),
     )
     expect(accept).toHaveBeenCalledWith(
@@ -105,15 +107,7 @@ it.each(['google', 'x', 'github'] as const)(
       phase: 'started',
       timestamp: expect.any(Number),
     })
-    handler({
-      type: 'prove-identity',
-      platformId,
-      platformCeremonyVersion: 1,
-      clientId: 'client',
-      redirectUri: 'https://bridge.test/callback',
-      codeVerifier: null,
-      notaryAddress: 'https://local-notary.test',
-    })
+    handler(proveIdentity(platformId, { notaryAddress: 'https://local-notary.test' }))
     await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
     const context = prove.mock.calls[0][0]
     expect(ui.trackProof).toHaveBeenCalledExactlyOnceWith(
@@ -121,7 +115,7 @@ it.each(['google', 'x', 'github'] as const)(
     )
     expect(context.request.notaryAddress).toBe('https://local-notary.test')
     expect(context).not.toHaveProperty('ledgerId')
-    expect(context.oauthReturn.fragment).toBe('#error=access_denied')
+    expect(context.oauthReturn).toEqual(oauthReturn)
   },
 )
 

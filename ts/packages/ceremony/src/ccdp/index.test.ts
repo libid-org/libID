@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { supportedPlatforms } from '../platforms/index.js'
 import { origin } from '../primitives.js'
 import { CEREMONY_ID } from '../testing/index.js'
 import {
@@ -73,7 +74,8 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
    * credential; each rejected value throws.
    */
   function checkField(field: string, accepted: unknown[], rejected: unknown[]) {
-    for (const platformId of ['google', 'x', 'github', 'new-platform']) {
+    // The codec admits any slug: every catalog platform and one it does not know yet.
+    for (const platformId of [...supportedPlatforms, 'new-platform']) {
       const base = { ...samples[1][1], platformId }
       expect(ProveIdentity.decode(base)).toBe(base)
       for (const value of accepted) {

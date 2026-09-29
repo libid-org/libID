@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
-import { type PlatformId, platforms } from '../../platforms/index.js'
+import { type PlatformId, platforms, supportedPlatforms } from '../../platforms/index.js'
+import { fixtures } from '../../testing/index.js'
 import { proofProgress } from './progress.js'
 
 const progressFor = (platform: PlatformId) =>
@@ -14,11 +15,6 @@ const proofOperations = [
   'witness',
   'proof',
 ]
-const platformOperations = {
-  google: ['signing-key-fetch'],
-  x: ['token-fetch', 'token-attestation', 'identity-fetch', 'identity-attestation'],
-  github: ['token-fetch', 'token-attestation', 'identity-fetch', 'identity-attestation'],
-}
 const finished = (event: string) =>
   ({
     event,
@@ -27,10 +23,10 @@ const finished = (event: string) =>
     status: 'active',
   }) as const
 
-it.each(['google', 'x', 'github'] as const)(
+it.each(supportedPlatforms)(
   'counts each %s operation once in different completion orders [LIBID-PROVER-011]',
   (platform) => {
-    const operations = [...proofOperations, ...platformOperations[platform]]
+    const operations = [...proofOperations, ...fixtures[platform].operations]
     for (const order of [operations, [...operations].reverse()]) {
       const progress = progressFor(platform)
       let previous = 0
