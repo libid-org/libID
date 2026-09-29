@@ -35,7 +35,7 @@ it('records sends and navigations, and delivers decoded peer messages to one han
   await expect(connection.ready).resolves.toBeUndefined()
 })
 
-it('ends once, then ignores messages and refuses to navigate away', async () => {
+it('ends once, then ignores messages and refuses to send or navigate away', async () => {
   const connection = fakeConnection<Ping>()
   const received: number[] = []
   connection.on(Ping, (message) => received.push(message.n))
@@ -45,6 +45,8 @@ it('ends once, then ignores messages and refuses to navigate away', async () => 
   connection.receive({ type: 'ping', n: 1 })
   expect(received).toEqual([])
   await expect(connection.navigateAway('https://elsewhere.example/')).rejects.toThrow('closed')
+  expect(() => connection.send({ type: 'ping', n: 2 })).toThrow('send-unavailable')
+  expect(connection.sent).toEqual([])
 })
 
 it('settles pending readiness when the test decides', async () => {

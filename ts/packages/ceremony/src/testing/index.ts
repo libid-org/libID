@@ -7,4 +7,5 @@ export const utf8 = (value: string) => new TextEncoder().encode(value)
 
 export const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 
+export * from './ccdp.js'
 export * from './http.js'

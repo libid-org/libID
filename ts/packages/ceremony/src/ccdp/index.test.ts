@@ -68,22 +68,30 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
       expect(() => codec.decode({ ...value, type: 'other' })).toThrow()
       expect(() => codec.decode(Object.assign(new Date(), value))).toThrow()
     })
-  it('validates nullable notary routing independently of platform [LIBID-OAUTH-021]', () => {
-    const message = samples[1][1]
+  /**
+   * On every platform, each accepted `field` value decodes unchanged and still admits no retired
+   * credential; each rejected value throws.
+   */
+  function checkField(field: string, accepted: unknown[], rejected: unknown[]) {
     for (const platformId of ['google', 'x', 'github', 'new-platform']) {
-      for (const notaryAddress of [
-        null,
-        'https://notary.test',
-        'https://localhost:4687',
-        'http://localhost:4687',
-      ]) {
-        const value = { ...message, platformId, notaryAddress }
-        expect(ProveIdentity.decode(value)).toBe(value)
+      const base = { ...samples[1][1], platformId }
+      expect(ProveIdentity.decode(base)).toBe(base)
+      for (const value of accepted) {
+        const valid = { ...base, [field]: value }
+        expect(ProveIdentity.decode(valid)).toBe(valid)
         expect(() =>
-          ProveIdentity.decode({ ...value, tokenExchangeCredential: 'retired' }),
+          ProveIdentity.decode({ ...valid, tokenExchangeCredential: 'retired' }),
         ).toThrow()
       }
-      for (const notaryAddress of [
+      for (const value of rejected)
+        expect(() => ProveIdentity.decode({ ...base, [field]: value })).toThrow()
+    }
+  }
+  it('validates nullable notary routing independently of platform [LIBID-OAUTH-021]', () => {
+    checkField(
+      'notaryAddress',
+      [null, 'https://notary.test', 'https://localhost:4687', 'http://localhost:4687'],
+      [
         undefined,
         0,
         {},
@@ -92,59 +100,29 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
         'https://user@notary.test',
         'https://notary.test?x=1',
         'https://notary.test#x',
-      ])
-        expect(() => ProveIdentity.decode({ ...message, platformId, notaryAddress })).toThrow()
-    }
+      ],
+    )
     for (const extra of [
       { ledgerId: 'test:mainnet' },
       { isTestnet: false },
       { chainId: new Uint8Array(32) },
     ])
-      expect(() => ProveIdentity.decode({ ...message, ...extra })).toThrow()
+      expect(() => ProveIdentity.decode({ ...samples[1][1], ...extra })).toThrow()
   })
   it('validates nullable code verifiers without deciding platform applicability [LIBID-OAUTH-021]', () => {
-    for (const platformId of ['google', 'x', 'github', 'new-platform']) {
-      for (const codeVerifier of [null, 'A'.repeat(43)]) {
-        const value = { ...samples[1][1], platformId, codeVerifier }
-        expect(ProveIdentity.decode(value)).toBe(value)
-        expect(() =>
-          ProveIdentity.decode({ ...value, tokenExchangeCredential: 'retired' }),
-        ).toThrow()
-      }
-      for (const codeVerifier of [
-        undefined,
-        '',
-        'A'.repeat(42),
-        '+'.repeat(43),
-        `${'A'.repeat(43)}=`,
-      ])
-        expect(() => ProveIdentity.decode({ ...samples[1][1], platformId, codeVerifier })).toThrow()
-    }
+    checkField(
+      'codeVerifier',
+      [null, 'A'.repeat(43)],
+      [undefined, '', 'A'.repeat(42), '+'.repeat(43), `${'A'.repeat(43)}=`],
+    )
   })
   it('validates the optional public credential independently of platform [TEST-CCDP-05]', () => {
-    for (const platformId of ['google', 'x', 'github', 'new-platform']) {
-      const base = { ...samples[1][1], platformId }
-      const value = { ...base, clientCredential: 'public&credential=1' }
-      expect(ProveIdentity.decode(value)).toBe(value)
-      const longest = { ...base, clientCredential: 'x'.repeat(512) }
-      expect(ProveIdentity.decode(longest)).toBe(longest)
-      expect(() => ProveIdentity.decode({ ...value, tokenExchangeCredential: 'retired' })).toThrow()
-      expect(ProveIdentity.decode(base)).toBe(base)
-      for (const clientCredential of [
-        undefined,
-        null,
-        '',
-        1,
-        [],
-        'has space',
-        'tail\n',
-        '\t',
-        'é',
-        '\x7f',
-        'x'.repeat(513),
-      ])
-        expect(() => ProveIdentity.decode({ ...base, clientCredential })).toThrow()
-    }
+    // An absent credential is valid: checkField decodes each platform's base message without one.
+    checkField(
+      'clientCredential',
+      ['public&credential=1', 'x'.repeat(512)],
+      [undefined, null, '', 1, [], 'has space', 'tail\n', '\t', 'é', '\x7f', 'x'.repeat(513)],
+    )
   })
 
   it('rejects malformed event records and terminal claims without coercion', () => {
@@ -178,6 +156,28 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
       ),
     ).toThrow()
   })
+})
+
+it('reads Prefetch input with or without its hash, bounded and exact', () => {
+  const fragment = String(prefetchFragment(id, 'google', 1))
+  expect(readPrefetch(`#${fragment}`)).toEqual({
+    ceremonyId: id,
+    platformId: 'google',
+    platformCeremonyVersion: 1,
+  })
+  expect(() => readPrefetch(`${fragment}&padding=${'x'.repeat(65536)}`)).toThrow('too large')
+  for (const [ceremonyId, platformId, version] of [
+    [id.toUpperCase(), 'google', '1'],
+    [id, 'Google', '1'],
+    [id, 'google', '01'],
+    [id, 'google', '-1'],
+    [id, 'google', '65536'],
+  ])
+    expect(() =>
+      readPrefetch(
+        String(new URLSearchParams({ ceremonyId, platformId, ceremonyVersion: version })),
+      ),
+    ).toThrow('Invalid Prefetch input')
 })
 
 it('reads the OAuth state it writes and any later CCDP version [LIBID-ASSET-015]', () => {

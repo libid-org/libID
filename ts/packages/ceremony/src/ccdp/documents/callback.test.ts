@@ -1,18 +1,11 @@
-import { type ConnectionEnd, PopupError } from '@libid/popup'
+import { PopupError } from '@libid/popup'
+import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import type { Events } from '../../events.js'
-import { CEREMONY_ID } from '../../testing/index.js'
+import { CEREMONY_ID, type FakeDocumentUi, fakeDocumentUi } from '../../testing/index.js'
 import { messages, popupErrorMessages } from '../ui-messages.js'
 import { startCallback } from './callback.js'
 
-const { accept, current, view, navigate, send, terminal } = vi.hoisted(() => ({
-  accept: vi.fn(),
-  current: vi.fn(),
-  view: vi.fn(),
-  navigate: vi.fn(),
-  send: vi.fn(),
-  terminal: vi.fn(),
-}))
+const { accept, current } = vi.hoisted(() => ({ accept: vi.fn(), current: vi.fn() }))
 
 vi.mock('@libid/popup', async (original) => ({
   ...(await original<typeof import('@libid/popup')>()),
@@ -20,26 +13,24 @@ vi.mock('@libid/popup', async (original) => ({
   PopupWindow: { current },
 }))
 
-vi.mock('./ui.js', () => ({
-  view,
-  eventView: (events: Events) => {
-    events.onEvent(terminal)
-    return { stop: vi.fn(), message: vi.fn() }
-  },
-}))
+vi.mock('./ui.js', async () => (await import('../../testing/index.js')).documentUi(() => ui))
 
 const id = CEREMONY_ID
 
 const v1Inputs = [['https://app.test', 'https://ccdp.test'], 'https://ccdp.test']
 
-let peerOrigin: string | null,
+let connection: FakeConnection,
+  ui: FakeDocumentUi,
   config: unknown,
   locationInput: { search: string; hash: string; pathname: string; origin: string }
+
+const cleared = () => expect(locationInput.search + locationInput.hash).toBe('')
 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => {})
-  peerOrigin = 'https://app.test'
+  connection = fakeConnection({ peerOrigin: 'https://app.test' })
+  ui = fakeDocumentUi()
   config = v1Inputs
   locationInput = {
     search: '',
@@ -55,19 +46,10 @@ beforeEach(() => {
     }),
   })
   vi.stubGlobal('document', { getElementById: () => ({ textContent: JSON.stringify(config) }) })
-  view.mockImplementation(() => {
-    expect(locationInput.search + locationInput.hash).toBe('')
-  })
+  vi.spyOn(ui, 'view').mockImplementation(cleared)
   accept.mockImplementation(() => {
-    expect(locationInput.search + locationInput.hash).toBe('')
-    return {
-      peerOrigin,
-      ready: Promise.resolve(),
-      closed: new Promise(() => {}),
-      on: vi.fn(),
-      navigate,
-      send,
-    }
+    cleared()
+    return connection
   })
 })
 
@@ -76,10 +58,15 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** The Prover fragment of the one navigation Callback made. */
+const proverFragment = () => new URLSearchParams(connection.navigations[0].fragment)
+
 it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010] [TEST-CCDP-03]', async () => {
   const original = locationInput.hash
-  peerOrigin = 'https://other-app.test'
+  connection.peerOrigin = 'https://other-app.test'
   config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']
+  const send = vi.spyOn(connection, 'send')
+  const navigate = vi.spyOn(connection, 'navigate')
   startCallback()
   await Promise.resolve()
   expect(accept).toHaveBeenCalledWith(undefined, {
@@ -87,21 +74,21 @@ it('clears before acceptance and preserves exact private return with shared depl
     connectionId: id,
     allowedApplicationOrigins: ['https://other-app.test', 'https://other-ccdp.test'],
   })
-  expect(navigate).toHaveBeenCalledWith(
-    'https://other-ccdp.test/ccdp/v1/prover',
-    new URLSearchParams({
-      ceremonyId: id,
-      applicationOrigin: 'https://other-app.test',
-      oauthQuery: '',
-      oauthFragment: original,
-    }),
-  )
-  expect(send).toHaveBeenCalledExactlyOnceWith({
-    type: 'event',
-    event: 'authorization',
-    phase: 'finished',
-    timestamp: expect.any(Number),
-  })
+  expect(connection.navigations).toEqual([
+    {
+      url: 'https://other-ccdp.test/ccdp/v1/prover',
+      fragment: new URLSearchParams({
+        ceremonyId: id,
+        applicationOrigin: 'https://other-app.test',
+        oauthQuery: '',
+        oauthFragment: original,
+      }).toString(),
+      away: false,
+    },
+  ])
+  expect(connection.sent).toEqual([
+    { type: 'event', event: 'authorization', phase: 'finished', timestamp: expect.any(Number) },
+  ])
   expect(send.mock.invocationCallOrder[0]).toBeLessThan(navigate.mock.invocationCallOrder[0])
 })
 
@@ -110,10 +97,10 @@ it.each(['2', '99', '99999999999999999999'])(
   (version) => {
     locationInput.hash = `#state=v${version}.${id}`
     startCallback()
-    expect(view).toHaveBeenCalledWith(expect.stringContaining('no longer supported'))
+    expect(ui.view).toHaveBeenCalledWith(expect.stringContaining('no longer supported'))
     expect(accept).not.toHaveBeenCalled()
     expect(current).not.toHaveBeenCalled()
-    expect(send).not.toHaveBeenCalled()
+    expect(connection.sent).toEqual([])
   },
 )
 
@@ -129,7 +116,7 @@ it.each([
 ])('clears malformed or oversized return before fixed local failure [KIT-010]', (input) => {
   Object.assign(locationInput, input)
   startCallback()
-  expect(view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
+  expect(ui.view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
   expect(accept).not.toHaveBeenCalled()
 })
 
@@ -152,7 +139,7 @@ it.each(
 )('rejects malformed deployment data before connection setup [KIT-010]', ({ input }) => {
   config = input
   startCallback()
-  expect(view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
+  expect(ui.view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
   expect(accept).not.toHaveBeenCalled()
 })
 
@@ -161,7 +148,7 @@ it.each([null, { textContent: '' }, { textContent: '[' }])(
   (slot) => {
     vi.stubGlobal('document', { getElementById: () => slot })
     startCallback()
-    expect(view).toHaveBeenCalledExactlyOnceWith(
+    expect(ui.view).toHaveBeenCalledExactlyOnceWith(
       messages.returnToApplication(messages.invalidCallbackInputs),
     )
     expect(accept).not.toHaveBeenCalled()
@@ -196,10 +183,9 @@ it.each([[], [null], [{ optional: { nested: [1, 2] } }]].map((trailing) => ({ tr
           allowedApplicationOrigins: ['https://app.test', 'https://ccdp.test'],
         }),
       )
-      expect(navigate).toHaveBeenCalledWith(
-        'https://ccdp.test/ccdp/v1/prover',
-        expect.any(URLSearchParams),
-      )
+      expect(connection.navigations).toEqual([
+        { url: 'https://ccdp.test/ccdp/v1/prover', fragment: expect.any(String), away: false },
+      ])
     } finally {
       parse.mockRestore()
     }
@@ -207,12 +193,12 @@ it.each([[], [null], [{ optional: { nested: [1, 2] } }]].map((trailing) => ({ tr
 )
 
 it('does not prevent private navigation when the advisory readiness send fails', async () => {
-  send.mockImplementationOnce(() => {
+  vi.spyOn(connection, 'send').mockImplementationOnce(() => {
     throw new Error('transport send failure')
   })
   startCallback()
   await Promise.resolve()
-  expect(navigate).toHaveBeenCalledOnce()
+  expect(connection.navigations).toHaveLength(1)
 })
 
 it('takes the selected peer from authentication, never from OAuth fields or allowlist order [TEST-CCDP-04]', async () => {
@@ -223,19 +209,18 @@ it('takes the selected peer from authentication, never from OAuth fields or allo
   locationInput.hash += '&applicationOrigin=https%3A%2F%2Fother-app.test'
   startCallback()
   await Promise.resolve()
-  const fragment = navigate.mock.calls[0][1] as URLSearchParams
-  expect(fragment.get('applicationOrigin')).toBe('https://app.test')
-  expect(fragment.get('oauthFragment')).toContain('applicationOrigin=')
+  expect(proverFragment().get('applicationOrigin')).toBe('https://app.test')
+  expect(proverFragment().get('oauthFragment')).toContain('applicationOrigin=')
 })
 
 it.each([null, 'null', 'https://app.test/'])(
   'fails locally when the authenticated peer origin is unavailable or invalid: %s [TEST-CCDP-04]',
   async (value) => {
-    peerOrigin = value
+    connection.peerOrigin = value
     startCallback()
     await vi.waitFor(() => expect(console.error).toHaveBeenCalled())
-    expect(navigate).not.toHaveBeenCalled()
-    expect(send).not.toHaveBeenCalled()
+    expect(connection.navigations).toEqual([])
+    expect(connection.sent).toEqual([])
   },
 )
 
@@ -243,42 +228,45 @@ it.each(['ready-first', 'closed-first'])(
   'keeps the connection failure visible locally when Application is unreachable: %s [TEST-CCDP-08]',
   async (order) => {
     const error = new PopupError('fallback-unavailable')
-    let rejectReady!: (error: Error) => void
-    let close!: (end: ConnectionEnd) => void
-    accept.mockReturnValueOnce({
-      peerOrigin: null,
-      ready: new Promise<void>((_, reject) => {
-        rejectReady = reject
-      }),
-      closed: new Promise<ConnectionEnd>((resolve) => {
-        close = resolve
-      }),
-      navigate,
-      send,
-    })
+    connection = fakeConnection({ ready: 'pending', peerOrigin: null })
     startCallback()
-    if (order === 'ready-first') rejectReady(error)
-    close({ outcome: 'failed', code: error.code })
-    if (order === 'closed-first') rejectReady(error)
+    if (order === 'ready-first') connection.settle(error)
+    connection.end({ outcome: 'failed', code: error.code })
+    if (order === 'closed-first') connection.settle(error)
     await vi.waitFor(() =>
-      expect(terminal).toHaveBeenCalledWith({
+      expect(ui.events).toContainEqual({
         status: 'failed',
         event: 'authorization',
         message: popupErrorMessages[error.code],
         timestamp: expect.any(Number),
       }),
     )
-    expect(navigate).not.toHaveBeenCalled()
-    expect(send).not.toHaveBeenCalled()
+    expect(connection.navigations).toEqual([])
+    expect(connection.sent).toEqual([])
     expect(console.error).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
   },
 )
+
+it('ignores readiness that arrives after the connection closed', async () => {
+  connection = fakeConnection({ ready: 'pending', peerOrigin: 'https://app.test' })
+  startCallback()
+  connection.end()
+  connection.settle()
+  await connection.ready
+  expect(ui.events).toEqual([
+    expect.objectContaining({ status: 'failed', message: messages.callbackClosed }),
+  ])
+  // The ended connection cannot carry the report; its loss is logged locally.
+  expect(connection.sent).toEqual([])
+  expect(console.error).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
+  expect(connection.navigations).toEqual([])
+})
 
 it.each(['*', '*.lib.id'])(
   'passes Bridge admission pattern %s to Popup and retains only the exact authenticated origin',
   async (pattern) => {
     config = [[pattern, 'https://ccdp.test'], 'https://ccdp.test']
-    peerOrigin = 'https://wallet.preview.lib.id'
+    connection.peerOrigin = 'https://wallet.preview.lib.id'
     startCallback()
     await Promise.resolve()
     expect(accept).toHaveBeenCalledWith(
@@ -287,26 +275,15 @@ it.each(['*', '*.lib.id'])(
         allowedApplicationOrigins: [pattern, 'https://ccdp.test'],
       }),
     )
-    const fragment = navigate.mock.calls[0][1] as URLSearchParams
-    expect(fragment.get('applicationOrigin')).toBe(peerOrigin)
+    expect(proverFragment().get('applicationOrigin')).toBe(connection.peerOrigin)
   },
 )
 
 it.each(['success', 'rejected', 'failed'] as const)(
   'distinguishes expected connection retirement from a failed handoff: %s [TEST-CCDP-08]',
   async (outcome) => {
-    let close!: (end: ConnectionEnd) => void
-    accept.mockReturnValueOnce({
-      peerOrigin,
-      ready: Promise.resolve(),
-      closed: new Promise<ConnectionEnd>((resolve) => {
-        close = resolve
-      }),
-      navigate,
-      send,
-    })
-    navigate.mockImplementationOnce(async () => {
-      close(
+    const navigate = vi.spyOn(connection, 'navigate').mockImplementationOnce(async () => {
+      connection.end(
         outcome === 'failed'
           ? { outcome: 'failed', code: 'fallback-unavailable' }
           : { outcome: 'closed' },
@@ -316,7 +293,7 @@ it.each(['success', 'rejected', 'failed'] as const)(
     })
     startCallback()
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledOnce())
-    const failures = terminal.mock.calls.filter(([event]) => event.status === 'failed')
+    const failures = ui.events.filter((event) => event.status === 'failed')
     expect(failures).toHaveLength(outcome === 'success' ? 0 : 1)
     if (outcome === 'success') expect(console.error).not.toHaveBeenCalled()
   },

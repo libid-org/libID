@@ -99,4 +99,6 @@ it('keeps admission patterns out of service URLs and exact peer origins', () => 
   }
   expect(origin('https://app.lib.id')).toBe(true)
   expect(webUrl('https://app.lib.id/path')).toBe(true)
+  for (const value of [undefined, null, 1, new URL('https://app.lib.id/path')])
+    expect(webUrl(value), String(value)).toBe(false)
 })

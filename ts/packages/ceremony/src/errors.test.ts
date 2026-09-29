@@ -1,4 +1,5 @@
-import { type Message, type PopupConnection, PopupError } from '@libid/popup'
+import { PopupError } from '@libid/popup'
+import { fakeConnection } from '@libid/popup/testing'
 import { expect, it, vi } from 'vitest'
 import { CeremonyFailed } from './ccdp/index.js'
 import { popupErrorMessages } from './ccdp/ui-messages.js'
@@ -9,18 +10,13 @@ it('preserves unexpected error text and context without serializing the exceptio
   const error = ceremonyError(cause, 'identity-fetch')
   expect(error.cause).toBe(cause)
   expect(ceremonyError(error, 'prover')).toBe(error)
-  const send = vi.fn()
-  reportFailure(
-    { send, peerOrigin: 'https://app.test' } as unknown as PopupConnection<Message>,
-    error,
-  )
-  const message = send.mock.calls[0][0]
+  const connection = fakeConnection({ peerOrigin: 'https://app.test' })
+  reportFailure(connection, error)
+  expect(connection.sent).toEqual([
+    { type: 'ceremony-failed', event: 'identity-fetch', message: 'Invalid GitHub id' },
+  ])
+  const [message] = connection.sent
   expect(CeremonyFailed.decode(message)).toBe(message)
-  expect(message).toEqual({
-    type: 'ceremony-failed',
-    event: 'identity-fetch',
-    message: 'Invalid GitHub id',
-  })
   expect(CeremonyFailed.decode({ ...message, message: 'A new dependency error' }).message).toBe(
     'A new dependency error',
   )
@@ -36,6 +32,9 @@ it('bounds display text and rejects arbitrary objects instead of stringifying th
   expect(long).toBe(`a${'💥'.repeat(511)}`)
   expect(new TextDecoder().decode(new TextEncoder().encode(long))).toBe(long)
   expect(new CeremonyError('proof', `a${'💥'.repeat(600)}`).message).toBe(long)
+  // Nothing displayable left after cleaning falls back to the generic text.
+  for (const empty of ['', ' ', '\n\0'])
+    expect(errorMessage(new Error(empty))).toBe('Ceremony failed.')
 })
 
 it('records undeliverable failures without logging opaque text or changing outcomes [TEST-CCDP-08]', () => {
@@ -45,22 +44,18 @@ it('records undeliverable failures without logging opaque text or changing outco
     reportFailure(undefined, error)
     expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
     log.mockClear()
-    reportFailure(
-      {
-        peerOrigin: 'https://app.test',
-        send() {
-          throw new Error('connection closed')
-        },
-      } as unknown as PopupConnection<Message>,
-      error,
-    )
+    const closed = fakeConnection({ peerOrigin: 'https://app.test' })
+    vi.spyOn(closed, 'send').mockImplementation(() => {
+      throw new Error('connection closed')
+    })
+    reportFailure(closed, error)
     expect(log).toHaveBeenCalledOnce()
     log.mockClear()
     // An unauthenticated or pattern-admitted peer never receives the failure.
     for (const peerOrigin of [null, 'null', '*', 'https://app.test/']) {
-      const send = vi.fn()
-      reportFailure({ send, peerOrigin } as unknown as PopupConnection<Message>, error)
-      expect(send).not.toHaveBeenCalled()
+      const connection = fakeConnection({ peerOrigin })
+      reportFailure(connection, error)
+      expect(connection.sent).toEqual([])
     }
     expect(log).toHaveBeenCalledTimes(4)
     log.mockImplementation(() => {
