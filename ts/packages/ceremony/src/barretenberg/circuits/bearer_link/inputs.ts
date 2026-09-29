@@ -9,22 +9,15 @@ export const MAX_BEARER_BYTES = 128
 export const isBearer = (value: string): boolean =>
   value.length <= MAX_BEARER_BYTES && /^[\x21-\x7e]+$/.test(value)
 
-/** The exact libid-circuits v0.4.0 `bearer_link` witness. */
-export interface BearerLinkInputs extends Record<string, unknown> {
-  bearer: number[]
-  bearer_len: string
-  blinder_token: number[]
-  blinder_identity: number[]
-  token_commitment: number[]
-  identity_commitment: number[]
-}
-
-/** Openings come from bearerOpening, which fixes their blinder width and bearer length. */
+/**
+ * The exact libid-circuits v0.4.0 `bearer_link` witness. Openings come from bearerOpening,
+ * which fixes their blinder width and bearer length.
+ */
 export function buildBearerLinkWitness(
   bearer: string,
   token: CorrelatedCommitment,
   identity: CorrelatedCommitment,
-): BearerLinkInputs {
+) {
   if (!isBearer(bearer)) throw new Error('bearer must be 1 to 128 visible ASCII bytes')
   const bytes = encoder.encode(bearer)
   const padded = new Uint8Array(MAX_BEARER_BYTES)
@@ -42,7 +35,7 @@ export function buildBearerLinkWitness(
 /** Match the two commitments in the circuit's exact public-input order. */
 export function validateBearerLinkPublicInputs(
   value: readonly string[],
-  inputs: BearerLinkInputs,
+  inputs: ReturnType<typeof buildBearerLinkWitness>,
 ): boolean {
   const expected = [...inputs.token_commitment, ...inputs.identity_commitment].map(
     (n) => `0x${n.toString(16).padStart(64, '0')}`,

@@ -1,6 +1,4 @@
-import { type BearerLinkProofV1, bearerLinkTypes } from '../../bearer-link/types.js'
-
-export type XProofV1 = BearerLinkProofV1
+import { bearerLinkTypes } from '../../bearer-link/types.js'
 
 export const isUserName = (value: string): boolean => /^[A-Za-z0-9_]{1,15}$/.test(value)
 

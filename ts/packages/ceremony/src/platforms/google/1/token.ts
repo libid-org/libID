@@ -1,4 +1,5 @@
 import {
+  type GoogleCircuitToken,
   MAX_AUD_BYTES,
   MAX_EMAIL_BYTES,
   MAX_SUB_BYTES,
@@ -8,22 +9,9 @@ import { b64urlDecode, isRecord, uint } from '../../../primitives.js'
 import { readJson } from '../../../response.js'
 import { circuitText } from './types.js'
 
-/** Claims the fixed oidc_google circuit consumes. */
-export interface GoogleIdTokenClaims {
-  aud: string
-  sub: string
-  email: string
-  exp: number
-  nonce: string
-}
-
-export interface ParsedGoogleIdToken {
+/** The token bytes and claims the fixed oidc_google circuit consumes, plus the signing key's `kid`. */
+export interface ParsedGoogleIdToken extends GoogleCircuitToken {
   kid: string
-  headerB64: string
-  payload: Uint8Array
-  payloadB64: string
-  signature: Uint8Array
-  claims: GoogleIdTokenClaims
 }
 
 const text = new TextDecoder('utf-8', { fatal: true })
@@ -38,7 +26,7 @@ function json(bytes: Uint8Array): Record<string, unknown> | null {
 }
 
 /** The circuit also requires the fixed issuer and a verified email; neither is delivered. */
-function googleClaims(p: Record<string, unknown> | null): GoogleIdTokenClaims | null {
+function googleClaims(p: Record<string, unknown> | null): GoogleCircuitToken['claims'] | null {
   if (p?.iss !== 'https://accounts.google.com' || p.email_verified !== true) return null
   const { aud, sub, email, exp, nonce } = p
   return circuitText(aud, MAX_AUD_BYTES) &&
@@ -54,7 +42,7 @@ function googleClaims(p: Record<string, unknown> | null): GoogleIdTokenClaims | 
 /** Parse the fixed RS256 token layout; any failure is an authorization error. */
 export function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
   const segments = idToken.split('.')
-  const [headerB64, payloadB64, signatureB64] = segments
+  const [headerB64, payloadB64] = segments
   const [header, payload, signature] =
     segments.length === 3 && !segments.includes('') ? segments.map(b64urlDecode) : []
   const claims = payload && googleClaims(json(payload))

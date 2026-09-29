@@ -1,8 +1,9 @@
 // The normative authorization constructions shared by the platform slices:
-// the Authorization Digest (ceremony-common §5, REQ-COMMON-01) and the S256
-// PKCE derivation X and GitHub bind it with (§7, REQ-COMMON-12). Only the
-// Ceremony Client derives these; the prover receives the already-derived
-// code verifier and does not receive the authorization nonce.
+// the Authorization Digest (ceremony-common §5, REQ-COMMON-01), the S256
+// PKCE derivation X and GitHub bind it with (§7, REQ-COMMON-12) and their
+// common code-request layout. Only the Ceremony Client derives these; the
+// prover receives the already-derived code verifier and does not receive the
+// authorization nonce.
 //
 // Hashes come from @noble/hashes: keccak256 has no native browser
 // implementation, and taking sha256 from the same audited pin keeps these
@@ -10,6 +11,7 @@
 
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
+import { isPkceValue } from '../ccdp/index.js'
 import { b64urlEncode } from '../primitives.js'
 
 export interface AuthorizationInput {
@@ -72,6 +74,38 @@ export function deriveCodeVerifier(
 /** `BASE64URL_NOPAD(SHA256(ASCII(code_verifier)))` — the S256 challenge. */
 export function deriveCodeChallenge(codeVerifier: string): string {
   return b64urlEncode(sha256(new TextEncoder().encode(codeVerifier)))
+}
+
+/**
+ * An S256 authorization-code request: the profile's leading fields, then `client_id`,
+ * `redirect_uri`, `scope`, `state`, `code_challenge` and `code_challenge_method` in
+ * exactly this order, serialized by the WHATWG form-urlencoded serializer.
+ */
+export function pkceAuthorizationUrl(
+  endpoint: string,
+  scope: string,
+  leading: [string, string][] = [],
+) {
+  return (input: {
+    clientId: string
+    redirectUri: string
+    state: string
+    codeChallenge: string | null
+  }): string => {
+    if (input.codeChallenge === null || !isPkceValue(input.codeChallenge)) {
+      throw new Error('codeChallenge must be exactly 43 base64url characters')
+    }
+    const query = new URLSearchParams([
+      ...leading,
+      ['client_id', input.clientId],
+      ['redirect_uri', input.redirectUri],
+      ['scope', scope],
+      ['state', input.state],
+      ['code_challenge', input.codeChallenge],
+      ['code_challenge_method', 'S256'],
+    ])
+    return `${endpoint}?${query}`
+  }
 }
 
 /** Form-authenticated client IDs must be byte-identical under form serialization. */

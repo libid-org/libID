@@ -20,6 +20,12 @@ import type { Identity } from '../types.js'
 import type { BearerTranscript } from './transcript.js'
 import type { BearerLinkProofV1 } from './types.js'
 
+/** Attribute a failure to the operation it interrupted. */
+const failsAs = <T>(p: Promise<T>, event: string) =>
+  p.catch((error): never => {
+    throw ceremonyError(error, event)
+  })
+
 /** Shared two-attestation bearer-link pipeline; platform transcripts own HTTP and identity policy. */
 export async function proveBearerLink<P extends 'x' | 'github'>(
   context: ProverContext,
@@ -51,35 +57,26 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     void p.catch((error) => controller.abort(error))
     return p
   }
+  // A provisional branch whose failure names its operation.
+  const branch = <T>(p: Promise<T>, event: string) => observe(failsAs(p, event))
   // Keep openings available immediately; observe final attestation failure before its join.
   async function reveal(
     session: NotarizationSession,
     ranges: Reveals,
     event: 'token-attestation' | 'identity-attestation',
   ) {
-    try {
-      const result = await session.reveal(ranges)
-      const attestation = observe(
-        result.attestation.catch((error) => {
-          throw ceremonyError(error, event)
-        }),
-      )
-      return { ...result, attestation }
-    } catch (error) {
-      throw ceremonyError(error, event)
-    }
+    const result = await failsAs(session.reveal(ranges), event)
+    return { ...result, attestation: branch(result.attestation, event) }
   }
   try {
     const notary = new Notarization(notaryAddress, signal, emit)
-    const tokenPrepared = observe(
-      notary.prepare(tokenRequest.url, 'token-attestation').catch((e) => {
-        throw ceremonyError(e, 'token-fetch')
-      }),
+    const tokenPrepared = branch(
+      notary.prepare(tokenRequest.url, 'token-attestation'),
+      'token-fetch',
     )
-    const identityPrepared = observe(
-      notary.prepare(profile.identityUrl, 'identity-attestation').catch((e) => {
-        throw ceremonyError(e, 'identity-fetch')
-      }),
+    const identityPrepared = branch(
+      notary.prepare(profile.identityUrl, 'identity-attestation'),
+      'identity-fetch',
     )
     const token = await operation(emit, 'token-fetch', async () => {
       const session = await tokenPrepared
