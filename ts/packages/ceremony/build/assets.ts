@@ -75,28 +75,33 @@ export function assetHeaders(path: string, policy: Readonly<Record<string, strin
   if (policyCsp || merged.has('Cross-Origin-Embedder-Policy')) {
     if (!policyCsp || merged.get('Cross-Origin-Embedder-Policy') !== 'require-corp')
       throw new Error('Worker isolation policy missing')
-    const directives = new Map<string, string[]>()
-    for (const clause of policyCsp.split(';').filter((c) => c.trim())) {
-      const [rawName, ...values] = clause.trim().split(/\s+/)
-      const name = rawName.toLowerCase()
-      if (directives.has(name)) throw new Error('Duplicate CSP directive')
-      directives.set(name, values)
-    }
-    for (const name of ['default-src', 'object-src', 'base-uri', 'form-action', 'frame-ancestors'])
-      if (directives.get(name)?.join(' ') !== "'none'") throw new Error('Worker CSP base weakened')
-    const scripts = directives.get('script-src') ?? [],
-      workers = directives.get('worker-src') ?? []
-    if (
-      !scripts.includes("'self'") ||
-      !scripts.includes("'wasm-unsafe-eval'") ||
-      scripts.some((s) => !["'self'", "'wasm-unsafe-eval'"].includes(s)) ||
-      !workers.length ||
-      workers.some((s) => !["'none'", "'self'", 'blob:'].includes(s)) ||
-      (workers.includes("'none'") && workers.length !== 1)
-    )
-      throw new Error('Worker code policy weakened')
+    validateWorkerCsp(policyCsp)
   }
   return Object.fromEntries(merged)
+}
+
+/** A declared worker CSP keeps the locked-down base and admits only same-origin WASM code. */
+function validateWorkerCsp(policy: string): void {
+  const directives = new Map<string, string[]>()
+  for (const clause of policy.split(';').filter((c) => c.trim())) {
+    const [rawName, ...values] = clause.trim().split(/\s+/)
+    const name = rawName.toLowerCase()
+    if (directives.has(name)) throw new Error('Duplicate CSP directive')
+    directives.set(name, values)
+  }
+  for (const name of ['default-src', 'object-src', 'base-uri', 'form-action', 'frame-ancestors'])
+    if (directives.get(name)?.join(' ') !== "'none'") throw new Error('Worker CSP base weakened')
+  const scripts = directives.get('script-src') ?? [],
+    workers = directives.get('worker-src') ?? []
+  if (
+    !scripts.includes("'self'") ||
+    !scripts.includes("'wasm-unsafe-eval'") ||
+    scripts.some((s) => !["'self'", "'wasm-unsafe-eval'"].includes(s)) ||
+    !workers.length ||
+    workers.some((s) => !["'none'", "'self'", 'blob:'].includes(s)) ||
+    (workers.includes("'none'") && workers.length !== 1)
+  )
+    throw new Error('Worker code policy weakened')
 }
 
 export function externalRequest(asset: ExternalAsset): AssetRequest {

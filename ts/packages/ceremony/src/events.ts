@@ -58,35 +58,35 @@ export function validateEvent(value: unknown): asserts value is OperationEvent {
     ('phase' in value && value.phase !== 'started' && value.phase !== 'finished')
   )
     throw new TypeError('Invalid operation event')
-  if (coreEvents.includes(value.event as CoreEvent)) {
-    if (value.event === 'prover-fallback' ? 'phase' in value : !('phase' in value))
-      throw new TypeError('Invalid core event phase')
-  }
-  if ('instrumentation' in value) {
-    const metadata = value.instrumentation
-    if (
-      !isRecord(metadata) ||
-      Object.keys(metadata).some((key) => !['operationId', 'attributes'].includes(key)) ||
-      ('operationId' in metadata &&
-        (!text(metadata.operationId, 64) || coreEvents.includes(value.event as CoreEvent)))
-    )
-      throw new TypeError('Invalid event instrumentation')
-    if (
-      'attributes' in metadata &&
-      (!isRecord(metadata.attributes) ||
-        Object.keys(metadata.attributes).length > 16 ||
-        Object.entries(metadata.attributes).some(
-          ([key, value]) =>
-            !eventName(key) ||
-            !(
-              typeof value === 'boolean' ||
-              (typeof value === 'number' && Number.isFinite(value)) ||
-              text(value, 128)
-            ),
-        ))
-    )
-      throw new TypeError('Invalid event attributes')
-  }
+  const core = coreEvents.includes(value.event as CoreEvent)
+  if (core && (value.event === 'prover-fallback' ? 'phase' in value : !('phase' in value)))
+    throw new TypeError('Invalid core event phase')
+  if ('instrumentation' in value) validateInstrumentation(value.instrumentation, core)
+}
+
+/** Core events carry no operation ID; attributes are a few scalar measurements. */
+function validateInstrumentation(metadata: unknown, core: boolean): void {
+  if (
+    !isRecord(metadata) ||
+    Object.keys(metadata).some((key) => !['operationId', 'attributes'].includes(key)) ||
+    ('operationId' in metadata && (!text(metadata.operationId, 64) || core))
+  )
+    throw new TypeError('Invalid event instrumentation')
+  if (
+    'attributes' in metadata &&
+    (!isRecord(metadata.attributes) ||
+      Object.keys(metadata.attributes).length > 16 ||
+      Object.entries(metadata.attributes).some(
+        ([key, value]) =>
+          !eventName(key) ||
+          !(
+            typeof value === 'boolean' ||
+            (typeof value === 'number' && Number.isFinite(value)) ||
+            text(value, 128)
+          ),
+      ))
+  )
+    throw new TypeError('Invalid event attributes')
 }
 
 export const stages = [
@@ -163,42 +163,14 @@ export class Events {
       this.stage = projected
       this.stageSeen = true
     }
-    const update = Object.freeze({
-      ...event,
-      ...('instrumentation' in event && event.instrumentation
-        ? {
-            instrumentation: Object.freeze({
-              ...event.instrumentation,
-              ...(event.instrumentation.attributes
-                ? { attributes: Object.freeze({ ...event.instrumentation.attributes }) }
-                : {}),
-            }),
-          }
-        : {}),
-    })
     const stageUpdate = Object.freeze({
       stage: this.stage,
       status: event.status,
       timestamp: event.timestamp,
       ...('message' in event ? { message: event.message } : {}),
     })
-    for (const listener of [...this.listeners]) {
-      if (this.ended && !terminal) break
-      try {
-        listener(update)
-      } catch {
-        /* Observers cannot affect protocol processing. */
-      }
-    }
-    if (changed || terminal)
-      for (const listener of [...this.stageListeners]) {
-        if (this.ended && !terminal) break
-        try {
-          listener(stageUpdate)
-        } catch {
-          /* Rendering cannot affect protocol processing. */
-        }
-      }
+    this.notify(this.listeners, snapshot(event), terminal)
+    if (changed || terminal) this.notify(this.stageListeners, stageUpdate, terminal)
     if (terminal) this.clear()
   }
 
@@ -206,6 +178,31 @@ export class Events {
     this.listeners.clear()
     this.stageListeners.clear()
   }
+
+  /** A listener's terminal emission stops delivery of the active update that preceded it. */
+  private notify<T>(listeners: Set<(update: T) => void>, update: T, terminal: boolean): void {
+    for (const listener of [...listeners]) {
+      if (this.ended && !terminal) break
+      try {
+        listener(update)
+      } catch {
+        /* Observers and rendering cannot affect protocol processing. */
+      }
+    }
+  }
+}
+
+/** Observers share one immutable update, including its instrumentation. */
+function snapshot(event: CeremonyEvent): CeremonyEvent {
+  if (!('instrumentation' in event) || !event.instrumentation) return Object.freeze({ ...event })
+  const { attributes } = event.instrumentation
+  return Object.freeze({
+    ...event,
+    instrumentation: Object.freeze({
+      ...event.instrumentation,
+      ...(attributes ? { attributes: Object.freeze({ ...attributes }) } : {}),
+    }),
+  })
 }
 
 /** Interruptions preserve the original error and never fabricate a finished operation. */

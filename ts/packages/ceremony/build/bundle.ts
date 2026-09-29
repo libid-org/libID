@@ -1,19 +1,11 @@
 import { dirname, join, posix } from 'node:path'
-import type { Node } from 'estree'
 import type { ChunkMetadata, Plugin, Rollup } from 'vite'
 import { build, transformWithEsbuild } from 'vite'
 import type { ResolvedAssets } from './assets.ts'
 import { assetPlugin } from './assets.ts'
+import { applyEdits, type Edit, replacement, walk } from './ast.ts'
 import { popupPlugin } from './popup.ts'
 import { hash, packageDir } from './release.ts'
-
-type Edit = readonly [start: number, end: number, replacement: string]
-
-// Rollup supplies offsets on every parsed node; ESTree's base types omit them.
-function replacement(node: Node, text: string): Edit {
-  const { start, end } = node as Node & { start: number; end: number }
-  return [start, end, text]
-}
 
 export type BundleNode = {
   entry: string | null
@@ -29,9 +21,7 @@ function absoluteImports(): Plugin {
     name: 'ceremony-absolute-imports',
     renderChunk(code, chunk) {
       const edits: Edit[] = []
-      const walk = (value: unknown) => {
-        if (!value || typeof value !== 'object') return
-        const node = value as Node
+      walk(this.parse(code), (node) => {
         if (
           (node.type === 'ImportDeclaration' ||
             node.type === 'ExportNamedDeclaration' ||
@@ -49,14 +39,8 @@ function absoluteImports(): Plugin {
               ),
             ),
           )
-        for (const v of Object.values(node))
-          if (Array.isArray(v)) v.forEach(walk)
-          else if (v && typeof v === 'object') walk(v)
-      }
-      walk(this.parse(code))
-      for (const [start, end, text] of edits.sort((a, b) => b[0] - a[0]))
-        code = code.slice(0, start) + text + code.slice(end)
-      return { code, map: null }
+      })
+      return { code: applyEdits(code, edits), map: null }
     },
   }
 }
@@ -79,9 +63,7 @@ function workerImports(): Plugin {
       }
       const edits: Edit[] = [],
         imports: string[] = []
-      const walk = (value: unknown) => {
-        if (!value || typeof value !== 'object') return
-        const node = value as Node
+      walk(ast, (node) => {
         if (
           node.type === 'NewExpression' &&
           node.callee.type === 'Identifier' &&
@@ -104,16 +86,9 @@ function workerImports(): Plugin {
             edits.push(replacement(url, name))
           }
         }
-        for (const v of Object.values(node))
-          if (Array.isArray(v)) v.forEach(walk)
-          else if (v && typeof v === 'object') walk(v)
-      }
-      walk(ast)
+      })
       if (!edits.length) return
-      let result = code
-      for (const [start, end, value] of edits.sort((a, b) => b[0] - a[0]))
-        result = result.slice(0, start) + value + result.slice(end)
-      return { code: `${imports.join('\n')}\n${result}`, map: null }
+      return { code: `${imports.join('\n')}\n${applyEdits(code, edits)}`, map: null }
     },
   }
 }

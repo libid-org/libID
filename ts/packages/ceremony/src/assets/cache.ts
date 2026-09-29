@@ -16,19 +16,7 @@ export function validateResponse(response: Response, spec: AssetRequest): void {
   if (spec.mime && response.headers.get('content-type')?.split(';')[0].trim() !== spec.mime)
     throw new Error('Invalid asset media type')
   const range = response.headers.get('content-range')
-  if (
-    spec.range &&
-    range &&
-    !new RegExp(`^bytes ${spec.range.slice(6)}/(?:[1-9][0-9]*|\\*)$`).test(range)
-  )
-    throw new Error('Unexpected asset range')
-  if (
-    spec.bytes !== undefined &&
-    range &&
-    range.split('/')[1] !== '*' &&
-    BigInt(range.split('/')[1]) < BigInt(spec.bytes)
-  )
-    throw new Error('Invalid asset total')
+  if (range) validateContentRange(range, spec)
   const length = response.headers.get('content-length')
   if (
     length !== null &&
@@ -36,6 +24,15 @@ export function validateResponse(response: Response, spec: AssetRequest): void {
     !response.headers.has('content-encoding')
   )
     throw new Error('Unexpected asset size')
+}
+
+/** A returned range matches the requested one; a known complete length covers the declared size. */
+function validateContentRange(range: string, spec: AssetRequest): void {
+  if (spec.range && !new RegExp(`^bytes ${spec.range.slice(6)}/(?:[1-9][0-9]*|\\*)$`).test(range))
+    throw new Error('Unexpected asset range')
+  const total = range.split('/')[1]
+  if (spec.bytes !== undefined && total !== '*' && BigInt(total) < BigInt(spec.bytes))
+    throw new Error('Invalid asset total')
 }
 
 /** Single-flight delivery of immutable bytes. Storage failure falls back to the same fetch. */
