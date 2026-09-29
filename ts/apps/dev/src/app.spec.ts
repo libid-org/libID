@@ -31,9 +31,9 @@ async function servePopup(context: BrowserContext) {
 
 async function serveCeremony(context: BrowserContext) {
   const popupModule = await servePopup(context)
-  const document = (prover: boolean) => `<!doctype html><title>Event transport fixture</title>
-    ${prover ? '<button id="close">Close</button>' : ''}
-    <script type="module">
+  const document = (
+    prover: boolean,
+  ) => `<!doctype html><title>Event transport fixture</title><script type="module">
       import { PopupConnection, PopupWindow } from '${popupModule}';
       const id = new URLSearchParams(location.hash.slice(1)).get('ceremonyId');
       const connection = PopupConnection.accept(PopupWindow.current(location.hash, { scope: '/' }), {
@@ -41,12 +41,7 @@ async function serveCeremony(context: BrowserContext) {
       });
       ${prover ? `connection.on({ type: 'prove-identity', decode: value => value }, value => { window.requested = true; window.proveIdentity = value });` : ''}
       await connection.ready;
-      ${
-        prover
-          ? `window.eventConnection = connection;
-      document.getElementById('close').onclick = () => connection.close();`
-          : "connection.send({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: performance.timeOrigin + performance.now(), instrumentation: { attributes: { 'document-startup-ms': 25, 'connection-ms': 2000, 'worker-ready-ms': 75, 'dispatch-ms': 30 } } });"
-      }
+      ${prover ? 'window.eventConnection = connection;' : "connection.send({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: performance.timeOrigin + performance.now(), instrumentation: { attributes: { 'document-startup-ms': 25, 'connection-ms': 2000, 'worker-ready-ms': 75, 'dispatch-ms': 30 } } });"}
     </script>`
   await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
     route.fulfill({ contentType: 'text/html', body: document(false) }),
@@ -405,10 +400,19 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
         ),
       ).toBe('bridge-provided')
     if (outcome === 'closed') {
-      // Await closure outside the document; self-closing can destroy an evaluate result.
-      const closed = popup.waitForEvent('close')
-      await popup.getByRole('button', { name: 'Close', exact: true }).click()
-      await closed
+      // Firefox may destroy the target before acknowledging its self-close.
+      await Promise.all([
+        popup.waitForEvent('close'),
+        popup
+          .evaluate(() =>
+            (
+              window as unknown as { eventConnection: { close(): Promise<void> } }
+            ).eventConnection.close(),
+          )
+          .catch((error) => {
+            expect(error.message).toContain('Target page, context or browser has been closed')
+          }),
+      ])
       await expect(page.locator('.run-outcome')).toHaveText('Interrupted')
       await expect(page.locator('.run-status')).toHaveText('Popup connection ended')
       await expect(page.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0)
