@@ -9,19 +9,9 @@ import {
   selectToken,
   selectIdentity as selectXIdentity,
 } from '../platforms/x/1/transcript.js'
-import { text, utf8 } from '../testing/index.js'
+import { httpResponse, proverRequest as serialize, text, utf8 } from '../testing/index.js'
 import { planNotarization } from './notarize.js'
-import type { ExactHttpRequest } from './protocol.js'
 import { quotedRange } from './transcript.js'
-
-function serialize(line: string, request: ExactHttpRequest): Uint8Array {
-  return utf8(
-    `${line}\r\n${Object.entries(request.headers)
-      .reverse()
-      .map(([name, value]) => `${name.toLowerCase()}: ${text(value)}`)
-      .join('\r\n')}\r\n\r\n${text(request.body)}`,
-  )
-}
 
 const input = {
   clientId: 'client',
@@ -34,7 +24,7 @@ const request = buildTokenRequest(input)
 
 const transcript = {
   sent: serialize('POST /2/oauth2/token HTTP/1.1', request),
-  received: utf8('HTTP/1.1 200 OK\r\n\r\n{"access_token":"token","token_type":"bearer"}'),
+  received: httpResponse('{"access_token":"token","token_type":"bearer"}'),
 }
 
 describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C] [TEST-PLAT-09A] [TEST-PLAT-09B] [TEST-PLAT-09C]', () => {
@@ -115,7 +105,7 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60] [TEST-PLAT-
   it.each(['{"id":123,"login":"alice"}', '{"login":"alice","id":123}'])(
     'accepts field order %s',
     (body) => {
-      const received = utf8(`HTTP/1.1 200 OK\r\n\r\n${body}`)
+      const received = httpResponse(body)
       const selected = selectIdentity({ sent, received }, 'token')
       const plan = planNotarization(
         { sent, received },
@@ -134,7 +124,7 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60] [TEST-PLAT-
     (space) => {
       const id = `"id"${space}:${space}123${space},`
       const login = `"login"${space}:${space}"alice"`
-      const received = utf8(`HTTP/1.1 200 OK\r\n\r\n{${id}\n${login}}`)
+      const received = httpResponse(`{${id}\n${login}}`)
       const selected = selectIdentity({ sent, received }, 'token')
       expect(selected.userId).toBe('123')
       expect(selected.userName).toBe('alice')
@@ -234,7 +224,7 @@ for (const platform of ['x', 'github'] as const) {
 describe('JSON field whitespace [LIBID-PROVER-003/004] [TEST-COMMON-10A]', () => {
   it.each([' ', '\t', '\r', '\n', ' \t\r\n'])('keeps X bearer offsets with %j', (ws) => {
     const prefix = `"access_token"${ws}:${ws}"`
-    const received = utf8(`HTTP/1.1 200 OK\r\n\r\n{${prefix}token"}`)
+    const received = httpResponse(`{${prefix}token"}`)
     const selected = selectToken({ ...transcript, received }, input)
     expect(text(received.slice(selected.bearerRange.start, selected.bearerRange.end))).toBe('token')
     expect(

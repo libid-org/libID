@@ -1,18 +1,13 @@
-import { concatBytes } from '@noble/hashes/utils.js'
 import { expect, it } from 'vitest'
-import { utf8 } from '../testing/index.js'
+import { chunked, httpResponse, receivedOnly, utf8 } from '../testing/index.js'
 import { responseJson, responseSizes } from './http.js'
 
-const response = (headers: string, body: string) => ({
-  sent: new Uint8Array(),
-  received: utf8(`HTTP/1.1 200 OK\r\n${headers}\r\n${body}`),
-})
+const response = (head: string, body: string | Uint8Array) => receivedOnly(httpResponse(body, head))
+
+const CHUNKED = 'Transfer-Encoding: chunked\r\n'
 
 it('parses chunked JSON without altering the transcript used for range commitments', () => {
-  const transcript = response(
-      'Transfer-Encoding: chunked\r\n',
-      '6\r\n{"id":\r\n2\r\n1}\r\n0\r\n\r\n',
-    ),
+  const transcript = response(CHUNKED, chunked('{"id":', '1}')),
     original = transcript.received.slice()
   expect(responseJson(transcript)).toEqual({ id: 1 })
   expect(transcript.received).toEqual(original)
@@ -22,20 +17,14 @@ it('parses chunked JSON without altering the transcript used for range commitmen
 it('decodes UTF-8 only after removing chunk framing that splits a character', () => {
   const json = utf8('{"id":1,"name":"é"}'),
     split = json.indexOf(0xc3) + 1
-  const received = concatBytes(
-    utf8(`HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n${split.toString(16)}\r\n`),
-    json.subarray(0, split),
-    utf8(`\r\n${(json.length - split).toString(16)}\r\n`),
-    json.subarray(split),
-    utf8('\r\n0\r\n\r\n'),
-  )
-  expect(responseJson({ sent: new Uint8Array(), received })).toEqual({ id: 1, name: 'é' })
+  const transcript = response(CHUNKED, chunked(json.subarray(0, split), json.subarray(split)))
+  expect(responseJson(transcript)).toEqual({ id: 1, name: 'é' })
 })
 
 it('rejects ambiguous framing, truncated chunks, compressed bodies, and malformed JSON', () => {
   for (const transcript of [
-    response('Transfer-Encoding: chunked\r\nContent-Length: 2\r\n', '{}'),
-    response('Transfer-Encoding: chunked\r\n', '5\r\n{}\r\n0\r\n\r\n'),
+    response(`${CHUNKED}Content-Length: 2\r\n`, '{}'),
+    response(CHUNKED, '5\r\n{}\r\n0\r\n\r\n'),
     response('Content-Encoding: gzip\r\n', '{}'),
     response('Content-Length: 0\r\n', '{}'),
     response('', '{"id":01}'),
@@ -46,12 +35,39 @@ it('rejects ambiguous framing, truncated chunks, compressed bodies, and malforme
     expect(() => responseJson(transcript)).toThrow()
 })
 
+it.each([
+  [
+    'a missing head terminator',
+    receivedOnly(utf8('HTTP/1.1 200 OK\r\n{}')),
+    'Invalid HTTP response',
+  ],
+  [
+    'a control character in the status line',
+    receivedOnly(utf8('HTTP/1.1 200 OK\u0000\r\n\r\n{}')),
+    'Invalid HTTP response',
+  ],
+  ['an invalid field name', response('Bad Name: x\r\n', '{}'), 'Invalid HTTP header'],
+  [
+    'a framing header repeated in another case',
+    response('Content-Length: 2\r\ncontent-length: 2\r\n', '{}'),
+    'Duplicate framing header',
+  ],
+  ['a chunk extension', response(CHUNKED, '2;x=1\r\n{}\r\n0\r\n\r\n'), 'Invalid chunk size'],
+  ['a chunk missing its CRLF', response(CHUNKED, '2\r\n{}0\r\n\r\n'), 'Truncated chunk'],
+  ['a chunked trailer', response(CHUNKED, '2\r\n{}\r\n0\r\nX: 1\r\n\r\n'), 'Invalid final chunk'],
+])('names the framing failure for %s', (_name, transcript, reason) => {
+  expect(() => responseJson(transcript)).toThrow(reason)
+})
+
 it.each([301, 302, 303, 307, 308])(
   'rejects a redirected notarized response: %s [TEST-COMMON-06]',
   (status) => {
-    const transcript = response('Location: https://other.test/\r\n', '{"access_token":"untrusted"}')
-    transcript.received = new TextEncoder().encode(
-      new TextDecoder().decode(transcript.received).replace('200 OK', `${status} Redirect`),
+    const transcript = receivedOnly(
+      httpResponse(
+        '{"access_token":"untrusted"}',
+        'Location: https://other.test/\r\n',
+        `${status} Redirect`,
+      ),
     )
     expect(() => responseJson(transcript)).toThrow('Platform request failed')
   },

@@ -1,5 +1,6 @@
 import { gzipSync } from 'node:zlib'
 import { afterEach, expect, it, vi } from 'vitest'
+import { posted, stubWorkerScope } from '../testing/workers.js'
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -32,9 +33,27 @@ afterEach(() => {
   vi.resetModules()
 })
 
-async function worker(key: Response | Promise<Response> = new Response(Uint8Array.of(11, 12))) {
-  let receive!: (event: { data: unknown }) => void
-  const postMessage = vi.fn()
+const preload = {
+  type: 'preload',
+  circuitUrl: 'https://ccdp.test/circuit.json',
+  verificationKeyUrl: 'https://ccdp.test/vk',
+  threads: 4,
+  acvmUrl: '/acvm.wasm',
+  abiUrl: '/abi.wasm',
+  wasmPath: '/bb.wasm',
+  crsPath: 'https://crs.test/',
+}
+
+const witness = () => ({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
+
+/**
+ * Boot the proof worker and deliver its preload. `runtime` is what bb logs about its thread pool
+ * (nothing when null); `isolated` is the scope's cross-origin isolation.
+ */
+async function worker(
+  key: Response | Promise<Response> = new Response(Uint8Array.of(11, 12)),
+  { isolated = true, runtime = 'threads: 4; shared memory: true' as string | null } = {},
+) {
   const request = vi.fn(async (url: string) =>
     url.endsWith('/vk')
       ? key
@@ -44,50 +63,41 @@ async function worker(key: Response | Promise<Response> = new Response(Uint8Arra
           }),
         ),
   )
-  vi.stubGlobal('self', {
-    crossOriginIsolated: true,
-    postMessage,
-    addEventListener: (_: string, callback: typeof receive) => {
-      receive = callback
-    },
-  })
+  const scope = stubWorkerScope({ crossOriginIsolated: isolated })
   vi.stubGlobal('fetch', request)
   mocks.create.mockImplementation(async ({ logger }) => {
     await mocks.initialize()
-    logger('threads: 4; shared memory: true')
+    if (runtime !== null) logger(runtime)
     return { circuitProve: mocks.prove, destroy: mocks.destroy }
   })
-  mocks.execute.mockResolvedValue({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
+  mocks.execute.mockResolvedValue(witness())
   mocks.destroy.mockResolvedValue(undefined)
   mocks.prove.mockResolvedValue({
     proof: [new Uint8Array(32).fill(7), new Uint8Array(32).fill(8)],
     publicInputs: [new Uint8Array(32), new Uint8Array(32).fill(255)],
   })
   await import('./engine.worker.js')
-  receive({
-    data: {
-      type: 'preload',
-      circuitUrl: 'https://ccdp.test/circuit.json',
-      verificationKeyUrl: 'https://ccdp.test/vk',
-      threads: 4,
-      acvmUrl: '/acvm.wasm',
-      abiUrl: '/abi.wasm',
-      wasmPath: '/bb.wasm',
-      crsPath: 'https://crs.test/',
-    },
-  })
+  scope.deliver(preload)
+  const { postMessage } = scope
   return {
-    receive,
+    send: scope.deliver,
+    prove: (inputs: Record<string, unknown>) => scope.deliver({ type: 'prove', inputs }),
     request,
     postMessage,
-    has: (type: string) => postMessage.mock.calls.some(([m]) => m.type === type),
+    has: (type: string) => posted(postMessage, type),
+    /** Whether the worker has reported `event` finished. */
+    finished: (event: string) =>
+      postMessage.mock.calls.some(
+        ([m]) => m.event?.event === event && m.event?.phase === 'finished',
+      ),
+    errors: () => postMessage.mock.calls.filter(([m]) => m.type === 'error').map(([m]) => m),
   }
 }
 
 it('uses the released VK with exact ZK Keccak settings and preserves proof encoding [LIBID-PROVER-001]', async () => {
   const w = await worker()
   await expect.poll(() => w.has('witness-ready')).toBe(true)
-  w.receive({ data: { type: 'prove', inputs: { fixture: 1 } } })
+  w.prove({ fixture: 1 })
   await expect.poll(() => w.has('result')).toBe(true)
   expect(w.request).toHaveBeenCalledWith('https://ccdp.test/vk', {
     credentials: 'same-origin',
@@ -130,7 +140,7 @@ it('preserves cleanup when bb rejects the supplied key [LIBID-PROVER-001]', asyn
   const w = await worker()
   await expect.poll(() => w.has('witness-ready')).toBe(true)
   mocks.prove.mockRejectedValueOnce(new Error('Invalid verification key'))
-  w.receive({ data: { type: 'prove', inputs: {} } })
+  w.prove({})
   await expect.poll(() => w.has('error')).toBe(true)
   expect(w.has('result')).toBe(false)
   expect(mocks.prove).toHaveBeenCalledOnce()
@@ -148,9 +158,18 @@ it.each(['backend', 'resources'])(
     mocks.acvm.mockReturnValueOnce(acvm.promise)
     mocks.abi.mockReturnValueOnce(abi.promise)
     const w = await worker(key.promise)
-    expect(mocks.create).toHaveBeenCalledOnce()
-    expect(mocks.acvm).toHaveBeenCalledOnce()
-    expect(mocks.abi).toHaveBeenCalledOnce()
+    // Each branch starts with its explicit emitted location.
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        backend: 'Wasm',
+        threads: 4,
+        srsSize: 2 ** 18,
+        wasmPath: '/bb.wasm',
+        crsPath: 'https://crs.test/',
+      }),
+    )
+    expect(mocks.acvm).toHaveBeenCalledExactlyOnceWith({ module_or_path: '/acvm.wasm' })
+    expect(mocks.abi).toHaveBeenCalledExactlyOnceWith({ module_or_path: '/abi.wasm' })
     expect(w.request).toHaveBeenCalledTimes(2)
     expect(w.has('witness-ready')).toBe(false)
     const resources = () => {
@@ -160,25 +179,12 @@ it.each(['backend', 'resources'])(
     }
     if (first === 'backend') {
       backend.resolve()
-      await expect
-        .poll(() =>
-          w.postMessage.mock.calls.some(
-            ([m]) =>
-              m.event?.event === 'proof-backend-initialization' && m.event?.phase === 'finished',
-          ),
-        )
-        .toBe(true)
+      await expect.poll(() => w.finished('proof-backend-initialization')).toBe(true)
       expect(w.has('witness-ready')).toBe(false)
       resources()
     } else {
       resources()
-      await expect
-        .poll(() =>
-          w.postMessage.mock.calls.some(
-            ([m]) => m.event?.event === 'proof-circuit-load' && m.event?.phase === 'finished',
-          ),
-        )
-        .toBe(true)
+      await expect.poll(() => w.finished('proof-circuit-load')).toBe(true)
       await expect.poll(() => w.has('witness-ready')).toBe(true)
       backend.resolve()
     }
@@ -187,6 +193,64 @@ it.each(['backend', 'resources'])(
     expect(mocks.execute).not.toHaveBeenCalled()
   },
 )
+
+it.each(['cross-origin isolation', 'shared memory'])(
+  'fails without %s before starting any preload branch [LIBID-PROVER-015]',
+  async (missing) => {
+    if (missing === 'shared memory') vi.stubGlobal('SharedArrayBuffer', undefined)
+    const w = await worker(undefined, { isolated: missing !== 'cross-origin isolation' })
+    await expect.poll(() => w.has('error')).toBe(true)
+    expect(w.errors()).toEqual([
+      {
+        type: 'error',
+        event: 'zk-proof-generation',
+        message: 'proof worker requires cross-origin isolation',
+      },
+    ])
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(w.request).not.toHaveBeenCalled()
+    expect(mocks.acvm).not.toHaveBeenCalled()
+  },
+)
+
+it.each([
+  ['one thread', 'threads: 1; shared memory: true'],
+  ['no shared memory', 'threads: 4; shared memory: false'],
+  ['no thread pool', null],
+])(
+  'fails and destroys a backend reporting %s instead of multithreaded execution [LIBID-PROVER-015]',
+  async (_, runtime) => {
+    const w = await worker(undefined, { runtime })
+    await expect.poll(() => w.has('error')).toBe(true)
+    expect(w.errors()).toEqual([
+      {
+        type: 'error',
+        event: 'proof-backend-initialization',
+        message: 'Multithreaded backend unavailable',
+      },
+    ])
+    await expect.poll(() => w.finished('proof-circuit-load')).toBe(true)
+    expect(mocks.destroy).toHaveBeenCalledOnce()
+    expect(w.has('backend-ready')).toBe(false)
+    expect(mocks.prove).not.toHaveBeenCalled()
+  },
+)
+
+it('a duplicate preload fails once and releases the started backend', async () => {
+  const w = await worker()
+  w.send(preload)
+  await expect.poll(() => w.has('error')).toBe(true)
+  expect(w.errors()).toEqual([
+    { type: 'error', event: 'zk-proof-generation', message: 'Duplicate engine initialization' },
+  ])
+  await expect
+    .poll(() => w.finished('proof-circuit-load') && w.finished('proof-wasm-load'))
+    .toBe(true)
+  await expect.poll(() => mocks.destroy.mock.calls.length).toBe(1)
+  expect(mocks.create).toHaveBeenCalledOnce()
+  expect(w.has('witness-ready')).toBe(false)
+  expect(w.has('backend-ready')).toBe(false)
+})
 
 it.each(['circuit', 'wasm'])(
   'fails promptly on %s loading and releases a late backend [LIBID-PROVER-014]',
@@ -212,13 +276,7 @@ it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]',
   const acvm = Promise.withResolvers<void>()
   mocks.acvm.mockReturnValueOnce(acvm.promise)
   const w = await worker()
-  await expect
-    .poll(() =>
-      w.postMessage.mock.calls.some(
-        ([m]) => m.event?.event === 'proof-backend-initialization' && m.event?.phase === 'finished',
-      ),
-    )
-    .toBe(true)
+  await expect.poll(() => w.finished('proof-backend-initialization')).toBe(true)
   acvm.reject(new Error('WASM load failed'))
   await expect.poll(() => w.has('error')).toBe(true)
   expect(mocks.destroy).toHaveBeenCalledOnce()
@@ -232,13 +290,7 @@ it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]'
   await expect.poll(() => w.has('error')).toBe(true)
   expect(mocks.destroy).not.toHaveBeenCalled()
   key.resolve(new Response(Uint8Array.of(11, 12)))
-  await expect
-    .poll(() =>
-      w.postMessage.mock.calls.some(
-        ([m]) => m.event?.event === 'proof-circuit-load' && m.event?.phase === 'finished',
-      ),
-    )
-    .toBe(true)
+  await expect.poll(() => w.finished('proof-circuit-load')).toBe(true)
   expect(w.has('witness-ready')).toBe(false)
   expect(mocks.prove).not.toHaveBeenCalled()
 })
@@ -247,25 +299,19 @@ it.each(['witness', 'backend'])(
   'overlaps witness execution with backend initialization when %s finishes first [LIBID-PROVER-012]',
   async (first) => {
     const backend = Promise.withResolvers<void>()
-    const witness = Promise.withResolvers<{ witness: Uint8Array }>()
+    const pending = Promise.withResolvers<{ witness: Uint8Array }>()
     mocks.initialize.mockReturnValueOnce(backend.promise)
     const w = await worker()
-    mocks.execute.mockReturnValueOnce(witness.promise)
+    mocks.execute.mockReturnValueOnce(pending.promise)
     await expect.poll(() => w.has('witness-ready')).toBe(true)
-    w.receive({ data: { type: 'prove', inputs: { fixture: 1 } } })
+    w.prove({ fixture: 1 })
     expect(mocks.execute).toHaveBeenCalledExactlyOnceWith({ fixture: 1 })
     expect(mocks.prove).not.toHaveBeenCalled()
-    const finishWitness = () => witness.resolve({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
+    const finishWitness = () => pending.resolve(witness())
     if (first === 'witness') finishWitness()
     else backend.resolve()
     await expect
-      .poll(() =>
-        w.postMessage.mock.calls.some(
-          ([m]) =>
-            m.event?.event === (first === 'witness' ? 'witness' : 'proof-backend-initialization') &&
-            m.event?.phase === 'finished',
-        ),
-      )
+      .poll(() => w.finished(first === 'witness' ? 'witness' : 'proof-backend-initialization'))
       .toBe(true)
     expect(mocks.prove).not.toHaveBeenCalled()
     if (first === 'witness') backend.resolve()
@@ -282,7 +328,7 @@ it('reports witness failure promptly and destroys a late backend once [LIBID-PRO
   const w = await worker()
   mocks.execute.mockRejectedValueOnce(new Error('Witness failed'))
   await expect.poll(() => w.has('witness-ready')).toBe(true)
-  w.receive({ data: { type: 'prove', inputs: {} } })
+  w.prove({})
   await expect.poll(() => w.has('error')).toBe(true)
   expect(mocks.destroy).not.toHaveBeenCalled()
   backend.resolve()
@@ -293,23 +339,17 @@ it('reports witness failure promptly and destroys a late backend once [LIBID-PRO
 
 it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-014]', async () => {
   const backend = Promise.withResolvers<void>()
-  const witness = Promise.withResolvers<{ witness: Uint8Array }>()
+  const pending = Promise.withResolvers<{ witness: Uint8Array }>()
   mocks.initialize.mockReturnValueOnce(backend.promise)
   const w = await worker()
-  mocks.execute.mockReturnValueOnce(witness.promise)
+  mocks.execute.mockReturnValueOnce(pending.promise)
   await expect.poll(() => w.has('witness-ready')).toBe(true)
-  w.receive({ data: { type: 'prove', inputs: {} } })
+  w.prove({})
   backend.reject(new Error('Backend failed'))
   await expect.poll(() => w.has('error')).toBe(true)
-  witness.resolve({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
-  await expect
-    .poll(() =>
-      w.postMessage.mock.calls.some(
-        ([m]) => m.event?.event === 'witness' && m.event?.phase === 'finished',
-      ),
-    )
-    .toBe(true)
-  expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'error')).toHaveLength(1)
+  pending.resolve(witness())
+  await expect.poll(() => w.finished('witness')).toBe(true)
+  expect(w.errors()).toHaveLength(1)
   expect(mocks.prove).not.toHaveBeenCalled()
   expect(w.has('result')).toBe(false)
 })
@@ -319,20 +359,13 @@ it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER
   const w = await worker()
   mocks.prove.mockReturnValueOnce(proof.promise)
   await expect.poll(() => w.has('witness-ready')).toBe(true)
-  const message = { data: { type: 'prove', inputs: {} } }
-  w.receive(message)
+  w.prove({})
   await expect.poll(() => mocks.prove.mock.calls.length).toBe(1)
-  w.receive(message)
+  w.prove({})
   await expect.poll(() => w.has('error')).toBe(true)
   proof.resolve({ proof: [new Uint8Array(32)], publicInputs: [] })
-  await expect
-    .poll(() =>
-      w.postMessage.mock.calls.some(
-        ([m]) => m.event?.event === 'proof' && m.event?.phase === 'finished',
-      ),
-    )
-    .toBe(true)
+  await expect.poll(() => w.finished('proof')).toBe(true)
   expect(mocks.destroy).toHaveBeenCalledOnce()
-  expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'error')).toHaveLength(1)
+  expect(w.errors()).toHaveLength(1)
   expect(w.has('result')).toBe(false)
 })

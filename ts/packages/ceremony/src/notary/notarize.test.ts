@@ -1,5 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { describe, expect, it } from 'vitest'
+import { utf8 } from '../testing/index.js'
 import { concat, encodeAttestation, opening } from './fixtures/attestation.js'
 import {
   correlateReveal,
@@ -10,12 +11,7 @@ import {
 } from './notarize.js'
 import type { ByteRange, Transcript } from './protocol.js'
 
-const encoder = new TextEncoder()
-
-const transcript: Transcript = {
-  sent: encoder.encode('abcdefghij'),
-  received: encoder.encode('0123456789ab'),
-}
+const transcript: Transcript = { sent: utf8('abcdefghij'), received: utf8('0123456789ab') }
 
 /** The worker's order: correlate provisional openings, then verify the signed record. */
 function correlateAttestation(
@@ -63,13 +59,13 @@ describe('planNotarization [TEST-COMMON-18]', () => {
   it('accepts full reveal and full commitment without empty complement ranges', () => {
     expect(
       planNotarization(
-        { sent: new Uint8Array(), received: encoder.encode('abc') },
+        { sent: new Uint8Array(), received: utf8('abc') },
         { sent: [], received: [{ start: 0, end: 3 }] },
       ).commit,
     ).toEqual({ sent: [], received: [] })
     expect(
       planNotarization(
-        { sent: encoder.encode('abc'), received: new Uint8Array() },
+        { sent: utf8('abc'), received: new Uint8Array() },
         { sent: [], received: [] },
       ).commit.sent,
     ).toEqual([{ start: 0, end: 3, algorithm: 'SHA256' }])
@@ -127,10 +123,8 @@ describe('correlateAttestation [TEST-PLAT-15] [TEST-PLAT-21]', () => {
   const received = plan.commit.received.map((range, index) =>
     opening(transcript.received, range, index + 3),
   )
-  const attestedData = encodeAttestation(transcript, plan, {
-    sent: sent.map(({ hash }) => hash),
-    received: received.map(({ hash }) => hash),
-  })
+  const hashes = { sent: sent.map(({ hash }) => hash), received: received.map(({ hash }) => hash) }
+  const attestedData = encodeAttestation(transcript, plan, hashes)
 
   it('rejects a signed authority differing from the session target', () => {
     const changed = attestedData.slice()
@@ -211,7 +205,7 @@ describe('correlateAttestation [TEST-PLAT-15] [TEST-PLAT-21]', () => {
   })
 
   it('rejects an opening that ambiguously matches equal hidden plaintext ranges', () => {
-    const repeated: Transcript = { sent: encoder.encode('xAxA'), received: new Uint8Array() }
+    const repeated: Transcript = { sent: utf8('xAxA'), received: new Uint8Array() }
     const repeatedPlan = planNotarization(repeated, {
       sent: [
         { start: 0, end: 1 },
@@ -250,27 +244,18 @@ describe('correlateAttestation [TEST-PLAT-15] [TEST-PLAT-21]', () => {
       (() => {
         const changed = transcript.sent.slice()
         changed[0] ^= 1
-        return encodeAttestation({ ...transcript, sent: changed }, plan, {
-          sent: sent.map(({ hash }) => hash),
-          received: received.map(({ hash }) => hash),
-        })
+        return encodeAttestation({ ...transcript, sent: changed }, plan, hashes)
       })(),
       /revealed range changed/,
     ],
     [
       'signed hash',
-      encodeAttestation(transcript, plan, {
-        sent: [new Uint8Array(32), sent[1].hash],
-        received: received.map(({ hash }) => hash),
-      }),
+      encodeAttestation(transcript, plan, { ...hashes, sent: [new Uint8Array(32), sent[1].hash] }),
       /signed commitment hash changed/,
     ],
     [
       'duplicate signed hash',
-      encodeAttestation(transcript, plan, {
-        sent: [sent[0].hash, sent[0].hash],
-        received: received.map(({ hash }) => hash),
-      }),
+      encodeAttestation(transcript, plan, { ...hashes, sent: [sent[0].hash, sent[0].hash] }),
       /signed commitment hash changed/,
     ],
     [
@@ -278,7 +263,7 @@ describe('correlateAttestation [TEST-PLAT-15] [TEST-PLAT-21]', () => {
       encodeAttestation(
         transcript,
         plan,
-        { sent: [sent[0].hash], received: received.map(({ hash }) => hash) },
+        { ...hashes, sent: [sent[0].hash] },
         { ...plan.commit, sent: [plan.commit.sent[0]] },
       ),
       /commitment count changed/,
@@ -288,10 +273,7 @@ describe('correlateAttestation [TEST-PLAT-15] [TEST-PLAT-21]', () => {
       encodeAttestation(
         transcript,
         plan,
-        {
-          sent: [sent[0].hash, sent[0].hash, sent[1].hash],
-          received: received.map(({ hash }) => hash),
-        },
+        { ...hashes, sent: [sent[0].hash, sent[0].hash, sent[1].hash] },
         {
           ...plan.commit,
           sent: [
@@ -305,15 +287,10 @@ describe('correlateAttestation [TEST-PLAT-15] [TEST-PLAT-21]', () => {
     ],
     [
       'signed commitment range',
-      encodeAttestation(
-        transcript,
-        plan,
-        { sent: sent.map(({ hash }) => hash), received: received.map(({ hash }) => hash) },
-        {
-          ...plan.commit,
-          sent: [{ start: 2, end: 3, algorithm: 'SHA256' }, plan.commit.sent[1]],
-        },
-      ),
+      encodeAttestation(transcript, plan, hashes, {
+        ...plan.commit,
+        sent: [{ start: 2, end: 3, algorithm: 'SHA256' }, plan.commit.sent[1]],
+      }),
       /commitment range changed/,
     ],
   ] as const)('rejects a changed %s', (_name, signed, reason) => {

@@ -67,3 +67,10 @@ export function opening(transcript: Uint8Array, range: ByteRange, byte: number):
     blinder,
   }
 }
+
+/** A notary wire frame: `payload` behind its 4-byte big-endian length. */
+export const frame = (payload: Uint8Array): Uint8Array => concat(u32(payload.length), payload)
+
+/** A notary wire frame carrying `value` as compact JSON. */
+export const frameJson = (value: unknown): Uint8Array =>
+  frame(encoder.encode(JSON.stringify(value)))

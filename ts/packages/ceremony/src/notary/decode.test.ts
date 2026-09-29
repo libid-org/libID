@@ -1,20 +1,8 @@
-import { readFileSync } from 'node:fs'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
 import { decodeAttestedData, isAttestation } from './decode.js'
+import { LIBID_RS_ATTESTED_DATA as FIXTURE } from './fixtures/libid-rs.js'
 import { MAX_ATTESTED_DATA_BYTES } from './limits.js'
-
-// libid-org/libid-rs@239a4bb426ac72591fe30006f22660e164a98d96,
-// crates/libid-ceremony/src/attestation.rs::CROSS_LANGUAGE_FIXTURE.
-const FIXTURE = Uint8Array.from(
-  Buffer.from(
-    readFileSync(
-      new URL('./libid-rs-239a4bb-attested-data.fixture.hex', import.meta.url),
-      'utf8',
-    ).trim(),
-    'hex',
-  ),
-)
 
 const changed = (offset: number, value: number): Uint8Array => {
   const bytes = FIXTURE.slice()
