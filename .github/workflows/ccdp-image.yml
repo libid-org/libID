@@ -18,7 +18,8 @@ name: CCDP image
 # full 40-hex sha, so two commits can never share a tag) — the reference the
 # checks run against and the one release.yml promotes after checking that
 # the image's `org.opencontainers.image.revision` label names the released
-# commit; `tags` adds further references (any whitespace separates them).
+# commit; `tag` adds one more tag (`main`, `custom-<name>`), checked here
+# against the tag grammar before anything is built.
 # The build is seeded from the previously published `:main` image so immutable
 # assets stay available through the compatibility window (see "Publication and
 # upgrades" in ts/packages/ceremony/docs/distribution.md).
@@ -33,8 +34,8 @@ on:
         description: Push the image to ghcr once the checks pass.
         type: boolean
         default: false
-      tags:
-        description: Image references to tag besides ghcr.io/libid-org/ccdp:sha-<commit sha>, one per line.
+      tag:
+        description: A tag of ghcr.io/libid-org/ccdp to add besides sha-<commit sha>, such as main or custom-<name>.
         type: string
         default: ""
   workflow_dispatch:
@@ -53,47 +54,27 @@ jobs:
       SWS_SHA256: c4b043f61eb63ea0fb6b13d42cc29d5732e893ab17fcee320982dcf57574378b
       # A dispatch has no inputs, so this is "false" unless a caller asked.
       PUSH: ${{ inputs.push == true }}
-      EXTRA_TAGS: ${{ inputs.tags }}
+      TAG: ${{ inputs.tag }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: 10
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm -C ts install --frozen-lockfile
-
-      - name: Build
-        run: pnpm -C ts --filter '@libid/ceremony...' build
-
       # SHA_REF is the commit's own tag; REFS is every reference the image gets
-      # (SHA_REF first). Each extra reference must be a tag of this image.
-      # IMAGE_VERSION, the `org.opencontainers.image.version` label, is the
-      # first extra tag (`main`) or else the sha tag.
+      # (SHA_REF first, then `tag`). IMAGE_VERSION, the
+      # `org.opencontainers.image.version` label, is `tag` or else the sha tag.
+      # The whole input must be one tag: a space or newline cannot smuggle in a
+      # second reference. It runs first, so a bad input fails before the build.
       - name: Resolve the image references
         run: |
           set -euo pipefail
           sha_ref="$IMAGE:sha-$GITHUB_SHA"
           refs="$sha_ref"
-          version=""
-          for ref in $EXTRA_TAGS; do
-            case "$ref" in
-              "$IMAGE":*) ;;
-              *) echo "::error::'$ref' is not a tag of $IMAGE"; exit 1 ;;
-            esac
-            case " $refs " in
-              *" $ref "*) ;;
-              *) refs="$refs $ref" ;;
-            esac
-            : "${version:=${ref#"$IMAGE":}}"
-          done
-          : "${version:=${sha_ref#"$IMAGE":}}"
+          version="sha-$GITHUB_SHA"
+          if [ -n "$TAG" ]; then
+            if ! [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "::error::${TAG@Q} is not usable as a tag of $IMAGE"
+              exit 1
+            fi
+            [ "$TAG" = "$version" ] || refs="$refs $IMAGE:$TAG"
+            version="$TAG"
+          fi
           echo "Image references: $refs (push: $PUSH, version label: $version)"
           {
             echo "SHA_REF=$sha_ref"
@@ -101,8 +82,17 @@ jobs:
             echo "IMAGE_VERSION=$version"
           } >> "$GITHUB_ENV"
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-ts
+
+      - name: Build
+        run: pnpm -C ts --filter '@libid/ceremony...' build
+
       - name: Log in to ghcr
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       # The previous publication's served tree and graph let build/distribution.ts
       # retain its immutable assets and verify reused URLs are unchanged. Only
