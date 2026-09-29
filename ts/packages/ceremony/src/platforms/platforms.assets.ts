@@ -1,5 +1,5 @@
 import type { Asset, LocalAsset } from '../assets/index.js'
-import { assets as bearerLink } from './bearer-link/bearer-link.assets.js'
+import { assets as bearerLink } from './bearer.assets.js'
 import { assets as google } from './google/1/google.assets.js'
 import type { PlatformId, SupportedCeremonyVersion } from './index.js'
 

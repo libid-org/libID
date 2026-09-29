@@ -1,21 +1,21 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { ProofEngineOptions, RawProof } from '../../barretenberg/engine.js'
-import type { NotaryAttestation } from '../../notary/decode.js'
-import { concat, encodeAttestation, opening } from '../../notary/fixtures/attestation.js'
-import { correlateReveal, planNotarization, verifyAttestation } from '../../notary/notarize.js'
+import type { ProofEngineOptions, RawProof } from '../barretenberg/engine.js'
+import type { NotaryAttestation } from '../notary/decode.js'
+import { concat, encodeAttestation, opening } from '../notary/fixtures/attestation.js'
+import { correlateReveal, planNotarization, verifyAttestation } from '../notary/notarize.js'
 import type {
   CommitmentOpening,
   ExactHttpRequest,
   Reveals,
   Transcript,
-} from '../../notary/protocol.js'
-import type { ProverContext } from '../context.js'
-import { prove as github } from '../github/1/prover.js'
-import * as githubTranscript from '../github/1/transcript.js'
-import { assembleResult } from '../index.js'
-import { prove as x } from '../x/1/prover.js'
-import * as xTranscript from '../x/1/transcript.js'
+} from '../notary/protocol.js'
+import type { ProverContext } from './context.js'
+import { prove as github } from './github/1/prover.js'
+import * as githubTranscript from './github/1/transcript.js'
+import { assembleResult } from './index.js'
+import { prove as x } from './x/1/prover.js'
+import * as xTranscript from './x/1/transcript.js'
 
 const { prepare, generate, destroy } = vi.hoisted(() => ({
   prepare: vi.fn(),
@@ -23,11 +23,11 @@ const { prepare, generate, destroy } = vi.hoisted(() => ({
   destroy: vi.fn(),
 }))
 vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
-vi.mock('../../assets/index.js', async (original) => ({
-  ...(await original<typeof import('../../assets/index.js')>()),
+vi.mock('../assets/index.js', async (original) => ({
+  ...(await original<typeof import('../assets/index.js')>()),
   assetUrl: () => 'https://ccdp.test/asset',
 }))
-vi.mock('../../barretenberg/engine.js', () => ({
+vi.mock('../barretenberg/engine.js', () => ({
   ProofEngine: class {
     constructor({ emit }: ProofEngineOptions) {
       emit?.({ event: 'zk-proof-preparation', phase: 'started', timestamp: 0 })
@@ -36,7 +36,7 @@ vi.mock('../../barretenberg/engine.js', () => ({
     destroy = destroy
   },
 }))
-vi.mock('../../notary/session.js', () => ({
+vi.mock('../notary/session.js', () => ({
   Notarization: class {
     constructor(_address: string, signal: AbortSignal) {
       signal.throwIfAborted()
@@ -225,6 +225,8 @@ for (const platform of ['x', 'github'] as const) {
                     ? 'attested authority changed'
                     : 'public input mismatch',
         )
+        if (outcome === 'opening-range')
+          await expect(pending).rejects.toMatchObject({ event: 'circuit-inputs' })
       } else {
         const result = await pending
         expect(result?.identity).toEqual({

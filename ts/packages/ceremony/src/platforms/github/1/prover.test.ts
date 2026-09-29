@@ -3,7 +3,7 @@ import type { ProverContext } from '../../context.js'
 import { prove as proveGitHub } from './prover.js'
 
 const { pipeline } = vi.hoisted(() => ({ pipeline: vi.fn() }))
-vi.mock('../../bearer-link/prover.js', () => ({ proveBearerLink: pipeline }))
+vi.mock('../../bearer.js', () => ({ proveBearerLink: pipeline }))
 afterEach(() => vi.resetAllMocks())
 
 const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'

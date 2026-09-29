@@ -3,7 +3,7 @@ import type { ProverContext } from '../../context.js'
 import { prove as proveX } from './prover.js'
 
 const { pipeline } = vi.hoisted(() => ({ pipeline: vi.fn() }))
-vi.mock('../../bearer-link/prover.js', () => ({ proveBearerLink: pipeline }))
+vi.mock('../../bearer.js', () => ({ proveBearerLink: pipeline }))
 afterEach(() => vi.resetAllMocks())
 
 it('requires codeVerifier before notarization [LIBID-OAUTH-021]', async () => {

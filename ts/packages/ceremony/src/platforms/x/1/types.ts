@@ -1,4 +1,4 @@
-import { bearerLinkTypes } from '../../bearer-link/types.js'
+import { bearerLinkTypes } from '../../bearer-types.js'
 
 export const isUserName = (value: string): boolean => /^[A-Za-z0-9_]{1,15}$/.test(value)
 

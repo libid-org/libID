@@ -12,6 +12,12 @@ returns one proof and destroys its worker. Platform owners call `destroy()` in
 `finally` to cover abandoned or failed work. AbortSignals retire pending work;
 late initialization cannot resurrect a settled engine.
 
+[BearerLinkProver](../src/barretenberg/circuits/bearer_link/prover.ts) owns the
+bearer circuit/key selection, witness preparation and public-input check. Its
+constructor starts the engine before token exchange; `prove()` consumes the
+selected private openings and returns proof bytes. The shared platform flow
+joins those bytes with both final attestations and destroys the prover in `finally`.
+
 [engine.worker.ts](../src/barretenberg/engine.worker.ts) starts three independent
 branches together: circuit/released-key loading, explicit ACVM/ABI WASM loading,
 and Barretenberg initialization. Noir/input readiness permits witness execution

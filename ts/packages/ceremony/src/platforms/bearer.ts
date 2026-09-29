@@ -1,24 +1,14 @@
-import { assetUrl } from '../../assets/index.js'
-import {
-  bearerCircuit,
-  bearerVerificationKey,
-} from '../../barretenberg/circuits/bearer_link/bearer_link.assets.js'
-import {
-  buildBearerLinkWitness,
-  validateBearerLinkPublicInputs,
-} from '../../barretenberg/circuits/bearer_link/inputs.js'
-import { ProofEngine } from '../../barretenberg/engine.js'
-import { CeremonyError, ceremonyError } from '../../errors.js'
-import { operation } from '../../events.js'
-import { responseJson } from '../../notary/http.js'
-import { bearerOpening } from '../../notary/notarize.js'
-import type { Reveals } from '../../notary/protocol.js'
-import { Notarization, type NotarizationSession } from '../../notary/session.js'
-import { isRecord } from '../../primitives.js'
-import type { ProverContext } from '../context.js'
-import type { Identity } from '../types.js'
-import type { BearerTranscript } from './transcript.js'
-import type { BearerLinkProofV1 } from './types.js'
+import { BearerLinkProver } from '../barretenberg/circuits/bearer_link/prover.js'
+import { CeremonyError, ceremonyError } from '../errors.js'
+import { operation } from '../events.js'
+import { responseJson } from '../notary/http.js'
+import type { Reveals } from '../notary/protocol.js'
+import { Notarization, type NotarizationSession } from '../notary/session.js'
+import { isRecord } from '../primitives.js'
+import type { BearerTranscript } from './bearer-transcript.js'
+import type { BearerLinkProofV1 } from './bearer-types.js'
+import type { ProverContext } from './context.js'
+import type { Identity } from './types.js'
 
 /** Attribute a failure to the operation it interrupted. */
 const failsAs = <T>(p: Promise<T>, event: string) =>
@@ -47,11 +37,7 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
   const tokenRequest = profile.buildTokenRequest(input)
   const controller = new AbortController()
   const signal = AbortSignal.any([context.signal, controller.signal])
-  const engine = new ProofEngine({
-    circuitUrl: assetUrl(bearerCircuit),
-    verificationKeyUrl: assetUrl(bearerVerificationKey),
-    emit,
-  })
+  const prover = new BearerLinkProver(emit)
   // Observe every provisional branch immediately; any failure retires sibling work.
   const observe = <T>(p: Promise<T>) => {
     void p.catch((error) => controller.abort(error))
@@ -103,24 +89,25 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     )
     const [tokenRevealed, identityRevealed] = await Promise.all([tokenOpened, identityOpened])
     const final = observe(Promise.all([tokenRevealed.attestation, identityRevealed.attestation]))
-    const inputs = await operation(emit, 'circuit-inputs', () =>
-      buildBearerLinkWitness(
+    const proof = observe(
+      prover.prove(
         bearer,
-        bearerOpening(tokenRevealed.openings, 'received', token.selected.bearerRange, bearer),
-        bearerOpening(identityRevealed.openings, 'sent', identity.selected.bearerRange, bearer),
+        { openings: tokenRevealed.openings, range: token.selected.bearerRange },
+        { openings: identityRevealed.openings, range: identity.selected.bearerRange },
+        signal,
       ),
     )
-    const proof = observe(engine.prove(inputs, signal))
-    const [raw, [tokenAttestation, identityAttestation]] = await Promise.all([proof, final])
-    if (!validateBearerLinkPublicInputs(raw.publicInputs, inputs))
-      throw new Error('Bearer public input mismatch')
+    const [bearerLinkProof, [tokenAttestation, identityAttestation]] = await Promise.all([
+      proof,
+      final,
+    ])
     const { userId, userName } = identity.selected
     return {
       identity: { platformId, oauthClientId: clientId, userId, userName },
-      proof: { bearerLinkProof: raw.proof, tokenAttestation, identityAttestation },
+      proof: { bearerLinkProof, tokenAttestation, identityAttestation },
     }
   } finally {
     controller.abort()
-    engine.destroy()
+    prover.destroy()
   }
 }

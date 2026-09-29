@@ -52,16 +52,17 @@ subject and email as identity fields.
 ## X
 
 [x/1/prover.ts](../src/platforms/x/1/prover.ts) accepts its return, then hands its
-transcript profile to [the shared bearer-link pipeline](../src/platforms/bearer-link/prover.ts),
+transcript profile to [the shared bearer-link pipeline](../src/platforms/bearer.ts),
 which overlaps these dependencies:
 
-1. Start the proof engine and prepare token/identity sessions in one
+1. Start the [bearer circuit prover](../src/barretenberg/circuits/bearer_link/prover.ts)
+   and prepare token/identity sessions in one
    ceremony-owned notary runtime. Each TLS session has its own channel.
 2. Send the token request and parse its bearer. Start token reveal/finalization;
    the prepared identity session can immediately send its request with the bearer.
 3. Parse identity and reveal its selected transcript ranges. Once both sets of
-   private openings are available, build the `bearer_link` witness and prove
-   while final attestations continue.
+   private openings are available, pass them to the circuit prover while final
+   attestations continue. It builds the witness and checks the returned public inputs.
 4. Join the proof and both correlated final attestations before returning.
 
 Only identity HTTP depends on the token. Session setup and proof initialization
@@ -86,10 +87,10 @@ The [public-client profile](https://github.com/libid-org/libid/blob/5e0e1f690369
 owns this request layout; deployed verifiers must accept that layout.
 
 X and GitHub share the `bearer_link` circuit and
-[transcript machinery](../src/platforms/bearer-link/transcript.ts).
+[transcript machinery](../src/platforms/bearer-transcript.ts).
 Each platform declares its fixed endpoints, ordered token fields, identity headers
 and field shapes in `transcript.ts`, and its user-name grammar in `types.ts`;
-[bearer-link/types.ts](../src/platforms/bearer-link/types.ts) supplies the shared
+[bearer-types.ts](../src/platforms/bearer-types.ts) supplies the shared
 client ID, identity and proof validators under each platform's names. The shared
 machinery validates the common token inputs (form client ID, code, redirect URI,
 PKCE verifier) and the circuit-width bearer once for both. Delivery
@@ -102,7 +103,7 @@ For another version-one platform:
 1. Add `platforms/<id>/1/` with `url.ts` (including PKCE choice and return
    profile), `types.ts` (client ID, identity and proof validation), event definitions
    (core operations and separate UI weights), `<id>.assets.ts` and `prover.ts`;
-   X/GitHub share `bearer-link/` events and assets instead. Reuse shared parsers,
+   X/GitHub share `bearer.events.ts` and `bearer.assets.ts` instead. Reuse shared parsers,
    notary sessions and circuit adapters only where their contracts fit. Keep
    platform-specific selectors and fixtures beside their tests.
 2. Register its lightweight definition in [the catalog](../src/platforms/index.ts).

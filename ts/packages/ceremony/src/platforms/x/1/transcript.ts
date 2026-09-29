@@ -1,5 +1,5 @@
 import { isRecord } from '../../../primitives.js'
-import { bearerTranscript } from '../../bearer-link/transcript.js'
+import { bearerTranscript } from '../../bearer-transcript.js'
 import { isUserName } from './types.js'
 
 export const {
