@@ -44,6 +44,7 @@ Object.assign(window, {
   },
   async notarizeRequests(count: number, platform: 'x' | 'github' = 'x') {
     const abort = new AbortController()
+    const started = performance.now()
     const pending = Array.from({ length: count }, () => 'prepare')
     const timer = setTimeout(
       () =>
@@ -99,6 +100,13 @@ Object.assign(window, {
         }),
       )
       return results
+    } catch (error) {
+      // These are unauthenticated fixture requests. Report only operation positions
+      // and elapsed time, including when the production deadline wins first.
+      throw new Error(
+        `${error instanceof Error ? error.message : 'Notarization failed'}; notary smoke: ${JSON.stringify({ platform, pending, elapsedMs: Math.round(performance.now() - started), hardwareConcurrency: navigator.hardwareConcurrency })}`,
+        { cause: error },
+      )
     } finally {
       clearTimeout(timer)
       abort.abort()
