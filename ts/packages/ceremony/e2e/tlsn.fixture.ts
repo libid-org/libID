@@ -81,7 +81,7 @@ export class Prover {
     commit: { sent: CommitRange[]; recv: CommitRange[] },
   ) {
     const plan: NotarizationPlan = {
-      reveal: { sent: reveal.sent, received: reveal.recv, server_identity: true },
+      reveal: { sent: reveal.sent, received: reveal.recv },
       commit: { sent: commit.sent, received: commit.recv },
     }
     // Distinct blinders for the token and identity sessions.

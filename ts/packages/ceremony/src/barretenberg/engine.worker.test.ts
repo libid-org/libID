@@ -68,7 +68,7 @@ async function worker(key: Response | Promise<Response> = new Response(Uint8Arra
   await import('./engine.worker.js')
   receive({
     data: {
-      type: 'engine-preload',
+      type: 'preload',
       circuitUrl: 'https://ccdp.test/circuit.json',
       verificationKeyUrl: 'https://ccdp.test/vk',
       threads: 4,
@@ -88,9 +88,9 @@ async function worker(key: Response | Promise<Response> = new Response(Uint8Arra
 
 it('uses the released VK with exact ZK Keccak settings and preserves proof encoding [LIBID-PROVER-001]', async () => {
   const w = await worker()
-  await expect.poll(() => w.has('engine-ready')).toBe(true)
-  w.receive({ data: { type: 'engine-prove', inputs: { fixture: 1 } } })
-  await expect.poll(() => w.has('engine-result')).toBe(true)
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  w.receive({ data: { type: 'prove', inputs: { fixture: 1 } } })
+  await expect.poll(() => w.has('result')).toBe(true)
   expect(w.request).toHaveBeenCalledWith('https://ccdp.test/vk', {
     credentials: 'same-origin',
     redirect: 'error',
@@ -109,7 +109,7 @@ it('uses the released VK with exact ZK Keccak settings and preserves proof encod
       optimizedSolidityVerifier: false,
     },
   })
-  expect(w.postMessage.mock.calls.find(([m]) => m.type === 'engine-result')![0].result).toEqual({
+  expect(w.postMessage.mock.calls.find(([m]) => m.type === 'result')![0].result).toEqual({
     proof: Uint8Array.from([...new Uint8Array(32).fill(7), ...new Uint8Array(32).fill(8)]),
     publicInputs: [`0x${'00'.repeat(32)}`, `0x${'ff'.repeat(32)}`],
     runtime: { effectiveThreads: 4, sharedMemory: true },
@@ -121,8 +121,8 @@ it.each(['missing', 'empty'])(
   'fails for a %s VK without falling back to recomputation [LIBID-PROVER-001]',
   async (kind) => {
     const w = await worker(new Response(null, { status: kind === 'missing' ? 404 : 200 }))
-    await expect.poll(() => w.has('engine-error')).toBe(true)
-    expect(w.has('engine-ready')).toBe(false)
+    await expect.poll(() => w.has('error')).toBe(true)
+    expect(w.has('witness-ready')).toBe(false)
     expect(mocks.destroy).toHaveBeenCalledOnce()
     expect(mocks.prove).not.toHaveBeenCalled()
   },
@@ -130,11 +130,11 @@ it.each(['missing', 'empty'])(
 
 it('preserves cleanup when bb rejects the supplied key [LIBID-PROVER-001]', async () => {
   const w = await worker()
-  await expect.poll(() => w.has('engine-ready')).toBe(true)
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
   mocks.prove.mockRejectedValueOnce(new Error('Invalid verification key'))
-  w.receive({ data: { type: 'engine-prove', inputs: {} } })
-  await expect.poll(() => w.has('engine-error')).toBe(true)
-  expect(w.has('engine-result')).toBe(false)
+  w.receive({ data: { type: 'prove', inputs: {} } })
+  await expect.poll(() => w.has('error')).toBe(true)
+  expect(w.has('result')).toBe(false)
   expect(mocks.prove).toHaveBeenCalledOnce()
   expect(mocks.destroy).toHaveBeenCalledOnce()
 })
@@ -164,7 +164,7 @@ it.each(['backend', 'resources'])(
     expect(mocks.acvm).toHaveBeenCalledOnce()
     expect(mocks.abi).toHaveBeenCalledOnce()
     expect(w.request).toHaveBeenCalledTimes(2)
-    expect(w.has('engine-ready')).toBe(false)
+    expect(w.has('witness-ready')).toBe(false)
     const resources = () => {
       acvm.resolve()
       abi.resolve()
@@ -180,7 +180,7 @@ it.each(['backend', 'resources'])(
           ),
         )
         .toBe(true)
-      expect(w.has('engine-ready')).toBe(false)
+      expect(w.has('witness-ready')).toBe(false)
       resources()
     } else {
       resources()
@@ -191,10 +191,10 @@ it.each(['backend', 'resources'])(
           ),
         )
         .toBe(true)
-      await expect.poll(() => w.has('engine-ready')).toBe(true)
+      await expect.poll(() => w.has('witness-ready')).toBe(true)
       backend.resolve()
     }
-    await expect.poll(() => w.has('engine-ready')).toBe(true)
+    await expect.poll(() => w.has('witness-ready')).toBe(true)
     expect(mocks.destroy).not.toHaveBeenCalled()
     expect(mocks.execute).not.toHaveBeenCalled()
   },
@@ -211,11 +211,11 @@ it.each(['circuit', 'wasm'])(
         ? new Response(null, { status: 404 })
         : new Response(Uint8Array.of(11, 12)),
     )
-    await expect.poll(() => w.has('engine-error')).toBe(true)
+    await expect.poll(() => w.has('error')).toBe(true)
     expect(mocks.destroy).not.toHaveBeenCalled()
     backend.resolve()
     await expect.poll(() => mocks.destroy.mock.calls.length).toBe(1)
-    expect(w.has('engine-ready')).toBe(false)
+    expect(w.has('witness-ready')).toBe(false)
     expect(mocks.prove).not.toHaveBeenCalled()
   },
 )
@@ -232,16 +232,16 @@ it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]',
     )
     .toBe(true)
   acvm.reject(new Error('WASM load failed'))
-  await expect.poll(() => w.has('engine-error')).toBe(true)
+  await expect.poll(() => w.has('error')).toBe(true)
   expect(mocks.destroy).toHaveBeenCalledOnce()
-  expect(w.has('engine-ready')).toBe(false)
+  expect(w.has('witness-ready')).toBe(false)
 })
 
 it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]', async () => {
   const key = deferred<Response>()
   mocks.initialize.mockRejectedValueOnce(new Error('Backend unavailable'))
   const w = await worker(key.promise)
-  await expect.poll(() => w.has('engine-error')).toBe(true)
+  await expect.poll(() => w.has('error')).toBe(true)
   expect(mocks.destroy).not.toHaveBeenCalled()
   key.resolve(new Response(Uint8Array.of(11, 12)))
   await expect
@@ -251,7 +251,7 @@ it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]'
       ),
     )
     .toBe(true)
-  expect(w.has('engine-ready')).toBe(false)
+  expect(w.has('witness-ready')).toBe(false)
   expect(mocks.prove).not.toHaveBeenCalled()
 })
 
@@ -263,8 +263,8 @@ it.each(['witness', 'backend'])(
     mocks.initialize.mockReturnValueOnce(backend.promise)
     const w = await worker()
     mocks.execute.mockReturnValueOnce(witness.promise)
-    await expect.poll(() => w.has('engine-ready')).toBe(true)
-    w.receive({ data: { type: 'engine-prove', inputs: { fixture: 1 } } })
+    await expect.poll(() => w.has('witness-ready')).toBe(true)
+    w.receive({ data: { type: 'prove', inputs: { fixture: 1 } } })
     expect(mocks.execute).toHaveBeenCalledExactlyOnceWith({ fixture: 1 })
     expect(mocks.prove).not.toHaveBeenCalled()
     const finishWitness = () => witness.resolve({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
@@ -282,7 +282,7 @@ it.each(['witness', 'backend'])(
     expect(mocks.prove).not.toHaveBeenCalled()
     if (first === 'witness') backend.resolve()
     else finishWitness()
-    await expect.poll(() => w.has('engine-result')).toBe(true)
+    await expect.poll(() => w.has('result')).toBe(true)
     expect(mocks.prove).toHaveBeenCalledOnce()
     expect(mocks.destroy).toHaveBeenCalledOnce()
   },
@@ -293,14 +293,14 @@ it('reports witness failure promptly and destroys a late backend once [LIBID-PRO
   mocks.initialize.mockReturnValueOnce(backend.promise)
   const w = await worker()
   mocks.execute.mockRejectedValueOnce(new Error('Witness failed'))
-  await expect.poll(() => w.has('engine-ready')).toBe(true)
-  w.receive({ data: { type: 'engine-prove', inputs: {} } })
-  await expect.poll(() => w.has('engine-error')).toBe(true)
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  w.receive({ data: { type: 'prove', inputs: {} } })
+  await expect.poll(() => w.has('error')).toBe(true)
   expect(mocks.destroy).not.toHaveBeenCalled()
   backend.resolve()
   await expect.poll(() => mocks.destroy.mock.calls.length).toBe(1)
   expect(mocks.prove).not.toHaveBeenCalled()
-  expect(w.has('engine-result')).toBe(false)
+  expect(w.has('result')).toBe(false)
 })
 
 it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-014]', async () => {
@@ -309,10 +309,10 @@ it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-01
   mocks.initialize.mockReturnValueOnce(backend.promise)
   const w = await worker()
   mocks.execute.mockReturnValueOnce(witness.promise)
-  await expect.poll(() => w.has('engine-ready')).toBe(true)
-  w.receive({ data: { type: 'engine-prove', inputs: {} } })
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  w.receive({ data: { type: 'prove', inputs: {} } })
   backend.reject(new Error('Backend failed'))
-  await expect.poll(() => w.has('engine-error')).toBe(true)
+  await expect.poll(() => w.has('error')).toBe(true)
   witness.resolve({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
   await expect
     .poll(() =>
@@ -321,21 +321,21 @@ it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-01
       ),
     )
     .toBe(true)
-  expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'engine-error')).toHaveLength(1)
+  expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'error')).toHaveLength(1)
   expect(mocks.prove).not.toHaveBeenCalled()
-  expect(w.has('engine-result')).toBe(false)
+  expect(w.has('result')).toBe(false)
 })
 
 it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER-014]', async () => {
   const proof = deferred<unknown>()
   const w = await worker()
   mocks.prove.mockReturnValueOnce(proof.promise)
-  await expect.poll(() => w.has('engine-ready')).toBe(true)
-  const message = { data: { type: 'engine-prove', inputs: {} } }
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  const message = { data: { type: 'prove', inputs: {} } }
   w.receive(message)
   await expect.poll(() => mocks.prove.mock.calls.length).toBe(1)
   w.receive(message)
-  await expect.poll(() => w.has('engine-error')).toBe(true)
+  await expect.poll(() => w.has('error')).toBe(true)
   proof.resolve({ proof: [new Uint8Array(32)], publicInputs: [] })
   await expect
     .poll(() =>
@@ -345,6 +345,6 @@ it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER
     )
     .toBe(true)
   expect(mocks.destroy).toHaveBeenCalledOnce()
-  expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'engine-error')).toHaveLength(1)
-  expect(w.has('engine-result')).toBe(false)
+  expect(w.postMessage.mock.calls.filter(([m]) => m.type === 'error')).toHaveLength(1)
+  expect(w.has('result')).toBe(false)
 })

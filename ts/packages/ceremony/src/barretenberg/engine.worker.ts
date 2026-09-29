@@ -6,8 +6,7 @@ import initAbi from '@noir-lang/noirc_abi'
 import { ceremonyError, errorMessage } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
 import { SRS_SIZE } from './barretenberg.assets.js'
-import type { RawProof } from './engine.js'
-import type { FromWorker, Preload, ToWorker } from './protocol.js'
+import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
 
@@ -25,7 +24,7 @@ let backend: Promise<Api> | null = null
 
 const send = (message: FromWorker): void => self.postMessage(message)
 
-const emit = (event: OperationEvent) => send({ type: 'engine-event', event })
+const emit = (event: OperationEvent) => send({ type: 'event', event })
 
 const span = <T>(event: string, work: () => Promise<T>) => operation(emit, event, work)
 
@@ -49,7 +48,7 @@ function fail(error: unknown): void {
   // Also releases a backend that finishes initializing after a sibling failed.
   void destroyBackend().catch(() => {})
   const failure = ceremonyError(error, 'zk-proof-generation')
-  send({ type: 'engine-error', error: errorMessage(failure), event: failure.event })
+  send({ type: 'error', message: errorMessage(failure), event: failure.event })
 }
 
 /** Start bb initialization alongside circuit/key and Noir loading; witness readiness does not await bb. */
@@ -114,15 +113,15 @@ async function preload(message: Preload): Promise<void> {
   if (state !== 'loading') return
   ready = { noir: new Noir(compiled), circuit }
   state = 'ready'
-  send({ type: 'engine-ready' })
+  send({ type: 'witness-ready' })
   void backend
     .then(() => {
-      if (state !== 'done') send({ type: 'engine-prepared', timestamp: now() })
+      if (state !== 'done') send({ type: 'backend-ready', timestamp: now() })
     })
     .catch(fail)
 }
 
-async function prove(message: Extract<ToWorker, { type: 'engine-prove' }>): Promise<void> {
+async function prove(message: Extract<ToWorker, { type: 'prove' }>): Promise<void> {
   if (!ready || !backend || state !== 'ready') throw new Error('proof engine is not ready')
   state = 'proving'
   emit({ event: 'zk-proof-generation', phase: 'started', timestamp: now() })
@@ -160,12 +159,12 @@ async function prove(message: Extract<ToWorker, { type: 'engine-prove' }>): Prom
   if (state !== 'proving') return
   ready = null
   state = 'done'
-  send({ type: 'engine-result', result })
+  send({ type: 'result', result })
 }
 
-send({ type: 'engine-booted', timestamp: now() })
+send({ type: 'booted', timestamp: now() })
 
 self.addEventListener('message', (event: MessageEvent<ToWorker>) => {
-  const work = event.data.type === 'engine-preload' ? preload(event.data) : prove(event.data)
+  const work = event.data.type === 'preload' ? preload(event.data) : prove(event.data)
   void work.catch(fail)
 })

@@ -15,7 +15,7 @@ export const tlsnWasm = release.member('tlsn_wasm_bg.wasm', {
   ...assets.headers.wasm,
 })
 
-export const tlsnSpawn = release.member('snippets/web-spawn-*/js/spawn.js', {
+const tlsnSpawn = release.member('snippets/web-spawn-*/js/spawn.js', {
   ...assets.headers.immutable,
   ...assets.headers.executionWorker,
 })
