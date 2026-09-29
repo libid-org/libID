@@ -4,6 +4,24 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@playwright/test':
+      specifier: 1.64.0-alpha-2026-09-29
+      version: 1.64.0-alpha-2026-09-29
+    '@types/node':
+      specifier: ^22.0.0
+      version: 22.20.1
+    typescript:
+      specifier: ^5.9.0
+      version: 5.9.3
+    vite:
+      specifier: ^7.3.6
+      version: 7.3.6
+    vitest:
+      specifier: ^3.2.0
+      version: 3.2.7
+
 importers:
 
   .:
@@ -46,10 +64,10 @@ importers:
         specifier: ^5.0.0
         version: 5.2.0(vite@7.3.6(@types/node@22.20.1))
       typescript:
-        specifier: ^5.9.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.1.0
+        specifier: 'catalog:'
         version: 7.3.6(@types/node@22.20.1)
 
   apps/dev:
@@ -68,16 +86,16 @@ importers:
         version: 2.4.0
     devDependencies:
       '@playwright/test':
-        specifier: 1.64.0-alpha-2026-09-29
+        specifier: 'catalog:'
         version: 1.64.0-alpha-2026-09-29
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.1
       typescript:
-        specifier: ^5.9.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.6
+        specifier: 'catalog:'
         version: 7.3.6(@types/node@22.20.1)
 
   packages/ceremony:
@@ -105,13 +123,13 @@ importers:
         version: 1.0.0-beta.25
     devDependencies:
       '@playwright/test':
-        specifier: 1.64.0-alpha-2026-09-29
+        specifier: 'catalog:'
         version: 1.64.0-alpha-2026-09-29
       '@types/estree':
         specifier: ^1.0.8
         version: 1.0.9
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.1
       smol-toml:
         specifier: ^1.8.0
@@ -120,13 +138,13 @@ importers:
         specifier: ^7.5.22
         version: 7.5.22
       typescript:
-        specifier: ^5.9.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.6
+        specifier: 'catalog:'
         version: 7.3.6(@types/node@22.20.1)
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.1)
 
   packages/claim:
@@ -148,16 +166,16 @@ importers:
         version: 1.0.0-beta.20
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.1
       typescript:
-        specifier: ^5.9.0
+        specifier: 'catalog:'
         version: 5.9.3
       viem:
         specifier: ^2.48.11
         version: 2.55.13(typescript@5.9.3)
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.1)
 
   packages/claim-full:
@@ -170,40 +188,40 @@ importers:
         specifier: 5.0.0-nightly.20260324
         version: 5.0.0-nightly.20260324
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.1
       typescript:
-        specifier: ^5.9.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.1)
 
   packages/ledger:
     devDependencies:
       typescript:
-        specifier: ^5.9.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.1)
 
   packages/popup:
     devDependencies:
       '@playwright/test':
-        specifier: 1.64.0-alpha-2026-09-29
+        specifier: 'catalog:'
         version: 1.64.0-alpha-2026-09-29
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.1
       typescript:
-        specifier: ^5.9.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.6
+        specifier: 'catalog:'
         version: 7.3.6(@types/node@22.20.1)
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.1)
 
 packages:

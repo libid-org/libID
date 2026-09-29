@@ -1,7 +1,8 @@
 # Started by services.ts after building CCDP.
 services:
   notary:
-    image: ghcr.io/libid-org/notary:0.4.0
+    # notary:0.4.0 by index digest.
+    image: ghcr.io/libid-org/notary@sha256:64716b57a89b6b9e5f97f8908572f4f8901b16ba4a0d442a44129020a70f5878
     environment:
       NOTARY_HOST: 0.0.0.0
       NOTARY_CLIENT_IP_HEADER: peer
@@ -19,7 +20,8 @@ services:
       - "127.0.0.1:4683:4683"
 
   bridge:
-    image: ghcr.io/libid-org/libid-server-rs:0.4.0
+    # libid-server-rs:0.4.0 by index digest.
+    image: ghcr.io/libid-org/libid-server-rs@sha256:65be861dfadcec292b3641572d2ef9bb08f0cf36c4dc80c94cd2752eab21866a
     network_mode: service:notary
     depends_on:
       ccdp:
@@ -39,6 +41,7 @@ services:
       interval: 1s
       timeout: 2s
       retries: 30
+    # static-web-server:3.0.0-beta.1-alpine by index digest; the healthcheck runs its wget.
     image: ghcr.io/static-web-server/static-web-server@sha256:4e804280b5b5b1be4563d4a9e0f3a0ea38e7887967d0cc00bc8c07030f529b3f
     environment:
       SERVER_CONFIG_FILE: /etc/sws.toml
