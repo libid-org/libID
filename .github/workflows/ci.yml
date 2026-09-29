@@ -26,19 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # pnpm before setup-node: `cache: pnpm` shells out to pnpm to locate
-      # the store, so the binary has to exist first.
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: 10
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm -C ts install --frozen-lockfile
+      # pnpm, Node and the frozen-lockfile install, pinned in one place.
+      - uses: ./.github/actions/setup-ts
 
       - name: Build
         run: pnpm -C ts build
@@ -72,7 +61,9 @@ jobs:
       # can pull them once the packages grant this repository read access
       # (or are flipped public, which is where releases should end up).
       - name: Log in to ghcr
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       - name: Render env from the committed network file
         run: harness/render-env.sh
@@ -191,7 +182,7 @@ jobs:
     with:
       push: true
       # `sha-<commit sha>` is always tagged; `:main` seeds the next build's retention.
-      tags: ghcr.io/libid-org/ccdp:main
+      tag: main
 
   # ---------------------------------------------------------------------------
   # DCO: every commit carries a Signed-off-by trailer. Plain git over the
@@ -275,17 +266,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: 10
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm -C ts install --frozen-lockfile
+      - uses: ./.github/actions/setup-ts
 
       - name: Build workspace and dependencies
         run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}...' build
@@ -298,7 +279,9 @@ jobs:
 
       - name: Log in to ghcr for the matched notary image
         if: matrix.workspace == 'ceremony'
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       - name: Browser tests
         run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}' run test:e2e ${{ matrix.projects }}
