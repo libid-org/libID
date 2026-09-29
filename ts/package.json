@@ -7,7 +7,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "lint": "biome lint . && biome check --formatter-enabled=false --only=assist/source/organizeImports packages/ceremony",
+    "lint": "biome lint . && biome check --formatter-enabled=false --only=assist/source/organizeImports packages/ceremony && oxlint",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
     "dev": "pnpm --filter @libid/dev dev",
@@ -16,7 +16,8 @@
     "dev:app": "pnpm --filter @libid/dev dev:app"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.8"
+    "@biomejs/biome": "^2.5.8",
+    "oxlint": "^1.86.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

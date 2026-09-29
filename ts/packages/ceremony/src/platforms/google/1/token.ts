@@ -3,7 +3,7 @@ import {
   MAX_EMAIL_BYTES,
   MAX_SUB_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/inputs.js'
-import { b64urlDecode } from '../../../primitives.js'
+import { b64urlDecode, isRecord } from '../../../primitives.js'
 import { printableWithoutQuote } from './types.js'
 
 export interface GoogleIdTokenClaims {
@@ -30,13 +30,15 @@ const text = new TextDecoder('utf-8', { fatal: true })
 function json(bytes: Uint8Array): Record<string, unknown> | null {
   try {
     const value: unknown = JSON.parse(text.decode(bytes))
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null
+    return isRecord(value) ? value : null
   } catch {
     return null
   }
 }
+
+/** Circuit-bound claims are printable ASCII without quotes, so length is the byte length. */
+const circuitText = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length <= max && printableWithoutQuote.test(value)
 
 function decodeGoogleIdToken(idToken: string): DecodedGoogleIdToken | null {
   const segments = idToken.split('.')
@@ -51,19 +53,12 @@ function decodeGoogleIdToken(idToken: string): DecodedGoogleIdToken | null {
   if (!p) return null
   const { iss, aud, sub, email, email_verified: emailVerified, exp, nonce } = p
   if (typeof iss !== 'string' || iss === '') return null
-  if (typeof aud !== 'string' || aud.length > MAX_AUD_BYTES || !printableWithoutQuote.test(aud)) {
-    return null
-  }
-  if (typeof sub !== 'string' || sub.length > MAX_SUB_BYTES || !printableWithoutQuote.test(sub)) {
-    return null
-  }
   if (
-    typeof email !== 'string' ||
-    email.length > MAX_EMAIL_BYTES ||
-    !printableWithoutQuote.test(email)
-  ) {
+    !circuitText(aud, MAX_AUD_BYTES) ||
+    !circuitText(sub, MAX_SUB_BYTES) ||
+    !circuitText(email, MAX_EMAIL_BYTES)
+  )
     return null
-  }
   if (typeof emailVerified !== 'boolean') return null
   if (typeof exp !== 'number' || !Number.isSafeInteger(exp) || exp < 0) return null
   if (typeof nonce !== 'string' || nonce === '') return null

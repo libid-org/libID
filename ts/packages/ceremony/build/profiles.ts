@@ -18,6 +18,9 @@ export const scriptHash = (code: string) =>
 
 const base = shared.csp.base
 
+const documents: readonly ResponseProfile[] = ['callback', 'prefetch', 'prover', 'proverFallback'],
+  isolatedWorkers: readonly ResponseProfile[] = ['executionWorker', 'proofWorker', 'leafWorker']
+
 export function responseHeaders(
   profile: ResponseProfile,
   {
@@ -28,19 +31,13 @@ export function responseHeaders(
     externalOrigins?: string[]
   },
 ): Record<string, string> {
+  const html = documents.includes(profile),
+    immutable = profile === 'asset' || isolatedWorkers.includes(profile)
   const headers: Record<string, string> = {
-    ...(['callback', 'prefetch', 'prover', 'proverFallback'].includes(profile)
-      ? shared.document
-      : shared.javascript),
-    ...(profile === 'asset' || ['executionWorker', 'proofWorker', 'leafWorker'].includes(profile)
-      ? shared.immutable
-      : { 'X-Content-Type-Options': 'nosniff' }),
-    'Cache-Control': ['asset', 'executionWorker', 'proofWorker', 'leafWorker'].includes(profile)
-      ? 'public, max-age=31536000, immutable'
-      : 'no-cache',
-    'Content-Type': ['callback', 'prefetch', 'prover', 'proverFallback'].includes(profile)
-      ? 'text/html; charset=utf-8'
-      : 'text/javascript; charset=utf-8',
+    ...(html ? shared.document : shared.javascript),
+    ...(immutable ? shared.immutable : { 'X-Content-Type-Options': 'nosniff' }),
+    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'Content-Type': html ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8',
   }
   if (profile === 'callback')
     return {
@@ -51,25 +48,12 @@ export function responseHeaders(
     }
   headers['Cross-Origin-Resource-Policy'] = 'same-origin'
   if (profile === 'asset') return headers
-  const execution = [
-    'prover',
-    'proverFallback',
-    'executionWorker',
-    'proofWorker',
-    'leafWorker',
-  ].includes(profile)
-  const connects = ['proofWorker', 'leafWorker'].includes(profile)
-    ? `${shared.csp.fetch} blob:`
-    : execution
-      ? `${shared.csp.fetch} ${shared.csp.websocket}`
-      : `'self' ${externalOrigins.join(' ')}`
-  headers['Content-Security-Policy'] =
-    `${base}; script-src 'self' ${inline.map(scriptHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}; worker-src ${profile === 'leafWorker' ? "'none'" : `'self'${execution ? ' blob:' : ''}`}; connect-src ${connects} ${popupFallback.connectSources.join(' ')}${profile === 'executionWorker' ? ' blob:' : ''}${['prefetch', 'prover', 'proverFallback'].includes(profile) ? "; style-src 'unsafe-inline'" : ''}`
+  headers['Content-Security-Policy'] = executableCsp(profile, inline, externalOrigins)
   if (profile === 'worker') {
     headers['Service-Worker-Allowed'] = '/'
     return headers
   }
-  if (['executionWorker', 'proofWorker', 'leafWorker'].includes(profile)) {
+  if (isolatedWorkers.includes(profile)) {
     headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
     return headers
   }
@@ -79,4 +63,25 @@ export function responseHeaders(
   if (profile === 'prover') Object.assign(headers, shared.dip)
   if (profile === 'proverFallback') Object.assign(headers, shared.isolated)
   return headers
+}
+
+/** Script, worker and connection sources for every executable profile except Callback. */
+function executableCsp(
+  profile: ResponseProfile,
+  inline: string[],
+  externalOrigins: string[],
+): string {
+  const execution =
+    profile === 'prover' || profile === 'proverFallback' || isolatedWorkers.includes(profile)
+  const scripts = `'self' ${inline.map(scriptHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}`,
+    workers = profile === 'leafWorker' ? "'none'" : `'self'${execution ? ' blob:' : ''}`
+  const connects =
+    profile === 'proofWorker' || profile === 'leafWorker'
+      ? `${shared.csp.fetch} blob:`
+      : execution
+        ? `${shared.csp.fetch} ${shared.csp.websocket}`
+        : `'self' ${externalOrigins.join(' ')}`
+  const connectBlob = profile === 'executionWorker' ? ' blob:' : '',
+    styles = documents.includes(profile) ? "; style-src 'unsafe-inline'" : ''
+  return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects} ${popupFallback.connectSources.join(' ')}${connectBlob}${styles}`
 }
