@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ExactHttpRequest } from '../../../notary/protocol.js'
-import { buildTokenRequest, selectToken, type TokenRequestInput } from './transcript.js'
+import type { TokenRequestInput } from '../../bearer-link/transcript.js'
+import { buildTokenRequest, selectToken } from './transcript.js'
 
 const encoder = new TextEncoder(),
   decoder = new TextDecoder()
@@ -96,6 +97,8 @@ it.each([
   '{"access_token":""}',
   '{"access_token":"one","access_token":"two"}',
   '{"refresh_token":"ghr_fixture"}',
+  '{"access_token":"ghu fixture"}',
+  `{"access_token":"${'a'.repeat(129)}"}`,
 ])('rejects an invalid bearer response %s', (body) => {
   expect(() => selectToken(transcript(buildTokenRequest(input), body), input)).toThrow()
 })

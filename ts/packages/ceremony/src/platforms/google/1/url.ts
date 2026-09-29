@@ -1,7 +1,15 @@
 import { b64urlEncode } from '../../../primitives.js'
+import type { ReturnProfile } from '../../oauthReturn.js'
 
 /** Google carries the digest as the OIDC nonce; no PKCE (spec §5 table). */
 export const pkce = false
+
+/** Fragment-only ID-token return; a code or access token violates the profile. */
+export const oauthReturn: ReturnProfile = {
+  transport: 'fragment',
+  credential: 'id_token',
+  rejected: ['code', 'access_token', 'refresh_token'],
+}
 
 const AUTHORIZATION_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 

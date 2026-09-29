@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest'
 import { validateIdentity as github } from './github/1/types.js'
-import { validateIdentity as google, validateProof } from './google/1/types.js'
+import { validateIdentity as google, isClientId, validateProof } from './google/1/types.js'
 import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from './index.js'
-import { validateProofMessage } from './index.js'
+import { assembleResult } from './index.js'
 import { validateIdentity as x } from './x/1/types.js'
 
 it('checks profile identity encodings without reading evidence [LIBID-MOD-019] [TEST-PLAT-02]', () => {
@@ -30,6 +30,12 @@ it('checks profile identity encodings without reading evidence [LIBID-MOD-019] [
   }
 })
 
+it('admits only Google client IDs a signed circuit audience can equal', () => {
+  expect(isClientId('123-abc.apps.googleusercontent.com')).toBe(true)
+  for (const clientId of ['', 'a"b', 'é', 'a\nb', 'x'.repeat(129), 42])
+    expect(isClientId(clientId)).toBe(false)
+})
+
 it('narrows the separate identity/proof message and rejects nested identity [LIBID-MOD-019]', () => {
   const message = {
     type: 'identity-proof' as const,
@@ -40,7 +46,10 @@ it('narrows the separate identity/proof message and rejects nested identity [LIB
       signingKeyModulus: new Uint8Array(256),
     },
   }
-  expect(validateProofMessage('google', 1, message)).toBe(message)
+  expect(assembleResult('google', 1, message, 'client', new Uint8Array(32))).toMatchObject({
+    identity: message.identity,
+    oauthProof: { proof: message.proof },
+  })
   expect(() => validateProof({ ...message.proof, identity: message.identity })).toThrow()
 })
 

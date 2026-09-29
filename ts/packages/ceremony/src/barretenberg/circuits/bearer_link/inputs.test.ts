@@ -22,8 +22,8 @@ it('matches token then identity commitments exactly [LIBID-PROVER-001]', () => {
     expect(validateBearerLinkPublicInputs(value, inputs)).toBe(false)
 })
 
-it.each(['', 'a'.repeat(129), 'a'.repeat(4097), 'bad\n', 'é'])(
-  'rejects unsupported bearer input %j [TEST-PLAT-10]',
+it.each(['', 'a'.repeat(129), 'a'.repeat(4097), 'bad\n', 'a b', 'a\tb', 'é'])(
+  'rejects bearers an HTTP Authorization header cannot carry %j [TEST-PLAT-10]',
   (bearer) => {
     const opening = {
       start: 0,

@@ -5,16 +5,10 @@ import {
 import { b64urlDecode, isRecord } from '../../../primitives.js'
 import type { ParsedGoogleIdToken } from './token.js'
 
-/** Adapt a parsed platform token and its selected JWK to the fixed circuit ABI and delivery. */
+/** Adapt a parsed platform token and the JWK selected by its `kid` to the circuit ABI and delivery. */
 export function buildGoogleWitness(token: ParsedGoogleIdToken, jwk: unknown) {
-  if (
-    !isRecord(jwk) ||
-    jwk.kty !== 'RSA' ||
-    jwk.e !== 'AQAB' ||
-    jwk.kid !== token.kid ||
-    typeof jwk.n !== 'string'
-  ) {
-    throw new Error('JWK does not match the Google ID token')
+  if (!isRecord(jwk) || jwk.kty !== 'RSA' || jwk.e !== 'AQAB' || typeof jwk.n !== 'string') {
+    throw new Error('JWK is not a Google RS256 signing key')
   }
 
   const modulus = b64urlDecode(jwk.n)
@@ -32,6 +26,7 @@ export function buildGoogleWitness(token: ParsedGoogleIdToken, jwk: unknown) {
   const { aud, sub, email, exp } = token.claims
   return {
     inputs: buildGoogleInputs(token, modulus, authorizationDigest),
+    authorizationDigest,
     identity: { platformId: 'google' as const, oauthClientId: aud, userId: sub, userName: email },
     proofFields: { tokenExpiresAt: exp, signingKeyModulus: modulus },
   }

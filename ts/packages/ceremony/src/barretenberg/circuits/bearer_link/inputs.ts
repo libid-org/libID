@@ -2,36 +2,31 @@ import type { CorrelatedCommitment } from '../../../notary/notarize.js'
 
 const encoder = new TextEncoder()
 
-const MAX_BEARER_BYTES = 128
+/** libid-circuits v0.4.0 private bearer width. */
+export const MAX_BEARER_BYTES = 128
 
-function validateOpening(opening: CorrelatedCommitment, name: string, bearerLength: number): void {
-  if (!(opening.blinder instanceof Uint8Array) || opening.blinder.length !== 16) {
-    throw new Error(`${name} blinder must be exactly 16 bytes`)
-  }
-  if (!(opening.hash instanceof Uint8Array) || opening.hash.length !== 32) {
-    throw new Error(`${name} commitment must be exactly 32 bytes`)
-  }
-  if (opening.end - opening.start !== bearerLength) {
-    throw new Error(`${name} opening length must match the bearer`)
-  }
+/** A circuit-width HTTP bearer: visible ASCII, so no whitespace. */
+export const isBearer = (value: string): boolean =>
+  value.length <= MAX_BEARER_BYTES && /^[\x21-\x7e]+$/.test(value)
+
+/** The exact libid-circuits v0.4.0 `bearer_link` witness. */
+export interface BearerLinkInputs extends Record<string, unknown> {
+  bearer: number[]
+  bearer_len: string
+  blinder_token: number[]
+  blinder_identity: number[]
+  token_commitment: number[]
+  identity_commitment: number[]
 }
 
-/** Construct the exact libid-circuits v0.4.0 `bearer_link` witness. */
+/** Openings come from bearerOpening, which fixes their blinder width and bearer length. */
 export function buildBearerLinkWitness(
   bearer: string,
   token: CorrelatedCommitment,
   identity: CorrelatedCommitment,
-): Record<string, unknown> {
+): BearerLinkInputs {
+  if (!isBearer(bearer)) throw new Error('bearer must be 1 to 128 visible ASCII bytes')
   const bytes = encoder.encode(bearer)
-  if (bytes.length === 0 || bytes.length > MAX_BEARER_BYTES) {
-    throw new Error('bearer must contain between 1 and 128 bytes')
-  }
-  if (bytes.some((byte) => byte < 0x20 || byte > 0x7e)) {
-    throw new Error('bearer must be printable ASCII')
-  }
-  validateOpening(token, 'token', bytes.length)
-  validateOpening(identity, 'identity', bytes.length)
-
   const padded = new Uint8Array(MAX_BEARER_BYTES)
   padded.set(bytes)
   return {
@@ -47,11 +42,10 @@ export function buildBearerLinkWitness(
 /** Match the two commitments in the circuit's exact public-input order. */
 export function validateBearerLinkPublicInputs(
   value: readonly string[],
-  inputs: Record<string, unknown>,
+  inputs: BearerLinkInputs,
 ): boolean {
-  const expected = [
-    ...(inputs.token_commitment as number[]),
-    ...(inputs.identity_commitment as number[]),
-  ].map((n) => `0x${BigInt(n).toString(16).padStart(64, '0')}`)
+  const expected = [...inputs.token_commitment, ...inputs.identity_commitment].map(
+    (n) => `0x${n.toString(16).padStart(64, '0')}`,
+  )
   return value.length === 64 && value.every((v, i) => v === expected[i])
 }
