@@ -1,8 +1,11 @@
 import * as assets from '../assets/index.js'
-
-// One shared CRS serves every current circuit. The browser loader uses 4 MiB chunks
-// (at least 2^17 points); oidc_google needs 2^18. Capacity is checked in build/circuits.ts.
-export const SRS_SIZE = 2 ** 18
+import {
+  G1_POINT_BYTES,
+  G2_BYTES,
+  GRUMPKIN_POINT_BYTES,
+  GRUMPKIN_SRS_POINTS,
+  SRS_POINTS,
+} from './parameters.js'
 
 const noirWasm = (pkg: string, name: string) =>
   assets.file(`npm:@noir-lang/${pkg}/web/${name}`, `noir/1.0.0-beta.25/${name}`, {
@@ -35,9 +38,11 @@ const crsFile = (name: string, request: { range: string } | { bytes: number }) =
   })
 
 export const crs = [
-  crsFile('g1_compressed.dat', { range: `bytes=0-${SRS_SIZE * 32 - 1}` }),
-  crsFile('g2.dat', { bytes: 128 }),
-  crsFile('grumpkin_g1_v2.dat', { range: `bytes=0-${2 ** 16 * 64 - 1}` }),
+  crsFile('g1_compressed.dat', { range: `bytes=0-${SRS_POINTS * G1_POINT_BYTES - 1}` }),
+  crsFile('g2.dat', { bytes: G2_BYTES }),
+  crsFile('grumpkin_g1_v2.dat', {
+    range: `bytes=0-${GRUMPKIN_SRS_POINTS * GRUMPKIN_POINT_BYTES - 1}`,
+  }),
 ] as const
 
 export const proofAssets = [acvm, abi, bbWasm, ...crs] as const

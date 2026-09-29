@@ -1,7 +1,8 @@
+import { MAX_CEREMONY_VERSION } from '../../platforms/authorization.js'
 import { platforms as catalog, isPlatformId, type PlatformId } from '../../platforms/index.js'
 import { hasExactKeys, isRecord, origin, uint } from '../../primitives.js'
 import { readJson } from '../../response.js'
-import { isClientCredential, MAX_CEREMONY_VERSION } from '../index.js'
+import { isClientCredential } from '../index.js'
 
 export interface PlatformConfig {
   clientId: string

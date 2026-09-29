@@ -1,5 +1,7 @@
+import { MAX_CEREMONY_VERSION } from '../platforms/authorization.js'
 import { isSlug, origin, uint } from '../primitives.js'
-import { CCDP_VERSION, MAX_CEREMONY_VERSION, UUID } from './index.js'
+import { CCDP_VERSION, UUID } from './index.js'
+import { MAX_NAVIGATION_FRAGMENT_CHARS } from './limits.js'
 
 export interface OAuthReturn {
   query: string
@@ -19,7 +21,7 @@ export function readOAuthState(state: string): { version: string; ceremonyId: st
 
 function fields<K extends string>(fragment: string, keys: readonly K[]): Record<K, string> {
   const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment
-  if (raw.length > 65536) throw new TypeError('Navigation input too large')
+  if (raw.length > MAX_NAVIGATION_FRAGMENT_CHARS) throw new TypeError('Navigation input too large')
   // URLSearchParams is deliberately forgiving; reject malformed UTF-8/escapes first.
   decodeURIComponent(raw.replace(/\+/g, ' '))
   const p = new URLSearchParams(raw)

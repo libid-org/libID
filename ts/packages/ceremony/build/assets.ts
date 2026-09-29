@@ -5,6 +5,7 @@ import { gunzipSync } from 'node:zlib'
 import type { Rollup } from 'vite'
 import { build } from 'vite'
 import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.js'
+import { SRS_POINTS } from '../src/barretenberg/parameters.ts'
 import * as headers from '../src/ccdp/headers.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetPlugin } from './asset-plugin.ts'
@@ -30,7 +31,6 @@ export async function loadAssetCatalog() {
   )) as {
     assetsByPlatform: Record<string, Record<number, readonly Asset[]>>
     circuits: readonly LocalAsset[]
-    SRS_SIZE: number
   }
 }
 
@@ -129,6 +129,9 @@ function installedFile(source: string): Buffer {
 /** The key of a local asset's built URL in `urls`, as the runtime assetUrl looks it up. */
 export const assetKey = (asset: LocalAsset) => `${asset.mount}/${asset.member ?? ''}`
 
+/** Short namespace for immutable worker execution policies; not source integrity. */
+const POLICY_HASH_HEX_CHARS = 12
+
 export async function resolveAssets() {
   const catalog = await loadAssetCatalog()
   const profiles = Object.fromEntries(
@@ -189,12 +192,12 @@ export async function resolveAssets() {
       return [asset.member!.replace(/\.json$/, ''), local.get(urls[assetKey(asset)])!.bytes]
     }),
   )
-  await validateCircuitCapacity(circuits, catalog.SRS_SIZE)
+  await validateCircuitCapacity(circuits, SRS_POINTS)
   for (const [path, { bytes }] of local) bodyHashes[path] = hash(bytes)
   // Bundled code changes URL when its execution policy changes, even if its code does not.
   const policyId = hash(
     JSON.stringify(isolatedWorkers.map((profile) => responseHeaders(profile))),
-  ).slice(0, 12)
+  ).slice(0, POLICY_HASH_HEX_CHARS)
   return {
     policyId,
     urls,

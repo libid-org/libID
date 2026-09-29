@@ -1,5 +1,6 @@
 import { pkceAuthorizationUrl } from '../../authorization.js'
 import type { ReturnProfile } from '../../oauthReturn.js'
+import { profile } from './profile.js'
 
 export const pkce = true
 
@@ -8,11 +9,11 @@ export const oauthReturn: ReturnProfile = {
   transport: 'query',
   credential: 'code',
   rejected: ['id_token', 'access_token', 'refresh_token'],
-  issuer: 'https://github.com/login/oauth',
+  issuer: profile.authorizationIssuer,
 }
 
 /** Build GitHub v1's fixed public authorization request. */
 export const buildAuthorizationUrl = pkceAuthorizationUrl(
-  'https://github.com/login/oauth/authorize',
-  'read:user',
+  profile.authorizationEndpoint,
+  profile.authorizationScope,
 )

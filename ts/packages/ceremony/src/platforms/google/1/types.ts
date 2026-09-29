@@ -2,8 +2,10 @@ import {
   MAX_AUD_BYTES,
   MAX_EMAIL_BYTES,
   MAX_SUB_BYTES,
+  PUBLIC_INPUT_COUNT,
   RSA_MODULUS_BYTES,
-} from '../../../barretenberg/circuits/oidc_google/inputs.js'
+} from '../../../barretenberg/circuits/oidc_google/parameters.js'
+import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../../../barretenberg/parameters.js'
 import { fixedBytes, recordValidator, uint } from '../../../primitives.js'
 import { type Identity, identityValidator, proofBytes } from '../../types.js'
 import { validateGooglePublicInputs } from './publicInputs.js'
@@ -30,9 +32,12 @@ const proofShape = recordValidator<GoogleProofV1>('Invalid Google proof', {
   identityProof: proofBytes,
   publicInputs: (value) =>
     Array.isArray(value) &&
-    value.length === 56 &&
+    value.length === PUBLIC_INPUT_COUNT &&
     Array.from(value).every(
-      (field) => typeof field === 'string' && field.length === 66 && /^0x[0-9a-f]{64}$/.test(field),
+      (field) =>
+        typeof field === 'string' &&
+        field.length === FIELD_HEX_CHARS &&
+        FIELD_HEX_PATTERN.test(field),
     ),
   tokenExpiresAt: (value) => uint(value, Number.MAX_SAFE_INTEGER),
   signingKeyModulus: (value) => fixedBytes(value, RSA_MODULUS_BYTES),

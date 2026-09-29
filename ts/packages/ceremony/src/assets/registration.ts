@@ -1,5 +1,8 @@
 import { route } from '../ccdp/navigation.js'
 
+const WORKER_READY_TIMEOUT_MS = 15000
+const ACTIVATION_POLL_INTERVAL_MS = 50
+
 /**
  * Settle through `done` within 15 seconds. Settling, including a synchronous throw from
  * `start`, clears the timer and aborts `signal`, removing listeners registered with it.
@@ -10,7 +13,7 @@ function within(
 ): Promise<void> {
   const { promise, resolve, reject } = Promise.withResolvers<void>()
   const settled = new AbortController()
-  const timer = setTimeout(() => done(new Error(timeout)), 15000)
+  const timer = setTimeout(() => done(new Error(timeout)), WORKER_READY_TIMEOUT_MS)
   const done = (error?: unknown) => {
     clearTimeout(timer)
     settled.abort()
@@ -45,7 +48,7 @@ export async function rootWorker(): Promise<ServiceWorkerRegistration> {
         else if (worker.state === 'redundant') done(new Error('Service Worker failed'))
       }
       // Concurrent Chromium popups can miss statechange while worker.state still updates.
-      const poll = setInterval(changed, 50)
+      const poll = setInterval(changed, ACTIVATION_POLL_INTERVAL_MS)
       signal.addEventListener('abort', () => clearInterval(poll))
       worker.addEventListener('statechange', changed, { signal })
       changed()

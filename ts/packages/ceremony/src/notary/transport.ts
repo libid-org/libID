@@ -1,9 +1,10 @@
 import { hasExactKeys, origin, uint } from '../primitives.js'
-import { MAX_ATTESTED_DATA_BYTES, type NotaryAttestation } from './decode.js'
+import type { NotaryAttestation } from './decode.js'
+import { MAX_ATTESTED_DATA_BYTES, MAX_FRAME_BYTES } from './limits.js'
+import { NOTARY_SIGNATURE_BYTES } from './protocol.js'
 
-export const MAX_FRAME_BYTES = 10 * 1024 * 1024
-
-const MAX_FRAME_PAYLOAD_BYTES = MAX_FRAME_BYTES - 4
+const FRAME_LENGTH_BYTES = Uint32Array.BYTES_PER_ELEMENT
+const MAX_FRAME_PAYLOAD_BYTES = MAX_FRAME_BYTES - FRAME_LENGTH_BYTES
 
 function invalid(reason: string): never {
   throw new Error(`invalid notary transport: ${reason}`)
@@ -26,15 +27,17 @@ function byteArray(value: unknown, minimum: number, maximum: number, reason: str
  * The channel reader requires EOF; trailing bytes, extra records and malformed byte arrays reject.
  */
 export function decodeAttestationFrame(frame: Uint8Array): NotaryAttestation {
-  if (frame.length < 4) invalid('truncated length')
-  const length = new DataView(frame.buffer, frame.byteOffset, 4).getUint32(0)
+  if (frame.length < FRAME_LENGTH_BYTES) invalid('truncated length')
+  const length = new DataView(frame.buffer, frame.byteOffset, FRAME_LENGTH_BYTES).getUint32(0)
   if (length > MAX_FRAME_PAYLOAD_BYTES) invalid('payload exceeds size limit')
-  if (frame.length < length + 4) invalid('truncated payload')
-  if (frame.length > length + 4) invalid('trailing bytes')
+  if (frame.length < length + FRAME_LENGTH_BYTES) invalid('truncated payload')
+  if (frame.length > length + FRAME_LENGTH_BYTES) invalid('trailing bytes')
 
   let value: unknown
   try {
-    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(frame.subarray(4)))
+    value = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true }).decode(frame.subarray(FRAME_LENGTH_BYTES)),
+    )
   } catch {
     return invalid('malformed JSON payload')
   }
@@ -43,8 +46,8 @@ export function decodeAttestationFrame(frame: Uint8Array): NotaryAttestation {
   }
   const signature = byteArray(
     value.notary_signature,
-    65,
-    65,
+    NOTARY_SIGNATURE_BYTES,
+    NOTARY_SIGNATURE_BYTES,
     'notary signature must be exactly 65 bytes',
   )
   // Empty attested data is never a signed record; the delivered-attestation check agrees.

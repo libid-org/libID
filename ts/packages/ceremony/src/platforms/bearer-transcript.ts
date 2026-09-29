@@ -1,5 +1,6 @@
-import { isBearer, MAX_BEARER_BYTES } from '../barretenberg/circuits/bearer_link/inputs.js'
-import { isPkceValue, redirect } from '../ccdp/index.js'
+import { isBearer } from '../barretenberg/circuits/bearer_link/inputs.js'
+import { MAX_BEARER_BYTES } from '../barretenberg/circuits/bearer_link/parameters.js'
+import { redirect } from '../ccdp/index.js'
 import type { ExactHttpRequest, Transcript } from '../notary/protocol.js'
 import {
   decodePrintable,
@@ -10,8 +11,8 @@ import {
   tokenRequestBody,
 } from '../notary/transcript.js'
 import { bytesEqual } from '../primitives.js'
-import { isFormClientId } from './authorization.js'
-import { isUserId } from './types.js'
+import { isFormClientId, isPkceValue } from './authorization.js'
+import { isUserId, MAX_USER_ID_CHARS } from './types.js'
 
 export interface TokenRequestInput {
   clientId: string
@@ -24,7 +25,8 @@ export interface TokenRequestInput {
 const encoder = new TextEncoder()
 
 // A consumed redirect code that fits one header-free form field of the bounded sent transcript.
-const CODE = /^[\x21-\x7e]{1,1024}$/
+const MAX_CODE_CHARS = 1024
+const CODE = /^[\x21-\x7e]+$/
 
 /** Fixed platform layout; raw transcript bytes remain the authority for disclosure ranges. */
 export function bearerTranscript(profile: {
@@ -32,6 +34,7 @@ export function bearerTranscript(profile: {
   tokenFields(input: TokenRequestInput): [string, string][]
   identityUrl: string
   identityHeaders: Record<string, string>
+  idField: string
   quotedId: boolean
   userName: { field: string; maxBytes: number; valid(value: string): boolean }
   /** Cross-check the parsed response against the exact selected identity bytes. */
@@ -45,6 +48,7 @@ export function bearerTranscript(profile: {
   function tokenBody(input: TokenRequestInput) {
     if (
       !isFormClientId(input.clientId) ||
+      input.code.length > MAX_CODE_CHARS ||
       !CODE.test(input.code) ||
       !redirect(input.redirectUri) ||
       !isPkceValue(input.codeVerifier)
@@ -120,9 +124,9 @@ export function bearerTranscript(profile: {
       bearer,
     )
     const id = profile.quotedId
-      ? quotedRange(transcript.received, 'id')
-      : numericId(transcript.received)
-    const userId = decodePrintable(id.value, 'identity id', 20)
+      ? quotedRange(transcript.received, profile.idField)
+      : numericId(transcript.received, profile.idField)
+    const userId = decodePrintable(id.value, 'identity id', MAX_USER_ID_CHARS)
     if (!isUserId(userId)) throw new Error('Invalid identity id')
     const name = quotedRange(transcript.received, profile.userName.field)
     const userName = decodePrintable(name.value, 'identity name', profile.userName.maxBytes)
@@ -153,12 +157,13 @@ export function bearerTranscript(profile: {
 
 export type BearerTranscript = ReturnType<typeof bearerTranscript>
 
-function numericId(bytes: Uint8Array) {
-  const { start, valueStart } = jsonField(bytes, 'id')
+function numericId(bytes: Uint8Array, field: string) {
+  const { start, valueStart } = jsonField(bytes, field)
   let end = valueStart
-  while (bytes[end] >= 48 && bytes[end] <= 57) end++
+  // ASCII digits, followed only by JSON whitespace and a comma or closing brace.
+  while (bytes[end] >= 0x30 && bytes[end] <= 0x39) end++
   const value = bytes.subarray(valueStart, end)
   end = skipJsonWhitespace(bytes, end)
-  if (![44, 125].includes(bytes[end])) throw new Error('Invalid identity id terminator')
+  if (![0x2c, 0x7d].includes(bytes[end])) throw new Error('Invalid identity id terminator')
   return { value, range: { start, end: end + 1 } }
 }

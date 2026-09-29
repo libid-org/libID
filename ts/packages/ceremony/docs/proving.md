@@ -46,9 +46,10 @@ against released keys and rejects altered public inputs.
 | [bearer_link](../src/barretenberg/circuits/bearer_link/) | One private bearer opening token and identity commitments, shared by X/GitHub. |
 
 The circuit repository owns the relation and ABI. Owner asset declarations pin
-compiled circuits and their keys together; input modules and adjacent vectors
-encode that ABI. They do not define a second proof format. Google result values
-are semantic fields; X/GitHub verifier inputs come from signed attestations.
+compiled circuits and their keys together. Each circuit’s `parameters.ts` owns
+its fixed dimensions; input modules and independent vectors encode that ABI. They
+do not define a second proof format. Google result values are semantic fields;
+X/GitHub verifier inputs come from signed attestations.
 The package's private Google public-input helper supports fixture verification,
 not application-side proof verification.
 
@@ -70,10 +71,10 @@ local resources alone would break prefetch/execution agreement. There is no
 fetch interception patch hiding that limitation.
 
 Exact URL/range/fallback declarations live beside the dependency pin, not in a
-second Markdown request table. `SRS_SIZE` and its browser-loader floor rationale
-are documented there. [Capacity checks](../build/circuits.ts) inspect the released
-circuits without downloading CRS; negative real-proof capacity qualification
-remains a separate gate.
+second Markdown request table. [parameters.ts](../src/barretenberg/parameters.ts)
+owns the shared proving settings, `SRS_POINTS` and browser-loader dimensions.
+[Capacity checks](../build/circuits.ts) inspect the released circuits without
+downloading CRS; negative real-proof capacity qualification remains a separate gate.
 
 ## Upgrade checklist
 

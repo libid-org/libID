@@ -1,5 +1,6 @@
 import { pkceAuthorizationUrl } from '../../authorization.js'
 import type { ReturnProfile } from '../../oauthReturn.js'
+import { profile } from './profile.js'
 
 export const pkce = true
 
@@ -12,7 +13,7 @@ export const oauthReturn: ReturnProfile = {
 
 /** Build X v1's fixed public-client S256 authorization request. */
 export const buildAuthorizationUrl = pkceAuthorizationUrl(
-  'https://x.com/i/oauth2/authorize',
-  'tweet.read users.read',
+  profile.authorizationEndpoint,
+  profile.authorizationScope,
   [['response_type', 'code']],
 )

@@ -1,18 +1,22 @@
+import type { GoogleCircuitToken } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
-  type GoogleCircuitToken,
   MAX_AUD_BYTES,
   MAX_EMAIL_BYTES,
   MAX_SUB_BYTES,
-} from '../../../barretenberg/circuits/oidc_google/inputs.js'
+} from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
 import { b64urlDecode, isRecord, uint } from '../../../primitives.js'
 import { readJson } from '../../../response.js'
+import { profile } from './profile.js'
 import { circuitText } from './types.js'
 
 /** The token bytes and claims the fixed oidc_google circuit consumes, plus the signing key's `kid`. */
 export interface ParsedGoogleIdToken extends GoogleCircuitToken {
   kid: string
 }
+
+/** Bound a public JWKS response independently of the circuit's token dimensions. */
+const MAX_JWKS_BYTES = 128 * 1024
 
 const text = new TextDecoder('utf-8', { fatal: true })
 
@@ -27,7 +31,7 @@ function json(bytes: Uint8Array): Record<string, unknown> | null {
 
 /** The circuit also requires the fixed issuer and a verified email; neither is delivered. */
 function googleClaims(p: Record<string, unknown> | null): GoogleCircuitToken['claims'] | null {
-  if (p?.iss !== 'https://accounts.google.com' || p.email_verified !== true) return null
+  if (p?.iss !== profile.issuer || p.email_verified !== true) return null
   const { aud, sub, email, exp, nonce } = p
   return circuitText(aud, MAX_AUD_BYTES) &&
     circuitText(sub, MAX_SUB_BYTES) &&
@@ -64,13 +68,13 @@ export function acceptGoogleIdToken(idToken: string, clientId: string): ParsedGo
 
 /** Select the one published signing key carrying the token's `kid`. */
 export async function fetchSigningKey(kid: string, signal: AbortSignal): Promise<unknown> {
-  const response = await fetch('https://www.googleapis.com/oauth2/v3/certs', {
+  const response = await fetch(profile.jwksUrl, {
     credentials: 'omit',
     redirect: 'error',
     signal,
   })
   if (!response.ok) throw new Error('Signing key request failed')
-  const body = await readJson(response, 128 * 1024)
+  const body = await readJson(response, MAX_JWKS_BYTES)
   if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')
   const keys = body.keys.filter((k) => isRecord(k) && k.kid === kid)
   if (keys.length !== 1) throw new Error('Signing key is not unique')

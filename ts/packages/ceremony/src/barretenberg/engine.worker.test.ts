@@ -26,8 +26,6 @@ vi.mock('@aztec/bb.js', () => ({
   Barretenberg: { new: mocks.create },
 }))
 
-vi.mock('./barretenberg.assets.js', () => ({ SRS_SIZE: 2 ** 18 }))
-
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.resetAllMocks()

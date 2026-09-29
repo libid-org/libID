@@ -1,7 +1,17 @@
 import { fixedBytes, hasExactKeys } from '../primitives.js'
-import type { ByteRange, Directions } from './protocol.js'
+import { MAX_ATTESTED_DATA_BYTES } from './limits.js'
+import {
+  AUTHORITY_ID_BYTES,
+  type ByteRange,
+  COMMITMENT_BYTES,
+  type Directions,
+  NOTARY_SIGNATURE_BYTES,
+} from './protocol.js'
 
-export const MAX_ATTESTED_DATA_BYTES = 2 * 1024 * 1024
+// Fixed-int bincode: u32 start, u64 byte length, at least one disclosed byte.
+const MIN_REVEALED_RANGE_BYTES = 4 + 8 + 1
+// Two u32 offsets followed by the commitment digest.
+const COMMITTED_RANGE_BYTES = 4 + 4 + COMMITMENT_BYTES
 
 export interface DecodedRevealedRange {
   start: number
@@ -80,7 +90,7 @@ class Cursor {
 function readDirection(cursor: Cursor, transcriptLength: number): DecodedDirection {
   const revealed: DecodedRevealedRange[] = []
   let previousEnd = 0
-  for (let count = cursor.count(13); count > 0; count--) {
+  for (let count = cursor.count(MIN_REVEALED_RANGE_BYTES); count > 0; count--) {
     const start = cursor.u32()
     const length = cursor.u64()
     if (length === 0n) invalid('empty revealed range')
@@ -97,13 +107,13 @@ function readDirection(cursor: Cursor, transcriptLength: number): DecodedDirecti
 
   const commitments: DecodedRangeCommitment[] = []
   previousEnd = 0
-  for (let count = cursor.count(40); count > 0; count--) {
+  for (let count = cursor.count(COMMITTED_RANGE_BYTES); count > 0; count--) {
     const start = cursor.u32()
     const end = cursor.u32()
     if (start < previousEnd || end <= start || end > transcriptLength) {
       invalid('commitment ranges are empty, unordered, overlapping, or out of bounds')
     }
-    commitments.push({ start, end, commitment: cursor.bytes(32) })
+    commitments.push({ start, end, commitment: cursor.bytes(COMMITMENT_BYTES) })
     previousEnd = end
   }
 
@@ -130,7 +140,7 @@ function readDirection(cursor: Cursor, transcriptLength: number): DecodedDirecti
 export function decodeAttestedData(bytes: Uint8Array): DecodedAttestedData {
   if (bytes.length > MAX_ATTESTED_DATA_BYTES) invalid('input exceeds size limit')
   const cursor = new Cursor(bytes)
-  const authorityId = cursor.bytes(32)
+  const authorityId = cursor.bytes(AUTHORITY_ID_BYTES)
   const createdAt = cursor.u64().toString()
   const sentTranscriptLength = cursor.u32()
   const receivedTranscriptLength = cursor.u32()
@@ -154,6 +164,6 @@ export function isAttestation(v: unknown): v is NotaryAttestation {
     v.attestedData instanceof Uint8Array &&
     v.attestedData.length > 0 &&
     v.attestedData.length <= MAX_ATTESTED_DATA_BYTES &&
-    fixedBytes(v.signature, 65)
+    fixedBytes(v.signature, NOTARY_SIGNATURE_BYTES)
   )
 }

@@ -1,5 +1,7 @@
 import { b64urlEncode } from '../../../primitives.js'
+import { AUTHORIZATION_DIGEST_BYTES } from '../../authorization.js'
 import type { ReturnProfile } from '../../oauthReturn.js'
+import { profile } from './profile.js'
 
 /** Google carries the digest as the OIDC nonce; no PKCE (spec §5 table). */
 export const pkce = false
@@ -10,8 +12,6 @@ export const oauthReturn: ReturnProfile = {
   credential: 'id_token',
   rejected: ['code', 'access_token', 'refresh_token'],
 }
-
-const AUTHORIZATION_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 
 /**
  * The §3.1 authorization request: seven fields, exactly this order,
@@ -25,7 +25,7 @@ export function buildAuthorizationUrl(input: {
   state: string
   authorizationDigest: Uint8Array
 }): string {
-  if (input.authorizationDigest.length !== 32) {
+  if (input.authorizationDigest.length !== AUTHORIZATION_DIGEST_BYTES) {
     throw new Error('authorizationDigest must be exactly 32 bytes')
   }
   const query = new URLSearchParams([
@@ -33,9 +33,9 @@ export function buildAuthorizationUrl(input: {
     ['response_mode', 'fragment'],
     ['client_id', input.clientId],
     ['redirect_uri', input.redirectUri],
-    ['scope', 'openid email'],
+    ['scope', profile.authorizationScope],
     ['state', input.state],
     ['nonce', b64urlEncode(input.authorizationDigest)],
   ])
-  return `${AUTHORIZATION_ENDPOINT}?${query}`
+  return `${profile.authorizationEndpoint}?${query}`
 }

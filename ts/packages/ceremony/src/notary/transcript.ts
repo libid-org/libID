@@ -1,17 +1,18 @@
+import { FORBIDDEN_REQUEST_HEADERS } from '@libid/contracts/ceremony'
 import { FIELD_NAME, latin1, parseHead, trimField } from './http.js'
 import type { ByteRange } from './protocol.js'
+
+// JSON permits only space, tab, LF and CR between tokens.
+const JSON_WHITESPACE = [0x20, 0x09, 0x0a, 0x0d]
+const JSON_COLON = 0x3a
+const JSON_QUOTE = 0x22
 
 const decoder = new TextDecoder('utf-8', { fatal: true })
 
 // REQ-COMMON-39B applies to both request types; tokens also forbid Authorization.
-const FORBIDDEN_HEADERS = new Set([
-  'cookie',
-  'content-encoding',
-  'transfer-encoding',
-  'x-http-method-override',
-  'x-http-method',
-  'x-method-override',
-])
+const FORBIDDEN_HEADERS = new Set(
+  FORBIDDEN_REQUEST_HEADERS.filter((name) => name !== 'authorization'),
+)
 
 function invalid(reason: string): never {
   throw new Error(`Invalid transcript: ${reason}`)
@@ -19,7 +20,7 @@ function invalid(reason: string): never {
 
 /** JSON whitespace only; offsets always remain relative to the original bytes. */
 export function skipJsonWhitespace(bytes: Uint8Array, start: number): number {
-  while ([32, 9, 10, 13].includes(bytes[start])) start++
+  while (JSON_WHITESPACE.includes(bytes[start])) start++
   return start
 }
 
@@ -33,7 +34,7 @@ export function jsonField(
   let found: { start: number; valueStart: number } | undefined
   for (let start = text.indexOf(key); start >= 0; start = text.indexOf(key, start + 1)) {
     const colon = skipJsonWhitespace(transcript, start + key.length)
-    if (transcript[colon] !== 58) continue
+    if (transcript[colon] !== JSON_COLON) continue
     if (found) return invalid(`${name} is duplicated`)
     found = { start, valueStart: skipJsonWhitespace(transcript, colon + 1) }
   }
@@ -45,9 +46,9 @@ export function quotedRange(
   name: string,
 ): { range: ByteRange; valueStart: number; value: Uint8Array } {
   const field = jsonField(transcript, name)
-  if (transcript[field.valueStart] !== 34) return invalid(`${name} is not a string`)
+  if (transcript[field.valueStart] !== JSON_QUOTE) return invalid(`${name} is not a string`)
   const valueStart = field.valueStart + 1
-  const end = transcript.indexOf(0x22, valueStart)
+  const end = transcript.indexOf(JSON_QUOTE, valueStart)
   if (end < 0) return invalid(`${name} is unterminated`)
   return {
     range: { start: field.start, end: end + 1 },

@@ -9,8 +9,10 @@ export const csp = {
   websocket: 'wss: ws://localhost:* ws://127.0.0.1:*',
 } as const
 
+const IMMUTABLE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
+
 export const immutable = {
-  'Cache-Control': 'public, max-age=31536000, immutable',
+  'Cache-Control': `public, max-age=${IMMUTABLE_MAX_AGE_SECONDS}, immutable`,
   'X-Content-Type-Options': 'nosniff',
   'Cross-Origin-Resource-Policy': 'same-origin',
 } as const

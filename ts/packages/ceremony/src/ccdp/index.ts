@@ -1,8 +1,8 @@
 import type { Message, MessageType } from '@libid/popup'
 import { MAX_MESSAGE_BYTES } from '../errors.js'
 import { type OperationEvent, validateEvent } from '../events.js'
+import { isPkceValue, MAX_CEREMONY_VERSION } from '../platforms/authorization.js'
 import {
-  b64urlDecode,
   hasExactKeys,
   isRecord,
   isSlug,
@@ -13,24 +13,23 @@ import {
   uint,
   webUrl,
 } from '../primitives.js'
+import {
+  MAX_CLIENT_CREDENTIAL_BYTES,
+  MAX_CLIENT_ID_BYTES,
+  MAX_IDENTITY_TEXT_BYTES,
+  MAX_REDIRECT_URI_BYTES,
+} from './limits.js'
 
 /** Pure CCDP codecs: shape and bounds validation only; transport authentication belongs to popup. */
 export const CCDP_VERSION = 1
-
-/** `PlatformCeremonyVersion` is a U16BE authorization-digest field. */
-export const MAX_CEREMONY_VERSION = 0xffff
-
-const MAX_REDIRECT_URI_BYTES = 2048
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 /** Public OAuth application credential: bounded like clientId, without whitespace or control bytes. */
 export const isClientCredential = (value: unknown): value is string =>
-  typeof value === 'string' && value.length <= 512 && /^[\x21-\x7e]+$/.test(value)
-
-/** PKCE verifiers and S256 challenges: canonical unpadded base64url of 32 bytes. */
-export const isPkceValue = (value: unknown): value is string =>
-  typeof value === 'string' && value.length === 43 && b64urlDecode(value)?.length === 32
+  typeof value === 'string' &&
+  value.length <= MAX_CLIENT_CREDENTIAL_BYTES &&
+  /^[\x21-\x7e]+$/.test(value)
 
 export function redirect(value: unknown): value is string {
   return text(value, MAX_REDIRECT_URI_BYTES) && webUrl(value) && !/[?#]/.test(value)
@@ -41,9 +40,9 @@ function isIdentityShape(value: unknown): value is IdentityProof['identity'] {
   return (
     hasExactKeys(value, ['platformId', 'oauthClientId', 'userId', 'userName']) &&
     isSlug(value.platformId) &&
-    text(value.oauthClientId, 512) &&
-    text(value.userId, 255) &&
-    text(value.userName, 255)
+    text(value.oauthClientId, MAX_CLIENT_ID_BYTES) &&
+    text(value.userId, MAX_IDENTITY_TEXT_BYTES) &&
+    text(value.userName, MAX_IDENTITY_TEXT_BYTES)
   )
 }
 
@@ -100,7 +99,7 @@ export const ProveIdentity = codec<ProveIdentity>(
   {
     platformId: isSlug,
     platformCeremonyVersion: (value) => uint(value, MAX_CEREMONY_VERSION),
-    clientId: (value) => text(value, 512),
+    clientId: (value) => text(value, MAX_CLIENT_ID_BYTES),
     redirectUri: redirect,
     codeVerifier: (value) => value === null || isPkceValue(value),
     notaryAddress: (value) => value === null || origin(value),

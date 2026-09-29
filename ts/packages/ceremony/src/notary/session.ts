@@ -15,6 +15,9 @@ import type {
   Transcript,
 } from './protocol.js'
 
+/** One send-through-attestation budget; setup and idle bearer waiting are excluded. */
+const REQUEST_TIMEOUT_MS = 10000
+
 /** Correlated provisional openings plus a separate promise for the final attestation. */
 export interface RevealResult {
   openings: readonly CommitmentOpening[]
@@ -140,7 +143,10 @@ class Session implements NotarizationSession {
     if (this.phase !== 'prepared' || request.url !== this.url)
       throw new Error('Invalid notarization send')
     this.phase = 'busy'
-    this.timer = setTimeout(() => this.fail(new Error('Notarization request timed out')), 10000)
+    this.timer = setTimeout(
+      () => this.fail(new Error('Notarization request timed out')),
+      REQUEST_TIMEOUT_MS,
+    )
     const result = this.wait('sent')
     try {
       this.channel.port1.postMessage({ type: 'send', request } satisfies ToWorker)

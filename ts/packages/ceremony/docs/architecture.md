@@ -105,3 +105,21 @@ organized imports. Separate declarations and methods with a blank line. JSDoc
 explains meaningful input, lifetime and failure constraints; internal comments
 explain invariants rather than restating types. Run `pnpm -C ts lint` and
 `pnpm -C ts fmt:check` for mechanical checks.
+
+## Constants and profiles
+
+Constants live with their owner. [CCDP limits](../src/ccdp/limits.ts) are shared
+by message validation and document startup. [Authorization](../src/platforms/authorization.ts)
+owns digest/nonce widths and derives its wire offsets. [Notary limits](../src/notary/limits.ts)
+bound acceptance; [its protocol](../src/notary/protocol.ts) owns encoding widths.
+Local deadlines, UI timings and instrumentation caps stay beside their consumers.
+Names distinguish bytes, characters, milliseconds, seconds and CRS points.
+
+Each platform version’s `profile.ts` owns its endpoints and identity constraints.
+X/GitHub import request layouts and launch lifetimes from the pinned, data-only
+`@libid/contracts/ceremony` entry point; no EVM client or on-chain lookup is used.
+These lifetime constants describe the released policy, not live governance state.
+[Proving parameters](proving.md#circuits) belong to the released circuit/backend,
+while asset declarations keep their own release locations and headers. None of
+these definitions adds a caller configuration API. Canonical vectors and artifact
+checks retain independent expected values rather than importing every expectation.
