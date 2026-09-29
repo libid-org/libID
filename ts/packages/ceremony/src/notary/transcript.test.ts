@@ -146,14 +146,11 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60]', () => {
       expect(() => selectIdentity({ sent, received }, 'token')).toThrow()
     },
   )
-  it('pins the API version and forwards the browser User-Agent, rejecting missing or duplicate headers', () => {
+  it('pins browser-independent API version and User-Agent, rejecting missing or duplicate headers', () => {
     expect(text(request.headers['X-GitHub-Api-Version'])).toBe('2022-11-28')
-    expect(text(request.headers['User-Agent'])).toBe(navigator.userAgent)
+    expect(text(request.headers['User-Agent'])).toBe('Mozilla/5.0')
     const received = utf8('{"id":123,"login":"alice"}')
-    for (const header of [
-      'x-github-api-version: 2022-11-28',
-      `user-agent: ${navigator.userAgent}`,
-    ]) {
+    for (const header of ['x-github-api-version: 2022-11-28', 'user-agent: Mozilla/5.0']) {
       for (const replacement of ['', `${header}\r\n${header}\r\n`]) {
         expect(() =>
           selectIdentity(
