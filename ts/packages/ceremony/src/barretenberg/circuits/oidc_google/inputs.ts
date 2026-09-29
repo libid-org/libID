@@ -27,36 +27,6 @@ const BARRETT_OVERFLOW_BITS = 6n
 
 const encoder = new TextEncoder()
 
-export interface GoogleCircuitInputs extends Record<string, unknown> {
-  signing_input: number[]
-  signing_input_len: string
-  header_b64_len: string
-  payload_json: number[]
-  payload_json_len: string
-  email_offset: string
-  nonce_offset: string
-  sub_offset: string
-  email_verified_offset: string
-  exp_offset: string
-  exp_len: string
-  iss_offset: string
-  aud_offset: string
-  email_bytes: number[]
-  email_len: string
-  sub_bytes: number[]
-  sub_len: string
-  audience_bytes: number[]
-  audience_len: string
-  signature: string[]
-  redc: string[]
-  authorization_digest: number[]
-  audience_hash: string[]
-  sub_packed: string[]
-  email_packed: string[]
-  exp: string
-  modulus: string[]
-}
-
 /** Interpret the circuit's byte arrays as unsigned big-endian integers. */
 export function bytesToBigInt(bytes: Uint8Array): bigint {
   let value = 0n
@@ -96,20 +66,19 @@ export function audienceHash(audience: Uint8Array): bigint[] {
 
 const hex = (value: bigint) => `0x${value.toString(16)}`
 
+/** The first occurrence of a signed claim, which must follow the opening brace and end a member. */
 function findOffset(payload: Uint8Array, pattern: string): number {
   const needle = encoder.encode(pattern)
-  outer: for (let offset = 0; offset + needle.length <= payload.length; offset++) {
-    for (let index = 0; index < needle.length; index++) {
-      if (payload[offset + index] !== needle[index]) continue outer
-    }
-    if (offset < 1) break
-    const trailing = payload[offset + needle.length]
-    if (trailing !== 0x2c && trailing !== 0x7d) {
-      throw new Error('signed claim lacks a structural terminator')
-    }
-    return offset
+  const offset = payload.findIndex((_, start) =>
+    needle.every((byte, index) => payload[start + index] === byte),
+  )
+  if (offset < 1)
+    throw new Error(`missing canonical signed claim ${pattern.slice(0, pattern.indexOf(':'))}`)
+  const trailing = payload[offset + needle.length]
+  if (trailing !== 0x2c && trailing !== 0x7d) {
+    throw new Error('signed claim lacks a structural terminator')
   }
-  throw new Error(`missing canonical signed claim ${pattern.slice(0, pattern.indexOf(':'))}`)
+  return offset
 }
 
 /** Build the exact libid-circuits v0.4.0 `oidc_google` witness. */
@@ -117,7 +86,7 @@ export function buildGoogleInputs(
   token: GoogleCircuitToken,
   modulus: Uint8Array,
   authorizationDigest: Uint8Array,
-): GoogleCircuitInputs {
+) {
   const signingInput = encoder.encode(`${token.headerB64}.${token.payloadB64}`)
   if (signingInput.length > SIGNING_INPUT_MAX) throw new Error('Google signing input is too long')
   if (token.payload.length > PAYLOAD_JSON_MAX) throw new Error('Google token payload is too long')
@@ -129,17 +98,8 @@ export function buildGoogleInputs(
   const paddedEmail = pad(emailBytes, MAX_EMAIL_BYTES)
   const paddedSub = pad(subBytes, MAX_SUB_BYTES)
   const expString = String(exp)
-
-  const emailOffset = findOffset(token.payload, `"email":"${email}"`)
-  const nonceOffset = findOffset(token.payload, `"nonce":"${nonce}"`)
-  const subOffset = findOffset(token.payload, `"sub":"${sub}"`)
-  const emailVerifiedOffset = findOffset(token.payload, '"email_verified":true')
-  const expOffset = findOffset(token.payload, `"exp":${expString}`)
-  const issOffset = findOffset(token.payload, '"iss":"https://accounts.google.com"')
-  const audOffset = findOffset(token.payload, `"aud":"${aud}"`)
-
+  const offset = (claim: string) => String(findOffset(token.payload, claim))
   const modulusInteger = bytesToBigInt(modulus)
-  const redc = (1n << (2n * 2048n + BARRETT_OVERFLOW_BITS)) / modulusInteger
 
   return {
     signing_input: Array.from(pad(signingInput, SIGNING_INPUT_MAX)),
@@ -147,14 +107,14 @@ export function buildGoogleInputs(
     header_b64_len: String(token.headerB64.length),
     payload_json: Array.from(pad(token.payload, PAYLOAD_JSON_MAX)),
     payload_json_len: String(token.payload.length),
-    email_offset: String(emailOffset),
-    nonce_offset: String(nonceOffset),
-    sub_offset: String(subOffset),
-    email_verified_offset: String(emailVerifiedOffset),
-    exp_offset: String(expOffset),
+    email_offset: offset(`"email":"${email}"`),
+    nonce_offset: offset(`"nonce":"${nonce}"`),
+    sub_offset: offset(`"sub":"${sub}"`),
+    email_verified_offset: offset('"email_verified":true'),
+    exp_offset: offset(`"exp":${expString}`),
     exp_len: String(expString.length),
-    iss_offset: String(issOffset),
-    aud_offset: String(audOffset),
+    iss_offset: offset('"iss":"https://accounts.google.com"'),
+    aud_offset: offset(`"aud":"${aud}"`),
     email_bytes: Array.from(paddedEmail),
     email_len: String(emailBytes.length),
     sub_bytes: Array.from(paddedSub),
@@ -162,7 +122,7 @@ export function buildGoogleInputs(
     audience_bytes: Array.from(pad(audienceBytes, MAX_AUD_BYTES)),
     audience_len: String(audienceBytes.length),
     signature: limbs(bytesToBigInt(token.signature)).map(hex),
-    redc: limbs(redc).map(hex),
+    redc: limbs((1n << (2n * 2048n + BARRETT_OVERFLOW_BITS)) / modulusInteger).map(hex),
     authorization_digest: Array.from(authorizationDigest),
     audience_hash: audienceHash(audienceBytes).map(hex),
     sub_packed: pack31(paddedSub).map(hex),
@@ -171,3 +131,6 @@ export function buildGoogleInputs(
     modulus: limbs(modulusInteger).map(hex),
   }
 }
+
+/** The oidc_google witness, keyed in the circuit's ABI order. */
+export type GoogleCircuitInputs = ReturnType<typeof buildGoogleInputs>

@@ -1,7 +1,13 @@
 import { isAttestation, type NotaryAttestation } from '../../notary/decode.js'
-import { hasExactKeys, isRecord, text } from '../../primitives.js'
+import { text } from '../../primitives.js'
 import { isFormClientId } from '../authorization.js'
-import { type Identity, isIdentity, isUserId, proofBytes } from '../types.js'
+import {
+  type Identity,
+  identityValidator,
+  isUserId,
+  proofBytes,
+  recordValidator,
+} from '../types.js'
 
 export interface BearerLinkProofV1 {
   bearerLinkProof: Uint8Array
@@ -23,27 +29,15 @@ export function bearerLinkTypes<P extends 'x' | 'github'>(
   const isClientId = (value: unknown): value is string => text(value, 512) && isFormClientId(value)
   return {
     isClientId,
-    validateIdentity(value: unknown): Identity<P> {
-      if (
-        !isIdentity(value, platform, {
-          oauthClientId: isClientId,
-          userId: isUserId,
-          userName: isUserName,
-        })
-      )
-        throw new TypeError(`Invalid ${platform} identity`)
-      return value
-    },
-    validateProof(v: unknown): BearerLinkProofV1 {
-      if (
-        !isRecord(v) ||
-        !hasExactKeys(v, ['bearerLinkProof', 'tokenAttestation', 'identityAttestation']) ||
-        !proofBytes(v.bearerLinkProof) ||
-        !isAttestation(v.tokenAttestation) ||
-        !isAttestation(v.identityAttestation)
-      )
-        throw new TypeError(`Invalid ${platform} proof`)
-      return v as unknown as BearerLinkProofV1
-    },
+    validateIdentity: identityValidator(platform, {
+      oauthClientId: isClientId,
+      userId: isUserId,
+      userName: isUserName,
+    }),
+    validateProof: recordValidator<BearerLinkProofV1>(`Invalid ${platform} proof`, {
+      bearerLinkProof: proofBytes,
+      tokenAttestation: isAttestation,
+      identityAttestation: isAttestation,
+    }),
   }
 }

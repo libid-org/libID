@@ -1,59 +1,37 @@
 import type { IdentityProof } from '../ccdp/index.js'
 import * as bearerEvents from './bearer-link/events.js'
-import {
-  isClientId as githubClientId,
-  validateIdentity as githubIdentity,
-  validateProof as githubProof,
-} from './github/1/types.js'
+import * as github from './github/1/types.js'
 import * as githubUrl from './github/1/url.js'
 import * as googleEvents from './google/1/events.js'
-import {
-  isClientId as googleClientId,
-  validateIdentity as googleIdentity,
-  validateProof as googleProof,
-} from './google/1/types.js'
+import * as google from './google/1/types.js'
 import * as googleUrl from './google/1/url.js'
 import type { Identity } from './types.js'
-import {
-  isClientId as xClientId,
-  validateIdentity as xIdentity,
-  validateProof as xProof,
-} from './x/1/types.js'
+import * as x from './x/1/types.js'
 import * as xUrl from './x/1/url.js'
 
 export type { Identity } from './types.js'
 
+/** The result validators a version takes from its platform's types module. */
+const validators = <I, P>(types: {
+  validateIdentity(value: unknown): I
+  validateProof(value: unknown): P
+}) => ({ validateIdentity: types.validateIdentity, validateProof: types.validateProof })
+
 export const platforms = {
   google: {
     requiresClientCredential: false,
-    isClientId: googleClientId,
-    versions: {
-      1: {
-        ...googleUrl,
-        ...googleEvents,
-        validateIdentity: googleIdentity,
-        validateProof: googleProof,
-      },
-    },
+    isClientId: google.isClientId,
+    versions: { 1: { ...googleUrl, ...googleEvents, ...validators(google) } },
   },
   x: {
     requiresClientCredential: false,
-    isClientId: xClientId,
-    versions: {
-      1: { ...xUrl, ...bearerEvents, validateIdentity: xIdentity, validateProof: xProof },
-    },
+    isClientId: x.isClientId,
+    versions: { 1: { ...xUrl, ...bearerEvents, ...validators(x) } },
   },
   github: {
     requiresClientCredential: true,
-    isClientId: githubClientId,
-    versions: {
-      1: {
-        ...githubUrl,
-        ...bearerEvents,
-        validateIdentity: githubIdentity,
-        validateProof: githubProof,
-      },
-    },
+    isClientId: github.isClientId,
+    versions: { 1: { ...githubUrl, ...bearerEvents, ...validators(github) } },
   },
 } as const
 
@@ -68,11 +46,9 @@ export type SupportedCeremonyVersion<P extends PlatformId> = P extends PlatformI
 
 export type ProofByPlatformVersion = {
   [P in PlatformId]: {
-    [V in SupportedCeremonyVersion<P>]: (typeof platforms)[P]['versions'][V] extends {
-      validateProof(value: unknown): infer Proof
-    }
-      ? Proof
-      : never
+    [V in SupportedCeremonyVersion<P>]: ReturnType<
+      (typeof platforms)[P]['versions'][V]['validateProof']
+    >
   }
 }
 

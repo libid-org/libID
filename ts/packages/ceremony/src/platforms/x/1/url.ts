@@ -1,4 +1,4 @@
-import { isPkceValue } from '../../../ccdp/index.js'
+import { pkceAuthorizationUrl } from '../../authorization.js'
 import type { ReturnProfile } from '../../oauthReturn.js'
 
 export const pkce = true
@@ -10,26 +10,9 @@ export const oauthReturn: ReturnProfile = {
   rejected: ['id_token', 'access_token', 'refresh_token', 'iss'],
 }
 
-const AUTHORIZATION_ENDPOINT = 'https://x.com/i/oauth2/authorize'
-
 /** Build X v1's fixed public-client S256 authorization request. */
-export function buildAuthorizationUrl(input: {
-  clientId: string
-  redirectUri: string
-  state: string
-  codeChallenge: string | null
-}): string {
-  if (input.codeChallenge === null || !isPkceValue(input.codeChallenge)) {
-    throw new Error('codeChallenge must be exactly 43 base64url characters')
-  }
-  const query = new URLSearchParams([
-    ['response_type', 'code'],
-    ['client_id', input.clientId],
-    ['redirect_uri', input.redirectUri],
-    ['scope', 'tweet.read users.read'],
-    ['state', input.state],
-    ['code_challenge', input.codeChallenge],
-    ['code_challenge_method', 'S256'],
-  ])
-  return `${AUTHORIZATION_ENDPOINT}?${query}`
-}
+export const buildAuthorizationUrl = pkceAuthorizationUrl(
+  'https://x.com/i/oauth2/authorize',
+  'tweet.read users.read',
+  [['response_type', 'code']],
+)
