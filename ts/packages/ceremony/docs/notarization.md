@@ -74,9 +74,10 @@ sizes use that internal record. The delivered `NotaryAttestation` contains only
 original `attestedData` and `signature` bytes. Signed bytes are never re-encoded;
 the cross-language fixture and digest live beside the decoder tests.
 
-Client bounds the delivered bytes without reparsing them. Applications forward this
+Client bounds delivered bytes and decodes the token attestation to derive
+[retention expiry](client.md#results-and-errors). Applications forward the original
 opaque evidence to their ledger adapter/verifier; the separate `Identity` is for
-local presentation. The decoder is internal to notarization. Neither endpoint verifies
+local presentation. The decoder remains a private package API. Neither endpoint verifies
 notary signatures locally. The ledger verifier authenticates the original bytes
 and derives authoritative identity and proof inputs from them.
 

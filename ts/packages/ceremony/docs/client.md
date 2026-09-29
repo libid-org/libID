@@ -162,20 +162,30 @@ containing separate `identity` and `oauthProof` values:
 
 - `identity`: exact platform ID, OAuth client ID, user ID and user name. The name
   is Google's signed email, X's username or GitHub's login, without normalization.
-- `oauthProof`: selected `platformCeremonyVersion`, fresh `authorizationNonce`
-  and the platform-specific `proof`.
+- `oauthProof`: selected `platformCeremonyVersion`, fresh `authorizationNonce`,
+  platform-specific `proof` and `expiresAt` in Unix seconds.
+
+Client derives `expiresAt` after structural validation: Google's signed JWT
+`tokenExpiresAt`, or the X/GitHub token attestation's `createdAt` plus 3600 seconds.
+The identity attestation does not extend that window. The shared launch lifetime
+mirrors [the contract profiles](https://github.com/libid-org/libid-contracts/blob/main/solidity/contracts/ceremony/profiles.json);
+split it if the X and GitHub values diverge. Consumers can discard retained proofs
+when block time is greater than or equal to `expiresAt`. This is retention metadata,
+not a validity guarantee: the ledger verifier's current checks remain authoritative.
+The field is computed locally and does not change CCDP or platform proof payloads.
 
 Google's proof contains `identityProof`, `tokenExpiresAt` and
 `signingKeyModulus`. X/GitHub contain `bearerLinkProof`, `tokenAttestation` and
 `identityAttestation`. A `NotaryAttestation` preserves original `attestedData`
-and `signature` bytes; decoded records stay internal to notarization.
+and `signature` bytes; decoded records are not exposed in the result.
 Use `OAuthProof<'google'>['proof']`, for example, to name a payload type without
 importing private modules. A literal platform argument infers its result type;
 a dynamic `PlatformId` produces the corresponding union.
 
 **Accepted means structurally accepted, not cryptographically verified.** Client
 checks the selected platform/version, exact shapes, bounds and OAuth client ID.
-It does not repeat evidence parsing, verify notary signatures or verify ZK proofs. The ledger adapter must preserve signed bytes
+For X/GitHub it decodes the token attestation to derive expiry, without parsing
+HTTP evidence or verifying notary signatures or ZK proofs. The ledger adapter must preserve signed bytes
 and combine the result with the original operation inputs; the separate `identity`
 is not authoritative ledger evidence.
 

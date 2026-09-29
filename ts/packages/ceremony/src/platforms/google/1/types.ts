@@ -13,6 +13,9 @@ export interface GoogleProofV1 {
   signingKeyModulus: Uint8Array
 }
 
+/** Google's signed JWT exp alone determines proof expiry. */
+export const proofExpiresAt = (proof: GoogleProofV1): number => proof.tokenExpiresAt
+
 /** Circuit-bound claims are printable ASCII without quotes, so length is the byte length. */
 export const circuitText = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length <= max && /^[\x20-\x21\x23-\x7e]+$/.test(value)
