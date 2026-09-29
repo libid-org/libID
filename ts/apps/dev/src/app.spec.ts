@@ -730,7 +730,9 @@ for (const blocked of [false, true]) {
     await third.popup.close()
     await page.evaluate(() => {
       const encode = TextEncoder.prototype.encode
-      TextEncoder.prototype.encode = () => {
+      // Fail only the next launch's startup input, not unrelated encodes such as error text.
+      TextEncoder.prototype.encode = function (this: TextEncoder, input?: string) {
+        if (input !== 'libid/ceremony/dev') return encode.call(this, input)
         TextEncoder.prototype.encode = encode
         throw new Error('Input preparation failed after opening the popup')
       }

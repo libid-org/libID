@@ -263,13 +263,15 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
     Object.defineProperty(this, 'launchUrl', { writable: false })
-    void this.connection.closed.then((end) =>
+    void this.connection.closed.then((end) => {
+      // A finished run ignores its connection ending; don't build an error nobody receives.
+      if (this.state === 'done') return
       this.fail(
         end.outcome === 'failed'
           ? new PopupError(end.code)
           : new CeremonyError(this.operation(), messages.connectionEnded, { status: 'closed' }),
-      ),
-    )
+      )
+    })
   }
 
   onEvent(listener: (event: CeremonyEvent) => void): () => void {

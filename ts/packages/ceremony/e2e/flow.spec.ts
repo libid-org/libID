@@ -437,18 +437,21 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
 })
 
 test('two independently supplied connections cannot replace each other [LIBID-BROWSER-014]', async ({
+  app,
   bridge,
   page,
   context,
   provider,
-  launch,
 }) => {
   const states = new Set<string>()
   await provider((state) => {
     states.add(state)
     return `${bridge}/auth/callback#error=access_denied&state=${state}`
   })
-  await launch()
+  await page.goto(app)
+  await page.waitForFunction(() => window.ready)
+  // Both launches start before either popup opens.
+  await page.locator('#launch').click()
   await page.locator('#launch').click()
   try {
     await expect.poll(() => page.evaluate(() => window.completed.length)).toBe(2)
