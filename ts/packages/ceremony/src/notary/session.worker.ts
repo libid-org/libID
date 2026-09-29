@@ -37,11 +37,6 @@ export interface NotaryHttpRequest {
   body: unknown
 }
 
-interface NotaryHttpResponse {
-  status: number
-  headers: [string, number[]][]
-}
-
 interface TlsnModule {
   default(options: { module_or_path: string }): Promise<void>
   initialize(logging: null, threads: number): Promise<void>
@@ -53,7 +48,7 @@ interface TlsnModule {
     network: 'Bandwidth'
   }) => {
     setup(io: Io): Promise<void>
-    send_request(session: null, request: NotaryHttpRequest): Promise<NotaryHttpResponse>
+    send_request(session: null, request: NotaryHttpRequest): Promise<unknown>
     transcript(): { sent: Uint8Array; recv: Uint8Array }
     reveal(
       reveal: {
@@ -87,19 +82,14 @@ function waitForOpen(socket: WebSocket): Promise<void> {
 
 function socketIo(socket: WebSocket): Io {
   const chunks: Uint8Array[] = []
-  const readers: Array<{
-    resolve(value: Uint8Array | null): void
-    reject(reason: Error): void
-  }> = []
-  let ended: null | Error = null
-  let closed = false
+  const readers: PromiseWithResolvers<Uint8Array | null>[] = []
+  // The first error or close ends reading once buffered chunks drain; later events are ignored.
+  let end: { error: Error | null } | undefined
 
   const settle = (error: Error | null) => {
-    if (closed || ended) return
-    if (error) ended = error
-    else closed = true
-    while (readers.length) {
-      const reader = readers.shift()!
+    if (end) return
+    end = { error }
+    for (const reader of readers.splice(0)) {
       if (error) reader.reject(error)
       else reader.resolve(null)
     }
@@ -121,9 +111,10 @@ function socketIo(socket: WebSocket): Io {
     read() {
       const chunk = chunks.shift()
       if (chunk) return Promise.resolve(chunk)
-      if (ended) return Promise.reject(ended)
-      if (closed) return Promise.resolve(null)
-      return new Promise((resolve, reject) => readers.push({ resolve, reject }))
+      if (end) return end.error ? Promise.reject(end.error) : Promise.resolve(null)
+      const reader = Promise.withResolvers<Uint8Array | null>()
+      readers.push(reader)
+      return reader.promise
     },
     write(data) {
       // The pinned SDK catches synchronous throws but discards write promises.

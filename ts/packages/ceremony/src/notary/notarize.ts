@@ -1,9 +1,9 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { concatBytes } from '@noble/hashes/utils.js'
-import { bytesEqual } from '../primitives.js'
+import { bytesEqual, fixedBytes } from '../primitives.js'
 import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
-import type { ByteRange, CommitmentOpening, Reveals, Transcript } from './protocol.js'
+import type { ByteRange, CommitmentOpening, Directions, Reveals, Transcript } from './protocol.js'
 
 /** Transcript acceptance limits, also supplied to the Prover as its setup limits. */
 export const MAX_SENT_BYTES = 4 * 1024
@@ -15,14 +15,8 @@ export interface CommitRange extends ByteRange {
 }
 
 export interface NotarizationPlan {
-  reveal: {
-    sent: ByteRange[]
-    received: ByteRange[]
-  }
-  commit: {
-    sent: CommitRange[]
-    received: CommitRange[]
-  }
+  reveal: Directions<ByteRange[]>
+  commit: Directions<CommitRange[]>
 }
 
 export interface HashOpening {
@@ -32,10 +26,7 @@ export interface HashOpening {
 
 export interface CorrelatedCommitment extends ByteRange, HashOpening {}
 
-export interface Correlated {
-  sent: readonly CorrelatedCommitment[]
-  received: readonly CorrelatedCommitment[]
-}
+export type Correlated = Directions<readonly CorrelatedCommitment[]>
 
 function invalid(reason: string): never {
   throw new Error(`invalid notarization: ${reason}`)
@@ -157,12 +148,9 @@ function correlateOpenings(
   const unmatched = new Set(planned.keys())
   const correlated: CorrelatedCommitment[] = []
   for (const opening of openings) {
-    if (!(opening.hash instanceof Uint8Array) || opening.hash.length !== 32) {
-      invalid(`${direction} opening hash must be exactly 32 bytes`)
-    }
-    if (!(opening.blinder instanceof Uint8Array) || opening.blinder.length !== 16) {
+    if (!fixedBytes(opening.hash, 32)) invalid(`${direction} opening hash must be exactly 32 bytes`)
+    if (!fixedBytes(opening.blinder, 16))
       invalid(`${direction} opening blinder must be exactly 16 bytes`)
-    }
 
     const matches = [...unmatched].filter((index) =>
       bytesEqual(
@@ -190,17 +178,11 @@ function correlateOpenings(
 export function correlateReveal(
   transcript: Transcript,
   plan: NotarizationPlan,
-  openings: { sent: readonly HashOpening[]; received: readonly HashOpening[] },
+  openings: Directions<readonly HashOpening[]>,
 ): Correlated {
-  return {
-    sent: correlateOpenings(transcript.sent, plan.commit.sent, openings.sent, 'sent'),
-    received: correlateOpenings(
-      transcript.received,
-      plan.commit.received,
-      openings.received,
-      'received',
-    ),
-  }
+  const correlate = (direction: 'sent' | 'received') =>
+    correlateOpenings(transcript[direction], plan.commit[direction], openings[direction], direction)
+  return { sent: correlate('sent'), received: correlate('received') }
 }
 
 /** Require the signed record to match the transcript, planned reveals and correlated openings. */
@@ -234,9 +216,7 @@ export function bearerOpening(
   range: ByteRange,
   bearer: string,
 ) {
-  const matches = openings.filter(
-    (o) => o.direction === direction && o.start === range.start && o.end === range.end,
-  )
+  const matches = openings.filter((o) => o.direction === direction && sameRange(o, range))
   if (matches.length !== 1) throw new Error('Bearer opening is not unique')
   const opening = matches[0],
     bytes = new TextEncoder().encode(bearer)

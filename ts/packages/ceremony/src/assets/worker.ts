@@ -11,12 +11,7 @@ export function startWorker(scope: ServiceWorkerGlobalScope): void {
     ...r,
     url: new URL(r.url, scope.location.origin).href,
   })
-  const allowed = new Map(
-    allowedRequests.map((r) => {
-      const spec = absolute(r)
-      return [requestKey(spec), spec]
-    }),
-  )
+  const allowed = new Map(allowedRequests.map(absolute).map((spec) => [requestKey(spec), spec]))
   const sameOriginClient = (source: ExtendableMessageEvent['source']) =>
     !!source && 'url' in source && new URL(source.url).origin === scope.location.origin
 

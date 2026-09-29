@@ -123,10 +123,8 @@ export class AssetCache {
       return spec.range ? new Response(bytes, { status: 206, headers }) : stored
     })().finally(dispatched.resolve)
     const complete = response
-      .then(
-        () => writing,
-        () => writing,
-      )
+      .catch(() => {})
+      .then(() => writing)
       .finally(() => {
         this.pending.delete(key)
       })

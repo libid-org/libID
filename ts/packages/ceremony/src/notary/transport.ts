@@ -1,4 +1,4 @@
-import { hasExactKeys, isRecord, origin } from '../primitives.js'
+import { hasExactKeys, isRecord, origin, uint } from '../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES, type NotaryAttestation } from './decode.js'
 
 export const MAX_FRAME_BYTES = 10 * 1024 * 1024
@@ -17,9 +17,7 @@ export function deriveNotaryWebSocketUrl(notaryAddress: string): string {
 
 function byteArray(value: unknown, minimum: number, maximum: number, reason: string): Uint8Array {
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) invalid(reason)
-  for (const byte of value) {
-    if (!Number.isInteger(byte) || byte < 0 || byte > 255) invalid('invalid byte element')
-  }
+  if (!value.every((byte) => uint(byte, 255))) invalid('invalid byte element')
   return Uint8Array.from(value)
 }
 
