@@ -21,6 +21,10 @@ exercise failures and scheduling; they do not establish real proving or runtime
 concurrency. Workspace CI runs build, unit tests, lint and formatting separately
 from the browser job.
 
+`pnpm -C ts --filter @libid/ceremony test:coverage` measures production-source
+coverage into `coverage/`. On each push to `main`, CI publishes its line
+coverage to the `badges` branch for the README badge.
+
 ## Distribution checks
 
 ```sh

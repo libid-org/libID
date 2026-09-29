@@ -20,6 +20,7 @@ harness/.env
 ts/packages/popup/e2e/dist/
 ts/packages/*/test-results/
 ts/packages/*/playwright-report/
+ts/packages/*/coverage/
 
 # Ceremony local tooling and qualification output
 .ceremony-local/
