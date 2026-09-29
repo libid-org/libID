@@ -24,7 +24,6 @@ const MAX_CONFIG_BYTES = 64 * 1024
 /** Validate public configuration and derive the fixed callback URL from the validated Bridge origin. */
 export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
   if (
-    !isRecord(v) ||
     !hasExactKeys(v, ['ccdpOrigin', 'platforms']) ||
     !origin(v.ccdpOrigin) ||
     !isRecord(v.platforms)
@@ -43,7 +42,6 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
 
 function validatePlatformConfig(id: PlatformId, p: unknown): PlatformConfig {
   if (
-    !isRecord(p) ||
     !hasExactKeys(p, ['clientId', 'ceremonyVersions'], ['clientCredential']) ||
     ((catalog[id].requiresClientCredential || Object.hasOwn(p, 'clientCredential')) &&
       !isClientCredential(p.clientCredential)) ||

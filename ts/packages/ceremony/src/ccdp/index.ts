@@ -37,7 +37,6 @@ export function redirect(value: unknown): value is string {
 /** Shared identity shape; each platform slice checks its own platform ID and byte limits. */
 function isIdentityShape(value: unknown): value is IdentityProof['identity'] {
   return (
-    isRecord(value) &&
     hasExactKeys(value, ['platformId', 'oauthClientId', 'userId', 'userName']) &&
     isSlug(value.platformId) &&
     text(value.oauthClientId, 512) &&

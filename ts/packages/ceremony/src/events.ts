@@ -46,7 +46,6 @@ export const isCoreEvent = (event: string): event is CoreEvent =>
 /** Exact bounded records are validated at the transport boundary, independently of subscriptions. */
 export function validateEvent(value: unknown): asserts value is OperationEvent {
   if (
-    !isRecord(value) ||
     !hasExactKeys(value, ['event', 'timestamp'], ['phase', 'instrumentation']) ||
     !isSlug(value.event) ||
     typeof value.timestamp !== 'number' ||
@@ -64,7 +63,6 @@ export function validateEvent(value: unknown): asserts value is OperationEvent {
 /** Core events carry no operation ID; attributes are a few scalar measurements. */
 function validateInstrumentation(metadata: unknown, core: boolean): void {
   if (
-    !isRecord(metadata) ||
     !hasExactKeys(metadata, [], ['operationId', 'attributes']) ||
     ('operationId' in metadata && (!text(metadata.operationId, 64) || core))
   )
@@ -114,19 +112,19 @@ export const CeremonyStage = {
   },
 }
 
-function projectedStage(event: CeremonyEvent): CeremonyStage | undefined {
-  if (!('phase' in event)) return
-  if (event.event === 'prefetch-dispatch' && event.phase === 'started') return 'preparation'
-  if (event.event === 'prover' && event.phase === 'started') return 'proof-preparation'
-  if (event.event === 'authorization')
-    return event.phase === 'started' ? 'authorization' : 'proof-preparation'
-  if (
-    (event.event === 'token-fetch' || event.event === 'token-attestation') &&
-    event.phase === 'started'
-  )
-    return 'notarization'
-  if (event.event === 'zk-proof-generation' && event.phase === 'started') return 'zk-proving'
-}
+/** The stage each operation occurrence projects, keyed by `event/phase`. */
+const projections = new Map<string, CeremonyStage>([
+  ['prefetch-dispatch/started', 'preparation'],
+  ['authorization/started', 'authorization'],
+  ['authorization/finished', 'proof-preparation'],
+  ['prover/started', 'proof-preparation'],
+  ['token-fetch/started', 'notarization'],
+  ['token-attestation/started', 'notarization'],
+  ['zk-proof-generation/started', 'zk-proving'],
+])
+
+const projectedStage = (event: CeremonyEvent): CeremonyStage | undefined =>
+  'phase' in event ? projections.get(`${event.event}/${event.phase}`) : undefined
 
 /** A local feed shared by the client and popup documents; observers never control its producer. */
 export class Events {
