@@ -1,5 +1,8 @@
 /** Bound bytes while reading, not after allocating an attacker-sized response. */
-export async function readBody(response: Response, maximum: number): Promise<Uint8Array> {
+export async function readBody(
+  response: Response,
+  maximum: number,
+): Promise<Uint8Array<ArrayBuffer>> {
   const reader = response.body?.getReader()
   if (!reader) throw new Error('Missing response body')
   const chunks: Uint8Array[] = []
@@ -18,6 +21,7 @@ export async function readBody(response: Response, maximum: number): Promise<Uin
   } finally {
     reader.releaseLock()
   }
+  // A copy loop rather than a spread: large assets arrive in thousands of chunks.
   const bytes = new Uint8Array(length)
   let offset = 0
   for (const chunk of chunks) {
@@ -25,4 +29,11 @@ export async function readBody(response: Response, maximum: number): Promise<Uin
     offset += chunk.length
   }
   return bytes
+}
+
+/** Strict UTF-8 JSON under the same read bound; native parsing keeps a duplicate key's last value. */
+export async function readJson(response: Response, maximum: number): Promise<unknown> {
+  return JSON.parse(
+    new TextDecoder('utf-8', { fatal: true }).decode(await readBody(response, maximum)),
+  )
 }

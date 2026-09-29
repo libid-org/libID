@@ -1,7 +1,7 @@
 import { type ConnectionEnd, PopupError } from '@libid/popup'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Events } from '../../events.js'
-import { popupErrorMessages } from '../ui-messages.js'
+import { messages, popupErrorMessages } from '../ui-messages.js'
 import { startCallback } from './callback.js'
 
 const { accept, current, view, navigate, send, terminal } = vi.hoisted(() => ({
@@ -156,6 +156,18 @@ it.each(
   expect(view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
   expect(accept).not.toHaveBeenCalled()
 })
+
+it.each([null, { textContent: '' }, { textContent: '[' }])(
+  'reports a missing or unparsable deployment slot as invalid inputs: %o [KIT-010]',
+  (slot) => {
+    vi.stubGlobal('document', { getElementById: () => slot })
+    startCallback()
+    expect(view).toHaveBeenCalledExactlyOnceWith(
+      messages.returnToApplication(messages.invalidCallbackInputs),
+    )
+    expect(accept).not.toHaveBeenCalled()
+  },
+)
 
 it('clears a double-slash callback path without treating it as another host [CSP-005]', () => {
   locationInput.pathname = '//auth/callback'

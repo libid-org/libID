@@ -1,4 +1,4 @@
-import { CeremonyStage, type Events } from '../../events.js'
+import { CeremonyStage, type Events, type StageEvent } from '../../events.js'
 import { messages } from '../ui-messages.js'
 import { proofProgress } from './progress.js'
 
@@ -20,8 +20,18 @@ export function view(title: string) {
   return { root, label }
 }
 
+/** Documents never project the authorization stage, so no platform name is needed. */
+function stageLabel(event: StageEvent): string {
+  if (event.status === 'active') return CeremonyStage.message(event.stage, '')
+  if (event.status === 'completed') return messages.proofReceived
+  if (event.status === 'denied') return messages.returnToApplication(messages.authorizationDeclined)
+  return messages.returnToApplication(
+    event.message ?? (event.status === 'closed' ? messages.interrupted : messages.failed),
+  )
+}
+
 /** The same local projection as the Application; subscriptions never mediate wire delivery. */
-export function eventView(events: Events, platform: string) {
+export function eventView(events: Events) {
   const { root, label } = view(messages.preparation)
   const bar = document.createElement('progress')
   bar.setAttribute('aria-label', messages.progress)
@@ -34,6 +44,11 @@ export function eventView(events: Events, platform: string) {
   hint.setAttribute('role', 'status')
   let timer: ReturnType<typeof setTimeout> | undefined
   let offProgress = () => {}
+  const teardown = () => {
+    clearTimeout(timer)
+    hint.remove()
+    style.remove()
+  }
   const off = events.onStage((event) => {
     if (
       event.status === 'active' &&
@@ -45,22 +60,10 @@ export function eventView(events: Events, platform: string) {
         hint.textContent = messages.slowProving
         root.append(hint)
       }, 15000)
-    label.textContent =
-      event.status === 'active'
-        ? CeremonyStage.message(event.stage, platform)
-        : event.status === 'completed'
-          ? messages.proofReceived
-          : event.status === 'denied'
-            ? messages.returnToApplication(messages.authorizationDeclined)
-            : messages.returnToApplication(
-                event.message ??
-                  (event.status === 'closed' ? messages.interrupted : messages.failed),
-              )
+    label.textContent = stageLabel(event)
     if (event.status !== 'active') {
-      clearTimeout(timer)
-      hint.remove()
+      teardown()
       bar.remove()
-      style.remove()
     }
   })
   return {
@@ -102,9 +105,7 @@ export function eventView(events: Events, platform: string) {
     stop() {
       off()
       offProgress()
-      style.remove()
-      clearTimeout(timer)
-      hint.remove()
+      teardown()
     },
     message(text: string) {
       label.textContent = text

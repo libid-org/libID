@@ -1,4 +1,5 @@
 export {
+  type CeremonyEvent,
   CeremonyStage,
   type CeremonyStatus,
   type OperationEvent,
@@ -10,6 +11,5 @@ export * from '../../index.js'
 export {
   type CCDPClient,
   type Ceremony,
-  type CeremonyEvent,
   createCCDPClient,
 } from './ceremony.js'

@@ -539,9 +539,10 @@ test('Callback clears unsupported versions and unconfigured direct visits locall
     await expect(page).toHaveURL(bridge + path.split(/[?#]/)[0])
   }
   await page.goto(`${ccdp}/ccdp/callback.html#state=v1.${id}`)
-  // Native JSON error wording differs across engines; the bounded text remains local.
-  await expect(page.getByRole('status')).toContainText('Return to your application.')
-  await expect(page.getByRole('status')).toContainText(/JSON/i)
+  // An unconfigured deployment slot fails with package-owned text, locally.
+  await expect(page.getByRole('status')).toHaveText(
+    'Invalid Callback inputs Return to your application.',
+  )
   expect(page.url()).toBe(`${ccdp}/ccdp/callback.html`)
   expect(outbound).toEqual([])
 })
