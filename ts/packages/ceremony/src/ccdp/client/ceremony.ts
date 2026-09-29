@@ -342,7 +342,11 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.publish(event)
   }
 
-  private listen<M extends Message>(type: MessageType<M>, handler: (message: M) => void): void {
+  private listen<M extends Message>(
+    binding: Binding,
+    type: MessageType<M>,
+    handler: (message: M) => void,
+  ): void {
     const listener = receiver((m: M) => {
       if (this.state === 'done') return
       try {
@@ -355,7 +359,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         )
       }
     })
-    this.binding!.remove.push(this.connection.on(type, listener.receive))
+    binding.remove.push(this.connection.on(type, listener.receive))
     this.off.push(listener.clear)
   }
 
@@ -393,8 +397,8 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       this.reject = reject
     })
     try {
-      this.listen(EventMessage, (event) => this.receiveEvent(event))
-      this.listen(IdentityProof, (m) => {
+      this.listen(binding, EventMessage, (event) => this.receiveEvent(event))
+      this.listen(binding, IdentityProof, (m) => {
         this.expect('proving')
         const result = assembleResult(
           this.platform,
@@ -412,7 +416,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         })
         resolve?.(result)
       })
-      this.listen(UserDenied, () => {
+      this.listen(binding, UserDenied, () => {
         this.expect('proving')
         if (this.proofWorkStarted) throw new Error('Denial after proof work began')
         const resolve = this.resolve
@@ -422,7 +426,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
         })
         resolve?.({ status: 'denied' })
       })
-      this.listen(CeremonyFailed, (message) =>
+      this.listen(binding, CeremonyFailed, (message) =>
         this.fail(new CeremonyError(message.event, message.message)),
       )
       this.publish({ event: 'prefetch-dispatch', phase: 'started', timestamp: now() })

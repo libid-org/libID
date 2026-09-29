@@ -322,3 +322,25 @@ it.each(['send', 'reveal', 'attestation'])(
     await expect(session.send(request)).rejects.toThrow('Notarization request timed out')
   },
 )
+
+it('rejects a final attestation before openings instead of leaving reveal pending', async () => {
+  vi.useFakeTimers()
+  const { messages, terminate } = runtime()
+  const notary = new Notarization('https://notary.test', new AbortController().signal)
+  const ready = notary.prepare(target)
+  const port = messages[0].port
+  port.postMessage({ type: 'prepared' })
+  const session = await ready
+  const sent = session.send(request)
+  port.postMessage({
+    type: 'sent',
+    transcript: { sent: new Uint8Array(), received: new Uint8Array() },
+  })
+  await sent
+  const revealing = session.reveal({ sent: [], received: [] })
+  port.postMessage({ type: 'attestation', attestation: {} })
+  await expect(revealing).rejects.toThrow('Unexpected notarization result')
+  expect(notary.signal.aborted).toBe(true)
+  expect(terminate).toHaveBeenCalledOnce()
+  expect(vi.getTimerCount()).toBe(0)
+})

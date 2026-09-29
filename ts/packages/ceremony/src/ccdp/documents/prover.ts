@@ -8,7 +8,7 @@ import { implementationFor, type PlatformId } from '../../platforms/index.js'
 import { Event as EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
-import { eventView } from './ui.js'
+import { eventView, view } from './ui.js'
 
 const implementations: Record<
   PlatformId,
@@ -21,130 +21,151 @@ const implementations: Record<
   github: () => import('../../platforms/github/1/prover.js'),
 }
 
+type ProverState =
+  | { phase: 'connecting' | 'ready'; input: ReturnType<typeof readProver> }
+  | { phase: 'proving' | 'ended' }
+
 /** Accept the private callback fragment, run the selected pipeline and deliver one terminal result. */
 export async function startProver(fragment: string): Promise<void> {
-  let connection: PopupConnection<Message> | undefined,
-    retained: ReturnType<typeof readProver> | undefined,
-    started = false,
-    ended = false,
-    ready = false
-  const controller = new AbortController()
-  const events = new Events()
-  let ui: ReturnType<typeof eventView> | undefined
-  const cleanup = () => {
-    ended = true
-    retained = undefined
-    controller.abort()
-    ui?.stop()
-  }
-  const fail = (error?: unknown) => {
-    if (ended) return
+  try {
+    const input = readProver(fragment)
+    const connection = PopupConnection.accept(PopupWindow.current(fragment, { scope: '/' }), {
+      fallback,
+      connectionId: input.ceremonyId,
+      allowedApplicationOrigins: [input.applicationOrigin],
+      isolationFallbackUrl: location.origin + route('prover/fallback'),
+    })
+    await new ProverDocument(connection, input).start()
+  } catch (error) {
     const failure = ceremonyError(error, 'prover')
-    events.emit({
+    view(messages.returnToApplication(failure.message))
+    reportFailure(undefined, failure)
+  }
+}
+
+/** Owns readiness, the one-shot OAuth capture and cleanup for this document. */
+class ProverDocument {
+  private state: ProverState
+  private readonly controller = new AbortController()
+  private readonly events = new Events()
+  private readonly ui = eventView(this.events, '')
+
+  constructor(
+    private readonly connection: PopupConnection<Message>,
+    input: ReturnType<typeof readProver>,
+  ) {
+    this.state = { phase: 'connecting', input }
+  }
+
+  async start(): Promise<void> {
+    try {
+      this.ui.message(messages.proofPreparation)
+      this.connection.on(ProveIdentity, (request) => {
+        void this.prove(request).catch((error) => this.fail(error))
+      })
+      void this.connection.closed.then((end) =>
+        this.fail(
+          end.outcome === 'failed' ? new PopupError(end.code) : new Error(messages.proverClosed),
+        ),
+      )
+      await this.connection.ready
+      if (this.controller.signal.aborted) return
+      if (
+        !crossOriginIsolated ||
+        typeof SharedArrayBuffer === 'undefined' ||
+        typeof Worker === 'undefined'
+      )
+        throw new Error(messages.isolationUnavailable)
+      await claimRootWorker()
+      if (this.controller.signal.aborted) return
+      if (this.state.phase !== 'connecting') throw new Error(messages.invalidProvingRequest)
+      this.state.phase = 'ready'
+      if (location.pathname === route('prover/fallback'))
+        this.produce({ event: 'prover-fallback', timestamp: performance.timeOrigin })
+      this.produce({ event: 'prover', phase: 'started', timestamp: now() })
+    } catch (error) {
+      this.fail(error)
+    }
+  }
+
+  private async prove(request: ProveIdentity): Promise<void> {
+    if (this.state.phase === 'ended') return
+    if (
+      this.state.phase !== 'ready' ||
+      request.platformCeremonyVersion !== 1 ||
+      !Object.hasOwn(implementations, request.platformId)
+    )
+      throw new Error(messages.invalidProvingRequest)
+    const { input } = this.state
+    this.state = { phase: 'proving' }
+    try {
+      this.ui.trackProof(implementationFor(request.platformId as PlatformId, 1).progressWeights)
+    } catch {
+      /* Presentation cannot prevent proof execution. */
+    }
+    const module = await implementations[request.platformId as PlatformId]()
+    this.controller.signal.throwIfAborted()
+    const result = await module.prove({
+      request,
+      ceremonyId: input.ceremonyId,
+      oauthReturn: input.oauthReturn,
+      signal: this.controller.signal,
+      emit: (event) => this.produce(event),
+    })
+    await this.deliver(result)
+  }
+
+  private async deliver(result: Omit<IdentityProof, 'type'> | null): Promise<void> {
+    if (this.controller.signal.aborted) return
+    if (result === null) {
+      this.connection.send({ type: 'user-denied' })
+      this.events.emit({ status: 'denied', timestamp: now() })
+      this.cleanup()
+      return
+    }
+    const message = IdentityProof.decode({ type: 'identity-proof', ...result })
+    try {
+      await this.ui.finishProof()
+    } catch {
+      /* Presentation cannot prevent proof delivery. */
+    }
+    if (this.controller.signal.aborted) return
+    this.connection.send(message)
+    this.cleanup()
+    this.ui.delivered()
+  }
+
+  private produce(event: OperationEvent): void {
+    if (this.state.phase === 'ended') return
+    const message = EventMessage.decode({ type: 'event', ...event })
+    try {
+      this.connection.send(message)
+    } catch (error) {
+      if (coreEvents.includes(event.event as CoreEvent)) {
+        this.fail(error)
+        return
+      }
+      // Observation loss cannot alter proving.
+    }
+    this.events.emit({ ...event, status: 'active' })
+  }
+
+  private cleanup(): void {
+    this.state = { phase: 'ended' }
+    this.controller.abort()
+    this.ui.stop()
+  }
+
+  private fail(error: unknown): void {
+    if (this.state.phase === 'ended') return
+    const failure = ceremonyError(error, 'prover')
+    this.events.emit({
       status: 'failed',
       event: failure.event,
       message: failure.message,
       timestamp: now(),
     })
-    cleanup()
-    reportFailure(connection, failure)
-  }
-  function produce(event: OperationEvent): void {
-    if (ended) return
-    const message = EventMessage.decode({ type: 'event', ...event })
-    if (coreEvents.includes(event.event as CoreEvent)) {
-      try {
-        connection!.send(message)
-      } catch (error) {
-        fail(error)
-        return
-      }
-    } else
-      try {
-        connection!.send(message)
-      } catch {
-        /* Observation loss cannot alter proving. */
-      }
-    events.emit({ ...event, status: 'active' })
-  }
-  try {
-    retained = readProver(fragment)
-    ui = eventView(events, '')
-    ui.message(messages.proofPreparation)
-    connection = PopupConnection.accept(PopupWindow.current(fragment, { scope: '/' }), {
-      fallback,
-      connectionId: retained.ceremonyId,
-      allowedApplicationOrigins: [retained.applicationOrigin],
-      isolationFallbackUrl: location.origin + route('prover/fallback'),
-    })
-
-    connection.on(ProveIdentity, (request) => {
-      if (ended) return
-      if (
-        !ready ||
-        started ||
-        request.platformCeremonyVersion !== 1 ||
-        !Object.hasOwn(implementations, request.platformId)
-      ) {
-        fail(new Error(messages.invalidProvingRequest))
-        return
-      }
-      started = true
-      try {
-        ui!.trackProof(implementationFor(request.platformId as PlatformId, 1).progressWeights)
-      } catch {
-        /* Presentation cannot prevent proof execution. */
-      }
-      const context: ProverContext = {
-        request,
-        ceremonyId: retained!.ceremonyId,
-        oauthReturn: retained!.oauthReturn,
-        signal: controller.signal,
-        emit: (event) => produce(event),
-      }
-      retained = undefined
-      void implementations[request.platformId as keyof typeof implementations]()
-        .then((module) => module.prove(context))
-        .then(async (result) => {
-          if (ended) return
-          if (result === null) {
-            connection!.send({ type: 'user-denied' })
-            events.emit({ status: 'denied', timestamp: now() })
-            cleanup()
-            return
-          }
-          const message = IdentityProof.decode({ type: 'identity-proof', ...result })
-          try {
-            await ui!.finishProof()
-          } catch {
-            /* Presentation cannot prevent proof delivery. */
-          }
-          if (ended) return
-          connection!.send(message)
-          cleanup()
-          ui!.delivered()
-        })
-        .catch(fail)
-    })
-    void connection.closed.then((end) => {
-      if (!ended)
-        fail(end.outcome === 'failed' ? new PopupError(end.code) : new Error(messages.proverClosed))
-    })
-    await connection.ready
-    if (ended) return
-    if (
-      !crossOriginIsolated ||
-      typeof SharedArrayBuffer === 'undefined' ||
-      typeof Worker === 'undefined'
-    )
-      throw new Error(messages.isolationUnavailable)
-    await claimRootWorker()
-    if (ended) return
-    ready = true
-    if (location.pathname === route('prover/fallback'))
-      produce({ event: 'prover-fallback', timestamp: performance.timeOrigin })
-    produce({ event: 'prover', phase: 'started', timestamp: now() })
-  } catch (error) {
-    fail(error)
+    this.cleanup()
+    reportFailure(this.connection, failure)
   }
 }
