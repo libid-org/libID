@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { createServer as createHttpServer, request as proxyRequest } from 'node:http'
 import { createServer } from 'node:https'
 import { join } from 'node:path'
-import { packageDir } from '../build/release.ts'
+import { packageDir } from '../build/sources.ts'
 import { prepareCallback } from './callback.ts'
 import { makeCertificate } from './tls.mjs'
 

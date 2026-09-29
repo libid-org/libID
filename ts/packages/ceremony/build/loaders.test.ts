@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 import type { DistributionMetadata } from './distribution.ts'
-import { packageDir } from './release.ts'
+import { packageDir } from './sources.ts'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
 

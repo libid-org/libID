@@ -5,7 +5,8 @@ import { test } from 'node:test'
 import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
-import { packageDir } from './release.ts'
+import { parseCsp } from './profiles.ts'
+import { packageDir } from './sources.ts'
 import { errorHeaders } from './sws.ts'
 
 const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
@@ -31,10 +32,12 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
     new Map(Object.entries(graph.files).map(([path, physical]) => [physical, graph.headers[path]])),
   )
   assert.equal(exact.length, Object.keys(graph.files).length)
-  assert.deepEqual(graph.headers['/404.html'], {
-    'Content-Type': 'text/html; charset=utf-8',
-    ...errorHeaders,
-  })
+  assert.deepEqual(
+    graph.headers['/404.html'],
+    Object.fromEntries(
+      new Headers({ 'Content-Type': 'text/html; charset=utf-8', ...errorHeaders }),
+    ),
+  )
   for (const [path, headers] of Object.entries(graph.headers)) {
     const physical = graph.files[path],
       body = readFileSync(join(out, 'public', physical))
@@ -178,7 +181,7 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   assert.equal(new Headers(a.headers).has('ETag'), false)
   assert.equal(new Headers(a.headers).has('Content-Encoding'), false)
   assert.equal(new Headers(a.headers).has('Access-Control-Allow-Origin'), false)
-  assert.equal(headers['Cache-Control'], 'no-cache')
+  assert.equal(headers['cache-control'], 'no-cache')
   for (const broken of [
     html.replace('__LIBID_CALLBACK_CONFIG__', ''),
     `${html}__LIBID_CALLBACK_CONFIG__`,
@@ -192,7 +195,7 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
       ]),
     )
   assert.throws(() =>
-    prepareCallback(html, { ...headers, 'Content-Security-Policy': "script-src 'self'" }, [
+    prepareCallback(html, { ...headers, 'content-security-policy': "script-src 'self'" }, [
       ['https://app.test'],
       'https://ccdp.test',
     ]),
@@ -205,12 +208,12 @@ test('CCDP contains no ledger implementation or build-time notary mapping [LIBID
   assert.ok(!modules.some((path) => /\/ledger\//.test(path)))
   assert.equal(Object.hasOwn(graph, 'ledgerFixture'), false)
   for (const [path, headers] of Object.entries(graph.headers)) {
-    const policy = headers['Content-Security-Policy'] ?? ''
+    const policy = headers['content-security-policy'] ?? ''
     // Prior immutable responses remain available for already-open documents.
     if (!path.startsWith('/ccdp/assets/') || Object.hasOwn(graph.graph, path.slice(1)))
       assert.ok(!policy.includes('notary.lib.id'), path)
     if (path === '/ccdp/v1/prover' || path === '/ccdp/v1/prover/fallback') {
-      const sources = policy.split('connect-src ')[1].split(';')[0].trim().split(/\s+/)
+      const sources = parseCsp(policy).get('connect-src')!
       for (const source of ["'self'", 'https:', 'wss:', 'ws://localhost:*', 'ws://127.0.0.1:*'])
         assert.ok(sources.includes(source), path)
       assert.ok(
@@ -298,9 +301,6 @@ test('browser graph contains resolved locations only [LIBID-MOD-021]', () => {
     const file = join(out, 'public', path)
     if (!existsSync(file)) continue // Embedded protocol entries have no separate script resource.
     const code = readFileSync(file, 'utf8')
-    assert.doesNotMatch(
-      code,
-      /libid-circuits-0\.3\.0|tlsn-wasm-0\.3\.0-rc\.1\.tar|npm:@noir|npm:@aztec/,
-    )
+    assert.doesNotMatch(code, /libid-circuits-|tlsn-wasm-|releases\/download\/|npm:@/)
   }
 })

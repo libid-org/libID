@@ -1,4 +1,5 @@
 import type { Node } from 'estree'
+import { type Rollup, transformWithEsbuild } from 'vite'
 
 export type Edit = readonly [start: number, end: number, replacement: string]
 
@@ -21,4 +22,16 @@ export function applyEdits(code: string, edits: Edit[]): string {
   for (const [start, end, text] of edits.sort((a, b) => b[0] - a[0]))
     code = code.slice(0, start) + text + code.slice(end)
   return code
+}
+
+/** Lower TypeScript to the ES2022 Rollup parses; other modules parse as they are. */
+export async function parseModule(
+  context: Pick<Rollup.PluginContext, 'parse'>,
+  source: string,
+  id: string,
+) {
+  const code = id.endsWith('.ts')
+    ? (await transformWithEsbuild(source, id, { loader: 'ts', target: 'es2022' })).code
+    : source
+  return { code, ast: context.parse(code) }
 }

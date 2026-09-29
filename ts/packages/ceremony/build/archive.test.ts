@@ -7,7 +7,7 @@ import { Header } from 'tar'
 import { executionWorker } from '../src/ccdp/headers.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetHeaders, externalRequest, loadAssetCatalog, resolveAssets } from './assets.ts'
-import { cache, packageDir } from './release.ts'
+import { cache, packageDir } from './sources.ts'
 
 function tar(entries: { path: string; type?: 'File' | 'SymbolicLink' | 'Link'; body?: string }[]) {
   const chunks: Buffer[] = []

@@ -1,20 +1,28 @@
 import { dirname, join, resolve } from 'node:path'
 import type { CallExpression, Node, ObjectExpression } from 'estree'
-import { type Plugin, transformWithEsbuild } from 'vite'
+import type { Plugin } from 'vite'
+import type { AssetRequest } from '../src/assets/index.js'
 import type { ResolvedAssets } from './assets.ts'
-import { applyEdits, type Edit, replacement, span, walk } from './ast.ts'
-import { packageDir } from './release.ts'
+import { applyEdits, type Edit, parseModule, replacement, span, walk } from './ast.ts'
+import { packageDir } from './sources.ts'
 
+/** Exact request sets per profile and the Worker allowlist, derived from the emitted Prover. */
+export type AssetManifest = {
+  requestsByProfile: Record<string, AssetRequest[]>
+  allowedRequests: AssetRequest[]
+}
+
+/** Without `manifest`, a bundle importing it fails to build instead of reading an empty one. */
 export function assetPlugin(
-  data?: Pick<ResolvedAssets, 'urls' | 'moduleUrls' | 'requestsByProfile' | 'allowedRequests'>,
+  data?: Pick<ResolvedAssets, 'urls' | 'moduleUrls'>,
+  manifest?: AssetManifest,
 ): Plugin {
   return {
     name: 'ceremony-assets',
     enforce: 'pre',
     async transform(source, id) {
       if (!data || !id.endsWith('.ts') || !source.includes('assets/index.js')) return
-      const code = (await transformWithEsbuild(source, id, { loader: 'ts', target: 'es2022' })).code
-      const ast = this.parse(code)
+      const { code, ast } = await parseModule(this, source, id)
       const namespaces = new Set<string>(),
         bindings = new Map<string, string>(),
         archives = new Set<string>()
@@ -104,27 +112,12 @@ export function assetPlugin(
       if (id === 'virtual:ceremony-assets') return `\0${id}`
     },
     load(id) {
-      if (data && id === join(packageDir, 'src/assets/index.ts'))
-        return `
-        import {urls} from 'virtual:ceremony-assets';
-        export * as headers from ${JSON.stringify(join(packageDir, 'src/ccdp/headers.ts'))};
-        export function archive(_source,mount){return {member(member){return {url:urls[mount+'/'+member]}}}}
-        export function file(_source,mount){return {url:urls[mount+'/']}}
-        export function external(source,options){return {url:source,isExternal:true,...options}}
-        export function assetUrl(asset){if(!asset.url)throw new Error('Missing built asset');return asset.isExternal ? asset.url : new URL(asset.url,location.origin).href}
-      `
       for (const [module, url] of Object.entries(data?.moduleUrls ?? {}))
         if (id.endsWith(`/${module}`)) return `export default ${JSON.stringify(url)};`
-      if (id === '\0virtual:ceremony-assets') {
-        const runtime = {
-          urls: data?.urls ?? {},
-          requestsByProfile: data?.requestsByProfile ?? {},
-          allowedRequests: data?.allowedRequests ?? [],
-        }
-        return Object.entries(runtime)
+      if (id === '\0virtual:ceremony-assets')
+        return Object.entries({ urls: data?.urls ?? {}, ...manifest })
           .map(([k, v]) => `export const ${k}=${JSON.stringify(v)};`)
           .join('\n')
-      }
     },
   }
 }

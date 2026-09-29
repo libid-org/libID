@@ -1,4 +1,4 @@
-import { scriptHash } from '../build/profiles.ts'
+import { parseCsp, scriptHash } from '../build/profiles.ts'
 
 /** Reference Bridge data insertion only; this is not a production Bridge server. */
 export function prepareCallback(
@@ -11,7 +11,6 @@ export function prepareCallback(
   const slot = `<script id="libid-callback-config" type="application/json">${marker}</script>`
   const headers = new Headers(sourceHeaders)
   const policy = headers.get('Content-Security-Policy') ?? ''
-  const scriptPolicies = [...policy.matchAll(/(?:^|;)\s*script-src\s+([^;]+)/g)]
   const scripts = [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi)]
   const executable = scripts.filter(([script]) => script !== slot)
   const code =
@@ -25,8 +24,7 @@ export function prepareCallback(
     !html.includes(slot) ||
     scripts.length !== 2 ||
     !code ||
-    scriptPolicies.length !== 1 ||
-    scriptPolicies[0][1].trim() !== scriptHash(code) ||
+    parseCsp(policy).get('script-src')?.join(' ') !== scriptHash(code) ||
     new URL(ccdpOrigin).origin !== ccdpOrigin ||
     !(
       ccdpOrigin.startsWith('https://') ||
