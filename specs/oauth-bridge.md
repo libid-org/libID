@@ -1,3 +1,7 @@
+---
+title: OAuth Bridge Server
+---
+
 # OAuth Bridge Server
 
 This document defines the HTTP and deployment contract for the OAuth bridge

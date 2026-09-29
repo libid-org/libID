@@ -1,3 +1,7 @@
+---
+title: Ceremony Cross-Document Protocol (CCDP)
+---
+
 # Ceremony Cross-Document Protocol (CCDP)
 
 This document defines the browser protocol across the Application and

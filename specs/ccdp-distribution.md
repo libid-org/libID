@@ -1,3 +1,7 @@
+---
+title: CCDP Distribution
+---
+
 # CCDP Distribution
 
 This document defines the static browser resources and proving assets required
