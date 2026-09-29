@@ -25,6 +25,11 @@ window.results = new Map()
 document.querySelector('#bridge')!.textContent = oauthBridge
 document.querySelector('#notary')!.textContent = ledger.notaryAddress()
 const names: Record<PlatformId, string> = { google: 'Google', x: 'X', github: 'GitHub' }
+/** A new `tag` element with `properties` assigned. */
+const element = <K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  properties: Partial<HTMLElementTagNameMap[K]> = {},
+) => Object.assign(document.createElement(tag), properties)
 let client: CCDPClient | undefined
 async function initialize() {
   try {
@@ -67,20 +72,18 @@ const operationNames: Record<string, string> = {
   'proof-backend-initialization': 'ZK backend initialization',
   'zk-proof-generation': 'ZK proof generation',
 }
-const attributeTitles = new Map([
-  [
-    'openings-ms',
+const attributeTitles: Record<string, string> = {
+  'openings-ms':
     'TLSNotary proof work until commitment openings arrive, including worker delivery.',
-  ],
-  ['finalization-ms', 'From openings until the final correlated attestation arrives.'],
-])
+  'finalization-ms': 'From openings until the final correlated attestation arrives.',
+}
 function attributeList(attributes: Readonly<Record<string, string | number | boolean>>) {
   const values = document.createElement('dl')
   for (const [key, value] of Object.entries(attributes)) {
     const term = document.createElement('dt')
     const description = document.createElement('dd')
     term.textContent = key.replace(/-(ms|bytes)$/, '').replaceAll('-', ' ')
-    term.title = attributeTitles.get(key) ?? ''
+    term.title = attributeTitles[key] ?? ''
     description.textContent =
       typeof value === 'number' && key.endsWith('-ms')
         ? `${value.toFixed(0)} ms`
@@ -102,35 +105,22 @@ function beginRun(platform: PlatformId, id: string) {
   const now = () => performance.timeOrigin + performance.now()
   const row = document.createElement('tr')
   row.dataset.ceremonyId = id
-  const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—'].map((text) => {
-    const cell = document.createElement('td')
-    cell.textContent = text
-    row.append(cell)
-    return cell
-  })
-  const outcome = document.createElement('strong')
-  outcome.className = 'run-outcome'
-  outcome.textContent = 'Running'
-  const message = document.createElement('p')
-  message.className = 'run-status'
+  const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—'].map((text) =>
+    element('td', { textContent: text }),
+  )
+  const outcome = element('strong', { className: 'run-outcome', textContent: 'Running' })
+  const message = element('p', { className: 'run-status', textContent: 'Opening authorization…' })
   message.setAttribute('role', 'status')
-  message.textContent = 'Opening authorization…'
   cells[2]!.replaceChildren(outcome, message)
+  const timings = element('ol', { className: 'operation-timings' })
+  const timingsCell = element('td')
+  timingsCell.append(timings)
+  const close = element('button', { type: 'button', textContent: 'Close', disabled: true })
+  const actions = element('td', { className: 'run-actions' })
+  actions.append(close)
+  row.append(...cells, timingsCell, actions)
   document.querySelector('#history')!.prepend(row)
   document.querySelector<HTMLElement>('#history-empty')!.hidden = true
-  const timings = document.createElement('ol')
-  timings.className = 'operation-timings'
-  const timingsCell = document.createElement('td')
-  timingsCell.append(timings)
-  row.append(timingsCell)
-  const actions = document.createElement('td')
-  const close = document.createElement('button')
-  close.type = 'button'
-  close.textContent = 'Close'
-  close.disabled = true
-  actions.append(close)
-  actions.className = 'run-actions'
-  row.append(actions)
   const operations = new Map<
     string,
     { name: string; started: number; finished?: number; cell: HTMLLIElement; label: HTMLElement }

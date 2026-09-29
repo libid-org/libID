@@ -3,7 +3,7 @@ import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { ty
 import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
 import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
 import { prepareCallback } from './callback.js'
-import { expect, test } from './fixtures.js'
+import { artifactRequests, expect, test } from './fixtures.js'
 import { verifyBrowserProof } from './verify.js'
 
 for (const wildcard of [false, true])
@@ -130,15 +130,7 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
   provider,
   launch,
 }) => {
-  const graph = JSON.parse(
-    readFileSync(
-      new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
-      'utf8',
-    ),
-  )
-  const asset = graph.requestsByProfile['google/1'].find((r: { url: string }) =>
-    r.url.endsWith('/oidc_google.json'),
-  ).url
+  const asset = artifactRequests('google/1').find((r) => r.url.endsWith('/oidc_google.json'))!.url
   const control = assetControl(asset)
   const before = (await (await request.get(`${control}&hold=1`)).json()).count
   const seed = await context.newPage()
@@ -184,18 +176,9 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
   request,
   assetControl,
 }, testInfo) => {
-  const graph = JSON.parse(
-    readFileSync(
-      new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
-      'utf8',
-    ),
-  )
-  const asset = graph.requestsByProfile['google/1']
-    .filter(
-      (r: { url: string; range?: string }) =>
-        r.url.startsWith('/') && !r.range && r.url.endsWith('.js'),
-    )
-    .sort((a: { bytes: number }, b: { bytes: number }) => a.bytes - b.bytes)[0]
+  const asset = artifactRequests('google/1')
+    .filter((r) => r.url.startsWith('/') && !r.range && r.url.endsWith('.js'))
+    .sort((a, b) => a.bytes! - b.bytes!)[0]
   const control = assetControl(asset.url)
   const before = (await (await request.get(control)).json()).count
   const args = [...(testInfo.project.use.launchOptions?.args ?? [])]
@@ -531,13 +514,7 @@ test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASS
   context,
 }) => {
   test.setTimeout(90000)
-  const graph = JSON.parse(
-    readFileSync(
-      new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
-      'utf8',
-    ),
-  )
-  const resources = graph.requestsByProfile['x/1'] as { url: string }[]
+  const resources = artifactRequests('x/1')
   const moduleUrl = ccdp + resources.find((r) => r.url.endsWith('/tlsn_wasm.js'))!.url
   const wasmUrl = ccdp + resources.find((r) => r.url.endsWith('/tlsn_wasm_bg.wasm'))!.url
   const snippet = resources.find((r) =>

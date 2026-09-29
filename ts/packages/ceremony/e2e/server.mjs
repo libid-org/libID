@@ -53,7 +53,7 @@ for (const secure of [true, false]) {
     { allowedApplicationOrigins: allowedOrigins, ccdpOrigin: ccdp },
   )
   // Each route returns true once it has answered; unmatched paths fall through to 404.
-  const appRoute = (req, res, path, send) => {
+  const appRoute = (path, send) => {
     if (staticModule(send, path)) return true
     if (path === '/ui')
       return send(
@@ -68,7 +68,7 @@ for (const secure of [true, false]) {
         ),
       )
   }
-  const bridgeRoute = (req, res, path, send) => {
+  const bridgeRoute = (path, send, req) => {
     if (path === '/api/v1/ceremony/config') {
       const origin = req.headers.origin
       const admitted =
@@ -146,7 +146,7 @@ for (const secure of [true, false]) {
       'Content-Type': 'application/json',
     })
   }
-  const ccdpRoute = async (req, res, path, send) => {
+  const ccdpRoute = async (path, send, req, res) => {
     if (path === '/qualification-control') return qualificationControl(req, send)
     if (path === '/ccdp/v1/seed') return send(html('<title>Worker seed</title>'))
 
@@ -202,7 +202,7 @@ for (const secure of [true, false]) {
       }
       if (!['GET', 'HEAD'].includes(req.method)) return send('Method not allowed', {}, 405)
       try {
-        if (await route(req, res, path, send)) return
+        if (await route(path, send, req, res)) return
       } catch (error) {
         // A harness fault, such as a missing build output, must not pass for a 404.
         console.error(`Harness failure on ${req.method} ${path}:`, error)

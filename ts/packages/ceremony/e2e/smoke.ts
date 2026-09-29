@@ -33,12 +33,8 @@ Object.assign(window, {
       threads: 2,
     })
     try {
-      const result = await engine.prove(inputs)
-      return {
-        proof: Array.from(result.proof),
-        publicInputs: result.publicInputs,
-        runtime: result.runtime,
-      }
+      const { proof, publicInputs, runtime } = await engine.prove(inputs)
+      return { proof: Array.from(proof), publicInputs, runtime }
     } finally {
       engine.destroy()
     }
@@ -58,7 +54,7 @@ Object.assign(window, {
     )
     try {
       const notarization = new Notarization(`http://localhost:${notary}`, abort.signal)
-      const results = await Promise.all(
+      return await Promise.all(
         Array.from({ length: count }, async (_, index) => {
           // Deliberately invalid fixture credentials exercise both public GitHub endpoints,
           // not a successful OAuth exchange or authenticated identity.
@@ -100,7 +96,6 @@ Object.assign(window, {
           }
         }),
       )
-      return results
     } catch (error) {
       // These are unauthenticated fixture requests. Report only operation positions
       // and elapsed time, including when the production deadline wins first.
