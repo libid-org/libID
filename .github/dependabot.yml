@@ -1,4 +1,3 @@
-# Coverage and manual-only pins: https://github.com/libid-org/libID/blob/main/DEPENDENCIES.md
 version: 2
 updates:
   - package-ecosystem: "npm"
