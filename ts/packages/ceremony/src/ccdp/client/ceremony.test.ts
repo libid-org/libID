@@ -80,7 +80,7 @@ const proof = {
 }
 
 describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
-  it('uses distinct origins and frozen input; never receives raw OAuth return', async () => {
+  it('uses distinct origins and frozen input; never receives raw OAuth return [TEST-CCDP-01] [TEST-CCDP-03]', async () => {
     const { connection: c, ceremony, data } = setup()
     const events: string[] = []
     ceremony.onEvent((e) => events.push(e.status === 'active' ? `${e.event}.${e.phase}` : e.status))
@@ -164,7 +164,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     await expect(result).rejects.toBeInstanceOf(CeremonyError)
     expect(events.at(-1)).toMatchObject({ status: 'failed', event: 'authorization' })
   })
-  it('rejects invalid predecessors', async () => {
+  it('rejects invalid predecessors [TEST-CCDP-05]', async () => {
     const { connection: c, ceremony } = setup()
     const pending = ceremony.proveUserIdentity()
     c.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
@@ -174,7 +174,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       message: expect.stringContaining('sequence'),
     })
   })
-  it('denial resolves only after start; observer failure is inert', async () => {
+  it('denial resolves only after start; observer failure is inert [TEST-CCDP-07]', async () => {
     const { connection: c, ceremony } = setup()
     ceremony.onEvent(() => {
       throw new Error('observer')
@@ -308,7 +308,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
   ).not.toThrow()
 })
 
-it('rejects changed form serialization for X/GitHub client IDs, not signed Google audiences', () => {
+it('rejects changed form serialization for X/GitHub client IDs, not signed Google audiences [TEST-COMMON-09]', () => {
   for (const platform of ['x', 'github'])
     for (const clientId of ['a+b', 'a b', 'a%2Fb', 'é'])
       expect(() =>
@@ -658,7 +658,7 @@ it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08
   expect(connection.send).not.toHaveBeenCalled()
 })
 
-it('only core readiness events advance the protocol; preserves occurrence times [LIBID-BROWSER-006]', async () => {
+it('only core readiness events advance the protocol; preserves occurrence times [LIBID-BROWSER-006] [TEST-CCDP-06]', async () => {
   const { ceremony, connection: c } = setup()
   const events: CeremonyEvent[] = []
   ceremony.onEvent((e) => events.push(e))
@@ -711,7 +711,7 @@ it('readiness without the optional authorization observation still permits denia
   expect(stages).toContain('proof-preparation')
 })
 
-it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] [LIBID-MOD-020]', async () => {
+it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] [LIBID-MOD-020] [TEST-PLAT-17]', async () => {
   // A second catalog entry tests selection only; it is not a new or qualified Google profile.
   Reflect.set(platforms.google.versions, '2', platforms.google.versions[1])
   try {

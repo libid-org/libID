@@ -12,7 +12,7 @@ import { prefetchFragment, proverFragment, readPrefetch, readProver } from './na
 
 const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 
-describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
+describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
   const samples = [
     [
       CeremonyFailed,
@@ -147,7 +147,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022]', () => {
     ])
       expect(() => Event.decode({ ...message, ...extra })).toThrow()
   })
-  it('preserves private return components with one outer encoding [LIBID-OAUTH-026]', () => {
+  it('preserves private return components with one outer encoding [LIBID-OAUTH-026] [TEST-CCDP-03]', () => {
     const input = { query: `?code=a%2Bb&state=v1.${id}`, fragment: '' }
     expect(readProver(String(proverFragment(id, 'https://app.test', input)))).toEqual({
       ceremonyId: id,

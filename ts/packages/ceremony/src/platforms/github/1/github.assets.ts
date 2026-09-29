@@ -1,8 +1,1 @@
-import { proofAssets } from '../../../barretenberg/barretenberg.assets.js'
-import {
-  bearerCircuit as circuit,
-  bearerVerificationKey as verificationKey,
-} from '../../../barretenberg/circuits/bearer_link/bearer_link.assets.js'
-import { notaryAssets } from '../../../notary/notary.assets.js'
-
-export const assets = [...proofAssets, ...notaryAssets, circuit, verificationKey] as const
+export { assets } from '../../bearer-link/bearer-link.assets.js'

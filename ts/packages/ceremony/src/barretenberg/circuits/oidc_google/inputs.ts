@@ -55,13 +55,15 @@ export interface GoogleCircuitInputs extends Record<string, unknown> {
   modulus: string[]
 }
 
-function bytesToBigInt(bytes: Uint8Array): bigint {
+/** Interpret the circuit's byte arrays as unsigned big-endian integers. */
+export function bytesToBigInt(bytes: Uint8Array): bigint {
   let value = 0n
   for (const byte of bytes) value = (value << 8n) | BigInt(byte)
   return value
 }
 
-function limbs(value: bigint): string[] {
+/** Split an RSA integer into the ABI's least-significant-first hexadecimal limbs. */
+export function limbs(value: bigint): string[] {
   const mask = (1n << LIMB_BITS) - 1n
   return Array.from(
     { length: NUM_LIMBS },

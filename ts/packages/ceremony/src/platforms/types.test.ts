@@ -5,7 +5,7 @@ import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from './index
 import { validateProofMessage } from './index.js'
 import { validateIdentity as x } from './x/1/types.js'
 
-it('checks profile identity encodings without reading evidence [LIBID-MOD-019]', () => {
+it('checks profile identity encodings without reading evidence [LIBID-MOD-019] [TEST-PLAT-02]', () => {
   for (const [validate, identity, badNames] of [
     [
       google,

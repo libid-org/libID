@@ -61,7 +61,7 @@ it.each([
   expect(parse(query)).toBeNull()
 })
 
-it('does not accept issuer fields for X or mixed query/fragment returns', () => {
+it('does not accept issuer fields for X or mixed query/fragment returns [TEST-PLAT-18]', () => {
   expect(parseCodeOAuthReturn({ query: `?code=test&state=v1.test${iss}`, fragment: '' })).toBeNull()
   expect(
     parseCodeOAuthReturn(

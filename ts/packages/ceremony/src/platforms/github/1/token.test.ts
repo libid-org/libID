@@ -27,7 +27,7 @@ function transcript(request: ExactHttpRequest, body = '{"access_token":"ghu_fixt
   }
 }
 
-it('reveals the complete canonical five-field request, including the public credential [LIBID-PROVER-004]', () => {
+it('reveals the complete canonical five-field request, including the public credential [LIBID-PROVER-004] [TEST-PLAT-12]', () => {
   const request = buildTokenRequest(input)
   expect(request.url).toBe('https://github.com/login/oauth/access_token')
   const body = decoder.decode(request.body)
@@ -53,7 +53,7 @@ it('reveals the complete canonical five-field request, including the public cred
   ).toEqual(['"access_token":"', '"'])
 })
 
-describe('complete form validation [LIBID-PROVER-004]', () => {
+describe('complete form validation [LIBID-PROVER-004] [TEST-PLAT-14]', () => {
   const original = decoder.decode(buildTokenRequest(input).body)
   it.each([
     `${original}&code=second`,
@@ -78,7 +78,7 @@ describe('complete form validation [LIBID-PROVER-004]', () => {
 })
 
 it.each(['clientId', 'code', 'redirectUri', 'codeVerifier', 'clientCredential'] as const)(
-  'binds the complete request to the frozen %s',
+  'binds the complete request to the frozen %s [TEST-PLAT-09] [TEST-COMMON-11]',
   (field) => {
     const raw = transcript(buildTokenRequest(input))
     expect(() => selectToken(raw, { ...input, [field]: `${input[field]}x` })).toThrow()
@@ -100,7 +100,7 @@ it.each([
   expect(() => selectToken(transcript(buildTokenRequest(input), body), input)).toThrow()
 })
 
-it('retains GitHub response whitespace in the bearer framing [LIBID-PROVER-004]', () => {
+it('retains GitHub response whitespace in the bearer framing [LIBID-PROVER-004] [TEST-COMMON-10A]', () => {
   const raw = transcript(buildTokenRequest(input), '{ "access_token" : \n "ghu_fixture" }')
   const selected = selectToken(raw, input)
   expect(

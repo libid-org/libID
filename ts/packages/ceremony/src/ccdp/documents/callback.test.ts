@@ -77,7 +77,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010]', async () => {
+it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010] [TEST-CCDP-03]', async () => {
   const original = locationInput.hash
   peerOrigin = 'https://other-app.test'
   config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']

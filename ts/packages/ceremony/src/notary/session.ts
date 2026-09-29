@@ -87,8 +87,8 @@ export class Notarization {
     const worker = this.#worker
     const { port1: port, port2 } = new MessageChannel()
     const failRuntime = (error: unknown) => this.#failure.abort(error)
-    let stage = 'preparing',
-      ended = false
+    let stage: 'preparing' | 'prepared' | 'sending' | 'sent' | 'revealing' = 'preparing'
+    let ended = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const waiters = new Map<
       FromWorker['type'],

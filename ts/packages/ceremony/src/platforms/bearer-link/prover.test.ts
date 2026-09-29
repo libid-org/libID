@@ -12,8 +12,10 @@ import type {
 } from '../../notary/protocol.js'
 import type { ProverContext } from '../context.js'
 import { prove as github } from '../github/1/prover.js'
+import * as githubTranscript from '../github/1/transcript.js'
 import { assembleResult } from '../index.js'
 import { prove as x } from '../x/1/prover.js'
+import * as xTranscript from '../x/1/transcript.js'
 
 const { prepare, generate, destroy } = vi.hoisted(() => ({
   prepare: vi.fn(),
@@ -44,6 +46,7 @@ vi.mock('../../notary/session.js', () => ({
 }))
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.resetAllMocks()
   vi.unstubAllGlobals()
 })
@@ -58,16 +61,34 @@ for (const platform of ['x', 'github'] as const) {
   it.each([
     'accepted',
     'opening-range',
+    'shifted-range',
     'attestation-mismatch',
     'public-input-order',
     'startup-cancel',
   ])(
-    `${platform} composes real request selection, openings, witness and delivery: %s [LIBID-PROVER-003] [LIBID-PROVER-004] [LIBID-PROVER-009] [LIBID-PROVER-021]`,
+    `${platform} composes real request selection, openings, witness and delivery: %s [LIBID-PROVER-003] [LIBID-PROVER-004] [LIBID-PROVER-009] [LIBID-PROVER-021] [TEST-PLAT-15A] [TEST-PLAT-15B] [TEST-PLAT-17A] [TEST-PLAT-21]`,
     async (outcome) => {
-      vi.stubGlobal('navigator', { userAgent: 'browser fixture' })
+      if (outcome === 'shifted-range') {
+        // Mutate a selector consistently: both the hidden window and its returned
+        // range shift by one byte without changing length. The test backend must
+        // detect that the resulting attestation commits different bytes.
+        const module = platform === 'x' ? xTranscript : githubTranscript
+        const select = module.selectIdentity
+        vi.spyOn(module, 'selectIdentity').mockImplementation(
+          (transcript: Transcript, bearer: string) => {
+            const selected = select(transcript, bearer)
+            selected.bearerRange.start++
+            selected.bearerRange.end++
+            selected.ranges.sent[0].end++
+            selected.ranges.sent[1].start++
+            return selected
+          },
+        )
+      }
       const attestations: NotaryAttestation[] = []
       const transcripts: Transcript[] = []
       const selected: Reveals[] = []
+      const commitments: { sent: Uint8Array[]; received: Uint8Array[] }[] = []
       let sessionCount = 0
       // Only the external TLSN runtime and expensive proof engine are replaced.
       // All byte selectors, correlation, witness encoding and client assembly are real.
@@ -107,13 +128,14 @@ for (const platform of ['x', 'github'] as const) {
                 opening(transcript.received, range, index + 1),
               ),
             }
+            commitments[index] = {
+              sent: raw.sent.map((o) => o.hash),
+              received: raw.received.map((o) => o.hash),
+            }
             const attestedData = encodeAttestation(
               transcript,
               plan,
-              {
-                sent: raw.sent.map((o) => o.hash),
-                received: raw.received.map((o) => o.hash),
-              },
+              commitments[index],
               plan.commit,
               new URL(url).hostname,
             )
@@ -145,6 +167,12 @@ for (const platform of ['x', 'github'] as const) {
         sha256(concat(encode(bearer), new Uint8Array(16).fill(byte))),
       )
       generate.mockImplementation(async (inputs): Promise<RawProof> => {
+        expect(commitments[0].received, 'Token commitment must match notarization').toContainEqual(
+          Uint8Array.from(inputs.token_commitment),
+        )
+        expect(commitments[1].sent, 'Identity commitment must match notarization').toEqual([
+          Uint8Array.from(inputs.identity_commitment),
+        ])
         expect(inputs).toEqual({
           bearer: [...encode(bearer), ...new Uint8Array(128 - bearer.length)],
           bearer_len: String(bearer.length),
@@ -187,13 +215,15 @@ for (const platform of ['x', 'github'] as const) {
       const pending = (platform === 'x' ? x : github)(context)
       if (outcome !== 'accepted') {
         await expect(pending).rejects.toThrow(
-          outcome === 'startup-cancel'
-            ? 'Closed during startup'
-            : outcome === 'opening-range'
-              ? 'Bearer opening is not unique'
-              : outcome === 'attestation-mismatch'
-                ? 'attested authority changed'
-                : 'public input mismatch',
+          outcome === 'shifted-range'
+            ? 'Identity commitment must match notarization'
+            : outcome === 'startup-cancel'
+              ? 'Closed during startup'
+              : outcome === 'opening-range'
+                ? 'Bearer opening is not unique'
+                : outcome === 'attestation-mismatch'
+                  ? 'attested authority changed'
+                  : 'public input mismatch',
         )
       } else {
         const result = await pending

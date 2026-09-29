@@ -16,7 +16,7 @@ it('parses chunked JSON without altering the transcript used for range commitmen
   expect(transcript.received).toEqual(original)
 })
 
-it('rejects ambiguous framing, truncated chunks, compressed bodies, and duplicate JSON members', () => {
+it('rejects ambiguous framing, truncated chunks, compressed bodies, and duplicate JSON members [TEST-COMMON-10]', () => {
   for (const transcript of [
     response('Transfer-Encoding: chunked\r\nContent-Length: 2\r\n', '{}'),
     response('Transfer-Encoding: chunked\r\n', '5\r\n{}\r\n0\r\n\r\n'),

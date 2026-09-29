@@ -33,7 +33,7 @@ it('bounds display text and rejects arbitrary objects instead of stringifying th
   expect(long.length).toBeGreaterThan(0)
 })
 
-it('records undeliverable failures without logging opaque text or changing outcomes', () => {
+it('records undeliverable failures without logging opaque text or changing outcomes [TEST-CCDP-08]', () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   try {
     const error = new CeremonyError('proof', 'synthetic-secret')
