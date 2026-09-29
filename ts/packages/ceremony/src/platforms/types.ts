@@ -1,4 +1,4 @@
-import { hasExactKeys, isRecord } from '../primitives.js'
+import { recordValidator } from '../primitives.js'
 import type { PlatformId } from './index.js'
 
 export interface Identity<P extends PlatformId = PlatformId> {
@@ -10,22 +10,6 @@ export interface Identity<P extends PlatformId = PlatformId> {
 
 export const proofBytes = (v: unknown): v is Uint8Array =>
   v instanceof Uint8Array && v.length > 0 && v.length <= 4 * 1024 * 1024
-
-/**
- * Validate an exact-shape record: every declared field and nothing else, each value
- * satisfying its predicate in declaration order; otherwise throw `message`.
- */
-export function recordValidator<T>(
-  message: string,
-  fields: { [K in keyof T]-?: (value: unknown) => boolean },
-): (value: unknown) => T {
-  const keys = Object.keys(fields) as (keyof T & string)[]
-  return (v) => {
-    if (!isRecord(v) || !hasExactKeys(v, keys) || !keys.every((key) => fields[key](v[key])))
-      throw new TypeError(message)
-    return v as T
-  }
-}
 
 const stringWhere = (valid: (value: string) => boolean) => (value: unknown) =>
   typeof value === 'string' && valid(value)

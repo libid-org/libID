@@ -7,6 +7,8 @@ import {
   isRecord,
   isSlug,
   origin,
+  type Predicates,
+  recordValidator,
   text,
   uint,
   webUrl,
@@ -53,24 +55,14 @@ type Fields<M extends Message> = {
 function codec<M extends Message>(
   type: M['type'],
   fields: Fields<M>,
-  optionalFields: readonly (keyof Fields<M> & string)[] = [],
+  optional: readonly (keyof Fields<M> & string)[] = [],
 ): MessageType<M> {
-  const checks = Object.entries<(value: unknown) => boolean>(fields)
-  const optional: readonly string[] = optionalFields
-  const required = ['type', ...checks.map(([key]) => key).filter((key) => !optional.includes(key))]
-  return {
-    type,
-    decode(value: unknown): M {
-      if (
-        !isRecord(value) ||
-        value.type !== type ||
-        !hasExactKeys(value, required, optional) ||
-        checks.some(([key, check]) => Object.hasOwn(value, key) && !check(value[key]))
-      )
-        throw new TypeError(`Invalid ${type} message`)
-      return value as unknown as M
-    },
-  }
+  const decode = recordValidator<M>(
+    `Invalid ${type} message`,
+    { type: (value: unknown) => value === type, ...fields } as Predicates<M>,
+    optional,
+  )
+  return { type, decode }
 }
 
 export interface UserDenied {

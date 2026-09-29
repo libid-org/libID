@@ -58,6 +58,29 @@ export function isSlug(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value)
 }
 
+export type Predicates<T> = { [K in keyof T]-?: (value: unknown) => boolean }
+
+/**
+ * Validate an exact-shape record: the declared fields (optional ones may be absent) and
+ * nothing else, each present value satisfying its predicate; otherwise throw `message`.
+ */
+export function recordValidator<T>(
+  message: string,
+  fields: Predicates<T>,
+  optional: readonly (keyof T & string)[] = [],
+): (value: unknown) => T {
+  const keys = Object.keys(fields) as (keyof T & string)[]
+  const required = keys.filter((key) => !optional.includes(key))
+  return (v) => {
+    if (
+      !hasExactKeys(v, required, optional) ||
+      !keys.every((key) => !Object.hasOwn(v, key) || fields[key](v[key]))
+    )
+      throw new TypeError(message)
+    return v as T
+  }
+}
+
 export const fixedBytes = (v: unknown, n: number): v is Uint8Array =>
   v instanceof Uint8Array && v.length === n
 

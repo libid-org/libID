@@ -1,4 +1,4 @@
-import { hasExactKeys, isRecord, origin, uint } from '../primitives.js'
+import { hasExactKeys, origin, uint } from '../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES, type NotaryAttestation } from './decode.js'
 
 export const MAX_FRAME_BYTES = 10 * 1024 * 1024
@@ -38,7 +38,7 @@ export function decodeAttestationFrame(frame: Uint8Array): NotaryAttestation {
   } catch {
     return invalid('malformed JSON payload')
   }
-  if (!isRecord(value) || !hasExactKeys(value, ['attested_data', 'notary_signature'])) {
+  if (!hasExactKeys(value, ['attested_data', 'notary_signature'])) {
     invalid('payload must contain exactly attested_data and notary_signature')
   }
   const signature = byteArray(
