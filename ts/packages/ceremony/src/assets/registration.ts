@@ -18,6 +18,7 @@ export async function rootWorker(): Promise<ServiceWorkerRegistration> {
       const timer = setTimeout(() => done(new Error('Service Worker activation timed out')), 15000)
       const done = (error?: Error) => {
         clearTimeout(timer)
+        clearInterval(poll)
         worker.removeEventListener('statechange', changed)
         error ? reject(error) : resolve()
       }
@@ -25,6 +26,8 @@ export async function rootWorker(): Promise<ServiceWorkerRegistration> {
         if (worker.state === 'activating' || worker.state === 'activated') done()
         else if (worker.state === 'redundant') done(new Error('Service Worker failed'))
       }
+      // Concurrent Chromium popups can miss statechange while worker.state still updates.
+      const poll = setInterval(changed, 50)
       worker.addEventListener('statechange', changed)
       changed()
     })
