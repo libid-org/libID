@@ -249,14 +249,26 @@ jobs:
           exit "$missing"
 
   # ---------------------------------------------------------------------------
-  # Browser tests: each workspace owns its suite, browser installation and
-  # test servers. Ceremony also exercises real proving and matched-notary
-  # containers, with release downloads and external network requests.
+  # Each workspace/engine pair has its own runner and test servers. Keep heavy
+  # ceremony work serial inside a runner; independent jobs can run in parallel.
   # ---------------------------------------------------------------------------
   browser:
-    name: Browser tests
+    name: Browser tests (${{ matrix.workspace }}, ${{ matrix.engine }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { workspace: popup, engine: chromium, projects: '--project=chromium --project=mobile-chrome' }
+          - { workspace: popup, engine: firefox, projects: '--project=firefox' }
+          - { workspace: popup, engine: webkit, projects: '--project=webkit --project=mobile-webkit' }
+          - { workspace: ceremony, engine: chromium, projects: '--project=chromium --project=chromium-http --project=android-emulated' }
+          - { workspace: ceremony, engine: firefox, projects: '--project=firefox --project=firefox-http' }
+          - { workspace: ceremony, engine: webkit, projects: '--project=webkit --project=webkit-http --project=ios-emulated' }
+          - { workspace: dev, engine: chromium, projects: '--project=chromium --project=android-emulated' }
+          - { workspace: dev, engine: firefox, projects: '--project=firefox' }
+          - { workspace: dev, engine: webkit, projects: '--project=webkit --project=ios-emulated' }
     permissions:
       contents: read
       packages: read
@@ -275,21 +287,18 @@ jobs:
       - name: Install dependencies
         run: pnpm -C ts install --frozen-lockfile
 
-      - name: Build workspace
-        run: pnpm -C ts build
+      - name: Build workspace and dependencies
+        run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}...' build
 
-      # Each package that has a Playwright suite installs the browsers it
-      # needs and runs its own suite; packages without one are skipped.
-      - name: Install browsers
-        run: pnpm -C ts -r --if-present run test:e2e:install
+      - name: Install browser
+        run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}' exec playwright install --with-deps ${{ matrix.engine }}
 
       - name: Check browser test types
-        run: pnpm -C ts -r --if-present run typecheck:e2e
+        run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}' --if-present run typecheck:e2e
 
       - name: Log in to ghcr for the matched notary image
+        if: matrix.workspace == 'ceremony'
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      # Run suites serially so proof generation has the runner to itself.
-      # Keep running independent suites after a failure; the job still fails.
       - name: Browser tests
-        run: pnpm -C ts -r --workspace-concurrency=1 --no-bail --if-present run test:e2e
+        run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}' run test:e2e ${{ matrix.projects }}
