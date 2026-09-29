@@ -1,12 +1,15 @@
 import { parseCsp, scriptHash } from '../build/profiles.ts'
+import { csp, document } from '../src/ccdp/headers.ts'
+
+/** The deployment inputs Callback reads, inserted in its positional order. */
+export type CallbackInputs = { allowedApplicationOrigins: readonly string[]; ccdpOrigin: string }
 
 /** Reference Bridge data insertion only; this is not a production Bridge server. */
 export function prepareCallback(
   html: string,
   sourceHeaders: Record<string, string>,
-  inputs: readonly [readonly string[], string, ...unknown[]],
+  { allowedApplicationOrigins, ccdpOrigin }: CallbackInputs,
 ) {
-  const ccdpOrigin = inputs[1]
   const marker = '__LIBID_CALLBACK_CONFIG__'
   const slot = `<script id="libid-callback-config" type="application/json">${marker}</script>`
   const headers = new Headers(sourceHeaders)
@@ -33,16 +36,13 @@ export function prepareCallback(
     )
   )
     throw new Error('Invalid Callback artifact')
-  const data = JSON.stringify(inputs).replace(/</g, '\\u003c')
+  const data = JSON.stringify([allowedApplicationOrigins, ccdpOrigin]).replace(/</g, '\\u003c')
   return {
     body: html.replace(slot, () => slot.replace(marker, () => data)),
     headers: {
-      'Content-Type': 'text/html; charset=utf-8',
+      ...document,
       'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'no-referrer',
-      'Cross-Origin-Opener-Policy': 'unsafe-none',
-      'Content-Security-Policy': `default-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; script-src ${scriptHash(code)}; style-src 'unsafe-inline'; frame-src ${ccdpOrigin}; connect-src 'none'`,
+      'Content-Security-Policy': `${csp.base}; script-src ${scriptHash(code)}; style-src 'unsafe-inline'; frame-src ${ccdpOrigin}; connect-src 'none'`,
     },
   }
 }

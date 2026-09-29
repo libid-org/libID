@@ -8,10 +8,11 @@ import { setTimeout } from 'node:timers/promises'
 import { parse, stringify, type TomlTable } from 'smol-toml'
 import { document } from '../src/ccdp/headers.ts'
 import { cache } from './sources.ts'
-import { errorHeaders, writeDistribution } from './sws.ts'
+import { errorHeaders, nativeSkip, writeDistribution } from './sws.ts'
 
-// The native tests below start their own SWS on this port and the next one.
-const testPort = Number(process.env.CEREMONY_SWS_TEST_PORT ?? 4687)
+// The native tests below start their own SWS on this port and the next one, clear of the dev
+// app and the e2e suite.
+const testPort = Number(process.env.CEREMONY_SWS_TEST_PORT ?? 4988)
 
 /** Point an emitted `sws.toml` at its own output on a loopback port. */
 function localize(dir: string, port: number, edit?: (config: TomlTable) => void) {
@@ -127,7 +128,7 @@ test('emitted header rules: the error policy catch-all, then one exact rule per 
 })
 
 test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-027]', {
-  skip: !process.env.CEREMONY_SWS_BINARY,
+  skip: nativeSkip('CEREMONY_SWS_BINARY'),
 }, async () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-test-'))
@@ -167,7 +168,7 @@ test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-02
 // sws.ts). A failure on a newer SWS means the matching changed; revisit sws.ts
 // and docs/distribution.md before updating the assertions.
 test('native SWS header-rule matching canary: plain path after rewrites, raw path and catch-all on errors [KIT-001A]', {
-  skip: !process.env.CEREMONY_SWS_BINARY,
+  skip: nativeSkip('CEREMONY_SWS_BINARY'),
 }, async () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-canary-'))

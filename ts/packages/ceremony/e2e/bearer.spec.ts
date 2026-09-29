@@ -12,12 +12,12 @@ import { verifyBrowserProof } from './verify.js'
 for (const platform of ['x', 'github'] as const)
   for (const corrupt of [false, true])
     test(`${platform} browser ceremony with fixture TLSN: ${corrupt ? 'rejects changed final attestation' : 'accepts independently verified proof'} [LIBID-PROVER-003] [LIBID-PROVER-004] [TEST-CCDP-07] ${corrupt ? '' : '[TEST-COMMON-20] [TEST-COMMON-22]'} @proof`, async ({
-      app,
       bridge,
       page,
       context,
       request,
       assetControl,
+      launch,
     }) => {
       test.setTimeout(480000)
       // Only OAuth and the TLSN SDK/peer are synthetic. Actual emitted documents,
@@ -57,11 +57,7 @@ for (const platform of ['x', 'github'] as const)
           })
         },
       )
-      await page.goto(`${app}?platform=${platform}`)
-      await page.waitForFunction(() => window.ready)
-      const opened = context.waitForEvent('page')
-      await page.locator('#launch').click()
-      const popup = await opened
+      const popup = await launch(`?platform=${platform}`)
       await page.waitForFunction(() => window.result, undefined, { timeout: 420000 })
       expect(await page.evaluate(() => window.result?.status)).toBe(corrupt ? 'failed' : 'accepted')
       const events = await page.evaluate(() => window.events)

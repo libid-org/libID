@@ -32,7 +32,8 @@ These Node tests exercise archive handling, emitted resources and header rules,
 circuit capacity and the installed dependency loaders. **HTTP and native-binary
 checks are conditional**: a default run skips them unless their service/binary
 inputs are supplied. A green default run is not the complete distribution
-qualification.
+qualification; with `CEREMONY_REQUIRE_NATIVE=1`, a missing input fails the run
+instead of skipping.
 
 To include served-response checks (exact routes and policies, negotiation,
 uncacheable 404s and the `/health` probe), [build and run the emitted SWS image](distribution.md#build-and-serve)
@@ -48,10 +49,10 @@ point SWS at that same artifact. To include the same-length ETag regression and 
 [header-matching canary](distribution.md#native-server-behavior), also set
 `CEREMONY_SWS_BINARY` to a locally runnable `static-web-server` from the
 [pinned release](https://github.com/static-web-server/static-web-server/releases/tag/v3.0.0-beta.1).
-Those tests start their own servers on `CEREMONY_SWS_TEST_PORT` (default 4687) and
-the next port; set `CEREMONY_SWS_TEST_PORT=4988` when the dev notary already
-occupies 4687. These inputs are test-only. The workspace **CCDP image** CI job runs
-all of them against the freshly built image and the pinned binary.
+Those tests start their own servers on `CEREMONY_SWS_TEST_PORT` (default 4988) and
+the next port. These inputs are test-only. The workspace **CCDP image** CI job runs
+all of them against the freshly built image and the pinned binary, requiring them
+with `CEREMONY_REQUIRE_NATIVE=1`.
 
 ## Browser tests
 
@@ -68,18 +69,20 @@ pnpm -C ts --filter @libid/ceremony exec playwright install --with-deps chromium
 pnpm -C ts --filter @libid/ceremony test:e2e
 ```
 
-The command builds qualification artifacts and runtime fixtures. Playwright owns
-startup, readiness and teardown for pinned SWS/notary containers and the browser
-harness. **Browser tests** CI runs nine independent workspace/engine jobs for
-popup, ceremony and the dev app. Every desktop, HTTP and emulated project runs
-once in its engine's job. Popup tests also use two parallel workers; ceremony's
-shared asset controls and heavy runtimes stay serial within each job. No OAuth
-credentials are required. Release downloads and real unauthenticated requests to
+Playwright first builds the qualification artifacts, the runtime fixture and the
+harness modules ([build.mjs](../e2e/build.mjs)), then owns startup, readiness and
+teardown for pinned SWS/notary containers and the browser harness, so a bare
+`playwright test` qualifies current artifacts too. **Browser tests** CI runs nine
+independent workspace/engine jobs for popup, ceremony and the dev app. Every
+desktop, HTTP and emulated project runs once in its engine's job. Popup tests also
+use two parallel workers; ceremony's shared asset controls and heavy runtimes stay
+serial within each job. No OAuth credentials are required. Release downloads and
+real unauthenticated requests to
 X/GitHub need network access; unavailable services fail rather than silently skip.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
 Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987 and
-4781–4783/4881–4883 are separate from the dev app. Concurrent suite invocations
+4781–4783/4881–4883 ([topology.ts](../e2e/topology.ts)) are separate from the dev app. Concurrent suite invocations
 fail on occupied ports instead of reusing or replacing another run's services.
 HTTPS tests use harness certificates and test-runner trust settings; the manual
 development app uses loopback HTTP without certificate setup.

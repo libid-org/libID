@@ -9,19 +9,20 @@ import { verifyBrowserProof } from './verify.js'
 for (const wildcard of [false, true])
   for (const native of [false, true])
     test(`actual popup: private callback, isolation, denial, and application continuation${native ? ' with native anchor' : ''}${wildcard ? ' with wildcard Callback admission' : ''} [LIBID-BROWSER-001] [LIBID-BROWSER-005]`, async ({
-      app,
       bridge,
       ccdp,
       page,
       context,
       request,
+      provider,
+      launch,
     }) => {
       if (wildcard) {
         const artifact = await request.get(`${ccdp}/ccdp/callback.html`)
-        const callback = prepareCallback(await artifact.text(), artifact.headers(), [
-          ['*', ccdp],
-          ccdp,
-        ])
+        const callback = prepareCallback(await artifact.text(), artifact.headers(), {
+          allowedApplicationOrigins: ['*', ccdp],
+          ccdpOrigin: ccdp,
+        })
         await context.route(`${bridge}/auth/callback`, (route) => route.fulfill(callback))
       }
       const errors: string[] = []
@@ -52,22 +53,16 @@ for (const wildcard of [false, true])
           `${request.resourceType()} ${url.origin}${url.pathname}: ${request.failure()?.errorText}`,
         )
       })
-      await context.route('https://accounts.google.com/**', async (route) => {
-        const state = new URL(route.request().url()).searchParams.get('state')
-        await route.fulfill({
-          contentType: 'text/html',
-          body: `<!doctype html><script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
-        })
-      })
-      await page.goto(`${app}?ledger=${native ? 'test:mainnet' : 'test:testnet'}`)
-      await page.waitForFunction(() => window.ready)
-      if (native)
-        await page.evaluate(() => {
-          window.open = () => null
-        })
-      const popupPromise = context.waitForEvent('page')
-      await page.locator('#launch').click()
-      const popup = await popupPromise
+      await provider()
+      const popup = await launch(
+        `?ledger=${native ? 'test:mainnet' : 'test:testnet'}`,
+        native
+          ? () =>
+              page.evaluate(() => {
+                window.open = () => null
+              })
+          : undefined,
+      )
       try {
         await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
       } catch (error) {
@@ -127,13 +122,13 @@ test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async
 })
 
 test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020] [TEST-DIST-03]', async ({
-  app,
-  bridge,
   ccdp,
   page,
   context,
   request,
   assetControl,
+  provider,
+  launch,
 }) => {
   const graph = JSON.parse(
     readFileSync(
@@ -161,18 +156,8 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
     }
   })
   await seed.close()
-  await context.route('https://accounts.google.com/**', async (route) => {
-    const state = new URL(route.request().url()).searchParams.get('state')
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
-    })
-  })
-  await page.goto(app)
-  await page.waitForFunction(() => window.ready)
-  const popupPromise = context.waitForEvent('page')
-  await page.locator('#launch').click()
-  const popup = await popupPromise
+  await provider()
+  const popup = await launch()
   await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
   expect(
     await popup.evaluate(async () =>
@@ -274,10 +259,11 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
 })
 
 test('real Google fixture proof under emitted CSP, independently released-key verified [LIBID-PROVER-001] [CSP-020] [TEST-COMMON-20] [TEST-COMMON-22] @proof', async ({
-  app,
   bridge,
   page,
   context,
+  provider,
+  launch,
 }) => {
   test.setTimeout(480000)
   // This controlled fixture is old and has its own digest. This proves runtime/key
@@ -297,16 +283,11 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
           )
         : fetch(...args)
   }, fixture.jwk)
-  await context.route('https://accounts.google.com/**', async (route) => {
-    const state = new URL(route.request().url()).searchParams.get('state')
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#id_token=${fixture.idToken}&state=${state}&version_info=synthetic&provider_meta=future&release.rev=1`)})</script>`,
-    })
-  })
-  await page.goto(app)
-  await page.waitForFunction(() => window.ready)
-  await page.locator('#launch').click()
+  await provider(
+    (state) =>
+      `${bridge}/auth/callback#id_token=${fixture.idToken}&state=${state}&version_info=synthetic&provider_meta=future&release.rev=1`,
+  )
+  await launch()
   await expect
     .poll(
       async () => {
@@ -437,10 +418,10 @@ test('popup paint wait skips hidden documents and tolerates stopped animation fr
 })
 
 test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async ({
-  app,
   page,
   context,
   assetControl,
+  launch,
 }) => {
   let oauth = 0
   await context.route('https://accounts.google.com/**', (route) => {
@@ -449,32 +430,25 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
   })
   const control = assetControl('/ccdp/v1/worker.js')
   await context.request.get(`${control}&fail`)
-  await page.goto(app)
-  await page.waitForFunction(() => window.ready)
-  await page.locator('#launch').click()
+  await launch()
   await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'failed' })
   expect(oauth).toBe(0)
   expect(await page.evaluate(() => window.failureEvent)).toBe('prefetch-dispatch')
 })
 
 test('two independently supplied connections cannot replace each other [LIBID-BROWSER-014]', async ({
-  app,
   bridge,
   page,
   context,
+  provider,
+  launch,
 }) => {
   const states = new Set<string>()
-  await context.route('https://accounts.google.com/**', async (route) => {
-    const state = new URL(route.request().url()).searchParams.get('state')!
+  await provider((state) => {
     states.add(state)
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
-    })
+    return `${bridge}/auth/callback#error=access_denied&state=${state}`
   })
-  await page.goto(app)
-  await page.waitForFunction(() => window.ready)
-  await page.locator('#launch').click()
+  await launch()
   await page.locator('#launch').click()
   try {
     await expect.poll(() => page.evaluate(() => window.completed.length)).toBe(2)
@@ -614,19 +588,13 @@ test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASS
 })
 
 test('Prover rejects a changed Application origin in the same opener window [TEST-CCDP-04] [TEST-COMMON-14]', async ({
-  app,
-  bridge,
   ccdp,
   page,
   context,
+  provider,
+  launch,
 }) => {
-  await context.route('https://accounts.google.com/**', async (route) => {
-    const state = new URL(route.request().url()).searchParams.get('state')
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback#error=access_denied&state=${state}`)})</script>`,
-    })
-  })
+  await provider()
   // A second origin admitted by Callback's deployment. The retained WindowProxy
   // is unchanged, but this new document is not the Application Callback bound.
   await context.route(`${ccdp}/changed-application`, (route) =>
@@ -646,35 +614,21 @@ test('Prover rejects a changed Application origin in the same opener window [TES
     await page.goto(`${ccdp}/changed-application`)
     await route.continue()
   })
-  await page.goto(app)
-  await page.waitForFunction(() => window.ready)
-  const popupPromise = context.waitForEvent('page')
-  await page.locator('#launch').click()
-  const popup = await popupPromise
+  const popup = await launch()
   await expect(popup.locator('body')).toContainText('connection failed authentication')
   expect(await popup.evaluate(() => location.hash)).toBe('')
   expect(new URL(page.url()).origin).toBe(ccdp)
 })
 
 test('provider isolation ends Application and returning Callback reports its own connection failure [TEST-CCDP-08] [LIBID-BROWSER-005]', async ({
-  app,
   bridge,
   page,
-  context,
+  provider,
+  launch,
 }) => {
-  await context.route('https://accounts.google.com/**', async (route) => {
-    const state = new URL(route.request().url()).searchParams.get('state')
-    // Serve COOP over HTTP: WebKit does not apply it to the intercepted response.
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<script>location.replace(${JSON.stringify(`${bridge}/isolating-provider?state=${encodeURIComponent(state!)}`)})</script>`,
-    })
-  })
-  await page.goto(app)
-  await page.waitForFunction(() => window.ready)
-  const opened = context.waitForEvent('page')
-  await page.locator('#launch').click()
-  const popup = await opened
+  // Serve COOP over HTTP: WebKit does not apply it to the intercepted response.
+  await provider((state) => `${bridge}/isolating-provider?state=${encodeURIComponent(state)}`)
+  const popup = await launch()
   await expect(popup.locator('#return')).toBeVisible()
   expect(await popup.evaluate(() => window.opener === null)).toBe(true)
   // Background polling may be suspended; observe from the active application.
@@ -705,10 +659,10 @@ for (const [platform, authorization] of [
   ['github', 'https://github.com/login/oauth/authorize'],
 ] as const)
   test(`${platform} bound denial crosses the actual popup and private Callback [TEST-CCDP-07]`, async ({
-    app,
     bridge,
     page,
     context,
+    launch,
   }) => {
     await context.route(`${authorization}?*`, async (route) => {
       const params = new URL(route.request().url()).searchParams
@@ -721,11 +675,7 @@ for (const [platform, authorization] of [
         body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback?${returned}`)})</script>`,
       })
     })
-    await page.goto(`${app}?platform=${platform}`)
-    await page.waitForFunction(() => window.ready)
-    const opened = context.waitForEvent('page')
-    await page.locator('#launch').click()
-    const popup = await opened
+    const popup = await launch(`?platform=${platform}`)
     await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
     expect(await popup.evaluate(() => location.hash)).toBe('')
     expect(await popup.evaluate(() => crossOriginIsolated)).toBe(true)

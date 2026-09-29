@@ -177,18 +177,14 @@ jobs:
           "$bin" --version
           echo "CEREMONY_SWS_BINARY=$bin" >> "$GITHUB_ENV"
 
+      # Both the server URL and the binary are provided, so CEREMONY_REQUIRE_NATIVE
+      # fails any test that would otherwise skip for want of either.
       - name: Distribution tests against the running image and the native binary
         env:
           CEREMONY_SWS_URL: http://127.0.0.1:28787
           CEREMONY_SWS_TEST_PORT: "28790"
-        run: |
-          set -euo pipefail
-          pnpm -C ts --filter @libid/ceremony test:distribution 2>&1 | tee "$RUNNER_TEMP/distribution-tests.log"
-          # Both inputs above are set, so nothing may have been skipped.
-          if grep -Eq 'skipped [1-9]' "$RUNNER_TEMP/distribution-tests.log"; then
-            echo "::error::distribution tests were skipped; the server/binary inputs did not reach them"
-            exit 1
-          fi
+          CEREMONY_REQUIRE_NATIVE: "1"
+        run: pnpm -C ts --filter @libid/ceremony test:distribution
 
       - name: Push the image
         if: env.PUSH == 'true'

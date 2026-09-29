@@ -1,4 +1,5 @@
-import { test as base, expect } from '@playwright/test'
+import { test as base, expect, type Page } from '@playwright/test'
+import { origins } from './topology.js'
 
 export { expect }
 
@@ -7,6 +8,10 @@ export const test = base.extend<{
   bridge: string
   ccdp: string
   assetControl: (asset: string) => string
+  /** Answer Google authorization by redirecting to `target(state)`; by default, a denial. */
+  provider: (target?: (state: string) => string) => Promise<void>
+  /** Open the application at `search`, run `prepare`, then launch; resolves to the popup. */
+  launch: (search?: string, prepare?: () => Promise<unknown>) => Promise<Page>
 }>({
   // Release held bodies and simulated failures before the request client is disposed,
   // even when a timeout leaves the test body (and its finally block) still pending.
@@ -27,13 +32,32 @@ export const test = base.extend<{
     await use(baseURL!)
   },
   bridge: async ({ app }, use) => {
-    const url = new URL(app)
-    url.port = String(Number(url.port) + 1)
-    await use(url.origin)
+    await use(origins(app.startsWith('https:')).bridge)
   },
   ccdp: async ({ app }, use) => {
-    const url = new URL(app)
-    url.port = String(Number(url.port) + 2)
-    await use(url.origin)
+    await use(origins(app.startsWith('https:')).ccdp)
+  },
+  provider: async ({ bridge, context }, use) => {
+    await use(
+      async (target = (state) => `${bridge}/auth/callback#error=access_denied&state=${state}`) => {
+        await context.route('https://accounts.google.com/**', async (route) => {
+          const state = new URL(route.request().url()).searchParams.get('state')!
+          await route.fulfill({
+            contentType: 'text/html',
+            body: `<script>location.replace(${JSON.stringify(target(state))})</script>`,
+          })
+        })
+      },
+    )
+  },
+  launch: async ({ app, context, page }, use) => {
+    await use(async (search = '', prepare) => {
+      await page.goto(app + search)
+      await page.waitForFunction(() => window.ready)
+      await prepare?.()
+      const opened = context.waitForEvent('page')
+      await page.locator('#launch').click()
+      return opened
+    })
   },
 })

@@ -3,11 +3,13 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { createServer as createHttpServer, request as proxyRequest } from 'node:http'
 import { createServer } from 'node:https'
 import { join } from 'node:path'
+import { makeCertificate } from '../../popup/e2e/tls.mjs'
 import { packageDir } from '../build/sources.ts'
+import { isolated } from '../src/ccdp/headers.ts'
 import { prepareCallback } from './callback.ts'
-import { makeCertificate } from './tls.mjs'
+import { origins, sws as swsPort } from './topology.ts'
 
-const sws = 'http://127.0.0.1:4980'
+const sws = `http://127.0.0.1:${swsPort}`
 
 const artifactDir = join(packageDir, '.cache/qualification-assets')
 
@@ -21,6 +23,14 @@ const graph = JSON.parse(readFileSync(join(artifactDir, 'distribution-graph.json
 const html = (body) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ceremony qualification</title><body>${body}</body></html>`
 
+/** A top-level module path serves the build.mjs output; a missing one is a harness fault. */
+const staticModule = (send, path, headers = {}) =>
+  /^\/[\w-]+\.js$/.test(path) &&
+  send(readFileSync(join(packageDir, '.cache/e2e', path)), {
+    'Content-Type': 'text/javascript',
+    ...headers,
+  })
+
 const certificate = makeCertificate(['localhost'])
 
 // Chromium's HTTP cache needs a clean certificate result, not just an ignored TLS error.
@@ -33,34 +43,24 @@ writeFileSync(
 
 // Both schemes run the same emitted bytes and protocol tests on separate origins.
 for (const secure of [true, false]) {
-  const offset = secure ? 200 : 100
-  const scheme = secure ? 'https' : 'http'
-  const app = `${scheme}://localhost:${4681 + offset}`,
-    ccdp = `${scheme}://localhost:${4683 + offset}`
+  const { app, bridge, ccdp } = origins(secure)
   const allowedOrigins = [app, ccdp]
   const server = secure ? createServer.bind(null, certificate) : createHttpServer
   // Prepared once, independently of OAuth requests; both bytes and policy change together.
   const callback = prepareCallback(
     readFileSync(join(artifactDir, 'public/ccdp/callback.html'), 'utf8'),
     graph.headers['/ccdp/callback.html'],
-    [allowedOrigins, ccdp],
+    { allowedApplicationOrigins: allowedOrigins, ccdpOrigin: ccdp },
   )
   // Each route returns true once it has answered; unmatched paths fall through to 404.
   const appRoute = (req, res, path, send) => {
-    if (['/ui.js', '/events.js', '/google-events.js'].includes(path))
-      return send(readFileSync(join(packageDir, '.cache/e2e', path.slice(1))), {
-        'Content-Type': 'text/javascript',
-      })
+    if (staticModule(send, path)) return true
     if (path === '/ui')
       return send(
         html(
-          '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {Events} from "/events.js";import {progressWeights} from "/google-events.js";window.testEvents=new Events();window.testView=eventView(window.testEvents,"Google");window.testView.trackProof(progressWeights);window.testEvents.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
+          '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {Events} from "/events.js";import {progressWeights} from "/google-events.js";window.testEvents=new Events();window.testView=eventView(window.testEvents);window.testView.trackProof(progressWeights);window.testEvents.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
         ),
       )
-    if (path === '/app.js')
-      return send(readFileSync(join(packageDir, '.cache/e2e/app.js')), {
-        'Content-Type': 'text/javascript',
-      })
     if (path === '/')
       return send(
         html(
@@ -101,15 +101,12 @@ for (const secure of [true, false]) {
     }
     if (path === '/isolating-provider') {
       const state = new URL(req.url, app).searchParams.get('state')
-      const target = `${scheme}://localhost:${4682 + offset}/auth/callback#error=access_denied&state=${encodeURIComponent(state ?? '')}`
+      const target = `${bridge}/auth/callback#error=access_denied&state=${encodeURIComponent(state ?? '')}`
       return send(
         html(
           `<button id="return">Return</button><script>document.querySelector('#return').onclick = () => location.replace(${JSON.stringify(target)})</script>`,
         ),
-        {
-          'Cross-Origin-Opener-Policy': 'same-origin',
-          'Cross-Origin-Embedder-Policy': 'require-corp',
-        },
+        isolated,
       )
     }
     if (path === '/auth/callback') return send(callback.body, callback.headers)
@@ -153,20 +150,13 @@ for (const secure of [true, false]) {
     if (path === '/qualification-control') return qualificationControl(req, send)
     if (path === '/ccdp/v1/seed') return send(html('<title>Worker seed</title>'))
 
-    if (path === '/popup.js')
-      return send(readFileSync(join(packageDir, '.cache/e2e/popup.js')), {
-        'Content-Type': 'text/javascript',
-        'Cross-Origin-Resource-Policy': 'same-origin',
-      })
+    if (staticModule(send, path, { 'Cross-Origin-Resource-Policy': 'same-origin' })) return true
     if (path === '/after')
       return send(
         html(
           `<script type="module">import {PopupConnection,PopupWindow} from '/popup.js';const id=new URLSearchParams(location.hash.slice(1)).get('id');history.replaceState(null,'',location.pathname);const c=PopupConnection.accept(PopupWindow.current('',{scope:'/'}),{connectionId:id,allowedApplicationOrigins:['${app}']});await c.ready;c.send({type:'after'});</script>`,
         ),
-        {
-          'Cross-Origin-Opener-Policy': 'same-origin',
-          'Cross-Origin-Embedder-Policy': 'require-corp',
-        },
+        isolated,
       )
     if (failures.has(path)) return send('Unavailable', {}, 503)
     if (Object.hasOwn(graph.headers, path)) {
@@ -193,10 +183,10 @@ for (const secure of [true, false]) {
     req.pipe(upstream)
     return true
   }
-  for (const [port, route] of [
-    [4681, appRoute],
-    [4682, bridgeRoute],
-    [4683, ccdpRoute],
+  for (const [origin, route] of [
+    [app, appRoute],
+    [bridge, bridgeRoute],
+    [ccdp, ccdpRoute],
   ])
     server(async (req, res) => {
       const path = new URL(req.url, 'https://localhost').pathname
@@ -213,13 +203,19 @@ for (const secure of [true, false]) {
       if (!['GET', 'HEAD'].includes(req.method)) return send('Method not allowed', {}, 405)
       try {
         if (await route(req, res, path, send)) return
-      } catch {}
+      } catch (error) {
+        // A harness fault, such as a missing build output, must not pass for a 404.
+        console.error(`Harness failure on ${req.method} ${path}:`, error)
+        if (res.headersSent) res.destroy()
+        else send('Harness failure', {}, 500)
+        return
+      }
       send(
         '<!doctype html><title>Not found</title><p>Not found.</p>',
         { 'Content-Security-Policy': "default-src 'none'" },
         404,
       )
-    }).listen(port + offset, '127.0.0.1', () =>
-      console.log(`Ceremony harness listening on ${port}`),
+    }).listen(Number(new URL(origin).port), '127.0.0.1', () =>
+      console.log(`Ceremony harness listening on ${origin}`),
     )
 }

@@ -35,6 +35,17 @@ export const errorHeaders = {
   'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
 } as const
 
+/**
+ * The skip reason of a test needing a served image or the native binary (`name` unset), or
+ * false. Under CEREMONY_REQUIRE_NATIVE=1 a missing input fails the run instead of skipping.
+ */
+export function nativeSkip(name: 'CEREMONY_SWS_URL' | 'CEREMONY_SWS_BINARY'): string | false {
+  if (process.env[name]) return false
+  if (process.env.CEREMONY_REQUIRE_NATIVE === '1')
+    throw new Error(`CEREMONY_REQUIRE_NATIVE=1 requires ${name}`)
+  return `${name} is unset`
+}
+
 const sidecars = [
   [
     '.br',
