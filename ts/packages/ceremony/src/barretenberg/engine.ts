@@ -50,6 +50,7 @@ export class ProofEngine {
         acvmUrl: assetUrl(acvm),
         abiUrl: assetUrl(abi),
         wasmPath: assetUrl(bbWasm).replace('-threads.wasm', '.wasm'),
+        // Ignored by pinned bb.js; build/loaders.test.ts fails once a CRS base is honored.
         crsPath: new URL('.', assetUrl(crs[0])).href,
       }
       this.#worker = this.#spawn()
