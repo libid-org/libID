@@ -9,6 +9,16 @@ import {
 } from '@libid/popup'
 import { CeremonyError, ceremonyError } from '../../errors.js'
 import {
+  type CeremonyEvent,
+  type CoreEvent,
+  Events,
+  failureEvent,
+  isCoreEvent,
+  now,
+  type OperationEvent,
+  type StageEvent,
+} from '../../events.js'
+import {
   deriveAuthorizationDigest,
   deriveCodeChallenge,
   deriveCodeVerifier,
@@ -22,10 +32,10 @@ import {
   type SupportedCeremonyVersion,
   supportedPlatforms,
 } from '../../platforms/index.js'
-import { hasExactKeys, isRecord, origin } from '../../primitives.js'
+import { fixedBytes, hasExactKeys, isRecord, origin } from '../../primitives.js'
 import {
   CeremonyFailed,
-  Event as EventMessage,
+  EventMessage,
   IdentityProof,
   type ProveIdentity,
   UserDenied,
@@ -34,18 +44,6 @@ import {
 import { oauthState, prefetchFragment, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
 import { type CeremonyConfig, fetchCeremonyConfig } from './config.js'
-
-export type { CeremonyEvent, CeremonyStage, StageEvent } from '../../events.js'
-
-import {
-  type CeremonyEvent,
-  type CoreEvent,
-  coreEvents,
-  Events,
-  now,
-  type OperationEvent,
-  type StageEvent,
-} from '../../events.js'
 
 /** One ceremony over a caller-supplied connection; the application owns the window. */
 export interface Ceremony<P extends PlatformId = PlatformId> {
@@ -59,8 +57,8 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
   proveUserIdentity(): Promise<IdentityResult<P>>
 }
 
+/** Validated `new` arguments; byte inputs are read only while deriving the digest. */
 interface Input<P extends PlatformId> {
-  connection: PopupConnection<Message>
   notaryAddress: string
   chainId: Uint8Array
   platformId: P
@@ -138,48 +136,52 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
     ): Ceremony<P> {
       if (typeof id !== 'string' || !UUID.test(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
-      const available = enabledVersions(platformId)
-      const version =
-        ceremonyVersion === undefined ? available[available.length - 1] : ceremonyVersion
-      if (!available.includes(version)) throw new TypeError('Unsupported ceremony version')
-      if (!ledgerId || typeof ledgerId.hash !== 'function')
-        throw new TypeError('Invalid ledger identity')
-      const hash = ledgerId.hash()
-      if (!(hash instanceof Uint8Array) || hash.length !== 32)
-        throw new TypeError('Ledger hash must be 32 bytes')
-      const chainId = Uint8Array.from(hash)
-      if (typeof ledgerId.notaryAddress !== 'function')
-        throw new TypeError('Missing notary address')
-      const notaryAddress = ledgerId.notaryAddress()
-      if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
-      if (!(operationDomain instanceof Uint8Array) || operationDomain.length !== 32)
-        throw new TypeError('Operation domain must be 32 bytes')
+      const version = selectVersion(enabledVersions(platformId), ceremonyVersion)
+      const { chainId, notaryAddress } = snapshotLedger(ledgerId)
+      if (!fixedBytes(operationDomain, 32)) throw new TypeError('Operation domain must be 32 bytes')
       if (!(transactionData instanceof Uint8Array) || transactionData.length > 0xffffffff)
         throw new TypeError('Invalid transaction bytes')
       if (liveIds.has(id)) throw new TypeError('Ceremony ID is already live')
-      const run = new Run(
-        id,
-        {
-          connection: conn,
-          platformId,
-          version,
-          operationDomain,
-          transactionData,
-          chainId,
-          notaryAddress,
-        },
-        config,
-        () => {
-          liveIds.delete(id)
-        },
-      )
+      const input = {
+        platformId,
+        version,
+        operationDomain,
+        transactionData,
+        chainId,
+        notaryAddress,
+      }
+      const run = new Run(id, conn, input, config, () => {
+        liveIds.delete(id)
+      })
       liveIds.add(id)
       return run
     },
   })
 }
 
+/** An omitted version selects the highest compatible one. */
+function selectVersion<V>(available: readonly V[], requested: V | undefined): V {
+  const version = requested === undefined ? available[available.length - 1] : requested
+  if (!available.includes(version)) throw new TypeError('Unsupported ceremony version')
+  return version
+}
+
+/** Read each ledger method once; later replacement of either method cannot affect the run. */
+function snapshotLedger(ledgerId: LedgerId): { chainId: Uint8Array; notaryAddress: string } {
+  if (!ledgerId || typeof ledgerId.hash !== 'function')
+    throw new TypeError('Invalid ledger identity')
+  const chainId = ledgerId.hash()
+  if (!fixedBytes(chainId, 32)) throw new TypeError('Ledger hash must be 32 bytes')
+  if (typeof ledgerId.notaryAddress !== 'function') throw new TypeError('Missing notary address')
+  const notaryAddress = ledgerId.notaryAddress()
+  if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
+  return { chainId, notaryAddress }
+}
+
 type Binding = { active: boolean; remove: (() => void)[] }
+
+/** Ordering violations only; other handler failures keep their own, possibly localized, text. */
+const sequenceError = (reason: string) => new Error(`Invalid ceremony sequence: ${reason}`)
 
 const bindings = new WeakMap<PopupConnection<Message>, Binding>()
 
@@ -202,14 +204,10 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private readonly observations = new Set<string>()
   private proofWorkStarted = false
   private readonly off: (() => void)[] = []
-  private readonly connection: PopupConnection<Message>
   private readonly platform: P
   private readonly version: SupportedCeremonyVersion<P>
-  private readonly retained: {
-    operationDomain: Uint8Array
-    authorizationNonce: Uint8Array
-    transactionData: Uint8Array
-  }
+  private readonly platformEvents: readonly CoreEvent[]
+  private readonly authorizationNonce = crypto.getRandomValues(new Uint8Array(32))
   private readonly start: ProveIdentity
   private authorizationUrl: string
   private readonly prefetchUrl: string
@@ -221,27 +219,26 @@ class Run<P extends PlatformId> implements Ceremony<P> {
 
   constructor(
     id: string,
+    private readonly connection: PopupConnection<Message>,
     input: Input<P>,
     config: CeremonyConfig,
     private readonly releaseId: () => void,
   ) {
-    this.connection = input.connection
     this.platform = input.platformId
     const platform = config.platforms[this.platform]
     this.version = input.version
-    this.retained = {
-      operationDomain: Uint8Array.from(input.operationDomain),
-      authorizationNonce: crypto.getRandomValues(new Uint8Array(32)),
-      transactionData: Uint8Array.from(input.transactionData),
-    }
+    // Deriving here, before `new` returns, makes later caller mutation irrelevant.
     const digest = deriveAuthorizationDigest({
-      ...this.retained,
+      operationDomain: input.operationDomain,
+      transactionData: input.transactionData,
       chainId: input.chainId,
+      authorizationNonce: this.authorizationNonce,
       platformCeremonyVersion: this.version,
     })
     const implementation = implementationFor(this.platform, this.version)
+    this.platformEvents = implementation.events
     const codeVerifier = implementation.pkce
-      ? deriveCodeVerifier(digest, this.retained.authorizationNonce)
+      ? deriveCodeVerifier(digest, this.authorizationNonce)
       : null
     this.authorizationUrl = implementation.buildAuthorizationUrl({
       clientId: platform.clientId,
@@ -266,12 +263,13 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
     Object.defineProperty(this, 'launchUrl', { writable: false })
-    void this.connection.closed.then((end) => {
+    void this.connection.closed.then((end) =>
       this.fail(
-        end.outcome === 'closed' ? new Error(messages.connectionEnded) : new PopupError(end.code),
-        end.outcome,
-      )
-    })
+        end.outcome === 'failed'
+          ? new PopupError(end.code)
+          : new CeremonyError(this.operation(), messages.connectionEnded, { status: 'closed' }),
+      ),
+    )
   }
 
   onEvent(listener: (event: CeremonyEvent) => void): () => void {
@@ -291,55 +289,61 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.events.emit(event)
   }
 
-  private receiveEvent(message: EventMessage): void {
-    const { type: _type, ...event } = message
-    const core = coreEvents.includes(event.event as CoreEvent)
-    if (event.event === 'prefetch-dispatch') {
-      this.expect('prefetch')
-      if (event.phase !== 'finished') throw new Error('Invalid prefetch readiness')
-      this.state = 'oauth'
-      const url = this.authorizationUrl
-      this.authorizationUrl = ''
+  private receiveEvent({ type: _type, ...event }: EventMessage): void {
+    if (event.event === 'prefetch-dispatch') this.prefetched(event)
+    else if (event.event === 'prover') this.proverReady(event)
+    else {
+      if (isCoreEvent(event.event)) this.observe(event.event, event.phase)
       this.publish(event)
-      if (this.state !== 'oauth') return
-      this.publish({ event: 'authorization', phase: 'started', timestamp: now() })
-      if (this.state === 'oauth')
-        void this.connection
-          .navigateAway(url)
-          .catch((error) => this.fail(ceremonyError(error, 'authorization')))
-      return
     }
-    if (event.event === 'prover') {
+  }
+
+  /** Prefetch readiness releases the one-shot authorization navigation. */
+  private prefetched(event: OperationEvent): void {
+    this.expect('prefetch')
+    if (event.phase !== 'finished') throw sequenceError('Invalid prefetch readiness')
+    this.state = 'oauth'
+    const url = this.authorizationUrl
+    this.authorizationUrl = ''
+    this.publish(event)
+    if (this.state !== 'oauth') return
+    this.publish({ event: 'authorization', phase: 'started', timestamp: now() })
+    if (this.state === 'oauth')
+      void this.connection
+        .navigateAway(url)
+        .catch((error) => this.fail(ceremonyError(error, 'authorization')))
+  }
+
+  private proverReady(event: OperationEvent): void {
+    this.expect('oauth')
+    if (event.phase !== 'started') throw sequenceError('Invalid prover readiness')
+    this.state = 'proving'
+    // Readiness processing precedes observers; no subscription is needed to start proving.
+    this.connection.send({ ...this.start })
+    this.publish(event)
+  }
+
+  /** Core observations must fit the run's state and platform, once each, started before finished. */
+  private observe(event: CoreEvent, phase: OperationEvent['phase']): void {
+    if (event === 'authorization' || event === 'prover-fallback') {
       this.expect('oauth')
-      if (event.phase !== 'started') throw new Error('Invalid prover readiness')
-      this.state = 'proving'
-      // Readiness processing precedes observers; no subscription is needed to start proving.
-      this.connection.send({ ...this.start })
-      this.publish(event)
-      return
-    }
-    if (event.event === 'authorization' || event.event === 'prover-fallback') {
-      this.expect('oauth')
-      if (event.event === 'authorization' && event.phase !== 'finished')
-        throw new Error('Invalid authorization observation')
-    } else if (core) {
+      if (event === 'authorization' && phase !== 'finished')
+        throw sequenceError('Invalid authorization observation')
+    } else {
       this.expect('proving')
-      if (!implementationFor(this.platform, this.version).events.includes(event.event as CoreEvent))
-        throw new Error('Event does not apply to platform')
+      if (!this.platformEvents.includes(event))
+        throw sequenceError('Event does not apply to platform')
       this.proofWorkStarted = true
     }
-    if (core) {
-      const key = `${event.event}/${event.phase ?? ''}`
-      if (this.observations.has(key)) throw new Error('Duplicate core occurrence')
-      if (
-        event.phase === 'finished' &&
-        event.event !== 'authorization' &&
-        !this.observations.has(`${event.event}/started`)
-      )
-        throw new Error('Core finish precedes start')
-      this.observations.add(key)
-    }
-    this.publish(event)
+    const key = `${event}/${phase ?? ''}`
+    if (this.observations.has(key)) throw sequenceError('Duplicate core occurrence')
+    if (
+      phase === 'finished' &&
+      event !== 'authorization' &&
+      !this.observations.has(`${event}/started`)
+    )
+      throw sequenceError('Core finish precedes start')
+    this.observations.add(key)
   }
 
   private listen<M extends Message>(
@@ -352,11 +356,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       try {
         handler(m)
       } catch (error) {
-        this.fail(
-          new Error(
-            `Invalid ceremony sequence: ${error instanceof Error ? error.message : 'unexpected message'}`,
-          ),
-        )
+        this.fail(error)
       }
     })
     binding.remove.push(this.connection.on(type, listener.receive))
@@ -364,7 +364,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   }
 
   private expect(state: typeof this.state): void {
-    if (this.state !== state) throw new Error('Unexpected ceremony message')
+    if (this.state !== state) throw sequenceError('Unexpected ceremony message')
   }
 
   proveUserIdentity(): Promise<IdentityResult<P>> {
@@ -405,7 +405,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
           this.version,
           m,
           this.start.clientId,
-          this.retained.authorizationNonce,
+          this.authorizationNonce,
         )
         const resolve = this.resolve
         this.finish({
@@ -418,7 +418,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       })
       this.listen(binding, UserDenied, () => {
         this.expect('proving')
-        if (this.proofWorkStarted) throw new Error('Denial after proof work began')
+        if (this.proofWorkStarted) throw sequenceError('Denial after proof work began')
         const resolve = this.resolve
         this.finish({
           status: 'denied',
@@ -433,7 +433,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       if (this.state === 'prefetch')
         void this.connection
           .navigate(this.prefetchUrl, this.fragment)
-          .catch(() => this.fail(new Error('Prefetch navigation failed')))
+          .catch((error) => this.fail(ceremonyError(error, 'prefetch-dispatch')))
     } catch {
       for (const remove of binding.remove.splice(0)) remove()
       if (bindings.get(this.connection) === binding) bindings.delete(this.connection)
@@ -442,26 +442,18 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     return result
   }
 
-  private fail(error: Error, status: 'failed' | 'closed' = 'failed'): void {
+  /** The operation a failure interrupts. */
+  private operation(): string {
+    if (this.state === 'new' || this.state === 'prefetch') return 'prefetch-dispatch'
+    return this.state === 'oauth' ? 'authorization' : 'prover'
+  }
+
+  private fail(error: unknown): void {
     if (this.state === 'done') return
     const reject = this.reject
-    const event =
-      this.state === 'prefetch' || this.state === 'new'
-        ? 'prefetch-dispatch'
-        : this.state === 'oauth'
-          ? 'authorization'
-          : 'prover'
-    const failure =
-      status === 'closed'
-        ? new CeremonyError(event, error.message, { cause: error, status })
-        : ceremonyError(error, event)
+    const failure = ceremonyError(error, this.operation())
     if (this.state === 'new') this.startFailure = failure
-    this.finish({
-      status: failure.status,
-      event: failure.event,
-      message: failure.message,
-      timestamp: now(),
-    })
+    this.finish(failureEvent(failure))
     reject?.(failure)
   }
 
@@ -473,9 +465,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.observations.clear()
     this.start.codeVerifier = null
     this.authorizationUrl = ''
-    this.retained.authorizationNonce.fill(0)
-    this.retained.operationDomain.fill(0)
-    this.retained.transactionData.fill(0)
+    this.authorizationNonce.fill(0)
     this.resolve = undefined
     this.reject = undefined
   }

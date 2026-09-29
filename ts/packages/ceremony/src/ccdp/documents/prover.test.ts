@@ -12,6 +12,7 @@ const { accept, connection, prove, ui, terminal } = vi.hoisted(() => ({
   accept: vi.fn(),
   terminal: vi.fn(),
   connection: {
+    peerOrigin: 'https://app.test',
     ready: Promise.resolve(),
     closed: new Promise<ConnectionEnd>(() => {}),
     send: vi.fn(),

@@ -1,6 +1,7 @@
-import { platforms as catalog, type PlatformId, supportedPlatforms } from '../../platforms/index.js'
+import { platforms as catalog, isPlatformId, type PlatformId } from '../../platforms/index.js'
 import { hasExactKeys, isRecord, origin, uint } from '../../primitives.js'
-import { isClientCredential } from '../index.js'
+import { readJson } from '../../response.js'
+import { isClientCredential, MAX_CEREMONY_VERSION } from '../index.js'
 
 export interface PlatformConfig {
   clientId: string
@@ -15,12 +16,14 @@ export interface CeremonyConfig {
   platforms: Readonly<Record<string, PlatformConfig>>
 }
 
-export const CONFIG_PATH = '/api/v1/ceremony/config'
+const CONFIG_PATH = '/api/v1/ceremony/config'
 
-/** Validate public configuration and derive the fixed callback URL from the supplied Bridge origin. */
+/** Public configuration is a few short records; the bound only stops unbounded reads. */
+const MAX_CONFIG_BYTES = 64 * 1024
+
+/** Validate public configuration and derive the fixed callback URL from the validated Bridge origin. */
 export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
   if (
-    !origin(bridge) ||
     !isRecord(v) ||
     !hasExactKeys(v, ['ccdpOrigin', 'platforms']) ||
     !origin(v.ccdpOrigin) ||
@@ -28,36 +31,41 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
   )
     throw new TypeError('Invalid Ceremony configuration')
   const platforms: Record<string, PlatformConfig> = Object.create(null)
-  for (const [key, p] of Object.entries(v.platforms)) {
-    if (!supportedPlatforms.includes(key as PlatformId)) continue
-    if (
-      !isRecord(p) ||
-      !hasExactKeys(p, [
-        'clientId',
-        'ceremonyVersions',
-        ...(Object.hasOwn(p, 'clientCredential') ? ['clientCredential'] : []),
-      ]) ||
-      ((catalog[key as PlatformId].requiresClientCredential ||
-        Object.hasOwn(p, 'clientCredential')) &&
-        !isClientCredential(p.clientCredential)) ||
-      !catalog[key as PlatformId].isClientId(p.clientId) ||
-      !Array.isArray(p.ceremonyVersions) ||
-      !p.ceremonyVersions.length ||
-      p.ceremonyVersions.some((n) => !uint(n, 65535)) ||
-      new Set(p.ceremonyVersions).size !== p.ceremonyVersions.length
-    )
-      throw new TypeError('Invalid platform configuration')
-    platforms[key] = Object.freeze({
-      clientId: p.clientId,
-      ceremonyVersions: Object.freeze([...p.ceremonyVersions]),
-      ...(typeof p.clientCredential === 'string' ? { clientCredential: p.clientCredential } : {}),
-    })
-  }
+  // Platforms outside this package's closed catalog are ignored, not rejected.
+  for (const [id, p] of Object.entries(v.platforms))
+    if (isPlatformId(id)) platforms[id] = validatePlatformConfig(id, p)
   return Object.freeze({
     redirectUri: new URL('/auth/callback', bridge).href,
     ccdpOrigin: v.ccdpOrigin,
     platforms: Object.freeze(platforms),
   })
+}
+
+function validatePlatformConfig(id: PlatformId, p: unknown): PlatformConfig {
+  if (
+    !isRecord(p) ||
+    !hasExactKeys(p, ['clientId', 'ceremonyVersions'], ['clientCredential']) ||
+    ((catalog[id].requiresClientCredential || Object.hasOwn(p, 'clientCredential')) &&
+      !isClientCredential(p.clientCredential)) ||
+    !catalog[id].isClientId(p.clientId) ||
+    !isVersionList(p.ceremonyVersions)
+  )
+    throw new TypeError('Invalid platform configuration')
+  return Object.freeze({
+    clientId: p.clientId,
+    ceremonyVersions: Object.freeze([...p.ceremonyVersions]),
+    ...(typeof p.clientCredential === 'string' ? { clientCredential: p.clientCredential } : {}),
+  })
+}
+
+/** A nonempty, duplicate-free list of ceremony versions, in any order. */
+function isVersionList(v: unknown): v is number[] {
+  return (
+    Array.isArray(v) &&
+    v.length > 0 &&
+    v.every((n) => uint(n, MAX_CEREMONY_VERSION)) &&
+    new Set(v).size === v.length
+  )
 }
 
 /** Fetch current configuration without cookies, redirects or persistent browser caching. */
@@ -71,5 +79,5 @@ export async function fetchCeremonyConfig(bridge: string): Promise<CeremonyConfi
     redirect: 'error',
   })
   if (!response.ok) throw new Error('Configuration request failed')
-  return validateCeremonyConfig(await response.json(), bridge)
+  return validateCeremonyConfig(await readJson(response, MAX_CONFIG_BYTES), bridge)
 }

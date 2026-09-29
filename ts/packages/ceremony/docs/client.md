@@ -84,9 +84,9 @@ or navigation. The returned connection supports other application protocols;
 
 `new(connection, id, platformId, ledger, operationDomain, transactionData, version?)`
 is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`
-and `ledger.notaryAddress()` once, copies the hash and byte inputs, and derives
-fresh authorization material. Invalid selection, ledger values or inputs fail
-before OAuth. A client cannot reuse a live ID; a connection cannot run two
+and `ledger.notaryAddress()` once and derives fresh authorization material from
+the hash and byte inputs before returning, without retaining those buffers.
+Invalid selection, ledger values or inputs fail before OAuth. A client cannot reuse a live ID; a connection cannot run two
 ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
 [ceremony.ts](../src/ccdp/client/ceremony.ts).
 
@@ -113,7 +113,8 @@ Client derives fixed `/auth/callback` from its configured Bridge origin; public
 configuration contains no callback path or redirect URI.
 
 GitHub configuration must include `clientCredential`, a nonempty printable
-ASCII public OAuth application credential without whitespace. Client freezes and
+ASCII public OAuth application credential without whitespace, of at most 512
+bytes. Client freezes and
 forwards it unchanged in `ProveIdentity`; Prover never refetches configuration.
 The field is optional for other platforms and validated whenever present. There
 is no per-ceremony credential override.

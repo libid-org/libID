@@ -1,9 +1,9 @@
 import { messages } from './ccdp/ui-messages.js'
-import { ceremonyError } from './errors.js'
-import { isRecord, text } from './primitives.js'
+import { type CeremonyError, ceremonyError } from './errors.js'
+import { hasExactKeys, isRecord, isSlug, text } from './primitives.js'
 
 /** Core operations have protocol-owned meanings; extension events grant no protocol authority. */
-export const coreEvents = [
+const coreEvents = [
   'prefetch-dispatch',
   'authorization',
   'prover',
@@ -40,25 +40,22 @@ export type CeremonyEvent =
 
 export const now = () => performance.timeOrigin + performance.now()
 
-export function eventName(value: unknown): value is string {
-  return typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value)
-}
+export const isCoreEvent = (event: string): event is CoreEvent =>
+  coreEvents.includes(event as CoreEvent)
 
 /** Exact bounded records are validated at the transport boundary, independently of subscriptions. */
 export function validateEvent(value: unknown): asserts value is OperationEvent {
   if (
     !isRecord(value) ||
-    !eventName(value.event) ||
+    !hasExactKeys(value, ['event', 'timestamp'], ['phase', 'instrumentation']) ||
+    !isSlug(value.event) ||
     typeof value.timestamp !== 'number' ||
     !Number.isFinite(value.timestamp) ||
     value.timestamp < 0 ||
-    Object.keys(value).some(
-      (key) => !['event', 'phase', 'timestamp', 'instrumentation', 'type'].includes(key),
-    ) ||
     ('phase' in value && value.phase !== 'started' && value.phase !== 'finished')
   )
     throw new TypeError('Invalid operation event')
-  const core = coreEvents.includes(value.event as CoreEvent)
+  const core = isCoreEvent(value.event)
   if (core && (value.event === 'prover-fallback' ? 'phase' in value : !('phase' in value)))
     throw new TypeError('Invalid core event phase')
   if ('instrumentation' in value) validateInstrumentation(value.instrumentation, core)
@@ -68,28 +65,26 @@ export function validateEvent(value: unknown): asserts value is OperationEvent {
 function validateInstrumentation(metadata: unknown, core: boolean): void {
   if (
     !isRecord(metadata) ||
-    Object.keys(metadata).some((key) => !['operationId', 'attributes'].includes(key)) ||
+    !hasExactKeys(metadata, [], ['operationId', 'attributes']) ||
     ('operationId' in metadata && (!text(metadata.operationId, 64) || core))
   )
     throw new TypeError('Invalid event instrumentation')
+  const { attributes } = metadata
   if (
     'attributes' in metadata &&
-    (!isRecord(metadata.attributes) ||
-      Object.keys(metadata.attributes).length > 16 ||
-      Object.entries(metadata.attributes).some(
-        ([key, value]) =>
-          !eventName(key) ||
-          !(
-            typeof value === 'boolean' ||
-            (typeof value === 'number' && Number.isFinite(value)) ||
-            text(value, 128)
-          ),
-      ))
+    (!isRecord(attributes) ||
+      Object.keys(attributes).length > 16 ||
+      Object.entries(attributes).some(([key, value]) => !isSlug(key) || !isAttributeValue(value)))
   )
     throw new TypeError('Invalid event attributes')
 }
 
-export const stages = [
+const isAttributeValue = (value: unknown): boolean =>
+  typeof value === 'boolean' ||
+  (typeof value === 'number' && Number.isFinite(value)) ||
+  text(value, 128)
+
+const stages = [
   'preparation',
   'authorization',
   'proof-preparation',
@@ -137,8 +132,7 @@ function projectedStage(event: CeremonyEvent): CeremonyStage | undefined {
 export class Events {
   private readonly listeners = new Set<(event: CeremonyEvent) => void>()
   private readonly stageListeners = new Set<(event: StageEvent) => void>()
-  private stage: CeremonyStage = 'preparation'
-  private stageSeen = false
+  private stage: CeremonyStage | undefined
   private ended = false
 
   onEvent(listener: (event: CeremonyEvent) => void): () => void {
@@ -155,16 +149,9 @@ export class Events {
     if (this.ended) return
     const terminal = event.status !== 'active'
     if (terminal) this.ended = true
-    const projected = projectedStage(event)
-    const changed =
-      projected !== undefined &&
-      (!this.stageSeen || stages.indexOf(projected) > stages.indexOf(this.stage))
-    if (changed) {
-      this.stage = projected
-      this.stageSeen = true
-    }
+    const changed = this.advance(projectedStage(event))
     const stageUpdate = Object.freeze({
-      stage: this.stage,
+      stage: this.stage ?? 'preparation',
       status: event.status,
       timestamp: event.timestamp,
       ...('message' in event ? { message: event.message } : {}),
@@ -174,7 +161,18 @@ export class Events {
     if (terminal) this.clear()
   }
 
-  clear(): void {
+  /** Stages only move forward; the first projection may start at any stage. */
+  private advance(stage: CeremonyStage | undefined): boolean {
+    if (
+      stage === undefined ||
+      (this.stage !== undefined && stages.indexOf(stage) <= stages.indexOf(this.stage))
+    )
+      return false
+    this.stage = stage
+    return true
+  }
+
+  private clear(): void {
     this.listeners.clear()
     this.stageListeners.clear()
   }
@@ -203,6 +201,18 @@ function snapshot(event: CeremonyEvent): CeremonyEvent {
       ...(attributes ? { attributes: Object.freeze({ ...attributes }) } : {}),
     }),
   })
+}
+
+/** The terminal update for a failure, carrying its status, operation and display text. */
+export function failureEvent(
+  failure: CeremonyError,
+): Extract<CeremonyEvent, { status: 'failed' | 'closed' }> {
+  return {
+    status: failure.status,
+    event: failure.event,
+    message: failure.message,
+    timestamp: now(),
+  }
 }
 
 /** Interruptions preserve the original error and never fabricate a finished operation. */

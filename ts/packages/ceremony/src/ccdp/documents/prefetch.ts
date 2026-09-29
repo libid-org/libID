@@ -4,7 +4,7 @@ import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { dispatchPrefetch, rootWorker } from '../../assets/registration.js'
 import { startWorker } from '../../assets/worker.js'
 import { ceremonyError, reportFailure } from '../../errors.js'
-import { Events, now } from '../../events.js'
+import { Events, failureEvent, now } from '../../events.js'
 import { readPrefetch } from '../navigation.js'
 import { messages } from '../ui-messages.js'
 import { eventView } from './ui.js'
@@ -14,7 +14,7 @@ export async function startPrefetch(fragment: string): Promise<void> {
   const started = performance.now()
   let connection: PopupConnection<Message> | undefined
   const events = new Events()
-  const ui = eventView(events, '')
+  const ui = eventView(events)
   try {
     const input = readPrefetch(fragment),
       profile = `${input.platformId}/${input.platformCeremonyVersion}`
@@ -54,12 +54,7 @@ export async function startPrefetch(fragment: string): Promise<void> {
     events.emit({ ...event, status: 'active' })
   } catch (error) {
     const failure = ceremonyError(error, 'prefetch-dispatch')
-    events.emit({
-      status: 'failed',
-      event: failure.event,
-      message: failure.message,
-      timestamp: now(),
-    })
+    events.emit(failureEvent(failure))
     reportFailure(connection, failure)
   } finally {
     ui.stop()
