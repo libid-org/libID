@@ -2,6 +2,7 @@ import type { CeremonyEvent } from '../src/ccdp/client/index.js'
 import type { Events } from '../src/events.js'
 import type { IdentityResult } from '../src/index.js'
 import type { Notarization } from '../src/notary/session.js'
+import type { NotaryPlatform } from './platforms.js'
 
 declare global {
   interface Window {
@@ -29,7 +30,7 @@ declare global {
     }>
     notarizeRequests(
       count: number,
-      platform?: 'x' | 'github',
+      platform?: NotaryPlatform,
     ): Promise<{ sent: number; received: number; attestedData: number }[]>
   }
 }

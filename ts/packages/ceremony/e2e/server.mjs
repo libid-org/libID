@@ -7,6 +7,7 @@ import { makeCertificate } from '../../popup/e2e/tls.mjs'
 import { packageDir } from '../build/sources.ts'
 import { isolated } from '../src/ccdp/headers.ts'
 import { prepareCallback } from './callback.ts'
+import { browserPlatforms } from './platforms.ts'
 import { origins, sws as swsPort } from './topology.ts'
 
 const sws = `http://127.0.0.1:${swsPort}`
@@ -19,6 +20,14 @@ const counts = new Map(),
   fixtures = new Map()
 
 const graph = JSON.parse(readFileSync(join(artifactDir, 'distribution-graph.json')))
+
+// Every platform in the e2e table, with the registration its fixtures expect.
+const registrations = Object.fromEntries(
+  Object.entries(browserPlatforms).map(([id, { clientId, clientCredential }]) => [
+    id,
+    { clientId, ...(clientCredential && { clientCredential }), ceremonyVersions: [1] },
+  ]),
+)
 
 const html = (body) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ceremony qualification</title><body>${body}</body></html>`
@@ -79,18 +88,7 @@ for (const secure of [true, false]) {
       return send(
         JSON.stringify({
           ccdpOrigin: ccdp,
-          platforms: {
-            google: {
-              clientId: '407408718192.apps.googleusercontent.com',
-              ceremonyVersions: [1],
-            },
-            x: { clientId: 'x-fixture', ceremonyVersions: [1] },
-            github: {
-              clientId: 'github-fixture',
-              clientCredential: 'fixture-public-credential',
-              ceremonyVersions: [1],
-            },
-          },
+          platforms: registrations,
         }),
         {
           'Content-Type': 'application/json',

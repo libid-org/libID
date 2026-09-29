@@ -60,11 +60,21 @@ with `CEREMONY_REQUIRE_NATIVE=1`.
 
 ## Browser tests
 
-`e2e/bearer.spec.ts` runs complete X/GitHub ceremony handoffs using synthetic
-OAuth returns and a test-only TLSN SDK/peer. The emitted session worker and
-proof engine are real; Node verifies delivered proofs against the released key
-and the commitments in the final fixture attestations. The separate runtime
-suite exercises real TLSN/notary sessions. Neither substitutes for live consent.
+Browser coverage is keyed by the platform catalog: [platforms.ts](../e2e/platforms.ts)
+holds one entry per catalog platform, and `typecheck:e2e` fails until a new
+platform has one. An entry states the harness Bridge registration, the
+authorization endpoint and return transport the popup must reach, the synthetic
+evidence its ceremonies run under, and its real-notary session counts.
+
+For every entry, `e2e/platforms.spec.ts` runs a bound denial and complete
+ceremony handoffs with accepted and corrupted evidence, using synthetic OAuth
+returns. Google uses its signed fixture JWT and fixture JWKS; the corrupted run
+changes one signature bit, which witness execution must reject. X/GitHub use a
+test-only TLSN SDK/peer; the corrupted run changes a final attestation. The
+emitted documents, session worker and proof engine are real; Node verifies
+delivered proofs against the released key and, for bearer-link, the commitments
+in the final fixture attestations. The separate runtime suite exercises real
+TLSN/notary sessions. Neither substitutes for live consent.
 
 With Docker Compose running:
 
@@ -93,9 +103,13 @@ development app uses loopback HTTP without certificate setup.
 
 | Suite | Coverage |
 |---|---|
-| [flow.spec.ts](../e2e/flow.spec.ts) | Document/connection lifecycle, emitted policies, selected assets, caching, UI and controlled Google proof generation. |
+| [platforms.spec.ts](../e2e/platforms.spec.ts) | Per catalog platform: bound denial, and fixture ceremonies with accepted and corrupted evidence, including released-key verification of delivered proofs. |
+| [popup.spec.ts](../e2e/popup.spec.ts) | Actual popup and Callback flows: private handoff, isolation, denial, application continuation, local Callback failures and the Prover progress UI. |
+| [isolation.spec.ts](../e2e/isolation.spec.ts) | Independent concurrent connections, a changed Application origin in the same opener window and provider isolation. |
+| [assets.spec.ts](../e2e/assets.spec.ts) | Emitted CCDP route policies, Service Worker migration and pending Prefetch joins, Cache Storage/HTTP-cache reuse, Worker failure before OAuth and mounted TLSN initialization. |
 | [admission.spec.ts](../e2e/admission.spec.ts) | Harness origin admission and CORS; not production Bridge egress or refresh. |
-| [runtime.spec.ts](../e2e/runtime.spec.ts) | One/two real X sessions and both GitHub endpoints through the matched notary; the GitHub pair runs alongside a separately verified bearer-link fixture proof. |
+| [runtime.spec.ts](../e2e/runtime.spec.ts) | The table's real-notary cases: one/two real X sessions and both GitHub endpoints through the matched notary; the GitHub pair runs alongside a separately verified bearer-link fixture proof. |
+| [fixtures.ts](../e2e/fixtures.ts) | Harness origins, popup launch, provider answers checked against the platform table, CCDP asset controls and fetch counts, and shared popup assertions. |
 | [verify.ts](../e2e/verify.ts) | Released-key verification of generated proofs and rejection of altered public inputs. |
 
 The harness proxies real SWS responses and inserts deployment data into emitted
