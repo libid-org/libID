@@ -60,19 +60,19 @@ function transcript(body: unknown) {
 }
 
 const profile = {
-  tokenRequest: {
+  buildTokenRequest: () => ({
     url: 'https://github.com/login/oauth/access_token',
     method: 'POST' as const,
     headers: {},
     body: new Uint8Array(),
-  },
+  }),
   selectToken: () => ({
     accessToken: 'fixture',
     ranges: { sent: [], received: [] },
     bearerRange: { start: 0, end: 7 },
   }),
   identityUrl: 'https://api.github.com/user',
-  identityRequest: () => ({
+  buildIdentityRequest: () => ({
     url: 'https://api.github.com/user',
     method: 'GET' as const,
     headers: {},
@@ -84,6 +84,7 @@ const profile = {
     ranges: { sent: [], received: [] },
     bearerRange: { start: 0, end: 7 },
   }),
+  identityResponse: () => true,
 }
 
 it.each(['accepted', 'failed'])(
@@ -130,7 +131,7 @@ it.each(['accepted', 'failed'])(
       },
     }
     let settled = false
-    const result = proveBearerLink(context, profile).finally(() => {
+    const result = proveBearerLink(context, 'github', profile, 'fixture').finally(() => {
       settled = true
     })
     const checked =
@@ -210,7 +211,7 @@ it.each(['closed', 'identity setup failed'])(
     prepare
       .mockImplementationOnce(prepare.getMockImplementation()!)
       .mockReturnValueOnce(identitySetup.promise)
-    const result = proveBearerLink(context, profile)
+    const result = proveBearerLink(context, 'github', profile, 'fixture')
     const checked = expect(result).rejects.toMatchObject({
       event: failure === 'closed' ? 'token-fetch' : 'identity-fetch',
       message: failure,
@@ -249,7 +250,7 @@ it('requires notaryAddress before notarization [LIBID-OAUTH-021]', async () => {
       fragment: '',
     },
   }
-  await expect(proveBearerLink(context, profile)).rejects.toBeInstanceOf(Error)
+  await expect(proveBearerLink(context, 'github', profile, 'fixture')).rejects.toBeInstanceOf(Error)
   expect(prepare).not.toHaveBeenCalled()
   expect(generate).not.toHaveBeenCalled()
 })

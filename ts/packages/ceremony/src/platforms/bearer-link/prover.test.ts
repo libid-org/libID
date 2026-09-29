@@ -219,9 +219,7 @@ for (const platform of ['x', 'github'] as const) {
       if (outcome !== 'accepted') {
         await expect(pending).rejects.toThrow(
           outcome === 'identity-shape'
-            ? platform === 'github'
-              ? 'Invalid GitHub identity'
-              : 'Invalid identity response'
+            ? 'Invalid identity response'
             : outcome === 'shifted-range'
               ? 'Identity commitment must match notarization'
               : outcome === 'startup-cancel'

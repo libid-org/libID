@@ -1,6 +1,14 @@
 import { isPkceValue } from '../../../ccdp/index.js'
+import type { ReturnProfile } from '../../oauthReturn.js'
 
 export const pkce = true
+
+/** Query code return; X defines no issuer field. */
+export const oauthReturn: ReturnProfile = {
+  transport: 'query',
+  credential: 'code',
+  rejected: ['id_token', 'access_token', 'refresh_token', 'iss'],
+}
 
 const AUTHORIZATION_ENDPOINT = 'https://x.com/i/oauth2/authorize'
 

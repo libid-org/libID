@@ -1,4 +1,4 @@
-import { hasExactKeys, isRecord, text } from '../primitives.js'
+import { hasExactKeys, isRecord } from '../primitives.js'
 import type { PlatformId } from './index.js'
 
 export interface Identity<P extends PlatformId = PlatformId> {
@@ -11,18 +11,22 @@ export interface Identity<P extends PlatformId = PlatformId> {
 export const proofBytes = (v: unknown): v is Uint8Array =>
   v instanceof Uint8Array && v.length > 0 && v.length <= 4 * 1024 * 1024
 
+const IDENTITY_FIELDS = ['oauthClientId', 'userId', 'userName'] as const
+
+/** Exact shape plus one encoding predicate per string field. */
 export function isIdentity<P extends PlatformId>(
   v: unknown,
   platform: P,
-  limits: readonly [number, number, number],
+  valid: Record<(typeof IDENTITY_FIELDS)[number], (value: string) => boolean>,
 ): v is Identity<P> {
   return (
     isRecord(v) &&
-    hasExactKeys(v, ['platformId', 'oauthClientId', 'userId', 'userName']) &&
+    hasExactKeys(v, ['platformId', ...IDENTITY_FIELDS]) &&
     v.platformId === platform &&
-    text(v.oauthClientId, limits[0]) &&
-    text(v.userId, limits[1]) &&
-    text(v.userName, limits[2])
+    IDENTITY_FIELDS.every((key) => {
+      const value = v[key]
+      return typeof value === 'string' && valid[key](value)
+    })
   )
 }
 

@@ -1,3 +1,5 @@
+import { isBearer, MAX_BEARER_BYTES } from '../../barretenberg/circuits/bearer_link/inputs.js'
+import { isPkceValue, redirect } from '../../ccdp/index.js'
 import type { ExactHttpRequest, Transcript } from '../../notary/protocol.js'
 import {
   decodePrintable,
@@ -8,6 +10,7 @@ import {
   tokenRequestBody,
 } from '../../notary/transcript.js'
 import { bytesEqual } from '../../primitives.js'
+import { isFormClientId } from '../authorization.js'
 import { isUserId } from '../types.js'
 
 export interface TokenRequestInput {
@@ -15,25 +18,42 @@ export interface TokenRequestInput {
   code: string
   redirectUri: string
   codeVerifier: string
+  clientCredential?: string
 }
 
 const encoder = new TextEncoder()
 
+// A consumed redirect code that fits one header-free form field of the bounded sent transcript.
+const CODE = /^[\x21-\x7e]{1,1024}$/
+
 /** Fixed platform layout; raw transcript bytes remain the authority for disclosure ranges. */
-export function bearerTranscript<Input>(profile: {
+export function bearerTranscript(profile: {
   tokenUrl: string
-  tokenFields(input: Input): [string, string][]
+  tokenFields(input: TokenRequestInput): [string, string][]
   identityUrl: string
   identityHeaders: Record<string, string>
   quotedId: boolean
   userName: { field: string; maxBytes: number; valid(value: string): boolean }
+  /** Cross-check the parsed response against the exact selected identity bytes. */
+  identityResponse(
+    body: Record<string, unknown>,
+    selected: { userId: string; userName: string },
+  ): boolean
 }) {
   const tokenUrl = new URL(profile.tokenUrl)
   const identityUrl = new URL(profile.identityUrl)
-  const tokenBody = (input: Input) =>
-    encoder.encode(new URLSearchParams(profile.tokenFields(input)).toString())
+  function tokenBody(input: TokenRequestInput) {
+    if (
+      !isFormClientId(input.clientId) ||
+      !CODE.test(input.code) ||
+      !redirect(input.redirectUri) ||
+      !isPkceValue(input.codeVerifier)
+    )
+      throw new Error('Invalid token request')
+    return encoder.encode(new URLSearchParams(profile.tokenFields(input)).toString())
+  }
 
-  function buildTokenRequest(input: Input): ExactHttpRequest {
+  function buildTokenRequest(input: TokenRequestInput): ExactHttpRequest {
     const body = tokenBody(input)
     return {
       url: profile.tokenUrl,
@@ -51,8 +71,7 @@ export function bearerTranscript<Input>(profile: {
   }
 
   function buildIdentityRequest(bearer: string): ExactHttpRequest {
-    // libid-circuits v0.4.0 bearer-link private-input width; HTTP bearers contain no whitespace.
-    if (!/^[\x21-\x7e]{1,128}$/.test(bearer)) throw new Error('Invalid bearer')
+    if (!isBearer(bearer)) throw new Error('Invalid bearer')
     return {
       url: profile.identityUrl,
       method: 'GET',
@@ -69,7 +88,7 @@ export function bearerTranscript<Input>(profile: {
   }
 
   /** Reveal the canonical frozen request and response framing around the hidden bearer. */
-  function selectToken(transcript: Transcript, input: Input) {
+  function selectToken(transcript: Transcript, input: TokenRequestInput) {
     const body = tokenRequestBody(
       transcript.sent,
       `POST ${tokenUrl.pathname} HTTP/1.1`,
@@ -77,7 +96,8 @@ export function bearerTranscript<Input>(profile: {
     )
     if (!bytesEqual(body, tokenBody(input))) throw new Error('Token request body changed')
     const token = quotedRange(transcript.received, 'access_token')
-    const accessToken = decodePrintable(token.value, 'access token', 128)
+    const accessToken = decodePrintable(token.value, 'access token', MAX_BEARER_BYTES)
+    if (!isBearer(accessToken)) throw new Error('Invalid access token')
     return {
       accessToken,
       bearerRange: { start: token.valueStart, end: token.range.end - 1 },
@@ -127,8 +147,11 @@ export function bearerTranscript<Input>(profile: {
     buildIdentityRequest,
     selectToken,
     selectIdentity,
+    identityResponse: profile.identityResponse,
   }
 }
+
+export type BearerTranscript = ReturnType<typeof bearerTranscript>
 
 function numericId(bytes: Uint8Array) {
   const { start, valueStart } = jsonField(bytes, 'id')

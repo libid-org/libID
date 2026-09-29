@@ -16,21 +16,26 @@ failures throw with operation context. Platform code has no popup connection.
 `ProverDocument` owns readiness, one-shot request execution, delivery and cleanup; its state drops the private capture when
 proving starts.
 
-Validate the return, state and required inputs before credential use. OAuth
-parsers ignore bounded provider metadata they do not need while rejecting
-malformed encoding, duplicate fields, extra credentials, mixed outcomes and
-wrong transport. GitHub also requires its exact issuer on success and error
+Validate the return, state and required inputs before credential use. Each
+`url.ts` declares its return profile (transport, credential field, rejected
+fields, issuer); [one parser](../src/platforms/oauthReturn.ts) decodes every value
+once, bounds decoded values, and ignores provider metadata it does not need while
+rejecting malformed encoding, duplicate fields, extra credentials, mixed outcomes
+and wrong transport. GitHub also requires its exact issuer on success and error
 returns; X does not inherit that requirement.
 
 Client forwards `notaryAddress` uniformly; Google ignores it, X/GitHub require it.
-The URL definition declares PKCE use; Client derives `codeVerifier` or sends null,
-and the pipeline enforces its requirement. Neither input selects an asset or a
+The URL definition declares PKCE use; Client derives `codeVerifier` or sends null.
+Every pipeline starts with [acceptReturn](../src/platforms/oauthReturn.ts), which
+checks the request against the catalog's client ID, PKCE and credential
+declarations, consumes the ceremony-bound return, and yields null for denial. Neither input selects an asset or a
 replacement notary. A second platform must not require another shared-code branch.
 
 ## Google
 
-[google/1/prover.ts](../src/platforms/google/1/prover.ts) selects the JWK matching
-the once-parsed token's `kid`. [witness.ts](../src/platforms/google/1/witness.ts)
+[google/1/token.ts](../src/platforms/google/1/token.ts) parses the ID token once,
+accepts it only for the frozen client before its signed expiry, and selects the
+JWK matching its `kid`. [witness.ts](../src/platforms/google/1/witness.ts)
 adapts that token/key to the released `oidc_google` circuit encoder and assembles
 the identity and proof fields. JWT/JWK input preparation overlaps [proof-worker startup](proving.md#worker-lifecycle).
 Google creates no TLSNotary session.
@@ -46,9 +51,9 @@ subject and email as identity fields.
 
 ## X
 
-[x/1/prover.ts](../src/platforms/x/1/prover.ts) validates its return and transcript
-policy, then uses [the shared bearer-link pipeline](../src/platforms/bearer-link/prover.ts)
-to overlap these dependencies:
+[x/1/prover.ts](../src/platforms/x/1/prover.ts) accepts its return, then hands its
+transcript profile to [the shared bearer-link pipeline](../src/platforms/bearer-link/prover.ts),
+which overlaps these dependencies:
 
 1. Start the proof engine and prepare token/identity sessions in one
    ceremony-owned notary runtime. Each TLS session has its own channel.
@@ -83,25 +88,29 @@ owns this request layout; deployed verifiers must accept that layout.
 X and GitHub share the `bearer_link` circuit and
 [transcript machinery](../src/platforms/bearer-link/transcript.ts).
 Each platform declares its fixed endpoints, ordered token fields, identity headers
-and field shapes in `transcript.ts`, and owns its proof validators. Delivery
+and field shapes in `transcript.ts`, and its user-name grammar in `types.ts`;
+[bearer-link/types.ts](../src/platforms/bearer-link/types.ts) supplies the shared
+client ID, identity and proof validators under each platform's names. The shared
+machinery validates the common token inputs (form client ID, code, redirect URI,
+PKCE verifier) and the circuit-width bearer once for both. Delivery
 includes proof and both attestations; the shared identity is a convenience view, not an additional circuit output.
 
 ## Adding a platform
 
 For another version-one platform:
 
-1. Add `platforms/<id>/1/` with `url.ts` (including PKCE choice), `types.ts`
-   (client ID, identity and proof validation), event definitions (core operations and
-   separate UI weights; X/GitHub share `bearer-link/events.ts`), `<id>.assets.ts`
-   and `prover.ts`. Reuse shared parsers,
+1. Add `platforms/<id>/1/` with `url.ts` (including PKCE choice and return
+   profile), `types.ts` (client ID, identity and proof validation), event definitions
+   (core operations and separate UI weights), `<id>.assets.ts` and `prover.ts`;
+   X/GitHub share `bearer-link/` events and assets instead. Reuse shared parsers,
    notary sessions and circuit adapters only where their contracts fit. Keep
    platform-specific selectors and fixtures beside their tests.
 2. Register its lightweight definition in [the catalog](../src/platforms/index.ts).
    It derives discovery, supported versions and result types.
 3. Add the lazy import to [the Prover dispatcher](../src/ccdp/documents/prover.ts)
    and resource set to [the asset catalog](../src/platforms/platforms.assets.ts).
-   Both are checked against the platform catalog. Add any new circuit to the
-   capacity list in the asset catalog. Emitted JavaScript dependencies come from
+   Both are checked against the platform catalog. The asset catalog derives its
+   capacity-checked circuit list from those resource sets. Emitted JavaScript dependencies come from
    the compiler graph; do not copy those URLs into the resource set.
 4. Have Bridge advertise the implemented version and any required public
    token-exchange credential; set `requiresClientCredential` in the catalog.
