@@ -1,13 +1,7 @@
 import { isAttestation, type NotaryAttestation } from '../../notary/decode.js'
-import { text } from '../../primitives.js'
+import { recordValidator, text } from '../../primitives.js'
 import { isFormClientId } from '../authorization.js'
-import {
-  type Identity,
-  identityValidator,
-  isUserId,
-  proofBytes,
-  recordValidator,
-} from '../types.js'
+import { type Identity, identityValidator, isUserId, proofBytes } from '../types.js'
 
 export interface BearerLinkProofV1 {
   bearerLinkProof: Uint8Array

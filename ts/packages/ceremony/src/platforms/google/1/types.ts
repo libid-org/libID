@@ -4,8 +4,8 @@ import {
   MAX_SUB_BYTES,
   RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/inputs.js'
-import { fixedBytes, uint } from '../../../primitives.js'
-import { type Identity, identityValidator, proofBytes, recordValidator } from '../../types.js'
+import { fixedBytes, recordValidator, uint } from '../../../primitives.js'
+import { type Identity, identityValidator, proofBytes } from '../../types.js'
 
 export interface GoogleProofV1 {
   identityProof: Uint8Array

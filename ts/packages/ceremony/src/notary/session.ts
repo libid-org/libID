@@ -54,7 +54,7 @@ export class Notarization {
     const signal = this.signal
     signal.throwIfAborted()
     const target = webUrl(url) ? new URL(url) : undefined
-    if (!target || target.protocol !== 'https:' || target.hash || target.port)
+    if (target?.protocol !== 'https:' || target.hash || target.port)
       throw new TypeError('Invalid notarization target')
     if (!this.#worker) {
       const worker = new Worker(new URL('./session.worker.ts', import.meta.url), { type: 'module' })

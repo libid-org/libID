@@ -1,4 +1,4 @@
-import { fixedBytes, hasExactKeys, isRecord } from '../primitives.js'
+import { fixedBytes, hasExactKeys } from '../primitives.js'
 import type { ByteRange, Directions } from './protocol.js'
 
 export const MAX_ATTESTED_DATA_BYTES = 2 * 1024 * 1024
@@ -150,7 +150,6 @@ export function decodeAttestedData(bytes: Uint8Array): DecodedAttestedData {
 /** Bound the delivered bytes; ledger verification remains authoritative. */
 export function isAttestation(v: unknown): v is NotaryAttestation {
   return (
-    isRecord(v) &&
     hasExactKeys(v, ['attestedData', 'signature']) &&
     v.attestedData instanceof Uint8Array &&
     v.attestedData.length > 0 &&
