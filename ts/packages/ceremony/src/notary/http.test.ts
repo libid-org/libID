@@ -1,6 +1,6 @@
 import { concatBytes } from '@noble/hashes/utils.js'
 import { expect, it } from 'vitest'
-import { responseJson } from './http.js'
+import { responseJson, responseSizes } from './http.js'
 
 const encode = (text: string) => new TextEncoder().encode(text)
 
@@ -17,6 +17,7 @@ it('parses chunked JSON without altering the transcript used for range commitmen
     original = transcript.received.slice()
   expect(responseJson(transcript)).toEqual({ id: 1 })
   expect(transcript.received).toEqual(original)
+  expect(responseJson(response('X-Name: café\r\nContent-Length:\t2 \r\n', '{}'))).toEqual({})
 })
 
 it('decodes UTF-8 only after removing chunk framing that splits a character', () => {
@@ -40,6 +41,8 @@ it('rejects ambiguous framing, truncated chunks, compressed bodies, and malforme
     response('Content-Length: 0\r\n', '{}'),
     response('', '{"id":01}'),
     response('', '{"id":1,2:3}'),
+    response('Content-Length : 3\r\n', '{}'),
+    response('X: a\nContent-Length: 3\r\n', '{}'),
   ])
     expect(() => responseJson(transcript)).toThrow()
 })
@@ -52,5 +55,22 @@ it.each([301, 302, 303, 307, 308])(
       new TextDecoder().decode(transcript.received).replace('200 OK', `${status} Redirect`),
     )
     expect(() => responseJson(transcript)).toThrow('Platform request failed')
+  },
+)
+
+it.each([
+  { response: 'HTTP/1.1 200 OK\r\n\r\n\r\n\r\n', headerBytes: 19 },
+  { response: 'HTTP/1.1 200 OK\r\nX: é\r\n\r\n', headerBytes: 26 },
+  { response: 'No header boundary', headerBytes: undefined },
+])(
+  'splits raw response sizes at the first head terminator: $response [LIBID-PROVER-007]',
+  ({ response, headerBytes }) => {
+    const received = new Uint8Array(40)
+    received.set(encode(response))
+    expect(responseSizes(received)).toEqual(
+      headerBytes === undefined
+        ? {}
+        : { 'response-header-bytes': headerBytes, 'response-body-bytes': 40 - headerBytes },
+    )
   },
 )

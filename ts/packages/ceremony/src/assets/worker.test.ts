@@ -60,3 +60,29 @@ it.each(['fetch', 'message', 'failed-prefetch'])(
     expect(settled).toBe(true)
   },
 )
+
+it.each([
+  [{ type: 'ceremony-claim' }, 'https://evil.example/page'],
+  [{ type: 'ceremony-claim', extra: true }, 'https://ccdp.example/ccdp/v1/prover'],
+  [{ type: 'ceremony-prefetch', profile: 'google/1' }, 'https://evil.example/page'],
+  [{ type: 'ceremony-prefetch', profile: 'other/1' }, 'https://ccdp.example/ccdp/v1/prefetch'],
+])('closes the ports of an invalid ceremony request %j from %s without replying', (data, url) => {
+  let handler!: (event: unknown) => void
+  const claim = vi.fn(async () => {})
+  startWorker({
+    location: { origin: 'https://ccdp.example' },
+    clients: { claim },
+    addEventListener: (type: string, listener: typeof handler) => {
+      if (type === 'message') handler = listener
+    },
+  } as unknown as ServiceWorkerGlobalScope)
+  const port = { postMessage: vi.fn(), close: vi.fn() }
+  const waitUntil = vi.fn()
+  load.mockClear()
+  handler({ data, ports: [port], source: { url }, waitUntil })
+  expect(port.close).toHaveBeenCalledOnce()
+  expect(port.postMessage).not.toHaveBeenCalled()
+  expect(waitUntil).not.toHaveBeenCalled()
+  expect(claim).not.toHaveBeenCalled()
+  expect(load).not.toHaveBeenCalled()
+})

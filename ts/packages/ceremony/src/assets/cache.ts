@@ -32,11 +32,49 @@ export function validateResponse(response: Response, spec: AssetRequest): void {
 
 /** A returned range matches the requested one; a known complete length covers the declared size. */
 function validateContentRange(range: string, spec: AssetRequest): void {
-  if (spec.range && !new RegExp(`^bytes ${spec.range.slice(6)}/(?:[1-9][0-9]*|\\*)$`).test(range))
+  const match = /^bytes ([0-9]+-[0-9]+)\/([1-9][0-9]*|\*)$/.exec(range)
+  if (!match || (spec.range && spec.range !== `bytes=${match[1]}`))
     throw new Error('Unexpected asset range')
-  const total = range.split('/')[1]
-  if (spec.bytes !== undefined && total !== '*' && BigInt(total) < BigInt(spec.bytes))
+  if (spec.bytes !== undefined && match[2] !== '*' && BigInt(match[2]) < BigInt(spec.bytes))
     throw new Error('Invalid asset total')
+}
+
+/** A validated stored copy, or undefined after removing a truncated range. */
+async function cachedResponse(
+  cache: Cache,
+  key: string,
+  spec: AssetRequest,
+): Promise<Response | undefined> {
+  const hit = await cache.match(key)
+  if (!hit) return
+  // Complete bodies were checked before cache.put; ordinary hits need no copy.
+  if (!spec.range) {
+    validateResponse(hit, spec)
+    return hit
+  }
+  const bytes = await readBody(hit, spec.bytes ?? Number.MAX_SAFE_INTEGER)
+  if (spec.bytes !== undefined && bytes.length !== spec.bytes) {
+    await cache.delete(key)
+    return
+  }
+  const response = new Response(bytes, { status: 206, headers: hit.headers })
+  validateResponse(response, spec)
+  return response
+}
+
+/** Validate and bound a fetched body; stored headers describe the decoded bytes. */
+async function fetchedBody(
+  received: Response,
+  spec: AssetRequest,
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; headers: Headers }> {
+  validateResponse(received, spec)
+  const bytes = await readBody(received, spec.bytes ?? Number.MAX_SAFE_INTEGER)
+  if (spec.bytes !== undefined && bytes.length !== spec.bytes)
+    throw new Error('Incomplete asset body')
+  const headers = new Headers(received.headers)
+  headers.delete('content-encoding')
+  headers.set('content-length', String(bytes.length))
+  return { bytes, headers }
 }
 
 /** Single-flight delivery of immutable bytes. Storage failure falls back to the same fetch. */
@@ -58,70 +96,32 @@ export class AssetCache {
     const key = requestKey(spec)
     const existing = this.pending.get(key)
     if (existing) return { ...existing, response: existing.response.then((r) => r.clone()) }
-    let dispatched!: () => void
-    const started = new Promise<void>((resolve) => {
-      dispatched = resolve
-    })
+    const dispatched = Promise.withResolvers<void>()
     let writing = Promise.resolve()
     const response = (async () => {
-      let cache: Cache | undefined
       const cacheKey = this.origin + PREFIX + encodeURIComponent(key)
+      let cache: Cache | undefined
       try {
         cache = await caches.open(CACHE)
-        const hit = await cache.match(cacheKey)
-        if (hit) {
-          // Complete bodies were checked before cache.put; ordinary hits need no copy.
-          if (!spec.range) {
-            validateResponse(hit, spec)
-            dispatched()
-            return hit
-          }
-          const bytes = await readBody(hit, spec.bytes ?? Number.MAX_SAFE_INTEGER)
-          if (spec.bytes === undefined || bytes.length === spec.bytes) {
-            const response = new Response(bytes.slice().buffer, {
-              status: 206,
-              headers: hit.headers,
-            })
-            validateResponse(response, spec)
-            dispatched()
-            return response
-          }
-          await cache.delete(cacheKey)
-        }
+        const hit = await cachedResponse(cache, cacheKey, spec)
+        if (hit) return hit
       } catch {
         /* Storage denial does not disable fetching. */
       }
-      let fetching: Promise<Response>
-      try {
-        fetching = fetch(spec.url, {
-          credentials: 'omit',
-          mode: 'cors',
-          redirect: 'error',
-          headers: spec.range ? { Range: spec.range } : {},
-          cache: 'force-cache',
-        })
-      } finally {
-        dispatched()
-      }
-      const received = await fetching
-      validateResponse(received, spec)
-      const bytes = await readBody(received, spec.bytes ?? Number.MAX_SAFE_INTEGER)
-      if (spec.bytes !== undefined && bytes.length !== spec.bytes)
-        throw new Error('Incomplete asset body')
-      const headers = new Headers(received.headers)
-      headers.delete('content-encoding')
-      headers.set('content-length', String(bytes.length))
-      const stored = new Response(bytes.slice().buffer, { headers })
-      if (cache)
-        try {
-          writing = cache.put(cacheKey, stored.clone()).catch(() => {})
-        } catch {
-          /* A valid response remains usable when storage is full. */
-        }
-      return spec.range
-        ? new Response(bytes.slice().buffer, { status: 206, headers: stored.headers })
-        : stored
-    })().finally(dispatched)
+      const fetching = fetch(spec.url, {
+        credentials: 'omit',
+        mode: 'cors',
+        redirect: 'error',
+        headers: spec.range ? { Range: spec.range } : {},
+        cache: 'force-cache',
+      })
+      dispatched.resolve()
+      const { bytes, headers } = await fetchedBody(await fetching, spec)
+      const stored = new Response(bytes, { headers })
+      // A valid response remains usable when storage is full.
+      if (cache) writing = cache.put(cacheKey, stored.clone()).catch(() => {})
+      return spec.range ? new Response(bytes, { status: 206, headers }) : stored
+    })().finally(dispatched.resolve)
     const complete = response
       .then(
         () => writing,
@@ -130,6 +130,7 @@ export class AssetCache {
       .finally(() => {
         this.pending.delete(key)
       })
+    const started = dispatched.promise
     this.pending.set(key, { dispatched: started, response, complete })
     return { dispatched: started, response: response.then((r) => r.clone()), complete }
   }

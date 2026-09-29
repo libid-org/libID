@@ -1,12 +1,14 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
+import { concatBytes } from '@noble/hashes/utils.js'
 import { bytesEqual } from '../primitives.js'
 import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
 import type { ByteRange, CommitmentOpening, Reveals, Transcript } from './protocol.js'
 
-const MAX_SENT_BYTES = 4 * 1024
+/** Transcript acceptance limits, also supplied to the Prover as its setup limits. */
+export const MAX_SENT_BYTES = 4 * 1024
 
-const MAX_RECV_BYTES = 32 * 1024
+export const MAX_RECV_BYTES = 32 * 1024
 
 export interface CommitRange extends ByteRange {
   algorithm: 'SHA256'
@@ -16,7 +18,6 @@ export interface NotarizationPlan {
   reveal: {
     sent: ByteRange[]
     received: ByteRange[]
-    server_identity: true
   }
   commit: {
     sent: CommitRange[]
@@ -29,15 +30,9 @@ export interface HashOpening {
   blinder: Uint8Array
 }
 
-export interface RevealOutput {
-  sent: readonly HashOpening[]
-  received: readonly HashOpening[]
-}
-
 export interface CorrelatedCommitment extends ByteRange, HashOpening {}
 
-export interface CorrelatedAttestation {
-  decoded: DecodedAttestedData
+export interface Correlated {
   sent: readonly CorrelatedCommitment[]
   received: readonly CorrelatedCommitment[]
 }
@@ -94,7 +89,7 @@ export function planNotarization(transcript: Transcript, ranges: Reveals): Notar
   const sent = mergeAdjacent(ranges.sent)
   const received = mergeAdjacent(ranges.received)
   return {
-    reveal: { sent, received, server_identity: true },
+    reveal: { sent, received },
     commit: {
       sent: complement(sent, transcript.sent.length),
       received: complement(received, transcript.received.length),
@@ -104,23 +99,6 @@ export function planNotarization(transcript: Transcript, ranges: Reveals): Notar
 
 function sameRange(a: ByteRange, b: ByteRange): boolean {
   return a.start === b.start && a.end === b.end
-}
-
-function requireExactPlan(transcript: Transcript, plan: NotarizationPlan): void {
-  if (plan.reveal.server_identity !== true) invalid('server identity must be revealed')
-  const expected = planNotarization(transcript, plan.reveal)
-  for (const direction of ['sent', 'received'] as const) {
-    const actual = plan.commit[direction]
-    const wanted = expected.commit[direction]
-    if (
-      actual.length !== wanted.length ||
-      actual.some(
-        (range, index) => range.algorithm !== 'SHA256' || !sameRange(range, wanted[index]),
-      )
-    ) {
-      invalid(`${direction} commitment plan is not the reveal complement`)
-    }
-  }
 }
 
 function requireRevealed(
@@ -143,39 +121,31 @@ function requireRevealed(
   }
 }
 
-function commitmentHash(transcript: Uint8Array, range: ByteRange, blinder: Uint8Array): Uint8Array {
-  const input = new Uint8Array(range.end - range.start + blinder.length)
-  input.set(transcript.subarray(range.start, range.end))
-  input.set(blinder, range.end - range.start)
-  return sha256(input)
-}
-
-function correlateDirection(
-  transcript: Uint8Array,
-  planned: readonly CommitRange[],
-  openings: readonly HashOpening[],
+function requireCommitted(
+  correlated: readonly CorrelatedCommitment[],
   signed: DecodedDirection,
   direction: string,
-): CorrelatedCommitment[] {
-  if (signed.commitments.length !== planned.length) {
+): void {
+  if (signed.commitments.length !== correlated.length) {
     invalid(`${direction} signed commitment count changed`)
   }
-  for (let index = 0; index < planned.length; index++) {
-    if (!sameRange(planned[index], signed.commitments[index])) {
+  for (let index = 0; index < correlated.length; index++) {
+    if (!sameRange(correlated[index], signed.commitments[index])) {
       invalid(`${direction} signed commitment range changed`)
     }
-  }
-  const correlated = correlateOpenings(transcript, planned, openings, direction)
-  for (let index = 0; index < correlated.length; index++) {
     if (!bytesEqual(signed.commitments[index].commitment, correlated[index].hash)) {
       invalid(`${direction} signed commitment hash changed`)
     }
   }
-  return correlated
+}
+
+/** SHA256(hidden bytes || 16-byte blinder), the TLSNotary plaintext-hash commitment. */
+function commitmentHash(bytes: Uint8Array, blinder: Uint8Array): Uint8Array {
+  return sha256(concatBytes(bytes, blinder))
 }
 
 /** Match unordered provisional openings without treating them as signed evidence. */
-export function correlateOpenings(
+function correlateOpenings(
   transcript: Uint8Array,
   planned: readonly CommitRange[],
   openings: readonly HashOpening[],
@@ -195,7 +165,13 @@ export function correlateOpenings(
     }
 
     const matches = [...unmatched].filter((index) =>
-      bytesEqual(commitmentHash(transcript, planned[index], opening.blinder), opening.hash),
+      bytesEqual(
+        commitmentHash(
+          transcript.subarray(planned[index].start, planned[index].end),
+          opening.blinder,
+        ),
+        opening.hash,
+      ),
     )
     if (matches.length !== 1) invalid(`${direction} opening does not identify one hidden range`)
     const index = matches[0]
@@ -210,15 +186,31 @@ export function correlateOpenings(
   return correlated
 }
 
-/** Validate TLSNotary openings against both the transcript and signed record. */
-export function correlateAttestation(
+/** Correlate both directions of one TLSNotary reveal, in planned commitment order. */
+export function correlateReveal(
+  transcript: Transcript,
+  plan: NotarizationPlan,
+  openings: { sent: readonly HashOpening[]; received: readonly HashOpening[] },
+): Correlated {
+  return {
+    sent: correlateOpenings(transcript.sent, plan.commit.sent, openings.sent, 'sent'),
+    received: correlateOpenings(
+      transcript.received,
+      plan.commit.received,
+      openings.received,
+      'received',
+    ),
+  }
+}
+
+/** Require the signed record to match the transcript, planned reveals and correlated openings. */
+export function verifyAttestation(
   authority: string,
   transcript: Transcript,
   plan: NotarizationPlan,
-  openings: RevealOutput,
+  correlated: Correlated,
   attestedData: Uint8Array,
-): CorrelatedAttestation {
-  requireExactPlan(transcript, plan)
+): DecodedAttestedData {
   const decoded = decodeAttestedData(attestedData)
   if (!bytesEqual(decoded.authorityId, keccak_256(new TextEncoder().encode(authority))))
     invalid('attested authority changed')
@@ -230,23 +222,9 @@ export function correlateAttestation(
   }
   requireRevealed(transcript.sent, plan.reveal.sent, decoded.sent, 'sent')
   requireRevealed(transcript.received, plan.reveal.received, decoded.received, 'received')
-  return {
-    decoded,
-    sent: correlateDirection(
-      transcript.sent,
-      plan.commit.sent,
-      openings.sent,
-      decoded.sent,
-      'sent',
-    ),
-    received: correlateDirection(
-      transcript.received,
-      plan.commit.received,
-      openings.received,
-      decoded.received,
-      'received',
-    ),
-  }
+  requireCommitted(correlated.sent, decoded.sent, 'sent')
+  requireCommitted(correlated.received, decoded.received, 'received')
+  return decoded
 }
 
 /** Select one provisional opening and reconstruct SHA256(bearer || blinder) for the link witness. */
@@ -261,11 +239,8 @@ export function bearerOpening(
   )
   if (matches.length !== 1) throw new Error('Bearer opening is not unique')
   const opening = matches[0],
-    bytes = new TextEncoder().encode(bearer),
-    preimage = new Uint8Array(bytes.length + 16)
+    bytes = new TextEncoder().encode(bearer)
   if (opening.blinder.length !== 16 || opening.end - opening.start !== bytes.length)
     throw new Error('Invalid bearer opening')
-  preimage.set(bytes)
-  preimage.set(opening.blinder, bytes.length)
-  return { ...opening, hash: sha256(preimage) }
+  return { ...opening, hash: commitmentHash(bytes, opening.blinder) }
 }

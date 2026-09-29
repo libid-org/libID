@@ -1,24 +1,28 @@
+import { concatBytes } from '@noble/hashes/utils.js'
 import { errorMessage } from '../errors.js'
+import { workerThreads } from '../workers.js'
+import type { DecodedAttestedData, DecodedDirection } from './decode.js'
+import { responseSizes } from './http.js'
 import {
   type CommitRange,
-  correlateAttestation,
-  correlateOpenings,
+  correlateReveal,
   type HashOpening,
+  MAX_RECV_BYTES,
+  MAX_SENT_BYTES,
   planNotarization,
+  verifyAttestation,
 } from './notarize.js'
 import type {
   ByteRange,
   CommitmentOpening,
+  ExactHttpRequest,
   FromWorker,
   Prepare,
+  Reveals,
   ToWorker,
   Transcript,
 } from './protocol.js'
-import {
-  decodeAttestationFrame,
-  deriveNotaryWebSocketUrl,
-  MAX_FRAME_PAYLOAD_BYTES,
-} from './transport.js'
+import { decodeAttestationFrame, deriveNotaryWebSocketUrl, MAX_FRAME_BYTES } from './transport.js'
 
 interface Io {
   read(): Promise<Uint8Array | null>
@@ -33,7 +37,7 @@ export interface NotaryHttpRequest {
   body: unknown
 }
 
-export interface NotaryHttpResponse {
+interface NotaryHttpResponse {
   status: number
   headers: [string, number[]][]
 }
@@ -67,26 +71,18 @@ interface TlsnModule {
   }
 }
 
+type Prover = InstanceType<TlsnModule['Prover']>
+
 function waitForOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve()
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      socket.removeEventListener('open', opened)
-      socket.removeEventListener('error', failed)
-      socket.removeEventListener('close', failed)
-    }
-    const opened = () => {
-      cleanup()
-      resolve()
-    }
-    const failed = () => {
-      cleanup()
-      reject(new Error('notary WebSocket failed to open'))
-    }
-    socket.addEventListener('open', opened)
-    socket.addEventListener('error', failed)
-    socket.addEventListener('close', failed)
-  })
+  const listening = new AbortController(),
+    signal = listening.signal
+  return new Promise<void>((resolve, reject) => {
+    const failed = () => reject(new Error('notary WebSocket failed to open'))
+    socket.addEventListener('open', () => resolve(), { signal })
+    socket.addEventListener('error', failed, { signal })
+    socket.addEventListener('close', failed, { signal })
+  }).finally(() => listening.abort())
 }
 
 function socketIo(socket: WebSocket): Io {
@@ -149,23 +145,17 @@ function socketIo(socket: WebSocket): Io {
 async function readFinalFrame(io: Io): Promise<Uint8Array> {
   const chunks: Uint8Array[] = []
   let length = 0
-  for (;;) {
-    const chunk = await io.read()
-    if (chunk === null) break
+  for (let chunk = await io.read(); chunk !== null; chunk = await io.read()) {
     length += chunk.length
-    if (length > MAX_FRAME_PAYLOAD_BYTES + 4) {
-      throw new Error('notary attestation frame exceeds size limit')
-    }
+    if (length > MAX_FRAME_BYTES) throw new Error('notary attestation frame exceeds size limit')
     chunks.push(chunk)
   }
-  const frame = new Uint8Array(length)
-  let offset = 0
-  for (const chunk of chunks) {
-    frame.set(chunk, offset)
-    offset += chunk.length
-  }
-  return frame
+  return concatBytes(...chunks)
 }
+
+/** SDK openings may arrive as plain arrays. */
+const copy = (openings: readonly HashOpening[]): HashOpening[] =>
+  openings.map((o) => ({ hash: Uint8Array.from(o.hash), blinder: Uint8Array.from(o.blinder) }))
 
 // The module and its thread pool are initialized once for this ceremony's sessions.
 let runtime: Promise<TlsnModule> | undefined
@@ -174,141 +164,146 @@ function initialize(data: Prepare): Promise<TlsnModule> {
   runtime ??= (async () => {
     const tlsn = (await import(/* @vite-ignore */ data.moduleUrl)) as TlsnModule
     await tlsn.default({ module_or_path: data.wasmUrl })
-    await tlsn.initialize(null, Math.min(navigator.hardwareConcurrency || 1, 4))
+    await tlsn.initialize(null, workerThreads())
     return tlsn
   })()
   return runtime
 }
 
-function session(port: MessagePort, initial: Prepare) {
-  let prover: InstanceType<TlsnModule['Prover']> | undefined
-  let io: Io | undefined
-  let transcript: Transcript | undefined
-  let target = ''
-  let stage: 'new' | 'preparing' | 'prepared' | 'sending' | 'sent' | 'revealing' | 'done' = 'new'
-  function reply(value: FromWorker) {
-    port.postMessage(value)
+/** Diagnostic counts only; transcript contents never leave through attributes. */
+function attestationAttributes(
+  decoded: DecodedAttestedData,
+  received: Uint8Array,
+): Record<string, number> {
+  const committed = ({ commitments }: DecodedDirection) =>
+    commitments.reduce((sum, r) => sum + r.end - r.start, 0)
+  return {
+    'sent-bytes': decoded.sentTranscriptLength,
+    'received-bytes': decoded.receivedTranscriptLength,
+    ...responseSizes(received),
+    'committed-sent-bytes': committed(decoded.sent),
+    'committed-received-bytes': committed(decoded.received),
+    'commitment-count': decoded.sent.commitments.length + decoded.received.commitments.length,
   }
-  async function work(data: Prepare | ToWorker) {
-    if (data.type === 'prepare' && stage === 'new') {
-      stage = 'preparing'
-      target = data.url
-      // The notary limits idle sockets; finish cold WASM startup before connecting.
-      const tlsn = await initialize(data)
-      const socket = new WebSocket(deriveNotaryWebSocketUrl(data.notaryAddress))
-      io = socketIo(socket)
-      await waitForOpen(socket)
-      // The peer may close between the open event and this continuation.
-      if (socket.readyState !== WebSocket.OPEN) throw new Error('notary WebSocket closed')
-      prover = new tlsn.Prover({
-        server_name: new URL(target).hostname,
-        mode: 'Proxy',
-        max_sent_data: 4096,
-        max_recv_data: 32768,
-        network: 'Bandwidth',
-      })
-      await prover.setup(io)
-      stage = 'prepared'
-      reply({ type: 'prepared' })
-      return
-    }
-    if (data.type === 'send' && stage === 'prepared' && prover) {
-      stage = 'sending'
-      const request = data.request
-      if (request.url !== target) throw new Error('Request target changed')
-      const url = new URL(target)
-      await prover.send_request(null, {
-        uri: url.pathname + url.search,
-        method: request.method,
-        headers: Object.fromEntries(
-          Object.entries(request.headers).map(([k, v]) => [k, Array.from(v)]),
-        ),
-        body: request.body.length
-          ? new TextDecoder('utf-8', { fatal: true }).decode(request.body)
-          : null,
-      })
-      const raw = prover.transcript()
-      // Proxy setup limits are not enforced by the pinned SDK. This bounds acceptance
-      // before parsing/reveal, not memory or traffic consumed while receiving.
-      if (raw.sent.length > 4096 || raw.recv.length > 32768)
-        throw new Error('Transcript acceptance limit exceeded')
-      transcript = { sent: Uint8Array.from(raw.sent), received: Uint8Array.from(raw.recv) }
-      stage = 'sent'
-      reply({ type: 'sent', transcript })
-      return
-    }
-    if (data.type === 'reveal' && stage === 'sent' && prover && transcript && io) {
-      stage = 'revealing'
-      const plan = planNotarization(transcript, data.reveals)
-      const result = await prover.reveal(
-        { sent: plan.reveal.sent, recv: plan.reveal.received, server_identity: true },
-        { sent: plan.commit.sent, recv: plan.commit.received },
-      )
-      const raw = { sent: result.sent, received: result.recv }
-      const openings: CommitmentOpening[] = []
-      for (const direction of ['sent', 'received'] as const) {
-        raw[direction] = raw[direction].map((o) => ({
-          hash: Uint8Array.from(o.hash),
-          blinder: Uint8Array.from(o.blinder),
-        }))
-        for (const { start, end, blinder } of correlateOpenings(
-          transcript[direction],
-          plan.commit[direction],
-          raw[direction],
-          direction,
-        )) {
-          openings.push({
-            direction,
-            start,
-            end,
-            blinder,
-          })
-        }
-      }
-      reply({ type: 'revealed', openings })
-      await prover.finish()
-      const frame = await readFinalFrame(io)
-      const wire = decodeAttestationFrame(frame)
-      const { decoded } = correlateAttestation(
-        new URL(target).hostname,
-        transcript,
-        plan,
-        raw,
-        wire.attestedData,
-      )
-      await io.close()
-      prover.free()
-      prover = undefined
-      transcript = undefined
-      io = undefined
-      stage = 'done'
-      reply({
-        type: 'attestation',
-        attestation: wire,
-        attributes: {
-          'sent-bytes': decoded.sentTranscriptLength,
-          'received-bytes': decoded.receivedTranscriptLength,
-          'committed-sent-bytes': decoded.sent.commitments.reduce(
-            (sum, r) => sum + r.end - r.start,
-            0,
-          ),
-          'committed-received-bytes': decoded.received.commitments.reduce(
-            (sum, r) => sum + r.end - r.start,
-            0,
-          ),
-          'commitment-count': decoded.sent.commitments.length + decoded.received.commitments.length,
-        },
-      })
-      port.close()
-      return
+}
+
+interface Prepared {
+  stage: 'prepared'
+  url: URL
+  io: Io
+  prover: Prover
+}
+
+interface Sent extends Omit<Prepared, 'stage'> {
+  stage: 'sent'
+  transcript: Transcript
+}
+
+/** Each stage holds exactly what its next message needs; `busy` rejects overlapping messages. */
+type State = { stage: 'new' | 'busy' | 'done' } | Prepared | Sent
+
+function session(port: MessagePort, initial: Prepare) {
+  let state: State = { stage: 'new' }
+  // Set once the socket exists, so any later failure closes it.
+  let socket: Io | undefined
+  const reply = (value: FromWorker) => port.postMessage(value)
+
+  async function prepare(data: Prepare): Promise<Prepared> {
+    const url = new URL(data.url)
+    // The notary limits idle sockets; finish cold WASM startup before connecting.
+    const tlsn = await initialize(data)
+    const ws = new WebSocket(deriveNotaryWebSocketUrl(data.notaryAddress))
+    const io = socketIo(ws)
+    socket = io
+    await waitForOpen(ws)
+    // The peer may close between the open event and this continuation.
+    if (ws.readyState !== WebSocket.OPEN) throw new Error('notary WebSocket closed')
+    const prover = new tlsn.Prover({
+      server_name: url.hostname,
+      mode: 'Proxy',
+      max_sent_data: MAX_SENT_BYTES,
+      max_recv_data: MAX_RECV_BYTES,
+      network: 'Bandwidth',
+    })
+    await prover.setup(io)
+    return { stage: 'prepared', url, io, prover }
+  }
+
+  async function send(prepared: Prepared, request: ExactHttpRequest): Promise<Sent> {
+    if (request.url !== initial.url) throw new Error('Request target changed')
+    const { url, prover } = prepared
+    await prover.send_request(null, {
+      uri: url.pathname + url.search,
+      method: request.method,
+      headers: Object.fromEntries(
+        Object.entries(request.headers).map(([k, v]) => [k, Array.from(v)]),
+      ),
+      body: request.body.length
+        ? new TextDecoder('utf-8', { fatal: true }).decode(request.body)
+        : null,
+    })
+    const raw = prover.transcript()
+    // Proxy setup limits are not enforced by the pinned SDK. This bounds acceptance
+    // before parsing/reveal, not memory or traffic consumed while receiving.
+    if (raw.sent.length > MAX_SENT_BYTES || raw.recv.length > MAX_RECV_BYTES)
+      throw new Error('Transcript acceptance limit exceeded')
+    const transcript = { sent: Uint8Array.from(raw.sent), received: Uint8Array.from(raw.recv) }
+    return { ...prepared, stage: 'sent', transcript }
+  }
+
+  async function reveal({ url, io, prover, transcript }: Sent, reveals: Reveals): Promise<void> {
+    const plan = planNotarization(transcript, reveals)
+    const result = await prover.reveal(
+      // The SDK requires this flag; the signed authority binds the prepared host.
+      { sent: plan.reveal.sent, recv: plan.reveal.received, server_identity: true },
+      { sent: plan.commit.sent, recv: plan.commit.received },
+    )
+    const correlated = correlateReveal(transcript, plan, {
+      sent: copy(result.sent),
+      received: copy(result.recv),
+    })
+    const openings: CommitmentOpening[] = (['sent', 'received'] as const).flatMap((direction) =>
+      correlated[direction].map(({ start, end, blinder }) => ({ direction, start, end, blinder })),
+    )
+    reply({ type: 'revealed', openings })
+    await prover.finish()
+    const wire = decodeAttestationFrame(await readFinalFrame(io))
+    const decoded = verifyAttestation(url.hostname, transcript, plan, correlated, wire.attestedData)
+    await io.close()
+    prover.free()
+    reply({
+      type: 'attestation',
+      attestation: wire,
+      attributes: attestationAttributes(decoded, transcript.received),
+    })
+  }
+
+  async function work(data: Prepare | ToWorker): Promise<void> {
+    const current = state
+    state = { stage: 'busy' }
+    switch (data.type) {
+      case 'prepare':
+        if (current.stage !== 'new') break
+        state = await prepare(data)
+        return reply({ type: 'prepared' })
+      case 'send':
+        if (current.stage !== 'prepared') break
+        state = await send(current, data.request)
+        return reply({ type: 'sent', transcript: state.transcript })
+      case 'reveal':
+        if (current.stage !== 'sent') break
+        await reveal(current, data.reveals)
+        state = { stage: 'done' }
+        return port.close()
     }
     throw new Error('Invalid notarization sequence')
   }
+
   function dispatch(data: Prepare | ToWorker) {
     void work(data).catch(async (error) => {
       reply({ type: 'error', message: errorMessage(error) })
-      stage = 'done'
-      await io?.close()
+      state = { stage: 'done' }
+      await socket?.close()
       port.close()
     })
   }

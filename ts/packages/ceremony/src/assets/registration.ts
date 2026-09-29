@@ -1,5 +1,30 @@
 import { route } from '../ccdp/navigation.js'
 
+/**
+ * Settle through `done` within 15 seconds. Settling, including a synchronous throw from
+ * `start`, clears the timer and aborts `signal`, removing listeners registered with it.
+ */
+function within(
+  timeout: string,
+  start: (done: (error?: unknown) => void, signal: AbortSignal) => void,
+): Promise<void> {
+  const { promise, resolve, reject } = Promise.withResolvers<void>()
+  const settled = new AbortController()
+  const timer = setTimeout(() => done(new Error(timeout)), 15000)
+  const done = (error?: unknown) => {
+    clearTimeout(timer)
+    settled.abort()
+    if (error === undefined) resolve()
+    else reject(error)
+  }
+  try {
+    start(done, settled.signal)
+  } catch (error) {
+    done(error)
+  }
+  return promise
+}
+
 /** Register the canonical root worker and retire only the known legacy nested scope. */
 export async function rootWorker(): Promise<ServiceWorkerRegistration> {
   const registration = await navigator.serviceWorker.register(route('worker.js'), {
@@ -14,21 +39,15 @@ export async function rootWorker(): Promise<ServiceWorkerRegistration> {
   // An active worker can handle messages while activating. WebKit can retain that
   // state in another document; the dispatch acknowledgement is our readiness gate.
   if (worker !== registration.active) {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => done(new Error('Service Worker activation timed out')), 15000)
-      const done = (error?: Error) => {
-        clearTimeout(timer)
-        clearInterval(poll)
-        worker.removeEventListener('statechange', changed)
-        error ? reject(error) : resolve()
-      }
+    await within('Service Worker activation timed out', (done, signal) => {
       const changed = () => {
         if (worker.state === 'activating' || worker.state === 'activated') done()
         else if (worker.state === 'redundant') done(new Error('Service Worker failed'))
       }
       // Concurrent Chromium popups can miss statechange while worker.state still updates.
       const poll = setInterval(changed, 50)
-      worker.addEventListener('statechange', changed)
+      signal.addEventListener('abort', () => clearInterval(poll))
+      worker.addEventListener('statechange', changed, { signal })
       changed()
     })
   }
@@ -54,14 +73,9 @@ export async function dispatchPrefetch(
   registration: ServiceWorkerRegistration,
   profile: string,
 ): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const channel = new MessageChannel(),
-      timer = setTimeout(() => done(new Error('Asset dispatch timed out')), 15000)
-    const done = (error?: Error) => {
-      clearTimeout(timer)
-      channel.port1.close()
-      error ? reject(error) : resolve()
-    }
+  await within('Asset dispatch timed out', (done, signal) => {
+    const channel = new MessageChannel()
+    signal.addEventListener('abort', () => channel.port1.close())
     channel.port1.onmessage = (event) =>
       event.data?.dispatched === true ? done() : done(new Error('Invalid dispatch acknowledgement'))
     try {
@@ -79,19 +93,13 @@ export async function claimRootWorker(): Promise<void> {
   if (registration?.scope !== `${location.origin}/` || !registration.active)
     throw new Error('Missing root Service Worker')
   if (navigator.serviceWorker.controller === registration.active) return
-  await new Promise<void>((resolve, reject) => {
-    const channel = new MessageChannel(),
-      timer = setTimeout(() => done(new Error('Service Worker control timed out')), 15000)
-    const done = (error?: Error) => {
-      clearTimeout(timer)
-      channel.port1.close()
-      navigator.serviceWorker.removeEventListener('controllerchange', changed)
-      error ? reject(error) : resolve()
-    }
+  await within('Service Worker control timed out', (done, signal) => {
+    const channel = new MessageChannel()
+    signal.addEventListener('abort', () => channel.port1.close())
     const changed = () => {
       if (navigator.serviceWorker.controller === registration.active) done()
     }
-    navigator.serviceWorker.addEventListener('controllerchange', changed)
+    navigator.serviceWorker.addEventListener('controllerchange', changed, { signal })
     channel.port1.onmessage = changed
     registration.active!.postMessage({ type: 'ceremony-claim' }, [channel.port2])
     changed()
