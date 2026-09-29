@@ -53,7 +53,7 @@ One bridge deployment has these inputs. Every origin follows the
 |---|---|
 | `allowedAppOrigins` | Nonempty, duplicate-free set of canonical application origins, [origin patterns](popup-transport.md#6-origin-allowlists-and-binding), and `*` |
 | CCDP origin | One canonical origin selected by the operator; defaults to `https://lib.id` when omitted |
-| Platform profiles | For each enabled platform, one default public OAuth client and, optionally, one override client per `PlatformCeremonyVersion`; a client is a public client ID plus a public `clientCredential` exactly when the platform's ceremony sends one |
+| Platform profiles | For each enabled platform, one public OAuth client ID and a public `clientCredential` exactly when the platform's ceremony sends one; no version list |
 | Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
 
 Every enabled platform's OAuth registration uses `/auth/callback` on the
@@ -121,9 +121,8 @@ bridge must not be configured with either until the Callback in its selected
 Distribution reads that member kind.
 
 The public profile entries match the OAuth registrations used by Callback.
-The bridge publishes each configured profile as is; it cannot check an
-override against the Distribution, and the Application resolves the pairs that
-run under [Public configuration](#public-configuration). Selecting a shared
+The bridge enumerates no versions; the Application resolves the pairs that run
+under [Public configuration](#public-configuration). Selecting a shared
 Distribution requires no reciprocal configuration.
 
 ## Route surface
@@ -166,13 +165,9 @@ is no request-time version negotiation.
 `GET /api/v1/ceremony/config` returns `application/json` with this exact record:
 
 ```ts
-interface ClientConfig {
+interface PlatformConfig {
   clientId: string
   clientCredential?: string
-}
-
-interface PlatformConfig extends ClientConfig {
-  versionOverrides?: Readonly<Record<string, ClientConfig>> // key: decimal PlatformCeremonyVersion
 }
 
 interface CeremonyConfig {
@@ -188,17 +183,14 @@ The response rules are:
   [origin policy](ccdp.md#origin-policy), with no credentials, path, query, or
   fragment. The Application accepts the localhost HTTP exception for this field
   and the Bridge origin it uses.
-- `platforms` holds exactly the configured platform profiles. Each entry is the
-  platform's default client; `versionOverrides`, present only when the
-  deployment overrides at least one version, maps the canonical decimal
-  spelling of a `PlatformCeremonyVersion` to a whole client. Any other key is
-  invalid. The record carries no version list.
+- Each platform entry has one public client ID; the record carries no version
+  list.
 - `clientCredential` is present exactly when the platform's ceremony sends one,
-  in the default and in every override, as a nonempty printable ASCII string
-  without whitespace. It is an intentionally public OAuth application
-  credential, not a user access token. GitHub requires it and uses it as
-  `client_secret`. A missing, unexpected, null, empty, or wrongly typed
-  credential is invalid. The selected platform owns any additional constraints.
+  as a nonempty printable ASCII string without whitespace. It is an
+  intentionally public OAuth application credential, not a user access token.
+  GitHub requires it and uses it as `client_secret`. A missing, unexpected,
+  null, empty, or wrongly typed credential is invalid. The selected platform
+  owns any additional constraints.
 - Unknown fields and malformed URLs are invalid. A platform absent from the
   client's closed local catalog is ignored; known entries remain
   exact-validated before use.
@@ -234,14 +226,12 @@ fetches `{ccdpOrigin}/ccdp/versions.json`, the Distribution's
 credentials or redirects, and validates it by that contract. If either read
 fails, no ceremony is available. The Application enables a platform only when
 the record configures it and the list names a version the Application
-implements; it enables exactly those versions. A listed version
-without an override uses the platform's default client; an override for a
-version not enabled is ignored. An omitted version selects the highest enabled
-one. It derives `redirectUri` as
+implements; it enables exactly those versions, all under the platform's one
+registration; an omitted version selects the highest. It derives `redirectUri` as
 `new URL('/auth/callback', oauthBridge).href` from its validated canonical
 OAuth Bridge origin, not from the response. It freezes the selected client ID,
 public token-exchange credential when present, derived redirect URI, CCDP origin,
-and enabled platform ceremony version in each live ceremony. It
+and mutually supported platform ceremony version in each live ceremony. It
 forwards the credential unchanged through CCDP's `ProveIdentity`; a configuration
 refresh does not replace it in a live ceremony.
 CCDP browser [resources](ccdp.md#documents-and-routes)
@@ -336,10 +326,7 @@ cryptographic soundness.
   `*.*.handles.link`, `*.127.0.0.1`, and `*handles.link`. A pattern or `*`
   configured as the CCDP origin fails at startup. The union remains literal: a
   pattern covering the CCDP origin leaves that origin an exact member, and
-  members whose admitted origins overlap configure successfully. A profile
-  without a default client, an override keyed by anything but a decimal
-  `PlatformCeremonyVersion`, or an override whose credential presence disagrees
-  with its platform's ceremony, fails at startup.
+  members whose admitted origins overlap configure successfully.
 - TEST-BRIDGE-02 (exercises REQ-BRIDGE-02):
   A configuration GET without Origin succeeds with exactly
   `Sec-Fetch-Site: same-origin`, even when the Bridge origin is not allowlisted;
@@ -354,19 +341,16 @@ cryptographic soundness.
   For the browser-exchange profiles, the former token route performs no exchange
   or notary work, including on POST.
 - TEST-BRIDGE-03 (exercises REQ-BRIDGE-03):
-  Exact public config carries each configured platform's default client and its
-  overrides keyed by canonical decimal version, including GitHub's public
-  token-exchange credential, and has no version list, redirect field, user
-  token, or notary selection. Missing required, unexpected, empty, null, wrongly
-  typed, or whitespace/control-bearing credentials reject, in a default or an
-  override; a non-canonical override key rejects; malformed known profiles
-  reject and unknown platforms are ignored. The Application enables a platform
-  only when the record configures it and the version list names a version it
-  implements, uses the default client for a listed version without an override,
-  ignores an override for an unlisted version, selects the highest enabled
-  version when none is given, and enables nothing when the list fails to fetch
-  or validate. Application freezes the selected client and forwards the same
-  credential to Prover despite later configuration changes.
+  Exact public config includes GitHub's public token-exchange credential and has
+  no version list, redirect field, user token, or notary selection. Missing
+  required, unexpected, empty, null, wrongly typed, or whitespace/control-bearing
+  credentials reject; malformed known profiles reject and unknown platforms are
+  ignored. The Application enables a platform only when the record configures it
+  and the version list names a version it implements, uses the platform's one
+  registration for every enabled version, selects the highest enabled version
+  when none is given, and enables nothing when the list fails to fetch or
+  validate. Application freezes the credential and forwards the same value to
+  Prover despite later configuration changes.
 - TEST-BRIDGE-04 (exercises REQ-BRIDGE-04):
   Callback queries/cookies/headers never reach the artifact request; failed refresh preserves the last valid HTML/policy pair, or serves inert unavailability.
 - TEST-BRIDGE-05: Withdrawn.
