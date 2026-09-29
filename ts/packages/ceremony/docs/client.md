@@ -167,17 +167,16 @@ containing separate `identity` and `oauthProof` values:
 Google's proof contains `identityProof`, `tokenExpiresAt` and
 `signingKeyModulus`. X/GitHub contain `bearerLinkProof`, `tokenAttestation` and
 `identityAttestation`. A `NotaryAttestation` preserves original `attestedData`
-and `signature` bytes with the Prover's complete `decoded` convenience view.
+and `signature` bytes; decoded records stay internal to notarization.
 Use `OAuthProof<'google'>['proof']`, for example, to name a payload type without
 importing private modules. A literal platform argument infers its result type;
 a dynamic `PlatformId` produces the corresponding union.
 
 **Accepted means structurally accepted, not cryptographically verified.** Client
 checks the selected platform/version, exact shapes, bounds and OAuth client ID.
-It does not repeat evidence parsing, authenticate decoded views, verify notary
-signatures or verify ZK proofs. The ledger adapter must preserve signed bytes
-and combine the result with the original operation inputs; convenience views
-are not authoritative ledger evidence.
+It does not repeat evidence parsing, verify notary signatures or verify ZK proofs. The ledger adapter must preserve signed bytes
+and combine the result with the original operation inputs; the separate `identity`
+is not authoritative ledger evidence.
 
 Technical failure and connection loss reject with `CeremonyError`, carrying
 `event` (operation context), bounded opaque `message`, and `status`:

@@ -1,4 +1,4 @@
-import type { ExactHttpRequest, Transcript } from '../../../notary/session.js'
+import type { ExactHttpRequest, Transcript } from '../../../notary/protocol.js'
 import {
   decodePrintable,
   identityBearerRange,

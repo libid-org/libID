@@ -1,5 +1,5 @@
 import { parseJson } from '../json.js'
-import type { Transcript } from './session.js'
+import type { Transcript } from './protocol.js'
 
 /** Decode a successful HTTP response without altering transcript bytes; numeric root IDs can retain bigint precision. */
 export function responseJson(transcript: Transcript, numbersAsText = false): unknown {

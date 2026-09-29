@@ -1,12 +1,19 @@
 import { errorMessage } from '../errors.js'
 import {
+  type CommitRange,
   correlateAttestation,
   correlateOpenings,
   type HashOpening,
   planNotarization,
-  type Transcript,
 } from './notarize.js'
-import type { ExactHttpRequest, Reveals } from './session.js'
+import type {
+  ByteRange,
+  CommitmentOpening,
+  FromWorker,
+  Prepare,
+  ToWorker,
+  Transcript,
+} from './protocol.js'
 import {
   decodeAttestationFrame,
   deriveNotaryWebSocketUrl,
@@ -43,10 +50,17 @@ interface TlsnModule {
   }) => {
     setup(io: Io): Promise<void>
     send_request(session: null, request: NotaryHttpRequest): Promise<NotaryHttpResponse>
-    transcript(): Transcript
+    transcript(): { sent: Uint8Array; recv: Uint8Array }
     reveal(
-      reveal: ReturnType<typeof planNotarization>['reveal'],
-      commit: ReturnType<typeof planNotarization>['commit'],
+      reveal: {
+        sent: readonly ByteRange[]
+        recv: readonly ByteRange[]
+        server_identity: true
+      },
+      commit: {
+        sent: readonly CommitRange[]
+        recv: readonly CommitRange[]
+      },
     ): Promise<{ sent: HashOpening[]; recv: HashOpening[] }>
     finish(): Promise<void>
     free(): void
@@ -156,32 +170,32 @@ async function readFinalFrame(io: Io): Promise<Uint8Array> {
 // The module and its thread pool are initialized once for this ceremony's sessions.
 let runtime: Promise<TlsnModule> | undefined
 
-function initialize(data: Record<string, unknown>): Promise<TlsnModule> {
+function initialize(data: Prepare): Promise<TlsnModule> {
   runtime ??= (async () => {
-    const tlsn = (await import(/* @vite-ignore */ String(data.moduleUrl))) as TlsnModule
-    await tlsn.default({ module_or_path: String(data.wasmUrl) })
+    const tlsn = (await import(/* @vite-ignore */ data.moduleUrl)) as TlsnModule
+    await tlsn.default({ module_or_path: data.wasmUrl })
     await tlsn.initialize(null, Math.min(navigator.hardwareConcurrency || 1, 4))
     return tlsn
   })()
   return runtime
 }
 
-function session(port: MessagePort, initial: Record<string, unknown>) {
+function session(port: MessagePort, initial: Prepare) {
   let prover: InstanceType<TlsnModule['Prover']> | undefined
   let io: Io | undefined
   let transcript: Transcript | undefined
   let target = ''
   let stage = 'new'
-  function reply(value: unknown) {
+  function reply(value: FromWorker) {
     port.postMessage(value)
   }
-  async function work(data: Record<string, unknown>) {
+  async function work(data: Prepare | ToWorker) {
     if (data.type === 'prepare' && stage === 'new') {
       stage = 'preparing'
-      target = String(data.url)
+      target = data.url
       // The notary limits idle sockets; finish cold WASM startup before connecting.
       const tlsn = await initialize(data)
-      const socket = new WebSocket(deriveNotaryWebSocketUrl(String(data.notaryAddress)))
+      const socket = new WebSocket(deriveNotaryWebSocketUrl(data.notaryAddress))
       io = socketIo(socket)
       await waitForOpen(socket)
       // The peer may close between the open event and this continuation.
@@ -200,7 +214,7 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
     }
     if (data.type === 'send' && stage === 'prepared' && prover) {
       stage = 'sending'
-      const request = data.request as ExactHttpRequest
+      const request = data.request
       if (request.url !== target) throw new Error('Request target changed')
       const url = new URL(target)
       await prover.send_request(null, {
@@ -218,18 +232,21 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
       // before parsing/reveal, not memory or traffic consumed while receiving.
       if (raw.sent.length > 4096 || raw.recv.length > 32768)
         throw new Error('Transcript acceptance limit exceeded')
-      transcript = { sent: Uint8Array.from(raw.sent), recv: Uint8Array.from(raw.recv) }
+      transcript = { sent: Uint8Array.from(raw.sent), received: Uint8Array.from(raw.recv) }
       stage = 'sent'
-      reply({ type: 'sent', transcript: { sent: transcript.sent, received: transcript.recv } })
+      reply({ type: 'sent', transcript })
       return
     }
     if (data.type === 'reveal' && stage === 'sent' && prover && transcript && io) {
       stage = 'revealing'
-      const reveals = data.reveals as Reveals
-      const plan = planNotarization(transcript, { sent: reveals.sent, recv: reveals.received })
-      const raw = await prover.reveal(plan.reveal, plan.commit)
-      const openings = []
-      for (const direction of ['sent', 'recv'] as const) {
+      const plan = planNotarization(transcript, data.reveals)
+      const result = await prover.reveal(
+        { sent: plan.reveal.sent, recv: plan.reveal.received, server_identity: true },
+        { sent: plan.commit.sent, recv: plan.commit.received },
+      )
+      const raw = { sent: result.sent, received: result.recv }
+      const openings: CommitmentOpening[] = []
+      for (const direction of ['sent', 'received'] as const) {
         raw[direction] = raw[direction].map((o) => ({
           hash: Uint8Array.from(o.hash),
           blinder: Uint8Array.from(o.blinder),
@@ -241,7 +258,7 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
           direction,
         )) {
           openings.push({
-            direction: direction === 'recv' ? 'received' : 'sent',
+            direction,
             start,
             end,
             blinder,
@@ -265,13 +282,29 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
       transcript = undefined
       io = undefined
       stage = 'done'
-      reply({ type: 'attestation', attestation: { ...wire, decoded } })
+      reply({
+        type: 'attestation',
+        attestation: wire,
+        attributes: {
+          'sent-bytes': decoded.sentTranscriptLength,
+          'received-bytes': decoded.receivedTranscriptLength,
+          'committed-sent-bytes': decoded.sent.commitments.reduce(
+            (sum, r) => sum + r.end - r.start,
+            0,
+          ),
+          'committed-received-bytes': decoded.received.commitments.reduce(
+            (sum, r) => sum + r.end - r.start,
+            0,
+          ),
+          'commitment-count': decoded.sent.commitments.length + decoded.received.commitments.length,
+        },
+      })
       port.close()
       return
     }
     throw new Error('Invalid notarization sequence')
   }
-  function dispatch(data: Record<string, unknown>) {
+  function dispatch(data: Prepare | ToWorker) {
     void work(data).catch(async (error) => {
       reply({ type: 'error', message: errorMessage(error) })
       stage = 'done'
@@ -279,10 +312,10 @@ function session(port: MessagePort, initial: Record<string, unknown>) {
       port.close()
     })
   }
-  port.onmessage = (event) => dispatch(event.data)
+  port.onmessage = (event: MessageEvent<ToWorker>) => dispatch(event.data)
   dispatch(initial)
 }
 
-self.addEventListener('message', (event: MessageEvent<Record<string, unknown>>) => {
-  session(event.data.port as MessagePort, event.data)
+self.addEventListener('message', (event: MessageEvent<Prepare>) => {
+  session(event.data.port, event.data)
 })

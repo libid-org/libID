@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
-import { decodeAttestedData, MAX_ATTESTED_DATA_BYTES } from './decode.js'
+import { decodeAttestedData, isAttestation, MAX_ATTESTED_DATA_BYTES } from './decode.js'
 
 // libid-org/libid-rs@239a4bb426ac72591fe30006f22660e164a98d96,
 // crates/libid-ceremony/src/attestation.rs::CROSS_LANGUAGE_FIXTURE.
@@ -89,4 +89,16 @@ describe('decodeAttestedData', () => {
   ])('rejects %s', (_name, bytes, reason) => {
     expect(() => decodeAttestedData(bytes)).toThrow(reason)
   })
+})
+
+it('delivers bounded original evidence without a decoded projection [LIBID-PROVER-021]', () => {
+  const attestation = { attestedData: FIXTURE, signature: new Uint8Array(65) }
+  expect(isAttestation(structuredClone(attestation))).toBe(true)
+  for (const value of [
+    { ...attestation, decoded: decodeAttestedData(FIXTURE) },
+    { ...attestation, signature: new Uint8Array(64) },
+    { ...attestation, attestedData: new Uint8Array() },
+    { ...attestation, attestedData: new Uint8Array(MAX_ATTESTED_DATA_BYTES + 1) },
+  ])
+    expect(isAttestation(value)).toBe(false)
 })

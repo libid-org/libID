@@ -1,5 +1,5 @@
 import { isClientCredential, redirect } from '../../../ccdp/index.js'
-import type { ExactHttpRequest, Transcript } from '../../../notary/session.js'
+import type { ExactHttpRequest, Transcript } from '../../../notary/protocol.js'
 import { decodePrintable, quotedRange, tokenRequestBody } from '../../../notary/transcript.js'
 import { bytesEqual } from '../../../primitives.js'
 import { isFormClientId } from '../../authorization.js'

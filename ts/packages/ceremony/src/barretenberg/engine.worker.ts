@@ -7,25 +7,13 @@ import { ceremonyError, errorMessage } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
 import { SRS_SIZE } from './barretenberg.assets.js'
 import type { RawProof } from './engine.js'
+import type { FromWorker, Preload, ToWorker } from './protocol.js'
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
 
 type Api = Awaited<ReturnType<typeof Barretenberg.new>>
 
 type ProvingCircuit = Parameters<Api['circuitProve']>[0]['circuit']
-
-type Preload = {
-  type: 'engine-preload'
-  circuitUrl: string
-  verificationKeyUrl: string
-  threads: number
-  acvmUrl: string
-  abiUrl: string
-  wasmPath: string
-  crsPath: string
-}
-
-type Prove = { type: 'engine-prove'; inputs: Record<string, unknown> }
 
 let runtime: { effectiveThreads: number; sharedMemory: boolean } | undefined
 
@@ -35,7 +23,7 @@ let ready: { noir: Noir; circuit: ProvingCircuit } | null = null
 
 let backend: Promise<Api> | null = null
 
-const send = (message: unknown): void => self.postMessage(message)
+const send = (message: FromWorker): void => self.postMessage(message)
 
 const emit = (event: OperationEvent) => send({ type: 'engine-event', event })
 
@@ -134,7 +122,7 @@ async function preload(message: Preload): Promise<void> {
     .catch(fail)
 }
 
-async function prove(message: Prove): Promise<void> {
+async function prove(message: Extract<ToWorker, { type: 'engine-prove' }>): Promise<void> {
   if (!ready || !backend || state !== 'ready') throw new Error('proof engine is not ready')
   state = 'proving'
   emit({ event: 'zk-proof-generation', phase: 'started', timestamp: now() })
@@ -177,7 +165,7 @@ async function prove(message: Prove): Promise<void> {
 
 send({ type: 'engine-booted', timestamp: now() })
 
-self.addEventListener('message', (event: MessageEvent<Preload | Prove>) => {
+self.addEventListener('message', (event: MessageEvent<ToWorker>) => {
   const work = event.data.type === 'engine-preload' ? preload(event.data) : prove(event.data)
   void work.catch(fail)
 })

@@ -2,26 +2,11 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { bytesEqual } from '../primitives.js'
 import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
-import type { CommitmentOpening } from './session.js'
+import type { ByteRange, CommitmentOpening, Reveals, Transcript } from './protocol.js'
 
 const MAX_SENT_BYTES = 4 * 1024
 
 const MAX_RECV_BYTES = 32 * 1024
-
-export interface ByteRange {
-  start: number
-  end: number
-}
-
-export interface Transcript {
-  sent: Uint8Array
-  recv: Uint8Array
-}
-
-export interface RevealRanges {
-  sent: readonly ByteRange[]
-  recv: readonly ByteRange[]
-}
 
 export interface CommitRange extends ByteRange {
   algorithm: 'SHA256'
@@ -30,12 +15,12 @@ export interface CommitRange extends ByteRange {
 export interface NotarizationPlan {
   reveal: {
     sent: ByteRange[]
-    recv: ByteRange[]
+    received: ByteRange[]
     server_identity: true
   }
   commit: {
     sent: CommitRange[]
-    recv: CommitRange[]
+    received: CommitRange[]
   }
 }
 
@@ -46,7 +31,7 @@ export interface HashOpening {
 
 export interface RevealOutput {
   sent: readonly HashOpening[]
-  recv: readonly HashOpening[]
+  received: readonly HashOpening[]
 }
 
 export interface CorrelatedCommitment extends ByteRange, HashOpening {}
@@ -54,7 +39,7 @@ export interface CorrelatedCommitment extends ByteRange, HashOpening {}
 export interface CorrelatedAttestation {
   decoded: DecodedAttestedData
   sent: readonly CorrelatedCommitment[]
-  recv: readonly CorrelatedCommitment[]
+  received: readonly CorrelatedCommitment[]
 }
 
 function invalid(reason: string): never {
@@ -99,20 +84,20 @@ function mergeAdjacent(ranges: readonly ByteRange[]): ByteRange[] {
   return merged
 }
 
-/** Build the exact range objects accepted by TLSNotary's browser `reveal`. */
-export function planNotarization(transcript: Transcript, ranges: RevealRanges): NotarizationPlan {
+/** Build the reveal ranges and their exact commitment complement. */
+export function planNotarization(transcript: Transcript, ranges: Reveals): NotarizationPlan {
   if (transcript.sent.length > MAX_SENT_BYTES) invalid('sent transcript exceeds 4 KiB')
-  if (transcript.recv.length > MAX_RECV_BYTES) invalid('received transcript exceeds 32 KiB')
+  if (transcript.received.length > MAX_RECV_BYTES) invalid('received transcript exceeds 32 KiB')
   validateRanges(ranges.sent, transcript.sent.length, 'sent')
-  validateRanges(ranges.recv, transcript.recv.length, 'received')
+  validateRanges(ranges.received, transcript.received.length, 'received')
 
   const sent = mergeAdjacent(ranges.sent)
-  const recv = mergeAdjacent(ranges.recv)
+  const received = mergeAdjacent(ranges.received)
   return {
-    reveal: { sent, recv, server_identity: true },
+    reveal: { sent, received, server_identity: true },
     commit: {
       sent: complement(sent, transcript.sent.length),
-      recv: complement(recv, transcript.recv.length),
+      received: complement(received, transcript.received.length),
     },
   }
 }
@@ -124,7 +109,7 @@ function sameRange(a: ByteRange, b: ByteRange): boolean {
 function requireExactPlan(transcript: Transcript, plan: NotarizationPlan): void {
   if (plan.reveal.server_identity !== true) invalid('server identity must be revealed')
   const expected = planNotarization(transcript, plan.reveal)
-  for (const direction of ['sent', 'recv'] as const) {
+  for (const direction of ['sent', 'received'] as const) {
     const actual = plan.commit[direction]
     const wanted = expected.commit[direction]
     if (
@@ -239,12 +224,12 @@ export function correlateAttestation(
     invalid('attested authority changed')
   if (
     decoded.sentTranscriptLength !== transcript.sent.length ||
-    decoded.receivedTranscriptLength !== transcript.recv.length
+    decoded.receivedTranscriptLength !== transcript.received.length
   ) {
     invalid('signed transcript length changed')
   }
   requireRevealed(transcript.sent, plan.reveal.sent, decoded.sent, 'sent')
-  requireRevealed(transcript.recv, plan.reveal.recv, decoded.received, 'received')
+  requireRevealed(transcript.received, plan.reveal.received, decoded.received, 'received')
   return {
     decoded,
     sent: correlateDirection(
@@ -254,10 +239,10 @@ export function correlateAttestation(
       decoded.sent,
       'sent',
     ),
-    recv: correlateDirection(
-      transcript.recv,
-      plan.commit.recv,
-      openings.recv,
+    received: correlateDirection(
+      transcript.received,
+      plan.commit.received,
+      openings.received,
       decoded.received,
       'received',
     ),

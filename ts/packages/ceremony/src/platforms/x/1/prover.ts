@@ -80,7 +80,7 @@ export async function prove(
       const transcript = await session.send(tokenRequest)
       const body = responseJson(transcript)
       const selection = selectTokenReveals(
-        { sent: transcript.sent, recv: transcript.received },
+        { sent: transcript.sent, received: transcript.received },
         input,
       )
       if (!isRecord(body) || body.access_token !== selection.accessToken)
@@ -90,7 +90,7 @@ export async function prove(
     })
     const tokenReveal = observe(
       session
-        .reveal({ sent: selection.ranges.sent, received: selection.ranges.recv })
+        .reveal({ sent: selection.ranges.sent, received: selection.ranges.received })
         .then((value) => {
           const attestation = observe(
             value.attestation.catch((e) => {
@@ -108,11 +108,11 @@ export async function prove(
       const identityTranscript = await identity.send(buildIdentityRequest(bearer))
       const identityBody = responseJson(identityTranscript),
         ranges = selectIdentityReveals(
-          { sent: identityTranscript.sent, recv: identityTranscript.received },
+          { sent: identityTranscript.sent, received: identityTranscript.received },
           bearer,
         )
       const extracted = identityFromReveals(
-        ranges.recv.map((r) => identityTranscript.received.slice(r.start, r.end)),
+        ranges.received.map((r) => identityTranscript.received.slice(r.start, r.end)),
       )
       if (
         !isRecord(identityBody) ||
@@ -125,7 +125,7 @@ export async function prove(
     })
     const identityReveal = observe(
       identity
-        .reveal({ sent: ranges.sent, received: ranges.recv })
+        .reveal({ sent: ranges.sent, received: ranges.received })
         .then((value) => {
           const attestation = observe(
             value.attestation.catch((e) => {

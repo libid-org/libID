@@ -1,4 +1,4 @@
-import { fixedBytes, hasExactKeys, isRecord, uint } from '../primitives.js'
+import { fixedBytes, hasExactKeys, isRecord } from '../primitives.js'
 
 export const MAX_ATTESTED_DATA_BYTES = 2 * 1024 * 1024
 
@@ -28,11 +28,10 @@ export interface DecodedAttestedData {
   received: DecodedDirection
 }
 
-/** Original signed bytes and their decoded projection; ledger verification remains authoritative. */
+/** Original signed bytes; ledger verification remains authoritative. */
 export interface NotaryAttestation {
   attestedData: Uint8Array
   signature: Uint8Array
-  decoded: DecodedAttestedData
 }
 
 function invalid(reason: string): never {
@@ -153,62 +152,14 @@ export function decodeAttestedData(bytes: Uint8Array): DecodedAttestedData {
   }
 }
 
-function direction(v: unknown): v is DecodedDirection {
+/** Bound the delivered bytes; ledger verification remains authoritative. */
+export function isAttestation(v: unknown): v is NotaryAttestation {
   return (
     isRecord(v) &&
-    hasExactKeys(v, ['revealed', 'commitments']) &&
-    Array.isArray(v.revealed) &&
-    v.revealed.length <= 65536 &&
-    Array.isArray(v.commitments) &&
-    v.commitments.length <= 65536 &&
-    v.revealed.every(
-      (r) =>
-        isRecord(r) &&
-        hasExactKeys(r, ['start', 'bytes']) &&
-        uint(r.start, 0xffffffff) &&
-        r.bytes instanceof Uint8Array &&
-        r.bytes.length <= 32768,
-    ) &&
-    v.commitments.every(
-      (r) =>
-        isRecord(r) &&
-        hasExactKeys(r, ['start', 'end', 'commitment']) &&
-        uint(r.start, 0xffffffff) &&
-        uint(r.end, 0xffffffff) &&
-        fixedBytes(r.commitment, 32),
-    )
-  )
-}
-
-/** Validate the delivered projection shape without reparsing bytes or verifying signatures. */
-export function isAttestation(v: unknown): v is NotaryAttestation {
-  if (
-    !isRecord(v) ||
-    !hasExactKeys(v, ['attestedData', 'signature', 'decoded']) ||
-    !(v.attestedData instanceof Uint8Array) ||
-    !v.attestedData.length ||
-    v.attestedData.length > 2 * 1024 * 1024 ||
-    !fixedBytes(v.signature, 65)
-  )
-    return false
-  const d = v.decoded
-  return (
-    isRecord(d) &&
-    hasExactKeys(d, [
-      'authorityId',
-      'createdAt',
-      'sentTranscriptLength',
-      'receivedTranscriptLength',
-      'sent',
-      'received',
-    ]) &&
-    fixedBytes(d.authorityId, 32) &&
-    typeof d.createdAt === 'string' &&
-    /^(0|[1-9][0-9]{0,19})$/.test(d.createdAt) &&
-    BigInt(d.createdAt) <= 0xffffffffffffffffn &&
-    uint(d.sentTranscriptLength, 4096) &&
-    uint(d.receivedTranscriptLength, 32768) &&
-    direction(d.sent) &&
-    direction(d.received)
+    hasExactKeys(v, ['attestedData', 'signature']) &&
+    v.attestedData instanceof Uint8Array &&
+    v.attestedData.length > 0 &&
+    v.attestedData.length <= MAX_ATTESTED_DATA_BYTES &&
+    fixedBytes(v.signature, 65)
   )
 }
