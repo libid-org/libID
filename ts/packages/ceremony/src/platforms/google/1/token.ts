@@ -1,6 +1,11 @@
+import {
+  MAX_AUD_BYTES,
+  MAX_EMAIL_BYTES,
+  MAX_SUB_BYTES,
+} from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import { parseJson } from '../../../json.js'
 import { b64urlDecode } from '../../../primitives.js'
-import { MAX_AUD_BYTES, MAX_EMAIL_BYTES, MAX_SUB_BYTES, printableWithoutQuote } from './types.js'
+import { printableWithoutQuote } from './types.js'
 
 export interface GoogleIdTokenClaims {
   iss: string
@@ -35,7 +40,7 @@ function json(bytes: Uint8Array): Record<string, unknown> | null {
 }
 
 /** The one strict payload decoder used only by Prover. */
-export function decodeGoogleIdToken(idToken: string): DecodedGoogleIdToken | null {
+function decodeGoogleIdToken(idToken: string): DecodedGoogleIdToken | null {
   const segments = idToken.split('.')
   if (segments.length !== 3 || segments.some((segment) => segment === '')) return null
   const [headerB64, payloadB64, signatureB64] = segments
@@ -75,11 +80,7 @@ export function decodeGoogleIdToken(idToken: string): DecodedGoogleIdToken | nul
   }
 }
 
-export function decodeGoogleHeader(bytes: Uint8Array): Record<string, unknown> | null {
-  return json(bytes)
-}
-
-interface ParsedGoogleIdToken extends DecodedGoogleIdToken {
+export interface ParsedGoogleIdToken extends DecodedGoogleIdToken {
   kid: string
 }
 
@@ -88,7 +89,7 @@ export function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
   if (token?.claims.iss !== 'https://accounts.google.com') {
     throw new Error('invalid Google ID token')
   }
-  const header = decodeGoogleHeader(token.header)
+  const header = json(token.header)
   if (header?.alg !== 'RS256' || typeof header.kid !== 'string' || header.kid === '') {
     throw new Error('invalid Google ID token header')
   }

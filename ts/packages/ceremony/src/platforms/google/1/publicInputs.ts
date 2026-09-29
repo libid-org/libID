@@ -1,11 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js'
-import {
-  type GoogleProofV1,
-  RSA_MODULUS_BYTES,
-  validateIdentity,
-  validateProof,
-} from '../../../platforms/google/1/types.js'
-import type { Identity } from '../../../platforms/types.js'
+import { RSA_MODULUS_BYTES } from '../../../barretenberg/circuits/oidc_google/inputs.js'
+import type { Identity } from '../../types.js'
+import { type GoogleProofV1, validateIdentity, validateProof } from './types.js'
 
 const encoder = new TextEncoder()
 
