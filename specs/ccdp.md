@@ -516,7 +516,7 @@ inapplicable operation emits nothing.
 |---|---|---|
 | `prefetch-dispatch` | Application, locally before the first Prefetch navigation | Prefetch, after authenticating the connection, registering the Worker, and dispatching selected-profile fetches. Permits Authorization navigation; downloads need not be complete. |
 | `authorization` | Application, locally when initiating Authorization navigation | Callback, after capturing the OAuth return and authenticating the Application, before navigating to Prover. Includes the return and connection setup; asserts neither approval nor pure user-consent duration. |
-| `prover` | Prover, after isolated connection readiness and installation of its CCDP handlers. Permits `ProveIdentity`; does not assert OAuth acceptance or ZK execution. | Application, locally after structurally accepting `IdentityProof` and assembling its result. Prover never sends this finish over CCDP. |
+| `prover` | Prover, after isolated connection readiness and installation of its CCDP handlers. Permits `ProveIdentity`; does not assert OAuth acceptance or ZK execution. | Application, locally after accepting `IdentityProof` under the selected profile's browser checks and assembling its result. Prover never sends this finish over CCDP. |
 | `prover-fallback` | — | Prover, once after an isolation replacement, with the replacement navigation's start timestamp and no `phase`. See [Fallback timing](#fallback-timing). |
 | `token-fetch` | Prover, when starting to obtain a usable access token | Prover, when that token is available, without waiting for its final attestation |
 | `token-attestation` | Prover, when starting work to obtain the token attestation | Prover, when the complete attestation passes its required structural, request-binding, and commitment/opening checks |
@@ -645,7 +645,7 @@ cryptographic properties delegated to the common and platform specifications.
 - TEST-CCDP-04 (exercises REQ-CCDP-04):
   Public Prefetch authenticates its exact peer; Callback rejects an unadmitted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Callback rejects a peer claiming a pattern member's own spelling, and Prover rejects a fragment carrying one. An exact member authenticates a peer observed at exactly that origin, and Prover receives that origin as `applicationOrigin`. Canonical HTTP loopback works at arbitrary ports.
 - TEST-CCDP-05 (exercises REQ-CCDP-05):
-  Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel`, `denied`, and `abort` records and Application-sent `UserDenied` are invalid. Proof payloads are structurally checked under the selected platform version.
+  Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel`, `denied`, and `abort` records and Application-sent `UserDenied` are invalid. Proof payloads pass the selected platform version's structural and result-consistency checks.
   An unknown discriminator or rejected decoder fails the logical connection;
   a handler's state guard permits no invalid transition. Late valid CCDP
   messages cannot change a settled ceremony outcome.
@@ -832,9 +832,9 @@ Prover's `UserDenied` reports valid OAuth denial; an active document's
 `CeremonyFailed` reports failure; and `IdentityProof` delivers a proof. These outcomes are
 mutually terminal even when they race in transit. Denial resolves denied;
 an observable failure rejects the live ceremony. A failure before connection
-acceptance is reported locally. Application structurally validates the delivered identity and
-selected platform/version proof and assembles its result before recording
-`prover.finished` locally. Neither endpoint adds local cryptographic proof or
+acceptance is reported locally. Application validates the delivered identity and
+selected platform/version proof under that profile's browser checks and
+assembles its result before recording `prover.finished` locally. Neither endpoint adds local cryptographic proof or
 attestation verification; ledger verification remains authoritative.
 
 The Application may cancel locally at any point, settling its run and ignoring

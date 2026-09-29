@@ -20,9 +20,11 @@ time. The Consumer's protocol owns transaction dispatch and authorization.
 handoff. Its Application and browser participants together implement the
 Canonical Runtime. Callback captures and clears the return; Prover owns complete
 platform-return parsing, canonical evidence decoding, request bindings, and
-commitment/opening correlation. Application structurally validates the delivered
-identity and platform proof and wraps it with retained authorization fields;
-it does not repeat Prover's evidence checks. Ledger verification means the
+commitment/opening correlation. Application validates the delivered identity and
+platform proof under the selected profile, including Google's public-input
+consistency checks, and wraps it with retained authorization fields; it does
+not repeat Prover's evidence extraction or perform cryptographic verification.
+Ledger verification means the
 Proof Verifier, Platform Verifier, and Notary Service checks before Consumer
 acceptance, not browser generation or a locally accepted result.
 
@@ -286,12 +288,23 @@ Google nonce         = sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU
 - REQ-PLAT-14 (upholds SP-BIND-01):
   The Prover MUST parse the token's `nonce` as canonical unpadded base64url
   encoding of exactly 32 bytes and use those bytes as the candidate
-  Authorization Digest public input to the circuit. Neither the Prover nor
-  the Application performs a separate nonce-versus-expected-digest
-  comparison. The expected digest remains Application-side and is not an
-  additional Prover input. REQ-PLAT-16 and REQ-PLAT-18 bind the candidate to
+  Authorization Digest public input to the circuit. The expected digest
+  remains Application-side and is not an additional Prover input; Prover
+  performs no nonce-versus-expected-digest comparison. REQ-PLAT-16 and
+  REQ-PLAT-18 bind the candidate to
   the signed token; common REQ-COMMON-02 and REQ-COMMON-02A bind the proof to
   the authorization that the Consumer is asked to accept.
+- REQ-PLAT-14A (upholds SP-BIND-01, SP-CLIENT-01):
+  Before delivery, the Prover MUST require the generated proof's public inputs
+  to equal the projection of its parsed token claims and selected signing
+  modulus under REQ-PLAT-16B, using the selected artifact's field encoding.
+- REQ-PLAT-14B (upholds SP-BIND-01, SP-CLIENT-01):
+  Before accepting a Google result, the Application MUST require its delivered
+  public inputs to equal the projection of the retained Authorization Digest,
+  validated identity fields, token expiry, and signing modulus under
+  REQ-PLAT-16B, using the same artifact encoding. This checks result consistency,
+  not the proof's cryptographic validity or the modulus's trusted-set membership.
+  It requires neither the ID Token nor a new `ProveIdentity` field.
 - REQ-PLAT-15:
   The Prover MUST reject a Google response carrying `code` or
   `access_token`. Necessity: neither artifact belongs to this
@@ -396,7 +409,7 @@ The signing key is fetched from Google's JWKS endpoint as witness input.
 ## 4. Browser TLSNotary launch transport
 
 Launch fixes X's `/2/oauth2/token` and `/2/users/me` sessions and GitHub's
-`/user` session to the Proxy profile.
+`/login/oauth/access_token` and `/user` sessions to the Proxy profile.
 
 | Property | Proxy profile | Browser MPC profile |
 |---|---|---|
@@ -1189,7 +1202,7 @@ Platform Verifier, Notary Service, Consumer.
 - TEST-PLAT-01 (exercises REQ-PLAT-10, REQ-PLAT-18):
   The §3.1 nonce vector reproduces exactly. A proof bound to another token
   nonce is rejected downstream when verified against this authorization's
-  recomputed digest; no separate browser digest comparison is required.
+  recomputed digest, independently of the browser result-consistency checks.
 - TEST-PLAT-02 (exercises REQ-PLAT-04, REQ-PLAT-05, REQ-PLAT-05A, REQ-PLAT-06, REQ-PLAT-07, REQ-PLAT-08):
   The §2.1 identifier vectors reproduce, the Google one as its digest, and
   each listed malformed identifier is rejected.
@@ -1198,16 +1211,21 @@ Platform Verifier, Notary Service, Consumer.
   profile is rejected. A nonempty query, mixed query/fragment response, or
   fragment carrying duplicate `state`, both `id_token` and `error`, `code`, or
   `access_token` is rejected.
-- TEST-PLAT-04 (exercises REQ-PLAT-13, REQ-PLAT-14):
+- TEST-PLAT-04 (exercises REQ-PLAT-13, REQ-PLAT-14, REQ-PLAT-14A, REQ-PLAT-14B):
   The browser Prover rejects a return whose `state` does not match its bound
   live ceremony, or has already been consumed, and rejects a missing,
   malformed, padded, noncanonical, or non-32-byte nonce. No server-side state
   lookup occurs. An otherwise valid signed token with a canonical nonce for
-  another digest is not rejected by an extra browser comparison: its circuit
-  inputs come from that nonce, and the Application only checks the delivery shape.
-  The resulting proof fails downstream verification against the requested
+  another digest supplies that candidate to Prover's circuit, but Application
+  rejects the delivered public inputs against its retained digest. Downstream
+  verification independently rejects that proof against the requested
   authorization's recomputed digest. The browser test adds no expected-digest
   field to `ProveIdentity`.
+  A changed public input, delivered identity field, expiry, or signing modulus
+  that no longer matches its projection fails the corresponding browser check.
+  A structurally valid forged proof whose supplied public inputs still match
+  the projection has no local cryptographic rejection and must fail downstream
+  proof verification; matching fields alone do not authenticate them.
 - TEST-PLAT-05 (exercises REQ-PLAT-15):
   A Google response carrying an authorization code or access token is rejected,
   and the deployment contains no Google exchange route or client secret.
@@ -1407,10 +1425,13 @@ Platform Verifier, Notary Service, Consumer.
 
 ## 9. Security Considerations
 
-Browser validation does not authenticate attestation signatures or compare a
-Google nonce against an independently supplied expected digest. A well-formed
-forgery or mismatch can therefore survive browser checks. REQ-PLAT-14,
-REQ-PLAT-18, and REQ-PLAT-44 preserve circuit and downstream verification;
+Browser validation does not authenticate attestation signatures or verify ZK
+proofs. Google's Prover checks generated public inputs against its parsed
+evidence; Application checks the delivered projection against its retained
+digest and result fields, without receiving the token. A well-formed forgery
+that preserves these checked relationships can still survive browser checks.
+REQ-PLAT-14, REQ-PLAT-14A, REQ-PLAT-14B, REQ-PLAT-18, and REQ-PLAT-44 preserve the
+distinction between local consistency and circuit/downstream verification;
 TEST-PLAT-04 and TEST-PLAT-15 distinguish those later rejections from early
 browser rejection. No ledger verification guarantee is weakened.
 
@@ -1470,8 +1491,9 @@ Google has no server-side token exchange. Its fragment is not visible at
 HTTP ingress, although the deployment controls Callback code. Its signed
 ID Token reaches the redirect fragment and is cleared
 before other work. The browser checks `state`, the configured audience, and
-canonical nonce encoding; the circuit binds the signed nonce and claims, and
-ledger verification binds that proof to the recomputed authorization digest
+canonical nonce encoding and checks the delivered public-input projection;
+the circuit binds the signed nonce and claims, and ledger verification binds
+that proof to the recomputed authorization digest
 and trusted signing key. A deployment backend can withhold the static redirect
 document but cannot substitute an ID Token through a server exchange that
 does not exist.

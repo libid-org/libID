@@ -241,10 +241,13 @@ on it.
 
 Browser result acceptance is not ledger verification. Prover performs canonical
 parsing and local request/commitment consistency checks; Application validates
-the delivered structure. Neither performs local notary-signature verification
-or a separate Google nonce-versus-expected-digest comparison. Well-formed
-mismatches or forgeries can survive those browser checks but still fail the
-applicable downstream proof, digest-binding, trusted signing-key, or
+the delivered result under the selected profile. Google's browser checks compare
+public inputs with the delivered fields and Application's retained digest
+without passing that expected digest to Prover; the
+[platform profile](platform-ceremonies.md#32-browser-token-validation) owns those
+checks. Neither endpoint verifies generated proofs or notary signatures
+cryptographically. Well-formed forgeries can survive browser consistency checks
+but still fail the applicable downstream proof, digest-binding, trusted signing-key, or
 notary-signature check before an authoritative effect.
 
 - SP-BIND-01:
