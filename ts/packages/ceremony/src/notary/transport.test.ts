@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { utf8 } from '../testing/index.js'
+import { frame, frameJson } from './fixtures/attestation.js'
 import { decodeAttestationFrame, deriveNotaryWebSocketUrl } from './transport.js'
 
 // Exact `write_msg` output for the smoke vector in libid-org/notary PR #6 at
@@ -9,17 +11,6 @@ const CANONICAL_FRAME = Uint8Array.from(
     'hex',
   ),
 )
-
-function framePayload(payload: Uint8Array): Uint8Array {
-  const frame = new Uint8Array(payload.length + 4)
-  new DataView(frame.buffer).setUint32(0, payload.length)
-  frame.set(payload, 4)
-  return frame
-}
-
-function frameJson(value: unknown): Uint8Array {
-  return framePayload(new TextEncoder().encode(JSON.stringify(value)))
-}
 
 const validPayload = (signature: unknown = new Array(65).fill(4)) => ({
   attested_data: [1, 2, 3],
@@ -75,8 +66,8 @@ describe('decodeAttestationFrame', () => {
     ['trailing byte', Uint8Array.from([...CANONICAL_FRAME, 0]), /trailing bytes/],
     ['second frame', Uint8Array.from([...CANONICAL_FRAME, ...CANONICAL_FRAME]), /trailing bytes/],
     ['oversize declaration', Uint8Array.from([0, 160, 0, 1]), /payload exceeds size limit/],
-    ['invalid UTF-8', framePayload(Uint8Array.from([0xff])), /malformed JSON/],
-    ['invalid JSON', framePayload(new TextEncoder().encode('{')), /malformed JSON/],
+    ['invalid UTF-8', frame(Uint8Array.from([0xff])), /malformed JSON/],
+    ['invalid JSON', frame(utf8('{')), /malformed JSON/],
     ['unknown field', frameJson({ ...validPayload(), other: [] }), /exactly/],
     ['missing field', frameJson({ attested_data: [1] }), /exactly/],
     ['short signature', frameJson(validPayload(new Array(64).fill(4))), /exactly 65/],
@@ -91,7 +82,7 @@ describe('decodeAttestationFrame', () => {
       frameJson({ ...validPayload(), attested_data: new Array(2 * 1024 * 1024 + 1).fill(0) }),
       /invalid byte array/,
     ],
-  ])('rejects %s', (_name, frame, reason) => {
-    expect(() => decodeAttestationFrame(frame)).toThrow(reason)
+  ])('rejects %s', (_name, bytes, reason) => {
+    expect(() => decodeAttestationFrame(bytes)).toThrow(reason)
   })
 })
