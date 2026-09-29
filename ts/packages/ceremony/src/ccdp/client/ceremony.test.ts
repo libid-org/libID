@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import type { LedgerId } from '@libid/ledger'
 import { mainnet, testnet } from '@libid/ledger/testing'
 import { type Message, type MessageType, PopupError } from '@libid/popup'
@@ -6,11 +5,18 @@ import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { describe, expect, it, type Mock, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
 import type { CeremonyEvent } from '../../events.js'
+import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { deriveAuthorizationDigest, deriveCodeChallenge } from '../../platforms/authorization.js'
 import { buildGooglePublicInputs } from '../../platforms/google/1/publicInputs.js'
-import { type PlatformId, platforms, type SupportedCeremonyVersion } from '../../platforms/index.js'
+import {
+  type Identity,
+  type PlatformId,
+  platforms,
+  type SupportedCeremonyVersion,
+  supportedPlatforms,
+} from '../../platforms/index.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import { CEREMONY_ID } from '../../testing/index.js'
+import { CEREMONY_ID, fixtures, platformConfig } from '../../testing/index.js'
 import { CeremonyFailed, EventMessage, IdentityProof, UserDenied } from '../index.js'
 import { popupErrorMessages } from '../ui-messages.js'
 import { type CCDPClient, ccdpClientFromConfig, createCCDPClient } from './ceremony.js'
@@ -25,10 +31,6 @@ function spiedConnection(): Spied {
     vi.spyOn(connection, method)
   return connection as Spied
 }
-
-// The platform tables construct `new Connection()`: a function declaration is constructible, and
-// the double it returns becomes the result.
-const Connection = spiedConnection as unknown as new () => Spied
 
 const id = CEREMONY_ID
 
@@ -130,14 +132,14 @@ const identity = {
   userName: 'a@b.c',
 }
 
-function proofFor(connection: FakeConnection) {
+function proofFor(connection: FakeConnection, claimed: Identity<'google'> = identity) {
   const url = connection.navigations.filter((navigation) => navigation.away).at(-1)?.url
   const digest = url ? b64urlDecode(new URL(url).searchParams.get('nonce')!)! : new Uint8Array(32)
   const fields = { tokenExpiresAt: 42, signingKeyModulus: new Uint8Array(256) }
   return {
     identityProof: new Uint8Array([1]),
     ...fields,
-    publicInputs: buildGooglePublicInputs(digest, identity, fields),
+    publicInputs: buildGooglePublicInputs(digest, claimed, fields),
   }
 }
 
@@ -387,26 +389,10 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
   expect(() => setup({ client, connection })).not.toThrow()
 })
 
-it('rejects changed form serialization for X/GitHub client IDs, not signed Google audiences [TEST-COMMON-09]', () => {
-  for (const platform of ['x', 'github'])
-    for (const clientId of ['a+b', 'a b', 'a%2Fb', 'é'])
-      expect(() =>
-        validateCeremonyConfig(
-          { ...wireConfig, platforms: { [platform]: { clientId, ceremonyVersions: [1] } } },
-          'https://bridge.test',
-        ),
-      ).toThrow()
-  expect(() =>
-    validateCeremonyConfig(
-      { ...wireConfig, platforms: { google: { clientId: 'a+b', ceremonyVersions: [1] } } },
-      'https://bridge.test',
-    ),
-  ).not.toThrow()
-})
-
-it.each(['google', 'x', 'github'] as const)(
+it.each(supportedPlatforms)(
   'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015]',
   async (platformId) => {
+    const oidc = fixtures[platformId].pipeline === 'oidc'
     const hash = testnet.hash(),
       domain = new Uint8Array(32),
       data = new Uint8Array([1, 2])
@@ -414,10 +400,10 @@ it.each(['google', 'x', 'github'] as const)(
       hash: vi.fn(() => hash),
       notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
     }
-    const connection = new Connection()
+    const connection = spiedConnection()
     const ceremony = ccdpClientFromConfig({
       ...config,
-      platforms: { [platformId]: { clientId: 'client', ceremonyVersions: [1] } },
+      platforms: { [platformId]: platformConfig(platformId) },
     }).new(connection, id, platformId, ledger, domain, data)
     expect(ledger.hash).toHaveBeenCalledOnce()
     expect(ledger.notaryAddress).toHaveBeenCalledOnce()
@@ -441,7 +427,7 @@ it.each(['google', 'x', 'github'] as const)(
     connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
     const message = connection.send.mock.calls[0][0]
     expect(message.notaryAddress).toBe('https://local-notary.test:8443')
-    if (platformId === 'google') {
+    if (oidc) {
       expect(message.codeVerifier).toBeNull()
       expect(authorization.searchParams.has('code_challenge')).toBe(false)
     } else {
@@ -451,24 +437,18 @@ it.each(['google', 'x', 'github'] as const)(
       )
     }
     for (const key of ['ledgerId', 'chainId', 'isTestnet']) expect(message).not.toHaveProperty(key)
+    // Every platform delivers an accepted result bound to the retained client digest.
+    const { identity: claimed } = fixtures[platformId]
     const attestation = {
-      attestedData: Uint8Array.from(
-        Buffer.from(
-          readFileSync(
-            new URL('../../notary/libid-rs-239a4bb-attested-data.fixture.hex', import.meta.url),
-            'utf8',
-          ).trim(),
-          'hex',
-        ),
-      ),
+      attestedData: LIBID_RS_ATTESTED_DATA.slice(),
       signature: new Uint8Array(65),
     }
     connection.receive({
       type: 'identity-proof',
-      identity: platformId === 'google' ? identity : { ...identity, platformId, userName: 'alice' },
+      identity: claimed,
       proof:
-        platformId === 'google'
-          ? proofFor(connection)
+        claimed.platformId === 'google'
+          ? proofFor(connection, claimed)
           : {
               bearerLinkProof: new Uint8Array([1]),
               tokenAttestation: attestation,
@@ -485,13 +465,12 @@ it.each(['google', 'x', 'github'] as const)(
       authorizationNonce: result.oauthProof.authorizationNonce,
     })
     expect(result.oauthProof.authorizationDigest).toEqual(expectedDigest)
-    if (platformId === 'google')
-      expect(authorization.searchParams.get('nonce')).toBe(b64urlEncode(expectedDigest))
+    if (oidc) expect(authorization.searchParams.get('nonce')).toBe(b64urlEncode(expectedDigest))
   },
 )
 
 it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014]', () => {
-  const connection = new Connection()
+  const connection = spiedConnection()
   for (const ledger of [
     null,
     {},
@@ -516,13 +495,13 @@ it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-
   expect(connection.navigate).not.toHaveBeenCalled()
 })
 
-it.each(['google', 'x', 'github'] as const)(
+it.each(supportedPlatforms)(
   'rejects invalid notary addresses before OAuth for %s [LIBID-OAUTH-021]',
   (platformId) => {
-    const connection = new Connection()
+    const connection = spiedConnection()
     const client = ccdpClientFromConfig({
       ...config,
-      platforms: { [platformId]: { clientId: 'client', ceremonyVersions: [1] } },
+      platforms: { [platformId]: platformConfig(platformId) },
     })
     for (const method of [
       undefined,
@@ -576,43 +555,25 @@ it.each([
   })
 })
 
-it.each(['digest', 'audience', 'subject', 'email', 'expiry', 'modulus', 'order'] as const)(
-  'rejects mismatched Google %s before resolving or announcing success [LIBID-OAUTH-014]',
-  async (changed) => {
-    const { connection, ceremony } = setup()
-    const statuses: string[] = []
-    ceremony.onEvent((event) => statuses.push(event.status))
-    const result = ceremony.proveUserIdentity()
-    connection.receive({
-      type: 'event',
-      event: 'prefetch-dispatch',
-      phase: 'finished',
-      timestamp: 1,
-    })
-    connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 2 })
-    const claimed = { ...identity }
-    const proof = proofFor(connection)
-    if (changed === 'digest')
-      proof.publicInputs[0] = `0x${(BigInt(proof.publicInputs[0]) ^ 1n).toString(16).padStart(64, '0')}`
-    if (changed === 'audience') claimed.oauthClientId = 'other-client'
-    if (changed === 'subject') claimed.userId = '2'
-    if (changed === 'email') claimed.userName = 'other@b.c'
-    if (changed === 'expiry') proof.tokenExpiresAt++
-    if (changed === 'modulus') proof.signingKeyModulus[0] ^= 1
-    if (changed === 'order')
-      [proof.publicInputs[34], proof.publicInputs[35]] = [
-        proof.publicInputs[35],
-        proof.publicInputs[34],
-      ]
-    connection.receive({ type: 'identity-proof', identity: claimed, proof })
-    await expect(result).rejects.toMatchObject({
-      name: 'CeremonyError',
-      event: 'prover',
-      message: 'Google public input mismatch',
-    })
-    expect(statuses.filter((status) => status !== 'active')).toEqual(['failed'])
-  },
-)
+it('rejects a Google proof bound to another authorization before resolving or announcing success [LIBID-OAUTH-014]', async () => {
+  const { connection, ceremony } = setup()
+  const statuses: string[] = []
+  ceremony.onEvent((event) => statuses.push(event.status))
+  const result = ceremony.proveUserIdentity()
+  reachProving(connection)
+  // Every other binding mismatch is the platform's conformance matrix.
+  const { proof } = fixtures.google.rejectedBinding['authorization digest']({
+    identity,
+    proof: proofFor(connection),
+  })
+  connection.receive({ type: 'identity-proof', identity, proof })
+  await expect(result).rejects.toMatchObject({
+    name: 'CeremonyError',
+    event: 'prover',
+    message: 'Google public input mismatch',
+  })
+  expect(statuses.filter((status) => status !== 'active')).toEqual(['failed'])
+})
 
 it('keeps transport failure text instead of reporting it as an invalid sequence', async () => {
   const { connection, ceremony } = setup()
@@ -687,13 +648,14 @@ it('preserves opaque failure text and operation context for the application', as
   })
 })
 
-it.each(['google', 'x', 'github'] as const)(
+it.each(supportedPlatforms)(
   'projects %s stages without delaying or summing overlapping work [LIBID-BROWSER-007]',
   async (platformId) => {
-    const c = new Connection()
+    const notarized = fixtures[platformId].pipeline === 'bearer-link'
+    const c = spiedConnection()
     const ceremony = ccdpClientFromConfig({
       ...config,
-      platforms: { [platformId]: { clientId: 'client', ceremonyVersions: [1] } },
+      platforms: { [platformId]: platformConfig(platformId) },
     }).new(c, id, platformId, testnet, new Uint8Array(32), new Uint8Array())
     const stages: string[] = []
     const events: CeremonyEvent[] = []
@@ -708,7 +670,7 @@ it.each(['google', 'x', 'github'] as const)(
     emit('authorization', 'finished', 20)
     emit('prover', 'started', 30)
     emit('zk-proof-preparation', 'started', 40)
-    if (platformId !== 'google') emit('token-fetch', 'started', 50)
+    if (notarized) emit('token-fetch', 'started', 50)
     emit('zk-proof-generation', 'started', 60)
     emit('zk-proof-preparation', 'finished', 70)
     emit('zk-proof-generation', 'finished', 80)
@@ -721,7 +683,7 @@ it.each(['google', 'x', 'github'] as const)(
       'preparation',
       'authorization',
       'proof-preparation',
-      ...(platformId === 'google' ? [] : ['notarization']),
+      ...(notarized ? ['notarization'] : []),
       'zk-proving',
     ])
     const rejection = expect(result).rejects.toMatchObject({ name: 'CeremonyError' })

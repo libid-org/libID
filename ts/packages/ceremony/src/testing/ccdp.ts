@@ -2,23 +2,7 @@
 // framework-agnostic: methods are own properties, so tests wrap them with their runner's spies.
 
 import type { eventView } from '../ccdp/documents/ui.js'
-import type { ProveIdentity } from '../ccdp/index.js'
 import type { CeremonyEvent, Events } from '../events.js'
-
-/** A complete, valid ProveIdentity for version 1 of `platformId`; `fields` override any part. */
-export const proveIdentity = (
-  platformId = 'google',
-  fields: Partial<ProveIdentity> = {},
-): ProveIdentity => ({
-  type: 'prove-identity',
-  platformId,
-  platformCeremonyVersion: 1,
-  clientId: 'client',
-  redirectUri: 'https://bridge.test/callback',
-  codeVerifier: null,
-  notaryAddress: 'https://notary.test',
-  ...fields,
-})
 
 type DocumentView = ReturnType<typeof eventView>
 

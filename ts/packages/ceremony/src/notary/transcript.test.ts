@@ -9,7 +9,14 @@ import {
   selectToken,
   selectIdentity as selectXIdentity,
 } from '../platforms/x/1/transcript.js'
-import { httpResponse, proverRequest as serialize, text, utf8 } from '../testing/index.js'
+import {
+  bearerLinkPlatforms,
+  fixtures,
+  httpResponse,
+  proverRequest,
+  text,
+  utf8,
+} from '../testing/index.js'
 import { planNotarization } from './notarize.js'
 import { quotedRange } from './transcript.js'
 
@@ -23,7 +30,7 @@ const input = {
 const request = buildTokenRequest(input)
 
 const transcript = {
-  sent: serialize('POST /2/oauth2/token HTTP/1.1', request),
+  sent: proverRequest('POST /2/oauth2/token HTTP/1.1', request),
   received: httpResponse('{"access_token":"token","token_type":"bearer"}'),
 }
 
@@ -101,7 +108,7 @@ describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C] [TEST-PLAT-09A
 
 describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60] [TEST-PLAT-22]', () => {
   const request = identityRequest('token')
-  const sent = serialize('GET /user HTTP/1.1', request)
+  const sent = proverRequest('GET /user HTTP/1.1', request)
   it.each(['{"id":123,"login":"alice"}', '{"login":"alice","id":123}'])(
     'accepts field order %s',
     (body) => {
@@ -161,18 +168,15 @@ describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60] [TEST-PLAT-
   })
 })
 
-for (const platform of ['x', 'github'] as const) {
+for (const platform of bearerLinkPlatforms) {
   describe(`${platform} additional identity headers [LIBID-PROVER-003/004]`, () => {
-    const request = platform === 'x' ? buildIdentityRequest('token') : identityRequest('token')
-    const line = platform === 'x' ? 'GET /2/users/me HTTP/1.1' : 'GET /user HTTP/1.1'
-    const original = text(serialize(line, request))
-    const received = utf8(
-      platform === 'x' ? '{"id":"123","username":"alice"}' : '{"id":123,"login":"alice"}',
-    )
+    const { transcript: profile, evidence } = fixtures[platform]
+    const request = profile.buildIdentityRequest('token')
+    const line = `GET ${new URL(profile.identityUrl).pathname} HTTP/1.1`
+    const original = text(proverRequest(line, request))
+    const received = utf8(evidence.identityBody)
     const select = (sent: Uint8Array) =>
-      platform === 'x'
-        ? selectXIdentity({ sent, received }, 'token').ranges.sent
-        : selectIdentity({ sent, received }, 'token').ranges.sent
+      profile.selectIdentity({ sent, received }, 'token').ranges.sent
     it.each(['x-extra: value', 'x-extra: café 😀', 'x-extra:', 'x-extra:\tvalue'])(
       'reveals extra headers before and after Authorization without shifting its bearer: %s',
       (extra) => {
@@ -233,7 +237,7 @@ describe('JSON field whitespace [LIBID-PROVER-003/004] [TEST-COMMON-10A]', () =>
     const request = buildIdentityRequest('token')
     const identity = utf8(`{"id"${ws}:${ws}"123", "username"${ws}:${ws}"alice"}`)
     const reveals = selectXIdentity(
-      { sent: serialize('GET /2/users/me HTTP/1.1', request), received: identity },
+      { sent: proverRequest('GET /2/users/me HTTP/1.1', request), received: identity },
       'token',
     )
     expect(

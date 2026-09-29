@@ -27,6 +27,8 @@
     "!src/**/*.test.ts",
     "!src/**/*.fixture.*",
     "!src/**/fixtures/**",
+    "!src/testing/**",
+    "!src/platforms/conformance/**",
     "build",
     "ccdp.Dockerfile"
   ],

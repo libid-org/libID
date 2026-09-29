@@ -9,3 +9,4 @@ export const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 
 export * from './ccdp.js'
 export * from './http.js'
+export * from './platforms.js'
