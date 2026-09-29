@@ -46,8 +46,12 @@ step. The circuit checks the signed claims and binding. Downstream verification
 must use the recomputed operation digest and trusted Google signing key.
 JSON uses native parsing; authoritative field uniqueness is the provider guarantee
 in ASM-PROV-06. Circuit inputs still reference the original signed bytes.
-Delivery includes the proof, expiry and modulus, beside the exact signed audience,
-subject and email as identity fields.
+Delivery includes the proof, its 56 public inputs, expiry and modulus, beside the
+exact signed audience, subject and email as identity fields. Prover compares the
+backend's public inputs to its witness-derived values. Client then independently
+rebuilds them with its retained authorization digest and the validated result,
+rejecting any mismatch before announcing completion. These comparisons do not
+verify the proof or establish trust in the signing key; the ledger remains authoritative.
 
 ## X
 

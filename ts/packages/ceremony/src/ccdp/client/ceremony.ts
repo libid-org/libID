@@ -188,6 +188,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private readonly version: SupportedCeremonyVersion<P>
   private readonly platformEvents: readonly CoreEvent[]
   private readonly authorizationNonce = crypto.getRandomValues(new Uint8Array(32))
+  private readonly authorizationDigest: Uint8Array
   private readonly start: ProveIdentity
   private authorizationUrl: string
   private readonly prefetchUrl: string
@@ -214,6 +215,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       authorizationNonce: this.authorizationNonce,
       platformCeremonyVersion: this.version,
     })
+    this.authorizationDigest = digest
     const implementation = implementationFor(this.platform, this.version)
     this.platformEvents = implementation.events
     const codeVerifier = implementation.pkce
@@ -380,6 +382,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
           m,
           this.start.clientId,
           this.authorizationNonce,
+          this.authorizationDigest,
         )
         this.finish(
           { event: 'prover', phase: 'finished', status: 'completed', timestamp: now() },
@@ -434,6 +437,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.start.codeVerifier = null
     this.authorizationUrl = ''
     this.authorizationNonce.fill(0)
+    this.authorizationDigest.fill(0)
     this.result = undefined
     this.events.emit(event)
     if (outcome instanceof CeremonyError) result?.reject(outcome)

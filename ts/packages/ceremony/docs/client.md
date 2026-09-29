@@ -163,7 +163,11 @@ containing separate `identity` and `oauthProof` values:
 - `identity`: exact platform ID, OAuth client ID, user ID and user name. The name
   is Google's signed email, X's username or GitHub's login, without normalization.
 - `oauthProof`: selected `platformCeremonyVersion`, fresh `authorizationNonce`,
-  platform-specific `proof` and `expiresAt` in Unix seconds.
+  client-derived `authorizationDigest` (32 bytes), platform-specific `proof` and
+  `expiresAt` in Unix seconds. The retained digest binds the original ledger hash,
+  operation domain, transaction bytes, ceremony version and nonce; it must equal
+  the resulting claim's `CeremonyBound.authorizationDigest`. It is copied from the
+  live ceremony, never supplied by Prover.
 
 Client derives `expiresAt` after structural validation: Google's signed JWT
 `tokenExpiresAt`, or the X/GitHub token attestation's `createdAt` plus 3600 seconds.
@@ -174,8 +178,11 @@ when block time is greater than or equal to `expiresAt`. This is retention metad
 not a validity guarantee: the ledger verifier's current checks remain authoritative.
 The field is computed locally and does not change CCDP or platform proof payloads.
 
-Google's proof contains `identityProof`, `tokenExpiresAt` and
-`signingKeyModulus`. X/GitHub contain `bearerLinkProof`, `tokenAttestation` and
+Google's proof contains `identityProof`, `publicInputs`, `tokenExpiresAt` and
+`signingKeyModulus`. Its `publicInputs` is a readonly array of 56 lowercase,
+0x-prefixed, 32-byte hex fields. Before acceptance Client reconstructs those fields
+from the validated identity, retained digest, expiry and modulus and requires an
+exact match in order. X/GitHub contain `bearerLinkProof`, `tokenAttestation` and
 `identityAttestation`. A `NotaryAttestation` preserves original `attestedData`
 and `signature` bytes; decoded records are not exposed in the result.
 Use `OAuthProof<'google'>['proof']`, for example, to name a payload type without

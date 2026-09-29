@@ -241,7 +241,9 @@ for (const platform of ['x', 'github'] as const) {
           identityAttestation: attestations[1],
         })
         const delivery = structuredClone({ type: 'identity-proof' as const, ...result! })
-        expect(assembleResult(platform, 1, delivery, 'client', new Uint8Array(32))).toMatchObject({
+        expect(
+          assembleResult(platform, 1, delivery, 'client', new Uint8Array(32), new Uint8Array(32)),
+        ).toMatchObject({
           status: 'accepted',
           identity: result!.identity,
         })

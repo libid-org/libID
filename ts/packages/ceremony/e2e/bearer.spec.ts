@@ -79,6 +79,7 @@ for (const platform of ['x', 'github'] as const)
         return {
           identity: result.identity,
           nonce: Array.from(result.oauthProof.authorizationNonce),
+          authorizationDigest: Array.from(result.oauthProof.authorizationDigest),
           proof: Array.from(proof.bearerLinkProof),
           token: Array.from(proof.tokenAttestation.attestedData),
           identityAttestation: Array.from(proof.identityAttestation.attestedData),
@@ -104,6 +105,7 @@ for (const platform of ['x', 'github'] as const)
         authorizationNonce: nonce,
         transactionData: new Uint8Array([1]),
       })
+      expect(Uint8Array.from(result.authorizationDigest)).toEqual(digest)
       const verifier = deriveCodeVerifier(digest, nonce)
       expect(form.get('code_verifier')).toBe(verifier)
       expect(challenge).toBe(deriveCodeChallenge(verifier))

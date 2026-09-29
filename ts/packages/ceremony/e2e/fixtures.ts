@@ -16,8 +16,8 @@ export const test = base.extend<{
   bridge: string
   ccdp: string
   assetControl: (asset: string) => string
-  /** Answer Google authorization by redirecting to `target(state)`; by default, a denial. */
-  provider: (target?: (state: string) => string) => Promise<void>
+  /** Answer Google authorization by redirecting to `target(state, nonce)`; by default, a denial. */
+  provider: (target?: (state: string, nonce: string) => string) => Promise<void>
   /** Open the application at `search`, run `prepare`, then launch; resolves to the popup. */
   launch: (search?: string, prepare?: () => Promise<unknown>) => Promise<Page>
 }>({
@@ -49,10 +49,12 @@ export const test = base.extend<{
     await use(
       async (target = (state) => `${bridge}/auth/callback#error=access_denied&state=${state}`) => {
         await context.route('https://accounts.google.com/**', async (route) => {
-          const state = new URL(route.request().url()).searchParams.get('state')!
+          const params = new URL(route.request().url()).searchParams
+          const state = params.get('state')!,
+            nonce = params.get('nonce')!
           await route.fulfill({
             contentType: 'text/html',
-            body: `<script>location.replace(${JSON.stringify(target(state))})</script>`,
+            body: `<script>location.replace(${JSON.stringify(target(state, nonce))})</script>`,
           })
         })
       },

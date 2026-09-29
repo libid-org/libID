@@ -29,7 +29,7 @@ export async function prove(context: ProverContext) {
       () => buildGoogleWitness(token, key),
     )
     const raw = await engine.prove(inputs, signal),
-      proof = { identityProof: raw.proof, ...proofFields }
+      proof = { identityProof: raw.proof, publicInputs: raw.publicInputs, ...proofFields }
     if (!validateGooglePublicInputs(raw.publicInputs, authorizationDigest, identity, proof))
       throw new Error('Google public input mismatch')
     return { identity, proof }
