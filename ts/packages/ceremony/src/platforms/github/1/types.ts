@@ -1,10 +1,9 @@
 import { bearerLinkTypes } from '../../bearer-types.js'
-
-export const isUserName = (value: string): boolean =>
-  /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(value) && !value.includes('--')
+import { isUserName, profile } from './profile.js'
 
 /** Client identifier, identity and proof constraints for this platform. */
 export const { isClientId, validateIdentity, validateProof, proofExpiresAt } = bearerLinkTypes(
   'github',
   isUserName,
+  profile.proofLifetimeSeconds,
 )

@@ -2,6 +2,11 @@ import { messages } from './ccdp/ui-messages.js'
 import { type CeremonyError, ceremonyError } from './errors.js'
 import { hasExactKeys, isRecord, isSlug, text } from './primitives.js'
 
+/** Bounded instrumentation payloads; text bounds are UTF-8 bytes. */
+const MAX_OPERATION_ID_BYTES = 64
+const MAX_EVENT_ATTRIBUTES = 16
+const MAX_ATTRIBUTE_TEXT_BYTES = 128
+
 /** Core operations have protocol-owned meanings; extension events grant no protocol authority. */
 const coreEvents = [
   'prefetch-dispatch',
@@ -64,14 +69,14 @@ export function validateEvent(value: unknown): asserts value is OperationEvent {
 function validateInstrumentation(metadata: unknown, core: boolean): void {
   if (
     !hasExactKeys(metadata, [], ['operationId', 'attributes']) ||
-    ('operationId' in metadata && (!text(metadata.operationId, 64) || core))
+    ('operationId' in metadata && (!text(metadata.operationId, MAX_OPERATION_ID_BYTES) || core))
   )
     throw new TypeError('Invalid event instrumentation')
   const { attributes } = metadata
   if (
     'attributes' in metadata &&
     (!isRecord(attributes) ||
-      Object.keys(attributes).length > 16 ||
+      Object.keys(attributes).length > MAX_EVENT_ATTRIBUTES ||
       Object.entries(attributes).some(([key, value]) => !isSlug(key) || !isAttributeValue(value)))
   )
     throw new TypeError('Invalid event attributes')
@@ -80,7 +85,7 @@ function validateInstrumentation(metadata: unknown, core: boolean): void {
 const isAttributeValue = (value: unknown): boolean =>
   typeof value === 'boolean' ||
   (typeof value === 'number' && Number.isFinite(value)) ||
-  text(value, 128)
+  text(value, MAX_ATTRIBUTE_TEXT_BYTES)
 
 const stages = [
   'preparation',

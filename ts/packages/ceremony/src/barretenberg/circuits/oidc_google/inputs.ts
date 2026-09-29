@@ -1,10 +1,18 @@
 import { sha256 } from '@noble/hashes/sha2.js'
-export const FIELD_PACK_BYTES = 31
-
-export const MAX_EMAIL_BYTES = 62,
-  MAX_SUB_BYTES = 31,
-  MAX_AUD_BYTES = 128,
-  RSA_MODULUS_BYTES = 256
+import {
+  AUDIENCE_HASH_FIELD_BYTES,
+  BARRETT_OVERFLOW_BITS,
+  FIELD_PACK_BYTES,
+  ISSUER,
+  LIMB_BITS,
+  MAX_AUD_BYTES,
+  MAX_EMAIL_BYTES,
+  MAX_PAYLOAD_JSON_BYTES,
+  MAX_SIGNING_INPUT_BYTES,
+  MAX_SUB_BYTES,
+  NUM_LIMBS,
+  RSA_MODULUS_BITS,
+} from './parameters.js'
 
 /** Token bytes and claim values consumed by the fixed oidc_google circuit. */
 export interface GoogleCircuitToken {
@@ -14,16 +22,6 @@ export interface GoogleCircuitToken {
   signature: Uint8Array
   claims: { aud: string; sub: string; email: string; exp: number; nonce: string }
 }
-
-const SIGNING_INPUT_MAX = 1280
-
-const PAYLOAD_JSON_MAX = 768
-
-const NUM_LIMBS = 18
-
-const LIMB_BITS = 120n
-
-const BARRETT_OVERFLOW_BITS = 6n
 
 const encoder = new TextEncoder()
 
@@ -61,7 +59,10 @@ export function pack31(bytes: Uint8Array): bigint[] {
 /** The audience's SHA-256 as two big-endian 128-bit halves. */
 export function audienceHash(audience: Uint8Array): bigint[] {
   const digest = sha256(audience)
-  return [bytesToBigInt(digest.subarray(0, 16)), bytesToBigInt(digest.subarray(16))]
+  return [
+    bytesToBigInt(digest.subarray(0, AUDIENCE_HASH_FIELD_BYTES)),
+    bytesToBigInt(digest.subarray(AUDIENCE_HASH_FIELD_BYTES)),
+  ]
 }
 
 const hex = (value: bigint) => `0x${value.toString(16)}`
@@ -88,8 +89,10 @@ export function buildGoogleInputs(
   authorizationDigest: Uint8Array,
 ) {
   const signingInput = encoder.encode(`${token.headerB64}.${token.payloadB64}`)
-  if (signingInput.length > SIGNING_INPUT_MAX) throw new Error('Google signing input is too long')
-  if (token.payload.length > PAYLOAD_JSON_MAX) throw new Error('Google token payload is too long')
+  if (signingInput.length > MAX_SIGNING_INPUT_BYTES)
+    throw new Error('Google signing input is too long')
+  if (token.payload.length > MAX_PAYLOAD_JSON_BYTES)
+    throw new Error('Google token payload is too long')
 
   const { aud, sub, email, exp, nonce } = token.claims
   const emailBytes = encoder.encode(email)
@@ -102,10 +105,10 @@ export function buildGoogleInputs(
   const modulusInteger = bytesToBigInt(modulus)
 
   return {
-    signing_input: Array.from(pad(signingInput, SIGNING_INPUT_MAX)),
+    signing_input: Array.from(pad(signingInput, MAX_SIGNING_INPUT_BYTES)),
     signing_input_len: String(signingInput.length),
     header_b64_len: String(token.headerB64.length),
-    payload_json: Array.from(pad(token.payload, PAYLOAD_JSON_MAX)),
+    payload_json: Array.from(pad(token.payload, MAX_PAYLOAD_JSON_BYTES)),
     payload_json_len: String(token.payload.length),
     email_offset: offset(`"email":"${email}"`),
     nonce_offset: offset(`"nonce":"${nonce}"`),
@@ -113,7 +116,7 @@ export function buildGoogleInputs(
     email_verified_offset: offset('"email_verified":true'),
     exp_offset: offset(`"exp":${expString}`),
     exp_len: String(expString.length),
-    iss_offset: offset('"iss":"https://accounts.google.com"'),
+    iss_offset: offset(`"iss":"${ISSUER}"`),
     aud_offset: offset(`"aud":"${aud}"`),
     email_bytes: Array.from(paddedEmail),
     email_len: String(emailBytes.length),
@@ -122,7 +125,9 @@ export function buildGoogleInputs(
     audience_bytes: Array.from(pad(audienceBytes, MAX_AUD_BYTES)),
     audience_len: String(audienceBytes.length),
     signature: limbs(bytesToBigInt(token.signature)).map(hex),
-    redc: limbs((1n << (2n * 2048n + BARRETT_OVERFLOW_BITS)) / modulusInteger).map(hex),
+    redc: limbs(
+      (1n << (2n * BigInt(RSA_MODULUS_BITS) + BARRETT_OVERFLOW_BITS)) / modulusInteger,
+    ).map(hex),
     authorization_digest: Array.from(authorizationDigest),
     audience_hash: audienceHash(audienceBytes).map(hex),
     sub_packed: pack31(paddedSub).map(hex),

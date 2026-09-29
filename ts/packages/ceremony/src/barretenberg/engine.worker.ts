@@ -5,8 +5,11 @@ import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
 import { ceremonyError, errorMessage } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
-import { SRS_SIZE } from './barretenberg.assets.js'
+import { FIELD_BYTES, PROVING_SETTINGS, SRS_POINTS } from './parameters.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
+
+/** Require the qualified shared-memory backend rather than silent single-threaded proving. */
+const MIN_PROOF_THREADS = 2
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
 
@@ -67,11 +70,11 @@ async function preload(message: Preload): Promise<void> {
         if (match)
           runtime = { effectiveThreads: Number(match[1]), sharedMemory: match[2] === 'true' }
       },
-      srsSize: SRS_SIZE,
+      srsSize: SRS_POINTS,
       wasmPath: message.wasmPath,
       crsPath: message.crsPath,
     })
-    if (!runtime?.sharedMemory || runtime.effectiveThreads < 2) {
+    if (!runtime?.sharedMemory || runtime.effectiveThreads < MIN_PROOF_THREADS) {
       await api.destroy()
       throw new Error('Multithreaded backend unavailable')
     }
@@ -135,19 +138,13 @@ async function prove(message: Extract<ToWorker, { type: 'prove' }>): Promise<voi
     api.circuitProve({
       circuit,
       witness: await inflate(witness),
-      // Exact bb.js 5.2.0 settings for verifierTarget: 'evm' (ZK-Honk/Keccak).
-      settings: {
-        ipaAccumulation: false,
-        oracleHashType: 'keccak',
-        disableZk: false,
-        optimizedSolidityVerifier: false,
-      },
+      settings: PROVING_SETTINGS,
     }),
   )
   if (state !== 'proving') return
-  const proof = new Uint8Array(generated.proof.length * 32)
+  const proof = new Uint8Array(generated.proof.length * FIELD_BYTES)
   generated.proof.forEach((field, i) => {
-    proof.set(field, i * 32)
+    proof.set(field, i * FIELD_BYTES)
   })
   const result: RawProof = {
     proof,

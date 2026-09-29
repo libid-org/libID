@@ -1,13 +1,20 @@
+import { buildGoogleInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
-  buildGoogleInputs,
+  RSA_EXPONENT_BASE64URL,
   RSA_MODULUS_BYTES,
-} from '../../../barretenberg/circuits/oidc_google/inputs.js'
+} from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { b64urlDecode, isRecord } from '../../../primitives.js'
+import { AUTHORIZATION_DIGEST_BYTES } from '../../authorization.js'
 import type { ParsedGoogleIdToken } from './token.js'
 
 /** Adapt a parsed platform token and the JWK selected by its `kid` to the circuit ABI and delivery. */
 export function buildGoogleWitness(token: ParsedGoogleIdToken, jwk: unknown) {
-  if (!isRecord(jwk) || jwk.kty !== 'RSA' || jwk.e !== 'AQAB' || typeof jwk.n !== 'string') {
+  if (
+    !isRecord(jwk) ||
+    jwk.kty !== 'RSA' ||
+    jwk.e !== RSA_EXPONENT_BASE64URL ||
+    typeof jwk.n !== 'string'
+  ) {
     throw new Error('JWK is not a Google RS256 signing key')
   }
 
@@ -19,7 +26,7 @@ export function buildGoogleWitness(token: ParsedGoogleIdToken, jwk: unknown) {
     throw new Error('Google ID token signature must be 256 bytes')
   }
   const authorizationDigest = b64urlDecode(token.claims.nonce)
-  if (authorizationDigest?.length !== 32) {
+  if (authorizationDigest?.length !== AUTHORIZATION_DIGEST_BYTES) {
     throw new Error('Google nonce must encode a 32-byte authorization digest')
   }
 

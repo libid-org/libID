@@ -3,12 +3,11 @@ import { errorMessage } from '../errors.js'
 import { workerThreads } from '../workers.js'
 import type { DecodedAttestedData, DecodedDirection } from './decode.js'
 import { responseSizes } from './http.js'
+import { MAX_FRAME_BYTES, MAX_RECV_BYTES, MAX_SENT_BYTES } from './limits.js'
 import {
   type CommitRange,
   correlateReveal,
   type HashOpening,
-  MAX_RECV_BYTES,
-  MAX_SENT_BYTES,
   planNotarization,
   verifyAttestation,
 } from './notarize.js'
@@ -22,7 +21,7 @@ import type {
   ToWorker,
   Transcript,
 } from './protocol.js'
-import { decodeAttestationFrame, deriveNotaryWebSocketUrl, MAX_FRAME_BYTES } from './transport.js'
+import { decodeAttestationFrame, deriveNotaryWebSocketUrl } from './transport.js'
 
 interface Io {
   read(): Promise<Uint8Array | null>

@@ -2,6 +2,9 @@ import { CeremonyStage, type Events, type StageEvent } from '../../events.js'
 import { messages } from '../ui-messages.js'
 import { proofProgress } from './progress.js'
 
+const SLOW_PROVING_HINT_MS = 15000
+const PAINT_FALLBACK_MS = 100
+
 /** Package-owned DOM: no remote resources, application markup, or styling inputs. */
 export function view(title: string) {
   const root = document.getElementById('libid-root')
@@ -59,7 +62,7 @@ export function eventView(events: Events) {
       timer = setTimeout(() => {
         hint.textContent = messages.slowProving
         root.append(hint)
-      }, 15000)
+      }, SLOW_PROVING_HINT_MS)
     label.textContent = stageLabel(event)
     if (event.status !== 'active') {
       teardown()
@@ -91,7 +94,7 @@ export function eventView(events: Events) {
           resolve()
         }
         // Animation frames can stop if the document becomes hidden.
-        const timeout = setTimeout(finish, 100)
+        const timeout = setTimeout(finish, PAINT_FALLBACK_MS)
         frame = requestAnimationFrame(() => {
           frame = requestAnimationFrame(finish)
         })

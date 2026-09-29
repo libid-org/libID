@@ -11,8 +11,29 @@
 
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
-import { isPkceValue } from '../ccdp/index.js'
-import { b64urlEncode } from '../primitives.js'
+import { concatBytes } from '@noble/hashes/utils.js'
+import { b64urlDecode, b64urlEncode } from '../primitives.js'
+
+/** ceremony-common §5: digest/hash widths, fresh nonce and unsigned wire fields. */
+export const AUTHORIZATION_DIGEST_BYTES = keccak_256.outputLen
+export const OPERATION_DOMAIN_BYTES = keccak_256.outputLen
+export const CHAIN_ID_BYTES = keccak_256.outputLen
+export const AUTHORIZATION_NONCE_BYTES = 32
+export const MAX_CEREMONY_VERSION = 0xffff
+export const MAX_TRANSACTION_DATA_BYTES = 0xffffffff
+
+const VERSION_OFFSET = OPERATION_DOMAIN_BYTES
+const CHAIN_ID_OFFSET = VERSION_OFFSET + Uint16Array.BYTES_PER_ELEMENT
+const NONCE_OFFSET = CHAIN_ID_OFFSET + CHAIN_ID_BYTES
+const TRANSACTION_LENGTH_OFFSET = NONCE_OFFSET + AUTHORIZATION_NONCE_BYTES
+const TRANSACTION_OFFSET = TRANSACTION_LENGTH_OFFSET + Uint32Array.BYTES_PER_ELEMENT
+
+/** Unpadded base64url spelling of one S256 output. */
+const PKCE_CHARS = Math.ceil((sha256.outputLen * 8) / 6)
+export const isPkceValue = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length === PKCE_CHARS &&
+  b64urlDecode(value)?.length === sha256.outputLen
 
 export interface AuthorizationInput {
   /** `keccak256(UTF8(domainString))` — exactly 32 bytes, supplied by the composition. */
@@ -38,20 +59,23 @@ function exact(bytes: Uint8Array, width: number, name: string): Uint8Array {
  */
 export function deriveAuthorizationDigest(input: AuthorizationInput): Uint8Array {
   const { platformCeremonyVersion: version, transactionData } = input
-  if (!Number.isInteger(version) || version < 0 || version > 0xffff) {
+  if (!Number.isInteger(version) || version < 0 || version > MAX_CEREMONY_VERSION) {
     throw new Error('platformCeremonyVersion must fit an unsigned 16-bit integer')
   }
-  if (transactionData.length > 0xffffffff) {
+  if (transactionData.length > MAX_TRANSACTION_DATA_BYTES) {
     throw new Error('transactionData length must fit an unsigned 32-bit integer')
   }
-  const preimage = new Uint8Array(102 + transactionData.length)
+  const preimage = new Uint8Array(TRANSACTION_OFFSET + transactionData.length)
   const view = new DataView(preimage.buffer)
-  preimage.set(exact(input.operationDomain, 32, 'operationDomain'), 0)
-  view.setUint16(32, version)
-  preimage.set(exact(input.chainId, 32, 'chainId'), 34)
-  preimage.set(exact(input.authorizationNonce, 32, 'authorizationNonce'), 66)
-  view.setUint32(98, transactionData.length)
-  preimage.set(transactionData, 102)
+  preimage.set(exact(input.operationDomain, OPERATION_DOMAIN_BYTES, 'operationDomain'), 0)
+  view.setUint16(VERSION_OFFSET, version)
+  preimage.set(exact(input.chainId, CHAIN_ID_BYTES, 'chainId'), CHAIN_ID_OFFSET)
+  preimage.set(
+    exact(input.authorizationNonce, AUTHORIZATION_NONCE_BYTES, 'authorizationNonce'),
+    NONCE_OFFSET,
+  )
+  view.setUint32(TRANSACTION_LENGTH_OFFSET, transactionData.length)
+  preimage.set(transactionData, TRANSACTION_OFFSET)
   return keccak_256(preimage)
 }
 
@@ -65,9 +89,10 @@ export function deriveCodeVerifier(
   authorizationDigest: Uint8Array,
   authorizationNonce: Uint8Array,
 ): string {
-  const binding = new Uint8Array(64)
-  binding.set(exact(authorizationDigest, 32, 'authorizationDigest'), 0)
-  binding.set(exact(authorizationNonce, 32, 'authorizationNonce'), 32)
+  const binding = concatBytes(
+    exact(authorizationDigest, AUTHORIZATION_DIGEST_BYTES, 'authorizationDigest'),
+    exact(authorizationNonce, AUTHORIZATION_NONCE_BYTES, 'authorizationNonce'),
+  )
   return b64urlEncode(sha256(binding))
 }
 

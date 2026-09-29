@@ -53,9 +53,12 @@ export function hasExactKeys(
   )
 }
 
+const MAX_SLUG_CHARS = 64
+const SLUG = new RegExp(`^[a-z][a-z0-9-]{0,${MAX_SLUG_CHARS - 1}}$`)
+
 /** Lowercase protocol identifiers: platform IDs, event names and attribute keys. */
 export function isSlug(value: unknown): value is string {
-  return typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value)
+  return typeof value === 'string' && SLUG.test(value)
 }
 
 export type Predicates<T> = { [K in keyof T]-?: (value: unknown) => boolean }

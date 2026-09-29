@@ -103,6 +103,9 @@ importers:
       '@aztec/bb.js':
         specifier: 5.2.0
         version: 5.2.0
+      '@libid/contracts':
+        specifier: 0.13.1
+        version: 0.13.1(viem@2.55.13(typescript@5.9.3))
       '@libid/ledger':
         specifier: workspace:^
         version: link:../ledger
@@ -552,6 +555,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@libid/contracts@0.13.1':
+    resolution: {integrity: sha512-a+X7pJOoz0Rw4t9W/I7noD9rXTQDxxlPbqk4PpdPgu8JcO5i6fKYjfOw3blTjnOZ8WkN277fH3zRBSlE9stgVg==}
+    peerDependencies:
+      viem: ^2.48.11
 
   '@libid/contracts@0.2.0':
     resolution: {integrity: sha512-Z+qSdBRtNxRY/qn+xIYcZtT4ZTrzooGMJoDNXdCYS66NxcsrGrPq4FKV1AiksO48D8F7J6VBp4e9I1LZwB7hKA==}
@@ -1679,6 +1687,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@libid/contracts@0.13.1(viem@2.55.13(typescript@5.9.3))':
+    dependencies:
+      viem: 2.55.13(typescript@5.9.3)
 
   '@libid/contracts@0.2.0(viem@2.55.13(typescript@5.9.3))':
     dependencies:

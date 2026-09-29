@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
-import { decodeAttestedData, isAttestation, MAX_ATTESTED_DATA_BYTES } from './decode.js'
+import { decodeAttestedData, isAttestation } from './decode.js'
+import { MAX_ATTESTED_DATA_BYTES } from './limits.js'
 
 // libid-org/libid-rs@239a4bb426ac72591fe30006f22660e164a98d96,
 // crates/libid-ceremony/src/attestation.rs::CROSS_LANGUAGE_FIXTURE.

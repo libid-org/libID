@@ -19,9 +19,13 @@ import {
   type StageEvent,
 } from '../../events.js'
 import {
+  AUTHORIZATION_NONCE_BYTES,
+  CHAIN_ID_BYTES,
   deriveAuthorizationDigest,
   deriveCodeChallenge,
   deriveCodeVerifier,
+  MAX_TRANSACTION_DATA_BYTES,
+  OPERATION_DOMAIN_BYTES,
 } from '../../platforms/authorization.js'
 import {
   assembleResult,
@@ -124,8 +128,12 @@ export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
         throw new TypeError('Invalid ceremony selection')
       const version = selectVersion(enabledVersions(platformId), ceremonyVersion)
       const ledger = snapshotLedger(ledgerId)
-      if (!fixedBytes(operationDomain, 32)) throw new TypeError('Operation domain must be 32 bytes')
-      if (!(transactionData instanceof Uint8Array) || transactionData.length > 0xffffffff)
+      if (!fixedBytes(operationDomain, OPERATION_DOMAIN_BYTES))
+        throw new TypeError('Operation domain must be 32 bytes')
+      if (
+        !(transactionData instanceof Uint8Array) ||
+        transactionData.length > MAX_TRANSACTION_DATA_BYTES
+      )
         throw new TypeError('Invalid transaction bytes')
       if (liveIds.has(id)) throw new TypeError('Ceremony ID is already live')
       const input = { ...ledger, platformId, version, operationDomain, transactionData }
@@ -151,7 +159,7 @@ function snapshotLedger(ledgerId: LedgerId): { chainId: Uint8Array; notaryAddres
   if (!ledgerId || typeof ledgerId.hash !== 'function')
     throw new TypeError('Invalid ledger identity')
   const chainId = ledgerId.hash()
-  if (!fixedBytes(chainId, 32)) throw new TypeError('Ledger hash must be 32 bytes')
+  if (!fixedBytes(chainId, CHAIN_ID_BYTES)) throw new TypeError('Ledger hash must be 32 bytes')
   if (typeof ledgerId.notaryAddress !== 'function') throw new TypeError('Missing notary address')
   const notaryAddress = ledgerId.notaryAddress()
   if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
@@ -187,7 +195,9 @@ class Run<P extends PlatformId> implements Ceremony<P> {
   private readonly platform: P
   private readonly version: SupportedCeremonyVersion<P>
   private readonly platformEvents: readonly CoreEvent[]
-  private readonly authorizationNonce = crypto.getRandomValues(new Uint8Array(32))
+  private readonly authorizationNonce = crypto.getRandomValues(
+    new Uint8Array(AUTHORIZATION_NONCE_BYTES),
+  )
   private readonly authorizationDigest: Uint8Array
   private readonly start: ProveIdentity
   private authorizationUrl: string

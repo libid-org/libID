@@ -3,12 +3,16 @@ import { keccak_256 } from '@noble/hashes/sha3.js'
 import { concatBytes } from '@noble/hashes/utils.js'
 import { bytesEqual, fixedBytes } from '../primitives.js'
 import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
-import type { ByteRange, CommitmentOpening, Directions, Reveals, Transcript } from './protocol.js'
-
-/** Transcript acceptance limits, also supplied to the Prover as its setup limits. */
-export const MAX_SENT_BYTES = 4 * 1024
-
-export const MAX_RECV_BYTES = 32 * 1024
+import { MAX_RECV_BYTES, MAX_SENT_BYTES } from './limits.js'
+import {
+  BLINDER_BYTES,
+  type ByteRange,
+  COMMITMENT_BYTES,
+  type CommitmentOpening,
+  type Directions,
+  type Reveals,
+  type Transcript,
+} from './protocol.js'
 
 export interface CommitRange extends ByteRange {
   algorithm: 'SHA256'
@@ -148,8 +152,9 @@ function correlateOpenings(
   const unmatched = new Set(planned.keys())
   const correlated: CorrelatedCommitment[] = []
   for (const opening of openings) {
-    if (!fixedBytes(opening.hash, 32)) invalid(`${direction} opening hash must be exactly 32 bytes`)
-    if (!fixedBytes(opening.blinder, 16))
+    if (!fixedBytes(opening.hash, COMMITMENT_BYTES))
+      invalid(`${direction} opening hash must be exactly 32 bytes`)
+    if (!fixedBytes(opening.blinder, BLINDER_BYTES))
       invalid(`${direction} opening blinder must be exactly 16 bytes`)
 
     const matches = [...unmatched].filter((index) =>
@@ -220,7 +225,7 @@ export function bearerOpening(
   if (matches.length !== 1) throw new Error('Bearer opening is not unique')
   const opening = matches[0],
     bytes = new TextEncoder().encode(bearer)
-  if (opening.blinder.length !== 16 || opening.end - opening.start !== bytes.length)
+  if (opening.blinder.length !== BLINDER_BYTES || opening.end - opening.start !== bytes.length)
     throw new Error('Invalid bearer opening')
   return { ...opening, hash: commitmentHash(bytes, opening.blinder) }
 }

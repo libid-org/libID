@@ -3,6 +3,7 @@ import { PopupConnection, PopupWindow } from '@libid/popup'
 import { ceremonyError, endError, reportFailure } from '../../errors.js'
 import { Events, failureEvent, now } from '../../events.js'
 import { origin } from '../../primitives.js'
+import { MAX_OAUTH_RETURN_CHARS } from '../limits.js'
 import { type OAuthReturn, proverFragment, readOAuthState, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
 import { eventView, view } from './ui.js'
@@ -10,7 +11,7 @@ import { eventView, view } from './ui.js'
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
 export function startCallback(): void {
   try {
-    const oversized = location.search.length + location.hash.length > 32768
+    const oversized = location.search.length + location.hash.length > MAX_OAUTH_RETURN_CHARS
     const input = oversized
       ? undefined
       : Object.freeze({ query: location.search, fragment: location.hash })

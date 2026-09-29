@@ -1,4 +1,5 @@
 import { isClientCredential } from '../ccdp/index.js'
+import { MAX_OAUTH_RETURN_CHARS } from '../ccdp/limits.js'
 import { type OAuthReturn, oauthState } from '../ccdp/navigation.js'
 import { CeremonyError } from '../errors.js'
 import type { ProverContext } from './context.js'
@@ -17,8 +18,11 @@ export type OAuthOutcome =
   | { outcome: 'denied'; state: string }
   | { outcome: 'error'; state: string; error: string }
 
+const MAX_FIELD_NAME_CHARS = 64
+const MAX_FIELD_VALUE_CHARS = 8192
+
 // Names are matched exactly, never percent-decoded; raw values are printable.
-const FIELD = /^([A-Za-z0-9_.-]{1,64})=([\x20-\x7e]*)$/
+const FIELD = /^([A-Za-z0-9_.-]+)=([\x20-\x7e]*)$/
 
 const VALUE = /^[\x20-\x7e]+$/
 
@@ -30,14 +34,20 @@ function readFields(component: string, rejected: readonly string[]): Map<string,
   const fields = new Map<string, string>()
   for (const part of component.split('&')) {
     const [, key, raw] = FIELD.exec(part) ?? []
-    if (key === undefined || rejected.includes(key) || fields.has(key)) return null
+    if (
+      key === undefined ||
+      key.length > MAX_FIELD_NAME_CHARS ||
+      rejected.includes(key) ||
+      fields.has(key)
+    )
+      return null
     let value: string
     try {
       value = decodeURIComponent(raw.replace(/\+/g, ' '))
     } catch {
       return null
     }
-    if (value.length > 8192) return null
+    if (value.length > MAX_FIELD_VALUE_CHARS) return null
     fields.set(key, value)
   }
   return fields
@@ -55,7 +65,12 @@ export function parseOAuthReturn(
   const [component, other] = query
     ? [oauthReturn.query, oauthReturn.fragment]
     : [oauthReturn.fragment, oauthReturn.query]
-  if (other !== '' || component[0] !== (query ? '?' : '#') || component.length > 32768) return null
+  if (
+    other !== '' ||
+    component[0] !== (query ? '?' : '#') ||
+    component.length > MAX_OAUTH_RETURN_CHARS
+  )
+    return null
   const fields = readFields(component.slice(1), profile.rejected)
   if (!fields || (profile.issuer !== undefined && fields.get('iss') !== profile.issuer)) return null
   const state = fields.get('state'),

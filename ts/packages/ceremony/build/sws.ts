@@ -46,13 +46,16 @@ export function nativeSkip(name: 'CEREMONY_SWS_URL' | 'CEREMONY_SWS_BINARY'): st
   return `${name} is unset`
 }
 
+const BROTLI_QUALITY = 6
+const GZIP_LEVEL = 6
+
 const sidecars = [
   [
     '.br',
     (bytes: Buffer) =>
-      brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 6 } }),
+      brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY } }),
   ],
-  ['.gz', (bytes: Buffer) => gzipSync(bytes, { level: 6 })],
+  ['.gz', (bytes: Buffer) => gzipSync(bytes, { level: GZIP_LEVEL })],
 ] as const
 
 /** Emit static files and native SWS configuration; no response metadata overrides. */

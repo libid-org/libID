@@ -1,6 +1,6 @@
 import { isClientCredential } from '../../../ccdp/index.js'
 import { bearerTranscript } from '../../bearer-transcript.js'
-import { isUserName } from './types.js'
+import { isUserName, profile } from './profile.js'
 
 export const {
   identityUrl,
@@ -10,26 +10,25 @@ export const {
   selectIdentity,
   identityResponse,
 } = bearerTranscript({
-  tokenUrl: 'https://github.com/login/oauth/access_token',
+  tokenUrl: profile.tokenUrl,
   tokenFields(input) {
     if (!isClientCredential(input.clientCredential)) throw new Error('Invalid token request')
-    return [
-      ['client_id', input.clientId],
-      ['code', input.code],
-      ['redirect_uri', input.redirectUri],
-      ['code_verifier', input.codeVerifier],
-      ['client_secret', input.clientCredential],
-    ]
+    const values: Record<string, string> = {
+      client_id: input.clientId,
+      code: input.code,
+      redirect_uri: input.redirectUri,
+      code_verifier: input.codeVerifier,
+      client_secret: input.clientCredential,
+    }
+    return profile.tokenFields.map((field) => [field, values[field]])
   },
-  identityUrl: 'https://api.github.com/user',
-  identityHeaders: {
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'Mozilla/5.0',
-    'X-GitHub-Api-Version': '2022-11-28',
-  },
-  quotedId: false,
-  userName: { field: 'login', maxBytes: 39, valid: isUserName },
+  identityUrl: profile.identityUrl,
+  identityHeaders: profile.identityHeaders,
+  idField: profile.idField,
+  quotedId: profile.quotedId,
+  userName: { field: profile.userNameField, maxBytes: profile.maxUserNameBytes, valid: isUserName },
   // The exact decimal ID exceeds JSON number precision; the selector owns its bytes.
   // JSON checks the root shape; the depth-agnostic byte selector preserves the exact ID.
-  identityResponse: (body, { userName }) => typeof body.id === 'number' && body.login === userName,
+  identityResponse: (body, { userName }) =>
+    typeof body[profile.idField] === 'number' && body[profile.userNameField] === userName,
 })

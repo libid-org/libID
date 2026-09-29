@@ -1,9 +1,8 @@
 import type { CorrelatedCommitment } from '../../../notary/notarize.js'
+import { fieldHex } from '../../protocol.js'
+import { MAX_BEARER_BYTES, PUBLIC_INPUT_COUNT } from './parameters.js'
 
 const encoder = new TextEncoder()
-
-/** libid-circuits v0.4.0 private bearer width. */
-export const MAX_BEARER_BYTES = 128
 
 /** A circuit-width HTTP bearer: visible ASCII, so no whitespace. */
 export const isBearer = (value: string): boolean =>
@@ -37,8 +36,6 @@ export function validateBearerLinkPublicInputs(
   value: readonly string[],
   inputs: ReturnType<typeof buildBearerLinkWitness>,
 ): boolean {
-  const expected = [...inputs.token_commitment, ...inputs.identity_commitment].map(
-    (n) => `0x${n.toString(16).padStart(64, '0')}`,
-  )
-  return value.length === 64 && value.every((v, i) => v === expected[i])
+  const expected = [...inputs.token_commitment, ...inputs.identity_commitment].map(fieldHex)
+  return value.length === PUBLIC_INPUT_COUNT && value.every((v, i) => v === expected[i])
 }

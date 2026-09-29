@@ -90,8 +90,11 @@ function framingHeaders(fields: readonly HeadField[]): Map<string, string> {
   return headers
 }
 
+const CR = 0x0d,
+  LF = 0x0a
+
 /** Whether CRLF starts at `at`; reads past the end are not CRLF, so this also bounds offsets. */
-const crlf = (bytes: Uint8Array, at: number) => bytes[at] === 13 && bytes[at + 1] === 10
+const crlf = (bytes: Uint8Array, at: number) => bytes[at] === CR && bytes[at + 1] === LF
 
 /** Decode a complete chunked body; extensions and trailers are rejected. */
 function decodeChunked(body: Uint8Array): Uint8Array {
