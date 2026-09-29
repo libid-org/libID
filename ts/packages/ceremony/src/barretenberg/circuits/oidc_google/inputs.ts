@@ -1,14 +1,17 @@
 import { sha256 } from '@noble/hashes/sha2.js'
-import { parseGoogleIdToken } from '../../../platforms/google/1/token.js'
-import {
-  type GoogleProofV1,
-  MAX_AUD_BYTES,
-  MAX_EMAIL_BYTES,
-  MAX_SUB_BYTES,
-  RSA_MODULUS_BYTES,
-} from '../../../platforms/google/1/types.js'
-import type { Identity } from '../../../platforms/types.js'
-import { b64urlDecode, isRecord } from '../../../primitives.js'
+export const MAX_EMAIL_BYTES = 62,
+  MAX_SUB_BYTES = 31,
+  MAX_AUD_BYTES = 128,
+  RSA_MODULUS_BYTES = 256
+
+/** Token bytes and claim values consumed by the fixed oidc_google circuit. */
+export interface GoogleCircuitToken {
+  headerB64: string
+  payloadB64: string
+  payload: Uint8Array
+  signature: Uint8Array
+  claims: { aud: string; sub: string; email: string; exp: number; nonce: string }
+}
 
 const SIGNING_INPUT_MAX = 1280
 
@@ -50,12 +53,6 @@ export interface GoogleCircuitInputs extends Record<string, unknown> {
   email_packed: string[]
   exp: string
   modulus: string[]
-}
-
-export interface BuiltGoogleWitness {
-  inputs: GoogleCircuitInputs
-  identity: Identity<'google'>
-  proofFields: Omit<GoogleProofV1, 'identityProof'>
 }
 
 function bytesToBigInt(bytes: Uint8Array): bigint {
@@ -100,30 +97,11 @@ function findOffset(payload: Uint8Array, pattern: string): number {
 }
 
 /** Build the exact libid-circuits v0.4.0 `oidc_google` witness. */
-export function buildGoogleWitness(idToken: string, jwk: unknown): BuiltGoogleWitness {
-  const token = parseGoogleIdToken(idToken)
-  if (
-    !isRecord(jwk) ||
-    jwk.kty !== 'RSA' ||
-    jwk.e !== 'AQAB' ||
-    jwk.kid !== token.kid ||
-    typeof jwk.n !== 'string'
-  ) {
-    throw new Error('JWK does not match the Google ID token')
-  }
-
-  const modulus = b64urlDecode(jwk.n)
-  if (!modulus || modulus.length !== RSA_MODULUS_BYTES || (modulus[0] & 0x80) === 0) {
-    throw new Error('Google signing key must be RSA-2048')
-  }
-  if (token.signature.length !== RSA_MODULUS_BYTES) {
-    throw new Error('Google ID token signature must be 256 bytes')
-  }
-  const authorizationDigest = b64urlDecode(token.claims.nonce)
-  if (authorizationDigest?.length !== 32) {
-    throw new Error('Google nonce must encode a 32-byte authorization digest')
-  }
-
+export function buildGoogleInputs(
+  token: GoogleCircuitToken,
+  modulus: Uint8Array,
+  authorizationDigest: Uint8Array,
+): GoogleCircuitInputs {
   const signingInput = encoder.encode(`${token.headerB64}.${token.payloadB64}`)
   if (signingInput.length > SIGNING_INPUT_MAX) throw new Error('Google signing input is too long')
   if (token.payload.length > PAYLOAD_JSON_MAX) throw new Error('Google token payload is too long')
@@ -150,39 +128,32 @@ export function buildGoogleWitness(idToken: string, jwk: unknown): BuiltGoogleWi
   const audienceDigest = sha256(audienceBytes)
 
   return {
-    inputs: {
-      signing_input: pad(signingInput, SIGNING_INPUT_MAX),
-      signing_input_len: String(signingInput.length),
-      header_b64_len: String(token.headerB64.length),
-      payload_json: pad(token.payload, PAYLOAD_JSON_MAX),
-      payload_json_len: String(token.payload.length),
-      email_offset: String(emailOffset),
-      nonce_offset: String(nonceOffset),
-      sub_offset: String(subOffset),
-      email_verified_offset: String(emailVerifiedOffset),
-      exp_offset: String(expOffset),
-      exp_len: String(expString.length),
-      iss_offset: String(issOffset),
-      aud_offset: String(audOffset),
-      email_bytes: Array.from(paddedEmail),
-      email_len: String(emailBytes.length),
-      sub_bytes: Array.from(paddedSub),
-      sub_len: String(subBytes.length),
-      audience_bytes: Array.from(paddedAudience),
-      audience_len: String(audienceBytes.length),
-      signature: limbs(bytesToBigInt(token.signature)),
-      redc: limbs(redc),
-      authorization_digest: Array.from(authorizationDigest),
-      audience_hash: [pack31(audienceDigest.subarray(0, 16)), pack31(audienceDigest.subarray(16))],
-      sub_packed: [pack31(paddedSub)],
-      email_packed: [pack31(paddedEmail.subarray(0, 31)), pack31(paddedEmail.subarray(31))],
-      exp: expString,
-      modulus: limbs(modulusInteger),
-    },
-    identity: { platformId: 'google', oauthClientId: aud, userId: sub, userName: email },
-    proofFields: {
-      tokenExpiresAt: exp,
-      signingKeyModulus: modulus,
-    },
+    signing_input: pad(signingInput, SIGNING_INPUT_MAX),
+    signing_input_len: String(signingInput.length),
+    header_b64_len: String(token.headerB64.length),
+    payload_json: pad(token.payload, PAYLOAD_JSON_MAX),
+    payload_json_len: String(token.payload.length),
+    email_offset: String(emailOffset),
+    nonce_offset: String(nonceOffset),
+    sub_offset: String(subOffset),
+    email_verified_offset: String(emailVerifiedOffset),
+    exp_offset: String(expOffset),
+    exp_len: String(expString.length),
+    iss_offset: String(issOffset),
+    aud_offset: String(audOffset),
+    email_bytes: Array.from(paddedEmail),
+    email_len: String(emailBytes.length),
+    sub_bytes: Array.from(paddedSub),
+    sub_len: String(subBytes.length),
+    audience_bytes: Array.from(paddedAudience),
+    audience_len: String(audienceBytes.length),
+    signature: limbs(bytesToBigInt(token.signature)),
+    redc: limbs(redc),
+    authorization_digest: Array.from(authorizationDigest),
+    audience_hash: [pack31(audienceDigest.subarray(0, 16)), pack31(audienceDigest.subarray(16))],
+    sub_packed: [pack31(paddedSub)],
+    email_packed: [pack31(paddedEmail.subarray(0, 31)), pack31(paddedEmail.subarray(31))],
+    exp: expString,
+    modulus: limbs(modulusInteger),
   }
 }

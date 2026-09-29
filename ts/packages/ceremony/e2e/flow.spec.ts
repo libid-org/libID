@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs'
-import fixture from '../src/barretenberg/circuits/oidc_google/google-v1.fixture.json' with {
-  type: 'json',
-}
-import { buildGooglePublicInputs } from '../src/barretenberg/circuits/oidc_google/publicInputs.js'
+import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { type: 'json' }
+import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
 import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
 import { prepareCallback } from './callback.js'
 import { expect, test } from './fixtures.js'

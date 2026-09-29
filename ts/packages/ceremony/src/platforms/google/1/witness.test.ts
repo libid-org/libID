@@ -1,8 +1,10 @@
 import { createPublicKey, verify } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { buildGoogleWitness, type GoogleCircuitInputs } from './inputs.js'
+import type { GoogleCircuitInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import { buildGooglePublicInputs, validateGooglePublicInputs } from './publicInputs.js'
+import { parseGoogleIdToken } from './token.js'
+import { buildGoogleWitness } from './witness.js'
 
 interface Fixture {
   idToken: string
@@ -143,7 +145,10 @@ describe('[LIBID-PROVER-002] Google v1 witness and verifier fields', () => {
       ),
     ).toBe(true)
 
-    const { inputs, identity, proofFields } = buildGoogleWitness(fixture.idToken, fixture.jwk)
+    const { inputs, identity, proofFields } = buildGoogleWitness(
+      parseGoogleIdToken(fixture.idToken),
+      fixture.jwk,
+    )
     expect(Object.keys(inputs)).toEqual(ABI_KEYS)
     expect(inputs.signing_input_len).toBe('412')
     expect(inputs.header_b64_len).toBe('72')
@@ -225,20 +230,23 @@ describe('[LIBID-PROVER-002] Google v1 witness and verifier fields', () => {
       ],
     ]
     for (const [name, token, jwk] of cases) {
-      expect(() => buildGoogleWitness(token, jwk), name).toThrow()
+      expect(() => buildGoogleWitness(parseGoogleIdToken(token), jwk), name).toThrow()
     }
   })
 
   it('does not require optional JWK metadata', () => {
     const { kid, kty, e, n } = fixture.jwk
     const jwk = { kid, kty, e, n }
-    expect(buildGoogleWitness(fixture.idToken, jwk)).toEqual(
-      buildGoogleWitness(fixture.idToken, fixture.jwk),
+    expect(buildGoogleWitness(parseGoogleIdToken(fixture.idToken), jwk)).toEqual(
+      buildGoogleWitness(parseGoogleIdToken(fixture.idToken), fixture.jwk),
     )
   })
 
   it('rejects wrong-length, wrong-order, wrong-type, and one-byte-changed public inputs', () => {
-    const { identity, proofFields } = buildGoogleWitness(fixture.idToken, fixture.jwk)
+    const { identity, proofFields } = buildGoogleWitness(
+      parseGoogleIdToken(fixture.idToken),
+      fixture.jwk,
+    )
     const proof = { identityProof: new Uint8Array([1]), ...proofFields }
     expect(validateGooglePublicInputs(BB_PUBLIC_INPUTS, digest, identity, proof)).toBe(true)
     expect(validateGooglePublicInputs(BB_PUBLIC_INPUTS.slice(1), digest, identity, proof)).toBe(
