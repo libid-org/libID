@@ -28,6 +28,10 @@ for (const [platform, count] of [
   }) => {
     test.setTimeout(480000)
     const logs: string[] = []
+    page.on('requestfailed', (request) => {
+      const url = new URL(request.url())
+      logs.push(`Request failed: ${url.origin}${url.pathname}: ${request.failure()?.errorText}`)
+    })
     page.on('console', (message) => {
       const text = message.text()
       if (/sdk-core\/src\/prover\.rs|session driver|HTTP connection error/.test(text))

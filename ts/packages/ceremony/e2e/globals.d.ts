@@ -8,7 +8,7 @@ declare global {
     Notarization: typeof Notarization
     failureEvent?: string
     ready: boolean
-    completed: IdentityResult<'google'>[]
+    completed: IdentityResult[]
     runs: { events: CeremonyEvent[]; diagnostics: string[]; outcome?: string; closed?: unknown }[]
     testEvents: Events
     testView: {
@@ -17,7 +17,7 @@ declare global {
       delivered(): void
       stop(): void
     }
-    result: IdentityResult<'google'> | { status: 'failed' } | undefined
+    result: IdentityResult | { status: 'failed' } | undefined
     events: CeremonyEvent[]
     ceremonyClosed: unknown
     afterReady: boolean

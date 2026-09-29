@@ -108,7 +108,7 @@ test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async
   expect((await request.get(`${ccdp}/ccdp/v99/prover`)).status()).toBe(404)
 })
 
-test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020]', async ({
+test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020] [TEST-DIST-03]', async ({
   app,
   bridge,
   ccdp,
@@ -304,7 +304,11 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
     .toBe('accepted')
   const result = await page.evaluate(() => {
     const result = window.result
-    if (result?.status !== 'accepted' || result.identity.platformId !== 'google')
+    if (
+      result?.status !== 'accepted' ||
+      result.identity.platformId !== 'google' ||
+      !('signingKeyModulus' in result.oauthProof.proof)
+    )
       throw new Error('Missing Google proof')
     const proof = result.oauthProof.proof
     return {
@@ -487,7 +491,7 @@ test('two independently supplied connections cannot replace each other [LIBID-BR
   ])
 })
 
-test('Callback clears unsupported versions and unconfigured direct visits locally [KIT-010] [CSP-007]', async ({
+test('Callback clears unsupported versions and unconfigured direct visits locally [KIT-010] [CSP-007] [TEST-CCDP-02]', async ({
   bridge,
   ccdp,
   page,
@@ -676,3 +680,39 @@ test('provider isolation ends Application and returning Callback reports its own
   expect(await popup.evaluate(() => window.opener)).toBeNull()
   expect(await page.evaluate(() => window.completed)).toEqual([])
 })
+
+for (const [platform, authorization] of [
+  ['x', 'https://x.com/i/oauth2/authorize'],
+  ['github', 'https://github.com/login/oauth/authorize'],
+] as const)
+  test(`${platform} bound denial crosses the actual popup and private Callback [TEST-CCDP-07]`, async ({
+    app,
+    bridge,
+    page,
+    context,
+  }) => {
+    await context.route(`${authorization}?*`, async (route) => {
+      const params = new URL(route.request().url()).searchParams
+      expect(params.get('client_id')).toBe(`${platform}-fixture`)
+      expect(params.get('code_challenge_method')).toBe('S256')
+      const returned = new URLSearchParams({ error: 'access_denied', state: params.get('state')! })
+      if (platform === 'github') returned.set('iss', 'https://github.com/login/oauth')
+      await route.fulfill({
+        contentType: 'text/html',
+        body: `<script>location.replace(${JSON.stringify(`${bridge}/auth/callback?${returned}`)})</script>`,
+      })
+    })
+    await page.goto(`${app}?platform=${platform}`)
+    await page.waitForFunction(() => window.ready)
+    const opened = context.waitForEvent('page')
+    await page.locator('#launch').click()
+    const popup = await opened
+    await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
+    expect(await popup.evaluate(() => location.hash)).toBe('')
+    expect(await popup.evaluate(() => crossOriginIsolated)).toBe(true)
+    expect(
+      await page.evaluate(() =>
+        window.events.some((event) => 'event' in event && event.event === 'token-fetch'),
+      ),
+    ).toBe(false)
+  })

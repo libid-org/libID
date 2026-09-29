@@ -99,6 +99,12 @@ for (const secure of [true, false]) {
                     clientId: '407408718192.apps.googleusercontent.com',
                     ceremonyVersions: [1],
                   },
+                  x: { clientId: 'x-fixture', ceremonyVersions: [1] },
+                  github: {
+                    clientId: 'github-fixture',
+                    clientCredential: 'fixture-public-credential',
+                    ceremonyVersions: [1],
+                  },
                 },
               }),
               {
