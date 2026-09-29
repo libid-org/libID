@@ -4,7 +4,7 @@
 // ignoreHTTPSErrors; nothing here is a production artifact.
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -13,26 +13,31 @@ export function makeCertificate(hostnames) {
   const key = join(dir, 'key.pem')
   const cert = join(dir, 'cert.pem')
   const sans = hostnames.map((h) => `DNS:${h}`).join(',')
-  execFileSync(
-    'openssl',
-    [
-      'req',
-      '-x509',
-      '-newkey',
-      'rsa:2048',
-      '-nodes',
-      '-keyout',
-      key,
-      '-out',
-      cert,
-      '-days',
-      '2',
-      '-subj',
-      '/CN=popup-e2e',
-      '-addext',
-      `subjectAltName=${sans}`,
-    ],
-    { stdio: 'ignore' },
-  )
-  return { key: readFileSync(key), cert: readFileSync(cert) }
+  try {
+    execFileSync(
+      'openssl',
+      [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-keyout',
+        key,
+        '-out',
+        cert,
+        '-days',
+        '2',
+        '-subj',
+        '/CN=popup-e2e',
+        '-addext',
+        `subjectAltName=${sans}`,
+      ],
+      { stdio: 'ignore' },
+    )
+    return { key: readFileSync(key), cert: readFileSync(cert) }
+  } finally {
+    // The key lives on only in memory, for this run.
+    rmSync(dir, { recursive: true, force: true })
+  }
 }

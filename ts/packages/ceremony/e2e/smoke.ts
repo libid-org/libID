@@ -11,6 +11,7 @@ import {
   buildTokenRequest,
   buildIdentityRequest as identityRequest,
 } from '../src/platforms/github/1/transcript.js'
+import { notary } from './topology.js'
 
 Object.assign(window, {
   Notarization,
@@ -56,7 +57,7 @@ Object.assign(window, {
       120000,
     )
     try {
-      const notary = new Notarization('http://localhost:4987', abort.signal)
+      const notarization = new Notarization(`http://localhost:${notary}`, abort.signal)
       const results = await Promise.all(
         Array.from({ length: count }, async (_, index) => {
           // Deliberately invalid fixture credentials exercise both public GitHub endpoints,
@@ -81,7 +82,7 @@ Object.assign(window, {
                   },
                   body: new Uint8Array(),
                 }
-          const session = await notary.prepare(request.url)
+          const session = await notarization.prepare(request.url)
           pending[index] = 'send'
           const transcript = await session.send(request)
           pending[index] = 'reveal'
