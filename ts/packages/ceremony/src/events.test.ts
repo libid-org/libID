@@ -7,7 +7,7 @@ import {
   type StageEvent,
 } from './events.js'
 
-it('projects monotonic presentation while preserving overlapping occurrence timestamps [LIBID-BROWSER-006]', () => {
+it('projects monotonic presentation while preserving overlapping occurrence timestamps [LIBID-BROWSER-006] [TEST-CCDP-06]', () => {
   const feed = new Events(),
     events: CeremonyEvent[] = [],
     stages: StageEvent[] = []

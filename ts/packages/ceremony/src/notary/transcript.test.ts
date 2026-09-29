@@ -37,7 +37,7 @@ const transcript = {
   received: utf8('HTTP/1.1 200 OK\r\n\r\n{"access_token":"token","token_type":"bearer"}'),
 }
 
-describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C]', () => {
+describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C] [TEST-PLAT-09A] [TEST-PLAT-09B] [TEST-PLAT-09C]', () => {
   it('reveals the entire request, accepts reordered headers, and keeps the bearer committed', () => {
     expect(text(request.headers['Content-Length'])).toBe(String(request.body.length))
     const selected = selectTokenReveals(transcript, input)
@@ -105,7 +105,7 @@ describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C]', () => {
   })
 })
 
-describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60]', () => {
+describe('GitHub identity disclosure [LIBID-PROVER-004, REQ-PLAT-60] [TEST-PLAT-22]', () => {
   const request = identityRequest('token')
   const sent = serialize('GET /user HTTP/1.1', request)
   it.each(['{"id":123,"login":"alice"}', '{"login":"alice","id":123}'])(
@@ -223,7 +223,7 @@ for (const platform of ['x', 'github'] as const) {
   })
 }
 
-describe('JSON field whitespace [LIBID-PROVER-003/004]', () => {
+describe('JSON field whitespace [LIBID-PROVER-003/004] [TEST-COMMON-10A]', () => {
   it.each([' ', '\t', '\r', '\n', ' \t\r\n'])('keeps X bearer offsets with %j', (ws) => {
     const prefix = `"access_token"${ws}:${ws}"`
     const received = utf8(`HTTP/1.1 200 OK\r\n\r\n{${prefix}token"}`)

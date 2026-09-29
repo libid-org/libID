@@ -133,7 +133,7 @@ function tokenWithPayload(payload: string): string {
   return `${header}.${Buffer.from(payload).toString('base64url')}.${signature}`
 }
 
-describe('[LIBID-PROVER-002] Google v1 witness and verifier fields', () => {
+describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier fields', () => {
   it('builds the released ABI exactly from a valid fixed RS256 token', () => {
     const [header, payload, signature] = fixture.idToken.split('.')
     expect(

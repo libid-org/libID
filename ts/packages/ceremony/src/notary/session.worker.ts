@@ -185,7 +185,7 @@ function session(port: MessagePort, initial: Prepare) {
   let io: Io | undefined
   let transcript: Transcript | undefined
   let target = ''
-  let stage = 'new'
+  let stage: 'new' | 'preparing' | 'prepared' | 'sending' | 'sent' | 'revealing' | 'done' = 'new'
   function reply(value: FromWorker) {
     port.postMessage(value)
   }

@@ -39,7 +39,6 @@ function json(bytes: Uint8Array): Record<string, unknown> | null {
   }
 }
 
-/** The one strict payload decoder used only by Prover. */
 function decodeGoogleIdToken(idToken: string): DecodedGoogleIdToken | null {
   const segments = idToken.split('.')
   if (segments.length !== 3 || segments.some((segment) => segment === '')) return null

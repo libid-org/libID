@@ -109,7 +109,7 @@ describe('[TEST-COMMON-07] PKCE derivation', () => {
     expect(() => deriveCodeVerifier(digest, new Uint8Array(16))).toThrow(/32 bytes/)
   })
 
-  it('matches the §3.1 Google nonce encoding of the same digest', () => {
+  it('matches the §3.1 Google nonce encoding of the same digest [TEST-PLAT-01]', () => {
     // Google carries the digest itself, base64url-encoded, as the OIDC nonce.
     expect(b64urlEncode(digest)).toBe('sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU')
   })

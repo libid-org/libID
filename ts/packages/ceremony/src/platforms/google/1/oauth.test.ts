@@ -46,7 +46,7 @@ it('keeps ambiguous, malformed and credential-bearing extras rejected [LIBID-OAU
   }
 })
 
-it('does not let version_info supply missing evidence or change transport [LIBID-OAUTH-007]', () => {
+it('does not let version_info supply missing evidence or change transport [LIBID-OAUTH-007] [TEST-PLAT-05]', () => {
   for (const fragment of [
     '#version_info=synthetic',
     `#state=${state}&version_info=synthetic`,

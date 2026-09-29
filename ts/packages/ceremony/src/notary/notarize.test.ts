@@ -22,7 +22,7 @@ const ranges = {
   ],
 }
 
-describe('planNotarization', () => {
+describe('planNotarization [TEST-COMMON-18]', () => {
   it('validates and tiles both directions with the exact TLSNotary input shape', () => {
     expect(planNotarization(transcript, ranges)).toEqual({
       reveal: { sent: ranges.sent, received: ranges.received, server_identity: true },
@@ -100,7 +100,7 @@ describe('planNotarization', () => {
   })
 })
 
-describe('correlateAttestation', () => {
+describe('correlateAttestation [TEST-PLAT-15] [TEST-PLAT-21]', () => {
   const plan = planNotarization(transcript, ranges)
   const sent = plan.commit.sent.map((range, index) => opening(transcript.sent, range, index + 1))
   const received = plan.commit.received.map((range, index) =>
@@ -138,7 +138,7 @@ describe('correlateAttestation', () => {
     expect(result.decoded.createdAt).toBe('1770000000')
   })
 
-  it('pins SHA-256 input order to hidden bytes followed by the 16-byte blinder', () => {
+  it('pins SHA-256 input order to hidden bytes followed by the 16-byte blinder [TEST-COMMON-19]', () => {
     const blinder = Uint8Array.from(Array.from({ length: 16 }, (_, index) => index))
     expect(Buffer.from(sha256(concat(transcript.sent.slice(2, 4), blinder))).toString('hex')).toBe(
       '2f83109b942b986213e9047e756ea35e066537f7a1297e9b368e7a481b53794f',
