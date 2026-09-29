@@ -33,7 +33,9 @@ the circuit's narrower limit.
 CI runs workspace type/unit checks, distribution/native-loader tests and browser
 coverage across Chromium, Firefox and WebKit. HTTP and mobile-emulated projects
 retain interaction and policy coverage; full proofs and matched-notary runtime
-qualification run once per desktop engine, without automatic retries. A configured
+qualification run per desktop engine, without automatic retries. Independent
+workspace/engine CI jobs run in parallel. Each engine generates the Google,
+X and GitHub ceremony proofs plus one real-notary coexistence proof. A configured
 test is not evidence that the current revision passed it.
 
 Manual wallet PoC testing reports
@@ -49,7 +51,7 @@ versions are not recorded.
 | Actual-popup browser flows | Private Callback handoff, exact Application origin, readiness, denial/failure, concurrency, root Worker control and progress across desktop engines and emulation. |
 | Google and bearer-link fixture proofs | Actual isolated browser workers generate proofs verified in Node against released keys, including altered-public-input rejection. Controlled Google token/time/JWKS inputs do not establish live consent or JWKS CORS; WebKit intercepts fixture JWKS at the page boundary. |
 | X/GitHub browser ceremony fixtures | Actual emitted Callback/Prover, Popup connection, session worker and Client execute success and changed-final-attestation rejection. Real bearer-link proofs verify against commitments extracted from delivered fixture attestations and the released key; digest/PKCE matches the frozen request. OAuth and the TLSN SDK/peer are substituted, and notary signatures are synthetic. This does not qualify real TLSN or authenticated provider evidence. |
-| Real matched-notary runtime tests | One/two X sessions and both GitHub endpoints run through the pinned notary in direct peer mode alongside a separately verified fixture proof. Unauthenticated requests and deliberately invalid credentials establish runtime/channel execution and authority correlation, not authenticated token/identity evidence. The separate fixture proof is not bound to these attestations. |
+| Real matched-notary runtime tests | One/two X sessions and both GitHub endpoints run through the pinned notary in direct peer mode. The GitHub pair runs alongside a separately verified fixture proof and asserts real shared-memory proving with multiple threads. Unauthenticated requests and deliberately invalid credentials establish runtime/channel execution and authority correlation, not authenticated token/identity evidence. The separate fixture proof is not bound to these attestations. |
 | Development app checks | Independent concurrent rows, closure, timings, fallback display and immediate success/denial closure, using intercepted responses. |
 | Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through released Bridge v0.4.0 and emitted CCDP. Provider returns are intercepted; manual live success and verifier acceptance are described above. Production refresh behavior remains a separate gate. |
 

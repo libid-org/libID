@@ -10,20 +10,12 @@ test.beforeEach(async ({ page }) => {
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true)
 })
 
-test('real bearer-link fixture proof [LIBID-PROVER-001] [LIBID-PROVER-015]', async ({ page }) => {
-  test.setTimeout(480000)
-  const result = await page.evaluate(() => window.proveBearerFixture())
-  expect(result.runtime.sharedMemory).toBe(true)
-  expect(result.runtime.effectiveThreads).toBeGreaterThan(1)
-  await verifyBrowserProof('bearer_link', result)
-})
-
 for (const [platform, count] of [
   ['x', 1],
   ['x', 2],
   ['github', 2],
 ] as const)
-  test(`real ${platform} notary: ${count} session(s) alongside proving [LIBID-PROVER-019]`, async ({
+  test(`real ${platform} notary: ${count} session(s)${platform === 'github' ? ' alongside proving [LIBID-PROVER-001] [LIBID-PROVER-015]' : ''} [LIBID-PROVER-019]`, async ({
     page,
   }) => {
     test.setTimeout(480000)
@@ -40,7 +32,12 @@ for (const [platform, count] of [
     const [proof, attestations] = await page
       .evaluate(
         async ({ platform, count }) =>
-          Promise.all([window.proveBearerFixture(), window.notarizeRequests(count, platform)]),
+          // One shared-runtime coexistence check per engine; X still exercises
+          // both one and two real sessions without regenerating the same proof.
+          Promise.all([
+            platform === 'github' ? window.proveBearerFixture() : null,
+            window.notarizeRequests(count, platform),
+          ]),
         { platform, count },
       )
       .catch((error: unknown) => {
@@ -48,7 +45,11 @@ for (const [platform, count] of [
         console.error('Notary runtime progress:', JSON.stringify(logs))
         throw error
       })
-    await verifyBrowserProof('bearer_link', proof)
+    if (platform === 'github') {
+      expect(proof!.runtime.sharedMemory).toBe(true)
+      expect(proof!.runtime.effectiveThreads).toBeGreaterThan(1)
+      await verifyBrowserProof('bearer_link', proof!)
+    }
     expect(attestations).toHaveLength(count)
     for (const attestation of attestations) {
       expect(attestation.sent).toBeGreaterThan(0)

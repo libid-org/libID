@@ -10,6 +10,7 @@ export default defineConfig({
   testMatch: '*.spec.ts',
   timeout: 60000,
   expect: { timeout: 15000 },
+  // Shared asset controls and CPU-heavy qualification stay serial within each CI engine job.
   workers: 1,
   retries: 0,
   use: {

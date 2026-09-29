@@ -70,8 +70,11 @@ pnpm -C ts --filter @libid/ceremony test:e2e
 
 The command builds qualification artifacts and runtime fixtures. Playwright owns
 startup, readiness and teardown for pinned SWS/notary containers and the browser
-harness. The workspace **Browser tests** CI job runs the same command alongside
-the popup and dev-app suites. No OAuth credentials are required. Release downloads and real unauthenticated requests to
+harness. **Browser tests** CI runs nine independent workspace/engine jobs for
+popup, ceremony and the dev app. Every desktop, HTTP and emulated project runs
+once in its engine's job. Popup tests also use two parallel workers; ceremony's
+shared asset controls and heavy runtimes stay serial within each job. No OAuth
+credentials are required. Release downloads and real unauthenticated requests to
 X/GitHub need network access; unavailable services fail rather than silently skip.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
@@ -85,7 +88,7 @@ development app uses loopback HTTP without certificate setup.
 |---|---|
 | [flow.spec.ts](../e2e/flow.spec.ts) | Document/connection lifecycle, emitted policies, selected assets, caching, UI and controlled Google proof generation. |
 | [admission.spec.ts](../e2e/admission.spec.ts) | Harness origin admission and CORS; not production Bridge egress or refresh. |
-| [runtime.spec.ts](../e2e/runtime.spec.ts) | Real bearer-link fixture proof and one/two matched-notary sessions alongside a separate real proof. |
+| [runtime.spec.ts](../e2e/runtime.spec.ts) | One/two real X sessions and both GitHub endpoints through the matched notary; the GitHub pair runs alongside a separately verified bearer-link fixture proof. |
 | [verify.ts](../e2e/verify.ts) | Released-key verification of generated proofs and rejection of altered public inputs. |
 
 The harness proxies real SWS responses and inserts deployment data into emitted
