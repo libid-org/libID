@@ -1,6 +1,8 @@
 import { expect, it, vi } from 'vitest'
+import { messages } from './ccdp/ui-messages.js'
 import {
   type CeremonyEvent,
+  CeremonyStage,
   Events,
   type OperationEvent,
   operation,
@@ -105,5 +107,46 @@ it('pairs concurrent repeated operations by identifier and leaves interrupted sp
     ['first', 'started'],
     ['second', 'started'],
     ['first', 'finished'],
+  ])
+})
+
+it('delivers nothing active after a listener ends the feed', () => {
+  const feed = new Events(),
+    later = vi.fn()
+  feed.onEvent((e) => {
+    if (e.status === 'active') feed.emit({ status: 'denied', timestamp: 2 })
+  })
+  feed.onEvent(later)
+  feed.emit({ event: 'prover', phase: 'started', timestamp: 1, status: 'active' })
+  expect(later.mock.calls.map(([e]) => e.status)).toEqual(['denied'])
+})
+
+it('freezes instrumentation that carries only an operation ID', () => {
+  const feed = new Events(),
+    seen: CeremonyEvent[] = []
+  feed.onEvent((e) => {
+    if ('instrumentation' in e && e.instrumentation)
+      Reflect.set(e.instrumentation, 'operationId', 'changed')
+  })
+  feed.onEvent((e) => seen.push(e))
+  const event = { event: 'session', phase: 'started', timestamp: 1, status: 'active' } as const
+  feed.emit({ ...event, instrumentation: { operationId: 'first' } })
+  expect(seen).toEqual([{ ...event, instrumentation: { operationId: 'first' } }])
+})
+
+it('labels every stage, naming the platform only for authorization', () => {
+  const stages: CeremonyStage[] = [
+    'preparation',
+    'authorization',
+    'proof-preparation',
+    'notarization',
+    'zk-proving',
+  ]
+  expect(stages.map((stage) => CeremonyStage.message(stage, 'Google'))).toEqual([
+    messages.preparation,
+    messages.authorization('Google'),
+    messages.proofPreparation,
+    messages.notarization,
+    messages.zkProving,
   ])
 })

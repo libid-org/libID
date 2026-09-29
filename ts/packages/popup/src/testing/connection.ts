@@ -1,4 +1,5 @@
 import type { ConnectionEnd, PopupConnection } from '../connection.js'
+import { PopupError } from '../diagnostics.js'
 import type { Message, MessageType } from '../message.js'
 import { POPUP_ORIGIN } from './fakes.js'
 
@@ -6,6 +7,7 @@ import { POPUP_ORIGIN } from './fakes.js'
 export interface FakeConnection<Out extends Message = Message, In extends Message = Out>
   extends PopupConnection<Out, In> {
   peerOrigin: string | null
+  /** Messages sent before the connection ended; a later send throws `send-unavailable`. */
   readonly sent: Out[]
   readonly navigations: { url: string; fragment?: string; away: boolean }[]
   ended: boolean
@@ -46,6 +48,8 @@ export function fakeConnection<Out extends Message = Message, In extends Message
     navigations: [],
     ended: false,
     send: (message) => {
+      // As the real connection: an ended connection refuses to send.
+      if (connection.ended) throw new PopupError('send-unavailable')
       connection.sent.push(message)
     },
     on<N extends In>(type: MessageType<N>, handler: (message: N) => void) {

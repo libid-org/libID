@@ -1,48 +1,34 @@
-import { type ConnectionEnd, PopupError } from '@libid/popup'
-import { afterEach, expect, it, vi } from 'vitest'
+import { PopupError } from '@libid/popup'
+import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
+import { afterEach, beforeEach, expect, it, type Mock, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
-import type { Events } from '../../events.js'
 import type { ProverContext } from '../../platforms/context.js'
 import { platforms } from '../../platforms/index.js'
-import { CEREMONY_ID } from '../../testing/index.js'
+import {
+  CEREMONY_ID,
+  type FakeDocumentUi,
+  fakeDocumentUi,
+  proveIdentity,
+} from '../../testing/index.js'
 import type { IdentityProof } from '../index.js'
-import { popupErrorMessages } from '../ui-messages.js'
+import { messages, popupErrorMessages } from '../ui-messages.js'
 import { startProver } from './prover.js'
 
-const { accept, connection, prove, ui, terminal } = vi.hoisted(() => ({
+const { accept, claimRootWorker, prove } = vi.hoisted(() => ({
   accept: vi.fn(),
-  terminal: vi.fn(),
-  connection: {
-    peerOrigin: 'https://app.test',
-    ready: Promise.resolve(),
-    closed: new Promise<ConnectionEnd>(() => {}),
-    send: vi.fn(),
-    on: vi.fn(),
-  },
+  claimRootWorker: vi.fn(),
   prove: vi.fn(
     async (_context: ProverContext): Promise<Omit<IdentityProof, 'type'> | null> => null,
   ),
-  ui: {
-    stop: vi.fn(),
-    message: vi.fn(),
-    trackProof: vi.fn(),
-    finishProof: vi.fn(),
-    delivered: vi.fn(),
-  },
 }))
 
 vi.mock('@libid/popup', async (original) => ({
   ...(await original<typeof import('@libid/popup')>()),
-  PopupConnection: {
-    accept: (...args: unknown[]) => {
-      accept(...args)
-      return connection
-    },
-  },
+  PopupConnection: { accept },
   PopupWindow: { current: vi.fn() },
 }))
 
-vi.mock('../../assets/registration.js', () => ({ claimRootWorker: vi.fn() }))
+vi.mock('../../assets/registration.js', () => ({ claimRootWorker }))
 
 vi.mock('../../platforms/google/1/prover.js', () => ({ prove }))
 
@@ -50,22 +36,46 @@ vi.mock('../../platforms/x/1/prover.js', () => ({ prove }))
 
 vi.mock('../../platforms/github/1/prover.js', () => ({ prove }))
 
-vi.mock('./ui.js', () => ({
-  view: vi.fn(),
-  eventView: (events: Events) => {
-    events.onEvent(terminal)
-    return ui
-  },
-}))
+vi.mock('./ui.js', async () => (await import('../../testing/index.js')).documentUi(() => ui))
+
+type Spied<T, K extends keyof T> = T & Record<K, Mock>
+
+/** The shared double; `on` and `send` are spied for handler lookups and send overrides. */
+function spiedConnection(ready: 'resolved' | 'pending' = 'resolved') {
+  const connection = fakeConnection({ peerOrigin: 'https://app.test', ready })
+  vi.spyOn(connection, 'on')
+  vi.spyOn(connection, 'send')
+  return connection as Spied<FakeConnection, 'on' | 'send'>
+}
+
+let connection: ReturnType<typeof spiedConnection>
+let ui: Spied<FakeDocumentUi, 'stop' | 'message' | 'trackProof' | 'finishProof' | 'delivered'>
+
+/** The Prover document's private fragment for an OAuth return carrying `oauthFragment`. */
+const proverInput = (oauthFragment = '#error=access_denied') =>
+  new URLSearchParams({
+    ceremonyId: CEREMONY_ID,
+    applicationOrigin: 'https://app.test',
+    oauthQuery: '',
+    oauthFragment,
+  }).toString()
+
+/** The message types the document sent, in order. */
+const sentTypes = () => connection.sent.map((message) => message.type)
+
+beforeEach(() => {
+  connection = spiedConnection()
+  ui = fakeDocumentUi() as typeof ui
+  for (const method of ['stop', 'message', 'trackProof', 'finishProof', 'delivered'] as const)
+    vi.spyOn(ui, method)
+  accept.mockImplementation(() => connection)
+  vi.stubGlobal('location', { origin: 'https://ccdp.test' })
+  vi.stubGlobal('crossOriginIsolated', true)
+  vi.stubGlobal('Worker', vi.fn())
+})
 
 afterEach(() => {
-  vi.clearAllMocks()
-  connection.closed = new Promise(() => {})
-  connection.ready = Promise.resolve()
-  connection.send.mockReset()
-  ui.trackProof.mockReset()
-  ui.finishProof.mockReset()
-  ui.delivered.mockReset()
+  vi.resetAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -125,75 +135,36 @@ it.each([
   'reports fallback and gracefully retires failure: $error.message [CSP-016]',
   async ({ error, event }) => {
     vi.stubGlobal('location', { origin: 'https://ccdp.test', pathname: '/ccdp/v1/prover/fallback' })
-    vi.stubGlobal('crossOriginIsolated', true)
-    vi.stubGlobal('Worker', vi.fn())
     prove.mockImplementationOnce(async (context) => {
       context.emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: 12 })
       throw error
     })
-    await startProver(
-      new URLSearchParams({
-        ceremonyId: CEREMONY_ID,
-        applicationOrigin: 'https://app.test',
-        oauthQuery: '',
-        oauthFragment: '#error=access_denied',
-      }).toString(),
-    )
-    expect(connection.send.mock.calls.slice(0, 2).map(([m]) => m)).toEqual([
+    await startProver(proverInput())
+    expect(connection.sent).toEqual([
       { type: 'event', event: 'prover-fallback', timestamp: performance.timeOrigin },
       { type: 'event', event: 'prover', phase: 'started', timestamp: expect.any(Number) },
     ])
-    connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]({
-      type: 'prove-identity',
-      platformId: 'github',
-      platformCeremonyVersion: 1,
-    })
-    await vi.waitFor(() =>
-      expect(connection.send).toHaveBeenCalledWith({
-        type: 'ceremony-failed',
-        event,
-        message: error.message,
-      }),
-    )
-    expect(connection.send).toHaveBeenCalledWith({
-      type: 'event',
-      event: 'proof-worker-bootstrap',
-      phase: 'started',
-      timestamp: 12,
-    })
-    expect(connection.send.mock.calls.filter(([m]) => m.type === 'ceremony-failed')).toHaveLength(1)
-    expect(connection.send.mock.calls.some(([m]) => m.type === 'identity-proof')).toBe(false)
-    expect(terminal.mock.calls.filter(([e]) => e.status === 'failed')).toHaveLength(1)
+    connection.receive(proveIdentity('github'))
+    await vi.waitFor(() => expect(sentTypes()).toContain('ceremony-failed'))
+    // Exactly one failure report follows the forwarded observation: no proof, no finished prover.
+    expect(connection.sent.slice(2)).toEqual([
+      { type: 'event', event: 'proof-worker-bootstrap', phase: 'started', timestamp: 12 },
+      { type: 'ceremony-failed', event, message: error.message },
+    ])
+    expect(ui.events.filter((e) => e.status === 'failed')).toHaveLength(1)
     expect(prove.mock.calls[0][0].signal.aborted).toBe(true)
     expect(ui.stop).toHaveBeenCalledOnce()
-    expect(
-      connection.send.mock.calls.some(([m]) => m.event === 'prover' && m.phase === 'finished'),
-    ).toBe(false)
   },
 )
 
 it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
   'gives the UI a paint opportunity before delivery: %s [LIBID-BROWSER-024]',
   async (outcome) => {
-    vi.stubGlobal('location', { origin: 'https://ccdp.test' })
-    vi.stubGlobal('crossOriginIsolated', true)
-    vi.stubGlobal('Worker', vi.fn())
-    let close!: () => void
-    connection.closed = new Promise<ConnectionEnd>((resolve) => {
-      close = () => resolve({ outcome: 'closed' })
-    })
     prove.mockResolvedValueOnce({
       identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
       proof: {},
     })
-    await startProver(
-      new URLSearchParams({
-        ceremonyId: CEREMONY_ID,
-        applicationOrigin: 'https://app.test',
-        oauthQuery: '',
-        oauthFragment: '',
-      }).toString(),
-    )
+    await startProver(proverInput(''))
     let painted!: () => void
     ui.finishProof.mockImplementation(
       () =>
@@ -204,6 +175,7 @@ it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
     if (outcome === 'send-failed')
       connection.send.mockImplementation((message) => {
         if (message.type === 'identity-proof') throw new Error('Delivery failed')
+        connection.sent.push(message)
       })
     if (outcome === 'ui-failed') {
       ui.finishProof.mockRejectedValueOnce(new Error('UI unavailable'))
@@ -214,108 +186,68 @@ it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
         throw new Error('UI unavailable')
       })
     }
-    connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]({
-      type: 'prove-identity',
-      platformId: 'google',
-      platformCeremonyVersion: 1,
-    })
+    connection.receive(proveIdentity())
     await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
     await vi.waitFor(() => expect(ui.finishProof).toHaveBeenCalledOnce())
     if (outcome !== 'ui-failed') {
-      expect(connection.send.mock.calls.some(([m]) => m.type === 'identity-proof')).toBe(false)
-      if (outcome === 'closed-during-paint') close()
+      expect(sentTypes()).not.toContain('identity-proof')
+      if (outcome === 'closed-during-paint') connection.end()
       await Promise.resolve()
       painted()
     }
     await vi.waitFor(() => expect(ui.stop).toHaveBeenCalled())
     if (outcome === 'closed-during-paint') {
       expect(ui.delivered).not.toHaveBeenCalled()
-      expect(connection.send.mock.calls.some(([m]) => m.type === 'identity-proof')).toBe(false)
+      expect(sentTypes()).not.toContain('identity-proof')
     } else if (outcome === 'send-failed') {
       expect(ui.delivered).not.toHaveBeenCalled()
-      expect(connection.send).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'ceremony-failed' }),
-      )
+      expect(sentTypes()).toContain('ceremony-failed')
     } else {
       expect(ui.delivered).toHaveBeenCalledOnce()
-      const index = connection.send.mock.calls.findIndex(
-        ([message]) => message.type === 'identity-proof',
-      )
+      const index = sentTypes().indexOf('identity-proof')
       expect(connection.send.mock.invocationCallOrder[index]).toBeLessThan(
         ui.delivered.mock.invocationCallOrder[0],
       )
-      expect(
-        connection.send.mock.calls.some(([message]) => message.type === 'ceremony-failed'),
-      ).toBe(false)
+      expect(sentTypes()).not.toContain('ceremony-failed')
     }
-    expect(
-      connection.send.mock.calls.some(
-        ([message]) => message.event === 'prover' && message.phase === 'finished',
-      ),
-    ).toBe(false)
+    expect(connection.sent).not.toContainEqual(
+      expect.objectContaining({ event: 'prover', phase: 'finished' }),
+    )
   },
 )
 
 it.each(['before', 'after'])(
   'shows the transport failure locally %s readiness [TEST-CCDP-08]',
   async (when) => {
-    vi.stubGlobal('location', { origin: 'https://ccdp.test' })
-    vi.stubGlobal('crossOriginIsolated', true)
-    vi.stubGlobal('Worker', vi.fn())
     const error = new PopupError('fallback-failed')
-    let close!: (end: ConnectionEnd) => void
-    connection.closed = new Promise<ConnectionEnd>((resolve) => {
-      close = resolve
-    })
-    let rejectReady!: (error: Error) => void
-    if (when === 'before')
-      connection.ready = new Promise<void>((_, reject) => {
-        rejectReady = reject
-      })
-    const run = startProver(
-      new URLSearchParams({
-        ceremonyId: CEREMONY_ID,
-        applicationOrigin: 'https://app.test',
-        oauthQuery: '',
-        oauthFragment: '',
-      }).toString(),
-    )
+    connection = spiedConnection(when === 'before' ? 'pending' : 'resolved')
+    const run = startProver(proverInput(''))
     if (when === 'after') await run
     connection.send.mockImplementation(() => {
       throw new Error('unreachable')
     })
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-    try {
-      close({ outcome: 'failed', code: error.code })
-      if (when === 'before') rejectReady(error)
-      await run
-      await vi.waitFor(() =>
-        expect(terminal).toHaveBeenCalledWith({
-          status: 'failed',
-          event: 'prover',
-          message: popupErrorMessages[error.code],
-          timestamp: expect.any(Number),
-        }),
-      )
-      expect(prove).not.toHaveBeenCalled()
-      expect(ui.stop).toHaveBeenCalledOnce()
-      expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
-    } finally {
-      log.mockRestore()
-    }
+    connection.end({ outcome: 'failed', code: error.code })
+    if (when === 'before') connection.settle(error)
+    await run
+    await vi.waitFor(() =>
+      expect(ui.events).toContainEqual({
+        status: 'failed',
+        event: 'prover',
+        message: popupErrorMessages[error.code],
+        timestamp: expect.any(Number),
+      }),
+    )
+    expect(prove).not.toHaveBeenCalled()
+    expect(ui.stop).toHaveBeenCalledOnce()
+    expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
   },
 )
 
 it.each(['before-ready', 'duplicate', 'after-denial'])(
   'consumes the private return once: %s [LIBID-OAUTH-019]',
   async (when) => {
-    vi.stubGlobal('location', { origin: 'https://ccdp.test' })
-    vi.stubGlobal('crossOriginIsolated', true)
-    vi.stubGlobal('Worker', vi.fn())
-    let ready!: () => void
-    connection.ready = new Promise<void>((resolve) => {
-      ready = resolve
-    })
+    connection = spiedConnection('pending')
     let finish!: () => void
     if (when !== 'before-ready')
       prove.mockImplementationOnce(
@@ -324,47 +256,122 @@ it.each(['before-ready', 'duplicate', 'after-denial'])(
             finish = () => resolve(null)
           }),
       )
-    const run = startProver(
-      new URLSearchParams({
-        ceremonyId: CEREMONY_ID,
-        applicationOrigin: 'https://app.test',
-        oauthQuery: '',
-        oauthFragment: '#error=access_denied',
-      }).toString(),
-    )
-    const request = { type: 'prove-identity', platformId: 'google', platformCeremonyVersion: 1 }
-    const receive = connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]
+    const run = startProver(proverInput())
+    const request = proveIdentity()
     if (when === 'before-ready') {
-      receive(request)
-      ready()
+      connection.receive(request)
+      connection.settle()
       await run
       await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
       expect(prove).not.toHaveBeenCalled()
-      expect(connection.send.mock.calls.some(([message]) => message.type === 'event')).toBe(false)
+      expect(sentTypes()).not.toContain('event')
     } else {
-      ready()
+      connection.settle()
       await run
-      receive(request)
+      connection.receive(request)
       await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
       if (when === 'duplicate') {
-        receive(request)
+        connection.receive(request)
         await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
         finish()
       } else {
         finish()
         await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
-        receive(request)
+        connection.receive(request)
       }
       await Promise.resolve()
       expect(prove).toHaveBeenCalledOnce()
       expect(prove.mock.calls[0][0].signal.aborted).toBe(true)
     }
-    expect(connection.send.mock.calls.filter(([m]) => m.type === 'ceremony-failed')).toHaveLength(
-      when === 'after-denial' ? 0 : 1,
-    )
-    expect(connection.send.mock.calls.filter(([m]) => m.type === 'user-denied')).toHaveLength(
-      when === 'after-denial' ? 1 : 0,
-    )
-    expect(connection.send.mock.calls.some(([m]) => m.type === 'identity-proof')).toBe(false)
+    const count = (type: string) => sentTypes().filter((sent) => sent === type).length
+    expect(count('ceremony-failed')).toBe(when === 'after-denial' ? 0 : 1)
+    expect(count('user-denied')).toBe(when === 'after-denial' ? 1 : 0)
+    expect(count('identity-proof')).toBe(0)
   },
 )
+
+it('reports an unreadable Prover fragment locally without accepting a connection', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  await startProver('ceremonyId=invalid')
+  expect(accept).not.toHaveBeenCalled()
+  expect(ui.views).toEqual([messages.returnToApplication('Invalid navigation fields')])
+  expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
+})
+
+it.each([
+  ['crossOriginIsolated', false],
+  ['SharedArrayBuffer', undefined],
+  ['Worker', undefined],
+])('refuses to prove without isolation: %s is %s', async (name, value) => {
+  vi.stubGlobal(name, value)
+  await startProver(proverInput())
+  expect(connection.sent).toEqual([
+    { type: 'ceremony-failed', event: 'prover', message: messages.isolationUnavailable },
+  ])
+  expect(claimRootWorker).not.toHaveBeenCalled()
+  expect(ui.stop).toHaveBeenCalledOnce()
+})
+
+it('announces no readiness when the connection ends while the root worker is claimed', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const claim = Promise.withResolvers<void>()
+  claimRootWorker.mockReturnValueOnce(claim.promise)
+  const run = startProver(proverInput())
+  await vi.waitFor(() => expect(claimRootWorker).toHaveBeenCalledOnce())
+  connection.end()
+  claim.resolve()
+  await run
+  expect(ui.events).toContainEqual(
+    expect.objectContaining({ status: 'failed', message: messages.proverClosed }),
+  )
+  // The ended connection cannot carry the report; its loss is logged locally.
+  expect(connection.sent).toEqual([])
+  expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
+  expect(ui.stop).toHaveBeenCalledOnce()
+})
+
+it('drops pipeline observations produced after the document ended', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  prove.mockImplementationOnce(async ({ signal, emit }) => {
+    await new Promise((resolve) => signal.addEventListener('abort', resolve))
+    emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: 12 })
+    return null
+  })
+  await startProver(proverInput())
+  connection.receive(proveIdentity())
+  await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
+  connection.end()
+  await prove.mock.results[0].value
+  expect(ui.events).toContainEqual(
+    expect.objectContaining({ status: 'failed', message: messages.proverClosed }),
+  )
+  expect(connection.sent).toEqual([
+    { type: 'event', event: 'prover', phase: 'started', timestamp: expect.any(Number) },
+  ])
+  expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
+  expect(ui.events).not.toContainEqual(expect.objectContaining({ event: 'proof-worker-bootstrap' }))
+})
+
+it.each([
+  { event: 'proof-worker-bootstrap', core: false },
+  { event: 'token-fetch', core: true },
+])('fails proving only when a core observation cannot be sent: $event', async ({ event, core }) => {
+  connection.send.mockImplementation((message) => {
+    if (message.type === 'event' && message.event === event) throw new Error('observation lost')
+    connection.sent.push(message)
+  })
+  prove.mockImplementationOnce(async ({ emit }) => {
+    emit({ event, phase: 'started', timestamp: 12 })
+    return null
+  })
+  await startProver(proverInput())
+  connection.receive(proveIdentity('github'))
+  await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
+  expect(connection.sent.slice(1)).toEqual([
+    core
+      ? { type: 'ceremony-failed', event: 'prover', message: 'observation lost' }
+      : { type: 'user-denied' },
+  ])
+  // A lost extension observation still reaches local observers; a core loss ends the run.
+  expect(ui.events.some((e) => 'event' in e && e.event === event)).toBe(!core)
+})
