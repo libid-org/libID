@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import type { OperationEvent } from '../events.js'
+import { CEREMONY_ID } from '../testing/index.js'
 import { proveBearerLink } from './bearer.js'
 import type { ProverContext } from './context.js'
 
@@ -11,7 +12,6 @@ const { prepare, initialize, boot, generate, destroy } = vi.hoisted(() => ({
   destroy: vi.fn(),
 }))
 
-vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
 vi.mock('../assets/index.js', async (original) => ({
   ...(await original<typeof import('../assets/index.js')>()),
   assetUrl: () => 'https://ccdp.test/asset',
@@ -42,16 +42,6 @@ afterEach(() => {
   vi.resetAllMocks()
   vi.unstubAllGlobals()
 })
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason: unknown) => void
-  const promise = new Promise<T>((yes, no) => {
-    resolve = yes
-    reject = no
-  })
-  return { promise, resolve, reject }
-}
 
 function transcript(body: unknown) {
   const json = JSON.stringify(body)
@@ -97,10 +87,13 @@ it.each(['accepted', 'failed'])(
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
     // Synthetic sessions isolate orchestration; real TLSN concurrency has a separate qualification gate.
-    const tokenResponse = deferred<ReturnType<typeof transcript>>()
-    const tokenOpenings = deferred<{ openings: []; attestation: Promise<Uint8Array> }>()
-    const tokenAttestation = deferred<Uint8Array>()
-    const identityAttestation = deferred<Uint8Array>()
+    const tokenResponse = Promise.withResolvers<ReturnType<typeof transcript>>()
+    const tokenOpenings = Promise.withResolvers<{
+      openings: []
+      attestation: Promise<Uint8Array>
+    }>()
+    const tokenAttestation = Promise.withResolvers<Uint8Array>()
+    const identityAttestation = Promise.withResolvers<Uint8Array>()
     const token = {
       send: vi.fn(() => tokenResponse.promise),
       reveal: vi.fn(() => tokenOpenings.promise),
@@ -114,7 +107,7 @@ it.each(['accepted', 'failed'])(
       generate.mockResolvedValue({ proof: new Uint8Array([1]), publicInputs: [] })
     else generate.mockReturnValue(new Promise(() => {})) // Failure must not await ZK completion.
     const events: OperationEvent[] = []
-    const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+    const ceremonyId = CEREMONY_ID
     const context: ProverContext = {
       ceremonyId,
       signal: new AbortController().signal,
@@ -187,7 +180,7 @@ it.each(['closed', 'identity setup failed'])(
   'retires both sessions and proving when %s [LIBID-PROVER-004]',
   async (failure) => {
     const abort = new AbortController()
-    const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+    const ceremonyId = CEREMONY_ID
     const context: ProverContext = {
       ceremonyId,
       signal: abort.signal,
@@ -213,7 +206,7 @@ it.each(['closed', 'identity setup failed'])(
         signal.addEventListener('abort', () => reject(signal.reason), { once: true })
       })
     })
-    const identitySetup = deferred<never>()
+    const identitySetup = Promise.withResolvers<never>()
     prepare
       .mockImplementationOnce(prepare.getMockImplementation()!)
       .mockReturnValueOnce(identitySetup.promise)
@@ -236,7 +229,7 @@ it.each(['closed', 'identity setup failed'])(
   },
 )
 it('requires notaryAddress before notarization [LIBID-OAUTH-021]', async () => {
-  const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+  const ceremonyId = CEREMONY_ID
   const context: ProverContext = {
     ceremonyId,
     signal: new AbortController().signal,

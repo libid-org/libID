@@ -9,13 +9,10 @@ import {
   selectToken,
   selectIdentity as selectXIdentity,
 } from '../platforms/x/1/transcript.js'
+import { text, utf8 } from '../testing/index.js'
 import { planNotarization } from './notarize.js'
 import type { ExactHttpRequest } from './protocol.js'
 import { quotedRange } from './transcript.js'
-
-const utf8 = (value: string) => new TextEncoder().encode(value)
-
-const text = (value: Uint8Array) => new TextDecoder().decode(value)
 
 function serialize(line: string, request: ExactHttpRequest): Uint8Array {
   return utf8(

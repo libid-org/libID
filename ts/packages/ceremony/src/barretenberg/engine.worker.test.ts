@@ -137,23 +137,13 @@ it('preserves cleanup when bb rejects the supplied key [LIBID-PROVER-001]', asyn
   expect(mocks.destroy).toHaveBeenCalledOnce()
 })
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: Error) => void
-  const promise = new Promise<T>((ok, fail) => {
-    resolve = ok
-    reject = fail
-  })
-  return { promise, resolve, reject }
-}
-
 it.each(['backend', 'resources'])(
   'starts all preload branches before %s finishes [LIBID-PROVER-012]',
   async (first) => {
-    const backend = deferred<void>(),
-      acvm = deferred<void>(),
-      abi = deferred<void>(),
-      key = deferred<Response>()
+    const backend = Promise.withResolvers<void>(),
+      acvm = Promise.withResolvers<void>(),
+      abi = Promise.withResolvers<void>(),
+      key = Promise.withResolvers<Response>()
     mocks.initialize.mockReturnValueOnce(backend.promise)
     mocks.acvm.mockReturnValueOnce(acvm.promise)
     mocks.abi.mockReturnValueOnce(abi.promise)
@@ -201,7 +191,7 @@ it.each(['backend', 'resources'])(
 it.each(['circuit', 'wasm'])(
   'fails promptly on %s loading and releases a late backend [LIBID-PROVER-014]',
   async (failure) => {
-    const backend = deferred<void>()
+    const backend = Promise.withResolvers<void>()
     mocks.initialize.mockReturnValueOnce(backend.promise)
     if (failure === 'wasm') mocks.acvm.mockRejectedValueOnce(new Error('WASM load failed'))
     const w = await worker(
@@ -219,7 +209,7 @@ it.each(['circuit', 'wasm'])(
 )
 
 it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]', async () => {
-  const acvm = deferred<void>()
+  const acvm = Promise.withResolvers<void>()
   mocks.acvm.mockReturnValueOnce(acvm.promise)
   const w = await worker()
   await expect
@@ -236,7 +226,7 @@ it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]',
 })
 
 it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]', async () => {
-  const key = deferred<Response>()
+  const key = Promise.withResolvers<Response>()
   mocks.initialize.mockRejectedValueOnce(new Error('Backend unavailable'))
   const w = await worker(key.promise)
   await expect.poll(() => w.has('error')).toBe(true)
@@ -256,8 +246,8 @@ it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]'
 it.each(['witness', 'backend'])(
   'overlaps witness execution with backend initialization when %s finishes first [LIBID-PROVER-012]',
   async (first) => {
-    const backend = deferred<void>()
-    const witness = deferred<{ witness: Uint8Array }>()
+    const backend = Promise.withResolvers<void>()
+    const witness = Promise.withResolvers<{ witness: Uint8Array }>()
     mocks.initialize.mockReturnValueOnce(backend.promise)
     const w = await worker()
     mocks.execute.mockReturnValueOnce(witness.promise)
@@ -287,7 +277,7 @@ it.each(['witness', 'backend'])(
 )
 
 it('reports witness failure promptly and destroys a late backend once [LIBID-PROVER-014]', async () => {
-  const backend = deferred<void>()
+  const backend = Promise.withResolvers<void>()
   mocks.initialize.mockReturnValueOnce(backend.promise)
   const w = await worker()
   mocks.execute.mockRejectedValueOnce(new Error('Witness failed'))
@@ -302,8 +292,8 @@ it('reports witness failure promptly and destroys a late backend once [LIBID-PRO
 })
 
 it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-014]', async () => {
-  const backend = deferred<void>()
-  const witness = deferred<{ witness: Uint8Array }>()
+  const backend = Promise.withResolvers<void>()
+  const witness = Promise.withResolvers<{ witness: Uint8Array }>()
   mocks.initialize.mockReturnValueOnce(backend.promise)
   const w = await worker()
   mocks.execute.mockReturnValueOnce(witness.promise)
@@ -325,7 +315,7 @@ it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-01
 })
 
 it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER-014]', async () => {
-  const proof = deferred<unknown>()
+  const proof = Promise.withResolvers<unknown>()
   const w = await worker()
   mocks.prove.mockReturnValueOnce(proof.promise)
   await expect.poll(() => w.has('witness-ready')).toBe(true)

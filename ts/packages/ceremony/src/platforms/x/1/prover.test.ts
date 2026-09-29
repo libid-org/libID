@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import { CEREMONY_ID } from '../../../testing/index.js'
 import type { ProverContext } from '../../context.js'
 import { prove as proveX } from './prover.js'
 
@@ -7,7 +8,7 @@ vi.mock('../../bearer.js', () => ({ proveBearerLink: pipeline }))
 afterEach(() => vi.resetAllMocks())
 
 it('requires codeVerifier before notarization [LIBID-OAUTH-021]', async () => {
-  const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+  const ceremonyId = CEREMONY_ID
   const context: ProverContext = {
     ceremonyId,
     signal: new AbortController().signal,

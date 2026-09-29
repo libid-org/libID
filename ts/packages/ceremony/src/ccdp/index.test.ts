@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { origin } from '../primitives.js'
+import { CEREMONY_ID } from '../testing/index.js'
 import {
   CeremonyFailed,
   EventMessage,
@@ -17,7 +18,7 @@ import {
   readProver,
 } from './navigation.js'
 
-const id = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+const id = CEREMONY_ID
 
 describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
   const samples = [

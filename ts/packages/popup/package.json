@@ -19,6 +19,10 @@
     "./worker": {
       "types": "./dist/worker.d.ts",
       "default": "./dist/worker.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
     }
   },
   "files": [

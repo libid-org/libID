@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CEREMONY_ID } from '../../../testing/index.js'
 import type { ProverContext } from '../../context.js'
 import { prove as proveGitHub } from './prover.js'
 
@@ -6,7 +7,7 @@ const { pipeline } = vi.hoisted(() => ({ pipeline: vi.fn() }))
 vi.mock('../../bearer.js', () => ({ proveBearerLink: pipeline }))
 afterEach(() => vi.resetAllMocks())
 
-const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+const ceremonyId = CEREMONY_ID
 const issuer = 'https://github.com/login/oauth'
 
 function context(query: string): ProverContext {

@@ -10,6 +10,7 @@ import type {
   Reveals,
   Transcript,
 } from '../notary/protocol.js'
+import { CEREMONY_ID, text, utf8 } from '../testing/index.js'
 import type { ProverContext } from './context.js'
 import { prove as github } from './github/1/prover.js'
 import * as githubTranscript from './github/1/transcript.js'
@@ -22,7 +23,6 @@ const { prepare, generate, destroy } = vi.hoisted(() => ({
   generate: vi.fn(),
   destroy: vi.fn(),
 }))
-vi.mock('virtual:ceremony-assets', () => ({ urls: {} }))
 vi.mock('../assets/index.js', async (original) => ({
   ...(await original<typeof import('../assets/index.js')>()),
   assetUrl: () => 'https://ccdp.test/asset',
@@ -51,11 +51,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const encode = (text: string) => new TextEncoder().encode(text)
-const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 const bearer = 'fixture_BEARER-123'
 const userId = '9007199254740993' // Above Number.MAX_SAFE_INTEGER.
-const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
+const ceremonyId = CEREMONY_ID
 
 for (const platform of ['x', 'github'] as const) {
   it.each([
@@ -103,7 +101,7 @@ for (const platform of ['x', 'github'] as const) {
             const header = `${request.method} ${target.pathname} HTTP/1.1\r\n${Object.entries(
               request.headers,
             )
-              .map(([k, v]) => `${k}: ${decode(v)}\r\n`)
+              .map(([k, v]) => `${k}: ${text(v)}\r\n`)
               .join('')}\r\n`
             const body =
               index === 0
@@ -114,8 +112,8 @@ for (const platform of ['x', 'github'] as const) {
                     ? `{ "data": { "username": "alice", "id": "${userId}" } }`
                     : `{ "login" : "alice", "id" : ${userId} , "unused": true }`
             transcript = {
-              sent: concat(encode(header), request.body),
-              received: encode(
+              sent: concat(utf8(header), request.body),
+              received: utf8(
                 `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\n\r\n${body}`,
               ),
             }
@@ -162,7 +160,7 @@ for (const platform of ['x', 'github'] as const) {
         }
       })
       const hashes = [1, 2].map((byte) =>
-        sha256(concat(encode(bearer), new Uint8Array(16).fill(byte))),
+        sha256(concat(utf8(bearer), new Uint8Array(16).fill(byte))),
       )
       generate.mockImplementation(async (inputs): Promise<RawProof> => {
         expect(commitments[0].received, 'Token commitment must match notarization').toContainEqual(
@@ -172,7 +170,7 @@ for (const platform of ['x', 'github'] as const) {
           Uint8Array.from(inputs.identity_commitment),
         ])
         expect(inputs).toEqual({
-          bearer: [...encode(bearer), ...new Uint8Array(128 - bearer.length)],
+          bearer: [...utf8(bearer), ...new Uint8Array(128 - bearer.length)],
           bearer_len: String(bearer.length),
           blinder_token: Array(16).fill(1),
           blinder_identity: Array(16).fill(2),
@@ -247,14 +245,14 @@ for (const platform of ['x', 'github'] as const) {
           status: 'accepted',
           identity: result!.identity,
         })
-        expect(decode(transcripts[0].sent)).toContain('client_id=client&code=fixture')
-        expect(decode(transcripts[1].sent)).toContain(`Authorization: Bearer ${bearer}`)
+        expect(text(transcripts[0].sent)).toContain('client_id=client&code=fixture')
+        expect(text(transcripts[1].sent)).toContain(`Authorization: Bearer ${bearer}`)
         for (const [index, ranges] of selected.entries()) {
           const disclosed = [
             ...ranges.sent.map((r) => transcripts[index].sent.slice(r.start, r.end)),
             ...ranges.received.map((r) => transcripts[index].received.slice(r.start, r.end)),
           ]
-          expect(disclosed.map(decode).join('')).not.toContain(bearer)
+          expect(disclosed.map(text).join('')).not.toContain(bearer)
         }
       }
       if (outcome === 'startup-cancel') {

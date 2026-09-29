@@ -4,6 +4,7 @@ import { CeremonyError } from '../../errors.js'
 import type { Events } from '../../events.js'
 import type { ProverContext } from '../../platforms/context.js'
 import { platforms } from '../../platforms/index.js'
+import { CEREMONY_ID } from '../../testing/index.js'
 import type { IdentityProof } from '../index.js'
 import { popupErrorMessages } from '../ui-messages.js'
 import { startProver } from './prover.js'
@@ -41,8 +42,6 @@ vi.mock('@libid/popup', async (original) => ({
   PopupWindow: { current: vi.fn() },
 }))
 
-vi.mock('virtual:ceremony-popup-fallback', () => ({ fallback: undefined }))
-
 vi.mock('../../assets/registration.js', () => ({ claimRootWorker: vi.fn() }))
 
 vi.mock('../../platforms/google/1/prover.js', () => ({ prove }))
@@ -78,7 +77,7 @@ it.each(['google', 'x', 'github'] as const)(
     vi.stubGlobal('Worker', vi.fn())
     await startProver(
       new URLSearchParams({
-        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        ceremonyId: CEREMONY_ID,
         applicationOrigin: 'https://app.test',
         oauthQuery: '',
         oauthFragment: '#error=access_denied',
@@ -134,7 +133,7 @@ it.each([
     })
     await startProver(
       new URLSearchParams({
-        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        ceremonyId: CEREMONY_ID,
         applicationOrigin: 'https://app.test',
         oauthQuery: '',
         oauthFragment: '#error=access_denied',
@@ -189,7 +188,7 @@ it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
     })
     await startProver(
       new URLSearchParams({
-        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        ceremonyId: CEREMONY_ID,
         applicationOrigin: 'https://app.test',
         oauthQuery: '',
         oauthFragment: '',
@@ -275,7 +274,7 @@ it.each(['before', 'after'])(
       })
     const run = startProver(
       new URLSearchParams({
-        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        ceremonyId: CEREMONY_ID,
         applicationOrigin: 'https://app.test',
         oauthQuery: '',
         oauthFragment: '',
@@ -327,7 +326,7 @@ it.each(['before-ready', 'duplicate', 'after-denial'])(
       )
     const run = startProver(
       new URLSearchParams({
-        ceremonyId: '6e171568-54e1-4f0d-aeb5-e8859826476a',
+        ceremonyId: CEREMONY_ID,
         applicationOrigin: 'https://app.test',
         oauthQuery: '',
         oauthFragment: '#error=access_denied',
