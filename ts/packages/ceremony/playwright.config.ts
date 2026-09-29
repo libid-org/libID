@@ -22,8 +22,9 @@ export default defineConfig({
   projects: [
     ...(['chromium', 'firefox', 'webkit'] as const).map((browserName) => ({
       name: `${browserName}-http`,
-      // Runtime fixtures use their own HTTP origin; run them once per browser below.
+      // Full proofs/runtime qualification run once per engine in the desktop HTTPS projects.
       testIgnore: 'runtime.spec.ts',
+      grepInvert: /@proof/,
       use: { browserName, baseURL: 'http://localhost:4781', ignoreHTTPSErrors: false },
     })),
     {
@@ -34,13 +35,20 @@ export default defineConfig({
     { name: 'webkit', use: { browserName: 'webkit' } },
     {
       name: 'android-emulated',
+      testIgnore: 'runtime.spec.ts',
+      grepInvert: /@proof/,
       use: {
         ...devices['Pixel 7'],
         browserName: 'chromium',
         launchOptions: { args: ['--ignore-certificate-errors'] },
       },
     },
-    { name: 'ios-emulated', use: { ...devices['iPhone 15'], browserName: 'webkit' } },
+    {
+      name: 'ios-emulated',
+      testIgnore: 'runtime.spec.ts',
+      grepInvert: /@proof/,
+      use: { ...devices['iPhone 15'], browserName: 'webkit' },
+    },
   ],
   webServer: [
     {

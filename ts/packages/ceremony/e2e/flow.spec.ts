@@ -255,7 +255,7 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
   }
 })
 
-test('real Google fixture proof under emitted CSP, independently released-key verified [LIBID-PROVER-001] [CSP-020]', async ({
+test('real Google fixture proof under emitted CSP, independently released-key verified [LIBID-PROVER-001] [CSP-020] @proof', async ({
   app,
   bridge,
   page,
