@@ -1,4 +1,5 @@
 import { resolve as resolveAsset } from '../assets/index.js'
+import { ceremonyError } from '../errors.js'
 import { now, type OperationEvent } from '../events.js'
 import { origin, webUrl } from '../primitives.js'
 import type { NotaryAttestation } from './decode.js'
@@ -230,6 +231,9 @@ class Session implements NotarizationSession {
 
   private fail(error: unknown): void {
     if (this.phase === 'ended') return
+    // Preserve the originating operation before shared-runtime cancellation rejects siblings.
+    if (!this.signal.aborted && this.phase === 'revealing' && this.event)
+      error = ceremonyError(error, this.event)
     for (const waiter of this.waiters.values()) waiter.reject(error)
     this.waiters.clear()
     this.cleanup()

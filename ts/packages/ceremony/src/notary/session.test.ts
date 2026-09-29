@@ -132,10 +132,13 @@ it.each(['abort', 'session-error'])(
     port.postMessage({ type: 'revealed', openings: [] })
     const { attestation } = await revealing
     const pending = notary.prepare(target)
-    const checks = Promise.all([
-      expect(attestation).rejects.toThrow(),
-      expect(pending).rejects.toThrow(),
-    ])
+    const checks = Promise.all(
+      [attestation, pending].map((result) =>
+        failure === 'session-error'
+          ? expect(result).rejects.toMatchObject({ event: 'token-attestation' })
+          : expect(result).rejects.toThrow(),
+      ),
+    )
     if (failure === 'abort') abort.abort()
     else port.postMessage({ type: 'error' })
     await checks
