@@ -51,6 +51,7 @@ export async function prove(
     selectIdentity(transcript, bearer) {
       const body = responseJson(transcript),
         selected = selectIdentity(transcript, bearer)
+      // JSON checks the root shape; the depth-agnostic byte selector preserves the exact ID.
       if (!isRecord(body) || typeof body.id !== 'number' || body.login !== selected.userName)
         throw new Error('Invalid GitHub identity')
       return selected

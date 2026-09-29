@@ -2,7 +2,7 @@
 
 The build emits a static CCDP artifact; Static Web Server (SWS) serves it.
 Resource and response requirements belong to the
-[Distribution specification](https://github.com/libid-org/libid/blob/docs/ceremony-browser-architecture/specs/ccdp-distribution.md).
+[Distribution specification](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/ccdp-distribution.md).
 The host needs no ceremony server, request-time compilation or asset downloads.
 
 ## Build and serve

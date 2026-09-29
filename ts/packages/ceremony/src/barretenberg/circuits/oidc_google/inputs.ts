@@ -1,4 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
+export const FIELD_PACK_BYTES = 31
+
 export const MAX_EMAIL_BYTES = 62,
   MAX_SUB_BYTES = 31,
   MAX_AUD_BYTES = 128,
@@ -154,7 +156,10 @@ export function buildGoogleInputs(
     authorization_digest: Array.from(authorizationDigest),
     audience_hash: [pack31(audienceDigest.subarray(0, 16)), pack31(audienceDigest.subarray(16))],
     sub_packed: [pack31(paddedSub)],
-    email_packed: [pack31(paddedEmail.subarray(0, 31)), pack31(paddedEmail.subarray(31))],
+    email_packed: [
+      pack31(paddedEmail.subarray(0, FIELD_PACK_BYTES)),
+      pack31(paddedEmail.subarray(FIELD_PACK_BYTES)),
+    ],
     exp: expString,
     modulus: limbs(modulusInteger),
   }

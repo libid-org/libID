@@ -1,5 +1,9 @@
 import { sha256 } from '@noble/hashes/sha2.js'
-import { bytesToBigInt, limbs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
+import {
+  bytesToBigInt,
+  FIELD_PACK_BYTES,
+  limbs,
+} from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import type { Identity } from '../../types.js'
 import { type GoogleProofV1, validateIdentity, validateProof } from './types.js'
 
@@ -9,10 +13,10 @@ const field = (value: bigint | number) => `0x${BigInt(value).toString(16).padSta
 
 function packed(value: string, fields: number): string[] {
   const bytes = encoder.encode(value)
-  const padded = new Uint8Array(fields * 31)
+  const padded = new Uint8Array(fields * FIELD_PACK_BYTES)
   padded.set(bytes)
   return Array.from({ length: fields }, (_, index) =>
-    field(bytesToBigInt(padded.subarray(index * 31, (index + 1) * 31))),
+    field(bytesToBigInt(padded.subarray(index * FIELD_PACK_BYTES, (index + 1) * FIELD_PACK_BYTES))),
   )
 }
 

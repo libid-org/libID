@@ -1,13 +1,12 @@
 import type { Asset } from '../assets/index.js'
-import { assets as github } from './github/1/github.assets.js'
+import { assets as bearer } from './bearer-link/bearer-link.assets.js'
 import { assets as google } from './google/1/google.assets.js'
 import type { PlatformId, SupportedCeremonyVersion } from './index.js'
-import { assets as x } from './x/1/x.assets.js'
 
 export const assetsByPlatform = {
   google: { 1: google },
-  x: { 1: x },
-  github: { 1: github },
+  x: { 1: bearer },
+  github: { 1: bearer },
 } as const satisfies { [P in PlatformId]: { [V in SupportedCeremonyVersion<P>]: readonly Asset[] } }
 
 import { bearerCircuit } from '../barretenberg/circuits/bearer_link/bearer_link.assets.js'
