@@ -53,7 +53,7 @@ it('reveals the complete canonical five-field request, including the public cred
   ).toEqual(['"access_token":"', '"'])
 })
 
-describe('complete form validation [LIBID-PROVER-004] [TEST-PLAT-14]', () => {
+describe('complete form validation [LIBID-PROVER-004] [TEST-PLAT-14] [TEST-COMMON-05] [TEST-COMMON-06]', () => {
   const original = decoder.decode(buildTokenRequest(input).body)
   it.each([
     `${original}&code=second`,

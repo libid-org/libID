@@ -27,3 +27,14 @@ it('rejects ambiguous framing, truncated chunks, compressed bodies, and malforme
   ])
     expect(() => responseJson(transcript)).toThrow()
 })
+
+it.each([301, 302, 303, 307, 308])(
+  'rejects a redirected notarized response: %s [TEST-COMMON-06]',
+  (status) => {
+    const transcript = response('Location: https://other.test/\r\n', '{"access_token":"untrusted"}')
+    transcript.received = new TextEncoder().encode(
+      new TextDecoder().decode(transcript.received).replace('200 OK', `${status} Redirect`),
+    )
+    expect(() => responseJson(transcript)).toThrow('Platform request failed')
+  },
+)

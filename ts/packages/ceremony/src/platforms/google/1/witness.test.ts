@@ -242,7 +242,7 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier field
     )
   })
 
-  it('rejects wrong-length, wrong-order, wrong-type, and one-byte-changed public inputs', () => {
+  it('rejects wrong-length, wrong-order, wrong-type, and one-byte-changed public inputs [TEST-COMMON-20]', () => {
     const { identity, proofFields } = buildGoogleWitness(
       parseGoogleIdToken(fixture.idToken),
       fixture.jwk,
@@ -265,3 +265,11 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier field
     expect(validateGooglePublicInputs(changed, digest, identity, proof)).toBe(false)
   })
 })
+
+it.each([1.5, -1, 2 ** 64, '1725001000'])(
+  'rejects invalid evidence expiry %j [TEST-COMMON-12]',
+  (exp) => {
+    const payload = JSON.parse(Buffer.from(fixture.idToken.split('.')[1], 'base64url').toString())
+    expect(() => parseGoogleIdToken(tokenWith({ payload: { ...payload, exp } }))).toThrow()
+  },
+)
