@@ -71,8 +71,15 @@ async function open(
 }
 
 const ping = (page: Page, n: number) =>
-  page.evaluate((n) => {
-    ;(window as unknown as { __conn: { send(v: unknown): void } }).__conn.send({ type: 'ping', n })
+  page.evaluate(async (n) => {
+    const connection = (
+      window as unknown as {
+        __conn: { ready: Promise<void>; send(v: unknown): void }
+      }
+    ).__conn
+    // Popup readiness does not imply its acknowledgement has reached Application.
+    await connection.ready
+    connection.send({ type: 'ping', n })
   }, n)
 
 /** Split a test URL written with an inline fragment into the structured pair. */
