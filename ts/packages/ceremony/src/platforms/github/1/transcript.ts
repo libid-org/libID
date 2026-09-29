@@ -1,4 +1,4 @@
-import { isClientCredential, redirect } from '../../../ccdp/index.js'
+import { isClientCredential, isPkceValue, redirect } from '../../../ccdp/index.js'
 import { isFormClientId } from '../../authorization.js'
 import {
   type TokenRequestInput as BaseTokenRequestInput,
@@ -18,7 +18,7 @@ export const { identityUrl, buildTokenRequest, buildIdentityRequest, selectToken
         !isFormClientId(input.clientId) ||
         !/^[\x21-\x7e]{1,1024}$/.test(input.code) ||
         !redirect(input.redirectUri) ||
-        !/^[A-Za-z0-9_-]{43}$/.test(input.codeVerifier) ||
+        !isPkceValue(input.codeVerifier) ||
         !isClientCredential(input.clientCredential)
       )
         throw new Error('Invalid GitHub token request')

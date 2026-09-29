@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { ProofEngine } from './engine.js'
 
-vi.mock('../assets/index.js', () => ({ resolve: () => 'https://ccdp.test/asset' }))
+vi.mock('../assets/index.js', () => ({ assetUrl: () => 'https://ccdp.test/asset' }))
 
 vi.mock('./barretenberg.assets.js', () => ({ abi: {}, acvm: {}, bbWasm: {}, crs: [{}] }))
 

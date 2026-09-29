@@ -1,8 +1,8 @@
+import { isPkceValue } from '../../../ccdp/index.js'
+
 export const pkce = true
 
 const AUTHORIZATION_ENDPOINT = 'https://x.com/i/oauth2/authorize'
-
-const PKCE = /^[A-Za-z0-9_-]{43}$/
 
 /** Build X v1's fixed public-client S256 authorization request. */
 export function buildAuthorizationUrl(input: {
@@ -11,7 +11,7 @@ export function buildAuthorizationUrl(input: {
   state: string
   codeChallenge: string | null
 }): string {
-  if (input.codeChallenge === null || !PKCE.test(input.codeChallenge)) {
+  if (input.codeChallenge === null || !isPkceValue(input.codeChallenge)) {
     throw new Error('codeChallenge must be exactly 43 base64url characters')
   }
   const query = new URLSearchParams([

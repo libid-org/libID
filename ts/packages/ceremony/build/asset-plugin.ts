@@ -111,7 +111,7 @@ export function assetPlugin(
         export function archive(_source,mount){return {member(member){return {url:urls[mount+'/'+member]}}}}
         export function file(_source,mount){return {url:urls[mount+'/']}}
         export function external(source,options){return {url:source,isExternal:true,...options}}
-        export function resolve(asset){if(!asset.url)throw new Error('Missing built asset');return asset.isExternal ? asset.url : new URL(asset.url,location.origin).href}
+        export function assetUrl(asset){if(!asset.url)throw new Error('Missing built asset');return asset.isExternal ? asset.url : new URL(asset.url,location.origin).href}
       `
       for (const [module, url] of Object.entries(data?.moduleUrls ?? {}))
         if (id.endsWith(`/${module}`)) return `export default ${JSON.stringify(url)};`

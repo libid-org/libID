@@ -1,7 +1,7 @@
 import { allowedRequests, requestsByProfile } from 'virtual:ceremony-assets'
 import { installPortKeeper } from '@libid/popup/worker'
 import { hasExactKeys, isRecord } from '../primitives.js'
-import { AssetCache } from './cache.js'
+import { AssetCache, requestKey } from './cache.js'
 
 /** Install the emitted fetch allowlist, cache delivery and popup-owned port continuity. */
 export function startWorker(scope: ServiceWorkerGlobalScope): void {
@@ -14,14 +14,19 @@ export function startWorker(scope: ServiceWorkerGlobalScope): void {
   const allowed = new Map(
     allowedRequests.map((r) => {
       const spec = resolve(r)
-      return [`${spec.url}\n${spec.range ?? ''}`, spec]
+      return [requestKey(spec), spec]
     }),
   )
   scope.addEventListener('install', (event) => event.waitUntil(scope.skipWaiting()))
   scope.addEventListener('activate', (event) => event.waitUntil(scope.clients.claim()))
   scope.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return
-    const spec = allowed.get(`${event.request.url}\n${event.request.headers.get('range') ?? ''}`)
+    const spec = allowed.get(
+      requestKey({
+        url: event.request.url,
+        range: event.request.headers.get('range') ?? undefined,
+      }),
+    )
     if (!spec) return
     const { response, complete } = cache.load(spec)
     event.respondWith(response)

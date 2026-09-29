@@ -4,6 +4,10 @@ import type { AssetRequest } from './index.js'
 const CACHE = 'libid-ceremony-assets-v1',
   PREFIX = '/__libid_ceremony_cache__/'
 
+/** One cached fetch per URL and byte range. */
+export const requestKey = (spec: { url: string; range?: string }) =>
+  `${spec.url}\n${spec.range ?? ''}`
+
 /** Validate status and exposed metadata before accepting an asset response. */
 export function validateResponse(response: Response, spec: AssetRequest): void {
   if (
@@ -51,7 +55,7 @@ export class AssetCache {
    * entry alive through best-effort cache persistence, without delaying delivery.
    */
   load(spec: AssetRequest) {
-    const key = `${spec.url}\n${spec.range ?? ''}`
+    const key = requestKey(spec)
     const existing = this.pending.get(key)
     if (existing) return { ...existing, response: existing.response.then((r) => r.clone()) }
     let dispatched!: () => void

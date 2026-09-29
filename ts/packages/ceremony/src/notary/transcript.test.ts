@@ -30,7 +30,7 @@ const input = {
   clientId: 'client',
   code: 'code+with/slash',
   redirectUri: 'https://bridge.example/callback',
-  codeVerifier: 'a'.repeat(43),
+  codeVerifier: 'A'.repeat(43),
 }
 
 const request = buildTokenRequest(input)
