@@ -280,3 +280,33 @@ it.each(['*', '*.lib.id'])(
     expect(fragment.get('applicationOrigin')).toBe(peerOrigin)
   },
 )
+
+it.each(['success', 'rejected', 'failed'] as const)(
+  'distinguishes expected connection retirement from a failed handoff: %s [TEST-CCDP-08]',
+  async (outcome) => {
+    let close!: (end: ConnectionEnd) => void
+    accept.mockReturnValueOnce({
+      peerOrigin,
+      ready: Promise.resolve(),
+      closed: new Promise<ConnectionEnd>((resolve) => {
+        close = resolve
+      }),
+      navigate,
+      send,
+    })
+    navigate.mockImplementationOnce(async () => {
+      close(
+        outcome === 'failed'
+          ? { outcome: 'failed', code: 'fallback-unavailable' }
+          : { outcome: 'closed' },
+      )
+      await Promise.resolve()
+      if (outcome === 'rejected') throw new Error('Navigation failed')
+    })
+    startCallback()
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledOnce())
+    const failures = terminal.mock.calls.filter(([event]) => event.status === 'failed')
+    expect(failures).toHaveLength(outcome === 'success' ? 0 : 1)
+    if (outcome === 'success') expect(console.error).not.toHaveBeenCalled()
+  },
+)

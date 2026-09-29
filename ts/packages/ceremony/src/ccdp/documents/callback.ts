@@ -51,6 +51,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     throw new TypeError(messages.invalidCallbackInputs)
   let connection: PopupConnection<Message> | undefined,
     ended = false,
+    navigating = false,
     retained: OAuthReturn | undefined
   const cleanup = () => {
     ended = true
@@ -82,7 +83,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     })
 
     void connection.closed.then((end) => {
-      if (!ended)
+      if (!ended && (!navigating || end.outcome === 'failed'))
         fail(
           end.outcome === 'failed' ? new PopupError(end.code) : new Error(messages.callbackClosed),
         )
@@ -100,6 +101,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
         }
         events.emit({ ...event, status: 'active' })
         const fragment = proverFragment(id, applicationOrigin, retained)
+        navigating = true
         await connection!.navigate(ccdpOrigin + route('prover'), fragment)
         cleanup()
         ui.stop()
