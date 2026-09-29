@@ -1,6 +1,7 @@
 # Dedicated test ports, separate from the shared development app.
 services:
   ccdp:
+    # static-web-server:3.0.0-beta.1-alpine by index digest; the healthcheck runs its wget.
     image: &sws ghcr.io/static-web-server/static-web-server@sha256:4e804280b5b5b1be4563d4a9e0f3a0ea38e7887967d0cc00bc8c07030f529b3f
     environment:
       SERVER_CONFIG_FILE: /etc/sws.toml
@@ -16,8 +17,8 @@ services:
       retries: 30
 
   notary:
-    # Match the browser bundle pinned by notary.assets.ts.
-    image: ghcr.io/libid-org/notary:0.4.0
+    # notary:0.4.0 by index digest, matching the browser bundle pinned by notary.assets.ts.
+    image: ghcr.io/libid-org/notary@sha256:64716b57a89b6b9e5f97f8908572f4f8901b16ba4a0d442a44129020a70f5878
     environment:
       NOTARY_HOST: 0.0.0.0
       NOTARY_CLIENT_IP_HEADER: peer

@@ -35,10 +35,10 @@
     "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.0-alpha-2026-09-29",
-    "@types/node": "^22.0.0",
-    "typescript": "^5.9.0",
-    "vite": "^7.3.6",
-    "vitest": "^3.2.0"
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }
