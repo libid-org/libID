@@ -79,15 +79,6 @@ describe('decodeAttestationFrame', () => {
     ['invalid JSON', framePayload(new TextEncoder().encode('{')), /malformed JSON/],
     ['unknown field', frameJson({ ...validPayload(), other: [] }), /exactly/],
     ['missing field', frameJson({ attested_data: [1] }), /exactly/],
-    [
-      'duplicate field',
-      framePayload(
-        new TextEncoder().encode(
-          `{"attested_data":[1],"attested_data":[2],"notary_signature":[${new Array(65).fill(4).join(',')}]}`,
-        ),
-      ),
-      /malformed JSON/,
-    ],
     ['short signature', frameJson(validPayload(new Array(64).fill(4))), /exactly 65/],
     ['long signature', frameJson(validPayload(new Array(66).fill(4))), /exactly 65/],
     ['negative byte', frameJson({ ...validPayload(), attested_data: [-1] }), /byte element/],

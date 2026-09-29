@@ -7,8 +7,10 @@ import {
 import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer_link/inputs.js'
 import { ProofEngine } from '../src/barretenberg/engine.js'
 import { Notarization } from '../src/notary/session.js'
-import { buildTokenRequest } from '../src/platforms/github/1/token.js'
-import { identityRequest } from '../src/platforms/github/1/transcript.js'
+import {
+  buildTokenRequest,
+  buildIdentityRequest as identityRequest,
+} from '../src/platforms/github/1/transcript.js'
 
 Object.assign(window, {
   Notarization,

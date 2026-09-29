@@ -1,4 +1,3 @@
-import { parseJson } from '../json.js'
 import { hasExactKeys, isRecord, origin } from '../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES, type NotaryAttestation } from './decode.js'
 
@@ -38,7 +37,7 @@ export function decodeAttestationFrame(frame: Uint8Array): NotaryAttestation {
   let text: string
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(frame.subarray(4))
-    value = parseJson(text)
+    value = JSON.parse(text)
   } catch {
     return invalid('malformed JSON payload')
   }

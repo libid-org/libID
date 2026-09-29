@@ -9,7 +9,8 @@ owns authoritative request/evidence rules.
 ## Session lifecycle
 
 [Notarization](../src/notary/session.ts) owns one WASM runtime/thread pool per
-ceremony. Each `prepare(url)` creates a separate TLS session and WebSocket.
+ceremony. Each `prepare(url)` creates a separate TLS session and WebSocket,
+with its own channel, phase and pending replies.
 Preparation needs a fixed HTTPS target but no bearer, so independent sessions
 can prepare concurrently. The notary connects to the target only when `send`
 starts TLS; preparation does not establish target reachability, so target
@@ -81,15 +82,21 @@ and derives authoritative identity and proof inputs from them.
 ## HTTP and platform policy
 
 [http.ts](../src/notary/http.ts) and [transcript.ts](../src/notary/transcript.ts)
-handle shared byte framing and request checks. Platform selectors remain under
-`platforms/<id>/1/transcript.ts`. JSON whitespace and header order do not establish
-identity: selectors work from actual wire offsets, and numeric GitHub IDs are
+handle shared byte framing and request checks. X/GitHub
+[transcript machinery](../src/platforms/bearer-link/transcript.ts) consumes the fixed
+profiles declared under `platforms/<id>/1/transcript.ts`. JSON whitespace and header
+order do not establish identity: selectors work from actual wire offsets, and numeric GitHub IDs are
 preserved losslessly. Additional headers are admitted subject to the profile's
 required fields and forbidden-header rules; duplicate required headers and
 alternate Authorization framing reject.
 
+JSON decoding uses `JSON.parse`; HTTP framing, response bounds and output shapes
+are checked separately. Authoritative field uniqueness and location rely on
+ASM-PROV-06. Delivered IDs come from selected transcript bytes, never rounded JSON
+numbers. Byte selectors still reject duplicate disclosure delimiters.
+
 Both X and GitHub obtain token and identity through browser Proxy sessions.
-GitHub's [token selector](../src/platforms/github/1/token.ts) checks the complete
+GitHub's [token selector](../src/platforms/github/1/transcript.ts) checks the complete
 request against the frozen canonical form before using the returned bearer.
 GitHub's identity request uses a fixed, generic User-Agent without browser or OS details. Exact header values and forbidden
 names are owned by code and the specification, not copied here.

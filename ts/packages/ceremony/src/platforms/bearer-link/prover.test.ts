@@ -60,6 +60,7 @@ const ceremonyId = '6e171568-54e1-4f0d-aeb5-e8859826476a'
 for (const platform of ['x', 'github'] as const) {
   it.each([
     'accepted',
+    'identity-shape',
     'opening-range',
     'shifted-range',
     'attestation-mismatch',
@@ -107,9 +108,11 @@ for (const platform of ['x', 'github'] as const) {
             const body =
               index === 0
                 ? `{ "access_token" : "${bearer}", "token_type": "bearer" }`
-                : platform === 'x'
-                  ? `{ "data": { "username": "alice", "id": "${userId}" } }`
-                  : `{ "login" : "alice", "id" : ${userId} , "unused": true }`
+                : outcome === 'identity-shape'
+                  ? `{ "login": "alice", "other": { "id": ${platform === 'x' ? `"${userId}"` : userId}, "username": "alice" } }`
+                  : platform === 'x'
+                    ? `{ "data": { "username": "alice", "id": "${userId}" } }`
+                    : `{ "login" : "alice", "id" : ${userId} , "unused": true }`
             transcript = {
               sent: concat(encode(header), request.body),
               received: encode(
@@ -215,15 +218,19 @@ for (const platform of ['x', 'github'] as const) {
       const pending = (platform === 'x' ? x : github)(context)
       if (outcome !== 'accepted') {
         await expect(pending).rejects.toThrow(
-          outcome === 'shifted-range'
-            ? 'Identity commitment must match notarization'
-            : outcome === 'startup-cancel'
-              ? 'Closed during startup'
-              : outcome === 'opening-range'
-                ? 'Bearer opening is not unique'
-                : outcome === 'attestation-mismatch'
-                  ? 'attested authority changed'
-                  : 'public input mismatch',
+          outcome === 'identity-shape'
+            ? platform === 'github'
+              ? 'Invalid GitHub identity'
+              : 'Invalid identity response'
+            : outcome === 'shifted-range'
+              ? 'Identity commitment must match notarization'
+              : outcome === 'startup-cancel'
+                ? 'Closed during startup'
+                : outcome === 'opening-range'
+                  ? 'Bearer opening is not unique'
+                  : outcome === 'attestation-mismatch'
+                    ? 'attested authority changed'
+                    : 'public input mismatch',
         )
       } else {
         const result = await pending
