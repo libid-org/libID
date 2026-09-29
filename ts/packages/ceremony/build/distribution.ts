@@ -25,13 +25,6 @@ type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
 
 type Records = Map<string, PublicRecord>
 
-type Put = (
-  path: string,
-  body: string | Uint8Array,
-  profile: ResponseProfile | Record<string, string>,
-  headers?: Record<string, string>,
-) => void
-
 const index = process.argv.indexOf('--out-dir'),
   out = resolve(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
 
@@ -111,13 +104,16 @@ async function buildDistribution() {
     ],
   }
   // Header names are normalized once, to the lowercase `Headers` form, so records compare directly.
-  const put: Put = (path, content, profile, headers = {}) => {
-    const merged = new Headers(
-      typeof profile === 'string' ? responseHeaders(profile, options) : profile,
+  const put = (
+    path: string,
+    content: string | Uint8Array,
+    policy: ResponseProfile | Record<string, string>,
+  ) => {
+    const headers = new Headers(
+      typeof policy === 'string' ? responseHeaders(policy, options) : policy,
     )
-    if (profile === 'asset') merged.set('Content-Type', mediaType(path))
-    for (const [name, value] of Object.entries(headers)) merged.set(name, value)
-    const record = { bytes: Buffer.from(content), headers: Object.fromEntries(merged) },
+    if (policy === 'asset') headers.set('Content-Type', mediaType(path))
+    const record = { bytes: Buffer.from(content), headers: Object.fromEntries(headers) },
       old = records.get(path)
     if (old && !sameRecord(old, record)) throw new Error(`Conflicting output: ${path}`)
     records.set(path, record)
@@ -130,7 +126,6 @@ async function buildDistribution() {
         messages.brand,
         `<main id="libid-root"></main><script>${scripts[0]}</script><script type="module">${scripts[1]}</script>`,
       ),
-      profile,
       responseHeaders(profile, { ...options, inline: scripts }),
     )
   }
@@ -176,7 +171,6 @@ async function buildDistribution() {
         messages.brand,
         `<main id="libid-root"></main><script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script>`,
       ),
-      'callback',
       responseHeaders('callback', { ...options, inline: [code] }),
     )
   }

@@ -26,13 +26,12 @@ export async function readArchive(source: string): Promise<Map<string, Buffer>> 
     parser.on('entry', (entry) => {
       try {
         const path = entry.path.replace(/^(\.\/)+/, '').replace(/\/$/, '')
-        if (!path && entry.type === 'Directory') {
-          entry.resume()
-          return
+        // The archive root directory has no path of its own.
+        if (path || entry.type !== 'Directory') {
+          safePath(path)
+          if (entries.has(path)) throw new Error(`Duplicate archive entry: ${path}`)
+          entries.add(path)
         }
-        safePath(path)
-        if (entries.has(path)) throw new Error(`Duplicate archive entry: ${path}`)
-        entries.add(path)
         if (entry.type === 'Directory') {
           entry.resume()
           return

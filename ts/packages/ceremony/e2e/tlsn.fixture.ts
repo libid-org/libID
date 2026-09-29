@@ -7,6 +7,7 @@ import type { NotaryHttpRequest } from '../src/notary/session.worker.js'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
+const tokenResponse = '{ "access_token" : "fixture_BEARER-123", "token_type": "bearer" }'
 
 class FixtureSocket extends EventTarget {
   static OPEN = 1
@@ -48,11 +49,9 @@ export class Prover {
 
   async send_request(_: null, request: NotaryHttpRequest) {
     const responses: Record<string, string> = {
-      'api.x.com/2/oauth2/token':
-        '{ "access_token" : "fixture_BEARER-123", "token_type": "bearer" }',
+      'api.x.com/2/oauth2/token': tokenResponse,
       'api.x.com/2/users/me': '{ "data" : { "id" : "9007199254740993", "username" : "alice" } }',
-      'github.com/login/oauth/access_token':
-        '{ "access_token" : "fixture_BEARER-123", "token_type": "bearer" }',
+      'github.com/login/oauth/access_token': tokenResponse,
       'api.github.com/user': '{ "id" : 9007199254740993 , "login" : "alice" }',
     }
     const body = responses[this.config.server_name + request.uri]

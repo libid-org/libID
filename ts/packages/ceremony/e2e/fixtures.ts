@@ -1,7 +1,15 @@
+import { readFileSync } from 'node:fs'
 import { test as base, expect, type Page } from '@playwright/test'
+import type { AssetRequest } from '../src/assets/index.js'
 import { origins } from './topology.js'
 
 export { expect }
+
+const graph = new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url)
+
+/** The exact requests of `profile` in the emitted graph of the artifact the harness serves. */
+export const artifactRequests = (profile: string): AssetRequest[] =>
+  JSON.parse(readFileSync(graph, 'utf8')).requestsByProfile[profile]
 
 export const test = base.extend<{
   app: string

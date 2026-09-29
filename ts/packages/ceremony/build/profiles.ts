@@ -32,6 +32,9 @@ const base = shared.csp.base
 
 const documents: readonly ResponseProfile[] = ['callback', 'prefetch', 'prover', 'proverFallback']
 
+/** Revalidated scripts; documents already declare both in `shared.document`. */
+const revalidated = { 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' }
+
 /** Bundled workers under COEP; the notary session worker alone connects to notaries. */
 export const isolatedWorkers: readonly ResponseProfile[] = [
   'notaryWorker',
@@ -53,31 +56,18 @@ export function responseHeaders(
     immutable = profile === 'asset' || isolatedWorkers.includes(profile)
   const headers: Record<string, string> = {
     ...(html ? shared.document : shared.javascript),
-    ...(immutable ? shared.immutable : { 'X-Content-Type-Options': 'nosniff' }),
-    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-    'Content-Type': html ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8',
+    ...(immutable ? shared.immutable : revalidated),
   }
   if (profile === 'callback')
     return {
       ...headers,
       'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'`,
-      'Cross-Origin-Opener-Policy': 'unsafe-none',
-      'Referrer-Policy': 'no-referrer',
     }
   headers['Cross-Origin-Resource-Policy'] = 'same-origin'
   if (profile === 'asset') return headers
   headers['Content-Security-Policy'] = executableCsp(profile, inline, externalOrigins)
-  if (profile === 'worker') {
-    headers['Service-Worker-Allowed'] = '/'
-    return headers
-  }
-  if (isolatedWorkers.includes(profile)) {
-    headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
-    return headers
-  }
-  headers['Referrer-Policy'] = 'no-referrer'
-  headers['Cross-Origin-Opener-Policy'] =
-    profile === 'proverFallback' ? 'same-origin' : 'unsafe-none'
+  if (profile === 'worker') headers['Service-Worker-Allowed'] = '/'
+  if (isolatedWorkers.includes(profile)) headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
   if (profile === 'prover') Object.assign(headers, shared.dip)
   if (profile === 'proverFallback') Object.assign(headers, shared.isolated)
   return headers

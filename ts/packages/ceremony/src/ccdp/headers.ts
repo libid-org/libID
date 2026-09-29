@@ -7,7 +7,6 @@ export const csp = {
   fetch: "'self' https:",
   // Exact loopback hosts only; public notaries still require TLS.
   websocket: 'wss: ws://localhost:* ws://127.0.0.1:*',
-  execution: `${base}; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:`,
 } as const
 
 export const immutable = {
@@ -34,7 +33,7 @@ export const document = {
 export const executionWorker = {
   ...javascript,
   'Cross-Origin-Embedder-Policy': 'require-corp',
-  'Content-Security-Policy': `${csp.execution}; connect-src ${csp.fetch} blob:`,
+  'Content-Security-Policy': `${base}; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src ${csp.fetch} blob:`,
 } as const
 
 export const dip = { 'Document-Isolation-Policy': 'isolate-and-require-corp' } as const

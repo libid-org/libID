@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import { findPackageJSON } from 'node:module'
 import { dirname, extname, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import type { Rollup } from 'vite'
@@ -11,10 +11,6 @@ import { assetPlugin } from './asset-plugin.ts'
 import { validateCircuitCapacity } from './circuits.ts'
 import { isolatedWorkers, parseCsp, responseHeaders } from './profiles.ts'
 import { hash, packageDir, readSource } from './sources.ts'
-
-export { assetPlugin } from './asset-plugin.ts'
-
-const require = createRequire(import.meta.url)
 
 export async function loadAssetCatalog() {
   const result = await build({
@@ -125,16 +121,9 @@ function installedFile(source: string): Buffer {
   const path = source.slice(4),
     parts = path.split('/'),
     pkg = path.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
-  let directory = dirname(require.resolve(pkg))
-  while (
-    !existsSync(join(directory, 'package.json')) ||
-    JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')).name !== pkg
-  ) {
-    const parent = dirname(directory)
-    if (parent === directory) throw new Error('Package root missing')
-    directory = parent
-  }
-  return readFileSync(join(directory, safePath(path.slice(pkg.length + 1))))
+  const manifest = findPackageJSON(pkg, import.meta.url)
+  if (!manifest) throw new Error('Package root missing')
+  return readFileSync(join(dirname(manifest), safePath(path.slice(pkg.length + 1))))
 }
 
 /** The key of a local asset's built URL in `urls`, as the runtime assetUrl looks it up. */
@@ -152,13 +141,14 @@ export async function resolveAssets() {
   const urls: Record<string, string> = {},
     moduleUrls: Record<string, string> = {},
     bodyHashes: Record<string, string> = {}
-  const local = new Map<string, { bytes: Buffer; headers: Record<string, string> }>()
-  const selections = new Map<string, string>(),
+  const local = new Map<string, { bytes: Buffer; headers: Record<string, string> }>(),
     mounts = new Map<string, string>()
   const register = (path: string, bytes: Buffer, policy: Record<string, string>) => {
+    const old = local.get(path)
+    if (old && JSON.stringify(old.headers) !== JSON.stringify(policy))
+      throw new Error(`Conflicting asset policy: ${path}`)
     // WASM resources have decoded bodies; HTTP compression belongs to the static server.
     if (path.endsWith('.wasm') && bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = gunzipSync(bytes)
-    const old = local.get(path)
     if (old && !old.bytes.equals(bytes)) throw new Error(`Conflicting asset body: ${path}`)
     local.set(path, { bytes, headers: policy })
   }
@@ -172,21 +162,15 @@ export async function resolveAssets() {
     if (asset.member !== undefined) {
       if (mounts.has(asset.mount) && mounts.get(asset.mount) !== asset.source)
         throw new Error('Conflicting archive mount')
-      const first = !mounts.has(asset.mount)
       if (
-        first &&
         [...mounts.keys()].some(
           (mount) => mount.startsWith(`${asset.mount}/`) || asset.mount.startsWith(`${mount}/`),
         )
       )
         throw new Error('Overlapping archive mounts')
       mounts.set(asset.mount, asset.source)
-      let archive = archives.get(asset.source)
-      if (!archive) {
-        archive = readArchive(asset.source)
-        archives.set(asset.source, archive)
-      }
-      const files = await archive
+      if (!archives.has(asset.source)) archives.set(asset.source, readArchive(asset.source))
+      const files = await archives.get(asset.source)!
       const member = selectMember(files, asset.member)
       path = `/ccdp/assets/${asset.mount}/${member}`
       bytes = files.get(member)!
@@ -196,12 +180,7 @@ export async function resolveAssets() {
         ? installedFile(asset.source)
         : await readSource(asset.source)
     }
-    const policy = assetHeaders(path, asset.headers),
-      signature = JSON.stringify(policy)
-    if (selections.has(path) && selections.get(path) !== signature)
-      throw new Error(`Conflicting asset policy: ${path}`)
-    selections.set(path, signature)
-    register(path, bytes, policy)
+    register(path, bytes, assetHeaders(path, asset.headers))
     urls[assetKey(asset)] = path
     for (const module of asset.bundledUrlModules ?? []) moduleUrls[module] = path
   }

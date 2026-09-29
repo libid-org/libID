@@ -2,12 +2,11 @@ import { dirname, join, posix } from 'node:path'
 import type { NewExpression } from 'estree'
 import type { Plugin, Rollup } from 'vite'
 import { build } from 'vite'
-import type { AssetManifest } from './asset-plugin.ts'
+import { type AssetManifest, assetPlugin } from './asset-plugin.ts'
 import type { ResolvedAssets } from './assets.ts'
-import { assetPlugin } from './assets.ts'
 import { applyEdits, type Edit, parseModule, replacement, walk } from './ast.ts'
 import { consumeInput } from './input.ts'
-import { popupPlugin } from './popup.ts'
+import { popupFallback } from './popup.ts'
 import { hash, packageDir } from './sources.ts'
 
 export type BundleNode = {
@@ -19,6 +18,13 @@ export type BundleNode = {
 /** Vite's worker-URL import query; graph modules carry it as their id suffix. */
 export const workerUrl = '?worker&url'
 
+/** A plugin named `name` serving `code` as the module `virtual:<name>`. */
+const virtualModule = (name: string, code: string): Plugin => ({
+  name,
+  resolveId: (id) => (id === `virtual:${name}` ? `\0${id}` : undefined),
+  load: (id) => (id === `\0virtual:${name}` ? code : undefined),
+})
+
 /** Compiler AST rewriting keeps inline module imports rooted at the distribution. */
 function absoluteImports(): Plugin {
   return {
@@ -26,11 +32,9 @@ function absoluteImports(): Plugin {
     renderChunk(code, chunk) {
       const edits: Edit[] = []
       walk(this.parse(code), (node) => {
+        // Static and dynamic imports and re-exports are the nodes with a module `source`.
         if (
-          (node.type === 'ImportDeclaration' ||
-            node.type === 'ExportNamedDeclaration' ||
-            node.type === 'ExportAllDeclaration' ||
-            node.type === 'ImportExpression') &&
+          'source' in node &&
           node.source?.type === 'Literal' &&
           typeof node.source.value === 'string' &&
           /^\.\.?\//.test(node.source.value)
@@ -132,21 +136,19 @@ export async function bundle(
       }
     },
   })
-  const entryPlugin: Plugin = {
-    name: 'ceremony-entry',
-    resolveId(id) {
-      if (id === 'virtual:ceremony-entry') return `\0${id}`
-    },
-    load(id) {
-      if (id !== '\0virtual:ceremony-entry') return
-      const start = input ? consumeInput(invoke!) : `${invoke}()`
-      return `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};${start}`
-    },
-  }
+  const start = input ? consumeInput(invoke!) : `${invoke}()`
   const plugins = (worker: boolean) => [
     workerImports(),
-    entryPlugin,
-    popupPlugin(),
+    virtualModule(
+      'ceremony-entry',
+      `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};${start}`,
+    ),
+    virtualModule(
+      'ceremony-popup-fallback',
+      popupFallback.module
+        ? `export {fallback} from ${JSON.stringify(popupFallback.module)}`
+        : 'export const fallback=undefined',
+    ),
     assetPlugin(data, manifest),
     absoluteImports(),
     record(worker),

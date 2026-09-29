@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { testnet } from '@libid/ledger/testing'
 import { decodeAttestedData } from '../src/notary/decode.js'
 import {
@@ -6,7 +5,7 @@ import {
   deriveCodeChallenge,
   deriveCodeVerifier,
 } from '../src/platforms/authorization.js'
-import { expect, test } from './fixtures.js'
+import { artifactRequests, expect, test } from './fixtures.js'
 import { verifyBrowserProof } from './verify.js'
 
 for (const platform of ['x', 'github'] as const)
@@ -22,15 +21,7 @@ for (const platform of ['x', 'github'] as const)
       test.setTimeout(480000)
       // Only OAuth and the TLSN SDK/peer are synthetic. Actual emitted documents,
       // popup continuity, session worker, witness/proof generation and Client run.
-      const graph = JSON.parse(
-        readFileSync(
-          new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url),
-          'utf8',
-        ),
-      )
-      const asset = graph.requestsByProfile[`${platform}/1`].find((a: { url: string }) =>
-        a.url.endsWith('/tlsn_wasm.js'),
-      )
+      const asset = artifactRequests(`${platform}/1`).find((a) => a.url.endsWith('/tlsn_wasm.js'))!
       expect(
         (
           await request.get(`${assetControl(asset.url)}&tlsn=${corrupt ? 'invalid' : 'valid'}`)
