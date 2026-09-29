@@ -8,7 +8,7 @@ import {
   pad,
 } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import type { Identity } from '../../types.js'
-import { type GoogleProofV1, validateIdentity, validateProof } from './types.js'
+import type { GoogleProofV1 } from './types.js'
 
 const encoder = new TextEncoder()
 
@@ -17,14 +17,12 @@ const field = (value: bigint | number) => `0x${BigInt(value).toString(16).padSta
 const packed = (value: string, width: number) =>
   pack31(pad(encoder.encode(value), width)).map(field)
 
-/** Flatten Google v1's named proof values into the exact 56 verifier fields. */
+/** Flatten validated Google v1 identity/proof values into the exact 56 verifier fields. */
 export function buildGooglePublicInputs(
   authorizationDigest: Uint8Array,
   identity: Identity<'google'>,
-  value: GoogleProofV1,
+  proof: Pick<GoogleProofV1, 'tokenExpiresAt' | 'signingKeyModulus'>,
 ): string[] {
-  const proof = validateProof(value)
-  validateIdentity(identity)
   if (authorizationDigest.length !== 32) {
     throw new Error('authorizationDigest must be exactly 32 bytes')
   }
@@ -38,14 +36,14 @@ export function buildGooglePublicInputs(
   ]
 }
 
-/** Exact-match bb.js output before discarding its positional array. */
+/** Compare every circuit field in order; canonical hex makes string equality byte equality. */
 export function validateGooglePublicInputs(
   value: unknown,
   authorizationDigest: Uint8Array,
   identity: Identity<'google'>,
-  proof: GoogleProofV1,
+  proof: Pick<GoogleProofV1, 'tokenExpiresAt' | 'signingKeyModulus'>,
 ): value is string[] {
   if (!Array.isArray(value)) return false
   const expected = buildGooglePublicInputs(authorizationDigest, identity, proof)
-  return value.length === expected.length && value.every((item, index) => item === expected[index])
+  return value.length === expected.length && expected.every((item, index) => item === value[index])
 }

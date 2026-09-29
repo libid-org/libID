@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { type BrowserContext, expect, test } from '@playwright/test'
+import { buildGooglePublicInputs } from '../../../packages/ceremony/src/platforms/google/1/publicInputs.js'
 
 const configUrl = 'http://localhost:4682/api/v1/ceremony/config'
 // Deliberately differs from the development deployment: the Bridge selects CCDP.
@@ -33,6 +34,7 @@ async function serveCeremony(context: BrowserContext) {
   const popupModule = await servePopup(context)
   const document = (
     prover: boolean,
+    nonce: string | null = null,
   ) => `<!doctype html><title>Event transport fixture</title><script type="module">
       import { PopupConnection, PopupWindow } from '${popupModule}';
       const id = new URLSearchParams(location.hash.slice(1)).get('ceremonyId');
@@ -41,19 +43,34 @@ async function serveCeremony(context: BrowserContext) {
       });
       ${prover ? `connection.on({ type: 'prove-identity', decode: value => value }, value => { window.requested = true; window.proveIdentity = value });` : ''}
       await connection.ready;
+      window.googlePublicInputs = ${JSON.stringify(
+        nonce === null
+          ? []
+          : buildGooglePublicInputs(
+              Uint8Array.from(Buffer.from(nonce, 'base64url')),
+              { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
+              { tokenExpiresAt: 42, signingKeyModulus: new Uint8Array(256) },
+            ),
+      )};
       ${prover ? 'window.eventConnection = connection;' : "connection.send({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: performance.timeOrigin + performance.now(), instrumentation: { attributes: { 'document-startup-ms': 25, 'connection-ms': 2000, 'worker-ready-ms': 75, 'dispatch-ms': 30 } } });"}
     </script>`
   await context.route(`${ccdp}/ccdp/v1/prefetch**`, (route) =>
     route.fulfill({ contentType: 'text/html', body: document(false) }),
   )
   await context.route(`${ccdp}/event-test**`, (route) =>
-    route.fulfill({ contentType: 'text/html', body: document(true) }),
+    route.fulfill({
+      contentType: 'text/html',
+      body: document(true, new URL(route.request().url()).searchParams.get('nonce')),
+    }),
   )
   await context.route(/https:\/\/(accounts\.google\.com|x\.com|github\.com)\//, (route) => {
-    const id = new URL(route.request().url()).searchParams.get('state')!.slice(3)
+    const params = new URL(route.request().url()).searchParams
+    const id = params.get('state')!.slice(3)
+    const nonce = params.get('nonce')
+    const query = nonce === null ? '' : `?${new URLSearchParams({ nonce })}`
     return route.fulfill({
       contentType: 'text/html',
-      body: `<script>window.returnUrl = ${JSON.stringify(`${ccdp}/event-test#ceremonyId=${id}`)}</script>`,
+      body: `<script>window.returnUrl = ${JSON.stringify(`${ccdp}/event-test${query}#ceremonyId=${id}`)}</script>`,
     })
   })
 }
@@ -568,6 +585,8 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
               },
               proof: {
                 identityProof: new Uint8Array([1]),
+                publicInputs: (window as unknown as { googlePublicInputs: string[] })
+                  .googlePublicInputs,
                 tokenExpiresAt: 42,
                 signingKeyModulus: new Uint8Array(256),
               },
@@ -702,6 +721,7 @@ for (const blocked of [false, true]) {
         identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
         proof: {
           identityProof: new Uint8Array([1]),
+          publicInputs: (window as unknown as { googlePublicInputs: string[] }).googlePublicInputs,
           tokenExpiresAt: 42,
           signingKeyModulus: new Uint8Array(256),
         },

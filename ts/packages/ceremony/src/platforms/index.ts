@@ -14,13 +14,13 @@ export type { Identity } from './types.js'
 /** Validate each version's proof before deriving its retention metadata. */
 const resultAdapter = <I, P>(types: {
   validateIdentity(value: unknown): I
-  validateProof(value: unknown): P
+  validateProof(value: unknown, identity: I, authorizationDigest: Uint8Array): P
   proofExpiresAt(proof: P): number
 }) => ({
-  validateIdentity: types.validateIdentity,
-  acceptProof(value: unknown) {
-    const proof = types.validateProof(value)
-    return { proof, expiresAt: types.proofExpiresAt(proof) }
+  acceptResult(identityValue: unknown, proofValue: unknown, authorizationDigest: Uint8Array) {
+    const identity = types.validateIdentity(identityValue)
+    const proof = types.validateProof(proofValue, identity, authorizationDigest)
+    return { identity, proof, expiresAt: types.proofExpiresAt(proof) }
   },
 })
 
@@ -54,7 +54,7 @@ export type SupportedCeremonyVersion<P extends PlatformId> = P extends PlatformI
 export type ProofByPlatformVersion = {
   [P in PlatformId]: {
     [V in SupportedCeremonyVersion<P>]: ReturnType<
-      (typeof platforms)[P]['versions'][V]['acceptProof']
+      (typeof platforms)[P]['versions'][V]['acceptResult']
     >['proof']
   }
 }
@@ -68,6 +68,8 @@ export type OAuthProof<P extends PlatformId = PlatformId> = {
     [V in SupportedCeremonyVersion<K>]: {
       platformCeremonyVersion: V
       authorizationNonce: Uint8Array
+      /** The client-derived, 32-byte digest binding this proof to its ledger operation. */
+      authorizationDigest: Uint8Array
       proof: ProofByPlatformVersion[K][V]
       /** Unix seconds; unusable at block time >= expiresAt. Retention only, not verification. */
       expiresAt: number
@@ -85,10 +87,14 @@ export function assembleResult<P extends PlatformId>(
   message: IdentityProof,
   clientId: string,
   authorizationNonce: Uint8Array,
+  authorizationDigest: Uint8Array,
 ): IdentityResult<P> {
   const implementation = implementationFor(platformId, version)
-  const identity = implementation.validateIdentity(message.identity)
-  const { proof, expiresAt } = implementation.acceptProof(message.proof)
+  const { identity, proof, expiresAt } = implementation.acceptResult(
+    message.identity,
+    message.proof,
+    authorizationDigest,
+  )
   if (identity.oauthClientId !== clientId) throw new TypeError('OAuth client ID mismatch')
   return {
     status: 'accepted',
@@ -96,6 +102,7 @@ export function assembleResult<P extends PlatformId>(
     oauthProof: {
       platformCeremonyVersion: version,
       authorizationNonce: authorizationNonce.slice(),
+      authorizationDigest: authorizationDigest.slice(),
       proof,
       expiresAt,
     },

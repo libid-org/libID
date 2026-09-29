@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, it } from 'vitest'
 import { validateIdentity as github } from './github/1/types.js'
+import { buildGooglePublicInputs } from './google/1/publicInputs.js'
 import { validateIdentity as google, isClientId, validateProof } from './google/1/types.js'
 import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from './index.js'
 import { assembleResult } from './index.js'
@@ -38,21 +39,70 @@ it('admits only Google client IDs a signed circuit audience can equal', () => {
 })
 
 it('narrows the separate identity/proof message and rejects nested identity [LIBID-MOD-019]', () => {
+  const digest = new Uint8Array(32).fill(7)
+  const fields = { tokenExpiresAt: 42, signingKeyModulus: new Uint8Array(256) }
+  const identity = {
+    platformId: 'google' as const,
+    oauthClientId: 'client',
+    userId: '1',
+    userName: 'a@b.c',
+  }
   const message = {
     type: 'identity-proof' as const,
-    identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
+    identity,
     proof: {
       identityProof: new Uint8Array([1]),
-      tokenExpiresAt: 42,
-      signingKeyModulus: new Uint8Array(256),
+      ...fields,
+      publicInputs: buildGooglePublicInputs(digest, identity, fields),
     },
   }
-  expect(assembleResult('google', 1, message, 'client', new Uint8Array(32))).toMatchObject({
+  expect(assembleResult('google', 1, message, 'client', new Uint8Array(32), digest)).toMatchObject({
     identity: message.identity,
-    oauthProof: { proof: message.proof, expiresAt: 42 },
+    oauthProof: { proof: message.proof, expiresAt: 42, authorizationDigest: digest },
   })
-  expect(() => validateProof({ ...message.proof, identity: message.identity })).toThrow()
-  expect(() => validateProof({ ...message.proof, expiresAt: 42 })).toThrow()
+  expect(() =>
+    validateProof({ ...message.proof, identity: message.identity }, identity, digest),
+  ).toThrow()
+  expect(() => validateProof({ ...message.proof, expiresAt: 42 }, identity, digest)).toThrow()
+})
+
+it('requires a dense array of 56 canonical Google fields [LIBID-OAUTH-013]', () => {
+  const digest = new Uint8Array(32)
+  const identity = {
+    platformId: 'google' as const,
+    oauthClientId: 'client',
+    userId: '1',
+    userName: 'a@b.c',
+  }
+  const fields = { tokenExpiresAt: 42, signingKeyModulus: new Uint8Array(256) }
+  const valid = buildGooglePublicInputs(digest, identity, fields)
+  for (const publicInputs of [
+    undefined,
+    null,
+    {},
+    [],
+    valid.slice(1),
+    [...valid, valid[0]],
+    new Array(56),
+    ...[
+      0,
+      null,
+      '0x00',
+      '00'.repeat(32),
+      `0X${'00'.repeat(32)}`,
+      `0x${'AA'.repeat(32)}`,
+      `0x${'gg'.repeat(32)}`,
+      `${valid[0]}\n`,
+    ].map((field) => [field, ...valid.slice(1)]),
+  ]) {
+    expect(() =>
+      validateProof(
+        { identityProof: new Uint8Array([1]), ...fields, publicInputs },
+        identity,
+        digest,
+      ),
+    ).toThrow('Invalid Google proof')
+  }
 })
 
 // Canonical libid-rs fixture: the u64 creation timestamp starts after the 32-byte authority.
@@ -90,7 +140,14 @@ it.each(['x', 'github'] as const)(
         identity: { platformId, oauthClientId: 'client', userId: '1', userName: 'alice' },
         proof,
       }
-      const result = assembleResult(platformId, 1, message, 'client', new Uint8Array(32))
+      const result = assembleResult(
+        platformId,
+        1,
+        message,
+        'client',
+        new Uint8Array(32),
+        new Uint8Array(32),
+      )
       expect(result).toMatchObject({ status: 'accepted', oauthProof: { proof, expiresAt } })
       expect(proof).not.toHaveProperty('expiresAt')
       expect(() =>
@@ -99,6 +156,7 @@ it.each(['x', 'github'] as const)(
           1,
           { ...message, proof: { ...proof, expiresAt } },
           'client',
+          new Uint8Array(32),
           new Uint8Array(32),
         ),
       ).toThrow(`Invalid ${platformId} proof`)
@@ -129,6 +187,7 @@ it.each(['x', 'github'] as const)(
           },
           'client',
           new Uint8Array(32),
+          new Uint8Array(32),
         ),
       ).toThrow(/invalid attested data|Proof expiry exceeds safe integer range/)
     }
@@ -146,6 +205,12 @@ function checkResultTypes(result: IdentityResult) {
   if (isGoogle(result)) {
     const proof: Uint8Array = result.oauthProof.proof.identityProof
     const expiresAt: number = result.oauthProof.expiresAt
+    const digest: Uint8Array = result.oauthProof.authorizationDigest
+    const publicInputs: readonly string[] = result.oauthProof.proof.publicInputs
+    // @ts-expect-error Delivered Google fields are readonly.
+    result.oauthProof.proof.publicInputs.push('0x00')
+    void digest
+    void publicInputs
     void proof
     void expiresAt
   }

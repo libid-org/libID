@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import type { LedgerId } from '@libid/ledger'
 import { mainnet, testnet } from '@libid/ledger/testing'
 import {
@@ -11,8 +12,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
 import type { CeremonyEvent } from '../../events.js'
 import { deriveAuthorizationDigest, deriveCodeChallenge } from '../../platforms/authorization.js'
+import { buildGooglePublicInputs } from '../../platforms/google/1/publicInputs.js'
 import { platforms } from '../../platforms/index.js'
-import { b64urlEncode } from '../../primitives.js'
+import { b64urlDecode, b64urlEncode } from '../../primitives.js'
 import { popupErrorMessages } from '../ui-messages.js'
 import { ccdpClientFromConfig } from './ceremony.js'
 import { fetchCeremonyConfig, validateCeremonyConfig } from './config.js'
@@ -81,10 +83,15 @@ const identity = {
   userName: 'a@b.c',
 }
 
-const proof = {
-  identityProof: new Uint8Array([1]),
-  tokenExpiresAt: 42,
-  signingKeyModulus: new Uint8Array(256),
+function proofFor(connection: Connection) {
+  const url = connection.navigations.at(-1)
+  const digest = url ? b64urlDecode(new URL(url).searchParams.get('nonce')!)! : new Uint8Array(32)
+  const fields = { tokenExpiresAt: 42, signingKeyModulus: new Uint8Array(256) }
+  return {
+    identityProof: new Uint8Array([1]),
+    ...fields,
+    publicInputs: buildGooglePublicInputs(digest, identity, fields),
+  }
 }
 
 describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
@@ -107,17 +114,28 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       codeVerifier: null,
       notaryAddress: testnet.notaryAddress(),
     })
-    c.receive({ type: 'identity-proof', identity, proof })
+    c.receive({ type: 'identity-proof', identity, proof: proofFor(c) })
     const result = await pending
     if (result.status !== 'accepted') throw new Error('Expected accepted')
     expect(result.identity).toBe(identity)
     expect(Object.keys(result.oauthProof)).toEqual([
       'platformCeremonyVersion',
       'authorizationNonce',
+      'authorizationDigest',
       'proof',
       'expiresAt',
     ])
     expect(result.oauthProof.expiresAt).toBe(42)
+    expect(result.oauthProof.authorizationDigest).toEqual(
+      deriveAuthorizationDigest({
+        chainId: testnet.hash(),
+        operationDomain: new Uint8Array(32),
+        transactionData: new Uint8Array([1, 2]),
+        platformCeremonyVersion: 1,
+        authorizationNonce: result.oauthProof.authorizationNonce,
+      }),
+    )
+    expect(result.oauthProof.authorizationDigest).toHaveLength(32)
     expect(new URL(c.navigateAway.mock.calls[0][0]).searchParams.get('redirect_uri')).toBe(
       config.redirectUri,
     )
@@ -141,7 +159,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       'completed',
     ])
     expect(c.close).not.toHaveBeenCalled()
-    c.receive({ type: 'identity-proof', identity, proof })
+    c.receive({ type: 'identity-proof', identity, proof: proofFor(c) })
     expect(events).toEqual([
       'prefetch-dispatch.started',
       'prefetch-dispatch.finished',
@@ -156,7 +174,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     const result = ceremony.proveUserIdentity()
     const rejection = expect(result).rejects.toBeInstanceOf(CeremonyError)
     await c.close()
-    c.receive({ type: 'identity-proof', identity, proof })
+    c.receive({ type: 'identity-proof', identity, proof: proofFor(c) })
     await rejection
     expect(c.close).toHaveBeenCalledOnce()
     expect(c.send).not.toHaveBeenCalled()
@@ -382,25 +400,42 @@ it.each(['google', 'x', 'github'] as const)(
       )
     }
     for (const key of ['ledgerId', 'chainId', 'isTestnet']) expect(message).not.toHaveProperty(key)
-    if (platformId === 'google') {
-      connection.receive({ type: 'identity-proof', identity, proof })
-      const result = await pending
-      if (result.status !== 'accepted') throw new Error('Expected proof')
-      expect(authorization.searchParams.get('nonce')).toBe(
-        b64urlEncode(
-          deriveAuthorizationDigest({
-            chainId: testnet.hash(),
-            operationDomain: new Uint8Array(32),
-            transactionData: new Uint8Array([1, 2]),
-            platformCeremonyVersion: 1,
-            authorizationNonce: result.oauthProof.authorizationNonce,
-          }),
+    const attestation = {
+      attestedData: Uint8Array.from(
+        Buffer.from(
+          readFileSync(
+            new URL('../../notary/libid-rs-239a4bb-attested-data.fixture.hex', import.meta.url),
+            'utf8',
+          ).trim(),
+          'hex',
         ),
-      )
-    } else {
-      connection.receive({ type: 'user-denied' })
-      await expect(pending).resolves.toEqual({ status: 'denied' })
+      ),
+      signature: new Uint8Array(65),
     }
+    connection.receive({
+      type: 'identity-proof',
+      identity: platformId === 'google' ? identity : { ...identity, platformId, userName: 'alice' },
+      proof:
+        platformId === 'google'
+          ? proofFor(connection)
+          : {
+              bearerLinkProof: new Uint8Array([1]),
+              tokenAttestation: attestation,
+              identityAttestation: attestation,
+            },
+    })
+    const result = await pending
+    if (result.status !== 'accepted') throw new Error('Expected proof')
+    const expectedDigest = deriveAuthorizationDigest({
+      chainId: testnet.hash(),
+      operationDomain: new Uint8Array(32),
+      transactionData: new Uint8Array([1, 2]),
+      platformCeremonyVersion: 1,
+      authorizationNonce: result.oauthProof.authorizationNonce,
+    })
+    expect(result.oauthProof.authorizationDigest).toEqual(expectedDigest)
+    if (platformId === 'google')
+      expect(authorization.searchParams.get('nonce')).toBe(b64urlEncode(expectedDigest))
   },
 )
 
@@ -482,7 +517,7 @@ it.each([
   const result = ceremony.proveUserIdentity()
   connection.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
   connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
-  connection.receive({ type: 'identity-proof', identity, proof })
+  connection.receive({ type: 'identity-proof', identity, proof: proofFor(connection) })
   // Result validation keeps its own text; only ordering violations are sequence errors.
   await expect(result).rejects.toMatchObject({
     name: 'CeremonyError',
@@ -490,6 +525,44 @@ it.each([
     message: expect.not.stringContaining('sequence'),
   })
 })
+
+it.each(['digest', 'audience', 'subject', 'email', 'expiry', 'modulus', 'order'] as const)(
+  'rejects mismatched Google %s before resolving or announcing success [LIBID-OAUTH-014]',
+  async (changed) => {
+    const { connection, ceremony } = setup()
+    const statuses: string[] = []
+    ceremony.onEvent((event) => statuses.push(event.status))
+    const result = ceremony.proveUserIdentity()
+    connection.receive({
+      type: 'event',
+      event: 'prefetch-dispatch',
+      phase: 'finished',
+      timestamp: 1,
+    })
+    connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 2 })
+    const claimed = { ...identity }
+    const proof = proofFor(connection)
+    if (changed === 'digest')
+      proof.publicInputs[0] = `0x${(BigInt(proof.publicInputs[0]) ^ 1n).toString(16).padStart(64, '0')}`
+    if (changed === 'audience') claimed.oauthClientId = 'other-client'
+    if (changed === 'subject') claimed.userId = '2'
+    if (changed === 'email') claimed.userName = 'other@b.c'
+    if (changed === 'expiry') proof.tokenExpiresAt++
+    if (changed === 'modulus') proof.signingKeyModulus[0] ^= 1
+    if (changed === 'order')
+      [proof.publicInputs[34], proof.publicInputs[35]] = [
+        proof.publicInputs[35],
+        proof.publicInputs[34],
+      ]
+    connection.receive({ type: 'identity-proof', identity: claimed, proof })
+    await expect(result).rejects.toMatchObject({
+      name: 'CeremonyError',
+      event: 'prover',
+      message: 'Google public input mismatch',
+    })
+    expect(statuses.filter((status) => status !== 'active')).toEqual(['failed'])
+  },
+)
 
 it('keeps transport failure text instead of reporting it as an invalid sequence', async () => {
   const { connection, ceremony } = setup()
@@ -650,7 +723,7 @@ it.each(['success', 'denied', 'failed', 'closed', 'invalid-result', 'setup'] as 
         connection.receive({
           type: 'identity-proof',
           identity,
-          proof: outcome === 'success' ? proof : {},
+          proof: outcome === 'success' ? proofFor(connection) : {},
         })
       else if (outcome === 'denied') connection.receive({ type: 'user-denied' })
       else if (outcome === 'closed') await connection.close()
@@ -663,7 +736,7 @@ it.each(['success', 'denied', 'failed', 'closed', 'invalid-result', 'setup'] as 
     }
     await result
     await connection.close()
-    connection.receive({ type: 'identity-proof', identity, proof })
+    connection.receive({ type: 'identity-proof', identity, proof: proofFor(connection) })
     await connection.close()
     expect(events.filter((e) => e.status !== 'active')).toEqual([
       expect.objectContaining({
@@ -691,7 +764,7 @@ it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08
   const count = events.length
   connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 2 })
   connection.receive({ type: 'user-denied' })
-  connection.receive({ type: 'identity-proof', identity, proof })
+  connection.receive({ type: 'identity-proof', identity, proof: proofFor(connection) })
   expect(events).toHaveLength(count)
   expect(events.at(-1)).toMatchObject({ status: 'closed' })
   expect(connection.send).not.toHaveBeenCalled()
@@ -806,7 +879,7 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
       c.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
       c.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
       expect(c.send.mock.calls[0][0].platformCeremonyVersion).toBe(version)
-      c.receive({ type: 'identity-proof', identity, proof })
+      c.receive({ type: 'identity-proof', identity, proof: proofFor(c) })
       const result = await pending
       expect(result).toMatchObject({ oauthProof: { platformCeremonyVersion: version } })
       if (result.status !== 'accepted') throw new Error('Expected proof')
@@ -856,7 +929,7 @@ it('a lost optional operation start does not prevent accepted proof delivery [LI
   c.receive({ type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 })
   c.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 2 })
   c.receive({ type: 'event', event: 'proof', phase: 'finished', timestamp: 4 })
-  c.receive({ type: 'identity-proof', identity, proof })
+  c.receive({ type: 'identity-proof', identity, proof: proofFor(c) })
   await expect(result).resolves.toMatchObject({ status: 'accepted' })
 })
 

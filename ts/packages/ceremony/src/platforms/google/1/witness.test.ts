@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { GoogleCircuitInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import { buildGooglePublicInputs, validateGooglePublicInputs } from './publicInputs.js'
 import { parseGoogleIdToken } from './token.js'
+import { validateProof } from './types.js'
 import { buildGoogleWitness } from './witness.js'
 
 interface Fixture {
@@ -186,6 +187,15 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier field
 
     const proof = { identityProof: new Uint8Array([1]), ...proofFields }
     expect(buildGooglePublicInputs(digest, identity, proof)).toEqual(BB_PUBLIC_INPUTS)
+    const delivery = { ...proof, publicInputs: BB_PUBLIC_INPUTS }
+    expect(validateProof(delivery, identity, digest)).toBe(delivery)
+    for (let index = 0; index < BB_PUBLIC_INPUTS.length; index++) {
+      const publicInputs = [...BB_PUBLIC_INPUTS]
+      publicInputs[index] = `0x${(BigInt(publicInputs[index]) ^ 1n).toString(16).padStart(64, '0')}`
+      expect(() => validateProof({ ...delivery, publicInputs }, identity, digest)).toThrow(
+        'Google public input mismatch',
+      )
+    }
   })
 
   it('rejects malformed token and JWK values before witness construction', () => {

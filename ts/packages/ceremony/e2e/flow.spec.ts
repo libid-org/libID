@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { type: 'json' }
 import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
@@ -249,8 +250,10 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
   launch,
 }) => {
   test.setTimeout(480000)
-  // This controlled fixture is old and has its own digest. This proves runtime/key
-  // compatibility, not real consent or authorization for the application transaction.
+  // Synthetic issuer signs the actual application nonce; proving and verification are real.
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  const jwk = { ...publicKey.export({ format: 'jwk' }), kid: fixture.jwk.kid }
+  let nonce = ''
   // WebKit's controlled-page fetch bypasses Playwright routing. Substitute only
   // this public JWKS fixture at the page boundary; all proof assets use real loaders.
   // This does not qualify the live JWKS endpoint's CORS/CSP behavior.
@@ -265,11 +268,15 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
             }),
           )
         : fetch(...args)
-  }, fixture.jwk)
-  await provider(
-    (state) =>
-      `${bridge}/auth/callback#id_token=${fixture.idToken}&state=${state}&version_info=synthetic&provider_meta=future&release.rev=1`,
-  )
+  }, jwk)
+  await provider((state, requestedNonce) => {
+    nonce = requestedNonce
+    const [header, originalPayload] = fixture.idToken.split('.')
+    const payload = { ...JSON.parse(Buffer.from(originalPayload, 'base64url').toString()), nonce }
+    const signed = `${header}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
+    const token = `${signed}.${sign('RSA-SHA256', Buffer.from(signed), privateKey).toString('base64url')}`
+    return `${bridge}/auth/callback#id_token=${token}&state=${state}&version_info=synthetic&provider_meta=future&release.rev=1`
+  })
   await launch()
   await expect
     .poll(
@@ -295,6 +302,7 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
     const proof = result.oauthProof.proof
     return {
       identity: result.identity,
+      authorizationDigest: Array.from(result.oauthProof.authorizationDigest),
       ...proof,
       identityProof: Array.from(proof.identityProof),
       signingKeyModulus: Array.from(proof.signingKeyModulus),
@@ -302,13 +310,16 @@ test('real Google fixture proof under emitted CSP, independently released-key ve
   })
   const proof: GoogleProofV1 = {
     tokenExpiresAt: result.tokenExpiresAt,
+    publicInputs: result.publicInputs,
     identityProof: Uint8Array.from(result.identityProof),
     signingKeyModulus: Uint8Array.from(result.signingKeyModulus),
   }
-  const digest = Uint8Array.from(Buffer.from(fixture.authorizationDigest.replace(/^0x/, ''), 'hex'))
+  const digest = Uint8Array.from(result.authorizationDigest)
+  expect(Buffer.from(digest).toString('base64url')).toBe(nonce)
+  expect(proof.publicInputs).toEqual(buildGooglePublicInputs(digest, result.identity, proof))
   await verifyBrowserProof('oidc_google', {
     proof: result.identityProof,
-    publicInputs: buildGooglePublicInputs(digest, result.identity, proof),
+    publicInputs: [...proof.publicInputs],
   })
 })
 
