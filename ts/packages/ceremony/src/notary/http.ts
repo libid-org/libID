@@ -1,8 +1,7 @@
-import { parseJson } from '../json.js'
 import type { Transcript } from './protocol.js'
 
-/** Decode a successful HTTP response without altering transcript bytes; numeric root IDs can retain bigint precision. */
-export function responseJson(transcript: Transcript, numbersAsText = false): unknown {
+/** Decode a successful HTTP response without altering the transcript used for commitments. */
+export function responseJson(transcript: Transcript): unknown {
   const bytes = transcript.received,
     decoder = new TextDecoder('utf-8', { fatal: true }),
     text = decoder.decode(bytes),
@@ -66,42 +65,5 @@ export function responseJson(transcript: Transcript, numbersAsText = false): unk
     body = decoded
   } else if (length !== undefined && (!/^[0-9]+$/.test(length) || Number(length) !== body.length))
     throw new Error('HTTP length mismatch')
-  return (numbersAsText ? parseJsonNumbersAsText : parseJson)(decoder.decode(body))
-}
-
-/** Preserve numeric root fields as bigint, without ever rounding an identity ID. */
-function parseJsonNumbersAsText(source: string): unknown {
-  const numericRoots = new Map<string, string>()
-  let depth = 0
-  for (const match of source.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\]]/g)) {
-    const token = match[0]
-    if (token === '{' || token === '[') depth++
-    else if (token === '}' || token === ']') depth--
-    else if (depth === 1) {
-      const number = /^\s*:\s*(-?(?:0|[1-9][0-9]*))\s*[,}]/.exec(
-        source.slice(match.index + token.length),
-      )
-      if (number) numericRoots.set(JSON.parse(token), number[1])
-    }
-  }
-  const value = parseJson(
-    source.replace(
-      /"(?:[^"\\]|\\.)*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/g,
-      (token, offset) => {
-        if (token.startsWith('"')) return token
-        if (/^\s*:/.test(source.slice(offset + token.length)))
-          throw new TypeError('Invalid JSON object key')
-        return JSON.stringify(token)
-      },
-    ),
-  )
-  if (value && typeof value === 'object' && !Array.isArray(value))
-    for (const [key, number] of numericRoots)
-      Object.defineProperty(value, key, {
-        value: BigInt(number),
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      })
-  return value
+  return JSON.parse(decoder.decode(body))
 }

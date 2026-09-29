@@ -8,8 +8,13 @@ import { proveBearerLink } from '../../bearer-link/prover.js'
 import { parseCodeOAuthReturn } from '../../codeReturn.js'
 import type { ProverContext } from '../../context.js'
 import type { Identity } from '../../types.js'
-import { buildTokenRequest, selectToken } from './token.js'
-import { identityRequest, selectIdentity } from './transcript.js'
+import {
+  buildIdentityRequest,
+  buildTokenRequest,
+  identityUrl,
+  selectIdentity,
+  selectToken,
+} from './transcript.js'
 import type { GitHubProofV1 } from './types.js'
 
 export async function prove(
@@ -41,17 +46,12 @@ export async function prove(
   const result = await proveBearerLink(context, {
     tokenRequest: buildTokenRequest(input),
     selectToken: (transcript) => selectToken(transcript, input),
-    identityUrl: 'https://api.github.com/user',
-    identityRequest,
+    identityUrl,
+    identityRequest: buildIdentityRequest,
     selectIdentity(transcript, bearer) {
-      const body = responseJson(transcript, true),
+      const body = responseJson(transcript),
         selected = selectIdentity(transcript, bearer)
-      if (
-        !isRecord(body) ||
-        typeof body.id !== 'bigint' ||
-        body.id.toString() !== selected.userId ||
-        body.login !== selected.userName
-      )
+      if (!isRecord(body) || typeof body.id !== 'number' || body.login !== selected.userName)
         throw new Error('Invalid GitHub identity')
       return selected
     },

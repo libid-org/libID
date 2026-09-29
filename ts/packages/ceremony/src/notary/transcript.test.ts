@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { identityRequest, selectIdentity } from '../platforms/github/1/transcript.js'
+import {
+  buildIdentityRequest as identityRequest,
+  selectIdentity,
+} from '../platforms/github/1/transcript.js'
 import {
   buildIdentityRequest,
   buildTokenRequest,
-  selectTokenReveals,
+  selectToken,
   selectIdentity as selectXIdentity,
 } from '../platforms/x/1/transcript.js'
 import { planNotarization } from './notarize.js'
@@ -40,7 +43,7 @@ const transcript = {
 describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C] [TEST-PLAT-09A] [TEST-PLAT-09B] [TEST-PLAT-09C]', () => {
   it('reveals the entire request, accepts reordered headers, and keeps the bearer committed', () => {
     expect(text(request.headers['Content-Length'])).toBe(String(request.body.length))
-    const selected = selectTokenReveals(transcript, input)
+    const selected = selectToken(transcript, input)
     const plan = planNotarization(transcript, selected.ranges)
     expect(plan.reveal.sent).toEqual([{ start: 0, end: transcript.sent.length }])
     expect(plan.commit.sent).toEqual([])
@@ -60,7 +63,7 @@ describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C] [TEST-PLAT-09A
       text(transcript.sent).replace('accept:', 'x-extra: café 😀\r\nx-extra:\r\naccept:'),
     ]) {
       const changed = { ...transcript, sent: utf8(sent) }
-      const selected = selectTokenReveals(changed, input)
+      const selected = selectToken(changed, input)
       expect(selected.accessToken).toBe('token')
       expect(selected.ranges.sent).toEqual([{ start: 0, end: changed.sent.length }])
     }
@@ -75,7 +78,7 @@ describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C] [TEST-PLAT-09A
     'X-Method-Override: POST',
   ])('rejects forbidden token header %s [REQ-PLAT-56A]', (header) => {
     const sent = utf8(text(transcript.sent).replace('accept:', `${header}\r\naccept:`))
-    expect(() => selectTokenReveals({ ...transcript, sent }, input)).toThrow()
+    expect(() => selectToken({ ...transcript, sent }, input)).toThrow()
   })
   it.each([
     ['host: api.x.com', 'host: other.com'],
@@ -97,10 +100,7 @@ describe('X token disclosure [LIBID-PROVER-003, REQ-PLAT-56A/B/C] [TEST-PLAT-09A
     ['code=code%2Bwith%2Fslash', 'code=code%2bwith%2fslash'],
   ])('rejects altered framing or binding: %s', (from, to) => {
     expect(() =>
-      selectTokenReveals(
-        { ...transcript, sent: utf8(text(transcript.sent).replace(from, to)) },
-        input,
-      ),
+      selectToken({ ...transcript, sent: utf8(text(transcript.sent).replace(from, to)) }, input),
     ).toThrow()
   })
 })
@@ -227,7 +227,7 @@ describe('JSON field whitespace [LIBID-PROVER-003/004] [TEST-COMMON-10A]', () =>
   it.each([' ', '\t', '\r', '\n', ' \t\r\n'])('keeps X bearer offsets with %j', (ws) => {
     const prefix = `"access_token"${ws}:${ws}"`
     const received = utf8(`HTTP/1.1 200 OK\r\n\r\n{${prefix}token"}`)
-    const selected = selectTokenReveals({ ...transcript, received }, input)
+    const selected = selectToken({ ...transcript, received }, input)
     expect(text(received.slice(selected.bearerRange.start, selected.bearerRange.end))).toBe('token')
     expect(
       selected.ranges.received.map(({ start, end }) => text(received.slice(start, end))),
@@ -246,8 +246,16 @@ describe('JSON field whitespace [LIBID-PROVER-003/004] [TEST-COMMON-10A]', () =>
     expect(() => quotedRange(utf8(`{"login":${ws}"alice"}`), 'login')).toThrow()
     expect(() => quotedRange(utf8(`{"login"${ws}:"alice"}`), 'login')).toThrow()
   })
-  it('rejects duplicates with different whitespace and incomplete values', () => {
+  it('rejects duplicates with different whitespace and incomplete values [TEST-COMMON-10]', () => {
     for (const body of ['{"login":"alice","login" : "bob"}', '{"login": "alice', '{"login" : '])
       expect(() => quotedRange(utf8(body), 'login')).toThrow()
   })
 })
+
+it.each([buildIdentityRequest, identityRequest])(
+  'rejects whitespace in an HTTP bearer before sending',
+  (request) => {
+    for (const bearer of ['token token', ' token', 'token ', 'token\t', 'token\r\n'])
+      expect(() => request(bearer)).toThrow('Invalid bearer')
+  },
+)

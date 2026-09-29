@@ -3,7 +3,6 @@ import { ProofEngine } from '../../../barretenberg/engine.js'
 import { oauthState } from '../../../ccdp/navigation.js'
 import { CeremonyError, ceremonyError } from '../../../errors.js'
 import { operation } from '../../../events.js'
-import { parseJson } from '../../../json.js'
 import { isRecord } from '../../../primitives.js'
 import { readBody } from '../../../response.js'
 import type { ProverContext } from '../../context.js'
@@ -55,7 +54,7 @@ export async function prove(
         signal,
       })
       if (!response.ok) throw new Error('Signing key request failed')
-      const body: unknown = parseJson(
+      const body: unknown = JSON.parse(
         new TextDecoder('utf-8', { fatal: true }).decode(await readBody(response, 128 * 1024)),
       )
       if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')

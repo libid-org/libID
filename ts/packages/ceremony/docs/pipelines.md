@@ -13,6 +13,8 @@ The Prover document dispatches a lazy pipeline with
 ceremony ID, private OAuth capture, abort signal and event producer. The pipeline
 returns separate identity/proof values, or null for valid OAuth denial. Technical
 failures throw with operation context. Platform code has no popup connection.
+`ProverDocument` owns readiness, one-shot request execution, delivery and cleanup; its state drops the private capture when
+proving starts.
 
 Validate the return, state and required inputs before credential use. OAuth
 parsers ignore bounded provider metadata they do not need while rejecting
@@ -37,6 +39,8 @@ The signed nonce is parsed canonically as the candidate authorization digest;
 there is no separately supplied expected digest or browser signature-verification
 step. The circuit checks the signed claims and binding. Downstream verification
 must use the recomputed operation digest and trusted Google signing key.
+JSON uses native parsing; authoritative field uniqueness is the provider guarantee
+in ASM-PROV-06. Circuit inputs still reference the original signed bytes.
 Delivery includes the proof, expiry and modulus, beside the exact signed audience,
 subject and email as identity fields.
 
@@ -67,7 +71,7 @@ waiting only for a usable bearer and its prepared session. `token-fetch` ends
 before token attestation; proof generation can overlap both final attestations.
 Any failure aborts sibling work and prevents delivery.
 
-[The token request](../src/platforms/github/1/token.ts) contains five canonical
+[The token request](../src/platforms/github/1/transcript.ts) contains five canonical
 form fields in order: `client_id`, `code`, `redirect_uri`, `code_verifier`,
 `client_secret`. The last is GitHub's public application credential, frozen from
 Bridge configuration and forwarded unchanged in `ProveIdentity`. The complete
@@ -76,9 +80,11 @@ private. There is no Bridge token endpoint call or ordinary browser HTTP exchang
 The [public-client profile](https://github.com/libid-org/libid/blob/5e0e1f690369a7e4c5b61634342ae7fdb975795e/specs/platform-ceremonies.md)
 owns this request layout; deployed verifiers must accept that layout.
 
-X and GitHub share the `bearer_link` circuit, but retain their own transcript
-selectors and proof validators. Delivery includes proof and both attestations;
-the shared identity is a convenience view, not an additional circuit output.
+X and GitHub share the `bearer_link` circuit and
+[transcript machinery](../src/platforms/bearer-link/transcript.ts).
+Each platform declares its fixed endpoints, ordered token fields, identity headers
+and field shapes in `transcript.ts`, and owns its proof validators. Delivery
+includes proof and both attestations; the shared identity is a convenience view, not an additional circuit output.
 
 ## Adding a platform
 

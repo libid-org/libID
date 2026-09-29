@@ -10,8 +10,9 @@ import type { Identity } from '../../types.js'
 import {
   buildIdentityRequest,
   buildTokenRequest,
+  identityUrl,
   selectIdentity,
-  selectTokenReveals,
+  selectToken,
 } from './transcript.js'
 import type { XProofV1 } from './types.js'
 
@@ -39,8 +40,8 @@ export async function prove(
   }
   const result = await proveBearerLink(context, {
     tokenRequest: buildTokenRequest(input),
-    selectToken: (transcript) => selectTokenReveals(transcript, input),
-    identityUrl: 'https://api.x.com/2/users/me',
+    selectToken: (transcript) => selectToken(transcript, input),
+    identityUrl,
     identityRequest: buildIdentityRequest,
     selectIdentity(transcript, bearer) {
       const body = responseJson(transcript),

@@ -3,7 +3,6 @@ import {
   MAX_EMAIL_BYTES,
   MAX_SUB_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/inputs.js'
-import { parseJson } from '../../../json.js'
 import { b64urlDecode } from '../../../primitives.js'
 import { printableWithoutQuote } from './types.js'
 
@@ -30,7 +29,7 @@ const text = new TextDecoder('utf-8', { fatal: true })
 
 function json(bytes: Uint8Array): Record<string, unknown> | null {
   try {
-    const value: unknown = parseJson(text.decode(bytes))
+    const value: unknown = JSON.parse(text.decode(bytes))
     return typeof value === 'object' && value !== null && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : null
