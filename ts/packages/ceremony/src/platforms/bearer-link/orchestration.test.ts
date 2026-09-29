@@ -87,7 +87,7 @@ const profile = {
 }
 
 it.each(['accepted', 'failed'])(
-  'overlaps identity fetch with token openings and waits for every output: %s [LIBID-PROVER-007] [LIBID-PROVER-013] [LIBID-PROVER-014]',
+  'overlaps identity fetch with token openings and waits for every output: %s [LIBID-PROVER-007] [LIBID-PROVER-013] [LIBID-PROVER-014] [TEST-PLAT-13]',
   async (outcome) => {
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)

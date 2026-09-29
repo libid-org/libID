@@ -114,3 +114,14 @@ describe('[TEST-COMMON-07] PKCE derivation', () => {
     expect(b64urlEncode(digest)).toBe('sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU')
   })
 })
+
+// The native serializer used by the authorization and token request builders.
+it('reproduces the §6 canonical form vector [TEST-COMMON-05]', () => {
+  expect(
+    new URLSearchParams([
+      ['label', 'A B'],
+      ['redirect_uri', 'https://redirect.example/oauth/redirect'],
+      ['state', '_-~'],
+    ]).toString(),
+  ).toBe('label=A+B&redirect_uri=https%3A%2F%2Fredirect.example%2Foauth%2Fredirect&state=_-%7E')
+})

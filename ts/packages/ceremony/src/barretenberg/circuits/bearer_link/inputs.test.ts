@@ -21,3 +21,16 @@ it('matches token then identity commitments exactly [LIBID-PROVER-001]', () => {
   ])
     expect(validateBearerLinkPublicInputs(value, inputs)).toBe(false)
 })
+
+it.each(['', 'a'.repeat(129), 'a'.repeat(4097), 'bad\n', 'é'])(
+  'rejects unsupported bearer input %j [TEST-PLAT-10]',
+  (bearer) => {
+    const opening = {
+      start: 0,
+      end: bearer.length,
+      blinder: new Uint8Array(16),
+      hash: new Uint8Array(32),
+    }
+    expect(() => buildBearerLinkWitness(bearer, opening, opening)).toThrow(/bearer/)
+  },
+)
