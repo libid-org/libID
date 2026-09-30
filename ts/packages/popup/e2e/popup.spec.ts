@@ -123,7 +123,7 @@ async function expectPong(page: Page, n: number): Promise<Pong> {
   return (await events(page)).find((e) => (e as Pong).n === n) as Pong
 }
 
-test('[POPUP-WINDOW-001] [POPUP-PORT-001] scripted open connects over MessagePort', async ({
+test('[POPUP-WINDOW-001] [POPUP-WINDOW-004] [POPUP-PORT-001] scripted open connects over MessagePort', async ({
   page,
 }) => {
   const { popup } = await open(page)
@@ -178,10 +178,12 @@ test('[POPUP-WINDOW-005] concurrent opens receive distinct placement hints and c
   await second.close()
 })
 
-test('[POPUP-WINDOW-002] blocked scripted open binds the native anchor popup', async ({ page }) => {
+test('[POPUP-WINDOW-002] [POPUP-WINDOW-004] blocked scripted open binds the native anchor popup', async ({
+  page,
+}) => {
   const { popup } = await open(page, { blocked: true })
   await expect(popup.locator('#status')).toHaveText('connected')
-  // An anchor carries no features, so the fallback popup is a tab.
+  // An anchor carries no features, so the popup it creates is a tab.
   expect(await popup.evaluate(() => window.toolbar.visible)).toBe(true)
   await ping(page, 1)
   await expectPong(page, 1)
@@ -321,8 +323,14 @@ test('[POPUP-CONTROL-003] a close right after navigate reaches the destination t
   const { id, popup } = await open(page)
   await expectPong(page, 0)
   await popup.evaluate(() => navigator.serviceWorker.ready)
+  // Sever the handle first, so the close must travel over the port as ClosePopup.
+  await nextDocument(popup, () => navigate(page, `${POPUP}/isolated#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(
+    await page.evaluate(() => (window as unknown as { __handle: Window }).__handle.closed),
+  ).toBe(true)
   const closed = popup.waitForEvent('close', { timeout: 15_000 })
-  await navigateThen(page, `${POPUP}/isolated#c=${id}`, 'close')
+  await navigateThen(page, `${POPUP}/p#c=${id}`, 'close')
   await closed
 })
 
@@ -342,7 +350,7 @@ test('[POPUP-CONTROL-003] [POPUP-CONTROL-004] close reaches a severed popup over
   expect(await diag(page)).toContain('connection-closed')
 })
 
-test('[POPUP-CONTROL-001] close uses the live handle directly', async ({ page }) => {
+test('[POPUP-CONTROL-003] close uses the live handle directly', async ({ page }) => {
   const { popup } = await open(page)
   await expectPong(page, 0)
   const closed = popup.waitForEvent('close')
@@ -478,7 +486,7 @@ test('[POPUP-CONNECTION-008] [POPUP-CONNECTION-009] a cross-origin participating
   expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(3)
 })
 
-test('[POPUP-CONNECTION-008] a cross-origin isolated destination needs a fallback', async ({
+test('[POPUP-CONNECTION-008] a cross-origin isolated destination needs a fallback constructor', async ({
   page,
 }) => {
   const { id, popup } = await open(page)
@@ -586,7 +594,7 @@ async function prepareKeeper(page: Page, nestedScope: string): Promise<void> {
     .toEqual(['activated', 'activated'])
 }
 
-test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or by its COOP fallback, delivering once', async ({
+test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or by its COOP isolation fallback, delivering once', async ({
   page,
 }) => {
   const id = freshId()
@@ -612,7 +620,7 @@ test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or 
   await expectPong(page, 78)
 })
 
-test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed without looping', async ({
+test('[POPUP-CONNECTION-012] an isolation fallback that stays non-isolated fails closed without looping', async ({
   page,
 }) => {
   const id = freshId()
@@ -621,7 +629,7 @@ test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed wit
   await expect(popup.locator('#status')).toHaveText(/connected|failed/)
   test.skip(
     await popup.evaluate(() => crossOriginIsolated),
-    'engine isolates by DIP; no fallback runs',
+    'engine isolates by DIP; no isolation fallback runs',
   )
   await expect(popup.locator('#status')).toHaveText('failed: isolation-unavailable')
   expect(popup.url()).toContain('/dip-broken/fallback')
@@ -630,6 +638,8 @@ test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed wit
     'isolation-unavailable',
     'connection-failed',
   ])
+  // The reported departure ends the application's side instead of leaving it waiting.
+  await expect.poll(() => events(page)).toContainEqual({ type: 'end', outcome: 'closed' })
 })
 
 for (const isolated of [false, true])
@@ -700,7 +710,7 @@ test('[POPUP-CONNECTION-006] provider COOP without recovery fails even while the
 
 for (const allowedOrigins of [['*'], ['*.lib.id']] as const) {
   for (const native of [false, true]) {
-    test(`wildcard admission ${JSON.stringify(allowedOrigins)} binds exact peers${native ? ' with native anchor' : ''}`, async ({
+    test(`[POPUP-CONNECTION-009] wildcard admission ${JSON.stringify(allowedOrigins)} binds exact peers${native ? ' with native anchor' : ''}`, async ({
       page,
       context,
       request,

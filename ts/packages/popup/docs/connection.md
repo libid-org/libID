@@ -112,7 +112,7 @@ message.
 - A carrier is selectable only after it authenticates both endpoints.
 - One connection admits at most one current popup endpoint and one active
   carrier. MessagePort additionally binds the exact window handle; a fallback
-  authenticates its peer without proving that handle's identity. Each new
+  carrier authenticates its peer without proving that handle's identity. Each new
   document authenticates and selects its own carrier; stale results are inert.
 - Application-level messages travel only over the active end-to-end carrier.
   Rendezvous and continuity
@@ -174,7 +174,7 @@ the browser, matching the HTML
 rule and excluding reserved keywords such as `_blank`, `_self`, `_parent`, and
 `_top`.
 `PopupConnection.connect` composes over that exact object, synchronously arms
-fallback binding, and never accepts a caller-supplied `WindowProxy`. It never
+native-anchor binding, and never accepts a caller-supplied `WindowProxy`. It never
 constructs a `PortKeeper`. `PopupWindow.current()` captures the popup document,
 its opener, and the origin's host-registered Service Worker registrations. By
 default a keep uses the registration that will control the destination URL and
@@ -197,14 +197,14 @@ installing delivery or settling `ready`, the endpoint checks
 `crossOriginIsolated`. An isolated document proceeds. A non-isolated document
 keeps its still-unstarted port through the worker, so every value the
 application already sent stays queued inside it, settles `closed` as closed,
-and replaces itself with the fallback; the fallback restores the port and
-becomes ready. The fallback is resolved against the current document, must be
+and replaces itself with the isolation fallback, which restores the port and
+becomes ready. The isolation fallback is resolved against the current document, must be
 same-origin, with the URL policy below and without a fragment of its own, and always carries the
 document's captured fragment, the value `PopupWindow.current` was given or
 read at adoption. Because the host may register its worker in the same
 document, the endpoint waits up to the keeper reply deadline for that
 registration to become active before it keeps the port. A document that
-already is the fallback, compared by origin, path, and query, and remains
+already is the isolation fallback, compared by origin, path, and query, and remains
 non-isolated fails with
 `isolation-unavailable` and reports its departure over the carrier it holds, so
 the application's side closes instead of waiting; a refused keep or missing worker fails as it does for
@@ -220,7 +220,7 @@ application may still hold its unusable side: sends succeed locally and are
 lost until the destination authenticates. Preparing a signaling round does
 not authenticate the replacement or queue messages for it. This is what lets
 a host serve one document with Document-Isolation-Policy for engines that
-honour it and a COOP fallback for the rest, with no protocol change.
+honour it and a COOP isolation fallback for the rest, with no protocol change.
 
 `connect` copies `allowedPopupOrigins`, and `accept` copies
 `allowedApplicationOrigins`. Both accept nonempty, duplicate-free lists of:
@@ -267,10 +267,13 @@ native anchor. It considers only the expected initial private control with the e
 connection ID and connection version from an allowed popup origin. After
 exact validation it internally calls
 `PopupWindow.bind(MessageEvent.source)` once.
-Wrong source, origin, ID, version, direction, or initial control rejects the
-connection. `bind` is package-internal and never accepts or interprets a caller
-message. `PopupWindow.opened` is initially true only when scripted creation
-returned a handle and becomes true after successful fallback binding.
+An attempt with another connection ID, from an origin outside the allowlist, or
+from any other window once a handle is known is not addressed to this connection
+and is ignored. A malformed record from an eligible peer, such as a wrong version,
+extra fields, or transferred ports, rejects the connection. `bind` is
+package-internal and never accepts or interprets a caller message.
+`PopupWindow.opened` is initially true only when scripted creation returned a
+handle and becomes true after successful native-anchor binding.
 
 When a document change cannot preserve the popup endpoint's current carrier,
 the connection retains its logical state and bound popup browsing context while
@@ -280,11 +283,11 @@ readiness before the popup navigates. The next participating popup document
 calls `accept` and installs the selected carrier under the same logical
 connection. These mechanics are transparent to the caller.
 
-### Popup creation and native-anchor fallback
+### Popup creation and native-anchor binding
 
 The caller renders an action-specific anchor with the destination URL and a
 unique valid target. On activation it lets the package attempt popup
-creation and synchronously arms fallback binding before the handler returns:
+creation and synchronously arms native-anchor binding before the handler returns:
 
 ```ts
 function activate(event: MouseEvent) {
@@ -313,12 +316,12 @@ binds only the popup whose initial private control authenticates for this
 connection ID and one of its allowed popup origins.
 
 The anchor must use that same valid, unique target and
-must not request `noopener` or `noreferrer`: the MessagePort fallback needs its
+must not request `noopener` or `noreferrer`: native-anchor binding needs its
 opener relationship long enough to authenticate and transfer the carrier port.
 
 The anchor is a compatibility hedge for an environment or embedding policy
 which rejects scripted popup creation, not a second user flow. It must exist
-before activation so the fallback proceeds in the same tap. Both paths use the
+before activation so native-anchor binding proceeds in the same tap. Both paths use the
 same target and create one script-closable top-level traversable, using the
 retained handle for direct operations and unavailable-window detection. Before native-anchor binding no handle exists to
 observe. Closure is never delivery, cancellation, or another caller-protocol outcome.
@@ -373,7 +376,6 @@ interface PopupDiagnostic {
   readonly code: string // stable identifier catalogued in METRICS.md
   readonly timestamp: number
   readonly durationMs?: number
-  readonly count?: number
 }
 
 // @libid/popup/worker
@@ -418,7 +420,7 @@ document-local MessagePort cancellation. Pending handshakes, signaling, carrier
 replacement, and connection closure use those signals; `close()` aborts all of
 that work. Cancellation machinery is not part of the public API.
 
-`fallback` constructs one ordinary authenticated `Carrier` and is not another
+The `fallback` constructor builds one ordinary authenticated `Carrier` and is not another
 connection abstraction. `connect` invokes a supplied constructor exactly once
 for the logical connection so opener-independent signaling is armed before
 navigation. It retains and observes the pending promise without awaiting it or
@@ -433,11 +435,11 @@ its connection-lifetime abort signal; the constructor closes over every
 carrier-specific option.
 
 Before navigation without an active carrier, the application starts the next
-document-local MessagePort operation while retaining any unused fallback.
+document-local MessagePort operation while retaining any unused fallback carrier.
 Before popup-side navigation destroys an active WebRTC carrier, that carrier
 privately requests and awaits preparation of its next signaling round from the
 application endpoint. Connection closure aborts every pending operation.
-If no constructor was supplied when fallback becomes necessary, connection
+If no constructor was supplied when a fallback carrier becomes necessary, connection
 records stable code `fallback-unavailable` and closes.
 
 `onDiagnostic` receives sanitized local events from construction onward. It is
@@ -469,22 +471,27 @@ messages described below whenever a carrier is active and otherwise delegate to
 carrier reconnection.
 
 `send` accepts the composition-owned union `M` and is not a delivery
-acknowledgement. It throws synchronously without an active carrier or after
-closure; the connection queues no caller value. Apart from rejecting reserved
-control discriminators, the connection does not revalidate trusted local input.
+acknowledgement. It throws `send-unavailable` synchronously without an active
+carrier and `connection-closed` once the endpoint has ended, as `navigate` and
+`navigateAway` do; the connection queues no caller value. Apart from rejecting
+reserved control discriminators and types routing would reject (empty or longer
+than 64 characters), the connection does not revalidate trusted local input.
 
 `on` registers one message class and handler by `message.type` and returns an
-unsubscribe function. Duplicate or reserved registrations throw synchronously.
+unsubscribe function. Duplicate, reserved, or unroutable registrations throw
+synchronously.
 Both constructors return synchronously and select carriers afterwards, so
 handlers registered before the caller yields precede every delivery; `ready`
 settles once a carrier is selected and rejects with the failure code if the
-endpoint failed first. `closed` settles exactly once with the connection's
+endpoint failed first. An application endpoint that ends closed before any
+carrier rejects it with `connection-closed`; a popup document that releases
+itself, as on its isolation hop, leaves it pending for its successor. `closed` settles exactly once with the connection's
 terminal outcome, including an authenticated best-effort document-departure
-notification. Without a selected carrier or a pending fallback, an unavailable
-retained handle instead fails with `popup-unavailable`: closure and provider COOP
+notification. Without a selected carrier, a pending authenticated handshake,
+or a pending fallback carrier, an unavailable retained handle instead fails with `popup-unavailable`: closure and provider COOP
 severance are indistinguishable but neither can recover on this path. Detection
 polls every 250 ms with no additional timeout; terminal cleanup stops polling.
-A pending fallback has no connection-layer deadline; its rejection removes that
+A pending fallback carrier has no connection-layer deadline; its rejection removes that
 recovery option, while resolution installs the authenticated carrier. Existing
 carriers remain usable despite handle severance. Unobserved loss and silence
 alone still remain pending. This is the only channel through which a failure
@@ -505,9 +512,9 @@ In particular, a simultaneous failed `closed` outcome must not mask readiness
 failure with a generic "connection closed" message. `PopupError.code` identifies
 the failure; the host owns its display text.
 `PopupError.message` contains the code without user-facing explanation. An absent
-opener with no configured fallback fails locally with `fallback-unavailable`,
+opener with no configured fallback constructor fails locally with `fallback-unavailable`,
 without needing Application to send a message. A silent opener retains the
-existing bounded handshake wait before fallback selection.
+existing bounded handshake wait before fallback-carrier selection.
 
 `navigate` is available on both connection endpoints. The application endpoint
 always sends the private control defined by [popup control](control.md) when a
@@ -518,10 +525,12 @@ continuity and replaces its own document without sending that control.
 application endpoint navigates its retained `WindowProxy` directly, never
 sends the destination over the carrier, retires the current carrier without
 preserving it, and keeps its listener armed for the next participating
-document; it rejects while the handle is absent or reports closed and performs
-no browser operation while native-anchor binding is pending. The popup
-endpoint's `navigateAway` releases its carrier and replaces its own document
-without invoking the keeper. The destination of `navigateAway` is private to
+document; it rejects with `popup-unavailable` while the handle reports closed
+and performs no browser operation while native-anchor binding is pending. The
+popup endpoint's `navigateAway` releases its carrier and replaces its own
+document without invoking the keeper. On the popup endpoint, `navigate` and
+`navigateAway` reject with `popup-unavailable` once the document has accepted a
+control or started leaving: that document is already on its way out. The destination of `navigateAway` is private to
 the endpoint that performs it and never crosses a carrier, which is why no
 control exists for it and why an isolated popup must initiate its own
 departure. `close`
@@ -563,7 +572,7 @@ interpret caller-owned fields:
 
 - while a carrier is active, the application endpoint sends `Navigate` over it;
 - without an active carrier, the application endpoint arms the next
-  document-local MessagePort operation, retains an unused fallback, and
+  document-local MessagePort operation, retains an unused fallback carrier, and
   navigates its exact retained `WindowProxy` only while that handle is non-null
   and not closed; while native-anchor binding is pending it performs no browser
   operation; and
@@ -575,13 +584,13 @@ interpret caller-owned fields:
 A selected MessagePort is preserved through `PortKeeper` only when the target
 has the current popup origin. For a different origin, including one on another
 site, connection does not send the port to the source origin's worker. It
-retires that popup endpoint and leaves the application listener armed; an
+releases that popup endpoint and leaves the application listener armed; an
 allowed destination establishes a fresh MessagePort through its surviving
-opener. If isolation removes that opener, only the configured fallback can
+opener. If isolation removes that opener, only the configured fallback constructor can
 establish the destination carrier. The logical connection ID and caller
-registrations remain unchanged. While replacement is pending, caller values
+handlers remain unchanged. While replacement is pending, caller values
 sent by the application succeed locally and are lost, as during any other
-non-participating window; the application cannot observe the retirement.
+non-participating window; the application cannot observe that release.
 
 For WebRTC replacement, connection gives the caller-selected target unchanged
 to the carrier's package-private preparation hook and navigates only to the
@@ -600,7 +609,7 @@ until a later participating document's handshake replaces it or the connection
 closes. No application message is deliverable while the popup is
 non-participating: every `send` and `navigate` issued meanwhile succeeds
 locally and is lost, while `close` still uses the live handle. An initial
-fallback which has not yet been selected remains armed.
+fallback carrier which has not yet been selected remains armed.
 The next participating document may use it to establish the first RTC carrier
 without navigation-round metadata. Connected navigation between participating
 documents may instead preserve a transferable port across the bounded
@@ -608,7 +617,7 @@ replacements defined below.
 
 The factory installs the appropriate operation from the native resource it
 owns, never from the URL. A failed port preservation or successor preparation
-rejects before navigation; a fallback-only isolation hop with no carrier yet
+rejects before navigation; an isolation hop with only a fallback constructor and no carrier yet
 instead connects at the destination. The application endpoint has no keeper,
 including a no-op implementation.
 
@@ -626,10 +635,11 @@ carrier, or navigate a document.
 
 The browser-local [MessagePort carrier](message-port.md) is built in.
 An explicitly supplied [WebRTC carrier](webrtc.md) constructor
-provides the opener-independent fallback.
+provides the opener-independent fallback carrier; it is specified but not
+implemented yet, so descriptions of it here state its intended contract.
 
 MessagePort is preferred while the popup retains its opener. WebRTC defines the
-opener-independent fallback boundary when supplied; its exact signaling-service
+opener-independent fallback-carrier boundary when supplied; its exact signaling-service
 contract is outside this specification.
 
 ### Carrier API
@@ -686,23 +696,23 @@ The popup endpoint chooses one physical path for each participating document;
 the application does not run an independent first-promise-wins race:
 
 1. The application keeps one document-local MessagePort operation and the
-   connection-lifetime fallback armed.
+   connection-lifetime fallback constructor armed.
 2. A popup with a usable opener completes exact source/origin authentication,
    validates the transferred port, and echoes the existing private MessagePort
    handshake over that port. Only that echo makes MessagePort selectable on the
-   application endpoint. The fallback remains pending and unused.
+   application endpoint. The fallback carrier remains pending and unused.
 3. A popup whose opener is null or reports `closed`, or which receives no
    valid response within `OPENER_HANDSHAKE_TIMEOUT_MS = 30_000`, commits its
-   configured fallback. The authenticated fallback resolving on the application endpoint
-   confirms that choice and replaces any carrier belonging to the preceding
+   configured fallback constructor. The authenticated fallback carrier
+   resolving on the application endpoint confirms that choice and replaces any carrier belonging to the preceding
    popup document. An authentication failure is terminal rather than a reason
-   to downgrade; an unavailable fallback also terminates.
+   to downgrade; an unavailable fallback carrier also terminates.
 
 Selection is atomic. Installing an authenticated carrier closes the obsolete
 carrier and document-local operation, while the unused connection-lifetime
-fallback remains armed. Stale acknowledgements, carrier completions, signaling,
+fallback carrier remains armed. Stale acknowledgements, carrier completions, signaling,
 or values from an earlier popup document are inert. An unexpected failure of
-the current document's active carrier never initiates fallback by itself; a
+the current document's active carrier never initiates the fallback carrier by itself; a
 fresh participating document must authenticate its own selection. A controlled
 document replacement may install a fresh carrier under the same logical
 connection only after its replacement path is prepared.
@@ -723,7 +733,7 @@ heap or an `RTCDataChannel`, and does not recover lost messages.
 Only a direct `PopupConnection.navigate()` between participating documents
 performs managed carrier preservation or replacement. Any navigation outside
 that API, including an external document's redirect, loses the current carrier.
-Before RTC has been selected, the pre-armed initial fallback may still establish
+Before RTC has been selected, the pre-armed initial fallback carrier may still establish
 the first RTC carrier in a later participating document; this is establishment,
 not preservation. After RTC is active, an unmanaged navigation cannot prepare
 or identify the next signaling round and terminates the logical connection.
@@ -749,7 +759,7 @@ could retain its ordinary opener connection while isolated work runs in that
 iframe. That would remove the top-level document replacement and its
 connection-continuity machinery. It would not protect against an external page
 which itself severs the opener with COOP, so the opener-independent carrier
-remains a separate fallback.
+remains a separate fallback carrier.
 
 DIP support is tracked by the [Chrome documentation](https://developer.chrome.com/blog/document-isolation-policy),
 [Mozilla standards position](https://github.com/mozilla/standards-positions/issues/1074),

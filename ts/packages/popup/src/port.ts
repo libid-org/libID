@@ -73,9 +73,11 @@ export interface ListenHandlers {
 /**
  * Application side. One window listener for the connection lifetime: each
  * accepted handshake yields one port; per-attempt state is discarded on
- * acceptance, supersession, or stop. An attempt from any window or origin
- * other than the expected peer is not an attempt on this connection and is
- * ignored, so nothing that merely knows the connection ID can end it.
+ * acceptance, supersession, or stop. Once a handle is known, an attempt from
+ * any window or origin other than the expected peer is not an attempt on this
+ * connection and is ignored. Before native-anchor binding any window at an
+ * allowed origin is a candidate peer, so its malformed attempt fails the
+ * connection.
  */
 export function listenForPopupPorts(options: ListenOptions, handlers: ListenHandlers): () => void {
   const { view, allowedPopupOrigins, connectionId } = options
@@ -156,7 +158,7 @@ export interface RequestOptions {
 /**
  * Popup side. Sends the handshake to the exact opener and resolves the
  * transferred, acknowledged port, or null when the opener stays silent past
- * the deadline (the caller then commits its fallback). Rejects with
+ * the deadline (the caller then commits its fallback constructor). Rejects with
  * `handshake-rejected` when the opener answers wrongly and `connection-closed`
  * on abort; every rejection closes reachable ports.
  */

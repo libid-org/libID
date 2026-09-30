@@ -35,7 +35,7 @@ it('records sends and navigations, and delivers decoded peer messages to one han
   await expect(connection.ready).resolves.toBeUndefined()
 })
 
-it('ends once, then ignores messages and refuses to send or navigate away', async () => {
+it('ends once, then ignores messages and refuses to send or navigate', async () => {
   const connection = fakeConnection<Ping>()
   const received: number[] = []
   connection.on(Ping, (message) => received.push(message.n))
@@ -44,9 +44,34 @@ it('ends once, then ignores messages and refuses to send or navigate away', asyn
   await expect(connection.closed).resolves.toEqual({ outcome: 'failed', code: 'keep-failed' })
   connection.receive({ type: 'ping', n: 1 })
   expect(received).toEqual([])
-  await expect(connection.navigateAway('https://elsewhere.example/')).rejects.toThrow('closed')
-  expect(() => connection.send({ type: 'ping', n: 2 })).toThrow('send-unavailable')
+  for (const navigation of [connection.navigate, connection.navigateAway]) {
+    await expect(navigation('https://elsewhere.example/')).rejects.toThrow('connection-closed')
+  }
+  expect(() => connection.send({ type: 'ping', n: 2 })).toThrow('connection-closed')
   expect(connection.sent).toEqual([])
+  expect(connection.navigations).toEqual([])
+})
+
+it('fails with decode-rejected on a type without a handler or a value its decoder rejects', async () => {
+  for (const value of [{ type: 'other' }, { type: 'ping', n: 'x' }]) {
+    const connection = fakeConnection<Ping>()
+    connection.on(Ping, () => {})
+    connection.receive(value as never)
+    await expect(connection.closed).resolves.toEqual({ outcome: 'failed', code: 'decode-rejected' })
+  }
+})
+
+it('rejects pending readiness on a failed end, and on a closed end only for the application', async () => {
+  const failed = fakeConnection({ ready: 'pending' })
+  failed.end({ outcome: 'failed', code: 'keep-failed' })
+  await expect(failed.ready).rejects.toThrow('keep-failed')
+  const application = fakeConnection({ ready: 'pending', endpoint: 'application' })
+  application.end()
+  await expect(application.ready).rejects.toThrow('connection-closed')
+  const popup = fakeConnection({ ready: 'pending' })
+  popup.end()
+  popup.settle()
+  await expect(popup.ready).resolves.toBeUndefined()
 })
 
 it('settles pending readiness when the test decides', async () => {

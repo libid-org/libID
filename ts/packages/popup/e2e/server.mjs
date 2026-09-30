@@ -89,7 +89,7 @@ const popupPage = html(`
     const id = new URLSearchParams(captured.slice(1)).get('c') ?? ''
     window.__isolated = crossOriginIsolated
     // /p-any is the same document deployed for any opener origin. /dip and
-    // /dip-broken require isolation and name their COOP fallback.
+    // /dip-broken require isolation and name their COOP isolation fallback.
     const allowedApplicationOrigins = location.pathname === '/p-any' ? '*' : ['${ORIGINS.appA}']
     const isolationFallbackUrl = location.pathname.startsWith('/dip-broken')
       ? '/dip-broken/fallback'
@@ -185,7 +185,7 @@ function popupHandler(req, res, page = popupPage) {
     case '/dip-broken':
       return send(res, 200, { ...HTML, ...DIP }, page)
     case '/dip-broken/fallback':
-      // COOP without COEP: never isolated, so the fallback must not loop.
+      // COOP without COEP: never isolated, so the isolation fallback must not loop.
       return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'same-origin' }, page)
     case '/external-isolated':
       return send(res, 200, { ...HTML, ...ISOLATED }, externalPage)

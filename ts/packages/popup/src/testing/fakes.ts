@@ -209,8 +209,6 @@ export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
     addEventListener: (type: string, handler: (event: unknown) => void) => {
       handlers.set(type, handler)
     },
-    skipWaiting: () => Promise.resolve(),
-    clients: { claim: () => Promise.resolve() },
   } as unknown as ServiceWorkerGlobalScope)
   const deliver = (url: string, data: unknown, ports: readonly MessagePort[]): void =>
     handlers.get('message')?.({

@@ -134,7 +134,7 @@ gives up a carrier the application may already hold:
 - a claim a worker answered wrongly, over any port another worker returned;
 - a port it fails to hand to the worker, including closure before the worker takes it.
 
-The keeper sends it on both held ports when a duplicate keep retires them; an
+The keeper sends it on both held ports when a duplicate keep rejects them; an
 expired port closes silently, so a later document can still re-establish. A non-cancelling
 `beforeunload` listener keeps WebKit's window-close lifecycle running; it sends
 nothing and never prompts. Both listeners are removed before planned navigation.
@@ -152,16 +152,16 @@ COOP-severed handle nor a silent carrier establishes document departure.
 
 Provider documents cannot send `DocumentDeparted`. The application polls its
 retained handle every 250 ms. Without a carrier, pending authenticated handshake,
-or pending fallback, an unavailable handle terminates the connection with
+or pending fallback carrier, an unavailable handle terminates the connection with
 `popup-unavailable` on the
 first observation. This means closure or opener severance (including COOP), not
 a confirmed physical close or denial. The application never closes the window
 as a side effect of this failure.
 
 A selected carrier suppresses this check, including through package-owned
-isolation. A pending fallback keeps the connection recoverable indefinitely;
-resolution installs its authenticated carrier, rejection removes the remaining
-fallback, and explicit close aborts recovery. Native-anchor launch has no handle
+isolation. A pending fallback carrier keeps the connection recoverable indefinitely;
+resolution installs it, rejection removes that remaining recovery, and explicit
+close aborts recovery. Native-anchor launch has no handle
 to poll until its first authenticated binding. Terminal cleanup stops polling.
 
 ## Security boundary

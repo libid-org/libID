@@ -226,7 +226,7 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
     }
   })
 
-  it('stops listening and closes pending state on stop', async () => {
+  it('stops listening on stop', async () => {
     const h = listen()
     h.stop()
     h.pair.appProxy.postMessage(handshake(), '*')

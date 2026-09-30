@@ -4,7 +4,6 @@
 
 /** Exact-matched in every private transport record; never negotiated. */
 export const CONNECTION_VERSION = 1 as const
-export type ConnectionVersion = typeof CONNECTION_VERSION
 
 export interface Message {
   readonly type: string

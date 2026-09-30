@@ -14,7 +14,7 @@ export interface CurrentOptions {
   scope?: string
 }
 
-/** @internal The listening surface of a Window, injectable for unit tests. */
+/** The listening surface of a Window, injectable for unit tests. */
 export interface View {
   addEventListener(type: 'message', listener: (event: MessageEvent) => void): void
   removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void

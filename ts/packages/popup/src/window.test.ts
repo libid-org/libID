@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { activeRegistration } from './keeper.js'
-import { type CurrentWindow, PopupWindow } from './window.js'
+import { fakePair, noRegistration } from './testing/fakes.js'
+import { CurrentWindow, OpenedWindow, PopupWindow } from './window.js'
 
 const ORIGIN = 'https://popup.example'
 const DOCUMENT = `${ORIGIN}/prover/x`
@@ -192,6 +193,67 @@ describe('default popup placement [POPUP-WINDOW-005]', () => {
       const features = nativeOpen.mock.lastCall![2] as string
       expect(features).toMatch(/,left=-1600,top=\d+$/)
       expect(Number(/top=(\d+)/.exec(features)![1])).toBeLessThan(280)
+    }
+  })
+})
+
+describe('PopupWindow', () => {
+  it('PopupWindow.open rejects reserved and empty targets [POPUP-WINDOW-001/003]', () => {
+    for (const target of ['', '_blank', '_self', '_parent', '_top', '_custom']) {
+      expect(() => PopupWindow.open(target)).toThrow(TypeError)
+    }
+  })
+
+  it('PopupWindow.open always requests a separate window and keeps the opener [POPUP-WINDOW-001]', () => {
+    const open = vi.fn(() => null)
+    vi.stubGlobal('window', {
+      open,
+      outerWidth: 1280,
+      screen: { availWidth: 1920, availLeft: 0, availTop: 0 },
+    })
+    try {
+      PopupWindow.open('libid-popup')
+      PopupWindow.open('libid-popup', 'width=480,height=720')
+      expect(open.mock.calls).toEqual([
+        ['about:blank', 'libid-popup', 'popup,left=0,top=0'],
+        ['about:blank', 'libid-popup', 'popup,width=480,height=720,left=0,top=0'],
+      ])
+      expect(() => PopupWindow.open('libid-popup', 'noopener')).toThrow(TypeError)
+      expect(() => PopupWindow.open('libid-popup', 'width=1,NoReferrer')).toThrow(TypeError)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('PopupWindow.current rejects an embedded document', () => {
+    const frame = { top: {} }
+    vi.stubGlobal('window', frame)
+    expect(() => PopupWindow.current()).toThrow('top-level popup')
+    vi.unstubAllGlobals()
+  })
+
+  it('treats inaccessible popup handles and openers as absent', () => {
+    const inaccessible = Object.defineProperty({}, 'closed', {
+      get: () => {
+        throw new DOMException('discarded')
+      },
+    }) as WindowProxy
+    expect(new OpenedWindow(inaccessible, fakePair().appView).direct).toBe(false)
+    expect(new CurrentWindow({ opener: inaccessible } as Window, noRegistration).opener).toBeNull()
+  })
+
+  it('adopts the captured fragment from a bootstrap that cleared the URL [POPUP-CONNECTION-013]', () => {
+    const view = { top: null as unknown, location: { hash: '#c=1' } }
+    view.top = view
+    vi.stubGlobal('window', view)
+    vi.stubGlobal('navigator', {})
+    try {
+      const captured = PopupWindow.current('#c=1&t=2') as CurrentWindow
+      view.location.hash = ''
+      expect(captured.fragment).toBe('c=1&t=2')
+      expect((PopupWindow.current() as CurrentWindow).fragment).toBe('')
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 })

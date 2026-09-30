@@ -8,13 +8,10 @@ export {
   PopupConnection,
 } from './connection.js'
 export { type PopupDiagnostic, PopupError, type PopupErrorCode } from './diagnostics.js'
-export {
-  type Carrier,
-  type CarrierConstructor,
-  type Message,
-  type MessageType,
-  type NavigationCarrier,
-  onReplacement,
-  prepareNavigation,
+export type {
+  Carrier,
+  CarrierConstructor,
+  Message,
+  MessageType,
 } from './message.js'
 export { type CurrentOptions, PopupWindow } from './window.js'
