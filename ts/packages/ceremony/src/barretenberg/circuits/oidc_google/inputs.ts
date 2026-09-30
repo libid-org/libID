@@ -1,10 +1,11 @@
 import { sha256 } from '@noble/hashes/sha2.js'
+import { concatBytes } from '@noble/hashes/utils.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../platforms/authorization.js'
 import { fieldHex } from '../../parameters.js'
 import {
-  AUDIENCE_HASH_FIELD_BYTES,
   BARRETT_OVERFLOW_BITS,
   FIELD_PACK_BYTES,
+  HASH_FIELD_BYTES,
   ISSUER,
   LIMB_BITS,
   MAX_AUD_BYTES,
@@ -14,6 +15,7 @@ import {
   MAX_SUB_BYTES,
   NUM_LIMBS,
   RSA_MODULUS_BITS,
+  USER_ID_TAG,
 } from './parameters.js'
 
 /** Token bytes and claim values consumed by the fixed oidc_google circuit. */
@@ -58,14 +60,20 @@ function pack31(bytes: Uint8Array): bigint[] {
   )
 }
 
-/** The audience's SHA-256 as two big-endian 128-bit halves. */
-function audienceHash(audience: Uint8Array): bigint[] {
-  const digest = sha256(audience)
+/** A SHA-256 hash as two big-endian 128-bit halves. */
+function hashFields(hash: Uint8Array): bigint[] {
   return [
-    bytesToBigInt(digest.subarray(0, AUDIENCE_HASH_FIELD_BYTES)),
-    bytesToBigInt(digest.subarray(AUDIENCE_HASH_FIELD_BYTES)),
+    bytesToBigInt(hash.subarray(0, HASH_FIELD_BYTES)),
+    bytesToBigInt(hash.subarray(HASH_FIELD_BYTES)),
   ]
 }
+
+/** The audience's SHA-256 as two big-endian 128-bit halves. */
+const audienceHash = (audience: Uint8Array): bigint[] => hashFields(sha256(audience))
+
+/** The Google userId's hash (REQ-PLAT-05A): SHA-256 of the tag and the exact signed `sub` bytes. */
+export const userIdHash = (sub: Uint8Array): Uint8Array =>
+  sha256(concatBytes(encoder.encode(USER_ID_TAG), sub))
 
 const hex = (value: bigint) => `0x${value.toString(16)}`
 
@@ -84,7 +92,7 @@ function findOffset(payload: Uint8Array, pattern: string): number {
   return offset
 }
 
-/** Build the exact libid-circuits v0.4.0 `oidc_google` circuit inputs. */
+/** Build the exact libid-circuits v0.5.0 `oidc_google` circuit inputs. */
 export function buildOidcGoogleInputs(
   token: OidcGoogleToken,
   modulus: Uint8Array,
@@ -101,7 +109,6 @@ export function buildOidcGoogleInputs(
   const subBytes = encoder.encode(sub)
   const audienceBytes = encoder.encode(aud)
   const paddedEmail = pad(emailBytes, MAX_EMAIL_BYTES)
-  const paddedSub = pad(subBytes, MAX_SUB_BYTES)
   const expString = String(exp)
   const offset = (claim: string) => String(findOffset(token.payload, claim))
   const modulusInteger = bytesToBigInt(modulus)
@@ -122,7 +129,7 @@ export function buildOidcGoogleInputs(
     aud_offset: offset(`"aud":"${aud}"`),
     email_bytes: Array.from(paddedEmail),
     email_len: String(emailBytes.length),
-    sub_bytes: Array.from(paddedSub),
+    sub_bytes: Array.from(pad(subBytes, MAX_SUB_BYTES)),
     sub_len: String(subBytes.length),
     audience_bytes: Array.from(pad(audienceBytes, MAX_AUD_BYTES)),
     audience_len: String(audienceBytes.length),
@@ -132,7 +139,7 @@ export function buildOidcGoogleInputs(
     ).map(hex),
     authorization_digest: Array.from(authorizationDigest),
     audience_hash: audienceHash(audienceBytes).map(hex),
-    sub_packed: pack31(paddedSub).map(hex),
+    user_id_hash: hashFields(userIdHash(subBytes)).map(hex),
     email_packed: pack31(paddedEmail).map(hex),
     exp: expString,
     modulus: limbs(modulusInteger).map(hex),
@@ -144,11 +151,11 @@ export function buildOidcGoogleInputs(
 const packed = (value: string, width: number) =>
   pack31(pad(encoder.encode(value), width)).map(fieldHex)
 
-/** The exact 56 public fields, in circuit order, for the values a proof binds. */
+/** The exact 57 public fields, in circuit order, for the values a proof binds. */
 export function buildOidcGooglePublicInputs(values: {
   authorizationDigest: Uint8Array
   audience: string
-  subject: string
+  userIdHash: Uint8Array
   email: string
   expiresAt: number
   modulus: Uint8Array
@@ -158,7 +165,7 @@ export function buildOidcGooglePublicInputs(values: {
   return [
     ...Array.from(values.authorizationDigest, fieldHex),
     ...audienceHash(encoder.encode(values.audience)).map(fieldHex),
-    ...packed(values.subject, MAX_SUB_BYTES),
+    ...hashFields(values.userIdHash).map(fieldHex),
     ...packed(values.email, MAX_EMAIL_BYTES),
     fieldHex(values.expiresAt),
     ...limbs(bytesToBigInt(values.modulus)).map(fieldHex),

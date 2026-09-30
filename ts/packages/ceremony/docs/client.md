@@ -179,6 +179,8 @@ containing separate `identity` and `oauthProof` values:
 
 - `identity`: exact platform ID, OAuth client ID, user ID and user name. The name
   is Google's signed email, X's username or GitHub's login, without normalization.
+  Google's user ID is `0x` and the 64 lowercase hex digits of the REQ-PLAT-05A
+  digest of its signed `sub`, never the `sub`.
 - `oauthProof`: selected `platformCeremonyVersion`, fresh `authorizationNonce`,
   client-derived `authorizationDigest` (32 bytes), platform-specific `proof` and
   `expiresAt` in Unix seconds. The retained digest binds the original ledger hash,
@@ -196,7 +198,7 @@ when block time is greater than or equal to `expiresAt`; ledger verification
 remains authoritative. This local metadata is absent from CCDP proof payloads.
 
 Google's proof contains `identityProof`, `publicInputs`, `tokenExpiresAt` and
-`signingKeyModulus`. Its `publicInputs` is a readonly array of 56 lowercase,
+`signingKeyModulus`. Its `publicInputs` is a readonly array of 57 lowercase,
 0x-prefixed, 32-byte hex fields. Before acceptance Client reconstructs those fields
 from the validated identity, retained digest, expiry and modulus and requires an
 exact match in order. X/GitHub contain `bearerLinkProof`, `tokenAttestation` and

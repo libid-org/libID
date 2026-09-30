@@ -11,7 +11,7 @@ Change dependency pins in the linked declarations and configuration.
 
 | Input | Version / owner |
 |---|---|
-| Circuits | v0.4.0, `b618e41eaf8bd0ec5f6e74b3efc2480dbec7e00a`; [circuit declarations](../src/barretenberg/circuits/). |
+| Circuits | v0.5.0, `d316ba5330c2e863e8befefcc49243a0733615f0`; [circuit declarations](../src/barretenberg/circuits/). |
 | Noir / bb.js | 1.0.0-beta.25 / 5.2.0; [package.json](../package.json), explicit EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts). |
 | Notary browser/runtime | v0.4.0, `829d8eb8778d4f1c30a2ec1f4c7cbd55e47d318a`; [declaration](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml). |
 | TLSN / MPZ | `da0f8488dfc55db8ed4271f817124306a2c07c09` / `4db9454a0b6380f1a23a7b4807989d866f838fff`, matched by the notary release. |

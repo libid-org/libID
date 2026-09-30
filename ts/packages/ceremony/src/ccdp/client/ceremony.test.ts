@@ -135,7 +135,7 @@ const registered = (connection: FakeConnection) =>
 const identity = {
   platformId: 'google' as const,
   oauthClientId: 'client',
-  userId: '1',
+  userId: `0x${'1'.repeat(64)}`,
   userName: 'a@b.c',
 }
 
@@ -493,7 +493,7 @@ it.each(supportedPlatforms)(
 it.each([
   { ...identity, platformId: 'x' },
   { ...identity, oauthClientId: 'other-client' },
-  { ...identity, userId: '1'.repeat(32) },
+  { ...identity, userId: '123456789012345678901' },
 ])('rejects a profile or client identity mismatch [LIBID-OAUTH-022]', async (identity) => {
   const { connection, ceremony } = setup()
   const result = ceremony.proveUserIdentity()
