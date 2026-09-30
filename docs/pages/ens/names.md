@@ -58,4 +58,5 @@ This name gives an address only when the sender asks for Base.
 
 Only addresses. Text records and avatars come back empty, and a wallet's
 reverse name is not set. To show a name for a wallet, use
-[`primaryName`](/docs/guides/lookup-wallet/).
+[`primaryName`](/docs/guides/lookup-wallet/#show-a-name). To list every
+handle a wallet has, use [`accountsOf`](/docs/guides/lookup-wallet/#list-every-account).
