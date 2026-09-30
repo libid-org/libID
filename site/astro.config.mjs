@@ -22,6 +22,7 @@ export default defineConfig({
               ['Get started', 'get-started'],
               ['Concepts', 'concepts'],
               ['Guides', 'guides'],
+              ['ENS', 'ens'],
               ['Examples', 'examples'],
               ['Reference', 'reference'],
               ['Networks', 'networks'],
