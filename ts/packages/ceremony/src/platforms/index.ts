@@ -108,7 +108,7 @@ export function assembleResult<P extends PlatformId>(
   } as IdentityResult<P>
 }
 
-/** Enumerate the closed catalog/Bridge intersection in ascending version order. */
+/** Enumerate the local catalog/Distribution intersection in ascending version order. */
 export function commonVersions<P extends PlatformId>(
   platform: P,
   advertised: readonly number[],

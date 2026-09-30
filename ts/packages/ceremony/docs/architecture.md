@@ -10,9 +10,9 @@ and assembles `OAuthProof`. Neither performs final cryptographic verification in
 
 | Owner | Responsibility |
 |---|---|
-| [ccdp/client](../src/ccdp/client/ceremony.ts) | Fetch/freeze Bridge config, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
+| [ccdp/client](../src/ccdp/client/ceremony.ts) | Fetch/freeze Bridge config and Distribution versions, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
 | [ccdp/index](../src/ccdp/index.ts), [navigation](../src/ccdp/navigation.ts) | Browser-free message companions and route/fragment codecs. |
-| [ccdp/documents](../src/ccdp/documents/) | Callback, Prefetch/Worker and Prover entrypoints; native package-owned UI. |
+| [ccdp/documents](../src/ccdp/documents/) | [Callback](../src/ccdp/documents/callback.ts), [Prefetch/Worker](../src/ccdp/documents/prefetch.ts) and [Prover](../src/ccdp/documents/prover.ts) entrypoints; package-owned UI. |
 | [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its prover. |
 | [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker and circuit ABI encoding; platform identity/proof assembly stays under platforms. |
 | [notary](../src/notary/session.ts) | TLSNotary sessions, HTTP/transcript helpers, canonical decoding and evidence correlation. |
@@ -66,8 +66,10 @@ wallet operation or transaction submission inside this package.
 ## Import boundaries
 
 The client-safe catalog imports URL builders, proof validators and event
-metadata. It never imports platform execution. Prover lazily imports execution
-leaves; those leaves do not import the catalog selecting them.
+metadata. It never imports platform execution. Only the Prover document imports
+the lazy [prover registry](../src/platforms/provers.ts). Execution code may consult
+the lightweight catalog through shared return validation; it does not import the
+registry that selects it.
 
 Shared integrations declare resources once in `*.assets.ts`; platform/version
 leaves compose those handles. Prefetch imports only this data-only catalog.
@@ -81,13 +83,10 @@ delivery joins every required final attestation and correlation.
 
 ## Versioning and compatibility
 
-Client intersects the local platform catalog with the versions the Distribution
-publishes at `/ccdp/versions.json`, for the platforms the Bridge record
-configures; the record names each platform's one OAuth client, which every
-version of the platform runs. An explicit version selects a compatible member;
-omission chooses the greatest common version. Each run freezes its selection
-and its client. Version semantics may differ in disclosure behavior, so an
-application promising a specific behavior selects it explicitly.
+Client selects from the intersection of its catalog and the Distribution's
+version list, restricted to platforms the Bridge configures. Each run freezes
+its selection and OAuth client. See [discovery](client.md#platform-and-version-discovery)
+for the default and explicit selection API.
 
 Platform ceremony, CCDP, popup transport and Bridge API versions have separate
 owners. Internal UI or asset changes need no platform ceremony version when the
@@ -100,8 +99,10 @@ and the build hold to one set.
 
 Keep cross-module rationale here, user contracts in the client/deployment guides,
 and byte layouts, limits, ownership and ordering comments beside their code.
-Link normative encodings instead of defining them again. Fixtures sit beside
-owning tests as `.fixture.*`; package contents exclude tests and fixtures.
+Link normative encodings instead of defining them again. Module-specific fixtures
+live beside their tests or in the owner's `fixtures/`.
+Shared ceremony builders live in `src/testing`; the platform matrix lives in
+`platforms/conformance`. Package contents exclude these test sources.
 
 Use workspace Biome formatting: two spaces, single quotes, no semicolons and
 organized imports. Separate declarations and methods with a blank line. JSDoc

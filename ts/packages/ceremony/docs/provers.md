@@ -13,8 +13,8 @@ The Prover document dispatches a lazy prover with
 ceremony ID, private OAuth capture, abort signal and event producer. The prover
 returns separate identity/proof values, or null for valid OAuth denial. Technical
 failures throw with operation context. Platform code has no popup connection.
-`ProverDocument` owns readiness, one-shot request execution, delivery and cleanup; its state drops the private capture when
-proving starts.
+`ProverDocument` owns readiness, one-shot request execution, delivery and cleanup.
+When proving starts, it transfers its private capture to the selected prover.
 
 Validate the return, state and required inputs before credential use. Each
 `url.ts` declares its return profile (transport, credential field, rejected
@@ -28,8 +28,8 @@ Client forwards `notaryAddress` uniformly; Google ignores it, X/GitHub require i
 The URL definition declares PKCE use; Client derives `codeVerifier` or sends null.
 Every prover starts with [acceptReturn](../src/platforms/oauthReturn.ts), which
 checks the request against the catalog's client ID, PKCE and credential
-declarations, consumes the ceremony-bound return, and yields null for denial. Neither input selects an asset or a
-replacement notary. A second platform must not require another shared-code branch.
+declarations, consumes the ceremony-bound return, and yields null for denial.
+The notary address selects the service; platform/version metadata selects assets.
 
 ## Google
 
@@ -53,11 +53,11 @@ rebuilds them with its retained authorization digest and the validated result,
 rejecting any mismatch before announcing completion. These comparisons do not
 verify the proof or establish trust in the signing key; the ledger remains authoritative.
 
-## X
+## X and GitHub
 
-[x/1/prover.ts](../src/platforms/x/1/prover.ts) accepts its return, then hands its
-transcript profile to [the shared bearer-link prover](../src/platforms/bearer.ts),
-which overlaps these dependencies:
+[X](../src/platforms/x/1/prover.ts) and [GitHub](../src/platforms/github/1/prover.ts)
+validate their returns and supply transcript profiles to
+[the shared bearer-link prover](../src/platforms/bearer.ts). It overlaps:
 
 1. Start the [bearer circuit prover](../src/barretenberg/circuits/bearer_link/prover.ts)
    and prepare token/identity sessions in one
@@ -73,27 +73,18 @@ Only identity HTTP depends on the token. Session setup and proof initialization
 do not. Every provisional branch is observed immediately so a failure aborts
 siblings rather than leaving work or a promise rejection behind.
 
-## GitHub
-
-[github/1/prover.ts](../src/platforms/github/1/prover.ts) uses that same
-concrete prover: two Proxy sessions in one notary runtime, with identity HTTP
-waiting only for a usable bearer and its prepared session. `token-fetch` ends
-before token attestation; proof generation can overlap both final attestations.
-Any failure aborts sibling work and prevents delivery.
-
-[The token request](../src/platforms/github/1/transcript.ts) contains five canonical
-form fields in order: `client_id`, `code`, `redirect_uri`, `code_verifier`,
-`client_secret`. The last is GitHub's public application credential, frozen from
-Bridge configuration and forwarded unchanged in `ProveIdentity`. The complete
-request is revealed; the response bearer and both commitment openings remain
-private. There is no Bridge token endpoint call or ordinary browser HTTP exchange.
-The [public-client profile](https://github.com/libid-org/libid/blob/5e0e1f690369a7e4c5b61634342ae7fdb975795e/specs/platform-ceremonies.md)
-owns this request layout; deployed verifiers must accept that layout.
+GitHub's [token request](../src/platforms/github/1/transcript.ts) includes the
+public application credential frozen from Bridge configuration and forwarded in
+`ProveIdentity`. The complete request is revealed; the response bearer and both
+commitment openings remain private. Both platforms exchange the code through
+browser TLSNotary Proxy sessions, without a Bridge token endpoint or ordinary
+browser HTTP exchange. The [public-client profile](https://github.com/libid-org/libid/blob/5e0e1f690369a7e4c5b61634342ae7fdb975795e/specs/platform-ceremonies.md)
+owns GitHub's request layout; deployed verifiers must accept it.
 
 X and GitHub share the `bearer_link` circuit and
 [transcript machinery](../src/platforms/bearer-transcript.ts).
-Each platform declares its fixed endpoints, ordered token fields, identity headers
-and field shapes in `transcript.ts`, and its user-name grammar in `types.ts`;
+Each platform's `profile.ts` owns endpoints, request fields, identity headers and
+user-name grammar; `transcript.ts` supplies its transcript selectors.
 [bearer-types.ts](../src/platforms/bearer-types.ts) supplies the shared
 client ID, identity and proof validators under each platform's names. The shared
 machinery validates the common token inputs (form client ID, code, redirect URI,
@@ -120,23 +111,20 @@ For another version-one platform:
    the catalog. The asset catalog derives its capacity-checked circuit list from those resource sets.
    Emitted JavaScript dependencies come from the compiler graph; do not copy
    those URLs into the resource set.
-4. Set `requiresClientCredential` in the catalog when the ceremony sends a
-   public token-exchange credential. The build publishes the catalog's versions
-   in `/ccdp/versions.json` once every pair has an emitted platform prover and
-   an asset profile; the client reads that list, and a Bridge deployment names
-   the platform's one OAuth client, which every version runs. A future
-   Bridge service needs an explicit platform-profile contract. Add configuration
-   and presentation in the [dev app](../../../apps/dev/README.md).
+4. Set `requiresClientCredential` in the catalog when token exchange needs one.
+   Configure the platform's OAuth registration in the Bridge and its presentation
+   in the [dev app](../../../apps/dev/README.md). The Distribution publishes
+   versions; Bridge configuration names the client used by every version.
 5. Add canonical vectors, malformed-return/input cases, selected-asset/native-loader
    checks, actual-popup browser flows and released-key-verified real proofs.
    Map applicable [stable test IDs](test-plan.md) in [traceability](traceability.md).
    Complete authenticated-service/device qualification before claiming support.
 
-These three registration points preserve Client/Prefetch import boundaries;
-there is no mutable plugin registry. A **second ceremony version** of a platform
-is the same three registrations under `platforms/<id>/<version>/`: the Prover
-dispatches on the request's platform and version, and the build looks each
-profile's prover up by its own version. Client discovery and the published
-version set follow the catalog; the build refuses a catalog entry without an
-emitted platform prover and asset profile, and a prover or profile the
-catalog does not name.
+For another version of an existing platform, add its leaf and the same catalog,
+prover and asset registrations. Type checking enforces table coverage; the build
+checks that the emitted prover chunks and asset profiles match the published
+catalog. Client and Prefetch remain free of execution imports.
+
+Only v1 return profiles exist today: `acceptReturn` reads the platform's v1 entry.
+A version with different OAuth return rules also needs version-aware validation
+in that helper; adding a registry entry alone does not change those rules.

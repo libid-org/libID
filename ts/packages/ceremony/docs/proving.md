@@ -50,8 +50,8 @@ compiled circuits and their keys together. Each circuit’s `parameters.ts` owns
 its fixed dimensions; input modules and independent vectors encode that ABI. They
 do not define a second proof format. Google result values are semantic fields;
 X/GitHub verifier inputs come from signed attestations.
-The package's private Google public-input helper supports fixture verification,
-not application-side proof verification.
+The private Google public-input helper also rebuilds the expected fields during
+Client acceptance. This checks result binding, not cryptographic proof validity.
 
 ## Dependency asset resolution
 
