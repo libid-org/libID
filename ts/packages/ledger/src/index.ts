@@ -1,5 +1,4 @@
-import { keccak_256 } from '@noble/hashes/sha3.js'
-import { hexToBytes } from '@noble/hashes/utils.js'
+import * as evm from './evm/chain.js'
 
 /** Ledger definitions own their chain identity, Chain Profile hash and notary routing. */
 export interface LedgerId {
@@ -9,14 +8,35 @@ export interface LedgerId {
   notaryAddress(): string
 }
 
-/** Chain namespaces with a ledger implementation. */
-export type Namespace = 'eip155'
+/** Each ledger family and the CAIP-2 namespace of its chain identifiers. */
+const namespaces = { evm: 'eip155' } as const
+export type FamilyNamespaces = typeof namespaces
+export type Family = keyof FamilyNamespaces
+type SupportedChain = `${FamilyNamespaces[Family]}:${string}`
+/**
+ * A chain identifier of a supported family, such as `eip155:3735928814`. `Extract` lets
+ * code that is generic over a family still satisfy `Chain`.
+ */
+export type Chain<F extends Family = Family> = Extract<
+  `${FamilyNamespaces[F]}:${string}`,
+  SupportedChain
+>
+export type FamilyOfChain<C extends string> = {
+  [F in Family]: C extends Chain<F> ? F : never
+}[Family]
+
+declare const account: unique symbol
+/** An account in its namespace's canonical form (EIP-55 on EVM ledgers); produced by a ledger client. */
+export type Account = string & { readonly [account]: true }
 
 /** A supported ledger and the libID deployments on it. */
 export interface Ledger<
-  C extends `${Namespace}:${string}` = `${Namespace}:${string}`,
+  F extends Family = Family,
+  C extends Chain = Chain<F>,
   A extends Readonly<Record<string, string>> = Readonly<Record<string, string>>,
 > extends LedgerId {
+  /** The ledger family, from the chain identifier's namespace. */
+  readonly family: F
   readonly chain: C
   readonly name: string
   readonly testnet: boolean
@@ -25,10 +45,7 @@ export interface Ledger<
   readonly addresses: A
 }
 
-export interface LedgerDefinition<
-  C extends `${Namespace}:${string}`,
-  A extends Record<string, string>,
-> {
+export interface LedgerDefinition<C extends Chain, A extends Record<string, string>> {
   chain: C
   name: string
   testnet: boolean
@@ -38,14 +55,16 @@ export interface LedgerDefinition<
 }
 
 /** Validates a definition and derives its Chain Profile hash from the chain identifier. */
-export function defineLedger<
-  const C extends `${Namespace}:${string}`,
-  const A extends Record<string, string>,
->(definition: LedgerDefinition<C, A>): Ledger<C, Readonly<A>> {
+export function defineLedger<const C extends Chain, const A extends Record<string, string>>(
+  definition: LedgerDefinition<C, A>,
+): Ledger<FamilyOfChain<C>, C, Readonly<A>> {
   const { chain, name, testnet, currency, notary, addresses } = definition
-  // ponytail: eip155 only; dispatch on the namespace when a second one lands.
-  const reference = /^eip155:([1-9][0-9]{0,31})$/.exec(chain)?.[1]
-  if (!reference) throw new TypeError(`Unsupported chain: ${chain}`)
+  const family = (Object.keys(namespaces) as Family[]).find((key) =>
+    chain.startsWith(`${namespaces[key]}:`),
+  )
+  // ponytail: EVM only; dispatch on the family when a second one lands.
+  const hash = family === 'evm' ? evm.chainHash(chain) : null
+  if (!hash) throw new TypeError(`Unsupported chain: ${chain}`)
   if (
     !name ||
     !currency.symbol ||
@@ -57,11 +76,10 @@ export function defineLedger<
   }
   // The notary origin is validated by the ceremony when a run snapshots the ledger.
   for (const [key, value] of Object.entries(addresses)) {
-    if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new TypeError(`Invalid ${key} address`)
+    if (!evm.isAddress(value)) throw new TypeError(`Invalid ${key} address`)
   }
-  // Matches `keccak256(abi.encode(block.chainid))` in the ceremony verifier contracts.
-  const hash = keccak_256(hexToBytes(BigInt(reference).toString(16).padStart(64, '0')))
   return Object.freeze({
+    family: family as FamilyOfChain<C>,
     chain,
     name,
     testnet,

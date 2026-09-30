@@ -4,5 +4,5 @@
     "declarationMap": false,
     "inlineSources": true
   },
-  "include": ["src/index.ts"]
+  "include": ["src/index.ts", "src/client.ts", "src/evm/index.ts"]
 }
