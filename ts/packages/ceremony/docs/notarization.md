@@ -53,8 +53,9 @@ runtime before opening session sockets, so cold loading does not consume the
 notary’s idle-socket deadline. Target-specific TLS setups still run concurrently.
 While any SDK call runs, a 10 ms no-op timer keeps the worker's event loop turning:
 WebKit can leave a cross-thread `Atomics.waitAsync` wake undelivered until something
-else wakes the worker, and the SDK waits on such wakes during its PRF step, where
-no network traffic arrives to wake it.
+else wakes the worker ([WebKit bug 325822](https://bugs.webkit.org/show_bug.cgi?id=325822)),
+and the SDK waits on such wakes during its PRF step, where no network traffic arrives
+to wake it. The timer can go once that bug is fixed in the supported engines.
 After TLSNotary finishes, it reclaims the same channel for one length-prefixed
 JSON attestation frame and requires EOF. [transport.ts](../src/notary/transport.ts)
 owns frame bounds and exact decoding. The shared request timeout also covers an

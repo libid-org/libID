@@ -40,7 +40,8 @@ let heartbeat: ReturnType<typeof setInterval> | undefined
  * Run an SDK call while a no-op timer turns this worker's event loop. WebKit can leave a
  * cross-thread `Atomics.waitAsync` wake undelivered until something else turns the loop, and
  * the SDK awaits exactly such wakes from its thread pool; with no timer and no network traffic,
- * a session would hang for good. The timer releases a stranded wake within 10 ms.
+ * a session would hang for good. The timer releases a stranded wake within 10 ms. Remove it
+ * once https://bugs.webkit.org/show_bug.cgi?id=325822 is fixed in the supported engines.
  */
 async function withHeartbeat<T>(call: () => Promise<T>): Promise<T> {
   if (heartbeatHolders++ === 0) heartbeat = setInterval(() => {}, HEARTBEAT_MS)
