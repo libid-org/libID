@@ -145,12 +145,13 @@ it('correlates plain-array SDK openings, then verifies the final frame before de
   port.send({ type: 'reveal', reveals })
   await expect.poll(() => port.close.mock.calls.length).toBe(1)
   expect(port.postMessage.mock.calls.map(([m]) => m.type)).toEqual([
+    'initialized',
     'prepared',
     'sent',
     'revealed',
     'attestation',
   ])
-  const [, , [revealed], [final]] = port.postMessage.mock.calls
+  const [, , , [revealed], [final]] = port.postMessage.mock.calls
   expect(revealed.openings).toEqual([
     { direction: 'sent', start: 3, end: 15, blinder: raw.sent[0].blinder },
     { direction: 'received', start: 8, end: 12, blinder: raw.recv[0].blinder },
@@ -184,16 +185,12 @@ it('initializes one WASM pool and overlaps setup while keeping per-session trans
   await expect.poll(() => hooks.setup.mock.calls.length).toBe(2)
   expect(hooks.init).toHaveBeenCalledOnce()
   expect(hooks.initialize).toHaveBeenCalledOnce()
-  expect(ports.every((port) => port.postMessage.mock.calls.length === 0)).toBe(true)
+  expect(ports.every((port) => port.replied('initialized') && !port.replied('prepared'))).toBe(true)
   setup.resolve()
-  await expect
-    .poll(() => ports.every((port) => port.postMessage.mock.calls.length === 1))
-    .toBe(true)
+  await expect.poll(() => ports.every((port) => port.replied('prepared'))).toBe(true)
   for (const port of ports) port.send({ type: 'send', request })
-  await expect
-    .poll(() => ports.every((port) => port.postMessage.mock.calls.length === 2))
-    .toBe(true)
-  expect(ports.map((port) => port.postMessage.mock.calls[1][0].transcript.sent[0])).toEqual([1, 2])
+  await expect.poll(() => ports.every((port) => port.replied('sent'))).toBe(true)
+  expect(ports.map((port) => port.postMessage.mock.calls[2][0].transcript.sent[0])).toEqual([1, 2])
   expect(scope.close).not.toHaveBeenCalled()
 })
 
@@ -277,6 +274,7 @@ it.each([
   port.send(message)
   await expect.poll(() => port.close.mock.calls.length).toBe(1)
   expect(port.postMessage.mock.calls.map(([m]) => m)).toEqual([
+    { type: 'initialized' },
     { type: 'prepared' },
     { type: 'error', message: reason },
   ])
@@ -318,6 +316,7 @@ it.each([
     })
     await expect.poll(() => port.close.mock.calls.length).toBe(1)
     expect(port.postMessage.mock.calls.map(([m]) => m)).toEqual([
+      { type: 'initialized' },
       { type: 'prepared' },
       { type: 'sent', transcript: { sent: Uint8Array.of(1, 2), received: Uint8Array.of(3, 4) } },
       { type: 'revealed', openings: [] },
@@ -422,10 +421,12 @@ it('opens the socket only after runtime startup, then waits for connection [LIBI
   expect(w.hooks.setup).not.toHaveBeenCalled()
   await w.resolve()
   expect(w.hooks.setup).not.toHaveBeenCalled()
-  expect(w.port.postMessage).not.toHaveBeenCalled()
-  w.open()
+  // The runtime is loaded; the parent starts its setup deadline only now.
   await expect.poll(() => w.port.postMessage.mock.calls.length).toBe(1)
-  expect(w.port.postMessage).toHaveBeenCalledWith({ type: 'prepared' })
+  expect(w.port.postMessage).toHaveBeenCalledWith({ type: 'initialized' })
+  w.open()
+  await expect.poll(() => w.port.postMessage.mock.calls.length).toBe(2)
+  expect(w.port.postMessage).toHaveBeenLastCalledWith({ type: 'prepared' })
   expect(w.hooks.setup).toHaveBeenCalledOnce()
 })
 
@@ -440,14 +441,13 @@ it.each(['runtime', 'socket-error', 'socket-close'])(
       else w.socket.close()
     }
     await expect.poll(() => w.port.close.mock.calls.length).toBe(1)
-    expect(w.port.postMessage).toHaveBeenCalledExactlyOnceWith({
-      type: 'error',
-      message: expect.any(String),
-    })
+    expect(w.port.postMessage.mock.calls.map(([m]) => m)).toEqual([
+      ...(failure === 'runtime' ? [] : [{ type: 'initialized' }]),
+      { type: 'error', message: expect.any(String) },
+    ])
     if (failure === 'runtime') expect(w.socket).toBeUndefined()
     else expect(w.socket.readyState).toBe(3)
     expect(w.hooks.setup).not.toHaveBeenCalled()
-    expect(w.port.postMessage).toHaveBeenCalledOnce()
   },
 )
 
@@ -457,10 +457,10 @@ it('rejects a socket closed immediately after opening [LIBID-PROVER-018]', async
   w.open()
   w.socket.close()
   await expect.poll(() => w.port.close.mock.calls.length).toBe(1)
-  expect(w.port.postMessage).toHaveBeenCalledExactlyOnceWith({
-    type: 'error',
-    message: expect.any(String),
-  })
+  expect(w.port.postMessage.mock.calls.map(([m]) => m)).toEqual([
+    { type: 'initialized' },
+    { type: 'error', message: expect.any(String) },
+  ])
   expect(w.hooks.setup).not.toHaveBeenCalled()
 })
 

@@ -107,6 +107,7 @@ function session(port: MessagePort, initial: Prepare) {
     const url = new URL(data.url)
     // The notary limits idle sockets; finish cold WASM startup before connecting.
     const tlsn = await initialize(data)
+    reply({ type: 'initialized' })
     const ws = new WebSocket(deriveNotaryWebSocketUrl(data.notaryAddress))
     const io = socketIo(ws)
     opened = io

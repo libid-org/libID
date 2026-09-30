@@ -44,6 +44,7 @@ async function sentSession(notary: NotaryRuntime, attestation?: string, transcri
     attestation === undefined ? undefined : { fetch: 'token-fetch', attestation },
   )
   const port = ports().at(-1)!
+  port.postMessage({ type: 'initialized' })
   port.postMessage({ type: 'prepared' })
   const session = await ready
   const sent = session.send(request)
@@ -90,7 +91,9 @@ it('shares one worker, routes overlapping replies per session and keeps it alive
   expect(workers).toHaveLength(1)
   const [{ terminate }] = workers
   const [one, two] = ports()
+  two.postMessage({ type: 'initialized' })
   two.postMessage({ type: 'prepared' })
+  one.postMessage({ type: 'initialized' })
   one.postMessage({ type: 'prepared' })
   const [token, identity] = await Promise.all([first, second])
   const a = token.send(request),
@@ -126,6 +129,7 @@ it('posts the exact request once and fails a send to another URL before sending 
   const port = ports()[0]
   const received: unknown[] = []
   port.onmessage = (event) => received.push(event.data)
+  port.postMessage({ type: 'initialized' })
   port.postMessage({ type: 'prepared' })
   const session = await ready
   await expect(session.reveal({ sent: [], received: [] })).rejects.toThrow(
@@ -185,6 +189,10 @@ it('fails a stuck preparation as the fetch it would start, within 10 seconds [LI
     event: 'token-fetch',
     message: 'Notary preparation timed out',
   })
+  // Loading the runtime, however slow the download, has no deadline.
+  await vi.advanceTimersByTimeAsync(60000)
+  expect(notary.signal.aborted).toBe(false)
+  ports().at(-1)!.postMessage({ type: 'initialized' })
   await vi.advanceTimersByTimeAsync(9999)
   expect(notary.signal.aborted).toBe(false)
   await vi.advanceTimersByTimeAsync(1)
@@ -193,6 +201,7 @@ it('fails a stuck preparation as the fetch it would start, within 10 seconds [LI
   // A prepared session's deadline starts only when it sends.
   const idle = new NotaryRuntime('https://notary.test', new AbortController().signal)
   const ready = idle.prepare(target)
+  ports().at(-1)!.postMessage({ type: 'initialized' })
   ports().at(-1)!.postMessage({ type: 'prepared' })
   await ready
   await vi.advanceTimersByTimeAsync(60000)
@@ -203,6 +212,7 @@ it('exposes late worker failure after preparation through the runtime signal [LI
   const parent = new AbortController()
   const notary = new NotaryRuntime('https://notary.test', parent.signal)
   const prepared = notary.prepare(target)
+  ports()[0].postMessage({ type: 'initialized' })
   ports()[0].postMessage({ type: 'prepared' })
   const session = await prepared
   expect(notary.signal.aborted).toBe(false)
@@ -315,6 +325,7 @@ it.each(['send', 'reveal', 'attestation'])(
     await vi.advanceTimersByTimeAsync(9999)
     expect(notary.signal.aborted).toBe(false)
     const port = ports()[0]
+    port.postMessage({ type: 'initialized' })
     port.postMessage({ type: 'prepared' })
     const session = await ready
     await vi.advanceTimersByTimeAsync(10000)

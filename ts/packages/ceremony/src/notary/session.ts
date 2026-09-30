@@ -15,8 +15,9 @@ import type {
 } from './protocol.js'
 
 /**
- * One session's setup. With the send budget it keeps X's token request well inside X's
- * 30-second code deadline, which the redirect and the Prover's load also spend.
+ * One session's setup once the SDK runtime has loaded; downloading the runtime has no deadline.
+ * With the send budget it keeps X's token request well inside X's 30-second code deadline,
+ * which the redirect and the Prover's load also spend.
  */
 const PREPARE_TIMEOUT_MS = 10000
 
@@ -130,11 +131,8 @@ class Session implements NotarySession {
   }
 
   async prepare(worker: Worker, notaryAddress: string): Promise<void> {
+    const initialized = this.wait('initialized')
     const prepared = this.wait('prepared')
-    this.timer = setTimeout(
-      () => this.fail(new Error('Notary preparation timed out')),
-      PREPARE_TIMEOUT_MS,
-    )
     try {
       worker.postMessage(
         {
@@ -146,6 +144,11 @@ class Session implements NotarySession {
           port: this.channel.port2,
         } satisfies Prepare,
         [this.channel.port2],
+      )
+      await initialized
+      this.timer = setTimeout(
+        () => this.fail(new Error('Notary preparation timed out')),
+        PREPARE_TIMEOUT_MS,
       )
       await prepared
       clearTimeout(this.timer)

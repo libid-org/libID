@@ -10,16 +10,21 @@ sessions, and no initialized runtime survives OAuth navigation.
 [registration.ts](../src/assets/registration.ts) resolves the canonical root
 registration, including when a stale nested registration uses the same script.
 It retires that known nested registration only when its workers use the canonical
-script URL; unrelated registrations remain untouched. It waits for the selected
-worker to become active and never dispatches to an older active worker while an
-update is installing or waiting. The dispatch acknowledgement establishes readiness;
-WebKit can leave another document's state stuck at `activating` after activation.
+script URL; unrelated registrations remain untouched. It checks for a deployed
+update and waits for an installing or waiting worker to become active. A working
+active worker bounds both waits to 3 seconds: past that, or when the check fails,
+Prefetch dispatches to it. A new worker cannot activate while the previous one still
+serves another Prefetch, and the previous one can serve this dispatch too; one that
+lacks the requested asset list answers at once, so the ceremony fails fast instead
+of waiting. Without an active worker, activation waits up to 15 seconds and failure
+is terminal. The dispatch acknowledgement establishes readiness; WebKit can leave
+another document's state stuck at `activating` after activation.
 
 [prefetch.ts](../src/ccdp/documents/prefetch.ts) is a dual document/Worker entry.
 The [Worker](../src/assets/rootWorker.ts) combines popup's port keeper with asset
 fetching. Install uses `skipWaiting`, activation uses `clients.claim`, and Prover
 explicitly joins root-worker control before readiness. Failure to establish the
-required registration/control is terminal.
+required registration or control is terminal.
 
 The private Worker message accepts an asset profile, never caller-supplied URLs.
 The dispatch acknowledgement means every selected request has a cache hit or a

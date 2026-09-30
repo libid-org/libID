@@ -62,6 +62,8 @@ export type ToWorker =
   | { type: 'reveal'; reveals: Reveals }
 
 export type FromWorker =
+  /** The SDK runtime has loaded; setup, which the preparation deadline bounds, starts now. */
+  | { type: 'initialized' }
   | { type: 'prepared' }
   | { type: 'sent'; transcript: Transcript }
   | { type: 'revealed'; openings: CommitmentOpening[] }
