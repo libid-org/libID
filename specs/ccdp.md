@@ -180,9 +180,10 @@ in the fragment, so the bridge cannot perform this selection at HTTP ingress.
 Compatible implementation changes keep the version. A breaking fragment
 grammar, navigation order, message shape, direction, ordering, or validation
 rule increments it, publishes new CCDP paths and Worker, and adds that version's
-implementation to the self-contained Callback artifact. Old resources and
-bundled Callback implementations remain available for live ceremonies and a
-compatibility window.
+implementation to the self-contained Callback artifact. The previous version's
+latest compatible release, including its bundled Callback implementation,
+remains available for a compatibility window, which ends when the Publisher
+stops including that version.
 
 Once that window ends, a build may omit a retired Callback implementation.
 Its version then takes Callback's local unsupported-version error path before

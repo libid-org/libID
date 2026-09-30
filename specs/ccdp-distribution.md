@@ -409,8 +409,10 @@ resources, including shared resources, so their downloads and caches are reusabl
 ### Publication and compatibility
 
 - REQ-DIST-05: The Publisher MUST activate a locally asset-complete release
-  and retain immutable paths as specified below. Necessity: compatible updates
-  must not invalidate live ceremonies or reusable cached bytes.
+  that serves the latest compatible release of each `CCDPVersion` it
+  includes, and no resource of an earlier compatible release. Necessity: an
+  origin serves one self-contained release at a time, and unchanged bytes stay
+  reusable across releases.
 
 Activation is asset-complete: every immutable resource referenced by an updated
 protocol resource or Worker is retrievable with its final bytes and response
@@ -420,12 +422,14 @@ The external Aztec request set is qualified before promotion; CDN availability
 cannot be made atomic with local deployment, and a later outage still fails
 proving if no usable cache is present.
 
-An unchanged asset retains its URL across compatible releases. Changed bytes or
-execution-relevant metadata receive a new immutable URL, and old URLs remain
-available while any live ceremony, supported CCDP implementation, platform
-profile, or compatibility window may reference them. Runtime content hashing is
-not required; release-qualified, content-addressed, and build-generated
-immutable paths all satisfy this contract.
+An origin serves one release at a time; activation switches it whole. An
+unchanged asset retains its URL across compatible releases. Changed bytes or
+execution-relevant metadata receive a new immutable URL, and the new release
+does not serve the URLs it replaced: a ceremony running across the switch can
+fail and is started again. The Publisher chooses which `CCDPVersion`s a release
+includes; each included version serves its latest compatible release. Runtime
+content hashing is not required; release-qualified, content-addressed, and
+build-generated immutable paths all satisfy this contract.
 
 Asset revisions change `CCDPVersion` or `PlatformCeremonyVersion` only when
 their observable protocol or proof semantics change.
@@ -469,6 +473,6 @@ these observable responses.
 - TEST-DIST-04 (exercises REQ-DIST-04):
   Empty-cache Prefetch and execution use the same declared resource graph; shared resources are reusable, and ranged external responses remain readable under both isolation profiles.
 - TEST-DIST-05 (exercises REQ-DIST-05):
-  Unchanged assets keep URLs, changed bytes get new URLs, both remain retrievable, and no updated document or Worker becomes reachable before all its local dependencies. External availability is qualified, not reported as atomic.
+  Unchanged assets keep URLs, changed bytes get new URLs, a release serves no resource of an earlier compatible release of an included `CCDPVersion`, and no updated document or Worker becomes reachable before all its local dependencies. External availability is qualified, not reported as atomic.
 - TEST-DIST-06 (exercises REQ-DIST-06):
   GET and HEAD serve the version list as `application/json; charset=utf-8` with `no-cache`, an ETag, `nosniff`, `Access-Control-Allow-Origin: *`, and `Cross-Origin-Resource-Policy: cross-origin`, without redirect, and no other resource sends a CORS header; its pairs equal the bundled Prover implementations. A reader ignores an unknown platform key; a non-object body, a non-array or non-integer value under any key, and an empty, duplicate-bearing, or non-ascending array refuse the resource.
