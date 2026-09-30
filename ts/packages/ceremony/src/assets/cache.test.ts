@@ -5,7 +5,7 @@ const spec = { url: 'https://assets.example/g1', range: 'bytes=0-1', bytes: 2 }
 
 afterEach(() => vi.unstubAllGlobals())
 
-it('joins pending downloads and preserves independent readers and worker CSP in stored bodies', async () => {
+it('joins pending downloads and preserves independent readers and worker CSP in stored bodies [LIBID-ASSET-019] [LIBID-ASSET-021] [LIBID-PROVER-016]', async () => {
   const stored = new Map<string, Response>()
   vi.stubGlobal('caches', {
     open: async () => ({
@@ -49,11 +49,11 @@ it('joins pending downloads and preserves independent readers and worker CSP in 
   expect(fetching).toHaveBeenCalledTimes(1)
 })
 
-it.each([200, 404])('rejects status %i for range fetches', (status) =>
+it.each([200, 404])('rejects status %i for range fetches [LIBID-ASSET-021]', (status) =>
   expect(() => validateResponse(new Response(null, { status }), spec)).toThrow(),
 )
 
-it('allows unexposed range headers but rejects exposed mismatches and wrong lengths', () => {
+it('allows unexposed range headers but rejects exposed mismatches and wrong lengths [LIBID-ASSET-021]', () => {
   expect(() => validateResponse(new Response(null, { status: 206 }), spec)).not.toThrow()
   for (const headers of [
     new Headers({ 'Content-Range': 'bytes 2-3/100' }),
@@ -62,7 +62,7 @@ it('allows unexposed range headers but rejects exposed mismatches and wrong leng
     expect(() => validateResponse(new Response(null, { status: 206, headers }), spec)).toThrow()
 })
 
-it('rejects a malformed Content-Range even without a requested range', () => {
+it('rejects a malformed Content-Range even without a requested range [LIBID-ASSET-021]', () => {
   for (const range of ['bytes 0-1/0x10', 'bytes 0-1', 'items 0-1/2'])
     expect(() =>
       validateResponse(new Response(null, { headers: { 'Content-Range': range } }), {
@@ -71,7 +71,7 @@ it('rejects a malformed Content-Range even without a requested range', () => {
     ).toThrow('Unexpected asset range')
 })
 
-it('storage denial still fetches; failed bodies never become a reusable flight', async () => {
+it('storage denial still fetches; failed bodies never become a reusable flight [LIBID-ASSET-019]', async () => {
   vi.stubGlobal('caches', {
     open: async () => {
       throw new Error('denied')
@@ -113,7 +113,7 @@ it.each(['application/wasm', 'text/javascript'])(
 )
 
 it.each(['miss', 'denied'])(
-  'uses the browser HTTP cache after a Cache Storage %s, retaining request options',
+  'uses the browser HTTP cache after a Cache Storage %s, retaining request options [LIBID-ASSET-021]',
   async (storage) => {
     vi.stubGlobal('caches', {
       open: async () => {
@@ -137,32 +137,35 @@ it.each(['miss', 'denied'])(
 it.each([
   { 'Content-Type': 'text/html', 'Content-Length': '2' },
   { 'Content-Type': 'application/wasm', 'Content-Length': '3' },
-])('rejects invalid cached metadata and validates the fetched body', async (headers) => {
-  vi.stubGlobal('caches', {
-    open: async () => ({
-      match: async () => new Response(new Uint8Array([4, 5]), { headers }),
-      put: async () => {},
-    }),
-  })
-  const fetching = vi.fn(
-    async () =>
-      new Response(new Uint8Array([4]), {
-        headers: { 'Content-Type': 'application/wasm' },
+])(
+  'rejects invalid cached metadata and validates the fetched body [LIBID-ASSET-019]',
+  async (headers) => {
+    vi.stubGlobal('caches', {
+      open: async () => ({
+        match: async () => new Response(new Uint8Array([4, 5]), { headers }),
+        put: async () => {},
       }),
-  )
-  vi.stubGlobal('fetch', fetching)
-  await expect(
-    new AssetCache('https://ccdp.example').load({
-      url: 'https://ccdp.example/asset.wasm',
-      bytes: 2,
-      mime: 'application/wasm',
-    }).response,
-  ).rejects.toThrow('Incomplete')
-  expect(fetching).toHaveBeenCalledTimes(1)
-})
+    })
+    const fetching = vi.fn(
+      async () =>
+        new Response(new Uint8Array([4]), {
+          headers: { 'Content-Type': 'application/wasm' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetching)
+    await expect(
+      new AssetCache('https://ccdp.example').load({
+        url: 'https://ccdp.example/asset.wasm',
+        bytes: 2,
+        mime: 'application/wasm',
+      }).response,
+    ).rejects.toThrow('Incomplete')
+    expect(fetching).toHaveBeenCalledTimes(1)
+  },
+)
 
 it.each([false, true])(
-  'delivers validated bytes before persistence, keeping joiners until write completion (range=%s)',
+  'delivers validated bytes before persistence, keeping joiners until write completion (range=%s) [LIBID-ASSET-019] [LIBID-ASSET-021]',
   async (range) => {
     let release!: () => void
     const held = new Promise<void>((resolve) => {
@@ -209,7 +212,7 @@ it.each([false, true])(
   },
 )
 
-it('absorbs failed writes, releases the pending entry and retries later', async () => {
+it('absorbs failed writes, releases the pending entry and retries later [LIBID-ASSET-019]', async () => {
   let reject!: (error: Error) => void
   vi.stubGlobal('caches', {
     open: async () => ({

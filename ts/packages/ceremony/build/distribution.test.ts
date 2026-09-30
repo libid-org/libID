@@ -14,7 +14,7 @@ const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifact
     readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
   )
 
-test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023]', () => {
+test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-PROVER-005]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
   assert.equal((config.general as TomlTable)['text-charset'], false)
   assert.equal(Object.hasOwn(config.general as object, 'port'), false)
@@ -100,7 +100,7 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
   assert.equal(existsSync(join(out, 'public/manifest.json')), false)
 })
 
-test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018] [TEST-DIST-01]', {
+test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018] [TEST-DIST-01] [LIBID-ASSET-014]', {
   skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
   for (const [path, expected] of Object.entries(graph.headers)) {
@@ -160,7 +160,7 @@ test('actual SWS answers the health probe and serves every 404 with the error po
   assert.equal(directory.headers.get('cache-control'), errorHeaders['Cache-Control'])
 })
 
-test('aggregate Callback insertion preserves executable hashes and rejects malformed artifacts [KIT-009] [KIT-010] [CSP-007] [TEST-DIST-02] [TEST-BRIDGE-04]', async () => {
+test('aggregate Callback insertion preserves executable hashes and rejects malformed artifacts [KIT-009] [KIT-010] [CSP-007] [TEST-DIST-02] [TEST-BRIDGE-04] [LIBID-MOD-003] [LIBID-ASSET-002]', async () => {
   const { prepareCallback } = await import('../e2e/callback.ts')
   const path = '/ccdp/callback.html'
   const html = readFileSync(join(out, 'public', path), 'utf8')

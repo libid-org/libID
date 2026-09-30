@@ -144,7 +144,7 @@ function proofFor(connection: FakeConnection, claimed: Identity<'google'> = iden
 }
 
 describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
-  it('uses distinct origins and frozen input; never receives raw OAuth return [TEST-CCDP-01] [TEST-CCDP-03]', async () => {
+  it('uses distinct origins and frozen input; never receives raw OAuth return [TEST-CCDP-01] [TEST-CCDP-03] [LIBID-MOD-018] [LIBID-OAUTH-016] [LIBID-OAUTH-027] [LIBID-BROWSER-020]', async () => {
     const { connection: c, ceremony, data } = setup()
     const events: string[] = []
     ceremony.onEvent((e) => events.push(e.status === 'active' ? `${e.event}.${e.phase}` : e.status))
@@ -208,7 +208,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     expect(events).toEqual(lifecycle)
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
   })
-  it('closing the connection wins over late delivery without a CCDP cancel [LIBID-BROWSER-005]', async () => {
+  it('closing the connection wins over late delivery without a CCDP cancel [LIBID-BROWSER-005] [LIBID-OAUTH-024] [LIBID-OAUTH-025] [LIBID-BROWSER-018]', async () => {
     const { connection: c, ceremony } = setup()
     const rejection = expect(ceremony.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
     await c.close()
@@ -296,7 +296,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       message: expect.stringContaining('sequence'),
     })
   })
-  it('denial resolves only after start; observer failure is inert [TEST-CCDP-07]', async () => {
+  it('denial resolves only after start; observer failure is inert [TEST-CCDP-07] [LIBID-BROWSER-018]', async () => {
     const { connection: c, ceremony } = setup()
     ceremony.onEvent(() => {
       throw new Error('observer')
@@ -306,7 +306,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     c.receive({ type: 'user-denied' })
     await expect(pending).resolves.toEqual({ status: 'denied' })
   })
-  it('rejects setup failures without leaking handlers or connection ownership', async () => {
+  it('rejects setup failures without leaking handlers or connection ownership [LIBID-BROWSER-002]', async () => {
     const { connection: c, ceremony } = setup()
     const release = c.on(EventMessage, () => {})
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('initialize')
@@ -390,7 +390,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
 })
 
 it.each(supportedPlatforms)(
-  'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015]',
+  'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015] [LIBID-ASSET-006] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
   async (platformId) => {
     const oidc = fixtures[platformId].pipeline === 'oidc'
     const hash = testnet.hash(),
@@ -469,7 +469,7 @@ it.each(supportedPlatforms)(
   },
 )
 
-it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014]', () => {
+it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014] [LIBID-OAUTH-003]', () => {
   const connection = spiedConnection()
   for (const ledger of [
     null,
@@ -699,7 +699,7 @@ it.each(supportedPlatforms)(
 )
 
 it.each(['success', 'denied', 'failed', 'closed', 'invalid-result', 'setup'] as const)(
-  'finishes exactly once for %s, before settling the promise [LIBID-BROWSER-008]',
+  'finishes exactly once for %s, before settling the promise [LIBID-BROWSER-008] [LIBID-OAUTH-029]',
   async (outcome) => {
     const { ceremony, connection } = setup()
     const finish = {
@@ -760,7 +760,7 @@ it.each(['success', 'denied', 'failed', 'closed', 'invalid-result', 'setup'] as 
   },
 )
 
-it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08]', async () => {
+it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08] [LIBID-OAUTH-024] [LIBID-OAUTH-025] [LIBID-BROWSER-009] [LIBID-BROWSER-022]', async () => {
   const { ceremony, connection } = setup()
   const events: CeremonyEvent[] = []
   ceremony.onEvent((event) => events.push(event))
@@ -781,7 +781,7 @@ it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08
   expect(connection.sent).toEqual([])
 })
 
-it('only core readiness events advance the protocol; preserves occurrence times [LIBID-BROWSER-006] [TEST-CCDP-06]', async () => {
+it('only core readiness events advance the protocol; preserves occurrence times [LIBID-BROWSER-006] [TEST-CCDP-06] [LIBID-OAUTH-028] [LIBID-BROWSER-030]', async () => {
   const { ceremony, connection: c } = setup()
   const events: CeremonyEvent[] = []
   ceremony.onEvent((e) => events.push(e))
@@ -807,7 +807,7 @@ it('only core readiness events advance the protocol; preserves occurrence times 
   expect(events).toHaveLength(count)
 })
 
-it('cancellation at authorization entry prevents provider navigation', async () => {
+it('cancellation at authorization entry prevents provider navigation [LIBID-BROWSER-018]', async () => {
   const { ceremony, connection } = setup()
   ceremony.onEvent((event) => {
     if (event.status === 'active' && event.event === 'authorization' && event.phase === 'started')
@@ -820,7 +820,7 @@ it('cancellation at authorization entry prevents provider navigation', async () 
   expect(connection.navigations.map((navigation) => navigation.away)).toEqual([false])
 })
 
-it('readiness without the optional authorization observation still permits denial', async () => {
+it('readiness without the optional authorization observation still permits denial [LIBID-OAUTH-028]', async () => {
   const { ceremony, connection: c } = setup()
   const stages: string[] = []
   ceremony.onStage((e) => stages.push(e.stage))
@@ -834,7 +834,7 @@ it('readiness without the optional authorization observation still permits denia
   expect(stages).toContain('proof-preparation')
 })
 
-it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] [LIBID-MOD-020] [TEST-PLAT-17]', async () => {
+it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] [LIBID-MOD-020] [TEST-PLAT-17] [LIBID-ASSET-004] [LIBID-ASSET-005]', async () => {
   // A second catalog entry tests selection only; it is not a new or qualified Google profile.
   Reflect.set(platforms.google.versions, '2', platforms.google.versions[1])
   try {
@@ -884,7 +884,7 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
   }
 })
 
-it('rejects unavailable explicit versions before reading ledger or reserving the run [LIBID-MOD-015]', async () => {
+it('rejects unavailable explicit versions before reading ledger or reserving the run [LIBID-MOD-015] [LIBID-ASSET-004] [LIBID-OAUTH-024]', async () => {
   const client = ccdpClientFromConfig(config)
   const ledger = { ...testnet, hash: vi.fn(testnet.hash) }
   const c = spiedConnection()
@@ -917,7 +917,7 @@ it('a lost optional operation start does not prevent accepted proof delivery [LI
   await expect(result).resolves.toMatchObject({ status: 'accepted' })
 })
 
-it('reports closure before the first start without mislabeling it as a repeat [LIBID-BROWSER-013]', async () => {
+it('reports closure before the first start without mislabeling it as a repeat [LIBID-BROWSER-013] [LIBID-BROWSER-020]', async () => {
   const { ceremony, connection } = setup()
   await connection.close()
   await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({
@@ -930,7 +930,7 @@ it('reports closure before the first start without mislabeling it as a repeat [L
   expect(connection.navigations).toEqual([])
 })
 
-it('freezes and forwards the public credential from validated configuration [TEST-BRIDGE-03]', async () => {
+it('freezes and forwards the public credential from validated configuration [TEST-BRIDGE-03] [LIBID-ASSET-006] [LIBID-ASSET-010] [LIBID-OAUTH-016]', async () => {
   const profile = {
     clientId: 'client',
     ceremonyVersions: [1],
@@ -982,7 +982,7 @@ it('requires the GitHub public credential and validates optional credentials for
 })
 
 it.each(['closed', 'failed'] as const)(
-  'preserves popup %s in errors and both terminal subscriptions',
+  'preserves popup %s in errors and both terminal subscriptions [LIBID-OAUTH-029] [LIBID-BROWSER-002]',
   async (outcome) => {
     const { connection, ceremony } = setup()
     const events = vi.fn(),
@@ -1004,7 +1004,7 @@ it.each(['closed', 'failed'] as const)(
   },
 )
 
-it('preserves closure before proving starts', async () => {
+it('preserves closure before proving starts [LIBID-BROWSER-002]', async () => {
   const { connection, ceremony } = setup()
   await connection.close()
   await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ status: 'closed' })
@@ -1056,7 +1056,7 @@ it.each([
   { name: 'transaction data array', transactionData: [1, 2], error: 'transaction bytes' },
   { name: 'transaction data string', transactionData: '0102', error: 'transaction bytes' },
 ])(
-  'rejects malformed operation bytes before OAuth: $name',
+  'rejects malformed operation bytes before OAuth: $name [LIBID-OAUTH-003]',
   ({ operationDomain = new Uint8Array(32), transactionData = new Uint8Array(), error }) => {
     const client = ccdpClientFromConfig(config)
     const connection = spiedConnection()

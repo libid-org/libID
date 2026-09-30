@@ -43,7 +43,7 @@ test('two independently supplied connections cannot replace each other [LIBID-BR
   ])
 })
 
-test('Prover rejects a changed Application origin in the same opener window [TEST-CCDP-04] [TEST-COMMON-14]', async ({
+test('Prover rejects a changed Application origin in the same opener window [TEST-CCDP-04] [TEST-COMMON-14] [LIBID-OAUTH-017]', async ({
   ccdp,
   page,
   context,
@@ -76,7 +76,7 @@ test('Prover rejects a changed Application origin in the same opener window [TES
   expect(new URL(page.url()).origin).toBe(ccdp)
 })
 
-test('provider isolation ends Application and returning Callback reports its own connection failure [TEST-CCDP-08] [LIBID-BROWSER-005]', async ({
+test('provider isolation ends Application and returning Callback reports its own connection failure [TEST-CCDP-08] [LIBID-BROWSER-005] [LIBID-OAUTH-020] [LIBID-BROWSER-009]', async ({
   bridge,
   page,
   provider,

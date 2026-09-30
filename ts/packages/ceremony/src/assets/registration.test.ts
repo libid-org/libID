@@ -73,7 +73,7 @@ it('uses dispatch acknowledgement when another document retains an activating wo
   )
 })
 
-it('waits for an installing update to become active instead of using the old worker', async () => {
+it('waits for an installing update to become active instead of using the old worker [LIBID-ASSET-014]', async () => {
   const worker = serviceWorker('installing')
   const root = registration(`${ORIGIN}/`, { active: {}, installing: worker })
   install(root)

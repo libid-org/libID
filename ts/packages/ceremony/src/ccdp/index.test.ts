@@ -127,7 +127,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
     )
   })
 
-  it('rejects malformed event records and terminal claims without coercion', () => {
+  it('rejects malformed event records and terminal claims without coercion [LIBID-OAUTH-024]', () => {
     const message = samples[5][1]
     for (const timestamp of [NaN, Infinity, -1, '0'])
       expect(() => EventMessage.decode({ ...message, timestamp })).toThrow()
@@ -140,7 +140,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
     ])
       expect(() => EventMessage.decode({ ...message, ...extra })).toThrow()
   })
-  it('preserves private return components with one outer encoding [LIBID-OAUTH-026] [TEST-CCDP-03]', () => {
+  it('preserves private return components with one outer encoding [LIBID-OAUTH-026] [TEST-CCDP-03] [LIBID-OAUTH-011]', () => {
     const input = { query: `?code=a%2Bb&state=v1.${id}`, fragment: '' }
     expect(readProver(String(proverFragment(id, 'https://app.test', input)))).toEqual({
       ceremonyId: id,
@@ -199,7 +199,7 @@ it.each([
   expect(() => IdentityProof.decode({ type: 'identity-proof', identity, proof: null })).toThrow()
 })
 
-it('rejects the retired delivery message and embedded-identity shape', () => {
+it('rejects the retired delivery message and embedded-identity shape [LIBID-OAUTH-024]', () => {
   expect(() => IdentityProof.decode({ type: 'prover-deliver-proof', proof: {} })).toThrow()
   expect(() => IdentityProof.decode({ type: 'identity-proof', proof: { identity: {} } })).toThrow()
 })
