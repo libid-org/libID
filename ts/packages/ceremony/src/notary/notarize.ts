@@ -218,17 +218,19 @@ export function matchAttestedData(
   return decoded
 }
 
-/** Select the one provisional opening of `range` and rebuild its commitment from known plaintext. */
+/** Select the one provisional opening of `range` and require it to commit exactly `plaintext`. */
 export function plaintextOpening(
   openings: readonly CommitmentOpening[],
   direction: 'sent' | 'received',
   range: ByteRange,
   plaintext: Uint8Array,
-): CommitmentOpening & HashOpening {
+): CommitmentOpening {
   const matches = openings.filter((o) => o.direction === direction && sameRange(o, range))
   if (matches.length !== 1) throw new Error('Plaintext opening is not unique')
   const opening = matches[0]
   if (opening.blinder.length !== BLINDER_BYTES || opening.end - opening.start !== plaintext.length)
     throw new Error('Invalid plaintext opening')
-  return { ...opening, hash: commitmentHash(plaintext, opening.blinder) }
+  if (!bytesEqual(commitmentHash(plaintext, opening.blinder), opening.hash))
+    throw new Error('Plaintext opening does not match its commitment')
+  return opening
 }

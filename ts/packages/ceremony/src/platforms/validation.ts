@@ -4,7 +4,8 @@ import type { PlatformId } from './index.js'
 /** Browser acceptance cap on opaque ZK proof bytes, not a circuit dimension. */
 const MAX_PROOF_BYTES = 4 * 1024 * 1024
 
-export interface Identity<P extends PlatformId = PlatformId> {
+/** One platform user; the wire form is `Identity<string>` until a platform slice checks it. */
+export interface Identity<P extends string = PlatformId> {
   platformId: P
   oauthClientId: string
   userId: string

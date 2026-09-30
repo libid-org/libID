@@ -1,5 +1,11 @@
 import type { ProverContext } from './context.js'
-import type { PlatformId, ProofByPlatformVersion, SupportedCeremonyVersion } from './index.js'
+import {
+  isPlatformId,
+  isSupportedVersion,
+  type PlatformId,
+  type ProofByPlatformVersion,
+  type SupportedCeremonyVersion,
+} from './index.js'
 import type { Identity } from './validation.js'
 
 /** Platform `P`'s delivered identity beside a proof of one of its versions. */
@@ -12,7 +18,7 @@ export type ProverResult<P extends PlatformId = PlatformId> = P extends Platform
  * Typed per platform, so a table entry or fixture importing another platform's fails typecheck.
  */
 export type ProverModule<P extends PlatformId = PlatformId> = {
-  prove(context: ProverContext): Promise<ProverResult<P> | null>
+  prove(context: ProverContext<P>): Promise<ProverResult<P>>
 }
 
 /**
@@ -37,15 +43,7 @@ export type Prover = {
 
 /** The prover a proving request names, or `undefined` when the Prover bundles none for it. */
 export function proverFor(platformId: string, version: number): Prover | undefined {
-  if (!Object.hasOwn(provers, platformId)) return undefined
-  const versions: Partial<Record<number, () => Promise<ProverModule>>> =
-    provers[platformId as PlatformId]
-  const load = Object.hasOwn(versions, version) ? versions[version] : undefined
-  return (
-    load && {
-      platformId: platformId as PlatformId,
-      version: version as SupportedCeremonyVersion<PlatformId>,
-      load,
-    }
-  )
+  if (!isPlatformId(platformId) || !isSupportedVersion(platformId, version)) return undefined
+  const versions: Readonly<Record<number, () => Promise<ProverModule>>> = provers[platformId]
+  return { platformId, version, load: versions[version] }
 }

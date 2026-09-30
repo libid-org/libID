@@ -772,8 +772,20 @@ it.each([
   if (document === 'Prover') prefetched(connection)
   connection.peerOrigin = 'https://bridge.test'
   connection.receive(readiness)
-  await expect(result).rejects.toThrow('Readiness from outside the CCDP')
+  await expect(result).rejects.toThrow('Message from outside the CCDP')
   expect(connection.sent).toEqual([])
+})
+
+it.each([
+  ['a proof', (c: FakeConnection) => ({ type: 'identity-proof', identity, proof: proofFor(c) })],
+  ['a denial', () => ({ type: 'user-denied' })],
+])('accepts %s only from the CCDP, never the Bridge', async (_name, message) => {
+  const { ceremony, connection } = setup()
+  const result = ceremony.proveUserIdentity()
+  reachProving(connection)
+  connection.peerOrigin = 'https://bridge.test'
+  connection.receive(message(connection))
+  await expect(result).rejects.toThrow('Message from outside the CCDP')
 })
 
 it.each([

@@ -2,6 +2,7 @@
 import type { Message, MessageType } from '@libid/popup'
 import { isCoreEvent, type OperationEvent } from '../events.js'
 import { isPkceValue } from '../platforms/authorization.js'
+import type { Identity } from '../platforms/validation.js'
 import {
   hasExactKeys,
   isOrigin,
@@ -33,7 +34,7 @@ export function isRedirectUri(value: unknown): value is string {
 }
 
 /** Shared identity shape; each platform slice checks its own platform ID and byte limits. */
-function isIdentityShape(value: unknown): value is IdentityProof['identity'] {
+function isIdentityShape(value: unknown): value is Identity<string> {
   return (
     hasExactKeys(value, ['platformId', 'oauthClientId', 'userId', 'userName']) &&
     isSlug(value.platformId) &&
@@ -163,7 +164,7 @@ export const EventMessage: MessageType<EventMessage> = {
 /** Final prover output, including all required attestations; the ledger verifier remains authoritative. */
 export interface IdentityProof {
   type: 'identity-proof'
-  identity: { platformId: string; oauthClientId: string; userId: string; userName: string }
+  identity: Identity<string>
   proof: unknown
 }
 

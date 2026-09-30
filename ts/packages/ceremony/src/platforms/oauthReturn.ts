@@ -1,9 +1,8 @@
-import { isClientCredential } from '../ccdp/index.js'
+import { isClientCredential, type ProveIdentity } from '../ccdp/index.js'
 import { MAX_OAUTH_RETURN_CHARS } from '../ccdp/limits.js'
 import { type OAuthReturn, oauthState } from '../ccdp/navigation.js'
 import { messages } from '../ccdp/uiMessages.js'
 import { CeremonyError } from '../errors.js'
-import type { ProverContext } from './context.js'
 import { ceremonyFor, type PlatformId, platforms, type SupportedCeremonyVersion } from './index.js'
 
 /** One platform's redirect: its transport, credential field, other rejected fields and any issuer. */
@@ -94,27 +93,33 @@ export function parseOAuthReturn(
     : { outcome: 'error', state, error }
 }
 
+/** An admitted return's credential, with the request's verifier where the version declares PKCE. */
+export interface AcceptedReturn {
+  credential: string
+  codeVerifier: string | null
+}
+
 /**
- * Admit the request against its platform's ceremony at the requested version and read its
+ * Admit `request` against platform `platformId`'s ceremony at `version` and read the run's
  * ceremony-bound return, before any network use: null for valid denial, otherwise the accepted
  * credential. Consuming the return once is the Prover document's job.
  */
-export function acceptReturn(context: ProverContext, platformId: PlatformId): string | null {
-  const { request } = context
+export function acceptReturn<P extends PlatformId>(
+  platformId: P,
+  version: SupportedCeremonyVersion<P>,
+  request: ProveIdentity,
+  capture: { ceremonyId: string; oauthReturn: OAuthReturn },
+): AcceptedReturn | null {
   const platform = platforms[platformId]
-  context.signal.throwIfAborted()
-  const ceremony = ceremonyFor(
-    platformId,
-    request.platformCeremonyVersion as SupportedCeremonyVersion<PlatformId>,
-  )
+  const ceremony = ceremonyFor(platformId, version)
   if (!platform.isClientId(request.clientId) || ceremony.pkce !== (request.codeVerifier !== null))
     throw new CeremonyError('authorization', messages.invalidProvingRequest)
-  const returned = parseOAuthReturn(context.oauthReturn, ceremony.returnRules)
-  if (returned?.state !== oauthState(context.ceremonyId))
+  const returned = parseOAuthReturn(capture.oauthReturn, ceremony.returnRules)
+  if (returned?.state !== oauthState(capture.ceremonyId))
     throw new CeremonyError('authorization', 'Invalid OAuth return')
   if (returned.outcome === 'denied') return null
   if (returned.outcome === 'error') throw new CeremonyError('authorization', 'Authorization failed')
   if (platform.requiresClientCredential && !isClientCredential(request.clientCredential))
     throw new CeremonyError('token-fetch', 'Missing public token-exchange credential')
-  return returned.credential
+  return { credential: returned.credential, codeVerifier: request.codeVerifier }
 }

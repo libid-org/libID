@@ -72,18 +72,28 @@ export function proveIdentity(
   }
 }
 
-/** A ProverContext for the fixture's accepted return under CEREMONY_ID. */
+/** The Prover document's capture of the fixture's accepted return under CEREMONY_ID. */
+export const returnCapture = (
+  platformId: PlatformId,
+  outcome: 'accepted' | 'denied' = 'accepted',
+) => ({
+  ceremonyId: CEREMONY_ID,
+  oauthReturn: returnSamples(platformId)[outcome].oauthReturn,
+})
+
+/** A ProverContext as the Prover document builds it from the fixture's accepted return. */
 export function proverContext(
   platformId: PlatformId,
   change: Partial<Omit<ProverContext, 'request'>> & { request?: Partial<ProveIdentity> } = {},
 ): ProverContext {
-  const { request, ...rest } = change
+  const { request: requestChange, ...rest } = change
+  const request = proveIdentity(platformId, requestChange)
   return {
-    ceremonyId: CEREMONY_ID,
     signal: new AbortController().signal,
     emit: () => {},
-    oauthReturn: returnSamples(platformId).accepted.oauthReturn,
-    request: proveIdentity(platformId, request),
+    credential: returnSamples(platformId).accepted.credential,
+    codeVerifier: request.codeVerifier,
+    request,
     ...rest,
   }
 }

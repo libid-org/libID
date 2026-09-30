@@ -3,7 +3,7 @@ import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterEach, beforeEach, expect, it, type Mock, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
 import type { ProverContext } from '../../platforms/context.js'
-import { platforms, supportedPlatforms } from '../../platforms/index.js'
+import { type PlatformId, platforms, supportedPlatforms } from '../../platforms/index.js'
 import {
   CEREMONY_ID,
   type FakeDocumentUi,
@@ -12,14 +12,24 @@ import {
   returnSamples,
 } from '../../testing/index.js'
 import type { IdentityProof } from '../index.js'
+import type { OAuthReturn } from '../navigation.js'
 import { messages, popupErrorMessages } from '../uiMessages.js'
 import { startProver } from './prover.js'
+
+/** A result the document delivers as a valid IdentityProof. */
+const proofOf = (platformId: PlatformId = 'google'): Omit<IdentityProof, 'type'> => ({
+  identity: { platformId, oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
+  proof: {},
+})
 
 const { accept, claimRootWorker, prove } = vi.hoisted(() => ({
   accept: vi.fn(),
   claimRootWorker: vi.fn(),
   prove: vi.fn(
-    async (_context: ProverContext): Promise<Omit<IdentityProof, 'type'> | null> => null,
+    async (_context: ProverContext): Promise<Omit<IdentityProof, 'type'>> => ({
+      identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
+      proof: {},
+    }),
   ),
 }))
 
@@ -52,14 +62,20 @@ function spiedConnection(ready: 'resolved' | 'pending' = 'resolved') {
 let connection: ReturnType<typeof spiedConnection>
 let ui: Spied<FakeDocumentUi, 'stop' | 'message' | 'trackProof' | 'finishProof' | 'delivered'>
 
-/** The Prover document's private fragment for an OAuth return carrying `oauthFragment`. */
-const proverInput = (oauthFragment = '#error=access_denied') =>
+/** The Prover document's private fragment carrying `oauthReturn`. */
+const inputFor = (oauthReturn: OAuthReturn) =>
   new URLSearchParams({
     ceremonyId: CEREMONY_ID,
     applicationOrigin: 'https://app.test',
-    oauthQuery: '',
-    oauthFragment,
+    oauthQuery: oauthReturn.query,
+    oauthFragment: oauthReturn.fragment,
   }).toString()
+
+/** The private fragment carrying `platformId`'s `outcome` return sample. */
+const proverInput = (
+  platformId: PlatformId = 'google',
+  outcome: 'accepted' | 'denied' = 'accepted',
+) => inputFor(returnSamples(platformId)[outcome].oauthReturn)
 
 /** The message types the document sent, in order. */
 const sentTypes = () => connection.sent.map((message) => message.type)
@@ -86,15 +102,7 @@ it.each(supportedPlatforms)(
     vi.stubGlobal('location', { origin: 'https://ccdp.test' })
     vi.stubGlobal('crossOriginIsolated', true)
     vi.stubGlobal('Worker', vi.fn())
-    const { oauthReturn } = returnSamples(platformId).denied
-    await startProver(
-      new URLSearchParams({
-        ceremonyId: CEREMONY_ID,
-        applicationOrigin: 'https://app.test',
-        oauthQuery: oauthReturn.query,
-        oauthFragment: oauthReturn.fragment,
-      }).toString(),
-    )
+    await startProver(proverInput(platformId))
     expect(accept).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({ allowedApplicationOrigins: ['https://app.test'] }),
@@ -115,7 +123,30 @@ it.each(supportedPlatforms)(
     )
     expect(context.request.notaryAddress).toBe('https://local-notary.test')
     expect(context).not.toHaveProperty('ledgerId')
-    expect(context.oauthReturn).toEqual(oauthReturn)
+    // The prover gets the admitted credential, never the raw return or the ceremony state.
+    expect(context.credential).toBe(returnSamples(platformId).accepted.credential)
+    expect(context.codeVerifier).toBe(context.request.codeVerifier)
+    expect(context).not.toHaveProperty('oauthReturn')
+    expect(context).not.toHaveProperty('ceremonyId')
+  },
+)
+
+it.each([
+  ['a denial', proverInput('google', 'denied'), { type: 'user-denied' }],
+  [
+    'a return without this ceremony state',
+    inputFor({ query: '', fragment: '#error=access_denied' }),
+    { type: 'ceremony-failed', event: 'authorization', message: 'Invalid OAuth return' },
+  ],
+])(
+  'settles %s before loading its prover [LIBID-OAUTH-018] [LIBID-OAUTH-021]',
+  async (_name, fragment, sent) => {
+    await startProver(fragment)
+    connection.receive(proveIdentity())
+    await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
+    expect(connection.sent.at(-1)).toEqual(sent)
+    expect(prove).not.toHaveBeenCalled()
+    expect(ui.trackProof).not.toHaveBeenCalled()
   },
 )
 
@@ -126,7 +157,7 @@ it.each([
 ])(
   'refuses unbundled $platformId/$platformCeremonyVersion before proving [LIBID-ASSET-007] [KIT-023]',
   async (pair) => {
-    await startProver(proverInput(''))
+    await startProver(proverInput())
     // Exercise document dispatch directly: the wire codec also rejects unknown platforms.
     connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]({
       ...proveIdentity('google'),
@@ -165,7 +196,7 @@ it.each([
       context.emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: 12 })
       throw error
     })
-    await startProver(proverInput())
+    await startProver(proverInput('github'))
     expect(connection.sent).toEqual([
       { type: 'event', event: 'prover-fallback', timestamp: performance.timeOrigin },
       { type: 'event', event: 'prover', phase: 'started', timestamp: expect.any(Number) },
@@ -186,11 +217,7 @@ it.each([
 it.each(['delivered', 'send-failed', 'ui-failed', 'closed-during-paint'])(
   'gives the UI a paint opportunity before delivery: %s [LIBID-BROWSER-024]',
   async (outcome) => {
-    prove.mockResolvedValueOnce({
-      identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
-      proof: {},
-    })
-    await startProver(proverInput(''))
+    await startProver(proverInput())
     let painted!: () => void
     ui.finishProof.mockImplementation(
       () =>
@@ -247,7 +274,7 @@ it.each(['before', 'after'])(
   async (when) => {
     const error = new PopupError('fallback-failed')
     connection = spiedConnection(when === 'before' ? 'pending' : 'resolved')
-    const run = startProver(proverInput(''))
+    const run = startProver(proverInput())
     if (when === 'after') await run
     connection.send.mockImplementation(() => {
       throw new Error('unreachable')
@@ -275,14 +302,14 @@ it.each(['before-ready', 'duplicate', 'after-denial'])(
   async (when) => {
     connection = spiedConnection('pending')
     let finish!: () => void
-    if (when !== 'before-ready')
+    if (when === 'duplicate')
       prove.mockImplementationOnce(
         () =>
-          new Promise<null>((resolve) => {
-            finish = () => resolve(null)
+          new Promise((resolve) => {
+            finish = () => resolve(proofOf())
           }),
       )
-    const run = startProver(proverInput())
+    const run = startProver(proverInput('google', when === 'after-denial' ? 'denied' : 'accepted'))
     const request = proveIdentity()
     if (when === 'before-ready') {
       connection.receive(request)
@@ -291,23 +318,25 @@ it.each(['before-ready', 'duplicate', 'after-denial'])(
       await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
       expect(prove).not.toHaveBeenCalled()
       expect(sentTypes()).not.toContain('event')
-    } else {
+    } else if (when === 'duplicate') {
       connection.settle()
       await run
       connection.receive(request)
       await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
-      if (when === 'duplicate') {
-        connection.receive(request)
-        await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
-        finish()
-      } else {
-        finish()
-        await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
-        connection.receive(request)
-      }
+      connection.receive(request)
+      await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
+      finish()
       await Promise.resolve()
       expect(prove).toHaveBeenCalledOnce()
       expect(prove.mock.calls[0][0].signal.aborted).toBe(true)
+    } else {
+      connection.settle()
+      await run
+      connection.receive(request)
+      await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
+      connection.receive(request)
+      await Promise.resolve()
+      expect(prove).not.toHaveBeenCalled()
     }
     const count = (type: string) => sentTypes().filter((sent) => sent === type).length
     expect(count('ceremony-failed')).toBe(when === 'after-denial' ? 0 : 1)
@@ -383,7 +412,7 @@ it('drops prover observations produced after the document ended [LIBID-BROWSER-0
   prove.mockImplementationOnce(async ({ signal, emit }) => {
     await new Promise((resolve) => signal.addEventListener('abort', resolve))
     emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: 12 })
-    return null
+    return proofOf()
   })
   await startProver(proverInput())
   connection.receive(proveIdentity())
@@ -410,15 +439,15 @@ it.each([
   })
   prove.mockImplementationOnce(async ({ emit }) => {
     emit({ event, phase: 'started', timestamp: 12 })
-    return null
+    return proofOf('github')
   })
-  await startProver(proverInput())
+  await startProver(proverInput('github'))
   connection.receive(proveIdentity('github'))
   await vi.waitFor(() => expect(ui.stop).toHaveBeenCalledOnce())
   expect(connection.sent.slice(1)).toEqual([
     core
       ? { type: 'ceremony-failed', event: 'prover', message: 'observation lost' }
-      : { type: 'user-denied' },
+      : { type: 'identity-proof', ...proofOf('github') },
   ])
   // A lost extension observation still reaches local observers; a core loss ends the run.
   expect(ui.events.some((e) => 'event' in e && e.event === event)).toBe(!core)

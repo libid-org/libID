@@ -9,12 +9,13 @@ own authorization encodings and proof statements.
 ## Shared execution boundary
 
 The Prover document dispatches a lazy prover with
-[ProverContext](../src/platforms/context.ts): the validated request, authenticated
-ceremony ID, private OAuth capture, abort signal and event producer. The prover
-returns separate identity/proof values, or null for valid OAuth denial. Technical
+[ProverContext](../src/platforms/context.ts): the validated request, the admitted
+OAuth credential, the code verifier where the version declares PKCE, abort signal
+and event producer. The prover returns separate identity/proof values. Technical
 failures throw with operation context. Platform code has no popup connection.
-`ProverDocument` owns readiness, one-shot request execution, delivery and cleanup.
-When proving starts, it transfers its private capture to the selected prover.
+`ProverDocument` owns readiness, one-shot request execution, OAuth return
+admission, denial, delivery and cleanup. Its private capture never reaches a
+prover.
 
 Validate the return, state and required inputs before credential use. Each
 `url.ts` declares its return rules (transport, credential field, rejected
@@ -26,9 +27,10 @@ returns; X does not inherit that requirement.
 
 Client forwards `notaryAddress` uniformly; Google ignores it, X/GitHub require it.
 The URL definition declares PKCE use; Client derives `codeVerifier` or sends null.
-Every prover starts with [acceptReturn](../src/platforms/oauthReturn.ts), which
-checks the request against the catalog's client ID, PKCE and credential
-declarations, consumes the ceremony-bound return, and yields null for denial.
+Before loading the prover, `ProverDocument` calls
+[acceptReturn](../src/platforms/oauthReturn.ts), which checks the request against
+the catalog's client ID, PKCE and credential declarations and consumes the
+ceremony-bound return. A denial sends `UserDenied` without loading a prover.
 The notary address selects the service; platform/version metadata selects assets.
 
 ## Google

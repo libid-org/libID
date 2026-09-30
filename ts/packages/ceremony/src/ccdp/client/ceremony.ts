@@ -209,10 +209,10 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
     this.emit(event)
   }
 
-  /** Readiness counts only from a CCDP document; the Bridge is also an admitted popup origin. */
+  /** Readiness and results count only from a CCDP document; the Bridge is also an admitted popup origin. */
   private expectCcdp(): void {
     if (this.connection.peerOrigin !== this.ccdpOrigin)
-      throw sequenceError('Readiness from outside the CCDP')
+      throw sequenceError('Message from outside the CCDP')
   }
 
   /** Core observations must fit the run's state and platform, once each, started before finished. */
@@ -284,6 +284,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       this.listen(binding, EventMessage, (event) => this.receiveEvent(event))
       this.listen(binding, IdentityProof, (m) => {
         this.expect('proving')
+        this.expectCcdp()
         const result = assembleResult(
           this.platform,
           this.version,
@@ -299,6 +300,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       })
       this.listen(binding, UserDenied, () => {
         this.expect('proving')
+        this.expectCcdp()
         if (this.proofWorkStarted) throw sequenceError('Denial after proof work began')
         this.finish({ status: 'denied', timestamp: now() }, { status: 'denied' })
       })

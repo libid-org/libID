@@ -18,22 +18,14 @@ const failsAs = <T>(p: Promise<T>, event: string) =>
 
 /** Shared two-attestation bearer-link prover; platform exchanges own HTTP and identity policy. */
 export async function proveBearerLink<P extends 'x' | 'github'>(
-  context: ProverContext,
+  context: ProverContext<'x' | 'github'>,
   platformId: P,
   exchange: BearerExchange,
-  code: string,
 ): Promise<{ identity: Identity<P>; proof: BearerLinkProofV1 }> {
-  const { emit, request } = context
+  const { emit, request, credential: code, codeVerifier } = context
   const { clientId, redirectUri, clientCredential, notaryAddress } = request
   if (notaryAddress === null) throw new CeremonyError('prover', 'Missing notary address')
-  // acceptReturn admitted the verifier and credential this platform's catalog entry declares.
-  const input = {
-    clientId,
-    code,
-    redirectUri,
-    codeVerifier: request.codeVerifier!,
-    clientCredential,
-  }
+  const input = { clientId, code, redirectUri, codeVerifier, clientCredential }
   const tokenRequest = exchange.buildTokenRequest(input)
   const controller = new AbortController()
   const signal = AbortSignal.any([context.signal, controller.signal])

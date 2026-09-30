@@ -153,9 +153,9 @@ it('correlates plain-array SDK openings, then verifies the final frame before de
   ])
   const [, , , [revealed], [final]] = port.postMessage.mock.calls
   expect(revealed.openings).toEqual([
-    { direction: 'sent', start: 3, end: 15, blinder: raw.sent[0].blinder },
-    { direction: 'received', start: 8, end: 12, blinder: raw.recv[0].blinder },
-    { direction: 'received', start: 14, end: 21, blinder: raw.recv[1].blinder },
+    { direction: 'sent', start: 3, end: 15, ...raw.sent[0] },
+    { direction: 'received', start: 8, end: 12, ...raw.recv[0] },
+    { direction: 'received', start: 14, end: 21, ...raw.recv[1] },
   ])
   expect(final).toEqual({
     type: 'attestation',

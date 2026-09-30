@@ -1,9 +1,6 @@
 import { proveBearerLink } from '../../../barretenberg/circuits/bearer-link/prover.js'
 import type { ProverContext } from '../../context.js'
-import { acceptReturn } from '../../oauthReturn.js'
 import * as exchange from './exchange.js'
 
-export async function prove(context: ProverContext) {
-  const code = acceptReturn(context, 'github')
-  return code === null ? null : proveBearerLink(context, 'github', exchange, code)
-}
+export const prove = (context: ProverContext<'github'>) =>
+  proveBearerLink(context, 'github', exchange)

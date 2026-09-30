@@ -43,8 +43,10 @@ export type Transcript = Directions<Uint8Array>
 
 export type Reveals = Directions<readonly ByteRange[]>
 
+/** One hidden range's blinder and the notarized commitment it correlated with. */
 export interface CommitmentOpening extends ByteRange {
   direction: 'sent' | 'received'
+  hash: Uint8Array
   blinder: Uint8Array
 }
 

@@ -11,6 +11,7 @@ import type {
 import type { ProofEngineOptions, RawProof } from '../../barretenberg/engine.js'
 import { proofEvents, proofWeights } from '../../barretenberg/events.js'
 import { validateCeremonyConfig } from '../../ccdp/client/config.js'
+import type { ProveIdentity } from '../../ccdp/index.js'
 import { type OAuthReturn, oauthState } from '../../ccdp/navigation.js'
 import { isCoreEvent, type OperationEvent } from '../../events.js'
 import { concat, encodeAttestation, opening } from '../../notary/fixtures/attestation.js'
@@ -36,6 +37,7 @@ import {
   type OidcPlatform,
   oidcPlatforms,
   platformConfig,
+  proveIdentity,
   proverContext,
   proverRequest,
   returnSamples,
@@ -56,7 +58,7 @@ import {
 } from '../index.js'
 import { acceptReturn, parseOAuthReturn, type ReturnRules } from '../oauthReturn.js'
 import { assetsByPlatform, circuits } from '../platforms.assets.js'
-import { provers } from '../provers.js'
+import { type ProverModule, provers } from '../provers.js'
 import type { EvidenceChange, PlatformFixture, ReturnSamples } from './fixtures.js'
 
 const { prepare, generate, destroy, engine, notarization } = vi.hoisted(() => ({
@@ -150,6 +152,9 @@ it('covers exactly the catalog platforms', () => {
   expect(Object.keys(assetsByPlatform)).toEqual([...supportedPlatforms])
   expect([...bearerLinkPlatforms, ...oidcPlatforms].sort()).toEqual([...supportedPlatforms].sort())
 })
+
+/** A platform's prover module, widened so one call serves every catalog platform. */
+const proverOf = (platformId: PlatformId): Promise<ProverModule> => fixtures[platformId].prover()
 
 describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
   const fixture = fixtures[platformId]
@@ -423,8 +428,15 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
     denied: { outcome: 'denied', state },
     error: { outcome: 'error', state, error: samples.error.error },
   }
-  const accept = (oauthReturn: OAuthReturn) =>
-    acceptReturn(proverContext(platformId, { oauthReturn }), platformId)
+  const admit = (
+    request: Partial<ProveIdentity> = {},
+    oauthReturn = samples.accepted.oauthReturn,
+  ) =>
+    acceptReturn(platformId, 1, proveIdentity(platformId, request), {
+      ceremonyId: CEREMONY_ID,
+      oauthReturn,
+    })
+  const accept = (oauthReturn: OAuthReturn) => admit({}, oauthReturn)?.credential ?? null
   const invalid = { event: 'authorization', message: 'Invalid OAuth return' }
   /** A return must parse and be admitted exactly like `outcome`'s sample. */
   function expectOutcome(oauthReturn: OAuthReturn, outcome: (typeof outcomes)[number]) {
@@ -525,50 +537,32 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
     }
   })
 
-  it('stops before reading the return once the run is closed', () => {
-    const controller = new AbortController()
-    controller.abort(new Error('Closed before return'))
-    const context = proverContext(platformId, { signal: controller.signal })
-    expect(() => acceptReturn(context, platformId)).toThrow('Closed before return')
-  })
-
-  it('resolves a bound denial and rejects a provider error before any network or proving work [LIBID-OAUTH-018]', async () => {
-    vi.stubGlobal('fetch', vi.fn())
-    const { prove } = await fixture.prover()
-    await expect(
-      prove(proverContext(platformId, { oauthReturn: samples.denied.oauthReturn })),
-    ).resolves.toBeNull()
-    await expect(
-      prove(proverContext(platformId, { oauthReturn: samples.error.oauthReturn })),
-    ).rejects.toMatchObject({ event: 'authorization' })
-    expectNoProvingWork()
-  })
-
-  it('requires the catalog code-verifier choice and client before notarization [LIBID-OAUTH-021]', async () => {
-    vi.stubGlobal('fetch', vi.fn())
-    const { prove } = await fixture.prover()
+  it('admits the code verifier exactly where the catalog declares PKCE, and the client [LIBID-OAUTH-021]', () => {
+    expect(admit()).toEqual({
+      credential: samples.accepted.credential,
+      codeVerifier: version.pkce ? 'A'.repeat(43) : null,
+    })
     for (const request of [
       { codeVerifier: version.pkce ? null : 'A'.repeat(43) },
       { clientId: sharedTextRejections[1] },
     ])
-      await expect(prove(proverContext(platformId, { request }))).rejects.toMatchObject({
-        event: 'authorization',
-      })
-    expectNoProvingWork()
+      expect(thrown(() => admit(request))).toMatchObject({ event: 'authorization' })
   })
 
-  it('requires a valid public credential before exchange exactly when the catalog does [LIBID-MOD-013]', async () => {
-    vi.stubGlobal('fetch', vi.fn())
-    const { prove } = await fixture.prover()
-    const missing = proverContext(platformId)
-    delete missing.request.clientCredential
+  it('requires a valid public credential before exchange exactly when the catalog does [LIBID-MOD-013]', () => {
+    const request = proveIdentity(platformId)
+    delete request.clientCredential
+    const missing = () =>
+      acceptReturn(platformId, 1, request, {
+        ceremonyId: CEREMONY_ID,
+        oauthReturn: samples.accepted.oauthReturn,
+      })
     if (platforms[platformId].requiresClientCredential) {
-      await expect(prove(missing)).rejects.toMatchObject({ event: 'token-fetch' })
-      await expect(
-        prove(proverContext(platformId, { request: { clientCredential: 'has space' } })),
-      ).rejects.toMatchObject({ event: 'token-fetch' })
-      expectNoProvingWork()
-    } else expect(acceptReturn(missing, platformId)).toBe(samples.accepted.credential)
+      expect(thrown(missing)).toMatchObject({ event: 'token-fetch' })
+      expect(thrown(() => admit({ clientCredential: 'has space' }))).toMatchObject({
+        event: 'token-fetch',
+      })
+    } else expect(missing()?.credential).toBe(samples.accepted.credential)
   })
 })
 
@@ -855,7 +849,7 @@ function runContext(
 const bearerFailures = {
   'identity-shape': 'Invalid identity response',
   'opening-range': 'Plaintext opening is not unique',
-  'shifted-range': 'Identity commitment must match notarization',
+  'shifted-range': 'Plaintext opening does not match its commitment',
   'attestation-mismatch': 'attested authority changed',
 }
 
@@ -863,8 +857,7 @@ type BearerOutcome = SharedOutcome | keyof typeof bearerFailures
 
 /**
  * Mutate a selector consistently: both the hidden window and its returned range shift by one
- * byte without changing length. The test backend must detect that the resulting attestation
- * commits different bytes.
+ * byte without changing length, so the notarized commitment covers different bytes.
  */
 function shiftIdentitySelection(transcript: BearerExchange) {
   const select = transcript.selectIdentity
@@ -949,12 +942,7 @@ function fakeNotarization(platformId: BearerLinkPlatform, outcome: BearerOutcome
         const correlated = correlateReveal(transcript, plan, raw)
         matchAttestedData(host, transcript, plan, correlated, attestedData)
         const openings: CommitmentOpening[] = (['sent', 'received'] as const).flatMap((direction) =>
-          correlated[direction].map(({ start, end, blinder }) => ({
-            direction,
-            start,
-            end,
-            blinder,
-          })),
+          correlated[direction].map((commitment) => ({ direction, ...commitment })),
         )
         if (outcome === 'opening-range' && index === 1) openings[0].start++
         const attestation = { attestedData, signature: new Uint8Array(65).fill(index + 1) }
@@ -969,23 +957,13 @@ function fakeNotarization(platformId: BearerLinkPlatform, outcome: BearerOutcome
       },
     }
   })
-  return { attestations, transcripts, selected, commitments, gates, log }
+  return { attestations, transcripts, selected, gates, log }
 }
 
-/** The proof engine checks the witness against the fake backend's commitments. */
-function fakeBearerProof(
-  bearer: string,
-  commitments: { sent: Uint8Array[]; received: Uint8Array[] }[],
-  outcome: BearerOutcome,
-) {
+/** The proof engine checks the witness it receives. */
+function fakeBearerProof(bearer: string, outcome: BearerOutcome) {
   const hashes = [1, 2].map((byte) => sha256(concat(utf8(bearer), new Uint8Array(16).fill(byte))))
   generate.mockImplementation(async (inputs): Promise<RawProof> => {
-    expect(commitments[0].received, 'Token commitment must match notarization').toContainEqual(
-      Uint8Array.from(inputs.token_commitment),
-    )
-    expect(commitments[1].sent, 'Identity commitment must match notarization').toEqual([
-      Uint8Array.from(inputs.identity_commitment),
-    ])
     expect(inputs).toEqual({
       bearer: [...utf8(bearer), ...new Uint8Array(128 - bearer.length)],
       bearer_len: String(bearer.length),
@@ -1018,7 +996,7 @@ function stageBearer(
   const fixture = fixtures[platformId]
   if (outcome === 'shifted-range') shiftIdentitySelection(fixture.exchange)
   const notarized = fakeNotarization(platformId, outcome, held)
-  fakeBearerProof(fixture.evidence.bearer, notarized.commitments, outcome)
+  fakeBearerProof(fixture.evidence.bearer, outcome)
   return {
     ...runContext(platformId, outcome, change),
     notarized,
@@ -1090,10 +1068,7 @@ function stageOidc(
   const { config, returnRules: rules } = fixture
   const accepted = fieldsOf(returnSamples(platformId).accepted.oauthReturn, rules)
   const run = runContext(platformId, outcome, {
-    oauthReturn: returnOf(
-      setField(accepted, rules.credentialField, oidcToken(idToken, outcome)),
-      rules,
-    ),
+    credential: oidcToken(idToken, outcome),
     request: outcome === 'audience-mismatch' ? { clientId: `other-${config.clientId}` } : {},
   })
   generate.mockImplementation(async (inputs): Promise<RawProof> => {
@@ -1152,7 +1127,7 @@ describe.each(supportedPlatforms)('%s prove() contract', (platformId) => {
   const title = (text: string) => tagged(text, `${tags} ${fixture.specTests.prover}`)
   async function run(outcome: SharedOutcome) {
     const staged = stage(platformId, outcome)
-    return { staged, pending: (await fixture.prover()).prove(staged.context) }
+    return { staged, pending: (await proverOf(platformId)).prove(staged.context) }
   }
 
   it(
@@ -1200,7 +1175,7 @@ describe.each(supportedPlatforms)('%s prove() contract', (platformId) => {
         return prove(inputs, signal)
       })
       // Whether a result still settles is the document's concern; it discards late results.
-      await Promise.allSettled([(await fixture.prover()).prove(staged.context)])
+      await Promise.allSettled([(await proverOf(platformId)).prove(staged.context)])
       expect(aborted).toEqual([false, true])
       expect(generate).toHaveBeenCalledOnce()
       expect(destroy).toHaveBeenCalledOnce()
@@ -1690,7 +1665,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         const fetch = vi.fn()
         vi.stubGlobal('fetch', fetch)
         const staged = stageBearer(platformId, 'accepted')
-        await (await fixture.prover()).prove(staged.context)
+        await (await proverOf(platformId)).prove(staged.context)
         expect(fetch).not.toHaveBeenCalled()
         const { transcripts, selected } = staged.notarized
         const { request } = staged.context
@@ -1724,7 +1699,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         // A failed final attestation must not wait for proof generation.
         if (outcome === 'failed') generate.mockReturnValue(new Promise(() => {}))
         let settled = false
-        const pending = (await fixture.prover()).prove(staged.context).finally(() => {
+        const pending = (await proverOf(platformId)).prove(staged.context).finally(() => {
           settled = true
         })
         const checked =
@@ -1777,7 +1752,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
           })
         const identitySetup = Promise.withResolvers<never>()
         prepare.mockImplementationOnce(pending).mockReturnValueOnce(identitySetup.promise)
-        const result = (await fixture.prover()).prove(staged.context)
+        const result = (await proverOf(platformId)).prove(staged.context)
         const checked = expect(result).rejects.toMatchObject({
           event: failure === 'closed' ? 'token-fetch' : 'identity-fetch',
           message: failure,
@@ -1798,7 +1773,9 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         const staged = stageBearer(platformId, 'accepted', {
           change: { request: { notaryAddress: null } },
         })
-        await expect((await fixture.prover()).prove(staged.context)).rejects.toBeInstanceOf(Error)
+        await expect((await proverOf(platformId)).prove(staged.context)).rejects.toBeInstanceOf(
+          Error,
+        )
         expect(notarization).not.toHaveBeenCalled()
         expect(prepare).not.toHaveBeenCalled()
         expect(generate).not.toHaveBeenCalled()
@@ -1809,7 +1786,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
       tagged('rejects %s and destroys its engine', tags),
       async (outcome) => {
         const staged = stageBearer(platformId, outcome)
-        const pending = (await fixture.prover()).prove(staged.context)
+        const pending = (await proverOf(platformId)).prove(staged.context)
         await expect(pending).rejects.toThrow(bearerFailures[outcome])
         // Circuit-input construction attributes its own failures.
         if (outcome === 'opening-range')
@@ -1841,7 +1818,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
         idToken: change.idToken?.(fixture.evidence.idToken),
         jwk: change.jwk?.(fixture.evidence.jwk),
       })
-      await expect((await fixture.prover()).prove(staged.context)).rejects.toMatchObject({
+      await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject({
         event: change.rejectedAt,
         ...(change.message === undefined ? {} : { message: change.message }),
       })
@@ -1853,7 +1830,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
 
   it(tagged('accepts its published signing key without optional members', tags), async () => {
     const staged = stageOidc(platformId, 'accepted', { jwk: fixture.evidence.minimalJwk })
-    await expect((await fixture.prover()).prove(staged.context)).resolves.toEqual({
+    await expect((await proverOf(platformId)).prove(staged.context)).resolves.toEqual({
       identity: fixture.identity,
       proof: fixture.proof,
     })
@@ -1866,7 +1843,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
     ),
     async () => {
       const staged = stageOidc(platformId, 'accepted')
-      await (await fixture.prover()).prove(staged.context)
+      await (await proverOf(platformId)).prove(staged.context)
       expect(staged.keys).toHaveBeenCalledOnce()
       expect(new URL(staged.keys.mock.calls[0][0]).protocol).toBe('https:')
       expect(staged.keys.mock.calls[0][1]).toMatchObject({ credentials: 'omit', redirect: 'error' })
@@ -1879,7 +1856,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
     tagged('rejects %s before generating a proof', tags),
     async (outcome) => {
       const staged = stageOidc(platformId, outcome)
-      await expect((await fixture.prover()).prove(staged.context)).rejects.toMatchObject(
+      await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject(
         oidcFailures[outcome],
       )
       if (beforeProving.includes(outcome)) expectNoProvingWork(staged.keys)

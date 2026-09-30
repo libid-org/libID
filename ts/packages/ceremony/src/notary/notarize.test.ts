@@ -9,6 +9,7 @@ import {
   matchAttestedData,
   type NotarizationPlan,
   planNotarization,
+  plaintextOpening,
 } from './notarize.js'
 import type { ByteRange, Transcript } from './protocol.js'
 
@@ -341,6 +342,28 @@ it('coalesces adjacent disclosures in both directions before signing [LIBID-PROV
   expect(() => correlateAttestation('api.x.com', changed, plan, openings, signed)).toThrow(
     /revealed range changed/,
   )
+})
+
+describe('plaintextOpening', () => {
+  const range = { start: 2, end: 5 }
+  const openings = [{ direction: 'sent' as const, ...range, ...opening(transcript.sent, range, 7) }]
+
+  it('returns the one opening that commits exactly the plaintext', () => {
+    expect(plaintextOpening(openings, 'sent', range, utf8('cde'))).toBe(openings[0])
+  })
+
+  it('rejects plaintext the notarized commitment does not cover, as a shifted range would', () => {
+    expect(() => plaintextOpening(openings, 'sent', range, utf8('def'))).toThrow(
+      'Plaintext opening does not match its commitment',
+    )
+  })
+
+  it('rejects a range with no or several openings', () => {
+    expect(() => plaintextOpening(openings, 'received', range, utf8('cde'))).toThrow(/not unique/)
+    expect(() =>
+      plaintextOpening([...openings, ...openings], 'sent', range, utf8('cde')),
+    ).toThrow(/not unique/)
+  })
 })
 
 describe('bytesEqual', () => {

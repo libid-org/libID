@@ -5,6 +5,7 @@ import { claimRootWorker } from '../../assets/registration.js'
 import { toCeremonyError } from '../../errors.js'
 import { EventFeed, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
 import { ceremonyFor } from '../../platforms/index.js'
+import { acceptReturn } from '../../platforms/oauthReturn.js'
 import { type ProverResult, proverFor } from '../../platforms/provers.js'
 import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver } from '../navigation.js'
@@ -91,6 +92,9 @@ class ProverDocument {
     if (this.state.phase !== 'ready' || !prover) throw new Error(messages.invalidProvingRequest)
     const { input } = this.state
     this.state = { phase: 'proving' }
+    // Every prover starts from an admitted return, before loading it or using the network.
+    const accepted = acceptReturn(prover.platformId, prover.version, request, input)
+    if (accepted === null) return this.deny()
     try {
       this.ui.trackProof(ceremonyFor(prover.platformId, prover.version).progressWeights)
     } catch {
@@ -100,22 +104,21 @@ class ProverDocument {
     this.controller.signal.throwIfAborted()
     const result = await module.prove({
       request,
-      ceremonyId: input.ceremonyId,
-      oauthReturn: input.oauthReturn,
+      ...accepted,
       signal: this.controller.signal,
       emit: (event) => this.emit(event),
     })
     await this.deliver(result)
   }
 
-  private async deliver(result: ProverResult | null): Promise<void> {
+  private deny(): void {
+    this.connection.send({ type: 'user-denied' })
+    this.feed.emit({ status: 'denied', timestamp: now() })
+    this.cleanup()
+  }
+
+  private async deliver(result: ProverResult): Promise<void> {
     if (this.controller.signal.aborted) return
-    if (result === null) {
-      this.connection.send({ type: 'user-denied' })
-      this.feed.emit({ status: 'denied', timestamp: now() })
-      this.cleanup()
-      return
-    }
     const message = IdentityProof.decode({ type: 'identity-proof', ...result })
     try {
       await this.ui.finishProof()

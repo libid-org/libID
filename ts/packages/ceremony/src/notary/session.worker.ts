@@ -163,7 +163,7 @@ function session(port: MessagePort, initial: Prepare) {
       received: copy(result.recv),
     })
     const openings: CommitmentOpening[] = (['sent', 'received'] as const).flatMap((direction) =>
-      correlated[direction].map(({ start, end, blinder }) => ({ direction, start, end, blinder })),
+      correlated[direction].map((commitment) => ({ direction, ...commitment })),
     )
     reply({ type: 'revealed', openings })
     await withHeartbeat(() => prover.finish())

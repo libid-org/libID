@@ -6,16 +6,13 @@ import {
 import { ProofEngine } from '../../../barretenberg/engine.js'
 import { operation } from '../../../events.js'
 import type { ProverContext } from '../../context.js'
-import { acceptReturn } from '../../oauthReturn.js'
 import { prepareGoogleInputs } from './inputs.js'
 import { acceptGoogleIdToken, fetchSigningKey } from './token.js'
 import { isGooglePublicInputs } from './validation.js'
 
-export async function prove(context: ProverContext) {
+export async function prove(context: ProverContext<'google'>) {
   const { signal, emit } = context
-  const idToken = acceptReturn(context, 'google')
-  if (idToken === null) return null
-  const token = acceptGoogleIdToken(idToken, context.request.clientId)
+  const token = acceptGoogleIdToken(context.credential, context.request.clientId)
   const engine = new ProofEngine({
     circuitUrl: assetUrl(circuit),
     verificationKeyUrl: assetUrl(verificationKey),
