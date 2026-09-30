@@ -35,14 +35,16 @@ function registration(
   scope: string,
   workers: Partial<Record<'active' | 'waiting' | 'installing', FakeServiceWorker | object>> = {},
 ) {
-  return {
+  const double = {
     scope,
     active: null,
     waiting: null,
     installing: null,
     unregister: vi.fn(async () => true),
+    update: vi.fn(async () => double),
     ...workers,
-  } as unknown as ServiceWorkerRegistration & { unregister: Mock }
+  }
+  return double as unknown as ServiceWorkerRegistration & { unregister: Mock; update: Mock }
 }
 
 /** Stub the container: `register` and `getRegistration` resolve `current`. */
@@ -88,6 +90,29 @@ it('waits for an installing update to become active instead of using the old wor
   worker.state = 'activating'
   worker.dispatchEvent(new Event('statechange'))
   await expect(ready).resolves.toBe(root)
+})
+
+it('checks for a deployed update before dispatching to the active worker [LIBID-ASSET-014]', async () => {
+  const previous = serviceWorker('activated', { dispatched: true })
+  const deployed = serviceWorker('installing', { dispatched: true })
+  const root = registration(`${ORIGIN}/`, { active: previous })
+  root.update.mockImplementation(async () => {
+    Object.assign(root, { installing: deployed })
+    // The browser then activates it in place of the previous worker.
+    queueMicrotask(() => {
+      Object.assign(root, { active: deployed, installing: null })
+      deployed.state = 'activating'
+      deployed.dispatchEvent(new Event('statechange'))
+    })
+    return root
+  })
+  install(root)
+  await dispatchPrefetch(await registerRootWorker(), 'google/2')
+  expect(deployed.postMessage).toHaveBeenCalledOnce()
+  expect(previous.postMessage).not.toHaveBeenCalled()
+  // A failed check keeps the active worker.
+  root.update.mockRejectedValue(new Error('offline'))
+  await expect(registerRootWorker()).resolves.toBe(root)
 })
 
 it('observes activation when a concurrent popup loses worker statechange notifications', async () => {

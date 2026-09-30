@@ -124,7 +124,7 @@ or browser hashing step.
 
 External declarations retain their URL, range, optional exact byte count and
 fallback URLs. They emit no local body or response headers. They contribute to
-prefetch metadata, the fetch allowlist and generated CSP. Native bb.js chooses
+the request lists, the fetch allowlist and generated CSP. Native bb.js chooses
 its fallback on failure; Prefetch does not speculatively download both mirrors.
 The [pinned browser loader limitation](proving.md#dependency-asset-resolution)
 means current CRS resources must remain external.
@@ -135,8 +135,8 @@ leaf; X and GitHub share the bearer-link leaf.
 derives the circuit list whose capacity the build checks. The compiler adds the selected execution chunks and nested-worker
 edges, so their filenames are not declared again. A profile's chunks stop at other
 platforms' provers, which the prover table reaches only lazily, and the notary runtime
-has its own chunk, so Google fetches no notary code. Prefetch consumes metadata;
-it never imports execution to discover dependencies.
+has its own chunk, so Google fetches no notary runtime. Prefetch consumes the request
+lists; it never imports execution to discover dependencies.
 
 ## Headers and compression
 
@@ -271,8 +271,10 @@ deployment is a separate, deliberate step.
 
 ## Build owners
 
-[distribution.ts](../build/distribution.ts) assembles and promotes the artifact
-and derives the prefetch manifest from the emitted Prover graph;
+[distribution.ts](../build/distribution.ts) assembles the artifact
+and derives the request lists from the emitted Prover graph;
+[retention.ts](../build/retention.ts) carries the previous output's immutable assets
+into it and replaces the output whole;
 [bundle.ts](../build/bundle.ts) records emitted dependencies and loads a source module into a build script;
 [fragment.ts](../build/fragment.ts) hands a document's launch fragment to its entry;
 [assets.ts](../build/assets.ts) resolves declarations;

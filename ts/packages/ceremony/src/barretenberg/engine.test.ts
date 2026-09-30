@@ -157,8 +157,10 @@ it('delivers one proof, rejects a second request and ignores messages after sett
 it('initialization failure releases waiting inputs without dispatching them [LIBID-PROVER-014]', async () => {
   const e = engine()
   const result = e.instance.prove({ fixture: 1 })
-  const rejected = expect(result).rejects.toMatchObject({ event: 'zk-proof-generation' })
-  e.send({ type: 'error', event: 'zk-proof-generation', message: 'Proof engine failed' })
+  // The worker names the span that failed, as it does for its backend initialization.
+  const event = 'proof-backend-initialization'
+  const rejected = expect(result).rejects.toMatchObject({ event })
+  e.send({ type: 'error', event, message: 'Proof engine failed' })
   await rejected
   e.send({ type: 'witness-ready' })
   expect(e.postMessage).toHaveBeenCalledTimes(1)

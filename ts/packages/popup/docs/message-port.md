@@ -209,7 +209,8 @@ selecting a weaker path.
 `PortKeeper` is the carrier's package-private continuity component. It
 encapsulates Service Worker communication, temporary ownership, event lifetime,
 the claim deadline, one-use transfer, and cleanup. It neither reads the port nor
-knows what it carries.
+knows what it carries; a port it drops first carries `document-departed`, so the
+application's side closes instead of waiting on a port nobody holds.
 
 The worker itself is host-owned. The host is the deployment serving the popup
 documents. A Service Worker script must be served from that origin, so the host
@@ -250,10 +251,12 @@ not yet exist. The Service Worker record and control-message encoding are
 implementation details. Connection version, connection ID, transferable
 count, duplicate ownership, and one-use claim are checked before ownership
 changes. A malformed, mismatched, or duplicate record rejects and closes every
-reachable port. Expiry deletes the entry and closes its port; an expired or
+reachable port, telling each held one's application that its document departed.
+Expiry deletes the entry and does the same with its port; an expired or
 already-claimed entry is absent and yields `null`, the worker keeps no record
 of it. Worker loss or a failed `keep` acknowledgement prevents navigation with
-live state. No `BroadcastChannel`, cookie, IndexedDB record, request, or URL
+live state; a port the worker never took carries `document-departed` from the
+page before it closes. No `BroadcastChannel`, cookie, IndexedDB record, request, or URL
 carries the port.
 
 Preservation also serves the isolation fallback: a document that must be

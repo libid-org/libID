@@ -396,10 +396,10 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     expect(codes(events)).toEqual(['carrier-restored'])
   })
 
-  it('fails closed without continuity instead of navigating', async () => {
+  it('fails closed without continuity instead of navigating, ending the application too', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const pair = fakePair()
-    connectApp(pair)
+    const app = connectApp(pair)
     const popupSide = acceptPopup(pair)
     const popup = await popupSide.connection
     await tick()
@@ -408,6 +408,7 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     )
     expect(pair.popupProxy.replaced).toEqual([])
     expect(codes(popupSide.events)).toContain('connection-failed')
+    expect(await app.connection.closed).toEqual({ outcome: 'closed' })
     error.mockRestore()
   })
 

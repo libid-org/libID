@@ -50,10 +50,17 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
     const keeper = new PortKeeper(scope.worker)
     const first = new MessageChannel()
     const second = new MessageChannel()
+    const departures = [nextMessage(first.port2), nextMessage(second.port2)]
     await keeper.keep(ID, first.port1, APP_ORIGIN)
     await expect(keeper.keep(ID, second.port1, APP_ORIGIN)).rejects.toThrow('keep-failed')
     expect(await keeper.claim(ID)).toBeNull()
     await expect(scope.pending[0]).resolves.toBeUndefined()
+    // Both applications learn their document departed.
+    expect(await Promise.all(departures)).toEqual([
+      { type: 'document-departed' },
+      { type: 'document-departed' },
+    ])
+    for (const channel of [first, second]) channel.port2.close()
   })
 
   it('ignores a client from another origin, which the keeper treats as absent', async () => {
@@ -140,11 +147,15 @@ describe('expiry [POPUP-KEEPER-003]', () => {
     const scope = fakeScope()
     const keeper = new PortKeeper(scope.worker)
     const channel = new MessageChannel()
+    const departed = nextMessage(channel.port2)
     const kept = keeper.keep(ID, channel.port1, APP_ORIGIN)
     await vi.advanceTimersByTimeAsync(10)
     await kept
     await vi.advanceTimersByTimeAsync(CARRIER_CLAIM_TIMEOUT_MS + 1)
     await expect(scope.pending[0]).resolves.toBeUndefined()
+    // An unclaimed port ends the application's side instead of leaving it waiting.
+    expect(await departed).toEqual({ type: 'document-departed' })
+    channel.port2.close()
     const claim = keeper.claim(ID)
     await vi.advanceTimersByTimeAsync(10)
     expect(await claim).toBeNull()

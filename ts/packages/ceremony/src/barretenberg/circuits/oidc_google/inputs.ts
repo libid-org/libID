@@ -146,11 +146,6 @@ export function buildOidcGoogleInputs(
   }
 }
 
-/** The oidc_google circuit inputs, keyed in the circuit's ABI order. */
-
-const packed = (value: string, width: number) =>
-  pack31(pad(encoder.encode(value), width)).map(fieldHex)
-
 /** The exact 57 public fields, in circuit order, for the values a proof binds. */
 export function buildOidcGooglePublicInputs(values: {
   authorizationDigest: Uint8Array
@@ -166,7 +161,7 @@ export function buildOidcGooglePublicInputs(values: {
     ...Array.from(values.authorizationDigest, fieldHex),
     ...audienceHash(encoder.encode(values.audience)).map(fieldHex),
     ...hashFields(values.userIdHash).map(fieldHex),
-    ...packed(values.email, MAX_EMAIL_BYTES),
+    ...pack31(pad(encoder.encode(values.email), MAX_EMAIL_BYTES)).map(fieldHex),
     fieldHex(values.expiresAt),
     ...limbs(bytesToBigInt(values.modulus)).map(fieldHex),
   ]

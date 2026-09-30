@@ -1,19 +1,19 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { Rollup } from 'vite'
 import type { AssetRequest, ExternalAsset } from '../src/assets/index.ts'
 import { assetKey, requestKey, route, VERSIONS_PATH } from '../src/assets/keys.ts'
 import { messages } from '../src/ccdp/uiMessages.ts'
-import { safePath } from './archive.ts'
 import type { AssetManifest } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
-import { checkDeclaredHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
+import { externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
 import { bundle } from './bundle.ts'
 import { captureFragment } from './fragment.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { emittedProfile, responseHeaders } from './profiles.ts'
+import { retainPrevious, sameRecord, swapInto } from './retention.ts'
 import { outputDirectory, packageDir } from './sources.ts'
 import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
@@ -36,10 +36,6 @@ const unique = (requests: AssetRequest[]) => [
   ...new Map(requests.map((r) => [requestKey(r), r])).values(),
 ]
 
-/** Same bytes and the same normalized headers. */
-const sameRecord = (a: PublicRecord, b: PublicRecord) =>
-  a.bytes.equals(b.bytes) && JSON.stringify(a.headers) === JSON.stringify(b.headers)
-
 const body = (item: Rollup.OutputChunk | Rollup.OutputAsset) =>
   item.type === 'chunk' ? item.code : item.source
 
@@ -58,6 +54,7 @@ function assetManifest(
   data: ResolvedAssets,
   graph: ReadonlyMap<string, BundleNode>,
   entries: ReadonlyMap<string, string>,
+  documentImports: readonly string[],
   records: Records,
   external: readonly ExternalAsset[],
 ): AssetManifest {
@@ -78,9 +75,12 @@ function assetManifest(
   for (const [profile, assets] of Object.entries(data.profiles)) {
     const entry = entries.get(profile)
     if (!entry) throw new Error(`Missing emitted platform entry: ${profile}`)
+    const files = closure(profile, entry)
+    // The Prover document inlines its entry, so everything that entry imports loads first.
+    for (const file of documentImports) closure(profile, file, files)
     requestsByProfile[profile] = unique([
       ...assets.map((a) => (a.isExternal ? externalRequest(a) : local(data.urls[assetKey(a)]))),
-      ...[...closure(profile, entry)].map((file) => local(`/${file}`)),
+      ...[...files].map((file) => local(`/${file}`)),
     ])
   }
   const allowedRequests = unique([
@@ -150,13 +150,20 @@ async function buildDistribution() {
     if (item.type !== 'chunk' || !item.isEntry)
       put(`/${item.fileName}`, body(item), emittedProfile(item.fileName, prover))
   }
-  const manifest = assetManifest(data, prover.graph, proverEntries, records, external)
-  // Every published pair has an emitted prover and asset profile.
-  put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
   const primary = prover.output.find(
     (o): o is Rollup.OutputChunk => o.type === 'chunk' && o.isEntry,
   )
   if (!primary) throw new Error('Missing Prover entry')
+  const manifest = assetManifest(
+    data,
+    prover.graph,
+    proverEntries,
+    primary.imports,
+    records,
+    external,
+  )
+  // Every published pair has an emitted prover and asset profile.
+  put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
   emitDocument(route('prover'), primary.code, 'prover')
   emitDocument(route('prover/fallback'), primary.code, 'proverFallback')
   const callback = await bundle('src/ccdp/documents/callback.ts', data, {
@@ -196,46 +203,11 @@ async function buildDistribution() {
   return { records, manifest, graph: prover.graph }
 }
 
-/** Retain old immutable assets and their effective policy through the compatibility window. */
-function retainPrevious(records: Records) {
-  const previousGraph = join(out, 'distribution-graph.json')
-  if (!existsSync(previousGraph)) return
-  const previous: DistributionMetadata = JSON.parse(readFileSync(previousGraph, 'utf8'))
-  for (const [path, headers] of Object.entries(previous.headers)) {
-    if (!path.startsWith('/ccdp/assets/')) continue
-    safePath(path.slice(1))
-    // A retained asset keeps the policy it was published with, so only its form is checked.
-    checkDeclaredHeaders(headers)
-    const record = {
-        bytes: readFileSync(join(out, 'public', path)),
-        headers: Object.fromEntries(new Headers(headers)),
-      },
-      current = records.get(path)
-    if (!current) records.set(path, record)
-    else if (!sameRecord(current, record)) throw new Error(`Immutable response changed: ${path}`)
-  }
-}
-
-/** Replace the output with the finished staging directory, restoring it if the move fails. */
-function swapInto(target: string) {
-  if (!existsSync(target)) return renameSync(staging, target)
-  const previous = `${target}.previous`
-  if (existsSync(previous)) throw new Error('Previous output already exists')
-  renameSync(target, previous)
-  try {
-    renameSync(staging, target)
-  } catch (error) {
-    renameSync(previous, target)
-    throw error
-  }
-  rmSync(previous, { recursive: true })
-}
-
 mkdirSync(join(staging, 'public'), { recursive: true })
 
 try {
   const { records, manifest, graph } = await buildDistribution()
-  retainPrevious(records)
+  retainPrevious(out, records)
   const files = writeDistribution(staging, records)
   // Keep graph metadata outside public/; the image retains it for subsequent builds.
   writeFileSync(
@@ -247,7 +219,7 @@ try {
       graph: Object.fromEntries(graph),
     } satisfies DistributionMetadata),
   )
-  swapInto(out)
+  swapInto(staging, out)
   console.log(`Built ${records.size} public resources in ${out}`)
 } catch (error) {
   rmSync(staging, { recursive: true, force: true })

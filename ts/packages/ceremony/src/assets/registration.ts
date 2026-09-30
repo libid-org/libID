@@ -37,6 +37,10 @@ export async function registerRootWorker(): Promise<ServiceWorkerRegistration> {
   })
   if (registration.scope !== `${location.origin}/`)
     throw new Error('Incorrect Service Worker scope')
+  // Registering an unchanged URL skips the update check, so after a deployment the new
+  // worker may not exist yet. A failed check keeps the active worker.
+  if (registration.active && !registration.installing && !registration.waiting)
+    await registration.update().catch(() => {})
   const worker = registration.installing ?? registration.waiting ?? registration.active
   if (!worker) throw new Error('Missing Service Worker')
   // An active worker can handle messages while activating. WebKit can retain that

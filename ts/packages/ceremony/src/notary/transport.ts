@@ -1,6 +1,8 @@
+import { concatBytes } from '@noble/hashes/utils.js'
 import { hasExactKeys, isOrigin, isUint } from '../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES, MAX_FRAME_BYTES } from './limits.js'
 import { NOTARY_SIGNATURE_BYTES, type NotaryAttestation } from './protocol.js'
+import type { Io } from './tlsn.js'
 
 const FRAME_LENGTH_BYTES = Uint32Array.BYTES_PER_ELEMENT
 const MAX_FRAME_PAYLOAD_BYTES = MAX_FRAME_BYTES - FRAME_LENGTH_BYTES
@@ -55,4 +57,81 @@ export function decodeAttestationFrame(frame: Uint8Array): NotaryAttestation {
     attestedData: byteArray(value.attested_data, 1, MAX_ATTESTED_DATA_BYTES, 'invalid byte array'),
     signature,
   }
+}
+
+export function waitForOpen(socket: WebSocket): Promise<void> {
+  if (socket.readyState === WebSocket.OPEN) return Promise.resolve()
+  const listening = new AbortController(),
+    signal = listening.signal
+  return new Promise<void>((resolve, reject) => {
+    const failed = () => reject(new Error('notary WebSocket failed to open'))
+    socket.addEventListener('open', () => resolve(), { signal })
+    socket.addEventListener('error', failed, { signal })
+    socket.addEventListener('close', failed, { signal })
+  }).finally(() => listening.abort())
+}
+
+export function socketIo(socket: WebSocket): Io {
+  const chunks: Uint8Array[] = []
+  const readers: PromiseWithResolvers<Uint8Array | null>[] = []
+  // The first error or close ends reading once buffered chunks drain; later events are ignored.
+  let end: { error: Error | null } | undefined
+
+  const settle = (error: Error | null) => {
+    if (end) return
+    end = { error }
+    for (const reader of readers.splice(0)) {
+      if (error) reader.reject(error)
+      else reader.resolve(null)
+    }
+  }
+
+  socket.binaryType = 'arraybuffer'
+  socket.addEventListener('message', (event) => {
+    if (end) return
+    if (!(event.data instanceof ArrayBuffer))
+      return settle(new Error('notary sent non-binary data'))
+    const chunk = new Uint8Array(event.data)
+    const reader = readers.shift()
+    if (reader) reader.resolve(chunk)
+    else chunks.push(chunk)
+  })
+  socket.addEventListener('error', () => settle(new Error('notary WebSocket failed')))
+  socket.addEventListener('close', () => settle(null))
+
+  return {
+    read() {
+      const chunk = chunks.shift()
+      if (chunk) return Promise.resolve(chunk)
+      if (end) return end.error ? Promise.reject(end.error) : Promise.resolve(null)
+      const reader = Promise.withResolvers<Uint8Array | null>()
+      readers.push(reader)
+      return reader.promise
+    },
+    write(data) {
+      // The pinned SDK catches synchronous throws but discards write promises.
+      if (socket.readyState !== WebSocket.OPEN) {
+        throw new Error('notary WebSocket is not open')
+      }
+      socket.send(data)
+      return Promise.resolve()
+    },
+    close() {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close()
+      }
+      return Promise.resolve()
+    },
+  }
+}
+
+export async function readFinalFrame(io: Io): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = []
+  let length = 0
+  for (let chunk = await io.read(); chunk !== null; chunk = await io.read()) {
+    length += chunk.length
+    if (length > MAX_FRAME_BYTES) throw new Error('notary attestation frame exceeds size limit')
+    chunks.push(chunk)
+  }
+  return concatBytes(...chunks)
 }

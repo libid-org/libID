@@ -1,6 +1,9 @@
 import type { OperationEvent } from '../events.js'
 
-/** Browser-generated bb output; structural checks here do not establish cryptographic validity. */
+/**
+ * Browser-generated bb output, delivered unchecked. Callers' public-input checks do not
+ * establish cryptographic validity.
+ */
 export interface RawProof {
   proof: Uint8Array
   publicInputs: string[]

@@ -39,8 +39,22 @@ export interface ReturnSamples {
 
 type Claim<P extends PlatformId> = { identity: Identity<P>; proof: Proof<P> }
 
+/** The values one authorization request carries; `codeChallenge` is null without PKCE. */
+export interface AuthorizationRequestInput {
+  clientId: string
+  redirectUri: string
+  state: string
+  authorizationDigest: Uint8Array
+  codeChallenge: string | null
+}
+
 interface Entry<P extends PlatformId> {
   config: ClientConfig<P>
+  /** The authorization endpoint and query fields, in order, its spec table requires for `input`. */
+  authorizationRequest: {
+    url: string
+    fields(input: AuthorizationRequestInput): [string, string][]
+  }
   /** The return rules the platform must enforce, declared here rather than read from its `url.ts`. */
   returnRules: ReturnRules
   /** The identity the evidence names; `oauthClientId` is the configured client. */
@@ -412,6 +426,18 @@ export const fixtures = {
       issuer: '',
       prover: '[TEST-PLAT-06]',
     },
+    authorizationRequest: {
+      url: 'https://accounts.google.com/o/oauth2/v2/auth',
+      fields: (input) => [
+        ['response_type', 'id_token'],
+        ['response_mode', 'fragment'],
+        ['client_id', input.clientId],
+        ['redirect_uri', input.redirectUri],
+        ['scope', 'openid email'],
+        ['state', input.state],
+        ['nonce', b64urlEncode(input.authorizationDigest)],
+      ],
+    },
     returns: (state) => ({
       accepted: {
         oauthReturn: { query: '', fragment: `#state=${state}&id_token=${googleV1.idToken}` },
@@ -473,7 +499,7 @@ export const fixtures = {
           payloadText(idToken, (json) => json.replace('","email_verified"', '" ,"email_verified"')),
         rejectedAt: 'circuit-inputs',
       },
-      // The circuit's identity is the email, so an unverified one never proves.
+      // The circuit discloses the email as the user name, so an unverified one never proves.
       'an unverified email': {
         idToken: (idToken) =>
           jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), email_verified: false } }),
@@ -560,6 +586,18 @@ export const fixtures = {
     rejectedProof: bearerLinkRejectedProof,
     operations: bearerLinkOperations,
     specTests: { ...bearerLinkSpecTests, issuer: '[TEST-PLAT-18]' },
+    authorizationRequest: {
+      url: 'https://x.com/i/oauth2/authorize',
+      fields: (input) => [
+        ['response_type', 'code'],
+        ['client_id', input.clientId],
+        ['redirect_uri', input.redirectUri],
+        ['scope', 'tweet.read users.read'],
+        ['state', input.state],
+        ['code_challenge', String(input.codeChallenge)],
+        ['code_challenge_method', 'S256'],
+      ],
+    },
     returns: codeReturns(),
     prover: () => import('../x/1/prover.js'),
     exchange: xExchange,
@@ -621,6 +659,17 @@ export const fixtures = {
     rejectedProof: bearerLinkRejectedProof,
     operations: bearerLinkOperations,
     specTests: { ...bearerLinkSpecTests, issuer: '[LIBID-OAUTH-031] [TEST-PLAT-12A]' },
+    authorizationRequest: {
+      url: 'https://github.com/login/oauth/authorize',
+      fields: (input) => [
+        ['client_id', input.clientId],
+        ['redirect_uri', input.redirectUri],
+        ['scope', 'read:user'],
+        ['state', input.state],
+        ['code_challenge', String(input.codeChallenge)],
+        ['code_challenge_method', 'S256'],
+      ],
+    },
     returns: codeReturns(
       `&iss=${encodeURIComponent('https://github.com/login/oauth')}`,
       '&error_description=Access+denied&error_uri=%2Fhelp',

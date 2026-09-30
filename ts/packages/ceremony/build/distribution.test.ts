@@ -98,6 +98,13 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
   assert.ok(!modules(google).some((m) => m.includes('/src/notary/session')))
   for (const list of [x, github])
     assert.ok(modules(list).some((m) => m.includes('/src/notary/session')))
+  // Every profile also loads what the Prover document imports: its own code and the prover table.
+  for (const list of Object.values(metadata.requestsByProfile))
+    for (const source of ['/src/ccdp/documents/prover.ts', '/src/platforms/provers.ts'])
+      assert.ok(
+        modules(list).some((m) => m.endsWith(source)),
+        source,
+      )
   assert.ok(!google.some((r) => r.url.endsWith('/bearer_link.json')))
   assert.ok(!x.some((r) => r.url.endsWith('/oidc_google.json')))
   assert.deepEqual(

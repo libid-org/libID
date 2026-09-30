@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { mediaType, resolveAssets } from '../build/assets.ts'
 import { bundle } from '../build/bundle.ts'
@@ -32,4 +33,7 @@ records.set('/index.html', {
   headers: responseHeaders('proverFallback'),
 })
 
-writeDistribution(join(packageDir, '.cache/runtime'), records)
+// Like the artifact, the runtime page starts fresh instead of serving earlier builds' files.
+const runtimeDir = join(packageDir, '.cache/runtime')
+rmSync(runtimeDir, { recursive: true, force: true })
+writeDistribution(runtimeDir, records)

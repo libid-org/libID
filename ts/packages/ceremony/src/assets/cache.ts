@@ -18,11 +18,14 @@ export function validateResponse(response: Response, spec: AssetRequest): void {
     throw new Error('Invalid asset media type')
   const range = response.headers.get('content-range')
   if (range) validateContentRange(range, spec)
+  // A CORS response hides Content-Encoding, so its length may be the encoded one; the body
+  // read still bounds the decoded bytes.
   const length = response.headers.get('content-length')
   if (
     length !== null &&
     (!/^[0-9]+$/.test(length) || (spec.bytes !== undefined && Number(length) !== spec.bytes)) &&
-    !response.headers.has('content-encoding')
+    !response.headers.has('content-encoding') &&
+    response.type !== 'cors'
   )
     throw new Error('Unexpected asset size')
 }

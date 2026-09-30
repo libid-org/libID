@@ -717,6 +717,12 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     viaOperation: boolean,
   ): Promise<void> {
     const failed: (code: PopupErrorCode) => never = (code) => {
+      // Before the worker takes the port, end the application's side here; after, the worker does.
+      try {
+        port.postMessage({ type: 'document-departed' })
+      } catch {
+        // A transferred port reaches nothing from here.
+      }
       port.close() // a no-op once transferred; releases a port the worker never took
       this.fail(code, viaOperation)
       throw new PopupError(code)

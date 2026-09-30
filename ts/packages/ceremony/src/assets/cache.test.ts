@@ -62,6 +62,14 @@ it('allows unexposed range headers but rejects exposed mismatches and wrong leng
     expect(() => validateResponse(new Response(null, { status: 206, headers }), spec)).toThrow()
 })
 
+it('checks the exposed length only where the encoding is visible too [LIBID-ASSET-021]', () => {
+  const declared = { url: spec.url, bytes: 100 }
+  const compressed = () => new Response(null, { headers: { 'Content-Length': '40' } })
+  expect(() => validateResponse(compressed(), declared)).toThrow('Unexpected asset size')
+  const cors = Object.defineProperty(compressed(), 'type', { value: 'cors' })
+  expect(() => validateResponse(cors, declared)).not.toThrow()
+})
+
 it('rejects a malformed Content-Range even without a requested range [LIBID-ASSET-021]', () => {
   for (const range of ['bytes 0-1/0x10', 'bytes 0-1', 'items 0-1/2'])
     expect(() =>

@@ -97,7 +97,7 @@ interface Waiter {
   reject(error: unknown): void
 }
 
-/** Owns one channel, its pending replies and the send-through-attestation deadline. */
+/** One channel, its pending replies, and its preparation and send-through-attestation deadlines. */
 class Session implements NotarySession {
   /** `busy` covers an in-flight prepare or send, failing as the fetch; `revealing` as the attestation. */
   private phase: 'busy' | 'prepared' | 'sent' | 'revealing' | 'ended' = 'busy'

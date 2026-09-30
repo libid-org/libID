@@ -7,8 +7,10 @@ import { packageDir } from '../build/sources.ts'
 import { artifactDir } from './topology.ts'
 
 // Every e2e input, before Playwright starts the containers that mount the first two.
-// The artifact starts fresh: retention belongs to publication, not to the test inputs.
-rmSync(join(packageDir, artifactDir), { recursive: true, force: true })
+// The artifact starts fresh: retention belongs to publication, not to the test inputs. An
+// interrupted build's staging or previous tree would otherwise stop every later run.
+for (const dir of [artifactDir, `${artifactDir}.building`, `${artifactDir}.previous`])
+  rmSync(join(packageDir, dir), { recursive: true, force: true })
 execFileSync(process.execPath, ['build/distribution.ts', '--out-dir', artifactDir], {
   cwd: packageDir,
   stdio: 'inherit',

@@ -179,7 +179,7 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     expect(ceremony.pkce).toBe(fixture.proverKind === 'bearer-link')
   })
 
-  it('round-trips client, redirect, state and the digest binding through its authorization URL', () => {
+  it('requests exactly its authorization endpoint and fields, in order, with the digest binding [TEST-PLAT-12]', () => {
     const digest = new Uint8Array(32).fill(7)
     const codeVerifier = deriveCodeVerifier(digest, new Uint8Array(32).fill(9))
     const input = {
@@ -190,25 +190,15 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       codeChallenge: ceremony.pkce ? deriveCodeChallenge(codeVerifier) : null,
     }
     const url = new URL(ceremony.buildAuthorizationUrl(input))
-    const params = url.searchParams
-    expect(url.protocol).toBe('https:')
+    // Exactly the spec table's fields, in its order, and nothing else (REQ-COMMON-08).
+    const { url: endpoint, fields } = fixture.authorizationRequest
+    expect(`${url.origin}${url.pathname}`).toBe(endpoint)
+    expect(url.search.slice(1)).toBe(new URLSearchParams(fields(input)).toString())
     expect(url.hash).toBe('')
-    expect(url.search.slice(1)).toBe(params.toString())
-    expect(new Set(params.keys()).size).toBe([...params.keys()].length)
-    expect(params.get('client_id')).toBe(input.clientId)
-    expect(params.get('redirect_uri')).toBe(input.redirectUri)
-    expect(params.get('state')).toBe(state)
     // The requested response is exactly what the platform's return rules accept.
+    const params = url.searchParams
     expect(params.get('response_type') ?? 'code').toBe(fixture.returnRules.credentialField)
     expect(params.get('response_mode') ?? 'query').toBe(fixture.returnRules.transport)
-    if (ceremony.pkce) {
-      expect(params.get('code_challenge')).toBe(input.codeChallenge)
-      expect(params.get('code_challenge_method')).toBe('S256')
-      expect(params.has('nonce')).toBe(false)
-    } else {
-      expect(params.get('nonce')).toBe(b64urlEncode(digest))
-      expect(params.has('code_challenge')).toBe(false)
-    }
     const malformed = {
       ...input,
       authorizationDigest: digest.slice(1),
