@@ -19,10 +19,11 @@ Each layer replaces less than the one before it:
 
 Across layers:
 
-- Every test title cites its [test-plan](test-plan.md) ID. A simulated pass is
-  labeled as such and never counts as qualification.
-- Platform coverage iterates the catalog through typed fixture tables, never a
-  literal platform list.
+- Tests covering a [test-plan](test-plan.md) requirement cite its stable ID.
+  The [traceability check](../src/testing/traceability.test.ts) requires a citation
+  for each Automated/Partial `LIBID-*` row. A simulated pass is not qualification.
+- Shared platform conformance and browser coverage iterate typed catalog fixtures;
+  platform-specific regressions stay with their owner.
 - Expectations are independent of the code under test: pinned external vectors
   (libid-rs attested data, a real Google token with bb.js-produced public inputs,
   released keys) and separately written values, not the production constants.
@@ -65,40 +66,20 @@ The [conformance suite](../src/platforms/conformance/conformance.test.ts) and ot
 per-platform unit tests iterate `supportedPlatforms` and read one typed
 [fixture table](../src/platforms/conformance/fixtures.ts) (through `src/testing`)
 instead of naming platforms. A catalog entry without a fixture fails `typecheck`
-at that table. The entry supplies:
+at that table. The entry supplies its OAuth registration/return rules, accepted identity and
+proof, independent expected values, failure vectors, events and prover kind.
+Bearer-link fixtures include transcripts and request profiles; OIDC fixtures
+include the signed token, key and binding mutations. The fixture types own the
+full field list.
 
-- the Bridge client (and public credential when `requiresClientCredential`), its
-  expected OAuth return rules, a valid identity and proof with the digest it is
-  bound to and its expected expiry, boundary and admitted client IDs, and
-  platform-specific rejected identity encodings and out-of-bound proof values;
-- accepted, denied and provider-error returns for a given OAuth state, the
-  prover's weighted operations and its lazily imported `prover.ts`;
-- its prover kind and evidence. A bearer-link platform supplies its response
-  bodies, transcript module, token endpoint and form, identity endpoint and
-  pinned headers. An OIDC platform supplies its signed ID token, JWK and
-  minimal JWK, nonce digest and its circuit input, released-verifier public
-  inputs, the well-formed changes that break its binding, and the token and key
-  rewrites it rejects, each with the operation that rejects it;
-- the normative test IDs each conformance section tags for this platform.
+The suite covers catalog discovery, authorization, validation, expiry and each
+prover's delivery, events, cancellation and cleanup. It preserves transcript,
+correlation and witness code while replacing the TLSN runtime and proof engine.
+A new prover kind needs a fixture evidence shape, a shared-contract test stage
+and its own cases; type checking identifies missing registrations.
 
-The suite then checks catalog members, authorization-URL round-trip, client-ID
-and credential rules, weights and assets; the OAuth return matrix (outcomes,
-metadata, state, issuer, malformed/oversized/leaked fields and transports); the
-generated identity/proof reject matrix, result acceptance and expiry, and OIDC
-binding mismatches; and a `prove()` contract every platform meets whatever its
-prover kind (delivery, operation reporting, the run's signal and engine teardown,
-changed engine public inputs, startup cancellation), followed by each prover
-kind's own cases (bearer-link transcripts, results and orchestration; OIDC
-binding, evidence and key sets), replacing only the TLSN runtime and proof
-engine. A check runs for every platform of a kind only when that kind's shared
-code enforces it; anything one platform alone requires comes from its fixture.
-A new prover kind adds its evidence shape, a stage for the shared contract
-(`typecheck` fails until it exists) and its own cases.
-
-Unit tests beside a platform's source keep only what the suite cannot reach
-through `prove()`, such as Google's circuit ABI vectors and the bearer guard in
-the bearer-link circuit inputs. Map newly tagged IDs in
-[traceability](traceability.md).
+Keep tests that require direct internal access, such as circuit ABI vectors,
+beside that module. Map newly covered IDs in [traceability](traceability.md).
 
 ## Distribution checks
 
@@ -216,12 +197,6 @@ Start the [shared dev app](../../../apps/dev/README.md) with `pnpm -C ts dev`.
 Use real registrations pointing to its exact callback URI. Complete consent
 manually; automated fixtures do not replace these checkpoints.
 
-In progress: the [Bridge live ceremony suite](https://github.com/libid-org/libID-bridge-rs/pull/12)
-authorizes real test accounts at GitHub, X and Google and notarizes real
-sessions through its own notary against the Platform Verifier's rules. It runs
-the Rust prover, not this package's browser prover, so the checkpoints below
-stay manual until a live suite drives the browser ceremony.
-
 1. For every platform, try approval and denial, signed-in/out state, cold and
    warm caches, and native provider apps installed/absent where applicable.
 2. Run concurrent ceremonies. Close an active popup during preparation,
@@ -242,9 +217,3 @@ values, transcripts, openings, witnesses and live proofs out of shared logs and
 telemetry. DevTools can inspect a failed popup locally; publish only the relevant
 sanitized error and component versions. Update the affected traceability rows
 when a new qualification result is established.
-
-Full Google and bearer-link proofs, matched-notary concurrency and real timeout
-cleanup run once per desktop engine. HTTP and mobile-emulated projects retain
-popup interaction, Service Worker, dependency loading and emitted-policy checks;
-they do not repeat the expensive proof cases. This does not qualify physical
-mobile resource limits or live OAuth behavior.

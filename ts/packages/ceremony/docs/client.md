@@ -110,29 +110,27 @@ neither them nor bearer credentials or private witnesses.
 
 `PlatformId` is derived from the closed catalog (`google`, `x`, `github`). Display
 names and icons belong to the application. Only ceremony version 1 currently
-exists. The versions come from the Distribution's `/ccdp/versions.json`, read
-with `mode: 'cors'`, `credentials: 'omit'`, `cache: 'no-store'` and
-`redirect: 'error'` after the Bridge record: one JSON object, platform id to a
-nonempty, duplicate-free, ascending list of unsigned 16-bit versions. A platform
-key the package does not know is ignored; any other violation, or an
-unavailable list, fails client creation, as an unavailable or malformed Bridge
-record does. The Bridge enumerates no versions: a platform it configures that
-the list omits, and a platform the list names that it does not configure, are
-both disabled. An omitted version chooses the highest compatible one; pass the
-trailing version argument explicitly when selecting a particular disclosure
-behavior. Unsupported selections fail synchronously without starting OAuth.
+exists. An omitted version chooses the highest compatible one; select a version
+explicitly when promising a particular disclosure behavior. Unsupported selections
+fail synchronously before OAuth.
+
+The [Distribution catalog](distribution.md#version-catalog) is fetched after the
+Bridge record, without credentials, redirects or persistent browser caching.
+Every version list is validated, including lists for unknown platforms; unknown
+platforms do not participate in selection. Failure of either fetch or validation
+rejects client creation. A platform missing from either record is disabled.
 
 Client derives fixed `/auth/callback` from its configured Bridge origin; public
 configuration contains no callback path or redirect URI.
 
 The Bridge record names, per configured platform, one OAuth client: its
 `clientId` and, for GitHub only, a `clientCredential`: a nonempty printable
-ASCII public OAuth application credential without whitespace, of at most 512 bytes. Every version of
-the platform runs that client, frozen and unchanged in the authorization request
-and in `ProveIdentity`; Prover never refetches configuration. A credential on a
-platform whose ceremony sends none, a missing GitHub credential, or any field
-outside the record refuses the whole configuration. A ceremony cannot supply a
-credential of its own.
+ASCII public OAuth application credential without whitespace, of at most 512 bytes.
+Every version uses the same frozen registration; Prover never refetches it.
+Known platform entries are exact-validated: a missing required credential,
+an unexpected credential or an extra field rejects the configuration. Unknown
+platform entries in the Bridge record are ignored. A ceremony cannot override
+its registration.
 
 ## Ledger and notary inputs
 
@@ -185,13 +183,13 @@ containing separate `identity` and `oauthProof` values:
   live ceremony, never supplied by Prover.
 
 Client derives `expiresAt` after structural validation: Google's signed JWT
-`tokenExpiresAt`, or the X/GitHub token attestation's `createdAt` plus 3600 seconds.
-The identity attestation does not extend that window. The shared launch lifetime
-mirrors [the contract profiles](https://github.com/libid-org/libid-contracts/blob/main/solidity/contracts/ceremony/profiles.json);
-split it if the X and GitHub values diverge. Consumers can discard retained proofs
-when block time is greater than or equal to `expiresAt`. This is retention metadata,
-not a validity guarantee: the ledger verifier's current checks remain authoritative.
-The field is computed locally and does not change CCDP or platform proof payloads.
+`tokenExpiresAt`, or the X/GitHub token attestation's `createdAt` plus that
+platform's released lifetime. The [GitHub](../src/platforms/github/1/profile.ts)
+and [X](../src/platforms/x/1/profile.ts) profiles import their separate lifetime
+constants from the pinned `@libid/contracts/ceremony` package. The identity
+attestation does not extend the window. Consumers may discard retained proofs
+when block time is greater than or equal to `expiresAt`; ledger verification
+remains authoritative. This local metadata is absent from CCDP proof payloads.
 
 Google's proof contains `identityProof`, `publicInputs`, `tokenExpiresAt` and
 `signingKeyModulus`. Its `publicInputs` is a readonly array of 56 lowercase,
@@ -259,7 +257,6 @@ own flow in the popup. Late CCDP traffic becomes inert after settlement.
 To stop a live run, call `connection.close()`. This produces a `closed` lifecycle
 update and rejects with `CeremonyError.status = closed`. An application wanting
 a separate cancellation label records its own intent.
-Closing the popup cannot recall a request already dispatched to the Bridge.
 
 A Ceremony is one-shot. Loss, reload or retry requires fresh OAuth and a new
 ceremony ID; there is no resume API. Discard subscriptions when the consuming

@@ -17,7 +17,7 @@ export function proverPair(entry: string | null): string | undefined {
 }
 
 /**
- * The version list the Distribution publishes: the catalog's, once the executable Prover
+ * The version list the Distribution publishes: the catalog's, once the platform
  * provers the bundle emits and the asset profiles name exactly the catalog's pairs. The
  * client selects from this list, so a pair any of the three lacks fails the build by name.
  */

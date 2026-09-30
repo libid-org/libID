@@ -54,26 +54,21 @@ Unknown routes return 404 with no SPA fallback and an explicit error policy
 [Native server behavior](#native-server-behavior)): absent cache headers would
 leave a 404 heuristically cacheable.
 
-`/ccdp/versions.json` names the platform ceremony versions the Distribution
-bundles: one JSON object, platform id as the catalog spells it, value the
-nonempty, duplicate-free, ascending list of unsigned 16-bit versions, written in
-catalog order (`{"google":[1],"x":[1],"github":[1]}`). The build derives it from
-the [platform catalog](../src/platforms/index.ts) and fails, naming the pairs
-that differ, unless the executable provers the Prover bundle emits (one chunk
-per `platforms/<platform>/<version>/prover.ts` the
-[platform provers](../src/platforms/provers.ts) load) and
-the asset profiles name exactly that set. The path is unversioned because the
-set is a property of the Distribution, not of one CCDP version. The response is
-`application/json; charset=utf-8` with `X-Content-Type-Options: nosniff` under
-the same `no-cache`/native-ETag policy as `/ccdp/callback.html`, to `GET` and
-`HEAD`, without redirect. The [client](client.md#platform-and-version-discovery)
-reads it from the application's origin, so it alone carries
-`Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`;
-the wildcard grant is origin-independent, so the declared policy has no `Vary`
-(the server's encoding negotiation adds its own, as on every resource). No other
-resource of the Distribution carries a CORS header, CCDP browser resources never
-fetch it, and the Bridge does not retrieve it. It names versions, not assets:
-there is still no browser-visible asset manifest.
+## Version catalog
+
+`/ccdp/versions.json` publishes the bundled platform ceremony versions, for example
+`{"google":[1],"x":[1],"github":[1]}`. Each list is nonempty, duplicate-free,
+ascending and limited to unsigned 16-bit versions. The build derives the record
+in [catalog](../src/platforms/index.ts) order and fails by pair name unless the
+emitted [platform provers](../src/platforms/provers.ts) and asset profiles name
+exactly the same pairs. It describes the Distribution, so its path is unversioned.
+
+The response is JSON with `nosniff`, `Cache-Control: no-cache` and a native ETag.
+It supports `GET` and `HEAD` without redirect. It alone carries
+`Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`.
+It needs no origin-dependent `Vary`; SWS may add `Vary: accept-encoding`.
+Only the Application's [client](client.md#platform-and-version-discovery) fetches
+it. Bridge and CCDP documents do not. Asset discovery remains build-owned.
 
 ## Source declarations
 
@@ -172,27 +167,11 @@ all releases to one fixed timestamp. The native-server regression in
 The pinned SWS 3.0.0-beta.1 has behavior that the generated configuration and
 the tests account for:
 
-- **Header rule matching.** `[[advanced.headers]]` sources are globs matched
-  against the request path after internal rewrites, so one exact rule per
-  physical file (`/ccdp/v1/prefetch.html`) covers its route and its direct
-  `.html` request. SWS appends `/<resolved file name>` before matching only for
-  a directory-index request (`/dir/`, or any resolved file when
-  `redirect-trailing-slash = false`). The distribution serves no directory index
-  and keeps the redirect on, so [sws.ts](../build/sws.ts) never emits that form:
-  keyed on `<file>/<name>`, it equals the raw path of the 404 beneath the file
-  and made that 404 immutable. A response that resolved no file (every 404, and
-  the `308` a directory path such as `/ccdp/assets` gets to `/ccdp/assets/`,
-  which returns 404) is matched on the raw request path, and every matching rule
-  applies in config order, later rules overwriting. The first emitted rule is therefore the
-  catch-all `/**` carrying the error policy, `Cache-Control: no-store`,
-  `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: same-origin`
-  and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`,
-  which `/404.html` itself declares. Each exact rule after it overwrites the
-  names it declares on its own file; a 200 keeps the catch-all's value for a
-  name its declaration omits (the CSP on a plain asset, inert outside documents
-  and workers, which all declare their own). The
-  [canary test](testing.md#distribution-checks) pins this matching against the
-  real binary; when it fails on a newer SWS, revisit `sws.ts` and this section.
+- **Header rule matching.** Keep `redirect-trailing-slash = true`. The generated
+  catch-all makes unresolved paths uncacheable; exact rules for physical files
+  then apply after route rewriting. Matching details belong to [sws.ts](../build/sws.ts)
+  and its [native canary](../build/sws.test.ts). Run that check when upgrading SWS;
+  changing these rules can accidentally give 404s immutable cache headers.
 - **`./config.toml` precedence.** A `config.toml` in the working directory is read
   instead of the `--config-file`/`SERVER_CONFIG_FILE` path. Run local binaries from
   a directory without one; the image's working directory, `/home/sws`, has none.
@@ -202,9 +181,6 @@ the tests account for:
   (`max-age=63072000; includeSubDomains; preload`), `X-Frame-Options` and a
   `frame-ancestors 'self'` CSP to every response, overriding declared policy.
   HSTS belongs to the ingress on the CCDP origin.
-- **HEAD responses carry no `Content-Length`.** GET responses do; harmless.
-- **Health and port.** `health = true` answers `GET /health` with 200 and no custom
-  headers, and the image inherits `EXPOSE 8787`.
 
 ## Bridge and popup integration
 
@@ -242,45 +218,22 @@ connection. Ceremony includes no WebRTC implementation or signaling service.
 
 ## Publication and upgrades
 
-The reusable [ccdp-image.yml](../../../../.github/workflows/ccdp-image.yml)
-workflow builds the artifact and the `linux/amd64` image, runs the distribution
-checks against the running container and the pinned native binary, and pushes
-the image only when asked to. Two jobs in
-[ci.yml](../../../../.github/workflows/ci.yml) call it. `ccdp-image` runs on
-every pull request with a read-only token and builds and tests without
-pushing. `ccdp-publish` runs on every push to `main`, is the only CI job that
-holds the package write permission, and pushes
-`ghcr.io/libid-org/ccdp:sha-<commit sha>` (the full 40-hex sha, never a
-prefix) and `ghcr.io/libid-org/ccdp:main`, printing the pushed digest in the
-run summary. Every image carries the built commit in its
-`org.opencontainers.image.revision` label, with the source repository and the
-version (`main` when published, else the sha tag) in the matching OCI labels.
-The workflow can also be dispatched by hand for a dry run, which never pushes.
+[ccdp-image.yml](../../../../.github/workflows/ccdp-image.yml) builds the artifact
+and `linux/amd64` image, then runs checks against the container and pinned native
+binary. [CI](../../../../.github/workflows/ci.yml) uses it as follows:
 
-A trial image of a commit that has not reached `main` comes from
-[ccdp-custom.yml](../../../../.github/workflows/ccdp-custom.yml): run it on the
-branch to build with a tag, or push a branch named `ccdp-custom/<tag>`, and it
-publishes `ghcr.io/libid-org/ccdp:custom-<tag>` (with the sha tag) through the
-same workflow and checks. A custom image is outside the `:main` retention
-history: deploy it as its `sha-<commit sha>` tag pinned by digest, and replace it
-whole.
+| Trigger | Publication |
+|---|---|
+| Pull request or manual dry run | Build and test only; no image push. |
+| Push to `main` | Publish `ghcr.io/libid-org/ccdp:sha-<full commit sha>` and `:main`. |
+| [Custom workflow](../../../../.github/workflows/ccdp-custom.yml), or `ccdp-custom/<tag>` branch | Publish the sha tag and `:custom-<tag>`. |
+| GitHub Release `v<version>` | [Promote](../../../../.github/workflows/release.yml) the existing sha image to `:<version>` and, for a stable version, `:latest`. |
 
-Publishing a GitHub Release `v<version>` runs
-[release.yml](../../../../.github/workflows/release.yml), which publishes
-`ghcr.io/libid-org/ccdp:<version>` and, for a stable version (no `-` prerelease
-suffix, the npm dist-tag rule), `ghcr.io/libid-org/ccdp:latest`. The release
-promotes rather than rebuilds: it retags the `sha-<commit sha>` image of the
-released commit registry-side, so the release image is byte-identical to the
-image built and tested when that commit landed on `main` — the same digest,
-which the job verifies for every new tag and prints next to the source digest
-in the run summary. Before retagging, the job reads the image's revision label
-and refuses to promote unless it names the released commit. Promotion needs no
-retention seed because it publishes that exact image. A release never builds.
-Without a `sha-` image (the commit never landed on `main`, or its `main` run
-failed) the job fails and names the fix: merge to `main`, let `ccdp-publish`
-run, then re-publish the release. Only images published from `main` enter the
-`:main` retention history described next; an image built anywhere else would
-be missing from it, and its assets could vanish from the next deployment.
+Release promotion verifies the source image's revision label and preserves its
+digest; it never rebuilds. If the sha image is missing, first publish that commit
+through a successful `main` run, then re-publish the release. Image digests appear
+in the workflow summary. Custom images are outside the `:main` retention history;
+deploy them by digest and replace them whole.
 
 Before building, the workflow pulls the previously published `:main` image and
 copies `/home/sws/public` and `/home/sws/distribution-graph.json` out of it into
