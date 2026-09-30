@@ -285,6 +285,47 @@ test('[POPUP-CONTROL-002] [POPUP-CONNECTION-003] [POPUP-KEEPER-003] one port sur
   expect(appDiag).not.toContain('fallback-unavailable')
 })
 
+/** Navigate, then call `then` on the connection in the same task. */
+const navigateThen = (page: Page, url: string, then: 'ping' | 'close') =>
+  page.evaluate(
+    ([[base, hash], then]) => {
+      const conn = (
+        window as unknown as {
+          __conn: {
+            navigate(u: string, f: URLSearchParams): Promise<void>
+            send(v: unknown): void
+            close(): Promise<void>
+          }
+        }
+      ).__conn
+      void conn.navigate(base, new URLSearchParams(hash))
+      if (then === 'ping') conn.send({ type: 'ping', n: 5 })
+      else void conn.close()
+    },
+    [split(url), then] as const,
+  )
+
+test('[POPUP-CONNECTION-003] a value sent right after navigate waits in the kept port for the destination', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  await nextDocument(popup, () => navigateThen(page, `${POPUP}/isolated#c=${id}`, 'ping'))
+  expect(await expectPong(page, 5)).toMatchObject({ path: '/isolated', isolated: true })
+})
+
+test('[POPUP-CONTROL-003] a close right after navigate reaches the destination through the kept port', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  const closed = popup.waitForEvent('close', { timeout: 15_000 })
+  await navigateThen(page, `${POPUP}/isolated#c=${id}`, 'close')
+  await closed
+})
+
 test('[POPUP-CONTROL-003] [POPUP-CONTROL-004] close reaches a severed popup over the port', async ({
   page,
 }) => {

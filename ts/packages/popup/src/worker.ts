@@ -2,15 +2,16 @@
 // The host serves and registers the worker and owns its update policy; this
 // handler only gives a port a temporary owner across one popup document
 // replacement. It touches nothing but its own keep and claim records, never
-// reads the port, keeps no durable record, and holds nothing past the claim
+// reads the port or its backlog, keeps no durable record, and holds nothing past the claim
 // deadline. A duplicate keep tells both applications their document departed;
 // an expired port closes silently, so a later document can still re-establish.
 
-import { CARRIER_CLAIM_TIMEOUT_MS, decodeKeeperRequest, KEEP } from './keeper.js'
+import { CARRIER_CLAIM_TIMEOUT_MS, decodeKeeperRequest, depart, KEEP } from './keeper.js'
 
 interface Held {
   port: MessagePort
   peerOrigin: string
+  backlog: unknown[] | undefined
   release: () => void
 }
 
@@ -21,16 +22,6 @@ function clientOrigin(source: ExtendableMessageEvent['source']): string | null {
   } catch {
     return null
   }
-}
-
-/** Close a held port, ending the application's side too: a closed port alone tells it nothing. */
-function retire(port: MessagePort): void {
-  try {
-    port.postMessage({ type: 'document-departed' })
-  } catch {
-    // Nothing more can reach the application.
-  }
-  port.close()
 }
 
 /** @internal Installs the handler on an explicit scope; tests inject a fake. */
@@ -60,8 +51,8 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
         // Duplicate ownership rejects both and closes every reachable port.
         held.delete(connectionId)
         existing.release()
-        retire(existing.port)
-        retire(port)
+        depart(existing.port)
+        depart(port)
         reply.postMessage({ ok: false })
         return
       }
@@ -80,6 +71,7 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
       held.set(connectionId, {
         port,
         peerOrigin: request.peerOrigin,
+        backlog: request.backlog,
         release: () => {
           clearTimeout(timer)
           release()
@@ -101,7 +93,8 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
     }
     held.delete(connectionId)
     existing.release()
-    reply.postMessage({ port: true, peerOrigin: existing.peerOrigin }, [existing.port])
+    const { peerOrigin, backlog } = existing
+    reply.postMessage({ port: true, peerOrigin, ...(backlog && { backlog }) }, [existing.port])
   })
 }
 

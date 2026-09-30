@@ -61,6 +61,8 @@ export interface DocumentDeparted {
   readonly type: 'document-departed'
 }
 
+export const DEPARTED: DocumentDeparted = { type: 'document-departed' }
+
 export type PopupControl = Navigate | ClosePopup | DocumentDeparted
 
 export const MAX_TYPE_LENGTH = 64

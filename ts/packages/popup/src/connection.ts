@@ -12,16 +12,18 @@ import {
   type Reporter,
   reportUndeliverable,
 } from './diagnostics.js'
-import { activeRegistration, bounded, PortKeeper } from './keeper.js'
+import { activeRegistration, depart, PortKeeper } from './keeper.js'
 import {
   type Carrier,
   type CarrierConstructor,
+  DEPARTED,
   decodeControl,
   isAllowedOrigin,
   isCanonicalWebUrl,
   isConnectionId,
   isNavigationCarrier,
   isReservedType,
+  MAX_TYPE_LENGTH,
   type Message,
   type MessageType,
   type Navigate,
@@ -113,8 +115,6 @@ function destination(url: string, fragment: URLSearchParams | undefined, report:
   return serialized === '' ? url : `${url}#${serialized}`
 }
 
-const stripFragment = (url: string): string => url.split('#', 1)[0]
-
 /** Same origin, path, and query; fragments do not distinguish documents. */
 const sameDocument = (url: URL, location: Location): boolean =>
   url.origin === location.origin &&
@@ -136,6 +136,14 @@ function resolveFallback(value: string, location: Location, fragment: string): U
   }
   url.hash = fragment
   return url
+}
+
+/** A caller type the peer's routing accepts: bounded and not a reserved control. */
+function requireRoutable(type: string): void {
+  if (isReservedType(type)) throw new TypeError(`"${type}" is a reserved discriminator`)
+  if (routingType({ type }) !== type) {
+    throw new TypeError(`message type must be 1 to ${MAX_TYPE_LENGTH} characters`)
+  }
 }
 
 interface Registration<In extends Message> {
@@ -160,9 +168,14 @@ abstract class Endpoint<Out extends Message, In extends Message>
   private rejectReady!: (error: PopupError) => void
   private settleClosed!: (end: ConnectionEnd) => void
 
+  /**
+   * @param closedRejectsReady whether ending closed before selection rejects
+   * `ready`; a popup document replacing itself leaves readiness to its successor.
+   */
   protected constructor(
     protected readonly report: Reporter,
     private readonly allowedOrigins: OriginAllowlist,
+    private readonly closedRejectsReady: boolean,
   ) {
     this.ready = new Promise((resolve, reject) => {
       this.resolveReady = resolve
@@ -180,9 +193,7 @@ abstract class Endpoint<Out extends Message, In extends Message>
   }
 
   send(message: Out): void {
-    if (isReservedType(message.type)) {
-      throw new TypeError(`"${message.type}" is a reserved discriminator`)
-    }
+    requireRoutable(message.type)
     this.transmit(message)
   }
 
@@ -202,7 +213,7 @@ abstract class Endpoint<Out extends Message, In extends Message>
 
   on<N extends In>(message: MessageType<N>, handler: (message: N) => void): () => void {
     const { type } = message
-    if (isReservedType(type)) throw new TypeError(`"${type}" is a reserved discriminator`)
+    requireRoutable(type)
     if (this.registrations.has(type)) throw new TypeError(`"${type}" is already registered`)
     const registration: Registration<In> = {
       decode: (value) => message.decode(value),
@@ -234,9 +245,14 @@ abstract class Endpoint<Out extends Message, In extends Message>
   /** Rejects an invalid binding before either delivery or isolation handoff. */
   protected checkPeer(carrier: Carrier): boolean {
     if (isAllowedOrigin(carrier.peerOrigin, this.allowedOrigins)) return true
-    carrier.close()
+    this.discard(carrier)
     this.fail('handshake-rejected')
     return false
+  }
+
+  /** Closes a carrier this endpoint will not use. */
+  protected discard(carrier: Carrier): void {
+    carrier.close()
   }
 
   protected abstract onControl(control: PopupControl): void
@@ -308,6 +324,7 @@ abstract class Endpoint<Out extends Message, In extends Message>
       performance.now() - this.startedAt,
     )
     if (end.outcome === 'failed') this.rejectReady(new PopupError(end.code))
+    else if (this.closedRejectsReady) this.rejectReady(new PopupError('connection-closed'))
     this.settleClosed(end)
   }
 }
@@ -323,7 +340,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
     options: ConnectOptions,
   ) {
     const allowedPopupOrigins = requireOrigins(options.allowedPopupOrigins, 'allowedPopupOrigins')
-    super(createReporter(options.onDiagnostic), allowedPopupOrigins)
+    super(createReporter(options.onDiagnostic), allowedPopupOrigins, true)
     const connectionId = requireConnectionId(options.connectionId)
     if (popup.connected) throw new Error('PopupWindow is already connected')
     popup.connected = true
@@ -478,6 +495,8 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
 class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Out, In> {
   /** The first accepted control is terminal for this document. */
   private controlsDone = false
+  /** A port on its way to the worker; closure before the transfer must still report departure. */
+  private handoff: MessagePort | null = null
   private readonly connectionId: string
   private readonly isolationFallback: URL | null
 
@@ -489,22 +508,27 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       options.allowedApplicationOrigins,
       'allowedApplicationOrigins',
     )
-    super(createReporter(options.onDiagnostic), allowedOrigins)
+    super(createReporter(options.onDiagnostic), allowedOrigins, false)
     this.connectionId = requireConnectionId(options.connectionId)
     this.isolationFallback =
       options.isolationFallbackUrl === undefined
         ? null
         : resolveFallback(options.isolationFallbackUrl, popup.view.location, popup.fragment)
-    const departed = () => {
+    const onPageHide = () => {
+      if (this.handoff) {
+        // Closed before the worker took the port.
+        depart(this.handoff)
+        this.handoff = null
+        return this.release()
+      }
       if (this.ended || this.controlsDone) return
-      this.notifyDeparture()
-      this.release()
+      this.depart()
     }
     // WebKit otherwise skips pagehide when closing a window. This listener never
     // prompts or reports departure; a beforeunload can still be cancelled.
     const beforeUnload = () => {}
     popup.view.addEventListener('beforeunload', beforeUnload, { signal: this.controller.signal })
-    popup.view.addEventListener('pagehide', departed, { signal: this.controller.signal })
+    popup.view.addEventListener('pagehide', onPageHide, { signal: this.controller.signal })
     void this.select(allowedOrigins, options.fallback)
   }
 
@@ -522,7 +546,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       const workers = (await this.popup.registrations()).flatMap((r) => r.active ?? [])
       if (workers.length > 0) {
         const port = await this.claimFrom(workers)
-        if (this.ended) return port?.close()
+        if (this.ended) return port ? this.discard(port) : undefined
         if (port) return this.admit(port, 'carrier-restored')
         this.report('claim-empty')
       }
@@ -535,7 +559,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
           connectionId: this.connectionId,
           signal: this.controller.signal,
         })
-        if (this.ended) return port?.close()
+        if (this.ended) return port ? this.discard(port) : undefined
         if (port) return this.admit(port, 'carrier-message-port')
         this.report('opener-timeout')
       }
@@ -554,7 +578,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
         return
       }
       const carrier = await fallback(this.controller.signal)
-      if (this.ended) return carrier.close()
+      if (this.ended) return this.discard(carrier)
       return this.install(carrier, 'carrier-fallback')
     } catch (error) {
       if (this.ended) return
@@ -562,12 +586,23 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     }
   }
 
-  /** Asks every worker at once; at most one holds this connection's port. */
+  /**
+   * Asks every worker at once; at most one holds this connection's port. A
+   * malformed answer fails the claim, and any port another worker returned
+   * then reports departure rather than leak.
+   */
   private async claimFrom(workers: ServiceWorker[]): Promise<PortCarrier | null> {
-    const ports = await Promise.all(workers.map((w) => new PortKeeper(w).claim(this.connectionId)))
-    const [port = null, ...extra] = ports.filter((p) => p !== null)
-    for (const p of extra) p.port.close()
-    return port ? new PortCarrier(port.port, port.peerOrigin) : null
+    const answers = await Promise.allSettled(
+      workers.map((w) => new PortKeeper(w).claim(this.connectionId)),
+    )
+    const claimed = answers.flatMap((a) => (a.status === 'fulfilled' && a.value ? [a.value] : []))
+    if (answers.some((a) => a.status === 'rejected')) {
+      for (const { port } of claimed) depart(port)
+      throw new PopupError('claim-failed')
+    }
+    const [first, ...extra] = claimed
+    for (const { port } of extra) port.close()
+    return first ? new PortCarrier(first.port, first.peerOrigin, first.backlog) : null
   }
 
   /**
@@ -590,12 +625,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       // Already the fallback and still not isolated: the host's policy is
       // not taking effect. Never loop, and end the application's side too,
       // which would otherwise keep waiting on this carrier.
-      try {
-        carrier.send({ type: 'document-departed' })
-      } catch {
-        // A carrier that cannot send leaves nothing to tell.
-      }
-      carrier.close()
+      this.discard(carrier)
       return this.fail('isolation-unavailable', true)
     }
     this.controlsDone = true
@@ -615,17 +645,21 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     }
     if (this.controlsDone) return
     this.controlsDone = true
-    if (control.type === 'navigate') {
-      void this.replaceDocument(control.url, false).catch(() => {})
-    } else {
+    if (control.type === 'close-popup') {
       this.closePopup()
+    } else if (sameDocument(new URL(control.url), this.popup.view.location)) {
+      // A fragment navigation keeps this document, so no destination would take the port.
+      if (this.carrier) this.discard(this.carrier)
+      this.fail('control-rejected')
+    } else {
+      void this.replaceDocument(control.url, false).catch(() => {})
     }
   }
 
   async navigate(url: string, fragment?: URLSearchParams): Promise<void> {
     if (this.ended) throw new PopupError('connection-closed')
     const target = destination(url, fragment, this.report)
-    if (url === stripFragment(this.popup.view.location.href)) {
+    if (sameDocument(new URL(url), this.popup.view.location)) {
       // A fragment navigation keeps this document; there is nothing to preserve.
       throw new TypeError('navigation requires a different document')
     }
@@ -680,9 +714,9 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     const carrier = this.carrier
     if (carrier instanceof PortCarrier) {
       const peerOrigin = carrier.peerOrigin
-      const port = carrier.detach()
+      const { port, backlog } = carrier.detach()
       this.dropCarrier()
-      await this.keepThrough(port, peerOrigin, url, viaOperation)
+      await this.keepThrough(port, backlog, peerOrigin, url, viaOperation)
       this.release() // the port is the worker's now; this endpoint is done
       location.replace(url)
       return
@@ -712,33 +746,34 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
    */
   private async keepThrough(
     port: MessagePort,
+    backlog: unknown[],
     peerOrigin: string,
     url: string,
     viaOperation: boolean,
   ): Promise<void> {
     const failed: (code: PopupErrorCode) => never = (code) => {
       // Before the worker takes the port, end the application's side here; after, the worker does.
-      try {
-        port.postMessage({ type: 'document-departed' })
-      } catch {
-        // A transferred port reaches nothing from here.
-      }
-      port.close() // a no-op once transferred; releases a port the worker never took
+      this.handoff = null
+      depart(port) // a no-op once transferred
       this.fail(code, viaOperation)
       throw new PopupError(code)
     }
+    this.handoff = port
     // The registration that will control the destination is the one its
     // document claims from, whichever one controls this document. The host
     // may still be registering it here, so wait briefly for it to activate.
-    const registration = await bounded(
-      activeRegistration(async () => (await this.popup.registrations(url))[0]),
+    const registration = await activeRegistration(
+      async () => (await this.popup.registrations(url))[0],
     )
     const worker = registration?.active ?? null
     if (this.ended) failed('connection-closed')
     if (!worker) failed('continuity-unsupported')
     const startedAt = performance.now()
     try {
-      await new PortKeeper(worker).keep(this.connectionId, port, peerOrigin)
+      // The transfer happens in this call, taking the backlog as it stands.
+      const kept = new PortKeeper(worker).keep(this.connectionId, port, peerOrigin, backlog)
+      this.handoff = null
+      await kept
     } catch {
       failed('keep-failed')
     }
@@ -746,18 +781,28 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     this.report('keep-acknowledged', performance.now() - startedAt)
   }
 
-  /** Sending during departure is best-effort and cannot create a reporting failure. */
-  private notifyDeparture(): void {
+  /**
+   * Closes a carrier the application may already hold, reporting departure
+   * first: a closed carrier alone tells it nothing. Best-effort, and never a
+   * reporting failure.
+   */
+  protected override discard(carrier: Carrier): void {
     try {
-      this.carrier?.send({ type: 'document-departed' })
+      carrier.send(DEPARTED)
     } catch {
       // No acknowledgement or retry can outlive this document reliably.
     }
+    carrier.close()
+  }
+
+  /** Ends this endpoint, telling the application its document departed. */
+  private depart(): void {
+    if (this.carrier) this.discard(this.carrier)
+    this.release()
   }
 
   private closePopup(): void {
-    this.notifyDeparture()
-    this.release()
+    this.depart()
     this.popup.view.close()
   }
 }

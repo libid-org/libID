@@ -159,8 +159,9 @@ source document          Service Worker          destination document
 The source navigates only after the worker acknowledges ownership. The
 destination claims before loading caller code or using the network. This
 preserves the already authenticated port without repeating its handshake.
-`PortKeeper` never receives an RTC resource, substitute carrier, or caller
-value.
+`PortKeeper` never receives an RTC resource or substitute carrier. Caller
+values reach it only as the port's backlog, described below, which it holds
+unread.
 
 This path is strictly same-origin. The host must make the worker holding the
 port reachable from the destination. By default, keep uses the registration
@@ -213,8 +214,8 @@ selecting a weaker path.
 
 `PortKeeper` is the carrier's package-private continuity component. It
 encapsulates Service Worker communication, temporary ownership, event lifetime,
-the claim deadline, one-use transfer, and cleanup. It neither reads the port nor
-knows what it carries. A duplicate keep sends `document-departed` on both ports
+the claim deadline, one-use transfer, and cleanup. It reads neither the port
+nor its backlog. A duplicate keep sends `document-departed` on both ports
 before closing them; an expired port closes silently, so the application keeps
 waiting and a later document can re-establish.
 
@@ -236,15 +237,17 @@ declare function installPortKeeper(): void
 declare class PortKeeper {
   constructor(worker: Pick<ServiceWorker, 'postMessage'>)
 
-  keep(connectionId: string, port: MessagePort, peerOrigin: string): Promise<void>
-  claim(connectionId: string): Promise<{ port: MessagePort; peerOrigin: string } | null>
+  keep(connectionId: string, port: MessagePort, peerOrigin: string, backlog?: unknown[]): Promise<void>
+  claim(
+    connectionId: string,
+  ): Promise<{ port: MessagePort; peerOrigin: string; backlog: unknown[] } | null>
 }
 ```
 
 The constructor fixes the active worker for both operations; the connection
 version is the package constant. `keep` resolves only after the worker owns the exact port, after
 which connection may replace the source document. `claim` atomically returns
-and removes the unchanged port, or returns `null` when no entry exists. A
+and removes the unchanged port with its backlog, or returns `null` when no entry exists. A
 worker that does not answer within the reply deadline is treated as holding
 nothing, so an unrelated worker on the origin never blocks a fresh handshake;
 a malformed answer is a failure. `null`
@@ -264,6 +267,15 @@ of it. Worker loss or a failed `keep` acknowledgement prevents navigation with
 live state; a port the worker never took carries `document-departed` from the
 page before it closes. No `BroadcastChannel`, cookie, IndexedDB record, request, or URL
 carries the port.
+
+A started port cannot be stopped, and an engine may drop values it has already
+taken from the channel when the port is transferred; WebKit does. So from the
+moment the source chooses to leave until the transfer, values the port still
+dispatches are collected in order as its backlog and travel in the keep record.
+The worker returns them with the claim, and the destination delivers them
+before anything still queued in the port, so values the application sends right
+after `Navigate` reach the destination in order. Either record spells the
+backlog only when it is nonempty.
 
 Preservation also serves the isolation fallback: a document that must be
 isolated and is not keeps the port it just selected, before starting it, and

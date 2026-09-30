@@ -221,9 +221,14 @@ export class PortCarrier implements Carrier {
   /** Whether handlers were ever installed; assigning them starts the port. */
   private started = false
 
+  /**
+   * `backlog` holds values a predecessor document received after it chose to
+   * leave; they precede everything still queued in the port.
+   */
   constructor(
     port: MessagePort,
     readonly peerOrigin: string,
+    private backlog: unknown[] = [],
   ) {
     this.port = port
   }
@@ -244,8 +249,14 @@ export class PortCarrier implements Carrier {
     if (!port) return () => {}
     this.started = true
     port.onmessage = (event: MessageEvent): void => handler(event.data)
-    port.onmessageerror = (): void => this.close()
+    // A value that cannot be deserialized reaches routing as one that cannot be decoded.
+    port.onmessageerror = (): void => handler(undefined)
     port.start()
+    // A microtask still precedes every task that dispatches the port's own values.
+    const backlog = this.backlog.splice(0)
+    queueMicrotask(() => {
+      for (const value of backlog) if (this.port === port) handler(value)
+    })
     return () => {
       if (this.port === port) {
         port.onmessage = null
@@ -255,29 +266,33 @@ export class PortCarrier implements Carrier {
   }
 
   close(): void {
-    this.take()?.close()
-  }
-
-  /** Surrenders the port for preservation; this carrier is closed afterwards. */
-  detach(): MessagePort {
-    const port = this.take()
-    if (!port) throw new PopupError('send-unavailable')
-    return port
-  }
-
-  /**
-   * Gives up the port. Handlers are cleared only if they were installed:
-   * assigning `onmessage`, even to null, starts the port and would dispatch
-   * queued values into the void before a transfer.
-   */
-  private take(): MessagePort | null {
     const port = this.port
-    if (!port) return null
+    if (!port) return
     this.port = null
+    // Assigning handlers, even null, would start a port that never was.
     if (this.started) {
       port.onmessage = null
       port.onmessageerror = null
     }
-    return port
+    port.close()
+  }
+
+  /**
+   * Surrenders the port and its backlog for preservation; this carrier is
+   * closed afterwards. Nothing stops a started port, and an engine may drop
+   * values it has already taken from the channel when the port is
+   * transferred, so until the transfer whatever it still dispatches here
+   * joins the backlog.
+   */
+  detach(): { port: MessagePort; backlog: unknown[] } {
+    const port = this.port
+    if (!port) throw new PopupError('send-unavailable')
+    this.port = null
+    const { backlog } = this
+    if (this.started) {
+      port.onmessage = (event: MessageEvent): void => void backlog.push(event.data)
+      port.onmessageerror = (): void => void backlog.push(undefined)
+    }
+    return { port, backlog }
   }
 }

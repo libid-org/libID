@@ -62,7 +62,7 @@ const request = (
 const requestPort = async (pair: FakePair, overrides = {}): Promise<MessagePort> => {
   const port = await request(pair, overrides)
   if (!port) throw new Error('expected a port')
-  return port.detach()
+  return port.detach().port
 }
 
 async function roundTrip(app: MessagePort, popup: MessagePort): Promise<unknown[]> {
@@ -326,19 +326,49 @@ describe('PortCarrier [POPUP-PORT-002]', () => {
     expect(() => carrier.close()).not.toThrow()
   })
 
-  it('detaches the same entangled port and closes itself', async () => {
+  it('surrenders a started port, collecting what it still dispatches into the backlog', async () => {
+    const channel = new MessageChannel()
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN, [{ type: 'earlier' }])
+    const handler = vi.fn()
+    carrier.on(handler)
+    await tick()
+    expect(handler).toHaveBeenCalledWith({ type: 'earlier' })
+    handler.mockClear()
+    const { port, backlog } = carrier.detach()
+    expect(port).toBe(channel.port1)
+    expect(() => carrier.send({ type: 'x' })).toThrow('send-unavailable')
+    channel.port2.postMessage({ type: 'after' })
+    await tick()
+    expect(handler).not.toHaveBeenCalled()
+    expect(backlog).toEqual([{ type: 'after' }])
+  })
+
+  it('delivers its backlog ahead of everything still queued in the port', async () => {
+    const channel = new MessageChannel()
+    channel.port2.postMessage({ type: 'queued' })
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN, [{ type: 'held' }])
+    const received: unknown[] = []
+    carrier.on((value) => void received.push(value))
+    await tick()
+    expect(received).toEqual([{ type: 'held' }, { type: 'queued' }])
+    carrier.close()
+  })
+
+  it('surrenders an unstarted port untouched, with only the backlog it was given', () => {
+    const channel = new MessageChannel()
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN, [{ type: 'held' }])
+    const { port, backlog } = carrier.detach()
+    expect(port.onmessage).toBeNull()
+    expect(backlog).toEqual([{ type: 'held' }])
+  })
+
+  it('hands an undeserializable value to routing as undecodable', () => {
     const channel = new MessageChannel()
     const carrier = new PortCarrier(channel.port1, APP_ORIGIN)
     const handler = vi.fn()
     carrier.on(handler)
-    const port = carrier.detach()
-    expect(port).toBe(channel.port1)
-    expect(() => carrier.send({ type: 'x' })).toThrow('send-unavailable')
-    const received: unknown[] = []
-    port.onmessage = (e) => void received.push(e.data)
-    channel.port2.postMessage({ type: 'after' })
-    await tick()
-    expect(handler).not.toHaveBeenCalled()
-    expect(received).toEqual([{ type: 'after' }])
+    channel.port1.onmessageerror?.(new MessageEvent('messageerror'))
+    expect(handler).toHaveBeenCalledWith(undefined)
+    carrier.close()
   })
 })
