@@ -4,10 +4,10 @@ import { claimRootWorker } from '../../assets/registration.js'
 import { ceremonyError, endError, reportFailure } from '../../errors.js'
 import { Events, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
 import { ceremonyFor } from '../../platforms/index.js'
-import { proverFor } from '../../platforms/provers.js'
+import { type ProverResult, proverFor } from '../../platforms/provers.js'
 import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
-import { messages } from '../ui-messages.js'
+import { messages } from '../uiMessages.js'
 import { eventView, view } from './ui.js'
 
 type ProverState =
@@ -96,7 +96,7 @@ class ProverDocument {
     await this.deliver(result)
   }
 
-  private async deliver(result: Omit<IdentityProof, 'type'> | null): Promise<void> {
+  private async deliver(result: ProverResult | null): Promise<void> {
     if (this.controller.signal.aborted) return
     if (result === null) {
       this.connection.send({ type: 'user-denied' })

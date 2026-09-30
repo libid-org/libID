@@ -9,7 +9,7 @@ import {
 import { prepareGoogleInputs } from './inputs.js'
 import { buildGooglePublicInputs } from './publicInputs.js'
 import { parseGoogleIdToken } from './token.js'
-import { validateProof } from './types.js'
+import { validateProof } from './validation.js'
 
 const digest = fixture.authorizationDigest
 

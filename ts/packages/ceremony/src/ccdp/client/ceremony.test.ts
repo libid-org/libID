@@ -18,8 +18,8 @@ import {
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
 import { bundledVersions, CEREMONY_ID, fixtures, platformConfig } from '../../testing/index.js'
 import { CeremonyFailed, EventMessage, IdentityProof, UserDenied } from '../index.js'
-import { popupErrorMessages } from '../ui-messages.js'
-import { type CCDPClient, ccdpClientFromConfig, createCCDPClient } from './ceremony.js'
+import { popupErrorMessages } from '../uiMessages.js'
+import { type CCDPClient, ccdpClientFromConfig, createCCDPClient } from './client.js'
 import { fetchCeremonyConfig, validateCeremonyConfig } from './config.js'
 import { VERSIONS_PATH, validatePlatformVersions } from './versions.js'
 

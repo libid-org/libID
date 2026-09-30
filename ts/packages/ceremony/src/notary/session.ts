@@ -1,8 +1,7 @@
 import { assetUrl } from '../assets/index.js'
 import { ceremonyError } from '../errors.js'
-import { now, type OperationEvent } from '../events.js'
+import { now, type OperationEvent, safeEmit } from '../events.js'
 import { isOrigin, isWebUrl } from '../primitives.js'
-import { safeEmit } from '../workers.js'
 import type { NotaryAttestation } from './decode.js'
 import { tlsnModule, tlsnWasm } from './notary.assets.js'
 import type {

@@ -1,7 +1,7 @@
 import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CEREMONY_ID, type FakeDocumentUi, fakeDocumentUi } from '../../testing/index.js'
-import { messages } from '../ui-messages.js'
+import { messages } from '../uiMessages.js'
 import { startPrefetch } from './prefetch.js'
 
 vi.hoisted(() => vi.stubGlobal('document', {}))

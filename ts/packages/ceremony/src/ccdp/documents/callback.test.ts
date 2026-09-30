@@ -2,7 +2,7 @@ import { PopupError } from '@libid/popup'
 import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CEREMONY_ID, type FakeDocumentUi, fakeDocumentUi } from '../../testing/index.js'
-import { messages, popupErrorMessages } from '../ui-messages.js'
+import { messages, popupErrorMessages } from '../uiMessages.js'
 import { startCallback } from './callback.js'
 
 const { accept, current } = vi.hoisted(() => ({ accept: vi.fn(), current: vi.fn() }))

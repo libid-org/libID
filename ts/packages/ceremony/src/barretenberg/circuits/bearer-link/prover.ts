@@ -8,7 +8,7 @@ import type { Identity } from '../../../platforms/types.js'
 import { isRecord } from '../../../primitives.js'
 import { BearerLinkCircuit } from './circuit.js'
 import type { BearerTranscript } from './transcript.js'
-import type { BearerLinkProofV1 } from './types.js'
+import type { BearerLinkProofV1 } from './validation.js'
 
 /** Attribute a failure to the operation it interrupted. */
 const failsAs = <T>(p: Promise<T>, event: string) =>

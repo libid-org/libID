@@ -1,9 +1,4 @@
 import type { OperationEvent } from '../events.js'
-import { FIELD_HEX_DIGITS } from './parameters.js'
-
-/** Canonical public field spelling used by both circuit adapters. */
-export const fieldHex = (value: bigint | number): string =>
-  `0x${BigInt(value).toString(16).padStart(FIELD_HEX_DIGITS, '0')}`
 
 /** Browser-generated bb output; structural checks here do not establish cryptographic validity. */
 export interface RawProof {

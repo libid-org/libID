@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import type { PlatformVersions } from '../src/ccdp/client/versions.ts'
 import { isUint } from '../src/primitives.ts'
-import { importSource } from './source.ts'
+import { importSource } from './bundle.ts'
 import { packageDir } from './sources.ts'
 
 /** `<platform>/<version>` for every version a list names, in the list's order. */

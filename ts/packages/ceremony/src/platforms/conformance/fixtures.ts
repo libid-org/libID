@@ -10,14 +10,14 @@ import type { OAuthReturn } from '../../ccdp/navigation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
 import * as githubTranscript from '../github/1/transcript.js'
-import * as githubTypes from '../github/1/types.js'
-import * as googleTypes from '../google/1/types.js'
+import * as githubValidation from '../github/1/validation.js'
+import * as googleValidation from '../google/1/validation.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
 import type { ReturnRules } from '../oauthReturn.js'
 import type { ProverModule } from '../provers.js'
 import type { Identity } from '../types.js'
 import * as xTranscript from '../x/1/transcript.js'
-import * as xTypes from '../x/1/types.js'
+import * as xValidation from '../x/1/validation.js'
 
 type Proof<P extends PlatformId> = ProofByPlatformVersion[P] extends { 1: infer T } ? T : never
 
@@ -58,7 +58,7 @@ interface Entry<P extends PlatformId> {
   /** Retention expiry the result adapter derives from `proof`, computed independently here. */
   expiresAt: number
   /** The platform version's own validators, which the catalog's result adapter composes. */
-  types: {
+  validation: {
     validateIdentity(value: unknown): Identity<P>
     validateProof(value: unknown, identity: Identity<P>, authorizationDigest: Uint8Array): Proof<P>
   }
@@ -356,7 +356,7 @@ export const fixtures = {
     },
     digest: googleV1.authorizationDigest,
     expiresAt: jwtPart(googleV1.idToken, 1).exp as number,
-    types: googleTypes,
+    validation: googleValidation,
     rejectedProof: {
       identityProof: [new Uint8Array(), oversizedProof],
       tokenExpiresAt: [-1, 1.5, Number.MAX_SAFE_INTEGER + 1],
@@ -512,7 +512,7 @@ export const fixtures = {
     proof: bearerLinkProof(),
     digest: bearerDigest,
     expiresAt: bearerExpiresAt,
-    types: xTypes,
+    validation: xValidation,
     rejectedProof: bearerLinkRejectedProof,
     operations: bearerLinkOperations,
     specTests: { ...bearerLinkSpecTests, issuer: '[TEST-PLAT-18]' },
@@ -573,7 +573,7 @@ export const fixtures = {
     proof: bearerLinkProof(),
     digest: bearerDigest,
     expiresAt: bearerExpiresAt,
-    types: githubTypes,
+    validation: githubValidation,
     rejectedProof: bearerLinkRejectedProof,
     operations: bearerLinkOperations,
     specTests: { ...bearerLinkSpecTests, issuer: '[LIBID-OAUTH-031] [TEST-PLAT-12A]' },

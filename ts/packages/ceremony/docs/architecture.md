@@ -10,7 +10,7 @@ and assembles `OAuthProof`. Neither performs final cryptographic verification in
 
 | Owner | Responsibility |
 |---|---|
-| [ccdp/client](../src/ccdp/client/ceremony.ts) | Fetch/freeze Bridge config and Distribution versions, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
+| [ccdp/client](../src/ccdp/client/client.ts) | Fetch/freeze Bridge config and Distribution versions, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
 | [ccdp/index](../src/ccdp/index.ts), [navigation](../src/ccdp/navigation.ts) | Browser-free message companions and route/fragment codecs. |
 | [ccdp/documents](../src/ccdp/documents/) | [Callback](../src/ccdp/documents/callback.ts), [Prefetch/Worker](../src/ccdp/documents/prefetch.ts) and [Prover](../src/ccdp/documents/prover.ts) entrypoints; package-owned UI. |
 | [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its prover. |

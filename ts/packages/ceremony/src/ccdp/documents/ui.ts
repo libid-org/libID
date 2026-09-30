@@ -1,5 +1,5 @@
 import { CeremonyStage, type Events, type StageEvent } from '../../events.js'
-import { messages } from '../ui-messages.js'
+import { messages } from '../uiMessages.js'
 import { proofProgress } from './progress.js'
 
 const SLOW_PROVING_HINT_MS = 15000

@@ -91,7 +91,7 @@ and `ledger.notaryAddress()` once and derives fresh authorization material from
 the hash and byte inputs before returning, without retaining those buffers.
 Invalid selection, ledger values or inputs fail before OAuth. A client cannot reuse a live ID; a connection cannot run two
 ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
-[ceremony.ts](../src/ccdp/client/ceremony.ts).
+[client.ts](../src/ccdp/client/client.ts) and [ceremony.ts](../src/ccdp/client/ceremony.ts).
 
 `launchUrl` is the complete Prefetch URL for a native anchor.
 `proveUserIdentity()` starts the run once and owns subsequent protocol navigation.
@@ -165,7 +165,7 @@ Application is required; an undeliverable failure leaves only the sanitized loca
 diagnostic. This identifies a connection/setup failure, not which component
 caused it.
 
-[CCDP UI messages](../src/ccdp/ui-messages.ts) groups stage labels, document UI text,
+[CCDP UI messages](../src/ccdp/uiMessages.ts) groups stage labels, document UI text,
 error-page text, and translations of popup error codes. Popup returns programmatic
 errors; ceremony translates them before display or forwarding. Unexpected
 exceptions retain their bounded opaque text for debugging.

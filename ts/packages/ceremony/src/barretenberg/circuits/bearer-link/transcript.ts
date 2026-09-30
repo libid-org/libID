@@ -13,7 +13,7 @@ import { isFormClientId, isPkceValue } from '../../../platforms/authorization.js
 import { bytesEqual } from '../../../primitives.js'
 import { isBearer } from './inputs.js'
 import { MAX_BEARER_BYTES } from './parameters.js'
-import { isUserId, MAX_USER_ID_CHARS } from './types.js'
+import { isUserId, MAX_USER_ID_CHARS } from './validation.js'
 
 export interface TokenRequestInput {
   clientId: string

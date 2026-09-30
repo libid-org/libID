@@ -6,7 +6,7 @@ import { startWorker } from '../../assets/worker.js'
 import { ceremonyError, reportFailure } from '../../errors.js'
 import { Events, failureEvent, now } from '../../events.js'
 import { readPrefetch } from '../navigation.js'
-import { messages } from '../ui-messages.js'
+import { messages } from '../uiMessages.js'
 import { eventView } from './ui.js'
 
 /** Authenticate the Prefetch page and acknowledge selected fetch dispatch before OAuth navigation. */

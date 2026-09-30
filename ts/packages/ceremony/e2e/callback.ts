@@ -1,5 +1,5 @@
 import { parseCsp, scriptHash } from '../build/profiles.ts'
-import { csp, document } from '../src/ccdp/headers.ts'
+import { csp, document } from '../src/assets/headers.ts'
 
 /** The deployment inputs Callback reads, inserted in its positional order. */
 export type CallbackInputs = { allowedApplicationOrigins: readonly string[]; ccdpOrigin: string }

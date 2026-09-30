@@ -605,13 +605,13 @@ function recordViolations(valid: object, wrong: Record<string, readonly unknown[
 describe.each(supportedPlatforms)('%s result validators', (platformId) => {
   const fixture = fixtures[platformId]
   // The fixture is correlated with platformId; the union of its validators takes a widened view.
-  const types = fixture.types as {
+  const validation = fixture.validation as {
     validateIdentity(value: unknown): unknown
     validateProof(value: unknown, identity: unknown, authorizationDigest: Uint8Array): unknown
   }
-  const validateIdentity = (value: unknown) => types.validateIdentity(value)
+  const validateIdentity = (value: unknown) => validation.validateIdentity(value)
   const validateProof = (value: unknown) =>
-    types.validateProof(value, fixture.identity, fixture.digest)
+    validation.validateProof(value, fixture.identity, fixture.digest)
   const { acceptResult } = ceremonyFor(platformId, 1)
 
   it('accepts the fixture identity and proof and assembles them as separate result fields [LIBID-MOD-019]', () => {
@@ -1807,7 +1807,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
     'rejects a well-formed proof with a mismatched %s [LIBID-OAUTH-014]',
     (_change, rebind) => {
       const { identity, proof } = rebind(fixture)
-      expect(() => fixture.types.validateProof(proof, identity, fixture.digest)).toThrow(
+      expect(() => fixture.validation.validateProof(proof, identity, fixture.digest)).toThrow(
         'public input mismatch',
       )
     },

@@ -1,5 +1,5 @@
 import { type ConnectionEnd, type Message, type PopupConnection, PopupError } from '@libid/popup'
-import { messages, popupErrorMessages } from './ccdp/ui-messages.js'
+import { messages, popupErrorMessages } from './ccdp/uiMessages.js'
 import { isOrigin, isText } from './primitives.js'
 
 /** UTF-8 bound on displayable failure text, including `CeremonyFailed.message`. */

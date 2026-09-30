@@ -1,5 +1,5 @@
 import { MAX_NAVIGATION_FRAGMENT_CHARS } from '../src/ccdp/limits.ts'
-import { messages } from '../src/ccdp/ui-messages.ts'
+import { messages } from '../src/ccdp/uiMessages.ts'
 
 // A document hands its launch fragment to the bundled entry through one window property: an
 // inline classic script captures it before any module runs, and the entry consumes it once.

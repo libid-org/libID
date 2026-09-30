@@ -1,6 +1,6 @@
 import { urls } from 'virtual:ceremony-assets'
 
-export * as headers from '../ccdp/headers.js'
+export * as headers from './headers.js'
 
 /** Exact fetch selected by the emitted graph; ranges distinguish requests to the same URL. */
 export interface AssetRequest {

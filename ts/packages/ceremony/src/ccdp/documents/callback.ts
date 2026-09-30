@@ -5,7 +5,7 @@ import { Events, failureEvent, now } from '../../events.js'
 import { isOrigin } from '../../primitives.js'
 import { MAX_OAUTH_RETURN_CHARS } from '../limits.js'
 import { type OAuthReturn, proverFragment, readOAuthState, route } from '../navigation.js'
-import { messages } from '../ui-messages.js'
+import { messages } from '../uiMessages.js'
 import { eventView, view } from './ui.js'
 
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */

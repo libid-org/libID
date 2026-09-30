@@ -2,7 +2,7 @@ import { PopupError } from '@libid/popup'
 import { fakeConnection } from '@libid/popup/testing'
 import { expect, it, vi } from 'vitest'
 import { CeremonyFailed } from './ccdp/index.js'
-import { popupErrorMessages } from './ccdp/ui-messages.js'
+import { popupErrorMessages } from './ccdp/uiMessages.js'
 import { CeremonyError, ceremonyError, errorMessage, reportFailure } from './errors.js'
 
 it('preserves unexpected error text and context without serializing the exception [LIBID-OAUTH-022] [LIBID-OAUTH-030]', () => {

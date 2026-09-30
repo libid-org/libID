@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from 'node:path'
 import type { CallExpression, Node, ObjectExpression } from 'estree'
 import type { Plugin } from 'vite'
-import type { AssetRequest } from '../src/assets/index.js'
+import type { AssetRequest } from '../src/assets/index.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { applyEdits, type Edit, parseModule, replacement, span, walk } from './ast.ts'
 import { packageDir } from './sources.ts'

@@ -1,4 +1,4 @@
-import { messages } from './ccdp/ui-messages.js'
+import { messages } from './ccdp/uiMessages.js'
 import { type CeremonyError, ceremonyError } from './errors.js'
 import { hasExactKeys, isRecord, isSlug, isText } from './primitives.js'
 
@@ -215,6 +215,17 @@ export function failureEvent(
     event: failure.event,
     message: failure.message,
     timestamp: now(),
+  }
+}
+
+/** Observers cannot change the outcome of the work they watch. */
+export function safeEmit(emit: (event: OperationEvent) => void): (event: OperationEvent) => void {
+  return (event) => {
+    try {
+      emit(event)
+    } catch {
+      /* Ignored. */
+    }
   }
 }
 

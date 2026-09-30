@@ -138,7 +138,7 @@ it never imports execution to discover dependencies.
 
 ## Headers and compression
 
-[headers.ts](../src/ccdp/headers.ts) holds plain reusable policy records:
+[headers.ts](../src/assets/headers.ts) holds plain reusable policy records:
 `immutable`, `javascript`, `wasm`, `json`, `document`, `executionWorker`, `dip`
 and `isolated`. Resource declarations compose them with object spread and may
 add explicit headers. [profiles.ts](../build/profiles.ts) applies document,
@@ -271,12 +271,11 @@ deployment is a separate, deliberate step.
 
 [distribution.ts](../build/distribution.ts) assembles and promotes the artifact
 and derives the prefetch manifest from the emitted Prover graph;
-[bundle.ts](../build/bundle.ts) records emitted dependencies;
+[bundle.ts](../build/bundle.ts) records emitted dependencies and loads a source module into a build script;
 [input.ts](../build/input.ts) hands a document's launch fragment to its entry;
 [assets.ts](../build/assets.ts) resolves declarations;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
 [sources.ts](../build/sources.ts) reads declared sources and caches downloads;
-[source.ts](../build/source.ts) loads a source module into a build script;
 [versions.ts](../build/versions.ts) reads the platform catalog's version set and
 reconciles it with the emitted platform provers and the asset profiles;
 [circuits.ts](../build/circuits.ts) checks capacity;

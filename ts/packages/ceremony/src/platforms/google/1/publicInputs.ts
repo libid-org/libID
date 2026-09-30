@@ -9,10 +9,10 @@ import {
   MAX_EMAIL_BYTES,
   MAX_SUB_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
-import { fieldHex } from '../../../barretenberg/protocol.js'
+import { fieldHex } from '../../../barretenberg/parameters.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../authorization.js'
 import type { Identity } from '../../types.js'
-import type { GoogleProofV1 } from './types.js'
+import type { GoogleProofV1 } from './validation.js'
 
 const encoder = new TextEncoder()
 

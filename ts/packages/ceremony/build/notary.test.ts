@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { executionWorker } from '../src/ccdp/headers.ts'
+import { executionWorker } from '../src/assets/headers.ts'
 import { parseCsp, responseHeaders } from './profiles.ts'
 
 test('fixed response policies admit runtime notaries without remote code permission [LIBID-ASSET-003] [CSP-003/011]', () => {

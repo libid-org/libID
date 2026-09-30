@@ -1,7 +1,7 @@
 import { type Carrier, PopupWindow } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
 import { bundledVersions, CEREMONY_ID } from '../../testing/index.js'
-import { ccdpClientFromConfig } from './ceremony.js'
+import { ccdpClientFromConfig } from './client.js'
 import { validateCeremonyConfig } from './config.js'
 
 afterEach(() => vi.unstubAllGlobals())

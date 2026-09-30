@@ -21,7 +21,7 @@ export interface BearerLinkProofV1 {
   identityAttestation: NotaryAttestation
 }
 
-export interface BearerLinkTypes<P extends 'x' | 'github'> {
+export interface BearerLinkValidation<P extends 'x' | 'github'> {
   isClientId(value: unknown): value is string
   validateIdentity(value: unknown): Identity<P>
   validateProof(value: unknown): BearerLinkProofV1
@@ -29,11 +29,11 @@ export interface BearerLinkTypes<P extends 'x' | 'github'> {
 }
 
 /** X and GitHub v1 share form client IDs, decimal user IDs and the bearer-link proof. */
-export function bearerLinkTypes<P extends 'x' | 'github'>(
+export function bearerLinkValidation<P extends 'x' | 'github'>(
   platform: P,
   isUserName: (value: string) => boolean,
   proofLifetimeSeconds: number,
-): BearerLinkTypes<P> {
+): BearerLinkValidation<P> {
   const isClientId = (value: unknown): value is string =>
     isText(value, MAX_CLIENT_ID_BYTES) && isFormClientId(value)
   return {

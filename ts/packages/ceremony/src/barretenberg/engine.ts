@@ -1,7 +1,7 @@
 import { assetUrl } from '../assets/index.js'
 import { ceremonyError } from '../errors.js'
-import { now, type OperationEvent } from '../events.js'
-import { safeEmit, workerThreads } from '../workers.js'
+import { now, type OperationEvent, safeEmit } from '../events.js'
+import { workerThreads } from '../workers.js'
 import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 

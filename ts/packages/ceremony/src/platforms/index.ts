@@ -1,26 +1,26 @@
 import * as bearerLinkEvents from '../barretenberg/circuits/bearer-link/events.js'
 import type { IdentityProof } from '../ccdp/index.js'
-import * as github from './github/1/types.js'
 import * as githubUrl from './github/1/url.js'
+import * as github from './github/1/validation.js'
 import * as googleEvents from './google/1/events.js'
-import * as google from './google/1/types.js'
 import * as googleUrl from './google/1/url.js'
+import * as google from './google/1/validation.js'
 import type { Identity } from './types.js'
-import * as x from './x/1/types.js'
 import * as xUrl from './x/1/url.js'
+import * as x from './x/1/validation.js'
 
 export type { Identity } from './types.js'
 
 /** Validate each version's proof before deriving its retention metadata. */
-const resultAdapter = <I, P>(types: {
+const resultAdapter = <I, P>(validation: {
   validateIdentity(value: unknown): I
   validateProof(value: unknown, identity: I, authorizationDigest: Uint8Array): P
   proofExpiresAt(proof: P): number
 }) => ({
   acceptResult(identityValue: unknown, proofValue: unknown, authorizationDigest: Uint8Array) {
-    const identity = types.validateIdentity(identityValue)
-    const proof = types.validateProof(proofValue, identity, authorizationDigest)
-    return { identity, proof, expiresAt: types.proofExpiresAt(proof) }
+    const identity = validation.validateIdentity(identityValue)
+    const proof = validation.validateProof(proofValue, identity, authorizationDigest)
+    return { identity, proof, expiresAt: validation.proofExpiresAt(proof) }
   },
 })
 

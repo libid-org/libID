@@ -12,7 +12,7 @@ import {
   returnSamples,
 } from '../../testing/index.js'
 import type { IdentityProof } from '../index.js'
-import { messages, popupErrorMessages } from '../ui-messages.js'
+import { messages, popupErrorMessages } from '../uiMessages.js'
 import { startProver } from './prover.js'
 
 const { accept, claimRootWorker, prove } = vi.hoisted(() => ({

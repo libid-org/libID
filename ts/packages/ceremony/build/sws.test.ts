@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
 import { parse, stringify, type TomlTable } from 'smol-toml'
-import { document } from '../src/ccdp/headers.ts'
+import { document } from '../src/assets/headers.ts'
 import { cache } from './sources.ts'
 import { errorHeaders, nativeSkip, writeDistribution } from './sws.ts'
 

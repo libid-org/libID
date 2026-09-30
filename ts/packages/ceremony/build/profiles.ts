@@ -11,7 +11,7 @@ export type ResponseProfile =
   | 'versions'
 
 import { createHash } from 'node:crypto'
-import * as shared from '../src/ccdp/headers.ts'
+import * as shared from '../src/assets/headers.ts'
 import { popupFallback } from './popup.ts'
 
 export const scriptHash = (code: string) =>

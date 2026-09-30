@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { build, type Rollup } from 'vite'
-import { assetPlugin } from './asset-plugin.ts'
+import { assetPlugin } from './assetPlugin.ts'
 import { packageDir } from './sources.ts'
 
 test('runtime lowering preserves named/chained calls and external request options [LIBID-MOD-021] [LIBID-ASSET-022]', async () => {

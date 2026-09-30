@@ -1,7 +1,7 @@
 import { isClientCredential } from '../ccdp/index.js'
 import { MAX_OAUTH_RETURN_CHARS } from '../ccdp/limits.js'
 import { type OAuthReturn, oauthState } from '../ccdp/navigation.js'
-import { messages } from '../ccdp/ui-messages.js'
+import { messages } from '../ccdp/uiMessages.js'
 import { CeremonyError } from '../errors.js'
 import type { ProverContext } from './context.js'
 import { ceremonyFor, type PlatformId, platforms, type SupportedCeremonyVersion } from './index.js'

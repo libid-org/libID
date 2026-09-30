@@ -85,7 +85,7 @@ X and GitHub share the `bearer_link` circuit and
 [transcript machinery](../src/barretenberg/circuits/bearer-link/transcript.ts).
 Each platform's `provider.ts` owns endpoints, request fields, identity headers and
 user-name grammar; `transcript.ts` supplies its transcript selectors.
-[bearer-link/types.ts](../src/barretenberg/circuits/bearer-link/types.ts) supplies the shared
+[bearer-link/validation.ts](../src/barretenberg/circuits/bearer-link/validation.ts) supplies the shared
 client ID, identity and proof validators under each platform's names. The shared
 machinery validates the common token inputs (form client ID, code, redirect URI,
 PKCE verifier) and the circuit-width bearer once for both. Delivery
@@ -96,7 +96,7 @@ includes proof and both attestations; the shared identity is a convenience view,
 For another version-one platform:
 
 1. Add `platforms/<id>/1/` with `provider.ts` (endpoints and identity
-   constraints), `url.ts` (including PKCE choice and return rules), `types.ts`
+   constraints), `url.ts` (including PKCE choice and return rules), `validation.ts`
    (client ID, identity and proof validation, plus a `proofExpiresAt` adapter),
    `events.ts` (core events and separate UI weights), `<id>.assets.ts`
    and `prover.ts`;

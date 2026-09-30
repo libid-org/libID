@@ -1,5 +1,5 @@
 import type { CorrelatedCommitment } from '../../../notary/notarize.js'
-import { fieldHex } from '../../protocol.js'
+import { fieldHex } from '../../parameters.js'
 import { MAX_BEARER_BYTES, PUBLIC_INPUT_COUNT } from './parameters.js'
 
 const encoder = new TextEncoder()

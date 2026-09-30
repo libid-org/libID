@@ -8,7 +8,7 @@ import { CeremonyError } from '../../../errors.js'
 import { b64urlDecode, isRecord, isUint } from '../../../primitives.js'
 import { readJson } from '../../../response.js'
 import { provider } from './provider.js'
-import { isCircuitText } from './types.js'
+import { isCircuitText } from './validation.js'
 
 /** The token bytes and claims the fixed oidc_google circuit consumes, plus the signing key's `kid`. */
 export interface ParsedGoogleIdToken extends GoogleCircuitToken {
