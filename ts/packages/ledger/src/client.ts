@@ -1,7 +1,7 @@
 import { evm } from './evm/client.js'
 import type * as Evm from './evm/index.js'
 import type { Indexer } from './indexer.js'
-import { type Account, type Family, type Ledger, ledgers as pinned } from './index.js'
+import { type Account, type Family, isEndpoint, type Ledger, ledgers as pinned } from './index.js'
 
 export { LedgerError, type LedgerErrorCode } from './errors.js'
 export { type Indexer, type IndexerOptions, indexer } from './indexer.js'
@@ -218,6 +218,9 @@ function drive(ledger: Ledger, access: { rpc?: string; explorer?: string }): Dri
   const rpc = access.rpc ?? ledger.rpc
   if (!rpc) throw new TypeError(`${ledger.name} has no public RPC; configure one`)
   const explorer = access.explorer ?? ledger.explorer
+  for (const value of [access.rpc, access.explorer]) {
+    if (value !== undefined && !isEndpoint(value)) throw new TypeError(`Invalid endpoint: ${value}`)
+  }
   // ponytail: one family; dispatch on `ledger.family` (and lazy-load drivers) when a second lands.
   return evm(ledger, { rpc, explorer })
 }

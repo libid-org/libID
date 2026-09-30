@@ -36,7 +36,7 @@ it('serves pinned ledgers only as defined, with their public endpoints by defaul
   )
 })
 
-it('requires an RPC for a ledger without a public one', () => {
+it('requires an RPC for a ledger without a public one, and valid endpoints', () => {
   const local = defineLedger({
     chain: 'eip155:31337',
     name: 'Local',
@@ -49,6 +49,15 @@ it('requires an RPC for a ledger without a public one', () => {
   expect(() =>
     connect({ ledgers: [{ ledger: local, rpc: 'http://127.0.0.1:8545' }] }),
   ).not.toThrow()
+  for (const endpoints of [
+    { rpc: 'http://rpc.example' },
+    { rpc: 'rpc' },
+    { rpc: 'http://127.0.0.1:8545', explorer: 'explorer' },
+  ]) {
+    expect(() => connect({ ledgers: [{ ledger: local, ...endpoints }] })).toThrow(
+      /Invalid endpoint/,
+    )
+  }
 })
 
 /** The same family's client, with a default indexer that never answers, must meet the contract. */
