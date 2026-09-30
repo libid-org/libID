@@ -1517,7 +1517,11 @@ leaves a profile with no attestation unaffected.
 The handle, the platform user identifier, and the client identifier are
 published deliberately. A binding exists to be read, and each of these values
 is already discoverable from the identity platform, so the protocol treats
-none of them as confidential. GitHub's application credential is also public,
+none of them as confidential. Google's `sub` is the exception: Google shows it
+only to the applications a user signs in to, so its Platform Profile publishes
+a digest of it as the user identifier
+([platform profiles §2.1](platform-ceremonies.md#21-canonical-platform-user-identifiers)).
+GitHub's application credential is also public,
 including in its revealed token request; knowing it does not authenticate the
 presenter. The bearer, commitment openings, and transcript bytes outside a
 profile's revealed ranges are withheld from published evidence.

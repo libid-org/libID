@@ -91,7 +91,7 @@ it does not create a ceremony-owned confirmation page.
 
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
-| Google | signed ID-Token `sub` | its exact 1–255 case-sensitive ASCII bytes | normalized email |
+| Google | signed ID-Token `sub` | the REQ-PLAT-05A digest of its exact 1–255 case-sensitive ASCII bytes | normalized email |
 | X | `/2/users/me.data.id` JSON string | canonical nonzero unsigned 64-bit decimal | normalized `username` |
 | GitHub | `/user.id` JSON integer token | canonical nonzero unsigned 64-bit decimal | normalized `login` |
 
@@ -103,6 +103,14 @@ it does not create a ceremony-owned confirmation page.
 - REQ-PLAT-05:
   The Implementation MUST NOT trim or case-convert a Google `sub`. Necessity:
   identity compatibility.
+- REQ-PLAT-05A:
+  The Implementation MUST derive the Google `userId` as `0x` followed by the
+  64 lowercase hexadecimal digits of
+  `SHA256(UTF8("libid.google-user-id") || sub)`, over the exact signed `sub`
+  bytes. Necessity: Google shows a `sub` only to the applications a user signs
+  in to, so the Consumer Chain records this digest in its place, and every
+  role must derive the same one. The tag separates the digest from a plain
+  `SHA256(sub)` another system may publish.
 - REQ-PLAT-06:
   The Implementation MUST require an X or GitHub identifier to match
   `^[1-9][0-9]{0,19}$` with a numeric value at most `2^64 - 1`. Necessity:
@@ -121,7 +129,7 @@ Conformance vectors:
 
 | Platform | Authenticated input | `userId` |
 |---|---|---|
-| Google | `sub: "123456789012345678901"` | `123456789012345678901` |
+| Google | `sub: "123456789012345678901"` | `0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560` |
 | X | `"id":"2244994945"` | `2244994945` |
 | GitHub | `"id":1` | `1` |
 
@@ -303,7 +311,7 @@ require a verifier that dispatches on the header `alg`; none exists here.
   |---|---|
   | Authorization Digest | signed `nonce`, decoded as exactly 32 bytes |
   | client-identifier digest | `SHA256` of the signed `aud` |
-  | canonical `userId` | signed `sub` |
+  | canonical `userId` digest | signed `sub`, hashed per REQ-PLAT-05A |
   | raw `email` bytes | signed `email`; the Consumer derives the normalized handle |
   | evidence timestamp | signed `exp`; used for both `metadataObservedAt` and `proofValidUntil` |
   | RSA modulus | exact `n` that verified the JWS; `e = 65537` is profile-fixed |
@@ -311,6 +319,11 @@ require a verifier that dispatches on the header `alg`; none exists here.
   The Proving Circuit MUST NOT expose a detached second representation of a
   claim. Proofs are over raw bytes; normalization, such as lowercasing the
   handle, is the Consumer's decision at consumption time.
+- REQ-PLAT-16C:
+  The Proving Circuit MUST NOT expose the signed `sub` in any public input.
+  The Proving Circuit MUST reject a `sub` that REQ-PLAT-04 rejects.
+  Necessity: REQ-PLAT-05A keeps the `sub` off the Consumer Chain, which leaves
+  the Proving Circuit the only role that sees its bytes.
 - REQ-PLAT-17 (upholds SP-BIND-01):
   The Proving Circuit MUST prove the signed `iss` equals
   `https://accounts.google.com`.
@@ -1124,9 +1137,9 @@ Platform Verifier, Notary Service, Consumer.
 - TEST-PLAT-01 (exercises REQ-PLAT-10, REQ-PLAT-18):
   The §3.1 nonce vector reproduces exactly, and a token carrying another nonce
   is rejected.
-- TEST-PLAT-02 (exercises REQ-PLAT-04, REQ-PLAT-05, REQ-PLAT-06, REQ-PLAT-07, REQ-PLAT-08):
-  The §2.1 identifier vectors reproduce, and each listed malformed identifier
-  is rejected.
+- TEST-PLAT-02 (exercises REQ-PLAT-04, REQ-PLAT-05, REQ-PLAT-05A, REQ-PLAT-06, REQ-PLAT-07, REQ-PLAT-08):
+  The §2.1 identifier vectors reproduce, the Google one as its digest, and
+  each listed malformed identifier is rejected.
 - TEST-PLAT-03 (exercises REQ-PLAT-11, REQ-PLAT-12):
   A Google authorization request not using the exact direct-ID-token fragment
   profile is rejected. A nonempty query, mixed query/fragment response, or
@@ -1140,7 +1153,7 @@ Platform Verifier, Notary Service, Consumer.
   A Google response carrying an authorization code or access token is rejected,
   and the deployment contains no Google exchange route or client secret.
   Verification: inspection of emitted artifacts.
-- TEST-PLAT-06 (exercises REQ-COMMON-19D, REQ-PLAT-16, REQ-PLAT-16A, REQ-PLAT-16B, REQ-PLAT-17, REQ-PLAT-19, REQ-PLAT-19A, REQ-PLAT-20, REQ-PLAT-21, REQ-PLAT-23):
+- TEST-PLAT-06 (exercises REQ-COMMON-19D, REQ-PLAT-16, REQ-PLAT-16A, REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-17, REQ-PLAT-19, REQ-PLAT-19A, REQ-PLAT-20, REQ-PLAT-21, REQ-PLAT-23):
   A token with a foreign issuer, foreign audience, `email_verified: false`, a
   quoted or non-boolean `email_verified`, a quoted, negative, fractional,
   exponent, leading-zero, or overflowing `exp`, or an untrusted signing
@@ -1151,7 +1164,9 @@ Platform Verifier, Notary Service, Consumer.
   circuit verification but is rejected by the Platform Verifier. An Submission
   whose supplied `aud` bytes do not hash to the audience public input is
   rejected, and an accepted one returns those exact bytes as the client
-  identifier.
+  identifier. A token whose `sub` is empty or carries a byte outside `0x20`
+  through `0x7e` fails the Proving Circuit, and no public input carries the
+  `sub`.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
   A proof at or after `proofValidUntil`, and a token-attestation creation time
   more than `maxFutureAttestationSkew` ahead of Block Time, are rejected. An
@@ -1383,6 +1398,14 @@ exist.
 Google's JWKS rotation makes the trusted modulus set a liveness dependency
 (REQ-PLAT-24): every Google ceremony fails closed while Google signs with an
 untrusted modulus.
+
+A Google binding publishes the REQ-PLAT-05A digest, never the `sub`. The
+digest keeps the `sub` from readers of the Consumer Chain, not from a party
+that already holds it: every application a user signs in to with Google
+knows that user's `sub` and can recompute the digest to find the binding.
+Google's `sub` values are 21-digit decimal strings in practice, too few to
+resist a well-resourced search. The handle is the account's email address
+and stays public, so a Google binding is not anonymous.
 
 ## 10. References
 
