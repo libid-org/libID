@@ -26,18 +26,20 @@ import {
   bearerLinkPlatforms,
   CEREMONY_ID,
   fixtures,
+  httpResponse,
   jwtPart,
   jwtWith,
   type OidcPlatform,
   oidcPlatforms,
   platformConfig,
   proverContext,
+  proverRequest,
   returnSamples,
   text,
   utf8,
 } from '../../testing/index.js'
 import { deriveCodeChallenge, deriveCodeVerifier } from '../authorization.js'
-import type { BearerTranscript } from '../bearer-transcript.js'
+import type { BearerTranscript, TokenRequestInput } from '../bearer-transcript.js'
 import type { ProverContext } from '../context.js'
 import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from '../index.js'
 import {
@@ -51,7 +53,7 @@ import {
 } from '../index.js'
 import { acceptReturn, parseOAuthReturn, type ReturnProfile } from '../oauthReturn.js'
 import { assetsByPlatform, circuits } from '../platforms.assets.js'
-import type { PlatformFixture, ReturnSamples } from './fixtures.js'
+import type { EvidenceChange, PlatformFixture, ReturnSamples } from './fixtures.js'
 
 const { prepare, generate, destroy, engine, notarization } = vi.hoisted(() => ({
   prepare: vi.fn(),
@@ -84,8 +86,8 @@ vi.mock('../../barretenberg/engine.js', () => ({
 }))
 vi.mock('../../notary/session.js', () => ({
   Notarization: class {
-    constructor(address: string, signal: AbortSignal) {
-      notarization(address)
+    constructor(address: string, signal: AbortSignal, emit: unknown) {
+      notarization(address, signal, emit)
       signal.throwIfAborted()
     }
     prepare = prepare
@@ -711,11 +713,87 @@ const requestHead = (request: ExactHttpRequest) =>
       .join('')}\r\n`,
   )
 
+/** The text of each range of `bytes`. */
+const revealed = (bytes: Uint8Array, ranges: readonly { start: number; end: number }[]) =>
+  ranges.map(({ start, end }) => text(bytes.slice(start, end)))
+
+/** JSON whitespace a selector must keep exact around member colons. */
+const jsonWhitespace = [' ', '\t', '\r', '\n', ' \t\r\n']
+
+/** `json` with `space` before and `after` after every member colon. */
+const spaced = (json: string, space: string, after = space) =>
+  json.replace(/"(\w+)"\s*:\s*/g, `"$1"${space}:${after}`)
+
+/** A different valid value for each frozen token input. */
+const frozenChanges: Record<keyof TokenRequestInput, string> = {
+  clientId: 'other-client',
+  code: 'other-code',
+  redirectUri: 'https://bridge.test/other',
+  codeVerifier: `B${'A'.repeat(42)}`,
+  clientCredential: 'other-credential',
+}
+
+/** `value` with its last character changed, keeping its length. */
+const lastChanged = (value: string) => value.slice(0, -1) + (value.endsWith('a') ? 'b' : 'a')
+
+/** Token forms that differ from `original` yet leave a well-formed request around them. */
+function formChanges(original: string, code: string) {
+  const fields = original.split('&')
+  const [name] = fields[0].split('=')
+  const escaped = (char: string) => `%${char.charCodeAt(0).toString(16)}`
+  const changes = [
+    `${original}&code=second`,
+    `${original}&grant_type=refresh_token`,
+    `${original}&refresh_token=old`,
+    `${original}&device_code=other`,
+    `${original}&extra=value`,
+    `${original}&`,
+    original.replace(`${name}=`, `${escaped(name[0])}${name.slice(1)}=`),
+    original.replace(`code=${code}`, `code=${escaped(code[0])}${code.slice(1)}`),
+    original.replace(`code=${code}`, 'code='),
+    original.replace('%3A', '%3a'),
+    [...fields].reverse().join('&'),
+    fields.slice(0, -1).join('&'),
+    ...fields.map((field) => original.replace(field, lastChanged(field))),
+  ]
+  // An escaped form delimiter inside a value must stay escaped.
+  for (const delimiter of ['%26', '%3D', '%2B'])
+    if (original.includes(delimiter))
+      changes.push(original.replace(delimiter, decodeURIComponent(delimiter)))
+  for (const change of changes) if (change === original) throw new Error(`No change: ${change}`)
+  return changes
+}
+
 // Pipelines: every platform meets one prove() contract, which its pipeline kind stages; each kind
 // then adds the cases only it has.
 
-/** Outcomes every pipeline kind stages: success, reordered engine inputs, startup cancellation. */
-type SharedOutcome = 'accepted' | 'public-input-order' | 'startup-cancel'
+/** Engine public inputs every pipeline must reject: reordered, resized, changed, or in noncanonical case. */
+const engineInputChanges = {
+  'public-input-order': 'out of order',
+  'public-input-extra': 'with an extra field',
+  'public-input-short': 'with a missing field',
+  'public-input-changed': 'with a changed value',
+  'public-input-case': 'in noncanonical case',
+}
+
+type EngineInputChange = keyof typeof engineInputChanges
+
+/** Outcomes every pipeline kind stages: success, changed engine inputs, startup cancellation. */
+type SharedOutcome = 'accepted' | EngineInputChange | 'startup-cancel'
+
+/** `fields` as a staged engine returns them; each pipeline reorders them its own way. */
+function changedEngineInputs(fields: string[], outcome: string) {
+  if (outcome === 'public-input-extra') return [...fields, fields[0]]
+  if (outcome === 'public-input-short') return fields.slice(0, -1)
+  if (outcome === 'public-input-changed')
+    return [
+      ...fields.slice(0, -1),
+      `0x${(BigInt(fields.at(-1)!) ^ 1n).toString(16).padStart(64, '0')}`,
+    ]
+  if (outcome === 'public-input-case')
+    return fields.map((field) => `0x${field.slice(2).toUpperCase()}`)
+  return fields
+}
 
 /** One staged run. `proof` and `untouched` are read after it settles. */
 interface Staged {
@@ -775,8 +853,21 @@ function shiftIdentitySelection(transcript: BearerTranscript) {
 }
 
 /** A synthetic TLSN backend over real planning, correlation and attestation encoding. */
-function fakeNotarization(platformId: BearerLinkPlatform, outcome: BearerOutcome) {
+/**
+ * A synthetic TLSN backend over real planning, correlation and attestation encoding. `held` sessions
+ * wait on `gates` for the token response, token openings and final token attestation, and `log`
+ * records each session call as it happens.
+ */
+function fakeNotarization(platformId: BearerLinkPlatform, outcome: BearerOutcome, held = false) {
   const { evidence } = fixtures[platformId]
+  const gate = () => {
+    const gate = Promise.withResolvers<void>()
+    if (!held) gate.resolve()
+    return gate
+  }
+  const gates = { tokenResponse: gate(), tokenOpenings: gate(), tokenAttestation: gate() }
+  const log: string[] = []
+  const session = (index: number) => (index === 0 ? 'token' : 'identity')
   const attestations: NotaryAttestation[] = []
   const transcripts: Transcript[] = []
   const selected: Reveals[] = []
@@ -787,6 +878,8 @@ function fakeNotarization(platformId: BearerLinkPlatform, outcome: BearerOutcome
     let transcript: Transcript
     return {
       async send(request: ExactHttpRequest) {
+        log.push(`${session(index)} send`)
+        if (index === 0) await gates.tokenResponse.promise
         expect(request.url).toBe(url)
         const body =
           index === 0
@@ -804,6 +897,8 @@ function fakeNotarization(platformId: BearerLinkPlatform, outcome: BearerOutcome
         return transcript
       },
       async reveal(ranges: Reveals) {
+        log.push(`${session(index)} reveal`)
+        if (index === 0) await gates.tokenOpenings.promise
         selected[index] = ranges
         const plan = planNotarization(transcript, ranges)
         const raw = {
@@ -838,11 +933,17 @@ function fakeNotarization(platformId: BearerLinkPlatform, outcome: BearerOutcome
         if (outcome === 'opening-range' && index === 1) openings[0].start++
         const attestation = { attestedData, signature: new Uint8Array(65).fill(index + 1) }
         attestations[index] = attestation
-        return { openings: openings.reverse(), attestation: Promise.resolve(attestation) }
+        return {
+          openings: openings.reverse(),
+          attestation:
+            index === 0
+              ? gates.tokenAttestation.promise.then(() => attestation)
+              : Promise.resolve(attestation),
+        }
       },
     }
   })
-  return { attestations, transcripts, selected, commitments }
+  return { attestations, transcripts, selected, commitments, gates, log }
 }
 
 /** The proof engine checks the witness against the fake backend's commitments. */
@@ -870,21 +971,30 @@ function fakeBearerProof(
     const ordered = outcome === 'public-input-order' ? [...hashes].reverse() : hashes
     return {
       proof: new Uint8Array([1]),
-      publicInputs: ordered.flatMap((hash) =>
-        [...hash].map((n) => `0x${n.toString(16).padStart(64, '0')}`),
+      publicInputs: changedEngineInputs(
+        ordered.flatMap((hash) => [...hash].map((n) => `0x${n.toString(16).padStart(64, '0')}`)),
+        outcome,
       ),
       runtime: { effectiveThreads: 2, sharedMemory: true },
     }
   })
 }
 
-function stageBearer(platformId: BearerLinkPlatform, outcome: BearerOutcome) {
+/** Stage `outcome`; `held` sessions wait on their gates, and `change` edits the run context. */
+function stageBearer(
+  platformId: BearerLinkPlatform,
+  outcome: BearerOutcome,
+  {
+    held = false,
+    change = {},
+  }: { held?: boolean; change?: Parameters<typeof proverContext>[1] } = {},
+) {
   const fixture = fixtures[platformId]
   if (outcome === 'shifted-range') shiftIdentitySelection(fixture.transcript)
-  const notarized = fakeNotarization(platformId, outcome)
+  const notarized = fakeNotarization(platformId, outcome, held)
   fakeBearerProof(fixture.evidence.bearer, notarized.commitments, outcome)
   return {
-    ...runContext(platformId, outcome),
+    ...runContext(platformId, outcome, change),
     notarized,
     proof: () => ({
       bearerLinkProof: new Uint8Array([1]),
@@ -897,50 +1007,63 @@ function stageBearer(platformId: BearerLinkPlatform, outcome: BearerOutcome) {
 
 const oidcFailures = {
   'wrong-kid': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
+  'duplicate-key': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
+  'empty-key-set': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
   expired: { event: 'authorization', message: expect.stringMatching(/token/i) },
   'audience-mismatch': { event: 'authorization', message: expect.stringMatching(/token/i) },
-  'email-unverified': { event: 'authorization', message: expect.stringMatching(/token/i) },
 }
 
 type OidcOutcome = SharedOutcome | keyof typeof oidcFailures
 
 /** Token rejections that must happen before any key fetch or proof engine startup. */
-const beforeProving: OidcOutcome[] = ['expired', 'audience-mismatch', 'email-unverified']
+const beforeProving: OidcOutcome[] = ['expired', 'audience-mismatch']
 
 function oidcToken(idToken: string, outcome: OidcOutcome) {
   if (outcome === 'wrong-kid')
     return jwtWith(idToken, { header: { ...jwtPart(idToken, 0), kid: 'rotated-key' } })
-  if (outcome === 'email-unverified')
-    return jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), email_verified: false } })
   return idToken
 }
 
-/** A published key set holding the fixture key beside an unrelated one. */
-function publishKeys(jwk: Record<string, string>) {
-  const previous = {
-    kid: 'previous',
-    kty: 'RSA',
-    e: 'AQAB',
-    n: b64urlEncode(new Uint8Array(256).fill(0xff)),
-  }
+/** An unrelated key published beside the fixture key. */
+const previousKey = {
+  kid: 'previous',
+  kty: 'RSA',
+  e: 'AQAB',
+  n: b64urlEncode(new Uint8Array(256).fill(0xff)),
+}
+
+/** Publish `published` as the provider's key set. */
+function publishKeys(published: object[]) {
   const sent: string[] = []
   const keys = vi.fn(async (url: string, init?: RequestInit) => {
     // As fetch: an aborted signal rejects before any request is sent.
     init?.signal?.throwIfAborted()
     sent.push(url)
-    return new Response(JSON.stringify({ keys: [previous, jwk] }))
+    return new Response(JSON.stringify({ keys: published }))
   })
   vi.stubGlobal('fetch', keys)
   return Object.assign(keys, { sent })
 }
 
-function stageOidc(platformId: OidcPlatform, outcome: OidcOutcome) {
+/** Stage `outcome`; `change` replaces the signed token or the published fixture key. */
+function stageOidc(
+  platformId: OidcPlatform,
+  outcome: OidcOutcome,
+  change: { idToken?: string; jwk?: Record<string, string> } = {},
+) {
   const fixture = fixtures[platformId]
-  const { idToken, jwk, authorizationDigest, publicInputs } = fixture.evidence
-  const { iat, exp } = jwtPart(idToken, 1) as { iat: number; exp: number }
+  const { authorizationDigest, publicInputs } = fixture.evidence
+  const { idToken = fixture.evidence.idToken, jwk = fixture.evidence.jwk } = change
+  const { iat, exp } = jwtPart(fixture.evidence.idToken, 1) as { iat: number; exp: number }
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime((outcome === 'expired' ? exp : iat) * 1000)
-  const keys = publishKeys(jwk)
+  const keys = publishKeys(
+    outcome === 'duplicate-key'
+      ? [jwk, jwk]
+      : outcome === 'empty-key-set'
+        ? []
+        : [previousKey, jwk],
+  )
   const { config, oauthReturn: profile } = fixture
   const accepted = fieldsOf(returnSamples(platformId).accepted.oauthReturn, profile)
   const run = runContext(platformId, outcome, {
@@ -951,12 +1074,14 @@ function stageOidc(platformId: OidcPlatform, outcome: OidcOutcome) {
     request: outcome === 'audience-mismatch' ? { clientId: `other-${config.clientId}` } : {},
   })
   generate.mockImplementation(async (inputs): Promise<RawProof> => {
-    expect(inputs.authorization_digest).toEqual([...authorizationDigest])
+    expect((inputs as Record<string, unknown>)[fixture.evidence.digestInput]).toEqual([
+      ...authorizationDigest,
+    ])
     const fields = [...publicInputs]
     if (outcome === 'public-input-order') fields.unshift(...fields.splice(1, 1))
     return {
       proof: new Uint8Array([1]),
-      publicInputs: fields,
+      publicInputs: changedEngineInputs(fields, outcome),
       runtime: { effectiveThreads: 2, sharedMemory: true },
     }
   })
@@ -1059,11 +1184,14 @@ describe.each(supportedPlatforms)('%s prove() contract', (platformId) => {
     },
   )
 
-  it(title('rejects engine public inputs out of order and destroys its engine'), async () => {
-    const { pending } = await run('public-input-order')
-    await expect(pending).rejects.toThrow('public input mismatch')
-    expect(destroy).toHaveBeenCalledOnce()
-  })
+  it.each(Object.entries(engineInputChanges) as [EngineInputChange, string][])(
+    title('rejects engine public inputs %s and destroys its engine'),
+    async (change) => {
+      const { pending } = await run(change)
+      await expect(pending).rejects.toThrow('public input mismatch')
+      expect(destroy).toHaveBeenCalledOnce()
+    },
+  )
 
   it(title('stops at startup cancellation before network, notary or proving work'), async () => {
     const { staged, pending } = await run('startup-cancel')
@@ -1080,6 +1208,35 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
   const tags = `${pipelines['bearer-link'].tags} ${fixture.specTests.pipeline}`
 
   describe('transcripts', () => {
+    const tokenTags = fixture.transcriptTests.token
+    const identityTags = fixture.transcriptTests.identity
+    const input: TokenRequestInput = {
+      ...config,
+      code: returnSamples(platformId).accepted.credential,
+      redirectUri: 'https://bridge.test/auth/callback',
+      codeVerifier: 'A'.repeat(43),
+      // Form delimiters inside a public credential must stay inside its field.
+      ...('clientCredential' in config
+        ? { clientCredential: 'public&credential=with+delimiters%' }
+        : {}),
+    }
+    const tokenUrl = new URL(fixture.tokenRequest.url)
+    const identityUrl = new URL(fixture.identityRequest.url)
+    /** A request as the TLSN prover writes it: lowercase names, reordered headers. */
+    const tokenSent = (request: ExactHttpRequest = transcript.buildTokenRequest(input)) =>
+      text(proverRequest(`POST ${tokenUrl.pathname} HTTP/1.1`, request))
+    const token = (sent: string, body = evidence.tokenBody, frozen = input) =>
+      transcript.selectToken({ sent: utf8(sent), received: httpResponse(body) }, frozen)
+    const identitySent = text(
+      proverRequest(
+        `GET ${identityUrl.pathname} HTTP/1.1`,
+        transcript.buildIdentityRequest(evidence.bearer),
+      ),
+    )
+    const identityOf = (body: string, sent = identitySent) =>
+      transcript.selectIdentity({ sent: utf8(sent), received: httpResponse(body) }, evidence.bearer)
+    const members = (body: string) => revealed(httpResponse(body), identityOf(body).ranges.received)
+
     it('selects exactly the identity its validators admit from the identity response', () => {
       const sent = requestHead(transcript.buildIdentityRequest(evidence.bearer))
       const select = (body: string) =>
@@ -1103,12 +1260,6 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
           userId,
         ).toThrow()
     })
-    const input = {
-      ...config,
-      code: returnSamples(platformId).accepted.credential,
-      redirectUri: 'https://bridge.test/auth/callback',
-      codeVerifier: 'A'.repeat(43),
-    }
     it.each([
       { clientId: '' },
       { clientId: 'a+b' },
@@ -1121,6 +1272,335 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
       expect(() => transcript.buildTokenRequest(input)).not.toThrow()
       expect(() => transcript.buildTokenRequest({ ...input, ...change })).toThrow(
         'Invalid token request',
+      )
+    })
+
+    describe('token request', () => {
+      it(
+        tagged(
+          'sends exactly its form to its endpoint and reveals it whole, committing only the bearer',
+          tokenTags,
+        ),
+        () => {
+          const request = transcript.buildTokenRequest(input)
+          expect(request.url).toBe(fixture.tokenRequest.url)
+          const body = text(request.body)
+          expect([...new URLSearchParams(body)]).toEqual(fixture.tokenRequest.form(input))
+          expect(body).toBe(new URLSearchParams(fixture.tokenRequest.form(input)).toString())
+          if (input.clientCredential)
+            expect(body).toContain('=public%26credential%3Dwith%2Bdelimiters%25')
+          expect(text(request.headers['Content-Length'])).toBe(String(request.body.length))
+          const sent = utf8(tokenSent(request))
+          const received = httpResponse(evidence.tokenBody)
+          const selected = token(tokenSent(request))
+          expect(selected.accessToken).toBe(evidence.bearer)
+          expect(text(received.slice(selected.bearerRange.start, selected.bearerRange.end))).toBe(
+            evidence.bearer,
+          )
+          const plan = planNotarization({ sent, received }, selected.ranges)
+          expect(plan.reveal.sent).toEqual([{ start: 0, end: sent.length }])
+          expect(plan.commit.sent).toEqual([])
+          expect(plan.commit.received).toContainEqual({
+            ...selected.bearerRange,
+            algorithm: 'SHA256',
+          })
+        },
+      )
+
+      it(
+        tagged('admits added headers and normalizes required names and HTTP whitespace', tokenTags),
+        () => {
+          const sent = tokenSent()
+          for (const changed of [
+            sent.replace('accept: application/json\r\n', '').replace('connection: close\r\n', ''),
+            sent.replace(
+              'accept: application/json',
+              'accept: text/plain\r\naccept: application/json',
+            ),
+            sent.replace(`host: ${tokenUrl.host}`, `HOST \t:\t${tokenUrl.host} \t`),
+            sent.replace('content-type: ', 'CONTENT_TYPE:\t'),
+            sent.replace('accept:', 'x-extra: café 😀\r\nx-extra:\r\naccept:'),
+          ]) {
+            expect(changed).not.toBe(sent)
+            const selected = token(changed)
+            expect(selected.accessToken).toBe(evidence.bearer)
+            expect(selected.ranges.sent).toEqual([{ start: 0, end: utf8(changed).length }])
+          }
+        },
+      )
+
+      it.each([
+        'Authorization: Basic other',
+        'Cookie: session=other',
+        'Content_Encoding: gzip',
+        'Transfer-Encoding: chunked',
+        'X_HTTP_Method_Override: POST',
+        'X-Http-Method: POST',
+        'X-Method-Override: POST',
+      ])(tagged('rejects forbidden token header %s', tokenTags), (header) => {
+        expect(() => token(tokenSent().replace('accept:', `${header}\r\naccept:`))).toThrow()
+      })
+
+      const host = `host: ${tokenUrl.host}`
+      const length = transcript.buildTokenRequest(input).body.length
+      it.each([
+        [host, 'host: other.com'],
+        ['application/x-www-form-urlencoded', 'text/plain'],
+        [`${host}\r\n`, ''],
+        [host, `${host}\r\nHOST: ${tokenUrl.host}`],
+        ['content-type: ', 'content-type: application/x-www-form-urlencoded\r\ncontent_type: '],
+        ['content-length: ', 'content-length: 3\r\ncontent_length: '],
+        ['content-length: ', 'content-length: 000'],
+        ['accept: application/json', 'accept: application/json\r\ntransfer-encoding: chunked'],
+        [`content-length: ${length}`, `content-length: ${length - 1}`],
+        ['content-length: ', 'content-length: +'],
+        ['\r\nhost:', '\nhost:'],
+        [`${host}\r\n`, `${host}\n\r\n`],
+        ['\r\nhost:', '\r\n host:'],
+        ['\r\nhost:', '\r\n\thost:'],
+      ])(tagged('rejects altered framing: %j', tokenTags), (from, to) => {
+        const sent = tokenSent()
+        expect(sent).toContain(from)
+        expect(() => token(sent.replace(from, to))).toThrow()
+      })
+
+      it.each(formChanges(text(transcript.buildTokenRequest(input).body), input.code))(
+        tagged(
+          'rejects an altered form despite a matching Content-Length: %s [TEST-COMMON-05] [TEST-COMMON-06]',
+          tokenTags,
+        ),
+        (body) => {
+          const request = transcript.buildTokenRequest(input)
+          const altered = utf8(body)
+          const headers = { ...request.headers, 'Content-Length': utf8(String(altered.length)) }
+          expect(() => token(tokenSent({ ...request, body: altered, headers }))).toThrow()
+        },
+      )
+
+      it.each(Object.keys(input) as (keyof TokenRequestInput)[])(
+        tagged(
+          'binds the complete request to the frozen %s [TEST-PLAT-09] [TEST-COMMON-11]',
+          tokenTags,
+        ),
+        (field) => {
+          const changed = { ...input, [field]: frozenChanges[field] }
+          expect(() => transcript.buildTokenRequest(changed)).not.toThrow()
+          expect(() => token(tokenSent(), evidence.tokenBody, changed)).toThrow(
+            'Token request body changed',
+          )
+        },
+      )
+
+      if (input.clientCredential !== undefined)
+        it.each(['', 'has space', 'trailing\n', '\tcredential', 'é', '\x7f'])(
+          'rejects an invalid public credential %j before request construction',
+          (clientCredential) => {
+            expect(() => transcript.buildTokenRequest({ ...input, clientCredential })).toThrow()
+          },
+        )
+    })
+
+    describe('token response', () => {
+      const bearing = (value: string) => evidence.tokenBody.replace(evidence.bearer, value)
+      it.each([
+        ['an empty bearer', bearing('')],
+        ['a duplicated bearer', evidence.tokenBody.replace('{', '{ "access_token": "other",')],
+        ['no bearer', evidence.tokenBody.replace('"access_token"', '"refresh_token"')],
+        ['a bearer with a space', bearing('with space')],
+        ['an over-length bearer', bearing('a'.repeat(129))],
+        [
+          'a bearer that is not a JSON string',
+          evidence.tokenBody.replace(`"${evidence.bearer}"`, `x${evidence.bearer}"`),
+        ],
+      ])('rejects a token response with %s', (_name, body) => {
+        expect(() => token(tokenSent(), body)).toThrow()
+      })
+
+      it.each(jsonWhitespace)(
+        'keeps the bearer framing exact around JSON whitespace %j [TEST-COMMON-10A]',
+        (space) => {
+          const body = spaced(evidence.tokenBody, space)
+          const received = httpResponse(body)
+          const selected = token(tokenSent(), body)
+          expect(text(received.slice(selected.bearerRange.start, selected.bearerRange.end))).toBe(
+            evidence.bearer,
+          )
+          expect(revealed(received, selected.ranges.received)).toEqual([
+            `"access_token"${space}:${space}"`,
+            '"',
+          ])
+        },
+      )
+    })
+
+    describe('identity request', () => {
+      const authorization = `authorization: Bearer ${evidence.bearer}`
+      const bearerHoles = (sent: string) => identityOf(evidence.identityBody, sent).ranges.sent
+
+      it(
+        tagged(
+          'pins exactly its headers and rejects each pinned one missing or duplicated',
+          identityTags,
+        ),
+        () => {
+          const request = transcript.buildIdentityRequest(evidence.bearer)
+          expect(request.url).toBe(fixture.identityRequest.url)
+          expect(
+            Object.fromEntries(
+              Object.entries(request.headers).map(([name, value]) => [name, text(value)]),
+            ),
+          ).toEqual({
+            Host: identityUrl.host,
+            Authorization: `Bearer ${evidence.bearer}`,
+            ...fixture.identityRequest.headers,
+            Connection: 'close',
+          })
+          for (const [name, value] of Object.entries(fixture.identityRequest.headers)) {
+            const line = `${name.toLowerCase()}: ${value}\r\n`
+            expect(identitySent).toContain(line)
+            for (const replacement of ['', `${line}${line}`])
+              expect(() =>
+                identityOf(evidence.identityBody, identitySent.replace(line, replacement)),
+              ).toThrow()
+          }
+        },
+      )
+
+      it('rejects whitespace in an HTTP bearer before sending', () => {
+        for (const bearer of ['token token', ' token', 'token ', 'token\t', 'token\r\n'])
+          expect(() => transcript.buildIdentityRequest(bearer)).toThrow('Invalid bearer')
+      })
+
+      it.each(['x-extra: value', 'x-extra: café 😀', 'x-extra:', 'x-extra:\tvalue'])(
+        tagged(
+          'reveals extra headers before and after Authorization without shifting its bearer: %s',
+          identityTags,
+        ),
+        (extra) => {
+          const sent = identitySent.replace(
+            `${authorization}\r\n`,
+            `${extra}\r\n${authorization}\r\n${extra}\r\n`,
+          )
+          const bytes = utf8(sent)
+          const ranges = bearerHoles(sent)
+          const plan = planNotarization(
+            { sent: bytes, received: httpResponse(evidence.identityBody) },
+            { sent: ranges, received: [] },
+          )
+          expect(plan.commit.sent).toHaveLength(1)
+          const hole = plan.commit.sent[0]
+          expect(text(bytes.slice(hole.start, hole.end))).toBe(evidence.bearer)
+          expect(ranges).toEqual([
+            { start: 0, end: hole.start },
+            { start: hole.end, end: bytes.length },
+          ])
+        },
+      )
+
+      it.each([
+        'Cookie: session=other',
+        'Content_Encoding: gzip',
+        'Transfer-Encoding: chunked',
+        'X_HTTP_Method_Override: POST',
+        'X-Http-Method: POST',
+        'X-Method-Override: POST',
+      ])(
+        tagged('rejects forbidden identity header %s [REQ-COMMON-39B]', identityTags),
+        (header) => {
+          expect(() => bearerHoles(identitySent.replace('host:', `${header}\r\nhost:`))).toThrow()
+        },
+      )
+
+      const line = `GET ${identityUrl.pathname} HTTP/1.1`
+      it.each([
+        [authorization, `${authorization}\r\nAuthorization: Bearer ${evidence.bearer}`],
+        [authorization, `${authorization}\r\nAuthorization: Basic other`],
+        [authorization, 'authorization: Bearer other'],
+        [`${authorization}\r\n`, ''],
+        ['host: ', ' host: '],
+        ['host: ', 'extra: x\nhost: '],
+        ['host: ', 'extra: x\rhost: '],
+        ['host: ', '\thost: '],
+        ['host: ', 'extra: x\u0000\r\nhost: '],
+        [line, line.replace(' HTTP', '?extra=1 HTTP')],
+        ['\r\n\r\n', '\r\n\r\nbody'],
+      ])(
+        tagged('rejects ambiguous framing or changed required headers: %j', identityTags),
+        (from, to) => {
+          expect(identitySent).toContain(from)
+          expect(() => bearerHoles(identitySent.replace(from, to))).toThrow()
+        },
+      )
+    })
+
+    describe('identity response', () => {
+      it.each([
+        ['its fixture', evidence.identityBody, evidence.identityMembers],
+        ['the reordered', evidence.reorderedIdentityBody, evidence.reorderedIdentityMembers],
+      ])(
+        tagged('discloses exactly the two identity members of %s response', identityTags),
+        (_name, body, expected) => {
+          const selected = identityOf(body)
+          expect(selected).toMatchObject({ userId: identity.userId, userName: identity.userName })
+          expect(members(body)).toEqual(expected)
+          const plan = planNotarization(
+            { sent: utf8(identitySent), received: httpResponse(body) },
+            selected.ranges,
+          )
+          expect(plan.commit.sent).toEqual([{ ...selected.bearerRange, algorithm: 'SHA256' }])
+        },
+      )
+
+      it.each(jsonWhitespace)(
+        tagged(
+          'preserves JSON whitespace %j in its revealed members [TEST-COMMON-10A]',
+          identityTags,
+        ),
+        (space) => {
+          const body = spaced(evidence.identityBody, space)
+          expect(identityOf(body)).toMatchObject({
+            userId: identity.userId,
+            userName: identity.userName,
+          })
+          expect(members(body)).toEqual(
+            evidence.identityMembers.map((member) => spaced(member, space)),
+          )
+        },
+      )
+
+      it.each(['\v', '\f', '\u00a0'])(
+        'rejects non-JSON whitespace %j around JSON members',
+        (space) => {
+          // Before the colon, and after it, where a value must begin.
+          for (const [before, after] of [
+            [space, ''],
+            ['', space],
+          ]) {
+            expect(() => token(tokenSent(), spaced(evidence.tokenBody, before, after))).toThrow()
+            expect(() => identityOf(spaced(evidence.identityBody, before, after))).toThrow()
+          }
+        },
+      )
+
+      it(
+        tagged(
+          'rejects a duplicated identity member, whatever its whitespace, and an incomplete one [TEST-COMMON-10]',
+          identityTags,
+        ),
+        () => {
+          const body = evidence.identityBody
+          for (const member of evidence.identityMembers) {
+            const name = member.match(/^"(\w+)"/)![1]
+            expect(
+              () => identityOf(body.replace(`"${name}"`, `"${name}" : "other", "${name}"`)),
+              name,
+            ).toThrow(/duplicated/)
+            // Cut inside the member's value, and right after its colon.
+            const at = body.indexOf(member)
+            for (const end of [at + member.length - 2, at + member.indexOf(':') + 1])
+              expect(() => identityOf(body.slice(0, end)), name).toThrow()
+          }
+        },
       )
     })
   })
@@ -1176,9 +1656,15 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
         const staged = stageBearer(platformId, 'accepted')
         await (await fixture.prover()).prove(staged.context)
         const { transcripts, selected } = staged.notarized
-        expect(text(transcripts[0].sent)).toContain(
-          `client_id=${config.clientId}&code=${returnSamples(platformId).accepted.credential}`,
-        )
+        const { request } = staged.context
+        const form = fixture.tokenRequest.form({
+          clientId: request.clientId,
+          code: returnSamples(platformId).accepted.credential,
+          redirectUri: request.redirectUri,
+          codeVerifier: request.codeVerifier!,
+          clientCredential: request.clientCredential,
+        })
+        expect(text(transcripts[0].sent)).toContain(new URLSearchParams(form).toString())
         expect(text(transcripts[1].sent)).toContain(`Authorization: Bearer ${evidence.bearer}`)
         for (const [index, ranges] of selected.entries()) {
           const disclosed = [
@@ -1187,6 +1673,95 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
           ]
           expect(disclosed.map(text).join('')).not.toContain(evidence.bearer)
         }
+      },
+    )
+
+    it.each(['accepted', 'failed'])(
+      tagged(
+        'overlaps identity work with token openings and settles only on every output: %s [LIBID-PROVER-007] [LIBID-PROVER-013] [LIBID-PROVER-014] [TEST-PLAT-13]',
+        tags,
+      ),
+      async (outcome) => {
+        const staged = stageBearer(platformId, 'accepted', { held: true })
+        const { gates, log } = staged.notarized
+        // A failed final attestation must not wait for proof generation.
+        if (outcome === 'failed') generate.mockReturnValue(new Promise(() => {}))
+        let settled = false
+        const pending = (await fixture.prover()).prove(staged.context).finally(() => {
+          settled = true
+        })
+        const checked =
+          outcome === 'accepted'
+            ? expect(pending).resolves.toMatchObject({ identity })
+            : expect(pending).rejects.toMatchObject({
+                event: 'token-attestation',
+                message: 'Final attestation failed',
+              })
+        await vi.waitFor(() => expect(log).toEqual(['token send']))
+        // Both sessions and the proof engine start before any HTTP; the engine first.
+        expect(prepare.mock.calls).toEqual([
+          [fixture.tokenRequest.url, 'token-attestation'],
+          [fixture.identityRequest.url, 'identity-attestation'],
+        ])
+        expect(engine.mock.invocationCallOrder[0]).toBeLessThan(prepare.mock.invocationCallOrder[0])
+        expect(notarization).toHaveBeenCalledWith(
+          staged.context.request.notaryAddress,
+          expect.any(AbortSignal),
+          staged.context.emit,
+        )
+        // The identity request waits for the bearer, then overlaps the token openings.
+        gates.tokenResponse.resolve()
+        await vi.waitFor(() => expect(log).toContain('identity reveal'))
+        expect(generate).not.toHaveBeenCalled()
+        gates.tokenOpenings.resolve()
+        await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce())
+        expect(settled).toBe(false)
+        if (outcome === 'accepted') gates.tokenAttestation.resolve()
+        else gates.tokenAttestation.reject(new Error('Final attestation failed'))
+        await checked
+        // Settling retires both notary sessions and the proof engine.
+        expect(notarization.mock.calls[0][1].aborted).toBe(true)
+        expect(destroy).toHaveBeenCalledOnce()
+      },
+    )
+
+    it.each(['closed', 'identity setup failed'])(
+      tagged('retires both sessions and proving when %s during setup', tags),
+      async (failure) => {
+        const staged = stageBearer(platformId, 'accepted')
+        // Sessions stay in setup until the notary signal aborts; identity setup may fail first.
+        const pending = () =>
+          new Promise<never>((_, reject) => {
+            const signal: AbortSignal = notarization.mock.calls[0][1]
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+          })
+        const identitySetup = Promise.withResolvers<never>()
+        prepare.mockImplementationOnce(pending).mockReturnValueOnce(identitySetup.promise)
+        const result = (await fixture.prover()).prove(staged.context)
+        const checked = expect(result).rejects.toMatchObject({
+          event: failure === 'closed' ? 'token-fetch' : 'identity-fetch',
+          message: failure,
+        })
+        await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2))
+        if (failure === 'closed') staged.abort(new Error(failure))
+        identitySetup.reject(new Error(failure))
+        await checked
+        expect(notarization.mock.calls[0][1].aborted).toBe(true)
+        expect(generate).not.toHaveBeenCalled()
+        expect(destroy).toHaveBeenCalledOnce()
+      },
+    )
+
+    it(
+      tagged('requires a notary address before notarization [LIBID-OAUTH-021]', tags),
+      async () => {
+        const staged = stageBearer(platformId, 'accepted', {
+          change: { request: { notaryAddress: null } },
+        })
+        await expect((await fixture.prover()).prove(staged.context)).rejects.toBeInstanceOf(Error)
+        expect(notarization).not.toHaveBeenCalled()
+        expect(prepare).not.toHaveBeenCalled()
+        expect(generate).not.toHaveBeenCalled()
       },
     )
 
@@ -1218,6 +1793,30 @@ describe.each(oidcPlatforms)('%s OIDC pipeline', (platformId) => {
       )
     },
   )
+
+  it.each(Object.entries(fixture.rejectedEvidence))(
+    tagged('rejects evidence with %s before generating a proof', tags),
+    async (_name, change: EvidenceChange) => {
+      const staged = stageOidc(platformId, 'accepted', {
+        idToken: change.idToken?.(fixture.evidence.idToken),
+        jwk: change.jwk?.(fixture.evidence.jwk),
+      })
+      await expect((await fixture.prover()).prove(staged.context)).rejects.toMatchObject({
+        event: change.rejectedAt,
+      })
+      if (change.rejectedAt === 'authorization') expectNoProvingWork(staged.keys)
+      expect(generate).not.toHaveBeenCalled()
+      expect(notarization).not.toHaveBeenCalled()
+    },
+  )
+
+  it(tagged('accepts its published signing key without optional members', tags), async () => {
+    const staged = stageOidc(platformId, 'accepted', { jwk: fixture.evidence.minimalJwk })
+    await expect((await fixture.prover()).prove(staged.context)).resolves.toEqual({
+      identity: fixture.identity,
+      proof: fixture.proof,
+    })
+  })
 
   it(
     tagged(

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import type { OAuthReturn } from '../../ccdp/navigation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import type { BearerTranscript } from '../bearer-transcript.js'
+import type { BearerTranscript, TokenRequestInput } from '../bearer-transcript.js'
 import type { ProverContext } from '../context.js'
 import * as githubTranscript from '../github/1/transcript.js'
 import * as githubTypes from '../github/1/types.js'
@@ -76,12 +76,23 @@ interface Entry<P extends PlatformId> {
 export interface BearerLinkFixture<P extends PlatformId> extends Entry<P> {
   pipeline: 'bearer-link'
   transcript: BearerTranscript
+  /** The token endpoint and the form fields, in order, the platform must send for `input`. */
+  tokenRequest: { url: string; form(input: TokenRequestInput): [string, string][] }
+  /** The identity endpoint and the headers it pins beside Host, Authorization and Connection. */
+  identityRequest: { url: string; headers: Record<string, string> }
+  /** Normative test IDs the token and identity transcript sections tag for this platform. */
+  transcriptTests: { token: string; identity: string }
   evidence: {
     bearer: string
     /** Token endpoint body carrying `bearer`. */
     tokenBody: string
     /** Identity endpoint body naming `identity`. */
     identityBody: string
+    /** The exact identity members `identityBody` discloses, in body order. */
+    identityMembers: readonly string[]
+    /** The same identity with its members in another order, and the exact members it discloses. */
+    reorderedIdentityBody: string
+    reorderedIdentityMembers: readonly string[]
     /** The same identity values outside the profile's response shape. */
     misshapenIdentityBody: string
   }
@@ -97,9 +108,23 @@ export interface OidcFixture<P extends PlatformId> extends Entry<P> {
     authorizationDigest: Uint8Array
     /** Verifier fields bb.js produced for exactly this token and key. */
     publicInputs: readonly string[]
+    /** The circuit input that carries the authorization digest. */
+    digestInput: string
+    /** The published key with only the members the pipeline requires. */
+    minimalJwk: Record<string, string>
   }
   /** Well-formed changes that bind the claim to another authorization, identity or signing key. */
   rejectedBinding: Record<string, (claim: Claim<P>) => Claim<P>>
+  /** Token or published-key rewrites the pipeline rejects before proving; tags follow the name. */
+  rejectedEvidence: Record<string, EvidenceChange>
+}
+
+/** A rewrite of the signed token, the published signing key, or both, and the operation that rejects it. */
+export interface EvidenceChange {
+  idToken?: (idToken: string) => string
+  jwk?: (jwk: Record<string, string>) => Record<string, string>
+  /** `authorization` rejects before any key fetch or engine start. */
+  rejectedAt: 'authorization' | 'signing-key-fetch' | 'circuit-inputs'
 }
 
 export type PlatformFixture<P extends PlatformId> = BearerLinkFixture<P> | OidcFixture<P>
@@ -209,6 +234,16 @@ const googleClaims = jwtPart(googleV1.idToken, 1) as { aud: string; sub: string;
 
 const googleModulus = b64urlDecode(googleV1.jwk.n)!
 
+/** A token whose claim JSON is rewritten as text, keeping its header and signature. */
+const payloadText = (idToken: string, change: (json: string) => string) =>
+  jwtWith(idToken, { payload: change(decoder.decode(b64urlDecode(idToken.split('.')[1])!)) })
+
+/** A token claiming `exp` as given. */
+const expiry = (exp: unknown): EvidenceChange => ({
+  idToken: (idToken) => jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), exp } }),
+  rejectedAt: 'authorization',
+})
+
 /** `field` with its low bit flipped: still canonical, but a different value. */
 const flipped = (field: string) => `0x${(BigInt(field) ^ 1n).toString(16).padStart(64, '0')}`
 
@@ -235,7 +270,7 @@ const bearerLinkSpecTests = {
 /** Form-authenticated client IDs whose serialization would change the frozen request bytes. */
 const formSerializationChanges = ['a+b', 'a b', 'a%2Fb']
 
-const decimalIdViolations = ['0', '01', '18446744073709551616', '-1', '1.5', '1e3']
+const decimalIdViolations = ['0', '01', '18446744073709551616', '-1', '1.5', '1e3', '1 2', '"1"']
 
 const attestation = (byte: number) => ({
   attestedData: LIBID_RS_ATTESTED_DATA.slice(),
@@ -362,7 +397,63 @@ export const fixtures = {
       },
     }),
     prover: () => import('../google/1/prover.js'),
-    evidence: { ...googleV1, publicInputs: googlePublicInputs },
+    evidence: {
+      ...googleV1,
+      publicInputs: googlePublicInputs,
+      digestInput: 'authorization_digest',
+      // RS256 needs only the key ID, type, exponent and modulus.
+      minimalJwk: {
+        kid: googleV1.jwk.kid,
+        kty: googleV1.jwk.kty,
+        e: googleV1.jwk.e,
+        n: googleV1.jwk.n,
+      },
+    },
+    rejectedEvidence: {
+      'a non-RS256 algorithm': {
+        idToken: (idToken) =>
+          jwtWith(idToken, { header: { ...jwtPart(idToken, 0), alg: 'ES256' } }),
+        rejectedAt: 'authorization',
+      },
+      'a missing key ID': {
+        idToken: (idToken) => jwtWith(idToken, { header: { alg: 'RS256' } }),
+        rejectedAt: 'authorization',
+      },
+      'a nonce of the wrong width': {
+        idToken: (idToken) =>
+          jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), nonce: 'AA' } }),
+        rejectedAt: 'circuit-inputs',
+      },
+      'a short signature': {
+        idToken: (idToken) => jwtWith(idToken, { signature: new Uint8Array(255) }),
+        rejectedAt: 'circuit-inputs',
+      },
+      'a noncanonical claim spelling': {
+        idToken: (idToken) =>
+          payloadText(idToken, (json) => json.replace('"email":"', '"email": "')),
+        rejectedAt: 'circuit-inputs',
+      },
+      'a missing structural terminator': {
+        idToken: (idToken) =>
+          payloadText(idToken, (json) => json.replace('","email_verified"', '" ,"email_verified"')),
+        rejectedAt: 'circuit-inputs',
+      },
+      // The circuit's identity is the email, so an unverified one never proves.
+      'an unverified email': {
+        idToken: (idToken) =>
+          jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), email_verified: false } }),
+        rejectedAt: 'authorization',
+      },
+      'a fractional expiry [TEST-COMMON-12]': expiry(1.5),
+      'a negative expiry [TEST-COMMON-12]': expiry(-1),
+      'an unrepresentable expiry [TEST-COMMON-12]': expiry(2 ** 64),
+      'a string expiry [TEST-COMMON-12]': expiry('1725001000'),
+      'a non-65537 exponent': { jwk: (jwk) => ({ ...jwk, e: 'Aw' }), rejectedAt: 'circuit-inputs' },
+      'a short modulus': {
+        jwk: (jwk) => ({ ...jwk, n: b64urlEncode(new Uint8Array(255).fill(0xff)) }),
+        rejectedAt: 'circuit-inputs',
+      },
+    },
     rejectedBinding: {
       'authorization digest': ({ identity, proof }) => ({
         identity,
@@ -427,10 +518,32 @@ export const fixtures = {
     returns: codeReturns(),
     prover: () => import('../x/1/prover.js'),
     transcript: xTranscript,
+    tokenRequest: {
+      url: 'https://api.x.com/2/oauth2/token',
+      form: (input) => [
+        ['grant_type', 'authorization_code'],
+        ['client_id', input.clientId],
+        ['code', input.code],
+        ['redirect_uri', input.redirectUri],
+        ['code_verifier', input.codeVerifier],
+      ],
+    },
+    identityRequest: {
+      url: 'https://api.x.com/2/users/me',
+      headers: { Accept: 'application/json' },
+    },
+    transcriptTests: {
+      token:
+        '[LIBID-PROVER-003] [REQ-PLAT-56A] [REQ-PLAT-56B] [REQ-PLAT-56C] [TEST-PLAT-09A] [TEST-PLAT-09B] [TEST-PLAT-09C]',
+      identity: '[LIBID-PROVER-003]',
+    },
     evidence: {
       bearer,
       tokenBody: `{ "access_token" : "${bearer}", "token_type": "bearer" }`,
       identityBody: `{ "data": { "username": "alice", "id": "${userId}" } }`,
+      identityMembers: ['"username": "alice"', `"id": "${userId}"`],
+      reorderedIdentityBody: `{ "data": { "id": "${userId}", "username": "alice" } }`,
+      reorderedIdentityMembers: [`"id": "${userId}"`, '"username": "alice"'],
       misshapenIdentityBody: `{ "login": "alice", "other": { "id": "${userId}", "username": "alice" } }`,
     },
   },
@@ -470,10 +583,36 @@ export const fixtures = {
     ),
     prover: () => import('../github/1/prover.js'),
     transcript: githubTranscript,
+    tokenRequest: {
+      url: 'https://github.com/login/oauth/access_token',
+      form: (input) => [
+        ['client_id', input.clientId],
+        ['code', input.code],
+        ['redirect_uri', input.redirectUri],
+        ['code_verifier', input.codeVerifier],
+        ['client_secret', input.clientCredential ?? ''],
+      ],
+    },
+    identityRequest: {
+      url: 'https://api.github.com/user',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'Mozilla/5.0',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+    transcriptTests: {
+      token: '[LIBID-PROVER-004] [TEST-PLAT-12] [TEST-PLAT-14]',
+      identity: '[LIBID-PROVER-004] [REQ-PLAT-60] [TEST-PLAT-22]',
+    },
     evidence: {
       bearer,
       tokenBody: `{ "access_token" : "${bearer}", "token_type": "bearer" }`,
       identityBody: `{ "login" : "alice", "id" : ${userId} , "unused": true }`,
+      // A numeric ID discloses its whitespace and the delimiter that ends it: a comma or a brace.
+      identityMembers: ['"login" : "alice"', `"id" : ${userId} ,`],
+      reorderedIdentityBody: `{ "unused": true, "login" : "alice", "id" : ${userId} }`,
+      reorderedIdentityMembers: ['"login" : "alice"', `"id" : ${userId} }`],
       misshapenIdentityBody: `{ "login": "alice", "other": { "id": ${userId}, "username": "alice" } }`,
     },
   },
