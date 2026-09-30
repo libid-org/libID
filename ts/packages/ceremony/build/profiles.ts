@@ -8,6 +8,7 @@ export type ResponseProfile =
   | 'proofWorker'
   | 'leafWorker'
   | 'asset'
+  | 'versions'
 
 import { createHash } from 'node:crypto'
 import * as shared from '../src/ccdp/headers.ts'
@@ -62,6 +63,14 @@ export function responseHeaders(
     return {
       ...headers,
       'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'`,
+    }
+  // The Application reads the version list from its own origin; the wildcard needs no Vary.
+  if (profile === 'versions')
+    return {
+      ...headers,
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
     }
   headers['Cross-Origin-Resource-Policy'] = 'same-origin'
   if (profile === 'asset') return headers

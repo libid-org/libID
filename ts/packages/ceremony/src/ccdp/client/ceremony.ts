@@ -48,6 +48,7 @@ import {
 import { oauthState, prefetchFragment, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
 import { type CeremonyConfig, fetchCeremonyConfig } from './config.js'
+import { fetchPlatformVersions, type PlatformVersions } from './versions.js'
 
 /** One ceremony over a caller-supplied connection; the application owns the window. */
 export interface Ceremony<P extends PlatformId = PlatformId> {
@@ -81,9 +82,15 @@ export interface CCDPClient {
     popup: PopupWindow,
     options: Omit<ConnectOptions, 'allowedPopupOrigins'>,
   ): PopupConnection<Out, In>
-  /** Intersection of supported platforms and versions advertised by the Bridge. */
+  /**
+   * Platforms the Bridge configures and the Distribution bundles at a version this package
+   * implements, in catalog order.
+   */
   readonly enabledPlatforms: readonly PlatformId[]
-  /** Compatible versions in ascending order; returns an immutable list, empty for disabled platforms. */
+  /**
+   * Ascending intersection of the package catalog and the Distribution's list; an immutable
+   * list, empty for a platform the Bridge does not configure.
+   */
   enabledVersions<P extends PlatformId>(platformId: P): readonly SupportedCeremonyVersion<P>[]
   /**
    * Snapshot ledger hash/address and input bytes before OAuth; invalid inputs throw synchronously.
@@ -101,18 +108,29 @@ export interface CCDPClient {
   ) => Ceremony<P>
 }
 
-/** Fetch and validate Bridge configuration once. Rejects unavailable or malformed configuration. */
+/**
+ * Fetch and validate the Bridge configuration, then the configured Distribution's version
+ * list, once each. Rejects when either is unavailable or malformed: nothing could run.
+ */
 export async function createCCDPClient(options: { oauthBridge: string }): Promise<CCDPClient> {
   if (!hasExactKeys(options, ['oauthBridge'])) throw new TypeError('Invalid client options')
-  return ccdpClientFromConfig(await fetchCeremonyConfig(options.oauthBridge))
+  const config = await fetchCeremonyConfig(options.oauthBridge)
+  return ccdpClientFromConfig(config, await fetchPlatformVersions(config.ccdpOrigin))
 }
 
-/** Internal construction from an already validated, frozen Bridge configuration. */
-export function ccdpClientFromConfig(config: CeremonyConfig): CCDPClient {
+/** Internal construction from an already validated, frozen Bridge configuration and Distribution list. */
+export function ccdpClientFromConfig(
+  config: CeremonyConfig,
+  versions: PlatformVersions,
+): CCDPClient {
   const popupOrigins = [...new Set([new URL(config.redirectUri).origin, config.ccdpOrigin])]
   const liveIds = new Set<string>()
+  // A platform the Bridge does not configure has no client, whatever the Distribution bundles.
   const enabledVersions = <P extends PlatformId>(platform: P) =>
-    commonVersions(platform, config.platforms[platform]?.ceremonyVersions ?? [])
+    commonVersions(
+      platform,
+      Object.hasOwn(config.platforms, platform) ? (versions[platform] ?? []) : [],
+    )
   const enabledPlatforms = Object.freeze(
     supportedPlatforms.filter((p) => enabledVersions(p).length > 0),
   )

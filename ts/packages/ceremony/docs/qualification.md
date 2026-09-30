@@ -2,7 +2,7 @@
 
 **Release qualification is incomplete.** [Testing](testing.md) provides runnable
 commands and manual checkpoints. The [test index](test-plan.md) and
-[traceability](traceability.md) retain all 158 stable requirement IDs and identify
+[traceability](traceability.md) retain all 159 stable requirement IDs and identify
 untested properties separately from passing assertions.
 
 ## Pinned integration
@@ -15,10 +15,10 @@ Change dependency pins in the linked declarations and configuration.
 | Noir / bb.js | 1.0.0-beta.25 / 5.2.0; [package.json](../package.json), explicit EVM proof settings in [engine.worker.ts](../src/barretenberg/engine.worker.ts). |
 | Notary browser/runtime | v0.4.0, `829d8eb8778d4f1c30a2ec1f4c7cbd55e47d318a`; [declaration](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml). |
 | TLSN / MPZ | `da0f8488dfc55db8ed4271f817124306a2c07c09` / `4db9454a0b6380f1a23a7b4807989d866f838fff`, matched by the notary release. |
-| Development Bridge | v0.4.0; [Compose pin](../../../apps/dev/compose.yaml). |
+| Development Bridge | v0.5.0, `63c9bfe7036ec9f16af19420254a9873aaae02a2`; [Compose pin](../../../apps/dev/compose.yaml). Publishes one OAuth client per platform and no version list. |
 | SWS | 3.0.0-beta.1; exact image digest in [ccdp.Dockerfile](../ccdp.Dockerfile). |
 
-Bridge v0.4.0 supports exact and wildcard admission. Browser tests cover both
+Bridge v0.5.0 supports exact and wildcard admission. Browser tests cover both
 wildcard forms in Popup and `*` through the emitted Callback handoff; Callback
 units cover pattern forwarding.
 
@@ -55,7 +55,7 @@ versions are not recorded.
 | X/GitHub browser ceremony fixtures | Actual emitted Callback/Prover, Popup connection, session worker and Client execute success and changed-final-attestation rejection. Real bearer-link proofs verify against commitments extracted from delivered fixture attestations and the released key; digest/PKCE matches the frozen request. OAuth and the TLSN SDK/peer are substituted, and notary signatures are synthetic. This does not qualify real TLSN or authenticated provider evidence. |
 | Real matched-notary runtime tests | One/two X sessions and both GitHub endpoints run through the pinned notary in direct peer mode. The GitHub pair runs alongside a separately verified fixture proof and asserts real shared-memory proving with multiple threads. Unauthenticated requests and deliberately invalid credentials establish runtime/channel execution and authority correlation, not authenticated token/identity evidence. The separate fixture proof is not bound to these attestations. |
 | Development app checks | Independent concurrent rows, closure, timings, fallback display and immediate success/denial closure, using intercepted responses. |
-| Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through released Bridge v0.4.0 and emitted CCDP. Provider returns are intercepted; manual live success and verifier acceptance are described above. Production refresh behavior remains a separate gate. |
+| Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through the e2e Bridge stand-in ([server.mjs](../e2e/server.mjs), which serves the record) and emitted CCDP, whose `versions.json` the client reads; no released Bridge image runs in these tests. Provider returns are intercepted; manual live success and verifier acceptance are described above. Production refresh behavior remains a separate gate. |
 
 ## Remaining qualification
 

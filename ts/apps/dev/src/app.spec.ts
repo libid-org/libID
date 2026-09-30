@@ -3,6 +3,7 @@ import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, type Page, test } from '@playwright/test'
 import {
+  bundled,
   ccdp,
   closeButton,
   closeFromPopup,
@@ -31,8 +32,10 @@ import {
   serveCeremony,
   servePopup,
   servePrefetch,
+  serveVersions,
   timing,
   timingDetails,
+  versionsUrl,
   waitForFixture,
 } from './app.fixtures.ts'
 
@@ -44,6 +47,7 @@ const platforms = [
 
 test('unavailable Bridge disables launch; reload loads compatible platforms', async ({ page }) => {
   let available = false
+  await serveVersions(page)
   await page.route(configUrl, (route) =>
     available
       ? route.fulfill({ json: config })
@@ -62,19 +66,41 @@ test('unavailable Bridge disables launch; reload loads compatible platforms', as
   await expect(launchButton(page, 'Google')).toBeEnabled()
 })
 
-test('no compatible platforms stays unavailable', async ({ page }) => {
-  await serveBridge(page, {})
-  await page.goto('/')
-  await expect(page.getByRole('status')).toContainText('no compatible platforms')
-  await expect(launchButtons(page)).toHaveCount(0)
-})
+for (const { name, platforms, versions } of [
+  { name: 'no Bridge registrations', platforms: {}, versions: bundled },
+  { name: 'empty Distribution catalog', platforms: config.platforms, versions: {} },
+  { name: 'no common version', platforms: config.platforms, versions: { x: [1], github: [2] } },
+])
+  test(`${name} stays unavailable`, async ({ page }) => {
+    await serveBridge(page, platforms)
+    await serveVersions(page, versions)
+    await page.goto('/')
+    await expect(page.getByRole('status')).toContainText('no compatible platforms')
+    await expect(launchButtons(page)).toHaveCount(0)
+  })
+
+for (const { name, status, json } of [
+  { name: 'missing', status: 404, json: {} },
+  { name: 'duplicate version', status: 200, json: { google: [1, 1] } },
+  { name: 'array', status: 200, json: [] },
+])
+  test(`${name} Distribution catalog disables launch`, async ({ page }) => {
+    await serveBridge(page)
+    await page.route(versionsUrl, (route) =>
+      route.fulfill({ status, json, headers: { 'Access-Control-Allow-Origin': '*' } }),
+    )
+    await page.goto('/')
+    await expect(page.getByRole('status')).toContainText('Could not load Bridge configuration')
+    await expect(launchButtons(page)).toHaveCount(0)
+  })
 
 for (const credential of ['bridge-provided', undefined, null, ''])
   test(`validates the Bridge client credential: ${JSON.stringify(credential)}`, async ({
     page,
   }) => {
+    await serveVersions(page, { github: [1] })
     await serveBridge(page, {
-      github: { clientId: 'test-client', ceremonyVersions: [1], clientCredential: credential },
+      github: { clientId: 'test-client', clientCredential: credential },
     })
     await page.goto('/')
     if (credential) await expect(launchButton(page, 'GitHub')).toBeEnabled()
@@ -118,11 +144,11 @@ for (const [platform, name] of platforms)
         ),
       )
       await openApp(page, {
+        versions: { google: [1], x: [1], github: [1] },
         blocked,
         platforms: {
           ...config.platforms,
-          x: { clientId: 'test-client', ceremonyVersions: [1] },
-          github: { ...config.platforms.github, ceremonyVersions: [1] },
+          x: { clientId: 'test-client' },
         },
       })
       const key = platform === 'google' ? (blocked ? 'Space' : 'Enter') : undefined
@@ -257,10 +283,10 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
     await serveCeremony(context)
     await page.clock.install()
     await openApp(page, {
+      versions: { [platform]: [1] },
       platforms: {
         [platform]: {
           clientId: 'client',
-          ceremonyVersions: [1],
           ...(platform === 'github' ? { clientCredential: 'bridge-provided' } : {}),
         },
       },
@@ -469,8 +495,8 @@ for (const blocked of [false, true])
     await openApp(page, {
       blocked,
       platforms: {
-        google: { clientId: 'client', ceremonyVersions: [1] },
-        x: { clientId: 'client', ceremonyVersions: [1] },
+        google: { clientId: 'client' },
+        x: { clientId: 'client' },
       },
     })
     const first = await launchRun(page, 'Google')
@@ -552,11 +578,11 @@ for (const blocked of [false, true])
   }) => {
     await serveCeremony(context)
     await openApp(page, {
+      versions: { github: [1] },
       blocked,
       platforms: {
         github: {
           ...config.platforms.github,
-          ceremonyVersions: [1],
           clientCredential: 'test-public-credential',
         },
       },

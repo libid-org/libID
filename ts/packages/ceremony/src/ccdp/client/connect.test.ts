@@ -1,6 +1,6 @@
 import { type Carrier, PopupWindow } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
-import { CEREMONY_ID } from '../../testing/index.js'
+import { bundledVersions, CEREMONY_ID } from '../../testing/index.js'
 import { ccdpClientFromConfig } from './ceremony.js'
 import { validateCeremonyConfig } from './config.js'
 
@@ -19,12 +19,10 @@ it.each([
     const popup = PopupWindow.open('client-connect', 'left=0,top=0')
     const client = ccdpClientFromConfig(
       validateCeremonyConfig(
-        {
-          ccdpOrigin,
-          platforms: { google: { clientId: 'client', ceremonyVersions: [1] } },
-        },
+        { ccdpOrigin, platforms: { google: { clientId: 'client' } } },
         'https://bridge.test',
       ),
+      bundledVersions,
     )
     let receive: (message: unknown) => void = () => {}
     const carrier: Carrier = {

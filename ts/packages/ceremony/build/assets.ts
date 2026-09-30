@@ -2,8 +2,6 @@ import { readFileSync } from 'node:fs'
 import { findPackageJSON } from 'node:module'
 import { dirname, extname, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
-import type { Rollup } from 'vite'
-import { build } from 'vite'
 import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.js'
 import { SRS_POINTS } from '../src/barretenberg/parameters.ts'
 import * as headers from '../src/ccdp/headers.ts'
@@ -11,27 +9,14 @@ import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetPlugin } from './asset-plugin.ts'
 import { validateCircuitCapacity } from './circuits.ts'
 import { isolatedWorkers, parseCsp, responseHeaders } from './profiles.ts'
+import { importSource } from './source.ts'
 import { hash, packageDir, readSource } from './sources.ts'
 
-export async function loadAssetCatalog() {
-  const result = await build({
-    configFile: false,
-    logLevel: 'silent',
-    plugins: [assetPlugin()],
-    build: {
-      write: false,
-      minify: false,
-      lib: { entry: join(packageDir, 'src/platforms/platforms.assets.ts'), formats: ['es'] },
-    },
-  })
-  const output = ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output
-  const code = output.find((o) => o.type === 'chunk')!
-  return (await import(
-    `data:text/javascript;base64,${Buffer.from(code.code).toString('base64')}`
-  )) as {
+export function loadAssetCatalog() {
+  return importSource<{
     assetsByPlatform: Record<string, Record<number, readonly Asset[]>>
     circuits: readonly LocalAsset[]
-  }
+  }>(join(packageDir, 'src/platforms/platforms.assets.ts'), [assetPlugin()])
 }
 
 const mediaTypes: Readonly<Record<string, string>> = {

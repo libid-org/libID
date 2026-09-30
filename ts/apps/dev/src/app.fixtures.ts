@@ -29,28 +29,42 @@ export const ccdp = 'http://localhost:4684'
 export const config = {
   ccdpOrigin: ccdp,
   platforms: {
-    google: { clientId: '407408718192.apps.googleusercontent.com', ceremonyVersions: [1] },
-    github: { clientId: 'test-client', ceremonyVersions: [2], clientCredential: 'fixture-public' },
+    google: { clientId: '407408718192.apps.googleusercontent.com' },
+    github: { clientId: 'test-client', clientCredential: 'fixture-public' },
   },
 }
+
+export const versionsUrl = `${ccdp}/ccdp/versions.json`
+export const bundled = { google: [1], x: [1], github: [2] }
+
+/** Answers the Distribution catalog request independently of Bridge registration. */
+export const serveVersions = (page: Page, versions: unknown = bundled) =>
+  page.route(versionsUrl, (route) =>
+    route.fulfill({ json: versions, headers: { 'Access-Control-Allow-Origin': '*' } }),
+  )
 
 /** Answers the Bridge configuration request with `platforms` in place of the default set. */
 export const serveBridge = (page: Page, platforms: object = config.platforms) =>
   page.route(configUrl, (route) => route.fulfill({ json: { ...config, platforms } }))
 
 /**
- * Serves the Bridge configuration, loads the app and waits until it is ready. `blocked` makes
- * `window.open` report a blocked popup, so launches fall back to the native anchor.
+ * Serves Bridge configuration and the Distribution catalog, then waits for app readiness.
+ * `blocked` makes `window.open` report a blocked popup, so launches fall back to the native anchor.
  */
 export async function openApp(
   page: Page,
-  { platforms = config.platforms, blocked = false }: { platforms?: object; blocked?: boolean } = {},
+  {
+    platforms = config.platforms,
+    versions = bundled,
+    blocked = false,
+  }: { platforms?: object; versions?: object; blocked?: boolean } = {},
 ) {
   if (blocked)
     await page.addInitScript(() => {
       window.open = () => null
     })
   await serveBridge(page, platforms)
+  await serveVersions(page, versions)
   await page.goto('/')
   await expect(page.locator('#status')).toContainText('Ready.')
 }

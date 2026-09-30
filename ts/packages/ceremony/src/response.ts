@@ -37,3 +37,15 @@ export async function readJson(response: Response, maximum: number): Promise<unk
     new TextDecoder('utf-8', { fatal: true }).decode(await readBody(response, maximum)),
   )
 }
+
+/** Public JSON fetched without cookies, redirects or persistent browser caching, read under `maximum`. */
+export async function fetchPublicJson(url: string, maximum: number, failure: string) {
+  const response = await fetch(url, {
+    mode: 'cors',
+    credentials: 'omit',
+    cache: 'no-store',
+    redirect: 'error',
+  })
+  if (!response.ok) throw new Error(failure)
+  return readJson(response, maximum)
+}

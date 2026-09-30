@@ -1,6 +1,7 @@
 // Catalog-driven platform test inputs. Iterate `supportedPlatforms` and read the conformance
 // table instead of naming platforms, so a catalog addition reaches every such test.
 import type { PlatformConfig } from '../ccdp/client/config.js'
+import { validatePlatformVersions } from '../ccdp/client/versions.js'
 import type { ProveIdentity } from '../ccdp/index.js'
 import { oauthState } from '../ccdp/navigation.js'
 import { fixtures } from '../platforms/conformance/fixtures.js'
@@ -35,10 +36,19 @@ export const oidcPlatforms = supportedPlatforms.filter(
   (p): p is OidcPlatform => fixtures[p].proverKind === 'oidc',
 )
 
-/** The fixture client as one Bridge-advertised version-1 configuration entry. */
+/** A Distribution list bundling every catalog version, as the Prover the build emits does. */
+export const bundledVersions = validatePlatformVersions(
+  Object.fromEntries(
+    supportedPlatforms.map((platformId) => [
+      platformId,
+      Object.keys(platforms[platformId].versions).map(Number),
+    ]),
+  ),
+)
+
+/** The fixture OAuth client registration supplied by the Bridge. */
 export const platformConfig = (platformId: PlatformId): PlatformConfig => ({
   ...fixtures[platformId].config,
-  ceremonyVersions: [1],
 })
 
 /** The fixture's provider returns, bound to CEREMONY_ID. */

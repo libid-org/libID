@@ -16,11 +16,12 @@ import {
   supportedPlatforms,
 } from '../../platforms/index.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import { CEREMONY_ID, fixtures, platformConfig } from '../../testing/index.js'
+import { bundledVersions, CEREMONY_ID, fixtures, platformConfig } from '../../testing/index.js'
 import { CeremonyFailed, EventMessage, IdentityProof, UserDenied } from '../index.js'
 import { popupErrorMessages } from '../ui-messages.js'
 import { type CCDPClient, ccdpClientFromConfig, createCCDPClient } from './ceremony.js'
 import { fetchCeremonyConfig, validateCeremonyConfig } from './config.js'
+import { VERSIONS_PATH, validatePlatformVersions } from './versions.js'
 
 type Spied = FakeConnection & Record<'send' | 'navigate' | 'navigateAway' | 'close', Mock>
 
@@ -36,14 +37,20 @@ const id = CEREMONY_ID
 
 const wireConfig = {
   ccdpOrigin: 'https://ccdp.test',
-  platforms: { google: { clientId: 'client', ceremonyVersions: [1] } },
+  platforms: { google: { clientId: 'client' } },
 }
 
 const config = validateCeremonyConfig(wireConfig, 'https://bridge.test')
+/** A client whose Bridge record configures `platformId` alone, with its fixture registration. */
+const clientFor = (platformId: PlatformId) =>
+  ccdpClientFromConfig(
+    { ...config, platforms: { [platformId]: platformConfig(platformId) } },
+    bundledVersions,
+  )
 
 /** A run on a fresh spied connection: Google version 1, transaction data [1, 2] by default. */
 function setup<P extends PlatformId = 'google'>({
-  client = ccdpClientFromConfig(config),
+  client = ccdpClientFromConfig(config, bundledVersions),
   connection = spiedConnection(),
   platformId = 'google' as P,
   ledgerId = testnet,
@@ -335,7 +342,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       validateCeremonyConfig(
         {
           ...wireConfig,
-          platforms: { google: { clientId: 'x'.repeat(129), ceremonyVersions: [1] } },
+          platforms: { google: { clientId: 'x'.repeat(129) } },
         },
         'https://bridge.test',
       ),
@@ -376,7 +383,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
 })
 
 it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async () => {
-  const client = ccdpClientFromConfig(config)
+  const client = ccdpClientFromConfig(config, bundledVersions)
   const { connection, ceremony: first } = setup({ client })
   expect(() => setup({ client })).toThrow('already live')
   const boxed = Object(id) as string
@@ -401,10 +408,7 @@ it.each(supportedPlatforms)(
       notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
     }
     const connection = spiedConnection()
-    const ceremony = ccdpClientFromConfig({
-      ...config,
-      platforms: { [platformId]: platformConfig(platformId) },
-    }).new(connection, id, platformId, ledger, domain, data)
+    const ceremony = clientFor(platformId).new(connection, id, platformId, ledger, domain, data)
     expect(ledger.hash).toHaveBeenCalledOnce()
     expect(ledger.notaryAddress).toHaveBeenCalledOnce()
     hash.fill(9)
@@ -483,7 +487,7 @@ it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-
     },
   ])
     expect(() =>
-      ccdpClientFromConfig(config).new(
+      ccdpClientFromConfig(config, bundledVersions).new(
         connection,
         id,
         'google',
@@ -499,10 +503,7 @@ it.each(supportedPlatforms)(
   'rejects invalid notary addresses before OAuth for %s [LIBID-OAUTH-021]',
   (platformId) => {
     const connection = spiedConnection()
-    const client = ccdpClientFromConfig({
-      ...config,
-      platforms: { [platformId]: platformConfig(platformId) },
-    })
+    const client = clientFor(platformId)
     for (const method of [
       undefined,
       1,
@@ -600,7 +601,7 @@ it('keeps the Prefetch navigation error like the authorization navigation error'
 
 // Compile-only API checks: rejected forms must remain rejected by TypeScript.
 function checkCreationTypes() {
-  const client = ccdpClientFromConfig(config)
+  const client = ccdpClientFromConfig(config, bundledVersions)
   const conn = spiedConnection(),
     ledger = testnet,
     bytes = new Uint8Array(32)
@@ -653,10 +654,14 @@ it.each(supportedPlatforms)(
   async (platformId) => {
     const notarized = fixtures[platformId].proverKind === 'bearer-link'
     const c = spiedConnection()
-    const ceremony = ccdpClientFromConfig({
-      ...config,
-      platforms: { [platformId]: platformConfig(platformId) },
-    }).new(c, id, platformId, testnet, new Uint8Array(32), new Uint8Array())
+    const ceremony = clientFor(platformId).new(
+      c,
+      id,
+      platformId,
+      testnet,
+      new Uint8Array(32),
+      new Uint8Array(),
+    )
     const stages: string[] = []
     const events: CeremonyEvent[] = []
     ceremony.onStage((e) => {
@@ -838,17 +843,17 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
   // A second catalog entry tests selection only; it is not a new or qualified Google profile.
   Reflect.set(platforms.google.versions, '2', platforms.google.versions[1])
   try {
+    const record = validateCeremonyConfig(
+      {
+        ...wireConfig,
+        platforms: { google: { clientId: identity.oauthClientId }, x: { clientId: 'client' } },
+      },
+      'https://bridge.test',
+    )
+    // The Distribution lists x at a version this package lacks, and github, which the record omits.
     const client = ccdpClientFromConfig(
-      validateCeremonyConfig(
-        {
-          ...wireConfig,
-          platforms: {
-            google: { clientId: identity.oauthClientId, ceremonyVersions: [2, 99, 1] },
-            x: { clientId: 'client', ceremonyVersions: [99] },
-          },
-        },
-        'https://bridge.test',
-      ),
+      record,
+      validatePlatformVersions({ google: [1, 2, 99], x: [99], github: [1], future: [1] }),
     )
     expect(client.enabledPlatforms).toEqual(['google'])
     const versions = client.enabledVersions('google')
@@ -856,10 +861,7 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
     expect(Object.isFrozen(versions)).toBe(true)
     expect(client.enabledVersions('x')).toEqual([])
     expect(client.enabledVersions('github')).toEqual([])
-    const onlyNewer = ccdpClientFromConfig({
-      ...config,
-      platforms: { google: { clientId: identity.oauthClientId, ceremonyVersions: [2] } },
-    })
+    const onlyNewer = ccdpClientFromConfig(config, validatePlatformVersions({ google: [2] }))
     expect(() => setup({ client: onlyNewer, version: 1 })).toThrow('Unsupported ceremony version')
     for (const selected of [1, undefined] as const) {
       const transactionData = new Uint8Array()
@@ -870,7 +872,13 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
       )
       const pending = run.proveUserIdentity()
       reachProving(c)
-      expect(c.sent).toEqual([expect.objectContaining({ platformCeremonyVersion: version })])
+      expect(authorizationUrl(c).searchParams.get('client_id')).toBe(identity.oauthClientId)
+      expect(c.sent).toEqual([
+        expect.objectContaining({
+          platformCeremonyVersion: version,
+          clientId: identity.oauthClientId,
+        }),
+      ])
       c.receive({ type: 'identity-proof', identity, proof: proofFor(c) })
       const result = await pending
       expect(result).toMatchObject({ oauthProof: { platformCeremonyVersion: version } })
@@ -884,8 +892,60 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
   }
 })
 
+it('creates a client from the Bridge record, then the Distribution list, refusing other options before fetching; either failing fails creation [LIBID-MOD-011] [LIBID-MOD-017]', async () => {
+  const unfetched = vi.fn()
+  vi.stubGlobal('fetch', unfetched)
+  await expect(
+    // @ts-expect-error Unknown options are rejected at runtime too.
+    createCCDPClient({ oauthBridge: 'https://bridge.test', ccdpOrigin: 'https://ccdp.test' }),
+  ).rejects.toThrow('Invalid client options')
+  expect(unfetched).not.toHaveBeenCalled()
+  vi.unstubAllGlobals()
+  const init = { mode: 'cors', credentials: 'omit', cache: 'no-store', redirect: 'error' }
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+  const create = (record: () => Response, list: () => Response) => {
+    const fetch = vi.fn(async (url: string) =>
+      url === `https://bridge.test/api/v1/ceremony/config`
+        ? record()
+        : url === `https://ccdp.test${VERSIONS_PATH}`
+          ? list()
+          : new Response('Not found', { status: 404 }),
+    )
+    vi.stubGlobal('fetch', fetch)
+    return {
+      fetch,
+      client: createCCDPClient({ oauthBridge: 'https://bridge.test' }).finally(() =>
+        vi.unstubAllGlobals(),
+      ),
+    }
+  }
+  const created = create(
+    () => json(wireConfig),
+    () => json({ google: [1], x: [1], future: [1] }),
+  )
+  const client = await created.client
+  expect(created.fetch.mock.calls).toEqual([
+    [`https://bridge.test/api/v1/ceremony/config`, init],
+    [`https://ccdp.test${VERSIONS_PATH}`, init],
+  ])
+  expect(client.enabledPlatforms).toEqual(['google'])
+  expect(client.enabledVersions('google')).toEqual([1])
+  for (const [record, list, listRead] of [
+    [() => json('Unavailable', 503), () => json({ google: [1] }), false],
+    [() => json(wireConfig), () => new Response('Not found', { status: 404 }), true],
+    [() => json(wireConfig), () => json({ google: [1, 1] }), true],
+    [() => json(wireConfig), () => json([1]), true],
+    [() => json(wireConfig), () => new Response('{', { status: 200 }), true],
+  ] as const) {
+    const failed = create(record, list)
+    await expect(failed.client).rejects.toThrow()
+    expect(failed.fetch).toHaveBeenCalledTimes(listRead ? 2 : 1)
+  }
+})
+
 it('rejects unavailable explicit versions before reading ledger or reserving the run [LIBID-MOD-015] [LIBID-ASSET-004] [LIBID-OAUTH-024]', async () => {
-  const client = ccdpClientFromConfig(config)
+  const client = ccdpClientFromConfig(config, bundledVersions)
   const ledger = { ...testnet, hash: vi.fn(testnet.hash) }
   const c = spiedConnection()
   for (const version of [0, 2, 99, -1, 1.5, NaN, null, '1']) {
@@ -933,14 +993,13 @@ it('reports closure before the first start without mislabeling it as a repeat [L
 it('freezes and forwards the public credential from validated configuration [TEST-BRIDGE-03] [LIBID-ASSET-006] [LIBID-ASSET-010] [LIBID-OAUTH-016]', async () => {
   const profile = {
     clientId: 'client',
-    ceremonyVersions: [1],
     clientCredential: 'public&original=1',
   }
   const config = validateCeremonyConfig(
     { ...wireConfig, platforms: { github: profile } },
     'https://bridge.test',
   )
-  const client = ccdpClientFromConfig(config)
+  const client = ccdpClientFromConfig(config, bundledVersions)
   profile.clientCredential = 'replacement'
   const { connection, ceremony } = setup({ client, platformId: 'github' })
   const rejected = expect(ceremony.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
@@ -951,34 +1010,6 @@ it('freezes and forwards the public credential from validated configuration [TES
   expect(Object.isFrozen(config.platforms.github)).toBe(true)
   await connection.close()
   await rejected
-})
-
-it('requires the GitHub public credential and validates optional credentials for other profiles [TEST-BRIDGE-03]', () => {
-  for (const platformId of ['github', 'x', 'google']) {
-    const profile = { clientId: 'client', ceremonyVersions: [1] }
-    const validate = (value: object) =>
-      validateCeremonyConfig(
-        { ...wireConfig, platforms: { [platformId]: value } },
-        'https://bridge.test',
-      )
-    if (platformId === 'github') expect(() => validate(profile)).toThrow()
-    else expect(() => validate(profile)).not.toThrow()
-    expect(() => validate({ ...profile, clientCredential: 'public' })).not.toThrow()
-    expect(() =>
-      validate({ ...profile, clientCredential: 'public', tokenExchangeCredential: 'retired' }),
-    ).toThrow()
-    for (const clientCredential of [
-      undefined,
-      null,
-      '',
-      1,
-      'with space',
-      'tail\n',
-      'é',
-      'x'.repeat(513),
-    ])
-      expect(() => validate({ ...profile, clientCredential })).toThrow()
-  }
 })
 
 it.each(['closed', 'failed'] as const)(
@@ -1032,23 +1063,6 @@ it('fetches configuration once without credentials and bounds its body [LIBID-MO
   }
 })
 
-it('creates a client from fetched configuration, rejecting other options before fetching', async () => {
-  const fetch = vi.fn(async () => Response.json(wireConfig))
-  vi.stubGlobal('fetch', fetch)
-  try {
-    await expect(
-      // @ts-expect-error Unknown options are rejected at runtime too.
-      createCCDPClient({ oauthBridge: 'https://bridge.test', ccdpOrigin: 'https://ccdp.test' }),
-    ).rejects.toThrow('Invalid client options')
-    expect(fetch).not.toHaveBeenCalled()
-    const client = await createCCDPClient({ oauthBridge: 'https://bridge.test' })
-    expect(client.enabledPlatforms).toEqual(['google'])
-    expect(fetch).toHaveBeenCalledOnce()
-  } finally {
-    vi.unstubAllGlobals()
-  }
-})
-
 it.each([
   { name: 'short operation domain', operationDomain: new Uint8Array(31), error: '32 bytes' },
   { name: 'long operation domain', operationDomain: new Uint8Array(33), error: '32 bytes' },
@@ -1058,7 +1072,7 @@ it.each([
 ])(
   'rejects malformed operation bytes before OAuth: $name [LIBID-OAUTH-003]',
   ({ operationDomain = new Uint8Array(32), transactionData = new Uint8Array(), error }) => {
-    const client = ccdpClientFromConfig(config)
+    const client = ccdpClientFromConfig(config, bundledVersions)
     const connection = spiedConnection()
     expect(() =>
       client.new(
@@ -1078,7 +1092,7 @@ it.each([
 )
 
 it('binds one active ceremony per connection and rebinds it once that run finishes', async () => {
-  const client = ccdpClientFromConfig(config)
+  const client = ccdpClientFromConfig(config, bundledVersions)
   const { connection, ceremony: first } = setup({ client })
   const second = client.new(
     connection,

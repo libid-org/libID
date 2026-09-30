@@ -14,6 +14,7 @@ import type { ResponseProfile } from './profiles.ts'
 import { responseHeaders } from './profiles.ts'
 import { packageDir } from './sources.ts'
 import { errorHeaders, writeDistribution } from './sws.ts'
+import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
 export type DistributionMetadata = AssetManifest & {
   headers: Record<string, Record<string, string>>
@@ -57,6 +58,7 @@ const page = (title: string, content: string) =>
 function assetManifest(
   data: ResolvedAssets,
   graph: ReadonlyMap<string, BundleNode>,
+  entries: ReadonlyMap<string, string>,
   records: Records,
   external: readonly ExternalAsset[],
 ): AssetManifest {
@@ -73,9 +75,7 @@ function assetManifest(
   }
   const requestsByProfile: Record<string, AssetRequest[]> = {}
   for (const [profile, assets] of Object.entries(data.profiles)) {
-    const entry = [...graph.entries()].find(([, v]) =>
-      v.entry?.endsWith(`/platforms/${profile}/prover.ts`),
-    )?.[0]
+    const entry = entries.get(profile)
     if (!entry) throw new Error(`Missing emitted platform entry: ${profile}`)
     requestsByProfile[profile] = unique([
       ...assets.map((a) => (a.isExternal ? externalRequest(a) : local(data.urls[assetKey(a)]))),
@@ -134,6 +134,17 @@ async function buildDistribution() {
     invoke: 'startProver',
     input: true,
   })
+  // Every prover the Prover can load is its own emitted chunk; the published set comes from them.
+  const proverEntries = new Map<string, string>()
+  for (const [file, node] of prover.graph) {
+    const pair = proverPair(node.entry)
+    if (pair) proverEntries.set(pair, file)
+  }
+  const versions = publishableVersions(
+    await catalogVersions(),
+    proverEntries.keys(),
+    Object.keys(data.profiles),
+  )
   const workerProfile = (file: string): ResponseProfile => {
     const modules = prover.graph.get(file)?.modules ?? []
     if (modules.some((m) => m.endsWith('/notary/session.worker.ts'))) return 'notaryWorker'
@@ -149,7 +160,9 @@ async function buildDistribution() {
           : 'asset',
       )
   }
-  const manifest = assetManifest(data, prover.graph, records, external)
+  const manifest = assetManifest(data, prover.graph, proverEntries, records, external)
+  // Every published pair has an emitted prover and asset profile.
+  put('/ccdp/versions.json', JSON.stringify(versions), 'versions')
   const primary = prover.output.find(
     (o): o is Rollup.OutputChunk => o.type === 'chunk' && o.isEntry,
   )

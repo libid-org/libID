@@ -107,11 +107,12 @@ pnpm -C ts --filter @libid/ceremony build:ccdp-artifacts
 pnpm -C ts --filter @libid/ceremony test:distribution
 ```
 
-These Node tests exercise archive handling, emitted resources and header rules,
-circuit capacity and the installed dependency loaders. **HTTP and native-binary
-checks are conditional**: a default run skips them unless their service/binary
-inputs are supplied. A green default run is not the complete distribution
-qualification; with `CEREMONY_REQUIRE_NATIVE=1`, a missing input fails the run
+These Node tests exercise archive handling, emitted resources (`versions.json`
+included, reconciled with the emitted platform provers and asset profiles) and
+header rules, circuit capacity and the installed dependency loaders. **HTTP and
+native-binary checks are conditional**: a default run skips them unless their
+service/binary inputs are supplied. A green default run is not the complete
+distribution qualification; with `CEREMONY_REQUIRE_NATIVE=1`, a missing input fails the run
 instead of skipping.
 
 To include served-response checks (exact routes and policies, negotiation,

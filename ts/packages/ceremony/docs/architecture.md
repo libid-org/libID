@@ -17,7 +17,7 @@ and assembles `OAuthProof`. Neither performs final cryptographic verification in
 | [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker and circuit ABI encoding; platform identity/proof assembly stays under platforms. |
 | [notary](../src/notary/session.ts) | TLSNotary sessions, HTTP/transcript helpers, canonical decoding and evidence correlation. |
 | [assets](../src/assets/index.ts) | Resource declarations and resolution, root Worker registration, byte caches and pending fetches. |
-| [build](../build/distribution.ts) | Compile the dependency graph and emit static files and response policies. |
+| [build](../build/distribution.ts) | Compile the dependency graph and emit static files, response policies and the bundled version set. |
 | [events](../src/events.ts), [errors](../src/errors.ts) | Shared operation feed, stage projection and bounded failure text. |
 
 The two public entrypoints are `@libid/ceremony` (discovery, result types and
@@ -81,18 +81,20 @@ delivery joins every required final attestation and correlation.
 
 ## Versioning and compatibility
 
-Client intersects the local platform catalog with Bridge-advertised versions.
-An explicit version selects a compatible member; omission chooses the greatest
-common version. Each run freezes its selection. Version semantics may differ in
-disclosure behavior, so an application promising a specific behavior selects it
-explicitly.
+Client intersects the local platform catalog with the versions the Distribution
+publishes at `/ccdp/versions.json`, for the platforms the Bridge record
+configures; the record names each platform's one OAuth client, which every
+version of the platform runs. An explicit version selects a compatible member;
+omission chooses the greatest common version. Each run freezes its selection
+and its client. Version semantics may differ in disclosure behavior, so an
+application promising a specific behavior selects it explicitly.
 
 Platform ceremony, CCDP, popup transport and Bridge API versions have separate
 owners. Internal UI or asset changes need no platform ceremony version when the
 proof semantics remain compatible. Only version 1 is implemented today;
 [adding another version](provers.md#adding-a-platform) registers it in the
 catalog, the [platform provers](../src/platforms/provers.ts) and the asset catalog, which the compiler
-holds to one set.
+and the build hold to one set.
 
 ## Code and documentation conventions
 
