@@ -43,7 +43,7 @@ export interface Ledger<
   readonly currency: Readonly<{ symbol: string; decimals: number }>
   /** Named deployments, stored uninterpreted; consumers give each name its meaning. */
   readonly addresses: A
-  /** A public RPC: the read fallback after a connected wallet, and what wallets add the chain with. */
+  /** An RPC: the read fallback after a connected wallet, and what wallets can add the chain with. */
   readonly rpc?: string
   /** A public block explorer. */
   readonly explorer?: string
@@ -115,9 +115,9 @@ export function isEndpoint(value: string): boolean {
 }
 
 /**
- * Supported ledgers, pinned: served only as defined here. Each carries a public RPC and
- * explorer where one exists; consumers may override both. Deployments mirror libID's
- * chain-configurations network files.
+ * Supported ledgers, pinned: served only as defined here. Deployments mirror libID's
+ * chain-configurations network files. libID pins no RPCs: reads go through the connected wallet
+ * or an RPC the consumer configures. Explorers are pinned where public; consumers may override.
  */
 export const Ledgers = Object.freeze({
   EdenTestnet: defineLedger({
@@ -127,9 +127,6 @@ export const Ledgers = Object.freeze({
     currency: { symbol: 'TIA', decimals: 18 },
     notary: 'https://testnet.notary.lib.id',
     addresses: { identityNames: '0x5b86114eccd8259347294a2bdbf3da2c93857796' },
-    // chain-configurations names ev-reth-eden-testnet.binarybuilders.services:8545, which
-    // sends no CORS headers, so browsers cannot use it. Gateway.fm's endpoint allows any origin.
-    rpc: 'https://rpc.testnet.eden.gateway.fm/',
     explorer: 'https://eden-testnet.blockscout.com',
   }),
 })

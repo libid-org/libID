@@ -30,12 +30,15 @@ export interface Fake<F extends Family> {
   }
   /** Moves the chain to a new state. */
   advance(): void
-  /** The account the wallet shares with the page; `null` shares none. */
-  shareAccount(raw: string | null): void
+  /** The account the wallet shares with the page; `null` shares none. Without `notify`, it
+   * changes without telling the page, as when an event is lost. */
+  shareAccount(raw: string | null, options?: { notify?: boolean }): void
+  /** The account the user picks the next time the wallet shows its account picker. */
+  nextChoice(raw: string): void
   /** Moves the wallet to another chain. */
   leaveChain(): void
   /** The wallet's user declines the next request of this kind. */
-  decline(request: 'accounts' | 'send'): void
+  decline(request: 'accounts' | 'switch' | 'send'): void
   /** The next send fails after the wallet has received it. */
   loseSend(): void
   /** Wallet requests that could show wallet UI. */

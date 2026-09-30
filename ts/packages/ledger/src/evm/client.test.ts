@@ -436,24 +436,31 @@ describe('EVM client', () => {
     expect(await client().estimate(ledger, tx, from)).toBe(21_000n * 132n)
   })
 
-  it('switches to the chain, adding it when the wallet does not know it', async () => {
-    endpoint({})
-    const added: unknown[] = []
-    let known = false
+  /** A wallet on chain 1 that must add `chainId` before switching to it. */
+  function unknowingWallet(added: unknown[]) {
     const wallet = scriptedWallet({
-      wallet_switchEthereumChain: () => {
-        if (!known) throw Object.assign(new Error('Unrecognized chain'), { code: 4902 })
-        wallet.setChain(chainId)
+      wallet_switchEthereumChain: ([params]) => {
+        const target = Number((params as { chainId: string }).chainId)
+        if (target === chainId && !added.length) {
+          throw Object.assign(new Error('Unrecognized chain'), { code: 4902 })
+        }
+        wallet.setChain(target)
         return null
       },
       wallet_addEthereumChain: (params) => {
         added.push(...params)
-        known = true
         return null
       },
     })
     wallet.setChain(1)
-    expect((await client('https://explorer.example').connect(ledger, wallet)).account).toBe(account)
+    return wallet
+  }
+
+  it('switches to the chain before sending, adding it when the wallet does not know it', async () => {
+    endpoint({})
+    const added: unknown[] = []
+    const session = await client('https://explorer.example').connect(unknowingWallet(added))
+    await session.send(ledger, tx)
     expect(added).toEqual([
       {
         chainId: toHex(chainId),
@@ -464,15 +471,6 @@ describe('EVM client', () => {
       },
     ])
     const offered: unknown[] = []
-    const fresh = scriptedWallet({
-      wallet_switchEthereumChain: () => {
-        if (!offered.length) throw Object.assign(new Error('Unrecognized chain'), { code: 4902 })
-        fresh.setChain(chainId)
-        return null
-      },
-      wallet_addEthereumChain: (params) => offered.push(...params),
-    })
-    fresh.setChain(1)
     const listed = defineLedger({
       chain: `eip155:${chainId}`,
       name: 'Test',
@@ -483,26 +481,86 @@ describe('EVM client', () => {
       rpc: 'https://public-rpc.example/',
       explorer: 'https://public-explorer.example',
     })
-    await connect({ ledgers: [{ ledger: listed }] }).connect(listed, fresh)
-    expect(offered, "Without overrides, wallets get the ledger's public endpoints").toMatchObject([
+    await (await connect({ ledgers: [{ ledger: listed }] }).connect(unknowingWallet(offered))).send(
+      listed,
+      tx,
+    )
+    expect(offered, "Without overrides, wallets get the ledger's own endpoints").toMatchObject([
       {
         rpcUrls: ['https://public-rpc.example/'],
         blockExplorerUrls: ['https://public-explorer.example'],
       },
     ])
+  })
+
+  it('cannot offer a chain to a wallet without an RPC, and sends nothing', async () => {
+    endpoint({})
+    const added: unknown[] = []
+    const wallet = unknowingWallet(added)
+    const session = await connect({ ledgers: [{ ledger }] }).connect(wallet)
+    await expect(session.send(ledger, tx)).rejects.toMatchObject({ code: 'wrong-chain' })
+    expect(added).toEqual([])
+    expect(wallet.request).not.toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'eth_sendTransaction' }),
+    )
+  })
+
+  it('reports a wallet without an account picker as unsupported', async () => {
+    endpoint({})
+    const session = await client().connect(scriptedWallet())
+    await expect(session.chooseAccount()).rejects.toMatchObject({ code: 'unsupported' })
+  })
+
+  it('reports a declined chain switch as rejected', async () => {
+    endpoint({})
     const declining = scriptedWallet({
       wallet_switchEthereumChain: () => {
         throw Object.assign(new Error('User rejected'), { code: 4001 })
       },
     })
     declining.setChain(1)
-    await expect(client().connect(ledger, declining)).rejects.toMatchObject({ code: 'rejected' })
+    const session = await client().connect(declining)
+    await expect(session.send(ledger, tx)).rejects.toMatchObject({ code: 'rejected' })
+  })
+
+  it('sends to several ledgers through one wallet, switching chains', async () => {
+    endpoint({})
+    const second = defineLedger({
+      chain: 'eip155:777',
+      name: 'Second',
+      testnet: true,
+      currency: { symbol: 'ETH', decimals: 18 },
+      notary: 'http://localhost:4687',
+      addresses: { identityNames: registry },
+    })
+    const wallet = scriptedWallet({
+      wallet_switchEthereumChain: ([params]) => {
+        wallet.setChain(Number((params as { chainId: string }).chainId))
+        return null
+      },
+    })
+    const both = connect({
+      ledgers: [
+        { ledger, rpc },
+        { ledger: second, rpc },
+      ],
+    })
+    const session = await both.connect(wallet)
+    await session.send(ledger, tx)
+    await session.send(second, tx)
+    const switches = wallet.request.mock.calls
+      .filter(([{ method }]) => method === 'wallet_switchEthereumChain')
+      .map(([{ params }]) => (params as [{ chainId: string }])[0].chainId)
+    expect(switches).toEqual([toHex(777)])
+    expect(
+      wallet.request.mock.calls.filter(([{ method }]) => method === 'eth_sendTransaction'),
+    ).toHaveLength(2)
   })
 
   it('simulates the exact transaction from the account before sending', async () => {
     endpoint({})
     const wallet = scriptedWallet()
-    await (await client().connect(ledger, wallet)).send(tx)
+    await (await client().connect(wallet)).send(ledger, tx)
     const methods = wallet.request.mock.calls.map(([{ method }]) => method)
     expect(methods.indexOf('eth_call')).toBeLessThan(methods.indexOf('eth_sendTransaction'))
     expect(wallet.request).toHaveBeenCalledWith(

@@ -1,6 +1,7 @@
-import { evm } from './evm/client.js'
+import { evm, evmWallet } from './evm/client.js'
 import type * as Evm from './evm/index.js'
 import type { Indexer } from './indexer.js'
+import { LedgerError } from './errors.js'
 import { type Account, type Family, isEndpoint, type Ledger, Ledgers as pinned } from './index.js'
 
 export { LedgerError, type LedgerErrorCode } from './errors.js'
@@ -42,9 +43,10 @@ export type Command<A extends readonly unknown[]> = {
 }
 
 /**
- * How the client reaches one ledger: through a connected wallet first, then an RPC, or through
- * another client serving it. `rpc` and `explorer` replace the ledger's public ones; a ledger
- * without a public RPC needs `rpc`.
+ * How the client reaches one ledger: through a connected wallet first, then an optional RPC, or
+ * through another client serving it. `rpc` and `explorer` replace the ledger's own. Without an
+ * RPC, the ledger is read only through a connected wallet, and a wallet that does not know the
+ * chain cannot be offered it.
  */
 export type LedgerAccess<L extends Ledger = Ledger> = (
   | { ledger: L; rpc?: string; explorer?: string }
@@ -90,26 +92,30 @@ export interface LedgerClient<L extends Ledger = Ledger> {
   /** Validates an account and returns its canonical form; throws on invalid input. */
   parseAccount(ledger: L, raw: string): Account
   /**
-   * Connects a wallet on the ledger; the ledger's reads then go through it until it closes.
-   * Without `prompt`, restores an authorized wallet already on the ledger and never shows wallet UI.
+   * Connects the wallet the user picked for every served ledger of its family, replacing any
+   * wallet connected before. Reads of a ledger then go through it while it is on that chain.
+   * Without `prompt`, restores an already authorized wallet and never shows wallet UI.
    */
-  connect<K extends L>(
-    ledger: K,
-    wallet: Families[K['family']]['wallet'],
+  connect(
+    wallet: Families[L['family']]['wallet'],
     options?: { prompt?: boolean },
-  ): Promise<Session<K>>
+  ): Promise<Session<L>>
 }
 
-/** A wallet connected on one ledger. */
+/** A connected wallet, serving every ledger of its family. */
 export interface Session<L extends Ledger = Ledger> {
-  readonly ledger: L
-  readonly account: Account
-  estimate(tx: Families[L['family']]['tx']): Promise<bigint>
+  /** The wallet's current account, following switches; undefined once it shares none. */
+  readonly account: Account | undefined
+  /** Calls `listener` after the account changes. */
+  subscribe(listener: () => void): () => void
+  /** Opens the wallet's account picker, then follows the chosen account. */
+  chooseAccount(): Promise<Account>
   /**
-   * Rechecks the account and chain, simulates, then asks the wallet to send.
-   * A `LedgerError` means nothing was sent; any other error leaves the outcome unknown.
+   * Switches the wallet to the ledger's chain if needed, rechecks the account, simulates, then
+   * asks the wallet to send. A `LedgerError` means nothing was sent; any other error leaves the
+   * outcome unknown.
    */
-  send(tx: Families[L['family']]['tx']): Promise<string>
+  send<K extends L>(ledger: K, tx: Families[K['family']]['tx']): Promise<string>
   close(): void
 }
 
@@ -126,13 +132,18 @@ export interface Driver<F extends Family = Family> {
   ): Promise<R>
   estimate(tx: Families[F]['tx'], from: Account): Promise<bigint>
   parseAccount(raw: string): Account
-  connect(wallet: Families[F]['wallet'], options?: { prompt?: boolean }): Promise<SessionDriver<F>>
+  /** Reads and sends through a connected wallet until detached. */
+  attach(wallet: Families[F]['wallet']): Promise<Attachment<F>>
 }
-export interface SessionDriver<F extends Family = Family> {
-  readonly account: Account
-  estimate(tx: Families[F]['tx']): Promise<bigint>
-  send(tx: Families[F]['tx']): Promise<string>
-  close(): void
+export interface Attachment<F extends Family = Family> {
+  send(tx: Families[F]['tx'], from: Account): Promise<string>
+  detach(): void
+}
+/** A family's wallet itself: its account, account changes, and its account picker. */
+export interface WalletDriver {
+  account(prompt: boolean): Promise<Account | null>
+  choose(): Promise<void>
+  watch(listener: (account: Account | null) => void): () => void
 }
 
 type Route = { ledger: Ledger; driver: Driver; indexer?: Indexer | false }
@@ -158,6 +169,8 @@ export function connect<const E extends readonly LedgerAccess[]>(options: {
     const driver = 'client' in access ? delegate(access.client, ledger) : drive(ledger, access)
     routes.set(ledger.chain, { ledger, driver, indexer: source })
   }
+  // ponytail: one family, so one connected wallet; keep one per family when a second lands.
+  let current: Session | null = null
   const route = (ledger: Ledger) => {
     const found = routes.get(ledger.chain)
     if (!found) throw new TypeError(`${ledger.name} is not served by this client`)
@@ -174,16 +187,57 @@ export function connect<const E extends readonly LedgerAccess[]>(options: {
     tx: (ledger, command, args) => command[ledger.family](ledger as never, ...args),
     estimate: async (ledger, tx, from) => route(ledger).driver.estimate(tx, from),
     parseAccount: (ledger, raw) => route(ledger).driver.parseAccount(raw),
-    async connect(ledger, wallet, options) {
-      const found = route(ledger)
-      const session = await found.driver.connect(wallet, options)
-      return {
-        ledger,
-        account: session.account,
-        estimate: session.estimate,
-        send: session.send,
-        close: session.close,
+    async connect(wallet, { prompt = true } = {}) {
+      // ponytail: one family; pick it by the wallet's shape when a second one lands.
+      const driver = evmWallet(wallet)
+      let account = await driver.account(prompt)
+      if (!account) throw new LedgerError('no-account')
+      current?.close()
+      const attached = new Map<string, Attachment>()
+      for (const { ledger, driver } of routes.values()) {
+        attached.set(ledger.chain, await driver.attach(wallet))
       }
+      const listeners = new Set<() => void>()
+      const notify = () => {
+        for (const listener of listeners) listener()
+      }
+      let closed = false
+      const unwatch = driver.watch((next) => {
+        account = next
+        notify()
+      })
+      const session: Session = {
+        get account() {
+          return account ?? undefined
+        },
+        subscribe(listener) {
+          listeners.add(listener)
+          return () => listeners.delete(listener)
+        },
+        async chooseAccount() {
+          await driver.choose()
+          const chosen = await driver.account(false)
+          if (!chosen) throw new LedgerError('no-account')
+          account = chosen
+          notify()
+          return chosen
+        },
+        async send(ledger, tx) {
+          const attachment = attached.get(route(ledger).ledger.chain)
+          if (closed || !account || !attachment) throw new LedgerError('no-account')
+          return attachment.send(tx, account)
+        },
+        close() {
+          if (closed) return
+          closed = true
+          unwatch()
+          for (const attachment of attached.values()) attachment.detach()
+          listeners.clear()
+          if (current === session) current = null
+        },
+      }
+      current = session
+      return session
     },
   } as LedgerClient<E[number]['ledger']>
 }
@@ -210,7 +264,6 @@ function read({ ledger, indexer }: Route, chain: Driver['read']): Read {
 
 function drive(ledger: Ledger, access: { rpc?: string; explorer?: string }): Driver {
   const rpc = access.rpc ?? ledger.rpc
-  if (!rpc) throw new TypeError(`${ledger.name} has no public RPC; configure one`)
   const explorer = access.explorer ?? ledger.explorer
   for (const value of [access.rpc, access.explorer]) {
     if (value !== undefined && !isEndpoint(value)) throw new TypeError(`Invalid endpoint: ${value}`)
@@ -231,13 +284,15 @@ function delegate(client: LedgerClient, ledger: Ledger): Driver {
     read: (run, args, options) => client.read(ledger, only(run), args as never, options),
     estimate: (tx, from) => client.estimate(ledger, tx, from),
     parseAccount: (raw) => client.parseAccount(ledger, raw),
-    async connect(wallet, options) {
-      const session = await client.connect(ledger, wallet, options)
+    async attach(wallet) {
+      // The outer client already authorized this wallet, so this never prompts.
+      const session = await client.connect(wallet, { prompt: false })
       return {
-        account: session.account,
-        estimate: session.estimate,
-        send: session.send,
-        close: session.close,
+        async send(tx, from) {
+          if (session.account !== from) throw new LedgerError('wallet-changed')
+          return session.send(ledger, tx)
+        },
+        detach: () => session.close(),
       }
     },
   }

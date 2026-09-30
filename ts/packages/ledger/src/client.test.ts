@@ -36,7 +36,7 @@ it('serves pinned ledgers only as defined, with their public endpoints by defaul
   )
 })
 
-it('requires an RPC for a ledger without a public one, and valid endpoints', () => {
+it('serves a ledger without an RPC, and validates configured endpoints', () => {
   const local = defineLedger({
     chain: 'eip155:31337',
     name: 'Local',
@@ -45,7 +45,7 @@ it('requires an RPC for a ledger without a public one, and valid endpoints', () 
     notary: 'http://localhost:4687',
     addresses: {},
   })
-  expect(() => connect({ ledgers: [{ ledger: local }] })).toThrow(/no public RPC/)
+  expect(() => connect({ ledgers: [{ ledger: local }] })).not.toThrow()
   expect(() =>
     connect({ ledgers: [{ ledger: local, rpc: 'http://127.0.0.1:8545' }] }),
   ).not.toThrow()
@@ -58,6 +58,26 @@ it('requires an RPC for a ledger without a public one, and valid endpoints', () 
       /Invalid endpoint/,
     )
   }
+})
+
+it('sends through another client only from the account asked for', async () => {
+  const fake = evm.setup()
+  const stranger = '0x1111111111111111111111111111111111111111'
+  const other = {
+    ...fake.client,
+    connect: async () => ({
+      account: stranger,
+      subscribe: () => () => {},
+      chooseAccount: async () => stranger,
+      send: async () => 'sent',
+      close() {},
+    }),
+  } as unknown as typeof fake.client
+  const client = connect({ ledgers: [{ ledger: fake.ledger, client: other }] })
+  const session = await client.connect(fake.wallet)
+  await expect(session.send(fake.ledger, fake.tx)).rejects.toMatchObject({
+    code: 'wallet-changed',
+  })
 })
 
 /**
@@ -93,7 +113,7 @@ function conformance<F extends Family>(
     run: (read: Families[F]['reader'], ...args: A) => Promise<R>,
   ) => ({ [family]: run }) as unknown as Query<A, R>
   const probe = (fake: Fake<F>) => query(async (read) => fake.probe(read))
-  const connected = (fake: Fake<F>) => fake.client.connect(fake.ledger, fake.wallet)
+  const connected = (fake: Fake<F>) => fake.client.connect(fake.wallet)
   const failure = (promise: Promise<unknown>) =>
     promise.then(
       () => {
@@ -150,9 +170,10 @@ function conformance<F extends Family>(
         expect(await client.read(fake.ledger, probe(fake), [])).toEqual(
           await fake.client.read(fake.ledger, probe(fake), []),
         )
-        expect((await client.connect(fake.ledger, fake.wallet)).account).toBe(
-          fake.accounts.canonical,
-        )
+        const session = await client.connect(fake.wallet)
+        expect(session.account).toBe(fake.accounts.canonical)
+        await session.send(fake.ledger, fake.tx)
+        expect(fake.sent).toBe(1)
       })
     })
 
@@ -250,29 +271,20 @@ function conformance<F extends Family>(
     })
 
     describe('connect', () => {
-      it('restores an authorized wallet on this chain without prompting', async () => {
+      it('restores an authorized wallet without prompting', async () => {
         const fake = harness.setup()
-        const session = await fake.client.connect(fake.ledger, fake.wallet, { prompt: false })
+        const session = await fake.client.connect(fake.wallet, { prompt: false })
         expect(session.account).toBe(fake.accounts.canonical)
-        expect(session.ledger).toBe(fake.ledger)
         expect(fake.prompts).toBe(0)
       })
 
-      it('refuses to restore without an account or on another chain, without prompting', async () => {
-        const none = harness.setup()
-        none.shareAccount(null)
-        const noAccount = await failure(
-          none.client.connect(none.ledger, none.wallet, { prompt: false }),
-        )
-        expect(noAccount).toBeInstanceOf(LedgerError)
-        expect(noAccount).toMatchObject({ code: 'no-account' })
-        const elsewhere = harness.setup()
-        elsewhere.leaveChain()
-        const wrongChain = await failure(
-          elsewhere.client.connect(elsewhere.ledger, elsewhere.wallet, { prompt: false }),
-        )
-        expect(wrongChain).toMatchObject({ code: 'wrong-chain' })
-        expect(none.prompts + elsewhere.prompts).toBe(0)
+      it('refuses to restore without an account, without prompting', async () => {
+        const fake = harness.setup()
+        fake.shareAccount(null)
+        const error = await failure(fake.client.connect(fake.wallet, { prompt: false }))
+        expect(error).toBeInstanceOf(LedgerError)
+        expect(error).toMatchObject({ code: 'no-account' })
+        expect(fake.prompts).toBe(0)
       })
 
       it('asks the wallet when prompting, and reports a decline as rejected', async () => {
@@ -285,6 +297,35 @@ function conformance<F extends Family>(
     })
 
     describe('session', () => {
+      it('follows account switches and tells subscribers', async () => {
+        const fake = harness.setup()
+        const session = await connected(fake)
+        let told = 0
+        const unsubscribe = session.subscribe(() => told++)
+        fake.shareAccount(fake.accounts.other)
+        expect(session.account).toBe(fake.client.parseAccount(fake.ledger, fake.accounts.other))
+        expect(told).toBeGreaterThan(0)
+        unsubscribe()
+        fake.shareAccount(null)
+        expect(session.account, 'A wallet sharing no account leaves none').toBeUndefined()
+        const error = await failure(session.send(fake.ledger, fake.tx))
+        expect(error).toMatchObject({ code: 'no-account' })
+        expect(fake.sent).toBe(0)
+      })
+
+      it("chooses an account through the wallet's picker", async () => {
+        const fake = harness.setup()
+        const session = await connected(fake)
+        const other = fake.client.parseAccount(fake.ledger, fake.accounts.other)
+        fake.nextChoice(fake.accounts.other)
+        const prompts = fake.prompts
+        expect(await session.chooseAccount()).toBe(other)
+        expect(session.account).toBe(other)
+        expect(fake.prompts).toBeGreaterThan(prompts)
+        fake.decline('accounts')
+        expect(await failure(session.chooseAccount())).toMatchObject({ code: 'rejected' })
+      })
+
       it("reads through the connected wallet, and the ledger's RPC otherwise", async () => {
         const fake = harness.setup()
         const before = await fake.client.read(fake.ledger, probe(fake), [])
@@ -298,36 +339,62 @@ function conformance<F extends Family>(
         expect(fake.walletReads, 'After closing, the RPC answers again').toBe(served)
       })
 
-      it("estimates through the session's wallet", async () => {
+      it('reads a ledger without an RPC only through a connected wallet', async () => {
         const fake = harness.setup()
-        const session = await connected(fake)
-        await expect(session.estimate(fake.tx)).resolves.toBeTypeOf('bigint')
+        const client = connect({ ledgers: [{ ledger: fake.ledger }] })
+        const unreachable = await failure(client.read(fake.ledger, probe(fake), []))
+        expect(unreachable).toBeInstanceOf(LedgerError)
+        expect(unreachable).toMatchObject({ code: 'unreachable' })
+        const session = await client.connect(fake.wallet)
+        await expect(client.read(fake.ledger, probe(fake), [])).resolves.toBeDefined()
+        fake.leaveChain()
+        expect(
+          await failure(client.read(fake.ledger, probe(fake), [])),
+          'A wallet on another chain cannot read this ledger',
+        ).toMatchObject({ code: 'unreachable' })
+        session.close()
+        expect(await failure(client.read(fake.ledger, probe(fake), []))).toMatchObject({
+          code: 'unreachable',
+        })
       })
 
       it('sends a transaction once and returns its identifier', async () => {
         const fake = harness.setup()
-        const id = await (await connected(fake)).send(fake.tx)
+        const id = await (await connected(fake)).send(fake.ledger, fake.tx)
         expect(id).toBeTypeOf('string')
         expect(id).not.toBe('')
         expect(fake.sent).toBe(1)
       })
 
-      for (const change of ['account', 'chain'] as const) {
-        it(`sends nothing after the wallet ${change} changed`, async () => {
-          const fake = harness.setup()
-          const session = await connected(fake)
-          if (change === 'account') fake.shareAccount(fake.accounts.other)
-          else fake.leaveChain()
-          const error = await failure(session.send(fake.tx))
-          expect(error).toBeInstanceOf(LedgerError)
-          expect(error).toMatchObject({ code: 'wallet-changed' })
-          expect(fake.sent).toBe(0)
-        })
-      }
+      it("switches the wallet to the ledger's chain before sending", async () => {
+        const fake = harness.setup()
+        const session = await connected(fake)
+        fake.leaveChain()
+        await session.send(fake.ledger, fake.tx)
+        expect(fake.sent).toBe(1)
+        const declining = harness.setup()
+        const declined = await connected(declining)
+        declining.leaveChain()
+        declining.decline('switch')
+        const error = await failure(declined.send(declining.ledger, declining.tx))
+        expect(error).toBeInstanceOf(LedgerError)
+        expect(error).toMatchObject({ code: 'rejected' })
+        expect(declining.sent).toBe(0)
+      })
+
+      it("sends nothing when the wallet's account changed unannounced", async () => {
+        const fake = harness.setup()
+        const session = await connected(fake)
+        fake.shareAccount(fake.accounts.other, { notify: false })
+        const error = await failure(session.send(fake.ledger, fake.tx))
+        expect(error).toBeInstanceOf(LedgerError)
+        expect(error).toMatchObject({ code: 'wallet-changed' })
+        expect(fake.sent).toBe(0)
+      })
 
       it('sends nothing when simulation fails', async () => {
         const fake = harness.setup()
-        const error = await failure((await connected(fake)).send(fake.reverting))
+        const error = await failure((await connected(fake)).send(fake.ledger, fake.reverting))
         expect(error).toBeInstanceOf(LedgerError)
         expect(error).toMatchObject({ code: 'not-sent', cause: expect.anything() })
         expect(fake.sent).toBe(0)
@@ -337,7 +404,9 @@ function conformance<F extends Family>(
         const fake = harness.setup()
         const session = await connected(fake)
         fake.decline('send')
-        expect(await failure(session.send(fake.tx))).toMatchObject({ code: 'rejected' })
+        expect(await failure(session.send(fake.ledger, fake.tx))).toMatchObject({
+          code: 'rejected',
+        })
         expect(fake.sent).toBe(0)
       })
 
@@ -345,17 +414,21 @@ function conformance<F extends Family>(
         const fake = harness.setup()
         const session = await connected(fake)
         fake.loseSend()
-        const error = await failure(session.send(fake.tx))
+        const error = await failure(session.send(fake.ledger, fake.tx))
         expect(error, 'Only a LedgerError promises that nothing was sent').not.toBeInstanceOf(
           LedgerError,
         )
       })
 
-      it('leaves the client usable after closing', async () => {
+      it('replaces the previous wallet, and leaves the client usable after closing', async () => {
         const fake = harness.setup()
-        const session = await connected(fake)
-        session.close()
-        session.close()
+        const first = await connected(fake)
+        const second = await connected(fake)
+        expect(await failure(first.send(fake.ledger, fake.tx))).toMatchObject({
+          code: 'no-account',
+        })
+        second.close()
+        second.close()
         await expect(fake.client.read(fake.ledger, probe(fake), [])).resolves.toBeDefined()
       })
     })

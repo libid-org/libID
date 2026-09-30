@@ -17,7 +17,7 @@ it('eden testnet matches its deployed verifier', () => {
   // CeremonyProofVerifier.chainId() at 0x76BDc18f21c2db0FF796C7Cc50348528b2899275, read 2026-09-30.
   expect(hex(eden)).toBe('0x70c29a92a253d6f2a7ee351d43fd44734752ddb392efed6c31d16d3530a7e41c')
   expect(eden.notaryAddress()).toBe('https://testnet.notary.lib.id')
-  expect(eden.rpc).toBe('https://rpc.testnet.eden.gateway.fm/')
+  expect(eden.rpc, 'libID pins no RPC').toBeUndefined()
   expect(eden.explorer).toBe('https://eden-testnet.blockscout.com')
   expectTypeOf(eden.chain).toEqualTypeOf<'eip155:3735928814'>()
   expectTypeOf(

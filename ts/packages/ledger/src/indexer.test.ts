@@ -167,7 +167,7 @@ it('reads the indexer while a wallet is connected', async () => {
     },
   })
   const client = clientOf()
-  const session = await client.connect(eden, wallet)
+  const session = await client.connect(wallet)
   expect((await client.read(eden, source, [])).source).toBe('indexer')
   expect(session.account).toBe(registry)
 })

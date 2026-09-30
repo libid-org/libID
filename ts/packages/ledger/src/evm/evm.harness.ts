@@ -39,13 +39,13 @@ export const evm: Harness<'evm'> = {
       currency: { symbol: 'ETH', decimals: 18 },
       notary: 'http://localhost:4687',
       addresses: { target },
-      rpc,
       explorer: `https://explorer-${nodes.size}.example`,
     })
     const state = {
       head: 16,
       walletChain: chainId,
       shared: [raw] as string[],
+      choice: null as string | null,
       decline: new Set<string>(),
       lose: false,
       prompts: 0,
@@ -99,8 +99,16 @@ export const evm: Harness<'evm'> = {
             return toHex(state.walletChain)
           case 'wallet_switchEthereumChain':
             state.prompts++
+            if (state.decline.delete('switch')) throw declined()
             state.walletChain = chainId
+            wallet.emit('chainChanged', toHex(chainId))
             return null
+          case 'wallet_requestPermissions':
+            state.prompts++
+            if (state.decline.delete('accounts')) throw declined()
+            if (state.choice) state.shared = [state.choice]
+            wallet.emit('accountsChanged', state.shared)
+            return [{ parentCapability: 'eth_accounts' }]
           case 'eth_sendTransaction':
             state.prompts++
             if (state.decline.delete('send')) throw declined()
@@ -114,7 +122,7 @@ export const evm: Harness<'evm'> = {
       },
     })
 
-    const access = { ledger }
+    const access = { ledger, rpc }
     return {
       ledger,
       access,
@@ -127,9 +135,12 @@ export const evm: Harness<'evm'> = {
       advance() {
         state.head++
       },
-      shareAccount(account) {
+      shareAccount(account, { notify = true } = {}) {
         state.shared = account ? [account] : []
-        wallet.emit('accountsChanged', state.shared)
+        if (notify) wallet.emit('accountsChanged', state.shared)
+      },
+      nextChoice(account) {
+        state.choice = account
       },
       leaveChain() {
         state.walletChain = 1

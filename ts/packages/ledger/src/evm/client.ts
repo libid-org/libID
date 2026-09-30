@@ -12,8 +12,8 @@ import {
   toHex,
   type Chain as ViemChain,
 } from 'viem'
-import type { Driver, SessionDriver } from '../client.js'
-import { errorCode, LedgerError } from '../errors.js'
+import type { Driver, WalletDriver } from '../client.js'
+import { errorCode, LedgerError, ledgerErrorIn } from '../errors.js'
 import type { Account, Ledger } from '../index.js'
 import type { Provider, Reader, Tx } from './index.js'
 
@@ -40,7 +40,7 @@ const sendMethods = ['eth_sendTransaction', 'wallet_sendTransaction']
 
 export function evm(
   ledger: Ledger<'evm'>,
-  access: { rpc: string; explorer?: string },
+  access: { rpc?: string; explorer?: string },
 ): Driver<'evm'> {
   const chainId = Number(ledger.chain.slice('eip155:'.length))
   if (!Number.isSafeInteger(chainId)) throw new TypeError(`Unsupported EVM chain: ${ledger.chain}`)
@@ -48,24 +48,30 @@ export function evm(
     id: chainId,
     name: ledger.name,
     nativeCurrency: { name: ledger.currency.symbol, ...ledger.currency },
-    rpcUrls: { default: { http: [access.rpc] } },
+    rpcUrls: { default: { http: access.rpc ? [access.rpc] : [] } },
     blockExplorers: access.explorer
       ? { default: { name: 'Explorer', url: access.explorer } }
       : undefined,
     testnet: ledger.testnet,
   })
-  const rpc = http(access.rpc, { timeout: 15_000, retryCount: 1 })
-  const fallback = rpc({ chain })
+  const rpc = access.rpc ? http(access.rpc, { timeout: 15_000, retryCount: 1 }) : undefined
+  const fallback = rpc?.({ chain })
   const parseAccount = (raw: string) => getAddress(raw) as Account
 
   /** Reads through whichever client `clientOf` gives when each read or estimate starts. */
-  function reads(clientOf: () => Client) {
+  function reads(clientOf: () => Client | null) {
+    const reachable = () => {
+      const client = clientOf()
+      if (!client) throw new LedgerError('unreachable')
+      return client
+    }
     return {
       walletRequirements: Object.freeze({
         methods: Object.freeze([
           'eth_sendTransaction',
           'wallet_switchEthereumChain',
           'wallet_addEthereumChain',
+          'wallet_requestPermissions',
           ...readMethods,
         ]),
         events: Object.freeze(['accountsChanged', 'chainChanged']),
@@ -77,45 +83,49 @@ export function evm(
         { signal }: { signal?: AbortSignal } = {},
       ): Promise<R> {
         signal?.throwIfAborted()
-        const client = clientOf()
-        const block = await client.getBlockNumber({ cacheTime: 0 })
-        // Every action defaults to the same block, so a query sees one consistent state.
-        const pin = <F>(action: unknown, key: 'blockNumber' | 'toBlock'): F =>
-          (async (params: object) => {
-            signal?.throwIfAborted()
-            const result = await (action as (params: object) => Promise<unknown>)({
-              [key]: block,
-              ...params,
-            })
-            signal?.throwIfAborted()
-            return result
-          }) as F
-        const reader: Reader = {
-          ledger,
-          block,
-          readContract: pin(client.readContract, 'blockNumber'),
-          getContractEvents: pin(client.getContractEvents, 'toBlock'),
-          getBalance: pin(client.getBalance, 'blockNumber'),
-          call: pin(client.call, 'blockNumber'),
-          address(name) {
-            const value = ledger.addresses[name]
-            if (!value) throw new TypeError(`${ledger.name} has no ${name} address`)
-            return getAddress(value)
-          },
-          parseAccount,
-        }
-        return run(reader, ...args)
+        const client = reachable()
+        return unwrapped(async () => {
+          const block = await client.getBlockNumber({ cacheTime: 0 })
+          // Every action defaults to the same block, so a query sees one consistent state.
+          const pin = <F>(action: unknown, key: 'blockNumber' | 'toBlock'): F =>
+            (async (params: object) => {
+              signal?.throwIfAborted()
+              const result = await (action as (params: object) => Promise<unknown>)({
+                [key]: block,
+                ...params,
+              })
+              signal?.throwIfAborted()
+              return result
+            }) as F
+          const reader: Reader = {
+            ledger,
+            block,
+            readContract: pin(client.readContract, 'blockNumber'),
+            getContractEvents: pin(client.getContractEvents, 'toBlock'),
+            getBalance: pin(client.getBalance, 'blockNumber'),
+            call: pin(client.call, 'blockNumber'),
+            address(name) {
+              const value = ledger.addresses[name]
+              if (!value) throw new TypeError(`${ledger.name} has no ${name} address`)
+              return getAddress(value)
+            },
+            parseAccount,
+          }
+          return run(reader, ...args)
+        })
       },
       async estimate(tx: Tx, from: Account): Promise<bigint> {
-        const client = clientOf()
-        const [gas, fees] = await Promise.all([
-          client.estimateGas({ ...tx, account: from as `0x${string}` }),
-          client.estimateFeesPerGas().catch((error) => {
-            if (!(error instanceof Eip1559FeesNotSupportedError)) throw error
-            return client.estimateFeesPerGas({ type: 'legacy' })
-          }),
-        ])
-        return gas * (fees.maxFeePerGas ?? fees.gasPrice)
+        const client = reachable()
+        return unwrapped(async () => {
+          const [gas, fees] = await Promise.all([
+            client.estimateGas({ ...tx, account: from as `0x${string}` }),
+            client.estimateFeesPerGas().catch((error) => {
+              if (!(error instanceof Eip1559FeesNotSupportedError)) throw error
+              return client.estimateFeesPerGas({ type: 'legacy' })
+            }),
+          ])
+          return gas * (fees.maxFeePerGas ?? fees.gasPrice)
+        })
       },
     }
   }
@@ -126,7 +136,8 @@ export function evm(
       try {
         await provider.request({ method: 'wallet_switchEthereumChain', params })
       } catch (error) {
-        if (errorCode(error) !== 4902) throw error
+        // Without an RPC there is nothing to offer a wallet that does not know the chain.
+        if (errorCode(error) !== 4902 || !access.rpc) throw error
         await provider.request({
           method: 'wallet_addEthereumChain',
           params: [
@@ -149,76 +160,111 @@ export function evm(
     if ((await walletChain(provider)) !== chainId) throw new LedgerError('wrong-chain')
   }
 
-  function session(provider: Provider, address: `0x${string}`): SessionDriver<'evm'> {
-    const transport = walletReads(provider, chainId, fallback)
-    const client: Client = createPublicClient({
-      chain,
-      transport: custom(transport, { retryCount: 0 }),
-    })
-    const { estimate } = reads(() => client)
-    const account = address as Account
-    active = client
-    return {
-      account,
-      estimate: (tx) => estimate(tx, account),
-      async send(tx: Tx) {
-        let requested = false
-        try {
-          const [current, walletChainId] = await Promise.all([
-            walletAccount(provider, false),
-            walletChain(provider),
-          ])
-          if (current !== address || walletChainId !== chainId) {
-            throw new LedgerError('wallet-changed')
-          }
-          await client.call({ ...tx, account: address })
-          const signer = createWalletClient({
-            account: address,
-            chain,
-            transport: custom({
-              async request(request: Request) {
-                // Everything before this point provably sent nothing.
-                if (sendMethods.includes(request.method)) requested = true
-                return provider.request(request)
-              },
-            }),
-          })
-          return await signer.sendTransaction(tx)
-        } catch (error) {
-          if (!requested) {
-            throw error instanceof LedgerError
-              ? error
-              : new LedgerError('not-sent', { cause: error })
-          }
-          if (errorCode(error) === 4001) throw new LedgerError('rejected', { cause: error })
-          throw error
-        }
-      },
-      // A closed session's transport sends every read to the RPC.
-      close: transport.close,
-    }
-  }
-
-  // The ledger reads through the last wallet connected on it.
-  const direct: Client = createPublicClient({ chain, transport: rpc })
+  // The ledger reads through the wallet attached last, then its RPC.
+  const direct: Client | null = rpc ? createPublicClient({ chain, transport: rpc }) : null
   let active: Client | null = null
-  const base = reads(() => active ?? direct)
   return {
-    ...base,
-    async connect(provider: Provider, { prompt = true }: { prompt?: boolean } = {}) {
-      let address: `0x${string}` | null
+    ...reads(() => active ?? direct),
+    async attach(provider: Provider) {
+      const transport = walletReads(provider, chainId, fallback)
+      const client: Client = createPublicClient({
+        chain,
+        transport: custom(transport, { retryCount: 0 }),
+      })
+      active = client
+      return {
+        async send(tx: Tx, from: Account) {
+          const address = from as `0x${string}`
+          let requested = false
+          try {
+            if ((await walletChain(provider)) !== chainId) await switchChain(provider)
+            const [current, walletChainId] = await Promise.all([
+              walletAccount(provider, false),
+              walletChain(provider),
+            ])
+            if (current !== address || walletChainId !== chainId) {
+              throw new LedgerError('wallet-changed')
+            }
+            await client.call({ ...tx, account: address })
+            const signer = createWalletClient({
+              account: address,
+              chain,
+              transport: custom({
+                async request(request: Request) {
+                  // Everything before this point provably sent nothing.
+                  if (sendMethods.includes(request.method)) requested = true
+                  return provider.request(request)
+                },
+              }),
+            })
+            return await signer.sendTransaction(tx)
+          } catch (error) {
+            if (!requested) {
+              throw error instanceof LedgerError
+                ? error
+                : new LedgerError('not-sent', { cause: error })
+            }
+            if (errorCode(error) === 4001) throw new LedgerError('rejected', { cause: error })
+            throw error
+          }
+        },
+        detach() {
+          transport.close()
+          if (active === client) active = null
+        },
+      }
+    },
+  }
+}
+
+/** @internal The EVM wallet itself: its account, account changes, and its account picker. */
+export function evmWallet(provider: Provider): WalletDriver {
+  const accountOf = (accounts: unknown) => {
+    const [first] = Array.isArray(accounts) ? accounts : []
+    return typeof first === 'string' && isAddress(first) ? (getAddress(first) as Account) : null
+  }
+  return {
+    async account(prompt) {
       try {
-        address = await walletAccount(provider, prompt)
+        return accountOf(
+          await provider.request({ method: prompt ? 'eth_requestAccounts' : 'eth_accounts' }),
+        )
       } catch (error) {
         throw walletError(error, 'no-account')
       }
-      if (!address) throw new LedgerError('no-account')
-      if ((await walletChain(provider)) !== chainId) {
-        if (!prompt) throw new LedgerError('wrong-chain')
-        await switchChain(provider)
-      }
-      return session(provider, address)
     },
+    async choose() {
+      try {
+        await provider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        })
+      } catch (error) {
+        const code = errorCode(error)
+        if (code === 4001) throw new LedgerError('rejected', { cause: error })
+        if (code === 4200 || code === -32601) throw new LedgerError('unsupported', { cause: error })
+        throw error
+      }
+    },
+    watch(listener) {
+      const changed = (accounts: unknown) => listener(accountOf(accounts))
+      const disconnected = () => listener(null)
+      provider.on('accountsChanged', changed)
+      provider.on('disconnect', disconnected)
+      return () => {
+        provider.removeListener('accountsChanged', changed)
+        provider.removeListener('disconnect', disconnected)
+      }
+    },
+  }
+}
+
+/** viem wraps errors a transport throws; surface this package's own errors as themselves. */
+async function unwrapped<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    throw ledgerErrorIn(error) ?? error
   }
 }
 
@@ -275,7 +321,7 @@ function approved(provider: Provider, chainId: number, method: string) {
 export function walletReads(
   provider: Provider,
   chainId: number,
-  fallback: { request(request: never): Promise<unknown> },
+  fallback?: { request(request: never): Promise<unknown> },
 ) {
   const context = { closed: false, unsupported: new Set<string>(), revision: 0, retryAfter: 0 }
   const unavailable = new Error('Wallet RPC changed or is on another network.')
@@ -287,8 +333,10 @@ export function walletReads(
   }
   const events = ['chainChanged', 'disconnect', 'connect']
   for (const event of events) provider.on(event, changed)
-  const toFallback = (request: Request) =>
-    (fallback.request as (request: Request) => Promise<unknown>)(request)
+  const toFallback = (request: Request) => {
+    if (!fallback) throw new LedgerError('unreachable')
+    return (fallback.request as (request: Request) => Promise<unknown>)(request)
+  }
   return {
     async request(request: Request): Promise<unknown> {
       if (!readMethods.includes(request.method)) {

@@ -5,6 +5,8 @@ export type LedgerErrorCode =
   | 'wallet-changed'
   | 'not-sent'
   | 'indexer-unavailable'
+  | 'unreachable'
+  | 'unsupported'
 
 const messages: Record<LedgerErrorCode, string> = {
   rejected: 'The wallet request was rejected.',
@@ -13,6 +15,8 @@ const messages: Record<LedgerErrorCode, string> = {
   'wallet-changed': 'The wallet account or chain changed.',
   'not-sent': 'The transaction was not sent.',
   'indexer-unavailable': 'The indexer is unavailable, behind, or not indexing this deployment.',
+  unreachable: 'No connected wallet or RPC can read this ledger.',
+  unsupported: 'The wallet does not support this request.',
 }
 
 /** A wallet, send or indexer failure. From `Session.send`, any `LedgerError` means nothing was sent. */
@@ -23,6 +27,15 @@ export class LedgerError extends Error {
     options?: { cause?: unknown },
   ) {
     super(messages[code], options)
+  }
+}
+
+/** A `LedgerError` among an error and its causes, such as one a transport library wrapped. */
+export function ledgerErrorIn(error: unknown): LedgerError | undefined {
+  let value = error
+  for (let i = 0; i < 8 && value && typeof value === 'object'; i++) {
+    if (value instanceof LedgerError) return value
+    value = 'cause' in value ? value.cause : undefined
   }
 }
 
