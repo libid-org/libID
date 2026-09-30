@@ -8,7 +8,16 @@ export default defineConfig({
   site: 'https://lib.id',
   markdown: { processor: unified({ remarkPlugins: [specMarkdown] }) },
   integrations: [
-    mermaid({ autoTheme: true }),
+    mermaid({
+      theme: 'base',
+      autoTheme: false,
+      mermaidConfig: {
+        fontFamily: "'JetBrains Mono', monospace",
+        themeVariables: { fontFamily: "'JetBrains Mono', monospace", fontSize: '14px' },
+        flowchart: { curve: 'basis', padding: 12, nodeSpacing: 40, rankSpacing: 44 },
+        sequence: { mirrorActors: false, actorMargin: 40, messageMargin: 32 },
+      },
+    }),
     starlight({
       title: 'libID',
       description: 'Every social account is already a multichain identity.',

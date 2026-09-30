@@ -11,18 +11,23 @@ The full rules are in the [specification](/specs/).
 
 ```mermaid
 flowchart TD
-  U["User in the browser"] -- "signs in" --> P["Platform<br/>trusted: says who owns the account"]
-  P -- "Google: signed sign-in token" --> G["Zero-knowledge proof<br/>that Google signed it"]
-  P -- "GitHub, X: two TLS sessions" --> N["Notary signs the session records<br/>trusted: signs only true records"]
-  N --> Z["Zero-knowledge proof<br/>that one token opened both sessions"]
-  G --> B["User's wallet sends bind"]
+  U["User in the browser"] -- "signs in" --> P["Platform (trusted)"]
+  P -- "Google: signed token" --> G["Proof that Google signed it"]
+  P -- "GitHub, X: two TLS sessions" --> N["Notary signs the sessions (trusted)"]
+  N --> Z["Proof that one token opened both"]
+  G --> B["Wallet sends bind"]
   Z --> B
-  B --> V["Proof verifier and platform verifier<br/>trusted, with their owners: check proofs correctly"]
-  V --> I["IdentityNames stores the binding<br/>public: wallet, account id, handle"]
+  B --> V["Proof verifier and platform verifier (trusted)"]
+  V --> I["IdentityNames stores the binding (public)"]
+  class P,N,V trusted
+  class I public
 ```
 
-The Google path needs no notary, because Google signs its tokens itself.
-Everything in the last box is public on chain.
+The parties marked trusted must behave: the platform says who owns the
+account, the notary signs only true records, and the verifiers and their
+owners check proofs correctly. What the last box stores is public on chain:
+the wallet, the account id and the handle. The Google path needs no notary,
+because Google signs its tokens itself.
 
 ## The steps
 

@@ -12,15 +12,15 @@ the handle and claims the funds, or the sender takes them back first.
 
 ```mermaid
 flowchart TD
-  D["Sender calls deposit"] --> Q{"Does someone hold the handle?"}
-  Q -- yes --> F["Paid to the holder at once<br/>Forwarded"]
-  Q -- no --> H["Held by the escrow<br/>Deposited"]
-  H -- "Carol proves the handle,<br/>then calls claim" --> C["Paid to Carol<br/>Claimed"]
-  H -- "the sender calls refund<br/>before any claim" --> R["Back to the sender<br/>Refunded"]
+  D["Sender deposits to @carol"] --> Q["Is @carol bound?"]
+  Q -- yes --> F["Carol is paid at once"]
+  Q -- no --> H["The escrow holds the funds"]
+  H -- "Carol binds, then claims" --> C["Carol is paid"]
+  H -- "the sender refunds first" --> R["The sender is paid back"]
 ```
 
-Held funds end one of two ways: Carol claims them, or the sender refunds
-them. Whichever comes first wins.
+A paid deposit emits `Forwarded`, a held one `Deposited`. Held funds end one
+of two ways, `Claimed` or `Refunded`, whichever comes first.
 
 In this guide you play both people: a sender, with `PRIVATE_KEY`, and Carol,
 with `CAROL_KEY`. Both keys are set by the [local chain](/docs/guides/local-chain/),
