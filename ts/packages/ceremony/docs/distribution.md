@@ -274,7 +274,7 @@ deployment is a separate, deliberate step.
 [distribution.ts](../build/distribution.ts) assembles and promotes the artifact
 and derives the prefetch manifest from the emitted Prover graph;
 [bundle.ts](../build/bundle.ts) records emitted dependencies and loads a source module into a build script;
-[input.ts](../build/input.ts) hands a document's launch fragment to its entry;
+[fragment.ts](../build/fragment.ts) hands a document's launch fragment to its entry;
 [assets.ts](../build/assets.ts) resolves declarations;
 [assetPlugin.ts](../build/assetPlugin.ts) lowers them to built URLs and serves the request lists;
 [profiles.ts](../build/profiles.ts) derives each response profile's headers and CSP;

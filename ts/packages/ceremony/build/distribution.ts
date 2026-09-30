@@ -10,7 +10,7 @@ import type { ResolvedAssets } from './assets.ts'
 import { assetHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
 import { bundle, workerUrl } from './bundle.ts'
-import { captureInput } from './input.ts'
+import { captureFragment } from './fragment.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { responseHeaders } from './profiles.ts'
 import { outputDirectory, packageDir } from './sources.ts'
@@ -123,7 +123,7 @@ async function buildDistribution() {
     records.set(path, record)
   }
   const emitDocument = (path: string, code: string, profile: ResponseProfile) => {
-    const scripts = [captureInput(path), code].map(inlineScript)
+    const scripts = [captureFragment(path), code].map(inlineScript)
     put(
       path,
       page(
@@ -136,7 +136,7 @@ async function buildDistribution() {
   for (const [path, record] of data.local) put(path, record.bytes, record.headers)
   const prover = await bundle('src/ccdp/documents/prover.ts', data, {
     invoke: 'startProver',
-    input: true,
+    fragment: true,
   })
   // Every prover the Prover can load is its own emitted chunk; the published set comes from them.
   const proverEntries = new Map<string, string>()
@@ -193,7 +193,7 @@ async function buildDistribution() {
   }
   const prefetch = await bundle('src/ccdp/documents/prefetch.ts', data, {
     invoke: 'startPrefetch',
-    input: true,
+    fragment: true,
     manifest,
   })
   for (const item of prefetch.output) {

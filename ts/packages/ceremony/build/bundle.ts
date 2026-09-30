@@ -5,7 +5,7 @@ import { build } from 'vite'
 import { type AssetManifest, assetPlugin } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { applyEdits, type Edit, parseModule, replacement, walk } from './ast.ts'
-import { consumeInput } from './input.ts'
+import { consumeFragment } from './fragment.ts'
 import { popupFallback } from './popup.ts'
 import { policyId } from './profiles.ts'
 import { hash, packageDir } from './sources.ts'
@@ -122,15 +122,15 @@ export async function bundle(
   {
     selfContained = false,
     invoke,
-    input = false,
+    fragment = false,
     groupModules = true,
     manifest,
   }: {
     /** One inlined chunk without module groups or imports. */
     selfContained?: boolean
-    /** The entry export the generated entry starts, with the captured input when `input`. */
+    /** The entry export the generated entry starts, with the captured launch fragment when `fragment`. */
     invoke?: string
-    input?: boolean
+    fragment?: boolean
     groupModules?: boolean
     manifest?: AssetManifest
   } = {},
@@ -156,7 +156,7 @@ export async function bundle(
       }
     },
   })
-  const start = input ? consumeInput(invoke!) : `${invoke}()`
+  const start = fragment ? consumeFragment(invoke!) : `${invoke}()`
   const plugins = (worker: boolean) => [
     workerImports(),
     virtualModule(
