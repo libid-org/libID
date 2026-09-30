@@ -348,6 +348,33 @@ it('reads nothing that arrives after the socket failed [LIBID-PROVER-008]', asyn
   })
 })
 
+it('keeps its event loop turning while the SDK computes, so a stranded wake still arrives', async () => {
+  // WebKit can deliver a cross-thread wake only when something else turns the event loop.
+  // Model it: an SDK call completes only once a timer callback runs.
+  const stranded: (() => void)[] = []
+  vi.stubGlobal('tlsnStranded', stranded)
+  const interval = globalThis.setInterval
+  const clear = vi.fn(globalThis.clearInterval)
+  vi.stubGlobal('setInterval', (handler: () => void, ms: number) =>
+    interval(() => {
+      for (const wake of stranded.splice(0)) wake()
+      handler()
+    }, ms),
+  )
+  vi.stubGlobal('clearInterval', clear)
+  const port = replyPort()
+  const { prepare } = await loadWorker(
+    `export default async()=>{};export async function initialize(){};export class Prover {async setup(){}send_request(){return new Promise((wake)=>globalThis.tlsnStranded.push(wake))}transcript(){return{sent:new Uint8Array(1),recv:new Uint8Array(1)}}async reveal(){return{sent:[],recv:[]}}async finish(){}free(){}}`,
+  )
+  prepare(port)
+  await expect.poll(() => port.replied('prepared')).toBe(true)
+  const cleared = clear.mock.calls.length
+  port.send({ type: 'send', request })
+  await expect.poll(() => port.replied('sent')).toBe(true)
+  // The timer runs only while the SDK call does.
+  expect(clear.mock.calls.length).toBeGreaterThan(cleared)
+})
+
 /** A session whose runtime startup is gated and whose WebSocket starts out connecting. */
 async function preparing() {
   let socket!: Socket

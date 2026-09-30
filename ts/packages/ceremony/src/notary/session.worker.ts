@@ -30,6 +30,27 @@ import {
 const copy = (openings: readonly TlsnOpening[]): HashOpening[] =>
   openings.map((o) => ({ hash: Uint8Array.from(o.hash), blinder: Uint8Array.from(o.blinder) }))
 
+/** How often a no-op timer turns this worker's event loop while the SDK computes. */
+const HEARTBEAT_MS = 10
+
+let heartbeatHolders = 0
+let heartbeat: ReturnType<typeof setInterval> | undefined
+
+/**
+ * Run an SDK call while a no-op timer turns this worker's event loop. WebKit can leave a
+ * cross-thread `Atomics.waitAsync` wake undelivered until something else turns the loop, and
+ * the SDK awaits exactly such wakes from its thread pool; with no timer and no network traffic,
+ * a session would hang for good. The timer releases a stranded wake within 10 ms.
+ */
+async function withHeartbeat<T>(call: () => Promise<T>): Promise<T> {
+  if (heartbeatHolders++ === 0) heartbeat = setInterval(() => {}, HEARTBEAT_MS)
+  try {
+    return await call()
+  } finally {
+    if (--heartbeatHolders === 0) clearInterval(heartbeat)
+  }
+}
+
 // The module and its thread pool are initialized once for this ceremony's sessions.
 let runtime: Promise<TlsnModule> | undefined
 
@@ -37,7 +58,7 @@ function initialize(data: Prepare): Promise<TlsnModule> {
   runtime ??= (async () => {
     const tlsn = (await import(/* @vite-ignore */ data.moduleUrl)) as TlsnModule
     await tlsn.default({ module_or_path: data.wasmUrl })
-    await tlsn.initialize(null, workerThreads())
+    await withHeartbeat(() => tlsn.initialize(null, workerThreads()))
     return tlsn
   })()
   return runtime
@@ -98,23 +119,25 @@ function session(port: MessagePort, initial: Prepare) {
       max_recv_data: MAX_RECV_BYTES,
       network: 'Bandwidth',
     })
-    await prover.setup(io)
+    await withHeartbeat(() => prover.setup(io))
     return { phase: 'prepared', url, io, prover }
   }
 
   async function send(prepared: Prepared, request: ExactHttpRequest): Promise<Sent> {
     if (request.url !== initial.url) throw new Error('Request target changed')
     const { url, prover } = prepared
-    await prover.send_request(null, {
-      uri: url.pathname + url.search,
-      method: request.method,
-      headers: Object.fromEntries(
-        Object.entries(request.headers).map(([k, v]) => [k, Array.from(v)]),
-      ),
-      body: request.body.length
-        ? new TextDecoder('utf-8', { fatal: true }).decode(request.body)
-        : null,
-    })
+    await withHeartbeat(() =>
+      prover.send_request(null, {
+        uri: url.pathname + url.search,
+        method: request.method,
+        headers: Object.fromEntries(
+          Object.entries(request.headers).map(([k, v]) => [k, Array.from(v)]),
+        ),
+        body: request.body.length
+          ? new TextDecoder('utf-8', { fatal: true }).decode(request.body)
+          : null,
+      }),
+    )
     const raw = prover.transcript()
     // Proxy setup limits are not enforced by the pinned SDK. This bounds acceptance
     // before parsing/reveal, not memory or traffic consumed while receiving.
@@ -126,10 +149,12 @@ function session(port: MessagePort, initial: Prepare) {
 
   async function reveal({ url, io, prover, transcript }: Sent, reveals: Reveals): Promise<void> {
     const plan = planNotarization(transcript, reveals)
-    const result = await prover.reveal(
-      // The SDK requires this flag; the signed authority binds the prepared host.
-      { sent: plan.reveal.sent, recv: plan.reveal.received, server_identity: true },
-      { sent: plan.commit.sent, recv: plan.commit.received },
+    const result = await withHeartbeat(() =>
+      prover.reveal(
+        // The SDK requires this flag; the signed authority binds the prepared host.
+        { sent: plan.reveal.sent, recv: plan.reveal.received, server_identity: true },
+        { sent: plan.commit.sent, recv: plan.commit.received },
+      ),
     )
     const correlated = correlateReveal(transcript, plan, {
       sent: copy(result.sent),
@@ -139,7 +164,7 @@ function session(port: MessagePort, initial: Prepare) {
       correlated[direction].map(({ start, end, blinder }) => ({ direction, start, end, blinder })),
     )
     reply({ type: 'revealed', openings })
-    await prover.finish()
+    await withHeartbeat(() => prover.finish())
     const wire = decodeAttestationFrame(await readFinalFrame(io))
     const decoded = matchAttestedData(url.hostname, transcript, plan, correlated, wire.attestedData)
     await io.close()

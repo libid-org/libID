@@ -51,6 +51,10 @@ notary selection or browser notary-key lookup.
 [session.worker.ts](../src/notary/session.worker.ts) initializes the shared WASM
 runtime before opening session sockets, so cold loading does not consume the
 notary’s idle-socket deadline. Target-specific TLS setups still run concurrently.
+While any SDK call runs, a 10 ms no-op timer keeps the worker's event loop turning:
+WebKit can leave a cross-thread `Atomics.waitAsync` wake undelivered until something
+else wakes the worker, and the SDK waits on such wakes during its PRF step, where
+no network traffic arrives to wake it.
 After TLSNotary finishes, it reclaims the same channel for one length-prefixed
 JSON attestation frame and requires EOF. [transport.ts](../src/notary/transport.ts)
 owns frame bounds and exact decoding. The shared request timeout also covers an
