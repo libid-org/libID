@@ -7,8 +7,8 @@ import { packageDir } from '../build/sources.ts'
 import { artifactDir } from './topology.ts'
 
 // Every e2e input, before Playwright starts the containers that mount the first two.
-// The artifact starts fresh: retention belongs to publication, not to the test inputs. An
-// interrupted build's staging or previous tree would otherwise stop every later run.
+// The artifact starts fresh, since an interrupted build's staging or previous tree would
+// otherwise stop every later run.
 // CI builds it once for every browser job and sets CEREMONY_E2E_PREBUILT.
 if (process.env.CEREMONY_E2E_PREBUILT) {
   if (!existsSync(join(packageDir, artifactDir, 'distribution-graph.json')))

@@ -223,12 +223,12 @@ jobs:
     if: github.event_name != 'push' || github.ref != 'refs/heads/main'
     permissions:
       contents: read
-      packages: read
     uses: ./.github/workflows/ccdp-image.yml
 
-  # Publications run one at a time, so no two builds seed from the same `:main`,
-  # and a running one is never cancelled. A third push while one runs replaces
-  # the queued one; re-run that commit's ccdp-publish before releasing it.
+  # Publications run one at a time and a running one is never cancelled, so
+  # every main commit gets its `sha-<commit sha>` image. A third push while one
+  # runs replaces the queued one; re-run that commit's ccdp-publish before
+  # releasing it.
   ccdp-publish:
     name: CCDP image (publish)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -241,7 +241,7 @@ jobs:
     uses: ./.github/workflows/ccdp-image.yml
     with:
       push: true
-      # `sha-<commit sha>` is what a release promotes; `:main` seeds the next build's retention.
+      # `sha-<commit sha>` is what a release promotes; `:main` names the latest build.
       sha_tag: true
       tag: main
 

@@ -59,7 +59,7 @@ test('policy cannot override server metadata or weaken immutable resources [LIBI
   )
 })
 
-test('a retained policy is checked for form, not against the current constants', () => {
+test('a weakened policy is refused, and declared headers are checked for form', () => {
   const published = { ...assetHeaders('file.js'), 'cache-control': 'public, max-age=60, immutable' }
   assert.throws(() => assetHeaders('file.js', published), /Asset policy weakened/)
   checkDeclaredHeaders(published)

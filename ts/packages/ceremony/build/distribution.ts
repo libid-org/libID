@@ -11,9 +11,9 @@ import { externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
 import { bundle } from './bundle.ts'
 import { captureFragment } from './fragment.ts'
+import { sameRecord, swapInto } from './output.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { emittedProfile, responseHeaders } from './profiles.ts'
-import { retainPrevious, sameRecord, swapInto } from './retention.ts'
 import { artifactsDir, outputDirectory } from './sources.ts'
 import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
@@ -217,9 +217,8 @@ async function main() {
   mkdirSync(join(staging, 'public'), { recursive: true })
   try {
     const { records, manifest, graph } = await buildDistribution()
-    retainPrevious(out, records)
     const files = writeDistribution(staging, records)
-    // Keep graph metadata outside public/; the image retains it for subsequent builds.
+    // Graph metadata stays outside public/: tests and e2e read it; it is never served.
     writeFileSync(
       join(staging, 'distribution-graph.json'),
       JSON.stringify({

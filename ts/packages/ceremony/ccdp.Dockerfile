@@ -5,6 +5,4 @@ FROM ghcr.io/static-web-server/static-web-server@sha256:4e804280b5b5b1be4563d4a9
 RUN rm -rf /home/sws/public
 COPY --chown=sws:sws public/ /home/sws/public/
 COPY --chown=sws:sws sws.toml /etc/sws.toml
-# Retention state for the next build, outside the served root; never a public resource.
-COPY --chown=sws:sws distribution-graph.json /home/sws/distribution-graph.json
 ENV SERVER_CONFIG_FILE=/etc/sws.toml

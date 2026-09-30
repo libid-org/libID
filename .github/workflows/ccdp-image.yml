@@ -9,9 +9,8 @@ name: CCDP image
 # published from main.
 #
 # No `permissions` here: a called workflow runs with its caller's token and
-# can only narrow it, so each caller declares what its run needs —
-# `packages: read` for pull requests, which execute PR-controlled build code,
-# and `packages: write` only for the runs that push. A dispatch runs with the
+# can only narrow it, so each caller declares what its run needs:
+# `packages: write` only for the runs that push. A dispatch runs with the
 # repository's default token, which is read-only.
 #
 # The checks run against the local reference `ghcr.io/libid-org/ccdp:sha-<commit sha>`
@@ -20,9 +19,8 @@ name: CCDP image
 # promotes after checking the image's revision and version labels. `tag` adds
 # one more tag (`main`, `custom-<name>`), checked here against the tag grammar
 # before anything is built; it is also the version label.
-# The build is seeded from the previously published `:main` image so immutable
-# assets stay available through the compatibility window (see "Publication and
-# upgrades" in ts/packages/ceremony/docs/distribution.md).
+# Each image serves only its own build (see "Publication and upgrades" in
+# ts/packages/ceremony/docs/distribution.md).
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -105,48 +103,6 @@ jobs:
 
       - name: Build
         run: pnpm -C ts --filter '@libid/ceremony...' build
-
-      - name: Log in to ghcr
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-
-      # The previous publication's served tree and graph let build/distribution.ts
-      # retain its immutable assets and verify reused URLs are unchanged. Only
-      # the registry's word that the image does not exist (first publication,
-      # or a package without a `:main` tag yet; "manifest unknown" for the
-      # read-only pull-request token too), or a fork's token being refused,
-      # skips the seed. Any other pull failure — network, registry, auth —
-      # fails the run, so a publication never drops retained assets silently
-      # and is simply re-run. The registry login ends here, before build code
-      # runs; the push logs in again.
-      - name: Seed retention from the previously published image
-        env:
-          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          set -euo pipefail
-          trap 'docker logout ghcr.io >/dev/null' EXIT
-          if docker pull --platform linux/amd64 "$IMAGE:main" 2>"$RUNNER_TEMP/pull.err"; then
-            previous=$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE:main")
-            cid=$(docker create --platform linux/amd64 "$IMAGE:main")
-            mkdir -p "$ARTIFACTS"
-            docker cp "$cid:/home/sws/public" "$ARTIFACTS/public"
-            docker cp "$cid:/home/sws/distribution-graph.json" "$ARTIFACTS/distribution-graph.json"
-            docker rm "$cid" >/dev/null
-            echo "Seeded $(find "$ARTIFACTS/public" -type f | wc -l) files from $previous"
-            exit 0
-          fi
-          cat "$RUNNER_TEMP/pull.err"
-          if grep -qiE 'manifest unknown|not found|name unknown' "$RUNNER_TEMP/pull.err" \
-            || { [ "$FORK_PR" = "true" ] && grep -qiE 'denied|unauthorized' "$RUNNER_TEMP/pull.err"; }; then
-            echo "No readable previous image at $IMAGE:main; building without retained assets."
-            if [ "$PUSH" = "true" ]; then
-              echo "::warning::Retention seed unavailable; this publication retains no previous immutable assets."
-            fi
-            exit 0
-          fi
-          echo "::error::Could not pull $IMAGE:main; fix the cause (or re-run) rather than building without retained assets."
-          exit 1
 
       - name: Build the CCDP artifact
         run: pnpm -C ts --filter @libid/ceremony build:ccdp-artifacts

@@ -40,13 +40,10 @@ dist-artifacts/
 └── distribution-graph.json
 ```
 
-`distribution-graph.json` is private build/test metadata and an input for retaining
-previous immutable resources. It is not a runtime manifest or public resource.
-The [container recipe](../ccdp.Dockerfile) replaces the base image's served
-tree (it ships a placeholder `index.html`) with `public/`, copies `sws.toml`,
-and places `distribution-graph.json` at `/home/sws/` outside the served root so
-the next build can read retention state back out of a published image (see
-[Publication and upgrades](#publication-and-upgrades)).
+`distribution-graph.json` is private build and test metadata: not a runtime
+manifest, a public resource or part of the image. The
+[container recipe](../ccdp.Dockerfile) replaces the base image's served tree (it
+ships a placeholder `index.html`) with `public/` and copies `sws.toml`.
 Exact internal rewrites serve the document routes without `.html`; direct
 navigation to their physical `.html` files does not execute a ceremony.
 Unknown routes return 404 with no SPA fallback and an explicit error policy
@@ -248,37 +245,28 @@ packages. Release promotion requires the tagged commit to be on `main` and the
 source image's revision and version labels to name it as a `main` publication,
 and it preserves the digest; it never rebuilds. If the sha image is missing, re-run
 that commit's `ccdp-publish` job, then re-publish the release. Image digests appear
-in the workflow summary. Custom images are outside the `:main` retention history;
-deploy them by digest and replace them whole.
+in the workflow summary. Deploy custom images by digest and replace them whole.
 
-Before building, the workflow pulls the previously published `:main` image and
-copies `/home/sws/public` and `/home/sws/distribution-graph.json` out of it into
-the build output. The build then checks reused immutable URLs for identical
-bytes and policies, retains the previous immutable assets, and replaces the
-output only after success, so the compatibility window holds without a
-persistent build directory. Only the registry's answer that the image does not
-exist (a first publication), or a fork pull request's token being refused, skips
-the seed, with a warning when publishing; any other pull failure fails the run, so a publication never drops retained assets
-silently and is re-run instead. Changing the bytes or policy of an already
-published immutable URL fails the build by design; publish changed content
-under a new mount.
-
-Local release builds follow the same rule: build into the existing accumulated
-output and preserve the whole of it, including `distribution-graph.json`,
-between builds. A fresh empty output cannot retain resources from a previous
-deployment.
+An image serves the latest minor release of each CCDP major it includes, and
+nothing from earlier minors: a minor update replaces the previous minor's files
+whole. Which majors an image includes is an explicit choice; today only v1
+exists, so an image serves exactly the build it was made from. Publish changed
+content under a new mount so that a URL never changes its bytes; the sha256
+pins stop a release archive from changing under its mount. This departs from
+the Distribution specification's rule that old URLs stay available while a live
+ceremony may reference them: a ceremony running during a minor update can fail
+on a file the new build changed, and the user starts it again.
 
 Deploy the complete image pinned by digest (the one in the run summary), not by
 a tag, which can move. Cut over atomically per origin: serve one revision at a
 time, never a mix of revisions behind one ingress. Blue/green or drain then
 switch does it without downtime; stopping the old instance before starting the
-new one (Kubernetes `Recreate`) does it with a brief outage. Retention carries only older assets forward, so a replica still on the
-previous build answers the new build's chunks with 404 and the Prover never
-starts.
+new one (Kubernetes `Recreate`) does it with a brief outage. Each build answers
+the other's changed chunks with 404, so a mix of revisions breaks ceremonies.
 
-Roll back forward: revert on `main` and publish a new build, which still retains
-the rolled-back build's assets for the documents already running it. Redeploying
-an older image drops those assets. A browser that already holds the newer
+Roll back forward: revert on `main` and publish a new build, or redeploy an
+older image; either way a ceremony already running the rolled-back build may
+fail once and restart. A browser that already holds the newer
 document revalidates correctly against the older one, because its changed ETag
 wins over the older `Last-Modified`
 ([native SWS test](../build/sws.test.ts)).
@@ -300,11 +288,10 @@ A CDN in front of SWS needs nothing from this package; configure it to:
 
 A CDN does not replace the atomic switch: a request for a file it has not cached
 yet still reaches the origin. 404s are `no-store`, so it never caches a missing
-file. Retention currently covers immutable assets, not an
-automatic archive of every protocol version: only v1 is emitted. Adding or
-retiring protocol versions needs explicit build support and a
-compatibility-window plan. Application, Callback, Prover and root Worker must
-remain compatible.
+file. Only v1 is emitted. Including an older major beside a new one needs build
+support: the older major's latest release pinned explicitly, its documents and
+assets served beside the new ones, and a root Worker that serves both. The
+Application, Callback, Prover and root Worker must remain compatible.
 
 Before an image goes to a deployment, run
 [distribution and browser checks](testing.md), including the actual dependency
@@ -318,8 +305,7 @@ deployment is a separate, deliberate step.
 
 [distribution.ts](../build/distribution.ts) assembles the artifact
 and derives the request lists from the emitted Prover graph;
-[retention.ts](../build/retention.ts) carries the previous output's immutable assets
-into it and replaces the output whole;
+[output.ts](../build/output.ts) replaces the output whole;
 [bundle.ts](../build/bundle.ts) records emitted dependencies and loads a source module into a build script;
 [fragment.ts](../build/fragment.ts) hands a document's launch fragment to its entry;
 [assets.ts](../build/assets.ts) resolves declarations;

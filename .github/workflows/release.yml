@@ -120,12 +120,10 @@ jobs:
   # CCDP image: publish the released commit's image under the version. The
   # image that ci.yml built, tested and pushed as `sha-<commit sha>` when the
   # commit landed on main is promoted — retagged registry-side by digest, no
-  # rebuild — so the release image is byte-identical to the tested one and
-  # needs no retention seed. The tag is the full sha, and the image's own
-  # labels must name this commit as a main publication, so a promotion cannot
-  # pick up another commit's image or a custom build. A release never builds:
-  # without that image the job fails, because only images published from main
-  # enter the `:main` retention history every later build seeds from.
+  # rebuild — so the release image is byte-identical to the tested one. The
+  # tag is the full sha, and the image's own labels must name this commit as a
+  # main publication, so a promotion cannot pick up another commit's image or
+  # a custom build. A release never builds: without that image the job fails.
   # ---------------------------------------------------------------------------
   publish-ccdp-image:
     name: Publish the CCDP image

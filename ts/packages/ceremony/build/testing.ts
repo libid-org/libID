@@ -1,6 +1,5 @@
 // Helpers only the build tests import.
 
-import { join } from 'node:path'
 import { artifactsDir } from './sources.ts'
 
 /** The built distribution a test reads: `CEREMONY_ARTIFACT_DIR`, or the default output. */

@@ -30,7 +30,7 @@ Index: all 159 stable IDs from [Test plan](test-plan.md). No requirement is dele
 | LIBID-ASSET-011 | Partial | [distribution assertions](../build/distribution.test.ts) check profile subsets; [loader tests](../build/loaders.test.ts) pin native CRS requests. A cold Google→X→GitHub browser flight-count assertion remains. |
 | LIBID-ASSET-012 | Partial | [browser flows](../e2e/assets.spec.ts): “migrates the known nested worker and joins a pending prefetch” delays asset bodies across navigation; [distribution assertions](../build/distribution.test.ts) hold each profile to its own platform's prover code and keep the notary runtime out of Google's. Exhaustive negative initialization spies for every Prefetch dependency remain. |
 | LIBID-ASSET-013 | Partial | [Real circuit statistics and negative build gates](../build/circuits.test.ts) match the released gate counts and fixed capacity. Real proofs use 2^18; negative browser-proof SRS-floor execution remains. |
-| LIBID-ASSET-014 | Partial | [Retention tests](../build/retention.test.ts) keep a published asset with its policy, refuse a changed one and restore the output after a failed swap; retained-response HTTP checks when CI seeds the previous image; [registration tests](../src/assets/registration.test.ts) check for a deployed update, wait for an installing one, keep a working active worker when the check or the new worker stalls, and fail at once when it lacks the asset list; no full changed-WASM/live-old-document promotion fixture yet. |
+| LIBID-ASSET-014 | Partial | [Output tests](../build/output.test.ts) restore the output after a failed swap; [registration tests](../src/assets/registration.test.ts) check for a deployed update, wait for an installing one, keep a working active worker when the check or the new worker stalls, and fail at once when it lacks the asset list; no full changed-WASM promotion fixture yet. Old URLs are not retained, a deliberate deviation from REQ-DIST-05. |
 | LIBID-ASSET-015 | Partial | [Callback units](../src/ccdp/documents/callback.test.ts) cover closed dispatch, the shared deeply frozen input list, ignored optional trailing inputs, and malformed or unsupported versions. [Browser flows](../e2e/popup.spec.ts) exercise query/fragment rejection; multi-version retention needs a second supported implementation. |
 | LIBID-ASSET-016 | Partial | [distribution assertions](../build/distribution.test.ts) check sidecar roundtrips and native negotiation, HEAD and ranges. These checks require the SWS inputs described in [testing](testing.md#distribution-checks). |
 | LIBID-ASSET-017 | Partial | Actual loaders and real Google distribution proofs; forced native CDN failure, partial caches, stopped/restarted SW and real TLSN under both response policies remain. HTTP-cache fallback after Cache Storage eviction is covered by the persistent-profile browser regression in all three engines. |
@@ -195,7 +195,7 @@ GitHub issuer test TEST-PLAT-12A is defined in the browser-spec revision.
 | TEST-DIST-02 | KIT-010, LIBID-ASSET-015; slot insertion, hashes and local unsupported-version failure. Two retained implementations remain a gap. |
 | TEST-DIST-03 | LIBID-ASSET-020, LIBID-BROWSER-015; canonical root and one logical isolated Prover. |
 | TEST-DIST-04 | LIBID-ASSET-011/017/018/019/021/023, CSP-019; loader/cache tests. Live CRS/CORS and full cache-fault matrix remain open. |
-| TEST-DIST-05 | LIBID-ASSET-014/027; retained bytes/URLs and native invalidation. Production atomic promotion remains external. |
+| TEST-DIST-05 | LIBID-ASSET-014/027; stable URLs and native invalidation. Old URLs are not retained, a deliberate deviation. Production atomic promotion remains external. |
 | TEST-BRIDGE-01/02 | KIT-004/005/016/022, LIBID-OAUTH-002; harness admission is simulated; actual Bridge startup/Fetch Metadata are service integration duties. |
 | TEST-BRIDGE-03 | LIBID-MOD-011, KIT-002, LIBID-OAUTH-016; client tests freeze and forward public credentials and reject invalid config. |
 | TEST-BRIDGE-04/06 | KIT-010/011/021; artifact insertion is checked here; refresh, forwarding and last-good cache semantics require real Bridge qualification. TEST-BRIDGE-05 is withdrawn. |
@@ -225,7 +225,7 @@ Popup transport tests are owned by [Popup's test plan](../../popup/TEST_PLAN.md)
 None of these is counted as a passing ceremony test.
 
 Untested normative vectors are not given test tags: TEST-DIST-05 still
-needs a two-build immutable-URL/retention fixture and atomic-publication test;
+needs a two-build immutable-URL fixture and atomic-publication test;
 TEST-PLAT-04 needs a wrong-live-state case and downstream digest-mismatch
 rejection; TEST-PLAT-16 needs an actual exchange-loss/restart browser scenario.
 The neighboring unit/build assertions listed above are supporting evidence,
