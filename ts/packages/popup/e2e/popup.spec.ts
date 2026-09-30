@@ -228,8 +228,10 @@ test('[POPUP-CONNECTION-001] an unlisted application origin is rejected by the p
 }) => {
   const { popup } = await open(page, { app: APP_B })
   await expect(popup.locator('#status')).toHaveText('failed: handshake-rejected')
-  await page.waitForTimeout(300)
-  expect(await diag(page)).toEqual(['window-opened', 'control-direct'])
+  // The popup answers the refused reply on its port, so the application fails at once.
+  await expect
+    .poll(() => diag(page))
+    .toEqual(['window-opened', 'control-direct', 'handshake-rejected', 'connection-failed'])
 })
 
 test('[POPUP-CONTROL-002] [POPUP-CONNECTION-003] [POPUP-KEEPER-003] one port survives app-driven navigation into and out of isolation', async ({

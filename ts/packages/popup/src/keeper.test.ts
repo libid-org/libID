@@ -147,14 +147,11 @@ describe('expiry [POPUP-KEEPER-003]', () => {
     const scope = fakeScope()
     const keeper = new PortKeeper(scope.worker)
     const channel = new MessageChannel()
-    const departed = nextMessage(channel.port2)
     const kept = keeper.keep(ID, channel.port1, APP_ORIGIN)
     await vi.advanceTimersByTimeAsync(10)
     await kept
     await vi.advanceTimersByTimeAsync(CARRIER_CLAIM_TIMEOUT_MS + 1)
     await expect(scope.pending[0]).resolves.toBeUndefined()
-    // An unclaimed port ends the application's side instead of leaving it waiting.
-    expect(await departed).toEqual({ type: 'document-departed' })
     channel.port2.close()
     const claim = keeper.claim(ID)
     await vi.advanceTimersByTimeAsync(10)

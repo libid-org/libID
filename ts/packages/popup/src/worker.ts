@@ -3,7 +3,8 @@
 // handler only gives a port a temporary owner across one popup document
 // replacement. It touches nothing but its own keep and claim records, never
 // reads the port, keeps no durable record, and holds nothing past the claim
-// deadline. A port it drops first tells the application the document departed.
+// deadline. A duplicate keep tells both applications their document departed;
+// an expired port closes silently, so a later document can still re-establish.
 
 import { CARRIER_CLAIM_TIMEOUT_MS, decodeKeeperRequest, KEEP } from './keeper.js'
 
@@ -71,7 +72,8 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
       const timer = setTimeout(() => {
         if (held.get(connectionId)?.port === port) {
           held.delete(connectionId)
-          retire(port)
+          // No departure: the application keeps waiting for a later document.
+          port.close()
         }
         release()
       }, CARRIER_CLAIM_TIMEOUT_MS)
