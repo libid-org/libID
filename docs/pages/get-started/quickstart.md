@@ -5,95 +5,89 @@ sidebar:
   order: 1
 ---
 
-In this guide you will look up who owns a GitHub account, and then do the
-same lookup in reverse. You only read from the chain, so you need no wallet
-and no tokens.
-
-The examples use the Eden testnet. The `IdentityNames` contract has the same
-address on every network, so only the RPC URL changes.
+In this guide you will find the wallet behind a GitHub handle, and then the
+GitHub handle behind a wallet. You only read from the chain, so you need no
+wallet and no tokens.
 
 ## Set up
 
-You need [Node.js](https://nodejs.org) 18 or later. Create a project and
-install [viem](https://viem.sh):
+You need [Node.js](https://nodejs.org) 20 or later and an RPC URL for a
+network libID is deployed on. See [Networks](/docs/networks/ethereum/).
+
+Create a project and install [viem](https://viem.sh) and the libID contracts
+package:
 
 ```sh
 mkdir libid-quickstart && cd libid-quickstart
 npm init -y
-npm install viem
+npm install viem @libid/contracts
 ```
 
 ## Connect to IdentityNames
 
+`IdentityNames` is the contract that stores who owns which account. It has
+the same address on every network.
+
 Create `index.mjs`:
 
 ```js
-import { createPublicClient, http, parseAbi, keccak256, toHex } from 'viem';
+import { createPublicClient, http } from 'viem';
+import { platformId, resolveHandle, primaryName } from '@libid/contracts';
 
-const client = createPublicClient({
-  transport: http('https://ev-reth-eden-testnet.binarybuilders.services:8545'),
-});
-
-const identityNames = {
+const names = {
+  client: createPublicClient({ transport: http(process.env.RPC_URL) }),
   address: '0xe78b53a183dd51763df44beb2500ddab9bb0329e',
-  abi: parseAbi([
-    'function resolveHandle(bytes32 platformId, string handle) view returns (address)',
-    'function primaryOf(address wallet, bytes32 platformId) view returns (string)',
-  ]),
 };
 
-const github = keccak256(toHex('github'));
+const github = platformId('github');
 ```
 
-Every platform has an id. It is the keccak256 hash of the platform's name, so
-GitHub is `keccak256("github")`. X and Google are `"x"` and `"google"`.
+Every platform has an id. `platformId('github')` is the keccak256 hash of the
+string `github`. The other platforms are `'x'` and `'google'`.
 
 ## Find the wallet for a handle
 
 Add this to `index.mjs`:
 
 ```js
-const wallet = await client.readContract({
-  ...identityNames,
-  functionName: 'resolveHandle',
-  args: [github, 'Wondertan'],
-});
+const wallet = await resolveHandle(names, github, 'octocat');
 console.log(wallet);
 ```
 
-`resolveHandle` returns the wallet that proved it owns the handle. Handles
-are matched the way the platform matches them, so `Wondertan` and `wondertan`
-give the same answer. A handle nobody has proved returns the zero address.
+`resolveHandle` returns the wallet that proved it owns the handle, or `null`
+if nobody has. Handles are matched the way the platform matches them, so
+`octocat`, `Octocat` and `@octocat` are the same GitHub handle.
 
 ## Find the name for a wallet
 
 Now go the other way:
 
 ```js
-const handle = await client.readContract({
-  ...identityNames,
-  functionName: 'primaryOf',
-  args: [wallet, github],
-});
-console.log(handle);
+if (wallet) {
+  const handle = await primaryName(names, wallet, github);
+  console.log(handle);
+}
 ```
 
-`primaryOf` returns the handle the wallet chose to show on that platform. It
-returns an empty string if the wallet has not chosen one, or if the handle now
+`primaryName` returns the handle the wallet chose to show on that platform.
+It returns `null` if the wallet has not chosen one, or if the handle now
 belongs to someone else.
 
 ## Run it
 
 ```sh
-node index.mjs
+RPC_URL=https://your-rpc-url node index.mjs
 ```
 
-You should see:
+If `octocat` has a binding, you will see a wallet address and a handle:
 
 ```
-0xF4F9cdD1A7A67c528475d995318A7DE42C95A103
-wondertan
+0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+octocat
 ```
+
+If nobody has proved `octocat`, you will see `null`. Try a handle you know
+has a binding.
 
 ## Without code
 
@@ -102,14 +96,15 @@ You can make the same call with [Foundry](https://getfoundry.sh)'s `cast`:
 ```sh
 cast call 0xe78b53a183dd51763df44beb2500ddab9bb0329e \
   'resolveHandle(bytes32,string)(address)' \
-  $(cast keccak github) Wondertan \
-  --rpc-url https://ev-reth-eden-testnet.binarybuilders.services:8545
+  $(cast keccak github) octocat \
+  --rpc-url $RPC_URL
 ```
 
 ## Next steps
 
-- [Platforms and nodes](/docs/concepts/platforms-and-nodes/) explains the ids
-  behind these calls.
-- [Gate a contract](/docs/guides/gate-contract/) does the same lookup from
+- [Resolve a handle](/docs/guides/resolve-handle/) covers what else you can
+  learn about a handle, such as when it was last proved.
+- [Look up a wallet](/docs/guides/lookup-wallet/) lists every account a
+  wallet owns.
+- [Gate a contract](/docs/guides/gate-contract/) does the same checks from
   Solidity.
-- [Addresses](/docs/reference/addresses/) lists every network libID is on.
