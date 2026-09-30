@@ -6,8 +6,8 @@ import {
   RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../../../barretenberg/parameters.js'
-import { fixedBytes, recordValidator, uint } from '../../../primitives.js'
-import { type Identity, identityValidator, proofBytes } from '../../types.js'
+import { isFixedBytes, isUint, recordValidator } from '../../../primitives.js'
+import { type Identity, identityValidator, isProofBytes } from '../../types.js'
 import { validateGooglePublicInputs } from './publicInputs.js'
 
 export interface GoogleProofV1 {
@@ -22,14 +22,14 @@ export interface GoogleProofV1 {
 export const proofExpiresAt = (proof: GoogleProofV1): number => proof.tokenExpiresAt
 
 /** Circuit-bound claims are printable ASCII without quotes, so length is the byte length. */
-export const circuitText = (value: unknown, max: number): value is string =>
+export const isCircuitText = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length <= max && /^[\x20-\x21\x23-\x7e]+$/.test(value)
 
 /** Client identifier constraints for this platform: exactly what a signed `aud` can hold. */
-export const isClientId = (value: unknown): value is string => circuitText(value, MAX_AUD_BYTES)
+export const isClientId = (value: unknown): value is string => isCircuitText(value, MAX_AUD_BYTES)
 
 const proofShape = recordValidator<GoogleProofV1>('Invalid Google proof', {
-  identityProof: proofBytes,
+  identityProof: isProofBytes,
   publicInputs: (value) =>
     Array.isArray(value) &&
     value.length === PUBLIC_INPUT_COUNT &&
@@ -39,8 +39,8 @@ const proofShape = recordValidator<GoogleProofV1>('Invalid Google proof', {
         field.length === FIELD_HEX_CHARS &&
         FIELD_HEX_PATTERN.test(field),
     ),
-  tokenExpiresAt: (value) => uint(value, Number.MAX_SAFE_INTEGER),
-  signingKeyModulus: (value) => fixedBytes(value, RSA_MODULUS_BYTES),
+  tokenExpiresAt: (value) => isUint(value, Number.MAX_SAFE_INTEGER),
+  signingKeyModulus: (value) => isFixedBytes(value, RSA_MODULUS_BYTES),
 })
 
 /** Check the payload and bind its public inputs to the client's validated identity and digest. */
@@ -59,7 +59,7 @@ export const validateIdentity: (value: unknown) => Identity<'google'> = identity
   'google',
   {
     oauthClientId: isClientId,
-    userId: (s) => circuitText(s, MAX_SUB_BYTES),
-    userName: (s) => circuitText(s, MAX_EMAIL_BYTES),
+    userId: (s) => isCircuitText(s, MAX_SUB_BYTES),
+    userName: (s) => isCircuitText(s, MAX_EMAIL_BYTES),
   },
 )

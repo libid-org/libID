@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import type { PlatformVersions } from '../src/ccdp/client/versions.ts'
-import { uint } from '../src/primitives.ts'
+import { isUint } from '../src/primitives.ts'
 import { importSource } from './source.ts'
 import { packageDir } from './sources.ts'
 
@@ -57,7 +57,7 @@ export async function catalogVersions(): Promise<PlatformVersions> {
     const list = Object.keys(definition.versions)
       .map(Number)
       .sort((a, b) => a - b)
-    if (!list.length || list.some((v) => !uint(v, MAX_CEREMONY_VERSION)))
+    if (!list.length || list.some((v) => !isUint(v, MAX_CEREMONY_VERSION)))
       throw new Error(`Invalid platform ceremony versions: ${platform}`)
     versions[platform] = Object.freeze(list)
   }

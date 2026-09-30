@@ -94,7 +94,7 @@ for (const stall of ['send', 'reveal'] as const)
       if (!address || typeof address === 'string') throw new Error('Missing relay port')
       const runtime = await page.evaluateHandle(async (notaryAddress) => {
         const abort = new AbortController()
-        const notary = new window.Notarization(notaryAddress, abort.signal)
+        const notary = new window.NotaryRuntime(notaryAddress, abort.signal)
         const request = {
           url: 'https://api.x.com/2/users/me',
           method: 'GET' as const,

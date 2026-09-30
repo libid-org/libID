@@ -8,7 +8,7 @@ import { AUTHORIZATION_DIGEST_BYTES } from '../../authorization.js'
 import type { ParsedGoogleIdToken } from './token.js'
 
 /** Adapt a parsed platform token and the JWK selected by its `kid` to the circuit ABI and delivery. */
-export function buildGoogleWitness(token: ParsedGoogleIdToken, jwk: unknown) {
+export function prepareGoogleInputs(token: ParsedGoogleIdToken, jwk: unknown) {
   if (
     !isRecord(jwk) ||
     jwk.kty !== 'RSA' ||

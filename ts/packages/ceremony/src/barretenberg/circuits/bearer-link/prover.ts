@@ -2,7 +2,7 @@ import { CeremonyError, ceremonyError } from '../../../errors.js'
 import { operation } from '../../../events.js'
 import { responseJson } from '../../../notary/http.js'
 import type { Reveals } from '../../../notary/protocol.js'
-import { Notarization, type NotarizationSession } from '../../../notary/session.js'
+import { NotaryRuntime, type NotarySession } from '../../../notary/session.js'
 import type { ProverContext } from '../../../platforms/context.js'
 import type { Identity } from '../../../platforms/types.js'
 import { isRecord } from '../../../primitives.js'
@@ -47,7 +47,7 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
   const branch = <T>(p: Promise<T>, event: string) => observe(failsAs(p, event))
   // Keep openings available immediately; observe final attestation failure before its join.
   async function reveal(
-    session: NotarizationSession,
+    session: NotarySession,
     ranges: Reveals,
     event: 'token-attestation' | 'identity-attestation',
   ) {
@@ -55,7 +55,7 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     return { ...result, attestation: branch(result.attestation, event) }
   }
   try {
-    const notary = new Notarization(notaryAddress, signal, emit)
+    const notary = new NotaryRuntime(notaryAddress, signal, emit)
     const tokenPrepared = branch(
       notary.prepare(tokenRequest.url, 'token-attestation'),
       'token-fetch',

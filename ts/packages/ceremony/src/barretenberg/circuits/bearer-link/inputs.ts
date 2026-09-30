@@ -9,10 +9,10 @@ export const isBearer = (value: string): boolean =>
   value.length <= MAX_BEARER_BYTES && /^[\x21-\x7e]+$/.test(value)
 
 /**
- * The exact libid-circuits v0.4.0 `bearer_link` witness. Openings come from plaintextOpening,
+ * The exact libid-circuits v0.4.0 `bearer_link` circuit inputs. Openings come from plaintextOpening,
  * which fixes their blinder width and bearer length.
  */
-export function buildBearerLinkWitness(
+export function buildBearerLinkInputs(
   bearer: string,
   token: CorrelatedCommitment,
   identity: CorrelatedCommitment,
@@ -34,7 +34,7 @@ export function buildBearerLinkWitness(
 /** Match the two commitments in the circuit's exact public-input order. */
 export function validateBearerLinkPublicInputs(
   value: readonly string[],
-  inputs: ReturnType<typeof buildBearerLinkWitness>,
+  inputs: ReturnType<typeof buildBearerLinkInputs>,
 ): boolean {
   const expected = [...inputs.token_commitment, ...inputs.identity_commitment].map(fieldHex)
   return value.length === PUBLIC_INPUT_COUNT && value.every((v, i) => v === expected[i])

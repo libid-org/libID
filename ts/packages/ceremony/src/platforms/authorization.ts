@@ -102,7 +102,7 @@ export function deriveCodeChallenge(codeVerifier: string): string {
 }
 
 /**
- * An S256 authorization-code request: the profile's leading fields, then `client_id`,
+ * An S256 authorization-code request: the platform's leading fields, then `client_id`,
  * `redirect_uri`, `scope`, `state`, `code_challenge` and `code_challenge_method` in
  * exactly this order, serialized by the WHATWG form-urlencoded serializer.
  */

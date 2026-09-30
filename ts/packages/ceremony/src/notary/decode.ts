@@ -1,4 +1,4 @@
-import { fixedBytes, hasExactKeys } from '../primitives.js'
+import { hasExactKeys, isFixedBytes } from '../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES } from './limits.js'
 import {
   AUTHORITY_ID_BYTES,
@@ -164,6 +164,6 @@ export function isAttestation(v: unknown): v is NotaryAttestation {
     v.attestedData instanceof Uint8Array &&
     v.attestedData.length > 0 &&
     v.attestedData.length <= MAX_ATTESTED_DATA_BYTES &&
-    fixedBytes(v.signature, NOTARY_SIGNATURE_BYTES)
+    isFixedBytes(v.signature, NOTARY_SIGNATURE_BYTES)
   )
 }

@@ -2,7 +2,7 @@ import { fallback } from 'virtual:ceremony-popup-fallback'
 import { PopupConnection, PopupWindow } from '@libid/popup'
 import { ceremonyError, endError, reportFailure } from '../../errors.js'
 import { Events, failureEvent, now } from '../../events.js'
-import { origin } from '../../primitives.js'
+import { isOrigin } from '../../primitives.js'
 import { MAX_OAUTH_RETURN_CHARS } from '../limits.js'
 import { type OAuthReturn, proverFragment, readOAuthState, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
@@ -55,7 +55,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
   const [allowedApplicationOrigins, ccdpOrigin] = inputs
   if (
     !Array.isArray(allowedApplicationOrigins) ||
-    !origin(ccdpOrigin) ||
+    !isOrigin(ccdpOrigin) ||
     !allowedApplicationOrigins.includes(ccdpOrigin)
   )
     throw new TypeError(messages.invalidCallbackInputs)
@@ -91,7 +91,7 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     .then(async () => {
       if (state.phase !== 'connecting') return
       const applicationOrigin = connection.peerOrigin
-      if (!origin(applicationOrigin)) throw new TypeError(messages.missingApplicationOrigin)
+      if (!isOrigin(applicationOrigin)) throw new TypeError(messages.missingApplicationOrigin)
       const event = { event: 'authorization', phase: 'finished', timestamp: now() } as const
       try {
         connection.send({ type: 'event', ...event })

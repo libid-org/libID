@@ -84,14 +84,14 @@ export function recordValidator<T>(
   }
 }
 
-export const fixedBytes = (v: unknown, n: number): v is Uint8Array =>
+export const isFixedBytes = (v: unknown, n: number): v is Uint8Array =>
   v instanceof Uint8Array && v.length === n
 
-export function uint(value: unknown, max: number): value is number {
+export function isUint(value: unknown, max: number): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max
 }
 
-export function text(value: unknown, max: number): value is string {
+export function isText(value: unknown, max: number): value is string {
   return (
     typeof value === 'string' &&
     value.length > 0 &&
@@ -100,7 +100,7 @@ export function text(value: unknown, max: number): value is string {
   )
 }
 
-export function webUrl(value: unknown): value is string {
+export function isWebUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false
   try {
     const u = new URL(value)
@@ -117,6 +117,6 @@ export function webUrl(value: unknown): value is string {
   }
 }
 
-export function origin(value: unknown): value is string {
-  return typeof value === 'string' && webUrl(`${value}/`) && new URL(value).origin === value
+export function isOrigin(value: unknown): value is string {
+  return typeof value === 'string' && isWebUrl(`${value}/`) && new URL(value).origin === value
 }

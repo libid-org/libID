@@ -82,7 +82,7 @@ function findOffset(payload: Uint8Array, pattern: string): number {
   return offset
 }
 
-/** Build the exact libid-circuits v0.4.0 `oidc_google` witness. */
+/** Build the exact libid-circuits v0.4.0 `oidc_google` circuit inputs. */
 export function buildGoogleInputs(
   token: GoogleCircuitToken,
   modulus: Uint8Array,
@@ -137,5 +137,5 @@ export function buildGoogleInputs(
   }
 }
 
-/** The oidc_google witness, keyed in the circuit's ABI order. */
+/** The oidc_google circuit inputs, keyed in the circuit's ABI order. */
 export type GoogleCircuitInputs = ReturnType<typeof buildGoogleInputs>

@@ -184,8 +184,8 @@ containing separate `identity` and `oauthProof` values:
 
 Client derives `expiresAt` after structural validation: Google's signed JWT
 `tokenExpiresAt`, or the X/GitHub token attestation's `createdAt` plus that
-platform's released lifetime. The [GitHub](../src/platforms/github/1/profile.ts)
-and [X](../src/platforms/x/1/profile.ts) profiles import their separate lifetime
+platform's released lifetime. The [GitHub](../src/platforms/github/1/provider.ts)
+and [X](../src/platforms/x/1/provider.ts) providers import their separate lifetime
 constants from the pinned `@libid/contracts/ceremony` package. The identity
 attestation does not extend the window. Consumers may discard retained proofs
 when block time is greater than or equal to `expiresAt`; ledger verification

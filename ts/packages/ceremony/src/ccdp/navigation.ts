@@ -1,5 +1,5 @@
 import { MAX_CEREMONY_VERSION } from '../platforms/authorization.js'
-import { isSlug, origin, uint } from '../primitives.js'
+import { isOrigin, isSlug, isUint } from '../primitives.js'
 import { CCDP_VERSION, UUID } from './index.js'
 import { MAX_NAVIGATION_FRAGMENT_CHARS } from './limits.js'
 
@@ -48,7 +48,7 @@ export function readPrefetch(fragment: string) {
     !UUID.test(ceremonyId) ||
     !isSlug(platformId) ||
     !/^(0|[1-9][0-9]*)$/.test(version) ||
-    !uint(Number(version), MAX_CEREMONY_VERSION)
+    !isUint(Number(version), MAX_CEREMONY_VERSION)
   )
     throw new TypeError('Invalid Prefetch input')
   return { ceremonyId, platformId, platformCeremonyVersion: Number(version) }
@@ -76,7 +76,7 @@ export function readProver(fragment: string) {
   } = fields(fragment, ['ceremonyId', 'applicationOrigin', 'oauthQuery', 'oauthFragment'])
   if (
     !UUID.test(ceremonyId) ||
-    !origin(applicationOrigin) ||
+    !isOrigin(applicationOrigin) ||
     (query !== '' && !query.startsWith('?')) ||
     (hash !== '' && !hash.startsWith('#'))
   )

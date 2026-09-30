@@ -17,7 +17,7 @@ failures throw with operation context. Platform code has no popup connection.
 When proving starts, it transfers its private capture to the selected prover.
 
 Validate the return, state and required inputs before credential use. Each
-`url.ts` declares its return profile (transport, credential field, rejected
+`url.ts` declares its return rules (transport, credential field, rejected
 fields, issuer); [one parser](../src/platforms/oauthReturn.ts) decodes every value
 once, bounds decoded values, and ignores provider metadata it does not need while
 rejecting malformed encoding, duplicate fields, extra credentials, mixed outcomes
@@ -35,8 +35,8 @@ The notary address selects the service; platform/version metadata selects assets
 
 [google/1/token.ts](../src/platforms/google/1/token.ts) parses the ID token once,
 accepts it only for the frozen client before its signed expiry, and selects the
-JWK matching its `kid`. [witness.ts](../src/platforms/google/1/witness.ts)
-adapts that token/key to the released `oidc_google` circuit encoder and assembles
+JWK matching its `kid`. [inputs.ts](../src/platforms/google/1/inputs.ts)
+adapts that token/key to the released `oidc_google` circuit inputs and assembles
 the identity and proof fields. JWT/JWK input preparation overlaps [proof-worker startup](proving.md#worker-lifecycle).
 Google creates no TLSNotary session.
 
@@ -56,7 +56,7 @@ verify the proof or establish trust in the signing key; the ledger remains autho
 ## X and GitHub
 
 [X](../src/platforms/x/1/prover.ts) and [GitHub](../src/platforms/github/1/prover.ts)
-validate their returns and supply transcript profiles to
+validate their returns and supply their transcripts to
 [the shared bearer-link prover](../src/barretenberg/circuits/bearer-link/prover.ts). It overlaps:
 
 1. Start the [bearer-link circuit](../src/barretenberg/circuits/bearer-link/circuit.ts)
@@ -83,7 +83,7 @@ owns GitHub's request layout; deployed verifiers must accept it.
 
 X and GitHub share the `bearer_link` circuit and
 [transcript machinery](../src/barretenberg/circuits/bearer-link/transcript.ts).
-Each platform's `profile.ts` owns endpoints, request fields, identity headers and
+Each platform's `provider.ts` owns endpoints, request fields, identity headers and
 user-name grammar; `transcript.ts` supplies its transcript selectors.
 [bearer-link/types.ts](../src/barretenberg/circuits/bearer-link/types.ts) supplies the shared
 client ID, identity and proof validators under each platform's names. The shared
@@ -95,10 +95,11 @@ includes proof and both attestations; the shared identity is a convenience view,
 
 For another version-one platform:
 
-1. Add `platforms/<id>/1/` with `url.ts` (including PKCE choice and return
-   profile), `types.ts` (client ID, identity and proof validation, plus a
-   `proofExpiresAt` adapter), event definitions
-   (core operations and separate UI weights), `<id>.assets.ts` and `prover.ts`;
+1. Add `platforms/<id>/1/` with `provider.ts` (endpoints and identity
+   constraints), `url.ts` (including PKCE choice and return rules), `types.ts`
+   (client ID, identity and proof validation, plus a `proofExpiresAt` adapter),
+   `events.ts` (core events and separate UI weights), `<id>.assets.ts`
+   and `prover.ts`;
    X/GitHub share `barretenberg/circuits/bearer-link/` instead. Reuse shared parsers,
    notary sessions and circuit adapters only where their contracts fit. Keep
    platform-specific selectors and fixtures beside their tests.
@@ -125,5 +126,5 @@ prover and asset registrations. Type checking enforces table coverage; the build
 checks that the emitted prover chunks and asset profiles match the published
 catalog. Client and Prefetch remain free of execution imports.
 
-`acceptReturn` checks each request against its own version's return profile, so a
+`acceptReturn` checks each request against its own version's return rules, so a
 version with different OAuth return rules declares them in its own `url.ts`.

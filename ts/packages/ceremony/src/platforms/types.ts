@@ -11,7 +11,7 @@ export interface Identity<P extends PlatformId = PlatformId> {
   userName: string
 }
 
-export const proofBytes = (v: unknown): v is Uint8Array =>
+export const isProofBytes = (v: unknown): v is Uint8Array =>
   v instanceof Uint8Array && v.length > 0 && v.length <= MAX_PROOF_BYTES
 
 const stringWhere = (valid: (value: string) => boolean) => (value: unknown) =>

@@ -1,5 +1,5 @@
 import { MAX_CEREMONY_VERSION } from '../../platforms/authorization.js'
-import { isRecord, uint } from '../../primitives.js'
+import { isRecord, isUint } from '../../primitives.js'
 import { fetchPublicJson } from '../../response.js'
 
 /** Platform ceremony versions a Distribution bundles: platform id to its ascending version list. */
@@ -22,7 +22,7 @@ export function validatePlatformVersions(v: unknown): PlatformVersions {
       !Array.isArray(list) ||
       !list.length ||
       list.some(
-        (version, i) => !uint(version, MAX_CEREMONY_VERSION) || (i > 0 && list[i - 1] >= version),
+        (version, i) => !isUint(version, MAX_CEREMONY_VERSION) || (i > 0 && list[i - 1] >= version),
       )
     )
       throw new TypeError('Invalid platform versions')

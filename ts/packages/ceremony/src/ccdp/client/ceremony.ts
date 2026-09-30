@@ -36,7 +36,7 @@ import {
   type SupportedCeremonyVersion,
   supportedPlatforms,
 } from '../../platforms/index.js'
-import { fixedBytes, hasExactKeys, origin } from '../../primitives.js'
+import { hasExactKeys, isFixedBytes, isOrigin } from '../../primitives.js'
 import {
   CeremonyFailed,
   EventMessage,
@@ -146,7 +146,7 @@ export function ccdpClientFromConfig(
         throw new TypeError('Invalid ceremony selection')
       const version = selectVersion(enabledVersions(platformId), ceremonyVersion)
       const ledger = snapshotLedger(ledgerId)
-      if (!fixedBytes(operationDomain, OPERATION_DOMAIN_BYTES))
+      if (!isFixedBytes(operationDomain, OPERATION_DOMAIN_BYTES))
         throw new TypeError('Operation domain must be 32 bytes')
       if (
         !(transactionData instanceof Uint8Array) ||
@@ -155,7 +155,7 @@ export function ccdpClientFromConfig(
         throw new TypeError('Invalid transaction bytes')
       if (liveIds.has(id)) throw new TypeError('Ceremony ID is already live')
       const input = { ...ledger, platformId, version, operationDomain, transactionData }
-      const run = new Run(id, conn, input, config, () => {
+      const run = new ClientCeremony(id, conn, input, config, () => {
         liveIds.delete(id)
       })
       liveIds.add(id)
@@ -177,10 +177,10 @@ function snapshotLedger(ledgerId: LedgerId): { chainId: Uint8Array; notaryAddres
   if (!ledgerId || typeof ledgerId.hash !== 'function')
     throw new TypeError('Invalid ledger identity')
   const chainId = ledgerId.hash()
-  if (!fixedBytes(chainId, CHAIN_ID_BYTES)) throw new TypeError('Ledger hash must be 32 bytes')
+  if (!isFixedBytes(chainId, CHAIN_ID_BYTES)) throw new TypeError('Ledger hash must be 32 bytes')
   if (typeof ledgerId.notaryAddress !== 'function') throw new TypeError('Missing notary address')
   const notaryAddress = ledgerId.notaryAddress()
-  if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
+  if (!isOrigin(notaryAddress)) throw new TypeError('Invalid notary origin')
   return { chainId, notaryAddress }
 }
 
@@ -203,7 +203,7 @@ function receiver<M extends Message>(handler: ((message: M) => void) | undefined
   }
 }
 
-class Run<P extends PlatformId> implements Ceremony<P> {
+class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   readonly launchUrl: string
   private state: 'new' | 'prefetch' | 'oauth' | 'proving' | 'done' = 'new'
   private readonly events = new Events()
@@ -217,7 +217,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     new Uint8Array(AUTHORIZATION_NONCE_BYTES),
   )
   private readonly authorizationDigest: Uint8Array
-  private readonly start: ProveIdentity
+  private readonly request: ProveIdentity
   private authorizationUrl: string
   private readonly prefetchUrl: string
   private readonly fragment: URLSearchParams
@@ -256,7 +256,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       authorizationDigest: digest,
       codeChallenge: codeVerifier === null ? null : deriveCodeChallenge(codeVerifier),
     })
-    this.start = {
+    this.request = {
       type: 'prove-identity',
       platformId: this.platform,
       platformCeremonyVersion: this.version,
@@ -291,7 +291,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     return this.state === 'done' ? () => {} : this.events.onStage(listener)
   }
 
-  private publish(event: OperationEvent): void {
+  private emit(event: OperationEvent): void {
     this.events.emit({ ...event, status: 'active' })
   }
 
@@ -300,7 +300,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     else if (event.event === 'prover') this.proverReady(event)
     else {
       if (isCoreEvent(event.event)) this.observe(event.event, event.phase)
-      this.publish(event)
+      this.emit(event)
     }
   }
 
@@ -311,9 +311,9 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.state = 'oauth'
     const url = this.authorizationUrl
     this.authorizationUrl = ''
-    this.publish(event)
+    this.emit(event)
     if (this.state !== 'oauth') return
-    this.publish({ event: 'authorization', phase: 'started', timestamp: now() })
+    this.emit({ event: 'authorization', phase: 'started', timestamp: now() })
     if (this.state === 'oauth')
       void this.connection
         .navigateAway(url)
@@ -325,8 +325,8 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     if (event.phase !== 'started') throw sequenceError('Invalid prover readiness')
     this.state = 'proving'
     // Readiness processing precedes observers; no subscription is needed to start proving.
-    this.connection.send({ ...this.start })
-    this.publish(event)
+    this.connection.send({ ...this.request })
+    this.emit(event)
   }
 
   /** Core observations must fit the run's state and platform, once each, started before finished. */
@@ -402,7 +402,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
           this.platform,
           this.version,
           m,
-          this.start.clientId,
+          this.request.clientId,
           this.authorizationNonce,
           this.authorizationDigest,
         )
@@ -419,7 +419,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       this.listen(binding, CeremonyFailed, (message) =>
         this.fail(new CeremonyError(message.event, message.message)),
       )
-      this.publish({ event: 'prefetch-dispatch', phase: 'started', timestamp: now() })
+      this.emit({ event: 'prefetch-dispatch', phase: 'started', timestamp: now() })
       if (this.state === 'prefetch')
         void this.connection
           .navigate(this.prefetchUrl, this.fragment)
@@ -456,7 +456,7 @@ class Run<P extends PlatformId> implements Ceremony<P> {
     this.releaseId()
     for (const off of this.off.splice(0)) off()
     this.observations.clear()
-    this.start.codeVerifier = null
+    this.request.codeVerifier = null
     this.authorizationUrl = ''
     this.authorizationNonce.fill(0)
     this.authorizationDigest.fill(0)

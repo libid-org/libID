@@ -110,7 +110,7 @@ explains meaningful input, lifetime and failure constraints; internal comments
 explain invariants rather than restating types. Run `pnpm -C ts lint` and
 `pnpm -C ts fmt:check` for mechanical checks.
 
-## Constants and profiles
+## Constants and providers
 
 Constants live with their owner. [CCDP limits](../src/ccdp/limits.ts) are shared
 by message validation and document startup. [Authorization](../src/platforms/authorization.ts)
@@ -119,7 +119,7 @@ bound acceptance; [its protocol](../src/notary/protocol.ts) owns encoding widths
 Local deadlines, UI timings and instrumentation caps stay beside their consumers.
 Names distinguish bytes, characters, milliseconds, seconds and CRS points.
 
-Each platform version’s `profile.ts` owns its endpoints and identity constraints.
+Each platform version’s `provider.ts` owns its endpoints and identity constraints.
 X/GitHub import request layouts and launch lifetimes from the pinned, data-only
 `@libid/contracts/ceremony` entry point; no EVM client or on-chain lookup is used.
 These lifetime constants describe the released policy, not live governance state.

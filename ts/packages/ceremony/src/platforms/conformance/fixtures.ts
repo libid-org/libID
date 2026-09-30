@@ -13,7 +13,7 @@ import * as githubTranscript from '../github/1/transcript.js'
 import * as githubTypes from '../github/1/types.js'
 import * as googleTypes from '../google/1/types.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
-import type { ReturnProfile } from '../oauthReturn.js'
+import type { ReturnRules } from '../oauthReturn.js'
 import type { ProverModule } from '../provers.js'
 import type { Identity } from '../types.js'
 import * as xTranscript from '../x/1/transcript.js'
@@ -41,8 +41,8 @@ type Claim<P extends PlatformId> = { identity: Identity<P>; proof: Proof<P> }
 
 interface Entry<P extends PlatformId> {
   config: ClientConfig<P>
-  /** The return rules the platform must enforce, declared here rather than read from its profile. */
-  oauthReturn: ReturnProfile
+  /** The return rules the platform must enforce, declared here rather than read from its `url.ts`. */
+  oauthReturn: ReturnRules
   /** The identity the evidence names; `oauthClientId` is the configured client. */
   identity: Identity<P>
   /** Every identity field at its maximum accepted length. */
@@ -94,7 +94,7 @@ export interface BearerLinkFixture<P extends PlatformId> extends Entry<P> {
     /** The same identity with its members in another order, and the exact members it discloses. */
     reorderedIdentityBody: string
     reorderedIdentityMembers: readonly string[]
-    /** The same identity values outside the profile's response shape. */
+    /** The same identity values outside the platform's response shape. */
     misshapenIdentityBody: string
   }
 }
@@ -304,7 +304,7 @@ const bearerLinkRejectedProof = {
   identityAttestation: rejectedAttestations,
 }
 
-/** A query code return; `suffix` carries any issuer field the profile requires. */
+/** A query code return; `suffix` carries any issuer field the rules require. */
 const codeReturns =
   (suffix = '', denialDetail = '', error = 'server_error') =>
   (state: string): ReturnSamples => ({

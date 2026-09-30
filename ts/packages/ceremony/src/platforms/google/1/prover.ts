@@ -7,9 +7,9 @@ import { ProofEngine } from '../../../barretenberg/engine.js'
 import { operation } from '../../../events.js'
 import type { ProverContext } from '../../context.js'
 import { acceptReturn } from '../../oauthReturn.js'
+import { prepareGoogleInputs } from './inputs.js'
 import { validateGooglePublicInputs } from './publicInputs.js'
 import { acceptGoogleIdToken, fetchSigningKey } from './token.js'
-import { buildGoogleWitness } from './witness.js'
 
 export async function prove(context: ProverContext) {
   const { signal, emit } = context
@@ -26,7 +26,7 @@ export async function prove(context: ProverContext) {
     const { inputs, authorizationDigest, identity, proofFields } = await operation(
       emit,
       'circuit-inputs',
-      () => buildGoogleWitness(token, key),
+      () => prepareGoogleInputs(token, key),
     )
     const raw = await engine.prove(inputs, signal),
       proof = { identityProof: raw.proof, publicInputs: raw.publicInputs, ...proofFields }

@@ -4,9 +4,9 @@ import {
   b64urlEncode,
   bytesEqual,
   hasExactKeys,
+  isOrigin,
   isRecord,
-  origin,
-  webUrl,
+  isWebUrl,
 } from './primitives.js'
 import { utf8 } from './testing/index.js'
 
@@ -94,11 +94,11 @@ describe('exact-record helpers', () => {
 
 it('keeps admission patterns out of service URLs and exact peer origins', () => {
   for (const value of ['*', '*.lib.id', 'https://*.lib.id', 'https://*']) {
-    expect(origin(value), value).toBe(false)
-    expect(webUrl(`${value}/`), value).toBe(false)
+    expect(isOrigin(value), value).toBe(false)
+    expect(isWebUrl(`${value}/`), value).toBe(false)
   }
-  expect(origin('https://app.lib.id')).toBe(true)
-  expect(webUrl('https://app.lib.id/path')).toBe(true)
+  expect(isOrigin('https://app.lib.id')).toBe(true)
+  expect(isWebUrl('https://app.lib.id/path')).toBe(true)
   for (const value of [undefined, null, 1, new URL('https://app.lib.id/path')])
-    expect(webUrl(value), String(value)).toBe(false)
+    expect(isWebUrl(value), String(value)).toBe(false)
 })

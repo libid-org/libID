@@ -1,6 +1,6 @@
 import { bearerTranscript } from '../../../barretenberg/circuits/bearer-link/transcript.js'
 import { isRecord } from '../../../primitives.js'
-import { isUserName, profile } from './profile.js'
+import { isUserName, provider } from './provider.js'
 
 export const {
   identityUrl,
@@ -10,7 +10,7 @@ export const {
   selectIdentity,
   identityResponse,
 } = bearerTranscript({
-  tokenUrl: profile.tokenUrl,
+  tokenUrl: provider.tokenUrl,
   tokenFields(input) {
     const values: Record<string, string> = {
       client_id: input.clientId,
@@ -19,13 +19,19 @@ export const {
       code_verifier: input.codeVerifier,
       grant_type: 'authorization_code',
     }
-    return profile.tokenFields.map((field) => [field, values[field]])
+    return provider.tokenFields.map((field) => [field, values[field]])
   },
-  identityUrl: profile.identityUrl,
-  identityHeaders: profile.identityHeaders,
-  idField: profile.idField,
-  quotedId: profile.quotedId,
-  userName: { field: profile.userNameField, maxBytes: profile.maxUserNameBytes, valid: isUserName },
+  identityUrl: provider.identityUrl,
+  identityHeaders: provider.identityHeaders,
+  idField: provider.idField,
+  quotedId: provider.quotedId,
+  userName: {
+    field: provider.userNameField,
+    maxBytes: provider.maxUserNameBytes,
+    valid: isUserName,
+  },
   identityResponse: ({ data }, { userId, userName }) =>
-    isRecord(data) && data[profile.idField] === userId && data[profile.userNameField] === userName,
+    isRecord(data) &&
+    data[provider.idField] === userId &&
+    data[provider.userNameField] === userName,
 })

@@ -5,8 +5,8 @@ import {
   type NotaryAttestation,
 } from '../../../notary/decode.js'
 import { isFormClientId } from '../../../platforms/authorization.js'
-import { type Identity, identityValidator, proofBytes } from '../../../platforms/types.js'
-import { recordValidator, text } from '../../../primitives.js'
+import { type Identity, identityValidator, isProofBytes } from '../../../platforms/types.js'
+import { isText, recordValidator } from '../../../primitives.js'
 
 /** X/GitHub identifiers are nonzero decimal u64 values. */
 const MAX_USER_ID = 0xffffffffffffffffn
@@ -35,7 +35,7 @@ export function bearerLinkTypes<P extends 'x' | 'github'>(
   proofLifetimeSeconds: number,
 ): BearerLinkTypes<P> {
   const isClientId = (value: unknown): value is string =>
-    text(value, MAX_CLIENT_ID_BYTES) && isFormClientId(value)
+    isText(value, MAX_CLIENT_ID_BYTES) && isFormClientId(value)
   return {
     isClientId,
     // Like PlatformVerifierBase._requireFresh, only the token attestation sets evidence time.
@@ -52,7 +52,7 @@ export function bearerLinkTypes<P extends 'x' | 'github'>(
       userName: isUserName,
     }),
     validateProof: recordValidator<BearerLinkProofV1>(`Invalid ${platform} proof`, {
-      bearerLinkProof: proofBytes,
+      bearerLinkProof: isProofBytes,
       tokenAttestation: isAttestation,
       identityAttestation: isAttestation,
     }),

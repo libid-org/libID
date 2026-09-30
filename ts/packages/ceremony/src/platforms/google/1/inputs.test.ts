@@ -6,10 +6,10 @@ import {
   googleV1 as fixture,
   jwtWith,
 } from '../../conformance/fixtures.js'
+import { prepareGoogleInputs } from './inputs.js'
 import { buildGooglePublicInputs } from './publicInputs.js'
 import { parseGoogleIdToken } from './token.js'
 import { validateProof } from './types.js'
-import { buildGoogleWitness } from './witness.js'
 
 const digest = fixture.authorizationDigest
 
@@ -51,7 +51,7 @@ const _tokenWith = (change: Parameters<typeof jwtWith>[1]) => jwtWith(fixture.id
 
 const _tokenWithPayload = (payload: string) => jwtWith(fixture.idToken, { payload })
 
-describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier fields', () => {
+describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifier fields', () => {
   it('builds the released ABI exactly from a valid fixed RS256 token and rejects each changed public input [TEST-COMMON-20]', () => {
     const [header, payload, signature] = fixture.idToken.split('.')
     expect(
@@ -63,7 +63,7 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier field
       ),
     ).toBe(true)
 
-    const { inputs, identity, proofFields } = buildGoogleWitness(
+    const { inputs, identity, proofFields } = prepareGoogleInputs(
       parseGoogleIdToken(fixture.idToken),
       fixture.jwk,
     )

@@ -4,7 +4,7 @@ const token = X.token!,
   identity = X.identity!
 
 /** Released v1 request profile plus browser-owned OAuth and presentation constraints. */
-export const profile = {
+export const provider = {
   tokenUrl: `https://${token.session.authority}${token.session.path}`,
   tokenFields: token.tokenFields,
   identityUrl: `https://${identity.session.authority}${identity.session.path}`,
@@ -20,4 +20,4 @@ export const profile = {
 } as const
 
 export const isUserName = (value: string): boolean =>
-  value.length <= profile.maxUserNameBytes && /^[A-Za-z0-9_]+$/.test(value)
+  value.length <= provider.maxUserNameBytes && /^[A-Za-z0-9_]+$/.test(value)

@@ -1,6 +1,6 @@
 import { bearerTranscript } from '../../../barretenberg/circuits/bearer-link/transcript.js'
 import { isClientCredential } from '../../../ccdp/index.js'
-import { isUserName, profile } from './profile.js'
+import { isUserName, provider } from './provider.js'
 
 export const {
   identityUrl,
@@ -10,7 +10,7 @@ export const {
   selectIdentity,
   identityResponse,
 } = bearerTranscript({
-  tokenUrl: profile.tokenUrl,
+  tokenUrl: provider.tokenUrl,
   tokenFields(input) {
     if (!isClientCredential(input.clientCredential)) throw new Error('Invalid token request')
     const values: Record<string, string> = {
@@ -20,15 +20,19 @@ export const {
       code_verifier: input.codeVerifier,
       client_secret: input.clientCredential,
     }
-    return profile.tokenFields.map((field) => [field, values[field]])
+    return provider.tokenFields.map((field) => [field, values[field]])
   },
-  identityUrl: profile.identityUrl,
-  identityHeaders: profile.identityHeaders,
-  idField: profile.idField,
-  quotedId: profile.quotedId,
-  userName: { field: profile.userNameField, maxBytes: profile.maxUserNameBytes, valid: isUserName },
+  identityUrl: provider.identityUrl,
+  identityHeaders: provider.identityHeaders,
+  idField: provider.idField,
+  quotedId: provider.quotedId,
+  userName: {
+    field: provider.userNameField,
+    maxBytes: provider.maxUserNameBytes,
+    valid: isUserName,
+  },
   // The exact decimal ID exceeds JSON number precision; the selector owns its bytes.
   // JSON checks the root shape; the depth-agnostic byte selector preserves the exact ID.
   identityResponse: (body, { userName }) =>
-    typeof body[profile.idField] === 'number' && body[profile.userNameField] === userName,
+    typeof body[provider.idField] === 'number' && body[provider.userNameField] === userName,
 })

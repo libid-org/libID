@@ -1,4 +1,4 @@
-import * as bearerEvents from '../barretenberg/circuits/bearer-link/events.js'
+import * as bearerLinkEvents from '../barretenberg/circuits/bearer-link/events.js'
 import type { IdentityProof } from '../ccdp/index.js'
 import * as github from './github/1/types.js'
 import * as githubUrl from './github/1/url.js'
@@ -33,12 +33,12 @@ export const platforms = {
   x: {
     requiresClientCredential: false,
     isClientId: x.isClientId,
-    versions: { 1: { ...xUrl, ...bearerEvents, ...resultAdapter(x) } },
+    versions: { 1: { ...xUrl, ...bearerLinkEvents, ...resultAdapter(x) } },
   },
   github: {
     requiresClientCredential: true,
     isClientId: github.isClientId,
-    versions: { 1: { ...githubUrl, ...bearerEvents, ...resultAdapter(github) } },
+    versions: { 1: { ...githubUrl, ...bearerLinkEvents, ...resultAdapter(github) } },
   },
 } as const
 

@@ -4,14 +4,14 @@ import { type OperationEvent, validateEvent } from '../events.js'
 import { isPkceValue, MAX_CEREMONY_VERSION } from '../platforms/authorization.js'
 import {
   hasExactKeys,
+  isOrigin,
   isRecord,
   isSlug,
-  origin,
+  isText,
+  isUint,
+  isWebUrl,
   type Predicates,
   recordValidator,
-  text,
-  uint,
-  webUrl,
 } from '../primitives.js'
 import {
   MAX_CLIENT_CREDENTIAL_BYTES,
@@ -31,8 +31,8 @@ export const isClientCredential = (value: unknown): value is string =>
   value.length <= MAX_CLIENT_CREDENTIAL_BYTES &&
   /^[\x21-\x7e]+$/.test(value)
 
-export function redirect(value: unknown): value is string {
-  return text(value, MAX_REDIRECT_URI_BYTES) && webUrl(value) && !/[?#]/.test(value)
+export function isRedirectUri(value: unknown): value is string {
+  return isText(value, MAX_REDIRECT_URI_BYTES) && isWebUrl(value) && !/[?#]/.test(value)
 }
 
 /** Shared identity shape; each platform slice checks its own platform ID and byte limits. */
@@ -40,9 +40,9 @@ function isIdentityShape(value: unknown): value is IdentityProof['identity'] {
   return (
     hasExactKeys(value, ['platformId', 'oauthClientId', 'userId', 'userName']) &&
     isSlug(value.platformId) &&
-    text(value.oauthClientId, MAX_CLIENT_ID_BYTES) &&
-    text(value.userId, MAX_IDENTITY_TEXT_BYTES) &&
-    text(value.userName, MAX_IDENTITY_TEXT_BYTES)
+    isText(value.oauthClientId, MAX_CLIENT_ID_BYTES) &&
+    isText(value.userId, MAX_IDENTITY_TEXT_BYTES) &&
+    isText(value.userName, MAX_IDENTITY_TEXT_BYTES)
   )
 }
 
@@ -79,7 +79,7 @@ export interface CeremonyFailed {
 
 export const CeremonyFailed = codec<CeremonyFailed>('ceremony-failed', {
   event: isSlug,
-  message: (value) => text(value, MAX_MESSAGE_BYTES),
+  message: (value) => isText(value, MAX_MESSAGE_BYTES),
 })
 
 /** Application-owned inputs only; raw OAuth returns remain private to Callback and Prover. */
@@ -98,11 +98,11 @@ export const ProveIdentity = codec<ProveIdentity>(
   'prove-identity',
   {
     platformId: isSlug,
-    platformCeremonyVersion: (value) => uint(value, MAX_CEREMONY_VERSION),
-    clientId: (value) => text(value, MAX_CLIENT_ID_BYTES),
-    redirectUri: redirect,
+    platformCeremonyVersion: (value) => isUint(value, MAX_CEREMONY_VERSION),
+    clientId: (value) => isText(value, MAX_CLIENT_ID_BYTES),
+    redirectUri: isRedirectUri,
     codeVerifier: (value) => value === null || isPkceValue(value),
-    notaryAddress: (value) => value === null || origin(value),
+    notaryAddress: (value) => value === null || isOrigin(value),
     clientCredential: isClientCredential,
   },
   ['clientCredential'],

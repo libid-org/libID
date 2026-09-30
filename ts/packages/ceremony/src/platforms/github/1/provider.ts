@@ -4,7 +4,7 @@ const token = GITHUB.token!,
   identity = GITHUB.identity!
 
 /** Released v1 request profile plus browser-owned OAuth and presentation constraints. */
-export const profile = {
+export const provider = {
   tokenUrl: `https://${token.session.authority}${token.session.path}`,
   tokenFields: token.tokenFields,
   identityUrl: `https://${identity.session.authority}${identity.session.path}`,
@@ -25,6 +25,6 @@ export const profile = {
 } as const
 
 export const isUserName = (value: string): boolean =>
-  value.length <= profile.maxUserNameBytes &&
+  value.length <= provider.maxUserNameBytes &&
   /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(value) &&
   !value.includes('--')

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { supportedPlatforms } from '../platforms/index.js'
-import { origin } from '../primitives.js'
+import { isOrigin } from '../primitives.js'
 import { CEREMONY_ID } from '../testing/index.js'
 import {
   CeremonyFailed,
   EventMessage,
   IdentityProof,
+  isRedirectUri,
   ProveIdentity,
-  redirect,
   UserDenied,
 } from './index.js'
 import {
@@ -207,7 +207,7 @@ it('rejects the retired delivery message and embedded-identity shape [LIBID-OAUT
 it('admits explicit loopback HTTP without widening public URL validation [LIBID-OAUTH-021]', () => {
   for (const suffix of ['?', '#', '?x=1', '#x']) {
     const redirectUri = `https://bridge.test/callback${suffix}`
-    expect(redirect(redirectUri)).toBe(false)
+    expect(isRedirectUri(redirectUri)).toBe(false)
     expect(() =>
       ProveIdentity.decode({
         type: 'prove-identity',
@@ -221,8 +221,8 @@ it('admits explicit loopback HTTP without widening public URL validation [LIBID-
     ).toThrow()
   }
   for (const value of ['http://localhost:4682', 'http://127.0.0.1:4682']) {
-    expect(origin(value)).toBe(true)
-    expect(redirect(`${value}/auth/callback`)).toBe(true)
+    expect(isOrigin(value)).toBe(true)
+    expect(isRedirectUri(`${value}/auth/callback`)).toBe(true)
   }
   for (const value of [
     'http://bridge.test',
@@ -234,8 +234,8 @@ it('admits explicit loopback HTTP without widening public URL validation [LIBID-
     'http://LOCALHOST',
     'http://127.1',
   ]) {
-    expect(origin(value), value).toBe(false)
-    expect(redirect(`${value}/auth/callback`), value).toBe(false)
+    expect(isOrigin(value), value).toBe(false)
+    expect(isRedirectUri(`${value}/auth/callback`), value).toBe(false)
   }
 })
 

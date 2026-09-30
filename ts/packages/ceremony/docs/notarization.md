@@ -8,7 +8,7 @@ owns authoritative request/evidence rules.
 
 ## Session lifecycle
 
-[Notarization](../src/notary/session.ts) owns one WASM runtime/thread pool per
+[NotaryRuntime](../src/notary/session.ts) owns one WASM runtime/thread pool per
 ceremony. Each `prepare(url)` creates a separate TLS session and WebSocket,
 with its own channel, phase and pending replies.
 Preparation needs a fixed HTTPS target but no bearer, so independent sessions
@@ -89,9 +89,9 @@ Each caller keeps its own field policy: [transcript.ts](../src/notary/transcript
 selects JSON fields from raw bytes, and the X/GitHub
 [transcript machinery](../src/barretenberg/circuits/bearer-link/transcript.ts) owns the token and
 identity request checks. It consumes the fixed
-profiles declared under `platforms/<id>/1/transcript.ts`. JSON whitespace and header
+layouts declared under `platforms/<id>/1/transcript.ts`. JSON whitespace and header
 order do not establish identity: selectors work from actual wire offsets, and numeric GitHub IDs are
-preserved losslessly. Additional headers are admitted subject to the profile's
+preserved losslessly. Additional headers are admitted subject to the layout's
 required fields and forbidden-header rules; duplicate required headers and
 alternate Authorization framing reject.
 

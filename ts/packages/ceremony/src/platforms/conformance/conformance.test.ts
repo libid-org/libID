@@ -54,7 +54,7 @@ import {
   platforms,
   supportedPlatforms,
 } from '../index.js'
-import { acceptReturn, parseOAuthReturn, type ReturnProfile } from '../oauthReturn.js'
+import { acceptReturn, parseOAuthReturn, type ReturnRules } from '../oauthReturn.js'
 import { assetsByPlatform, circuits } from '../platforms.assets.js'
 import { provers } from '../provers.js'
 import type { EvidenceChange, PlatformFixture, ReturnSamples } from './fixtures.js'
@@ -89,7 +89,7 @@ vi.mock('../../barretenberg/engine.js', () => ({
   },
 }))
 vi.mock('../../notary/session.js', () => ({
-  Notarization: class {
+  NotaryRuntime: class {
     constructor(address: string, signal: AbortSignal, emit: unknown) {
       notarization(address, signal, emit)
       signal.throwIfAborted()
@@ -297,12 +297,12 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
   })
 })
 
-// Return helpers over one profile: `fields` is the component without its `?`/`#` prefix.
-const fieldsOf = (value: OAuthReturn, profile: ReturnProfile) =>
-  (profile.transport === 'query' ? value.query : value.fragment).slice(1)
+// Return helpers over one platform's return rules: `fields` is the component without its `?`/`#` prefix.
+const fieldsOf = (value: OAuthReturn, rules: ReturnRules) =>
+  (rules.transport === 'query' ? value.query : value.fragment).slice(1)
 
-function returnOf(fields: string, profile: ReturnProfile, other = ''): OAuthReturn {
-  return profile.transport === 'query'
+function returnOf(fields: string, rules: ReturnRules, other = ''): OAuthReturn {
+  return rules.transport === 'query'
     ? { query: `?${fields}`, fragment: other && `#${other}` }
     : { query: other && `?${other}`, fragment: `#${fields}` }
 }
@@ -322,7 +322,7 @@ const dropField = (fields: string, name: string) =>
 const percentEncode = (value: string) =>
   [...value].map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join('')
 
-/** Provider metadata a profile must ignore; each list is appended as extra fields. */
+/** Provider metadata the return rules must ignore; each list is appended as extra fields. */
 const metadata = [
   [],
   ['version_info='],
@@ -340,10 +340,10 @@ const metadata = [
   [`meta=${'%2F'.repeat(4096)}`],
 ]
 
-/** Every return a profile must reject before exchange, each derived from the platform's samples. */
-function malformedReturns(profile: ReturnProfile, samples: ReturnSamples): [string, OAuthReturn][] {
-  const accepted = fieldsOf(samples.accepted.oauthReturn, profile)
-  const { credential } = profile
+/** Every return the rules must reject before exchange, each derived from the platform's samples. */
+function malformedReturns(rules: ReturnRules, samples: ReturnSamples): [string, OAuthReturn][] {
+  const accepted = fieldsOf(samples.accepted.oauthReturn, rules)
+  const { credential } = rules
   const value = accepted.split('&').find((part) => part.startsWith(`${credential}=`))!
   const fields: [string, string][] = [
     [`duplicate ${credential}`, `${accepted}&${credential}=second`],
@@ -362,8 +362,8 @@ function malformedReturns(profile: ReturnProfile, samples: ReturnSamples): [stri
     [`control character ${credential}`, setField(accepted, credential, '%0A')],
     [`non-ASCII ${credential}`, setField(accepted, credential, '%E2%9C%93')],
     [`${credential} with a decoded control suffix`, accepted.replace(value, `${value}%0A`)],
-    ['empty error', setField(fieldsOf(samples.error.oauthReturn, profile), 'error', '')],
-    ...profile.rejected.map((name): [string, string] => [
+    ['empty error', setField(fieldsOf(samples.error.oauthReturn, rules), 'error', '')],
+    ...rules.rejected.map((name): [string, string] => [
       `leaked ${name}`,
       `${accepted}&${name}=unexpected`,
     ]),
@@ -383,20 +383,20 @@ function malformedReturns(profile: ReturnProfile, samples: ReturnSamples): [stri
     ['state and metadata only', `state=${state}&version_info=synthetic`],
     ['empty credential with metadata', `state=${state}&${credential}=&version_info=synthetic`],
   ]
-  const other: ReturnProfile = {
-    ...profile,
-    transport: profile.transport === 'query' ? 'fragment' : 'query',
+  const other: ReturnRules = {
+    ...rules,
+    transport: rules.transport === 'query' ? 'fragment' : 'query',
   }
   return [
-    ...fields.map(([name, value]): [string, OAuthReturn] => [name, returnOf(value, profile)]),
+    ...fields.map(([name, value]): [string, OAuthReturn] => [name, returnOf(value, rules)]),
     ['the other transport', returnOf(accepted, other)],
-    ['nonempty other transport', returnOf(accepted, profile, 'version_info=synthetic')],
-    [`${credential} in the other transport`, returnOf(accepted, profile, `${credential}=other`)],
-    ['both transports', returnOf(accepted, profile, accepted)],
+    ['nonempty other transport', returnOf(accepted, rules, 'version_info=synthetic')],
+    [`${credential} in the other transport`, returnOf(accepted, rules, `${credential}=other`)],
+    ['both transports', returnOf(accepted, rules, accepted)],
   ]
 }
 
-/** Issuer spellings an issuer-bound profile must reject, as field suffixes. */
+/** Issuer spellings issuer-bound rules must reject, as field suffixes. */
 function issuerViolations(issuer: string): string[] {
   const { protocol, host, pathname } = new URL(issuer)
   const encoded = encodeURIComponent(issuer)
@@ -419,8 +419,8 @@ const outcomes = ['accepted', 'denied', 'error'] as const
 
 describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
   const fixture = fixtures[platformId]
-  // Returns are built and judged by the fixture's rules; only the parser reads the profile.
-  const profile: ReturnProfile = fixture.oauthReturn
+  // Returns are built and judged by the fixture's rules; only the parser reads the platform's own.
+  const rules: ReturnRules = fixture.oauthReturn
   const version = platforms[platformId].versions[1]
   const production = version.oauthReturn
   const samples = returnSamples(platformId)
@@ -452,23 +452,23 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
   it.each(outcomes)(
     'ignores provider metadata on the %s return without changing outcome, credential or issuer [LIBID-OAUTH-006] [LIBID-OAUTH-018]',
     (outcome) => {
-      const fields = fieldsOf(samples[outcome].oauthReturn, profile)
+      const fields = fieldsOf(samples[outcome].oauthReturn, rules)
       const present = fields.split('&').map((part) => part.split('=')[0])
       for (const extra of metadata) {
         const added = extra.filter((part) => !present.includes(part.split('=')[0]))
-        expectOutcome(returnOf([fields, ...added].join('&'), profile), outcome)
+        expectOutcome(returnOf([fields, ...added].join('&'), rules), outcome)
       }
     },
   )
 
   it.each(outcomes)('binds the %s return to this ceremony state [LIBID-OAUTH-006]', (outcome) => {
-    const fields = fieldsOf(samples[outcome].oauthReturn, profile)
+    const fields = fieldsOf(samples[outcome].oauthReturn, rules)
     for (const other of [
       oauthState('00000000-0000-4000-8000-000000000000'),
       `v2.${CEREMONY_ID}`,
       CEREMONY_ID,
     ]) {
-      const changed = returnOf(setField(fields, 'state', other), profile)
+      const changed = returnOf(setField(fields, 'state', other), rules)
       expect(parseOAuthReturn(changed, production)).toMatchObject({ state: other })
       expect(thrown(() => accept(changed))).toMatchObject(invalid)
     }
@@ -477,33 +477,28 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
   it.each(outcomes)(
     tagged('applies its issuer rule to the %s return before exchange or denial', issuerVectors),
     (outcome) => {
-      const fields = dropField(fieldsOf(samples[outcome].oauthReturn, profile), 'iss')
+      const fields = dropField(fieldsOf(samples[outcome].oauthReturn, rules), 'iss')
       const issuer = encodeURIComponent('https://issuer.test')
-      if (profile.issuer) {
-        const encoded = encodeURIComponent(profile.issuer)
-        for (const iss of [profile.issuer, encoded, encoded.toLowerCase()])
-          expectOutcome(returnOf(`${fields}&iss=${iss}`, profile), outcome)
-        for (const suffix of issuerViolations(profile.issuer)) {
-          expect(
-            parseOAuthReturn(returnOf(fields + suffix, profile), production),
-            suffix,
-          ).toBeNull()
-          expect(thrown(() => accept(returnOf(fields + suffix, profile)))).toMatchObject(invalid)
+      if (rules.issuer) {
+        const encoded = encodeURIComponent(rules.issuer)
+        for (const iss of [rules.issuer, encoded, encoded.toLowerCase()])
+          expectOutcome(returnOf(`${fields}&iss=${iss}`, rules), outcome)
+        for (const suffix of issuerViolations(rules.issuer)) {
+          expect(parseOAuthReturn(returnOf(fields + suffix, rules), production), suffix).toBeNull()
+          expect(thrown(() => accept(returnOf(fields + suffix, rules)))).toMatchObject(invalid)
         }
         const other = setField(`${fields}&iss=${encoded}`, 'state', 'v1.other')
-        expect(thrown(() => accept(returnOf(other, profile)))).toMatchObject(invalid)
-      } else if (profile.rejected.includes('iss')) {
-        expect(
-          parseOAuthReturn(returnOf(`${fields}&iss=${issuer}`, profile), production),
-        ).toBeNull()
-        expect(thrown(() => accept(returnOf(`${fields}&iss=${issuer}`, profile)))).toMatchObject(
+        expect(thrown(() => accept(returnOf(other, rules)))).toMatchObject(invalid)
+      } else if (rules.rejected.includes('iss')) {
+        expect(parseOAuthReturn(returnOf(`${fields}&iss=${issuer}`, rules), production)).toBeNull()
+        expect(thrown(() => accept(returnOf(`${fields}&iss=${issuer}`, rules)))).toMatchObject(
           invalid,
         )
-      } else expectOutcome(returnOf(`${fields}&iss=${issuer}`, profile), outcome)
+      } else expectOutcome(returnOf(`${fields}&iss=${issuer}`, rules), outcome)
     },
   )
 
-  it.each(malformedReturns(profile, samples))(
+  it.each(malformedReturns(rules, samples))(
     tagged('rejects %s before exchange [LIBID-OAUTH-007]', vectors),
     (_name, oauthReturn) => {
       expect(parseOAuthReturn(oauthReturn, production)).toBeNull()
@@ -512,7 +507,7 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
   )
 
   it('decodes each value exactly once under the decoded bounds', () => {
-    const fields = fieldsOf(samples.accepted.oauthReturn, profile)
+    const fields = fieldsOf(samples.accepted.oauthReturn, rules)
     const { credential } = samples.accepted
     for (const [raw, decoded] of [
       [percentEncode(credential), credential],
@@ -520,7 +515,7 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
       ['%252F', '%2F'],
       ['%2F'.repeat(4096), '/'.repeat(4096)],
     ]) {
-      const changed = returnOf(setField(fields, profile.credential, raw), profile)
+      const changed = returnOf(setField(fields, rules.credential, raw), rules)
       expect(parseOAuthReturn(changed, production)).toEqual({
         ...expected.accepted,
         credential: decoded,
@@ -1091,13 +1086,10 @@ function stageOidc(
         ? []
         : [previousKey, jwk],
   )
-  const { config, oauthReturn: profile } = fixture
-  const accepted = fieldsOf(returnSamples(platformId).accepted.oauthReturn, profile)
+  const { config, oauthReturn: rules } = fixture
+  const accepted = fieldsOf(returnSamples(platformId).accepted.oauthReturn, rules)
   const run = runContext(platformId, outcome, {
-    oauthReturn: returnOf(
-      setField(accepted, profile.credential, oidcToken(idToken, outcome)),
-      profile,
-    ),
+    oauthReturn: returnOf(setField(accepted, rules.credential, oidcToken(idToken, outcome)), rules),
     request: outcome === 'audience-mismatch' ? { clientId: `other-${config.clientId}` } : {},
   })
   generate.mockImplementation(async (inputs): Promise<RawProof> => {

@@ -1,4 +1,4 @@
-import { hasExactKeys, origin, uint } from '../primitives.js'
+import { hasExactKeys, isOrigin, isUint } from '../primitives.js'
 import type { NotaryAttestation } from './decode.js'
 import { MAX_ATTESTED_DATA_BYTES, MAX_FRAME_BYTES } from './limits.js'
 import { NOTARY_SIGNATURE_BYTES } from './protocol.js'
@@ -11,14 +11,15 @@ function invalid(reason: string): never {
 }
 
 export function deriveNotaryWebSocketUrl(notaryAddress: string): string {
-  if (!origin(notaryAddress)) invalid('address must be a canonical HTTPS or localhost HTTP origin')
+  if (!isOrigin(notaryAddress))
+    invalid('address must be a canonical HTTPS or localhost HTTP origin')
   const url = new URL(notaryAddress)
   return `${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}/notarize-proxy`
 }
 
 function byteArray(value: unknown, minimum: number, maximum: number, reason: string): Uint8Array {
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) invalid(reason)
-  if (!value.every((byte) => uint(byte, 255))) invalid('invalid byte element')
+  if (!value.every((byte) => isUint(byte, 255))) invalid('invalid byte element')
   return Uint8Array.from(value)
 }
 

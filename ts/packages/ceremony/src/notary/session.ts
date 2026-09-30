@@ -1,7 +1,7 @@
 import { assetUrl } from '../assets/index.js'
 import { ceremonyError } from '../errors.js'
 import { now, type OperationEvent } from '../events.js'
-import { origin, webUrl } from '../primitives.js'
+import { isOrigin, isWebUrl } from '../primitives.js'
 import { safeEmit } from '../workers.js'
 import type { NotaryAttestation } from './decode.js'
 import { tlsnModule, tlsnWasm } from './notary.assets.js'
@@ -24,7 +24,7 @@ export interface RevealResult {
   attestation: Promise<NotaryAttestation>
 }
 
-export interface NotarizationSession {
+export interface NotarySession {
   /** Send once after setup; starts the 10-second deadline through final attestation. */
   send(request: ExactHttpRequest): Promise<Transcript>
   /** Reveal once after send; proof preparation may use openings before attestation completes. */
@@ -36,7 +36,7 @@ export interface NotarizationSession {
  * The supplied abort signal releases the worker; any session failure also aborts sibling work.
  * Final outputs preserve signed bytes and correlate openings without verifying notary signatures.
  */
-export class Notarization {
+export class NotaryRuntime {
   #worker?: Worker
   #failure = new AbortController()
   /** Caller cancellation combined with runtime failure, including failures after prepare resolves. */
@@ -48,15 +48,15 @@ export class Notarization {
     private readonly emit?: (event: OperationEvent) => void,
   ) {
     signal.throwIfAborted()
-    if (!origin(notaryAddress)) throw new TypeError('Invalid notary origin')
+    if (!isOrigin(notaryAddress)) throw new TypeError('Invalid notary origin')
     this.signal = AbortSignal.any([signal, this.#failure.signal])
   }
 
   /** Start target-specific setup without a bearer; event names the later reveal/attestation operation. */
-  async prepare(url: string, event?: string): Promise<NotarizationSession> {
+  async prepare(url: string, event?: string): Promise<NotarySession> {
     const signal = this.signal
     signal.throwIfAborted()
-    const target = webUrl(url) ? new URL(url) : undefined
+    const target = isWebUrl(url) ? new URL(url) : undefined
     if (target?.protocol !== 'https:' || target.hash || target.port)
       throw new TypeError('Invalid notarization target')
     if (!this.#worker) {
@@ -87,7 +87,7 @@ interface Waiter {
 }
 
 /** Owns one channel, its pending replies and the send-through-attestation deadline. */
-class Session implements NotarizationSession {
+class Session implements NotarySession {
   /** `busy` covers an in-flight prepare or send; reveal failures carry their operation. */
   private phase: 'busy' | 'prepared' | 'sent' | 'revealing' | 'ended' = 'busy'
   private readonly channel = new MessageChannel()

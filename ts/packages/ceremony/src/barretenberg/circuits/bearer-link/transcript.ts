@@ -1,5 +1,5 @@
 import { FORBIDDEN_REQUEST_HEADERS } from '@libid/contracts/ceremony'
-import { redirect } from '../../../ccdp/index.js'
+import { isRedirectUri } from '../../../ccdp/index.js'
 import { FIELD_NAME, latin1, parseHead, trimField } from '../../../notary/http.js'
 import type { ByteRange, ExactHttpRequest, Transcript } from '../../../notary/protocol.js'
 import {
@@ -56,7 +56,7 @@ export function bearerTranscript(layout: {
       !isFormClientId(input.clientId) ||
       input.code.length > MAX_CODE_CHARS ||
       !CODE.test(input.code) ||
-      !redirect(input.redirectUri) ||
+      !isRedirectUri(input.redirectUri) ||
       !isPkceValue(input.codeVerifier)
     )
       throw new Error('Invalid token request')

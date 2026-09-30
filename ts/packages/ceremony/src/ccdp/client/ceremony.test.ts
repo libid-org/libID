@@ -991,16 +991,16 @@ it('reports closure before the first start without mislabeling it as a repeat [L
 })
 
 it('freezes and forwards the public credential from validated configuration [TEST-BRIDGE-03] [LIBID-ASSET-006] [LIBID-ASSET-010] [LIBID-OAUTH-016]', async () => {
-  const profile = {
+  const github = {
     clientId: 'client',
     clientCredential: 'public&original=1',
   }
   const config = validateCeremonyConfig(
-    { ...wireConfig, platforms: { github: profile } },
+    { ...wireConfig, platforms: { github } },
     'https://bridge.test',
   )
   const client = ccdpClientFromConfig(config, bundledVersions)
-  profile.clientCredential = 'replacement'
+  github.clientCredential = 'replacement'
   const { connection, ceremony } = setup({ client, platformId: 'github' })
   const rejected = expect(ceremony.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
   reachProving(connection)

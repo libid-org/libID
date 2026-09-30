@@ -7,7 +7,7 @@ import type { ProverContext } from './context.js'
 import { ceremonyFor, type PlatformId, platforms, type SupportedCeremonyVersion } from './index.js'
 
 /** One platform's redirect: its transport, credential field, other rejected fields and any issuer. */
-export interface ReturnProfile {
+export interface ReturnRules {
   transport: 'query' | 'fragment'
   credential: string
   rejected: readonly string[]
@@ -56,13 +56,13 @@ function readFields(component: string, rejected: readonly string[]): Map<string,
 
 /**
  * Parse one exact return: `state` plus the credential XOR `error`. Other bounded provider
- * metadata has no value schema; only fields used by the profile are interpreted.
+ * metadata has no value schema; only fields the rules use are interpreted.
  */
 export function parseOAuthReturn(
   oauthReturn: OAuthReturn,
-  profile: ReturnProfile,
+  rules: ReturnRules,
 ): OAuthOutcome | null {
-  const query = profile.transport === 'query'
+  const query = rules.transport === 'query'
   const [component, other] = query
     ? [oauthReturn.query, oauthReturn.fragment]
     : [oauthReturn.fragment, oauthReturn.query]
@@ -72,10 +72,10 @@ export function parseOAuthReturn(
     component.length > MAX_OAUTH_RETURN_CHARS
   )
     return null
-  const fields = readFields(component.slice(1), profile.rejected)
-  if (!fields || (profile.issuer !== undefined && fields.get('iss') !== profile.issuer)) return null
+  const fields = readFields(component.slice(1), rules.rejected)
+  if (!fields || (rules.issuer !== undefined && fields.get('iss') !== rules.issuer)) return null
   const state = fields.get('state'),
-    credential = fields.get(profile.credential),
+    credential = fields.get(rules.credential),
     error = fields.get('error')
   if (!isValue(state) || (credential === undefined) === (error === undefined)) return null
   if (credential !== undefined)

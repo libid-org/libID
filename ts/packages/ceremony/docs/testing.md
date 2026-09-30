@@ -68,13 +68,13 @@ per-platform unit tests iterate `supportedPlatforms` and read one typed
 instead of naming platforms. A catalog entry without a fixture fails `typecheck`
 at that table. The entry supplies its OAuth registration/return rules, accepted identity and
 proof, independent expected values, failure vectors, events and prover kind.
-Bearer-link fixtures include transcripts and request profiles; OIDC fixtures
+Bearer-link fixtures include transcripts and request layouts; OIDC fixtures
 include the signed token, key and binding mutations. The fixture types own the
 full field list.
 
 The suite covers catalog discovery, authorization, validation, expiry and each
 prover's delivery, events, cancellation and cleanup. It preserves transcript,
-correlation and witness code while replacing the TLSN runtime and proof engine.
+correlation and circuit input code while replacing the TLSN runtime and proof engine.
 A new prover kind needs a fixture evidence shape, a shared-contract test stage
 and its own cases; type checking identifies missing registrations.
 

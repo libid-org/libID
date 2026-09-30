@@ -4,10 +4,10 @@ import {
   circuit,
   verificationKey,
 } from '../src/barretenberg/circuits/bearer-link/bearerLink.assets.js'
-import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer-link/inputs.js'
+import { buildBearerLinkInputs } from '../src/barretenberg/circuits/bearer-link/inputs.js'
 import { ProofEngine } from '../src/barretenberg/engine.js'
 import type { ExactHttpRequest } from '../src/notary/protocol.js'
-import { Notarization } from '../src/notary/session.js'
+import { NotaryRuntime } from '../src/notary/session.js'
 import {
   buildTokenRequest,
   buildIdentityRequest as identityRequest,
@@ -41,7 +41,7 @@ const notaryRequests: { [P in NotaryPlatform]: (index: number) => ExactHttpReque
 }
 
 Object.assign(window, {
-  Notarization,
+  NotaryRuntime,
   async proveBearerFixture() {
     const bearer = `AAAA${'x'.repeat(96)}`
     const opening = (start: number) => {
@@ -53,7 +53,7 @@ Object.assign(window, {
         hash: sha256(Uint8Array.from([...new TextEncoder().encode(bearer), ...blinder])),
       }
     }
-    const inputs = buildBearerLinkWitness(bearer, opening(0), opening(16))
+    const inputs = buildBearerLinkInputs(bearer, opening(0), opening(16))
     const engine = new ProofEngine({
       circuitUrl: assetUrl(circuit),
       verificationKeyUrl: assetUrl(verificationKey),
@@ -80,7 +80,7 @@ Object.assign(window, {
       120000,
     )
     try {
-      const notarization = new Notarization(`http://localhost:${notary}`, abort.signal)
+      const notarization = new NotaryRuntime(`http://localhost:${notary}`, abort.signal)
       return await Promise.all(
         Array.from({ length: count }, async (_, index) => {
           const request = notaryRequests[platform](index)

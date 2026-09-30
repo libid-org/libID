@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { concatBytes } from '@noble/hashes/utils.js'
-import { bytesEqual, fixedBytes } from '../primitives.js'
+import { bytesEqual, isFixedBytes } from '../primitives.js'
 import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
 import { MAX_RECV_BYTES, MAX_SENT_BYTES } from './limits.js'
 import {
@@ -148,13 +148,13 @@ function correlateOpenings(
 ): CorrelatedCommitment[] {
   if (openings.length !== planned.length) invalid(`${direction} opening count changed`)
 
-  // ponytail: quadratic scan over the small, fixed profile range sets.
+  // ponytail: quadratic scan over the small, fixed per-platform range sets.
   const unmatched = new Set(planned.keys())
   const correlated: CorrelatedCommitment[] = []
   for (const opening of openings) {
-    if (!fixedBytes(opening.hash, COMMITMENT_BYTES))
+    if (!isFixedBytes(opening.hash, COMMITMENT_BYTES))
       invalid(`${direction} opening hash must be exactly 32 bytes`)
-    if (!fixedBytes(opening.blinder, BLINDER_BYTES))
+    if (!isFixedBytes(opening.blinder, BLINDER_BYTES))
       invalid(`${direction} opening blinder must be exactly 16 bytes`)
 
     const matches = [...unmatched].filter((index) =>

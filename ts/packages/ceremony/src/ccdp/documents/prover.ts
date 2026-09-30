@@ -66,8 +66,8 @@ class ProverDocument {
       if (this.state.phase !== 'connecting') throw new Error(messages.invalidProvingRequest)
       this.state.phase = 'ready'
       if (location.pathname === route('prover/fallback'))
-        this.produce({ event: 'prover-fallback', timestamp: performance.timeOrigin })
-      this.produce({ event: 'prover', phase: 'started', timestamp: now() })
+        this.emit({ event: 'prover-fallback', timestamp: performance.timeOrigin })
+      this.emit({ event: 'prover', phase: 'started', timestamp: now() })
     } catch (error) {
       this.fail(error)
     }
@@ -91,7 +91,7 @@ class ProverDocument {
       ceremonyId: input.ceremonyId,
       oauthReturn: input.oauthReturn,
       signal: this.controller.signal,
-      emit: (event) => this.produce(event),
+      emit: (event) => this.emit(event),
     })
     await this.deliver(result)
   }
@@ -116,7 +116,7 @@ class ProverDocument {
     this.ui.delivered()
   }
 
-  private produce(event: OperationEvent): void {
+  private emit(event: OperationEvent): void {
     if (this.state.phase === 'ended') return
     const message = EventMessage.decode({ type: 'event', ...event })
     try {

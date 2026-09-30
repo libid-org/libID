@@ -5,10 +5,10 @@ import {
   MAX_SUB_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
-import { b64urlDecode, isRecord, uint } from '../../../primitives.js'
+import { b64urlDecode, isRecord, isUint } from '../../../primitives.js'
 import { readJson } from '../../../response.js'
-import { profile } from './profile.js'
-import { circuitText } from './types.js'
+import { provider } from './provider.js'
+import { isCircuitText } from './types.js'
 
 /** The token bytes and claims the fixed oidc_google circuit consumes, plus the signing key's `kid`. */
 export interface ParsedGoogleIdToken extends GoogleCircuitToken {
@@ -31,12 +31,12 @@ function json(bytes: Uint8Array): Record<string, unknown> | null {
 
 /** The circuit also requires the fixed issuer and a verified email; neither is delivered. */
 function googleClaims(p: Record<string, unknown> | null): GoogleCircuitToken['claims'] | null {
-  if (p?.iss !== profile.issuer || p.email_verified !== true) return null
+  if (p?.iss !== provider.issuer || p.email_verified !== true) return null
   const { aud, sub, email, exp, nonce } = p
-  return circuitText(aud, MAX_AUD_BYTES) &&
-    circuitText(sub, MAX_SUB_BYTES) &&
-    circuitText(email, MAX_EMAIL_BYTES) &&
-    uint(exp, Number.MAX_SAFE_INTEGER) &&
+  return isCircuitText(aud, MAX_AUD_BYTES) &&
+    isCircuitText(sub, MAX_SUB_BYTES) &&
+    isCircuitText(email, MAX_EMAIL_BYTES) &&
+    isUint(exp, Number.MAX_SAFE_INTEGER) &&
     typeof nonce === 'string' &&
     nonce !== ''
     ? { aud, sub, email, exp, nonce }
@@ -70,7 +70,7 @@ export function acceptGoogleIdToken(idToken: string, clientId: string): ParsedGo
 export async function fetchSigningKey(kid: string, signal: AbortSignal): Promise<unknown> {
   // A run closed before this point starts no key request.
   signal.throwIfAborted()
-  const response = await fetch(profile.jwksUrl, {
+  const response = await fetch(provider.jwksUrl, {
     credentials: 'omit',
     redirect: 'error',
     signal,

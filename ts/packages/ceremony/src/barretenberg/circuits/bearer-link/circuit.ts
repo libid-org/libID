@@ -4,7 +4,7 @@ import { plaintextOpening } from '../../../notary/notarize.js'
 import type { ByteRange, CommitmentOpening } from '../../../notary/protocol.js'
 import { ProofEngine } from '../../engine.js'
 import { circuit, verificationKey } from './bearerLink.assets.js'
-import { buildBearerLinkWitness, validateBearerLinkPublicInputs } from './inputs.js'
+import { buildBearerLinkInputs, validateBearerLinkPublicInputs } from './inputs.js'
 
 type BearerOpening = { openings: readonly CommitmentOpening[]; range: ByteRange }
 
@@ -29,7 +29,7 @@ export class BearerLinkCircuit {
   ): Promise<Uint8Array> {
     const inputs = await operation(this.emit, 'circuit-inputs', () => {
       const plaintext = new TextEncoder().encode(bearer)
-      return buildBearerLinkWitness(
+      return buildBearerLinkInputs(
         bearer,
         plaintextOpening(token.openings, 'received', token.range, plaintext),
         plaintextOpening(identity.openings, 'sent', identity.range, plaintext),

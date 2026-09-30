@@ -1,6 +1,6 @@
 import { type ConnectionEnd, type Message, type PopupConnection, PopupError } from '@libid/popup'
 import { messages, popupErrorMessages } from './ccdp/ui-messages.js'
-import { origin, text } from './primitives.js'
+import { isOrigin, isText } from './primitives.js'
 
 /** UTF-8 bound on displayable failure text, including `CeremonyFailed.message`. */
 export const MAX_MESSAGE_BYTES = 2048
@@ -19,7 +19,7 @@ function displayText(message: string): string {
   const clean = message.replace(/\p{Cc}/gu, ' ').trim()
   const { read } = new TextEncoder().encodeInto(clean, new Uint8Array(MAX_MESSAGE_BYTES))
   const bounded = clean.slice(0, read)
-  return text(bounded, MAX_MESSAGE_BYTES) ? bounded : messages.failed
+  return isText(bounded, MAX_MESSAGE_BYTES) ? bounded : messages.failed
 }
 
 /** A failed operation and its displayable explanation; no stable error-code catalog. */
@@ -57,7 +57,7 @@ export function reportFailure(
   error: CeremonyError,
 ): void {
   try {
-    if (connection && origin(connection.peerOrigin)) {
+    if (connection && isOrigin(connection.peerOrigin)) {
       const message = { type: 'ceremony-failed', event: error.event, message: error.message }
       connection.send(message)
       return
