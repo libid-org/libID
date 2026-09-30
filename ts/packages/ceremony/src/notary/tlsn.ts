@@ -1,6 +1,15 @@
 // The TLSNotary SDK surface the session worker uses. The e2e fixture stands in for it.
-import type { CommitRange, HashOpening } from './notarize.js'
 import type { ByteRange } from './protocol.js'
+
+export interface CommitRange extends ByteRange {
+  algorithm: 'SHA256'
+}
+
+/** The SDK may hand bytes back as plain arrays; the worker copies them into `Uint8Array`s. */
+export interface TlsnOpening {
+  hash: ArrayLike<number>
+  blinder: ArrayLike<number>
+}
 
 export interface Io {
   read(): Promise<Uint8Array | null>
@@ -27,7 +36,7 @@ export interface TlsnModule {
   }) => {
     setup(io: Io): Promise<void>
     send_request(session: null, request: NotaryHttpRequest): Promise<unknown>
-    transcript(): { sent: Uint8Array; recv: Uint8Array }
+    transcript(): { sent: ArrayLike<number>; recv: ArrayLike<number> }
     reveal(
       reveal: {
         sent: readonly ByteRange[]
@@ -38,7 +47,7 @@ export interface TlsnModule {
         sent: readonly CommitRange[]
         recv: readonly CommitRange[]
       },
-    ): Promise<{ sent: HashOpening[]; recv: HashOpening[] }>
+    ): Promise<{ sent: TlsnOpening[]; recv: TlsnOpening[] }>
     finish(): Promise<void>
     free(): void
   }

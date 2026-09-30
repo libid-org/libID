@@ -13,10 +13,7 @@ import {
   type Reveals,
   type Transcript,
 } from './protocol.js'
-
-export interface CommitRange extends ByteRange {
-  algorithm: 'SHA256'
-}
+import type { CommitRange } from './tlsn.js'
 
 export interface NotarizationPlan {
   reveal: Directions<ByteRange[]>
@@ -227,7 +224,7 @@ export function plaintextOpening(
   direction: 'sent' | 'received',
   range: ByteRange,
   plaintext: Uint8Array,
-) {
+): CommitmentOpening & HashOpening {
   const matches = openings.filter((o) => o.direction === direction && sameRange(o, range))
   if (matches.length !== 1) throw new Error('Plaintext opening is not unique')
   const opening = matches[0]

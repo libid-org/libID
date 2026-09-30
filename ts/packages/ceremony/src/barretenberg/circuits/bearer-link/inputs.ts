@@ -1,4 +1,4 @@
-import type { CorrelatedCommitment } from '../../../notary/notarize.js'
+import type { HashOpening } from '../../../notary/notarize.js'
 import { fieldHex } from '../../parameters.js'
 import { MAX_BEARER_BYTES, PUBLIC_INPUT_COUNT } from './parameters.js'
 
@@ -12,11 +12,7 @@ export const isBearer = (value: string): boolean =>
  * The exact libid-circuits v0.4.0 `bearer_link` circuit inputs. Openings come from plaintextOpening,
  * which fixes their blinder width and bearer length.
  */
-export function buildBearerLinkInputs(
-  bearer: string,
-  token: CorrelatedCommitment,
-  identity: CorrelatedCommitment,
-) {
+export function buildBearerLinkInputs(bearer: string, token: HashOpening, identity: HashOpening) {
   if (!isBearer(bearer)) throw new Error('bearer must be 1 to 128 visible ASCII bytes')
   const bytes = encoder.encode(bearer)
   const padded = new Uint8Array(MAX_BEARER_BYTES)

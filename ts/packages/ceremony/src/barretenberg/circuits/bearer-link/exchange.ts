@@ -40,7 +40,7 @@ export function bearerExchange(layout: {
   quotedId: boolean
   userName: { field: string; maxBytes: number; valid(value: string): boolean }
   /** Cross-check the parsed response against the exact selected identity bytes. */
-  identityResponse(
+  isIdentityResponse(
     body: Record<string, unknown>,
     selected: { userId: string; userName: string },
   ): boolean
@@ -101,10 +101,10 @@ export function bearerExchange(layout: {
     )
     if (!bytesEqual(body, tokenBody(input))) throw new Error('Token request body changed')
     const token = quotedRange(transcript.received, 'access_token')
-    const accessToken = decodePrintable(token.value, 'access token', MAX_BEARER_BYTES)
-    if (!isBearer(accessToken)) throw new Error('Invalid access token')
+    const bearer = decodePrintable(token.value, 'access token', MAX_BEARER_BYTES)
+    if (!isBearer(bearer)) throw new Error('Invalid access token')
     return {
-      accessToken,
+      bearer,
       bearerRange: { start: token.valueStart, end: token.range.end - 1 },
       ranges: {
         sent: [{ start: 0, end: transcript.sent.length }],
@@ -152,7 +152,7 @@ export function bearerExchange(layout: {
     buildIdentityRequest,
     selectToken,
     selectIdentity,
-    identityResponse: layout.identityResponse,
+    isIdentityResponse: layout.isIdentityResponse,
   }
 }
 

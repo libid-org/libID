@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { Rollup } from 'vite'
 import type { AssetRequest, ExternalAsset } from '../src/assets/index.ts'
-import { assetKey, requestKey, VERSIONS_PATH } from '../src/assets/keys.ts'
+import { assetKey, requestKey, route, VERSIONS_PATH } from '../src/assets/keys.ts'
 import { messages } from '../src/ccdp/uiMessages.ts'
 import { safePath } from './archive.ts'
 import type { AssetManifest } from './assetPlugin.ts'
@@ -157,8 +157,8 @@ async function buildDistribution() {
     (o): o is Rollup.OutputChunk => o.type === 'chunk' && o.isEntry,
   )
   if (!primary) throw new Error('Missing Prover entry')
-  emitDocument('/ccdp/v1/prover', primary.code, 'prover')
-  emitDocument('/ccdp/v1/prover/fallback', primary.code, 'proverFallback')
+  emitDocument(route('prover'), primary.code, 'prover')
+  emitDocument(route('prover/fallback'), primary.code, 'proverFallback')
   const callback = await bundle('src/ccdp/documents/callback.ts', data, {
     selfContained: true,
     invoke: 'startCallback',
@@ -184,8 +184,8 @@ async function buildDistribution() {
   })
   for (const item of prefetch.output) {
     if (item.type === 'chunk' && item.isEntry) {
-      emitDocument('/ccdp/v1/prefetch', item.code, 'prefetch')
-      put('/ccdp/v1/worker.js', item.code, 'worker')
+      emitDocument(route('prefetch'), item.code, 'prefetch')
+      put(route('worker.js'), item.code, 'worker')
     } else put(`/${item.fileName}`, body(item), 'asset')
   }
   // The page every 404 serves; requested directly it declares the same error policy.

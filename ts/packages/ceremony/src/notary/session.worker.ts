@@ -19,7 +19,7 @@ import type {
   ToWorker,
   Transcript,
 } from './protocol.js'
-import type { Io, TlsnModule, TlsnProver } from './tlsn.js'
+import type { Io, TlsnModule, TlsnOpening, TlsnProver } from './tlsn.js'
 import { decodeAttestationFrame, deriveNotaryWebSocketUrl } from './transport.js'
 
 function waitForOpen(socket: WebSocket): Promise<void> {
@@ -99,8 +99,7 @@ async function readFinalFrame(io: Io): Promise<Uint8Array> {
   return concatBytes(...chunks)
 }
 
-/** SDK openings may arrive as plain arrays. */
-const copy = (openings: readonly HashOpening[]): HashOpening[] =>
+const copy = (openings: readonly TlsnOpening[]): HashOpening[] =>
   openings.map((o) => ({ hash: Uint8Array.from(o.hash), blinder: Uint8Array.from(o.blinder) }))
 
 // The module and its thread pool are initialized once for this ceremony's sessions.

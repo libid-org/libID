@@ -9,9 +9,9 @@ import { ceremonyFor, type PlatformId, platforms, type SupportedCeremonyVersion 
 /** One platform's redirect: its transport, credential field, other rejected fields and any issuer. */
 export interface ReturnRules {
   transport: 'query' | 'fragment'
-  credential: string
+  credentialField: string
   rejected: readonly string[]
-  issuer?: string
+  authorizationIssuer?: string
   /** The credential values the platform can exchange, checked at the redirect. */
   isCredential?: (value: string) => boolean
 }
@@ -75,9 +75,13 @@ export function parseOAuthReturn(
   )
     return null
   const fields = readFields(component.slice(1), rules.rejected)
-  if (!fields || (rules.issuer !== undefined && fields.get('iss') !== rules.issuer)) return null
+  if (
+    !fields ||
+    (rules.authorizationIssuer !== undefined && fields.get('iss') !== rules.authorizationIssuer)
+  )
+    return null
   const state = fields.get('state'),
-    credential = fields.get(rules.credential),
+    credential = fields.get(rules.credentialField),
     error = fields.get('error')
   if (!isValue(state) || (credential === undefined) === (error === undefined)) return null
   if (credential !== undefined)
@@ -91,9 +95,9 @@ export function parseOAuthReturn(
 }
 
 /**
- * Admit the request against its platform's ceremony at the requested version and consume its
- * ceremony-bound return once, before any network use: null for valid denial, otherwise the
- * accepted credential.
+ * Admit the request against its platform's ceremony at the requested version and read its
+ * ceremony-bound return, before any network use: null for valid denial, otherwise the accepted
+ * credential. Consuming the return once is the Prover document's job.
  */
 export function acceptReturn(context: ProverContext, platformId: PlatformId): string | null {
   const { request } = context

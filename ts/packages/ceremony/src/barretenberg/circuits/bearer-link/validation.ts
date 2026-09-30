@@ -1,6 +1,7 @@
 import { MAX_CLIENT_ID_BYTES } from '../../../ccdp/limits.js'
-import { decodeAttestedData, isNotaryAttestation } from '../../../notary/decode.js'
+import { decodeAttestedData } from '../../../notary/decode.js'
 import type { NotaryAttestation } from '../../../notary/protocol.js'
+import { isNotaryAttestation } from '../../../notary/protocol.js'
 import { type Identity, identityValidator, isProofBytes } from '../../../platforms/validation.js'
 import { isText, recordValidator } from '../../../primitives.js'
 

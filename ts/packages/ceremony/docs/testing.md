@@ -133,10 +133,10 @@ delivered proofs against the released key and, for bearer-link, the commitments
 in the final fixture attestations. The separate runtime suite exercises real
 TLSN/notary sessions. Neither substitutes for live consent.
 
-With Docker Compose running:
+With Docker Compose available:
 
 ```sh
-pnpm -C ts --filter @libid/ceremony exec playwright install --with-deps chromium firefox webkit
+pnpm -C ts --filter @libid/ceremony test:e2e:install
 pnpm -C ts --filter @libid/ceremony test:e2e
 ```
 

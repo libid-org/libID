@@ -1,4 +1,5 @@
 import { type Message, type MessageType, type PopupConnection, PopupError } from '@libid/popup'
+import { route } from '../../assets/keys.js'
 import { CeremonyError, toCeremonyError } from '../../errors.js'
 import {
   type CeremonyEvent,
@@ -30,7 +31,7 @@ import {
   type ProveIdentity,
   UserDenied,
 } from '../index.js'
-import { oauthState, prefetchFragment, route } from '../navigation.js'
+import { oauthState, prefetchFragment } from '../navigation.js'
 import { messages } from '../uiMessages.js'
 import type { CeremonyConfig } from './config.js'
 
@@ -47,7 +48,7 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
 }
 
 /** Validated `new` arguments; byte inputs are read only while deriving the digest. */
-export interface CeremonyInput<P extends PlatformId> {
+interface CeremonyInput<P extends PlatformId> {
   notaryAddress: string
   chainId: Uint8Array
   platformId: P

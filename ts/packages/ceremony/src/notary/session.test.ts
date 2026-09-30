@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { validateEvent } from '../ccdp/index.js'
+import { EventMessage } from '../ccdp/index.js'
 import type { OperationEvent } from '../events.js'
 import { exactRequest } from '../testing/index.js'
 import { type FakeWorker, stubWorkers } from '../testing/workers.js'
@@ -215,12 +215,12 @@ it('exposes late worker failure after preparation through the runtime signal [LI
 })
 
 it.each([
-  { event: 'token-attestation', response: 'HTTP/1.1 200 OK\r\n\r\n\r\n\r\n', headerBytes: 19 },
-  { event: 'identity-attestation', response: 'HTTP/1.1 200 OK\r\nX: é\r\n\r\n', headerBytes: 26 },
-  { event: 'token-attestation', response: 'No header boundary', headerBytes: undefined },
+  { event: 'token-attestation', headerBytes: 19 },
+  { event: 'identity-attestation', headerBytes: 26 },
+  { event: 'token-attestation', headerBytes: undefined },
 ])(
-  'measures $event response $response and openings separately from finalization without exposing evidence or blocking delivery [LIBID-PROVER-007]',
-  async ({ event, response, headerBytes }) => {
+  'measures $event openings separately from finalization and forwards the worker response measures ($headerBytes header bytes) without exposing evidence or blocking delivery [LIBID-PROVER-007]',
+  async ({ event, headerBytes }) => {
     let clock = 0
     vi.stubGlobal('performance', { timeOrigin: 10000, now: () => clock })
     const events: OperationEvent[] = []
@@ -230,11 +230,9 @@ it.each([
       throw new Error('Broken diagnostic observer')
     })
     try {
-      const received = new Uint8Array(40)
-      received.set(new TextEncoder().encode(response))
       const { session, port } = await sentSession(notary, event, {
         sent: new Uint8Array(60),
-        received,
+        received: new Uint8Array(40),
       })
       clock = 10
       const pending = session.reveal({ sent: [], received: [] })
@@ -271,7 +269,8 @@ it.each([
           },
         },
       ])
-      for (const emitted of events) expect(() => validateEvent(emitted)).not.toThrow()
+      for (const emitted of events)
+        expect(() => EventMessage.decode({ type: 'event', ...emitted })).not.toThrow()
     } finally {
       abort.abort()
     }

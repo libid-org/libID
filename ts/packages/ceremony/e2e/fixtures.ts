@@ -7,11 +7,11 @@ import { artifactDir, origins } from './topology.js'
 
 export { expect }
 
-const metadata = new URL(`../${artifactDir}/distribution-graph.json`, import.meta.url)
+const metadataUrl = new URL(`../${artifactDir}/distribution-graph.json`, import.meta.url)
 
 /** The exact requests of `profile` in the emitted metadata of the artifact the harness serves. */
 export const artifactRequests = (profile: string): AssetRequest[] =>
-  JSON.parse(readFileSync(metadata, 'utf8')).requestsByProfile[profile]
+  JSON.parse(readFileSync(metadataUrl, 'utf8')).requestsByProfile[profile]
 
 /** A provider page that immediately continues to `url`, as an authorization redirect would. */
 const redirect = (url: string) => ({
@@ -105,7 +105,8 @@ export const test = base.extend<Fixtures>({
   },
   authorize: async ({ bridge, context }, use) => {
     await use(async (platform, fields) => {
-      const { authorization, clientId, pkce, returns, issuer } = browserPlatforms[platform]
+      const { authorization, clientId, pkce, returns, authorizationIssuer } =
+        browserPlatforms[platform]
       const requests: URLSearchParams[] = []
       await context.route(`${authorization}?**`, async (route) => {
         const params = new URL(route.request().url()).searchParams
@@ -114,7 +115,7 @@ export const test = base.extend<Fixtures>({
         if (pkce) expect(params.get('code_challenge_method')).toBe('S256')
         const answer = typeof fields === 'function' ? fields(params) : fields
         const returned = new URLSearchParams({ ...answer, state: params.get('state')! })
-        if (issuer) returned.set('iss', issuer)
+        if (authorizationIssuer) returned.set('iss', authorizationIssuer)
         const separator = returns === 'query' ? '?' : '#'
         await route.fulfill(redirect(`${bridge}/auth/callback${separator}${returned}`))
       })

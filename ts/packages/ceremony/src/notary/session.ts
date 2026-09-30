@@ -58,12 +58,12 @@ export class NotaryRuntime {
   }
 
   /**
-   * Start target-specific setup without a bearer. `operations` name the caller's fetch (setup and
+   * Start target-specific setup without a bearer. `events` name the caller's fetch (setup and
    * send) and attestation (reveal) operations, so a failure names the operation it interrupts.
    */
   async prepare(
     url: string,
-    operations?: { fetch: string; attestation: string },
+    events?: { fetch: string; attestation: string },
   ): Promise<NotarySession> {
     const signal = this.signal
     signal.throwIfAborted()
@@ -81,7 +81,7 @@ export class NotaryRuntime {
       url,
       this.signal,
       (error) => this.#failure.abort(error),
-      operations && { ...operations, emit: this.emit && safeEmit(this.emit) },
+      events && { ...events, emit: this.emit && safeEmit(this.emit) },
     )
     await session.prepare(this.#worker, this.notaryAddress)
     return session
@@ -111,8 +111,8 @@ class Session implements NotarySession {
     private readonly url: string,
     private readonly signal: AbortSignal,
     private readonly failRuntime: (error: unknown) => void,
-    /** The caller's fetch and attestation operations; `emit` is set when they are observed. */
-    private readonly observer?: {
+    /** The caller's fetch and attestation events; `emit` is set when they are observed. */
+    private readonly events?: {
       fetch: string
       attestation: string
       emit?: (event: OperationEvent) => void
@@ -185,7 +185,7 @@ class Session implements NotarySession {
     if (this.phase !== 'sent') throw new Error('Invalid notarization reveal')
     this.phase = 'revealing'
     const started = now()
-    const { attestation: event, emit } = this.observer ?? {}
+    const { attestation: event, emit } = this.events ?? {}
     if (event && emit) emit({ event, phase: 'started', timestamp: started })
     this.signal.throwIfAborted()
     const result = this.wait('revealed')
@@ -258,10 +258,10 @@ class Session implements NotarySession {
   private fail(error: unknown): void {
     if (this.phase === 'ended') return
     // Name the interrupted operation before shared-runtime cancellation rejects siblings with it.
-    if (!this.signal.aborted && this.observer)
+    if (!this.signal.aborted && this.events)
       error = toCeremonyError(
         error,
-        this.phase === 'revealing' ? this.observer.attestation : this.observer.fetch,
+        this.phase === 'revealing' ? this.events.attestation : this.events.fetch,
       )
     for (const waiter of this.pending.splice(0)) waiter.reject(error)
     this.cleanup()

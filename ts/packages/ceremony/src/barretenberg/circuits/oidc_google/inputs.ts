@@ -140,7 +140,6 @@ export function buildOidcGoogleInputs(
 }
 
 /** The oidc_google circuit inputs, keyed in the circuit's ABI order. */
-export type OidcGoogleInputs = ReturnType<typeof buildOidcGoogleInputs>
 
 const packed = (value: string, width: number) =>
   pack31(pad(encoder.encode(value), width)).map(fieldHex)

@@ -1,8 +1,6 @@
+import { CCDP_VERSION } from '../assets/keys.js'
 import { isOrigin, isSlug, isUint } from '../primitives.js'
 import { MAX_CEREMONY_VERSION, MAX_NAVIGATION_FRAGMENT_CHARS } from './limits.js'
-
-/** The CCDP version this build's documents and routes implement. */
-export const CCDP_VERSION = 1
 
 /** A ceremony ID: a lowercase UUIDv4, also the popup connection ID. */
 export const isCeremonyId = (value: string): boolean =>
@@ -12,9 +10,6 @@ export interface OAuthReturn {
   query: string
   fragment: string
 }
-
-export const route = (name: 'prefetch' | 'prover' | 'prover/fallback' | 'worker.js') =>
-  `/ccdp/v${CCDP_VERSION}/${name}`
 
 export const oauthState = (ceremonyId: string) => `v${CCDP_VERSION}.${ceremonyId}`
 

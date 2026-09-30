@@ -9,7 +9,7 @@ export const {
   buildIdentityRequest,
   selectToken,
   selectIdentity,
-  identityResponse,
+  isIdentityResponse,
 } = bearerExchange({
   tokenUrl: provider.tokenUrl,
   tokenFields(input) {
@@ -31,7 +31,7 @@ export const {
     maxBytes: MAX_USER_NAME_BYTES,
     valid: isUserName,
   },
-  identityResponse: ({ data }, { userId, userName }) =>
+  isIdentityResponse: ({ data }, { userId, userName }) =>
     isRecord(data) &&
     data[provider.idField] === userId &&
     data[provider.userNameField] === userName,

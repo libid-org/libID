@@ -1,12 +1,9 @@
-import { hasExactKeys, isFixedBytes } from '../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES } from './limits.js'
 import {
   AUTHORITY_ID_BYTES,
   type ByteRange,
   COMMITMENT_BYTES,
   type Directions,
-  NOTARY_SIGNATURE_BYTES,
-  type NotaryAttestation,
 } from './protocol.js'
 
 // Fixed-int bincode: u32 start, u64 byte length, at least one disclosed byte.
@@ -150,15 +147,4 @@ export function decodeAttestedData(bytes: Uint8Array): DecodedAttestedData {
     sent,
     received,
   }
-}
-
-/** Bound the delivered bytes; ledger verification remains authoritative. */
-export function isNotaryAttestation(v: unknown): v is NotaryAttestation {
-  return (
-    hasExactKeys(v, ['attestedData', 'signature']) &&
-    v.attestedData instanceof Uint8Array &&
-    v.attestedData.length > 0 &&
-    v.attestedData.length <= MAX_ATTESTED_DATA_BYTES &&
-    isFixedBytes(v.signature, NOTARY_SIGNATURE_BYTES)
-  )
 }

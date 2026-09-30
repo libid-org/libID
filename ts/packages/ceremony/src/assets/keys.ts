@@ -12,5 +12,12 @@ export const requestKey = (request: { url: string; range?: string }) =>
 export const profileKey = (platformId: string, version: number | string) =>
   `${platformId}/${version}`
 
+/** The CCDP version this build's documents and routes implement. */
+export const CCDP_VERSION = 1
+
+/** A CCDP document or worker route of this version. */
+export const route = (name: 'prefetch' | 'prover' | 'prover/fallback' | 'worker.js') =>
+  `/ccdp/v${CCDP_VERSION}/${name}`
+
 /** The Distribution's version list, one unversioned route. */
 export const VERSIONS_PATH = '/ccdp/versions.json'

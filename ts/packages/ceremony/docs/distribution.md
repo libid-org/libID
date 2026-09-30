@@ -281,7 +281,7 @@ and derives the prefetch manifest from the emitted Prover graph;
 [popup.ts](../build/popup.ts) is the optional popup-carrier integration point;
 [ast.ts](../build/ast.ts) holds the AST helpers both plugins share;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
-[sources.ts](../build/sources.ts) reads declared sources and caches downloads;
+[sources.ts](../build/sources.ts) reads declared sources, caches downloads and guards the output directory;
 [versions.ts](../build/versions.ts) reads the platform catalog's version set and
 reconciles it with the emitted platform provers and the asset profiles;
 [circuits.ts](../build/circuits.ts) checks capacity;

@@ -9,7 +9,7 @@ export const {
   buildIdentityRequest,
   selectToken,
   selectIdentity,
-  identityResponse,
+  isIdentityResponse,
 } = bearerExchange({
   tokenUrl: provider.tokenUrl,
   tokenFields(input) {
@@ -34,6 +34,6 @@ export const {
   },
   // The byte selector owns the exact decimal ID. JSON may round a large one, but `Number()`
   // rounds the selected decimal identically, so the parsed root value still cross-checks it.
-  identityResponse: (body, { userId, userName }) =>
+  isIdentityResponse: (body, { userId, userName }) =>
     body[provider.idField] === Number(userId) && body[provider.userNameField] === userName,
 })

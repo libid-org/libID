@@ -199,7 +199,7 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     expect(params.get('redirect_uri')).toBe(input.redirectUri)
     expect(params.get('state')).toBe(state)
     // The requested response is exactly what the platform's return rules accept.
-    expect(params.get('response_type') ?? 'code').toBe(fixture.returnRules.credential)
+    expect(params.get('response_type') ?? 'code').toBe(fixture.returnRules.credentialField)
     expect(params.get('response_mode') ?? 'query').toBe(fixture.returnRules.transport)
     if (ceremony.pkce) {
       expect(params.get('code_challenge')).toBe(input.codeChallenge)
@@ -343,25 +343,25 @@ const metadata = [
 /** Every return the rules must reject before exchange, each derived from the platform's samples. */
 function malformedReturns(rules: ReturnRules, samples: ReturnSamples): [string, OAuthReturn][] {
   const accepted = fieldsOf(samples.accepted.oauthReturn, rules)
-  const { credential } = rules
-  const value = accepted.split('&').find((part) => part.startsWith(`${credential}=`))!
+  const { credentialField } = rules
+  const value = accepted.split('&').find((part) => part.startsWith(`${credentialField}=`))!
   const fields: [string, string][] = [
-    [`duplicate ${credential}`, `${accepted}&${credential}=second`],
+    [`duplicate ${credentialField}`, `${accepted}&${credentialField}=second`],
     ['duplicate state', `${accepted}&state=other`],
     ['percent-encoded state name', `${accepted}&%73tate=other`],
     [
-      `percent-encoded ${credential} name`,
-      accepted.replace(value, percentEncode(credential[0]) + value.slice(1)),
+      `percent-encoded ${credentialField} name`,
+      accepted.replace(value, percentEncode(credentialField[0]) + value.slice(1)),
     ],
     ['success mixed with error', `${accepted}&error=access_denied`],
     ['missing state', dropField(accepted, 'state')],
-    ['missing outcome', dropField(accepted, credential)],
-    [`empty ${credential}`, setField(accepted, credential, '')],
-    [`malformed ${credential} escape`, setField(accepted, credential, '%ZZ')],
-    [`non-UTF-8 ${credential}`, setField(accepted, credential, '%FF')],
-    [`control character ${credential}`, setField(accepted, credential, '%0A')],
-    [`non-ASCII ${credential}`, setField(accepted, credential, '%E2%9C%93')],
-    [`${credential} with a decoded control suffix`, accepted.replace(value, `${value}%0A`)],
+    ['missing outcome', dropField(accepted, credentialField)],
+    [`empty ${credentialField}`, setField(accepted, credentialField, '')],
+    [`malformed ${credentialField} escape`, setField(accepted, credentialField, '%ZZ')],
+    [`non-UTF-8 ${credentialField}`, setField(accepted, credentialField, '%FF')],
+    [`control character ${credentialField}`, setField(accepted, credentialField, '%0A')],
+    [`non-ASCII ${credentialField}`, setField(accepted, credentialField, '%E2%9C%93')],
+    [`${credentialField} with a decoded control suffix`, accepted.replace(value, `${value}%0A`)],
     ['empty error', setField(fieldsOf(samples.error.oauthReturn, rules), 'error', '')],
     ...rules.rejected.map((name): [string, string] => [
       `leaked ${name}`,
@@ -381,7 +381,7 @@ function malformedReturns(rules: ReturnRules, samples: ReturnSamples): [string, 
     ],
     ['metadata only', 'version_info=synthetic'],
     ['state and metadata only', `state=${state}&version_info=synthetic`],
-    ['empty credential with metadata', `state=${state}&${credential}=&version_info=synthetic`],
+    ['empty credential with metadata', `state=${state}&${credentialField}=&version_info=synthetic`],
   ]
   const other: ReturnRules = {
     ...rules,
@@ -391,7 +391,10 @@ function malformedReturns(rules: ReturnRules, samples: ReturnSamples): [string, 
     ...fields.map(([name, value]): [string, OAuthReturn] => [name, returnOf(value, rules)]),
     ['the other transport', returnOf(accepted, other)],
     ['nonempty other transport', returnOf(accepted, rules, 'version_info=synthetic')],
-    [`${credential} in the other transport`, returnOf(accepted, rules, `${credential}=other`)],
+    [
+      `${credentialField} in the other transport`,
+      returnOf(accepted, rules, `${credentialField}=other`),
+    ],
     ['both transports', returnOf(accepted, rules, accepted)],
   ]
 }
@@ -479,11 +482,11 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
     (outcome) => {
       const fields = dropField(fieldsOf(samples[outcome].oauthReturn, rules), 'iss')
       const issuer = encodeURIComponent('https://issuer.test')
-      if (rules.issuer) {
-        const encoded = encodeURIComponent(rules.issuer)
-        for (const iss of [rules.issuer, encoded, encoded.toLowerCase()])
+      if (rules.authorizationIssuer) {
+        const encoded = encodeURIComponent(rules.authorizationIssuer)
+        for (const iss of [rules.authorizationIssuer, encoded, encoded.toLowerCase()])
           expectOutcome(returnOf(`${fields}&iss=${iss}`, rules), outcome)
-        for (const suffix of issuerViolations(rules.issuer)) {
+        for (const suffix of issuerViolations(rules.authorizationIssuer)) {
           expect(parseOAuthReturn(returnOf(fields + suffix, rules), production), suffix).toBeNull()
           expect(thrown(() => accept(returnOf(fields + suffix, rules)))).toMatchObject(invalid)
         }
@@ -514,7 +517,7 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
       ['a%2Bb%2fc', 'a+b/c'],
       ['%252F', '%2F'],
     ]) {
-      const changed = returnOf(setField(fields, rules.credential, raw), rules)
+      const changed = returnOf(setField(fields, rules.credentialField, raw), rules)
       expect(parseOAuthReturn(changed, production)).toEqual({
         ...expected.accepted,
         credential: decoded,
@@ -1097,7 +1100,10 @@ function stageOidc(
   const { config, returnRules: rules } = fixture
   const accepted = fieldsOf(returnSamples(platformId).accepted.oauthReturn, rules)
   const run = runContext(platformId, outcome, {
-    oauthReturn: returnOf(setField(accepted, rules.credential, oidcToken(idToken, outcome)), rules),
+    oauthReturn: returnOf(
+      setField(accepted, rules.credentialField, oidcToken(idToken, outcome)),
+      rules,
+    ),
     request: outcome === 'audience-mismatch' ? { clientId: `other-${config.clientId}` } : {},
   })
   generate.mockImplementation(async (inputs): Promise<RawProof> => {
@@ -1330,7 +1336,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
           const sent = utf8(tokenSent(request))
           const received = httpResponse(evidence.tokenBody)
           const selected = token(tokenSent(request))
-          expect(selected.accessToken).toBe(evidence.bearer)
+          expect(selected.bearer).toBe(evidence.bearer)
           expect(text(received.slice(selected.bearerRange.start, selected.bearerRange.end))).toBe(
             evidence.bearer,
           )
@@ -1360,7 +1366,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
           ]) {
             expect(changed).not.toBe(sent)
             const selected = token(changed)
-            expect(selected.accessToken).toBe(evidence.bearer)
+            expect(selected.bearer).toBe(evidence.bearer)
             expect(selected.ranges.sent).toEqual([{ start: 0, end: utf8(changed).length }])
           }
         },

@@ -331,7 +331,7 @@ export const fixtures = {
     config: { clientId: googleClaims.aud },
     returnRules: {
       transport: 'fragment',
-      credential: 'id_token',
+      credentialField: 'id_token',
       rejected: ['code', 'access_token', 'refresh_token'],
     },
     identity: {
@@ -501,7 +501,7 @@ export const fixtures = {
     config: { clientId: 'client' },
     returnRules: {
       transport: 'query',
-      credential: 'code',
+      credentialField: 'code',
       rejected: ['id_token', 'access_token', 'refresh_token', 'iss'],
     },
     identity: { platformId: 'x', oauthClientId: 'client', userId, userName: 'alice' },
@@ -561,9 +561,9 @@ export const fixtures = {
     config: { clientId: 'client', clientCredential: 'public-fixture' },
     returnRules: {
       transport: 'query',
-      credential: 'code',
+      credentialField: 'code',
       rejected: ['id_token', 'access_token', 'refresh_token'],
-      issuer: 'https://github.com/login/oauth',
+      authorizationIssuer: 'https://github.com/login/oauth',
     },
     identity: { platformId: 'github', oauthClientId: 'client', userId, userName: 'alice' },
     longest: {

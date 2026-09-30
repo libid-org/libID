@@ -109,7 +109,7 @@ const MAX_EVENT_ATTRIBUTES = 16
 const MAX_ATTRIBUTE_TEXT_BYTES = 128
 
 /** Exact bounded records are validated at the transport boundary, independently of subscriptions. */
-export function validateEvent(value: unknown): asserts value is OperationEvent {
+function validateEvent(value: unknown): asserts value is OperationEvent {
   if (
     !hasExactKeys(value, ['event', 'timestamp'], ['phase', 'instrumentation']) ||
     !isSlug(value.event) ||

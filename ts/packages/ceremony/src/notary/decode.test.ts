@@ -1,8 +1,9 @@
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
-import { decodeAttestedData, isNotaryAttestation } from './decode.js'
+import { decodeAttestedData } from './decode.js'
 import { LIBID_RS_ATTESTED_DATA as FIXTURE } from './fixtures/libid-rs.js'
 import { MAX_ATTESTED_DATA_BYTES } from './limits.js'
+import { isNotaryAttestation } from './protocol.js'
 
 const changed = (offset: number, value: number): Uint8Array => {
   const bytes = FIXTURE.slice()

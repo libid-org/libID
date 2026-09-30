@@ -72,18 +72,18 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
       const transcript = await session.send(tokenRequest)
       const body = responseJson(transcript)
       const selected = exchange.selectToken(transcript, input)
-      if (!isRecord(body) || body.access_token !== selected.accessToken)
+      if (!isRecord(body) || body.access_token !== selected.bearer)
         throw new Error('Invalid token response')
       return { session, selected }
     })
-    const bearer = token.selected.accessToken
+    const bearer = token.selected.bearer
     const tokenOpened = observe(reveal(token.session, token.selected.ranges, 'token-attestation'))
     const identity = await operation(emit, 'identity-fetch', async () => {
       const session = await identityPrepared
       const transcript = await session.send(exchange.buildIdentityRequest(bearer))
       const body = responseJson(transcript)
       const selected = exchange.selectIdentity(transcript, bearer)
-      if (!isRecord(body) || !exchange.identityResponse(body, selected))
+      if (!isRecord(body) || !exchange.isIdentityResponse(body, selected))
         throw new Error('Invalid identity response')
       return { session, selected }
     })

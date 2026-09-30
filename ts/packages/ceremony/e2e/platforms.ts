@@ -12,7 +12,7 @@ export interface BrowserPlatform {
   /** Authorization endpoint the popup must reach, and how the provider returns to Callback. */
   authorization: string
   returns: 'query' | 'fragment'
-  issuer?: string
+  authorizationIssuer?: string
   /** Whether the authorization request carries an S256 PKCE challenge. */
   pkce: boolean
   /** `jwt`: the signed Google v1 fixture token; `tlsn`: bearer-link with a fixture TLSN SDK/peer. */
@@ -44,7 +44,7 @@ const table = {
     clientCredential: 'fixture-public-credential',
     authorization: 'https://github.com/login/oauth/authorize',
     returns: 'query',
-    issuer: 'https://github.com/login/oauth',
+    authorizationIssuer: 'https://github.com/login/oauth',
     pkce: true,
     evidence: 'tlsn',
     notary: [{ sessions: 2, alongsideProving: true }],

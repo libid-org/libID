@@ -8,7 +8,7 @@ export const pkce = true
 /** Query code return; X defines no issuer field. */
 export const returnRules: ReturnRules = {
   transport: 'query',
-  credential: 'code',
+  credentialField: 'code',
   isCredential: isAuthorizationCode,
   rejected: ['id_token', 'access_token', 'refresh_token', 'iss'],
 }

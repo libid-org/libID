@@ -1,4 +1,4 @@
-import { route } from '../ccdp/navigation.js'
+import { route } from './keys.js'
 
 const SERVICE_WORKER_TIMEOUT_MS = 15000
 const ACTIVATION_POLL_INTERVAL_MS = 50

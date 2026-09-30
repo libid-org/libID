@@ -8,10 +8,10 @@ export const pkce = true
 /** Query code return; success and error both carry the exact issuer. */
 export const returnRules: ReturnRules = {
   transport: 'query',
-  credential: 'code',
+  credentialField: 'code',
   isCredential: isAuthorizationCode,
   rejected: ['id_token', 'access_token', 'refresh_token'],
-  issuer: provider.authorizationIssuer,
+  authorizationIssuer: provider.authorizationIssuer,
 }
 
 /** Build GitHub v1's fixed public authorization request. */

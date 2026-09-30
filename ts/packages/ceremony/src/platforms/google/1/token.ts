@@ -44,7 +44,10 @@ function googleClaims(p: Record<string, unknown> | null): OidcGoogleToken['claim
     : null
 }
 
-/** The released circuit's fixed widths and characters, narrower than the platform profile allows. */
+/**
+ * The released circuit's claim widths and characters. buildOidcGoogleInputs bounds the payload
+ * and signing input.
+ */
 const fitsCircuit = ({ aud, sub, email }: OidcGoogleToken['claims']) =>
   isCircuitText(aud, MAX_AUD_BYTES) &&
   isCircuitText(sub, MAX_SUB_BYTES) &&

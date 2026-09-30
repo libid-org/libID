@@ -13,7 +13,7 @@ import {
   buildIdentityRequest as identityRequest,
 } from '../src/platforms/github/1/exchange.js'
 import type { NotaryPlatform } from './platforms.js'
-import { notary } from './topology.js'
+import { notary, origins } from './topology.js'
 
 /** The index-th unauthenticated request of a real-notary run, per table platform with sessions. */
 const notaryRequests: { [P in NotaryPlatform]: (index: number) => ExactHttpRequest } = {
@@ -33,7 +33,7 @@ const notaryRequests: { [P in NotaryPlatform]: (index: number) => ExactHttpReque
       ? buildTokenRequest({
           clientId: 'fixture',
           code: 'fixture',
-          redirectUri: 'http://localhost:4682/auth/callback',
+          redirectUri: `${origins(false).bridge}/auth/callback`,
           codeVerifier: 'A'.repeat(43),
           clientCredential: 'fixture',
         })

@@ -115,7 +115,7 @@ export const policyId = createHash('sha256')
 export const workerUrl = '?worker&url'
 
 /** The response profile a bundled worker file needs, from the modules its graph node holds. */
-export function workerProfile(modules: readonly string[]): ResponseProfile {
+function workerProfile(modules: readonly string[]): ResponseProfile {
   if (modules.some((m) => m.endsWith('/notary/session.worker.ts'))) return 'notaryWorker'
   // A worker that spawns workers imports their URLs; a leaf imports none.
   return modules.some((m) => m.endsWith(workerUrl)) ? 'proofWorker' : 'leafWorker'

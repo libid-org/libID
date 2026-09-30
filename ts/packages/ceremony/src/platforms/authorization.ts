@@ -117,7 +117,7 @@ export function pkceAuthorizationUrlBuilder(
     state: string
     codeChallenge: string | null
   }): string => {
-    if (input.codeChallenge === null || !isPkceValue(input.codeChallenge)) {
+    if (!isPkceValue(input.codeChallenge)) {
       throw new Error('codeChallenge must be exactly 43 base64url characters')
     }
     const query = new URLSearchParams([

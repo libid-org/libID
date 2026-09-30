@@ -1,9 +1,9 @@
 // Test-only SDK/peer replacement. Signatures are synthetic; no TLS or notary
 // cryptography runs here. The real session worker validates/correlates these bytes.
 import { concat, encodeAttestation, opening } from '../src/notary/fixtures/attestation.js'
-import type { CommitRange, NotarizationPlan } from '../src/notary/notarize.js'
+import type { NotarizationPlan } from '../src/notary/notarize.js'
 import type { ByteRange, Transcript } from '../src/notary/protocol.js'
-import type { NotaryHttpRequest, TlsnModule } from '../src/notary/tlsn.js'
+import type { CommitRange, NotaryHttpRequest, TlsnModule } from '../src/notary/tlsn.js'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
