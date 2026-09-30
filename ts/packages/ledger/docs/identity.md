@@ -2,8 +2,9 @@
 
 Ledger identity and notary routing for application code. The package owns each
 ledger's chain identifier, Chain Profile hash, and notary address, and the
-catalog of supported ledgers. It contains no RPC client, transaction handling,
-or ceremony dependency.
+catalog of supported ledgers. This entry point contains no RPC client,
+transaction handling, or ceremony dependency; chain access is the separate
+`@libid/ledger/client` entry point.
 
 ## API
 

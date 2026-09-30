@@ -2,7 +2,7 @@
   "name": "@libid/ledger",
   "version": "0.0.0",
   "private": true,
-  "description": "Ledger identities, notary routing, and the supported ledger catalog.",
+  "description": "Ledger identities, the supported ledger catalog, and chain access.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
     "type": "git",
@@ -15,6 +15,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
     },
     "./testing": {
       "types": "./dist/testing.d.ts",
@@ -33,7 +37,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@noble/hashes": "^2.3.0"
+    "@noble/hashes": "^2.3.0",
+    "viem": "^2.55.13"
   },
   "devDependencies": {
     "typescript": "catalog:",

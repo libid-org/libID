@@ -40,6 +40,46 @@ const anvil = defineLedger({
 Only the `eip155` namespace is implemented. Ceremony stays chain agnostic;
 Prover has no ledger dependency.
 
+## Chain access
+
+`@libid/ledger/client` runs reads and writes without knowing what they mean.
+The layer above describes them with one function per namespace, so adding a
+namespace fails to compile until every query and command implements it:
+
+```ts
+import { connect, type Command, type Query } from '@libid/ledger/client'
+
+const resolveHandle: Query<[platform: `0x${string}`, handle: string], `0x${string}`> = {
+  eip155: (read, platform, handle) =>
+    read.readContract({
+      address: read.address('identityNames'),
+      abi: identityNamesAbi,
+      functionName: 'resolveHandle',
+      args: [platform, handle],
+    }),
+}
+
+const client = connect(ledgers['eden-testnet'], { rpc: 'https://…' })
+await client.read(resolveHandle, [platform, 'alice'])
+```
+
+- `read` pins every action in a query to one block, so the query sees one
+  consistent state.
+- `tx` builds a command's transaction and `estimate` returns its network fee in
+  native units.
+- `connect(wallet, { prompt })` returns a `Session`. Without `prompt` it only
+  restores an authorized wallet already on this ledger; with it, it may ask for
+  accounts and switch or add the chain. Session reads try the wallet's own RPC
+  first and fall back to the configured one, discarding any read that crosses a
+  chain change.
+- `Session.send` rechecks the account and chain and simulates before asking
+  the wallet to send. A `LedgerError` from `send` means nothing was sent; any
+  other error leaves the outcome unknown.
+- `walletRequirements` lists the methods and events a session needs, for
+  connectors such as WalletConnect.
+
+The catalog and client take no RPC defaults; consumers supply endpoints.
+
 ## Shared test fixture
 
 ```ts

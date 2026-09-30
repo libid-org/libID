@@ -12,6 +12,10 @@ export interface LedgerId {
 /** Chain namespaces with a ledger implementation. */
 export type Namespace = 'eip155'
 
+declare const account: unique symbol
+/** An account in its namespace's canonical form (EIP-55 on eip155); produced by a ledger client. */
+export type Account = string & { readonly [account]: true }
+
 /** A supported ledger and the libID deployments on it. */
 export interface Ledger<
   C extends `${Namespace}:${string}` = `${Namespace}:${string}`,

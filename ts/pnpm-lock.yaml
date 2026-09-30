@@ -205,6 +205,9 @@ importers:
       '@noble/hashes':
         specifier: ^2.3.0
         version: 2.4.0
+      viem:
+        specifier: ^2.55.13
+        version: 2.55.13(typescript@5.9.3)
     devDependencies:
       typescript:
         specifier: 'catalog:'
