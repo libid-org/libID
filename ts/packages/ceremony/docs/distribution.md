@@ -239,13 +239,15 @@ binary. [CI](../../../../.github/workflows/ci.yml) uses it as follows:
 | Trigger | Publication |
 |---|---|
 | Pull request or manual dry run | Build and test only; no image push. |
-| Push to `main` | Publish `ghcr.io/libid-org/ccdp:sha-<full commit sha>` and `:main`. |
-| [Custom workflow](../../../../.github/workflows/ccdp-custom.yml), or `ccdp-custom/<tag>` branch | Publish the sha tag and `:custom-<tag>`. |
-| GitHub Release `v<version>` | [Promote](../../../../.github/workflows/release.yml) the existing sha image to `:<version>` and, for a stable version, `:latest`. |
+| Push to `main` | Publish `ghcr.io/libid-org/ccdp:sha-<full commit sha>` and `:main`, one publication at a time. |
+| [Custom workflow](../../../../.github/workflows/ccdp-custom.yml), or `ccdp-custom/<tag>` branch | Publish `:custom-<tag>` only. |
+| GitHub Release `ccdp-v<version>`, such as `ccdp-v1` or `ccdp-v1.2.0` | [Promote](../../../../.github/workflows/release.yml) the commit's sha image to `:<version>` and, for a version without `-`, `:latest`. |
 
-Release promotion verifies the source image's revision label and preserves its
-digest; it never rebuilds. If the sha image is missing, first publish that commit
-through a successful `main` run, then re-publish the release. Image digests appear
+CCDP versions are their own; a `v<version>` release publishes only the npm
+packages. Release promotion requires the tagged commit to be on `main` and the
+source image's revision and version labels to name it as a `main` publication,
+and it preserves the digest; it never rebuilds. If the sha image is missing, re-run
+that commit's `ccdp-publish` job, then re-publish the release. Image digests appear
 in the workflow summary. Custom images are outside the `:main` retention history;
 deploy them by digest and replace them whole.
 
@@ -255,8 +257,8 @@ the build output. The build then checks reused immutable URLs for identical
 bytes and policies, retains the previous immutable assets, and replaces the
 output only after success, so the compatibility window holds without a
 persistent build directory. Only the registry's answer that the image does not
-exist (a first publication) skips the seed, with a warning when publishing; any
-other pull failure fails the run, so a publication never drops retained assets
+exist (a first publication), or a fork pull request's token being refused, skips
+the seed, with a warning when publishing; any other pull failure fails the run, so a publication never drops retained assets
 silently and is re-run instead. Changing the bytes or policy of an already
 published immutable URL fails the build by design; publish changed content
 under a new mount.

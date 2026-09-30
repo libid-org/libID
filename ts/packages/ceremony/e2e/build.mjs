@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { build } from 'vite'
@@ -9,12 +9,18 @@ import { artifactDir } from './topology.ts'
 // Every e2e input, before Playwright starts the containers that mount the first two.
 // The artifact starts fresh: retention belongs to publication, not to the test inputs. An
 // interrupted build's staging or previous tree would otherwise stop every later run.
-for (const dir of [artifactDir, `${artifactDir}.building`, `${artifactDir}.previous`])
-  rmSync(join(packageDir, dir), { recursive: true, force: true })
-execFileSync(process.execPath, ['build/distribution.ts', '--out-dir', artifactDir], {
-  cwd: packageDir,
-  stdio: 'inherit',
-})
+// CI builds it once for every browser job and sets CEREMONY_E2E_PREBUILT.
+if (process.env.CEREMONY_E2E_PREBUILT) {
+  if (!existsSync(join(packageDir, artifactDir, 'distribution-graph.json')))
+    throw new Error(`CEREMONY_E2E_PREBUILT is set but ${artifactDir} holds no Distribution`)
+} else {
+  for (const dir of [artifactDir, `${artifactDir}.building`, `${artifactDir}.previous`])
+    rmSync(join(packageDir, dir), { recursive: true, force: true })
+  execFileSync(process.execPath, ['build/distribution.ts', '--out-dir', artifactDir], {
+    cwd: packageDir,
+    stdio: 'inherit',
+  })
+}
 await import('./buildRuntime.mjs')
 await (await import('./crs.mjs')).cacheCrs()
 

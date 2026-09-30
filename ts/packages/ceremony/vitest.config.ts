@@ -25,6 +25,8 @@ export default defineConfig({
         'src/**/*.d.ts',
       ],
       reporter: ['text-summary', 'json-summary', 'html'],
+      // The measured floor; raise it as coverage rises.
+      thresholds: { lines: 97, statements: 97, functions: 98, branches: 97 },
     },
   },
 })

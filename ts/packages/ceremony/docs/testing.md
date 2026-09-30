@@ -57,8 +57,9 @@ concurrency. Workspace CI runs build, unit tests, lint and formatting separately
 from the browser job.
 
 `pnpm -C ts --filter @libid/ceremony test:coverage` measures production-source
-coverage into `coverage/`. On each push to `main`, CI publishes its line
-coverage to the `badges` branch for the README badge.
+coverage into `coverage/`; the thresholds in [vitest.config.ts](../vitest.config.ts)
+fail CI's TypeScript job, which runs ceremony's tests this way. On each push to
+`main`, CI publishes that line coverage to the `badges` branch for the README badge.
 
 ## Adding a platform
 
@@ -144,7 +145,9 @@ Playwright first builds the qualification artifacts, the runtime page and the
 harness modules ([build.mjs](../e2e/build.mjs)), then owns startup, readiness and
 teardown for pinned SWS/notary containers and the browser harness, so a bare
 `playwright test` qualifies current artifacts too. **Browser tests** CI runs nine
-independent workspace/engine jobs for popup, ceremony and the dev app. Every
+independent workspace/engine jobs for popup, ceremony and the dev app. One job
+builds the qualification Distribution for the three ceremony jobs, which set
+`CEREMONY_E2E_PREBUILT` so `build.mjs` uses it instead of rebuilding. Every
 desktop, HTTP and emulated project runs once in its engine's job. Popup tests also
 use two parallel workers; ceremony's shared asset controls and heavy runtimes stay
 serial within each job. No OAuth credentials are required. Release downloads and

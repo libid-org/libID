@@ -1,8 +1,9 @@
 name: CCDP custom image
 
-# A trial image of the CCDP Distribution from any commit, published as
+# A trial image of the CCDP Distribution from any commit, published only as
 # ghcr.io/libid-org/ccdp:custom-<tag> by the same workflow and checks as a
-# main publication. Run it on the branch to build, or push ccdp-custom/<tag>.
+# main publication; it never pushes the sha tag a release promotes. Run it on
+# the branch to build, or push ccdp-custom/<tag>.
 
 on:
   workflow_dispatch:

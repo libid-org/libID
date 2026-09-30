@@ -14,12 +14,12 @@ name: CCDP image
 # and `packages: write` only for the runs that push. A dispatch runs with the
 # repository's default token, which is read-only.
 #
-# The image is always tagged `ghcr.io/libid-org/ccdp:sha-<commit sha>` (the
-# full 40-hex sha, so two commits can never share a tag) — the reference the
-# checks run against and the one release.yml promotes after checking that
-# the image's `org.opencontainers.image.revision` label names the released
-# commit; `tag` adds one more tag (`main`, `custom-<name>`), checked here
-# against the tag grammar before anything is built.
+# The checks run against the local reference `ghcr.io/libid-org/ccdp:sha-<commit sha>`
+# (the full 40-hex sha, so two commits can never share a tag). Only a main
+# publication passes `sha_tag` and pushes it: that is the reference release.yml
+# promotes after checking the image's revision and version labels. `tag` adds
+# one more tag (`main`, `custom-<name>`), checked here against the tag grammar
+# before anything is built; it is also the version label.
 # The build is seeded from the previously published `:main` image so immutable
 # assets stay available through the compatibility window (see "Publication and
 # upgrades" in ts/packages/ceremony/docs/distribution.md).
@@ -35,9 +35,13 @@ on:
         type: boolean
         default: false
       tag:
-        description: A tag of ghcr.io/libid-org/ccdp to add besides sha-<commit sha>, such as main or custom-<name>.
+        description: A tag of ghcr.io/libid-org/ccdp to push, such as main or custom-<name>.
         type: string
         default: ""
+      sha_tag:
+        description: Also push sha-<commit sha>, the reference a release promotes. Only main publications pass true.
+        type: boolean
+        default: false
   workflow_dispatch:
 
 jobs:
@@ -57,34 +61,45 @@ jobs:
       # A dispatch has no inputs, so this is "false" unless a caller asked.
       PUSH: ${{ inputs.push == true }}
       TAG: ${{ inputs.tag }}
+      SHA_TAG: ${{ inputs.sha_tag == true }}
     steps:
-      # SHA_REF is the commit's own tag; REFS is every reference the image gets
-      # (SHA_REF first, then `tag`). IMAGE_VERSION, the
-      # `org.opencontainers.image.version` label, is `tag` or else the sha tag.
-      # The whole input must be one tag: a space or newline cannot smuggle in a
-      # second reference. It runs first, so a bad input fails before the build.
+      # SHA_REF is the commit's own tag, which every check runs against; REFS is
+      # what a push publishes (SHA_REF only with `sha_tag`, then `tag`).
+      # IMAGE_VERSION, the `org.opencontainers.image.version` label, is `tag` or
+      # else the sha tag. The whole input must be one tag: a space or newline
+      # cannot smuggle in a second reference. It runs first, so a bad input
+      # fails before the build.
       - name: Resolve the image references
         run: |
           set -euo pipefail
           sha_ref="$IMAGE:sha-$GITHUB_SHA"
-          refs="$sha_ref"
+          refs=""
+          if [ "$SHA_TAG" = "true" ]; then refs="$sha_ref"; fi
           version="sha-$GITHUB_SHA"
           if [ -n "$TAG" ]; then
             if ! [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
               echo "::error::${TAG@Q} is not usable as a tag of $IMAGE"
               exit 1
             fi
-            [ "$TAG" = "$version" ] || refs="$refs $IMAGE:$TAG"
+            [ "$TAG" = "$version" ] || refs="${refs:+$refs }$IMAGE:$TAG"
             version="$TAG"
           fi
-          echo "Image references: $refs (push: $PUSH, version label: $version)"
+          if [ "$PUSH" = "true" ] && [ -z "$refs" ]; then
+            echo "::error::a push needs a tag or sha_tag"
+            exit 1
+          fi
+          echo "Image references: $sha_ref ${refs:+(publishes $refs) }(push: $PUSH, version label: $version)"
           {
             echo "SHA_REF=$sha_ref"
             echo "REFS=$refs"
             echo "IMAGE_VERSION=$version"
           } >> "$GITHUB_ENV"
 
+      # The build and tests run with a token that may write packages; keep it
+      # out of .git/config.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-ts
 
@@ -100,12 +115,17 @@ jobs:
       # retain its immutable assets and verify reused URLs are unchanged. Only
       # the registry's word that the image does not exist (first publication,
       # or a package without a `:main` tag yet; "manifest unknown" for the
-      # read-only pull-request token too) skips the seed. Any other pull
-      # failure — network, registry, auth — fails the run, so a publication
-      # never drops retained assets silently and is simply re-run.
+      # read-only pull-request token too), or a fork's token being refused,
+      # skips the seed. Any other pull failure — network, registry, auth —
+      # fails the run, so a publication never drops retained assets silently
+      # and is simply re-run. The registry login ends here, before build code
+      # runs; the push logs in again.
       - name: Seed retention from the previously published image
+        env:
+          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           set -euo pipefail
+          trap 'docker logout ghcr.io >/dev/null' EXIT
           if docker pull --platform linux/amd64 "$IMAGE:main" 2>"$RUNNER_TEMP/pull.err"; then
             previous=$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE:main")
             cid=$(docker create --platform linux/amd64 "$IMAGE:main")
@@ -117,8 +137,9 @@ jobs:
             exit 0
           fi
           cat "$RUNNER_TEMP/pull.err"
-          if grep -qiE 'manifest unknown|not found|name unknown' "$RUNNER_TEMP/pull.err"; then
-            echo "No previous image at $IMAGE:main; building without retained assets."
+          if grep -qiE 'manifest unknown|not found|name unknown' "$RUNNER_TEMP/pull.err" \
+            || { [ "$FORK_PR" = "true" ] && grep -qiE 'denied|unauthorized' "$RUNNER_TEMP/pull.err"; }; then
+            echo "No readable previous image at $IMAGE:main; building without retained assets."
             if [ "$PUSH" = "true" ]; then
               echo "::warning::Retention seed unavailable; this publication retains no previous immutable assets."
             fi
@@ -136,8 +157,8 @@ jobs:
       - name: Build the image (linux/amd64)
         run: |
           set -euo pipefail
-          tags=()
-          for ref in $REFS; do tags+=(-t "$ref"); done
+          tags=(-t "$SHA_REF")
+          for ref in $REFS; do [ "$ref" = "$SHA_REF" ] || tags+=(-t "$ref"); done
           docker buildx build --platform linux/amd64 --load "${tags[@]}" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
@@ -188,8 +209,12 @@ jobs:
 
       - name: Push the image
         if: env.PUSH == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null' EXIT
           for ref in $REFS; do docker push "$ref"; done
           digest=$(docker image inspect -f '{{index .RepoDigests 0}}' "$SHA_REF")
           {

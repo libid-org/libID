@@ -1,11 +1,13 @@
 name: Release
 
-# Publishing a GitHub Release tagged `v<version>` publishes @libid/claim
-# and @libid/claim-full (whose version tracks claim's) to npm, and the CCDP
-# image to ghcr as `ghcr.io/libid-org/ccdp:<version>` (plus `:latest` for a
-# stable version). The tag is a pointer, never a source: it must equal both
-# package.json versions. npm auth is token-first (org NPM_TOKEN secret) with
-# OIDC trusted publishing as the fallback — same model as libid-contracts.
+# A published GitHub Release's tag selects what it publishes:
+# - `ccdp-v<version>` promotes the CCDP image of the tagged commit, which must
+#   be on main, to `ghcr.io/libid-org/ccdp:<version>` (plus `:latest` for a
+#   stable version). CCDP versions are their own, never a package's.
+# - `v<version>` publishes @libid/claim and @libid/claim-full (whose version
+#   tracks claim's) to npm. The tag is a pointer, never a source: it must equal
+#   both package.json versions. npm auth is token-first (org NPM_TOKEN secret)
+#   with OIDC trusted publishing as the fallback — same model as libid-contracts.
 
 on:
   release:
@@ -16,16 +18,28 @@ permissions:
 
 jobs:
   verify-tag:
-    name: Release tag matches version
+    name: Release tag matches its source
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Tag equals package version
+        with:
+          # Full history, so origin/main is present for the ancestry check.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: A CCDP tag is on main; a package tag equals the package versions
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
+          if [[ "$TAG" == ccdp-v* ]]; then
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+              echo "::error::$TAG targets $GITHUB_SHA, which is not on main; only main publications are released"
+              exit 1
+            }
+            echo "tag: $TAG  commit: $GITHUB_SHA (on main)"
+            exit 0
+          fi
           version="${TAG#v}"
           for dir in claim claim-full; do
             pkg=$(node -p "require('./ts/packages/$dir/package.json').version")
@@ -35,6 +49,7 @@ jobs:
 
   publish-npm:
     name: Publish @libid/claim + @libid/claim-full to npm
+    if: ${{ !startsWith(github.event.release.tag_name, 'ccdp-v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [verify-tag]
@@ -106,14 +121,15 @@ jobs:
   # image that ci.yml built, tested and pushed as `sha-<commit sha>` when the
   # commit landed on main is promoted — retagged registry-side by digest, no
   # rebuild — so the release image is byte-identical to the tested one and
-  # needs no retention seed. The tag is the full sha and the image's own
-  # revision label must name this commit, so a promotion cannot pick up
-  # another commit's image. A release never builds: without that image the
-  # job fails, because only images published from main enter the `:main`
-  # retention history every later build seeds from.
+  # needs no retention seed. The tag is the full sha, and the image's own
+  # labels must name this commit as a main publication, so a promotion cannot
+  # pick up another commit's image or a custom build. A release never builds:
+  # without that image the job fails, because only images published from main
+  # enter the `:main` retention history every later build seeds from.
   # ---------------------------------------------------------------------------
   publish-ccdp-image:
     name: Publish the CCDP image
+    if: startsWith(github.event.release.tag_name, 'ccdp-v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [verify-tag]
@@ -123,15 +139,15 @@ jobs:
     env:
       IMAGE: ghcr.io/libid-org/ccdp
     steps:
-      # `<version>` is the tag without its `v`, as on npm; a `-` marks a
-      # prerelease (the dist-tag rule above), which never moves `latest`.
+      # `<version>` is the tag after `ccdp-v`, such as `1` or `1.2.0`; a `-`
+      # marks a prerelease, which never moves `latest`.
       - name: Derive the image tags from the release version
         id: tags
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          version="${TAG#v}"
+          version="${TAG#ccdp-v}"
           printf '%s' "$version" | grep -qE '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$' || {
             echo "::error::version '$version' is not usable as an image tag" >&2
             exit 1
@@ -150,11 +166,11 @@ jobs:
 
       # `--prefer-index=false`: with a single source, imagetools would otherwise
       # wrap a plain manifest in a new index, which has a different digest.
-      # "not found" means the commit never published from main (or its run
-      # failed): the fix is to merge and let ccdp-publish run, never to build
-      # here. Before retagging, the image's `org.opencontainers.image.revision`
-      # label (baked in by ccdp-image.yml) must equal the released commit: the
-      # tag alone is a mutable pointer. `.Image` is one config for a plain
+      # "not found" means the commit's main run did not publish (still running,
+      # failed, or superseded while queued): the fix is to re-run its
+      # ccdp-publish, never to build here. Before retagging, the labels baked in
+      # by ccdp-image.yml must name the released commit as a main publication:
+      # the tag alone is a mutable pointer. `.Image` is one config for a plain
       # manifest and a per-platform map for an index.
       - name: Promote the tested main image of this commit
         env:
@@ -166,21 +182,26 @@ jobs:
               2>"$RUNNER_TEMP/inspect.err" | jq -r .); then
             cat "$RUNNER_TEMP/inspect.err"
             if grep -qiE 'not found|manifest unknown|name unknown' "$RUNNER_TEMP/inspect.err"; then
-              echo "::error::no tested main image for $GITHUB_SHA: merge to main and let ccdp-publish run, then re-publish the release"
+              echo "::error::no tested main image for $GITHUB_SHA: re-run the ccdp-publish job of its main CI run, then re-publish the release"
             else
               echo "::error::could not inspect $source; fix the cause and re-run"
             fi
             exit 1
           fi
           echo "$source is $digest"
-          revision=$(docker buildx imagetools inspect "$IMAGE@$digest" --format '{{json .Image}}' \
-            | jq -r 'if has("config") then . else .["linux/amd64"] end
-                     | .config.Labels["org.opencontainers.image.revision"] // empty')
+          labels=$(docker buildx imagetools inspect "$IMAGE@$digest" --format '{{json .Image}}' \
+            | jq -c 'if has("config") then . else .["linux/amd64"] end | .config.Labels // {}')
+          revision=$(jq -r '.["org.opencontainers.image.revision"] // empty' <<<"$labels")
+          built_as=$(jq -r '.["org.opencontainers.image.version"] // empty' <<<"$labels")
           if [ "$revision" != "$GITHUB_SHA" ]; then
             echo "::error::$source carries revision '${revision:-none}', not $GITHUB_SHA; refusing to promote"
             exit 1
           fi
-          echo "$source was built from $revision"
+          if [ "$built_as" != "main" ]; then
+            echo "::error::$source is a '${built_as:-unlabelled}' build, not a main publication; refusing to promote"
+            exit 1
+          fi
+          echo "$source was published from main at $revision"
           args=()
           for ref in $TAGS; do args+=(-t "$ref"); done
           docker buildx imagetools create --prefer-index=false "${args[@]}" "$IMAGE@$digest"
