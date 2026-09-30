@@ -12,9 +12,9 @@ import {
   toHex,
   type Chain as ViemChain,
 } from 'viem'
-import type { Access, LedgerClient, Session } from '../client.js'
+import type { Driver, SessionDriver } from '../client.js'
 import { errorCode, LedgerError } from '../errors.js'
-import type { Account, Chain, Ledger } from '../index.js'
+import type { Account, Ledger } from '../index.js'
 import type { Provider, Reader, Tx } from './index.js'
 
 type Request = { method: string; params?: unknown }
@@ -38,10 +38,10 @@ export const readMethods: readonly string[] = Object.freeze([
 ])
 const sendMethods = ['eth_sendTransaction', 'wallet_sendTransaction']
 
-export function evm<L extends Ledger<Chain<'evm'>>>(
-  ledger: L,
-  access: Access,
-): LedgerClient<'evm', L> {
+export function evm(
+  ledger: Ledger<'evm'>,
+  access: { rpc: string; explorer?: string },
+): Driver<'evm'> {
   const chainId = Number(ledger.chain.slice('eip155:'.length))
   if (!Number.isSafeInteger(chainId)) throw new TypeError(`Unsupported EVM chain: ${ledger.chain}`)
   const chain = defineChain({
@@ -60,8 +60,6 @@ export function evm<L extends Ledger<Chain<'evm'>>>(
 
   function reads(client: Client) {
     return {
-      family: 'evm' as const,
-      ledger,
       walletRequirements: Object.freeze({
         methods: Object.freeze([
           'eth_sendTransaction',
@@ -73,7 +71,7 @@ export function evm<L extends Ledger<Chain<'evm'>>>(
       }),
       parseAccount,
       async read<A extends readonly unknown[], R>(
-        query: { evm: (read: Reader, ...args: A) => Promise<R> },
+        run: (read: Reader, ...args: A) => Promise<R>,
         args: A,
         { signal }: { signal?: AbortSignal } = {},
       ): Promise<R> {
@@ -104,13 +102,7 @@ export function evm<L extends Ledger<Chain<'evm'>>>(
           },
           parseAccount,
         }
-        return query.evm(reader, ...args)
-      },
-      tx<A extends readonly unknown[]>(
-        command: { evm: (ledger: Ledger, ...args: A) => Tx },
-        args: A,
-      ): Tx {
-        return command.evm(ledger, ...args)
+        return run(reader, ...args)
       },
       async estimate(tx: Tx, from: Account): Promise<bigint> {
         const [gas, fees] = await Promise.all([
@@ -154,15 +146,18 @@ export function evm<L extends Ledger<Chain<'evm'>>>(
     if ((await walletChain(provider)) !== chainId) throw new LedgerError('wrong-chain')
   }
 
-  function session(provider: Provider, address: `0x${string}`): Session<'evm', L> {
+  function session(provider: Provider, address: `0x${string}`): SessionDriver<'evm'> {
     const transport = walletReads(provider, chainId, fallback)
     const client: Client = createPublicClient({
       chain,
       transport: custom(transport, { retryCount: 0 }),
     })
+    const { read, estimate } = reads(client)
+    const account = address as Account
     return {
-      ...reads(client),
-      account: address as Account,
+      account,
+      read,
+      estimate: (tx) => estimate(tx, account),
       async send(tx: Tx) {
         let requested = false
         try {
@@ -197,7 +192,7 @@ export function evm<L extends Ledger<Chain<'evm'>>>(
         }
       },
       close: transport.close,
-    } as Session<'evm', L>
+    }
   }
 
   const base = reads(createPublicClient({ chain, transport: rpc }))
@@ -217,7 +212,7 @@ export function evm<L extends Ledger<Chain<'evm'>>>(
       }
       return session(provider, address)
     },
-  } as LedgerClient<'evm', L>
+  }
 }
 
 function walletError(error: unknown, otherwise: 'no-account' | 'wrong-chain') {

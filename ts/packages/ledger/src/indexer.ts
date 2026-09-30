@@ -1,19 +1,28 @@
 import type { IndexerReader } from './client.js'
 import type { Ledger } from './index.js'
 
-export interface IndexerAccess {
+export interface IndexerOptions {
   /** The indexer's origin: HTTPS, or HTTP on localhost for development. */
   origin: string
-  /** The ledger deployment, by name, the indexer must report indexing. */
+  /** The deployment, by ledger address name, the indexer must report indexing on each chain. */
   deployment: string
   /** How far behind the chain head the indexer may be, in blocks. Defaults to 20. */
   maxLag?: number
 }
 
-export type Indexer = ReturnType<typeof indexer>
+/** A libID indexer. One indexer serves every chain it reports. */
+export interface Indexer {
+  readonly deployment: string
+  /** Runs a query's indexer implementation for a ledger; throws unless the index is current. */
+  read<A extends readonly unknown[], R>(
+    ledger: Ledger,
+    run: (read: IndexerReader, ...args: A) => Promise<R>,
+    args: A,
+    signal?: AbortSignal,
+  ): Promise<R>
+}
 
-/** @internal Runs queries' indexer implementations against a libID indexer. */
-export function indexer(ledger: Ledger, { origin, deployment, maxLag = 20 }: IndexerAccess) {
+export function indexer({ origin, deployment, maxLag = 20 }: IndexerOptions): Indexer {
   const url = new URL(origin)
   if (
     url.origin !== origin ||
@@ -24,10 +33,6 @@ export function indexer(ledger: Ledger, { origin, deployment, maxLag = 20 }: Ind
   ) {
     throw new TypeError('Invalid indexer configuration.')
   }
-  const contract = ledger.addresses[deployment]?.toLowerCase()
-  if (!contract) throw new TypeError(`${ledger.name} has no ${deployment} address`)
-  // ponytail: the libID indexer keys chains by EVM chain id; extend its protocol for other families.
-  const chainId = Number(ledger.chain.slice(ledger.chain.indexOf(':') + 1))
 
   async function get(
     path: string,
@@ -45,13 +50,18 @@ export function indexer(ledger: Ledger, { origin, deployment, maxLag = 20 }: Ind
     return object(await response.json())
   }
 
-  /** The last indexed block, if the indexer is current and indexes this deployment. */
-  async function status(signal: AbortSignal): Promise<number> {
+  /** The ledger's last indexed block, if the index is current and covers the deployment. */
+  async function status(ledger: Ledger, signal: AbortSignal): Promise<number> {
+    // ponytail: the libID indexer keys chains by EVM chain id; extend its protocol for other families.
+    const chainId = Number(ledger.chain.slice(ledger.chain.indexOf(':') + 1))
+    const contract = ledger.addresses[deployment]?.toLowerCase()
+    // ponytail: two status requests per read; share one per moment if many chains read at once.
     const data = await get('/v1/status', undefined, signal)
     if (!Array.isArray(data.chains)) throw new Error('Invalid indexer status.')
     const chains = data.chains.map(object).filter((chain) => chain.chainId === chainId)
     const chain = chains[0]
     if (
+      !contract ||
       chains.length !== 1 ||
       typeof chain.contract !== 'string' ||
       chain.contract.toLowerCase() !== contract ||
@@ -66,27 +76,26 @@ export function indexer(ledger: Ledger, { origin, deployment, maxLag = 20 }: Ind
       chain.reportValidFor <= 0 ||
       chain.lastWindowError !== null
     ) {
-      throw new Error('Indexer is unavailable, behind, or indexing another deployment.')
+      throw new Error('Indexer is unavailable, behind, or not indexing this deployment.')
     }
     return chain.lastIndexedBlock
   }
 
   return {
-    async read<A extends readonly unknown[], R>(
-      run: (read: IndexerReader, ...args: A) => Promise<R>,
-      args: A,
-      outer?: AbortSignal,
-    ): Promise<R> {
+    deployment,
+    async read(ledger, run, args, outer) {
       const timeout = AbortSignal.timeout(15_000)
       const signal = outer ? AbortSignal.any([outer, timeout]) : timeout
       signal.throwIfAborted()
-      const before = await status(signal)
+      const before = await status(ledger, signal)
       const result = await run(
         { ledger, block: BigInt(before), get: (path, params) => get(path, params, signal) },
         ...args,
       )
       // An index that moved backwards (a reorg or reindex) may have served mixed state.
-      if ((await status(signal)) < before) throw new Error('Indexer state changed while reading.')
+      if ((await status(ledger, signal)) < before) {
+        throw new Error('Indexer state changed while reading.')
+      }
       return result
     },
   }

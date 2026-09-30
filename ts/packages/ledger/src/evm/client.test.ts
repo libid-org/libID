@@ -9,7 +9,7 @@ import {
   toHex,
 } from 'viem'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { connect, type Families, type FamilyOf, type Query } from '../client.js'
+import { connect, type Families, type Query } from '../client.js'
 import { defineLedger, type ledgers } from '../index.js'
 import { readMethods, walletReads } from './client.js'
 
@@ -335,7 +335,7 @@ describe('EVM client', () => {
   })
   const feeBlock = { number: '0x1', baseFeePerGas: '0x64', transactions: [] }
   const tx = { to: registry, data: '0x1234' as const, value: 5n }
-  const client = (explorer?: string) => connect(ledger, { rpc, explorer })
+  const client = (explorer?: string) => connect({ ledgers: [{ ledger, rpc, explorer }] })
 
   /** A JSON-RPC endpoint answering from `handlers`; unknown methods are "not found". */
   function endpoint(handlers: Handlers) {
@@ -382,10 +382,12 @@ describe('EVM client', () => {
     const named = (name: string): Query<[], string> => ({
       evm: async (read) => read.address(name),
     })
-    expect(await client().read(named('identityNames'), [])).toBe(
+    expect(await client().read(ledger, named('identityNames'), [])).toBe(
       '0x2222222222222222222222222222222222222222',
     )
-    await expect(client().read(named('verifier'), [])).rejects.toThrow(/no verifier address/)
+    await expect(client().read(ledger, named('verifier'), [])).rejects.toThrow(
+      /no verifier address/,
+    )
   })
 
   it('estimates the network fee with EIP-1559 fees, or legacy gas prices when unsupported', async () => {
@@ -395,17 +397,17 @@ describe('EVM client', () => {
       eth_maxPriorityFeePerGas: () => '0x7',
       eth_gasPrice: () => '0x6e',
     }
-    const from = client().parseAccount(account)
+    const from = client().parseAccount(ledger, account)
     endpoint(handlers)
     // maxFeePerGas = baseFee 100 × 1.2 + tip 7
-    expect(await client().estimate(tx, from)).toBe(21_000n * 127n)
+    expect(await client().estimate(ledger, tx, from)).toBe(21_000n * 127n)
     vi.restoreAllMocks()
     endpoint({
       ...handlers,
       eth_getBlockByNumber: () => ({ ...feeBlock, baseFeePerGas: undefined }),
     })
     // gasPrice 110 × 1.2
-    expect(await client().estimate(tx, from)).toBe(21_000n * 132n)
+    expect(await client().estimate(ledger, tx, from)).toBe(21_000n * 132n)
   })
 
   it('switches to the chain, adding it when the wallet does not know it', async () => {
@@ -425,7 +427,7 @@ describe('EVM client', () => {
       },
     })
     wallet.setChain(1)
-    expect((await client('https://explorer.example').connect(wallet)).account).toBe(account)
+    expect((await client('https://explorer.example').connect(ledger, wallet)).account).toBe(account)
     expect(added).toEqual([
       {
         chainId: toHex(chainId),
@@ -441,13 +443,13 @@ describe('EVM client', () => {
       },
     })
     declining.setChain(1)
-    await expect(client().connect(declining)).rejects.toMatchObject({ code: 'rejected' })
+    await expect(client().connect(ledger, declining)).rejects.toMatchObject({ code: 'rejected' })
   })
 
   it('simulates the exact transaction from the account before sending', async () => {
     endpoint({})
     const wallet = scriptedWallet()
-    await (await client().connect(wallet)).send(tx)
+    await (await client().connect(ledger, wallet)).send(tx)
     const methods = wallet.request.mock.calls.map(([{ method }]) => method)
     expect(methods.indexOf('eth_call')).toBeLessThan(methods.indexOf('eth_sendTransaction'))
     expect(wallet.request).toHaveBeenCalledWith(
@@ -460,6 +462,6 @@ describe('EVM client', () => {
 
   it('accepts viem providers and derives the family from the chain', () => {
     expectTypeOf<EIP1193Provider>().toMatchTypeOf<Families['evm']['wallet']>()
-    expectTypeOf<FamilyOf<(typeof ledgers)['eden-testnet']>>().toEqualTypeOf<'evm'>()
+    expectTypeOf<(typeof ledgers)['eden-testnet']['family']>().toEqualTypeOf<'evm'>()
   })
 })

@@ -7,19 +7,10 @@ import { defineLedger } from '../index.js'
 
 type Node = (method: string, params: unknown[]) => unknown
 
-const chainId = 3735928814
 const raw = '0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed'
 const canonical = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed'
 const target = `0x${'2'.repeat(40)}` as const
 const reverts = `0x${'3'.repeat(40)}` as const
-const ledger = defineLedger({
-  chain: `eip155:${chainId}`,
-  name: 'Harness',
-  testnet: true,
-  currency: { symbol: 'ETH', decimals: 18 },
-  notary: 'http://localhost:4687',
-  addresses: { target },
-})
 
 // Each fake gets its own RPC URL, so fakes in one test never answer for each other.
 const nodes = new Map<string, Node>()
@@ -39,6 +30,15 @@ const declined = () => Object.assign(new Error('User rejected the request.'), { 
 
 export const evm: Harness<'evm'> = {
   setup() {
+    const chainId = 3735928814 + nodes.size
+    const ledger = defineLedger({
+      chain: `eip155:${chainId}`,
+      name: `Harness ${chainId}`,
+      testnet: true,
+      currency: { symbol: 'ETH', decimals: 18 },
+      notary: 'http://localhost:4687',
+      addresses: { target },
+    })
     const state = {
       head: 16,
       walletChain: chainId,
@@ -110,8 +110,11 @@ export const evm: Harness<'evm'> = {
       },
     })
 
+    const access = { ledger, rpc }
     return {
-      client: connect(ledger, { rpc }),
+      ledger,
+      access,
+      client: connect({ ledgers: [access] }),
       wallet,
       probe: (read) => read.getBalance({ address: canonical }),
       tx: { to: target, data: '0x1234', value: 5n },

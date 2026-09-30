@@ -1,21 +1,18 @@
 import { evm } from './evm/client.js'
 import type * as Evm from './evm/index.js'
-import { type Indexer, type IndexerAccess, indexer } from './indexer.js'
-import type { Account, Chain, Family, Ledger } from './index.js'
+import type { Indexer } from './indexer.js'
+import type { Account, Family, Ledger } from './index.js'
 
 export { LedgerError, type LedgerErrorCode } from './errors.js'
-export type { IndexerAccess } from './indexer.js'
+export { type Indexer, type IndexerOptions, indexer } from './indexer.js'
 
 /**
- * Each ledger family's own types, defined in its module. Besides the `connect` dispatch,
- * the only place this entry point names a family: adding one adds one entry.
+ * Each ledger family's own types, defined in its module. Besides the driver dispatch in
+ * `connect`, the only place this entry point names a family: adding one adds one entry.
  */
 export interface Families {
   evm: { reader: Evm.Reader; tx: Evm.Tx; wallet: Evm.Provider }
 }
-export type FamilyOf<L extends Ledger> = {
-  [F in Family]: L['chain'] extends Chain<F> ? F : never
-}[Family]
 
 /** Reads from a libID indexer, which serves state as of `block`, the last one it processed. */
 export interface IndexerReader {
@@ -33,88 +30,228 @@ export type Query<A extends readonly unknown[], R> = {
   readonly [F in Family]: (read: Families[F]['reader'], ...args: A) => Promise<R>
 } & {
   /**
-   * The same result from an indexer. Used when the client has a current indexer; otherwise,
+   * The same result from an indexer, used while the ledger's indexer is current; otherwise,
    * or if the indexer fails, the chain implementation runs.
    */
   readonly indexer?: (read: IndexerReader, ...args: A) => Promise<R>
 }
 /** What to write: one transaction builder per ledger family. */
 export type Command<A extends readonly unknown[]> = {
-  readonly [F in Family]: (ledger: Ledger, ...args: A) => Families[F]['tx']
+  readonly [F in Family]: (ledger: Ledger<F>, ...args: A) => Families[F]['tx']
 }
 
-export interface Access {
-  rpc: string
-  explorer?: string
-  /** A libID indexer that queries with an `indexer` implementation read first. */
-  indexer?: IndexerAccess
+/** How the client reaches one ledger: its RPC endpoint, or another client serving it. */
+export type LedgerAccess<L extends Ledger = Ledger> = (
+  | { ledger: L; rpc: string; explorer?: string }
+  | { ledger: L; client: LedgerClient }
+) & {
+  /** Replaces the client's default indexer for this ledger; `false` reads only the chain. */
+  indexer?: Indexer | false
 }
 
-/**
- * A ledger client, typed by its family so code generic over families type-checks.
- * Code holding clients of several families narrows them on `family`.
- */
-export interface LedgerClient<F extends Family = Family, L extends Ledger = Ledger<Chain<F>>> {
-  readonly family: F
+/** What connectors must request from wallets, as CAIP-25 namespaces. */
+export type WalletRequirements = Readonly<
+  Record<
+    string,
+    {
+      readonly chains: readonly string[]
+      readonly methods: readonly string[]
+      readonly events: readonly string[]
+    }
+  >
+>
+
+/** Reads and writes across every ledger it serves. */
+export interface LedgerClient<L extends Ledger = Ledger> {
+  readonly ledgers: readonly L[]
+  /** A served ledger by chain identifier, such as one a wallet reports. */
+  ledger(chain: string): L | undefined
+  readonly walletRequirements: WalletRequirements
+  /** Runs a query against one state of a ledger. */
+  read<A extends readonly unknown[], R>(
+    ledger: L,
+    query: Query<A, R>,
+    args: A,
+    options?: { signal?: AbortSignal },
+  ): Promise<R>
+  /** Builds a ledger's transaction for a command. */
+  tx<K extends L, A extends readonly unknown[]>(
+    ledger: K,
+    command: Command<A>,
+    args: A,
+  ): Families[K['family']]['tx']
+  /** Upper bound of the network fee, in the ledger's native units. */
+  estimate<K extends L>(ledger: K, tx: Families[K['family']]['tx'], from: Account): Promise<bigint>
+  /** Validates an account and returns its canonical form; throws on invalid input. */
+  parseAccount(ledger: L, raw: string): Account
+  /** Without `prompt`, restores an authorized wallet already on the ledger and never shows wallet UI. */
+  connect<K extends L>(
+    ledger: K,
+    wallet: Families[K['family']]['wallet'],
+    options?: { prompt?: boolean },
+  ): Promise<Session<K>>
+}
+
+/** A wallet connected on one ledger. Reads prefer the wallet's own RPC. */
+export interface Session<L extends Ledger = Ledger> {
   readonly ledger: L
-  /** What a wallet session needs from a connector, such as WalletConnect. */
-  readonly walletRequirements: {
-    readonly methods: readonly string[]
-    readonly events: readonly string[]
-  }
-  /** Runs a query against one chain state, from a current indexer when the query supports it. */
+  readonly account: Account
   read<A extends readonly unknown[], R>(
     query: Query<A, R>,
     args: A,
     options?: { signal?: AbortSignal },
   ): Promise<R>
-  /** Builds this ledger's transaction for a command. */
-  tx<A extends readonly unknown[]>(command: Command<A>, args: A): Families[F]['tx']
-  /** Upper bound of the network fee, in native units. */
-  estimate(tx: Families[F]['tx'], from: Account): Promise<bigint>
-  /** Validates an account and returns its canonical form; throws on invalid input. */
-  parseAccount(raw: string): Account
-  /** Without `prompt`, restores an authorized wallet already on this ledger and never shows wallet UI. */
-  connect(wallet: Families[F]['wallet'], options?: { prompt?: boolean }): Promise<Session<F, L>>
-}
-
-/** A connected wallet. Reads prefer the wallet's own RPC and fall back to `Access.rpc`. */
-export interface Session<F extends Family = Family, L extends Ledger = Ledger<Chain<F>>>
-  extends Omit<LedgerClient<F, L>, 'connect'> {
-  readonly account: Account
+  estimate(tx: Families[L['family']]['tx']): Promise<bigint>
   /**
    * Rechecks the account and chain, simulates, then asks the wallet to send.
    * A `LedgerError` means nothing was sent; any other error leaves the outcome unknown.
    */
+  send(tx: Families[L['family']]['tx']): Promise<string>
+  close(): void
+}
+
+/** One ledger's operations, implemented by each family's driver. */
+export interface Driver<F extends Family = Family> {
+  readonly walletRequirements: {
+    readonly methods: readonly string[]
+    readonly events: readonly string[]
+  }
+  read<A extends readonly unknown[], R>(
+    run: (read: Families[F]['reader'], ...args: A) => Promise<R>,
+    args: A,
+    options?: { signal?: AbortSignal },
+  ): Promise<R>
+  estimate(tx: Families[F]['tx'], from: Account): Promise<bigint>
+  parseAccount(raw: string): Account
+  connect(wallet: Families[F]['wallet'], options?: { prompt?: boolean }): Promise<SessionDriver<F>>
+}
+export interface SessionDriver<F extends Family = Family> {
+  readonly account: Account
+  read: Driver<F>['read']
+  estimate(tx: Families[F]['tx']): Promise<bigint>
   send(tx: Families[F]['tx']): Promise<string>
   close(): void
 }
 
-export function connect<L extends Ledger>(ledger: L, access: Access): LedgerClient<FamilyOf<L>, L> {
-  // ponytail: one family; dispatch on it (and lazy-load drivers) when a second one lands.
-  const client = evm(ledger, access) as LedgerClient<FamilyOf<L>, L>
-  if (!access.indexer) return client
-  const source = indexer(ledger, access.indexer)
+type Route = { ledger: Ledger; driver: Driver; indexer?: Indexer | false }
+
+export function connect<const E extends readonly LedgerAccess[]>(options: {
+  ledgers: E
+  /** Read first, for every ledger, by queries with an indexer implementation. */
+  indexer?: Indexer
+}): LedgerClient<E[number]['ledger']> {
+  const routes = new Map<string, Route>()
+  for (const access of options.ledgers) {
+    const { ledger } = access
+    if (routes.has(ledger.chain)) throw new TypeError(`More than one entry for ${ledger.chain}`)
+    const source = access.indexer ?? options.indexer
+    if (source && !ledger.addresses[source.deployment]) {
+      throw new TypeError(`${ledger.name} has no ${source.deployment} address`)
+    }
+    const driver = 'client' in access ? delegate(access.client, ledger) : drive(ledger, access)
+    routes.set(ledger.chain, { ledger, driver, indexer: source })
+  }
+  const route = (ledger: Ledger) => {
+    const found = routes.get(ledger.chain)
+    if (!found) throw new TypeError(`${ledger.name} is not served by this client`)
+    return found
+  }
   return {
-    ...client,
-    read: preferIndexer(client.read, source),
+    ledgers: Object.freeze([...routes.values()].map(({ ledger }) => ledger)),
+    ledger: (chain: string) => routes.get(chain)?.ledger,
+    walletRequirements: requirements([...routes.values()]),
+    read: async (ledger, query, args, options) => {
+      const found = route(ledger)
+      return read(found, found.driver.read)(query, args, options)
+    },
+    tx: (ledger, command, args) => command[ledger.family](ledger as never, ...args),
+    estimate: async (ledger, tx, from) => route(ledger).driver.estimate(tx, from),
+    parseAccount: (ledger, raw) => route(ledger).driver.parseAccount(raw),
+    async connect(ledger, wallet, options) {
+      const found = route(ledger)
+      const session = await found.driver.connect(wallet, options)
+      return {
+        ledger,
+        account: session.account,
+        read: read(found, session.read),
+        estimate: session.estimate,
+        send: session.send,
+        close: session.close,
+      }
+    },
+  } as LedgerClient<E[number]['ledger']>
+}
+
+/** Reads a current indexer first when the query supports it; the chain stays authoritative. */
+function read({ ledger, indexer }: Route, chain: Driver['read']): Session['read'] {
+  return async <A extends readonly unknown[], R>(
+    query: Query<A, R>,
+    args: A,
+    options?: { signal?: AbortSignal },
+  ): Promise<R> => {
+    if (query.indexer && indexer) {
+      try {
+        return await indexer.read(ledger, query.indexer, args, options?.signal)
+      } catch (error) {
+        // An unavailable or stale indexer only costs speed.
+        if (options?.signal?.aborted) throw error
+      }
+    }
+    // Each route pairs a ledger with its own family's driver; the map cannot express that.
+    const run = query[ledger.family] as (read: Families[Family]['reader'], ...args: A) => Promise<R>
+    return chain(run, args, options)
+  }
+}
+
+function drive(ledger: Ledger, access: { rpc: string; explorer?: string }): Driver {
+  // ponytail: one family; dispatch on `ledger.family` (and lazy-load drivers) when a second lands.
+  return evm(ledger, access)
+}
+
+/** Serves a ledger through another client, such as a custom or differently configured one. */
+function delegate(client: LedgerClient, ledger: Ledger): Driver {
+  const only = (run: unknown) => ({ [ledger.family]: run }) as unknown as Query<never, never>
+  const namespace = ledger.chain.slice(0, ledger.chain.indexOf(':'))
+  return {
+    get walletRequirements() {
+      const { methods = [], events = [] } = client.walletRequirements[namespace] ?? {}
+      return { methods, events }
+    },
+    read: (run, args, options) => client.read(ledger, only(run), args as never, options),
+    estimate: (tx, from) => client.estimate(ledger, tx, from),
+    parseAccount: (raw) => client.parseAccount(ledger, raw),
     async connect(wallet, options) {
-      const session = await client.connect(wallet, options)
-      return { ...session, read: preferIndexer(session.read, source) }
+      const session = await client.connect(ledger, wallet, options)
+      return {
+        account: session.account,
+        read: (run, args, options) => session.read(only(run), args as never, options),
+        estimate: session.estimate,
+        send: session.send,
+        close: session.close,
+      }
     },
   }
 }
 
-function preferIndexer(chain: LedgerClient['read'], source: Indexer): LedgerClient['read'] {
-  return async (query, args, options) => {
-    if (query.indexer) {
-      try {
-        return await source.read(query.indexer, args, options?.signal)
-      } catch (error) {
-        // The chain stays authoritative: an unavailable or stale indexer only costs speed.
-        if (options?.signal?.aborted) throw error
-      }
-    }
-    return chain(query, args, options)
+function requirements(routes: Route[]): WalletRequirements {
+  const namespaces: Record<
+    string,
+    { chains: string[]; methods: Set<string>; events: Set<string> }
+  > = {}
+  for (const { ledger, driver } of routes) {
+    const namespace = ledger.chain.slice(0, ledger.chain.indexOf(':'))
+    namespaces[namespace] ??= { chains: [], methods: new Set(), events: new Set() }
+    namespaces[namespace].chains.push(ledger.chain)
+    for (const method of driver.walletRequirements.methods)
+      namespaces[namespace].methods.add(method)
+    for (const event of driver.walletRequirements.events) namespaces[namespace].events.add(event)
   }
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(namespaces).map(([namespace, { chains, methods, events }]) => [
+        namespace,
+        Object.freeze({ chains, methods: [...methods], events: [...events] }),
+      ]),
+    ),
+  )
 }

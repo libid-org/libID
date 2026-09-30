@@ -1,14 +1,18 @@
-import type { Families, LedgerClient } from './client.js'
-import type { Family } from './index.js'
+import type { Families, LedgerAccess, LedgerClient } from './client.js'
+import type { Family, Ledger } from './index.js'
 
 /** What each ledger family provides so the conformance suite can test its client. */
 export interface Harness<F extends Family> {
-  /** A fresh fake chain, a client on it, and a wallet authorized on its chain. */
+  /** A fresh fake chain with its own chain id, a client on it, and a wallet authorized on it. */
   setup(): Fake<F>
 }
 
 export interface Fake<F extends Family> {
-  readonly client: LedgerClient<F>
+  readonly ledger: Ledger<F>
+  /** How a client reaches the fake chain, for composing clients over several fakes. */
+  readonly access: LedgerAccess<Ledger<F>>
+  /** A client serving only this ledger. */
+  readonly client: LedgerClient<Ledger<F>>
   /** Authorized for `accounts.raw` and on the client's chain. */
   readonly wallet: Families[F]['wallet']
   /** Reads a value that differs between any two chain states. */
