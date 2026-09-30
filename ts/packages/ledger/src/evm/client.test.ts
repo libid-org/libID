@@ -1,6 +1,16 @@
 import { EventEmitter } from 'node:events'
-import { createPublicClient, custom, defineChain, HttpRequestError, http, toHex } from 'viem'
-import { afterEach, expect, it, vi } from 'vitest'
+import {
+  createPublicClient,
+  custom,
+  defineChain,
+  type EIP1193Provider,
+  HttpRequestError,
+  http,
+  toHex,
+} from 'viem'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { connect, type Families, type FamilyOf, type Query } from '../client.js'
+import { defineLedger, type ledgers } from '../index.js'
 import { readMethods, walletReads } from './client.js'
 
 type Request = { method: string; params?: unknown }
@@ -309,4 +319,147 @@ it('falls back from an unresponsive wallet with a cooldown and recovers', async 
   s.answer(async () => '0xb')
   s.provider.emit('connect', { chainId: toHex(chainId) })
   expect(await s.reads.request(block), 'A reconnect clears the cooldown').toBe('0xb')
+})
+
+// EVM behavior beyond the shared contract in ../client.test.ts.
+describe('EVM client', () => {
+  type Handlers = Record<string, (params: unknown[]) => unknown>
+  const registry = `0x${'2'.repeat(40)}` as const
+  const ledger = defineLedger({
+    chain: `eip155:${chainId}`,
+    name: 'Test',
+    testnet: true,
+    currency: { symbol: 'TIA', decimals: 18 },
+    notary: 'http://localhost:4687',
+    addresses: { identityNames: registry },
+  })
+  const feeBlock = { number: '0x1', baseFeePerGas: '0x64', transactions: [] }
+  const tx = { to: registry, data: '0x1234' as const, value: 5n }
+  const client = (explorer?: string) => connect(ledger, { rpc, explorer })
+
+  /** A JSON-RPC endpoint answering from `handlers`; unknown methods are "not found". */
+  function endpoint(handlers: Handlers) {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_, init) => {
+      const { id, method, params } = JSON.parse(String(init?.body))
+      const handler = handlers[method]
+      return Response.json(
+        handler
+          ? { jsonrpc: '2.0', id, result: handler(params ?? []) }
+          : { jsonrpc: '2.0', id, error: { code: -32601, message: `No ${method}` } },
+      )
+    })
+  }
+
+  function scriptedWallet(overrides: Handlers = {}) {
+    let chain = chainId
+    const handlers: Handlers = {
+      eth_accounts: () => [account],
+      eth_requestAccounts: () => [account],
+      eth_chainId: () => toHex(chain),
+      eth_call: () => '0x',
+      eth_estimateGas: () => '0x5208',
+      eth_getBlockByNumber: () => feeBlock,
+      eth_maxPriorityFeePerGas: () => '0x1',
+      eth_getTransactionCount: () => '0x0',
+      eth_sendTransaction: () => `0x${'a'.repeat(64)}`,
+      ...overrides,
+    }
+    const request = vi.fn(async ({ method, params }: Request) => {
+      const handler = handlers[method]
+      if (!handler) throw Object.assign(new Error(`No ${method}`), { code: 4200 })
+      return handler((params ?? []) as unknown[])
+    })
+    return Object.assign(new EventEmitter(), {
+      request,
+      setChain(id: number) {
+        chain = id
+      },
+    })
+  }
+
+  it('returns named deployments checksummed and rejects unknown names', async () => {
+    endpoint({ eth_blockNumber: () => '0x10' })
+    const named = (name: string): Query<[], string> => ({
+      evm: async (read) => read.address(name),
+    })
+    expect(await client().read(named('identityNames'), [])).toBe(
+      '0x2222222222222222222222222222222222222222',
+    )
+    await expect(client().read(named('verifier'), [])).rejects.toThrow(/no verifier address/)
+  })
+
+  it('estimates the network fee with EIP-1559 fees, or legacy gas prices when unsupported', async () => {
+    const handlers: Handlers = {
+      eth_estimateGas: () => '0x5208',
+      eth_getBlockByNumber: () => feeBlock,
+      eth_maxPriorityFeePerGas: () => '0x7',
+      eth_gasPrice: () => '0x6e',
+    }
+    const from = client().parseAccount(account)
+    endpoint(handlers)
+    // maxFeePerGas = baseFee 100 × 1.2 + tip 7
+    expect(await client().estimate(tx, from)).toBe(21_000n * 127n)
+    vi.restoreAllMocks()
+    endpoint({
+      ...handlers,
+      eth_getBlockByNumber: () => ({ ...feeBlock, baseFeePerGas: undefined }),
+    })
+    // gasPrice 110 × 1.2
+    expect(await client().estimate(tx, from)).toBe(21_000n * 132n)
+  })
+
+  it('switches to the chain, adding it when the wallet does not know it', async () => {
+    endpoint({})
+    const added: unknown[] = []
+    let known = false
+    const wallet = scriptedWallet({
+      wallet_switchEthereumChain: () => {
+        if (!known) throw Object.assign(new Error('Unrecognized chain'), { code: 4902 })
+        wallet.setChain(chainId)
+        return null
+      },
+      wallet_addEthereumChain: (params) => {
+        added.push(...params)
+        known = true
+        return null
+      },
+    })
+    wallet.setChain(1)
+    expect((await client('https://explorer.example').connect(wallet)).account).toBe(account)
+    expect(added).toEqual([
+      {
+        chainId: toHex(chainId),
+        chainName: 'Test',
+        nativeCurrency: { name: 'TIA', symbol: 'TIA', decimals: 18 },
+        rpcUrls: [rpc],
+        blockExplorerUrls: ['https://explorer.example'],
+      },
+    ])
+    const declining = scriptedWallet({
+      wallet_switchEthereumChain: () => {
+        throw Object.assign(new Error('User rejected'), { code: 4001 })
+      },
+    })
+    declining.setChain(1)
+    await expect(client().connect(declining)).rejects.toMatchObject({ code: 'rejected' })
+  })
+
+  it('simulates the exact transaction from the account before sending', async () => {
+    endpoint({})
+    const wallet = scriptedWallet()
+    await (await client().connect(wallet)).send(tx)
+    const methods = wallet.request.mock.calls.map(([{ method }]) => method)
+    expect(methods.indexOf('eth_call')).toBeLessThan(methods.indexOf('eth_sendTransaction'))
+    expect(wallet.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'eth_call',
+        params: [expect.objectContaining({ from: account, to: registry, value: '0x5' }), 'latest'],
+      }),
+    )
+  })
+
+  it('accepts viem providers and derives the family from the chain', () => {
+    expectTypeOf<EIP1193Provider>().toMatchTypeOf<Families['evm']['wallet']>()
+    expectTypeOf<FamilyOf<(typeof ledgers)['eden-testnet']>>().toEqualTypeOf<'evm'>()
+  })
 })

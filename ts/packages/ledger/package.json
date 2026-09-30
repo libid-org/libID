@@ -20,9 +20,9 @@
       "types": "./dist/client.d.ts",
       "default": "./dist/client.js"
     },
-    "./eip155": {
-      "types": "./dist/eip155/index.d.ts",
-      "default": "./dist/eip155/index.js"
+    "./evm": {
+      "types": "./dist/evm/index.d.ts",
+      "default": "./dist/evm/index.js"
     },
     "./testing": {
       "types": "./dist/testing.d.ts",
@@ -33,7 +33,8 @@
     "dist",
     "src",
     "docs",
-    "!src/**/*.test.ts"
+    "!src/**/*.test.ts",
+    "!src/**/*.harness.ts"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

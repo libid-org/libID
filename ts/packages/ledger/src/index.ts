@@ -1,4 +1,4 @@
-import * as eip155 from './eip155/chain.js'
+import * as evm from './evm/chain.js'
 
 /** Ledger definitions own their chain identity, Chain Profile hash and notary routing. */
 export interface LedgerId {
@@ -8,16 +8,28 @@ export interface LedgerId {
   notaryAddress(): string
 }
 
-/** Chain namespaces with a ledger implementation. */
-export type Namespace = 'eip155'
+/** Each ledger family and the CAIP-2 namespace of its chain identifiers. */
+export interface FamilyNamespaces {
+  evm: 'eip155'
+}
+export type Family = keyof FamilyNamespaces
+type SupportedChain = `${FamilyNamespaces[Family]}:${string}`
+/**
+ * A chain identifier of a supported family, such as `eip155:3735928814`. `Extract` lets
+ * code that is generic over a family still satisfy `Chain`.
+ */
+export type Chain<F extends Family = Family> = Extract<
+  `${FamilyNamespaces[F]}:${string}`,
+  SupportedChain
+>
 
 declare const account: unique symbol
-/** An account in its namespace's canonical form (EIP-55 on eip155); produced by a ledger client. */
+/** An account in its namespace's canonical form (EIP-55 on EVM ledgers); produced by a ledger client. */
 export type Account = string & { readonly [account]: true }
 
 /** A supported ledger and the libID deployments on it. */
 export interface Ledger<
-  C extends `${Namespace}:${string}` = `${Namespace}:${string}`,
+  C extends Chain = Chain,
   A extends Readonly<Record<string, string>> = Readonly<Record<string, string>>,
 > extends LedgerId {
   readonly chain: C
@@ -28,10 +40,7 @@ export interface Ledger<
   readonly addresses: A
 }
 
-export interface LedgerDefinition<
-  C extends `${Namespace}:${string}`,
-  A extends Record<string, string>,
-> {
+export interface LedgerDefinition<C extends Chain, A extends Record<string, string>> {
   chain: C
   name: string
   testnet: boolean
@@ -41,13 +50,12 @@ export interface LedgerDefinition<
 }
 
 /** Validates a definition and derives its Chain Profile hash from the chain identifier. */
-export function defineLedger<
-  const C extends `${Namespace}:${string}`,
-  const A extends Record<string, string>,
->(definition: LedgerDefinition<C, A>): Ledger<C, Readonly<A>> {
+export function defineLedger<const C extends Chain, const A extends Record<string, string>>(
+  definition: LedgerDefinition<C, A>,
+): Ledger<C, Readonly<A>> {
   const { chain, name, testnet, currency, notary, addresses } = definition
-  // ponytail: eip155 only; dispatch on the namespace when a second one lands.
-  const hash = eip155.chainHash(chain)
+  // ponytail: EVM only; dispatch on the family when a second one lands.
+  const hash = evm.chainHash(chain)
   if (!hash) throw new TypeError(`Unsupported chain: ${chain}`)
   if (
     !name ||
@@ -60,7 +68,7 @@ export function defineLedger<
   }
   // The notary origin is validated by the ceremony when a run snapshots the ledger.
   for (const [key, value] of Object.entries(addresses)) {
-    if (!eip155.isAddress(value)) throw new TypeError(`Invalid ${key} address`)
+    if (!evm.isAddress(value)) throw new TypeError(`Invalid ${key} address`)
   }
   return Object.freeze({
     chain,

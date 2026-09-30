@@ -37,22 +37,25 @@ const anvil = defineLedger({
 })
 ```
 
-Only the `eip155` namespace is implemented. Ceremony stays chain agnostic;
-Prover has no ledger dependency.
+Only the EVM family is implemented. Chain identifiers stay CAIP-2, so EVM
+ledgers use `eip155:<chain id>`. Ceremony stays chain agnostic; Prover has no
+ledger dependency.
 
 ## Chain access
 
 `@libid/ledger/client` runs reads and writes without knowing what they mean.
-The layer above describes them with one function per namespace, so adding a
-namespace fails to compile until every query and command implements it. Each
-namespace's own types (`Reader`, `Tx`, `Provider`) live in its module, such as
-`@libid/ledger/eip155`; the client entry point stays namespace-agnostic:
+The layer above describes each one once, with one implementation per ledger
+family. Every family's implementation takes the same arguments and returns the
+same result, but uses its own family's reader, so families never have to share
+method names. Each family's types (`Reader`, `Tx`, `Provider`) live in its
+module, such as `@libid/ledger/evm`; the client entry point stays
+family-agnostic:
 
 ```ts
 import { connect, type Query } from '@libid/ledger/client'
 
 const resolveHandle: Query<[platform: `0x${string}`, handle: string], `0x${string}`> = {
-  eip155: (read, platform, handle) =>
+  evm: (read, platform, handle) =>
     read.readContract({
       address: read.address('identityNames'),
       abi: identityNamesAbi,
@@ -65,8 +68,7 @@ const client = connect(ledgers['eden-testnet'], { rpc: 'https://…' })
 await client.read(resolveHandle, [platform, 'alice'])
 ```
 
-- `read` pins every action in a query to one block, so the query sees one
-  consistent state.
+- `read` pins every action in a query to one chain state, such as one block.
 - `tx` builds a command's transaction and `estimate` returns its network fee in
   native units.
 - `connect(wallet, { prompt })` returns a `Session`. Without `prompt` it only
@@ -79,22 +81,33 @@ await client.read(resolveHandle, [platform, 'alice'])
   other error leaves the outcome unknown.
 - `walletRequirements` lists the methods and events a session needs, for
   connectors such as WalletConnect.
+- `family` tells clients of different families apart.
 
 The catalog and client take no RPC defaults; consumers supply endpoints.
 
-## Adding a namespace
+## Conformance
 
-1. Add it to `Namespace` in `src/index.ts`, and give `defineLedger` its Chain
-   Profile hash and address check from `src/<namespace>/chain.ts`.
-2. Create `src/<namespace>/index.ts` with the namespace's `Reader`, `Tx` and
-   `Provider` types, and `src/<namespace>/client.ts` implementing
-   `LedgerClient`. Export `./<namespace>` from `package.json`.
-3. Add one entry to `Namespaces` in `src/client.ts` and dispatch to the new
-   driver in `connect`.
+`src/client.test.ts` is the contract every family's client must meet. It covers
+each `LedgerClient` and `Session` member and runs against a harness each family
+provides: a fake chain and wallet the suite controls
+(`src/conformance.harness.ts`; the EVM one is `src/evm/evm.harness.ts`). A
+family without a harness does not compile. Family-specific behavior, such as EVM
+fee formulas and chain switching, is tested beside its driver.
 
-The compiler then flags the `connect` dispatch and every `Query` and `Command`
-without the new namespace, in this package and in its consumers. Existing
-namespace modules and namespace-agnostic code do not change.
+## Adding a family
+
+1. Add it to `FamilyNamespaces` in `src/index.ts` with its CAIP-2 namespace, and
+   give `defineLedger` its Chain Profile hash and address check from
+   `src/<family>/chain.ts`.
+2. Create `src/<family>/index.ts` with the family's `Reader`, `Tx` and `Provider`
+   types, and `src/<family>/client.ts` implementing `LedgerClient`. Export
+   `./<family>` from `package.json`.
+3. Add one entry to `Families` in `src/client.ts`, dispatch to the new driver in
+   `connect`, and register the family's harness in `src/client.test.ts`.
+
+The compiler then flags the harness registry, the `connect` dispatch, and every
+`Query` and `Command` without the new family, in this package and in its
+consumers. Existing families and family-agnostic code do not change.
 
 ## Shared test fixture
 

@@ -1,9 +1,9 @@
 import type { Address, Hex, PublicClient } from 'viem'
-import type { Account, Ledger } from '../index.js'
+import type { Account, Chain, Ledger } from '../index.js'
 
 /** A read pinned to one block. Actions default `blockNumber` (or `toBlock`) to `block`. */
 export interface Reader {
-  readonly ledger: Ledger<`eip155:${string}`>
+  readonly ledger: Ledger<Chain<'evm'>>
   readonly block: bigint
   readonly readContract: PublicClient['readContract']
   readonly getContractEvents: PublicClient['getContractEvents']

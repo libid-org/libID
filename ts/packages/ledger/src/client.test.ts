@@ -1,276 +1,226 @@
-import { EventEmitter } from 'node:events'
-import { type EIP1193Provider, toHex } from 'viem'
-import { afterEach, expect, expectTypeOf, it, vi } from 'vitest'
-import {
-  type Command,
-  connect,
-  LedgerError,
-  type NamespaceOf,
-  type Namespaces,
-  type Query,
-} from './client.js'
-import { defineLedger, type ledgers } from './index.js'
+/**
+ * The contract every ledger family's client must meet, run against each family's harness.
+ * A family without a harness does not compile.
+ */
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { type Command, type Families, LedgerError, type Query } from './client.js'
+import type { Fake, Harness } from './conformance.harness.js'
+import { evm } from './evm/evm.harness.js'
+import type { Family } from './index.js'
 
-type Request = { method: string; params?: unknown[] }
-type Handlers = Record<string, (params: unknown[]) => unknown>
-
-const chainId = 3735928814
-const account = '0x1111111111111111111111111111111111111111'
-const registry = `0x${'2'.repeat(40)}` as const
-const ledger = defineLedger({
-  chain: `eip155:${chainId}`,
-  name: 'Test',
-  testnet: true,
-  currency: { symbol: 'TIA', decimals: 18 },
-  notary: 'http://localhost:4687',
-  addresses: { identityNames: registry },
-})
-const block = { number: '0x1', baseFeePerGas: '0x64', transactions: [] }
-const tx = { to: registry, data: '0x1234' as const, value: 5n }
+const harnesses: { [F in Family]: Harness<F> } = { evm }
 
 afterEach(() => vi.restoreAllMocks())
 
-/** A JSON-RPC endpoint answering from `handlers`; unknown methods are "not found". */
-function rpc(handlers: Handlers) {
-  const answer = ({ id, method, params }: Request & { id: number }) => {
-    const handler = handlers[method]
-    if (!handler) return { jsonrpc: '2.0', id, error: { code: -32601, message: `No ${method}` } }
-    return { jsonrpc: '2.0', id, result: handler(params ?? []) }
-  }
-  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (_, init) => {
-    const body = JSON.parse(String(init?.body))
-    return Response.json(Array.isArray(body) ? body.map(answer) : answer(body))
+it('requires every family to implement each query and command', () => {
+  // @ts-expect-error a query needs an implementation for every family
+  const query: Query<[], number> = {}
+  // @ts-expect-error a command needs an implementation for every family
+  const command: Command<[]> = {}
+  expect([query, command]).toEqual([{}, {}])
+})
+
+function run<F extends Family>(family: F) {
+  conformance(family, harnesses[family])
+}
+for (const family of Object.keys(harnesses) as Family[]) run(family)
+
+function conformance<F extends Family>(family: F, harness: Harness<F>) {
+  const query = <A extends unknown[], R>(
+    run: (read: Families[F]['reader'], ...args: A) => Promise<R>,
+  ) => ({ [family]: run }) as unknown as Query<A, R>
+  const probe = (fake: Fake<F>) => query(async (read) => fake.probe(read))
+  const connected = async (fake: Fake<F>) => fake.client.connect(fake.wallet)
+  const failure = (promise: Promise<unknown>) =>
+    promise.then(
+      () => {
+        throw new Error('Expected a failure')
+      },
+      (error: unknown) => error,
+    )
+
+  describe(`${family} ledger client`, () => {
+    it('describes its family and what a wallet session needs', () => {
+      const { client } = harness.setup()
+      expect(client.family).toBe(family)
+      for (const list of [client.walletRequirements.methods, client.walletRequirements.events]) {
+        expect(list.length).toBeGreaterThan(0)
+        expect(list.every((item) => typeof item === 'string' && item !== '')).toBe(true)
+      }
+    })
+
+    describe('read', () => {
+      it("runs the family's implementation with the given arguments", async () => {
+        const { client } = harness.setup()
+        const concat = query(async (_, a: number, b: string) => `${a}${b}`)
+        expect(await client.read(concat, [1, 'x'])).toBe('1x')
+      })
+
+      it('sees one chain state for the whole query', async () => {
+        const fake = harness.setup()
+        const twice = query(async (read) => {
+          const first = await fake.probe(read)
+          fake.advance()
+          return [first, await fake.probe(read)]
+        })
+        const [first, second] = await fake.client.read(twice, [])
+        expect(second, 'A query never sees two states').toEqual(first)
+        const [later] = await fake.client.read(twice, [])
+        expect(later, 'A later query sees the new state').not.toEqual(first)
+      })
+
+      it('stops when its signal aborts', async () => {
+        const fake = harness.setup()
+        let ran = false
+        const noted = query(async () => {
+          ran = true
+        })
+        await expect(fake.client.read(noted, [], { signal: AbortSignal.abort() })).rejects.toThrow()
+        expect(ran, 'An aborted read does not start its query').toBe(false)
+        const controller = new AbortController()
+        const midway = query(async (read) => {
+          controller.abort()
+          return fake.probe(read)
+        })
+        await expect(fake.client.read(midway, [], { signal: controller.signal })).rejects.toThrow()
+      })
+
+      it('propagates query failures unchanged', async () => {
+        const { client } = harness.setup()
+        const cause = new Error('query failed')
+        const throwing = query(async () => {
+          throw cause
+        })
+        expect(await failure(client.read(throwing, []))).toBe(cause)
+      })
+    })
+
+    it("builds a command's transaction for its ledger", () => {
+      const fake = harness.setup()
+      const command = {
+        [family]: (ledger: unknown, value: number) => {
+          expect(ledger).toBe(fake.client.ledger)
+          expect(value).toBe(7)
+          return fake.tx
+        },
+      } as unknown as Command<[number]>
+      expect(fake.client.tx(command, [7])).toBe(fake.tx)
+    })
+
+    it('estimates a network fee in native units', async () => {
+      const fake = harness.setup()
+      const fee = await fake.client.estimate(fake.tx, fake.client.parseAccount(fake.accounts.raw))
+      expect(typeof fee).toBe('bigint')
+      expect(fee).toBeGreaterThanOrEqual(0n)
+    })
+
+    it('canonicalizes accounts and rejects invalid ones', () => {
+      const { client, accounts } = harness.setup()
+      expect(client.parseAccount(accounts.raw)).toBe(accounts.canonical)
+      expect(client.parseAccount(accounts.canonical)).toBe(accounts.canonical)
+      expect(client.parseAccount(accounts.other)).not.toBe(accounts.canonical)
+      expect(() => client.parseAccount(accounts.invalid)).toThrow()
+    })
+
+    describe('connect', () => {
+      it('restores an authorized wallet on this chain without prompting', async () => {
+        const fake = harness.setup()
+        const session = await fake.client.connect(fake.wallet, { prompt: false })
+        expect(session.account).toBe(fake.accounts.canonical)
+        expect(session.ledger).toBe(fake.client.ledger)
+        expect(fake.prompts).toBe(0)
+      })
+
+      it('refuses to restore without an account or on another chain, without prompting', async () => {
+        const none = harness.setup()
+        none.shareAccount(null)
+        const noAccount = await failure(none.client.connect(none.wallet, { prompt: false }))
+        expect(noAccount).toBeInstanceOf(LedgerError)
+        expect(noAccount).toMatchObject({ code: 'no-account' })
+        const elsewhere = harness.setup()
+        elsewhere.leaveChain()
+        const wrongChain = await failure(
+          elsewhere.client.connect(elsewhere.wallet, { prompt: false }),
+        )
+        expect(wrongChain).toMatchObject({ code: 'wrong-chain' })
+        expect(none.prompts + elsewhere.prompts).toBe(0)
+      })
+
+      it('asks the wallet when prompting, and reports a decline as rejected', async () => {
+        const fake = harness.setup()
+        expect((await connected(fake)).account).toBe(fake.accounts.canonical)
+        expect(fake.prompts).toBeGreaterThan(0)
+        fake.decline('accounts')
+        expect(await failure(connected(fake))).toMatchObject({ code: 'rejected' })
+      })
+    })
+
+    describe('session', () => {
+      it('reads, parses and estimates like its client', async () => {
+        const fake = harness.setup()
+        const session = await connected(fake)
+        await expect(session.read(probe(fake), [])).resolves.toEqual(
+          await fake.client.read(probe(fake), []),
+        )
+        expect(session.parseAccount(fake.accounts.raw)).toBe(fake.accounts.canonical)
+        expect(session.walletRequirements).toEqual(fake.client.walletRequirements)
+        await expect(session.estimate(fake.tx, session.account)).resolves.toBeTypeOf('bigint')
+      })
+
+      it('sends a transaction once and returns its identifier', async () => {
+        const fake = harness.setup()
+        const id = await (await connected(fake)).send(fake.tx)
+        expect(id).toBeTypeOf('string')
+        expect(id).not.toBe('')
+        expect(fake.sent).toBe(1)
+      })
+
+      for (const change of ['account', 'chain'] as const) {
+        it(`sends nothing after the wallet ${change} changed`, async () => {
+          const fake = harness.setup()
+          const session = await connected(fake)
+          if (change === 'account') fake.shareAccount(fake.accounts.other)
+          else fake.leaveChain()
+          const error = await failure(session.send(fake.tx))
+          expect(error).toBeInstanceOf(LedgerError)
+          expect(error).toMatchObject({ code: 'wallet-changed' })
+          expect(fake.sent).toBe(0)
+        })
+      }
+
+      it('sends nothing when simulation fails', async () => {
+        const fake = harness.setup()
+        const error = await failure((await connected(fake)).send(fake.reverting))
+        expect(error).toBeInstanceOf(LedgerError)
+        expect(error).toMatchObject({ code: 'not-sent', cause: expect.anything() })
+        expect(fake.sent).toBe(0)
+      })
+
+      it('reports a declined send as rejected', async () => {
+        const fake = harness.setup()
+        const session = await connected(fake)
+        fake.decline('send')
+        expect(await failure(session.send(fake.tx))).toMatchObject({ code: 'rejected' })
+        expect(fake.sent).toBe(0)
+      })
+
+      it('leaves a send that failed after reaching the wallet unknown', async () => {
+        const fake = harness.setup()
+        const session = await connected(fake)
+        fake.loseSend()
+        const error = await failure(session.send(fake.tx))
+        expect(error, 'Only a LedgerError promises that nothing was sent').not.toBeInstanceOf(
+          LedgerError,
+        )
+      })
+
+      it('leaves the client usable after closing', async () => {
+        const fake = harness.setup()
+        const session = await connected(fake)
+        session.close()
+        session.close()
+        await expect(fake.client.read(probe(fake), [])).resolves.toBeDefined()
+      })
+    })
   })
 }
-
-function wallet(overrides: Partial<Record<string, (params: unknown[]) => unknown>> = {}) {
-  let chain = chainId
-  const handlers: Record<string, (params: unknown[]) => unknown> = {
-    eth_accounts: () => [account],
-    eth_requestAccounts: () => [account],
-    eth_chainId: () => toHex(chain),
-    eth_call: () => '0x',
-    eth_estimateGas: () => '0x5208',
-    eth_getBlockByNumber: () => block,
-    eth_maxPriorityFeePerGas: () => '0x1',
-    eth_getTransactionCount: () => '0x0',
-    eth_sendTransaction: () => `0x${'a'.repeat(64)}`,
-    wallet_switchEthereumChain: () => {
-      chain = chainId
-      return null
-    },
-    ...overrides,
-  }
-  const request = vi.fn(async ({ method, params }: Request) => {
-    const handler = handlers[method]
-    if (!handler) throw Object.assign(new Error(`No ${method}`), { code: 4200 })
-    return handler(params ?? [])
-  })
-  return Object.assign(new EventEmitter(), {
-    request,
-    setChain(id: number) {
-      chain = id
-    },
-    sent: () => request.mock.calls.filter(([{ method }]) => method === 'eth_sendTransaction'),
-  })
-}
-
-const client = () => connect(ledger, { rpc: 'https://rpc.example/' })
-
-it('runs a query against one block', async () => {
-  const blockTags: unknown[] = []
-  const fetch = rpc({
-    eth_blockNumber: () => '0x10',
-    eth_getBalance: ([, tag]) => {
-      blockTags.push(tag)
-      return '0x7'
-    },
-    eth_call: ([, tag]) => {
-      blockTags.push(tag)
-      return '0x'
-    },
-  })
-  const query: Query<[string], { block: bigint; balance: bigint; registry: string }> = {
-    eip155: async (read, raw) => {
-      const address = read.parseAccount(raw) as `0x${string}`
-      const balance = await read.getBalance({ address })
-      await read.call({ to: read.address('identityNames'), data: '0x' })
-      return { block: read.block, balance, registry: read.address('identityNames') }
-    },
-  }
-  expect(await client().read(query, [account])).toEqual({
-    block: 16n,
-    balance: 7n,
-    registry: '0x2222222222222222222222222222222222222222',
-  })
-  expect(blockTags).toEqual(['0x10', '0x10'])
-  const methods = fetch.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).method)
-  expect(methods.filter((method) => method === 'eth_blockNumber')).toHaveLength(1)
-})
-
-it('stops a query when its signal aborts', async () => {
-  rpc({ eth_blockNumber: () => '0x10', eth_getBalance: () => '0x7' })
-  const controller = new AbortController()
-  const query: Query<[], bigint> = {
-    eip155: async (read) => {
-      controller.abort()
-      return read.getBalance({ address: account })
-    },
-  }
-  await expect(client().read(query, [], { signal: controller.signal })).rejects.toThrow(/abort/i)
-  await expect(client().read(query, [], { signal: controller.signal })).rejects.toThrow(/abort/i)
-})
-
-it('rejects unknown deployment names and invalid accounts', async () => {
-  rpc({ eth_blockNumber: () => '0x10' })
-  const query: Query<[], string> = { eip155: async (read) => read.address('verifier') }
-  await expect(client().read(query, [])).rejects.toThrow(/no verifier address/)
-  expect(() => client().parseAccount('0x1234')).toThrow()
-  expect(client().parseAccount(account.toUpperCase().replace('0X', '0x'))).toBe(account)
-})
-
-it('builds commands for the ledger', () => {
-  const command: Command<[number]> = {
-    eip155: (ledger, value) => ({
-      to: ledger.addresses.identityNames as `0x${string}`,
-      data: toHex(value),
-    }),
-  }
-  expect(client().tx(command, [255])).toEqual({ to: registry, data: '0xff' })
-})
-
-it('estimates the network fee with EIP-1559 fees, or legacy gas prices when unsupported', async () => {
-  const handlers: Handlers = {
-    eth_estimateGas: () => '0x5208',
-    eth_getBlockByNumber: () => block,
-    eth_maxPriorityFeePerGas: () => '0x7',
-    eth_gasPrice: () => '0x6e',
-  }
-  rpc(handlers)
-  // maxFeePerGas = baseFee 100 × 1.2 + tip 7
-  expect(await client().estimate(tx, client().parseAccount(account))).toBe(21_000n * 127n)
-  rpc({ ...handlers, eth_getBlockByNumber: () => ({ ...block, baseFeePerGas: undefined }) })
-  // gasPrice 110 × 1.2
-  expect(await client().estimate(tx, client().parseAccount(account))).toBe(21_000n * 132n)
-})
-
-it('connects without prompting only to an authorized wallet on this ledger', async () => {
-  rpc({})
-  await expect(
-    client().connect(wallet({ eth_accounts: () => [] }), { prompt: false }),
-  ).rejects.toMatchObject({ code: 'no-account' })
-  const elsewhere = wallet()
-  elsewhere.setChain(1)
-  await expect(client().connect(elsewhere, { prompt: false })).rejects.toMatchObject({
-    code: 'wrong-chain',
-  })
-  expect(elsewhere.request).not.toHaveBeenCalledWith(
-    expect.objectContaining({ method: 'wallet_switchEthereumChain' }),
-  )
-  const session = await client().connect(wallet(), { prompt: false })
-  expect(session.account).toBe(account)
-})
-
-it('asks for accounts and switches or adds the chain when prompting', async () => {
-  rpc({})
-  const rejected = wallet({
-    eth_requestAccounts: () => {
-      throw Object.assign(new Error('User rejected'), { code: 4001 })
-    },
-  })
-  await expect(client().connect(rejected)).rejects.toMatchObject({ code: 'rejected' })
-
-  const added: unknown[] = []
-  let known = false
-  const unknown = wallet({
-    wallet_switchEthereumChain: () => {
-      if (!known) throw Object.assign(new Error('Unrecognized chain'), { code: 4902 })
-      unknown.setChain(chainId)
-      return null
-    },
-    wallet_addEthereumChain: (params) => {
-      added.push(...params)
-      known = true
-      return null
-    },
-  })
-  unknown.setChain(1)
-  const session = await connect(ledger, {
-    rpc: 'https://rpc.example/',
-    explorer: 'https://explorer.example',
-  }).connect(unknown)
-  expect(session.account).toBe(account)
-  expect(added).toEqual([
-    {
-      chainId: toHex(chainId),
-      chainName: 'Test',
-      nativeCurrency: { name: 'TIA', symbol: 'TIA', decimals: 18 },
-      rpcUrls: ['https://rpc.example/'],
-      blockExplorerUrls: ['https://explorer.example'],
-    },
-  ])
-
-  const declined = wallet({
-    wallet_switchEthereumChain: () => {
-      throw Object.assign(new Error('User rejected'), { code: 4001 })
-    },
-  })
-  declined.setChain(1)
-  await expect(client().connect(declined)).rejects.toMatchObject({ code: 'rejected' })
-})
-
-it('sends only after rechecking the wallet and simulating', async () => {
-  rpc({})
-  const provider = wallet()
-  const session = await client().connect(provider)
-  expect(await session.send(tx)).toBe(`0x${'a'.repeat(64)}`)
-  expect(provider.sent()).toHaveLength(1)
-  expect(provider.request).toHaveBeenCalledWith(
-    expect.objectContaining({
-      method: 'eth_call',
-      params: [expect.objectContaining({ from: account, to: registry, value: '0x5' }), 'latest'],
-    }),
-  )
-
-  provider.setChain(1)
-  const changed = await session.send(tx).catch((error: unknown) => error)
-  expect(changed).toMatchObject({ code: 'wallet-changed' })
-  provider.setChain(chainId)
-
-  const reverting = wallet({
-    eth_call: () => {
-      throw Object.assign(new Error('execution reverted'), { code: 3, data: '0x' })
-    },
-  })
-  const failed = await (await client().connect(reverting)).send(tx).catch((error) => error)
-  expect(failed).toBeInstanceOf(LedgerError)
-  expect(failed).toMatchObject({ code: 'not-sent', cause: expect.anything() })
-  expect(reverting.sent(), 'A failed simulation reaches no send').toHaveLength(0)
-})
-
-it('separates a rejected send from an unknown outcome', async () => {
-  rpc({})
-  const rejecting = wallet({
-    eth_sendTransaction: () => {
-      throw Object.assign(new Error('User rejected'), { code: 4001 })
-    },
-  })
-  await expect((await client().connect(rejecting)).send(tx)).rejects.toMatchObject({
-    code: 'rejected',
-  })
-  const lost = wallet({
-    eth_sendTransaction: () => {
-      throw new Error('Connection lost')
-    },
-  })
-  const error = await (await client().connect(lost)).send(tx).catch((error: unknown) => error)
-  expect(error, 'After the send request, failures stay unknown').not.toBeInstanceOf(LedgerError)
-})
-
-it('types wallets and namespaces from the ledger', () => {
-  expectTypeOf<EIP1193Provider>().toMatchTypeOf<Namespaces['eip155']['wallet']>()
-  expectTypeOf<NamespaceOf<(typeof ledgers)['eden-testnet']>>().toEqualTypeOf<'eip155'>()
-  // @ts-expect-error every supported namespace needs an implementation
-  const missing: Query<[], number> = {}
-  expect(missing).toEqual({})
-})
