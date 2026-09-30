@@ -360,6 +360,7 @@ it.each(['google', 'x', 'github'] as const)(
       domain = new Uint8Array(32),
       data = new Uint8Array([1, 2])
     const ledger = {
+      chain: testnet.chain,
       hash: vi.fn(() => hash),
       notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
     }

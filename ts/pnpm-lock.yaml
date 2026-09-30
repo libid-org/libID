@@ -201,6 +201,10 @@ importers:
         version: 3.2.7(@types/node@22.20.1)
 
   packages/ledger:
+    dependencies:
+      '@noble/hashes':
+        specifier: ^2.3.0
+        version: 2.4.0
     devDependencies:
       typescript:
         specifier: 'catalog:'

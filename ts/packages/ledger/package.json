@@ -2,7 +2,7 @@
   "name": "@libid/ledger",
   "version": "0.0.0",
   "private": true,
-  "description": "Shared ledger identity and notary routing contract.",
+  "description": "Ledger identities, notary routing, and the supported ledger catalog.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
     "type": "git",
@@ -31,6 +31,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.3.0"
   },
   "devDependencies": {
     "typescript": "catalog:",

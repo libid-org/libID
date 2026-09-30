@@ -1,21 +1,28 @@
 # `@libid/ledger`
 
-Ledger identity and notary routing for application code. The package owns the
-Chain Profile hash and each ledger's notary address. It contains no RPC client,
-transaction handling, or ceremony dependency.
+Ledger identity and notary routing for application code. The package owns each
+ledger's chain identifier, Chain Profile hash, and notary address, and the
+catalog of supported ledgers. It contains no RPC client, transaction handling,
+or ceremony dependency.
 
 ## API
 
 ```ts
 export interface LedgerId {
+  readonly chain: `${string}:${string}` // CAIP-2 chain identifier
   hash(): Uint8Array // exact 32-byte Chain Profile identifier
   notaryAddress(): string // canonical HTTPS origin; HTTP on localhost/127.0.0.1 for development
 }
 ```
 
+`chain` is the ledger's CAIP-2 identifier, such as `eip155:3735928814`.
+Synthetic test ledgers use the `test` namespace.
+
 `hash()` uses the ledger's canonical Chain Profile encoding and matches the
 identifier used by that ledger's verifier. Returned bytes cannot mutate the
-ledger value. The notary address is not part of this hash.
+ledger value. The notary address is not part of this hash. For `eip155`, the
+encoding is `keccak256(abi.encode(uint256 chainId))`, matching `block.chainid`
+in the ceremony verifier contracts.
 
 `notaryAddress()` returns a canonical HTTPS origin with no credentials, path,
 query, or fragment. Ledger definitions use `https://notary.lib.id` for mainnets
@@ -29,21 +36,21 @@ ledger hash while selecting a local notary; no environment override is needed:
 
 ```ts
 const localLedger: LedgerId = {
-  hash: () => targetLedger.hash(),
+  ...targetLedger,
   notaryAddress: () => 'http://localhost:4687',
 }
 ```
 
-Concrete ledger definitions and their hash/address checks belong beside
-their implementation. Sharing an implementation within a ledger family or
-using a class per ledger is an internal choice; neither a public registration
-API nor a class hierarchy is required.
+Concrete ledger definitions live in the catalog and are built with
+`defineLedger`, the shared implementation for each namespace. Neither a public
+registration API nor a class hierarchy is required.
 
 ## Checks
 
 For every supported ledger, test its notary address and exact 32-byte Chain
-Profile hash against the ledger's vectors. Distinct supported networks must
-retain distinct identities. A fixture changing only the notary address must
+Profile hash against the ledger's vectors, including the value its deployed
+verifier reports from `CeremonyProofVerifier.chainId()`. Distinct supported
+networks must retain distinct identities. A fixture changing only the notary address must
 retain the target ledger hash. Mutating returned hash bytes must not change
 later results.
 
