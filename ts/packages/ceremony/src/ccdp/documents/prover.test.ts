@@ -81,7 +81,7 @@ afterEach(() => {
 })
 
 it.each(supportedPlatforms)(
-  'passes validated %s routing to the platform without ledger decoding [LIBID-OAUTH-021]',
+  'passes validated %s routing to the platform without ledger decoding [LIBID-OAUTH-021] [LIBID-BROWSER-003]',
   async (platformId) => {
     vi.stubGlobal('location', { origin: 'https://ccdp.test' })
     vi.stubGlobal('crossOriginIsolated', true)
@@ -126,7 +126,7 @@ it.each([
     event: 'token-attestation',
   },
 ])(
-  'reports fallback and gracefully retires failure: $error.message [CSP-016]',
+  'reports fallback and gracefully retires failure: $error.message [CSP-016] [LIBID-OAUTH-029] [LIBID-OAUTH-030] [LIBID-BROWSER-015] [LIBID-BROWSER-030]',
   async ({ error, event }) => {
     vi.stubGlobal('location', { origin: 'https://ccdp.test', pathname: '/ccdp/v1/prover/fallback' })
     prove.mockImplementationOnce(async (context) => {
@@ -239,7 +239,7 @@ it.each(['before', 'after'])(
 )
 
 it.each(['before-ready', 'duplicate', 'after-denial'])(
-  'consumes the private return once: %s [LIBID-OAUTH-019]',
+  'consumes the private return once: %s [LIBID-OAUTH-019] [LIBID-OAUTH-023]',
   async (when) => {
     connection = spiedConnection('pending')
     let finish!: () => void
@@ -284,7 +284,7 @@ it.each(['before-ready', 'duplicate', 'after-denial'])(
   },
 )
 
-it('reports an unreadable Prover fragment locally without accepting a connection', async () => {
+it('reports an unreadable Prover fragment locally without accepting a connection [LIBID-OAUTH-030]', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   await startProver('ceremonyId=invalid')
   expect(accept).not.toHaveBeenCalled()
@@ -296,17 +296,20 @@ it.each([
   ['crossOriginIsolated', false],
   ['SharedArrayBuffer', undefined],
   ['Worker', undefined],
-])('refuses to prove without isolation: %s is %s', async (name, value) => {
-  vi.stubGlobal(name, value)
-  await startProver(proverInput())
-  expect(connection.sent).toEqual([
-    { type: 'ceremony-failed', event: 'prover', message: messages.isolationUnavailable },
-  ])
-  expect(claimRootWorker).not.toHaveBeenCalled()
-  expect(ui.stop).toHaveBeenCalledOnce()
-})
+])(
+  'refuses to prove without isolation: %s is %s [LIBID-MOD-012] [LIBID-OAUTH-010] [LIBID-BROWSER-015]',
+  async (name, value) => {
+    vi.stubGlobal(name, value)
+    await startProver(proverInput())
+    expect(connection.sent).toEqual([
+      { type: 'ceremony-failed', event: 'prover', message: messages.isolationUnavailable },
+    ])
+    expect(claimRootWorker).not.toHaveBeenCalled()
+    expect(ui.stop).toHaveBeenCalledOnce()
+  },
+)
 
-it('announces no readiness when the connection ends while the root worker is claimed', async () => {
+it('announces no readiness when the connection ends while the root worker is claimed [LIBID-BROWSER-022]', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   const claim = Promise.withResolvers<void>()
   claimRootWorker.mockReturnValueOnce(claim.promise)
@@ -324,7 +327,7 @@ it('announces no readiness when the connection ends while the root worker is cla
   expect(ui.stop).toHaveBeenCalledOnce()
 })
 
-it('drops pipeline observations produced after the document ended', async () => {
+it('drops pipeline observations produced after the document ended [LIBID-BROWSER-015] [LIBID-BROWSER-022] [LIBID-BROWSER-030]', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   prove.mockImplementationOnce(async ({ signal, emit }) => {
     await new Promise((resolve) => signal.addEventListener('abort', resolve))

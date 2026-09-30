@@ -61,7 +61,7 @@ afterEach(() => {
 /** The Prover fragment of the one navigation Callback made. */
 const proverFragment = () => new URLSearchParams(connection.navigations[0].fragment)
 
-it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010] [TEST-CCDP-03]', async () => {
+it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010] [TEST-CCDP-03] [LIBID-ASSET-006] [LIBID-OAUTH-005] [LIBID-OAUTH-011] [LIBID-OAUTH-028] [LIBID-BROWSER-004]', async () => {
   const original = locationInput.hash
   connection.peerOrigin = 'https://other-app.test'
   config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']
@@ -93,7 +93,7 @@ it('clears before acceptance and preserves exact private return with shared depl
 })
 
 it.each(['2', '99', '99999999999999999999'])(
-  'rejects unbundled/retired version %s locally [LIBID-ASSET-015]',
+  'rejects unbundled/retired version %s locally [LIBID-ASSET-015] [LIBID-ASSET-007]',
   (version) => {
     locationInput.hash = `#state=v${version}.${id}`
     startCallback()
@@ -113,12 +113,15 @@ it.each([
   { hash: `#state=v1.${id}%FF` },
   { hash: '#code=x' },
   { hash: `#${'x'.repeat(32768)}` },
-])('clears malformed or oversized return before fixed local failure [KIT-010]', (input) => {
-  Object.assign(locationInput, input)
-  startCallback()
-  expect(ui.view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
-  expect(accept).not.toHaveBeenCalled()
-})
+])(
+  'clears malformed or oversized return before fixed local failure [KIT-010] [LIBID-OAUTH-005] [LIBID-OAUTH-023]',
+  (input) => {
+    Object.assign(locationInput, input)
+    startCallback()
+    expect(ui.view).toHaveBeenCalledWith(expect.stringMatching(/Return to your application/))
+    expect(accept).not.toHaveBeenCalled()
+  },
+)
 
 it.each(
   [
@@ -163,7 +166,7 @@ it('clears a double-slash callback path without treating it as another host [CSP
 })
 
 it.each([[], [null], [{ optional: { nested: [1, 2] } }]].map((trailing) => ({ trailing })))(
-  'ignores optional trailing inputs and deeply freezes the parsed list [LIBID-ASSET-015] [KIT-010]',
+  'ignores optional trailing inputs and deeply freezes the parsed list [LIBID-ASSET-015] [KIT-010] [LIBID-ASSET-006]',
   async ({ trailing }) => {
     config = [...v1Inputs, ...trailing]
     const parse = vi.spyOn(JSON, 'parse')
@@ -192,7 +195,7 @@ it.each([[], [null], [{ optional: { nested: [1, 2] } }]].map((trailing) => ({ tr
   },
 )
 
-it('does not prevent private navigation when the advisory readiness send fails', async () => {
+it('does not prevent private navigation when the advisory readiness send fails [LIBID-OAUTH-028]', async () => {
   vi.spyOn(connection, 'send').mockImplementationOnce(() => {
     throw new Error('transport send failure')
   })
@@ -201,7 +204,7 @@ it('does not prevent private navigation when the advisory readiness send fails',
   expect(connection.navigations).toHaveLength(1)
 })
 
-it('takes the selected peer from authentication, never from OAuth fields or allowlist order [TEST-CCDP-04]', async () => {
+it('takes the selected peer from authentication, never from OAuth fields or allowlist order [TEST-CCDP-04] [LIBID-OAUTH-017]', async () => {
   config = [
     ['https://other-app.test', 'https://app.test', 'https://ccdp.test'],
     'https://ccdp.test',
@@ -225,7 +228,7 @@ it.each([null, 'null', 'https://app.test/'])(
 )
 
 it.each(['ready-first', 'closed-first'])(
-  'keeps the connection failure visible locally when Application is unreachable: %s [TEST-CCDP-08]',
+  'keeps the connection failure visible locally when Application is unreachable: %s [TEST-CCDP-08] [LIBID-OAUTH-030]',
   async (order) => {
     const error = new PopupError('fallback-unavailable')
     connection = fakeConnection({ ready: 'pending', peerOrigin: null })
@@ -247,7 +250,7 @@ it.each(['ready-first', 'closed-first'])(
   },
 )
 
-it('ignores readiness that arrives after the connection closed', async () => {
+it('ignores readiness that arrives after the connection closed [LIBID-BROWSER-022]', async () => {
   connection = fakeConnection({ ready: 'pending', peerOrigin: 'https://app.test' })
   startCallback()
   connection.end()

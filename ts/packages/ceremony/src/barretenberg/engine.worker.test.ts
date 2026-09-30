@@ -195,7 +195,7 @@ it.each(['backend', 'resources'])(
 )
 
 it.each(['cross-origin isolation', 'shared memory'])(
-  'fails without %s before starting any preload branch [LIBID-PROVER-015]',
+  'fails without %s before starting any preload branch [LIBID-PROVER-015] [LIBID-OAUTH-010]',
   async (missing) => {
     if (missing === 'shared memory') vi.stubGlobal('SharedArrayBuffer', undefined)
     const w = await worker(undefined, { isolated: missing !== 'cross-origin isolation' })
@@ -218,7 +218,7 @@ it.each([
   ['no shared memory', 'threads: 4; shared memory: false'],
   ['no thread pool', null],
 ])(
-  'fails and destroys a backend reporting %s instead of multithreaded execution [LIBID-PROVER-015]',
+  'fails and destroys a backend reporting %s instead of multithreaded execution [LIBID-PROVER-015] [LIBID-OAUTH-010]',
   async (_, runtime) => {
     const w = await worker(undefined, { runtime })
     await expect.poll(() => w.has('error')).toBe(true)

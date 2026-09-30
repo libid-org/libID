@@ -90,7 +90,7 @@ describe('[TEST-COMMON-07] PKCE derivation', () => {
     transactionData,
   })
 
-  it('reproduces the §7 conformance vector exactly', () => {
+  it('reproduces the §7 conformance vector exactly [LIBID-OAUTH-016]', () => {
     const verifier = deriveCodeVerifier(digest, authorizationNonce)
     expect(verifier).toBe('5teBDl6cz4U77aFweV5PbMhBJ_lEFv6LLNKzqnDI5lo')
     expect(deriveCodeChallenge(verifier)).toBe('c8HLMaJOzc8OUoRYc7AocL5ioAkXVtAOmoGxoSY60IQ')

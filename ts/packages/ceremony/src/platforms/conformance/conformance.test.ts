@@ -531,7 +531,7 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
     expectNoProvingWork()
   })
 
-  it('requires a valid public credential before exchange exactly when the catalog does', async () => {
+  it('requires a valid public credential before exchange exactly when the catalog does [LIBID-MOD-013]', async () => {
     vi.stubGlobal('fetch', vi.fn())
     const { prove } = await fixture.prover()
     const missing = proverContext(platformId)
@@ -1646,7 +1646,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
   describe('composition', () => {
     it(
       tagged(
-        'sends the code and the bearer in their requests and never discloses the bearer',
+        'sends the code and the bearer in their requests and never discloses the bearer [LIBID-MOD-013] [LIBID-OAUTH-015]',
         tags,
       ),
       async () => {
@@ -1675,7 +1675,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
 
     it.each(['accepted', 'failed'])(
       tagged(
-        'overlaps identity work with token openings and settles only on every output: %s [LIBID-PROVER-007] [LIBID-PROVER-013] [LIBID-PROVER-014] [TEST-PLAT-13]',
+        'overlaps identity work with token openings and settles only on every output: %s [LIBID-PROVER-007] [LIBID-PROVER-013] [LIBID-PROVER-014] [TEST-PLAT-13] [LIBID-OAUTH-015]',
         tags,
       ),
       async (outcome) => {

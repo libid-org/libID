@@ -27,7 +27,7 @@ test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async
   expect((await request.get(`${ccdp}/ccdp/v99/prover`)).status()).toBe(404)
 })
 
-test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020] [TEST-DIST-03]', async ({
+test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020] [TEST-DIST-03] [LIBID-MOD-002] [LIBID-ASSET-012] [LIBID-PROVER-016]', async ({
   ccdp,
   page,
   context,
@@ -77,7 +77,7 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
   await expectApplicationContinues(page)
 })
 
-test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-ASSET-017]', async ({
+test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-ASSET-017] [LIBID-PROVER-016]', async ({
   ccdp,
   browser,
   request,
@@ -169,7 +169,7 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
 })
 
 // Real RC WASM and its nested module workers; no simulated SDK initialization.
-test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASSET-017]', async ({
+test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASSET-017] [LIBID-ASSET-009] [LIBID-PROVER-006]', async ({
   ccdp,
   page,
   assetCount,

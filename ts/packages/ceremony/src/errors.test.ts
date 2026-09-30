@@ -5,7 +5,7 @@ import { CeremonyFailed } from './ccdp/index.js'
 import { popupErrorMessages } from './ccdp/ui-messages.js'
 import { CeremonyError, ceremonyError, errorMessage, reportFailure } from './errors.js'
 
-it('preserves unexpected error text and context without serializing the exception [LIBID-OAUTH-022]', () => {
+it('preserves unexpected error text and context without serializing the exception [LIBID-OAUTH-022] [LIBID-OAUTH-030]', () => {
   const cause = new Error('Invalid GitHub id')
   const error = ceremonyError(cause, 'identity-fetch')
   expect(error.cause).toBe(cause)
@@ -24,7 +24,7 @@ it('preserves unexpected error text and context without serializing the exceptio
     expect(() => CeremonyFailed.decode({ ...message, ...extra })).toThrow()
 })
 
-it('bounds display text and rejects arbitrary objects instead of stringifying their contents', () => {
+it('bounds display text and rejects arbitrary objects instead of stringifying their contents [LIBID-OAUTH-030]', () => {
   expect(errorMessage({ secret: 'value' })).toBe('Ceremony failed.')
   expect(errorMessage(new Error('bad\nvalue\0'))).toBe('bad value')
   expect(errorMessage(new Error('💥'.repeat(2048)))).toBe('💥'.repeat(512))
@@ -37,7 +37,7 @@ it('bounds display text and rejects arbitrary objects instead of stringifying th
     expect(errorMessage(new Error(empty))).toBe('Ceremony failed.')
 })
 
-it('records undeliverable failures without logging opaque text or changing outcomes [TEST-CCDP-08]', () => {
+it('records undeliverable failures without logging opaque text or changing outcomes [TEST-CCDP-08] [LIBID-OAUTH-029] [LIBID-OAUTH-030]', () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   try {
     const error = new CeremonyError('proof', 'synthetic-secret')

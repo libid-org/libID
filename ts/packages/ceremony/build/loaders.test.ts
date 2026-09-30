@@ -34,7 +34,7 @@ const external = requests.filter((r) => r.url.startsWith('https:'))
 
 // These observing stubs never contact external hosts. They test the dependency
 // loaders, not proving: only the standalone browser qualification uses real CRS.
-test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASSET-018] [TEST-DIST-04]', async () => {
+test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASSET-018] [TEST-DIST-04] [LIBID-ASSET-011]', async () => {
   globalThis.fetch = async (input, init) => {
     const url = String(input),
       range = new Headers(init?.headers).get('range') ?? undefined

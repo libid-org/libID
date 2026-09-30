@@ -10,7 +10,7 @@ import {
 
 for (const wildcard of [false, true])
   for (const native of [false, true])
-    test(`actual popup: private callback, isolation, denial, and application continuation${native ? ' with native anchor' : ''}${wildcard ? ' with wildcard Callback admission' : ''} [LIBID-BROWSER-001] [LIBID-BROWSER-005]`, async ({
+    test(`actual popup: private callback, isolation, denial, and application continuation${native ? ' with native anchor' : ''}${wildcard ? ' with wildcard Callback admission' : ''} [LIBID-BROWSER-001] [LIBID-BROWSER-005] [LIBID-MOD-012] [LIBID-ASSET-002] [LIBID-OAUTH-002] [LIBID-OAUTH-011] [LIBID-OAUTH-027] [LIBID-BROWSER-003] [LIBID-BROWSER-004] [LIBID-BROWSER-015] [LIBID-BROWSER-018]`, async ({
       bridge,
       ccdp,
       page,
@@ -89,7 +89,7 @@ for (const wildcard of [false, true])
       expect(callbackScripts).toEqual([])
     })
 
-test('popup progress follows operation events independently of stage labels [LIBID-PROVER-011] [LIBID-BROWSER-024] [LIBID-BROWSER-025]', async ({
+test('popup progress follows operation events independently of stage labels [LIBID-PROVER-011] [LIBID-BROWSER-024] [LIBID-BROWSER-025] [LIBID-BROWSER-017]', async ({
   app,
   page,
 }) => {
@@ -177,7 +177,7 @@ test('popup paint wait skips hidden documents and tolerates stopped animation fr
   })
 })
 
-test('Callback clears unsupported versions and unconfigured direct visits locally [KIT-010] [CSP-007] [TEST-CCDP-02]', async ({
+test('Callback clears unsupported versions and unconfigured direct visits locally [KIT-010] [CSP-007] [TEST-CCDP-02] [LIBID-OAUTH-005]', async ({
   bridge,
   ccdp,
   page,
