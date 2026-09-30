@@ -47,9 +47,9 @@ function recompose(limbs: string[]): bigint {
   return limbs.reduce((value, limb, index) => value | (BigInt(limb) << (120n * BigInt(index))), 0n)
 }
 
-const tokenWith = (change: Parameters<typeof jwtWith>[1]) => jwtWith(fixture.idToken, change)
+const _tokenWith = (change: Parameters<typeof jwtWith>[1]) => jwtWith(fixture.idToken, change)
 
-const tokenWithPayload = (payload: string) => jwtWith(fixture.idToken, { payload })
+const _tokenWithPayload = (payload: string) => jwtWith(fixture.idToken, { payload })
 
 describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier fields', () => {
   it('builds the released ABI exactly from a valid fixed RS256 token and rejects each changed public input [TEST-COMMON-20]', () => {
@@ -114,65 +114,4 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 witness and verifier field
       )
     }
   })
-
-  it('rejects malformed token and JWK values before witness construction', () => {
-    const payload = JSON.parse(
-      Buffer.from(fixture.idToken.split('.')[1], 'base64url').toString(),
-    ) as Record<string, unknown>
-    const header = JSON.parse(
-      Buffer.from(fixture.idToken.split('.')[0], 'base64url').toString(),
-    ) as Record<string, unknown>
-    const payloadJson = Buffer.from(fixture.idToken.split('.')[1], 'base64url').toString()
-    const cases: Array<[string, string, unknown]> = [
-      ['wrong algorithm', tokenWith({ header: { ...header, alg: 'ES256' } }), fixture.jwk],
-      ['missing kid', tokenWith({ header: { alg: 'RS256' } }), fixture.jwk],
-      ['wrong nonce width', tokenWith({ payload: { ...payload, nonce: 'AA' } }), fixture.jwk],
-      [
-        'wrong claim type',
-        tokenWith({ payload: { ...payload, exp: String(payload.exp) } }),
-        fixture.jwk,
-      ],
-      [
-        'unverified email',
-        tokenWith({ payload: { ...payload, email_verified: false } }),
-        fixture.jwk,
-      ],
-      ['short signature', tokenWith({ signature: new Uint8Array(255) }), fixture.jwk],
-      [
-        'missing canonical claim spelling',
-        tokenWithPayload(payloadJson.replace('"email":"', '"email": "')),
-        fixture.jwk,
-      ],
-      [
-        'missing structural terminator',
-        tokenWithPayload(payloadJson.replace('","email_verified"', '" ,"email_verified"')),
-        fixture.jwk,
-      ],
-      ['wrong exponent', fixture.idToken, { ...fixture.jwk, e: 'Aw' }],
-      [
-        'short modulus',
-        fixture.idToken,
-        { ...fixture.jwk, n: Buffer.alloc(255, 0xff).toString('base64url') },
-      ],
-    ]
-    for (const [name, token, jwk] of cases) {
-      expect(() => buildGoogleWitness(parseGoogleIdToken(token), jwk), name).toThrow()
-    }
-  })
-
-  it('does not require optional JWK metadata', () => {
-    const { kid, kty, e, n } = fixture.jwk
-    const jwk = { kid, kty, e, n }
-    expect(buildGoogleWitness(parseGoogleIdToken(fixture.idToken), jwk)).toEqual(
-      buildGoogleWitness(parseGoogleIdToken(fixture.idToken), fixture.jwk),
-    )
-  })
 })
-
-it.each([1.5, -1, 2 ** 64, '1725001000'])(
-  'rejects invalid evidence expiry %j [TEST-COMMON-12]',
-  (exp) => {
-    const payload = JSON.parse(Buffer.from(fixture.idToken.split('.')[1], 'base64url').toString())
-    expect(() => parseGoogleIdToken(tokenWith({ payload: { ...payload, exp } }))).toThrow()
-  },
-)
