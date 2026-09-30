@@ -11,7 +11,7 @@ import {
 
 const id = CEREMONY_ID
 
-it('reads Prefetch input with or without its hash, bounded and exact', () => {
+it('reads Prefetch input with or without its hash, bounded and exact [CSP-006]', () => {
   const fragment = String(prefetchFragment(id, 'google', 1))
   expect(readPrefetch(`#${fragment}`)).toEqual({
     ceremonyId: id,

@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures.js'
 
-test('Bridge config admits its effective origins without exposing the allowlist [KIT-004] [KIT-005] [LIBID-OAUTH-002]', async ({
+test('Bridge config admits its effective origins without exposing the allowlist [KIT-004] [KIT-005]', async ({
   request,
   app,
   bridge,

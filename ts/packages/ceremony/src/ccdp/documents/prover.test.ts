@@ -158,7 +158,7 @@ it.each([
     event: 'token-attestation',
   },
 ])(
-  'reports fallback and gracefully retires failure: $error.message [CSP-016] [LIBID-OAUTH-029] [LIBID-OAUTH-030] [LIBID-BROWSER-015] [LIBID-BROWSER-030]',
+  'reports fallback and gracefully retires failure: $error.message [LIBID-OAUTH-029] [LIBID-OAUTH-030] [LIBID-BROWSER-015] [LIBID-BROWSER-030]',
   async ({ error, event }) => {
     vi.stubGlobal('location', { origin: 'https://ccdp.test', pathname: '/ccdp/v1/prover/fallback' })
     prove.mockImplementationOnce(async (context) => {
@@ -271,7 +271,7 @@ it.each(['before', 'after'])(
 )
 
 it.each(['before-ready', 'duplicate', 'after-denial'])(
-  'consumes the private return once: %s [LIBID-OAUTH-019] [LIBID-OAUTH-023]',
+  'consumes the private return once: %s [LIBID-OAUTH-019]',
   async (when) => {
     connection = spiedConnection('pending')
     let finish!: () => void
@@ -329,7 +329,7 @@ it.each([
   ['SharedArrayBuffer', undefined],
   ['Worker', undefined],
 ])(
-  'refuses to prove without isolation: %s is %s [LIBID-MOD-012] [LIBID-OAUTH-010] [LIBID-BROWSER-015]',
+  'refuses to prove without isolation: %s is %s [CSP-016] [LIBID-MOD-012] [LIBID-OAUTH-010] [LIBID-BROWSER-015]',
   async (name, value) => {
     vi.stubGlobal(name, value)
     await startProver(proverInput())

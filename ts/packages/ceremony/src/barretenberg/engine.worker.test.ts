@@ -204,7 +204,7 @@ it.each(['backend', 'resources'])(
 )
 
 it.each(['cross-origin isolation', 'shared memory'])(
-  'fails without %s before starting any preload branch [LIBID-PROVER-015] [LIBID-OAUTH-010]',
+  'fails without %s before starting any preload branch [CSP-016] [LIBID-PROVER-015] [LIBID-OAUTH-010]',
   async (missing) => {
     if (missing === 'shared memory') vi.stubGlobal('SharedArrayBuffer', undefined)
     const w = await worker(undefined, { isolated: missing !== 'cross-origin isolation' })

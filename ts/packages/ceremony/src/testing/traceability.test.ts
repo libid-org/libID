@@ -36,7 +36,7 @@ const planned = new Set(
 
 const tested = [
   ...read('docs/traceability.md').matchAll(
-    /^\| (LIBID-[A-Z]+-\d+[A-Z]?) \| (Automated|Partial) \|/gm,
+    /^\| ((?:LIBID-[A-Z]+|KIT|CSP)-\d+[A-Z]?) \| (Automated|Partial) \|/gm,
   ),
 ].map(([, id]) => id)
 

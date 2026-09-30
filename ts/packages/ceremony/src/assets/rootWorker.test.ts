@@ -39,7 +39,7 @@ function start(scope: Record<string, unknown> = {}) {
 const port = () => ({ postMessage: vi.fn(), close: vi.fn() })
 
 it.each(['fetch', 'message', 'failed-prefetch'])(
-  'keeps %s lifetime tied to persistence after response delivery',
+  'keeps %s lifetime tied to persistence after response delivery [CSP-017]',
   async (type) => {
     const complete = Promise.withResolvers<void>()
     const response =

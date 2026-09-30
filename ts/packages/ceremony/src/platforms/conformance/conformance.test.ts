@@ -1682,12 +1682,16 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
   describe('composition', () => {
     it(
       tagged(
-        'sends the code and the bearer in their requests and never discloses the bearer [LIBID-MOD-013] [LIBID-OAUTH-015]',
+        'sends the code and the bearer only in notarized requests and never discloses the bearer [LIBID-MOD-013] [LIBID-OAUTH-015] [KIT-003]',
         tags,
       ),
       async () => {
+        // Only notary sessions carry HTTP; an ordinary fetch could leak the code or bearer.
+        const fetch = vi.fn()
+        vi.stubGlobal('fetch', fetch)
         const staged = stageBearer(platformId, 'accepted')
         await (await fixture.prover()).prove(staged.context)
+        expect(fetch).not.toHaveBeenCalled()
         const { transcripts, selected } = staged.notarized
         const { request } = staged.context
         const form = fixture.tokenRequest.form({

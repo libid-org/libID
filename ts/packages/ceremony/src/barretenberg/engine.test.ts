@@ -65,6 +65,13 @@ it('posts one preload after boot with resolved resource URLs and capped threads 
   })
   engine({ threads: 2 })
   expect(workers[1].postMessage.mock.calls[0][0]).toMatchObject({ type: 'preload', threads: 2 })
+  // The fixed cap holds on a larger machine; a smaller one caps the default.
+  vi.stubGlobal('navigator', { hardwareConcurrency: 16 })
+  engine({ threads: 8 })
+  expect(workers[2].postMessage.mock.calls[0][0]).toMatchObject({ threads: 4 })
+  vi.stubGlobal('navigator', { hardwareConcurrency: 2 })
+  engine()
+  expect(workers[3].postMessage.mock.calls[0][0]).toMatchObject({ threads: 2 })
 })
 
 it.each([

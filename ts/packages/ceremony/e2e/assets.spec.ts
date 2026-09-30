@@ -2,10 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { artifactRequests, expect, expectApplicationContinues, test } from './fixtures.js'
 
-test('emitted route policies and inert missing paths [CSP-001] [CSP-003]', async ({
-  request,
-  ccdp,
-}) => {
+test('emitted route policies and inert missing paths [CSP-001]', async ({ request, ccdp }) => {
   for (const path of [
     '/ccdp/v1/prefetch',
     '/ccdp/v1/prover',
@@ -169,7 +166,7 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
 })
 
 // Real RC WASM and its nested module workers; no simulated SDK initialization.
-test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASSET-017] [LIBID-ASSET-009] [LIBID-PROVER-006]', async ({
+test('released TLSNotary initializes concurrently from mounted assets [CSP-010] [LIBID-ASSET-017] [LIBID-ASSET-009] [LIBID-PROVER-006]', async ({
   ccdp,
   page,
   assetCount,

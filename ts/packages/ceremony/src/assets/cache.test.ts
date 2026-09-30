@@ -5,7 +5,7 @@ const spec = { url: 'https://assets.example/g1', range: 'bytes=0-1', bytes: 2 }
 
 afterEach(() => vi.unstubAllGlobals())
 
-it('joins pending downloads and preserves independent readers and worker CSP in stored bodies [LIBID-ASSET-019] [LIBID-ASSET-021] [LIBID-PROVER-016]', async () => {
+it('joins pending downloads and preserves independent readers and worker CSP in stored bodies [CSP-019] [LIBID-ASSET-019] [LIBID-ASSET-021] [LIBID-PROVER-016]', async () => {
   const stored = new Map<string, Response>()
   vi.stubGlobal('caches', {
     open: async () => ({

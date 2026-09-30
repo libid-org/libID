@@ -89,6 +89,15 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
     assert.ok(existsSync(join(out, 'public', `${wasm.url}.${extension}`)))
   assert.ok(!google.some((r) => r.url.includes('tlsn')))
   assert.ok(x.some((r) => r.url.endsWith('/tlsn_wasm.js')))
+  // X and GitHub share one bearer-link circuit and key and one TLSN module/WASM pair.
+  const bearerLink = (list: typeof x) =>
+    list
+      .map((r) => r.url)
+      .filter((url) => /\/bearer-link\/|\/tlsn\//.test(url))
+      .sort()
+  assert.ok(bearerLink(x).some((url) => url.endsWith('/bearer_link.json')))
+  assert.ok(bearerLink(x).some((url) => url.endsWith('/tlsn_wasm_bg.wasm')))
+  assert.deepEqual(bearerLink(github), bearerLink(x))
   // Code follows the same split: a profile loads its own platform's prover only, and a profile
   // without the notary client loads none of the notary runtime.
   const modules = (list: typeof google) =>
@@ -244,7 +253,7 @@ test('actual SWS answers the health probe and serves every 404 with the error po
   assert.equal(directory.headers.get('cache-control'), errorHeaders['Cache-Control'])
 })
 
-test('aggregate Callback insertion preserves executable hashes and rejects malformed artifacts [KIT-009] [KIT-010] [CSP-007] [TEST-DIST-02] [TEST-BRIDGE-04] [LIBID-MOD-003] [LIBID-ASSET-002]', async () => {
+test('aggregate Callback insertion preserves executable hashes and rejects malformed artifacts [KIT-009] [KIT-010] [CSP-004] [CSP-007] [TEST-DIST-02] [TEST-BRIDGE-04] [LIBID-MOD-003] [LIBID-ASSET-002]', async () => {
   const { prepareCallback } = await import('../e2e/callback.ts')
   const path = '/ccdp/callback.html'
   const html = readFileSync(join(out, 'public', path), 'utf8')
@@ -260,7 +269,9 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   })
   assert.equal(a.headers['Content-Security-Policy'], b.headers['Content-Security-Policy'])
   assert.equal(a.headers['Content-Security-Policy'], headers['content-security-policy'])
+  // Hostile inserted text stays data: no raw script end survives, and the policy is unchanged.
   assert.ok(b.body.includes('\\u003c/script>'))
+  assert.ok(!b.body.includes('</script><script>alert(1)'))
   assert.ok(b.body.includes('$&'))
   assert.equal(a.headers['Cache-Control'], 'no-store')
   assert.equal(new Headers(a.headers).has('ETag'), false)
@@ -280,7 +291,15 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   assert.equal(Object.hasOwn(metadata.headers, '/ccdp/v1/callback.js'), false)
 })
 
-test('only worker entry scripts carry worker isolation policies [LIBID-ASSET-001]', () => {
+test('only worker entry scripts carry worker isolation policies, from immutable CCDP paths [LIBID-ASSET-001] [CSP-008]', () => {
+  const workers = Object.entries(metadata.graph).filter(([, node]) =>
+    /\.worker\.[jt]s$/.test(node.entry ?? ''),
+  )
+  assert.ok(workers.length > 0)
+  for (const [file] of workers) {
+    assert.ok(file.startsWith('ccdp/assets/'), file)
+    assert.match(metadata.headers[`/${file}`]['cache-control'], /immutable/, file)
+  }
   for (const [path, headers] of Object.entries(metadata.headers)) {
     const node = metadata.graph[path.slice(1)]
     // Prior immutable responses keep the policy they were published with.

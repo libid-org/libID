@@ -61,14 +61,18 @@ afterEach(() => {
 /** The Prover fragment of the one navigation Callback made. */
 const proverFragment = () => new URLSearchParams(connection.navigations[0].fragment)
 
-it('clears before acceptance and preserves exact private return with shared deployment inputs [KIT-006] [KIT-010] [TEST-CCDP-03] [LIBID-ASSET-006] [LIBID-OAUTH-005] [LIBID-OAUTH-011] [LIBID-OAUTH-028] [LIBID-BROWSER-004]', async () => {
+it('clears before acceptance and preserves exact private return with shared deployment inputs, exchanging nothing [KIT-006] [KIT-010] [KIT-012] [TEST-CCDP-03] [LIBID-ASSET-006] [LIBID-OAUTH-005] [LIBID-OAUTH-011] [LIBID-OAUTH-028] [LIBID-BROWSER-004]', async () => {
   const original = locationInput.hash
   connection.peerOrigin = 'https://other-app.test'
   config = [['https://other-app.test', 'https://other-ccdp.test'], 'https://other-ccdp.test']
   const send = vi.spyOn(connection, 'send')
   const navigate = vi.spyOn(connection, 'navigate')
+  // Only the isolated Prover exchanges the return; Callback fetches nothing.
+  const fetch = vi.fn()
+  vi.stubGlobal('fetch', fetch)
   startCallback()
   await Promise.resolve()
+  expect(fetch).not.toHaveBeenCalled()
   expect(accept).toHaveBeenCalledWith(undefined, {
     fallback: undefined,
     connectionId: id,

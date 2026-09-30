@@ -81,7 +81,7 @@ test('sidecars cannot overwrite archive members or executable resources [LIBID-A
     )
 })
 
-test('rebuild removes obsolete compression sidecars [LIBID-ASSET-023]', () => {
+test('rebuild removes obsolete compression sidecars', () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-sidecars-'))
   const publish = (body: string) =>

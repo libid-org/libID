@@ -151,7 +151,7 @@ function proofFor(connection: FakeConnection, claimed: Identity<'google'> = iden
 }
 
 describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
-  it('uses distinct origins and frozen input; never receives raw OAuth return [TEST-CCDP-01] [TEST-CCDP-03] [LIBID-MOD-018] [LIBID-OAUTH-016] [LIBID-OAUTH-027] [LIBID-BROWSER-020]', async () => {
+  it('uses distinct origins and frozen input; never receives raw OAuth return [TEST-CCDP-01] [LIBID-MOD-018] [LIBID-OAUTH-016] [LIBID-OAUTH-027] [LIBID-BROWSER-020]', async () => {
     const { connection: c, ceremony, data } = setup()
     const events: string[] = []
     ceremony.onEvent((e) => events.push(e.status === 'active' ? `${e.event}.${e.phase}` : e.status))
@@ -215,7 +215,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     expect(events).toEqual(lifecycle)
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
   })
-  it('closing the connection wins over late delivery without a CCDP cancel [LIBID-BROWSER-005] [LIBID-OAUTH-024] [LIBID-OAUTH-025] [LIBID-BROWSER-018]', async () => {
+  it('closing the connection wins over late delivery without a CCDP cancel [LIBID-OAUTH-024] [LIBID-OAUTH-025] [LIBID-BROWSER-018]', async () => {
     const { connection: c, ceremony } = setup()
     const rejection = expect(ceremony.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
     await c.close()
@@ -348,7 +348,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
 })
 
 it.each(supportedPlatforms)(
-  'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015] [LIBID-ASSET-006] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
+  'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
   async (platformId) => {
     const oidc = fixtures[platformId].proverKind === 'oidc'
     const hash = testnet.hash(),
@@ -766,18 +766,15 @@ it('only core readiness events advance the protocol; preserves occurrence times 
 it.each([
   ['Prefetch', event('prefetch-dispatch', 'finished')],
   ['Prover', event('prover', 'started', 3)],
-])(
-  'accepts %s readiness only from the CCDP, never the Bridge [LIBID-OAUTH-023]',
-  async (document, readiness) => {
-    const { ceremony, connection } = setup()
-    const result = ceremony.proveUserIdentity()
-    if (document === 'Prover') prefetched(connection)
-    connection.peerOrigin = 'https://bridge.test'
-    connection.receive(readiness)
-    await expect(result).rejects.toThrow('Readiness from outside the CCDP')
-    expect(connection.sent).toEqual([])
-  },
-)
+])('accepts %s readiness only from the CCDP, never the Bridge', async (document, readiness) => {
+  const { ceremony, connection } = setup()
+  const result = ceremony.proveUserIdentity()
+  if (document === 'Prover') prefetched(connection)
+  connection.peerOrigin = 'https://bridge.test'
+  connection.receive(readiness)
+  await expect(result).rejects.toThrow('Readiness from outside the CCDP')
+  expect(connection.sent).toEqual([])
+})
 
 it.each([
   ['before the return', [], 'authorization'],
@@ -789,6 +786,21 @@ it.each([
   for (const message of observed) connection.receive(message)
   await connection.close()
   await expect(result).rejects.toMatchObject({ status: 'closed', event: blamed })
+})
+
+it('draws a fresh authorization nonce for every ceremony [LIBID-OAUTH-016] [TEST-COMMON-07]', async () => {
+  // Identical inputs: only the nonce can make the requested digests differ.
+  const nonces: (string | null)[] = []
+  for (const _ of [1, 2]) {
+    const { connection, ceremony } = setup()
+    const result = ceremony.proveUserIdentity().catch(() => {})
+    prefetched(connection)
+    nonces.push(authorizationUrl(connection).searchParams.get('nonce'))
+    await connection.close()
+    await result
+  }
+  expect(nonces[0]).not.toBeNull()
+  expect(nonces[0]).not.toBe(nonces[1])
 })
 
 it('cancellation at authorization entry prevents provider navigation [LIBID-BROWSER-018]', async () => {
@@ -917,7 +929,7 @@ it('reports closure before the first start without mislabeling it as a repeat [L
   expect(connection.navigations).toEqual([])
 })
 
-it('freezes and forwards the public credential from validated configuration [TEST-BRIDGE-03] [LIBID-ASSET-006] [LIBID-ASSET-010] [LIBID-OAUTH-016]', async () => {
+it('freezes and forwards the public credential from validated configuration [KIT-002] [TEST-BRIDGE-03] [LIBID-ASSET-006] [LIBID-ASSET-010] [LIBID-OAUTH-016]', async () => {
   const github = {
     clientId: 'client',
     clientCredential: 'public&original=1',
