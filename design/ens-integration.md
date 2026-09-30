@@ -73,7 +73,7 @@ alice.x.base.handles.link         with an explicit chain
 ```
 
 The platform label is not decoration: our keyspace is per platform, so `alice` on
-X and `alice` on GitHub are different names that may hold different wallets.
+X and `alice` on GitHub are different names that may have different holders.
 
 **The chain belongs to the hierarchy**, as a label of its own, rather than being
 left to the coin type alone. That is settled, and it is part of the name shape
@@ -223,7 +223,7 @@ Both answers are honest to their own chain. One name, two people, told apart onl
 by which network the sender was on.
 
 **The gateway is where this can be addressed**, because it reads every chain at
-once and no on-chain resolver can. `byHandle(node)` exposes `observedAt`
+once and no on-chain resolver can. `handleBinding(handleNode)` exposes `observedAt`
 publicly, so the options are open: expose the age and let the consumer decide;
 answer only for the freshest chain and refuse elsewhere; or refuse entirely when
 chains disagree.
@@ -565,7 +565,7 @@ every chain we target provides.
 **Issue subnames as NFTs**, on L1 or through an L2 framework such as Durin. Durin
 is right when a name is an asset in its own right. Here a name is derived from a
 proof, and minting it separately creates a **second source of truth that can
-disagree with the first**: a user rebinds `alice` to a new wallet in
+disagree with the first**: a user rebinds `alice` to a new holder in
 `IdentityNames` while the subname NFT still records the old owner, and nothing
 decides which is correct.
 
