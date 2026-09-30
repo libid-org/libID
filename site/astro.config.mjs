@@ -14,7 +14,22 @@ export default defineConfig({
       customCss: ['./src/styles/custom.css'],
       routeMiddleware: './src/route-data.ts',
       sidebar: [
-        { label: 'Docs', items: [{ autogenerate: { directory: 'docs' } }] },
+        {
+          label: 'Docs',
+          items: [
+            { label: 'Introduction', slug: 'docs' },
+            ...[
+              ['Get started', 'get-started'],
+              ['Concepts', 'concepts'],
+              ['Guides', 'guides'],
+              ['Examples', 'examples'],
+              ['Reference', 'reference'],
+              ['Networks', 'networks'],
+              ['Resources', 'resources'],
+              ['Advanced', 'advanced'],
+            ].map(([label, dir]) => ({ label, items: [{ autogenerate: { directory: `docs/${dir}` } }] })),
+          ],
+        },
         { label: 'Specs', items: [{ autogenerate: { directory: 'specs' } }] },
       ],
       components: {
