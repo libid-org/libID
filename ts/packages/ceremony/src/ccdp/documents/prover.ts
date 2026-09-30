@@ -3,23 +3,18 @@ import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { claimRootWorker } from '../../assets/registration.js'
 import { ceremonyError, endError, reportFailure } from '../../errors.js'
 import { Events, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
-import { implementationFor, isPlatformId } from '../../platforms/index.js'
+import { ceremonyFor } from '../../platforms/index.js'
+import { proverFor } from '../../platforms/provers.js'
 import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
 import { messages } from '../ui-messages.js'
 import { eventView, view } from './ui.js'
 
-const implementations = {
-  google: () => import('../../platforms/google/1/prover.js'),
-  x: () => import('../../platforms/x/1/prover.js'),
-  github: () => import('../../platforms/github/1/prover.js'),
-}
-
 type ProverState =
   | { phase: 'connecting' | 'ready'; input: ReturnType<typeof readProver> }
   | { phase: 'proving' | 'ended' }
 
-/** Accept the private callback fragment, run the selected pipeline and deliver one terminal result. */
+/** Accept the private callback fragment, run the selected prover and deliver one terminal result. */
 export async function startProver(fragment: string): Promise<void> {
   try {
     const input = readProver(fragment)
@@ -80,22 +75,16 @@ class ProverDocument {
 
   private async prove(request: ProveIdentity): Promise<void> {
     if (this.state.phase === 'ended') return
-    const { platformId } = request
-    // Only version 1 provers are bundled.
-    if (
-      this.state.phase !== 'ready' ||
-      request.platformCeremonyVersion !== 1 ||
-      !isPlatformId(platformId)
-    )
-      throw new Error(messages.invalidProvingRequest)
+    const prover = proverFor(request.platformId, request.platformCeremonyVersion)
+    if (this.state.phase !== 'ready' || !prover) throw new Error(messages.invalidProvingRequest)
     const { input } = this.state
     this.state = { phase: 'proving' }
     try {
-      this.ui.trackProof(implementationFor(platformId, 1).progressWeights)
+      this.ui.trackProof(ceremonyFor(prover.platformId, prover.version).progressWeights)
     } catch {
       /* Presentation cannot prevent proof execution. */
     }
-    const module = await implementations[platformId]()
+    const module = await prover.load()
     this.controller.signal.throwIfAborted()
     const result = await module.prove({
       request,

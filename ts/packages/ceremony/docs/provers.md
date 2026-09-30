@@ -1,16 +1,16 @@
-# Platform pipelines
+# Platform provers
 
 Each platform/version owns authorization URLs, accepted OAuth returns, proof and
-identity validators, resource declarations, events and its execution pipeline.
+identity validators, resource declarations, events and its prover.
 Shared Client, message and progress code consult that metadata instead of branching
 on provider names. The [normative profiles](https://github.com/libid-org/libid/blob/main/specs/platform-ceremonies.md)
 own authorization encodings and proof statements.
 
 ## Shared execution boundary
 
-The Prover document dispatches a lazy pipeline with
+The Prover document dispatches a lazy prover with
 [ProverContext](../src/platforms/context.ts): the validated request, authenticated
-ceremony ID, private OAuth capture, abort signal and event producer. The pipeline
+ceremony ID, private OAuth capture, abort signal and event producer. The prover
 returns separate identity/proof values, or null for valid OAuth denial. Technical
 failures throw with operation context. Platform code has no popup connection.
 `ProverDocument` owns readiness, one-shot request execution, delivery and cleanup; its state drops the private capture when
@@ -26,7 +26,7 @@ returns; X does not inherit that requirement.
 
 Client forwards `notaryAddress` uniformly; Google ignores it, X/GitHub require it.
 The URL definition declares PKCE use; Client derives `codeVerifier` or sends null.
-Every pipeline starts with [acceptReturn](../src/platforms/oauthReturn.ts), which
+Every prover starts with [acceptReturn](../src/platforms/oauthReturn.ts), which
 checks the request against the catalog's client ID, PKCE and credential
 declarations, consumes the ceremony-bound return, and yields null for denial. Neither input selects an asset or a
 replacement notary. A second platform must not require another shared-code branch.
@@ -56,7 +56,7 @@ verify the proof or establish trust in the signing key; the ledger remains autho
 ## X
 
 [x/1/prover.ts](../src/platforms/x/1/prover.ts) accepts its return, then hands its
-transcript profile to [the shared bearer-link pipeline](../src/platforms/bearer.ts),
+transcript profile to [the shared bearer-link prover](../src/platforms/bearer.ts),
 which overlaps these dependencies:
 
 1. Start the [bearer circuit prover](../src/barretenberg/circuits/bearer_link/prover.ts)
@@ -76,7 +76,7 @@ siblings rather than leaving work or a promise rejection behind.
 ## GitHub
 
 [github/1/prover.ts](../src/platforms/github/1/prover.ts) uses that same
-concrete pipeline: two Proxy sessions in one notary runtime, with identity HTTP
+concrete prover: two Proxy sessions in one notary runtime, with identity HTTP
 waiting only for a usable bearer and its prepared session. `token-fetch` ends
 before token attestation; proof generation can overlap both final attestations.
 Any failure aborts sibling work and prevents delivery.
@@ -113,11 +113,13 @@ For another version-one platform:
    platform-specific selectors and fixtures beside their tests.
 2. Register its lightweight definition in [the catalog](../src/platforms/index.ts).
    It derives discovery, supported versions and result types.
-3. Add the lazy import to [the Prover dispatcher](../src/ccdp/documents/prover.ts)
+3. Add the lazy import to [the platform provers](../src/platforms/provers.ts)
    and resource set to [the asset catalog](../src/platforms/platforms.assets.ts).
-   Both are checked against the platform catalog. The asset catalog derives its
-   capacity-checked circuit list from those resource sets. Emitted JavaScript dependencies come from
-   the compiler graph; do not copy those URLs into the resource set.
+   Both are typed against the platform catalog: `typecheck` fails on a catalog
+   version without a prover or resource set, and on either outside
+   the catalog. The asset catalog derives its capacity-checked circuit list from those resource sets.
+   Emitted JavaScript dependencies come from the compiler graph; do not copy
+   those URLs into the resource set.
 4. Have Bridge advertise the implemented version and any required public
    token-exchange credential; set `requiresClientCredential` in the catalog.
    A future Bridge service needs an explicit platform-profile contract. Add
@@ -128,6 +130,8 @@ For another version-one platform:
    Complete authenticated-service/device qualification before claiming support.
 
 These three registration points preserve Client/Prefetch import boundaries;
-there is no mutable plugin registry. For a **second ceremony version**, also
-extend the version-one-only Prover dispatcher and distribution runtime-entry
-lookup. Client discovery alone does not implement another version.
+there is no mutable plugin registry. A **second ceremony version** of a platform
+is the same three registrations under `platforms/<id>/<version>/`: the Prover
+dispatches on the request's platform and version, and the build looks each
+profile's prover up by its own version. Client discovery alone does not
+implement another version.

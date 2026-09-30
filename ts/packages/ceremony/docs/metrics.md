@@ -12,7 +12,7 @@ and export are deferred; this guide preserves their required measurement rules.
 [events.ts](../src/events.ts) owns occurrences, subscriptions, terminal status and
 monotonic stage projection. [Barretenberg events](../src/barretenberg/events.ts)
 and each platform's `events.ts` own additional operations and separate progress
-weights. Pipeline producers use `operation()` or explicit start/finish emission
+weights. Platform provers use `operation()` or explicit start/finish emission
 around concurrent branches. Failed operations need not fabricate a finish.
 
 Popup UI uses that local feed without an Application roundtrip. Its native bar

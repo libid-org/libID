@@ -44,8 +44,8 @@ import type { ProverContext } from '../context.js'
 import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from '../index.js'
 import {
   assembleResult,
+  ceremonyFor,
   commonVersions,
-  implementationFor,
   isPlatformId,
   type PlatformId,
   platforms,
@@ -53,6 +53,7 @@ import {
 } from '../index.js'
 import { acceptReturn, parseOAuthReturn, type ReturnProfile } from '../oauthReturn.js'
 import { assetsByPlatform, circuits } from '../platforms.assets.js'
+import { provers } from '../provers.js'
 import type { EvidenceChange, PlatformFixture, ReturnSamples } from './fixtures.js'
 
 const { prepare, generate, destroy, engine, notarization } = vi.hoisted(() => ({
@@ -62,7 +63,7 @@ const { prepare, generate, destroy, engine, notarization } = vi.hoisted(() => ({
   engine: vi.fn(),
   notarization: vi.fn(),
 }))
-// One distinct URL per resource, so tests can see which resources a pipeline proves with.
+// One distinct URL per resource, so tests can see which resources a prover proves with.
 vi.mock('../../assets/index.js', async (original) => {
   const urls = new Map<object, string>()
   return {
@@ -129,7 +130,7 @@ function expectNoProvingWork(fetch: unknown = globalThis.fetch) {
   expect(generate).not.toHaveBeenCalled()
 }
 
-/** Resources a pipeline's proof engine loaded must belong to the platform's asset set. */
+/** Resources a prover's proof engine loaded must belong to the platform's asset set. */
 function expectEngineAssets(platformId: PlatformId) {
   const assets: readonly Asset[] = assetsByPlatform[platformId][1]
   const urls = assets.map(assetUrl)
@@ -150,7 +151,7 @@ it('covers exactly the catalog platforms', () => {
 describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
   const fixture = fixtures[platformId]
   const platform = platforms[platformId]
-  const implementation = implementationFor(platformId, 1)
+  const ceremony = ceremonyFor(platformId, 1)
 
   it('exposes exactly the members Client, Prover and the asset build consume', () => {
     expect(isPlatformId(platformId)).toBe(true)
@@ -162,8 +163,8 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     expect(typeof platform.requiresClientCredential).toBe('boolean')
     expect(Object.keys(platform.versions)).toEqual(['1'])
     expect(commonVersions(platformId, [0, 2, 1])).toEqual([1])
-    expect(() => implementationFor(platformId, 2 as 1)).toThrow('Unsupported platform version')
-    expect(Object.keys(implementation).sort()).toEqual([
+    expect(() => ceremonyFor(platformId, 2 as 1)).toThrow('Unsupported platform version')
+    expect(Object.keys(ceremony).sort()).toEqual([
       'acceptResult',
       'buildAuthorizationUrl',
       'events',
@@ -172,7 +173,7 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       'progressWeights',
     ])
     // Code exchange binds the digest through PKCE; an implicit ID token carries it as the nonce.
-    expect(implementation.pkce).toBe(fixture.pipeline === 'bearer-link')
+    expect(ceremony.pkce).toBe(fixture.proverKind === 'bearer-link')
   })
 
   it('round-trips client, redirect, state and the digest binding through its authorization URL', () => {
@@ -183,9 +184,9 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       redirectUri: 'https://bridge.test/auth/callback',
       state,
       authorizationDigest: digest,
-      codeChallenge: implementation.pkce ? deriveCodeChallenge(codeVerifier) : null,
+      codeChallenge: ceremony.pkce ? deriveCodeChallenge(codeVerifier) : null,
     }
-    const url = new URL(implementation.buildAuthorizationUrl(input))
+    const url = new URL(ceremony.buildAuthorizationUrl(input))
     const params = url.searchParams
     expect(url.protocol).toBe('https:')
     expect(url.hash).toBe('')
@@ -197,7 +198,7 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     // The requested response is exactly what the platform's return rules accept.
     expect(params.get('response_type') ?? 'code').toBe(fixture.oauthReturn.credential)
     expect(params.get('response_mode') ?? 'query').toBe(fixture.oauthReturn.transport)
-    if (implementation.pkce) {
+    if (ceremony.pkce) {
       expect(params.get('code_challenge')).toBe(input.codeChallenge)
       expect(params.get('code_challenge_method')).toBe('S256')
       expect(params.has('nonce')).toBe(false)
@@ -208,9 +209,9 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     const malformed = {
       ...input,
       authorizationDigest: digest.slice(1),
-      codeChallenge: implementation.pkce ? codeVerifier.slice(1) : null,
+      codeChallenge: ceremony.pkce ? codeVerifier.slice(1) : null,
     }
-    expect(() => implementation.buildAuthorizationUrl(malformed)).toThrow()
+    expect(() => ceremony.buildAuthorizationUrl(malformed)).toThrow()
   })
 
   const validate = (entry: unknown) =>
@@ -251,8 +252,13 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       expect(() => validate({ ...withoutCredential, clientCredential })).toThrow()
   })
 
-  it('weights every pipeline operation once and ships its proof and pipeline resources', () => {
-    const { events, progressWeights } = implementation
+  it('registers its own prover for its catalog version', async () => {
+    // The fixture imports its prover independently of the Prover's table.
+    expect(await provers[platformId][1]()).toBe(await fixture.prover())
+  })
+
+  it('weights every prover operation once and ships its proof and prover resources', () => {
+    const { events, progressWeights } = ceremony
     expect(Object.keys(progressWeights).sort()).toEqual(
       [...Object.keys(proofWeights), ...fixture.operations].sort(),
     )
@@ -261,8 +267,8 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     expect(events).toEqual(expect.arrayContaining([...proofEvents]))
     for (const event of events) expect(isCoreEvent(event)).toBe(true)
     const assets: readonly Asset[] = assetsByPlatform[platformId][1]
-    const pipelineAssets = fixture.pipeline === 'bearer-link' ? notaryAssets : []
-    expect(assets).toEqual(expect.arrayContaining([...proofAssets, ...pipelineAssets]))
+    const proverAssets = fixture.proverKind === 'bearer-link' ? notaryAssets : []
+    expect(assets).toEqual(expect.arrayContaining([...proofAssets, ...proverAssets]))
     expect(circuits.filter((circuit) => assets.includes(circuit))).toHaveLength(1)
   })
 })
@@ -587,7 +593,7 @@ describe.each(supportedPlatforms)('%s result validators', (platformId) => {
   const validateIdentity = (value: unknown) => types.validateIdentity(value)
   const validateProof = (value: unknown) =>
     types.validateProof(value, fixture.identity, fixture.digest)
-  const { acceptResult } = implementationFor(platformId, 1)
+  const { acceptResult } = ceremonyFor(platformId, 1)
 
   it('accepts the fixture identity and proof and assembles them as separate result fields [LIBID-MOD-019]', () => {
     expect(validateIdentity(fixture.identity)).toBe(fixture.identity)
@@ -764,10 +770,10 @@ function formChanges(original: string, code: string) {
   return changes
 }
 
-// Pipelines: every platform meets one prove() contract, which its pipeline kind stages; each kind
+// Provers: every platform meets one prove() contract, which its prover kind stages; each kind
 // then adds the cases only it has.
 
-/** Engine public inputs every pipeline must reject: reordered, resized, changed, or in noncanonical case. */
+/** Engine public inputs every prover must reject: reordered, resized, changed, or in noncanonical case. */
 const engineInputChanges = {
   'public-input-order': 'out of order',
   'public-input-extra': 'with an extra field',
@@ -778,10 +784,10 @@ const engineInputChanges = {
 
 type EngineInputChange = keyof typeof engineInputChanges
 
-/** Outcomes every pipeline kind stages: success, changed engine inputs, startup cancellation. */
+/** Outcomes every prover kind stages: success, changed engine inputs, startup cancellation. */
 type SharedOutcome = 'accepted' | EngineInputChange | 'startup-cancel'
 
-/** `fields` as a staged engine returns them; each pipeline reorders them its own way. */
+/** `fields` as a staged engine returns them; each prover reorders them its own way. */
 function changedEngineInputs(fields: string[], outcome: string) {
   if (outcome === 'public-input-extra') return [...fields, fields[0]]
   if (outcome === 'public-input-short') return fields.slice(0, -1)
@@ -803,7 +809,7 @@ interface Staged {
   abort(reason: Error): void
   /** The platform proof an accepted run delivers. */
   proof(): unknown
-  /** The pipeline started no request and opened no notary session of its own. */
+  /** The prover started no request and opened no notary session of its own. */
   untouched(): void
 }
 
@@ -1094,11 +1100,11 @@ function stageOidc(
 }
 
 /**
- * Each pipeline kind's stage for the shared outcomes, and the requirements its runs cover. A new
- * kind fails typecheck here until it can be staged. The fixture's pipeline selects the stage, so
+ * Each prover kind's stage for the shared outcomes, and the requirements its runs cover. A new
+ * kind fails typecheck here until it can be staged. The fixture's prover kind selects the stage, so
  * the platform passed to it is of that kind.
  */
-const pipelines = {
+const proverKinds = {
   'bearer-link': {
     stage: (platformId, outcome) => stageBearer(platformId as BearerLinkPlatform, outcome),
     tags: '[LIBID-PROVER-003] [LIBID-PROVER-004] [LIBID-PROVER-009] [LIBID-PROVER-021]',
@@ -1111,7 +1117,7 @@ const pipelines = {
     sessionReported: [],
   },
 } satisfies Record<
-  PlatformFixture<PlatformId>['pipeline'],
+  PlatformFixture<PlatformId>['proverKind'],
   {
     stage(platformId: PlatformId, outcome: SharedOutcome): Staged
     tags: string
@@ -1121,9 +1127,9 @@ const pipelines = {
 
 describe.each(supportedPlatforms)('%s prove() contract', (platformId) => {
   const fixture = fixtures[platformId]
-  const { stage, tags } = pipelines[fixture.pipeline]
-  const sessionReported: readonly string[] = pipelines[fixture.pipeline].sessionReported
-  const title = (text: string) => tagged(text, `${tags} ${fixture.specTests.pipeline}`)
+  const { stage, tags } = proverKinds[fixture.proverKind]
+  const sessionReported: readonly string[] = proverKinds[fixture.proverKind].sessionReported
+  const title = (text: string) => tagged(text, `${tags} ${fixture.specTests.prover}`)
   async function run(outcome: SharedOutcome) {
     const staged = stage(platformId, outcome)
     return { staged, pending: (await fixture.prover()).prove(staged.context) }
@@ -1153,7 +1159,7 @@ describe.each(supportedPlatforms)('%s prove() contract', (platformId) => {
     },
   )
 
-  it(title('reports each pipeline operation once, started before finished'), async () => {
+  it(title('reports each prover operation once, started before finished'), async () => {
     const { staged, pending } = await run('accepted')
     await pending
     const reported = fixture.operations.filter((name) => !sessionReported.includes(name))
@@ -1199,10 +1205,10 @@ describe.each(supportedPlatforms)('%s prove() contract', (platformId) => {
   })
 })
 
-describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
+describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
   const fixture = fixtures[platformId]
   const { transcript, config, evidence, identity, longest, rejectedIdentity } = fixture
-  const tags = `${pipelines['bearer-link'].tags} ${fixture.specTests.pipeline}`
+  const tags = `${proverKinds['bearer-link'].tags} ${fixture.specTests.prover}`
 
   describe('transcripts', () => {
     const tokenTags = fixture.transcriptTests.token
@@ -1603,7 +1609,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
   })
 
   describe('results', () => {
-    const { acceptResult } = implementationFor(platformId, 1)
+    const { acceptResult } = ceremonyFor(platformId, 1)
     const createdAt = (time: bigint) => {
       const attestedData = LIBID_RS_ATTESTED_DATA.slice()
       new DataView(attestedData.buffer).setBigUint64(32, time)
@@ -1777,9 +1783,9 @@ describe.each(bearerLinkPlatforms)('%s bearer-link pipeline', (platformId) => {
   })
 })
 
-describe.each(oidcPlatforms)('%s OIDC pipeline', (platformId) => {
+describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
   const fixture = fixtures[platformId]
-  const tags = `${pipelines.oidc.tags} [LIBID-OAUTH-007] [LIBID-OAUTH-021] ${fixture.specTests.pipeline}`
+  const tags = `${proverKinds.oidc.tags} [LIBID-OAUTH-007] [LIBID-OAUTH-021] ${fixture.specTests.prover}`
 
   it.each(Object.entries(fixture.rejectedBinding))(
     'rejects a well-formed proof with a mismatched %s [LIBID-OAUTH-014]',
@@ -1826,7 +1832,7 @@ describe.each(oidcPlatforms)('%s OIDC pipeline', (platformId) => {
       expect(staged.keys).toHaveBeenCalledOnce()
       expect(new URL(staged.keys.mock.calls[0][0]).protocol).toBe('https:')
       expect(staged.keys.mock.calls[0][1]).toMatchObject({ credentials: 'omit', redirect: 'error' })
-      // The supplied notary address never opens a notary connection for this pipeline.
+      // The supplied notary address never opens a notary connection for this prover.
       expect(notarization).not.toHaveBeenCalled()
     },
   )

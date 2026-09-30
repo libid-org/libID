@@ -70,7 +70,7 @@ export function eventView(events: Events) {
     }
   })
   return {
-    /** ProveIdentity supplies the platform before any pipeline events are produced. */
+    /** ProveIdentity supplies the platform before any prover events are produced. */
     trackProof(weights: Readonly<Record<string, number>>) {
       offProgress()
       bar.max = 1

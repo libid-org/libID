@@ -121,7 +121,7 @@ export const EventMessage: MessageType<EventMessage> = {
   },
 }
 
-/** Final pipeline output, including all required attestations; the ledger verifier remains authoritative. */
+/** Final prover output, including all required attestations; the ledger verifier remains authoritative. */
 export interface IdentityProof {
   type: 'identity-proof'
   identity: { platformId: string; oauthClientId: string; userId: string; userName: string }

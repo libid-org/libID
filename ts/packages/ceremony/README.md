@@ -23,7 +23,7 @@ incomplete**; see [evidence and remaining gates](docs/qualification.md).
 ## Maintain
 
 - [Architecture](docs/architecture.md): module map, document lifecycle and boundaries.
-- [Platform pipelines](docs/pipelines.md): concurrency and adding a platform/version.
+- [Platform provers](docs/provers.md): concurrency and adding a platform/version.
 - [Proving](docs/proving.md): Noir/Barretenberg integration and dependency upgrades.
 - [Notarization](docs/notarization.md): session lifecycle and evidence handling.
 - [Assets](docs/assets.md): prefetch, Service Worker ownership and caches.

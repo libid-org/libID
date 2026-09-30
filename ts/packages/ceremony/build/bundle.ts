@@ -189,6 +189,9 @@ export async function bundle(
               : (id) => {
                   if (id.includes('/src/barretenberg/')) return 'proof-engine'
                   if (id.includes('/src/notary/')) return 'notary'
+                  // Platform modules, the prover table among them, stay out of the shared
+                  // chunk: on a chunk every prover imports, the table would put every
+                  // prover in every profile's set.
                   if (
                     id.includes('/src/') &&
                     !id.includes('/platforms/') &&

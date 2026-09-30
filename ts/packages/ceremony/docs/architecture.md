@@ -13,7 +13,7 @@ and assembles `OAuthProof`. Neither performs final cryptographic verification in
 | [ccdp/client](../src/ccdp/client/ceremony.ts) | Fetch/freeze Bridge config, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
 | [ccdp/index](../src/ccdp/index.ts), [navigation](../src/ccdp/navigation.ts) | Browser-free message companions and route/fragment codecs. |
 | [ccdp/documents](../src/ccdp/documents/) | Callback, Prefetch/Worker and Prover entrypoints; native package-owned UI. |
-| [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its execution pipeline. |
+| [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its prover. |
 | [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker and circuit ABI encoding; platform identity/proof assembly stays under platforms. |
 | [notary](../src/notary/session.ts) | TLSNotary sessions, HTTP/transcript helpers, canonical decoding and evidence correlation. |
 | [assets](../src/assets/index.ts) | Resource declarations and resolution, root Worker registration, byte caches and pending fetches. |
@@ -38,7 +38,7 @@ are private. See the [client guide](client.md) for application use.
    `connection.peerOrigin`, forwarded in the private fragment. That origin is
    never inferred from OAuth fields or allowlist order. After popup connection
    readiness, isolation checks and root-worker claim, Prover requests inputs
-   through `prover.started`, runs the selected pipeline and sends one outcome.
+   through `prover.started`, runs the selected prover and sends one outcome.
 
 Bridge admission entries can contain `*` or `*.lib.id` patterns. Callback passes
 them to Popup for matching. A subdomain pattern admits only HTTPS at the default
@@ -75,7 +75,7 @@ The compiler adds actual chunks and nested-worker edges to each selected set.
 Execution resolves the same handles. Fetching scripts as bytes before OAuth
 never initializes WASM, proof backends or TLSNotary sessions.
 
-[Platform pipelines](pipelines.md) compose the independent proving and notary
+[Platform provers](provers.md) compose the independent proving and notary
 modules. Early transcripts and commitment openings permit overlap, but proof
 delivery joins every required final attestation and correlation.
 
@@ -90,8 +90,9 @@ explicitly.
 Platform ceremony, CCDP, popup transport and Bridge API versions have separate
 owners. Internal UI or asset changes need no platform ceremony version when the
 proof semantics remain compatible. Only version 1 is implemented today;
-[adding another version](pipelines.md#adding-a-platform) also requires changes
-to the Prover dispatcher and distribution build.
+[adding another version](provers.md#adding-a-platform) registers it in the
+catalog, the [platform provers](../src/platforms/provers.ts) and the asset catalog, which the compiler
+holds to one set.
 
 ## Code and documentation conventions
 
