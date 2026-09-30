@@ -7,8 +7,9 @@ import { makeCertificate } from '../../popup/e2e/tls.mjs'
 import { packageDir } from '../build/sources.ts'
 import { isolated } from '../src/ccdp/headers.ts'
 import { prepareCallback } from './callback.ts'
+import { crsHosts, serveCrs } from './crs.mjs'
 import { browserPlatforms } from './platforms.ts'
-import { origins, sws as swsPort } from './topology.ts'
+import { crsProxy, origins, sws as swsPort } from './topology.ts'
 
 const sws = `http://127.0.0.1:${swsPort}`
 
@@ -40,7 +41,9 @@ const staticModule = (send, path, headers = {}) =>
     ...headers,
   })
 
-const certificate = makeCertificate(['localhost'])
+// One certificate for the harness origins and the locally served CRS hosts.
+const certificate = makeCertificate(['localhost', ...crsHosts()])
+const crs = serveCrs(crsProxy, certificate)
 
 // Chromium's HTTP cache needs a clean certificate result, not just an ignored TLS error.
 writeFileSync(
@@ -146,6 +149,7 @@ for (const secure of [true, false]) {
   }
   const ccdpRoute = async (path, send, req, res) => {
     if (path === '/qualification-control') return qualificationControl(req, send)
+    if (path === '/qualification-crs') return send(JSON.stringify(crs.served()))
     if (path === '/ccdp/v1/seed') return send(html('<title>Worker seed</title>'))
 
     if (staticModule(send, path, { 'Cross-Origin-Resource-Policy': 'same-origin' })) return true

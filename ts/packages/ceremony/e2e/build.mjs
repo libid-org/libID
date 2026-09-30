@@ -11,6 +11,7 @@ execFileSync(
   { cwd: packageDir, stdio: 'inherit' },
 )
 await import('./build-smoke.mjs')
+await (await import('./crs.mjs')).cacheCrs()
 
 /** An unminified ES library build into the directory the harness server reads. */
 const buildHarness = (lib, options) =>

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { defineConfig, devices } from '@playwright/test'
-import { origins, runtime } from './e2e/topology.js'
+import { crsProxy, origins, runtime } from './e2e/topology.js'
 
 // A second invocation must never recreate another run's containers during startup.
 const compose = `docker compose -p ceremony-e2e-${randomUUID()} -f e2e/compose.yaml`
@@ -17,6 +17,8 @@ export default defineConfig({
   use: {
     baseURL: origins(true).app,
     ignoreHTTPSErrors: true,
+    // The CRS comes from the harness cache (e2e/crs.mjs), not Aztec's CDN.
+    proxy: { server: `http://127.0.0.1:${crsProxy}`, bypass: 'localhost,127.0.0.1' },
     trace: 'off',
     video: 'off',
     screenshot: 'off',
@@ -27,7 +29,15 @@ export default defineConfig({
       // Full proofs/runtime qualification run once per engine in the desktop HTTPS projects.
       testIgnore: 'runtime.spec.ts',
       grepInvert: /@proof/,
-      use: { browserName, baseURL: origins(false).app, ignoreHTTPSErrors: false },
+      // The origins are plain HTTP; the only HTTPS left is the locally served CRS, whose harness
+      // certificate Chromium's Service Worker fetches accept only with the launch flag.
+      use: {
+        browserName,
+        baseURL: origins(false).app,
+        ...(browserName === 'chromium' && {
+          launchOptions: { args: ['--ignore-certificate-errors'] },
+        }),
+      },
     })),
     {
       name: 'chromium',
