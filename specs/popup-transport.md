@@ -1,3 +1,7 @@
+---
+title: Popup transport
+---
+
 # Popup transport
 
 Part of the [libID protocol specification](libid.md).
