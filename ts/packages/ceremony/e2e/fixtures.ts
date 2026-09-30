@@ -3,15 +3,15 @@ import { test as base, expect, type Page } from '@playwright/test'
 import type { AssetRequest } from '../src/assets/index.js'
 import type { PlatformId } from '../src/platforms/index.js'
 import { browserPlatforms } from './platforms.js'
-import { origins } from './topology.js'
+import { artifactDir, origins } from './topology.js'
 
 export { expect }
 
-const graph = new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url)
+const metadataUrl = new URL(`../${artifactDir}/distribution-graph.json`, import.meta.url)
 
-/** The exact requests of `profile` in the emitted graph of the artifact the harness serves. */
+/** The exact requests of `profile` in the emitted metadata of the artifact the harness serves. */
 export const artifactRequests = (profile: string): AssetRequest[] =>
-  JSON.parse(readFileSync(graph, 'utf8')).requestsByProfile[profile]
+  JSON.parse(readFileSync(metadataUrl, 'utf8')).requestsByProfile[profile]
 
 /** A provider page that immediately continues to `url`, as an authorization redirect would. */
 const redirect = (url: string) => ({
@@ -51,7 +51,7 @@ export interface Fixtures {
   /** How many times the harness has served `asset` so far. */
   assetCount: (asset: string) => Promise<number>
   /** Answer Google authorization by redirecting to `target(state, nonce)`; by default, a denial. */
-  provider: (target?: (state: string, nonce: string) => string) => Promise<void>
+  googleProvider: (target?: (state: string, nonce: string) => string) => Promise<void>
   /**
    * Check `platform`'s authorization request against its table registration and answer it
    * with `fields` (or the fields computed from the request) and its state in the provider's return
@@ -93,7 +93,7 @@ export const test = base.extend<Fixtures>({
   ccdp: async ({ app }, use) => {
     await use(origins(app.startsWith('https:')).ccdp)
   },
-  provider: async ({ bridge, context }, use) => {
+  googleProvider: async ({ bridge, context }, use) => {
     await use(
       async (target = (state) => `${bridge}/auth/callback#error=access_denied&state=${state}`) => {
         await context.route('https://accounts.google.com/**', async (route) => {
@@ -105,7 +105,8 @@ export const test = base.extend<Fixtures>({
   },
   authorize: async ({ bridge, context }, use) => {
     await use(async (platform, fields) => {
-      const { authorization, clientId, pkce, returns, issuer } = browserPlatforms[platform]
+      const { authorization, clientId, pkce, returns, authorizationIssuer } =
+        browserPlatforms[platform]
       const requests: URLSearchParams[] = []
       await context.route(`${authorization}?**`, async (route) => {
         const params = new URL(route.request().url()).searchParams
@@ -114,7 +115,7 @@ export const test = base.extend<Fixtures>({
         if (pkce) expect(params.get('code_challenge_method')).toBe('S256')
         const answer = typeof fields === 'function' ? fields(params) : fields
         const returned = new URLSearchParams({ ...answer, state: params.get('state')! })
-        if (issuer) returned.set('iss', issuer)
+        if (authorizationIssuer) returned.set('iss', authorizationIssuer)
         const separator = returns === 'query' ? '?' : '#'
         await route.fulfill(redirect(`${bridge}/auth/callback${separator}${returned}`))
       })

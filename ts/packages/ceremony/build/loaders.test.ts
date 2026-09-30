@@ -12,11 +12,11 @@ const require = createRequire(new URL('../package.json', import.meta.url))
 
 const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts')
 
-const graph: DistributionMetadata = JSON.parse(
+const metadata: DistributionMetadata = JSON.parse(
   readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
 )
 
-const requests = graph.requestsByProfile['google/1']
+const requests = metadata.requestsByProfile['google/1']
 
 const originalFetch = globalThis.fetch
 

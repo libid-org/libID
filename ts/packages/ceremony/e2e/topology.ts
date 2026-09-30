@@ -1,6 +1,9 @@
 // Dedicated test ports, separate from the shared development app; compose.yaml publishes the
 // container ports. Harness code and tests derive every origin from here.
 
+/** The qualification artifact, relative to the package. compose.yaml mounts the same path. */
+export const artifactDir = '.cache/qualification-assets'
+
 /** SWS serving the qualification artifact behind the CCDP origins. */
 export const sws = 4980
 

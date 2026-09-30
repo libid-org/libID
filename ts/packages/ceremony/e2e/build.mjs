@@ -1,16 +1,19 @@
 import { execFileSync } from 'node:child_process'
+import { rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { build } from 'vite'
 import { packageDir } from '../build/sources.ts'
+import { artifactDir } from './topology.ts'
 
 // Every e2e input, before Playwright starts the containers that mount the first two.
-execFileSync(
-  process.execPath,
-  ['build/distribution.ts', '--out-dir', '.cache/qualification-assets'],
-  { cwd: packageDir, stdio: 'inherit' },
-)
-await import('./build-smoke.mjs')
+// The artifact starts fresh: retention belongs to publication, not to the test inputs.
+rmSync(join(packageDir, artifactDir), { recursive: true, force: true })
+execFileSync(process.execPath, ['build/distribution.ts', '--out-dir', artifactDir], {
+  cwd: packageDir,
+  stdio: 'inherit',
+})
+await import('./buildRuntime.mjs')
 await (await import('./crs.mjs')).cacheCrs()
 
 /** An unminified ES library build into the directory the harness server reads. */

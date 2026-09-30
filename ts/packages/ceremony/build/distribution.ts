@@ -1,19 +1,21 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { parseArgs } from 'node:util'
 import type { Rollup } from 'vite'
-import type { AssetRequest, ExternalAsset } from '../src/assets/index.js'
-import { messages } from '../src/ccdp/ui-messages.ts'
+import type { AssetRequest, ExternalAsset } from '../src/assets/index.ts'
+import { assetKey, requestKey, route, VERSIONS_PATH } from '../src/assets/keys.ts'
+import { messages } from '../src/ccdp/uiMessages.ts'
 import { safePath } from './archive.ts'
-import type { AssetManifest } from './asset-plugin.ts'
+import type { AssetManifest } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
-import { assetHeaders, assetKey, externalRequest, mediaType, resolveAssets } from './assets.ts'
+import { checkDeclaredHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
-import { bundle, workerUrl } from './bundle.ts'
-import { captureInput } from './input.ts'
+import { bundle } from './bundle.ts'
+import { captureFragment } from './fragment.ts'
 import type { ResponseProfile } from './profiles.ts'
-import { responseHeaders } from './profiles.ts'
-import { packageDir } from './sources.ts'
-import { errorHeaders, writeDistribution } from './sws.ts'
+import { emittedProfile, responseHeaders } from './profiles.ts'
+import { outputDirectory, packageDir } from './sources.ts'
+import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
 export type DistributionMetadata = AssetManifest & {
@@ -22,23 +24,16 @@ export type DistributionMetadata = AssetManifest & {
   files: Record<string, string>
 }
 
-type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
-
 type Records = Map<string, PublicRecord>
 
-const index = process.argv.indexOf('--out-dir'),
-  out = resolve(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
-
-if (out === packageDir || !out.startsWith(`${resolve(packageDir, '../../..')}/`))
-  throw new Error('Output must be a dedicated directory inside this worktree')
+const { values } = parseArgs({ options: { 'out-dir': { type: 'string' } }, strict: true }),
+  out = outputDirectory(values['out-dir'] ?? join(packageDir, 'dist-artifacts'))
 
 const staging = `${out}.building`
 
-if (existsSync(staging)) throw new Error('Build staging directory already exists')
-
 /** One request per exact URL and Range, first occurrence first. */
 const unique = (requests: AssetRequest[]) => [
-  ...new Map(requests.map((r) => [`${r.url}\n${r.range ?? ''}`, r])).values(),
+  ...new Map(requests.map((r) => [requestKey(r), r])).values(),
 ]
 
 /** Same bytes and the same normalized headers. */
@@ -54,7 +49,11 @@ const inlineScript = (code: string) => code.replace(/<\/script/gi, '<\\/script')
 const page = (title: string, content: string) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body>${content}</body></html>`
 
-/** Each profile's declared assets and its platform entry's emitted closure, then the allowlist. */
+/**
+ * Each profile's declared assets and its platform entry's emitted closure, then the allowlist.
+ * The closure stops at other platforms' provers: the prover table reaches every one of them
+ * lazily, but a run loads only its own.
+ */
 function assetManifest(
   data: ResolvedAssets,
   graph: ReadonlyMap<string, BundleNode>,
@@ -62,10 +61,12 @@ function assetManifest(
   records: Records,
   external: readonly ExternalAsset[],
 ): AssetManifest {
-  const closure = (file: string, set = new Set<string>()): Set<string> => {
-    if (set.has(file)) return set
+  const closure = (profile: string, file: string, set = new Set<string>()): Set<string> => {
+    const pair = proverPair(graph.get(file)?.entry ?? null)
+    if (set.has(file) || (pair !== undefined && pair !== profile)) return set
     set.add(file)
-    for (const next of graph.get(file)?.dependencies ?? []) closure(next.replace(/^\//, ''), set)
+    for (const next of graph.get(file)?.dependencies ?? [])
+      closure(profile, next.replace(/^\//, ''), set)
     return set
   }
   const local = (url: string): AssetRequest => {
@@ -79,7 +80,7 @@ function assetManifest(
     if (!entry) throw new Error(`Missing emitted platform entry: ${profile}`)
     requestsByProfile[profile] = unique([
       ...assets.map((a) => (a.isExternal ? externalRequest(a) : local(data.urls[assetKey(a)]))),
-      ...[...closure(entry)].map((file) => local(`/${file}`)),
+      ...[...closure(profile, entry)].map((file) => local(`/${file}`)),
     ])
   }
   const allowedRequests = unique([
@@ -119,7 +120,7 @@ async function buildDistribution() {
     records.set(path, record)
   }
   const emitDocument = (path: string, code: string, profile: ResponseProfile) => {
-    const scripts = [captureInput(path), code].map(inlineScript)
+    const scripts = [captureFragment(path), code].map(inlineScript)
     put(
       path,
       page(
@@ -132,7 +133,7 @@ async function buildDistribution() {
   for (const [path, record] of data.local) put(path, record.bytes, record.headers)
   const prover = await bundle('src/ccdp/documents/prover.ts', data, {
     invoke: 'startProver',
-    input: true,
+    fragment: true,
   })
   // Every prover the Prover can load is its own emitted chunk; the published set comes from them.
   const proverEntries = new Map<string, string>()
@@ -145,30 +146,19 @@ async function buildDistribution() {
     proverEntries.keys(),
     Object.keys(data.profiles),
   )
-  const workerProfile = (file: string): ResponseProfile => {
-    const modules = prover.graph.get(file)?.modules ?? []
-    if (modules.some((m) => m.endsWith('/notary/session.worker.ts'))) return 'notaryWorker'
-    return modules.some((m) => m.endsWith(workerUrl)) ? 'proofWorker' : 'leafWorker'
-  }
   for (const item of prover.output) {
     if (item.type !== 'chunk' || !item.isEntry)
-      put(
-        `/${item.fileName}`,
-        body(item),
-        prover.workerFiles.has(item.fileName) && item.fileName.endsWith('.js')
-          ? workerProfile(item.fileName)
-          : 'asset',
-      )
+      put(`/${item.fileName}`, body(item), emittedProfile(item.fileName, prover))
   }
   const manifest = assetManifest(data, prover.graph, proverEntries, records, external)
   // Every published pair has an emitted prover and asset profile.
-  put('/ccdp/versions.json', JSON.stringify(versions), 'versions')
+  put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
   const primary = prover.output.find(
     (o): o is Rollup.OutputChunk => o.type === 'chunk' && o.isEntry,
   )
   if (!primary) throw new Error('Missing Prover entry')
-  emitDocument('/ccdp/v1/prover', primary.code, 'prover')
-  emitDocument('/ccdp/v1/prover/fallback', primary.code, 'proverFallback')
+  emitDocument(route('prover'), primary.code, 'prover')
+  emitDocument(route('prover/fallback'), primary.code, 'proverFallback')
   const callback = await bundle('src/ccdp/documents/callback.ts', data, {
     selfContained: true,
     invoke: 'startCallback',
@@ -189,13 +179,13 @@ async function buildDistribution() {
   }
   const prefetch = await bundle('src/ccdp/documents/prefetch.ts', data, {
     invoke: 'startPrefetch',
-    input: true,
+    fragment: true,
     manifest,
   })
   for (const item of prefetch.output) {
     if (item.type === 'chunk' && item.isEntry) {
-      emitDocument('/ccdp/v1/prefetch', item.code, 'prefetch')
-      put('/ccdp/v1/worker.js', item.code, 'worker')
+      emitDocument(route('prefetch'), item.code, 'prefetch')
+      put(route('worker.js'), item.code, 'worker')
     } else put(`/${item.fileName}`, body(item), 'asset')
   }
   // The page every 404 serves; requested directly it declares the same error policy.
@@ -214,7 +204,8 @@ function retainPrevious(records: Records) {
   for (const [path, headers] of Object.entries(previous.headers)) {
     if (!path.startsWith('/ccdp/assets/')) continue
     safePath(path.slice(1))
-    assetHeaders(path, headers)
+    // A retained asset keeps the policy it was published with, so only its form is checked.
+    checkDeclaredHeaders(headers)
     const record = {
         bytes: readFileSync(join(out, 'public', path)),
         headers: Object.fromEntries(new Headers(headers)),

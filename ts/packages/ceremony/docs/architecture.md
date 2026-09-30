@@ -10,11 +10,11 @@ and assembles `OAuthProof`. Neither performs final cryptographic verification in
 
 | Owner | Responsibility |
 |---|---|
-| [ccdp/client](../src/ccdp/client/ceremony.ts) | Fetch/freeze Bridge config and Distribution versions, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
+| [ccdp/client](../src/ccdp/client/client.ts) | Fetch/freeze Bridge config and Distribution versions, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
 | [ccdp/index](../src/ccdp/index.ts), [navigation](../src/ccdp/navigation.ts) | Browser-free message companions and route/fragment codecs. |
 | [ccdp/documents](../src/ccdp/documents/) | [Callback](../src/ccdp/documents/callback.ts), [Prefetch/Worker](../src/ccdp/documents/prefetch.ts) and [Prover](../src/ccdp/documents/prover.ts) entrypoints; package-owned UI. |
 | [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its prover. |
-| [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker and circuit ABI encoding; platform identity/proof assembly stays under platforms. |
+| [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker and its circuits: the oidc_google ABI, and the bearer-link circuit with the X/GitHub prover built on it. Google identity/proof assembly stays under platforms. |
 | [notary](../src/notary/session.ts) | TLSNotary sessions, HTTP/transcript helpers, canonical decoding and evidence correlation. |
 | [assets](../src/assets/index.ts) | Resource declarations and resolution, root Worker registration, byte caches and pending fetches. |
 | [build](../build/distribution.ts) | Compile the dependency graph and emit static files, response policies and the bundled version set. |
@@ -72,7 +72,7 @@ the lightweight catalog through shared return validation; it does not import the
 registry that selects it.
 
 Shared integrations declare resources once in `*.assets.ts`; platform/version
-leaves compose those handles. Prefetch imports only this data-only catalog.
+leaves compose those handles. Prefetch imports only the request lists the build derives from them.
 The compiler adds actual chunks and nested-worker edges to each selected set.
 Execution resolves the same handles. Fetching scripts as bytes before OAuth
 never initializes WASM, proof backends or TLSNotary sessions.
@@ -110,7 +110,7 @@ explains meaningful input, lifetime and failure constraints; internal comments
 explain invariants rather than restating types. Run `pnpm -C ts lint` and
 `pnpm -C ts fmt:check` for mechanical checks.
 
-## Constants and profiles
+## Constants and providers
 
 Constants live with their owner. [CCDP limits](../src/ccdp/limits.ts) are shared
 by message validation and document startup. [Authorization](../src/platforms/authorization.ts)
@@ -119,7 +119,7 @@ bound acceptance; [its protocol](../src/notary/protocol.ts) owns encoding widths
 Local deadlines, UI timings and instrumentation caps stay beside their consumers.
 Names distinguish bytes, characters, milliseconds, seconds and CRS points.
 
-Each platform version’s `profile.ts` owns its endpoints and identity constraints.
+Each platform version’s `provider.ts` owns its endpoints and request layout; its `validation.ts` owns identity constraints.
 X/GitHub import request layouts and launch lifetimes from the pinned, data-only
 `@libid/contracts/ceremony` entry point; no EVM client or on-chain lookup is used.
 These lifetime constants describe the released policy, not live governance state.

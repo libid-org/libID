@@ -1,5 +1,5 @@
 import { platforms as catalog, isPlatformId, type PlatformId } from '../../platforms/index.js'
-import { hasExactKeys, isRecord, origin } from '../../primitives.js'
+import { hasExactKeys, isOrigin, isRecord } from '../../primitives.js'
 import { fetchPublicJson } from '../../response.js'
 import { isClientCredential } from '../index.js'
 
@@ -38,7 +38,7 @@ function validatePlatform(platform: PlatformId, v: unknown): PlatformConfig {
 export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
   if (
     !hasExactKeys(v, ['ccdpOrigin', 'platforms']) ||
-    !origin(v.ccdpOrigin) ||
+    !isOrigin(v.ccdpOrigin) ||
     !isRecord(v.platforms)
   )
     throw new TypeError('Invalid Ceremony configuration')
@@ -55,7 +55,7 @@ export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConf
 
 /** Fetch current configuration without cookies, redirects or persistent browser caching. */
 export async function fetchCeremonyConfig(bridge: string): Promise<CeremonyConfig> {
-  if (!origin(bridge))
+  if (!isOrigin(bridge))
     throw new TypeError('oauthBridge must be a canonical HTTPS or localhost HTTP origin')
   return validateCeremonyConfig(
     await fetchPublicJson(

@@ -1,11 +1,12 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 
 // Test titles cite the requirements they cover (docs/test-plan.md); traceability maps each row to
 // its tests. This keeps the two honest: tested rows are cited, and citations name real rows.
 
-const root = new URL('../../', import.meta.url).pathname
+const root = fileURLToPath(new URL('../../', import.meta.url))
 const read = (path: string) => readFileSync(join(root, path), 'utf8')
 
 /** Test sources, and the fixtures and tables whose strings become test titles. */

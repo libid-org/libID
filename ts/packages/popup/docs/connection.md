@@ -206,7 +206,8 @@ document, the endpoint waits up to the keeper reply deadline for that
 registration to become active before it keeps the port. A document that
 already is the fallback, compared by origin, path, and query, and remains
 non-isolated fails with
-`isolation-unavailable`; a refused keep or missing worker fails as it does for
+`isolation-unavailable` and reports its departure over the carrier it holds, so
+the application's side closes instead of waiting; a refused keep or missing worker fails as it does for
 `navigate`. Only a MessagePort is preserved. When no port is available and the
 fallback constructor is the only remaining source, the non-isolated document
 does not invoke it: a carrier it produced could not cross the replacement, so

@@ -1,18 +1,16 @@
 import { concatBytes } from '@noble/hashes/utils.js'
 import { errorMessage } from '../errors.js'
-import { workerThreads } from '../workers.js'
+import { workerThreads } from '../threads.js'
 import type { DecodedAttestedData, DecodedDirection } from './decode.js'
 import { responseSizes } from './http.js'
 import { MAX_FRAME_BYTES, MAX_RECV_BYTES, MAX_SENT_BYTES } from './limits.js'
 import {
-  type CommitRange,
   correlateReveal,
   type HashOpening,
+  matchAttestedData,
   planNotarization,
-  verifyAttestation,
 } from './notarize.js'
 import type {
-  ByteRange,
   CommitmentOpening,
   ExactHttpRequest,
   FromWorker,
@@ -21,51 +19,8 @@ import type {
   ToWorker,
   Transcript,
 } from './protocol.js'
+import type { Io, TlsnModule, TlsnOpening, TlsnProver } from './tlsn.js'
 import { decodeAttestationFrame, deriveNotaryWebSocketUrl } from './transport.js'
-
-interface Io {
-  read(): Promise<Uint8Array | null>
-  write(data: Uint8Array): Promise<void>
-  close(): Promise<void>
-}
-
-export interface NotaryHttpRequest {
-  uri: string
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
-  headers: Record<string, number[]>
-  body: unknown
-}
-
-interface TlsnModule {
-  default(options: { module_or_path: string }): Promise<void>
-  initialize(logging: null, threads: number): Promise<void>
-  Prover: new (config: {
-    server_name: string
-    mode: 'Proxy'
-    max_sent_data: number
-    max_recv_data: number
-    network: 'Bandwidth'
-  }) => {
-    setup(io: Io): Promise<void>
-    send_request(session: null, request: NotaryHttpRequest): Promise<unknown>
-    transcript(): { sent: Uint8Array; recv: Uint8Array }
-    reveal(
-      reveal: {
-        sent: readonly ByteRange[]
-        recv: readonly ByteRange[]
-        server_identity: true
-      },
-      commit: {
-        sent: readonly CommitRange[]
-        recv: readonly CommitRange[]
-      },
-    ): Promise<{ sent: HashOpening[]; recv: HashOpening[] }>
-    finish(): Promise<void>
-    free(): void
-  }
-}
-
-type Prover = InstanceType<TlsnModule['Prover']>
 
 function waitForOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve()
@@ -96,6 +51,7 @@ function socketIo(socket: WebSocket): Io {
 
   socket.binaryType = 'arraybuffer'
   socket.addEventListener('message', (event) => {
+    if (end) return
     if (!(event.data instanceof ArrayBuffer))
       return settle(new Error('notary sent non-binary data'))
     const chunk = new Uint8Array(event.data)
@@ -143,8 +99,7 @@ async function readFinalFrame(io: Io): Promise<Uint8Array> {
   return concatBytes(...chunks)
 }
 
-/** SDK openings may arrive as plain arrays. */
-const copy = (openings: readonly HashOpening[]): HashOpening[] =>
+const copy = (openings: readonly TlsnOpening[]): HashOpening[] =>
   openings.map((o) => ({ hash: Uint8Array.from(o.hash), blinder: Uint8Array.from(o.blinder) }))
 
 // The module and its thread pool are initialized once for this ceremony's sessions.
@@ -181,7 +136,7 @@ interface Prepared {
   stage: 'prepared'
   url: URL
   io: Io
-  prover: Prover
+  prover: TlsnProver
 }
 
 interface Sent extends Omit<Prepared, 'stage'> {
@@ -258,7 +213,7 @@ function session(port: MessagePort, initial: Prepare) {
     reply({ type: 'revealed', openings })
     await prover.finish()
     const wire = decodeAttestationFrame(await readFinalFrame(io))
-    const decoded = verifyAttestation(url.hostname, transcript, plan, correlated, wire.attestedData)
+    const decoded = matchAttestedData(url.hostname, transcript, plan, correlated, wire.attestedData)
     await io.close()
     prover.free()
     reply({

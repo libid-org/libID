@@ -35,6 +35,12 @@ it('rejects ambiguous framing, truncated chunks, compressed bodies, and malforme
     expect(() => responseJson(transcript)).toThrow()
 })
 
+it('reports malformed JSON without quoting the body, which may hold the bearer', () => {
+  expect(() => responseJson(response('', '{"access_token":gho_SECRET}'))).toThrow(
+    /^Invalid JSON response$/,
+  )
+})
+
 it.each([
   [
     'a missing head terminator',
@@ -47,6 +53,11 @@ it.each([
     'Invalid HTTP response',
   ],
   ['an invalid field name', response('Bad Name: x\r\n', '{}'), 'Invalid HTTP header'],
+  [
+    'an empty Transfer-Encoding beside a length',
+    response('Transfer-Encoding: \r\nContent-Length: 2\r\n', '{}'),
+    'Ambiguous HTTP framing',
+  ],
   [
     'a framing header repeated in another case',
     response('Content-Length: 2\r\ncontent-length: 2\r\n', '{}'),

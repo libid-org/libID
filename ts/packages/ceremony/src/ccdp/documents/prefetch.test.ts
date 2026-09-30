@@ -1,13 +1,13 @@
 import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CEREMONY_ID, type FakeDocumentUi, fakeDocumentUi } from '../../testing/index.js'
-import { messages } from '../ui-messages.js'
+import { messages } from '../uiMessages.js'
 import { startPrefetch } from './prefetch.js'
 
 vi.hoisted(() => vi.stubGlobal('document', {}))
 afterAll(() => vi.unstubAllGlobals())
-const { rootWorker, dispatchPrefetch } = vi.hoisted(() => ({
-  rootWorker: vi.fn(),
+const { registerRootWorker, dispatchPrefetch } = vi.hoisted(() => ({
+  registerRootWorker: vi.fn(),
   dispatchPrefetch: vi.fn(),
 }))
 vi.mock('virtual:ceremony-assets', () => ({ requestsByProfile: { 'google/1': [] } }))
@@ -16,8 +16,8 @@ vi.mock('@libid/popup', async (original) => ({
   PopupConnection: { accept: () => connection },
   PopupWindow: { current: vi.fn() },
 }))
-vi.mock('../../assets/registration.js', () => ({ rootWorker, dispatchPrefetch }))
-vi.mock('../../assets/worker.js', () => ({ startWorker: vi.fn() }))
+vi.mock('../../assets/registration.js', () => ({ registerRootWorker, dispatchPrefetch }))
+vi.mock('../../assets/rootWorker.js', () => ({ startRootWorker: vi.fn() }))
 vi.mock('./ui.js', async () => (await import('../../testing/index.js')).documentUi(() => ui))
 let connection: FakeConnection, ui: FakeDocumentUi
 const fragment = (platformId = 'google') =>
@@ -35,7 +35,7 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
   vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
   let activated!: () => void, dispatched!: () => void
   connection = fakeConnection({ peerOrigin: 'https://app.test', ready: 'pending' })
-  rootWorker.mockReturnValueOnce(
+  registerRootWorker.mockReturnValueOnce(
     new Promise<void>((resolve) => {
       activated = resolve
     }),
@@ -47,10 +47,10 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
   )
   const run = startPrefetch(fragment())
   expect(connection.sent).toEqual([])
-  expect(rootWorker).not.toHaveBeenCalled()
+  expect(registerRootWorker).not.toHaveBeenCalled()
   elapsed = 2025
   connection.settle()
-  await vi.waitFor(() => expect(rootWorker).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(registerRootWorker).toHaveBeenCalledOnce())
   expect(dispatchPrefetch).not.toHaveBeenCalled()
   elapsed = 2100
   activated()
@@ -90,7 +90,7 @@ it('rejects a profile without bundled requests before accepting a connection', a
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   const stop = vi.spyOn(ui, 'stop')
   await startPrefetch(fragment('x'))
-  expect(rootWorker).not.toHaveBeenCalled()
+  expect(registerRootWorker).not.toHaveBeenCalled()
   expect(connection.sent).toEqual([])
   expect(ui.events).toEqual([
     expect.objectContaining({ status: 'failed', message: messages.unsupportedProfile }),

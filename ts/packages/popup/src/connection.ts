@@ -588,7 +588,13 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     this.report(code)
     if (sameDocument(this.isolationFallback, location)) {
       // Already the fallback and still not isolated: the host's policy is
-      // not taking effect. Never loop.
+      // not taking effect. Never loop, and end the application's side too,
+      // which would otherwise keep waiting on this carrier.
+      try {
+        carrier.send({ type: 'document-departed' })
+      } catch {
+        // A carrier that cannot send leaves nothing to tell.
+      }
       carrier.close()
       return this.fail('isolation-unavailable', true)
     }

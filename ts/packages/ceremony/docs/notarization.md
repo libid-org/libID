@@ -8,7 +8,7 @@ owns authoritative request/evidence rules.
 
 ## Session lifecycle
 
-[Notarization](../src/notary/session.ts) owns one WASM runtime/thread pool per
+[NotaryRuntime](../src/notary/session.ts) owns one WASM runtime/thread pool per
 ceremony. Each `prepare(url)` creates a separate TLS session and WebSocket,
 with its own channel, phase and pending replies.
 Preparation needs a fixed HTTPS target but no bearer, so independent sessions
@@ -23,7 +23,7 @@ connection failures reject `send`.
 | `session.reveal(ranges)` | Private commitment openings and a pending `attestation` promise. |
 | `await result.attestation` | Original signed bytes after final correlation. |
 
-Transcript parsing and witness construction can use early material while final
+Transcript parsing and circuit input construction can use early material while final
 attestations remain pending. That material is provisional: delivery must join
 all final attestations and the generated proof. A late failure discards the
 speculative result. See [X/GitHub scheduling](provers.md).
@@ -33,8 +33,10 @@ sessions. Any session failure aborts sibling work. Successful sessions release
 their own prover/channel; the platform's `finally` abort releases the shared
 runtime. Each request has one 10-second timeout from `send()` until its final
 attestation arrives. The budget includes response receipt, disclosure selection,
-openings and finalization; it does not restart between these steps. WASM/session
-preparation, idle bearer waiting and ZK proving are outside that budget. Timeout
+openings and finalization; it does not restart between these steps. Each session's
+WASM/session preparation has its own 10-second deadline, which fails as that session's
+fetch; together they keep X's token request inside X's 30-second code deadline. Idle
+bearer waiting and ZK proving are outside both. Timeout
 rejects pending calls and terminates the shared worker without waiting for SDK
 completion. The platform retires its proof engine, and Prover reports one failure
 and stops its UI. Types and exact method constraints stay beside the implementation.
@@ -85,12 +87,13 @@ and derives authoritative identity and proof inputs from them.
 
 [http.ts](../src/notary/http.ts) tokenizes HTTP heads on wire bytes for both
 directions and UTF-8-decodes a response body only after removing chunked framing.
-Each caller keeps its own field policy; [transcript.ts](../src/notary/transcript.ts)
-owns the request checks. X/GitHub
-[transcript machinery](../src/platforms/bearer-transcript.ts) consumes the fixed
-profiles declared under `platforms/<id>/1/transcript.ts`. JSON whitespace and header
+Each caller keeps its own field policy: [transcript.ts](../src/notary/transcript.ts)
+selects JSON fields from raw bytes, and the X/GitHub
+[exchange machinery](../src/barretenberg/circuits/bearer-link/exchange.ts) owns the token and
+identity request checks. It consumes the fixed
+layouts each platform's `provider.ts` declares. JSON whitespace and header
 order do not establish identity: selectors work from actual wire offsets, and numeric GitHub IDs are
-preserved losslessly. Additional headers are admitted subject to the profile's
+preserved losslessly. Additional headers are admitted subject to the layout's
 required fields and forbidden-header rules; duplicate required headers and
 alternate Authorization framing reject.
 
@@ -100,7 +103,7 @@ ASM-PROV-06. Delivered IDs come from selected transcript bytes, never rounded JS
 numbers. Byte selectors still reject duplicate disclosure delimiters.
 
 Both X and GitHub obtain token and identity through browser Proxy sessions.
-GitHub's [token selector](../src/platforms/github/1/transcript.ts) checks the complete
+GitHub's [token selector](../src/platforms/github/1/exchange.ts) checks the complete
 request against the frozen canonical form before using the returned bearer.
 GitHub's identity request uses a fixed, generic User-Agent without browser or OS details. Exact header values and forbidden
 names are owned by code and the specification, not copied here.

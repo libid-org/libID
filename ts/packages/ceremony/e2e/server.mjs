@@ -5,22 +5,22 @@ import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { makeCertificate } from '../../popup/e2e/tls.mjs'
 import { packageDir } from '../build/sources.ts'
-import { isolated } from '../src/ccdp/headers.ts'
+import { isolated } from '../src/assets/headers.ts'
 import { prepareCallback } from './callback.ts'
 import { crsHosts, serveCrs } from './crs.mjs'
 import { browserPlatforms } from './platforms.ts'
-import { crsProxy, origins, sws as swsPort } from './topology.ts'
+import { artifactDir, crsProxy, origins, sws as swsPort } from './topology.ts'
 
 const sws = `http://127.0.0.1:${swsPort}`
 
-const artifactDir = join(packageDir, '.cache/qualification-assets')
+const artifact = join(packageDir, artifactDir)
 
 const counts = new Map(),
   holds = new Map(),
   failures = new Set(),
   fixtures = new Map()
 
-const graph = JSON.parse(readFileSync(join(artifactDir, 'distribution-graph.json')))
+const metadata = JSON.parse(readFileSync(join(artifact, 'distribution-graph.json')))
 
 // Every platform in the e2e table, with the registration its fixtures expect.
 const registrations = Object.fromEntries(
@@ -60,8 +60,8 @@ for (const secure of [true, false]) {
   const server = secure ? createServer.bind(null, certificate) : createHttpServer
   // Prepared once, independently of OAuth requests; both bytes and policy change together.
   const callback = prepareCallback(
-    readFileSync(join(artifactDir, 'public/ccdp/callback.html'), 'utf8'),
-    graph.headers['/ccdp/callback.html'],
+    readFileSync(join(artifact, 'public/ccdp/callback.html'), 'utf8'),
+    metadata.headers['/ccdp/callback.html'],
     { allowedApplicationOrigins: allowedOrigins, ccdpOrigin: ccdp },
   )
   // Each route returns true once it has answered; unmatched paths fall through to 404.
@@ -70,7 +70,7 @@ for (const secure of [true, false]) {
     if (path === '/ui')
       return send(
         html(
-          '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {Events} from "/events.js";import {progressWeights} from "/google-events.js";window.testEvents=new Events();window.testView=eventView(window.testEvents);window.testView.trackProof(progressWeights);window.testEvents.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
+          '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {EventFeed} from "/events.js";import {progressWeights} from "/google-events.js";window.testFeed=new EventFeed();window.testView=eventView(window.testFeed);window.testView.trackProof(progressWeights);window.testFeed.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
         ),
       )
     if (path === '/')
@@ -123,7 +123,7 @@ for (const secure of [true, false]) {
     }
     if (query.has('tlsn')) {
       const mode = query.get('tlsn')
-      const asset = graph.allowedRequests.find(
+      const asset = metadata.allowedRequests.find(
         (asset) => asset.url === target && asset.url.endsWith('/tlsn_wasm.js'),
       )
       if (!asset || !['valid', 'invalid'].includes(mode)) return send('Invalid fixture', {}, 400)
@@ -132,7 +132,7 @@ for (const secure of [true, false]) {
           readFileSync(join(packageDir, '.cache/e2e/tlsn-fixture.js'), 'utf8'),
       )
       if (code.length > asset.bytes) throw new Error('TLSN fixture exceeds asset length')
-      // Keep the emitted graph's byte-length validation active. The fixture replaces
+      // Keep the emitted metadata's byte-length validation active. The fixture replaces
       // the SDK and peer only; production session worker/correlation code still runs.
       const body = Buffer.alloc(asset.bytes, ' ')
       code.copy(body)
@@ -161,11 +161,11 @@ for (const secure of [true, false]) {
         isolated,
       )
     if (failures.has(path)) return send('Unavailable', {}, 503)
-    if (Object.hasOwn(graph.headers, path)) {
+    if (Object.hasOwn(metadata.headers, path)) {
       counts.set(path, (counts.get(path) ?? 0) + 1)
       if (holds.has(path)) await new Promise((resolve) => holds.get(path).push(resolve))
     }
-    if (fixtures.has(path)) return send(fixtures.get(path), graph.headers[path])
+    if (fixtures.has(path)) return send(fixtures.get(path), metadata.headers[path])
     // Transparent HTTPS ingress to the real static server, including HEAD/ranges/304.
     const upstream = proxyRequest(
       new URL(req.url, sws),

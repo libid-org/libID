@@ -1,15 +1,15 @@
 import { b64urlEncode } from '../../../primitives.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../authorization.js'
-import type { ReturnProfile } from '../../oauthReturn.js'
-import { profile } from './profile.js'
+import type { ReturnRules } from '../../oauthReturn.js'
+import { provider } from './provider.js'
 
-/** Google carries the digest as the OIDC nonce; no PKCE (spec §5 table). */
+/** Google carries the digest as the OIDC nonce; no PKCE (ceremony-common §5 table). */
 export const pkce = false
 
-/** Fragment-only ID-token return; a code or access token violates the profile. */
-export const oauthReturn: ReturnProfile = {
+/** Fragment-only ID-token return; a code or access token breaks Google v1's return rules. */
+export const returnRules: ReturnRules = {
   transport: 'fragment',
-  credential: 'id_token',
+  credentialField: 'id_token',
   rejected: ['code', 'access_token', 'refresh_token'],
 }
 
@@ -33,9 +33,9 @@ export function buildAuthorizationUrl(input: {
     ['response_mode', 'fragment'],
     ['client_id', input.clientId],
     ['redirect_uri', input.redirectUri],
-    ['scope', profile.authorizationScope],
+    ['scope', provider.authorizationScope],
     ['state', input.state],
     ['nonce', b64urlEncode(input.authorizationDigest)],
   ])
-  return `${profile.authorizationEndpoint}?${query}`
+  return `${provider.authorizationEndpoint}?${query}`
 }

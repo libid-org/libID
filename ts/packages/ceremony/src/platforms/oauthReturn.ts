@@ -1,16 +1,19 @@
 import { isClientCredential } from '../ccdp/index.js'
 import { MAX_OAUTH_RETURN_CHARS } from '../ccdp/limits.js'
 import { type OAuthReturn, oauthState } from '../ccdp/navigation.js'
+import { messages } from '../ccdp/uiMessages.js'
 import { CeremonyError } from '../errors.js'
 import type { ProverContext } from './context.js'
-import { type PlatformId, platforms } from './index.js'
+import { ceremonyFor, type PlatformId, platforms, type SupportedCeremonyVersion } from './index.js'
 
 /** One platform's redirect: its transport, credential field, other rejected fields and any issuer. */
-export interface ReturnProfile {
+export interface ReturnRules {
   transport: 'query' | 'fragment'
-  credential: string
+  credentialField: string
   rejected: readonly string[]
-  issuer?: string
+  authorizationIssuer?: string
+  /** The credential values the platform can exchange, checked at the redirect. */
+  isCredential?: (value: string) => boolean
 }
 
 export type OAuthOutcome =
@@ -55,13 +58,13 @@ function readFields(component: string, rejected: readonly string[]): Map<string,
 
 /**
  * Parse one exact return: `state` plus the credential XOR `error`. Other bounded provider
- * metadata has no value schema; only fields used by the profile are interpreted.
+ * metadata has no value schema; only fields the rules use are interpreted.
  */
 export function parseOAuthReturn(
   oauthReturn: OAuthReturn,
-  profile: ReturnProfile,
+  rules: ReturnRules,
 ): OAuthOutcome | null {
-  const query = profile.transport === 'query'
+  const query = rules.transport === 'query'
   const [component, other] = query
     ? [oauthReturn.query, oauthReturn.fragment]
     : [oauthReturn.fragment, oauthReturn.query]
@@ -71,14 +74,20 @@ export function parseOAuthReturn(
     component.length > MAX_OAUTH_RETURN_CHARS
   )
     return null
-  const fields = readFields(component.slice(1), profile.rejected)
-  if (!fields || (profile.issuer !== undefined && fields.get('iss') !== profile.issuer)) return null
+  const fields = readFields(component.slice(1), rules.rejected)
+  if (
+    !fields ||
+    (rules.authorizationIssuer !== undefined && fields.get('iss') !== rules.authorizationIssuer)
+  )
+    return null
   const state = fields.get('state'),
-    credential = fields.get(profile.credential),
+    credential = fields.get(rules.credentialField),
     error = fields.get('error')
   if (!isValue(state) || (credential === undefined) === (error === undefined)) return null
   if (credential !== undefined)
-    return isValue(credential) ? { outcome: 'accepted', state, credential } : null
+    return isValue(credential) && (rules.isCredential?.(credential) ?? true)
+      ? { outcome: 'accepted', state, credential }
+      : null
   if (!isValue(error)) return null
   return error === 'access_denied'
     ? { outcome: 'denied', state }
@@ -86,17 +95,21 @@ export function parseOAuthReturn(
 }
 
 /**
- * Admit the request against its catalog entry and consume its ceremony-bound return once,
- * before any network use: null for valid denial, otherwise the accepted credential.
+ * Admit the request against its platform's ceremony at the requested version and read its
+ * ceremony-bound return, before any network use: null for valid denial, otherwise the accepted
+ * credential. Consuming the return once is the Prover document's job.
  */
 export function acceptReturn(context: ProverContext, platformId: PlatformId): string | null {
   const { request } = context
-  const platform = platforms[platformId],
-    version = platform.versions[1]
+  const platform = platforms[platformId]
   context.signal.throwIfAborted()
-  if (!platform.isClientId(request.clientId) || version.pkce !== (request.codeVerifier !== null))
-    throw new CeremonyError('authorization', 'Invalid proving request')
-  const returned = parseOAuthReturn(context.oauthReturn, version.oauthReturn)
+  const ceremony = ceremonyFor(
+    platformId,
+    request.platformCeremonyVersion as SupportedCeremonyVersion<PlatformId>,
+  )
+  if (!platform.isClientId(request.clientId) || ceremony.pkce !== (request.codeVerifier !== null))
+    throw new CeremonyError('authorization', messages.invalidProvingRequest)
+  const returned = parseOAuthReturn(context.oauthReturn, ceremony.returnRules)
   if (returned?.state !== oauthState(context.ceremonyId))
     throw new CeremonyError('authorization', 'Invalid OAuth return')
   if (returned.outcome === 'denied') return null

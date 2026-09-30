@@ -1,8 +1,8 @@
 import { parseCsp, scriptHash } from '../build/profiles.ts'
-import { csp, document } from '../src/ccdp/headers.ts'
+import { documentHeaders } from '../src/assets/headers.ts'
 
 /** The deployment inputs Callback reads, inserted in its positional order. */
-export type CallbackInputs = { allowedApplicationOrigins: readonly string[]; ccdpOrigin: string }
+type CallbackInputs = { allowedApplicationOrigins: readonly string[]; ccdpOrigin: string }
 
 /** Reference Bridge data insertion only; this is not a production Bridge server. */
 export function prepareCallback(
@@ -40,9 +40,10 @@ export function prepareCallback(
   return {
     body: html.replace(slot, () => slot.replace(marker, () => data)),
     headers: {
-      ...document,
+      ...documentHeaders,
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': `${csp.base}; script-src ${scriptHash(code)}; style-src 'unsafe-inline'; frame-src ${ccdpOrigin}; connect-src 'none'`,
+      // Inserting data changes no executable, so the artifact's own policy still applies.
+      'Content-Security-Policy': policy,
     },
   }
 }

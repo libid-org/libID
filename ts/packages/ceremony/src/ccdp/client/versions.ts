@@ -1,13 +1,12 @@
-import { MAX_CEREMONY_VERSION } from '../../platforms/authorization.js'
-import { isRecord, uint } from '../../primitives.js'
+import { VERSIONS_PATH } from '../../assets/keys.js'
+import { isRecord, isUint } from '../../primitives.js'
 import { fetchPublicJson } from '../../response.js'
+import { MAX_CEREMONY_VERSION } from '../limits.js'
 
 /** Platform ceremony versions a Distribution bundles: platform id to its ascending version list. */
 export type PlatformVersions = Readonly<Record<string, readonly number[]>>
 
-export const VERSIONS_PATH = '/ccdp/versions.json'
-
-/** The catalog is a short public record; bound downloads before decoding JSON. */
+/** The version list is a short public record; bound downloads before decoding JSON. */
 const MAX_VERSIONS_BYTES = 64 * 1024
 
 /**
@@ -22,7 +21,7 @@ export function validatePlatformVersions(v: unknown): PlatformVersions {
       !Array.isArray(list) ||
       !list.length ||
       list.some(
-        (version, i) => !uint(version, MAX_CEREMONY_VERSION) || (i > 0 && list[i - 1] >= version),
+        (version, i) => !isUint(version, MAX_CEREMONY_VERSION) || (i > 0 && list[i - 1] >= version),
       )
     )
       throw new TypeError('Invalid platform versions')

@@ -1,13 +1,15 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
+import { route } from '../../assets/keys.js'
 import { claimRootWorker } from '../../assets/registration.js'
-import { ceremonyError, endError, reportFailure } from '../../errors.js'
-import { Events, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
+import { toCeremonyError } from '../../errors.js'
+import { EventFeed, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
 import { ceremonyFor } from '../../platforms/index.js'
-import { proverFor } from '../../platforms/provers.js'
+import { type ProverResult, proverFor } from '../../platforms/provers.js'
 import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
-import { readProver, route } from '../navigation.js'
-import { messages } from '../ui-messages.js'
+import { readProver } from '../navigation.js'
+import { messages, popupErrorMessages } from '../uiMessages.js'
+import { endError, reportFailure } from './failure.js'
 import { eventView, view } from './ui.js'
 
 type ProverState =
@@ -18,15 +20,20 @@ type ProverState =
 export async function startProver(fragment: string): Promise<void> {
   try {
     const input = readProver(fragment)
+    // Popup reports the isolation hop just before it releases this page to the fallback.
+    const hop = { leaving: false }
     const connection = PopupConnection.accept(PopupWindow.current(fragment, { scope: '/' }), {
       fallback,
       connectionId: input.ceremonyId,
       allowedApplicationOrigins: [input.applicationOrigin],
       isolationFallbackUrl: location.origin + route('prover/fallback'),
+      onDiagnostic: ({ code }) => {
+        if (code === 'isolation-fallback') hop.leaving = true
+      },
     })
-    await new ProverDocument(connection, input).start()
+    await new ProverDocument(connection, input, hop).start()
   } catch (error) {
-    const failure = ceremonyError(error, 'prover')
+    const failure = toCeremonyError(error, 'prover')
     view(messages.returnToApplication(failure.message))
     reportFailure(undefined, failure)
   }
@@ -36,12 +43,13 @@ export async function startProver(fragment: string): Promise<void> {
 class ProverDocument {
   private state: ProverState
   private readonly controller = new AbortController()
-  private readonly events = new Events()
-  private readonly ui = eventView(this.events)
+  private readonly feed = new EventFeed()
+  private readonly ui = eventView(this.feed)
 
   constructor(
     private readonly connection: PopupConnection<Message>,
     input: ReturnType<typeof readProver>,
+    private readonly hop: { readonly leaving: boolean },
   ) {
     this.state = { phase: 'connecting', input }
   }
@@ -52,7 +60,11 @@ class ProverDocument {
       this.connection.on(ProveIdentity, (request) => {
         void this.prove(request).catch((error) => this.fail(error))
       })
-      void this.connection.closed.then((end) => this.fail(endError(end, messages.proverClosed)))
+      void this.connection.closed.then((end) => {
+        // The fallback document continues this ceremony; this page is only leaving.
+        if (end.outcome === 'closed' && this.hop.leaving) return
+        this.fail(endError(end, messages.proverClosed))
+      })
       await this.connection.ready
       if (this.controller.signal.aborted) return
       if (
@@ -60,14 +72,14 @@ class ProverDocument {
         typeof SharedArrayBuffer === 'undefined' ||
         typeof Worker === 'undefined'
       )
-        throw new Error(messages.isolationUnavailable)
+        throw new Error(popupErrorMessages['isolation-unavailable'])
       await claimRootWorker()
       if (this.controller.signal.aborted) return
       if (this.state.phase !== 'connecting') throw new Error(messages.invalidProvingRequest)
       this.state.phase = 'ready'
       if (location.pathname === route('prover/fallback'))
-        this.produce({ event: 'prover-fallback', timestamp: performance.timeOrigin })
-      this.produce({ event: 'prover', phase: 'started', timestamp: now() })
+        this.emit({ event: 'prover-fallback', timestamp: performance.timeOrigin })
+      this.emit({ event: 'prover', phase: 'started', timestamp: now() })
     } catch (error) {
       this.fail(error)
     }
@@ -91,16 +103,16 @@ class ProverDocument {
       ceremonyId: input.ceremonyId,
       oauthReturn: input.oauthReturn,
       signal: this.controller.signal,
-      emit: (event) => this.produce(event),
+      emit: (event) => this.emit(event),
     })
     await this.deliver(result)
   }
 
-  private async deliver(result: Omit<IdentityProof, 'type'> | null): Promise<void> {
+  private async deliver(result: ProverResult | null): Promise<void> {
     if (this.controller.signal.aborted) return
     if (result === null) {
       this.connection.send({ type: 'user-denied' })
-      this.events.emit({ status: 'denied', timestamp: now() })
+      this.feed.emit({ status: 'denied', timestamp: now() })
       this.cleanup()
       return
     }
@@ -116,7 +128,7 @@ class ProverDocument {
     this.ui.delivered()
   }
 
-  private produce(event: OperationEvent): void {
+  private emit(event: OperationEvent): void {
     if (this.state.phase === 'ended') return
     const message = EventMessage.decode({ type: 'event', ...event })
     try {
@@ -128,7 +140,7 @@ class ProverDocument {
       }
       // Observation loss cannot alter proving.
     }
-    this.events.emit({ ...event, status: 'active' })
+    this.feed.emit({ ...event, status: 'active' })
   }
 
   private cleanup(): void {
@@ -139,8 +151,8 @@ class ProverDocument {
 
   private fail(error: unknown): void {
     if (this.state.phase === 'ended') return
-    const failure = ceremonyError(error, 'prover')
-    this.events.emit(failureEvent(failure))
+    const failure = toCeremonyError(error, 'prover')
+    this.feed.emit(failureEvent(failure))
     this.cleanup()
     reportFailure(this.connection, failure)
   }

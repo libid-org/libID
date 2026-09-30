@@ -7,7 +7,7 @@ import { CeremonyError } from '../../errors.js'
 import type { CeremonyEvent } from '../../events.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { deriveAuthorizationDigest, deriveCodeChallenge } from '../../platforms/authorization.js'
-import { buildGooglePublicInputs } from '../../platforms/google/1/publicInputs.js'
+import { buildGooglePublicInputs } from '../../platforms/google/1/validation.js'
 import {
   type Identity,
   type PlatformId,
@@ -18,10 +18,10 @@ import {
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
 import { bundledVersions, CEREMONY_ID, fixtures, platformConfig } from '../../testing/index.js'
 import { CeremonyFailed, EventMessage, IdentityProof, UserDenied } from '../index.js'
-import { popupErrorMessages } from '../ui-messages.js'
-import { type CCDPClient, ccdpClientFromConfig, createCCDPClient } from './ceremony.js'
-import { fetchCeremonyConfig, validateCeremonyConfig } from './config.js'
-import { VERSIONS_PATH, validatePlatformVersions } from './versions.js'
+import { popupErrorMessages } from '../uiMessages.js'
+import { type CCDPClient, ccdpClientFromConfig } from './client.js'
+import { validateCeremonyConfig } from './config.js'
+import { validatePlatformVersions } from './versions.js'
 
 type Spied = FakeConnection & Record<'send' | 'navigate' | 'navigateAway' | 'close', Mock>
 
@@ -330,55 +330,6 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     })
     await c.close()
     await rejection
-  })
-  it('ignores unknown platforms and rejects oversized Google audiences', () => {
-    expect(
-      validateCeremonyConfig(
-        { ...wireConfig, platforms: { ...wireConfig.platforms, future: null } },
-        'https://bridge.test',
-      ).platforms,
-    ).toEqual(config.platforms)
-    expect(() =>
-      validateCeremonyConfig(
-        {
-          ...wireConfig,
-          platforms: { google: { clientId: 'x'.repeat(129) } },
-        },
-        'https://bridge.test',
-      ),
-    ).toThrow()
-  })
-  it('accepts a local HTTP CCDP on a separate origin [LIBID-MOD-011]', () => {
-    for (const host of ['localhost', '127.0.0.1']) {
-      const bridge = `http://${host}:4682`
-      for (const ccdpOrigin of [`http://${host}`, `http://${host}:4683`]) {
-        const local = { ...wireConfig, ccdpOrigin }
-        expect(validateCeremonyConfig(local, bridge)).toMatchObject({
-          ccdpOrigin,
-          redirectUri: `${bridge}/auth/callback`,
-        })
-      }
-    }
-    expect(() =>
-      validateCeremonyConfig(
-        { ...wireConfig, ccdpOrigin: 'http://ccdp.test' },
-        'https://bridge.test',
-      ),
-    ).toThrow()
-  })
-  it('validates configuration without coupling Bridge and CCDP [LIBID-OAUTH-001]', () => {
-    expect(validateCeremonyConfig(wireConfig, 'https://bridge.test').ccdpOrigin).toBe(
-      'https://ccdp.test',
-    )
-    for (const patch of [
-      { ccdpOrigin: 'https://ccdp.test/' },
-      { callbackPath: '/auth/callback' },
-      { redirectUri: 'https://bridge.test/auth/callback' },
-      { allowedAppOrigins: [] },
-    ])
-      expect(() =>
-        validateCeremonyConfig({ ...wireConfig, ...patch }, 'https://bridge.test'),
-      ).toThrow()
   })
 })
 
@@ -812,6 +763,34 @@ it('only core readiness events advance the protocol; preserves occurrence times 
   expect(events).toHaveLength(count)
 })
 
+it.each([
+  ['Prefetch', event('prefetch-dispatch', 'finished')],
+  ['Prover', event('prover', 'started', 3)],
+])(
+  'accepts %s readiness only from the CCDP, never the Bridge [LIBID-OAUTH-023]',
+  async (document, readiness) => {
+    const { ceremony, connection } = setup()
+    const result = ceremony.proveUserIdentity()
+    if (document === 'Prover') prefetched(connection)
+    connection.peerOrigin = 'https://bridge.test'
+    connection.receive(readiness)
+    await expect(result).rejects.toThrow('Readiness from outside the CCDP')
+    expect(connection.sent).toEqual([])
+  },
+)
+
+it.each([
+  ['before the return', [], 'authorization'],
+  ['after Callback forwarded the return', [event('authorization', 'finished', 2)], 'prover'],
+])('blames a closure %s on the operation still pending', async (_name, observed, blamed) => {
+  const { ceremony, connection } = setup()
+  const result = ceremony.proveUserIdentity()
+  prefetched(connection)
+  for (const message of observed) connection.receive(message)
+  await connection.close()
+  await expect(result).rejects.toMatchObject({ status: 'closed', event: blamed })
+})
+
 it('cancellation at authorization entry prevents provider navigation [LIBID-BROWSER-018]', async () => {
   const { ceremony, connection } = setup()
   ceremony.onEvent((event) => {
@@ -892,58 +871,6 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
   }
 })
 
-it('creates a client from the Bridge record, then the Distribution list, refusing other options before fetching; either failing fails creation [LIBID-MOD-011] [LIBID-MOD-017]', async () => {
-  const unfetched = vi.fn()
-  vi.stubGlobal('fetch', unfetched)
-  await expect(
-    // @ts-expect-error Unknown options are rejected at runtime too.
-    createCCDPClient({ oauthBridge: 'https://bridge.test', ccdpOrigin: 'https://ccdp.test' }),
-  ).rejects.toThrow('Invalid client options')
-  expect(unfetched).not.toHaveBeenCalled()
-  vi.unstubAllGlobals()
-  const init = { mode: 'cors', credentials: 'omit', cache: 'no-store', redirect: 'error' }
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-  const create = (record: () => Response, list: () => Response) => {
-    const fetch = vi.fn(async (url: string) =>
-      url === `https://bridge.test/api/v1/ceremony/config`
-        ? record()
-        : url === `https://ccdp.test${VERSIONS_PATH}`
-          ? list()
-          : new Response('Not found', { status: 404 }),
-    )
-    vi.stubGlobal('fetch', fetch)
-    return {
-      fetch,
-      client: createCCDPClient({ oauthBridge: 'https://bridge.test' }).finally(() =>
-        vi.unstubAllGlobals(),
-      ),
-    }
-  }
-  const created = create(
-    () => json(wireConfig),
-    () => json({ google: [1], x: [1], future: [1] }),
-  )
-  const client = await created.client
-  expect(created.fetch.mock.calls).toEqual([
-    [`https://bridge.test/api/v1/ceremony/config`, init],
-    [`https://ccdp.test${VERSIONS_PATH}`, init],
-  ])
-  expect(client.enabledPlatforms).toEqual(['google'])
-  expect(client.enabledVersions('google')).toEqual([1])
-  for (const [record, list, listRead] of [
-    [() => json('Unavailable', 503), () => json({ google: [1] }), false],
-    [() => json(wireConfig), () => new Response('Not found', { status: 404 }), true],
-    [() => json(wireConfig), () => json({ google: [1, 1] }), true],
-    [() => json(wireConfig), () => json([1]), true],
-    [() => json(wireConfig), () => new Response('{', { status: 200 }), true],
-  ] as const) {
-    const failed = create(record, list)
-    await expect(failed.client).rejects.toThrow()
-    expect(failed.fetch).toHaveBeenCalledTimes(listRead ? 2 : 1)
-  }
-})
-
 it('rejects unavailable explicit versions before reading ledger or reserving the run [LIBID-MOD-015] [LIBID-ASSET-004] [LIBID-OAUTH-024]', async () => {
   const client = ccdpClientFromConfig(config, bundledVersions)
   const ledger = { ...testnet, hash: vi.fn(testnet.hash) }
@@ -991,16 +918,16 @@ it('reports closure before the first start without mislabeling it as a repeat [L
 })
 
 it('freezes and forwards the public credential from validated configuration [TEST-BRIDGE-03] [LIBID-ASSET-006] [LIBID-ASSET-010] [LIBID-OAUTH-016]', async () => {
-  const profile = {
+  const github = {
     clientId: 'client',
     clientCredential: 'public&original=1',
   }
   const config = validateCeremonyConfig(
-    { ...wireConfig, platforms: { github: profile } },
+    { ...wireConfig, platforms: { github } },
     'https://bridge.test',
   )
   const client = ccdpClientFromConfig(config, bundledVersions)
-  profile.clientCredential = 'replacement'
+  github.clientCredential = 'replacement'
   const { connection, ceremony } = setup({ client, platformId: 'github' })
   const rejected = expect(ceremony.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
   reachProving(connection)
@@ -1039,28 +966,6 @@ it('preserves closure before proving starts [LIBID-BROWSER-002]', async () => {
   const { connection, ceremony } = setup()
   await connection.close()
   await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ status: 'closed' })
-})
-
-it('fetches configuration once without credentials and bounds its body [LIBID-MOD-011]', async () => {
-  const fetch = vi.fn(async () => Response.json(wireConfig))
-  vi.stubGlobal('fetch', fetch)
-  try {
-    await expect(fetchCeremonyConfig('https://bridge.test')).resolves.toEqual(config)
-    expect(fetch).toHaveBeenCalledExactlyOnceWith('https://bridge.test/api/v1/ceremony/config', {
-      mode: 'cors',
-      credentials: 'omit',
-      cache: 'no-store',
-      redirect: 'error',
-    })
-    fetch.mockResolvedValueOnce(Response.json({ ...wireConfig, padding: 'x'.repeat(64 * 1024) }))
-    await expect(fetchCeremonyConfig('https://bridge.test')).rejects.toThrow('limit')
-    await expect(fetchCeremonyConfig('https://bridge.test/')).rejects.toThrow('oauthBridge')
-    expect(fetch).toHaveBeenCalledTimes(2)
-    fetch.mockResolvedValueOnce(new Response(null, { status: 503 }))
-    await expect(fetchCeremonyConfig('https://bridge.test')).rejects.toThrow('request failed')
-  } finally {
-    vi.unstubAllGlobals()
-  }
 })
 
 it.each([

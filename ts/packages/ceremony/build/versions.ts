@@ -1,19 +1,21 @@
 import { join } from 'node:path'
+import { profileKey } from '../src/assets/keys.ts'
 import type { PlatformVersions } from '../src/ccdp/client/versions.ts'
-import { uint } from '../src/primitives.ts'
-import { importSource } from './source.ts'
+import { importSource } from './bundle.ts'
 import { packageDir } from './sources.ts'
 
 /** `<platform>/<version>` for every version a list names, in the list's order. */
 export function versionPairs(versions: PlatformVersions): string[] {
-  return Object.entries(versions).flatMap(([platform, list]) => list.map((v) => `${platform}/${v}`))
+  return Object.entries(versions).flatMap(([platform, list]) =>
+    list.map((v) => profileKey(platform, v)),
+  )
 }
 
 /** The `<platform>/<version>` pair of an emitted `src/platforms/<platform>/<version>/prover.ts` chunk. */
 export function proverPair(entry: string | null): string | undefined {
   const match =
     entry === null ? null : /\/src\/platforms\/([^/]+)\/([^/]+)\/prover\.ts$/.exec(entry)
-  return match ? `${match[1]}/${match[2]}` : undefined
+  return match ? profileKey(match[1], match[2]) : undefined
 }
 
 /**
@@ -44,22 +46,24 @@ export function publishableVersions(
   return catalog
 }
 
-/** Read every platform's `versions` keys from the platform catalog. */
+/** The platform catalog's versions, held to the grammar the client reads `versions.json` under. */
 export async function catalogVersions(): Promise<PlatformVersions> {
-  const { MAX_CEREMONY_VERSION } = await importSource<
-    typeof import('../src/platforms/authorization.js')
-  >(join(packageDir, 'src/platforms/authorization.ts'))
-  const catalog = await importSource<{
-    platforms: Record<string, { versions: Record<string, unknown> }>
-  }>(join(packageDir, 'src/platforms/index.ts'))
-  const versions: Record<string, readonly number[]> = {}
-  for (const [platform, definition] of Object.entries(catalog.platforms)) {
-    const list = Object.keys(definition.versions)
-      .map(Number)
-      .sort((a, b) => a - b)
-    if (!list.length || list.some((v) => !uint(v, MAX_CEREMONY_VERSION)))
-      throw new Error(`Invalid platform ceremony versions: ${platform}`)
-    versions[platform] = Object.freeze(list)
-  }
-  return Object.freeze(versions)
+  const [{ platforms }, { validatePlatformVersions }] = await Promise.all([
+    importSource<{ platforms: Record<string, { versions: Record<string, unknown> }> }>(
+      join(packageDir, 'src/platforms/index.ts'),
+    ),
+    importSource<typeof import('../src/ccdp/client/versions.ts')>(
+      join(packageDir, 'src/ccdp/client/versions.ts'),
+    ),
+  ])
+  return validatePlatformVersions(
+    Object.fromEntries(
+      Object.entries(platforms).map(([platform, { versions }]) => [
+        platform,
+        Object.keys(versions)
+          .map(Number)
+          .sort((a, b) => a - b),
+      ]),
+    ),
+  )
 }

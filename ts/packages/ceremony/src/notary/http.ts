@@ -64,14 +64,20 @@ export function responseJson(transcript: Transcript): unknown {
   const length = headers.get('content-length'),
     transfer = headers.get('transfer-encoding')
   let body = transcript.received.subarray(head.bodyStart)
-  if (transfer) {
+  if (transfer !== undefined) {
     if (transfer.toLowerCase() !== 'chunked' || length !== undefined)
       throw new Error('Ambiguous HTTP framing')
     body = decodeChunked(body)
   } else if (length !== undefined && (!/^[0-9]+$/.test(length) || Number(length) !== body.length))
     throw new Error('HTTP length mismatch')
   // Only the de-framed body is UTF-8; chunk boundaries may split a character.
-  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body))
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(body)
+  try {
+    return JSON.parse(text)
+  } catch {
+    // The parser's message quotes the body, which may hold the bearer.
+    throw new Error('Invalid JSON response')
+  }
 }
 
 /** Case-folded response fields; framing headers must not repeat. */

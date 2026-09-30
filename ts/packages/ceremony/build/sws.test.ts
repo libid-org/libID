@@ -6,13 +6,13 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
 import { parse, stringify, type TomlTable } from 'smol-toml'
-import { document } from '../src/ccdp/headers.ts'
+import { documentHeaders } from '../src/assets/headers.ts'
 import { cache } from './sources.ts'
 import { errorHeaders, nativeSkip, writeDistribution } from './sws.ts'
 
 // The native tests below start their own SWS on this port and the next one, clear of the dev
 // app and the e2e suite.
-const testPort = Number(process.env.CEREMONY_SWS_TEST_PORT ?? 4988)
+const testPort = Number(process.env.CEREMONY_SWS_TEST_PORT ?? 4990)
 
 /** Point an emitted `sws.toml` at its own output on a loopback port. */
 function localize(dir: string, port: number, edit?: (config: TomlTable) => void) {
@@ -79,7 +79,7 @@ test('rebuild removes obsolete compression sidecars [LIBID-ASSET-023]', () => {
   const publish = (body: string) =>
     writeDistribution(
       dir,
-      new Map([['/index.html', { bytes: Buffer.from(body), headers: { ...document } }]]),
+      new Map([['/index.html', { bytes: Buffer.from(body), headers: { ...documentHeaders } }]]),
     )
   try {
     publish('<p>compressible</p>'.repeat(100))
@@ -103,7 +103,7 @@ test('emitted header rules: the error policy catch-all, then one exact rule per 
       dir,
       new Map([
         ['/ccdp/assets/a.js', { bytes: Buffer.from('a'), headers }],
-        ['/ccdp/v1/prefetch', { bytes: Buffer.from('<p>p</p>'), headers: { ...document } }],
+        ['/ccdp/v1/prefetch', { bytes: Buffer.from('<p>p</p>'), headers: { ...documentHeaders } }],
       ]),
     )
     const config = parse(readFileSync(join(dir, 'sws.toml'), 'utf8'))
@@ -120,7 +120,7 @@ test('emitted header rules: the error policy catch-all, then one exact rule per 
     assert.deepEqual((config.advanced as TomlTable).headers, [
       { source: '/**', headers: errorHeaders },
       { source: '/ccdp/assets/a.js', headers },
-      { source: '/ccdp/v1/prefetch.html', headers: document },
+      { source: '/ccdp/v1/prefetch.html', headers: documentHeaders },
     ])
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -136,8 +136,8 @@ test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-02
     writeDistribution(
       dir,
       new Map([
-        ['/ccdp/v1/prefetch', { bytes: Buffer.from(body), headers: { ...document } }],
-        ['/404.html', { bytes: Buffer.from('Not found'), headers: { ...document } }],
+        ['/ccdp/v1/prefetch', { bytes: Buffer.from(body), headers: { ...documentHeaders } }],
+        ['/404.html', { bytes: Buffer.from('Not found'), headers: { ...documentHeaders } }],
       ]),
     )
     localize(dir, testPort)
@@ -178,7 +178,10 @@ test('native SWS header-rule matching canary: plain path after rewrites, raw pat
     dir,
     new Map([
       ['/ccdp/assets/served.js', { bytes: Buffer.from('export {}'), headers: asset }],
-      ['/ccdp/v1/prefetch', { bytes: Buffer.from('<p>prefetch</p>'), headers: { ...document } }],
+      [
+        '/ccdp/v1/prefetch',
+        { bytes: Buffer.from('<p>prefetch</p>'), headers: { ...documentHeaders } },
+      ],
       ['/404.html', { bytes: Buffer.from('Not found'), headers: { ...errorHeaders } }],
     ]),
   )
@@ -211,7 +214,7 @@ test('native SWS header-rule matching canary: plain path after rewrites, raw pat
       const page = await fetch(server.url + path)
       assert.equal(page.status, 200, path)
       assert.equal(page.redirected, false, path)
-      assert.equal(page.headers.get('cache-control'), document['Cache-Control'], path)
+      assert.equal(page.headers.get('cache-control'), documentHeaders['Cache-Control'], path)
       assert.equal(page.headers.get('x-requested'), null, path)
     }
     const beneath = await fetch(`${server.url}/ccdp/assets/served.js/served.js`)

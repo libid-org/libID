@@ -2,19 +2,22 @@
 // the catalog fails typecheck here until its entry exists; conformance.test.ts then runs the
 // catalog, OAuth return, validator and prover checks over every entry.
 import { readFileSync } from 'node:fs'
+import type {
+  BearerExchange,
+  TokenRequestInput,
+} from '../../barretenberg/circuits/bearer-link/exchange.js'
 import type { OAuthReturn } from '../../ccdp/navigation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import type { BearerTranscript, TokenRequestInput } from '../bearer-transcript.js'
-import * as githubTranscript from '../github/1/transcript.js'
-import * as githubTypes from '../github/1/types.js'
-import * as googleTypes from '../google/1/types.js'
+import * as githubExchange from '../github/1/exchange.js'
+import * as githubValidation from '../github/1/validation.js'
+import * as googleValidation from '../google/1/validation.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
-import type { ReturnProfile } from '../oauthReturn.js'
+import type { ReturnRules } from '../oauthReturn.js'
 import type { ProverModule } from '../provers.js'
-import type { Identity } from '../types.js'
-import * as xTranscript from '../x/1/transcript.js'
-import * as xTypes from '../x/1/types.js'
+import type { Identity } from '../validation.js'
+import * as xExchange from '../x/1/exchange.js'
+import * as xValidation from '../x/1/validation.js'
 
 type Proof<P extends PlatformId> = ProofByPlatformVersion[P] extends { 1: infer T } ? T : never
 
@@ -38,8 +41,8 @@ type Claim<P extends PlatformId> = { identity: Identity<P>; proof: Proof<P> }
 
 interface Entry<P extends PlatformId> {
   config: ClientConfig<P>
-  /** The return rules the platform must enforce, declared here rather than read from its profile. */
-  oauthReturn: ReturnProfile
+  /** The return rules the platform must enforce, declared here rather than read from its `url.ts`. */
+  returnRules: ReturnRules
   /** The identity the evidence names; `oauthClientId` is the configured client. */
   identity: Identity<P>
   /** Every identity field at its maximum accepted length. */
@@ -55,7 +58,7 @@ interface Entry<P extends PlatformId> {
   /** Retention expiry the result adapter derives from `proof`, computed independently here. */
   expiresAt: number
   /** The platform version's own validators, which the catalog's result adapter composes. */
-  types: {
+  validation: {
     validateIdentity(value: unknown): Identity<P>
     validateProof(value: unknown, identity: Identity<P>, authorizationDigest: Uint8Array): Proof<P>
   }
@@ -73,7 +76,7 @@ interface Entry<P extends PlatformId> {
 /** Code-exchange platforms proven by two notarized HTTP transcripts and the bearer-link circuit. */
 export interface BearerLinkFixture<P extends PlatformId> extends Entry<P> {
   proverKind: 'bearer-link'
-  transcript: BearerTranscript
+  exchange: BearerExchange
   /** The token endpoint and the form fields, in order, the platform must send for `input`. */
   tokenRequest: { url: string; form(input: TokenRequestInput): [string, string][] }
   /** The identity endpoint and the headers it pins beside Host, Authorization and Connection. */
@@ -91,7 +94,7 @@ export interface BearerLinkFixture<P extends PlatformId> extends Entry<P> {
     /** The same identity with its members in another order, and the exact members it discloses. */
     reorderedIdentityBody: string
     reorderedIdentityMembers: readonly string[]
-    /** The same identity values outside the profile's response shape. */
+    /** The same identity values outside the platform's response shape. */
     misshapenIdentityBody: string
   }
 }
@@ -168,7 +171,8 @@ export const googleV1 = {
 }
 
 // Generated once by running googleV1 through the official libid-circuits
-// v0.3.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter.
+// v0.3.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter. The v0.4.0 release ships a
+// byte-identical circuit and key.
 export const googlePublicInputs = [
   '0x00000000000000000000000000000000000000000000000000000000000000b3',
   '0x0000000000000000000000000000000000000000000000000000000000000018',
@@ -301,7 +305,7 @@ const bearerLinkRejectedProof = {
   identityAttestation: rejectedAttestations,
 }
 
-/** A query code return; `suffix` carries any issuer field the profile requires. */
+/** A query code return; `suffix` carries any issuer field the rules require. */
 const codeReturns =
   (suffix = '', denialDetail = '', error = 'server_error') =>
   (state: string): ReturnSamples => ({
@@ -325,9 +329,9 @@ export const fixtures = {
   google: {
     proverKind: 'oidc',
     config: { clientId: googleClaims.aud },
-    oauthReturn: {
+    returnRules: {
       transport: 'fragment',
-      credential: 'id_token',
+      credentialField: 'id_token',
       rejected: ['code', 'access_token', 'refresh_token'],
     },
     identity: {
@@ -353,7 +357,7 @@ export const fixtures = {
     },
     digest: googleV1.authorizationDigest,
     expiresAt: jwtPart(googleV1.idToken, 1).exp as number,
-    types: googleTypes,
+    validation: googleValidation,
     rejectedProof: {
       identityProof: [new Uint8Array(), oversizedProof],
       tokenExpiresAt: [-1, 1.5, Number.MAX_SAFE_INTEGER + 1],
@@ -415,6 +419,13 @@ export const fixtures = {
       },
       'a missing key ID': {
         idToken: (idToken) => jwtWith(idToken, { header: { alg: 'RS256' } }),
+        rejectedAt: 'authorization',
+      },
+      'an email beyond the circuit width': {
+        idToken: (idToken) =>
+          jwtWith(idToken, {
+            payload: { ...jwtPart(idToken, 1), email: `${'a'.repeat(53)}@gmail.com` },
+          }),
         rejectedAt: 'authorization',
       },
       'a nonce of the wrong width': {
@@ -488,9 +499,9 @@ export const fixtures = {
   x: {
     proverKind: 'bearer-link',
     config: { clientId: 'client' },
-    oauthReturn: {
+    returnRules: {
       transport: 'query',
-      credential: 'code',
+      credentialField: 'code',
       rejected: ['id_token', 'access_token', 'refresh_token', 'iss'],
     },
     identity: { platformId: 'x', oauthClientId: 'client', userId, userName: 'alice' },
@@ -509,13 +520,13 @@ export const fixtures = {
     proof: bearerLinkProof(),
     digest: bearerDigest,
     expiresAt: bearerExpiresAt,
-    types: xTypes,
+    validation: xValidation,
     rejectedProof: bearerLinkRejectedProof,
     operations: bearerLinkOperations,
     specTests: { ...bearerLinkSpecTests, issuer: '[TEST-PLAT-18]' },
     returns: codeReturns(),
     prover: () => import('../x/1/prover.js'),
-    transcript: xTranscript,
+    exchange: xExchange,
     tokenRequest: {
       url: 'https://api.x.com/2/oauth2/token',
       form: (input) => [
@@ -548,11 +559,11 @@ export const fixtures = {
   github: {
     proverKind: 'bearer-link',
     config: { clientId: 'client', clientCredential: 'public-fixture' },
-    oauthReturn: {
+    returnRules: {
       transport: 'query',
-      credential: 'code',
+      credentialField: 'code',
       rejected: ['id_token', 'access_token', 'refresh_token'],
-      issuer: 'https://github.com/login/oauth',
+      authorizationIssuer: 'https://github.com/login/oauth',
     },
     identity: { platformId: 'github', oauthClientId: 'client', userId, userName: 'alice' },
     longest: {
@@ -570,7 +581,7 @@ export const fixtures = {
     proof: bearerLinkProof(),
     digest: bearerDigest,
     expiresAt: bearerExpiresAt,
-    types: githubTypes,
+    validation: githubValidation,
     rejectedProof: bearerLinkRejectedProof,
     operations: bearerLinkOperations,
     specTests: { ...bearerLinkSpecTests, issuer: '[LIBID-OAUTH-031] [TEST-PLAT-12A]' },
@@ -580,7 +591,7 @@ export const fixtures = {
       'application_suspended',
     ),
     prover: () => import('../github/1/prover.js'),
-    transcript: githubTranscript,
+    exchange: githubExchange,
     tokenRequest: {
       url: 'https://github.com/login/oauth/access_token',
       form: (input) => [

@@ -1,11 +1,9 @@
-import { fixedBytes, hasExactKeys } from '../primitives.js'
 import { MAX_ATTESTED_DATA_BYTES } from './limits.js'
 import {
   AUTHORITY_ID_BYTES,
   type ByteRange,
   COMMITMENT_BYTES,
   type Directions,
-  NOTARY_SIGNATURE_BYTES,
 } from './protocol.js'
 
 // Fixed-int bincode: u32 start, u64 byte length, at least one disclosed byte.
@@ -19,7 +17,7 @@ export interface DecodedRevealedRange {
 }
 
 export interface DecodedRangeCommitment extends ByteRange {
-  commitment: Uint8Array
+  hash: Uint8Array
 }
 
 export interface DecodedDirection {
@@ -33,12 +31,6 @@ export interface DecodedAttestedData extends Directions<DecodedDirection> {
   createdAt: string
   sentTranscriptLength: number
   receivedTranscriptLength: number
-}
-
-/** Original signed bytes; ledger verification remains authoritative. */
-export interface NotaryAttestation {
-  attestedData: Uint8Array
-  signature: Uint8Array
 }
 
 function invalid(reason: string): never {
@@ -113,7 +105,7 @@ function readDirection(cursor: Cursor, transcriptLength: number): DecodedDirecti
     if (start < previousEnd || end <= start || end > transcriptLength) {
       invalid('commitment ranges are empty, unordered, overlapping, or out of bounds')
     }
-    commitments.push({ start, end, commitment: cursor.bytes(COMMITMENT_BYTES) })
+    commitments.push({ start, end, hash: cursor.bytes(COMMITMENT_BYTES) })
     previousEnd = end
   }
 
@@ -155,15 +147,4 @@ export function decodeAttestedData(bytes: Uint8Array): DecodedAttestedData {
     sent,
     received,
   }
-}
-
-/** Bound the delivered bytes; ledger verification remains authoritative. */
-export function isAttestation(v: unknown): v is NotaryAttestation {
-  return (
-    hasExactKeys(v, ['attestedData', 'signature']) &&
-    v.attestedData instanceof Uint8Array &&
-    v.attestedData.length > 0 &&
-    v.attestedData.length <= MAX_ATTESTED_DATA_BYTES &&
-    fixedBytes(v.signature, NOTARY_SIGNATURE_BYTES)
-  )
 }

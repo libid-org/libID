@@ -44,8 +44,8 @@ services:
     ports:
       - "127.0.0.1:4986:8787"
     volumes:
-      - ../.cache/smoke/public:/home/sws/public:ro
-      - ../.cache/smoke/sws.toml:/etc/sws.toml:ro
+      - ../.cache/runtime/public:/home/sws/public:ro
+      - ../.cache/runtime/sws.toml:/etc/sws.toml:ro
     depends_on:
       ccdp:
         condition: service_healthy

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { type BrowserContext, expect, type Locator, type Page } from '@playwright/test'
-import { buildGooglePublicInputs } from '../../../packages/ceremony/src/platforms/google/1/publicInputs.js'
+import { buildGooglePublicInputs } from '../../../packages/ceremony/src/platforms/google/1/validation.js'
 
 // Helpers for app.spec.ts: the Bridge and app, the run history, and the popup-side fixtures.
 

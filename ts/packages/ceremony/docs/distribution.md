@@ -101,8 +101,8 @@ const crs = assets.external('https://crs.aztec-cdn.foundation/g1_compressed.dat'
 })
 
 // Execution resolves the same handle synchronously; this does not fetch.
-const moduleUrl = assets.resolve(module)
-const crsUrl = assets.resolve(crs) // The original external URL.
+const moduleUrl = assets.assetUrl(module)
+const crsUrl = assets.assetUrl(crs) // The original external URL.
 ```
 
 The real declarations live in [notary.assets.ts](../src/notary/notary.assets.ts)
@@ -133,13 +133,15 @@ Each platform/version composes shared handles and its circuit/key in an asset
 leaf; X and GitHub share the bearer-link leaf.
 [platforms.assets.ts](../src/platforms/platforms.assets.ts) collects those sets and
 derives the circuit list whose capacity the build checks. The compiler adds the selected execution chunks and nested-worker
-edges, so their filenames are not declared again. Prefetch consumes metadata;
+edges, so their filenames are not declared again. A profile's chunks stop at other
+platforms' provers, which the prover table reaches only lazily, and the notary runtime
+has its own chunk, so Google fetches no notary code. Prefetch consumes metadata;
 it never imports execution to discover dependencies.
 
 ## Headers and compression
 
-[headers.ts](../src/ccdp/headers.ts) holds plain reusable policy records:
-`immutable`, `javascript`, `wasm`, `json`, `document`, `executionWorker`, `dip`
+[headers.ts](../src/assets/headers.ts) holds plain reusable policy records:
+`immutable`, `javascript`, `wasm`, `json`, `documentHeaders`, `executionWorker`, `dip`
 and `isolated`. Resource declarations compose them with object spread and may
 add explicit headers. [profiles.ts](../build/profiles.ts) applies document,
 worker and `versions.json` policies using compiler-produced script hashes and
@@ -208,7 +210,7 @@ The runnable reference configuration is in
 Client derives fixed `/auth/callback` from the supplied Bridge origin and
 freezes the redirect URI once; public configuration carries no callback path. X and GitHub use the supplied notary
 origin's Proxy WebSocket for both token and identity sessions. Prover performs no
-Bridge fetch; its HTTPS fetch sources serve proving assets, while WSS (or the
+Bridge fetch; its HTTPS fetch sources serve proving assets and Google's JWKS, while WSS (or the
 exact loopback WS exception) serves notarization. Bridge owns Callback refresh.
 
 Optional opener-independent fallback is supplied through
@@ -271,12 +273,15 @@ deployment is a separate, deliberate step.
 
 [distribution.ts](../build/distribution.ts) assembles and promotes the artifact
 and derives the prefetch manifest from the emitted Prover graph;
-[bundle.ts](../build/bundle.ts) records emitted dependencies;
-[input.ts](../build/input.ts) hands a document's launch fragment to its entry;
+[bundle.ts](../build/bundle.ts) records emitted dependencies and loads a source module into a build script;
+[fragment.ts](../build/fragment.ts) hands a document's launch fragment to its entry;
 [assets.ts](../build/assets.ts) resolves declarations;
+[assetPlugin.ts](../build/assetPlugin.ts) lowers them to built URLs and serves the request lists;
+[profiles.ts](../build/profiles.ts) derives each response profile's headers and CSP;
+[popup.ts](../build/popup.ts) is the optional popup-carrier integration point;
+[ast.ts](../build/ast.ts) holds the AST helpers both plugins share;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
-[sources.ts](../build/sources.ts) reads declared sources and caches downloads;
-[source.ts](../build/source.ts) loads a source module into a build script;
+[sources.ts](../build/sources.ts) reads declared sources, caches downloads and guards the output directory;
 [versions.ts](../build/versions.ts) reads the platform catalog's version set and
 reconciles it with the emitted platform provers and the asset profiles;
 [circuits.ts](../build/circuits.ts) checks capacity;

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { type OperationEvent, validateEvent } from '../events.js'
+import { EventMessage } from '../ccdp/index.js'
+import type { OperationEvent } from '../events.js'
 import { exactRequest } from '../testing/index.js'
 import { type FakeWorker, stubWorkers } from '../testing/workers.js'
 import { LIBID_RS_ATTESTED_DATA } from './fixtures/libid-rs.js'
 import type { Prepare, Transcript } from './protocol.js'
-import { Notarization, type NotarizationSession } from './session.js'
+import { NotaryRuntime, type NotarySession } from './session.js'
 
 vi.mock('../assets/index.js', async (original) => ({
   ...(await original<typeof import('../assets/index.js')>()),
@@ -37,8 +38,11 @@ afterEach(() => {
 })
 
 /** Prepare a session, answering `prepared` and then its send with `transcript`. */
-async function sentSession(notary: Notarization, event?: string, transcript = empty) {
-  const ready = notary.prepare(target, event)
+async function sentSession(notary: NotaryRuntime, attestation?: string, transcript = empty) {
+  const ready = notary.prepare(
+    target,
+    attestation === undefined ? undefined : { fetch: 'token-fetch', attestation },
+  )
   const port = ports().at(-1)!
   port.postMessage({ type: 'prepared' })
   const session = await ready
@@ -49,7 +53,7 @@ async function sentSession(notary: Notarization, event?: string, transcript = em
 }
 
 /** Reveal nothing and answer with no openings, resolving to the result awaiting attestation. */
-function revealNothing(session: NotarizationSession, port: MessagePort) {
+function revealNothing(session: NotarySession, port: MessagePort) {
   const revealing = session.reveal({ sent: [], received: [] })
   port.postMessage({ type: 'revealed', openings: [] })
   return revealing
@@ -58,7 +62,7 @@ function revealNothing(session: NotarizationSession, port: MessagePort) {
 it.each(['https://notary.lib.id', 'https://testnet.notary.lib.id', 'https://localhost:4687'])(
   'starts the selected notary only, without retrying another network: %s [LIBID-PROVER-008]',
   async (notaryAddress) => {
-    const pending = new Notarization(notaryAddress, new AbortController().signal).prepare(target)
+    const pending = new NotaryRuntime(notaryAddress, new AbortController().signal).prepare(target)
     ports()[0].postMessage({ type: 'error' })
     await expect(pending).rejects.toThrow('Notarization failed')
     expect(workers).toHaveLength(1)
@@ -69,18 +73,18 @@ it.each(['https://notary.lib.id', 'https://testnet.notary.lib.id', 'https://loca
 
 it('rejects invalid origins, targets and pre-aborted work before creating a worker', async () => {
   for (const address of ['http://notary.test', 'https://notary.test/', 'https://notary.test/path'])
-    expect(() => new Notarization(address, new AbortController().signal)).toThrow()
-  const notary = new Notarization('https://notary.test', new AbortController().signal)
+    expect(() => new NotaryRuntime(address, new AbortController().signal)).toThrow()
+  const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
   for (const url of ['http://api.x.com/', 'https://api.x.com/#fragment', 'https://api.x.com:444/'])
     await expect(notary.prepare(url)).rejects.toThrow('Invalid notarization target')
-  expect(() => new Notarization('https://notary.test', AbortSignal.abort())).toThrow()
+  expect(() => new NotaryRuntime('https://notary.test', AbortSignal.abort())).toThrow()
   expect(workers).toHaveLength(0)
 })
 
 it('shares one worker, routes overlapping replies per session and keeps it alive until ceremony cleanup', async () => {
   vi.useFakeTimers()
   const abort = new AbortController()
-  const notary = new Notarization('https://notary.test', abort.signal)
+  const notary = new NotaryRuntime('https://notary.test', abort.signal)
   const first = notary.prepare(target),
     second = notary.prepare(target)
   expect(workers).toHaveLength(1)
@@ -117,7 +121,7 @@ it('shares one worker, routes overlapping replies per session and keeps it alive
 
 it('posts the exact request once and fails a send to another URL before sending [LIBID-PROVER-017]', async () => {
   const abort = new AbortController()
-  const notary = new Notarization('https://notary.test', abort.signal)
+  const notary = new NotaryRuntime('https://notary.test', abort.signal)
   const ready = notary.prepare(target)
   const port = ports()[0]
   const received: unknown[] = []
@@ -148,7 +152,7 @@ it.each(['abort', 'session-error'])(
     vi.useFakeTimers()
     const abort = new AbortController()
     const events: OperationEvent[] = []
-    const notary = new Notarization('https://notary.test', abort.signal, (event) =>
+    const notary = new NotaryRuntime('https://notary.test', abort.signal, (event) =>
       events.push(event),
     )
     const { session, port } = await sentSession(notary, 'token-attestation')
@@ -173,9 +177,31 @@ it.each(['abort', 'session-error'])(
   },
 )
 
+it('fails a stuck preparation as the fetch it would start, within 10 seconds [LIBID-BROWSER-010]', async () => {
+  vi.useFakeTimers()
+  const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
+  const stuck = notary.prepare(target, { fetch: 'token-fetch', attestation: 'token-attestation' })
+  const rejection = expect(stuck).rejects.toMatchObject({
+    event: 'token-fetch',
+    message: 'Notary preparation timed out',
+  })
+  await vi.advanceTimersByTimeAsync(9999)
+  expect(notary.signal.aborted).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  await rejection
+  expect(notary.signal.aborted).toBe(true)
+  // A prepared session's deadline starts only when it sends.
+  const idle = new NotaryRuntime('https://notary.test', new AbortController().signal)
+  const ready = idle.prepare(target)
+  ports().at(-1)!.postMessage({ type: 'prepared' })
+  await ready
+  await vi.advanceTimersByTimeAsync(60000)
+  expect(idle.signal.aborted).toBe(false)
+})
+
 it('exposes late worker failure after preparation through the runtime signal [LIBID-PROVER-018]', async () => {
   const parent = new AbortController()
-  const notary = new Notarization('https://notary.test', parent.signal)
+  const notary = new NotaryRuntime('https://notary.test', parent.signal)
   const prepared = notary.prepare(target)
   ports()[0].postMessage({ type: 'prepared' })
   const session = await prepared
@@ -189,26 +215,24 @@ it('exposes late worker failure after preparation through the runtime signal [LI
 })
 
 it.each([
-  { event: 'token-attestation', response: 'HTTP/1.1 200 OK\r\n\r\n\r\n\r\n', headerBytes: 19 },
-  { event: 'identity-attestation', response: 'HTTP/1.1 200 OK\r\nX: é\r\n\r\n', headerBytes: 26 },
-  { event: 'token-attestation', response: 'No header boundary', headerBytes: undefined },
+  { event: 'token-attestation', headerBytes: 19 },
+  { event: 'identity-attestation', headerBytes: 26 },
+  { event: 'token-attestation', headerBytes: undefined },
 ])(
-  'measures $event response $response and openings separately from finalization without exposing evidence or blocking delivery [LIBID-PROVER-007]',
-  async ({ event, response, headerBytes }) => {
+  'measures $event openings separately from finalization and forwards the worker response measures ($headerBytes header bytes) without exposing evidence or blocking delivery [LIBID-PROVER-007]',
+  async ({ event, headerBytes }) => {
     let clock = 0
     vi.stubGlobal('performance', { timeOrigin: 10000, now: () => clock })
     const events: OperationEvent[] = []
     const abort = new AbortController()
-    const notary = new Notarization('https://notary.test', abort.signal, (event) => {
+    const notary = new NotaryRuntime('https://notary.test', abort.signal, (event) => {
       events.push(event)
       throw new Error('Broken diagnostic observer')
     })
     try {
-      const received = new Uint8Array(40)
-      received.set(new TextEncoder().encode(response))
       const { session, port } = await sentSession(notary, event, {
         sent: new Uint8Array(60),
-        received,
+        received: new Uint8Array(40),
       })
       clock = 10
       const pending = session.reveal({ sent: [], received: [] })
@@ -245,17 +269,36 @@ it.each([
           },
         },
       ])
-      for (const emitted of events) expect(() => validateEvent(emitted)).not.toThrow()
+      for (const emitted of events)
+        expect(() => EventMessage.decode({ type: 'event', ...emitted })).not.toThrow()
     } finally {
       abort.abort()
     }
   },
 )
 
+it("names the failed session's own operation in the siblings its failure aborts", async () => {
+  const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
+  const token = notary.prepare(target, { fetch: 'token-fetch', attestation: 'token-attestation' })
+  const identity = notary.prepare(target, {
+    fetch: 'identity-fetch',
+    attestation: 'identity-attestation',
+  })
+  const [, identityPort] = ports()
+  identityPort.postMessage({ type: 'error', message: 'identity setup failed' })
+  const failure = {
+    name: 'CeremonyError',
+    event: 'identity-fetch',
+    message: 'identity setup failed',
+  }
+  await expect(identity).rejects.toMatchObject(failure)
+  await expect(token).rejects.toMatchObject(failure)
+})
+
 it('rejects reveal when its start event synchronously aborts the session', async () => {
   const abort = new AbortController()
   const reason = new Error('Connection ended during event forwarding')
-  const notary = new Notarization('https://notary.test', abort.signal, () => abort.abort(reason))
+  const notary = new NotaryRuntime('https://notary.test', abort.signal, () => abort.abort(reason))
   const { session } = await sentSession(notary, 'token-attestation')
   await expect(session.reveal({ sent: [], received: [] })).rejects.toBe(reason)
   expect(workers[0].terminate).toHaveBeenCalledOnce()
@@ -265,10 +308,11 @@ it.each(['send', 'reveal', 'attestation'])(
   '%s stalls share one 10-second request deadline and abort sibling work [LIBID-BROWSER-010]',
   async (stage) => {
     vi.useFakeTimers()
-    const notary = new Notarization('https://notary.test', new AbortController().signal)
+    const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
     const ready = notary.prepare(target)
-    // Neither cold preparation nor an idle session waiting for its bearer uses the budget.
-    await vi.advanceTimersByTimeAsync(10000)
+    // Neither cold preparation (bounded on its own) nor an idle session waiting for its bearer
+    // uses the budget.
+    await vi.advanceTimersByTimeAsync(9999)
     expect(notary.signal.aborted).toBe(false)
     const port = ports()[0]
     port.postMessage({ type: 'prepared' })
@@ -306,7 +350,7 @@ it.each(['send', 'reveal', 'attestation'])(
 
 it('rejects a final attestation before openings instead of leaving reveal pending', async () => {
   vi.useFakeTimers()
-  const notary = new Notarization('https://notary.test', new AbortController().signal)
+  const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
   const { session, port } = await sentSession(notary)
   const revealing = session.reveal({ sent: [], received: [] })
   port.postMessage({ type: 'attestation', attestation: {} })

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, type Mock, vi } from 'vitest'
-import { claimRootWorker, dispatchPrefetch, rootWorker } from './registration.js'
+import { claimRootWorker, dispatchPrefetch, registerRootWorker } from './registration.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -66,7 +66,7 @@ it('uses dispatch acknowledgement when another document retains an activating wo
   const root = registration(`${ORIGIN}/`, { active })
   install(root)
   // No statechange will arrive, as in the concurrent WebKit popup failure.
-  await dispatchPrefetch(await rootWorker(), 'google/1')
+  await dispatchPrefetch(await registerRootWorker(), 'google/1')
   expect(active.postMessage).toHaveBeenCalledWith(
     { type: 'ceremony-prefetch', profile: 'google/1' },
     expect.any(Array),
@@ -77,7 +77,7 @@ it('waits for an installing update to become active instead of using the old wor
   const worker = serviceWorker('installing')
   const root = registration(`${ORIGIN}/`, { active: {}, installing: worker })
   install(root)
-  const ready = rootWorker()
+  const ready = registerRootWorker()
   let settled = false
   void ready.then(() => {
     settled = true
@@ -96,7 +96,7 @@ it('observes activation when a concurrent popup loses worker statechange notific
   const root = registration(`${ORIGIN}/`, { installing: worker })
   install(root)
   const activated = vi.fn()
-  const ready = rootWorker().then(activated)
+  const ready = registerRootWorker().then(activated)
   await vi.advanceTimersByTimeAsync(0)
   // Chromium updates these objects without always delivering statechange.
   Object.assign(root, { active: worker, installing: null })
@@ -110,7 +110,7 @@ it('observes activation when a concurrent popup loses worker statechange notific
 it('bounds activation and releases timers when installation stalls', async () => {
   vi.useFakeTimers()
   install(registration(`${ORIGIN}/`, { installing: serviceWorker('installing') }))
-  const failed = expect(rootWorker()).rejects.toThrow('Service Worker activation timed out')
+  const failed = expect(registerRootWorker()).rejects.toThrow('Service Worker activation timed out')
   await vi.advanceTimersByTimeAsync(15000)
   await failed
   expect(vi.getTimerCount()).toBe(0)
@@ -134,7 +134,7 @@ it('registers the root module worker and retires only the legacy scope running i
     registration(`${ORIGIN}/ccdp/v1/`),
   ]
   const container = install(root, [root, legacy, ...kept])
-  await expect(rootWorker()).resolves.toBe(root)
+  await expect(registerRootWorker()).resolves.toBe(root)
   expect(container.register).toHaveBeenCalledExactlyOnceWith('/ccdp/v1/worker.js', {
     scope: '/',
     type: 'module',
@@ -158,7 +158,7 @@ it.each([
   ],
 ])('rejects %s', async (_, current, reason) => {
   install(current)
-  await expect(rootWorker()).rejects.toThrow(reason)
+  await expect(registerRootWorker()).rejects.toThrow(reason)
 })
 
 it('rejects an invalid dispatch acknowledgement', async () => {

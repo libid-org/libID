@@ -2,15 +2,17 @@ import { readFileSync } from 'node:fs'
 import { findPackageJSON } from 'node:module'
 import { dirname, extname, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
-import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.js'
+import * as headers from '../src/assets/headers.ts'
+import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.ts'
+import { assetKey, profileKey } from '../src/assets/keys.ts'
 import { SRS_POINTS } from '../src/barretenberg/parameters.ts'
-import * as headers from '../src/ccdp/headers.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
-import { assetPlugin } from './asset-plugin.ts'
+import { assetPlugin } from './assetPlugin.ts'
+import { importSource } from './bundle.ts'
 import { validateCircuitCapacity } from './circuits.ts'
-import { isolatedWorkers, parseCsp, responseHeaders } from './profiles.ts'
-import { importSource } from './source.ts'
+import { parseCsp } from './profiles.ts'
 import { hash, packageDir, readSource } from './sources.ts'
+import type { PublicRecord } from './sws.ts'
 
 export function loadAssetCatalog() {
   return importSource<{
@@ -24,13 +26,14 @@ const mediaTypes: Readonly<Record<string, string>> = {
   '.mjs': headers.javascript['Content-Type'],
   '.wasm': headers.wasm['Content-Type'],
   '.json': headers.json['Content-Type'],
-  '.html': headers.document['Content-Type'],
+  '.html': headers.documentHeaders['Content-Type'],
 }
 
 export const mediaType = (path: string): string =>
   mediaTypes[extname(path)] ?? 'application/octet-stream'
 
-export function assetHeaders(path: string, policy: Readonly<Record<string, string>> = {}) {
+/** Declared headers are well-formed, unique and leave representation metadata to SWS. */
+export function checkDeclaredHeaders(policy: Readonly<Record<string, string>>): void {
   const seen = new Set<string>()
   for (const [name, value] of Object.entries(policy)) {
     const lower = name.toLowerCase()
@@ -45,6 +48,10 @@ export function assetHeaders(path: string, policy: Readonly<Record<string, strin
     if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(name) || /[\r\n\0]/.test(value))
       throw new Error('Invalid header')
   }
+}
+
+export function assetHeaders(path: string, policy: Readonly<Record<string, string>> = {}) {
+  checkDeclaredHeaders(policy)
   const merged = new Headers({ ...headers.immutable, 'Content-Type': mediaType(path) })
   for (const [name, value] of Object.entries(policy)) merged.set(name, value)
   for (const [name, value] of Object.entries(headers.immutable))
@@ -111,17 +118,11 @@ function installedFile(source: string): Buffer {
   return readFileSync(join(dirname(manifest), safePath(path.slice(pkg.length + 1))))
 }
 
-/** The key of a local asset's built URL in `urls`, as the runtime assetUrl looks it up. */
-export const assetKey = (asset: LocalAsset) => `${asset.mount}/${asset.member ?? ''}`
-
-/** Short namespace for immutable worker execution policies; not source integrity. */
-const POLICY_HASH_HEX_CHARS = 12
-
 export async function resolveAssets() {
   const catalog = await loadAssetCatalog()
   const profiles = Object.fromEntries(
     Object.entries(catalog.assetsByPlatform).flatMap(([p, vs]) =>
-      Object.entries(vs).map(([v, as]) => [`${p}/${v}`, as]),
+      Object.entries(vs).map(([v, as]) => [profileKey(p, v), as]),
     ),
   )
   const declarations = Object.values(profiles).flat()
@@ -129,7 +130,7 @@ export async function resolveAssets() {
   const urls: Record<string, string> = {},
     moduleUrls: Record<string, string> = {},
     bodyHashes: Record<string, string> = {}
-  const local = new Map<string, { bytes: Buffer; headers: Record<string, string> }>(),
+  const local = new Map<string, PublicRecord>(),
     mounts = new Map<string, string>()
   const register = (path: string, bytes: Buffer, policy: Record<string, string>) => {
     const old = local.get(path)
@@ -179,12 +180,7 @@ export async function resolveAssets() {
   )
   await validateCircuitCapacity(circuits, SRS_POINTS)
   for (const [path, { bytes }] of local) bodyHashes[path] = hash(bytes)
-  // Bundled code changes URL when its execution policy changes, even if its code does not.
-  const policyId = hash(
-    JSON.stringify(isolatedWorkers.map((profile) => responseHeaders(profile))),
-  ).slice(0, POLICY_HASH_HEX_CHARS)
   return {
-    policyId,
     urls,
     moduleUrls,
     profiles,

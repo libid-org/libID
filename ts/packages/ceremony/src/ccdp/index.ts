@@ -1,29 +1,26 @@
+// Pure CCDP codecs: shape and bounds validation only; transport authentication belongs to popup.
 import type { Message, MessageType } from '@libid/popup'
-import { MAX_MESSAGE_BYTES } from '../errors.js'
-import { type OperationEvent, validateEvent } from '../events.js'
-import { isPkceValue, MAX_CEREMONY_VERSION } from '../platforms/authorization.js'
+import { isCoreEvent, type OperationEvent } from '../events.js'
+import { isPkceValue } from '../platforms/authorization.js'
 import {
   hasExactKeys,
+  isOrigin,
   isRecord,
   isSlug,
-  origin,
+  isText,
+  isUint,
+  isWebUrl,
   type Predicates,
   recordValidator,
-  text,
-  uint,
-  webUrl,
 } from '../primitives.js'
 import {
+  MAX_CEREMONY_VERSION,
   MAX_CLIENT_CREDENTIAL_BYTES,
   MAX_CLIENT_ID_BYTES,
+  MAX_FAILURE_TEXT_BYTES,
   MAX_IDENTITY_TEXT_BYTES,
   MAX_REDIRECT_URI_BYTES,
 } from './limits.js'
-
-/** Pure CCDP codecs: shape and bounds validation only; transport authentication belongs to popup. */
-export const CCDP_VERSION = 1
-
-export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 /** Public OAuth application credential: bounded like clientId, without whitespace or control bytes. */
 export const isClientCredential = (value: unknown): value is string =>
@@ -31,8 +28,8 @@ export const isClientCredential = (value: unknown): value is string =>
   value.length <= MAX_CLIENT_CREDENTIAL_BYTES &&
   /^[\x21-\x7e]+$/.test(value)
 
-export function redirect(value: unknown): value is string {
-  return text(value, MAX_REDIRECT_URI_BYTES) && webUrl(value) && !/[?#]/.test(value)
+export function isRedirectUri(value: unknown): value is string {
+  return isText(value, MAX_REDIRECT_URI_BYTES) && isWebUrl(value) && !/[?#]/.test(value)
 }
 
 /** Shared identity shape; each platform slice checks its own platform ID and byte limits. */
@@ -40,15 +37,13 @@ function isIdentityShape(value: unknown): value is IdentityProof['identity'] {
   return (
     hasExactKeys(value, ['platformId', 'oauthClientId', 'userId', 'userName']) &&
     isSlug(value.platformId) &&
-    text(value.oauthClientId, MAX_CLIENT_ID_BYTES) &&
-    text(value.userId, MAX_IDENTITY_TEXT_BYTES) &&
-    text(value.userName, MAX_IDENTITY_TEXT_BYTES)
+    isText(value.oauthClientId, MAX_CLIENT_ID_BYTES) &&
+    isText(value.userId, MAX_IDENTITY_TEXT_BYTES) &&
+    isText(value.userName, MAX_IDENTITY_TEXT_BYTES)
   )
 }
 
-type Fields<M extends Message> = {
-  readonly [K in Exclude<keyof M, 'type'>]-?: (value: unknown) => boolean
-}
+type Fields<M extends Message> = Readonly<Predicates<Omit<M, 'type'>>>
 
 /** Exact keys and one predicate per field; optional fields are checked only when present. */
 function codec<M extends Message>(
@@ -79,7 +74,7 @@ export interface CeremonyFailed {
 
 export const CeremonyFailed = codec<CeremonyFailed>('ceremony-failed', {
   event: isSlug,
-  message: (value) => text(value, MAX_MESSAGE_BYTES),
+  message: (value) => isText(value, MAX_FAILURE_TEXT_BYTES),
 })
 
 /** Application-owned inputs only; raw OAuth returns remain private to Callback and Prover. */
@@ -98,15 +93,59 @@ export const ProveIdentity = codec<ProveIdentity>(
   'prove-identity',
   {
     platformId: isSlug,
-    platformCeremonyVersion: (value) => uint(value, MAX_CEREMONY_VERSION),
-    clientId: (value) => text(value, MAX_CLIENT_ID_BYTES),
-    redirectUri: redirect,
+    platformCeremonyVersion: (value) => isUint(value, MAX_CEREMONY_VERSION),
+    clientId: (value) => isText(value, MAX_CLIENT_ID_BYTES),
+    redirectUri: isRedirectUri,
     codeVerifier: (value) => value === null || isPkceValue(value),
-    notaryAddress: (value) => value === null || origin(value),
+    notaryAddress: (value) => value === null || isOrigin(value),
     clientCredential: isClientCredential,
   },
   ['clientCredential'],
 )
+
+/** Bounded instrumentation payloads; text bounds are UTF-8 bytes. */
+const MAX_OPERATION_ID_BYTES = 64
+const MAX_EVENT_ATTRIBUTES = 16
+const MAX_ATTRIBUTE_TEXT_BYTES = 128
+
+/** Exact bounded records are validated at the transport boundary, independently of subscriptions. */
+function validateEvent(value: unknown): asserts value is OperationEvent {
+  if (
+    !hasExactKeys(value, ['event', 'timestamp'], ['phase', 'instrumentation']) ||
+    !isSlug(value.event) ||
+    typeof value.timestamp !== 'number' ||
+    !Number.isFinite(value.timestamp) ||
+    value.timestamp < 0 ||
+    ('phase' in value && value.phase !== 'started' && value.phase !== 'finished')
+  )
+    throw new TypeError('Invalid operation event')
+  const core = isCoreEvent(value.event)
+  if (core && (value.event === 'prover-fallback' ? 'phase' in value : !('phase' in value)))
+    throw new TypeError('Invalid core event phase')
+  if ('instrumentation' in value) validateInstrumentation(value.instrumentation, core)
+}
+
+/** Core events carry no operation ID; attributes are a few scalar measurements. */
+function validateInstrumentation(metadata: unknown, core: boolean): void {
+  if (
+    !hasExactKeys(metadata, [], ['operationId', 'attributes']) ||
+    ('operationId' in metadata && (!isText(metadata.operationId, MAX_OPERATION_ID_BYTES) || core))
+  )
+    throw new TypeError('Invalid event instrumentation')
+  const { attributes } = metadata
+  if (
+    'attributes' in metadata &&
+    (!isRecord(attributes) ||
+      Object.keys(attributes).length > MAX_EVENT_ATTRIBUTES ||
+      Object.entries(attributes).some(([key, value]) => !isSlug(key) || !isAttributeValue(value)))
+  )
+    throw new TypeError('Invalid event attributes')
+}
+
+const isAttributeValue = (value: unknown): boolean =>
+  typeof value === 'boolean' ||
+  (typeof value === 'number' && Number.isFinite(value)) ||
+  isText(value, MAX_ATTRIBUTE_TEXT_BYTES)
 
 /** One event envelope for coordination and observations; it never declares ceremony success. */
 export type EventMessage = { type: 'event' } & OperationEvent

@@ -8,8 +8,8 @@ import {
   deriveCodeVerifier,
 } from '../src/platforms/authorization.js'
 import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { type: 'json' }
-import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
-import type { GoogleProofV1 } from '../src/platforms/google/1/types.js'
+import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
+import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
 import type { PlatformId } from '../src/platforms/index.js'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'
 import { type BrowserPlatform, browserPlatforms, platformIds } from './platforms.js'
@@ -112,10 +112,9 @@ const evidence = {
         )
         expect(bearer).toHaveLength(1)
         expect(identity.sent.commitments).toHaveLength(1)
-        const publicInputs = [
-          ...bearer[0].commitment,
-          ...identity.sent.commitments[0].commitment,
-        ].map((byte) => `0x${byte.toString(16).padStart(64, '0')}`)
+        const publicInputs = [...bearer[0].hash, ...identity.sent.commitments[0].hash].map(
+          (byte) => `0x${byte.toString(16).padStart(64, '0')}`,
+        )
         await verifyBrowserProof('bearer_link', { proof: result.proof, publicInputs })
       }
     },
@@ -159,7 +158,7 @@ const evidence = {
         if (corrupt) signature[signature.length - 1] ^= 1
         return {
           id_token: `${signed}.${signature.toString('base64url')}`,
-          // Provider metadata the return profile does not interpret must pass through.
+          // Provider metadata the return rules do not interpret must pass through.
           version_info: 'synthetic',
           provider_meta: 'future',
           'release.rev': '1',

@@ -1,5 +1,5 @@
-import { CeremonyStage, type Events, type StageEvent } from '../../events.js'
-import { messages } from '../ui-messages.js'
+import { CeremonyStage, type EventFeed, type StageEvent } from '../../events.js'
+import { messages } from '../uiMessages.js'
 import { proofProgress } from './progress.js'
 
 const SLOW_PROVING_HINT_MS = 15000
@@ -28,13 +28,15 @@ function stageLabel(event: StageEvent): string {
   if (event.status === 'active') return CeremonyStage.message(event.stage, '')
   if (event.status === 'completed') return messages.proofReceived
   if (event.status === 'denied') return messages.returnToApplication(messages.authorizationDeclined)
-  return messages.returnToApplication(
-    event.message ?? (event.status === 'closed' ? messages.interrupted : messages.failed),
-  )
+  // Failed and closed updates always carry their display text.
+  return messages.returnToApplication(event.message ?? messages.failed)
 }
 
+/** The handle a document drives its package-owned UI through. */
+export type DocumentView = ReturnType<typeof eventView>
+
 /** The same local projection as the Application; subscriptions never mediate wire delivery. */
-export function eventView(events: Events) {
+export function eventView(feed: EventFeed) {
   const { root, label } = view(messages.preparation)
   const bar = document.createElement('progress')
   bar.setAttribute('aria-label', messages.progress)
@@ -52,13 +54,9 @@ export function eventView(events: Events) {
     hint.remove()
     style.remove()
   }
-  const off = events.onStage((event) => {
-    if (
-      event.status === 'active' &&
-      event.stage !== 'preparation' &&
-      event.stage !== 'authorization' &&
-      timer === undefined
-    )
+  const off = feed.onStage((event) => {
+    // Documents project no authorization stage: past preparation is proving work.
+    if (event.status === 'active' && event.stage !== 'preparation' && timer === undefined)
       timer = setTimeout(() => {
         hint.textContent = messages.slowProving
         root.append(hint)
@@ -77,7 +75,7 @@ export function eventView(events: Events) {
       bar.value = 0
       root.append(style)
       const progress = proofProgress(weights)
-      offProgress = events.onEvent((event) => {
+      offProgress = feed.onEvent((event) => {
         const value = progress(event)
         if (value !== undefined) bar.value = value
       })

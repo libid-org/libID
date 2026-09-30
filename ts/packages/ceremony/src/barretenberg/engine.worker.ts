@@ -3,7 +3,7 @@ import { bytesToHex } from '@noble/hashes/utils.js'
 import initACVM from '@noir-lang/acvm_js'
 import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
-import { ceremonyError, errorMessage } from '../errors.js'
+import { errorMessage, toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
 import { FIELD_BYTES, PROVING_SETTINGS, SRS_POINTS } from './parameters.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
@@ -46,11 +46,12 @@ function destroyBackend(): Promise<void> {
 
 function fail(error: unknown): void {
   if (state === 'done') return
+  const event = state === 'proving' ? 'zk-proof-generation' : 'zk-proof-preparation'
   state = 'done'
   ready = null
   // Also releases a backend that finishes initializing after a sibling failed.
   void destroyBackend().catch(() => {})
-  const failure = ceremonyError(error, 'zk-proof-generation')
+  const failure = toCeremonyError(error, event)
   send({ type: 'error', message: errorMessage(failure), event: failure.event })
 }
 
@@ -152,7 +153,8 @@ async function prove(message: Extract<ToWorker, { type: 'prove' }>): Promise<voi
     runtime: runtime!,
   }
   emit({ event: 'zk-proof-generation', phase: 'finished', timestamp: now() })
-  await span('proof-backend-destroy', destroyBackend)
+  // The proof is finished; failing to release the backend cannot take it back.
+  await span('proof-backend-destroy', destroyBackend).catch(() => {})
   if (state !== 'proving') return
   ready = null
   state = 'done'

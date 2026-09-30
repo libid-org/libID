@@ -112,17 +112,21 @@ it('cancels an early witness, terminates the worker and ignores late delivery [L
   expect(e.terminate).toHaveBeenCalledOnce()
 })
 
-it('rejects an already-aborted proof without dispatching its inputs', async () => {
+it('rejects an already-aborted proof without dispatching its inputs or finishing preparation', async () => {
   const e = engine()
+  e.send({ type: 'backend-ready', timestamp: 2 })
   const reason = new Error('Ceremony closed')
   await expect(e.instance.prove({ fixture: 1 }, AbortSignal.abort(reason))).rejects.toMatchObject({
-    event: 'zk-proof-generation',
+    event: 'zk-proof-preparation',
     message: 'Ceremony closed',
   })
   e.send({ type: 'witness-ready' })
   await Promise.resolve()
   expect(e.postMessage).toHaveBeenCalledTimes(1)
   expect(e.terminate).toHaveBeenCalledOnce()
+  expect(e.events).not.toContainEqual(
+    expect.objectContaining({ event: 'zk-proof-preparation', phase: 'finished' }),
+  )
 })
 
 it('delivers one proof, rejects a second request and ignores messages after settlement', async () => {
@@ -201,7 +205,7 @@ it.each([
   const e = engine()
   const result = e.instance.prove({ fixture: 1 })
   e.send(message)
-  await expect(result).rejects.toMatchObject({ event: 'zk-proof-generation', message: reason })
+  await expect(result).rejects.toMatchObject({ event: 'zk-proof-preparation', message: reason })
   expect(e.terminate).toHaveBeenCalledOnce()
 })
 
@@ -233,7 +237,7 @@ it('reports an uncaught worker error without its source location', async () => {
     lineno: 7,
   })
   await expect(result).rejects.toMatchObject({
-    event: 'zk-proof-generation',
+    event: 'zk-proof-preparation',
     message: 'Uncaught Error: bb',
   })
   expect(e.terminate).toHaveBeenCalledOnce()
@@ -244,7 +248,7 @@ it('reports a generic failure for an uncaught worker error without a message', a
   const result = e.instance.prove({ fixture: 1 })
   e.crash({ message: '' })
   await expect(result).rejects.toMatchObject({
-    event: 'zk-proof-generation',
+    event: 'zk-proof-preparation',
     message: 'proof worker failed',
   })
 })

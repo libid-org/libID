@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest'
-import { fetchPlatformVersions, VERSIONS_PATH, validatePlatformVersions } from './versions.js'
+import { VERSIONS_PATH } from '../../assets/keys.js'
+import { fetchPlatformVersions, validatePlatformVersions } from './versions.js'
 
 it('accepts ascending unsigned 16-bit lists under any platform key and freezes them [KIT-023]', () => {
   const versions = validatePlatformVersions({ google: [1], x: [0, 65535], future: [3, 7] })

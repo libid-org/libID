@@ -8,8 +8,5 @@ export {
 
 export * from '../../index.js'
 
-export {
-  type CCDPClient,
-  type Ceremony,
-  createCCDPClient,
-} from './ceremony.js'
+export type { Ceremony } from './ceremony.js'
+export { type CCDPClient, createCCDPClient } from './client.js'

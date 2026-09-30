@@ -1,22 +1,39 @@
-import { dirname, join, posix } from 'node:path'
+import { dirname, join, posix, relative } from 'node:path'
 import type { NewExpression } from 'estree'
 import type { Plugin, Rollup } from 'vite'
 import { build } from 'vite'
-import { type AssetManifest, assetPlugin } from './asset-plugin.ts'
+import { type AssetManifest, assetPlugin } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { applyEdits, type Edit, parseModule, replacement, walk } from './ast.ts'
-import { consumeInput } from './input.ts'
+import { consumeFragment } from './fragment.ts'
 import { popupFallback } from './popup.ts'
+import { policyId, workerUrl } from './profiles.ts'
 import { hash, packageDir } from './sources.ts'
+
+/**
+ * Import a `src` module into this Node process. The sources resolve one another
+ * through `.js` specifiers, which only the bundler maps back to `.ts`, so the
+ * module is compiled into one self-contained chunk and loaded from a data URL.
+ */
+export async function importSource<T>(entry: string, plugins: Plugin[] = []): Promise<T> {
+  const result = await build({
+    configFile: false,
+    logLevel: 'silent',
+    plugins,
+    build: { write: false, minify: false, lib: { entry, formats: ['es'] } },
+  })
+  const output = ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output
+  const code = output.find((o) => o.type === 'chunk')!
+  return (await import(
+    `data:text/javascript;base64,${Buffer.from(code.code).toString('base64')}`
+  )) as T
+}
 
 export type BundleNode = {
   entry: string | null
   modules: string[]
   dependencies: string[]
 }
-
-/** Vite's worker-URL import query; graph modules carry it as their id suffix. */
-export const workerUrl = '?worker&url'
 
 /** A plugin named `name` serving `code` as the module `virtual:<name>`. */
 const virtualModule = (name: string, code: string): Plugin => ({
@@ -102,15 +119,15 @@ export async function bundle(
   {
     selfContained = false,
     invoke,
-    input = false,
+    fragment = false,
     groupModules = true,
     manifest,
   }: {
     /** One inlined chunk without module groups or imports. */
     selfContained?: boolean
-    /** The entry export the generated entry starts, with the captured input when `input`. */
+    /** The entry export the generated entry starts, with the captured launch fragment when `fragment`. */
     invoke?: string
-    input?: boolean
+    fragment?: boolean
     groupModules?: boolean
     manifest?: AssetManifest
   } = {},
@@ -121,7 +138,8 @@ export async function bundle(
     name: 'ceremony-emitted-graph',
     generateBundle(_, output) {
       for (const item of Object.values(output)) {
-        if (worker) workerFiles.add(item.fileName)
+        // Only a worker build's own entry runs as a worker; its other chunks are modules.
+        if (worker && item.type === 'chunk' && item.isEntry) workerFiles.add(item.fileName)
         if (item.type === 'chunk')
           graph.set(item.fileName, {
             entry: item.facadeModuleId,
@@ -136,7 +154,7 @@ export async function bundle(
       }
     },
   })
-  const start = input ? consumeInput(invoke!) : `${invoke}()`
+  const start = fragment ? consumeFragment(invoke!) : `${invoke}()`
   const plugins = (worker: boolean) => [
     workerImports(),
     virtualModule(
@@ -156,9 +174,9 @@ export async function bundle(
   const assetName = (asset: Rollup.PreRenderedAsset) => {
     const digest = hash(asset.source)
     const owned = Object.entries(data.bodyHashes).find(([, bodyHash]) => bodyHash === digest)
-    return owned ? owned[0].slice(1) : `ccdp/assets/${data.policyId}/[name]-[hash][extname]`
+    return owned ? owned[0].slice(1) : `ccdp/assets/${policyId}/[name]-[hash][extname]`
   }
-  const chunkName = `ccdp/assets/${data.policyId}/[name]-[hash].js`,
+  const chunkName = `ccdp/assets/${policyId}/[name]-[hash].js`,
     output = { entryFileNames: chunkName, chunkFileNames: chunkName, assetFileNames: assetName }
   const result = await build({
     configFile: false,
@@ -187,16 +205,25 @@ export async function bundle(
             selfContained || !groupModules
               ? undefined
               : (id) => {
-                  if (id.includes('/src/barretenberg/')) return 'proof-engine'
-                  if (id.includes('/src/notary/')) return 'notary'
+                  // Classify by package path: the checkout's own path may contain `/src/`.
+                  const path = relative(packageDir, id)
+                  // Circuits follow the platforms that import them, as platform modules do.
+                  if (path.startsWith('src/barretenberg/circuits/')) return
+                  if (path.startsWith('src/barretenberg/')) return 'proof-engine'
+                  // The catalog validates attestations with the decoder and its constants;
+                  // only the notary runtime stays in a chunk that a profile without it skips.
+                  if (
+                    path.startsWith('src/notary/') &&
+                    !/^src\/notary\/(decode|limits|protocol)\.ts$/.test(path)
+                  )
+                    return 'notary'
                   // Platform modules, the prover table among them, stay out of the shared
                   // chunk: on a chunk every prover imports, the table would put every
                   // prover in every profile's set.
                   if (
-                    id.includes('/src/') &&
-                    !id.includes('/platforms/') &&
-                    !id.includes('/src/ccdp/documents/prover.ts') &&
-                    !id.includes('/popup/')
+                    path.startsWith('src/') &&
+                    !path.startsWith('src/platforms/') &&
+                    path !== 'src/ccdp/documents/prover.ts'
                   )
                     return 'shared'
                 },

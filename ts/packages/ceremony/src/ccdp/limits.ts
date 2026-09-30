@@ -1,3 +1,9 @@
+/** Platform ceremony versions are unsigned 16-bit: the authorization digest's U16BE field. */
+export const MAX_CEREMONY_VERSION = 0xffff
+
+/** UTF-8 bound on displayable failure text, including `CeremonyFailed.message`. */
+export const MAX_FAILURE_TEXT_BYTES = 2048
+
 /** UTF-8 bounds shared by CCDP codecs and platform admission. */
 export const MAX_CLIENT_ID_BYTES = 512
 export const MAX_CLIENT_CREDENTIAL_BYTES = MAX_CLIENT_ID_BYTES

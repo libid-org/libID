@@ -1,7 +1,7 @@
 import { assetUrl } from '../assets/index.js'
-import { ceremonyError } from '../errors.js'
-import { now, type OperationEvent } from '../events.js'
-import { safeEmit, workerThreads } from '../workers.js'
+import { toCeremonyError } from '../errors.js'
+import { now, type OperationEvent, safeEmit } from '../events.js'
+import { workerThreads } from '../threads.js'
 import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
@@ -23,7 +23,10 @@ export class ProofEngine {
   #preload?: Preload
   /** Set by the single `prove` call; preparation finishes once inputs and backend are ready. */
   #inputsAt?: number
+  /** Set by the worker's `backend-ready` message. */
   #backendAt?: number
+  /** Generation starts once the inputs are posted, when the worker starts it too. */
+  #generating = false
   #phase: 'preparing' | 'prepared' | 'settled' = 'preparing'
   /** Witness readiness and the proof; both reject with the engine's failure. */
   readonly #ready = Promise.withResolvers<void>()
@@ -63,13 +66,14 @@ export class ProofEngine {
   async prove(inputs: Record<string, unknown>, signal?: AbortSignal): Promise<RawProof> {
     if (this.#inputsAt !== undefined) throw new Error('proof engine is single-use')
     this.#inputsAt = now()
-    this.#finishPreparation()
     const abort = () =>
       this.#fail(signal?.reason ?? new DOMException('Proving aborted', 'AbortError'))
     signal?.addEventListener('abort', abort, { once: true })
     if (signal?.aborted) abort()
+    this.#finishPreparation()
     try {
       await this.#ready.promise
+      this.#generating = true
       try {
         this.#worker?.postMessage({ type: 'prove', inputs } satisfies ToWorker)
       } catch (error) {
@@ -128,7 +132,7 @@ export class ProofEngine {
         this.#result.resolve(message.result)
         break
       case 'error':
-        this.#fail(ceremonyError(message.message, message.event))
+        this.#fail(toCeremonyError(message.message, message.event))
         break
       default:
         this.#fail('unexpected proof worker message')
@@ -154,9 +158,9 @@ export class ProofEngine {
     if (this.#phase === 'settled') return
     this.#phase = 'settled'
     this.#worker?.terminate()
-    const error = ceremonyError(
+    const error = toCeremonyError(
       reason,
-      this.#inputsAt === undefined ? 'zk-proof-preparation' : 'zk-proof-generation',
+      this.#generating ? 'zk-proof-generation' : 'zk-proof-preparation',
     )
     this.#ready.reject(error)
     this.#result.reject(error)

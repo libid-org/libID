@@ -11,7 +11,7 @@ and export are deferred; this guide preserves their required measurement rules.
 
 [events.ts](../src/events.ts) owns occurrences, subscriptions, terminal status and
 monotonic stage projection. [Barretenberg events](../src/barretenberg/events.ts)
-and each platform's `events.ts` own additional operations and separate progress
+and each platform's `events.ts` (X/GitHub share bearer-link's) own additional operations and separate progress
 weights. Platform provers use `operation()` or explicit start/finish emission
 around concurrent branches. Failed operations need not fabricate a finish.
 

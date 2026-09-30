@@ -11,11 +11,11 @@ import { errorHeaders, nativeSkip } from './sws.ts'
 import { catalogVersions, proverPair, versionPairs } from './versions.ts'
 
 const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
-  graph: DistributionMetadata = JSON.parse(
+  metadata: DistributionMetadata = JSON.parse(
     readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
   )
 
-test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-PROVER-005]', () => {
+test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-ASSET-012] [LIBID-PROVER-005]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
   assert.equal((config.general as TomlTable)['text-charset'], false)
   assert.equal(Object.hasOwn(config.general as object, 'port'), false)
@@ -30,17 +30,19 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
   for (const rule of exact) assert.doesNotMatch(rule.source, /[*?[\]{}]/, rule.source)
   assert.deepEqual(
     new Map(exact.map((rule) => [rule.source, rule.headers])),
-    new Map(Object.entries(graph.files).map(([path, physical]) => [physical, graph.headers[path]])),
+    new Map(
+      Object.entries(metadata.files).map(([path, physical]) => [physical, metadata.headers[path]]),
+    ),
   )
-  assert.equal(exact.length, Object.keys(graph.files).length)
+  assert.equal(exact.length, Object.keys(metadata.files).length)
   assert.deepEqual(
-    graph.headers['/404.html'],
+    metadata.headers['/404.html'],
     Object.fromEntries(
       new Headers({ 'Content-Type': 'text/html; charset=utf-8', ...errorHeaders }),
     ),
   )
-  for (const [path, headers] of Object.entries(graph.headers)) {
-    const physical = graph.files[path],
+  for (const [path, headers] of Object.entries(metadata.headers)) {
+    const physical = metadata.files[path],
       body = readFileSync(join(out, 'public', physical))
     for (const name of [
       'etag',
@@ -58,9 +60,9 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
       if (existsSync(sidecar)) assert.deepEqual(decode(readFileSync(sidecar)), body)
     }
   }
-  const google = graph.requestsByProfile['google/1'],
-    x = graph.requestsByProfile['x/1'],
-    github = graph.requestsByProfile['github/1']
+  const google = metadata.requestsByProfile['google/1'],
+    x = metadata.requestsByProfile['x/1'],
+    github = metadata.requestsByProfile['github/1']
   for (const [list, name] of [
     [google, 'oidc-google'],
     [x, 'bearer-link'],
@@ -87,13 +89,22 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
     assert.ok(existsSync(join(out, 'public', `${wasm.url}.${extension}`)))
   assert.ok(!google.some((r) => r.url.includes('tlsn')))
   assert.ok(x.some((r) => r.url.endsWith('/tlsn_wasm.js')))
+  // Code follows the same split: a profile loads its own platform's prover only, and a profile
+  // without the notary client loads none of the notary runtime.
+  const modules = (list: typeof google) =>
+    list.flatMap((r) => metadata.graph[r.url.slice(1)]?.modules ?? [])
+  for (const [profile, list] of Object.entries(metadata.requestsByProfile))
+    assert.deepEqual([...new Set(modules(list).map(proverPair).filter(Boolean))], [profile])
+  assert.ok(!modules(google).some((m) => m.includes('/src/notary/session')))
+  for (const list of [x, github])
+    assert.ok(modules(list).some((m) => m.includes('/src/notary/session')))
   assert.ok(!google.some((r) => r.url.endsWith('/bearer_link.json')))
   assert.ok(!x.some((r) => r.url.endsWith('/oidc_google.json')))
   assert.deepEqual(
     x.filter((r) => r.url.startsWith('https:')),
     github.filter((r) => r.url.startsWith('https:')),
   )
-  for (const list of Object.values(graph.requestsByProfile)) {
+  for (const list of Object.values(metadata.requestsByProfile)) {
     assert.equal(new Set(list.map((r) => `${r.url}\n${r.range ?? ''}`)).size, list.length)
     for (const request of list.filter((r) => r.url.startsWith('/')))
       assert.equal(readFileSync(join(out, 'public', request.url)).length, request.bytes)
@@ -103,28 +114,31 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
 
 test('versions.json names the bundled platform ceremony versions, readable from any origin under the Callback cache policy [KIT-023] [LIBID-ASSET-008]', async () => {
   const path = '/ccdp/versions.json'
-  const body = readFileSync(join(out, 'public', graph.files[path]), 'utf8')
+  const body = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
   const versions: Record<string, number[]> = JSON.parse(body)
-  assert.equal(graph.files[path], path)
-  assert.deepEqual(graph.headers[path], {
+  assert.equal(metadata.files[path], path)
+  assert.deepEqual(metadata.headers[path], {
     'content-type': 'application/json; charset=utf-8',
     'x-content-type-options': 'nosniff',
-    'cache-control': graph.headers['/ccdp/callback.html']['cache-control'],
+    'cache-control': metadata.headers['/ccdp/callback.html']['cache-control'],
     'access-control-allow-origin': '*',
     'cross-origin-resource-policy': 'cross-origin',
   })
-  assert.equal(graph.headers[path]['cache-control'], 'no-cache')
+  assert.equal(metadata.headers[path]['cache-control'], 'no-cache')
   // The wildcard is the only CORS grant of the Distribution; nothing else is read cross-origin.
-  for (const [other, headers] of Object.entries(graph.headers))
+  for (const [other, headers] of Object.entries(metadata.headers))
     if (other !== path)
       assert.equal(new Headers(headers).has('Access-Control-Allow-Origin'), false, other)
   assert.equal(new Headers(errorHeaders).has('Access-Control-Allow-Origin'), false)
   // Exactly the pairs the Prover bundle executes, one emitted prover chunk and one asset
   // profile each, as one compact object in catalog order.
-  const prover = Object.values(graph.graph).flatMap((node) => proverPair(node.entry) ?? [])
+  const prover = Object.values(metadata.graph).flatMap((node) => proverPair(node.entry) ?? [])
   assert.ok(prover.length)
   assert.deepEqual(new Set(versionPairs(versions)), new Set(prover))
-  assert.deepEqual(new Set(versionPairs(versions)), new Set(Object.keys(graph.requestsByProfile)))
+  assert.deepEqual(
+    new Set(versionPairs(versions)),
+    new Set(Object.keys(metadata.requestsByProfile)),
+  )
   assert.equal(body, JSON.stringify(versions))
   // Exactly the catalog's platforms and versions, in catalog order.
   assert.deepEqual(Object.entries(versions), Object.entries(await catalogVersions()))
@@ -141,8 +155,8 @@ test('versions.json names the bundled platform ceremony versions, readable from 
 test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018] [TEST-DIST-01] [LIBID-ASSET-014] [KIT-023]', {
   skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
-  for (const [path, expected] of Object.entries(graph.headers)) {
-    const physical = graph.files[path]
+  for (const [path, expected] of Object.entries(metadata.headers)) {
+    const physical = metadata.files[path]
     // A document's route and its physical `.html` file answer alike; nothing declared redirects.
     for (const request of new Set([path, physical])) {
       const response = await fetch(process.env.CEREMONY_SWS_URL + request, {
@@ -193,7 +207,7 @@ test('actual SWS answers the health probe and serves every 404 with the error po
   // Error responses are matched on the raw request path, where only the catch-all applies: every
   // 404 carries exactly the error policy and no validator. `<file>/<name>` is the form a per-file
   // rule must never be keyed on; `/` must not serve the base image's placeholder index.
-  const asset = Object.keys(graph.headers).find((p) => /^\/ccdp\/assets\/.*\.js$/.test(p))!
+  const asset = Object.keys(metadata.headers).find((p) => /^\/ccdp\/assets\/.*\.js$/.test(p))!
   for (const path of [
     '/',
     '/nope',
@@ -227,7 +241,7 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   const { prepareCallback } = await import('../e2e/callback.ts')
   const path = '/ccdp/callback.html'
   const html = readFileSync(join(out, 'public', path), 'utf8')
-  const headers = graph.headers[path]
+  const headers = metadata.headers[path]
   const inputs = {
     allowedApplicationOrigins: ['https://app.test', 'https://ccdp.test'],
     ccdpOrigin: 'https://ccdp.test',
@@ -238,6 +252,7 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
     allowedApplicationOrigins: ['https://other.test', '</script><script>alert(1)</script>$&'],
   })
   assert.equal(a.headers['Content-Security-Policy'], b.headers['Content-Security-Policy'])
+  assert.equal(a.headers['Content-Security-Policy'], headers['content-security-policy'])
   assert.ok(b.body.includes('\\u003c/script>'))
   assert.ok(b.body.includes('$&'))
   assert.equal(a.headers['Cache-Control'], 'no-store')
@@ -255,17 +270,27 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   assert.throws(() =>
     prepareCallback(html, { ...headers, 'content-security-policy': "script-src 'self'" }, inputs),
   )
-  assert.equal(Object.hasOwn(graph.headers, '/ccdp/v1/callback.js'), false)
+  assert.equal(Object.hasOwn(metadata.headers, '/ccdp/v1/callback.js'), false)
+})
+
+test('only worker entry scripts carry worker isolation policies [LIBID-ASSET-001]', () => {
+  for (const [path, headers] of Object.entries(metadata.headers)) {
+    const node = metadata.graph[path.slice(1)]
+    // Prior immutable responses keep the policy they were published with.
+    if (!path.startsWith('/ccdp/assets/') || !node) continue
+    const worker = /\.worker\.[jt]s$/.test(node.entry ?? '')
+    assert.equal(Object.hasOwn(headers, 'cross-origin-embedder-policy'), worker, path)
+  }
 })
 
 test('CCDP contains no ledger implementation or build-time notary mapping [LIBID-ASSET-003]', () => {
-  const modules = Object.values(graph.graph).flatMap((node) => node.modules)
+  const modules = Object.values(metadata.graph).flatMap((node) => node.modules)
   assert.ok(!modules.some((path) => /\/ledger\//.test(path)))
-  assert.equal(Object.hasOwn(graph, 'ledgerFixture'), false)
-  for (const [path, headers] of Object.entries(graph.headers)) {
+  assert.equal(Object.hasOwn(metadata, 'ledgerFixture'), false)
+  for (const [path, headers] of Object.entries(metadata.headers)) {
     const policy = headers['content-security-policy'] ?? ''
     // Prior immutable responses remain available for already-open documents.
-    if (!path.startsWith('/ccdp/assets/') || Object.hasOwn(graph.graph, path.slice(1)))
+    if (!path.startsWith('/ccdp/assets/') || Object.hasOwn(metadata.graph, path.slice(1)))
       assert.ok(!policy.includes('notary.lib.id'), path)
     if (path === '/ccdp/v1/prover' || path === '/ccdp/v1/prover/fallback') {
       const sources = parseCsp(policy).get('connect-src')!
@@ -279,7 +304,7 @@ test('CCDP contains no ledger implementation or build-time notary mapping [LIBID
   }
 })
 
-test('native SWS negotiates representations, HEAD, conditional requests and ranges [LIBID-ASSET-026] [LIBID-ASSET-016] [KIT-001B] [KIT-023]', {
+test('actual SWS negotiates representations, HEAD, conditional requests and ranges [LIBID-ASSET-026] [LIBID-ASSET-016] [KIT-001B] [KIT-023]', {
   skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
   const { request } = await import('node:http')
@@ -304,18 +329,23 @@ test('native SWS negotiates representations, HEAD, conditional requests and rang
     '/ccdp/v1/prover/fallback',
     '/ccdp/v1/worker.js',
     '/ccdp/versions.json',
-    graph.requestsByProfile['google/1'].find((r) => r.url.endsWith('/barretenberg-threads.wasm'))!
-      .url,
-    ...Object.keys(graph.headers)
+    metadata.requestsByProfile['google/1'].find((r) =>
+      r.url.endsWith('/barretenberg-threads.wasm'),
+    )!.url,
+    ...Object.keys(metadata.headers)
       .filter((p) => /\.(js|wasm|json)$/.test(p) && p.startsWith('/ccdp/assets/'))
       .slice(0, 6),
   ]) {
-    const original = readFileSync(join(out, 'public', graph.files[path]))
+    const original = readFileSync(join(out, 'public', metadata.files[path]))
     for (const encoding of ['identity', 'br', 'gzip']) {
       const response = await raw(path, { 'Accept-Encoding': encoding })
       assert.equal(response.status, 200)
       assert.equal(response.headers.location, undefined)
-      const sidecar = join(out, 'public', `${graph.files[path]}.${encoding === 'br' ? 'br' : 'gz'}`)
+      const sidecar = join(
+        out,
+        'public',
+        `${metadata.files[path]}.${encoding === 'br' ? 'br' : 'gz'}`,
+      )
       const compressed = encoding !== 'identity' && existsSync(sidecar)
       assert.equal(response.headers['content-encoding'], compressed ? encoding : undefined)
       if (response.headers['content-length'] !== undefined)
@@ -352,8 +382,8 @@ test('native SWS negotiates representations, HEAD, conditional requests and rang
   }
 })
 
-test('browser graph contains resolved locations only [LIBID-MOD-021]', () => {
-  for (const path of Object.keys(graph.graph)) {
+test('browser metadata contains resolved locations only [LIBID-MOD-021]', () => {
+  for (const path of Object.keys(metadata.graph)) {
     const file = join(out, 'public', path)
     if (!existsSync(file)) continue // Embedded protocol entries have no separate script resource.
     const code = readFileSync(file, 'utf8')

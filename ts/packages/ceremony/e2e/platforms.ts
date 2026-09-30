@@ -3,7 +3,7 @@ import type { PlatformId } from '../src/platforms/index.js'
 
 /**
  * One catalog platform's controlled browser fixtures. Provider facts are stated here,
- * independently of the catalog's own return profile, so a changed profile fails the suite.
+ * independently of the catalog's own return rules, so changed rules fail the suite.
  */
 export interface BrowserPlatform {
   /** Registration the harness Bridge advertises. */
@@ -12,7 +12,7 @@ export interface BrowserPlatform {
   /** Authorization endpoint the popup must reach, and how the provider returns to Callback. */
   authorization: string
   returns: 'query' | 'fragment'
-  issuer?: string
+  authorizationIssuer?: string
   /** Whether the authorization request carries an S256 PKCE challenge. */
   pkce: boolean
   /** `jwt`: the signed Google v1 fixture token; `tlsn`: bearer-link with a fixture TLSN SDK/peer. */
@@ -44,7 +44,7 @@ const table = {
     clientCredential: 'fixture-public-credential',
     authorization: 'https://github.com/login/oauth/authorize',
     returns: 'query',
-    issuer: 'https://github.com/login/oauth',
+    authorizationIssuer: 'https://github.com/login/oauth',
     pkce: true,
     evidence: 'tlsn',
     notary: [{ sessions: 2, alongsideProving: true }],
@@ -55,7 +55,7 @@ export const browserPlatforms: { readonly [P in PlatformId]: BrowserPlatform } =
 
 export const platformIds = Object.keys(table) as PlatformId[]
 
-/** Platforms with real notary sessions; each needs an unauthenticated request in smoke.ts. */
+/** Platforms with real notary sessions; each needs an unauthenticated request in runtime.ts. */
 export type NotaryPlatform = {
   [P in PlatformId]: (typeof table)[P]['notary'] extends readonly [] ? never : P
 }[PlatformId]

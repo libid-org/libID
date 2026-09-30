@@ -11,7 +11,7 @@ Each layer replaces less than the one before it:
 
 | Layer | Command | Real | Replaced | CI |
 |---|---|---|---|---|
-| Unit and conformance | `test` | Package logic, validators, transcripts, witnesses | Browser, workers, network, TLSN runtime, proof engine | TypeScript |
+| Unit and conformance | `test` | Package logic, validators, transcripts, circuit inputs | Browser, workers, network, TLSN runtime, proof engine | TypeScript |
 | Distribution | `test:distribution` | The emitted artifact, its headers and pins; SWS when supplied | Nothing inside the artifact | CCDP image |
 | Browser | `test:e2e` | Browsers, popup, documents, Service Worker, assets, proving and released-key verification; notary in `runtime.spec.ts` | Providers and, outside the runtime suite, the TLSN peer | Browser tests |
 | Dev app | `apps/dev` `test:e2e` | The dev UI over the real popup transport | Ceremony documents, OAuth, proofs | Browser tests |
@@ -68,13 +68,13 @@ per-platform unit tests iterate `supportedPlatforms` and read one typed
 instead of naming platforms. A catalog entry without a fixture fails `typecheck`
 at that table. The entry supplies its OAuth registration/return rules, accepted identity and
 proof, independent expected values, failure vectors, events and prover kind.
-Bearer-link fixtures include transcripts and request profiles; OIDC fixtures
+Bearer-link fixtures include transcripts and request layouts; OIDC fixtures
 include the signed token, key and binding mutations. The fixture types own the
 full field list.
 
 The suite covers catalog discovery, authorization, validation, expiry and each
 prover's delivery, events, cancellation and cleanup. It preserves transcript,
-correlation and witness code while replacing the TLSN runtime and proof engine.
+correlation and circuit input code while replacing the TLSN runtime and proof engine.
 A new prover kind needs a fixture evidence shape, a shared-contract test stage
 and its own cases; type checking identifies missing registrations.
 
@@ -110,7 +110,7 @@ point SWS at that same artifact. To include the same-length ETag regression and 
 [header-matching canary](distribution.md#native-server-behavior), also set
 `CEREMONY_SWS_BINARY` to a locally runnable `static-web-server` from the
 [pinned release](https://github.com/static-web-server/static-web-server/releases/tag/v3.0.0-beta.1).
-Those tests start their own servers on `CEREMONY_SWS_TEST_PORT` (default 4988) and
+Those tests start their own servers on `CEREMONY_SWS_TEST_PORT` (default 4990) and
 the next port. These inputs are test-only. The workspace **CCDP image** CI job runs
 all of them against the freshly built image and the pinned binary, requiring them
 with `CEREMONY_REQUIRE_NATIVE=1`.
@@ -133,14 +133,14 @@ delivered proofs against the released key and, for bearer-link, the commitments
 in the final fixture attestations. The separate runtime suite exercises real
 TLSN/notary sessions. Neither substitutes for live consent.
 
-With Docker Compose running:
+With Docker Compose available:
 
 ```sh
-pnpm -C ts --filter @libid/ceremony exec playwright install --with-deps chromium firefox webkit
+pnpm -C ts --filter @libid/ceremony test:e2e:install
 pnpm -C ts --filter @libid/ceremony test:e2e
 ```
 
-Playwright first builds the qualification artifacts, the runtime fixture and the
+Playwright first builds the qualification artifacts, the runtime page and the
 harness modules ([build.mjs](../e2e/build.mjs)), then owns startup, readiness and
 teardown for pinned SWS/notary containers and the browser harness, so a bare
 `playwright test` qualifies current artifacts too. **Browser tests** CI runs nine
@@ -158,7 +158,7 @@ runtime test retries once, since each runs through the real notary against the X
 GitHub APIs; the real-notary session tests are also tagged `@live`.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
-Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987 and
+Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987/4989 and
 4781–4783/4881–4883 ([topology.ts](../e2e/topology.ts)) are separate from the dev app. Concurrent suite invocations
 fail on occupied ports instead of reusing or replacing another run's services.
 HTTPS tests use harness certificates and test-runner trust settings; the manual
@@ -169,9 +169,9 @@ development app uses loopback HTTP without certificate setup.
 | [platforms.spec.ts](../e2e/platforms.spec.ts) | Per catalog platform: bound denial, and fixture ceremonies with accepted and corrupted evidence, including released-key verification of delivered proofs. |
 | [popup.spec.ts](../e2e/popup.spec.ts) | Actual popup and Callback flows: private handoff, isolation, denial, application continuation, local Callback failures and the Prover progress UI. |
 | [isolation.spec.ts](../e2e/isolation.spec.ts) | Independent concurrent connections, a changed Application origin in the same opener window and provider isolation. |
-| [assets.spec.ts](../e2e/assets.spec.ts) | Emitted CCDP route policies, Service Worker migration and pending Prefetch joins, Cache Storage/HTTP-cache reuse, Worker failure before OAuth and mounted TLSN initialization. |
+| [assets.spec.ts](../e2e/assets.spec.ts) | Emitted CCDP route policies, Service Worker migration and pending Prefetch joins, Cache Storage/HTTP-cache reuse, Service Worker CRS loading, Worker failure before OAuth and mounted TLSN initialization. |
 | [admission.spec.ts](../e2e/admission.spec.ts) | Harness origin admission and CORS; not production Bridge egress or refresh. |
-| [runtime.spec.ts](../e2e/runtime.spec.ts) | The table's real-notary cases: one/two real X sessions and both GitHub endpoints through the matched notary; the GitHub pair runs alongside a separately verified bearer-link fixture proof. |
+| [runtime.spec.ts](../e2e/runtime.spec.ts) | The table's real-notary cases: one/two real X sessions and both GitHub endpoints through the matched notary; the GitHub pair runs alongside a separately verified bearer-link fixture proof. Notary send and reveal timeouts close the real sockets and workers. |
 | [fixtures.ts](../e2e/fixtures.ts) | Harness origins, popup launch, provider answers checked against the platform table, CCDP asset controls and fetch counts, and shared popup assertions. |
 | [verify.ts](../e2e/verify.ts) | Released-key verification of generated proofs and rejection of altered public inputs. |
 

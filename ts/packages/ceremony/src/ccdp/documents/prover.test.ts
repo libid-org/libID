@@ -12,7 +12,7 @@ import {
   returnSamples,
 } from '../../testing/index.js'
 import type { IdentityProof } from '../index.js'
-import { messages, popupErrorMessages } from '../ui-messages.js'
+import { messages, popupErrorMessages } from '../uiMessages.js'
 import { startProver } from './prover.js'
 
 const { accept, claimRootWorker, prove } = vi.hoisted(() => ({
@@ -334,12 +334,31 @@ it.each([
     vi.stubGlobal(name, value)
     await startProver(proverInput())
     expect(connection.sent).toEqual([
-      { type: 'ceremony-failed', event: 'prover', message: messages.isolationUnavailable },
+      {
+        type: 'ceremony-failed',
+        event: 'prover',
+        message: popupErrorMessages['isolation-unavailable'],
+      },
     ])
     expect(claimRootWorker).not.toHaveBeenCalled()
     expect(ui.stop).toHaveBeenCalledOnce()
   },
 )
+
+it('leaves quietly when popup moves the run to the isolated fallback [LIBID-BROWSER-022]', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  connection = spiedConnection('pending')
+  void startProver(proverInput())
+  // Popup reports the hop, releases this page and replaces it; its `ready` stays pending.
+  accept.mock.calls[0][1].onDiagnostic({ code: 'isolation-fallback', timestamp: 1 })
+  connection.end()
+  await connection.closed
+  await new Promise((resolve) => setTimeout(resolve))
+  expect(ui.events.filter((event) => event.status !== 'active')).toEqual([])
+  expect(connection.sent).toEqual([])
+  expect(log).not.toHaveBeenCalled()
+  expect(ui.stop).not.toHaveBeenCalled()
+})
 
 it('announces no readiness when the connection ends while the root worker is claimed [LIBID-BROWSER-022]', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -76,7 +76,8 @@ async function bindGoogleAction(
 The [development app](../../../apps/dev/src/app.ts) shows platform buttons,
 concurrent runs, independent Close controls and timing history. Each live run
 needs its own target, connection and fresh lowercase UUIDv4. Use the same UUID
-for popup's `connectionId` and `client.new`'s ceremony ID. Reserve no CCDP message
+for popup's `connectionId` and `client.new`'s ceremony ID; `new` rejects a different ID on a
+connection from `client.connect`. Reserve no CCDP message
 handlers yourself on that connection.
 
 `connect` accepts popup's `ConnectOptions` except `allowedPopupOrigins`; the client
@@ -84,6 +85,9 @@ supplies that allowlist from its frozen Bridge configuration. Fallback and
 diagnostic options pass through to the popup package. It adds no message handlers
 or navigation. The returned connection supports other application protocols;
 `client.new()` also continues to accept independently constructed connections.
+The Bridge and the CCDP are both admitted popup origins, but only CCDP documents
+advance a run: Prefetch and Prover readiness from any other origin fails it, so
+the Bridge's Callback never receives the code verifier or client credential.
 
 `new(connection, id, platformId, ledger, operationDomain, transactionData, version?)`
 is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`
@@ -91,7 +95,7 @@ and `ledger.notaryAddress()` once and derives fresh authorization material from
 the hash and byte inputs before returning, without retaining those buffers.
 Invalid selection, ledger values or inputs fail before OAuth. A client cannot reuse a live ID; a connection cannot run two
 ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
-[ceremony.ts](../src/ccdp/client/ceremony.ts).
+[client.ts](../src/ccdp/client/client.ts) and [ceremony.ts](../src/ccdp/client/ceremony.ts).
 
 `launchUrl` is the complete Prefetch URL for a native anchor.
 `proveUserIdentity()` starts the run once and owns subsequent protocol navigation.
@@ -165,7 +169,7 @@ Application is required; an undeliverable failure leaves only the sanitized loca
 diagnostic. This identifies a connection/setup failure, not which component
 caused it.
 
-[CCDP UI messages](../src/ccdp/ui-messages.ts) groups stage labels, document UI text,
+[CCDP UI messages](../src/ccdp/uiMessages.ts) groups stage labels, document UI text,
 error-page text, and translations of popup error codes. Popup returns programmatic
 errors; ceremony translates them before display or forwarding. Unexpected
 exceptions retain their bounded opaque text for debugging.
@@ -184,8 +188,8 @@ containing separate `identity` and `oauthProof` values:
 
 Client derives `expiresAt` after structural validation: Google's signed JWT
 `tokenExpiresAt`, or the X/GitHub token attestation's `createdAt` plus that
-platform's released lifetime. The [GitHub](../src/platforms/github/1/profile.ts)
-and [X](../src/platforms/x/1/profile.ts) profiles import their separate lifetime
+platform's released lifetime. The [GitHub](../src/platforms/github/1/provider.ts)
+and [X](../src/platforms/x/1/provider.ts) providers import their separate lifetime
 constants from the pinned `@libid/contracts/ceremony` package. The identity
 attestation does not extend the window. Consumers may discard retained proofs
 when block time is greater than or equal to `expiresAt`; ledger verification

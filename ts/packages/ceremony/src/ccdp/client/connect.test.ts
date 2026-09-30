@@ -1,7 +1,8 @@
+import { testnet } from '@libid/ledger/testing'
 import { type Carrier, PopupWindow } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
 import { bundledVersions, CEREMONY_ID } from '../../testing/index.js'
-import { ccdpClientFromConfig } from './ceremony.js'
+import { ccdpClientFromConfig } from './client.js'
 import { validateCeremonyConfig } from './config.js'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -71,3 +72,22 @@ it.each([
     expect(carrier.close).toHaveBeenCalledOnce()
   },
 )
+
+it('runs a ceremony only under its connection ID [KIT-008]', async () => {
+  vi.stubGlobal('window', Object.assign(new EventTarget(), { open: () => ({ closed: false }) }))
+  const client = ccdpClientFromConfig(
+    validateCeremonyConfig(
+      { ccdpOrigin: 'https://ccdp.test', platforms: { google: { clientId: 'client' } } },
+      'https://bridge.test',
+    ),
+    bundledVersions,
+  )
+  const connection = client.connect(PopupWindow.open('client-ids', 'left=0,top=0'), {
+    connectionId: CEREMONY_ID,
+  })
+  const run = (id: string) =>
+    client.new(connection, id, 'google', testnet, new Uint8Array(32), new Uint8Array())
+  expect(() => run(crypto.randomUUID())).toThrow('Ceremony ID must be the connection ID')
+  expect(run(CEREMONY_ID).launchUrl).toContain(CEREMONY_ID)
+  await connection.close()
+})

@@ -1,8 +1,9 @@
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { describe, expect, it } from 'vitest'
-import { decodeAttestedData, isAttestation } from './decode.js'
+import { decodeAttestedData } from './decode.js'
 import { LIBID_RS_ATTESTED_DATA as FIXTURE } from './fixtures/libid-rs.js'
 import { MAX_ATTESTED_DATA_BYTES } from './limits.js'
+import { isNotaryAttestation } from './protocol.js'
 
 const changed = (offset: number, value: number): Uint8Array => {
   const bytes = FIXTURE.slice()
@@ -39,11 +40,11 @@ describe('decodeAttestedData', () => {
           { start: 0, bytes: new Uint8Array(20).fill('a'.charCodeAt(0)) },
           { start: 40, bytes: new Uint8Array(20).fill('b'.charCodeAt(0)) },
         ],
-        commitments: [{ start: 20, end: 40, commitment: new Uint8Array(32).fill(7) }],
+        commitments: [{ start: 20, end: 40, hash: new Uint8Array(32).fill(7) }],
       },
       received: {
         revealed: [{ start: 0, bytes: new Uint8Array(10).fill('c'.charCodeAt(0)) }],
-        commitments: [{ start: 10, end: 40, commitment: new Uint8Array(32).fill(9) }],
+        commitments: [{ start: 10, end: 40, hash: new Uint8Array(32).fill(9) }],
       },
     })
   })
@@ -56,7 +57,7 @@ describe('decodeAttestedData', () => {
     expect(decodeAttestedData(changed(68, 'd'.charCodeAt(0))).sent.revealed[0].bytes[0]).toBe(
       'd'.charCodeAt(0),
     )
-    expect(decodeAttestedData(changed(136, 8)).sent.commitments[0].commitment[0]).toBe(8)
+    expect(decodeAttestedData(changed(136, 8)).sent.commitments[0].hash[0]).toBe(8)
   })
 
   it.each<[string, Uint8Array, RegExp]>([
@@ -82,12 +83,12 @@ describe('decodeAttestedData', () => {
 
 it('delivers bounded original evidence without a decoded projection [LIBID-PROVER-021]', () => {
   const attestation = { attestedData: FIXTURE, signature: new Uint8Array(65) }
-  expect(isAttestation(structuredClone(attestation))).toBe(true)
+  expect(isNotaryAttestation(structuredClone(attestation))).toBe(true)
   for (const value of [
     { ...attestation, decoded: decodeAttestedData(FIXTURE) },
     { ...attestation, signature: new Uint8Array(64) },
     { ...attestation, attestedData: new Uint8Array() },
     { ...attestation, attestedData: new Uint8Array(MAX_ATTESTED_DATA_BYTES + 1) },
   ])
-    expect(isAttestation(value)).toBe(false)
+    expect(isNotaryAttestation(value)).toBe(false)
 })

@@ -1,15 +1,16 @@
 import { PopupError } from '@libid/popup'
 import { fakeConnection } from '@libid/popup/testing'
 import { expect, it, vi } from 'vitest'
+import { reportFailure } from './ccdp/documents/failure.js'
 import { CeremonyFailed } from './ccdp/index.js'
-import { popupErrorMessages } from './ccdp/ui-messages.js'
-import { CeremonyError, ceremonyError, errorMessage, reportFailure } from './errors.js'
+import { popupErrorMessages } from './ccdp/uiMessages.js'
+import { CeremonyError, errorMessage, toCeremonyError } from './errors.js'
 
 it('preserves unexpected error text and context without serializing the exception [LIBID-OAUTH-022] [LIBID-OAUTH-030]', () => {
   const cause = new Error('Invalid GitHub id')
-  const error = ceremonyError(cause, 'identity-fetch')
+  const error = toCeremonyError(cause, 'identity-fetch')
   expect(error.cause).toBe(cause)
-  expect(ceremonyError(error, 'prover')).toBe(error)
+  expect(toCeremonyError(error, 'prover')).toBe(error)
   const connection = fakeConnection({ peerOrigin: 'https://app.test' })
   reportFailure(connection, error)
   expect(connection.sent).toEqual([
@@ -69,7 +70,7 @@ it('records undeliverable failures without logging opaque text or changing outco
 
 it('translates popup codes into CCDP copy while preserving the transport cause', () => {
   const cause = new PopupError('fallback-unavailable')
-  const error = ceremonyError(cause, 'authorization')
+  const error = toCeremonyError(cause, 'authorization')
   expect(cause.message).toBe('fallback-unavailable')
   expect(error.cause).toBe(cause)
   expect(error.event).toBe('authorization')

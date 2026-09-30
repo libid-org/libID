@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { concatBytes } from '@noble/hashes/utils.js'
-import { bytesEqual, fixedBytes } from '../primitives.js'
+import { isFixedBytes } from '../primitives.js'
 import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
 import { MAX_RECV_BYTES, MAX_SENT_BYTES } from './limits.js'
 import {
@@ -13,10 +13,7 @@ import {
   type Reveals,
   type Transcript,
 } from './protocol.js'
-
-export interface CommitRange extends ByteRange {
-  algorithm: 'SHA256'
-}
+import type { CommitRange } from './tlsn.js'
 
 export interface NotarizationPlan {
   reveal: Directions<ByteRange[]>
@@ -31,6 +28,13 @@ export interface HashOpening {
 export interface CorrelatedCommitment extends ByteRange, HashOpening {}
 
 export type Correlated = Directions<readonly CorrelatedCommitment[]>
+
+/** Byte equality. Not constant-time; never used to compare secrets. */
+export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
 
 function invalid(reason: string): never {
   throw new Error(`invalid notarization: ${reason}`)
@@ -128,7 +132,7 @@ function requireCommitted(
     if (!sameRange(correlated[index], signed.commitments[index])) {
       invalid(`${direction} signed commitment range changed`)
     }
-    if (!bytesEqual(signed.commitments[index].commitment, correlated[index].hash)) {
+    if (!bytesEqual(signed.commitments[index].hash, correlated[index].hash)) {
       invalid(`${direction} signed commitment hash changed`)
     }
   }
@@ -148,13 +152,13 @@ function correlateOpenings(
 ): CorrelatedCommitment[] {
   if (openings.length !== planned.length) invalid(`${direction} opening count changed`)
 
-  // ponytail: quadratic scan over the small, fixed profile range sets.
+  // ponytail: quadratic scan over the small, fixed per-platform range sets.
   const unmatched = new Set(planned.keys())
   const correlated: CorrelatedCommitment[] = []
   for (const opening of openings) {
-    if (!fixedBytes(opening.hash, COMMITMENT_BYTES))
+    if (!isFixedBytes(opening.hash, COMMITMENT_BYTES))
       invalid(`${direction} opening hash must be exactly 32 bytes`)
-    if (!fixedBytes(opening.blinder, BLINDER_BYTES))
+    if (!isFixedBytes(opening.blinder, BLINDER_BYTES))
       invalid(`${direction} opening blinder must be exactly 16 bytes`)
 
     const matches = [...unmatched].filter((index) =>
@@ -191,7 +195,7 @@ export function correlateReveal(
 }
 
 /** Require the signed record to match the transcript, planned reveals and correlated openings. */
-export function verifyAttestation(
+export function matchAttestedData(
   authority: string,
   transcript: Transcript,
   plan: NotarizationPlan,
@@ -214,18 +218,17 @@ export function verifyAttestation(
   return decoded
 }
 
-/** Select one provisional opening and reconstruct SHA256(bearer || blinder) for the link witness. */
-export function bearerOpening(
+/** Select the one provisional opening of `range` and rebuild its commitment from known plaintext. */
+export function plaintextOpening(
   openings: readonly CommitmentOpening[],
   direction: 'sent' | 'received',
   range: ByteRange,
-  bearer: string,
-) {
+  plaintext: Uint8Array,
+): CommitmentOpening & HashOpening {
   const matches = openings.filter((o) => o.direction === direction && sameRange(o, range))
-  if (matches.length !== 1) throw new Error('Bearer opening is not unique')
-  const opening = matches[0],
-    bytes = new TextEncoder().encode(bearer)
-  if (opening.blinder.length !== BLINDER_BYTES || opening.end - opening.start !== bytes.length)
-    throw new Error('Invalid bearer opening')
-  return { ...opening, hash: commitmentHash(bytes, opening.blinder) }
+  if (matches.length !== 1) throw new Error('Plaintext opening is not unique')
+  const opening = matches[0]
+  if (opening.blinder.length !== BLINDER_BYTES || opening.end - opening.start !== plaintext.length)
+    throw new Error('Invalid plaintext opening')
+  return { ...opening, hash: commitmentHash(plaintext, opening.blinder) }
 }
