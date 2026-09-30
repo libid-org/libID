@@ -2,7 +2,7 @@ import type { ProveIdentity } from '../ccdp/index.js'
 import type { OAuthReturn } from '../ccdp/navigation.js'
 import type { OperationEvent } from '../events.js'
 
-/** Per-run inputs and one event producer shared by the Prover page and platform pipelines. */
+/** Per-run inputs and one event producer shared by the Prover page and platform provers. */
 export interface ProverContext {
   request: ProveIdentity
   ceremonyId: string

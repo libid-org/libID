@@ -1,4 +1,4 @@
-/** Core operations emitted by the Barretenberg pipeline. */
+/** Core operations emitted by the Barretenberg proof engine. */
 export const proofEvents = ['zk-proof-preparation', 'zk-proof-generation'] as const
 
 /** Presentation weights estimate work; they are not elapsed durations. */

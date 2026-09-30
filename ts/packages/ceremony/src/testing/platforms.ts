@@ -17,22 +17,22 @@ export {
   type PlatformFixture,
 } from '../platforms/conformance/fixtures.js'
 
-type Pipeline<K extends string> = {
-  [P in PlatformId]: (typeof fixtures)[P] extends { pipeline: K } ? P : never
+type OfProverKind<K extends string> = {
+  [P in PlatformId]: (typeof fixtures)[P] extends { proverKind: K } ? P : never
 }[PlatformId]
 
-export type BearerLinkPlatform = Pipeline<'bearer-link'>
+export type BearerLinkPlatform = OfProverKind<'bearer-link'>
 
-export type OidcPlatform = Pipeline<'oidc'>
+export type OidcPlatform = OfProverKind<'oidc'>
 
-/** Catalog platforms proven by the shared bearer-link pipeline, in catalog order. */
+/** Catalog platforms proven by the shared bearer-link prover, in catalog order. */
 export const bearerLinkPlatforms = supportedPlatforms.filter(
-  (p): p is BearerLinkPlatform => fixtures[p].pipeline === 'bearer-link',
+  (p): p is BearerLinkPlatform => fixtures[p].proverKind === 'bearer-link',
 )
 
 /** Catalog platforms proven from a signed OIDC ID token, in catalog order. */
 export const oidcPlatforms = supportedPlatforms.filter(
-  (p): p is OidcPlatform => fixtures[p].pipeline === 'oidc',
+  (p): p is OidcPlatform => fixtures[p].proverKind === 'oidc',
 )
 
 /** The fixture client as one Bridge-advertised version-1 configuration entry. */

@@ -26,7 +26,7 @@ connection failures reject `send`.
 Transcript parsing and witness construction can use early material while final
 attestations remain pending. That material is provisional: delivery must join
 all final attestations and the generated proof. A late failure discards the
-speculative result. See [X/GitHub scheduling](pipelines.md).
+speculative result. See [X/GitHub scheduling](provers.md).
 
 The supplied abort signal releases the shared worker, including idle prepared
 sessions. Any session failure aborts sibling work. Successful sessions release

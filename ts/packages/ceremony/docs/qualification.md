@@ -27,7 +27,7 @@ X and GitHub specifications allow up to 4096 bytes; both implementations enforce
 the circuit's narrower limit on the token response, where they also reject the
 whitespace an HTTP bearer cannot carry.
 [Specifications](../README.md#specifications) own proof and protocol requirements;
-[platform pipelines](pipelines.md) describe this implementation.
+[platform provers](provers.md) describe this implementation.
 
 ## Current coverage
 
@@ -48,7 +48,7 @@ versions are not recorded.
 
 | Coverage | What it establishes / limit |
 |---|---|
-| Unit and type checks | Client lifecycle, exact codecs, canonical vectors, parsers, concurrency ordering and public types; the bearer pipeline tests retain real selectors/correlation/witness construction while mocking external runtimes; they do not establish real proving or live-service behavior. |
+| Unit and type checks | Client lifecycle, exact codecs, canonical vectors, parsers, concurrency ordering and public types; the bearer prover tests retain real selectors/correlation/witness construction while mocking external runtimes; they do not establish real proving or live-service behavior. |
 | Distribution/native-loader/SWS checks | Emitted policies, compression/ranges, immutable retention and actual loader requests, including the running image and pinned native binary in CI. Live CDN availability is separate; local runs need the [explicit inputs](testing.md#distribution-checks). |
 | Actual-popup browser flows | Private Callback handoff, exact Application origin, readiness, denial/failure, concurrency, root Worker control and progress across desktop engines and emulation. |
 | Google and bearer-link fixture proofs | Actual isolated browser workers generate proofs verified in Node against released keys, including altered-public-input rejection. Controlled Google token/time/JWKS inputs do not establish live consent or JWKS CORS; WebKit intercepts fixture JWKS at the page boundary. |

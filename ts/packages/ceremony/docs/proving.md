@@ -1,7 +1,7 @@
 # Noir and Barretenberg proving
 
 [src/barretenberg](../src/barretenberg/) owns the dedicated proof worker and
-circuit adapters. [Platform pipelines](pipelines.md) prepare inputs and compose
+circuit adapters. [Platform provers](provers.md) prepare inputs and compose
 it with notarization; the Prover page owns the browser connection and delivery.
 The engine has no popup, ledger or transaction-submission dependency.
 

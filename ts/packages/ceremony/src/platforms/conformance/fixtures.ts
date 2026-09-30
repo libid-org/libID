@@ -1,17 +1,17 @@
 // The platform conformance table: one typed entry per catalog platform. Adding a platform to
 // the catalog fails typecheck here until its entry exists; conformance.test.ts then runs the
-// catalog, OAuth return, validator and pipeline checks over every entry.
+// catalog, OAuth return, validator and prover checks over every entry.
 import { readFileSync } from 'node:fs'
 import type { OAuthReturn } from '../../ccdp/navigation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
 import type { BearerTranscript, TokenRequestInput } from '../bearer-transcript.js'
-import type { ProverContext } from '../context.js'
 import * as githubTranscript from '../github/1/transcript.js'
 import * as githubTypes from '../github/1/types.js'
 import * as googleTypes from '../google/1/types.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
 import type { ReturnProfile } from '../oauthReturn.js'
+import type { ProverModule } from '../provers.js'
 import type { Identity } from '../types.js'
 import * as xTranscript from '../x/1/transcript.js'
 import * as xTypes from '../x/1/types.js'
@@ -40,7 +40,7 @@ interface Entry<P extends PlatformId> {
   config: ClientConfig<P>
   /** The return rules the platform must enforce, declared here rather than read from its profile. */
   oauthReturn: ReturnProfile
-  /** The identity the pipeline evidence names; `oauthClientId` is the configured client. */
+  /** The identity the evidence names; `oauthClientId` is the configured client. */
   identity: Identity<P>
   /** Every identity field at its maximum accepted length. */
   longest: Identity<P>
@@ -61,20 +61,18 @@ interface Entry<P extends PlatformId> {
   }
   /** Out-of-bound values each proof field rejects. */
   rejectedProof: { [K in keyof Proof<P>]-?: readonly unknown[] }
-  /** Weighted operations the pipeline adds to the proof engine's own. */
+  /** Weighted operations the prover adds to the proof engine's own. */
   operations: readonly string[]
   /** Normative platform test IDs, as title tags, that each conformance section covers here. */
-  specTests: { identity: string; returns: string; issuer: string; pipeline: string }
+  specTests: { identity: string; returns: string; issuer: string; prover: string }
   returns(state: string): ReturnSamples
-  /** The execution leaf, lazily imported as the Prover dispatcher imports it. */
-  prover(): Promise<{
-    prove(context: ProverContext): Promise<{ identity: Identity<P>; proof: Proof<P> } | null>
-  }>
+  /** The execution leaf, imported independently of the Prover's dispatch table. */
+  prover(): Promise<ProverModule<P>>
 }
 
 /** Code-exchange platforms proven by two notarized HTTP transcripts and the bearer-link circuit. */
 export interface BearerLinkFixture<P extends PlatformId> extends Entry<P> {
-  pipeline: 'bearer-link'
+  proverKind: 'bearer-link'
   transcript: BearerTranscript
   /** The token endpoint and the form fields, in order, the platform must send for `input`. */
   tokenRequest: { url: string; form(input: TokenRequestInput): [string, string][] }
@@ -100,7 +98,7 @@ export interface BearerLinkFixture<P extends PlatformId> extends Entry<P> {
 
 /** Implicit-flow platforms proven from a signed ID token and its published signing key. */
 export interface OidcFixture<P extends PlatformId> extends Entry<P> {
-  pipeline: 'oidc'
+  proverKind: 'oidc'
   evidence: {
     idToken: string
     jwk: Record<string, string>
@@ -110,12 +108,12 @@ export interface OidcFixture<P extends PlatformId> extends Entry<P> {
     publicInputs: readonly string[]
     /** The circuit input that carries the authorization digest. */
     digestInput: string
-    /** The published key with only the members the pipeline requires. */
+    /** The published key with only the members the prover requires. */
     minimalJwk: Record<string, string>
   }
   /** Well-formed changes that bind the claim to another authorization, identity or signing key. */
   rejectedBinding: Record<string, (claim: Claim<P>) => Claim<P>>
-  /** Token or published-key rewrites the pipeline rejects before proving; tags follow the name. */
+  /** Token or published-key rewrites the prover rejects before proving; tags follow the name. */
   rejectedEvidence: Record<string, EvidenceChange>
 }
 
@@ -264,7 +262,7 @@ const bearerLinkOperations = [
 const bearerLinkSpecTests = {
   identity: '[TEST-PLAT-02]',
   returns: '[TEST-PLAT-18]',
-  pipeline: '[TEST-PLAT-15A] [TEST-PLAT-15B] [TEST-PLAT-17A] [TEST-PLAT-21]',
+  prover: '[TEST-PLAT-15A] [TEST-PLAT-15B] [TEST-PLAT-17A] [TEST-PLAT-21]',
 }
 
 /** Form-authenticated client IDs whose serialization would change the frozen request bytes. */
@@ -325,7 +323,7 @@ const codeReturns =
 
 export const fixtures = {
   google: {
-    pipeline: 'oidc',
+    proverKind: 'oidc',
     config: { clientId: googleClaims.aud },
     oauthReturn: {
       transport: 'fragment',
@@ -383,7 +381,7 @@ export const fixtures = {
       identity: '[TEST-PLAT-02]',
       returns: '[TEST-PLAT-03] [TEST-PLAT-05]',
       issuer: '',
-      pipeline: '[TEST-PLAT-06]',
+      prover: '[TEST-PLAT-06]',
     },
     returns: (state) => ({
       accepted: {
@@ -488,7 +486,7 @@ export const fixtures = {
     },
   },
   x: {
-    pipeline: 'bearer-link',
+    proverKind: 'bearer-link',
     config: { clientId: 'client' },
     oauthReturn: {
       transport: 'query',
@@ -548,7 +546,7 @@ export const fixtures = {
     },
   },
   github: {
-    pipeline: 'bearer-link',
+    proverKind: 'bearer-link',
     config: { clientId: 'client', clientCredential: 'public-fixture' },
     oauthReturn: {
       transport: 'query',

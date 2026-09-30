@@ -50,7 +50,7 @@ pnpm -C ts --filter @libid/ceremony test
 ```
 
 Unit tests sit beside their source owners. Canonical fixtures cover authorization,
-JWT/circuit inputs and signed attestation decoding. Worker and pipeline mocks
+JWT/circuit inputs and signed attestation decoding. Worker and prover mocks
 exercise failures and scheduling; they do not establish real proving or runtime
 concurrency. Workspace CI runs build, unit tests, lint and formatting separately
 from the browser job.
@@ -72,8 +72,8 @@ at that table. The entry supplies:
   bound to and its expected expiry, boundary and admitted client IDs, and
   platform-specific rejected identity encodings and out-of-bound proof values;
 - accepted, denied and provider-error returns for a given OAuth state, the
-  pipeline's weighted operations and its lazily imported `prover.ts`;
-- the pipeline and its evidence. A bearer-link platform supplies its response
+  prover's weighted operations and its lazily imported `prover.ts`;
+- its prover kind and evidence. A bearer-link platform supplies its response
   bodies, transcript module, token endpoint and form, identity endpoint and
   pinned headers. An OIDC platform supplies its signed ID token, JWK and
   minimal JWK, nonce digest and its circuit input, released-verifier public
@@ -86,13 +86,13 @@ and credential rules, weights and assets; the OAuth return matrix (outcomes,
 metadata, state, issuer, malformed/oversized/leaked fields and transports); the
 generated identity/proof reject matrix, result acceptance and expiry, and OIDC
 binding mismatches; and a `prove()` contract every platform meets whatever its
-pipeline (delivery, operation reporting, the run's signal and engine teardown,
-changed engine public inputs, startup cancellation), followed by each pipeline
+prover kind (delivery, operation reporting, the run's signal and engine teardown,
+changed engine public inputs, startup cancellation), followed by each prover
 kind's own cases (bearer-link transcripts, results and orchestration; OIDC
 binding, evidence and key sets), replacing only the TLSN runtime and proof
 engine. A check runs for every platform of a kind only when that kind's shared
 code enforces it; anything one platform alone requires comes from its fixture.
-A new pipeline kind adds its evidence shape, a stage for the shared contract
+A new prover kind adds its evidence shape, a stage for the shared contract
 (`typecheck` fails until it exists) and its own cases.
 
 Unit tests beside a platform's source keep only what the suite cannot reach

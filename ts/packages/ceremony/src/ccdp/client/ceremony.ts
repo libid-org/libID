@@ -29,9 +29,9 @@ import {
 } from '../../platforms/authorization.js'
 import {
   assembleResult,
+  ceremonyFor,
   commonVersions,
   type IdentityResult,
-  implementationFor,
   type PlatformId,
   type SupportedCeremonyVersion,
   supportedPlatforms,
@@ -226,12 +226,12 @@ class Run<P extends PlatformId> implements Ceremony<P> {
       platformCeremonyVersion: this.version,
     })
     this.authorizationDigest = digest
-    const implementation = implementationFor(this.platform, this.version)
-    this.platformEvents = implementation.events
-    const codeVerifier = implementation.pkce
+    const platformCeremony = ceremonyFor(this.platform, this.version)
+    this.platformEvents = platformCeremony.events
+    const codeVerifier = platformCeremony.pkce
       ? deriveCodeVerifier(digest, this.authorizationNonce)
       : null
-    this.authorizationUrl = implementation.buildAuthorizationUrl({
+    this.authorizationUrl = platformCeremony.buildAuthorizationUrl({
       clientId: platform.clientId,
       redirectUri: config.redirectUri,
       state: oauthState(id),

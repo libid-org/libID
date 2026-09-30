@@ -89,8 +89,7 @@ export function assembleResult<P extends PlatformId>(
   authorizationNonce: Uint8Array,
   authorizationDigest: Uint8Array,
 ): IdentityResult<P> {
-  const implementation = implementationFor(platformId, version)
-  const { identity, proof, expiresAt } = implementation.acceptResult(
+  const { identity, proof, expiresAt } = ceremonyFor(platformId, version).acceptResult(
     message.identity,
     message.proof,
     authorizationDigest,
@@ -123,11 +122,15 @@ export function commonVersions<P extends PlatformId>(
   ) as readonly SupportedCeremonyVersion<P>[]
 }
 
-export function implementationFor<P extends PlatformId>(
+/**
+ * Platform `P`'s ceremony at `version`: its authorization request, return rules, events and result
+ * adapter. Its prover is registered apart, in `provers.ts`, so the Client never bundles one.
+ */
+export function ceremonyFor<P extends PlatformId>(
   platform: P,
   version: SupportedCeremonyVersion<P>,
 ) {
-  const implementation = platforms[platform].versions[version as 1]
-  if (!implementation) throw new TypeError('Unsupported platform version')
-  return implementation
+  const ceremony = platforms[platform].versions[version as 1]
+  if (!ceremony) throw new TypeError('Unsupported platform version')
+  return ceremony
 }

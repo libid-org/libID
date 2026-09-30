@@ -392,7 +392,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
 it.each(supportedPlatforms)(
   'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015] [LIBID-ASSET-006] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
   async (platformId) => {
-    const oidc = fixtures[platformId].pipeline === 'oidc'
+    const oidc = fixtures[platformId].proverKind === 'oidc'
     const hash = testnet.hash(),
       domain = new Uint8Array(32),
       data = new Uint8Array([1, 2])
@@ -651,7 +651,7 @@ it('preserves opaque failure text and operation context for the application', as
 it.each(supportedPlatforms)(
   'projects %s stages without delaying or summing overlapping work [LIBID-BROWSER-007]',
   async (platformId) => {
-    const notarized = fixtures[platformId].pipeline === 'bearer-link'
+    const notarized = fixtures[platformId].proverKind === 'bearer-link'
     const c = spiedConnection()
     const ceremony = ccdpClientFromConfig({
       ...config,

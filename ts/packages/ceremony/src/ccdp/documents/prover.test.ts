@@ -120,6 +120,38 @@ it.each(supportedPlatforms)(
 )
 
 it.each([
+  { platformId: 'google', platformCeremonyVersion: 2 },
+  { platformId: 'github', platformCeremonyVersion: 0 },
+  { platformId: 'future', platformCeremonyVersion: 1 },
+])(
+  'refuses unbundled $platformId/$platformCeremonyVersion before proving [LIBID-ASSET-007]',
+  async (pair) => {
+    await startProver(proverInput(''))
+    // Exercise document dispatch directly: the wire codec also rejects unknown platforms.
+    connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1]({
+      ...proveIdentity('google'),
+      ...pair,
+    })
+    await vi.waitFor(() =>
+      expect(ui.events).toContainEqual({
+        status: 'failed',
+        event: 'prover',
+        message: messages.invalidProvingRequest,
+        timestamp: expect.any(Number),
+      }),
+    )
+    expect(connection.send).toHaveBeenLastCalledWith({
+      type: 'ceremony-failed',
+      event: 'prover',
+      message: messages.invalidProvingRequest,
+    })
+    expect(prove).not.toHaveBeenCalled()
+    expect(ui.trackProof).not.toHaveBeenCalled()
+    expect(ui.stop).toHaveBeenCalledOnce()
+  },
+)
+
+it.each([
   { error: new Error('Invalid GitHub id'), event: 'prover' },
   {
     error: new CeremonyError('token-attestation', 'Notarization request timed out'),
@@ -327,7 +359,7 @@ it('announces no readiness when the connection ends while the root worker is cla
   expect(ui.stop).toHaveBeenCalledOnce()
 })
 
-it('drops pipeline observations produced after the document ended [LIBID-BROWSER-015] [LIBID-BROWSER-022] [LIBID-BROWSER-030]', async () => {
+it('drops prover observations produced after the document ended [LIBID-BROWSER-015] [LIBID-BROWSER-022] [LIBID-BROWSER-030]', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   prove.mockImplementationOnce(async ({ signal, emit }) => {
     await new Promise((resolve) => signal.addEventListener('abort', resolve))
