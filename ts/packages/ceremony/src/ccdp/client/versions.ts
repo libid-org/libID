@@ -1,11 +1,10 @@
+import { VERSIONS_PATH } from '../../assets/keys.js'
 import { isRecord, isUint } from '../../primitives.js'
 import { fetchPublicJson } from '../../response.js'
 import { MAX_CEREMONY_VERSION } from '../limits.js'
 
 /** Platform ceremony versions a Distribution bundles: platform id to its ascending version list. */
 export type PlatformVersions = Readonly<Record<string, readonly number[]>>
-
-export const VERSIONS_PATH = '/ccdp/versions.json'
 
 /** The version list is a short public record; bound downloads before decoding JSON. */
 const MAX_VERSIONS_BYTES = 64 * 1024

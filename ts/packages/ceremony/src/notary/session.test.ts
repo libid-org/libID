@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { type OperationEvent, validateEvent } from '../events.js'
+import { validateEvent } from '../ccdp/index.js'
+import type { OperationEvent } from '../events.js'
 import { exactRequest } from '../testing/index.js'
 import { type FakeWorker, stubWorkers } from '../testing/workers.js'
 import { LIBID_RS_ATTESTED_DATA } from './fixtures/libid-rs.js'

@@ -1,7 +1,7 @@
-import { type ConnectionEnd, type Message, type PopupConnection, PopupError } from '@libid/popup'
+import { PopupError } from '@libid/popup'
 import { MAX_FAILURE_TEXT_BYTES } from './ccdp/limits.js'
 import { messages, popupErrorMessages } from './ccdp/uiMessages.js'
-import { isOrigin, isText } from './primitives.js'
+import { isText } from './primitives.js'
 
 /** Opaque display text only: never serialize an exception object, stack, or nested causes. */
 export const errorMessage = (error: unknown): string => displayText(describe(error))
@@ -36,34 +36,8 @@ export class CeremonyError extends Error {
   }
 }
 
-/** A failed end keeps its transport code; an orderly close fails the document's own run with `closedMessage`. */
-export const endError = (end: ConnectionEnd, closedMessage: string): Error =>
-  end.outcome === 'failed' ? new PopupError(end.code) : new Error(closedMessage)
-
 export function toCeremonyError(error: unknown, event: string): CeremonyError {
   return error instanceof CeremonyError
     ? error
     : new CeremonyError(event, describe(error), { cause: error })
-}
-
-/**
- * Only an authenticated peer receives CeremonyFailed. Failure to deliver it is recorded
- * locally without exposing its opaque text to telemetry.
- */
-export function reportFailure(
-  connection: PopupConnection<Message> | undefined,
-  error: CeremonyError,
-): void {
-  try {
-    if (connection && isOrigin(connection.peerOrigin)) {
-      const message = { type: 'ceremony-failed', event: error.event, message: error.message }
-      connection.send(message)
-      return
-    }
-  } catch {
-    /* Reporting cannot replace the original failure. */
-  }
-  try {
-    console.error('[ceremony] failure report unavailable')
-  } catch {}
 }

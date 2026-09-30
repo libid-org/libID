@@ -334,7 +334,11 @@ it.each([
     vi.stubGlobal(name, value)
     await startProver(proverInput())
     expect(connection.sent).toEqual([
-      { type: 'ceremony-failed', event: 'prover', message: messages.isolationUnavailable },
+      {
+        type: 'ceremony-failed',
+        event: 'prover',
+        message: popupErrorMessages['isolation-unavailable'],
+      },
     ])
     expect(claimRootWorker).not.toHaveBeenCalled()
     expect(ui.stop).toHaveBeenCalledOnce()

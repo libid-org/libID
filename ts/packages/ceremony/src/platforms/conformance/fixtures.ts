@@ -171,7 +171,8 @@ export const googleV1 = {
 }
 
 // Generated once by running googleV1 through the official libid-circuits
-// v0.3.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter.
+// v0.3.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter. The v0.4.0 release ships a
+// byte-identical circuit and key.
 export const googlePublicInputs = [
   '0x00000000000000000000000000000000000000000000000000000000000000b3',
   '0x0000000000000000000000000000000000000000000000000000000000000018',

@@ -16,7 +16,7 @@ update is installing or waiting. The dispatch acknowledgement establishes readin
 WebKit can leave another document's state stuck at `activating` after activation.
 
 [prefetch.ts](../src/ccdp/documents/prefetch.ts) is a dual document/Worker entry.
-The [Worker](../src/assets/worker.ts) combines popup's port keeper with asset
+The [Worker](../src/assets/rootWorker.ts) combines popup's port keeper with asset
 fetching. Install uses `skipWaiting`, activation uses `clients.claim`, and Prover
 explicitly joins root-worker control before readiness. Failure to establish the
 required registration/control is terminal.

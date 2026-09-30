@@ -13,7 +13,6 @@ export const messages = {
   proofReceived: 'Proof received',
   proofDelivered: 'Proof delivered.',
   authorizationDeclined: 'Authorization declined.',
-  interrupted: 'Ceremony interrupted.',
   failed: 'Ceremony failed.',
   returning: 'Returning to your application',
   returnToApplication: (message: string) => `${message} Return to your application.`,
@@ -32,7 +31,6 @@ export const messages = {
   connectionEnded: 'Popup connection ended',
   connectionInitializationFailed: 'Unable to initialize ceremony connection',
   invalidProvingRequest: 'Invalid proving request',
-  isolationUnavailable: 'Prover isolation unavailable',
   unsupportedProfile: 'Unsupported profile',
 } as const
 

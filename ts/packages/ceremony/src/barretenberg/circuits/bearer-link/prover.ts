@@ -16,7 +16,7 @@ const failsAs = <T>(p: Promise<T>, event: string) =>
     throw toCeremonyError(error, event)
   })
 
-/** Shared two-attestation bearer-link prover; platform transcripts own HTTP and identity policy. */
+/** Shared two-attestation bearer-link prover; platform exchanges own HTTP and identity policy. */
 export async function proveBearerLink<P extends 'x' | 'github'>(
   context: ProverContext,
   platformId: P,

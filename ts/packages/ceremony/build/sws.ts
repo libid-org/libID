@@ -4,6 +4,9 @@ import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { stringify } from 'smol-toml'
 import { safePath } from './archive.ts'
 
+/** One published path: its bytes and the headers SWS serves with them. */
+export type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
+
 /**
  * Policy of every response that resolved no file: 404s (unknown routes,
  * missing assets, `/ccdp/assets/`, `<file>/<name>`) and the trailing-slash
@@ -59,10 +62,7 @@ const sidecars = [
 ] as const
 
 /** Emit static files and native SWS configuration; no response metadata overrides. */
-export function writeDistribution(
-  out: string,
-  records: ReadonlyMap<string, { bytes: Buffer; headers: Record<string, string> }>,
-) {
+export function writeDistribution(out: string, records: ReadonlyMap<string, PublicRecord>) {
   const files: Record<string, string> = {}
   for (const path of records.keys()) {
     if (!path.startsWith('/')) throw new Error('Invalid public path')

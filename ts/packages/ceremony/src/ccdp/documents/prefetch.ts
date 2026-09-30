@@ -3,11 +3,12 @@ import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { profileKey } from '../../assets/keys.js'
 import { dispatchPrefetch, registerRootWorker } from '../../assets/registration.js'
-import { startWorker } from '../../assets/worker.js'
-import { reportFailure, toCeremonyError } from '../../errors.js'
+import { startRootWorker } from '../../assets/rootWorker.js'
+import { toCeremonyError } from '../../errors.js'
 import { EventFeed, failureEvent, now } from '../../events.js'
 import { readPrefetch } from '../navigation.js'
 import { messages } from '../uiMessages.js'
+import { reportFailure } from './failure.js'
 import { eventView } from './ui.js'
 
 /** Authenticate the Prefetch page and acknowledge selected fetch dispatch before OAuth navigation. */
@@ -62,4 +63,4 @@ export async function startPrefetch(fragment: string): Promise<void> {
   }
 }
 
-if (typeof document === 'undefined') startWorker(self as unknown as ServiceWorkerGlobalScope)
+if (typeof document === 'undefined') startRootWorker(self as unknown as ServiceWorkerGlobalScope)

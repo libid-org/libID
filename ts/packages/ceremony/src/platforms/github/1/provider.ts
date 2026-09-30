@@ -1,9 +1,9 @@
-import { GITHUB, PROOF_LIFETIME_SECONDS_GITHUB } from '@libid/contracts/ceremony'
+import { GITHUB } from '@libid/contracts/ceremony'
 
 const token = GITHUB.token!,
   identity = GITHUB.identity!
 
-/** Released v1 request layout plus browser-owned OAuth and presentation constraints. */
+/** The released v1 request layout plus the browser-owned OAuth endpoint and scope. */
 export const provider = {
   tokenUrl: `https://${token.session.authority}${token.session.path}`,
   tokenFields: token.tokenFields,
@@ -11,8 +11,6 @@ export const provider = {
   idField: identity.idField,
   quotedId: identity.idShape === 'jsonString',
   userNameField: identity.handleField,
-  // Released launch policy for retention; ledger verification remains authoritative.
-  proofLifetimeSeconds: PROOF_LIFETIME_SECONDS_GITHUB,
   authorizationEndpoint: 'https://github.com/login/oauth/authorize',
   authorizationIssuer: 'https://github.com/login/oauth',
   authorizationScope: 'read:user',

@@ -3,13 +3,13 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { build } from 'vite'
 import { packageDir } from '../build/sources.ts'
+import { artifactDir } from './topology.ts'
 
 // Every e2e input, before Playwright starts the containers that mount the first two.
-execFileSync(
-  process.execPath,
-  ['build/distribution.ts', '--out-dir', '.cache/qualification-assets'],
-  { cwd: packageDir, stdio: 'inherit' },
-)
+execFileSync(process.execPath, ['build/distribution.ts', '--out-dir', artifactDir], {
+  cwd: packageDir,
+  stdio: 'inherit',
+})
 await import('./buildRuntime.mjs')
 await (await import('./crs.mjs')).cacheCrs()
 

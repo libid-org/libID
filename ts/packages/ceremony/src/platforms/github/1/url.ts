@@ -1,5 +1,5 @@
 import { isAuthorizationCode } from '../../../barretenberg/circuits/bearer-link/validation.js'
-import { pkceAuthorizationUrl } from '../../authorization.js'
+import { pkceAuthorizationUrlBuilder } from '../../authorization.js'
 import type { ReturnRules } from '../../oauthReturn.js'
 import { provider } from './provider.js'
 
@@ -15,7 +15,7 @@ export const returnRules: ReturnRules = {
 }
 
 /** Build GitHub v1's fixed public authorization request. */
-export const buildAuthorizationUrl = pkceAuthorizationUrl(
+export const buildAuthorizationUrl = pkceAuthorizationUrlBuilder(
   provider.authorizationEndpoint,
   provider.authorizationScope,
 )

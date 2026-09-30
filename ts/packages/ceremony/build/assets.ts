@@ -12,6 +12,7 @@ import { importSource } from './bundle.ts'
 import { validateCircuitCapacity } from './circuits.ts'
 import { parseCsp } from './profiles.ts'
 import { hash, packageDir, readSource } from './sources.ts'
+import type { PublicRecord } from './sws.ts'
 
 export function loadAssetCatalog() {
   return importSource<{
@@ -124,7 +125,7 @@ export async function resolveAssets() {
   const urls: Record<string, string> = {},
     moduleUrls: Record<string, string> = {},
     bodyHashes: Record<string, string> = {}
-  const local = new Map<string, { bytes: Buffer; headers: Record<string, string> }>(),
+  const local = new Map<string, PublicRecord>(),
     mounts = new Map<string, string>()
   const register = (path: string, bytes: Buffer, policy: Record<string, string>) => {
     const old = local.get(path)

@@ -5,14 +5,12 @@ import type { DecodedAttestedData, DecodedDirection } from './decode.js'
 import { responseSizes } from './http.js'
 import { MAX_FRAME_BYTES, MAX_RECV_BYTES, MAX_SENT_BYTES } from './limits.js'
 import {
-  type CommitRange,
   correlateReveal,
   type HashOpening,
   matchAttestedData,
   planNotarization,
 } from './notarize.js'
 import type {
-  ByteRange,
   CommitmentOpening,
   ExactHttpRequest,
   FromWorker,
@@ -21,51 +19,8 @@ import type {
   ToWorker,
   Transcript,
 } from './protocol.js'
+import type { Io, TlsnModule, TlsnProver } from './tlsn.js'
 import { decodeAttestationFrame, deriveNotaryWebSocketUrl } from './transport.js'
-
-interface Io {
-  read(): Promise<Uint8Array | null>
-  write(data: Uint8Array): Promise<void>
-  close(): Promise<void>
-}
-
-export interface NotaryHttpRequest {
-  uri: string
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
-  headers: Record<string, number[]>
-  body: unknown
-}
-
-interface TlsnModule {
-  default(options: { module_or_path: string }): Promise<void>
-  initialize(logging: null, threads: number): Promise<void>
-  Prover: new (config: {
-    server_name: string
-    mode: 'Proxy'
-    max_sent_data: number
-    max_recv_data: number
-    network: 'Bandwidth'
-  }) => {
-    setup(io: Io): Promise<void>
-    send_request(session: null, request: NotaryHttpRequest): Promise<unknown>
-    transcript(): { sent: Uint8Array; recv: Uint8Array }
-    reveal(
-      reveal: {
-        sent: readonly ByteRange[]
-        recv: readonly ByteRange[]
-        server_identity: true
-      },
-      commit: {
-        sent: readonly CommitRange[]
-        recv: readonly CommitRange[]
-      },
-    ): Promise<{ sent: HashOpening[]; recv: HashOpening[] }>
-    finish(): Promise<void>
-    free(): void
-  }
-}
-
-type Prover = InstanceType<TlsnModule['Prover']>
 
 function waitForOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve()
@@ -181,7 +136,7 @@ interface Prepared {
   stage: 'prepared'
   url: URL
   io: Io
-  prover: Prover
+  prover: TlsnProver
 }
 
 interface Sent extends Omit<Prepared, 'stage'> {

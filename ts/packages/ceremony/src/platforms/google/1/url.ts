@@ -6,7 +6,7 @@ import { provider } from './provider.js'
 /** Google carries the digest as the OIDC nonce; no PKCE (spec §5 table). */
 export const pkce = false
 
-/** Fragment-only ID-token return; a code or access token violates the profile. */
+/** Fragment-only ID-token return; a code or access token breaks Google v1's return rules. */
 export const returnRules: ReturnRules = {
   transport: 'fragment',
   credential: 'id_token',

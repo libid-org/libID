@@ -39,15 +39,11 @@ const carrier = popupFallback.connectSources.join(' ')
 
 const documents: readonly ResponseProfile[] = ['callback', 'prefetch', 'prover', 'proverFallback']
 
-/** Revalidated scripts; documents already declare both in `shared.document`. */
+/** Revalidated scripts; documents already declare both in `shared.documentHeaders`. */
 const revalidated = { 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' }
 
 /** Bundled workers under COEP; the notary session worker alone connects to notaries. */
-export const isolatedWorkers: readonly ResponseProfile[] = [
-  'notaryWorker',
-  'proofWorker',
-  'leafWorker',
-]
+const isolatedWorkers: readonly ResponseProfile[] = ['notaryWorker', 'proofWorker', 'leafWorker']
 
 export function responseHeaders(
   profile: ResponseProfile,
@@ -70,7 +66,7 @@ export function responseHeaders(
       ...headers,
       'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'${carrier ? `; connect-src ${carrier}` : ''}`,
     }
-  // The Application reads the version list from its own origin; the wildcard needs no Vary.
+  // The Application reads the version list cross-origin; the wildcard needs no Vary.
   if (profile === 'versions')
     return {
       ...headers,

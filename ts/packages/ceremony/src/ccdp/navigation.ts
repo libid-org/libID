@@ -1,9 +1,12 @@
 import { isOrigin, isSlug, isUint } from '../primitives.js'
-import { UUID } from './index.js'
 import { MAX_CEREMONY_VERSION, MAX_NAVIGATION_FRAGMENT_CHARS } from './limits.js'
 
 /** The CCDP version this build's documents and routes implement. */
 export const CCDP_VERSION = 1
+
+/** A ceremony ID: a lowercase UUIDv4, also the popup connection ID. */
+export const isCeremonyId = (value: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
 
 export interface OAuthReturn {
   query: string
@@ -16,9 +19,9 @@ export const route = (name: 'prefetch' | 'prover' | 'prover/fallback' | 'worker.
 export const oauthState = (ceremonyId: string) => `v${CCDP_VERSION}.${ceremonyId}`
 
 /** Any CCDP version parses, so Callback can reject unbundled ones distinctly from malformed state. */
-export function readOAuthState(state: string): { version: string; ceremonyId: string } | null {
+export function readOAuthState(state: string): { ccdpVersion: string; ceremonyId: string } | null {
   const match = /^v([1-9][0-9]*)\.(.+)$/.exec(state)
-  return match && UUID.test(match[2]) ? { version: match[1], ceremonyId: match[2] } : null
+  return match && isCeremonyId(match[2]) ? { ccdpVersion: match[1], ceremonyId: match[2] } : null
 }
 
 function fields<K extends string>(fragment: string, keys: readonly K[]): Record<K, string> {
@@ -47,7 +50,7 @@ export function readPrefetch(fragment: string) {
     ceremonyVersion: version,
   } = fields(fragment, ['ceremonyId', 'platformId', 'ceremonyVersion'])
   if (
-    !UUID.test(ceremonyId) ||
+    !isCeremonyId(ceremonyId) ||
     !isSlug(platformId) ||
     !/^(0|[1-9][0-9]*)$/.test(version) ||
     !isUint(Number(version), MAX_CEREMONY_VERSION)
@@ -77,7 +80,7 @@ export function readProver(fragment: string) {
     oauthFragment: hash,
   } = fields(fragment, ['ceremonyId', 'applicationOrigin', 'oauthQuery', 'oauthFragment'])
   if (
-    !UUID.test(ceremonyId) ||
+    !isCeremonyId(ceremonyId) ||
     !isOrigin(applicationOrigin) ||
     (query !== '' && !query.startsWith('?')) ||
     (hash !== '' && !hash.startsWith('#'))

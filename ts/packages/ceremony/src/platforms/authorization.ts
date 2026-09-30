@@ -106,7 +106,7 @@ export function deriveCodeChallenge(codeVerifier: string): string {
  * `redirect_uri`, `scope`, `state`, `code_challenge` and `code_challenge_method` in
  * exactly this order, serialized by the WHATWG form-urlencoded serializer.
  */
-export function pkceAuthorizationUrl(
+export function pkceAuthorizationUrlBuilder(
   endpoint: string,
   scope: string,
   leading: [string, string][] = [],

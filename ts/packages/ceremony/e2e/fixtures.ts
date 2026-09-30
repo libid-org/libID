@@ -3,15 +3,15 @@ import { test as base, expect, type Page } from '@playwright/test'
 import type { AssetRequest } from '../src/assets/index.js'
 import type { PlatformId } from '../src/platforms/index.js'
 import { browserPlatforms } from './platforms.js'
-import { origins } from './topology.js'
+import { artifactDir, origins } from './topology.js'
 
 export { expect }
 
-const graph = new URL('../.cache/qualification-assets/distribution-graph.json', import.meta.url)
+const metadata = new URL(`../${artifactDir}/distribution-graph.json`, import.meta.url)
 
-/** The exact requests of `profile` in the emitted graph of the artifact the harness serves. */
+/** The exact requests of `profile` in the emitted metadata of the artifact the harness serves. */
 export const artifactRequests = (profile: string): AssetRequest[] =>
-  JSON.parse(readFileSync(graph, 'utf8')).requestsByProfile[profile]
+  JSON.parse(readFileSync(metadata, 'utf8')).requestsByProfile[profile]
 
 /** A provider page that immediately continues to `url`, as an authorization redirect would. */
 const redirect = (url: string) => ({

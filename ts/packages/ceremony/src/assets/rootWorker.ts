@@ -5,7 +5,7 @@ import { AssetCache } from './cache.js'
 import { requestKey } from './keys.js'
 
 /** Install the emitted fetch allowlist, cache delivery and popup-owned port continuity. */
-export function startWorker(scope: ServiceWorkerGlobalScope): void {
+export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
   installPortKeeper()
   const cache = new AssetCache(scope.location.origin)
   const absolute = (r: (typeof allowedRequests)[number]) => ({

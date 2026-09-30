@@ -1,13 +1,14 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { claimRootWorker } from '../../assets/registration.js'
-import { endError, reportFailure, toCeremonyError } from '../../errors.js'
+import { toCeremonyError } from '../../errors.js'
 import { EventFeed, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
 import { ceremonyFor } from '../../platforms/index.js'
 import { type ProverResult, proverFor } from '../../platforms/provers.js'
 import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver, route } from '../navigation.js'
-import { messages } from '../uiMessages.js'
+import { messages, popupErrorMessages } from '../uiMessages.js'
+import { endError, reportFailure } from './failure.js'
 import { eventView, view } from './ui.js'
 
 type ProverState =
@@ -70,7 +71,7 @@ class ProverDocument {
         typeof SharedArrayBuffer === 'undefined' ||
         typeof Worker === 'undefined'
       )
-        throw new Error(messages.isolationUnavailable)
+        throw new Error(popupErrorMessages['isolation-unavailable'])
       await claimRootWorker()
       if (this.controller.signal.aborted) return
       if (this.state.phase !== 'connecting') throw new Error(messages.invalidProvingRequest)

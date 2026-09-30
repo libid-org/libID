@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
+import { VERSIONS_PATH } from '../../assets/keys.js'
 import { createCCDPClient } from './client.js'
-import { VERSIONS_PATH } from './versions.js'
 
 const wireConfig = {
   ccdpOrigin: 'https://ccdp.test',

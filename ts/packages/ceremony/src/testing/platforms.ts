@@ -7,7 +7,7 @@ import { oauthState } from '../ccdp/navigation.js'
 import { fixtures } from '../platforms/conformance/fixtures.js'
 import type { ProverContext } from '../platforms/context.js'
 import { type PlatformId, platforms, supportedPlatforms } from '../platforms/index.js'
-import { CEREMONY_ID } from './index.js'
+import { CEREMONY_ID } from './values.js'
 
 export {
   fixtures,

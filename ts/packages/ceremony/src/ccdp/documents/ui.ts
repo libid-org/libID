@@ -28,9 +28,8 @@ function stageLabel(event: StageEvent): string {
   if (event.status === 'active') return CeremonyStage.message(event.stage, '')
   if (event.status === 'completed') return messages.proofReceived
   if (event.status === 'denied') return messages.returnToApplication(messages.authorizationDeclined)
-  return messages.returnToApplication(
-    event.message ?? (event.status === 'closed' ? messages.interrupted : messages.failed),
-  )
+  // Failed and closed updates always carry their display text.
+  return messages.returnToApplication(event.message ?? messages.failed)
 }
 
 /** The handle a document drives its package-owned UI through. */
@@ -56,12 +55,8 @@ export function eventView(feed: EventFeed) {
     style.remove()
   }
   const off = feed.onStage((event) => {
-    if (
-      event.status === 'active' &&
-      event.stage !== 'preparation' &&
-      event.stage !== 'authorization' &&
-      timer === undefined
-    )
+    // Documents project no authorization stage: past preparation is proving work.
+    if (event.status === 'active' && event.stage !== 'preparation' && timer === undefined)
       timer = setTimeout(() => {
         hint.textContent = messages.slowProving
         root.append(hint)

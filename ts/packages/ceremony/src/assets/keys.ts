@@ -11,3 +11,6 @@ export const requestKey = (request: { url: string; range?: string }) =>
 /** A platform version's asset profile. */
 export const profileKey = (platformId: string, version: number | string) =>
   `${platformId}/${version}`
+
+/** The Distribution's version list, one unversioned route. */
+export const VERSIONS_PATH = '/ccdp/versions.json'

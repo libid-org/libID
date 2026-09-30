@@ -34,8 +34,8 @@ it('reads Prefetch input with or without its hash, bounded and exact', () => {
 })
 
 it('reads the OAuth state it writes and any later CCDP version [LIBID-ASSET-015]', () => {
-  expect(readOAuthState(oauthState(id))).toEqual({ version: '1', ceremonyId: id })
-  expect(readOAuthState(`v2.${id}`)).toEqual({ version: '2', ceremonyId: id })
+  expect(readOAuthState(oauthState(id))).toEqual({ ccdpVersion: '1', ceremonyId: id })
+  expect(readOAuthState(`v2.${id}`)).toEqual({ ccdpVersion: '2', ceremonyId: id })
   for (const state of [`v0.${id}`, `v01.${id}`, `1.${id}`, 'v1.invalid', `v1.${id.toUpperCase()}`])
     expect(readOAuthState(state)).toBeNull()
 })

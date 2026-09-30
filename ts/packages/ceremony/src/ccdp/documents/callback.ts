@@ -1,11 +1,12 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { PopupConnection, PopupWindow } from '@libid/popup'
-import { endError, reportFailure, toCeremonyError } from '../../errors.js'
+import { toCeremonyError } from '../../errors.js'
 import { EventFeed, failureEvent, now } from '../../events.js'
 import { isOrigin } from '../../primitives.js'
 import { MAX_NAVIGATION_FRAGMENT_CHARS, MAX_OAUTH_RETURN_CHARS } from '../limits.js'
 import { type OAuthReturn, proverFragment, readOAuthState, route } from '../navigation.js'
 import { messages } from '../uiMessages.js'
+import { endError, reportFailure } from './failure.js'
 import { eventView, view } from './ui.js'
 
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
@@ -21,14 +22,14 @@ export function startCallback(): void {
       ...new URLSearchParams(oauthReturn.query).getAll('state'),
       ...new URLSearchParams(oauthReturn.fragment.slice(1)).getAll('state'),
     ]
-    const state = states.length === 1 ? readOAuthState(states[0]) : null
-    if (!state) throw new TypeError(messages.invalidOAuthState)
+    const returnState = states.length === 1 ? readOAuthState(states[0]) : null
+    if (!returnState) throw new TypeError(messages.invalidOAuthState)
     // This closed dispatch retains only implementations supported by this artifact.
-    if (state.version !== '1') {
+    if (returnState.ccdpVersion !== '1') {
       view(messages.unsupportedVersion)
       return
     }
-    callbackV1(oauthReturn, state.ceremonyId, deploymentInputs())
+    callbackV1(oauthReturn, returnState.ceremonyId, deploymentInputs())
   } catch (error) {
     const failure = toCeremonyError(error, 'authorization')
     view(messages.returnToApplication(failure.message))

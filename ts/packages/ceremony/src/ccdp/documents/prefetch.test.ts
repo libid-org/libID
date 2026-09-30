@@ -17,7 +17,7 @@ vi.mock('@libid/popup', async (original) => ({
   PopupWindow: { current: vi.fn() },
 }))
 vi.mock('../../assets/registration.js', () => ({ registerRootWorker, dispatchPrefetch }))
-vi.mock('../../assets/worker.js', () => ({ startWorker: vi.fn() }))
+vi.mock('../../assets/rootWorker.js', () => ({ startRootWorker: vi.fn() }))
 vi.mock('./ui.js', async () => (await import('../../testing/index.js')).documentUi(() => ui))
 let connection: FakeConnection, ui: FakeDocumentUi
 const fragment = (platformId = 'google') =>

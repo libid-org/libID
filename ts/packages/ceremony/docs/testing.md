@@ -169,9 +169,9 @@ development app uses loopback HTTP without certificate setup.
 | [platforms.spec.ts](../e2e/platforms.spec.ts) | Per catalog platform: bound denial, and fixture ceremonies with accepted and corrupted evidence, including released-key verification of delivered proofs. |
 | [popup.spec.ts](../e2e/popup.spec.ts) | Actual popup and Callback flows: private handoff, isolation, denial, application continuation, local Callback failures and the Prover progress UI. |
 | [isolation.spec.ts](../e2e/isolation.spec.ts) | Independent concurrent connections, a changed Application origin in the same opener window and provider isolation. |
-| [assets.spec.ts](../e2e/assets.spec.ts) | Emitted CCDP route policies, Service Worker migration and pending Prefetch joins, Cache Storage/HTTP-cache reuse, Worker failure before OAuth and mounted TLSN initialization. |
+| [assets.spec.ts](../e2e/assets.spec.ts) | Emitted CCDP route policies, Service Worker migration and pending Prefetch joins, Cache Storage/HTTP-cache reuse, Service Worker CRS loading, Worker failure before OAuth and mounted TLSN initialization. |
 | [admission.spec.ts](../e2e/admission.spec.ts) | Harness origin admission and CORS; not production Bridge egress or refresh. |
-| [runtime.spec.ts](../e2e/runtime.spec.ts) | The table's real-notary cases: one/two real X sessions and both GitHub endpoints through the matched notary; the GitHub pair runs alongside a separately verified bearer-link fixture proof. |
+| [runtime.spec.ts](../e2e/runtime.spec.ts) | The table's real-notary cases: one/two real X sessions and both GitHub endpoints through the matched notary; the GitHub pair runs alongside a separately verified bearer-link fixture proof. Notary send and reveal timeouts close the real sockets and workers. |
 | [fixtures.ts](../e2e/fixtures.ts) | Harness origins, popup launch, provider answers checked against the platform table, CCDP asset controls and fetch counts, and shared popup assertions. |
 | [verify.ts](../e2e/verify.ts) | Released-key verification of generated proofs and rejection of altered public inputs. |
 

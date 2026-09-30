@@ -1,4 +1,4 @@
-/** Released notary format: secp256k1 signature, keccak authority, SHA256 commitment and salt. */
+/** Released notary format: secp256k1 signature, keccak authority, SHA256 commitment and blinder. */
 export const NOTARY_SIGNATURE_BYTES = 65
 export const AUTHORITY_ID_BYTES = 32
 export const COMMITMENT_BYTES = 32

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { Rollup } from 'vite'
 import type { AssetRequest, ExternalAsset } from '../src/assets/index.ts'
-import { assetKey, requestKey } from '../src/assets/keys.ts'
+import { assetKey, requestKey, VERSIONS_PATH } from '../src/assets/keys.ts'
 import { messages } from '../src/ccdp/uiMessages.ts'
 import { safePath } from './archive.ts'
 import type { AssetManifest } from './assetPlugin.ts'
@@ -15,7 +15,7 @@ import { captureFragment } from './fragment.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { emittedProfile, responseHeaders } from './profiles.ts'
 import { outputDirectory, packageDir } from './sources.ts'
-import { errorHeaders, writeDistribution } from './sws.ts'
+import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
 export type DistributionMetadata = AssetManifest & {
@@ -23,8 +23,6 @@ export type DistributionMetadata = AssetManifest & {
   graph: Record<string, BundleNode>
   files: Record<string, string>
 }
-
-type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
 
 type Records = Map<string, PublicRecord>
 
@@ -154,7 +152,7 @@ async function buildDistribution() {
   }
   const manifest = assetManifest(data, prover.graph, proverEntries, records, external)
   // Every published pair has an emitted prover and asset profile.
-  put('/ccdp/versions.json', JSON.stringify(versions), 'versions')
+  put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
   const primary = prover.output.find(
     (o): o is Rollup.OutputChunk => o.type === 'chunk' && o.isEntry,
   )

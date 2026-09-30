@@ -141,7 +141,7 @@ it never imports execution to discover dependencies.
 ## Headers and compression
 
 [headers.ts](../src/assets/headers.ts) holds plain reusable policy records:
-`immutable`, `javascript`, `wasm`, `json`, `document`, `executionWorker`, `dip`
+`immutable`, `javascript`, `wasm`, `json`, `documentHeaders`, `executionWorker`, `dip`
 and `isolated`. Resource declarations compose them with object spread and may
 add explicit headers. [profiles.ts](../build/profiles.ts) applies document,
 worker and `versions.json` policies using compiler-produced script hashes and
@@ -210,7 +210,7 @@ The runnable reference configuration is in
 Client derives fixed `/auth/callback` from the supplied Bridge origin and
 freezes the redirect URI once; public configuration carries no callback path. X and GitHub use the supplied notary
 origin's Proxy WebSocket for both token and identity sessions. Prover performs no
-Bridge fetch; its HTTPS fetch sources serve proving assets, while WSS (or the
+Bridge fetch; its HTTPS fetch sources serve proving assets and Google's JWKS, while WSS (or the
 exact loopback WS exception) serves notarization. Bridge owns Callback refresh.
 
 Optional opener-independent fallback is supplied through

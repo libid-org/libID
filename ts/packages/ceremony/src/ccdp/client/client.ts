@@ -12,7 +12,7 @@ import {
   supportedPlatforms,
 } from '../../platforms/index.js'
 import { hasExactKeys, isFixedBytes, isOrigin } from '../../primitives.js'
-import { UUID } from '../index.js'
+import { isCeremonyId } from '../navigation.js'
 import { type Ceremony, ClientCeremony } from './ceremony.js'
 import { type CeremonyConfig, fetchCeremonyConfig } from './config.js'
 import { fetchPlatformVersions, type PlatformVersions } from './versions.js'
@@ -87,7 +87,7 @@ export function ccdpClientFromConfig(
       return PopupConnection.connect(popup, { ...options, allowedPopupOrigins: popupOrigins })
     },
     new(conn, id, platformId, ledgerId, operationDomain, transactionData, ceremonyVersion) {
-      if (typeof id !== 'string' || !UUID.test(id) || !enabledPlatforms.includes(platformId))
+      if (typeof id !== 'string' || !isCeremonyId(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
       const version = selectVersion(enabledVersions(platformId), ceremonyVersion)
       const ledger = snapshotLedger(ledgerId)

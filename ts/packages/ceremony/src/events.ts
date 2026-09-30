@@ -1,11 +1,5 @@
 import { messages } from './ccdp/uiMessages.js'
 import { type CeremonyError, toCeremonyError } from './errors.js'
-import { hasExactKeys, isRecord, isSlug, isText } from './primitives.js'
-
-/** Bounded instrumentation payloads; text bounds are UTF-8 bytes. */
-const MAX_OPERATION_ID_BYTES = 64
-const MAX_EVENT_ATTRIBUTES = 16
-const MAX_ATTRIBUTE_TEXT_BYTES = 128
 
 /** Core operations have protocol-owned meanings; extension events grant no protocol authority. */
 const coreEvents = [
@@ -47,45 +41,6 @@ export const now = () => performance.timeOrigin + performance.now()
 
 export const isCoreEvent = (event: string): event is CoreEvent =>
   coreEvents.includes(event as CoreEvent)
-
-/** Exact bounded records are validated at the transport boundary, independently of subscriptions. */
-export function validateEvent(value: unknown): asserts value is OperationEvent {
-  if (
-    !hasExactKeys(value, ['event', 'timestamp'], ['phase', 'instrumentation']) ||
-    !isSlug(value.event) ||
-    typeof value.timestamp !== 'number' ||
-    !Number.isFinite(value.timestamp) ||
-    value.timestamp < 0 ||
-    ('phase' in value && value.phase !== 'started' && value.phase !== 'finished')
-  )
-    throw new TypeError('Invalid operation event')
-  const core = isCoreEvent(value.event)
-  if (core && (value.event === 'prover-fallback' ? 'phase' in value : !('phase' in value)))
-    throw new TypeError('Invalid core event phase')
-  if ('instrumentation' in value) validateInstrumentation(value.instrumentation, core)
-}
-
-/** Core events carry no operation ID; attributes are a few scalar measurements. */
-function validateInstrumentation(metadata: unknown, core: boolean): void {
-  if (
-    !hasExactKeys(metadata, [], ['operationId', 'attributes']) ||
-    ('operationId' in metadata && (!isText(metadata.operationId, MAX_OPERATION_ID_BYTES) || core))
-  )
-    throw new TypeError('Invalid event instrumentation')
-  const { attributes } = metadata
-  if (
-    'attributes' in metadata &&
-    (!isRecord(attributes) ||
-      Object.keys(attributes).length > MAX_EVENT_ATTRIBUTES ||
-      Object.entries(attributes).some(([key, value]) => !isSlug(key) || !isAttributeValue(value)))
-  )
-    throw new TypeError('Invalid event attributes')
-}
-
-const isAttributeValue = (value: unknown): boolean =>
-  typeof value === 'boolean' ||
-  (typeof value === 'number' && Number.isFinite(value)) ||
-  isText(value, MAX_ATTRIBUTE_TEXT_BYTES)
 
 const stages = [
   'preparation',

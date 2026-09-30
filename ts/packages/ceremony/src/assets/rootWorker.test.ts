@@ -16,7 +16,7 @@ vi.mock('virtual:ceremony-assets', () => ({
   allowedRequests: [{ url: '/asset' }, { url: '/g1.dat', range: 'bytes=0-1' }],
 }))
 
-import { startWorker } from './worker.js'
+import { startRootWorker } from './rootWorker.js'
 
 beforeEach(() => {
   load.mockReset()
@@ -27,7 +27,7 @@ const PREFETCH = 'https://ccdp.example/ccdp/v1/prefetch'
 /** Start the worker on a scope double; `dispatch(type, event)` runs its listener for `type`. */
 function start(scope: Record<string, unknown> = {}) {
   const handlers = new Map<string, (event: unknown) => void>()
-  startWorker({
+  startRootWorker({
     location: { origin: 'https://ccdp.example' },
     addEventListener: (type: string, handler: (event: unknown) => void) =>
       handlers.set(type, handler),
