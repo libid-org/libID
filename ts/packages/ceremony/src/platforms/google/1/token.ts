@@ -68,6 +68,8 @@ export function acceptGoogleIdToken(idToken: string, clientId: string): ParsedGo
 
 /** Select the one published signing key carrying the token's `kid`. */
 export async function fetchSigningKey(kid: string, signal: AbortSignal): Promise<unknown> {
+  // A run closed before this point starts no key request.
+  signal.throwIfAborted()
   const response = await fetch(profile.jwksUrl, {
     credentials: 'omit',
     redirect: 'error',

@@ -803,7 +803,7 @@ interface Staged {
   abort(reason: Error): void
   /** The platform proof an accepted run delivers. */
   proof(): unknown
-  /** The pipeline sent no request and opened no notary session of its own. */
+  /** The pipeline started no request and opened no notary session of its own. */
   untouched(): void
 }
 
@@ -1034,15 +1034,12 @@ const previousKey = {
 
 /** Publish `published` as the provider's key set. */
 function publishKeys(published: object[]) {
-  const sent: string[] = []
-  const keys = vi.fn(async (url: string, init?: RequestInit) => {
-    // As fetch: an aborted signal rejects before any request is sent.
+  const keys = vi.fn(async (_url: string, init?: RequestInit) => {
     init?.signal?.throwIfAborted()
-    sent.push(url)
     return new Response(JSON.stringify({ keys: published }))
   })
   vi.stubGlobal('fetch', keys)
-  return Object.assign(keys, { sent })
+  return keys
 }
 
 /** Stage `outcome`; `change` replaces the signed token or the published fixture key. */
@@ -1090,7 +1087,7 @@ function stageOidc(
     keys,
     proof: () => fixture.proof,
     untouched: () => {
-      expect(keys.sent).toEqual([])
+      expect(keys).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
     },
   }
