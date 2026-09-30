@@ -1,6 +1,6 @@
 import { concatBytes } from '@noble/hashes/utils.js'
 import { errorMessage } from '../errors.js'
-import { workerThreads } from '../workers.js'
+import { workerThreads } from '../threads.js'
 import type { DecodedAttestedData, DecodedDirection } from './decode.js'
 import { responseSizes } from './http.js'
 import { MAX_FRAME_BYTES, MAX_RECV_BYTES, MAX_SENT_BYTES } from './limits.js'
@@ -8,8 +8,8 @@ import {
   type CommitRange,
   correlateReveal,
   type HashOpening,
+  matchAttestedData,
   planNotarization,
-  verifyAttestation,
 } from './notarize.js'
 import type {
   ByteRange,
@@ -258,7 +258,7 @@ function session(port: MessagePort, initial: Prepare) {
     reply({ type: 'revealed', openings })
     await prover.finish()
     const wire = decodeAttestationFrame(await readFinalFrame(io))
-    const decoded = verifyAttestation(url.hostname, transcript, plan, correlated, wire.attestedData)
+    const decoded = matchAttestedData(url.hostname, transcript, plan, correlated, wire.attestedData)
     await io.close()
     prover.free()
     reply({

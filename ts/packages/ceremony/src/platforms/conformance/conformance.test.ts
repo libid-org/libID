@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type Asset, assetUrl } from '../../assets/index.js'
 import { proofAssets } from '../../barretenberg/barretenberg.assets.js'
 import type {
-  BearerTranscript,
+  BearerExchange,
   TokenRequestInput,
-} from '../../barretenberg/circuits/bearer-link/transcript.js'
+} from '../../barretenberg/circuits/bearer-link/exchange.js'
 import type { ProofEngineOptions, RawProof } from '../../barretenberg/engine.js'
 import { proofEvents, proofWeights } from '../../barretenberg/events.js'
 import { validateCeremonyConfig } from '../../ccdp/client/config.js'
@@ -16,7 +16,7 @@ import { isCoreEvent, type OperationEvent } from '../../events.js'
 import type { NotaryAttestation } from '../../notary/decode.js'
 import { concat, encodeAttestation, opening } from '../../notary/fixtures/attestation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
-import { correlateReveal, planNotarization, verifyAttestation } from '../../notary/notarize.js'
+import { correlateReveal, matchAttestedData, planNotarization } from '../../notary/notarize.js'
 import { notaryAssets } from '../../notary/notary.assets.js'
 import type {
   CommitmentOpening,
@@ -171,9 +171,9 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       'acceptResult',
       'buildAuthorizationUrl',
       'events',
-      'oauthReturn',
       'pkce',
       'progressWeights',
+      'returnRules',
     ])
     // Code exchange binds the digest through PKCE; an implicit ID token carries it as the nonce.
     expect(ceremony.pkce).toBe(fixture.proverKind === 'bearer-link')
@@ -199,8 +199,8 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     expect(params.get('redirect_uri')).toBe(input.redirectUri)
     expect(params.get('state')).toBe(state)
     // The requested response is exactly what the platform's return rules accept.
-    expect(params.get('response_type') ?? 'code').toBe(fixture.oauthReturn.credential)
-    expect(params.get('response_mode') ?? 'query').toBe(fixture.oauthReturn.transport)
+    expect(params.get('response_type') ?? 'code').toBe(fixture.returnRules.credential)
+    expect(params.get('response_mode') ?? 'query').toBe(fixture.returnRules.transport)
     if (ceremony.pkce) {
       expect(params.get('code_challenge')).toBe(input.codeChallenge)
       expect(params.get('code_challenge_method')).toBe('S256')
@@ -420,9 +420,9 @@ const outcomes = ['accepted', 'denied', 'error'] as const
 describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
   const fixture = fixtures[platformId]
   // Returns are built and judged by the fixture's rules; only the parser reads the platform's own.
-  const rules: ReturnRules = fixture.oauthReturn
+  const rules: ReturnRules = fixture.returnRules
   const version = platforms[platformId].versions[1]
-  const production = version.oauthReturn
+  const production = version.returnRules
   const samples = returnSamples(platformId)
   const { returns: vectors, issuer: issuerVectors } = fixture.specTests
   const expected = {
@@ -865,7 +865,7 @@ type BearerOutcome = SharedOutcome | keyof typeof bearerFailures
  * byte without changing length. The test backend must detect that the resulting attestation
  * commits different bytes.
  */
-function shiftIdentitySelection(transcript: BearerTranscript) {
+function shiftIdentitySelection(transcript: BearerExchange) {
   const select = transcript.selectIdentity
   vi.spyOn(transcript, 'selectIdentity').mockImplementation((value: Transcript, bearer: string) => {
     const selected = select(value, bearer)
@@ -946,7 +946,7 @@ function fakeNotarization(platformId: BearerLinkPlatform, outcome: BearerOutcome
         )
         if (outcome === 'attestation-mismatch' && index === 0) attestedData[0] ^= 1
         const correlated = correlateReveal(transcript, plan, raw)
-        verifyAttestation(host, transcript, plan, correlated, attestedData)
+        matchAttestedData(host, transcript, plan, correlated, attestedData)
         const openings: CommitmentOpening[] = (['sent', 'received'] as const).flatMap((direction) =>
           correlated[direction].map(({ start, end, blinder }) => ({
             direction,
@@ -1015,7 +1015,7 @@ function stageBearer(
   }: { held?: boolean; change?: Parameters<typeof proverContext>[1] } = {},
 ) {
   const fixture = fixtures[platformId]
-  if (outcome === 'shifted-range') shiftIdentitySelection(fixture.transcript)
+  if (outcome === 'shifted-range') shiftIdentitySelection(fixture.exchange)
   const notarized = fakeNotarization(platformId, outcome, held)
   fakeBearerProof(fixture.evidence.bearer, notarized.commitments, outcome)
   return {
@@ -1086,7 +1086,7 @@ function stageOidc(
         ? []
         : [previousKey, jwk],
   )
-  const { config, oauthReturn: rules } = fixture
+  const { config, returnRules: rules } = fixture
   const accepted = fieldsOf(returnSamples(platformId).accepted.oauthReturn, rules)
   const run = runContext(platformId, outcome, {
     oauthReturn: returnOf(setField(accepted, rules.credential, oidcToken(idToken, outcome)), rules),
@@ -1223,7 +1223,7 @@ describe.each(supportedPlatforms)('%s prove() contract', (platformId) => {
 
 describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
   const fixture = fixtures[platformId]
-  const { transcript, config, evidence, identity, longest, rejectedIdentity } = fixture
+  const { exchange, config, evidence, identity, longest, rejectedIdentity } = fixture
   const tags = `${proverKinds['bearer-link'].tags} ${fixture.specTests.prover}`
 
   describe('transcripts', () => {
@@ -1242,24 +1242,24 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
     const tokenUrl = new URL(fixture.tokenRequest.url)
     const identityUrl = new URL(fixture.identityRequest.url)
     /** A request as the TLSN prover writes it: lowercase names, reordered headers. */
-    const tokenSent = (request: ExactHttpRequest = transcript.buildTokenRequest(input)) =>
+    const tokenSent = (request: ExactHttpRequest = exchange.buildTokenRequest(input)) =>
       text(proverRequest(`POST ${tokenUrl.pathname} HTTP/1.1`, request))
     const token = (sent: string, body = evidence.tokenBody, frozen = input) =>
-      transcript.selectToken({ sent: utf8(sent), received: httpResponse(body) }, frozen)
+      exchange.selectToken({ sent: utf8(sent), received: httpResponse(body) }, frozen)
     const identitySent = text(
       proverRequest(
         `GET ${identityUrl.pathname} HTTP/1.1`,
-        transcript.buildIdentityRequest(evidence.bearer),
+        exchange.buildIdentityRequest(evidence.bearer),
       ),
     )
     const identityOf = (body: string, sent = identitySent) =>
-      transcript.selectIdentity({ sent: utf8(sent), received: httpResponse(body) }, evidence.bearer)
+      exchange.selectIdentity({ sent: utf8(sent), received: httpResponse(body) }, evidence.bearer)
     const members = (body: string) => revealed(httpResponse(body), identityOf(body).ranges.received)
 
     it('selects exactly the identity its validators admit from the identity response', () => {
-      const sent = requestHead(transcript.buildIdentityRequest(evidence.bearer))
+      const sent = requestHead(exchange.buildIdentityRequest(evidence.bearer))
       const select = (body: string) =>
-        transcript.selectIdentity(
+        exchange.selectIdentity(
           { sent, received: utf8(`HTTP/1.1 200 OK\r\n\r\n${body}`) },
           evidence.bearer,
         )
@@ -1288,8 +1288,8 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
       { redirectUri: 'https://bridge.test/callback?next=1' },
       { codeVerifier: 'a'.repeat(43) },
     ])('rejects invalid token inputs before request construction: %j', (change) => {
-      expect(() => transcript.buildTokenRequest(input)).not.toThrow()
-      expect(() => transcript.buildTokenRequest({ ...input, ...change })).toThrow(
+      expect(() => exchange.buildTokenRequest(input)).not.toThrow()
+      expect(() => exchange.buildTokenRequest({ ...input, ...change })).toThrow(
         'Invalid token request',
       )
     })
@@ -1301,7 +1301,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
           tokenTags,
         ),
         () => {
-          const request = transcript.buildTokenRequest(input)
+          const request = exchange.buildTokenRequest(input)
           expect(request.url).toBe(fixture.tokenRequest.url)
           const body = text(request.body)
           expect([...new URLSearchParams(body)]).toEqual(fixture.tokenRequest.form(input))
@@ -1361,7 +1361,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
       })
 
       const host = `host: ${tokenUrl.host}`
-      const length = transcript.buildTokenRequest(input).body.length
+      const length = exchange.buildTokenRequest(input).body.length
       it.each([
         [host, 'host: other.com'],
         ['application/x-www-form-urlencoded', 'text/plain'],
@@ -1383,13 +1383,13 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         expect(() => token(sent.replace(from, to))).toThrow()
       })
 
-      it.each(formChanges(text(transcript.buildTokenRequest(input).body), input.code))(
+      it.each(formChanges(text(exchange.buildTokenRequest(input).body), input.code))(
         tagged(
           'rejects an altered form despite a matching Content-Length: %s [TEST-COMMON-05] [TEST-COMMON-06]',
           tokenTags,
         ),
         (body) => {
-          const request = transcript.buildTokenRequest(input)
+          const request = exchange.buildTokenRequest(input)
           const altered = utf8(body)
           const headers = { ...request.headers, 'Content-Length': utf8(String(altered.length)) }
           expect(() => token(tokenSent({ ...request, body: altered, headers }))).toThrow()
@@ -1403,7 +1403,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         ),
         (field) => {
           const changed = { ...input, [field]: frozenChanges[field] }
-          expect(() => transcript.buildTokenRequest(changed)).not.toThrow()
+          expect(() => exchange.buildTokenRequest(changed)).not.toThrow()
           expect(() => token(tokenSent(), evidence.tokenBody, changed)).toThrow(
             'Token request body changed',
           )
@@ -1414,7 +1414,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         it.each(['', 'has space', 'trailing\n', '\tcredential', 'é', '\x7f'])(
           'rejects an invalid public credential %j before request construction',
           (clientCredential) => {
-            expect(() => transcript.buildTokenRequest({ ...input, clientCredential })).toThrow()
+            expect(() => exchange.buildTokenRequest({ ...input, clientCredential })).toThrow()
           },
         )
     })
@@ -1462,7 +1462,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
           identityTags,
         ),
         () => {
-          const request = transcript.buildIdentityRequest(evidence.bearer)
+          const request = exchange.buildIdentityRequest(evidence.bearer)
           expect(request.url).toBe(fixture.identityRequest.url)
           expect(
             Object.fromEntries(
@@ -1487,7 +1487,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
 
       it('rejects whitespace in an HTTP bearer before sending', () => {
         for (const bearer of ['token token', ' token', 'token ', 'token\t', 'token\r\n'])
-          expect(() => transcript.buildIdentityRequest(bearer)).toThrow('Invalid bearer')
+          expect(() => exchange.buildIdentityRequest(bearer)).toThrow('Invalid bearer')
       })
 
       it.each(['x-extra: value', 'x-extra: café 😀', 'x-extra:', 'x-extra:\tvalue'])(

@@ -5,7 +5,7 @@ import { notaryCases } from './platforms.js'
 import { notary, runtime } from './topology.js'
 import { verifyBrowserProof } from './verify.js'
 
-// Controlled circuit inputs and smoke.ts's unauthenticated requests; no live OAuth credentials.
+// Controlled circuit inputs and runtime.ts's unauthenticated requests; no live OAuth credentials.
 // The sessions reach the live X and GitHub APIs: one retry absorbs a transient network failure,
 // while a persistent one still fails.
 test.describe.configure({ retries: 1 })
@@ -43,7 +43,7 @@ for (const { platform, sessions: count, alongsideProving } of notaryCases)
         { platform, count, alongsideProving },
       )
       .catch((error: unknown) => {
-        // These sessions contain only smoke.ts's synthetic, unauthenticated requests.
+        // These sessions contain only runtime.ts's synthetic, unauthenticated requests.
         console.error('Notary runtime progress:', JSON.stringify(logs))
         throw error
       })

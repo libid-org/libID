@@ -1,5 +1,5 @@
 import { parseCsp, scriptHash } from '../build/profiles.ts'
-import { csp, document } from '../src/assets/headers.ts'
+import { csp, documentHeaders } from '../src/assets/headers.ts'
 
 /** The deployment inputs Callback reads, inserted in its positional order. */
 export type CallbackInputs = { allowedApplicationOrigins: readonly string[]; ccdpOrigin: string }
@@ -40,7 +40,7 @@ export function prepareCallback(
   return {
     body: html.replace(slot, () => slot.replace(marker, () => data)),
     headers: {
-      ...document,
+      ...documentHeaders,
       'Cache-Control': 'no-store',
       'Content-Security-Policy': `${csp.base}; script-src ${scriptHash(code)}; style-src 'unsafe-inline'; frame-src ${ccdpOrigin}; connect-src 'none'`,
     },

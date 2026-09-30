@@ -38,11 +38,11 @@ export class CeremonyError extends Error {
   }
 }
 
-/** A failed end keeps its transport code; an orderly close is this participant's interruption. */
+/** A failed end keeps its transport code; an orderly close fails the document's own run with `closedMessage`. */
 export const endError = (end: ConnectionEnd, closedMessage: string): Error =>
   end.outcome === 'failed' ? new PopupError(end.code) : new Error(closedMessage)
 
-export function ceremonyError(error: unknown, event: string): CeremonyError {
+export function toCeremonyError(error: unknown, event: string): CeremonyError {
   return error instanceof CeremonyError
     ? error
     : new CeremonyError(event, describe(error), { cause: error })

@@ -101,7 +101,7 @@ export function acceptReturn(context: ProverContext, platformId: PlatformId): st
   )
   if (!platform.isClientId(request.clientId) || ceremony.pkce !== (request.codeVerifier !== null))
     throw new CeremonyError('authorization', messages.invalidProvingRequest)
-  const returned = parseOAuthReturn(context.oauthReturn, ceremony.oauthReturn)
+  const returned = parseOAuthReturn(context.oauthReturn, ceremony.returnRules)
   if (returned?.state !== oauthState(context.ceremonyId))
     throw new CeremonyError('authorization', 'Invalid OAuth return')
   if (returned.outcome === 'denied') return null

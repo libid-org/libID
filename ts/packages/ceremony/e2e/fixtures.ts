@@ -51,7 +51,7 @@ export interface Fixtures {
   /** How many times the harness has served `asset` so far. */
   assetCount: (asset: string) => Promise<number>
   /** Answer Google authorization by redirecting to `target(state, nonce)`; by default, a denial. */
-  provider: (target?: (state: string, nonce: string) => string) => Promise<void>
+  googleProvider: (target?: (state: string, nonce: string) => string) => Promise<void>
   /**
    * Check `platform`'s authorization request against its table registration and answer it
    * with `fields` (or the fields computed from the request) and its state in the provider's return
@@ -93,7 +93,7 @@ export const test = base.extend<Fixtures>({
   ccdp: async ({ app }, use) => {
     await use(origins(app.startsWith('https:')).ccdp)
   },
-  provider: async ({ bridge, context }, use) => {
+  googleProvider: async ({ bridge, context }, use) => {
     await use(
       async (target = (state) => `${bridge}/auth/callback#error=access_denied&state=${state}`) => {
         await context.route('https://accounts.google.com/**', async (route) => {

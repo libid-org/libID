@@ -39,7 +39,7 @@ export function buildGooglePublicInputs(
 }
 
 /** Compare every circuit field in order; canonical hex makes string equality byte equality. */
-export function validateGooglePublicInputs(
+export function isGooglePublicInputs(
   value: unknown,
   authorizationDigest: Uint8Array,
   identity: Identity<'google'>,

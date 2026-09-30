@@ -1,8 +1,8 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { claimRootWorker } from '../../assets/registration.js'
-import { ceremonyError, endError, reportFailure } from '../../errors.js'
-import { Events, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
+import { endError, reportFailure, toCeremonyError } from '../../errors.js'
+import { EventFeed, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
 import { ceremonyFor } from '../../platforms/index.js'
 import { type ProverResult, proverFor } from '../../platforms/provers.js'
 import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
@@ -26,7 +26,7 @@ export async function startProver(fragment: string): Promise<void> {
     })
     await new ProverDocument(connection, input).start()
   } catch (error) {
-    const failure = ceremonyError(error, 'prover')
+    const failure = toCeremonyError(error, 'prover')
     view(messages.returnToApplication(failure.message))
     reportFailure(undefined, failure)
   }
@@ -36,8 +36,8 @@ export async function startProver(fragment: string): Promise<void> {
 class ProverDocument {
   private state: ProverState
   private readonly controller = new AbortController()
-  private readonly events = new Events()
-  private readonly ui = eventView(this.events)
+  private readonly feed = new EventFeed()
+  private readonly ui = eventView(this.feed)
 
   constructor(
     private readonly connection: PopupConnection<Message>,
@@ -100,7 +100,7 @@ class ProverDocument {
     if (this.controller.signal.aborted) return
     if (result === null) {
       this.connection.send({ type: 'user-denied' })
-      this.events.emit({ status: 'denied', timestamp: now() })
+      this.feed.emit({ status: 'denied', timestamp: now() })
       this.cleanup()
       return
     }
@@ -128,7 +128,7 @@ class ProverDocument {
       }
       // Observation loss cannot alter proving.
     }
-    this.events.emit({ ...event, status: 'active' })
+    this.feed.emit({ ...event, status: 'active' })
   }
 
   private cleanup(): void {
@@ -139,8 +139,8 @@ class ProverDocument {
 
   private fail(error: unknown): void {
     if (this.state.phase === 'ended') return
-    const failure = ceremonyError(error, 'prover')
-    this.events.emit(failureEvent(failure))
+    const failure = toCeremonyError(error, 'prover')
+    this.feed.emit(failureEvent(failure))
     this.cleanup()
     reportFailure(this.connection, failure)
   }

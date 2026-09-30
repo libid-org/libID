@@ -32,7 +32,7 @@ export function buildBearerLinkInputs(
 }
 
 /** Match the two commitments in the circuit's exact public-input order. */
-export function validateBearerLinkPublicInputs(
+export function isBearerLinkPublicInputs(
   value: readonly string[],
   inputs: ReturnType<typeof buildBearerLinkInputs>,
 ): boolean {

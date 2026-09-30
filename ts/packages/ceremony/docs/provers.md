@@ -48,7 +48,7 @@ JSON uses native parsing; authoritative field uniqueness is the provider guarant
 in ASM-PROV-06. Circuit inputs still reference the original signed bytes.
 Delivery includes the proof, its 56 public inputs, expiry and modulus, beside the
 exact signed audience, subject and email as identity fields. Prover compares the
-backend's public inputs to its witness-derived values. Client then independently
+backend's public inputs to the values it derived for the circuit inputs. Client then independently
 rebuilds them with its retained authorization digest and the validated result,
 rejecting any mismatch before announcing completion. These comparisons do not
 verify the proof or establish trust in the signing key; the ledger remains authoritative.
@@ -65,15 +65,15 @@ validate their returns and supply their transcripts to
 2. Send the token request and parse its bearer. Start token reveal/finalization;
    the prepared identity session can immediately send its request with the bearer.
 3. Parse identity and reveal its selected transcript ranges. Once both sets of
-   private openings are available, pass them to the circuit prover while final
-   attestations continue. It builds the witness and checks the returned public inputs.
+   private openings are available, pass them to the bearer-link circuit while final
+   attestations continue. It builds the circuit inputs and checks the returned public inputs.
 4. Join the proof and both correlated final attestations before returning.
 
 Only identity HTTP depends on the token. Session setup and proof initialization
 do not. Every provisional branch is observed immediately so a failure aborts
 siblings rather than leaving work or a promise rejection behind.
 
-GitHub's [token request](../src/platforms/github/1/transcript.ts) includes the
+GitHub's [token request](../src/platforms/github/1/exchange.ts) includes the
 public application credential frozen from Bridge configuration and forwarded in
 `ProveIdentity`. The complete request is revealed; the response bearer and both
 commitment openings remain private. Both platforms exchange the code through
@@ -82,9 +82,9 @@ browser HTTP exchange. The [public-client profile](https://github.com/libid-org/
 owns GitHub's request layout; deployed verifiers must accept it.
 
 X and GitHub share the `bearer_link` circuit and
-[transcript machinery](../src/barretenberg/circuits/bearer-link/transcript.ts).
+[exchange machinery](../src/barretenberg/circuits/bearer-link/exchange.ts).
 Each platform's `provider.ts` owns endpoints, request fields, identity headers and
-user-name grammar; `transcript.ts` supplies its transcript selectors.
+user-name grammar; `exchange.ts` supplies its requests and transcript selectors.
 [bearer-link/validation.ts](../src/barretenberg/circuits/bearer-link/validation.ts) supplies the shared
 client ID, identity and proof validators under each platform's names. The shared
 machinery validates the common token inputs (form client ID, code, redirect URI,

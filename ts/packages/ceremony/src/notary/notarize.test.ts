@@ -5,9 +5,9 @@ import { concat, encodeAttestation, opening } from './fixtures/attestation.js'
 import {
   correlateReveal,
   type HashOpening,
+  matchAttestedData,
   type NotarizationPlan,
   planNotarization,
-  verifyAttestation,
 } from './notarize.js'
 import type { ByteRange, Transcript } from './protocol.js'
 
@@ -24,7 +24,7 @@ function correlateAttestation(
   const correlated = correlateReveal(transcript, plan, openings)
   return {
     ...correlated,
-    decoded: verifyAttestation(authority, transcript, plan, correlated, attestedData),
+    decoded: matchAttestedData(authority, transcript, plan, correlated, attestedData),
   }
 }
 

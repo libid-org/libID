@@ -2,7 +2,7 @@
 // framework-agnostic: methods are own properties, so tests wrap them with their runner's spies.
 
 import type { eventView } from '../ccdp/documents/ui.js'
-import type { CeremonyEvent, Events } from '../events.js'
+import type { CeremonyEvent, EventFeed } from '../events.js'
 
 type DocumentView = ReturnType<typeof eventView>
 
@@ -14,7 +14,7 @@ export interface FakeDocumentUi extends DocumentView {
   readonly views: string[]
   readonly events: CeremonyEvent[]
   view(title: string): void
-  eventView(events: Events): DocumentView
+  eventView(events: EventFeed): DocumentView
 }
 
 export function fakeDocumentUi(): FakeDocumentUi {
@@ -43,5 +43,5 @@ export function fakeDocumentUi(): FakeDocumentUi {
  */
 export const documentUi = (current: () => FakeDocumentUi) => ({
   view: (title: string) => current().view(title),
-  eventView: (events: Events) => current().eventView(events),
+  eventView: (events: EventFeed) => current().eventView(events),
 })

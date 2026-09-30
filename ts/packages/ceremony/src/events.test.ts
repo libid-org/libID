@@ -3,14 +3,14 @@ import { messages } from './ccdp/uiMessages.js'
 import {
   type CeremonyEvent,
   CeremonyStage,
-  Events,
+  EventFeed,
   type OperationEvent,
   operation,
   type StageEvent,
 } from './events.js'
 
 it('projects monotonic presentation while preserving overlapping occurrence timestamps [LIBID-BROWSER-006] [TEST-CCDP-06]', () => {
-  const feed = new Events(),
+  const feed = new EventFeed(),
     events: CeremonyEvent[] = [],
     stages: StageEvent[] = []
   feed.onEvent((e) => events.push(e))
@@ -52,7 +52,7 @@ it('projects monotonic presentation while preserving overlapping occurrence time
 })
 
 it('isolates throwing observers and mutations, and unsubscribes locally', () => {
-  const feed = new Events(),
+  const feed = new EventFeed(),
     listen = vi.fn(),
     stage = vi.fn()
   feed.onEvent(() => {
@@ -111,7 +111,7 @@ it('pairs concurrent repeated operations by identifier and leaves interrupted sp
 })
 
 it('delivers nothing active after a listener ends the feed', () => {
-  const feed = new Events(),
+  const feed = new EventFeed(),
     later = vi.fn()
   feed.onEvent((e) => {
     if (e.status === 'active') feed.emit({ status: 'denied', timestamp: 2 })
@@ -122,7 +122,7 @@ it('delivers nothing active after a listener ends the feed', () => {
 })
 
 it('freezes instrumentation that carries only an operation ID', () => {
-  const feed = new Events(),
+  const feed = new EventFeed(),
     seen: CeremonyEvent[] = []
   feed.onEvent((e) => {
     if ('instrumentation' in e && e.instrumentation)

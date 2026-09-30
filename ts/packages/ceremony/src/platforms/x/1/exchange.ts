@@ -1,4 +1,4 @@
-import { bearerTranscript } from '../../../barretenberg/circuits/bearer-link/transcript.js'
+import { bearerExchange } from '../../../barretenberg/circuits/bearer-link/exchange.js'
 import { isRecord } from '../../../primitives.js'
 import { isUserName, provider } from './provider.js'
 
@@ -9,7 +9,7 @@ export const {
   selectToken,
   selectIdentity,
   identityResponse,
-} = bearerTranscript({
+} = bearerExchange({
   tokenUrl: provider.tokenUrl,
   tokenFields(input) {
     const values: Record<string, string> = {

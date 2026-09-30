@@ -7,7 +7,7 @@ export type PlatformVersions = Readonly<Record<string, readonly number[]>>
 
 export const VERSIONS_PATH = '/ccdp/versions.json'
 
-/** The catalog is a short public record; bound downloads before decoding JSON. */
+/** The version list is a short public record; bound downloads before decoding JSON. */
 const MAX_VERSIONS_BYTES = 64 * 1024
 
 /**

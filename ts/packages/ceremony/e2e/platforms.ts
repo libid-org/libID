@@ -3,7 +3,7 @@ import type { PlatformId } from '../src/platforms/index.js'
 
 /**
  * One catalog platform's controlled browser fixtures. Provider facts are stated here,
- * independently of the catalog's own return profile, so a changed profile fails the suite.
+ * independently of the catalog's own return rules, so changed rules fail the suite.
  */
 export interface BrowserPlatform {
   /** Registration the harness Bridge advertises. */
@@ -55,7 +55,7 @@ export const browserPlatforms: { readonly [P in PlatformId]: BrowserPlatform } =
 
 export const platformIds = Object.keys(table) as PlatformId[]
 
-/** Platforms with real notary sessions; each needs an unauthenticated request in smoke.ts. */
+/** Platforms with real notary sessions; each needs an unauthenticated request in runtime.ts. */
 export type NotaryPlatform = {
   [P in PlatformId]: (typeof table)[P]['notary'] extends readonly [] ? never : P
 }[PlatformId]

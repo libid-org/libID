@@ -10,7 +10,7 @@ execFileSync(
   ['build/distribution.ts', '--out-dir', '.cache/qualification-assets'],
   { cwd: packageDir, stdio: 'inherit' },
 )
-await import('./buildSmoke.mjs')
+await import('./buildRuntime.mjs')
 await (await import('./crs.mjs')).cacheCrs()
 
 /** An unminified ES library build into the directory the harness server reads. */

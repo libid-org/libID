@@ -112,10 +112,9 @@ const evidence = {
         )
         expect(bearer).toHaveLength(1)
         expect(identity.sent.commitments).toHaveLength(1)
-        const publicInputs = [
-          ...bearer[0].commitment,
-          ...identity.sent.commitments[0].commitment,
-        ].map((byte) => `0x${byte.toString(16).padStart(64, '0')}`)
+        const publicInputs = [...bearer[0].hash, ...identity.sent.commitments[0].hash].map(
+          (byte) => `0x${byte.toString(16).padStart(64, '0')}`,
+        )
         await verifyBrowserProof('bearer_link', { proof: result.proof, publicInputs })
       }
     },
@@ -159,7 +158,7 @@ const evidence = {
         if (corrupt) signature[signature.length - 1] ^= 1
         return {
           id_token: `${signed}.${signature.toString('base64url')}`,
-          // Provider metadata the return profile does not interpret must pass through.
+          // Provider metadata the return rules do not interpret must pass through.
           version_info: 'synthetic',
           provider_meta: 'future',
           'release.rev': '1',

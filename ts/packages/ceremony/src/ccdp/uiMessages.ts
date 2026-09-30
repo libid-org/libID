@@ -1,6 +1,6 @@
 import type { PopupErrorCode } from '@libid/popup'
 
-/** Package-owned CCDP display text, shared by documents and the client stage projection. */
+/** Package-owned CCDP display text: document UI, client stages, failure text and the build's inline fallbacks. */
 export const messages = {
   brand: 'libID',
   preparation: 'Preparing your ceremony',

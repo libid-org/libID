@@ -35,7 +35,7 @@ const MAX_CODE_CHARS = 1024
 const CODE = /^[\x21-\x7e]+$/
 
 /** Fixed platform layout; raw transcript bytes remain the authority for disclosure ranges. */
-export function bearerTranscript(layout: {
+export function bearerExchange(layout: {
   tokenUrl: string
   tokenFields(input: TokenRequestInput): [string, string][]
   identityUrl: string
@@ -161,7 +161,7 @@ export function bearerTranscript(layout: {
   }
 }
 
-export type BearerTranscript = ReturnType<typeof bearerTranscript>
+export type BearerExchange = ReturnType<typeof bearerExchange>
 
 function numericId(bytes: Uint8Array, field: string) {
   const { start, valueStart } = jsonField(bytes, field)

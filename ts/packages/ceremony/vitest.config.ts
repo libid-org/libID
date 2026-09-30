@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       'virtual:ceremony-assets': testing('virtual/assets.ts'),
-      'virtual:ceremony-popup-fallback': testing('virtual/popup-fallback.ts'),
+      'virtual:ceremony-popup-fallback': testing('virtual/popupFallback.ts'),
     },
   },
   test: {

@@ -1,5 +1,5 @@
 import { assetUrl } from '../assets/index.js'
-import { ceremonyError } from '../errors.js'
+import { toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, safeEmit } from '../events.js'
 import { isOrigin, isWebUrl } from '../primitives.js'
 import type { NotaryAttestation } from './decode.js'
@@ -238,7 +238,7 @@ class Session implements NotarySession {
     if (this.phase === 'ended') return
     // Preserve the originating operation before shared-runtime cancellation rejects siblings.
     if (!this.signal.aborted && this.phase === 'revealing' && this.observer)
-      error = ceremonyError(error, this.observer.event)
+      error = toCeremonyError(error, this.observer.event)
     for (const waiter of this.pending.splice(0)) waiter.reject(error)
     this.cleanup()
     this.failRuntime(error)

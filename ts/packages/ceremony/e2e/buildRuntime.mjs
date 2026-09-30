@@ -7,7 +7,7 @@ import { writeDistribution } from '../build/sws.ts'
 
 const data = await resolveAssets()
 
-const emitted = await bundle('e2e/smoke.ts', data, { groupModules: false })
+const emitted = await bundle('e2e/runtime.ts', data, { groupModules: false })
 
 const records = new Map(data.local)
 
@@ -22,13 +22,13 @@ for (const item of emitted.output) {
 
 const entry = emitted.output.find((item) => item.type === 'chunk' && item.isEntry)
 
-if (!entry) throw new Error('Missing smoke entry')
+if (!entry) throw new Error('Missing runtime entry')
 
 records.set('/index.html', {
   bytes: Buffer.from(
-    `<!doctype html><title>Ceremony engine qualification</title><script type="module" src="/${entry.fileName}"></script>`,
+    `<!doctype html><title>Ceremony runtime</title><script type="module" src="/${entry.fileName}"></script>`,
   ),
   headers: responseHeaders('proverFallback'),
 })
 
-writeDistribution(join(packageDir, '.cache/smoke'), records)
+writeDistribution(join(packageDir, '.cache/runtime'), records)

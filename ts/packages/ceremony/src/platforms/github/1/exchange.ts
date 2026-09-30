@@ -1,4 +1,4 @@
-import { bearerTranscript } from '../../../barretenberg/circuits/bearer-link/transcript.js'
+import { bearerExchange } from '../../../barretenberg/circuits/bearer-link/exchange.js'
 import { isClientCredential } from '../../../ccdp/index.js'
 import { isUserName, provider } from './provider.js'
 
@@ -9,7 +9,7 @@ export const {
   selectToken,
   selectIdentity,
   identityResponse,
-} = bearerTranscript({
+} = bearerExchange({
   tokenUrl: provider.tokenUrl,
   tokenFields(input) {
     if (!isClientCredential(input.clientCredential)) throw new Error('Invalid token request')

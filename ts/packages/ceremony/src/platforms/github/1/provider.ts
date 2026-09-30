@@ -3,7 +3,7 @@ import { GITHUB, PROOF_LIFETIME_SECONDS_GITHUB } from '@libid/contracts/ceremony
 const token = GITHUB.token!,
   identity = GITHUB.identity!
 
-/** Released v1 request profile plus browser-owned OAuth and presentation constraints. */
+/** Released v1 request layout plus browser-owned OAuth and presentation constraints. */
 export const provider = {
   tokenUrl: `https://${token.session.authority}${token.session.path}`,
   tokenFields: token.tokenFields,

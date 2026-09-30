@@ -8,7 +8,7 @@ import {
 import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../../../barretenberg/parameters.js'
 import { isFixedBytes, isUint, recordValidator } from '../../../primitives.js'
 import { type Identity, identityValidator, isProofBytes } from '../../types.js'
-import { validateGooglePublicInputs } from './publicInputs.js'
+import { isGooglePublicInputs } from './publicInputs.js'
 
 export interface GoogleProofV1 {
   identityProof: Uint8Array
@@ -50,7 +50,7 @@ export function validateProof(
   authorizationDigest: Uint8Array,
 ): GoogleProofV1 {
   const proof = proofShape(value)
-  if (!validateGooglePublicInputs(proof.publicInputs, authorizationDigest, identity, proof))
+  if (!isGooglePublicInputs(proof.publicInputs, authorizationDigest, identity, proof))
     throw new Error('Google public input mismatch')
   return proof
 }

@@ -13,7 +13,7 @@ returns one proof and destroys its worker. Platform owners call `destroy()` in
 late initialization cannot resurrect a settled engine.
 
 [BearerLinkCircuit](../src/barretenberg/circuits/bearer-link/circuit.ts) owns the
-bearer circuit/key selection, witness preparation and public-input check. Its
+bearer circuit/key selection, circuit input preparation and public-input check. Its
 constructor starts the engine before token exchange; `prove()` consumes the
 selected private openings and returns proof bytes. The shared platform flow
 joins those bytes with both final attestations and destroys the prover in `finally`.

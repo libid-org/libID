@@ -128,7 +128,7 @@ function requireCommitted(
     if (!sameRange(correlated[index], signed.commitments[index])) {
       invalid(`${direction} signed commitment range changed`)
     }
-    if (!bytesEqual(signed.commitments[index].commitment, correlated[index].hash)) {
+    if (!bytesEqual(signed.commitments[index].hash, correlated[index].hash)) {
       invalid(`${direction} signed commitment hash changed`)
     }
   }
@@ -191,7 +191,7 @@ export function correlateReveal(
 }
 
 /** Require the signed record to match the transcript, planned reveals and correlated openings. */
-export function verifyAttestation(
+export function matchAttestedData(
   authority: string,
   transcript: Transcript,
   plan: NotarizationPlan,

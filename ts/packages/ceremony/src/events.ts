@@ -1,5 +1,5 @@
 import { messages } from './ccdp/uiMessages.js'
-import { type CeremonyError, ceremonyError } from './errors.js'
+import { type CeremonyError, toCeremonyError } from './errors.js'
 import { hasExactKeys, isRecord, isSlug, isText } from './primitives.js'
 
 /** Bounded instrumentation payloads; text bounds are UTF-8 bytes. */
@@ -132,7 +132,7 @@ const projectedStage = (event: CeremonyEvent): CeremonyStage | undefined =>
   'phase' in event ? projections.get(`${event.event}/${event.phase}`) : undefined
 
 /** A local feed shared by the client and popup documents; observers never control its producer. */
-export class Events {
+export class EventFeed {
   private readonly listeners = new Set<(event: CeremonyEvent) => void>()
   private readonly stageListeners = new Set<(event: StageEvent) => void>()
   private stage: CeremonyStage | undefined
@@ -246,6 +246,6 @@ export async function operation<T>(
     emit({ ...context, phase: 'finished', timestamp: now() })
     return result
   } catch (error) {
-    throw ceremonyError(error, event)
+    throw toCeremonyError(error, event)
   }
 }

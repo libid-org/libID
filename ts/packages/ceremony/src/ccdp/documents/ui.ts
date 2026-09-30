@@ -1,4 +1,4 @@
-import { CeremonyStage, type Events, type StageEvent } from '../../events.js'
+import { CeremonyStage, type EventFeed, type StageEvent } from '../../events.js'
 import { messages } from '../uiMessages.js'
 import { proofProgress } from './progress.js'
 
@@ -34,7 +34,7 @@ function stageLabel(event: StageEvent): string {
 }
 
 /** The same local projection as the Application; subscriptions never mediate wire delivery. */
-export function eventView(events: Events) {
+export function eventView(feed: EventFeed) {
   const { root, label } = view(messages.preparation)
   const bar = document.createElement('progress')
   bar.setAttribute('aria-label', messages.progress)
@@ -52,7 +52,7 @@ export function eventView(events: Events) {
     hint.remove()
     style.remove()
   }
-  const off = events.onStage((event) => {
+  const off = feed.onStage((event) => {
     if (
       event.status === 'active' &&
       event.stage !== 'preparation' &&
@@ -77,7 +77,7 @@ export function eventView(events: Events) {
       bar.value = 0
       root.append(style)
       const progress = proofProgress(weights)
-      offProgress = events.onEvent((event) => {
+      offProgress = feed.onEvent((event) => {
         const value = progress(event)
         if (value !== undefined) bar.value = value
       })

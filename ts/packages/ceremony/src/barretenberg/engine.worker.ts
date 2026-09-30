@@ -3,7 +3,7 @@ import { bytesToHex } from '@noble/hashes/utils.js'
 import initACVM from '@noir-lang/acvm_js'
 import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
-import { ceremonyError, errorMessage } from '../errors.js'
+import { errorMessage, toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
 import { FIELD_BYTES, PROVING_SETTINGS, SRS_POINTS } from './parameters.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
@@ -51,7 +51,7 @@ function fail(error: unknown): void {
   ready = null
   // Also releases a backend that finishes initializing after a sibling failed.
   void destroyBackend().catch(() => {})
-  const failure = ceremonyError(error, event)
+  const failure = toCeremonyError(error, event)
   send({ type: 'error', message: errorMessage(failure), event: failure.event })
 }
 

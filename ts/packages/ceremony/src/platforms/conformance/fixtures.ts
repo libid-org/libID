@@ -3,20 +3,20 @@
 // catalog, OAuth return, validator and prover checks over every entry.
 import { readFileSync } from 'node:fs'
 import type {
-  BearerTranscript,
+  BearerExchange,
   TokenRequestInput,
-} from '../../barretenberg/circuits/bearer-link/transcript.js'
+} from '../../barretenberg/circuits/bearer-link/exchange.js'
 import type { OAuthReturn } from '../../ccdp/navigation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import * as githubTranscript from '../github/1/transcript.js'
+import * as githubExchange from '../github/1/exchange.js'
 import * as githubValidation from '../github/1/validation.js'
 import * as googleValidation from '../google/1/validation.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
 import type { ReturnRules } from '../oauthReturn.js'
 import type { ProverModule } from '../provers.js'
 import type { Identity } from '../types.js'
-import * as xTranscript from '../x/1/transcript.js'
+import * as xExchange from '../x/1/exchange.js'
 import * as xValidation from '../x/1/validation.js'
 
 type Proof<P extends PlatformId> = ProofByPlatformVersion[P] extends { 1: infer T } ? T : never
@@ -42,7 +42,7 @@ type Claim<P extends PlatformId> = { identity: Identity<P>; proof: Proof<P> }
 interface Entry<P extends PlatformId> {
   config: ClientConfig<P>
   /** The return rules the platform must enforce, declared here rather than read from its `url.ts`. */
-  oauthReturn: ReturnRules
+  returnRules: ReturnRules
   /** The identity the evidence names; `oauthClientId` is the configured client. */
   identity: Identity<P>
   /** Every identity field at its maximum accepted length. */
@@ -76,7 +76,7 @@ interface Entry<P extends PlatformId> {
 /** Code-exchange platforms proven by two notarized HTTP transcripts and the bearer-link circuit. */
 export interface BearerLinkFixture<P extends PlatformId> extends Entry<P> {
   proverKind: 'bearer-link'
-  transcript: BearerTranscript
+  exchange: BearerExchange
   /** The token endpoint and the form fields, in order, the platform must send for `input`. */
   tokenRequest: { url: string; form(input: TokenRequestInput): [string, string][] }
   /** The identity endpoint and the headers it pins beside Host, Authorization and Connection. */
@@ -328,7 +328,7 @@ export const fixtures = {
   google: {
     proverKind: 'oidc',
     config: { clientId: googleClaims.aud },
-    oauthReturn: {
+    returnRules: {
       transport: 'fragment',
       credential: 'id_token',
       rejected: ['code', 'access_token', 'refresh_token'],
@@ -491,7 +491,7 @@ export const fixtures = {
   x: {
     proverKind: 'bearer-link',
     config: { clientId: 'client' },
-    oauthReturn: {
+    returnRules: {
       transport: 'query',
       credential: 'code',
       rejected: ['id_token', 'access_token', 'refresh_token', 'iss'],
@@ -518,7 +518,7 @@ export const fixtures = {
     specTests: { ...bearerLinkSpecTests, issuer: '[TEST-PLAT-18]' },
     returns: codeReturns(),
     prover: () => import('../x/1/prover.js'),
-    transcript: xTranscript,
+    exchange: xExchange,
     tokenRequest: {
       url: 'https://api.x.com/2/oauth2/token',
       form: (input) => [
@@ -551,7 +551,7 @@ export const fixtures = {
   github: {
     proverKind: 'bearer-link',
     config: { clientId: 'client', clientCredential: 'public-fixture' },
-    oauthReturn: {
+    returnRules: {
       transport: 'query',
       credential: 'code',
       rejected: ['id_token', 'access_token', 'refresh_token'],
@@ -583,7 +583,7 @@ export const fixtures = {
       'application_suspended',
     ),
     prover: () => import('../github/1/prover.js'),
-    transcript: githubTranscript,
+    exchange: githubExchange,
     tokenRequest: {
       url: 'https://github.com/login/oauth/access_token',
       form: (input) => [

@@ -1,9 +1,9 @@
 import { type Message, type MessageType, PopupConnection, PopupError } from '@libid/popup'
-import { CeremonyError, ceremonyError } from '../../errors.js'
+import { CeremonyError, toCeremonyError } from '../../errors.js'
 import {
   type CeremonyEvent,
   type CoreEvent,
-  Events,
+  EventFeed,
   failureEvent,
   isCoreEvent,
   now,
@@ -47,7 +47,7 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
 }
 
 /** Validated `new` arguments; byte inputs are read only while deriving the digest. */
-export interface Input<P extends PlatformId> {
+export interface CeremonyInput<P extends PlatformId> {
   notaryAddress: string
   chainId: Uint8Array
   platformId: P
@@ -78,10 +78,10 @@ function receiver<M extends Message>(handler: ((message: M) => void) | undefined
 export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   readonly launchUrl: string
   private state: 'new' | 'prefetch' | 'oauth' | 'proving' | 'done' = 'new'
-  private readonly events = new Events()
+  private readonly feed = new EventFeed()
   private readonly observations = new Set<string>()
   private proofWorkStarted = false
-  private readonly off: (() => void)[] = []
+  private readonly clearHandlers: (() => void)[] = []
   private readonly platform: P
   private readonly version: SupportedCeremonyVersion<P>
   private readonly platformEvents: readonly CoreEvent[]
@@ -100,12 +100,12 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   constructor(
     id: string,
     private readonly connection: PopupConnection<Message>,
-    input: Input<P>,
+    input: CeremonyInput<P>,
     config: CeremonyConfig,
     private readonly releaseId: () => void,
   ) {
     this.platform = input.platformId
-    const platform = config.platforms[this.platform]
+    const platformConfig = config.platforms[this.platform]
     this.version = input.version
     // Deriving here, before `new` returns, makes later caller mutation irrelevant.
     const digest = deriveAuthorizationDigest({
@@ -122,7 +122,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       ? deriveCodeVerifier(digest, this.authorizationNonce)
       : null
     this.authorizationUrl = platformCeremony.buildAuthorizationUrl({
-      clientId: platform.clientId,
+      clientId: platformConfig.clientId,
       redirectUri: config.redirectUri,
       state: oauthState(id),
       authorizationDigest: digest,
@@ -132,13 +132,13 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       type: 'prove-identity',
       platformId: this.platform,
       platformCeremonyVersion: this.version,
-      clientId: platform.clientId,
+      clientId: platformConfig.clientId,
       redirectUri: config.redirectUri,
       codeVerifier,
       notaryAddress: input.notaryAddress,
-      ...(platform.clientCredential === undefined
+      ...(platformConfig.clientCredential === undefined
         ? {}
-        : { clientCredential: platform.clientCredential }),
+        : { clientCredential: platformConfig.clientCredential }),
     }
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)
@@ -150,21 +150,23 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       this.fail(
         end.outcome === 'failed'
           ? new PopupError(end.code)
-          : new CeremonyError(this.operation(), messages.connectionEnded, { status: 'closed' }),
+          : new CeremonyError(this.interruptedEvent(), messages.connectionEnded, {
+              status: 'closed',
+            }),
       )
     })
   }
 
   onEvent(listener: (event: CeremonyEvent) => void): () => void {
-    return this.state === 'done' ? () => {} : this.events.onEvent(listener)
+    return this.state === 'done' ? () => {} : this.feed.onEvent(listener)
   }
 
   onStage(listener: (event: StageEvent) => void): () => void {
-    return this.state === 'done' ? () => {} : this.events.onStage(listener)
+    return this.state === 'done' ? () => {} : this.feed.onStage(listener)
   }
 
   private emit(event: OperationEvent): void {
-    this.events.emit({ ...event, status: 'active' })
+    this.feed.emit({ ...event, status: 'active' })
   }
 
   private receiveEvent({ type: _type, ...event }: EventMessage): void {
@@ -189,7 +191,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
     if (this.state === 'oauth')
       void this.connection
         .navigateAway(url)
-        .catch((error) => this.fail(ceremonyError(error, 'authorization')))
+        .catch((error) => this.fail(toCeremonyError(error, 'authorization')))
   }
 
   private proverReady(event: OperationEvent): void {
@@ -238,7 +240,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       }
     })
     binding.remove.push(this.connection.on(type, listener.receive))
-    this.off.push(listener.clear)
+    this.clearHandlers.push(listener.clear)
   }
 
   private expect(state: typeof this.state): void {
@@ -295,7 +297,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       if (this.state === 'prefetch')
         void this.connection
           .navigate(this.prefetchUrl, this.fragment)
-          .catch((error) => this.fail(ceremonyError(error, 'prefetch-dispatch')))
+          .catch((error) => this.fail(toCeremonyError(error, 'prefetch-dispatch')))
     } catch {
       for (const remove of binding.remove.splice(0)) remove()
       if (bindings.get(this.connection) === binding) bindings.delete(this.connection)
@@ -305,14 +307,14 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   }
 
   /** The operation a failure interrupts. */
-  private operation(): string {
+  private interruptedEvent(): string {
     if (this.state === 'new' || this.state === 'prefetch') return 'prefetch-dispatch'
     return this.state === 'oauth' ? 'authorization' : 'prover'
   }
 
   private fail(error: unknown): void {
     if (this.state === 'done') return
-    const failure = ceremonyError(error, this.operation())
+    const failure = toCeremonyError(error, this.interruptedEvent())
     if (this.state === 'new') this.startFailure = failure
     this.finish(failureEvent(failure), failure)
   }
@@ -326,14 +328,14 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
     if (this.binding) this.binding.active = false
     this.state = 'done'
     this.releaseId()
-    for (const off of this.off.splice(0)) off()
+    for (const off of this.clearHandlers.splice(0)) off()
     this.observations.clear()
     this.request.codeVerifier = null
     this.authorizationUrl = ''
     this.authorizationNonce.fill(0)
     this.authorizationDigest.fill(0)
     this.result = undefined
-    this.events.emit(event)
+    this.feed.emit(event)
     if (outcome instanceof CeremonyError) result?.reject(outcome)
     else result?.resolve(outcome)
   }

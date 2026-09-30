@@ -16,7 +16,7 @@ for (const wildcard of [false, true])
       page,
       context,
       request,
-      provider,
+      googleProvider,
       launch,
     }) => {
       if (wildcard) {
@@ -55,7 +55,7 @@ for (const wildcard of [false, true])
           `${request.resourceType()} ${url.origin}${url.pathname}: ${request.failure()?.errorText}`,
         )
       })
-      await provider()
+      await googleProvider()
       const popup = await launch(
         `?ledger=${native ? 'test:mainnet' : 'test:testnet'}`,
         native
@@ -101,20 +101,20 @@ test('popup progress follows operation events independently of stage labels [LIB
   await expect(page.getByText('Preparing your identity proof')).toBeVisible()
   await page.evaluate(() => {
     for (const event of ['proof-worker-bootstrap', 'proof-wasm-load'])
-      window.testEvents.emit({ event, phase: 'finished', timestamp: 1, status: 'active' })
+      window.testFeed.emit({ event, phase: 'finished', timestamp: 1, status: 'active' })
   })
   const value = await bar.evaluate((node: HTMLProgressElement) => node.value)
   expect(value).toBeGreaterThan(0)
   await expect(page.getByText('Preparing your identity proof')).toBeVisible()
   await page.evaluate(() => {
     for (const event of ['proof-wasm-load', 'zk-proof-preparation', 'unrelated-observation'])
-      window.testEvents.emit({ event, phase: 'finished', timestamp: 1, status: 'active' })
+      window.testFeed.emit({ event, phase: 'finished', timestamp: 1, status: 'active' })
   })
   expect(await bar.evaluate((node: HTMLProgressElement) => node.value)).toBe(value)
   await page.clock.runFor(15000)
   await expect(page.getByText(/Still proving/)).toBeVisible()
   await page.evaluate(() => {
-    window.testEvents.emit({
+    window.testFeed.emit({
       event: 'zk-proof-generation',
       phase: 'started',
       timestamp: 2,
@@ -128,7 +128,7 @@ test('popup progress follows operation events independently of stage labels [LIB
       'witness',
       'proof',
     ])
-      window.testEvents.emit({ event, phase: 'finished', timestamp: 3, status: 'active' })
+      window.testFeed.emit({ event, phase: 'finished', timestamp: 3, status: 'active' })
   })
   // Proof work fills the bar before backend teardown and delivery.
   await expect(bar).toHaveAttribute('value', '1')

@@ -6,10 +6,10 @@ test('two independently supplied connections cannot replace each other [LIBID-BR
   bridge,
   page,
   context,
-  provider,
+  googleProvider,
 }) => {
   const states = new Set<string>()
-  await provider((state) => {
+  await googleProvider((state) => {
     states.add(state)
     return `${bridge}/auth/callback#error=access_denied&state=${state}`
   })
@@ -47,10 +47,10 @@ test('Prover rejects a changed Application origin in the same opener window [TES
   ccdp,
   page,
   context,
-  provider,
+  googleProvider,
   launch,
 }) => {
-  await provider()
+  await googleProvider()
   // A second origin admitted by Callback's deployment. The retained WindowProxy
   // is unchanged, but this new document is not the Application Callback bound.
   await context.route(`${ccdp}/changed-application`, (route) =>
@@ -79,11 +79,11 @@ test('Prover rejects a changed Application origin in the same opener window [TES
 test('provider isolation ends Application and returning Callback reports its own connection failure [TEST-CCDP-08] [LIBID-BROWSER-005] [LIBID-OAUTH-020] [LIBID-BROWSER-009]', async ({
   bridge,
   page,
-  provider,
+  googleProvider,
   launch,
 }) => {
   // Serve COOP over HTTP: WebKit does not apply it to the intercepted response.
-  await provider((state) => `${bridge}/isolating-provider?state=${encodeURIComponent(state)}`)
+  await googleProvider((state) => `${bridge}/isolating-provider?state=${encodeURIComponent(state)}`)
   const popup = await launch()
   await expect(popup.locator('#return')).toBeVisible()
   expect(await popup.evaluate(() => window.opener === null)).toBe(true)

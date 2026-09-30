@@ -1,4 +1,4 @@
-import { CeremonyError, ceremonyError } from '../../../errors.js'
+import { CeremonyError, toCeremonyError } from '../../../errors.js'
 import { operation } from '../../../events.js'
 import { responseJson } from '../../../notary/http.js'
 import type { Reveals } from '../../../notary/protocol.js'
@@ -7,20 +7,20 @@ import type { ProverContext } from '../../../platforms/context.js'
 import type { Identity } from '../../../platforms/types.js'
 import { isRecord } from '../../../primitives.js'
 import { BearerLinkCircuit } from './circuit.js'
-import type { BearerTranscript } from './transcript.js'
+import type { BearerExchange } from './exchange.js'
 import type { BearerLinkProofV1 } from './validation.js'
 
 /** Attribute a failure to the operation it interrupted. */
 const failsAs = <T>(p: Promise<T>, event: string) =>
   p.catch((error): never => {
-    throw ceremonyError(error, event)
+    throw toCeremonyError(error, event)
   })
 
 /** Shared two-attestation bearer-link prover; platform transcripts own HTTP and identity policy. */
 export async function proveBearerLink<P extends 'x' | 'github'>(
   context: ProverContext,
   platformId: P,
-  transcript: BearerTranscript,
+  exchange: BearerExchange,
   code: string,
 ): Promise<{ identity: Identity<P>; proof: BearerLinkProofV1 }> {
   const { emit, request } = context
@@ -34,7 +34,7 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     codeVerifier: request.codeVerifier!,
     clientCredential,
   }
-  const tokenRequest = transcript.buildTokenRequest(input)
+  const tokenRequest = exchange.buildTokenRequest(input)
   const controller = new AbortController()
   const signal = AbortSignal.any([context.signal, controller.signal])
   const circuit = new BearerLinkCircuit(emit)
@@ -61,14 +61,14 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
       'token-fetch',
     )
     const identityPrepared = branch(
-      notary.prepare(transcript.identityUrl, 'identity-attestation'),
+      notary.prepare(exchange.identityUrl, 'identity-attestation'),
       'identity-fetch',
     )
     const token = await operation(emit, 'token-fetch', async () => {
       const session = await tokenPrepared
-      const sent = await session.send(tokenRequest)
-      const body = responseJson(sent)
-      const selected = transcript.selectToken(sent, input)
+      const transcript = await session.send(tokenRequest)
+      const body = responseJson(transcript)
+      const selected = exchange.selectToken(transcript, input)
       if (!isRecord(body) || body.access_token !== selected.accessToken)
         throw new Error('Invalid token response')
       return { session, selected }
@@ -77,10 +77,10 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     const tokenOpened = observe(reveal(token.session, token.selected.ranges, 'token-attestation'))
     const identity = await operation(emit, 'identity-fetch', async () => {
       const session = await identityPrepared
-      const sent = await session.send(transcript.buildIdentityRequest(bearer))
-      const body = responseJson(sent)
-      const selected = transcript.selectIdentity(sent, bearer)
-      if (!isRecord(body) || !transcript.identityResponse(body, selected))
+      const transcript = await session.send(exchange.buildIdentityRequest(bearer))
+      const body = responseJson(transcript)
+      const selected = exchange.selectIdentity(transcript, bearer)
+      if (!isRecord(body) || !exchange.identityResponse(body, selected))
         throw new Error('Invalid identity response')
       return { session, selected }
     })

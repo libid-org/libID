@@ -3,7 +3,7 @@ import { PROOF_LIFETIME_SECONDS_X, X } from '@libid/contracts/ceremony'
 const token = X.token!,
   identity = X.identity!
 
-/** Released v1 request profile plus browser-owned OAuth and presentation constraints. */
+/** Released v1 request layout plus browser-owned OAuth and presentation constraints. */
 export const provider = {
   tokenUrl: `https://${token.session.authority}${token.session.path}`,
   tokenFields: token.tokenFields,

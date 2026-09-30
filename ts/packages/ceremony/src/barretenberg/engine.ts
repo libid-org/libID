@@ -1,7 +1,7 @@
 import { assetUrl } from '../assets/index.js'
-import { ceremonyError } from '../errors.js'
+import { toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, safeEmit } from '../events.js'
-import { workerThreads } from '../workers.js'
+import { workerThreads } from '../threads.js'
 import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
@@ -128,7 +128,7 @@ export class ProofEngine {
         this.#result.resolve(message.result)
         break
       case 'error':
-        this.#fail(ceremonyError(message.message, message.event))
+        this.#fail(toCeremonyError(message.message, message.event))
         break
       default:
         this.#fail('unexpected proof worker message')
@@ -154,7 +154,7 @@ export class ProofEngine {
     if (this.#phase === 'settled') return
     this.#phase = 'settled'
     this.#worker?.terminate()
-    const error = ceremonyError(
+    const error = toCeremonyError(
       reason,
       this.#inputsAt === undefined ? 'zk-proof-preparation' : 'zk-proof-generation',
     )

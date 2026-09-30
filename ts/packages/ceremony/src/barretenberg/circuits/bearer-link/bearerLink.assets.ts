@@ -15,4 +15,4 @@ export const circuit = release.member('bearer_link.json', {
 export const verificationKey = release.member('vk', headers.immutable)
 
 /** Every X/GitHub v1 resource: the proof engine, the notary client and this circuit. */
-export const assets = [...proofAssets, ...notaryAssets, circuit, verificationKey] as const
+export const bearerLinkAssets = [...proofAssets, ...notaryAssets, circuit, verificationKey] as const

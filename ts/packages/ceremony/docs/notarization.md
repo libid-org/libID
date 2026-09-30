@@ -23,7 +23,7 @@ connection failures reject `send`.
 | `session.reveal(ranges)` | Private commitment openings and a pending `attestation` promise. |
 | `await result.attestation` | Original signed bytes after final correlation. |
 
-Transcript parsing and witness construction can use early material while final
+Transcript parsing and circuit input construction can use early material while final
 attestations remain pending. That material is provisional: delivery must join
 all final attestations and the generated proof. A late failure discards the
 speculative result. See [X/GitHub scheduling](provers.md).
@@ -87,9 +87,9 @@ and derives authoritative identity and proof inputs from them.
 directions and UTF-8-decodes a response body only after removing chunked framing.
 Each caller keeps its own field policy: [transcript.ts](../src/notary/transcript.ts)
 selects JSON fields from raw bytes, and the X/GitHub
-[transcript machinery](../src/barretenberg/circuits/bearer-link/transcript.ts) owns the token and
+[exchange machinery](../src/barretenberg/circuits/bearer-link/exchange.ts) owns the token and
 identity request checks. It consumes the fixed
-layouts declared under `platforms/<id>/1/transcript.ts`. JSON whitespace and header
+layouts each platform's `provider.ts` declares. JSON whitespace and header
 order do not establish identity: selectors work from actual wire offsets, and numeric GitHub IDs are
 preserved losslessly. Additional headers are admitted subject to the layout's
 required fields and forbidden-header rules; duplicate required headers and
@@ -101,7 +101,7 @@ ASM-PROV-06. Delivered IDs come from selected transcript bytes, never rounded JS
 numbers. Byte selectors still reject duplicate disclosure delimiters.
 
 Both X and GitHub obtain token and identity through browser Proxy sessions.
-GitHub's [token selector](../src/platforms/github/1/transcript.ts) checks the complete
+GitHub's [token selector](../src/platforms/github/1/exchange.ts) checks the complete
 request against the frozen canonical form before using the returned bearer.
 GitHub's identity request uses a fixed, generic User-Agent without browser or OS details. Exact header values and forbidden
 names are owned by code and the specification, not copied here.

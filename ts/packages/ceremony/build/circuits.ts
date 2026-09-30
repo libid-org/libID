@@ -9,7 +9,7 @@ import {
 
 /** Build-time circuit statistics use the pinned EVM proof settings, without SRS downloads. */
 export async function validateCircuitCapacity(
-  releases: ReadonlyMap<string, Buffer>,
+  circuits: ReadonlyMap<string, Buffer>,
   srsPoints: number,
 ) {
   if (
@@ -21,7 +21,7 @@ export async function validateCircuitCapacity(
   const api = await Barretenberg.new({ backend: BackendType.Wasm, threads: 1, skipSrsInit: true })
   const stats: Record<string, { gates: number; dyadic: number }> = {}
   try {
-    for (const [name, bytes] of releases) {
+    for (const [name, bytes] of circuits) {
       const circuit = JSON.parse(bytes.toString('utf8')) as { bytecode: string }
       const result = await api.circuitStats({
         circuit: {

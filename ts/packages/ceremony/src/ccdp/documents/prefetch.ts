@@ -1,10 +1,10 @@
 import { requestsByProfile } from 'virtual:ceremony-assets'
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
-import { dispatchPrefetch, rootWorker } from '../../assets/registration.js'
+import { dispatchPrefetch, registerRootWorker } from '../../assets/registration.js'
 import { startWorker } from '../../assets/worker.js'
-import { ceremonyError, reportFailure } from '../../errors.js'
-import { Events, failureEvent, now } from '../../events.js'
+import { reportFailure, toCeremonyError } from '../../errors.js'
+import { EventFeed, failureEvent, now } from '../../events.js'
 import { readPrefetch } from '../navigation.js'
 import { messages } from '../uiMessages.js'
 import { eventView } from './ui.js'
@@ -13,13 +13,13 @@ import { eventView } from './ui.js'
 export async function startPrefetch(fragment: string): Promise<void> {
   const started = performance.now()
   let connection: PopupConnection<Message> | undefined
-  const events = new Events()
-  const ui = eventView(events)
+  const feed = new EventFeed()
+  const ui = eventView(feed)
   try {
     const input = readPrefetch(fragment),
       profile = `${input.platformId}/${input.platformCeremonyVersion}`
     if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
-    events.emit({
+    feed.emit({
       event: 'prefetch-dispatch',
       phase: 'started',
       timestamp: now(),
@@ -32,7 +32,7 @@ export async function startPrefetch(fragment: string): Promise<void> {
     })
     await connection.ready
     const connected = performance.now()
-    const registration = await rootWorker()
+    const registration = await registerRootWorker()
     const workerReady = performance.now()
     await dispatchPrefetch(registration, profile)
     const dispatched = performance.now()
@@ -51,10 +51,10 @@ export async function startPrefetch(fragment: string): Promise<void> {
       },
     } as const
     connection.send({ type: 'event', ...event })
-    events.emit({ ...event, status: 'active' })
+    feed.emit({ ...event, status: 'active' })
   } catch (error) {
-    const failure = ceremonyError(error, 'prefetch-dispatch')
-    events.emit(failureEvent(failure))
+    const failure = toCeremonyError(error, 'prefetch-dispatch')
+    feed.emit(failureEvent(failure))
     reportFailure(connection, failure)
   } finally {
     ui.stop()

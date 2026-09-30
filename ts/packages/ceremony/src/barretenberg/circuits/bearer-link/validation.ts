@@ -1,7 +1,7 @@
 import { MAX_CLIENT_ID_BYTES } from '../../../ccdp/limits.js'
 import {
   decodeAttestedData,
-  isAttestation,
+  isNotaryAttestation,
   type NotaryAttestation,
 } from '../../../notary/decode.js'
 import { isFormClientId } from '../../../platforms/authorization.js'
@@ -53,8 +53,8 @@ export function bearerLinkValidation<P extends 'x' | 'github'>(
     }),
     validateProof: recordValidator<BearerLinkProofV1>(`Invalid ${platform} proof`, {
       bearerLinkProof: isProofBytes,
-      tokenAttestation: isAttestation,
-      identityAttestation: isAttestation,
+      tokenAttestation: isNotaryAttestation,
+      identityAttestation: isNotaryAttestation,
     }),
   }
 }

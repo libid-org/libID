@@ -11,7 +11,7 @@ import { NotaryRuntime } from '../src/notary/session.js'
 import {
   buildTokenRequest,
   buildIdentityRequest as identityRequest,
-} from '../src/platforms/github/1/transcript.js'
+} from '../src/platforms/github/1/exchange.js'
 import type { NotaryPlatform } from './platforms.js'
 import { notary } from './topology.js'
 
@@ -74,7 +74,7 @@ Object.assign(window, {
       () =>
         abort.abort(
           new Error(
-            `Notary smoke timed out: ${JSON.stringify({ platform, hardwareConcurrency: navigator.hardwareConcurrency, pending })}`,
+            `Notary runtime timed out: ${JSON.stringify({ platform, hardwareConcurrency: navigator.hardwareConcurrency, pending })}`,
           ),
         ),
       120000,
@@ -106,7 +106,7 @@ Object.assign(window, {
       // These are unauthenticated fixture requests. Report only operation positions
       // and elapsed time, including when the production deadline wins first.
       throw new Error(
-        `${error instanceof Error ? error.message : 'Notarization failed'}; notary smoke: ${JSON.stringify({ platform, pending, elapsedMs: Math.round(performance.now() - started), hardwareConcurrency: navigator.hardwareConcurrency })}`,
+        `${error instanceof Error ? error.message : 'Notarization failed'}; notary runtime: ${JSON.stringify({ platform, pending, elapsedMs: Math.round(performance.now() - started), hardwareConcurrency: navigator.hardwareConcurrency })}`,
         { cause: error },
       )
     } finally {

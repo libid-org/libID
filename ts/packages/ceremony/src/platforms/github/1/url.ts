@@ -5,7 +5,7 @@ import { provider } from './provider.js'
 export const pkce = true
 
 /** Query code return; success and error both carry the exact issuer. */
-export const oauthReturn: ReturnRules = {
+export const returnRules: ReturnRules = {
   transport: 'query',
   credential: 'code',
   rejected: ['id_token', 'access_token', 'refresh_token'],

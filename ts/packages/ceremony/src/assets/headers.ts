@@ -1,4 +1,4 @@
-/** Response policy only. The static server owns representation metadata. */
+/** Response policy and declared media types; the static server owns encoding, length and validators. */
 const base =
   "default-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
@@ -23,7 +23,7 @@ export const wasm = { 'Content-Type': 'application/wasm' } as const
 
 export const json = { 'Content-Type': 'application/json' } as const
 
-export const document = {
+export const documentHeaders = {
   'Content-Type': 'text/html; charset=utf-8',
   'Cache-Control': 'no-cache',
   'X-Content-Type-Options': 'nosniff',

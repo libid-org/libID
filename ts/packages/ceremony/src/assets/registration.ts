@@ -1,6 +1,6 @@
 import { route } from '../ccdp/navigation.js'
 
-const WORKER_READY_TIMEOUT_MS = 15000
+const SERVICE_WORKER_TIMEOUT_MS = 15000
 const ACTIVATION_POLL_INTERVAL_MS = 50
 
 /**
@@ -13,7 +13,7 @@ function within(
 ): Promise<void> {
   const { promise, resolve, reject } = Promise.withResolvers<void>()
   const settled = new AbortController()
-  const timer = setTimeout(() => done(new Error(timeout)), WORKER_READY_TIMEOUT_MS)
+  const timer = setTimeout(() => done(new Error(timeout)), SERVICE_WORKER_TIMEOUT_MS)
   const done = (error?: unknown) => {
     clearTimeout(timer)
     settled.abort()
@@ -29,7 +29,7 @@ function within(
 }
 
 /** Register the canonical root worker and retire only the known legacy nested scope. */
-export async function rootWorker(): Promise<ServiceWorkerRegistration> {
+export async function registerRootWorker(): Promise<ServiceWorkerRegistration> {
   const registration = await navigator.serviceWorker.register(route('worker.js'), {
     scope: '/',
     type: 'module',

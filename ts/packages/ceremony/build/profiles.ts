@@ -56,7 +56,7 @@ export function responseHeaders(
   const html = documents.includes(profile),
     immutable = profile === 'asset' || isolatedWorkers.includes(profile)
   const headers: Record<string, string> = {
-    ...(html ? shared.document : shared.javascript),
+    ...(html ? shared.documentHeaders : shared.javascript),
     ...(immutable ? shared.immutable : revalidated),
   }
   if (profile === 'callback')

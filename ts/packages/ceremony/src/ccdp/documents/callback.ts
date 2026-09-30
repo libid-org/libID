@@ -1,7 +1,7 @@
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { PopupConnection, PopupWindow } from '@libid/popup'
-import { ceremonyError, endError, reportFailure } from '../../errors.js'
-import { Events, failureEvent, now } from '../../events.js'
+import { endError, reportFailure, toCeremonyError } from '../../errors.js'
+import { EventFeed, failureEvent, now } from '../../events.js'
 import { isOrigin } from '../../primitives.js'
 import { MAX_OAUTH_RETURN_CHARS } from '../limits.js'
 import { type OAuthReturn, proverFragment, readOAuthState, route } from '../navigation.js'
@@ -12,14 +12,14 @@ import { eventView, view } from './ui.js'
 export function startCallback(): void {
   try {
     const oversized = location.search.length + location.hash.length > MAX_OAUTH_RETURN_CHARS
-    const input = oversized
+    const oauthReturn = oversized
       ? undefined
       : Object.freeze({ query: location.search, fragment: location.hash })
     history.replaceState(null, '', location.origin + location.pathname)
-    if (!input) throw new TypeError(messages.oauthReturnTooLarge)
+    if (!oauthReturn) throw new TypeError(messages.oauthReturnTooLarge)
     const states = [
-      ...new URLSearchParams(input.query).getAll('state'),
-      ...new URLSearchParams(input.fragment.slice(1)).getAll('state'),
+      ...new URLSearchParams(oauthReturn.query).getAll('state'),
+      ...new URLSearchParams(oauthReturn.fragment.slice(1)).getAll('state'),
     ]
     const state = states.length === 1 ? readOAuthState(states[0]) : null
     if (!state) throw new TypeError(messages.invalidOAuthState)
@@ -28,9 +28,9 @@ export function startCallback(): void {
       view(messages.unsupportedVersion)
       return
     }
-    callbackV1(input, state.ceremonyId, deploymentInputs())
+    callbackV1(oauthReturn, state.ceremonyId, deploymentInputs())
   } catch (error) {
-    const failure = ceremonyError(error, 'authorization')
+    const failure = toCeremonyError(error, 'authorization')
     view(messages.returnToApplication(failure.message))
     reportFailure(undefined, failure)
   }
@@ -51,7 +51,7 @@ function deploymentInputs(): readonly unknown[] {
   return inputs
 }
 
-function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]): void {
+function callbackV1(oauthReturn: OAuthReturn, id: string, inputs: readonly unknown[]): void {
   const [allowedApplicationOrigins, ccdpOrigin] = inputs
   if (
     !Array.isArray(allowedApplicationOrigins) ||
@@ -65,20 +65,21 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
     connectionId: id,
     allowedApplicationOrigins,
   })
-  let state: { phase: 'connecting'; input: OAuthReturn } | { phase: 'navigating' | 'ended' } = {
-    phase: 'connecting',
-    input,
-  }
-  const events = new Events()
-  const ui = eventView(events)
+  let state: { phase: 'connecting'; oauthReturn: OAuthReturn } | { phase: 'navigating' | 'ended' } =
+    {
+      phase: 'connecting',
+      oauthReturn,
+    }
+  const feed = new EventFeed()
+  const ui = eventView(feed)
   const cleanup = () => {
     state = { phase: 'ended' }
     ui.stop()
   }
   const fail = (error: unknown) => {
     if (state.phase === 'ended') return
-    const failure = ceremonyError(error, 'authorization')
-    events.emit(failureEvent(failure))
+    const failure = toCeremonyError(error, 'authorization')
+    feed.emit(failureEvent(failure))
     cleanup()
     reportFailure(connection, failure)
   }
@@ -98,8 +99,8 @@ function callbackV1(input: OAuthReturn, id: string, inputs: readonly unknown[]):
       } catch {
         /* A lost observation does not gate navigation. */
       }
-      events.emit({ ...event, status: 'active' })
-      const fragment = proverFragment(id, applicationOrigin, state.input)
+      feed.emit({ ...event, status: 'active' })
+      const fragment = proverFragment(id, applicationOrigin, state.oauthReturn)
       state = { phase: 'navigating' }
       await connection.navigate(ccdpOrigin + route('prover'), fragment)
       cleanup()

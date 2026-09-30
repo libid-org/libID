@@ -8,7 +8,7 @@ import { operation } from '../../../events.js'
 import type { ProverContext } from '../../context.js'
 import { acceptReturn } from '../../oauthReturn.js'
 import { prepareGoogleInputs } from './inputs.js'
-import { validateGooglePublicInputs } from './publicInputs.js'
+import { isGooglePublicInputs } from './publicInputs.js'
 import { acceptGoogleIdToken, fetchSigningKey } from './token.js'
 
 export async function prove(context: ProverContext) {
@@ -30,7 +30,7 @@ export async function prove(context: ProverContext) {
     )
     const raw = await engine.prove(inputs, signal),
       proof = { identityProof: raw.proof, publicInputs: raw.publicInputs, ...proofFields }
-    if (!validateGooglePublicInputs(raw.publicInputs, authorizationDigest, identity, proof))
+    if (!isGooglePublicInputs(raw.publicInputs, authorizationDigest, identity, proof))
       throw new Error('Google public input mismatch')
     return { identity, proof }
   } finally {

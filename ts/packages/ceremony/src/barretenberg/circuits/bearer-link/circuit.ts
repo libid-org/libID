@@ -4,7 +4,7 @@ import { plaintextOpening } from '../../../notary/notarize.js'
 import type { ByteRange, CommitmentOpening } from '../../../notary/protocol.js'
 import { ProofEngine } from '../../engine.js'
 import { circuit, verificationKey } from './bearerLink.assets.js'
-import { buildBearerLinkInputs, validateBearerLinkPublicInputs } from './inputs.js'
+import { buildBearerLinkInputs, isBearerLinkPublicInputs } from './inputs.js'
 
 type BearerOpening = { openings: readonly CommitmentOpening[]; range: ByteRange }
 
@@ -36,7 +36,7 @@ export class BearerLinkCircuit {
       )
     })
     const raw = await this.engine.prove(inputs, signal)
-    if (!validateBearerLinkPublicInputs(raw.publicInputs, inputs))
+    if (!isBearerLinkPublicInputs(raw.publicInputs, inputs))
       throw new Error('Bearer public input mismatch')
     return raw.proof
   }

@@ -19,7 +19,7 @@ export interface DecodedRevealedRange {
 }
 
 export interface DecodedRangeCommitment extends ByteRange {
-  commitment: Uint8Array
+  hash: Uint8Array
 }
 
 export interface DecodedDirection {
@@ -113,7 +113,7 @@ function readDirection(cursor: Cursor, transcriptLength: number): DecodedDirecti
     if (start < previousEnd || end <= start || end > transcriptLength) {
       invalid('commitment ranges are empty, unordered, overlapping, or out of bounds')
     }
-    commitments.push({ start, end, commitment: cursor.bytes(COMMITMENT_BYTES) })
+    commitments.push({ start, end, hash: cursor.bytes(COMMITMENT_BYTES) })
     previousEnd = end
   }
 
@@ -158,7 +158,7 @@ export function decodeAttestedData(bytes: Uint8Array): DecodedAttestedData {
 }
 
 /** Bound the delivered bytes; ledger verification remains authoritative. */
-export function isAttestation(v: unknown): v is NotaryAttestation {
+export function isNotaryAttestation(v: unknown): v is NotaryAttestation {
   return (
     hasExactKeys(v, ['attestedData', 'signature']) &&
     v.attestedData instanceof Uint8Array &&

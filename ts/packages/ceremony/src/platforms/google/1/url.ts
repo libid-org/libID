@@ -7,7 +7,7 @@ import { provider } from './provider.js'
 export const pkce = false
 
 /** Fragment-only ID-token return; a code or access token violates the profile. */
-export const oauthReturn: ReturnRules = {
+export const returnRules: ReturnRules = {
   transport: 'fragment',
   credential: 'id_token',
   rejected: ['code', 'access_token', 'refresh_token'],

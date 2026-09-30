@@ -34,7 +34,7 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
   request,
   assetControl,
   assetCount,
-  provider,
+  googleProvider,
   launch,
 }) => {
   const asset = artifactRequests('google/1').find((r) => r.url.endsWith('/oidc_google.json'))!.url
@@ -56,7 +56,7 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
     }
   })
   await seed.close()
-  await provider()
+  await googleProvider()
   const popup = await launch()
   await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
   expect(
@@ -225,7 +225,7 @@ test('Prefetch loads every declared CRS request through the Service Worker [LIBI
   ccdp,
   context,
   request,
-  provider,
+  googleProvider,
   launch,
 }) => {
   // The harness proxy counts a request only after its TLS handshake succeeded.
@@ -240,7 +240,7 @@ test('Prefetch loads every declared CRS request through the Service Worker [LIBI
   // in-flight fetches once no document of its origin remains.
   const keepalive = await context.newPage()
   await keepalive.goto(`${ccdp}/ccdp/v1/seed`)
-  await provider(() => `${bridge}/held-provider`)
+  await googleProvider(() => `${bridge}/held-provider`)
   await context.route(`${bridge}/held-provider`, (route) =>
     route.fulfill({ contentType: 'text/html', body: '<p>Consent pending</p>' }),
   )

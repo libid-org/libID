@@ -21,7 +21,7 @@ fetching. Install uses `skipWaiting`, activation uses `clients.claim`, and Prove
 explicitly joins root-worker control before readiness. Failure to establish the
 required registration/control is terminal.
 
-The private Worker message accepts a catalog profile, never caller-supplied URLs.
+The private Worker message accepts an asset profile, never caller-supplied URLs.
 The dispatch acknowledgement means every selected request has a cache hit or a
 fetch invocation. It does not wait for response bodies or persistence. Only after
 that acknowledgement and popup authentication may Prefetch emit
