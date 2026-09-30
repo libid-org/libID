@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type Command, connect, type Families, indexer, LedgerError, type Query } from './client.js'
 import type { Fake, Harness } from './conformance.harness.js'
 import { evm } from './evm/evm.harness.js'
-import { defineLedger, type Family, ledgers } from './index.js'
+import { defineLedger, type Family, Ledgers } from './index.js'
 
 const harnesses: { [F in Family]: Harness<F> } = { evm }
 
@@ -21,7 +21,7 @@ it('requires every family to implement each query and command', () => {
 })
 
 it('serves pinned ledgers only as defined, with their public endpoints by default', () => {
-  const eden = ledgers['eden-testnet']
+  const eden = Ledgers.EdenTestnet
   expect(() => connect({ ledgers: [{ ledger: eden }] })).not.toThrow()
   const altered = defineLedger({
     chain: eden.chain,
@@ -60,7 +60,10 @@ it('requires an RPC for a ledger without a public one, and valid endpoints', () 
   }
 })
 
-/** The same family's client, with a default indexer that never answers, must meet the contract. */
+/**
+ * The same family's client, with a default indexer that never answers, must meet the contract:
+ * only queries with an indexer implementation depend on the indexer.
+ */
 const behindUnavailableIndexer = <F extends Family>(harness: Harness<F>): Harness<F> => ({
   setup() {
     const fake = harness.setup()
@@ -74,11 +77,18 @@ const behindUnavailableIndexer = <F extends Family>(harness: Harness<F>): Harnes
 
 function run<F extends Family>(family: F) {
   conformance(family, harnesses[family])
-  conformance(family, behindUnavailableIndexer(harnesses[family]), 'behind an unavailable indexer')
+  conformance(family, behindUnavailableIndexer(harnesses[family]), {
+    variant: 'behind an unavailable indexer',
+    unavailableIndexer: true,
+  })
 }
 for (const family of Object.keys(harnesses) as Family[]) run(family)
 
-function conformance<F extends Family>(family: F, harness: Harness<F>, variant = '') {
+function conformance<F extends Family>(
+  family: F,
+  harness: Harness<F>,
+  { variant = '', unavailableIndexer = false } = {},
+) {
   const query = <A extends unknown[], R>(
     run: (read: Families[F]['reader'], ...args: A) => Promise<R>,
   ) => ({ [family]: run }) as unknown as Query<A, R>
@@ -166,11 +176,21 @@ function conformance<F extends Family>(family: F, harness: Harness<F>, variant =
         expect(later, 'A later query sees the new state').not.toEqual(first)
       })
 
-      it('answers from the chain unless a current indexer serves the query', async () => {
-        const { client, ledger } = harness.setup()
-        const both = { ...query(async () => 'chain'), indexer: async () => 'indexer' }
-        expect(await client.read(ledger, both as Query<[], string>, [])).toBe('chain')
-      })
+      it(
+        unavailableIndexer
+          ? 'fails a query with an indexer implementation, without falling back to the chain'
+          : 'runs the chain implementation on a ledger without an indexer',
+        async () => {
+          const { client, ledger } = harness.setup()
+          const both = { ...query(async () => 'chain'), indexer: async () => 'indexer' }
+          const answer = client.read(ledger, both as Query<[], string>, [])
+          if (unavailableIndexer) {
+            await expect(answer).rejects.toMatchObject({ code: 'indexer-unavailable' })
+          } else {
+            expect(await answer).toBe('chain')
+          }
+        },
+      )
 
       it('stops when its signal aborts', async () => {
         const fake = harness.setup()

@@ -10,7 +10,7 @@ import {
 } from 'viem'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { connect, type Families, type Query } from '../client.js'
-import { defineLedger, type ledgers } from '../index.js'
+import { defineLedger, type Ledgers } from '../index.js'
 import { readMethods, walletReads } from './client.js'
 
 type Request = { method: string; params?: unknown }
@@ -515,6 +515,6 @@ describe('EVM client', () => {
 
   it('accepts viem providers and derives the family from the chain', () => {
     expectTypeOf<EIP1193Provider>().toMatchTypeOf<Families['evm']['wallet']>()
-    expectTypeOf<(typeof ledgers)['eden-testnet']['family']>().toEqualTypeOf<'evm'>()
+    expectTypeOf<(typeof Ledgers)['EdenTestnet']['family']>().toEqualTypeOf<'evm'>()
   })
 })

@@ -48,6 +48,7 @@ function serve(statuses: (Status | Status[] | Response)[] = [statusOf(eden)], va
       return Response.json({ jsonrpc: '2.0', id, result })
     }
     requests.push({ url: url.href, init })
+    if (init?.signal?.aborted) throw new DOMException('The request was aborted.', 'AbortError')
     if (url.pathname === '/v1/status') {
       const status = statuses[Math.min(calls++, statuses.length - 1)]
       if (status instanceof Response) return status.clone()
@@ -89,7 +90,7 @@ it('reads a current indexer for queries that support it', async () => {
   })
 })
 
-it('reads the chain for queries without an indexer implementation, or without an indexer', async () => {
+it('reads the chain for queries without an indexer implementation, or on ledgers without one', async () => {
   serve()
   const chainOnly: Query<[], string> = { evm: async () => 'chain' }
   expect(await clientOf().read(eden, chainOnly, [])).toBe('chain')
@@ -105,32 +106,55 @@ it.each([
   ['reports a window error', statusOf(eden, { lastWindowError: 'rpc timeout' })],
   ['reports an expired status', statusOf(eden, { reportValidFor: 0 })],
   ['fails', new Response('down', { status: 503 })],
-])('falls back to the chain when the indexer %s', async (_, status) => {
+])('fails without falling back when the indexer %s', async (_, status) => {
   serve([status])
-  expect((await clientOf().read(eden, source, [])).source).toBe('chain')
+  await expect(clientOf().read(eden, source, [])).rejects.toMatchObject({
+    code: 'indexer-unavailable',
+  })
 })
 
-it('falls back to the chain when the index moves backwards during the read', async () => {
+it('fails when the index moves backwards during the read', async () => {
   serve([statusOf(eden), statusOf(eden, { lastIndexedBlock: 13 })])
-  expect((await clientOf().read(eden, source, [])).source).toBe('chain')
+  await expect(clientOf().read(eden, source, [])).rejects.toMatchObject({
+    code: 'indexer-unavailable',
+  })
 })
 
-it('falls back to the chain when the indexer answers with something other than an object', async () => {
+it('fails when the indexer answers with something other than an object', async () => {
   serve([statusOf(eden)], ['not', 'an', 'object'])
-  expect((await clientOf().read(eden, source, [])).source).toBe('chain')
+  await expect(clientOf().read(eden, source, [])).rejects.toMatchObject({
+    code: 'indexer-unavailable',
+  })
 })
 
-it('propagates an abort instead of falling back', async () => {
+it("propagates a query's own indexer errors unchanged", async () => {
   serve()
-  const controller = new AbortController()
-  const aborting: Query<[], string> = {
-    evm: async () => 'chain',
+  const cause = new Error('Invalid identity list.')
+  const strict: Query<[], never> = {
+    evm: async () => {
+      throw new Error('not reached')
+    },
     indexer: async () => {
-      controller.abort()
-      throw new Error('stopped')
+      throw cause
     },
   }
-  await expect(clientOf().read(eden, aborting, [], { signal: controller.signal })).rejects.toThrow()
+  await expect(clientOf().read(eden, strict, [])).rejects.toBe(cause)
+})
+
+it("propagates the caller's abort as an abort, not as an unavailable indexer", async () => {
+  serve()
+  const controller = new AbortController()
+  const aborting: Query<[], unknown> = {
+    evm: async () => 'chain',
+    indexer: async (read) => {
+      controller.abort()
+      return read.get('/v1/value')
+    },
+  }
+  const error = await clientOf()
+    .read(eden, aborting, [], { signal: controller.signal })
+    .catch((error: unknown) => error)
+  expect(error).toMatchObject({ name: 'AbortError' })
 })
 
 it('reads the indexer while a wallet is connected', async () => {

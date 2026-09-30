@@ -1,6 +1,6 @@
 import { bytesToHex } from '@noble/hashes/utils.js'
 import { expect, expectTypeOf, it } from 'vitest'
-import { defineLedger, ledgers } from './index.js'
+import { defineLedger, Ledgers } from './index.js'
 
 const hex = (ledger: { hash(): Uint8Array }) => `0x${bytesToHex(ledger.hash())}`
 const local = {
@@ -13,7 +13,7 @@ const local = {
 } as const
 
 it('eden testnet matches its deployed verifier', () => {
-  const eden = ledgers['eden-testnet']
+  const eden = Ledgers.EdenTestnet
   // CeremonyProofVerifier.chainId() at 0x76BDc18f21c2db0FF796C7Cc50348528b2899275, read 2026-09-30.
   expect(hex(eden)).toBe('0x70c29a92a253d6f2a7ee351d43fd44734752ddb392efed6c31d16d3530a7e41c')
   expect(eden.notaryAddress()).toBe('https://testnet.notary.lib.id')
@@ -22,7 +22,7 @@ it('eden testnet matches its deployed verifier', () => {
   expectTypeOf(eden.chain).toEqualTypeOf<'eip155:3735928814'>()
   expectTypeOf(
     eden.addresses.identityNames,
-  ).toEqualTypeOf<'0xe78b53a183dd51763df44beb2500ddab9bb0329e'>()
+  ).toEqualTypeOf<'0x5b86114eccd8259347294a2bdbf3da2c93857796'>()
 })
 
 it('derives eip155 hashes as keccak256(abi.encode(chainId))', () => {

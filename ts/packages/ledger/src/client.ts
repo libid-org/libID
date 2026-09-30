@@ -1,7 +1,7 @@
 import { evm } from './evm/client.js'
 import type * as Evm from './evm/index.js'
 import type { Indexer } from './indexer.js'
-import { type Account, type Family, isEndpoint, type Ledger, ledgers as pinned } from './index.js'
+import { type Account, type Family, isEndpoint, type Ledger, Ledgers as pinned } from './index.js'
 
 export { LedgerError, type LedgerErrorCode } from './errors.js'
 export { type Indexer, type IndexerOptions, indexer } from './indexer.js'
@@ -30,8 +30,9 @@ export type Query<A extends readonly unknown[], R> = {
   readonly [F in Family]: (read: Families[F]['reader'], ...args: A) => Promise<R>
 } & {
   /**
-   * The same result from an indexer, used while the ledger's indexer is current; otherwise,
-   * or if the indexer fails, the chain implementation runs.
+   * The same result from an indexer. On a ledger with an indexer it answers instead of the
+   * chain implementation; a stale or unavailable indexer fails the read with
+   * `indexer-unavailable`. Ledgers without an indexer run the chain implementation.
    */
   readonly indexer?: (read: IndexerReader, ...args: A) => Promise<R>
 }
@@ -187,7 +188,7 @@ export function connect<const E extends readonly LedgerAccess[]>(options: {
   } as LedgerClient<E[number]['ledger']>
 }
 
-/** Reads a current indexer first when the query supports it; the chain stays authoritative. */
+/** A ledger with an indexer answers queries that support it from the indexer, or fails. */
 type Read = <A extends readonly unknown[], R>(
   query: Query<A, R>,
   args: A,
@@ -200,14 +201,7 @@ function read({ ledger, indexer }: Route, chain: Driver['read']): Read {
     args: A,
     options?: { signal?: AbortSignal },
   ): Promise<R> => {
-    if (query.indexer && indexer) {
-      try {
-        return await indexer.read(ledger, query.indexer, args, options?.signal)
-      } catch (error) {
-        // An unavailable or stale indexer only costs speed.
-        if (options?.signal?.aborted) throw error
-      }
-    }
+    if (query.indexer && indexer) return indexer.read(ledger, query.indexer, args, options?.signal)
     // Each route pairs a ledger with its own family's driver; the map cannot express that.
     const run = query[ledger.family] as (read: Families[Family]['reader'], ...args: A) => Promise<R>
     return chain(run, args, options)

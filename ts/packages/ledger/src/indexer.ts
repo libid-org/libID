@@ -1,4 +1,5 @@
 import type { IndexerReader } from './client.js'
+import { LedgerError } from './errors.js'
 import type { Ledger } from './index.js'
 
 export interface IndexerOptions {
@@ -34,31 +35,41 @@ export function indexer({ origin, deployment, maxLag = 20 }: IndexerOptions): In
     throw new TypeError('Invalid indexer configuration.')
   }
 
+  /** GETs a JSON object; any failure but the caller's abort means the indexer is unavailable. */
   async function get(
     path: string,
     params: Record<string, string> | undefined,
     signal: AbortSignal,
+    outer?: AbortSignal,
   ) {
-    const search = params ? `?${new URLSearchParams(params)}` : ''
-    const response = await fetch(`${origin}${path}${search}`, {
-      signal,
-      credentials: 'omit',
-      cache: 'no-store',
-      redirect: 'error',
-    })
-    if (!response.ok) throw new Error(`Indexer request failed (${response.status}).`)
-    return object(await response.json())
+    try {
+      const search = params ? `?${new URLSearchParams(params)}` : ''
+      const response = await fetch(`${origin}${path}${search}`, {
+        signal,
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+      })
+      if (!response.ok) throw new Error(`Indexer request failed (${response.status}).`)
+      return object(await response.json())
+    } catch (error) {
+      if (outer?.aborted) throw error
+      throw new LedgerError('indexer-unavailable', { cause: error })
+    }
   }
 
   /** The ledger's last indexed block, if the index is current and covers the deployment. */
-  async function status(ledger: Ledger, signal: AbortSignal): Promise<number> {
+  async function status(ledger: Ledger, signal: AbortSignal, outer?: AbortSignal): Promise<number> {
     // ponytail: the libID indexer keys chains by EVM chain id; extend its protocol for other families.
     const chainId = Number(ledger.chain.slice(ledger.chain.indexOf(':') + 1))
     const contract = ledger.addresses[deployment]?.toLowerCase()
     // ponytail: two status requests per read; share one per moment if many chains read at once.
-    const data = await get('/v1/status', undefined, signal)
-    if (!Array.isArray(data.chains)) throw new Error('Invalid indexer status.')
-    const chains = data.chains.map(object).filter((chain) => chain.chainId === chainId)
+    const data = await get('/v1/status', undefined, signal, outer)
+    const chains = Array.isArray(data.chains)
+      ? data.chains.filter(
+          (chain) => chain && typeof chain === 'object' && chain.chainId === chainId,
+        )
+      : []
     const chain = chains[0]
     if (
       !contract ||
@@ -76,7 +87,7 @@ export function indexer({ origin, deployment, maxLag = 20 }: IndexerOptions): In
       chain.reportValidFor <= 0 ||
       chain.lastWindowError !== null
     ) {
-      throw new Error('Indexer is unavailable, behind, or not indexing this deployment.')
+      throw new LedgerError('indexer-unavailable', { cause: chain ?? data })
     }
     return chain.lastIndexedBlock
   }
@@ -87,14 +98,14 @@ export function indexer({ origin, deployment, maxLag = 20 }: IndexerOptions): In
       const timeout = AbortSignal.timeout(15_000)
       const signal = outer ? AbortSignal.any([outer, timeout]) : timeout
       signal.throwIfAborted()
-      const before = await status(ledger, signal)
+      const before = await status(ledger, signal, outer)
       const result = await run(
-        { ledger, block: BigInt(before), get: (path, params) => get(path, params, signal) },
+        { ledger, block: BigInt(before), get: (path, params) => get(path, params, signal, outer) },
         ...args,
       )
       // An index that moved backwards (a reorg or reindex) may have served mixed state.
-      if ((await status(ledger, signal)) < before) {
-        throw new Error('Indexer state changed while reading.')
+      if ((await status(ledger, signal, outer)) < before) {
+        throw new LedgerError('indexer-unavailable', { cause: 'The index moved backwards.' })
       }
       return result
     },

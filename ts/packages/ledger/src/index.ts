@@ -116,16 +116,19 @@ export function isEndpoint(value: string): boolean {
 
 /**
  * Supported ledgers, pinned: served only as defined here. Each carries a public RPC and
- * explorer where one exists; consumers may override both.
+ * explorer where one exists; consumers may override both. Deployments mirror libID's
+ * chain-configurations network files.
  */
-export const ledgers = Object.freeze({
-  'eden-testnet': defineLedger({
+export const Ledgers = Object.freeze({
+  EdenTestnet: defineLedger({
     chain: 'eip155:3735928814',
     name: 'Eden testnet',
     testnet: true,
     currency: { symbol: 'TIA', decimals: 18 },
     notary: 'https://testnet.notary.lib.id',
-    addresses: { identityNames: '0xe78b53a183dd51763df44beb2500ddab9bb0329e' },
+    addresses: { identityNames: '0x5b86114eccd8259347294a2bdbf3da2c93857796' },
+    // chain-configurations names ev-reth-eden-testnet.binarybuilders.services:8545, which
+    // sends no CORS headers, so browsers cannot use it. Gateway.fm's endpoint allows any origin.
     rpc: 'https://rpc.testnet.eden.gateway.fm/',
     explorer: 'https://eden-testnet.blockscout.com',
   }),

@@ -4,6 +4,7 @@ export type LedgerErrorCode =
   | 'wrong-chain'
   | 'wallet-changed'
   | 'not-sent'
+  | 'indexer-unavailable'
 
 const messages: Record<LedgerErrorCode, string> = {
   rejected: 'The wallet request was rejected.',
@@ -11,9 +12,10 @@ const messages: Record<LedgerErrorCode, string> = {
   'wrong-chain': 'The wallet is not on this ledger.',
   'wallet-changed': 'The wallet account or chain changed.',
   'not-sent': 'The transaction was not sent.',
+  'indexer-unavailable': 'The indexer is unavailable, behind, or not indexing this deployment.',
 }
 
-/** A wallet or send failure. From `Session.send`, any `LedgerError` means nothing was sent. */
+/** A wallet, send or indexer failure. From `Session.send`, any `LedgerError` means nothing was sent. */
 export class LedgerError extends Error {
   override readonly name = 'LedgerError'
   constructor(

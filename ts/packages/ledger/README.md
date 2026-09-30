@@ -7,11 +7,11 @@ Shared `LedgerId` contract for application code (`chain`, `hash()` and
 ## Supported ledgers
 
 ```ts
-import { ledgers } from '@libid/ledger'
+import { Ledgers } from '@libid/ledger'
 
-const eden = ledgers['eden-testnet']
+const eden = Ledgers.EdenTestnet
 eden.chain // 'eip155:3735928814'
-eden.addresses.identityNames // '0xe78b…'
+eden.addresses.identityNames // '0x5b86…'
 ```
 
 Each entry is a `Ledger`: a `LedgerId` plus its name, testnet flag, native
@@ -68,12 +68,12 @@ const resolveHandle: Query<[platform: `0x${string}`, handle: string], `0x${strin
 
 const client = connect({
   ledgers: [
-    { ledger: ledgers['eden-testnet'] }, // its public RPC and explorer
+    { ledger: Ledgers.EdenTestnet }, // its public RPC and explorer
     { ledger: anvil, rpc: 'http://127.0.0.1:8545', indexer: false },
   ],
   indexer: indexer({ origin: 'https://…', deployment: 'identityNames' }),
 })
-await client.read(ledgers['eden-testnet'], resolveHandle, [platform, 'alice'])
+await client.read(Ledgers.EdenTestnet, resolveHandle, [platform, 'alice'])
 ```
 
 - Every method takes the ledger it acts on. `client.ledger(chain)` finds a
@@ -114,14 +114,14 @@ const identitiesOf: Query<[account: Account], Identity[]> = {
 ```
 
 The client's `indexer` is the default for every ledger; an entry's `indexer`
-replaces it for that ledger, and `indexer: false` reads only the chain. A
-ledger's indexer is used only while it is current: its status must report the
-named deployment on that chain, within `maxLag` blocks (20 by default) of the
-head, and its index must not move backwards during the read. Otherwise, or if
-the indexer fails, the chain implementation runs: the chain stays authoritative,
-and an indexer only makes reads faster. Queries that must be authoritative, such
-as checking who owns a handle before relinking, omit `indexer`. The ledger knows
-the indexer's status protocol, not its application endpoints.
+replaces it for that ledger, and `indexer: false` gives that ledger none. On a
+ledger with an indexer, queries with an `indexer` implementation are answered by
+the indexer alone. Its status must report the named deployment on that chain,
+within `maxLag` blocks (20 by default) of the head, and its index must not move
+backwards during the read; otherwise the read fails with `indexer-unavailable`,
+without falling back to the chain. Queries without an `indexer` implementation,
+such as checking who owns a handle before relinking, always read the chain. The
+ledger knows the indexer's status protocol, not its application endpoints.
 
 ## Conformance
 
@@ -130,7 +130,7 @@ every `LedgerClient` and `Session` member, including serving several ledgers,
 and runs against a harness each family provides: fake chains and wallets the
 suite controls (`src/conformance.harness.ts`; the EVM one is
 `src/evm/evm.harness.ts`). It runs again with an unavailable default indexer,
-which must change nothing. A family without a harness does not compile.
+which must change nothing for queries without an indexer implementation. A family without a harness does not compile.
 Family-specific behavior, such as EVM fee formulas and chain switching, is
 tested beside its driver.
 
