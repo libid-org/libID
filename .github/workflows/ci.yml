@@ -322,6 +322,15 @@ jobs:
       - name: Check browser test types
         run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}' --if-present run typecheck:e2e
 
+      # The CRS the ceremony e2e build caches once (e2e/crs.mjs). The build checks every file
+      # against its pins and downloads again on a mismatch, so a restored cache is never trusted.
+      - name: Restore the cached CRS
+        if: matrix.workspace == 'ceremony'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ts/packages/ceremony/.cache/crs
+          key: ceremony-crs-${{ hashFiles('ts/packages/ceremony/e2e/crs.pins.json') }}
+
       - name: Log in to ghcr for the matched notary image
         if: matrix.workspace == 'ceremony'
         env:

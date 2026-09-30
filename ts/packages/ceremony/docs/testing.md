@@ -166,8 +166,14 @@ independent workspace/engine jobs for popup, ceremony and the dev app. Every
 desktop, HTTP and emulated project runs once in its engine's job. Popup tests also
 use two parallel workers; ceremony's shared asset controls and heavy runtimes stay
 serial within each job. No OAuth credentials are required. Release downloads and
-real unauthenticated requests to
-X/GitHub need network access; unavailable services fail rather than silently skip.
+real unauthenticated requests to X/GitHub need network access; unavailable services
+fail rather than silently skip. The CRS is the exception: the build step caches each
+declared request once, pinned in [crs.pins.json](../e2e/crs.pins.json), and every
+project reaches Aztec's CDN hosts through a harness proxy that serves that cache
+with the CDN's status and headers ([crs.mjs](../e2e/crs.mjs)); live CDN availability
+stays a [qualification gate](qualification.md#remaining-qualification). Every
+runtime test retries once, since each runs through the real notary against the X and
+GitHub APIs; the real-notary session tests are also tagged `@live`.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
 Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987 and

@@ -9,6 +9,8 @@ export const runtime = 4986
 
 /** The pinned notary. */
 export const notary = 4987
+/** The harness proxy that serves the cached CRS and tunnels every other host. */
+export const crsProxy = 4989
 
 /** Application, Bridge and CCDP origins, on consecutive ports per scheme. */
 export function origins(secure: boolean) {

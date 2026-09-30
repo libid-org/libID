@@ -219,3 +219,39 @@ test('released TLSNotary initializes concurrently from mounted assets [LIBID-ASS
   expect(result).toEqual(['ready', 'ready'])
   expect(await assetCount(snippet)).toBeGreaterThan(before)
 })
+
+test('Prefetch loads every declared CRS request through the Service Worker [LIBID-ASSET-021]', async ({
+  bridge,
+  ccdp,
+  context,
+  request,
+  provider,
+  launch,
+}) => {
+  // The harness proxy counts a request only after its TLS handshake succeeded.
+  const crs = async () =>
+    (await (await request.get(`${ccdp}/qualification-crs`)).json()) as {
+      expected: string[]
+      counts: Record<string, number>
+    }
+  const before = await crs()
+  expect(before.expected.length).toBeGreaterThan(0)
+  // Consent stays pending, and a CCDP document stays open: WebKit stops a Service Worker's
+  // in-flight fetches once no document of its origin remains.
+  const keepalive = await context.newPage()
+  await keepalive.goto(`${ccdp}/ccdp/v1/seed`)
+  await provider(() => `${bridge}/held-provider`)
+  await context.route(`${bridge}/held-provider`, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<p>Consent pending</p>' }),
+  )
+  await launch()
+  await expect
+    .poll(
+      async () => {
+        const { counts } = await crs()
+        return before.expected.filter((key) => (counts[key] ?? 0) > (before.counts[key] ?? 0))
+      },
+      { timeout: 30_000 },
+    )
+    .toEqual(before.expected)
+})

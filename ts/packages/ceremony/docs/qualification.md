@@ -34,7 +34,8 @@ whitespace an HTTP bearer cannot carry.
 CI runs workspace type/unit checks, distribution/native-loader tests and browser
 coverage across Chromium, Firefox and WebKit. HTTP and mobile-emulated projects
 retain interaction and policy coverage; full proofs and matched-notary runtime
-qualification run per desktop engine, without automatic retries. Independent
+qualification run per desktop engine. All runtime tests, which run through the
+real notary against the X and GitHub APIs, retry once; nothing else retries. Independent
 workspace/engine CI jobs run in parallel. Each engine generates the Google,
 X and GitHub ceremony proofs plus one real-notary coexistence proof. A configured
 test is not evidence that the current revision passed it.
