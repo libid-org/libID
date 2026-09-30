@@ -354,65 +354,92 @@ function readFailure(error: unknown, walletConnect: boolean) {
     // Error objects can be cyclic. Refuse ambiguous, excessively nested wrappers.
     if (seen.size === 16) return
     seen.add(value)
-    const { code, status, statusCode, name, message, details, shortMessage, data } =
-      value as Record<string, unknown>
-    const httpStatus = status ?? statusCode
-    const unsupported =
-      code === 4200 || code === -32601 || code === -32004 || (walletConnect && code === 5101)
-    const unavailable =
-      code === 4900 || code === 4901 || code === 429 || code === -32005 || code === -32002
-    const transportError =
-      ['NetworkError', 'TimeoutError', 'SocketClosedError', 'WebSocketRequestError'].includes(
-        String(name),
-      ) &&
-      (typeof code !== 'number' ||
-        (name === 'NetworkError' && code === 19) ||
-        (name === 'TimeoutError' && code === 23))
-    if (
-      (typeof code === 'number' &&
-        code !== -32603 &&
-        !unsupported &&
-        !unavailable &&
-        !transportError) ||
-      ['ACTION_REJECTED', 'CALL_EXCEPTION', 'INVALID_ARGUMENT'].includes(String(code)) ||
-      name === 'AbortError' ||
-      (typeof httpStatus === 'number' &&
-        httpStatus >= 400 &&
-        httpStatus < 500 &&
-        httpStatus !== 408 &&
-        httpStatus !== 429) ||
-      (typeof data === 'string' && /^0x[\da-f]*$/i.test(data)) ||
-      [message, details, shortMessage].some(
-        (text) =>
-          typeof text === 'string' &&
-          /\brevert(?:ed)?\b|\buser (?:rejected|denied)\b|\bunauthori[sz]ed\b|\binvalid (?:params|parameters|input|request)\b/i.test(
-            text,
-          ),
-      )
-    ) {
-      return
-    }
-    if (
-      unavailable ||
-      (typeof httpStatus === 'number' &&
-        (httpStatus === 408 || httpStatus === 429 || (httpStatus >= 500 && httpStatus < 600))) ||
-      ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH'].includes(
-        String(code),
-      ) ||
-      transportError ||
-      (typeof message === 'string' &&
-        /^(?:TypeError: )?(?:failed to fetch|fetch failed|network request failed|NetworkError when attempting to fetch resource\.?|load failed)$/i.test(
-          message,
-        ))
-    ) {
-      failure = 'unavailable'
-    } else if (unsupported && !failure) {
-      failure = 'unsupported'
-    }
+    const wrapper = wrapperOf(value)
+    if (isRefusal(wrapper, walletConnect)) return
+    if (isTransient(wrapper)) failure = 'unavailable'
+    else if (isUnsupported(wrapper.code, walletConnect) && !failure) failure = 'unsupported'
     // Inspect all wrappers before accepting a transport failure: a nested refusal wins.
     for (const key of ['cause', 'error', 'originalError', 'data'] as const) {
       pending.push((value as Record<string, unknown>)[key])
     }
   }
   return failure
+}
+
+/** The fields one error wrapper may carry. */
+interface Wrapper {
+  code: unknown
+  httpStatus: unknown
+  name: unknown
+  message: unknown
+  messages: unknown[]
+  data: unknown
+}
+
+function wrapperOf(value: object): Wrapper {
+  const { code, status, statusCode, name, message, details, shortMessage, data } = value as Record<
+    string,
+    unknown
+  >
+  const messages = [message, details, shortMessage]
+  return { code, httpStatus: status ?? statusCode, name, message, messages, data }
+}
+
+const isUnsupported = (code: unknown, walletConnect: boolean) =>
+  code === 4200 || code === -32601 || code === -32004 || (walletConnect && code === 5101)
+
+const isUnavailableCode = (code: unknown) =>
+  code === 4900 || code === 4901 || code === 429 || code === -32005 || code === -32002
+
+function isTransportError({ name, code }: Wrapper) {
+  return (
+    ['NetworkError', 'TimeoutError', 'SocketClosedError', 'WebSocketRequestError'].includes(
+      String(name),
+    ) &&
+    (typeof code !== 'number' ||
+      (name === 'NetworkError' && code === 19) ||
+      (name === 'TimeoutError' && code === 23))
+  )
+}
+
+const refusalMessage =
+  /\brevert(?:ed)?\b|\buser (?:rejected|denied)\b|\bunauthori[sz]ed\b|\binvalid (?:params|parameters|input|request)\b/i
+
+/** A revert, rejection or invalid input: the wallet answered, so it is not missing support. */
+function isRefusal(wrapper: Wrapper, walletConnect: boolean) {
+  const { code, httpStatus, name, messages, data } = wrapper
+  return (
+    (typeof code === 'number' &&
+      code !== -32603 &&
+      !isUnsupported(code, walletConnect) &&
+      !isUnavailableCode(code) &&
+      !isTransportError(wrapper)) ||
+    ['ACTION_REJECTED', 'CALL_EXCEPTION', 'INVALID_ARGUMENT'].includes(String(code)) ||
+    name === 'AbortError' ||
+    (typeof httpStatus === 'number' &&
+      httpStatus >= 400 &&
+      httpStatus < 500 &&
+      httpStatus !== 408 &&
+      httpStatus !== 429) ||
+    (typeof data === 'string' && /^0x[\da-f]*$/i.test(data)) ||
+    messages.some((text) => typeof text === 'string' && refusalMessage.test(text))
+  )
+}
+
+const fetchFailure =
+  /^(?:TypeError: )?(?:failed to fetch|fetch failed|network request failed|NetworkError when attempting to fetch resource\.?|load failed)$/i
+
+/** A transport or availability failure: the wallet may answer later. */
+function isTransient(wrapper: Wrapper) {
+  const { code, httpStatus, message } = wrapper
+  return (
+    isUnavailableCode(code) ||
+    (typeof httpStatus === 'number' &&
+      (httpStatus === 408 || httpStatus === 429 || (httpStatus >= 500 && httpStatus < 600))) ||
+    ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH'].includes(
+      String(code),
+    ) ||
+    isTransportError(wrapper) ||
+    (typeof message === 'string' && fetchFailure.test(message))
+  )
 }
