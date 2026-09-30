@@ -5,14 +5,15 @@ sidebar:
   order: 2
 ---
 
-This guide shows how to turn a handle into a wallet, and how to see when the
-owner last proved it.
+This guide shows how to turn a handle into a wallet, how to see when the
+owner last proved it, and how to notice that a handle moved to another
+account.
 
 The examples use the setup from the [Quickstart](/docs/get-started/quickstart/):
 
 ```js
 import { createPublicClient, http } from 'viem';
-import { identityNamesAbi, platformId, resolveHandle } from '@libid/contracts';
+import { accountsOf, identityNamesAbi, platformId, resolveHandle, resolvePair } from '@libid/contracts';
 
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
 const names = { client, address: '0xe78b53a183dd51763df44beb2500ddab9bb0329e' };
@@ -65,6 +66,43 @@ Handles can be renamed and reused on the platform. The older `observedAt`
 is, the more likely the handle now belongs to someone else there. Show it to
 your users before they send anything, or refuse bindings older than you are
 comfortable with.
+
+## Notice a new owner
+
+A handle can move to a different account on the platform. Someone who paid
+`@octocat` last month may now be paying a stranger.
+
+The contract cannot tell you this on its own. Your app has to remember who
+owned the handle before. When a user first pays or saves a handle, store the
+account id behind it:
+
+```js
+const [account] = (await accountsOf(names, wallet, 0n, 10n)).filter(
+  (a) => a.platformId === github && a.handle === 'octocat' && a.handleCurrent,
+);
+const savedUserId = account.userId; // keep this with the contact
+```
+
+Next time, pass the saved id to `resolvePair`:
+
+```js
+const { wallet: current, idAgrees } = await resolvePair(names, github, 'octocat', savedUserId);
+
+if (!idAgrees) {
+  console.log('@octocat now belongs to a different account.');
+}
+```
+
+`idAgrees` is `true` only when the handle and the saved account id still
+point to the same wallet. It is `false` when another account has taken the
+handle since you saved it.
+
+Only use this with an id you saved earlier. An id you read just now always
+agrees, so the check tells you nothing. If your app has nothing saved, show
+`observedAt` from the section above instead.
+
+Use the result to warn the user. Do not block the payment: the handle now
+belongs to the new owner.
 
 ## From Solidity
 
