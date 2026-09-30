@@ -19,6 +19,7 @@ declare global {
 const oauthBridge = 'http://localhost:4682'
 /** A synthetic ledger routed to the local notary; its hash names no real Chain Profile. */
 const ledger: LedgerId = {
+  chain: 'test:local',
   hash: () => new Uint8Array(32).fill(2),
   notaryAddress: () => 'http://localhost:4687',
 }
