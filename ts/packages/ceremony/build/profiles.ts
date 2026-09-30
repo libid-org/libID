@@ -34,6 +34,9 @@ export function parseCsp(policy: string): Map<string, string[]> {
 
 const base = shared.csp.base
 
+/** The optional popup carrier's sources, for the documents that accept a popup connection only. */
+const carrier = popupFallback.connectSources.join(' ')
+
 const documents: readonly ResponseProfile[] = ['callback', 'prefetch', 'prover', 'proverFallback']
 
 /** Revalidated scripts; documents already declare both in `shared.document`. */
@@ -65,7 +68,7 @@ export function responseHeaders(
   if (profile === 'callback')
     return {
       ...headers,
-      'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'`,
+      'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'${carrier ? `; connect-src ${carrier}` : ''}`,
     }
   // The Application reads the version list from its own origin; the wildcard needs no Vary.
   if (profile === 'versions')
@@ -103,7 +106,7 @@ function executableCsp(
         : `'self' ${externalOrigins.join(' ')}`
   const connectBlob = profile === 'notaryWorker' ? ' blob:' : '',
     styles = documents.includes(profile) ? "; style-src 'unsafe-inline'" : ''
-  return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects} ${popupFallback.connectSources.join(' ')}${connectBlob}${styles}`
+  return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects}${documents.includes(profile) && carrier ? ` ${carrier}` : ''}${connectBlob}${styles}`
 }
 
 /** Bundled code changes URL when its execution policy changes, even if its code does not. */
@@ -111,3 +114,23 @@ export const policyId = createHash('sha256')
   .update(JSON.stringify(isolatedWorkers.map((profile) => responseHeaders(profile))))
   .digest('hex')
   .slice(0, POLICY_HASH_HEX_CHARS)
+
+/** Vite's worker-URL import query; graph modules carry it as their id suffix. */
+export const workerUrl = '?worker&url'
+
+/** The response profile a bundled worker file needs, from the modules its graph node holds. */
+export function workerProfile(modules: readonly string[]): ResponseProfile {
+  if (modules.some((m) => m.endsWith('/notary/session.worker.ts'))) return 'notaryWorker'
+  // A worker that spawns workers imports their URLs; a leaf imports none.
+  return modules.some((m) => m.endsWith(workerUrl)) ? 'proofWorker' : 'leafWorker'
+}
+
+/** A bundle's emitted file: a worker script gets its worker profile, anything else is an asset. */
+export function emittedProfile(
+  file: string,
+  bundle: { graph: ReadonlyMap<string, { modules: string[] }>; workerFiles: ReadonlySet<string> },
+): ResponseProfile {
+  return bundle.workerFiles.has(file) && file.endsWith('.js')
+    ? workerProfile(bundle.graph.get(file)?.modules ?? [])
+    : 'asset'
+}

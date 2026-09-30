@@ -12,6 +12,8 @@ export interface ReturnRules {
   credential: string
   rejected: readonly string[]
   issuer?: string
+  /** The credential values the platform can exchange, checked at the redirect. */
+  isCredential?: (value: string) => boolean
 }
 
 export type OAuthOutcome =
@@ -79,7 +81,9 @@ export function parseOAuthReturn(
     error = fields.get('error')
   if (!isValue(state) || (credential === undefined) === (error === undefined)) return null
   if (credential !== undefined)
-    return isValue(credential) ? { outcome: 'accepted', state, credential } : null
+    return isValue(credential) && (rules.isCredential?.(credential) ?? true)
+      ? { outcome: 'accepted', state, credential }
+      : null
   if (!isValue(error)) return null
   return error === 'access_denied'
     ? { outcome: 'denied', state }

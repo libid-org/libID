@@ -25,7 +25,11 @@ units cover pattern forwarding.
 The released `bearer_link` circuit accepts bearers of at most 128 bytes. The
 X and GitHub specifications allow up to 4096 bytes; both implementations enforce
 the circuit's narrower limit on the token response, where they also reject the
-whitespace an HTTP bearer cannot carry.
+whitespace an HTTP bearer cannot carry. The released `oidc_google` circuit
+accepts a Google `sub` of at most 31 bytes, an email of at most 62 bytes and an
+audience of at most 128 bytes, all printable ASCII without `"`; Google's
+specification allows a `sub` of up to 255 bytes. A token outside those limits
+fails at authorization with its own message, before any key fetch or proving.
 [Specifications](../README.md#specifications) own proof and protocol requirements;
 [platform provers](provers.md) describe this implementation.
 

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { parseArgs } from 'node:util'
 import type { Rollup } from 'vite'
 import type { AssetRequest, ExternalAsset } from '../src/assets/index.ts'
 import { assetKey, requestKey } from '../src/assets/keys.ts'
@@ -9,10 +10,10 @@ import type { AssetManifest } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { assetHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
-import { bundle, workerUrl } from './bundle.ts'
+import { bundle } from './bundle.ts'
 import { captureFragment } from './fragment.ts'
 import type { ResponseProfile } from './profiles.ts'
-import { responseHeaders } from './profiles.ts'
+import { emittedProfile, responseHeaders } from './profiles.ts'
 import { outputDirectory, packageDir } from './sources.ts'
 import { errorHeaders, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
@@ -27,12 +28,10 @@ type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
 
 type Records = Map<string, PublicRecord>
 
-const index = process.argv.indexOf('--out-dir'),
-  out = outputDirectory(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
+const { values } = parseArgs({ options: { 'out-dir': { type: 'string' } }, strict: true }),
+  out = outputDirectory(values['out-dir'] ?? join(packageDir, 'dist-artifacts'))
 
 const staging = `${out}.building`
-
-if (existsSync(staging)) throw new Error('Build staging directory already exists')
 
 /** One request per exact URL and Range, first occurrence first. */
 const unique = (requests: AssetRequest[]) => [
@@ -149,20 +148,9 @@ async function buildDistribution() {
     proverEntries.keys(),
     Object.keys(data.profiles),
   )
-  const workerProfile = (file: string): ResponseProfile => {
-    const modules = prover.graph.get(file)?.modules ?? []
-    if (modules.some((m) => m.endsWith('/notary/session.worker.ts'))) return 'notaryWorker'
-    return modules.some((m) => m.endsWith(workerUrl)) ? 'proofWorker' : 'leafWorker'
-  }
   for (const item of prover.output) {
     if (item.type !== 'chunk' || !item.isEntry)
-      put(
-        `/${item.fileName}`,
-        body(item),
-        prover.workerFiles.has(item.fileName) && item.fileName.endsWith('.js')
-          ? workerProfile(item.fileName)
-          : 'asset',
-      )
+      put(`/${item.fileName}`, body(item), emittedProfile(item.fileName, prover))
   }
   const manifest = assetManifest(data, prover.graph, proverEntries, records, external)
   // Every published pair has an emitted prover and asset profile.

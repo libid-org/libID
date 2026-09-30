@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { mediaType, resolveAssets } from '../build/assets.ts'
 import { bundle } from '../build/bundle.ts'
-import { responseHeaders } from '../build/profiles.ts'
+import { emittedProfile, responseHeaders } from '../build/profiles.ts'
 import { packageDir } from '../build/sources.ts'
 import { writeDistribution } from '../build/sws.ts'
 
@@ -13,7 +13,8 @@ const records = new Map(data.local)
 
 for (const item of emitted.output) {
   const path = `/${item.fileName}`
-  const policy = emitted.workerFiles.has(item.fileName) ? 'notaryWorker' : 'asset'
+  // The same classification the Distribution ships, so the runtime page runs production policy.
+  const policy = emittedProfile(item.fileName, emitted)
   records.set(path, {
     bytes: Buffer.from(item.type === 'chunk' ? item.code : item.source),
     headers: { ...responseHeaders(policy), 'Content-Type': mediaType(path) },

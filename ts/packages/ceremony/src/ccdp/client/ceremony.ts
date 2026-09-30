@@ -1,4 +1,4 @@
-import { type Message, type MessageType, PopupConnection, PopupError } from '@libid/popup'
+import { type Message, type MessageType, type PopupConnection, PopupError } from '@libid/popup'
 import { CeremonyError, toCeremonyError } from '../../errors.js'
 import {
   type CeremonyEvent,
@@ -32,7 +32,7 @@ import {
 } from '../index.js'
 import { oauthState, prefetchFragment, route } from '../navigation.js'
 import { messages } from '../uiMessages.js'
-import { type CeremonyConfig } from './config.js'
+import type { CeremonyConfig } from './config.js'
 
 /** One ceremony over a caller-supplied connection; the application owns the window. */
 export interface Ceremony<P extends PlatformId = PlatformId> {

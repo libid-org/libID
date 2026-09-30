@@ -32,8 +32,8 @@ export const {
     maxBytes: MAX_USER_NAME_BYTES,
     valid: isUserName,
   },
-  // The exact decimal ID exceeds JSON number precision; the selector owns its bytes.
-  // JSON checks the root shape; the depth-agnostic byte selector preserves the exact ID.
-  identityResponse: (body, { userName }) =>
-    typeof body[provider.idField] === 'number' && body[provider.userNameField] === userName,
+  // The byte selector owns the exact decimal ID. JSON may round a large one, but `Number()`
+  // rounds the selected decimal identically, so the parsed root value still cross-checks it.
+  identityResponse: (body, { userId, userName }) =>
+    body[provider.idField] === Number(userId) && body[provider.userNameField] === userName,
 })

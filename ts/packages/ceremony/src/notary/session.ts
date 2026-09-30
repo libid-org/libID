@@ -51,8 +51,14 @@ export class NotaryRuntime {
     this.signal = AbortSignal.any([signal, this.#failure.signal])
   }
 
-  /** Start target-specific setup without a bearer; event names the later reveal/attestation operation. */
-  async prepare(url: string, event?: string): Promise<NotarySession> {
+  /**
+   * Start target-specific setup without a bearer. `operations` name the caller's fetch (setup and
+   * send) and attestation (reveal) operations, so a failure names the operation it interrupts.
+   */
+  async prepare(
+    url: string,
+    operations?: { fetch: string; attestation: string },
+  ): Promise<NotarySession> {
     const signal = this.signal
     signal.throwIfAborted()
     const target = isWebUrl(url) ? new URL(url) : undefined
@@ -69,7 +75,7 @@ export class NotaryRuntime {
       url,
       this.signal,
       (error) => this.#failure.abort(error),
-      event ? { event, emit: this.emit && safeEmit(this.emit) } : undefined,
+      operations && { ...operations, emit: this.emit && safeEmit(this.emit) },
     )
     await session.prepare(this.#worker, this.notaryAddress)
     return session
@@ -87,7 +93,7 @@ interface Waiter {
 
 /** Owns one channel, its pending replies and the send-through-attestation deadline. */
 class Session implements NotarySession {
-  /** `busy` covers an in-flight prepare or send; reveal failures carry their operation. */
+  /** `busy` covers an in-flight prepare or send, failing as the fetch; `revealing` as the attestation. */
   private phase: 'busy' | 'prepared' | 'sent' | 'revealing' | 'ended' = 'busy'
   private readonly channel = new MessageChannel()
   /** Replies currently awaited, oldest first; any other reply fails the session. */
@@ -99,8 +105,12 @@ class Session implements NotarySession {
     private readonly url: string,
     private readonly signal: AbortSignal,
     private readonly failRuntime: (error: unknown) => void,
-    /** The platform's reveal/attestation operation; `emit` is set when it is observed. */
-    private readonly observer?: { event: string; emit?: (event: OperationEvent) => void },
+    /** The caller's fetch and attestation operations; `emit` is set when they are observed. */
+    private readonly observer?: {
+      fetch: string
+      attestation: string
+      emit?: (event: OperationEvent) => void
+    },
   ) {
     signal.addEventListener('abort', this.abort, { once: true })
     this.channel.port1.onmessageerror = () => this.fail(new Error('Invalid notarization message'))
@@ -164,7 +174,7 @@ class Session implements NotarySession {
     if (this.phase !== 'sent') throw new Error('Invalid notarization reveal')
     this.phase = 'revealing'
     const started = now()
-    const { event, emit } = this.observer ?? {}
+    const { attestation: event, emit } = this.observer ?? {}
     if (event && emit) emit({ event, phase: 'started', timestamp: started })
     this.signal.throwIfAborted()
     const result = this.wait('revealed')
@@ -236,9 +246,12 @@ class Session implements NotarySession {
 
   private fail(error: unknown): void {
     if (this.phase === 'ended') return
-    // Preserve the originating operation before shared-runtime cancellation rejects siblings.
-    if (!this.signal.aborted && this.phase === 'revealing' && this.observer)
-      error = toCeremonyError(error, this.observer.event)
+    // Name the interrupted operation before shared-runtime cancellation rejects siblings with it.
+    if (!this.signal.aborted && this.observer)
+      error = toCeremonyError(
+        error,
+        this.phase === 'revealing' ? this.observer.attestation : this.observer.fetch,
+      )
     for (const waiter of this.pending.splice(0)) waiter.reject(error)
     this.cleanup()
     this.failRuntime(error)

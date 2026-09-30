@@ -37,8 +37,11 @@ afterEach(() => {
 })
 
 /** Prepare a session, answering `prepared` and then its send with `transcript`. */
-async function sentSession(notary: NotaryRuntime, event?: string, transcript = empty) {
-  const ready = notary.prepare(target, event)
+async function sentSession(notary: NotaryRuntime, attestation?: string, transcript = empty) {
+  const ready = notary.prepare(
+    target,
+    attestation === undefined ? undefined : { fetch: 'token-fetch', attestation },
+  )
   const port = ports().at(-1)!
   port.postMessage({ type: 'prepared' })
   const session = await ready
@@ -251,6 +254,24 @@ it.each([
     }
   },
 )
+
+it("names the failed session's own operation in the siblings its failure aborts", async () => {
+  const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
+  const token = notary.prepare(target, { fetch: 'token-fetch', attestation: 'token-attestation' })
+  const identity = notary.prepare(target, {
+    fetch: 'identity-fetch',
+    attestation: 'identity-attestation',
+  })
+  const [, identityPort] = ports()
+  identityPort.postMessage({ type: 'error', message: 'identity setup failed' })
+  const failure = {
+    name: 'CeremonyError',
+    event: 'identity-fetch',
+    message: 'identity setup failed',
+  }
+  await expect(identity).rejects.toMatchObject(failure)
+  await expect(token).rejects.toMatchObject(failure)
+})
 
 it('rejects reveal when its start event synchronously aborts the session', async () => {
   const abort = new AbortController()

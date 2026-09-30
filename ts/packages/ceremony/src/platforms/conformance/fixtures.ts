@@ -420,6 +420,13 @@ export const fixtures = {
         idToken: (idToken) => jwtWith(idToken, { header: { alg: 'RS256' } }),
         rejectedAt: 'authorization',
       },
+      'an email beyond the circuit width': {
+        idToken: (idToken) =>
+          jwtWith(idToken, {
+            payload: { ...jwtPart(idToken, 1), email: `${'a'.repeat(53)}@gmail.com` },
+          }),
+        rejectedAt: 'authorization',
+      },
       'a nonce of the wrong width': {
         idToken: (idToken) =>
           jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), nonce: 'AA' } }),

@@ -10,7 +10,8 @@ export const cache = join(packageDir, '.cache')
 /**
  * A build writes a fresh tree and swaps it in whole, so its output directory must be dedicated:
  * inside this worktree, neither this package nor an ancestor of it, and either absent, empty or
- * previous output.
+ * previous output. A staging or previous tree left by an interrupted build stops the next one:
+ * building past it would drop the assets that output retains.
  */
 export function outputDirectory(argument: string): string {
   const out = resolve(argument),
@@ -24,6 +25,9 @@ export function outputDirectory(argument: string): string {
       !existsSync(join(out, 'distribution-graph.json')))
   )
     throw new Error('Output must be a dedicated directory inside this worktree')
+  for (const leftover of [`${out}.building`, `${out}.previous`])
+    if (existsSync(leftover))
+      throw new Error(`An interrupted build left ${leftover}; restore or remove it first`)
   return out
 }
 

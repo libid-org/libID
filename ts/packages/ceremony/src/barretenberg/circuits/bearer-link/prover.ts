@@ -57,11 +57,14 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
   try {
     const notary = new NotaryRuntime(notaryAddress, signal, emit)
     const tokenPrepared = branch(
-      notary.prepare(tokenRequest.url, 'token-attestation'),
+      notary.prepare(tokenRequest.url, { fetch: 'token-fetch', attestation: 'token-attestation' }),
       'token-fetch',
     )
     const identityPrepared = branch(
-      notary.prepare(exchange.identityUrl, 'identity-attestation'),
+      notary.prepare(exchange.identityUrl, {
+        fetch: 'identity-fetch',
+        attestation: 'identity-attestation',
+      }),
       'identity-fetch',
     )
     const token = await operation(emit, 'token-fetch', async () => {

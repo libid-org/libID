@@ -4,6 +4,7 @@ import type { OidcGoogleInputs } from '../../../barretenberg/circuits/oidc_googl
 import {
   googlePublicInputs as BB_PUBLIC_INPUTS,
   googleV1 as fixture,
+  jwtPart,
   jwtWith,
 } from '../../../testing/index.js'
 import { prepareGoogleInputs } from './inputs.js'
@@ -113,4 +114,13 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifie
       )
     }
   })
+})
+
+it('refuses identifiers the circuit cannot hold with their own message [LIBID-PROVER-002]', () => {
+  const claims = jwtPart(fixture.idToken, 1)
+  const withEmail = (email: string) => jwtWith(fixture.idToken, { payload: { ...claims, email } })
+  expect(() => parseGoogleIdToken(withEmail(`${'a'.repeat(53)}@gmail.com`))).toThrow(
+    'exceed the lengths or characters the circuit supports',
+  )
+  expect(() => parseGoogleIdToken(withEmail(''))).toThrow('invalid Google ID token')
 })

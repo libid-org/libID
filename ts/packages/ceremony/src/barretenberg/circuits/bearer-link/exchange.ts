@@ -13,7 +13,7 @@ import {
 import { isPkceValue } from '../../../platforms/authorization.js'
 import { isBearer } from './inputs.js'
 import { MAX_BEARER_BYTES } from './parameters.js'
-import { isFormClientId, isUserId, MAX_USER_ID_CHARS } from './validation.js'
+import { isAuthorizationCode, isFormClientId, isUserId, MAX_USER_ID_CHARS } from './validation.js'
 
 export interface TokenRequestInput {
   clientId: string
@@ -29,10 +29,6 @@ const encoder = new TextEncoder()
 const FORBIDDEN_HEADERS = new Set(
   FORBIDDEN_REQUEST_HEADERS.filter((name) => name !== 'authorization'),
 )
-
-// A consumed redirect code that fits one header-free form field of the bounded sent transcript.
-const MAX_CODE_CHARS = 1024
-const CODE = /^[\x21-\x7e]+$/
 
 /** Fixed platform layout; raw transcript bytes remain the authority for disclosure ranges. */
 export function bearerExchange(layout: {
@@ -54,8 +50,7 @@ export function bearerExchange(layout: {
   function tokenBody(input: TokenRequestInput) {
     if (
       !isFormClientId(input.clientId) ||
-      input.code.length > MAX_CODE_CHARS ||
-      !CODE.test(input.code) ||
+      !isAuthorizationCode(input.code) ||
       !isRedirectUri(input.redirectUri) ||
       !isPkceValue(input.codeVerifier)
     )

@@ -216,6 +216,20 @@ it('takes the selected peer from authentication, never from OAuth fields or allo
   expect(proverFragment().get('oauthFragment')).toContain('applicationOrigin=')
 })
 
+it('reports a return whose Prover fragment would exceed its bound instead of navigating [LIBID-OAUTH-005]', async () => {
+  // Within Callback's own bound, but every `/` re-encodes to three characters.
+  locationInput.hash = `#state=v1.${id}&code=${'/'.repeat(22000)}`
+  startCallback()
+  await vi.waitFor(() =>
+    expect(connection.sent).toContainEqual({
+      type: 'ceremony-failed',
+      event: 'authorization',
+      message: messages.oauthReturnTooLarge,
+    }),
+  )
+  expect(connection.navigations).toEqual([])
+})
+
 it.each([null, 'null', 'https://app.test/'])(
   'fails locally when the authenticated peer origin is unavailable or invalid: %s [TEST-CCDP-04]',
   async (value) => {

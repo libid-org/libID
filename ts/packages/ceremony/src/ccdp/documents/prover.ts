@@ -18,13 +18,18 @@ type ProverState =
 export async function startProver(fragment: string): Promise<void> {
   try {
     const input = readProver(fragment)
+    // Popup reports the isolation hop just before it releases this page to the fallback.
+    const hop = { leaving: false }
     const connection = PopupConnection.accept(PopupWindow.current(fragment, { scope: '/' }), {
       fallback,
       connectionId: input.ceremonyId,
       allowedApplicationOrigins: [input.applicationOrigin],
       isolationFallbackUrl: location.origin + route('prover/fallback'),
+      onDiagnostic: ({ code }) => {
+        if (code === 'isolation-fallback') hop.leaving = true
+      },
     })
-    await new ProverDocument(connection, input).start()
+    await new ProverDocument(connection, input, hop).start()
   } catch (error) {
     const failure = toCeremonyError(error, 'prover')
     view(messages.returnToApplication(failure.message))
@@ -42,6 +47,7 @@ class ProverDocument {
   constructor(
     private readonly connection: PopupConnection<Message>,
     input: ReturnType<typeof readProver>,
+    private readonly hop: { readonly leaving: boolean },
   ) {
     this.state = { phase: 'connecting', input }
   }
@@ -52,7 +58,11 @@ class ProverDocument {
       this.connection.on(ProveIdentity, (request) => {
         void this.prove(request).catch((error) => this.fail(error))
       })
-      void this.connection.closed.then((end) => this.fail(endError(end, messages.proverClosed)))
+      void this.connection.closed.then((end) => {
+        // The fallback document continues this ceremony; this page is only leaving.
+        if (end.outcome === 'closed' && this.hop.leaving) return
+        this.fail(endError(end, messages.proverClosed))
+      })
       await this.connection.ready
       if (this.controller.signal.aborted) return
       if (

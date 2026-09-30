@@ -511,9 +511,8 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
     const { credential } = samples.accepted
     for (const [raw, decoded] of [
       [percentEncode(credential), credential],
-      ['a+b%20c%2fd', 'a b c/d'],
+      ['a%2Bb%2fc', 'a+b/c'],
       ['%252F', '%2F'],
-      ['%2F'.repeat(4096), '/'.repeat(4096)],
     ]) {
       const changed = returnOf(setField(fields, rules.credential, raw), rules)
       expect(parseOAuthReturn(changed, production)).toEqual({
@@ -521,6 +520,15 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
         credential: decoded,
       })
       expect(accept(changed)).toBe(decoded)
+    }
+    // Plus signs decode to spaces, and the bound applies to decoded values.
+    const errors = fieldsOf(samples.error.oauthReturn, rules)
+    for (const [raw, decoded] of [
+      ['a+b%20c%2fd', 'a b c/d'],
+      ['%2F'.repeat(4096), '/'.repeat(4096)],
+    ]) {
+      const changed = returnOf(setField(errors, 'error', raw), rules)
+      expect(parseOAuthReturn(changed, production)).toEqual({ ...expected.error, error: decoded })
     }
   })
 
@@ -1226,6 +1234,16 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
   const { exchange, config, evidence, identity, longest, rejectedIdentity } = fixture
   const tags = `${proverKinds['bearer-link'].tags} ${fixture.specTests.prover}`
 
+  it.each([
+    ['a space', 'a+b'],
+    ['an encoded space', 'a%20b'],
+    ['1025 characters', 'x'.repeat(1025)],
+  ])('rejects a code with %s at the redirect, before exchange [LIBID-OAUTH-007]', (_name, code) => {
+    const accepted = fieldsOf(returnSamples(platformId).accepted.oauthReturn, fixture.returnRules)
+    const changed = returnOf(setField(accepted, 'code', code), fixture.returnRules)
+    expect(parseOAuthReturn(changed, platforms[platformId].versions[1].returnRules)).toBeNull()
+  })
+
   describe('transcripts', () => {
     const tokenTags = fixture.transcriptTests.token
     const identityTags = fixture.transcriptTests.identity
@@ -1719,8 +1737,11 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         await vi.waitFor(() => expect(log).toEqual(['token send']))
         // Both sessions and the proof engine start before any HTTP; the engine first.
         expect(prepare.mock.calls).toEqual([
-          [fixture.tokenRequest.url, 'token-attestation'],
-          [fixture.identityRequest.url, 'identity-attestation'],
+          [fixture.tokenRequest.url, { fetch: 'token-fetch', attestation: 'token-attestation' }],
+          [
+            fixture.identityRequest.url,
+            { fetch: 'identity-fetch', attestation: 'identity-attestation' },
+          ],
         ])
         expect(engine.mock.invocationCallOrder[0]).toBeLessThan(prepare.mock.invocationCallOrder[0])
         expect(notarization).toHaveBeenCalledWith(

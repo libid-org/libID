@@ -29,19 +29,26 @@ function json(bytes: Uint8Array): Record<string, unknown> | null {
   }
 }
 
+const isClaim = (value: unknown): value is string => typeof value === 'string' && value !== ''
+
 /** The circuit also requires the fixed issuer and a verified email; neither is delivered. */
 function googleClaims(p: Record<string, unknown> | null): OidcGoogleToken['claims'] | null {
   if (p?.iss !== provider.issuer || p.email_verified !== true) return null
   const { aud, sub, email, exp, nonce } = p
-  return isCircuitText(aud, MAX_AUD_BYTES) &&
-    isCircuitText(sub, MAX_SUB_BYTES) &&
-    isCircuitText(email, MAX_EMAIL_BYTES) &&
+  return isClaim(aud) &&
+    isClaim(sub) &&
+    isClaim(email) &&
     isUint(exp, Number.MAX_SAFE_INTEGER) &&
-    typeof nonce === 'string' &&
-    nonce !== ''
+    isClaim(nonce)
     ? { aud, sub, email, exp, nonce }
     : null
 }
+
+/** The released circuit's fixed widths and characters, narrower than the platform profile allows. */
+const fitsCircuit = ({ aud, sub, email }: OidcGoogleToken['claims']) =>
+  isCircuitText(aud, MAX_AUD_BYTES) &&
+  isCircuitText(sub, MAX_SUB_BYTES) &&
+  isCircuitText(email, MAX_EMAIL_BYTES)
 
 /** Parse the fixed RS256 token layout; any failure is an authorization error. */
 export function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
@@ -55,6 +62,11 @@ export function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
   const fields = json(header)
   if (fields?.alg !== 'RS256' || typeof fields.kid !== 'string' || fields.kid === '')
     throw new CeremonyError('authorization', 'invalid Google ID token header')
+  if (!fitsCircuit(claims))
+    throw new CeremonyError(
+      'authorization',
+      'Google account identifiers exceed the lengths or characters the circuit supports',
+    )
   return { kid: fields.kid, headerB64, payload, payloadB64, signature, claims }
 }
 

@@ -7,7 +7,7 @@ import type { ResolvedAssets } from './assets.ts'
 import { applyEdits, type Edit, parseModule, replacement, walk } from './ast.ts'
 import { consumeFragment } from './fragment.ts'
 import { popupFallback } from './popup.ts'
-import { policyId } from './profiles.ts'
+import { policyId, workerUrl } from './profiles.ts'
 import { hash, packageDir } from './sources.ts'
 
 /**
@@ -34,9 +34,6 @@ export type BundleNode = {
   modules: string[]
   dependencies: string[]
 }
-
-/** Vite's worker-URL import query; graph modules carry it as their id suffix. */
-export const workerUrl = '?worker&url'
 
 /** A plugin named `name` serving `code` as the module `virtual:<name>`. */
 const virtualModule = (name: string, code: string): Plugin => ({

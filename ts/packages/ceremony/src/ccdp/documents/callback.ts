@@ -3,7 +3,7 @@ import { PopupConnection, PopupWindow } from '@libid/popup'
 import { endError, reportFailure, toCeremonyError } from '../../errors.js'
 import { EventFeed, failureEvent, now } from '../../events.js'
 import { isOrigin } from '../../primitives.js'
-import { MAX_OAUTH_RETURN_CHARS } from '../limits.js'
+import { MAX_NAVIGATION_FRAGMENT_CHARS, MAX_OAUTH_RETURN_CHARS } from '../limits.js'
 import { type OAuthReturn, proverFragment, readOAuthState, route } from '../navigation.js'
 import { messages } from '../uiMessages.js'
 import { eventView, view } from './ui.js'
@@ -101,6 +101,9 @@ function callbackV1(oauthReturn: OAuthReturn, id: string, inputs: readonly unkno
       }
       feed.emit({ ...event, status: 'active' })
       const fragment = proverFragment(id, applicationOrigin, state.oauthReturn)
+      // Re-encoding grows the return; the Prover refuses a fragment beyond its bound, `#` included.
+      if (String(fragment).length >= MAX_NAVIGATION_FRAGMENT_CHARS)
+        throw new TypeError(messages.oauthReturnTooLarge)
       state = { phase: 'navigating' }
       await connection.navigate(ccdpOrigin + route('prover'), fragment)
       cleanup()

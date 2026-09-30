@@ -23,7 +23,10 @@ export class ProofEngine {
   #preload?: Preload
   /** Set by the single `prove` call; preparation finishes once inputs and backend are ready. */
   #inputsAt?: number
+  /** Set by the worker's `backend-ready` message. */
   #backendAt?: number
+  /** Generation starts once the inputs are posted, when the worker starts it too. */
+  #generating = false
   #phase: 'preparing' | 'prepared' | 'settled' = 'preparing'
   /** Witness readiness and the proof; both reject with the engine's failure. */
   readonly #ready = Promise.withResolvers<void>()
@@ -70,6 +73,7 @@ export class ProofEngine {
     if (signal?.aborted) abort()
     try {
       await this.#ready.promise
+      this.#generating = true
       try {
         this.#worker?.postMessage({ type: 'prove', inputs } satisfies ToWorker)
       } catch (error) {
@@ -156,7 +160,7 @@ export class ProofEngine {
     this.#worker?.terminate()
     const error = toCeremonyError(
       reason,
-      this.#inputsAt === undefined ? 'zk-proof-preparation' : 'zk-proof-generation',
+      this.#generating ? 'zk-proof-generation' : 'zk-proof-preparation',
     )
     this.#ready.reject(error)
     this.#result.reject(error)
