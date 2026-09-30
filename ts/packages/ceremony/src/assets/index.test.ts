@@ -15,7 +15,7 @@ it('resolves exact build matches at the executing origin without fetching [LIBID
   const fetch = vi.fn()
   vi.stubGlobal('fetch', fetch)
   const member = assets
-    .archive('https://release.test/tlsn.tar.gz', 'tlsn/v1')
+    .archive('https://release.test/tlsn.tar.gz', 'tlsn/v1', `sha256:${'0'.repeat(64)}`)
     .member('snippets/web-spawn-*/js/spawn.js', assets.headers.executionWorker)
   expect(assets.assetUrl(member)).toBe(
     'https://ccdp.test/ccdp/assets/tlsn/v1/snippets/web-spawn-abcd/js/spawn.js',

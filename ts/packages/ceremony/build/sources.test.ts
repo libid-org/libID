@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { test } from 'node:test'
-import { outputDirectory, packageDir } from './sources.ts'
+import { mock, test } from 'node:test'
+import { cache, outputDirectory, packageDir, readSource } from './sources.ts'
 
 test('a build replaces only a dedicated output directory', () => {
   for (const argument of [
@@ -23,5 +24,35 @@ test('a build replaces only a dedicated output directory', () => {
     } finally {
       rmSync(leftover, { recursive: true })
     }
+  }
+})
+
+test('an HTTPS source must match its sha256 pin, fresh or cached', async () => {
+  const source = 'https://release.test/pinned.tar.gz',
+    body = Buffer.from('release bytes'),
+    pin = `sha256:${createHash('sha256').update(body).digest('hex')}`,
+    cached = join(cache, 'downloads', encodeURIComponent(source))
+  const fetch = mock.method(globalThis, 'fetch', async () => new Response(body))
+  rmSync(cached, { force: true })
+  try {
+    await assert.rejects(readSource(source), /needs a sha256 pin/)
+    await assert.rejects(readSource(source, 'sha256:abc'), /Invalid sha256 pin/)
+    await assert.rejects(
+      readSource(source, `sha256:${'0'.repeat(64)}`),
+      new RegExp(`expected sha256:0{64}, got ${pin}`),
+    )
+    assert.equal(fetch.mock.callCount(), 1)
+    // A mismatching download is never cached.
+    assert.deepEqual(await readSource(source, pin), body)
+    assert.deepEqual(readFileSync(cached), body)
+    assert.deepEqual(await readSource(source, pin), body)
+    assert.equal(fetch.mock.callCount(), 2)
+    // A cached copy that no longer matches is downloaded again.
+    writeFileSync(cached, 'truncated')
+    assert.deepEqual(await readSource(source, pin), body)
+    assert.equal(fetch.mock.callCount(), 3)
+  } finally {
+    fetch.mock.restore()
+    rmSync(cached, { force: true })
   }
 })

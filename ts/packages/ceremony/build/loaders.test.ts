@@ -6,11 +6,11 @@ import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 import type { DistributionMetadata } from './distribution.ts'
-import { packageDir } from './sources.ts'
+import { builtArtifacts } from './testing.ts'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
 
-const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts')
+const out = builtArtifacts
 
 const metadata: DistributionMetadata = JSON.parse(
   readFileSync(join(out, 'distribution-graph.json'), 'utf8'),

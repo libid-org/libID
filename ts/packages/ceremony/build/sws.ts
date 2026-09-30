@@ -8,28 +8,9 @@ import { safePath } from './archive.ts'
 export type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
 
 /**
- * Policy of every response that resolved no file: 404s (unknown routes,
- * missing assets, `/ccdp/assets/`, `<file>/<name>`) and the trailing-slash
- * redirect of a directory path. Absent cache headers would leave a 404
- * heuristically cacheable (RFC 9110 §15.5.5), so the policy is explicit.
- *
- * SWS 3.0.0-beta.1 (`src/custom_headers.rs`) matches `[[advanced.headers]]`
- * sources against the request path after `advanced.rewrites`, so one exact
- * rule per physical file (`/ccdp/v1/prefetch.html`) covers its route and its
- * direct `.html` request. `/<resolved file name>` is appended before matching
- * only for a directory-index request (`/dir/`, or any resolved file with
- * `redirect-trailing-slash = false`); this distribution serves no directory
- * index and keeps the redirect on, so that form is never emitted: keyed on
- * `<file>/<name>`, it equals the raw path of the 404 beneath the file. A
- * response that resolved no file is matched on the raw request path, and
- * every matching rule applies in config order, later rules overwriting.
- * Hence the catch-all `/**` carrying this policy comes first: an exact rule
- * overwrites the names it declares on its own file, nothing else inherits a
- * cacheable policy, and a 200 keeps the catch-all's value for a name its
- * declaration omits (the CSP on a plain asset, inert outside documents and
- * workers, which all declare their own). The canary in `sws.test.ts` pins
- * this matching against the real binary; when it fails on a newer SWS,
- * revisit this file and docs/distribution.md.
+ * Policy of every response that resolved no file, and the catch-all first rule: SWS applies
+ * matching header rules in order, later ones overwriting, so each file's exact rule overwrites
+ * it. `sws.test.ts` pins this against the real binary.
  */
 export const errorHeaders = {
   'Cache-Control': 'no-store',
@@ -37,17 +18,6 @@ export const errorHeaders = {
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
 } as const
-
-/**
- * The skip reason of a test needing a served image or the native binary (`name` unset), or
- * false. Under CEREMONY_REQUIRE_NATIVE=1 a missing input fails the run instead of skipping.
- */
-export function nativeSkip(name: 'CEREMONY_SWS_URL' | 'CEREMONY_SWS_BINARY'): string | false {
-  if (process.env[name]) return false
-  if (process.env.CEREMONY_REQUIRE_NATIVE === '1')
-    throw new Error(`CEREMONY_REQUIRE_NATIVE=1 requires ${name}`)
-  return `${name} is unset`
-}
 
 const BROTLI_QUALITY = 6
 const GZIP_LEVEL = 6
@@ -61,7 +31,7 @@ const sidecars = [
   ['.gz', (bytes: Buffer) => gzipSync(bytes, { level: GZIP_LEVEL })],
 ] as const
 
-/** Emit static files and native SWS configuration; no response metadata overrides. */
+/** Emit the static files, their precompressed sidecars and the native SWS configuration. */
 export function writeDistribution(out: string, records: ReadonlyMap<string, PublicRecord>) {
   const files: Record<string, string> = {}
   for (const path of records.keys()) {

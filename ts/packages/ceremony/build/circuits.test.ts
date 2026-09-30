@@ -12,7 +12,7 @@ test('released circuit statistics fit the fixed launch SRS [LIBID-ASSET-013]', a
         async (asset) =>
           [
             asset.member!.replace(/\.json$/, ''),
-            (await readArchive(asset.source)).get(asset.member!)!,
+            (await readArchive(asset.source, asset.sha256)).get(asset.member!)!,
           ] as const,
       ),
     ),

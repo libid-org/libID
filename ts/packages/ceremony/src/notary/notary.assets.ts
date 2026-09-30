@@ -3,6 +3,7 @@ import * as assets from '../assets/index.js'
 const release = assets.archive(
   'https://github.com/libid-org/notary/releases/download/v0.4.0/tlsn-wasm-0.4.0.tar.gz',
   'tlsn/v0.4.0',
+  'sha256:3e1ee9cc85f7f2bfc65946d3b69a5a4064fa688cc804f181c971febaaa53a0b1',
 )
 
 export const tlsnModule = release.member('tlsn_wasm.js', {

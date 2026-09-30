@@ -16,7 +16,8 @@ import { setTimeout } from 'node:timers/promises'
 import { parse, stringify, type TomlTable } from 'smol-toml'
 import { documentHeaders } from '../src/assets/headers.ts'
 import { cache } from './sources.ts'
-import { errorHeaders, nativeSkip, writeDistribution } from './sws.ts'
+import { errorHeaders, writeDistribution } from './sws.ts'
+import { nativeSkip } from './testing.ts'
 
 // The native tests below start their own SWS on this port and the next one, clear of the dev
 // app and the e2e suite.

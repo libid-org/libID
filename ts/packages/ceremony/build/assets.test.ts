@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { findPackageJSON } from 'node:module'
 import { test } from 'node:test'
 import { executionWorker } from '../src/assets/headers.ts'
 import {
@@ -12,6 +14,20 @@ import {
 test('asset resolution publishes only declared files and archive members [LIBID-ASSET-024]', async () => {
   const { local, urls } = await resolveAssets()
   assert.deepEqual(new Set(local.keys()), new Set(Object.values(urls)))
+})
+
+test('an installed file lives under its installed package version', async () => {
+  const { urls } = await resolveAssets()
+  const version = (pkg: string): string =>
+    JSON.parse(readFileSync(findPackageJSON(pkg, import.meta.url)!, 'utf8')).version
+  assert.equal(
+    urls['noir/{version}/acvm_js_bg.wasm/'],
+    `/ccdp/assets/noir/${version('@noir-lang/acvm_js')}/acvm_js_bg.wasm`,
+  )
+  assert.equal(
+    urls['bb/{version}/wasm/barretenberg-threads.wasm/'],
+    `/ccdp/assets/bb/${version('@aztec/bb.js')}/wasm/barretenberg-threads.wasm`,
+  )
 })
 
 test('policy cannot override server metadata or weaken immutable resources [LIBID-ASSET-026]', () => {

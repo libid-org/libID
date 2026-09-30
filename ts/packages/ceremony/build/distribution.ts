@@ -14,7 +14,7 @@ import { captureFragment } from './fragment.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { emittedProfile, responseHeaders } from './profiles.ts'
 import { retainPrevious, sameRecord, swapInto } from './retention.ts'
-import { outputDirectory, packageDir } from './sources.ts'
+import { artifactsDir, outputDirectory } from './sources.ts'
 import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
@@ -25,11 +25,6 @@ export type DistributionMetadata = AssetManifest & {
 }
 
 type Records = Map<string, PublicRecord>
-
-const { values } = parseArgs({ options: { 'out-dir': { type: 'string' } }, strict: true }),
-  out = outputDirectory(values['out-dir'] ?? join(packageDir, 'dist-artifacts'))
-
-const staging = `${out}.building`
 
 /** One request per exact URL and Range, first occurrence first. */
 const unique = (requests: AssetRequest[]) => [
@@ -90,47 +85,58 @@ function assetManifest(
   return { requestsByProfile, allowedRequests }
 }
 
-/** Resolve assets, bundle the documents and record every public resource with its policy. */
-async function buildDistribution() {
-  const data = await resolveAssets(),
-    records: Records = new Map()
-  const external = Object.values(data.profiles)
-    .flat()
-    .filter((a) => a.isExternal === true)
-  const options = {
-    externalOrigins: [
-      ...new Set(
-        external.flatMap((a) => [a.source, ...(a.fallback ?? [])].map((u) => new URL(u).origin)),
-      ),
-    ],
+/** Every public resource with its policy; a path gets one record, or the same one again. */
+class PublicTree {
+  readonly records: Records = new Map()
+  readonly options: { externalOrigins: string[] }
+
+  constructor(externalOrigins: string[]) {
+    this.options = { externalOrigins }
   }
+
   // Header names are normalized once, to the lowercase `Headers` form, so records compare directly.
-  const put = (
+  put(
     path: string,
     content: string | Uint8Array,
     policy: ResponseProfile | Record<string, string>,
-  ) => {
+  ) {
     const headers = new Headers(
-      typeof policy === 'string' ? responseHeaders(policy, options) : policy,
+      typeof policy === 'string' ? responseHeaders(policy, this.options) : policy,
     )
     if (policy === 'asset') headers.set('Content-Type', mediaType(path))
     const record = { bytes: Buffer.from(content), headers: Object.fromEntries(headers) },
-      old = records.get(path)
+      old = this.records.get(path)
     if (old && !sameRecord(old, record)) throw new Error(`Conflicting output: ${path}`)
-    records.set(path, record)
+    this.records.set(path, record)
   }
-  const emitDocument = (path: string, code: string, profile: ResponseProfile) => {
+
+  /** A document inlining the fragment capture and its module entry. */
+  document(path: string, code: string, profile: ResponseProfile) {
     const scripts = [captureFragment(path), code].map(inlineScript)
-    put(
+    this.put(
       path,
       page(
         messages.brand,
         `<main id="libid-root"></main><script>${scripts[0]}</script><script type="module">${scripts[1]}</script>`,
       ),
-      responseHeaders(profile, { ...options, inline: scripts }),
+      responseHeaders(profile, { ...this.options, inline: scripts }),
     )
   }
-  for (const [path, record] of data.local) put(path, record.bytes, record.headers)
+}
+
+/** Resolve assets, bundle the documents and record every public resource with its policy. */
+async function buildDistribution() {
+  const data = await resolveAssets()
+  const external = Object.values(data.profiles)
+    .flat()
+    .filter((a) => a.isExternal === true)
+  const tree = new PublicTree([
+    ...new Set(
+      external.flatMap((a) => [a.source, ...(a.fallback ?? [])].map((u) => new URL(u).origin)),
+    ),
+  ])
+  const { records, options } = tree
+  for (const [path, record] of data.local) tree.put(path, record.bytes, record.headers)
   const prover = await bundle('src/ccdp/documents/prover.ts', data, {
     invoke: 'startProver',
     fragment: true,
@@ -148,7 +154,7 @@ async function buildDistribution() {
   )
   for (const item of prover.output) {
     if (item.type !== 'chunk' || !item.isEntry)
-      put(`/${item.fileName}`, body(item), emittedProfile(item.fileName, prover))
+      tree.put(`/${item.fileName}`, body(item), emittedProfile(item.fileName, prover))
   }
   const primary = prover.output.find(
     (o): o is Rollup.OutputChunk => o.type === 'chunk' && o.isEntry,
@@ -163,9 +169,9 @@ async function buildDistribution() {
     external,
   )
   // Every published pair has an emitted prover and asset profile.
-  put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
-  emitDocument(route('prover'), primary.code, 'prover')
-  emitDocument(route('prover/fallback'), primary.code, 'proverFallback')
+  tree.put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
+  tree.document(route('prover'), primary.code, 'prover')
+  tree.document(route('prover/fallback'), primary.code, 'proverFallback')
   const callback = await bundle('src/ccdp/documents/callback.ts', data, {
     selfContained: true,
     invoke: 'startCallback',
@@ -175,7 +181,7 @@ async function buildDistribution() {
     if (item.imports.length || item.dynamicImports.length || item.referencedFiles.length)
       throw new Error('Callback must have no external dependencies')
     const code = inlineScript(item.code)
-    put(
+    tree.put(
       '/ccdp/callback.html',
       page(
         messages.brand,
@@ -191,37 +197,44 @@ async function buildDistribution() {
   })
   for (const item of prefetch.output) {
     if (item.type === 'chunk' && item.isEntry) {
-      emitDocument(route('prefetch'), item.code, 'prefetch')
-      put(route('worker.js'), item.code, 'worker')
-    } else put(`/${item.fileName}`, body(item), 'asset')
+      tree.document(route('prefetch'), item.code, 'prefetch')
+      tree.put(route('worker.js'), item.code, 'worker')
+    } else tree.put(`/${item.fileName}`, body(item), 'asset')
   }
   // The page every 404 serves; requested directly it declares the same error policy.
-  put('/404.html', page(messages.notFoundTitle, `<p>${messages.notFound}</p>`), {
+  tree.put('/404.html', page(messages.notFoundTitle, `<p>${messages.notFound}</p>`), {
     'Content-Type': 'text/html; charset=utf-8',
     ...errorHeaders,
   })
   return { records, manifest, graph: prover.graph }
 }
 
-mkdirSync(join(staging, 'public'), { recursive: true })
-
-try {
-  const { records, manifest, graph } = await buildDistribution()
-  retainPrevious(out, records)
-  const files = writeDistribution(staging, records)
-  // Keep graph metadata outside public/; the image retains it for subsequent builds.
-  writeFileSync(
-    join(staging, 'distribution-graph.json'),
-    JSON.stringify({
-      files,
-      ...manifest,
-      headers: Object.fromEntries([...records].map(([p, r]) => [p, r.headers])),
-      graph: Object.fromEntries(graph),
-    } satisfies DistributionMetadata),
-  )
-  swapInto(staging, out)
-  console.log(`Built ${records.size} public resources in ${out}`)
-} catch (error) {
-  rmSync(staging, { recursive: true, force: true })
-  throw error
+/** Build into a staging tree beside `--out-dir` and swap it in whole once it is complete. */
+async function main() {
+  const { values } = parseArgs({ options: { 'out-dir': { type: 'string' } }, strict: true })
+  const out = outputDirectory(values['out-dir'] ?? artifactsDir),
+    staging = `${out}.building`
+  mkdirSync(join(staging, 'public'), { recursive: true })
+  try {
+    const { records, manifest, graph } = await buildDistribution()
+    retainPrevious(out, records)
+    const files = writeDistribution(staging, records)
+    // Keep graph metadata outside public/; the image retains it for subsequent builds.
+    writeFileSync(
+      join(staging, 'distribution-graph.json'),
+      JSON.stringify({
+        files,
+        ...manifest,
+        headers: Object.fromEntries([...records].map(([p, r]) => [p, r.headers])),
+        graph: Object.fromEntries(graph),
+      } satisfies DistributionMetadata),
+    )
+    swapInto(staging, out)
+    console.log(`Built ${records.size} public resources in ${out}`)
+  } catch (error) {
+    rmSync(staging, { recursive: true, force: true })
+    throw error
+  }
 }
+
+if (import.meta.main) await main()

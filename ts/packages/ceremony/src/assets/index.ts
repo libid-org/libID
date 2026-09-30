@@ -14,6 +14,8 @@ export interface AssetRequest {
 export type LocalAsset = {
   source: string
   mount: string
+  /** The source's `sha256:<hex>` digest, which an HTTPS source requires. */
+  sha256?: string
   member?: string
   headers: Readonly<Record<string, string>>
   bundledUrlModules?: readonly string[]
@@ -30,21 +32,33 @@ export type ExternalAsset = {
 
 export type Asset = LocalAsset | ExternalAsset
 
-/** Declare one archive mount. Members select paths or wildcard matches resolved at build time. */
-export function archive(source: string, mount: string) {
+/**
+ * Declare one archive mount, pinned to the release asset's digest as `gh release view` prints it.
+ * Members select paths or wildcard matches resolved at build time.
+ */
+export function archive(source: string, mount: string, sha256: string) {
   return {
     member: (member: string, headers: LocalAsset['headers']): LocalAsset => ({
       source,
       mount,
+      sha256,
       member,
       headers,
     }),
   }
 }
 
-/** Installed package files and standalone downloads use the same publication rules. */
-export function file(source: string, mount: string, headers: LocalAsset['headers']): LocalAsset {
-  return { source, mount, headers }
+/**
+ * Installed package files and standalone downloads use the same publication rules. A download
+ * carries its digest; the lockfile pins an installed file.
+ */
+export function file(
+  source: string,
+  mount: string,
+  headers: LocalAsset['headers'],
+  sha256?: string,
+): LocalAsset {
+  return { source, mount, headers, ...(sha256 && { sha256 }) }
 }
 
 /** Retain a native external loader URL and its request shape; the build does not rehost it. */

@@ -10,7 +10,7 @@ export async function verifyBrowserProof(
   const catalog = await loadAssetCatalog()
   const circuit = catalog.circuits.find((asset) => asset.member === `${name}.json`)
   if (!circuit) throw new Error('Unknown circuit')
-  const files = await readArchive(circuit.source),
+  const files = await readArchive(circuit.source, circuit.sha256),
     api = await Barretenberg.new({ threads: 1 })
   try {
     const verifier = new UltraHonkVerifierBackend(api)

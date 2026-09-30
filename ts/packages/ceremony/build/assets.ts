@@ -109,13 +109,18 @@ export function externalRequest(asset: ExternalAsset): AssetRequest {
   return { url: asset.source, range: asset.range, bytes }
 }
 
-function installedFile(source: string): Buffer {
+/** An installed package file, and the package version its mount's `{version}` becomes. */
+function installedFile(source: string): { bytes: Buffer; version: string } {
   const path = source.slice(4),
     parts = path.split('/'),
     pkg = path.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
   const manifest = findPackageJSON(pkg, import.meta.url)
   if (!manifest) throw new Error('Package root missing')
-  return readFileSync(join(dirname(manifest), safePath(path.slice(pkg.length + 1))))
+  const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as { version: string }
+  return {
+    bytes: readFileSync(join(dirname(manifest), safePath(path.slice(pkg.length + 1)))),
+    version,
+  }
 }
 
 export async function resolveAssets() {
@@ -146,9 +151,9 @@ export async function resolveAssets() {
       externalRequest(asset)
       continue
     }
-    safePath(asset.mount)
     let path: string, bytes: Buffer
     if (asset.member !== undefined) {
+      safePath(asset.mount)
       if (mounts.has(asset.mount) && mounts.get(asset.mount) !== asset.source)
         throw new Error('Conflicting archive mount')
       if (
@@ -158,16 +163,22 @@ export async function resolveAssets() {
       )
         throw new Error('Overlapping archive mounts')
       mounts.set(asset.mount, asset.source)
-      if (!archives.has(asset.source)) archives.set(asset.source, readArchive(asset.source))
+      if (!archives.has(asset.source))
+        archives.set(asset.source, readArchive(asset.source, asset.sha256))
       const files = await archives.get(asset.source)!
       const member = selectMember(files, asset.member)
       path = `/ccdp/assets/${asset.mount}/${member}`
       bytes = files.get(member)!
+    } else if (asset.source.startsWith('npm:')) {
+      // The installed version names the immutable path, so an upgrade cannot reuse it.
+      if (!asset.mount.includes('{version}'))
+        throw new Error(`An installed file's mount spells {version}: ${asset.mount}`)
+      const installed = installedFile(asset.source)
+      path = `/ccdp/assets/${safePath(asset.mount.replaceAll('{version}', installed.version))}`
+      bytes = installed.bytes
     } else {
-      path = `/ccdp/assets/${asset.mount}`
-      bytes = asset.source.startsWith('npm:')
-        ? installedFile(asset.source)
-        : await readSource(asset.source)
+      path = `/ccdp/assets/${safePath(asset.mount)}`
+      bytes = await readSource(asset.source, asset.sha256)
     }
     register(path, bytes, assetHeaders(path, asset.headers))
     urls[assetKey(asset)] = path

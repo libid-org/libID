@@ -8,7 +8,7 @@ import {
 } from './parameters.js'
 
 const noirWasm = (pkg: string, name: string) =>
-  assets.file(`npm:@noir-lang/${pkg}/web/${name}`, `noir/1.0.0-beta.25/${name}`, {
+  assets.file(`npm:@noir-lang/${pkg}/web/${name}`, `noir/{version}/${name}`, {
     ...assets.headers.immutable,
     ...assets.headers.wasm,
   })
@@ -20,7 +20,7 @@ export const abi = noirWasm('noirc_abi', 'noirc_abi_wasm_bg.wasm')
 export const bbWasm = {
   ...assets.file(
     'npm:@aztec/bb.js/dest/node/barretenberg_wasm/barretenberg-threads.wasm.gz',
-    'bb/5.2.0/wasm/barretenberg-threads.wasm',
+    'bb/{version}/wasm/barretenberg-threads.wasm',
     { ...assets.headers.immutable, ...assets.headers.wasm },
   ),
   bundledUrlModules: [

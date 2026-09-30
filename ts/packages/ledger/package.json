@@ -21,12 +21,6 @@
       "default": "./dist/testing.js"
     }
   },
-  "files": [
-    "dist",
-    "src",
-    "docs",
-    "!src/**/*.test.ts"
-  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",

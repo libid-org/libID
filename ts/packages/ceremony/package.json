@@ -20,18 +20,6 @@
       "default": "./dist/ccdp/client/index.js"
     }
   },
-  "files": [
-    "dist",
-    "src",
-    "docs",
-    "!src/**/*.test.ts",
-    "!src/**/*.fixture.*",
-    "!src/**/fixtures/**",
-    "!src/testing/**",
-    "!src/platforms/conformance/**",
-    "build",
-    "ccdp.Dockerfile"
-  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit && pnpm typecheck:build",

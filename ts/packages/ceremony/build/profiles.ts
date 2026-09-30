@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto'
 import * as shared from '../src/assets/headers.ts'
 import { popupFallback } from './popup.ts'
 
-/** Short namespace for immutable worker execution policies; not source integrity. */
+/** Hex characters of the policy directory under `/ccdp/assets/` that bundled code lives in. */
 const POLICY_HASH_HEX_CHARS = 12
 
 export const scriptHash = (code: string) =>

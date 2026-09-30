@@ -11,9 +11,10 @@ import { policyId, workerUrl } from './profiles.ts'
 import { hash, packageDir } from './sources.ts'
 
 /**
- * Import a `src` module into this Node process. The sources resolve one another
- * through `.js` specifiers, which only the bundler maps back to `.ts`, so the
- * module is compiled into one self-contained chunk and loaded from a data URL.
+ * Import a `src` module into this Node process. Only the bundler maps the sources'
+ * `.js` specifiers back to `.ts`, serves their `virtual:` modules and compiles their
+ * parameter properties, so the module is compiled into one self-contained chunk and
+ * loaded from a data URL. Importing `dist/` instead would read whatever tsc last built.
  */
 export async function importSource<T>(entry: string, plugins: Plugin[] = []): Promise<T> {
   const result = await build({

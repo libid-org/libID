@@ -81,6 +81,7 @@ import * as assets from '../assets/index.js'
 const release = assets.archive(
   'https://github.com/libid-org/notary/releases/download/v0.4.0/tlsn-wasm-0.4.0.tar.gz',
   'tlsn/v0.4.0',
+  'sha256:3e1ee9cc85f7f2bfc65946d3b69a5a4064fa688cc804f181c971febaaa53a0b1',
 )
 const module = release.member('tlsn_wasm.js', {
   ...assets.headers.immutable,
@@ -92,7 +93,7 @@ const spawn = release.member('snippets/web-spawn-*/js/spawn.js', {
 })
 const acvm = assets.file(
   'npm:@noir-lang/acvm_js/web/acvm_js_bg.wasm',
-  'noir/1.0.0-beta.25/acvm_js_bg.wasm',
+  'noir/{version}/acvm_js_bg.wasm',
   { ...assets.headers.immutable, ...assets.headers.wasm },
 )
 const crs = assets.external('https://crs.aztec-cdn.foundation/g1_compressed.dat', {
@@ -118,9 +119,14 @@ conflicting bodies/policies and sidecar collisions fail the build.
 
 Mounted files become servable, but only selected profile dependencies are
 prefetched. Standalone files accept installed `npm:` paths or declared sources;
-installed package integrity comes from the workspace lockfile. Developers own
-release URLs and immutable mounts. There is no handwritten asset checksum list
-or browser hashing step.
+installed package integrity comes from the workspace lockfile. An installed file's
+mount spells `{version}`, which the build replaces with the installed package's
+version, so upgrading the package moves the file to a new immutable path. Every HTTPS source
+declares its `sha256:` digest, and the build refuses bytes that do not match, from
+a fresh download or the cache. To upgrade a release, change its URL, mount and
+digest together; `gh release view <tag> -R <repo> --json assets` and the release
+page show each asset's digest. Developers own release URLs and immutable mounts.
+Browsers do no asset hashing.
 
 External declarations retain their URL, range, optional exact byte count and
 fallback URLs. They emit no local body or response headers. They contribute to
@@ -169,11 +175,17 @@ all releases to one fixed timestamp. The native-server regression in
 The pinned SWS 3.0.0-beta.1 has behavior that the generated configuration and
 the tests account for:
 
-- **Header rule matching.** Keep `redirect-trailing-slash = true`. The generated
-  catch-all makes unresolved paths uncacheable; exact rules for physical files
-  then apply after route rewriting. Matching details belong to [sws.ts](../build/sws.ts)
-  and its [native canary](../build/sws.test.ts). Run that check when upgrading SWS;
-  changing these rules can accidentally give 404s immutable cache headers.
+- **Header rule matching.** SWS matches `[[advanced.headers]]` sources against
+  the request path after rewrites and applies every matching rule in config order,
+  later rules overwriting. The generated catch-all `/**` comes first with the
+  uncacheable error policy, and one exact rule per physical file overwrites the
+  names it declares. A route and its direct `.html` request therefore share one
+  rule, a 404 carries only the error policy, and a 200 keeps the catch-all's value
+  for a name its declaration omits, such as the CSP on a plain asset. Keep
+  `redirect-trailing-slash = true`: without it, and for directory-index requests,
+  SWS appends the resolved file name before matching. The
+  [native canary](../build/sws.test.ts) pins this model; run it when upgrading SWS,
+  since changed matching can give 404s immutable cache headers.
 - **`./config.toml` precedence.** A `config.toml` in the working directory is read
   instead of the `--config-file`/`SERVER_CONFIG_FILE` path. Run local binaries from
   a directory without one; the image's working directory, `/home/sws`, has none.

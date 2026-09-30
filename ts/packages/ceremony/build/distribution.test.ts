@@ -6,11 +6,11 @@ import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { parseCsp } from './profiles.ts'
-import { packageDir } from './sources.ts'
-import { errorHeaders, nativeSkip } from './sws.ts'
+import { errorHeaders } from './sws.ts'
+import { builtArtifacts, nativeSkip } from './testing.ts'
 import { catalogVersions, proverPair, versionPairs } from './versions.ts'
 
-const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
+const out = builtArtifacts,
   metadata: DistributionMetadata = JSON.parse(
     readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
   )
