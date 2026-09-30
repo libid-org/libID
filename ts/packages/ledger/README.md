@@ -82,6 +82,20 @@ await client.read(resolveHandle, [platform, 'alice'])
 
 The catalog and client take no RPC defaults; consumers supply endpoints.
 
+## Adding a namespace
+
+1. Add it to `Namespace` in `src/index.ts`, and give `defineLedger` its Chain
+   Profile hash and address check from `src/<namespace>/chain.ts`.
+2. Create `src/<namespace>/index.ts` with the namespace's `Reader`, `Tx` and
+   `Provider` types, and `src/<namespace>/client.ts` implementing
+   `LedgerClient`. Export `./<namespace>` from `package.json`.
+3. Add one entry to `Namespaces` in `src/client.ts` and dispatch to the new
+   driver in `connect`.
+
+The compiler then flags the `connect` dispatch and every `Query` and `Command`
+without the new namespace, in this package and in its consumers. Existing
+namespace modules and namespace-agnostic code do not change.
+
 ## Shared test fixture
 
 ```ts

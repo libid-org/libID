@@ -6,8 +6,8 @@ import {
   connect,
   LedgerError,
   type NamespaceOf,
+  type Namespaces,
   type Query,
-  type Wallets,
 } from './client.js'
 import { defineLedger, type ledgers } from './index.js'
 
@@ -268,7 +268,7 @@ it('separates a rejected send from an unknown outcome', async () => {
 })
 
 it('types wallets and namespaces from the ledger', () => {
-  expectTypeOf<EIP1193Provider>().toMatchTypeOf<Wallets['eip155']>()
+  expectTypeOf<EIP1193Provider>().toMatchTypeOf<Namespaces['eip155']['wallet']>()
   expectTypeOf<NamespaceOf<(typeof ledgers)['eden-testnet']>>().toEqualTypeOf<'eip155'>()
   // @ts-expect-error every supported namespace needs an implementation
   const missing: Query<[], number> = {}

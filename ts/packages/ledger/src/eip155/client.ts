@@ -38,7 +38,10 @@ export const readMethods: readonly string[] = Object.freeze([
 ])
 const sendMethods = ['eth_sendTransaction', 'wallet_sendTransaction']
 
-export function eip155<L extends Ledger>(ledger: L, access: Access): LedgerClient<L> {
+export function eip155<L extends Ledger<`eip155:${string}`>>(
+  ledger: L,
+  access: Access,
+): LedgerClient<L> {
   const chainId = Number(ledger.chain.slice('eip155:'.length))
   if (!Number.isSafeInteger(chainId)) throw new TypeError(`Unsupported EVM chain: ${ledger.chain}`)
   const chain = defineChain({
@@ -199,7 +202,7 @@ export function eip155<L extends Ledger>(ledger: L, access: Access): LedgerClien
   const base = reads(createPublicClient({ chain, transport: rpc }))
   return {
     ...base,
-    async connect(provider, { prompt = true } = {}) {
+    async connect(provider: Provider, { prompt = true }: { prompt?: boolean } = {}) {
       let address: `0x${string}` | null
       try {
         address = await walletAccount(provider, prompt)
