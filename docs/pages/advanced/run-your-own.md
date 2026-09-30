@@ -1,5 +1,6 @@
 ---
 title: Run your own deployment
+draft: true
 sidebar:
   order: 6
 ---

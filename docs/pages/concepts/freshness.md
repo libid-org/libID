@@ -1,7 +1,50 @@
 ---
 title: Freshness
+description: What observedAt means, and how old is too old.
 sidebar:
   order: 3
 ---
 
-_Draft._ What `observedAt` means and how to pick a maximum age.
+Every binding stores `observedAt`: the time, in Unix seconds, at which the
+platform confirmed who owns the account. `byHandle` and `byId` return it.
+
+## Where the time comes from
+
+The time is not chosen by the user or by your app. It comes from signed
+evidence:
+
+| Platform | `observedAt` is |
+| --- | --- |
+| GitHub, X | when the notary signed the record of the user's session with the platform |
+| Google | the expiry time in Google's signed sign-in token, about an hour after sign-in |
+
+A GitHub or X proof must reach the chain within an hour of that time, and the
+time cannot be more than five minutes ahead of the block. A Google proof must
+reach the chain before its token expires. These limits are protocol
+parameters; see [Protocol parameters](/specs/#protocol-parameters).
+
+## Newer wins
+
+A proof is accepted only if its `observedAt` is later than the one already
+stored for the same account and for the same handle. An old proof cannot undo
+a newer one, and the same proof cannot be used twice.
+
+## What it tells you
+
+`observedAt` says when the platform last confirmed the binding. It does not
+say that the owner still has the account, or still uses that handle, today.
+
+Nothing refreshes a binding automatically. It changes only when someone
+proves the account or the handle again. A binding from last year is still
+there, unchanged, until then.
+
+## How old is too old
+
+libID does not decide this for you. Pick a limit that fits what is at stake:
+
+- To show a name next to a wallet, any age is usually fine.
+- To send a payment to a handle, show the age to the sender, and warn when it
+  is old.
+- To gate something valuable in a contract, compare `block.timestamp -
+  observedAt` with a maximum age. See
+  [Gate a contract](/docs/guides/gate-contract/).

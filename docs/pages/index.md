@@ -3,23 +3,36 @@ title: Introduction
 description: Every social account is already a multichain identity.
 ---
 
-Every social account is already a multichain identity.
+libID lets a wallet prove it owns a GitHub, X or Google account. The proof is
+checked on chain, and the result is stored in the `IdentityNames` contract.
+Any app or contract can then ask who owns `@octocat`, or which accounts a
+wallet has, without trusting a server.
 
-## What is libID?
+With that you can:
 
-libID is a trust-minimized identity system that bridges identities from
-OAuth-enabled platforms to blockchains. An existing user handle can stand in
-for an onchain address, similar to an onchain naming service.
+- show a name instead of an address,
+- send funds to a handle, even before its owner has a wallet,
+- let only verified accounts call a contract,
+- resolve a handle as an ENS name, such as `octocat.github.handles.link`.
 
-The project includes tools for application developers, wallet providers, and
-other integrators to build with these identities.
+## Start here
 
-## Explore the project
+- [Quickstart](/docs/get-started/quickstart/): read your first binding in a
+  few minutes.
+- [Test on a local chain](/docs/guides/local-chain/): run everything on your
+  machine with known test data.
 
-- [libID](https://lib.id) — the project website.
-- [GitHub](https://github.com/libid-org/libid) — source code and project overview.
+## Guides
 
-## Documentation status
+- [Look up a wallet](/docs/guides/lookup-wallet/)
+- [Resolve a handle](/docs/guides/resolve-handle/)
+- [Gate a contract](/docs/guides/gate-contract/)
+- [Send funds to a handle](/docs/guides/pay-a-handle/)
+- [Listen to events](/docs/guides/events/)
+- [ENS names](/docs/ens/names/)
 
-These docs are just getting started. Integration guides and reference material
-will be added here as they are ready.
+## Before you build on it
+
+- [What a binding proves](/docs/concepts/trust/), and whom you trust for it.
+- [Security](/docs/resources/security/): the contracts have not been audited.
+- [Networks](/docs/networks/eden/): what is deployed where.
