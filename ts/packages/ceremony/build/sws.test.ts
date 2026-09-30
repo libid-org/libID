@@ -12,7 +12,7 @@ import { errorHeaders, nativeSkip, writeDistribution } from './sws.ts'
 
 // The native tests below start their own SWS on this port and the next one, clear of the dev
 // app and the e2e suite.
-const testPort = Number(process.env.CEREMONY_SWS_TEST_PORT ?? 4988)
+const testPort = Number(process.env.CEREMONY_SWS_TEST_PORT ?? 4990)
 
 /** Point an emitted `sws.toml` at its own output on a loopback port. */
 function localize(dir: string, port: number, edit?: (config: TomlTable) => void) {

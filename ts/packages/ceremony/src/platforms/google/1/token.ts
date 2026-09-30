@@ -1,4 +1,4 @@
-import type { GoogleCircuitToken } from '../../../barretenberg/circuits/oidc_google/inputs.js'
+import type { OidcGoogleToken } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
   MAX_AUD_BYTES,
   MAX_EMAIL_BYTES,
@@ -11,7 +11,7 @@ import { provider } from './provider.js'
 import { isCircuitText } from './validation.js'
 
 /** The token bytes and claims the fixed oidc_google circuit consumes, plus the signing key's `kid`. */
-export interface ParsedGoogleIdToken extends GoogleCircuitToken {
+export interface ParsedGoogleIdToken extends OidcGoogleToken {
   kid: string
 }
 
@@ -30,7 +30,7 @@ function json(bytes: Uint8Array): Record<string, unknown> | null {
 }
 
 /** The circuit also requires the fixed issuer and a verified email; neither is delivered. */
-function googleClaims(p: Record<string, unknown> | null): GoogleCircuitToken['claims'] | null {
+function googleClaims(p: Record<string, unknown> | null): OidcGoogleToken['claims'] | null {
   if (p?.iss !== provider.issuer || p.email_verified !== true) return null
   const { aud, sub, email, exp, nonce } = p
   return isCircuitText(aud, MAX_AUD_BYTES) &&

@@ -110,7 +110,7 @@ point SWS at that same artifact. To include the same-length ETag regression and 
 [header-matching canary](distribution.md#native-server-behavior), also set
 `CEREMONY_SWS_BINARY` to a locally runnable `static-web-server` from the
 [pinned release](https://github.com/static-web-server/static-web-server/releases/tag/v3.0.0-beta.1).
-Those tests start their own servers on `CEREMONY_SWS_TEST_PORT` (default 4988) and
+Those tests start their own servers on `CEREMONY_SWS_TEST_PORT` (default 4990) and
 the next port. These inputs are test-only. The workspace **CCDP image** CI job runs
 all of them against the freshly built image and the pinned binary, requiring them
 with `CEREMONY_REQUIRE_NATIVE=1`.
@@ -158,7 +158,7 @@ runtime test retries once, since each runs through the real notary against the X
 GitHub APIs; the real-notary session tests are also tagged `@live`.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
-Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987 and
+Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987/4989 and
 4781–4783/4881–4883 ([topology.ts](../e2e/topology.ts)) are separate from the dev app. Concurrent suite invocations
 fail on occupied ports instead of reusing or replacing another run's services.
 HTTPS tests use harness certificates and test-runner trust settings; the manual

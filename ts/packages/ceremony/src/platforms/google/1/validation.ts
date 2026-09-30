@@ -1,3 +1,4 @@
+import { buildOidcGooglePublicInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
   MAX_AUD_BYTES,
   MAX_EMAIL_BYTES,
@@ -7,8 +8,7 @@ import {
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../../../barretenberg/parameters.js'
 import { isFixedBytes, isUint, recordValidator } from '../../../primitives.js'
-import { type Identity, identityValidator, isProofBytes } from '../../types.js'
-import { isGooglePublicInputs } from './publicInputs.js'
+import { type Identity, identityValidator, isProofBytes } from '../../validation.js'
 
 export interface GoogleProofV1 {
   identityProof: Uint8Array
@@ -63,3 +63,31 @@ export const validateIdentity: (value: unknown) => Identity<'google'> = identity
     userName: (s) => isCircuitText(s, MAX_EMAIL_BYTES),
   },
 )
+
+/** Flatten validated Google v1 identity/proof values into the circuit's public fields. */
+export function buildGooglePublicInputs(
+  authorizationDigest: Uint8Array,
+  identity: Identity<'google'>,
+  proof: Pick<GoogleProofV1, 'tokenExpiresAt' | 'signingKeyModulus'>,
+): string[] {
+  return buildOidcGooglePublicInputs({
+    authorizationDigest,
+    audience: identity.oauthClientId,
+    subject: identity.userId,
+    email: identity.userName,
+    expiresAt: proof.tokenExpiresAt,
+    modulus: proof.signingKeyModulus,
+  })
+}
+
+/** Compare every circuit field in order; canonical hex makes string equality byte equality. */
+export function isGooglePublicInputs(
+  value: unknown,
+  authorizationDigest: Uint8Array,
+  identity: Identity<'google'>,
+  proof: Pick<GoogleProofV1, 'tokenExpiresAt' | 'signingKeyModulus'>,
+): value is string[] {
+  if (!Array.isArray(value)) return false
+  const expected = buildGooglePublicInputs(authorizationDigest, identity, proof)
+  return value.length === expected.length && expected.every((item, index) => item === value[index])
+}

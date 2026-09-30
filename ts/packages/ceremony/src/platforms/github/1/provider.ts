@@ -16,15 +16,9 @@ export const provider = {
   authorizationEndpoint: 'https://github.com/login/oauth/authorize',
   authorizationIssuer: 'https://github.com/login/oauth',
   authorizationScope: 'read:user',
-  maxUserNameBytes: 39,
   identityHeaders: {
     Accept: 'application/vnd.github+json',
     'User-Agent': 'Mozilla/5.0',
     'X-GitHub-Api-Version': '2022-11-28',
   },
 } as const
-
-export const isUserName = (value: string): boolean =>
-  value.length <= provider.maxUserNameBytes &&
-  /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(value) &&
-  !value.includes('--')

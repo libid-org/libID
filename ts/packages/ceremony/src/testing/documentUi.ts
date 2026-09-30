@@ -1,10 +1,8 @@
-// CCDP request builders and the documents' UI double. Like @libid/popup/testing, they stay
-// framework-agnostic: methods are own properties, so tests wrap them with their runner's spies.
+// The documents' UI double. Like @libid/popup/testing, it stays framework-agnostic: methods are
+// own properties, so tests wrap them with their runner's spies.
 
-import type { eventView } from '../ccdp/documents/ui.js'
+import type { DocumentView } from '../ccdp/documents/ui.js'
 import type { CeremonyEvent, EventFeed } from '../events.js'
-
-type DocumentView = ReturnType<typeof eventView>
 
 /**
  * Stand-in for the documents' `./ui.js`. It records the titles shown and every update on the

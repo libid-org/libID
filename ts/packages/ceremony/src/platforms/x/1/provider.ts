@@ -15,9 +15,5 @@ export const provider = {
   proofLifetimeSeconds: PROOF_LIFETIME_SECONDS_X,
   authorizationEndpoint: 'https://x.com/i/oauth2/authorize',
   authorizationScope: 'tweet.read users.read',
-  maxUserNameBytes: 15,
   identityHeaders: { Accept: 'application/json' },
 } as const
-
-export const isUserName = (value: string): boolean =>
-  value.length <= provider.maxUserNameBytes && /^[A-Za-z0-9_]+$/.test(value)

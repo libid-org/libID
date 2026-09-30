@@ -8,8 +8,8 @@ import { operation } from '../../../events.js'
 import type { ProverContext } from '../../context.js'
 import { acceptReturn } from '../../oauthReturn.js'
 import { prepareGoogleInputs } from './inputs.js'
-import { isGooglePublicInputs } from './publicInputs.js'
 import { acceptGoogleIdToken, fetchSigningKey } from './token.js'
+import { isGooglePublicInputs } from './validation.js'
 
 export async function prove(context: ProverContext) {
   const { signal, emit } = context

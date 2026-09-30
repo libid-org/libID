@@ -1,6 +1,6 @@
 import type { ProverContext } from './context.js'
 import type { PlatformId, ProofByPlatformVersion, SupportedCeremonyVersion } from './index.js'
-import type { Identity } from './types.js'
+import type { Identity } from './validation.js'
 
 /** Platform `P`'s delivered identity beside a proof of one of its versions. */
 export type ProverResult<P extends PlatformId = PlatformId> = P extends PlatformId

@@ -15,7 +15,7 @@ import * as googleValidation from '../google/1/validation.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
 import type { ReturnRules } from '../oauthReturn.js'
 import type { ProverModule } from '../provers.js'
-import type { Identity } from '../types.js'
+import type { Identity } from '../validation.js'
 import * as xExchange from '../x/1/exchange.js'
 import * as xValidation from '../x/1/validation.js'
 

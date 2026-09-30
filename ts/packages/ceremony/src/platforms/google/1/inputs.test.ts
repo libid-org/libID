@@ -1,19 +1,18 @@
 import { createPublicKey, verify } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import type { GoogleCircuitInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
+import type { OidcGoogleInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
   googlePublicInputs as BB_PUBLIC_INPUTS,
   googleV1 as fixture,
   jwtWith,
-} from '../../conformance/fixtures.js'
+} from '../../../testing/index.js'
 import { prepareGoogleInputs } from './inputs.js'
-import { buildGooglePublicInputs } from './publicInputs.js'
 import { parseGoogleIdToken } from './token.js'
-import { validateProof } from './validation.js'
+import { buildGooglePublicInputs, validateProof } from './validation.js'
 
 const digest = fixture.authorizationDigest
 
-const ABI_KEYS: Array<keyof GoogleCircuitInputs> = [
+const ABI_KEYS: Array<keyof OidcGoogleInputs> = [
   'signing_input',
   'signing_input_len',
   'header_b64_len',

@@ -17,7 +17,7 @@ export const NUM_LIMBS = Math.ceil(RSA_MODULUS_BITS / Number(LIMB_BITS))
 export const BARRETT_OVERFLOW_BITS = 6n
 
 /** SHA256 audience digest split into two 128-bit public fields. */
-export const AUDIENCE_HASH_FIELDS = 2
+const AUDIENCE_HASH_FIELDS = 2
 export const AUDIENCE_HASH_FIELD_BYTES = 16
 
 /** Digest bytes, audience hash, packed subject/email, expiry and RSA modulus limbs. */

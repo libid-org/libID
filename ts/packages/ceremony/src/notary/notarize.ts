@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { concatBytes } from '@noble/hashes/utils.js'
-import { bytesEqual, isFixedBytes } from '../primitives.js'
+import { isFixedBytes } from '../primitives.js'
 import { type DecodedAttestedData, type DecodedDirection, decodeAttestedData } from './decode.js'
 import { MAX_RECV_BYTES, MAX_SENT_BYTES } from './limits.js'
 import {
@@ -31,6 +31,13 @@ export interface HashOpening {
 export interface CorrelatedCommitment extends ByteRange, HashOpening {}
 
 export type Correlated = Directions<readonly CorrelatedCommitment[]>
+
+/** Byte equality. Not constant-time; never used to compare secrets. */
+export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
 
 function invalid(reason: string): never {
   throw new Error(`invalid notarization: ${reason}`)

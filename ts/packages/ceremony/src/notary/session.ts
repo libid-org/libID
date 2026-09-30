@@ -2,12 +2,12 @@ import { assetUrl } from '../assets/index.js'
 import { toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, safeEmit } from '../events.js'
 import { isOrigin, isWebUrl } from '../primitives.js'
-import type { NotaryAttestation } from './decode.js'
 import { tlsnModule, tlsnWasm } from './notary.assets.js'
 import type {
   CommitmentOpening,
   ExactHttpRequest,
   FromWorker,
+  NotaryAttestation,
   Prepare,
   Reveals,
   ToWorker,

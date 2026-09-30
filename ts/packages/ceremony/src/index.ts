@@ -1,5 +1,5 @@
 export { CeremonyError } from './errors.js'
-export type { NotaryAttestation } from './notary/decode.js'
+export type { NotaryAttestation } from './notary/protocol.js'
 
 export {
   type Identity,

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   b64urlDecode,
   b64urlEncode,
-  bytesEqual,
   hasExactKeys,
   isOrigin,
   isRecord,
@@ -57,15 +56,6 @@ describe('b64url codec', () => {
     expect(b64urlDecode('Zh')).toBeNull() // trailing bits nonzero
     expect(b64urlDecode('Zm9vYh')).toBeNull()
     expect(b64urlDecode('é')).toBeNull()
-  })
-})
-
-describe('bytesEqual', () => {
-  it('compares content, not identity', () => {
-    expect(bytesEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2]))).toBe(true)
-    expect(bytesEqual(new Uint8Array([1, 2]), new Uint8Array([1, 3]))).toBe(false)
-    expect(bytesEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2, 3]))).toBe(false)
-    expect(bytesEqual(new Uint8Array(0), new Uint8Array(0))).toBe(true)
   })
 })
 

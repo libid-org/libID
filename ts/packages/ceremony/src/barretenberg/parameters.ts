@@ -8,7 +8,7 @@ export const PROVING_SETTINGS = {
 
 /** Serialized field representation; unrelated to the width of a byte-packed circuit input. */
 export const FIELD_BYTES = 32
-export const FIELD_HEX_DIGITS = FIELD_BYTES * 2
+const FIELD_HEX_DIGITS = FIELD_BYTES * 2
 export const FIELD_HEX_CHARS = '0x'.length + FIELD_HEX_DIGITS
 export const FIELD_HEX_PATTERN = new RegExp(`^0x[0-9a-f]{${FIELD_HEX_DIGITS}}$`)
 

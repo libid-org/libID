@@ -3,13 +3,14 @@ import { findPackageJSON } from 'node:module'
 import { dirname, extname, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import * as headers from '../src/assets/headers.ts'
-import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.js'
+import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.ts'
+import { assetKey, profileKey } from '../src/assets/keys.ts'
 import { SRS_POINTS } from '../src/barretenberg/parameters.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetPlugin } from './assetPlugin.ts'
 import { importSource } from './bundle.ts'
 import { validateCircuitCapacity } from './circuits.ts'
-import { isolatedWorkers, parseCsp, responseHeaders } from './profiles.ts'
+import { parseCsp } from './profiles.ts'
 import { hash, packageDir, readSource } from './sources.ts'
 
 export function loadAssetCatalog() {
@@ -111,17 +112,11 @@ function installedFile(source: string): Buffer {
   return readFileSync(join(dirname(manifest), safePath(path.slice(pkg.length + 1))))
 }
 
-/** The key of a local asset's built URL in `urls`, as the runtime assetUrl looks it up. */
-export const assetKey = (asset: LocalAsset) => `${asset.mount}/${asset.member ?? ''}`
-
-/** Short namespace for immutable worker execution policies; not source integrity. */
-const POLICY_HASH_HEX_CHARS = 12
-
 export async function resolveAssets() {
   const catalog = await loadAssetCatalog()
   const profiles = Object.fromEntries(
     Object.entries(catalog.assetsByPlatform).flatMap(([p, vs]) =>
-      Object.entries(vs).map(([v, as]) => [`${p}/${v}`, as]),
+      Object.entries(vs).map(([v, as]) => [profileKey(p, v), as]),
     ),
   )
   const declarations = Object.values(profiles).flat()
@@ -179,12 +174,7 @@ export async function resolveAssets() {
   )
   await validateCircuitCapacity(circuits, SRS_POINTS)
   for (const [path, { bytes }] of local) bodyHashes[path] = hash(bytes)
-  // Bundled code changes URL when its execution policy changes, even if its code does not.
-  const policyId = hash(
-    JSON.stringify(isolatedWorkers.map((profile) => responseHeaders(profile))),
-  ).slice(0, POLICY_HASH_HEX_CHARS)
   return {
-    policyId,
     urls,
     moduleUrls,
     profiles,

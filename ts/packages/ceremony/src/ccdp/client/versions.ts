@@ -1,6 +1,6 @@
-import { MAX_CEREMONY_VERSION } from '../../platforms/authorization.js'
 import { isRecord, isUint } from '../../primitives.js'
 import { fetchPublicJson } from '../../response.js'
+import { MAX_CEREMONY_VERSION } from '../limits.js'
 
 /** Platform ceremony versions a Distribution bundles: platform id to its ascending version list. */
 export type PlatformVersions = Readonly<Record<string, readonly number[]>>

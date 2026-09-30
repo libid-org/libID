@@ -1,7 +1,9 @@
-import { MAX_CEREMONY_VERSION } from '../platforms/authorization.js'
 import { isOrigin, isSlug, isUint } from '../primitives.js'
-import { CCDP_VERSION, UUID } from './index.js'
-import { MAX_NAVIGATION_FRAGMENT_CHARS } from './limits.js'
+import { UUID } from './index.js'
+import { MAX_CEREMONY_VERSION, MAX_NAVIGATION_FRAGMENT_CHARS } from './limits.js'
+
+/** The CCDP version this build's documents and routes implement. */
+export const CCDP_VERSION = 1
 
 export interface OAuthReturn {
   query: string

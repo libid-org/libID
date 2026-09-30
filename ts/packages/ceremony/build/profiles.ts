@@ -14,6 +14,9 @@ import { createHash } from 'node:crypto'
 import * as shared from '../src/assets/headers.ts'
 import { popupFallback } from './popup.ts'
 
+/** Short namespace for immutable worker execution policies; not source integrity. */
+const POLICY_HASH_HEX_CHARS = 12
+
 export const scriptHash = (code: string) =>
   `'sha256-${createHash('sha256').update(code).digest('base64')}'`
 
@@ -102,3 +105,9 @@ function executableCsp(
     styles = documents.includes(profile) ? "; style-src 'unsafe-inline'" : ''
   return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects} ${popupFallback.connectSources.join(' ')}${connectBlob}${styles}`
 }
+
+/** Bundled code changes URL when its execution policy changes, even if its code does not. */
+export const policyId = createHash('sha256')
+  .update(JSON.stringify(isolatedWorkers.map((profile) => responseHeaders(profile))))
+  .digest('hex')
+  .slice(0, POLICY_HASH_HEX_CHARS)

@@ -1,6 +1,7 @@
 import { FORBIDDEN_REQUEST_HEADERS } from '@libid/contracts/ceremony'
 import { isRedirectUri } from '../../../ccdp/index.js'
 import { FIELD_NAME, latin1, parseHead, trimField } from '../../../notary/http.js'
+import { bytesEqual } from '../../../notary/notarize.js'
 import type { ByteRange, ExactHttpRequest, Transcript } from '../../../notary/protocol.js'
 import {
   decodePrintable,
@@ -9,11 +10,10 @@ import {
   quotedRange,
   skipJsonWhitespace,
 } from '../../../notary/transcript.js'
-import { isFormClientId, isPkceValue } from '../../../platforms/authorization.js'
-import { bytesEqual } from '../../../primitives.js'
+import { isPkceValue } from '../../../platforms/authorization.js'
 import { isBearer } from './inputs.js'
 import { MAX_BEARER_BYTES } from './parameters.js'
-import { isUserId, MAX_USER_ID_CHARS } from './validation.js'
+import { isFormClientId, isUserId, MAX_USER_ID_CHARS } from './validation.js'
 
 export interface TokenRequestInput {
   clientId: string

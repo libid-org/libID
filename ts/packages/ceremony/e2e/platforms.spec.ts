@@ -8,8 +8,8 @@ import {
   deriveCodeVerifier,
 } from '../src/platforms/authorization.js'
 import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { type: 'json' }
-import { buildGooglePublicInputs } from '../src/platforms/google/1/publicInputs.js'
 import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
+import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
 import type { PlatformId } from '../src/platforms/index.js'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'
 import { type BrowserPlatform, browserPlatforms, platformIds } from './platforms.js'

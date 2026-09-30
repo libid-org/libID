@@ -1,12 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Rollup } from 'vite'
-import type { AssetRequest, ExternalAsset } from '../src/assets/index.js'
+import type { AssetRequest, ExternalAsset } from '../src/assets/index.ts'
+import { assetKey, requestKey } from '../src/assets/keys.ts'
 import { messages } from '../src/ccdp/uiMessages.ts'
 import { safePath } from './archive.ts'
 import type { AssetManifest } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
-import { assetHeaders, assetKey, externalRequest, mediaType, resolveAssets } from './assets.ts'
+import { assetHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
 import { bundle, workerUrl } from './bundle.ts'
 import { captureInput } from './input.ts'
@@ -35,7 +36,7 @@ if (existsSync(staging)) throw new Error('Build staging directory already exists
 
 /** One request per exact URL and Range, first occurrence first. */
 const unique = (requests: AssetRequest[]) => [
-  ...new Map(requests.map((r) => [`${r.url}\n${r.range ?? ''}`, r])).values(),
+  ...new Map(requests.map((r) => [requestKey(r), r])).values(),
 ]
 
 /** Same bytes and the same normalized headers. */

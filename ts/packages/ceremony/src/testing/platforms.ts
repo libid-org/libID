@@ -15,7 +15,6 @@ export {
   googleV1,
   jwtPart,
   jwtWith,
-  type PlatformFixture,
 } from '../platforms/conformance/fixtures.js'
 
 type OfProverKind<K extends string> = {

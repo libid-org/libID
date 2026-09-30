@@ -33,6 +33,9 @@ function stageLabel(event: StageEvent): string {
   )
 }
 
+/** The handle a document drives its package-owned UI through. */
+export type DocumentView = ReturnType<typeof eventView>
+
 /** The same local projection as the Application; subscriptions never mediate wire delivery. */
 export function eventView(feed: EventFeed) {
   const { root, label } = view(messages.preparation)

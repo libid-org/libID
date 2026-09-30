@@ -83,8 +83,8 @@ owns GitHub's request layout; deployed verifiers must accept it.
 
 X and GitHub share the `bearer_link` circuit and
 [exchange machinery](../src/barretenberg/circuits/bearer-link/exchange.ts).
-Each platform's `provider.ts` owns endpoints, request fields, identity headers and
-user-name grammar; `exchange.ts` supplies its requests and transcript selectors.
+Each platform's `provider.ts` owns endpoints, request fields and identity headers, its
+`validation.ts` the user-name grammar; `exchange.ts` supplies its requests and transcript selectors.
 [bearer-link/validation.ts](../src/barretenberg/circuits/bearer-link/validation.ts) supplies the shared
 client ID, identity and proof validators under each platform's names. The shared
 machinery validates the common token inputs (form client ID, code, redirect URI,

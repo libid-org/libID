@@ -12,6 +12,7 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { concatBytes } from '@noble/hashes/utils.js'
+import { MAX_CEREMONY_VERSION } from '../ccdp/limits.js'
 import { b64urlDecode, b64urlEncode } from '../primitives.js'
 
 /** ceremony-common §5: digest/hash widths, fresh nonce and unsigned wire fields. */
@@ -19,7 +20,6 @@ export const AUTHORIZATION_DIGEST_BYTES = keccak_256.outputLen
 export const OPERATION_DOMAIN_BYTES = keccak_256.outputLen
 export const CHAIN_ID_BYTES = keccak_256.outputLen
 export const AUTHORIZATION_NONCE_BYTES = 32
-export const MAX_CEREMONY_VERSION = 0xffff
 export const MAX_TRANSACTION_DATA_BYTES = 0xffffffff
 
 const VERSION_OFFSET = OPERATION_DOMAIN_BYTES
@@ -132,6 +132,3 @@ export function pkceAuthorizationUrl(
     return `${endpoint}?${query}`
   }
 }
-
-/** Form-authenticated client IDs must be byte-identical under form serialization. */
-export const isFormClientId = (value: string): boolean => /^[A-Za-z0-9*._-]+$/.test(value)

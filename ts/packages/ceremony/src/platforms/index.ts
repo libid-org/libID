@@ -5,11 +5,11 @@ import * as github from './github/1/validation.js'
 import * as googleEvents from './google/1/events.js'
 import * as googleUrl from './google/1/url.js'
 import * as google from './google/1/validation.js'
-import type { Identity } from './types.js'
+import type { Identity } from './validation.js'
 import * as xUrl from './x/1/url.js'
 import * as x from './x/1/validation.js'
 
-export type { Identity } from './types.js'
+export type { Identity } from './validation.js'
 
 /** Validate each version's proof before deriving its retention metadata. */
 const resultAdapter = <I, P>(validation: {

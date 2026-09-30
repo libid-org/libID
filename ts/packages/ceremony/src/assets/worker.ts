@@ -1,7 +1,8 @@
 import { allowedRequests, requestsByProfile } from 'virtual:ceremony-assets'
 import { installPortKeeper } from '@libid/popup/worker'
 import { hasExactKeys, isRecord } from '../primitives.js'
-import { AssetCache, requestKey } from './cache.js'
+import { AssetCache } from './cache.js'
+import { requestKey } from './keys.js'
 
 /** Install the emitted fetch allowlist, cache delivery and popup-owned port continuity. */
 export function startWorker(scope: ServiceWorkerGlobalScope): void {

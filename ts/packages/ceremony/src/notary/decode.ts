@@ -6,6 +6,7 @@ import {
   COMMITMENT_BYTES,
   type Directions,
   NOTARY_SIGNATURE_BYTES,
+  type NotaryAttestation,
 } from './protocol.js'
 
 // Fixed-int bincode: u32 start, u64 byte length, at least one disclosed byte.
@@ -33,12 +34,6 @@ export interface DecodedAttestedData extends Directions<DecodedDirection> {
   createdAt: string
   sentTranscriptLength: number
   receivedTranscriptLength: number
-}
-
-/** Original signed bytes; ledger verification remains authoritative. */
-export interface NotaryAttestation {
-  attestedData: Uint8Array
-  signature: Uint8Array
 }
 
 function invalid(reason: string): never {

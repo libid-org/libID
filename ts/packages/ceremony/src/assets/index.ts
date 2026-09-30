@@ -1,4 +1,5 @@
 import { urls } from 'virtual:ceremony-assets'
+import { assetKey } from './keys.js'
 
 export * as headers from './headers.js'
 
@@ -57,7 +58,7 @@ export function external(
 /** Resolve synchronously at the CCDP origin, or retain an external URL. Never fetches. */
 export function assetUrl(asset: Asset): string {
   if (asset.isExternal) return asset.source
-  const path = urls[`${asset.mount}/${asset.member ?? ''}`]
+  const path = urls[assetKey(asset)]
   if (!path) throw new Error('Missing built asset')
   return new URL(path, location.origin).href
 }

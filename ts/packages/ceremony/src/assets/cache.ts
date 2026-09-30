@@ -1,12 +1,9 @@
 import { readBody } from '../response.js'
 import type { AssetRequest } from './index.js'
+import { requestKey } from './keys.js'
 
 const CACHE = 'libid-ceremony-assets-v1',
   PREFIX = '/__libid_ceremony_cache__/'
-
-/** One cached fetch per URL and byte range. */
-export const requestKey = (spec: { url: string; range?: string }) =>
-  `${spec.url}\n${spec.range ?? ''}`
 
 /** Validate status and exposed metadata before accepting an asset response. */
 export function validateResponse(response: Response, spec: AssetRequest): void {

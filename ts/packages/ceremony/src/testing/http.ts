@@ -16,7 +16,7 @@ export const exactRequest = (
 ): ExactHttpRequest => ({ url, method: 'GET', headers: {}, body: new Uint8Array(), ...request })
 
 /** The start line, one `name: value` line per field in the given order, a blank line, then `body`. */
-export function httpRequest(
+function httpRequest(
   line: string,
   fields: Iterable<readonly [string, Bytes]>,
   body: Bytes = '',

@@ -1,4 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
+import { AUTHORIZATION_DIGEST_BYTES } from '../../../platforms/authorization.js'
+import { fieldHex } from '../../parameters.js'
 import {
   AUDIENCE_HASH_FIELD_BYTES,
   BARRETT_OVERFLOW_BITS,
@@ -15,7 +17,7 @@ import {
 } from './parameters.js'
 
 /** Token bytes and claim values consumed by the fixed oidc_google circuit. */
-export interface GoogleCircuitToken {
+export interface OidcGoogleToken {
   headerB64: string
   payloadB64: string
   payload: Uint8Array
@@ -26,14 +28,14 @@ export interface GoogleCircuitToken {
 const encoder = new TextEncoder()
 
 /** Interpret the circuit's byte arrays as unsigned big-endian integers. */
-export function bytesToBigInt(bytes: Uint8Array): bigint {
+function bytesToBigInt(bytes: Uint8Array): bigint {
   let value = 0n
   for (const byte of bytes) value = (value << 8n) | BigInt(byte)
   return value
 }
 
 /** Split an RSA integer into the ABI's least-significant-first limbs. */
-export function limbs(value: bigint): bigint[] {
+function limbs(value: bigint): bigint[] {
   const mask = (1n << LIMB_BITS) - 1n
   return Array.from(
     { length: NUM_LIMBS },
@@ -42,7 +44,7 @@ export function limbs(value: bigint): bigint[] {
 }
 
 /** Zero-pad a value to its fixed circuit width. */
-export function pad(bytes: Uint8Array, length: number): Uint8Array {
+function pad(bytes: Uint8Array, length: number): Uint8Array {
   if (bytes.length > length) throw new Error(`value exceeds circuit limit ${length}`)
   const result = new Uint8Array(length)
   result.set(bytes)
@@ -50,14 +52,14 @@ export function pad(bytes: Uint8Array, length: number): Uint8Array {
 }
 
 /** Pack padded bytes into big-endian FIELD_PACK_BYTES-byte field elements. */
-export function pack31(bytes: Uint8Array): bigint[] {
+function pack31(bytes: Uint8Array): bigint[] {
   return Array.from({ length: Math.ceil(bytes.length / FIELD_PACK_BYTES) }, (_, index) =>
     bytesToBigInt(bytes.subarray(index * FIELD_PACK_BYTES, (index + 1) * FIELD_PACK_BYTES)),
   )
 }
 
 /** The audience's SHA-256 as two big-endian 128-bit halves. */
-export function audienceHash(audience: Uint8Array): bigint[] {
+function audienceHash(audience: Uint8Array): bigint[] {
   const digest = sha256(audience)
   return [
     bytesToBigInt(digest.subarray(0, AUDIENCE_HASH_FIELD_BYTES)),
@@ -83,8 +85,8 @@ function findOffset(payload: Uint8Array, pattern: string): number {
 }
 
 /** Build the exact libid-circuits v0.4.0 `oidc_google` circuit inputs. */
-export function buildGoogleInputs(
-  token: GoogleCircuitToken,
+export function buildOidcGoogleInputs(
+  token: OidcGoogleToken,
   modulus: Uint8Array,
   authorizationDigest: Uint8Array,
 ) {
@@ -138,4 +140,28 @@ export function buildGoogleInputs(
 }
 
 /** The oidc_google circuit inputs, keyed in the circuit's ABI order. */
-export type GoogleCircuitInputs = ReturnType<typeof buildGoogleInputs>
+export type OidcGoogleInputs = ReturnType<typeof buildOidcGoogleInputs>
+
+const packed = (value: string, width: number) =>
+  pack31(pad(encoder.encode(value), width)).map(fieldHex)
+
+/** The exact 56 public fields, in circuit order, for the values a proof binds. */
+export function buildOidcGooglePublicInputs(values: {
+  authorizationDigest: Uint8Array
+  audience: string
+  subject: string
+  email: string
+  expiresAt: number
+  modulus: Uint8Array
+}): string[] {
+  if (values.authorizationDigest.length !== AUTHORIZATION_DIGEST_BYTES)
+    throw new Error('authorizationDigest must be exactly 32 bytes')
+  return [
+    ...Array.from(values.authorizationDigest, fieldHex),
+    ...audienceHash(encoder.encode(values.audience)).map(fieldHex),
+    ...packed(values.subject, MAX_SUB_BYTES),
+    ...packed(values.email, MAX_EMAIL_BYTES),
+    fieldHex(values.expiresAt),
+    ...limbs(bytesToBigInt(values.modulus)).map(fieldHex),
+  ]
+}

@@ -1,6 +1,7 @@
 import { bearerExchange } from '../../../barretenberg/circuits/bearer-link/exchange.js'
 import { isRecord } from '../../../primitives.js'
-import { isUserName, provider } from './provider.js'
+import { provider } from './provider.js'
+import { isUserName, MAX_USER_NAME_BYTES } from './validation.js'
 
 export const {
   identityUrl,
@@ -27,7 +28,7 @@ export const {
   quotedId: provider.quotedId,
   userName: {
     field: provider.userNameField,
-    maxBytes: provider.maxUserNameBytes,
+    maxBytes: MAX_USER_NAME_BYTES,
     valid: isUserName,
   },
   identityResponse: ({ data }, { userId, userName }) =>

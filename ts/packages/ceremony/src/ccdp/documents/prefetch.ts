@@ -1,6 +1,7 @@
 import { requestsByProfile } from 'virtual:ceremony-assets'
 import { fallback } from 'virtual:ceremony-popup-fallback'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
+import { profileKey } from '../../assets/keys.js'
 import { dispatchPrefetch, registerRootWorker } from '../../assets/registration.js'
 import { startWorker } from '../../assets/worker.js'
 import { reportFailure, toCeremonyError } from '../../errors.js'
@@ -17,7 +18,7 @@ export async function startPrefetch(fragment: string): Promise<void> {
   const ui = eventView(feed)
   try {
     const input = readPrefetch(fragment),
-      profile = `${input.platformId}/${input.platformCeremonyVersion}`
+      profile = profileKey(input.platformId, input.platformCeremonyVersion)
     if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
     feed.emit({
       event: 'prefetch-dispatch',

@@ -1,11 +1,7 @@
 import { MAX_CLIENT_ID_BYTES } from '../../../ccdp/limits.js'
-import {
-  decodeAttestedData,
-  isNotaryAttestation,
-  type NotaryAttestation,
-} from '../../../notary/decode.js'
-import { isFormClientId } from '../../../platforms/authorization.js'
-import { type Identity, identityValidator, isProofBytes } from '../../../platforms/types.js'
+import { decodeAttestedData, isNotaryAttestation } from '../../../notary/decode.js'
+import type { NotaryAttestation } from '../../../notary/protocol.js'
+import { type Identity, identityValidator, isProofBytes } from '../../../platforms/validation.js'
 import { isText, recordValidator } from '../../../primitives.js'
 
 /** X/GitHub identifiers are nonzero decimal u64 values. */
@@ -15,13 +11,16 @@ export const MAX_USER_ID_CHARS = MAX_USER_ID.toString().length
 export const isUserId = (value: string): boolean =>
   value.length <= MAX_USER_ID_CHARS && /^[1-9][0-9]*$/.test(value) && BigInt(value) <= MAX_USER_ID
 
+/** Form-authenticated client IDs must be byte-identical under form serialization. */
+export const isFormClientId = (value: string): boolean => /^[A-Za-z0-9*._-]+$/.test(value)
+
 export interface BearerLinkProofV1 {
   bearerLinkProof: Uint8Array
   tokenAttestation: NotaryAttestation
   identityAttestation: NotaryAttestation
 }
 
-export interface BearerLinkValidation<P extends 'x' | 'github'> {
+interface BearerLinkValidation<P extends 'x' | 'github'> {
   isClientId(value: unknown): value is string
   validateIdentity(value: unknown): Identity<P>
   validateProof(value: unknown): BearerLinkProofV1

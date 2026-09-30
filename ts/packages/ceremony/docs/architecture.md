@@ -72,7 +72,7 @@ the lightweight catalog through shared return validation; it does not import the
 registry that selects it.
 
 Shared integrations declare resources once in `*.assets.ts`; platform/version
-leaves compose those handles. Prefetch imports only this data-only catalog.
+leaves compose those handles. Prefetch imports only the request lists the build derives from them.
 The compiler adds actual chunks and nested-worker edges to each selected set.
 Execution resolves the same handles. Fetching scripts as bytes before OAuth
 never initializes WASM, proof backends or TLSNotary sessions.
@@ -119,7 +119,7 @@ bound acceptance; [its protocol](../src/notary/protocol.ts) owns encoding widths
 Local deadlines, UI timings and instrumentation caps stay beside their consumers.
 Names distinguish bytes, characters, milliseconds, seconds and CRS points.
 
-Each platform version’s `provider.ts` owns its endpoints and identity constraints.
+Each platform version’s `provider.ts` owns its endpoints and request layout; its `validation.ts` owns identity constraints.
 X/GitHub import request layouts and launch lifetimes from the pinned, data-only
 `@libid/contracts/ceremony` entry point; no EVM client or on-chain lookup is used.
 These lifetime constants describe the released policy, not live governance state.

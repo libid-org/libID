@@ -13,7 +13,6 @@ import { proofEvents, proofWeights } from '../../barretenberg/events.js'
 import { validateCeremonyConfig } from '../../ccdp/client/config.js'
 import { type OAuthReturn, oauthState } from '../../ccdp/navigation.js'
 import { isCoreEvent, type OperationEvent } from '../../events.js'
-import type { NotaryAttestation } from '../../notary/decode.js'
 import { concat, encodeAttestation, opening } from '../../notary/fixtures/attestation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { correlateReveal, matchAttestedData, planNotarization } from '../../notary/notarize.js'
@@ -21,6 +20,7 @@ import { notaryAssets } from '../../notary/notary.assets.js'
 import type {
   CommitmentOpening,
   ExactHttpRequest,
+  NotaryAttestation,
   Reveals,
   Transcript,
 } from '../../notary/protocol.js'

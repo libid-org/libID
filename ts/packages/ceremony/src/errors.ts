@@ -1,9 +1,7 @@
 import { type ConnectionEnd, type Message, type PopupConnection, PopupError } from '@libid/popup'
+import { MAX_FAILURE_TEXT_BYTES } from './ccdp/limits.js'
 import { messages, popupErrorMessages } from './ccdp/uiMessages.js'
 import { isOrigin, isText } from './primitives.js'
-
-/** UTF-8 bound on displayable failure text, including `CeremonyFailed.message`. */
-export const MAX_MESSAGE_BYTES = 2048
 
 /** Opaque display text only: never serialize an exception object, stack, or nested causes. */
 export const errorMessage = (error: unknown): string => displayText(describe(error))
@@ -17,9 +15,9 @@ function describe(error: unknown): string {
 /** Controls become spaces; the byte bound cuts at a character boundary, never inside a pair. */
 function displayText(message: string): string {
   const clean = message.replace(/\p{Cc}/gu, ' ').trim()
-  const { read } = new TextEncoder().encodeInto(clean, new Uint8Array(MAX_MESSAGE_BYTES))
+  const { read } = new TextEncoder().encodeInto(clean, new Uint8Array(MAX_FAILURE_TEXT_BYTES))
   const bounded = clean.slice(0, read)
-  return isText(bounded, MAX_MESSAGE_BYTES) ? bounded : messages.failed
+  return isText(bounded, MAX_FAILURE_TEXT_BYTES) ? bounded : messages.failed
 }
 
 /** A failed operation and its displayable explanation; no stable error-code catalog. */

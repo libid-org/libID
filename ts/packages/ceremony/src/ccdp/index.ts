@@ -1,7 +1,7 @@
+// Pure CCDP codecs: shape and bounds validation only; transport authentication belongs to popup.
 import type { Message, MessageType } from '@libid/popup'
-import { MAX_MESSAGE_BYTES } from '../errors.js'
 import { type OperationEvent, validateEvent } from '../events.js'
-import { isPkceValue, MAX_CEREMONY_VERSION } from '../platforms/authorization.js'
+import { isPkceValue } from '../platforms/authorization.js'
 import {
   hasExactKeys,
   isOrigin,
@@ -14,14 +14,13 @@ import {
   recordValidator,
 } from '../primitives.js'
 import {
+  MAX_CEREMONY_VERSION,
   MAX_CLIENT_CREDENTIAL_BYTES,
   MAX_CLIENT_ID_BYTES,
+  MAX_FAILURE_TEXT_BYTES,
   MAX_IDENTITY_TEXT_BYTES,
   MAX_REDIRECT_URI_BYTES,
 } from './limits.js'
-
-/** Pure CCDP codecs: shape and bounds validation only; transport authentication belongs to popup. */
-export const CCDP_VERSION = 1
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
@@ -46,9 +45,7 @@ function isIdentityShape(value: unknown): value is IdentityProof['identity'] {
   )
 }
 
-type Fields<M extends Message> = {
-  readonly [K in Exclude<keyof M, 'type'>]-?: (value: unknown) => boolean
-}
+type Fields<M extends Message> = Readonly<Predicates<Omit<M, 'type'>>>
 
 /** Exact keys and one predicate per field; optional fields are checked only when present. */
 function codec<M extends Message>(
@@ -79,7 +76,7 @@ export interface CeremonyFailed {
 
 export const CeremonyFailed = codec<CeremonyFailed>('ceremony-failed', {
   event: isSlug,
-  message: (value) => isText(value, MAX_MESSAGE_BYTES),
+  message: (value) => isText(value, MAX_FAILURE_TEXT_BYTES),
 })
 
 /** Application-owned inputs only; raw OAuth returns remain private to Callback and Prover. */

@@ -101,8 +101,8 @@ const crs = assets.external('https://crs.aztec-cdn.foundation/g1_compressed.dat'
 })
 
 // Execution resolves the same handle synchronously; this does not fetch.
-const moduleUrl = assets.resolve(module)
-const crsUrl = assets.resolve(crs) // The original external URL.
+const moduleUrl = assets.assetUrl(module)
+const crsUrl = assets.assetUrl(crs) // The original external URL.
 ```
 
 The real declarations live in [notary.assets.ts](../src/notary/notary.assets.ts)
@@ -276,6 +276,10 @@ and derives the prefetch manifest from the emitted Prover graph;
 [bundle.ts](../build/bundle.ts) records emitted dependencies and loads a source module into a build script;
 [input.ts](../build/input.ts) hands a document's launch fragment to its entry;
 [assets.ts](../build/assets.ts) resolves declarations;
+[assetPlugin.ts](../build/assetPlugin.ts) lowers them to built URLs and serves the request lists;
+[profiles.ts](../build/profiles.ts) derives each response profile's headers and CSP;
+[popup.ts](../build/popup.ts) is the optional popup-carrier integration point;
+[ast.ts](../build/ast.ts) holds the AST helpers both plugins share;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
 [sources.ts](../build/sources.ts) reads declared sources and caches downloads;
 [versions.ts](../build/versions.ts) reads the platform catalog's version set and

@@ -23,13 +23,6 @@ export function b64urlDecode(s: string): Uint8Array | null {
   return b64urlEncode(bytes) === s ? bytes : null
 }
 
-/** Byte equality. Not constant-time; never used to compare secrets. */
-export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
-  return true
-}
-
 export function isRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null) return false
   const prototype = Object.getPrototypeOf(value)

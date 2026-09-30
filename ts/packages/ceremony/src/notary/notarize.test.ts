@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { utf8 } from '../testing/index.js'
 import { concat, encodeAttestation, opening } from './fixtures/attestation.js'
 import {
+  bytesEqual,
   correlateReveal,
   type HashOpening,
   matchAttestedData,
@@ -340,4 +341,13 @@ it('coalesces adjacent disclosures in both directions before signing [LIBID-PROV
   expect(() => correlateAttestation('api.x.com', changed, plan, openings, signed)).toThrow(
     /revealed range changed/,
   )
+})
+
+describe('bytesEqual', () => {
+  it('compares content, not identity', () => {
+    expect(bytesEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2]))).toBe(true)
+    expect(bytesEqual(new Uint8Array([1, 2]), new Uint8Array([1, 3]))).toBe(false)
+    expect(bytesEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2, 3]))).toBe(false)
+    expect(bytesEqual(new Uint8Array(0), new Uint8Array(0))).toBe(true)
+  })
 })

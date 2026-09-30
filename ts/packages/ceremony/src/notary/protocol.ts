@@ -1,10 +1,14 @@
-import type { NotaryAttestation } from './decode.js'
-
 /** Released notary format: secp256k1 signature, keccak authority, SHA256 commitment and salt. */
 export const NOTARY_SIGNATURE_BYTES = 65
 export const AUTHORITY_ID_BYTES = 32
 export const COMMITMENT_BYTES = 32
 export const BLINDER_BYTES = 16
+
+/** Original signed bytes; ledger verification remains authoritative. */
+export interface NotaryAttestation {
+  attestedData: Uint8Array
+  signature: Uint8Array
+}
 
 /** One value per transcript direction. */
 export type Directions<T> = { sent: T; received: T }

@@ -1,4 +1,4 @@
-import { buildGoogleInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
+import { buildOidcGoogleInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
   RSA_EXPONENT_BASE64URL,
   RSA_MODULUS_BYTES,
@@ -32,7 +32,7 @@ export function prepareGoogleInputs(token: ParsedGoogleIdToken, jwk: unknown) {
 
   const { aud, sub, email, exp } = token.claims
   return {
-    inputs: buildGoogleInputs(token, modulus, authorizationDigest),
+    inputs: buildOidcGoogleInputs(token, modulus, authorizationDigest),
     authorizationDigest,
     identity: { platformId: 'google' as const, oauthClientId: aud, userId: sub, userName: email },
     proofFields: { tokenExpiresAt: exp, signingKeyModulus: modulus },

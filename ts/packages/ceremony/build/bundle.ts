@@ -7,6 +7,7 @@ import type { ResolvedAssets } from './assets.ts'
 import { applyEdits, type Edit, parseModule, replacement, walk } from './ast.ts'
 import { consumeInput } from './input.ts'
 import { popupFallback } from './popup.ts'
+import { policyId } from './profiles.ts'
 import { hash, packageDir } from './sources.ts'
 
 /**
@@ -175,9 +176,9 @@ export async function bundle(
   const assetName = (asset: Rollup.PreRenderedAsset) => {
     const digest = hash(asset.source)
     const owned = Object.entries(data.bodyHashes).find(([, bodyHash]) => bodyHash === digest)
-    return owned ? owned[0].slice(1) : `ccdp/assets/${data.policyId}/[name]-[hash][extname]`
+    return owned ? owned[0].slice(1) : `ccdp/assets/${policyId}/[name]-[hash][extname]`
   }
-  const chunkName = `ccdp/assets/${data.policyId}/[name]-[hash].js`,
+  const chunkName = `ccdp/assets/${policyId}/[name]-[hash].js`,
     output = { entryFileNames: chunkName, chunkFileNames: chunkName, assetFileNames: assetName }
   const result = await build({
     configFile: false,
