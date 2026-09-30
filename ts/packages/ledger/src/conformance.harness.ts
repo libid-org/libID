@@ -9,7 +9,7 @@ export interface Harness<F extends Family> {
 
 export interface Fake<F extends Family> {
   readonly ledger: Ledger<F>
-  /** How a client reaches the fake chain, for composing clients over several fakes. */
+  /** How a client reaches the fake chain by default, for composing clients over several fakes. */
   readonly access: LedgerAccess<Ledger<F>>
   /** A client serving only this ledger. */
   readonly client: LedgerClient<Ledger<F>>
@@ -42,4 +42,6 @@ export interface Fake<F extends Family> {
   readonly prompts: number
   /** Transactions the wallet accepted for sending. */
   readonly sent: number
+  /** Chain reads the wallet served. */
+  readonly walletReads: number
 }

@@ -1,7 +1,7 @@
 import { evm } from './evm/client.js'
 import type * as Evm from './evm/index.js'
 import type { Indexer } from './indexer.js'
-import type { Account, Family, Ledger } from './index.js'
+import { type Account, type Family, type Ledger, ledgers as pinned } from './index.js'
 
 export { LedgerError, type LedgerErrorCode } from './errors.js'
 export { type Indexer, type IndexerOptions, indexer } from './indexer.js'
@@ -40,9 +40,13 @@ export type Command<A extends readonly unknown[]> = {
   readonly [F in Family]: (ledger: Ledger<F>, ...args: A) => Families[F]['tx']
 }
 
-/** How the client reaches one ledger: its RPC endpoint, or another client serving it. */
+/**
+ * How the client reaches one ledger: through a connected wallet first, then an RPC, or through
+ * another client serving it. `rpc` and `explorer` replace the ledger's public ones; a ledger
+ * without a public RPC needs `rpc`.
+ */
 export type LedgerAccess<L extends Ledger = Ledger> = (
-  | { ledger: L; rpc: string; explorer?: string }
+  | { ledger: L; rpc?: string; explorer?: string }
   | { ledger: L; client: LedgerClient }
 ) & {
   /** Replaces the client's default indexer for this ledger; `false` reads only the chain. */
@@ -67,7 +71,7 @@ export interface LedgerClient<L extends Ledger = Ledger> {
   /** A served ledger by chain identifier, such as one a wallet reports. */
   ledger(chain: string): L | undefined
   readonly walletRequirements: WalletRequirements
-  /** Runs a query against one state of a ledger. */
+  /** Runs a query against one state of a ledger, through its connected wallet when there is one. */
   read<A extends readonly unknown[], R>(
     ledger: L,
     query: Query<A, R>,
@@ -84,7 +88,10 @@ export interface LedgerClient<L extends Ledger = Ledger> {
   estimate<K extends L>(ledger: K, tx: Families[K['family']]['tx'], from: Account): Promise<bigint>
   /** Validates an account and returns its canonical form; throws on invalid input. */
   parseAccount(ledger: L, raw: string): Account
-  /** Without `prompt`, restores an authorized wallet already on the ledger and never shows wallet UI. */
+  /**
+   * Connects a wallet on the ledger; the ledger's reads then go through it until it closes.
+   * Without `prompt`, restores an authorized wallet already on the ledger and never shows wallet UI.
+   */
   connect<K extends L>(
     ledger: K,
     wallet: Families[K['family']]['wallet'],
@@ -92,15 +99,10 @@ export interface LedgerClient<L extends Ledger = Ledger> {
   ): Promise<Session<K>>
 }
 
-/** A wallet connected on one ledger. Reads prefer the wallet's own RPC. */
+/** A wallet connected on one ledger. */
 export interface Session<L extends Ledger = Ledger> {
   readonly ledger: L
   readonly account: Account
-  read<A extends readonly unknown[], R>(
-    query: Query<A, R>,
-    args: A,
-    options?: { signal?: AbortSignal },
-  ): Promise<R>
   estimate(tx: Families[L['family']]['tx']): Promise<bigint>
   /**
    * Rechecks the account and chain, simulates, then asks the wallet to send.
@@ -127,7 +129,6 @@ export interface Driver<F extends Family = Family> {
 }
 export interface SessionDriver<F extends Family = Family> {
   readonly account: Account
-  read: Driver<F>['read']
   estimate(tx: Families[F]['tx']): Promise<bigint>
   send(tx: Families[F]['tx']): Promise<string>
   close(): void
@@ -141,9 +142,14 @@ export function connect<const E extends readonly LedgerAccess[]>(options: {
   indexer?: Indexer
 }): LedgerClient<E[number]['ledger']> {
   const routes = new Map<string, Route>()
+  const pinnedByChain = new Map<string, Ledger>(Object.values(pinned).map((l) => [l.chain, l]))
   for (const access of options.ledgers) {
     const { ledger } = access
     if (routes.has(ledger.chain)) throw new TypeError(`More than one entry for ${ledger.chain}`)
+    const own = pinnedByChain.get(ledger.chain)
+    if (own && own !== ledger) {
+      throw new TypeError(`${ledger.chain} is pinned: serve libID's ${own.name} definition as is`)
+    }
     const source = access.indexer ?? options.indexer
     if (source && !ledger.addresses[source.deployment]) {
       throw new TypeError(`${ledger.name} has no ${source.deployment} address`)
@@ -173,7 +179,6 @@ export function connect<const E extends readonly LedgerAccess[]>(options: {
       return {
         ledger,
         account: session.account,
-        read: read(found, session.read),
         estimate: session.estimate,
         send: session.send,
         close: session.close,
@@ -183,7 +188,13 @@ export function connect<const E extends readonly LedgerAccess[]>(options: {
 }
 
 /** Reads a current indexer first when the query supports it; the chain stays authoritative. */
-function read({ ledger, indexer }: Route, chain: Driver['read']): Session['read'] {
+type Read = <A extends readonly unknown[], R>(
+  query: Query<A, R>,
+  args: A,
+  options?: { signal?: AbortSignal },
+) => Promise<R>
+
+function read({ ledger, indexer }: Route, chain: Driver['read']): Read {
   return async <A extends readonly unknown[], R>(
     query: Query<A, R>,
     args: A,
@@ -203,9 +214,12 @@ function read({ ledger, indexer }: Route, chain: Driver['read']): Session['read'
   }
 }
 
-function drive(ledger: Ledger, access: { rpc: string; explorer?: string }): Driver {
+function drive(ledger: Ledger, access: { rpc?: string; explorer?: string }): Driver {
+  const rpc = access.rpc ?? ledger.rpc
+  if (!rpc) throw new TypeError(`${ledger.name} has no public RPC; configure one`)
+  const explorer = access.explorer ?? ledger.explorer
   // ponytail: one family; dispatch on `ledger.family` (and lazy-load drivers) when a second lands.
-  return evm(ledger, access)
+  return evm(ledger, { rpc, explorer })
 }
 
 /** Serves a ledger through another client, such as a custom or differently configured one. */
@@ -224,7 +238,6 @@ function delegate(client: LedgerClient, ledger: Ledger): Driver {
       const session = await client.connect(ledger, wallet, options)
       return {
         account: session.account,
-        read: (run, args, options) => session.read(only(run), args as never, options),
         estimate: session.estimate,
         send: session.send,
         close: session.close,

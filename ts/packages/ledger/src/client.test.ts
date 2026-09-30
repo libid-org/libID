@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type Command, connect, type Families, indexer, LedgerError, type Query } from './client.js'
 import type { Fake, Harness } from './conformance.harness.js'
 import { evm } from './evm/evm.harness.js'
-import type { Family } from './index.js'
+import { defineLedger, type Family, ledgers } from './index.js'
 
 const harnesses: { [F in Family]: Harness<F> } = { evm }
 
@@ -18,6 +18,37 @@ it('requires every family to implement each query and command', () => {
   // @ts-expect-error a command needs an implementation for every family
   const command: Command<[]> = {}
   expect([query, command]).toEqual([{}, {}])
+})
+
+it('serves pinned ledgers only as defined, with their public endpoints by default', () => {
+  const eden = ledgers['eden-testnet']
+  expect(() => connect({ ledgers: [{ ledger: eden }] })).not.toThrow()
+  const altered = defineLedger({
+    chain: eden.chain,
+    name: eden.name,
+    testnet: eden.testnet,
+    currency: eden.currency,
+    notary: eden.notaryAddress(),
+    addresses: { identityNames: `0x${'9'.repeat(40)}` },
+  })
+  expect(() => connect({ ledgers: [{ ledger: altered, rpc: 'https://rpc.example/' }] })).toThrow(
+    /pinned/,
+  )
+})
+
+it('requires an RPC for a ledger without a public one', () => {
+  const local = defineLedger({
+    chain: 'eip155:31337',
+    name: 'Local',
+    testnet: true,
+    currency: { symbol: 'ETH', decimals: 18 },
+    notary: 'http://localhost:4687',
+    addresses: {},
+  })
+  expect(() => connect({ ledgers: [{ ledger: local }] })).toThrow(/no public RPC/)
+  expect(() =>
+    connect({ ledgers: [{ ledger: local, rpc: 'http://127.0.0.1:8545' }] }),
+  ).not.toThrow()
 })
 
 /** The same family's client, with a default indexer that never answers, must meet the contract. */
@@ -225,12 +256,22 @@ function conformance<F extends Family>(family: F, harness: Harness<F>, variant =
     })
 
     describe('session', () => {
-      it('reads and estimates on its ledger', async () => {
+      it("reads through the connected wallet, and the ledger's RPC otherwise", async () => {
+        const fake = harness.setup()
+        const before = await fake.client.read(fake.ledger, probe(fake), [])
+        expect(fake.walletReads, 'Without a wallet, the RPC answers').toBe(0)
+        const session = await connected(fake)
+        expect(await fake.client.read(fake.ledger, probe(fake), [])).toEqual(before)
+        const served = fake.walletReads
+        expect(served, 'A connected wallet answers').toBeGreaterThan(0)
+        session.close()
+        await fake.client.read(fake.ledger, probe(fake), [])
+        expect(fake.walletReads, 'After closing, the RPC answers again').toBe(served)
+      })
+
+      it("estimates through the session's wallet", async () => {
         const fake = harness.setup()
         const session = await connected(fake)
-        await expect(session.read(probe(fake), [])).resolves.toEqual(
-          await fake.client.read(fake.ledger, probe(fake), []),
-        )
         await expect(session.estimate(fake.tx)).resolves.toBeTypeOf('bigint')
       })
 

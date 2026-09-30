@@ -43,6 +43,10 @@ export interface Ledger<
   readonly currency: Readonly<{ symbol: string; decimals: number }>
   /** Named deployments, stored uninterpreted; consumers give each name its meaning. */
   readonly addresses: A
+  /** A public RPC: the read fallback after a connected wallet, and what wallets add the chain with. */
+  readonly rpc?: string
+  /** A public block explorer. */
+  readonly explorer?: string
 }
 
 export interface LedgerDefinition<C extends Chain, A extends Record<string, string>> {
@@ -52,13 +56,15 @@ export interface LedgerDefinition<C extends Chain, A extends Record<string, stri
   currency: { symbol: string; decimals: number }
   notary: string
   addresses: A
+  rpc?: string
+  explorer?: string
 }
 
 /** Validates a definition and derives its Chain Profile hash from the chain identifier. */
 export function defineLedger<const C extends Chain, const A extends Record<string, string>>(
   definition: LedgerDefinition<C, A>,
 ): Ledger<FamilyOfChain<C>, C, Readonly<A>> {
-  const { chain, name, testnet, currency, notary, addresses } = definition
+  const { chain, name, testnet, currency, notary, addresses, rpc, explorer } = definition
   const family = (Object.keys(namespaces) as Family[]).find((key) =>
     chain.startsWith(`${namespaces[key]}:`),
   )
@@ -78,6 +84,9 @@ export function defineLedger<const C extends Chain, const A extends Record<strin
   for (const [key, value] of Object.entries(addresses)) {
     if (!evm.isAddress(value)) throw new TypeError(`Invalid ${key} address`)
   }
+  for (const value of [rpc, explorer]) {
+    if (value !== undefined && !isEndpoint(value)) throw new TypeError(`Invalid endpoint: ${value}`)
+  }
   return Object.freeze({
     family: family as FamilyOfChain<C>,
     chain,
@@ -87,10 +96,28 @@ export function defineLedger<const C extends Chain, const A extends Record<strin
     addresses: Object.freeze({ ...addresses }),
     hash: () => hash.slice(),
     notaryAddress: () => notary,
+    ...(rpc && { rpc }),
+    ...(explorer && { explorer }),
   })
 }
 
-/** Supported ledgers. Consumers supply RPC and indexer endpoints. */
+/** An HTTPS URL without credentials or fragment, or HTTP on localhost for development. */
+export function isEndpoint(value: string): boolean {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  return (
+    !url.username &&
+    !url.password &&
+    !url.hash &&
+    (url.protocol === 'https:' ||
+      (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname)))
+  )
+}
+
+/**
+ * Supported ledgers, pinned: served only as defined here. Each carries a public RPC and
+ * explorer where one exists; consumers may override both.
+ */
 export const ledgers = Object.freeze({
   'eden-testnet': defineLedger({
     chain: 'eip155:3735928814',
@@ -99,5 +126,7 @@ export const ledgers = Object.freeze({
     currency: { symbol: 'TIA', decimals: 18 },
     notary: 'https://testnet.notary.lib.id',
     addresses: { identityNames: '0xe78b53a183dd51763df44beb2500ddab9bb0329e' },
+    rpc: 'https://rpc.testnet.eden.gateway.fm/',
+    explorer: 'https://eden-testnet.blockscout.com',
   }),
 })

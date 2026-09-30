@@ -15,7 +15,7 @@ import { readMethods, walletReads } from './client.js'
 
 type Request = { method: string; params?: unknown }
 
-const chainId = 3735928814
+const chainId = 424242
 const rpc = 'https://rpc.example/'
 const account = '0x1111111111111111111111111111111111111111'
 const block = { method: 'eth_blockNumber' }
@@ -377,6 +377,32 @@ describe('EVM client', () => {
     })
   }
 
+  it("reads through a configured RPC instead of the ledger's public one", async () => {
+    const urls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      urls.push(String(input))
+      const { id } = JSON.parse(String(init?.body))
+      return Response.json({ jsonrpc: '2.0', id, result: '0x10' })
+    })
+    const listed = defineLedger({
+      chain: `eip155:${chainId}`,
+      name: 'Test',
+      testnet: true,
+      currency: { symbol: 'TIA', decimals: 18 },
+      notary: 'http://localhost:4687',
+      addresses: {},
+      rpc: 'https://public-rpc.example/',
+    })
+    const block: Query<[], bigint> = { evm: async (read) => read.block }
+    await connect({ ledgers: [{ ledger: listed, rpc: 'https://mine.example/' }] }).read(
+      listed,
+      block,
+      [],
+    )
+    await connect({ ledgers: [{ ledger: listed }] }).read(listed, block, [])
+    expect(urls).toEqual(['https://mine.example/', 'https://public-rpc.example/'])
+  })
+
   it('returns named deployments checksummed and rejects unknown names', async () => {
     endpoint({ eth_blockNumber: () => '0x10' })
     const named = (name: string): Query<[], string> => ({
@@ -435,6 +461,33 @@ describe('EVM client', () => {
         nativeCurrency: { name: 'TIA', symbol: 'TIA', decimals: 18 },
         rpcUrls: [rpc],
         blockExplorerUrls: ['https://explorer.example'],
+      },
+    ])
+    const offered: unknown[] = []
+    const fresh = scriptedWallet({
+      wallet_switchEthereumChain: () => {
+        if (!offered.length) throw Object.assign(new Error('Unrecognized chain'), { code: 4902 })
+        fresh.setChain(chainId)
+        return null
+      },
+      wallet_addEthereumChain: (params) => offered.push(...params),
+    })
+    fresh.setChain(1)
+    const listed = defineLedger({
+      chain: `eip155:${chainId}`,
+      name: 'Test',
+      testnet: true,
+      currency: { symbol: 'TIA', decimals: 18 },
+      notary: 'http://localhost:4687',
+      addresses: { identityNames: registry },
+      rpc: 'https://public-rpc.example/',
+      explorer: 'https://public-explorer.example',
+    })
+    await connect({ ledgers: [{ ledger: listed }] }).connect(listed, fresh)
+    expect(offered, "Without overrides, wallets get the ledger's public endpoints").toMatchObject([
+      {
+        rpcUrls: ['https://public-rpc.example/'],
+        blockExplorerUrls: ['https://public-explorer.example'],
       },
     ])
     const declining = scriptedWallet({

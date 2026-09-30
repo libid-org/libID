@@ -30,7 +30,8 @@ const declined = () => Object.assign(new Error('User rejected the request.'), { 
 
 export const evm: Harness<'evm'> = {
   setup() {
-    const chainId = 3735928814 + nodes.size
+    const chainId = 1_000_000 + nodes.size
+    const rpc = `https://rpc-${nodes.size}.example/`
     const ledger = defineLedger({
       chain: `eip155:${chainId}`,
       name: `Harness ${chainId}`,
@@ -38,6 +39,8 @@ export const evm: Harness<'evm'> = {
       currency: { symbol: 'ETH', decimals: 18 },
       notary: 'http://localhost:4687',
       addresses: { target },
+      rpc,
+      explorer: `https://explorer-${nodes.size}.example`,
     })
     const state = {
       head: 16,
@@ -47,6 +50,7 @@ export const evm: Harness<'evm'> = {
       lose: false,
       prompts: 0,
       sent: 0,
+      walletReads: 0,
     }
     // One fake node answers both the RPC endpoint and the wallet's own reads.
     const node: Node = (method, params) => {
@@ -78,7 +82,6 @@ export const evm: Harness<'evm'> = {
           throw Object.assign(new Error(`No ${method}`), { code: -32601 })
       }
     }
-    const rpc = `https://rpc-${nodes.size}.example/`
     nodes.set(rpc, node)
     if (!vi.isMockFunction(globalThis.fetch))
       vi.spyOn(globalThis, 'fetch').mockImplementation(serve)
@@ -105,12 +108,13 @@ export const evm: Harness<'evm'> = {
             state.sent++
             return `0x${'a'.repeat(64)}`
           default:
+            state.walletReads++
             return node(method, (params ?? []) as unknown[])
         }
       },
     })
 
-    const access = { ledger, rpc }
+    const access = { ledger }
     return {
       ledger,
       access,
@@ -142,6 +146,9 @@ export const evm: Harness<'evm'> = {
       },
       get sent() {
         return state.sent
+      },
+      get walletReads() {
+        return state.walletReads
       },
     }
   },

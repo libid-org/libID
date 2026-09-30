@@ -17,8 +17,11 @@ eden.addresses.identityNames // '0xe78b…'
 Each entry is a `Ledger`: a `LedgerId` plus its name, testnet flag, native
 currency, and the named libID deployments on it. `addresses` is stored
 uninterpreted; consumers give each name its meaning and can require the names
-they need in their own types. The catalog holds no RPC or indexer endpoints;
-consumers supply those.
+they need in their own types. A catalog ledger also carries a public `rpc` and
+`explorer` where one exists, so wallets can add the chain and reads work before
+a wallet connects; clients may override both. Catalog ledgers are pinned: a
+client serves a catalog chain only with its catalog definition, so its
+deployments and notary cannot be changed.
 
 `defineLedger` validates a definition and derives its Chain Profile hash from
 the chain identifier. Use it for local chains:
@@ -65,7 +68,7 @@ const resolveHandle: Query<[platform: `0x${string}`, handle: string], `0x${strin
 
 const client = connect({
   ledgers: [
-    { ledger: ledgers['eden-testnet'], rpc: 'https://…' },
+    { ledger: ledgers['eden-testnet'] }, // its public RPC and explorer
     { ledger: anvil, rpc: 'http://127.0.0.1:8545', indexer: false },
   ],
   indexer: indexer({ origin: 'https://…', deployment: 'identityNames' }),
@@ -81,18 +84,19 @@ await client.read(ledgers['eden-testnet'], resolveHandle, [platform, 'alice'])
   the ledger's native units.
 - `connect(ledger, wallet, { prompt })` returns a `Session` on that ledger.
   Without `prompt` it only restores an authorized wallet already on the ledger;
-  with it, it may ask for accounts and switch or add the chain. Session reads
-  try the wallet's own RPC first, discarding any read that crosses a chain
-  change.
+  with it, it may ask for accounts and switch or add the chain. From then on,
+  the client reads that ledger through the connected wallet, falling back to
+  the ledger's RPC and discarding any read that crosses a chain change.
 - `Session.send` rechecks the account and chain and simulates before asking
   the wallet to send. A `LedgerError` from `send` means nothing was sent; any
   other error leaves the outcome unknown.
 - `walletRequirements` lists, per CAIP-2 namespace, the chains, methods and
   events wallet connectors such as WalletConnect must request.
 
-Each entry in `ledgers` reaches its ledger through an RPC endpoint, or through
-another client (`{ ledger, client }`), such as a custom one. The catalog and
-client take no endpoint defaults; consumers supply them.
+Each entry in `ledgers` reaches its ledger through a connected wallet and its
+RPC, or through another client (`{ ledger, client }`), such as a custom one. An
+entry's `rpc` and `explorer` replace the ledger's public ones; a ledger without
+a public RPC needs `rpc`.
 
 ### Indexers
 

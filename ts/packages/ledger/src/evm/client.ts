@@ -58,7 +58,8 @@ export function evm(
   const fallback = rpc({ chain })
   const parseAccount = (raw: string) => getAddress(raw) as Account
 
-  function reads(client: Client) {
+  /** Reads through whichever client `clientOf` gives when each read or estimate starts. */
+  function reads(clientOf: () => Client) {
     return {
       walletRequirements: Object.freeze({
         methods: Object.freeze([
@@ -76,6 +77,7 @@ export function evm(
         { signal }: { signal?: AbortSignal } = {},
       ): Promise<R> {
         signal?.throwIfAborted()
+        const client = clientOf()
         const block = await client.getBlockNumber({ cacheTime: 0 })
         // Every action defaults to the same block, so a query sees one consistent state.
         const pin = <F>(action: unknown, key: 'blockNumber' | 'toBlock'): F =>
@@ -105,6 +107,7 @@ export function evm(
         return run(reader, ...args)
       },
       async estimate(tx: Tx, from: Account): Promise<bigint> {
+        const client = clientOf()
         const [gas, fees] = await Promise.all([
           client.estimateGas({ ...tx, account: from as `0x${string}` }),
           client.estimateFeesPerGas().catch((error) => {
@@ -152,11 +155,11 @@ export function evm(
       chain,
       transport: custom(transport, { retryCount: 0 }),
     })
-    const { read, estimate } = reads(client)
+    const { estimate } = reads(() => client)
     const account = address as Account
+    active = client
     return {
       account,
-      read,
       estimate: (tx) => estimate(tx, account),
       async send(tx: Tx) {
         let requested = false
@@ -191,11 +194,15 @@ export function evm(
           throw error
         }
       },
+      // A closed session's transport sends every read to the RPC.
       close: transport.close,
     }
   }
 
-  const base = reads(createPublicClient({ chain, transport: rpc }))
+  // The ledger reads through the last wallet connected on it.
+  const direct: Client = createPublicClient({ chain, transport: rpc })
+  let active: Client | null = null
+  const base = reads(() => active ?? direct)
   return {
     ...base,
     async connect(provider: Provider, { prompt = true }: { prompt?: boolean } = {}) {

@@ -17,6 +17,8 @@ it('eden testnet matches its deployed verifier', () => {
   // CeremonyProofVerifier.chainId() at 0x76BDc18f21c2db0FF796C7Cc50348528b2899275, read 2026-09-30.
   expect(hex(eden)).toBe('0x70c29a92a253d6f2a7ee351d43fd44734752ddb392efed6c31d16d3530a7e41c')
   expect(eden.notaryAddress()).toBe('https://testnet.notary.lib.id')
+  expect(eden.rpc).toBe('https://rpc.testnet.eden.gateway.fm/')
+  expect(eden.explorer).toBe('https://eden-testnet.blockscout.com')
   expectTypeOf(eden.chain).toEqualTypeOf<'eip155:3735928814'>()
   expectTypeOf(
     eden.addresses.identityNames,
@@ -48,6 +50,22 @@ it.each([
   ['a padded chain id', { chain: 'eip155:01' }],
   ['a malformed address', { addresses: { registry: '0x1234' } }],
   ['fractional decimals', { currency: { symbol: 'ETH', decimals: 1.5 } }],
+  ['a plain HTTP RPC', { rpc: 'http://rpc.example' }],
+  ['an RPC with a user name', { rpc: 'https://user@rpc.example' }],
+  ['an explorer that is not a URL', { explorer: 'blockscout' }],
 ])('rejects %s', (_, override) => {
   expect(() => defineLedger({ ...local, ...override } as never)).toThrow(TypeError)
+})
+
+it('keeps public endpoints only when given', () => {
+  expect('rpc' in defineLedger(local)).toBe(false)
+  const withEndpoints = defineLedger({
+    ...local,
+    rpc: 'http://127.0.0.1:8545',
+    explorer: 'https://explorer.example',
+  })
+  expect([withEndpoints.rpc, withEndpoints.explorer]).toEqual([
+    'http://127.0.0.1:8545',
+    'https://explorer.example',
+  ])
 })

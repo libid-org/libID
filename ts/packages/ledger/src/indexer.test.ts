@@ -15,7 +15,7 @@ const ledgerOn = (id: number) =>
     notary: 'http://localhost:4687',
     addresses: { identityNames: registry },
   })
-const eden = ledgerOn(3735928814)
+const eden = ledgerOn(4242)
 const rpcOf = (ledger: Ledger) => `https://rpc.example/${ledger.chain}`
 const names = (at = origin) => indexer({ origin: at, deployment: 'identityNames' })
 const clientOf = (ledger: Ledger = eden, source: Indexer = names()) =>
@@ -79,7 +79,7 @@ it('reads a current indexer for queries that support it', async () => {
   })
   expect(requests.map(({ url }) => url)).toEqual([
     `${origin}/v1/status`,
-    `${origin}/v1/value?chain=eip155%3A3735928814`,
+    `${origin}/v1/value?chain=eip155%3A4242`,
     `${origin}/v1/status`,
   ])
   expect(requests[1].init).toMatchObject({
@@ -133,17 +133,18 @@ it('propagates an abort instead of falling back', async () => {
   await expect(clientOf().read(eden, aborting, [], { signal: controller.signal })).rejects.toThrow()
 })
 
-it('reads the indexer from wallet sessions too', async () => {
+it('reads the indexer while a wallet is connected', async () => {
   serve()
   const wallet = Object.assign(new EventEmitter(), {
     async request({ method }: { method: string }) {
-      if (method === 'eth_chainId') return toHex(3735928814)
+      if (method === 'eth_chainId') return toHex(4242)
       if (method === 'eth_accounts' || method === 'eth_requestAccounts') return [registry]
       throw Object.assign(new Error(`No ${method}`), { code: 4200 })
     },
   })
-  const session = await clientOf().connect(eden, wallet)
-  expect((await session.read(source, [])).source).toBe('indexer')
+  const client = clientOf()
+  const session = await client.connect(eden, wallet)
+  expect((await client.read(eden, source, [])).source).toBe('indexer')
   expect(session.account).toBe(registry)
 })
 
@@ -159,7 +160,7 @@ it('serves every chain it reports from one indexer', async () => {
 })
 
 it('composes a default indexer with per-ledger overrides', async () => {
-  const [a, b, c, d] = [3735928814, 1, 31337, 10].map(ledgerOn)
+  const [a, b, c, d] = [4242, 1, 31337, 10].map(ledgerOn)
   serve([[a, b, c, d].map((ledger) => statusOf(ledger))])
   const other = 'https://other-indexer.example'
   const base = connect({ ledgers: [{ ledger: d, rpc: rpcOf(d) }] })
