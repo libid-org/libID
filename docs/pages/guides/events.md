@@ -13,10 +13,10 @@ The examples use this setup:
 
 ```js
 import { createPublicClient, http } from 'viem';
-import { handleEscrowAbi, identityNamesAbi } from '@libid/contracts';
+import { handleEscrowAbi, identityNamesAbi, platformId } from '@libid/contracts';
 
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
-const IDENTITY_NAMES = '0xe78b53a183dd51763df44beb2500ddab9bb0329e';
+const IDENTITY_NAMES = process.env.IDENTITY_NAMES;
 ```
 
 ## Read past bindings
@@ -91,14 +91,21 @@ Call `unwatch()` to stop.
 - `Claimed`: the owner took what was held.
 - `Refunded`: a sender took a deposit back.
 
-For example, to list what is waiting for one handle:
+For example, to list the deposits ever made to one handle:
 
 ```js
+const carolNode = await client.readContract({
+  address: IDENTITY_NAMES,
+  abi: identityNamesAbi,
+  functionName: 'nodeOf',
+  args: [platformId('github'), 'carol'],
+});
+
 const deposits = await client.getContractEvents({
   address: process.env.HANDLE_ESCROW,
   abi: handleEscrowAbi,
   eventName: 'Deposited',
-  args: { handleNode: '0x…' },
+  args: { handleNode: carolNode },
   fromBlock: 0n,
 });
 ```
@@ -124,5 +131,10 @@ If you store events in your own database, follow these rules:
 - Blocks near the head can be replaced (a reorg). Either wait a few blocks
   before you treat an event as final, or drop and re-read events from blocks
   that changed. viem marks a removed log with `removed: true`.
-- When a handle changes owner, the newest `IdentityBound` for that
-  `handleNode` wins. Order events by block number, then log index.
+- Apply events in order: by block number, then log index.
+- On `IdentityBound`, set the owner of `handleNode` and of `idNode` to
+  `owner`.
+- On `HandleRetired`, mark `handleNode` as held by nobody. An account emits it
+  when it proves a new handle. If you skip it, your index keeps routing the
+  old handle to that wallet.
+- On `NameUnpublished`, clear the wallet's primary name on that platform.

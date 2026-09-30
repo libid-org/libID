@@ -6,14 +6,17 @@ description: Every social account is already a multichain identity.
 libID lets a wallet prove it owns a GitHub, X or Google account. The proof is
 checked on chain, and the result is stored in the `IdentityNames` contract.
 Any app or contract can then ask who owns `@octocat`, or which accounts a
-wallet has, without trusting a server.
+wallet has, by reading the chain. There is no libID server to ask. You still
+rely on the platforms, the notary and the contract owners; see
+[What a binding proves](/docs/concepts/trust/).
 
 With that you can:
 
 - show a name instead of an address,
 - send funds to a handle, even before its owner has a wallet,
 - let only verified accounts call a contract,
-- resolve a handle as an ENS name, such as `octocat.github.handles.link`.
+- resolve a handle as an ENS name, such as `octocat.github.handles.link`
+  (not live yet).
 
 ## Start here
 

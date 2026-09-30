@@ -7,12 +7,17 @@ sidebar:
 
 `HandleEscrow` lets you send ETH or tokens to a handle such as `@carol` on
 GitHub. If Carol has already proved the handle, she gets the funds right away.
-If not, the escrow holds them until she proves it and claims them. Until then,
-you can take them back.
+If not, the escrow holds them. Then one of two things happens: Carol proves
+the handle and claims the funds, or the sender takes them back first.
 
-## Set up
+In this guide you play both people: a sender, with `PRIVATE_KEY`, and Carol,
+with `CAROL_KEY`. Both keys are set by the [local chain](/docs/guides/local-chain/),
+which also sets `HANDLE_ESCROW`. `HandleEscrow` is not on a public network
+yet.
 
-You need a wallet with some ETH. The examples use viem with a private key:
+## The sender's script
+
+Create `sender.mjs`. Start with the setup:
 
 ```js
 import { createPublicClient, createWalletClient, http } from 'viem';
@@ -21,46 +26,46 @@ import { handleEscrowAbi, handleHash, handleNode, platformId, rulesOnChain } fro
 
 const transport = http(process.env.RPC_URL);
 const client = createPublicClient({ transport });
-const account = privateKeyToAccount(process.env.PRIVATE_KEY);
-const wallet = createWalletClient({ account, transport });
-
-const names = { client, address: '0xe78b53a183dd51763df44beb2500ddab9bb0329e' };
+const names = { client, address: process.env.IDENTITY_NAMES };
 const escrow = { address: process.env.HANDLE_ESCROW, abi: handleEscrowAbi };
 
 const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 ```
 
-`NATIVE` is the address the escrow uses for ETH. `HandleEscrow` is not on a
-public network yet. On the [local chain](/docs/guides/local-chain/) its
-address is `0x0B306BF915C4d645ff596e518fAf3F9669b97016`, and a funded
-private key is printed when anvil starts.
+`NATIVE` is the address the escrow uses for ETH.
 
-## Hash the handle
+### Hash the handle
 
 The escrow takes the handle as a hash. Compute it on your side, so the
 handle itself is never sent to the RPC:
 
 ```js
+const sender = createWalletClient({ account: privateKeyToAccount(process.env.PRIVATE_KEY), transport });
+
 const rules = await rulesOnChain(names, 'github');
 const hash = handleHash('carol', rules);
+const node = handleNode('github', hash);
 ```
 
 `rulesOnChain` reads how the platform writes handles: GitHub ignores case,
 X drops a leading `@`, and so on. `handleHash` applies those rules and hashes
 the result. It throws if the text can never be a handle on that platform.
+`handleNode` is the key the escrow keeps the funds under.
 
-## Send
+### Send
 
 ```js
-const amount = 10n ** 16n; // 0.01 ETH
+async function send(amount) {
+  const tx = await sender.writeContract({
+    ...escrow,
+    functionName: 'deposit',
+    args: [platformId('github'), hash, NATIVE, amount, sender.account.address],
+    value: amount,
+  });
+  await client.waitForTransactionReceipt({ hash: tx });
+}
 
-const hash1 = await wallet.writeContract({
-  ...escrow,
-  functionName: 'deposit',
-  args: [platformId('github'), hash, NATIVE, amount, account.address],
-  value: amount,
-});
-await client.waitForTransactionReceipt({ hash: hash1 });
+await send(10n ** 16n); // 0.01 ETH
 ```
 
 The arguments are the platform, the handle hash, the token, the amount, and
@@ -69,61 +74,83 @@ the address that may take the funds back. For ETH, `value` must equal
 
 If someone already owns the handle, the escrow pays them in the same
 transaction and emits `Forwarded`. Otherwise it keeps the funds and emits
-`Deposited`.
+`Deposited`. Nobody owns `carol` on the local chain yet, so the escrow keeps
+them.
 
-## Check what is held
-
-The escrow keeps funds under the handle's node. Compute it from the hash:
+### Check what is held
 
 ```js
-const node = handleNode('github', hash);
-
-const held = await client.readContract({
-  ...escrow,
-  functionName: 'escrowed',
-  args: [node, NATIVE],
-});
+const held = await client.readContract({ ...escrow, functionName: 'escrowed', args: [node, NATIVE] });
+console.log('held for carol:', held);
 ```
 
-## Take it back
+### Take it back
 
-Until the owner claims, the address you named can take its own deposits back:
+Until Carol claims, the sender can take its own deposits back:
 
 ```js
-const hash2 = await wallet.writeContract({
+const tx = await sender.writeContract({
   ...escrow,
   functionName: 'refund',
-  args: [node, NATIVE, account.address],
+  args: [node, NATIVE, sender.account.address],
 });
-await client.waitForTransactionReceipt({ hash: hash2 });
+await client.waitForTransactionReceipt({ hash: tx });
 ```
 
 The last argument is where the funds go. `refundable(node, token, address)`
 tells you how much a refund would return.
 
-## Claim as the owner
-
-Carol proves `carol` on GitHub with the libID sign-in flow, which binds the
-handle to her wallet. See [How binding works](/docs/advanced/how-binding-works/).
-On the local chain, bind it with the script's `bind` function instead; the
-[local chain guide](/docs/guides/local-chain/#bind-another-handle) shows the
-exact command.
-
-Once `carol` is bound, Carol can claim from that wallet:
+A refund and a claim are alternatives: whichever comes first gets the funds.
+So that Carol has something to claim in the next step, send again:
 
 ```js
-const hash3 = await wallet.writeContract({
-  ...escrow,
-  functionName: 'claim',
-  args: [node, [NATIVE], account.address],
-});
-await client.waitForTransactionReceipt({ hash: hash3 });
+await send(10n ** 16n);
 ```
 
-The second argument lists the tokens to claim. Tokens with nothing held are
-skipped. The third is where the funds go.
+Run it:
 
-After a claim, deposits made earlier can no longer be refunded.
+```sh
+node sender.mjs
+```
+
+## Carol proves her handle
+
+In a real app, Carol proves `carol` on GitHub with the libID sign-in flow,
+which binds the handle to her wallet. See
+[How binding works](/docs/advanced/how-binding-works/). On the local chain,
+bind it from the `local-chain` directory:
+
+```sh
+./bind.sh github 777 carol $CAROL_KEY
+```
+
+## Carol's script
+
+Create `carol.mjs`, starting with the same setup as `sender.mjs`, then:
+
+```js
+const carol = createWalletClient({ account: privateKeyToAccount(process.env.CAROL_KEY), transport });
+const node = handleNode('github', handleHash('carol', await rulesOnChain(names, 'github')));
+
+const tx = await carol.writeContract({
+  ...escrow,
+  functionName: 'claim',
+  args: [node, [NATIVE], carol.account.address],
+});
+await client.waitForTransactionReceipt({ hash: tx });
+
+console.log('left for carol:', await client.readContract({ ...escrow, functionName: 'escrowed', args: [node, NATIVE] }));
+```
+
+`claim` must come from the wallet that owns the handle. The second argument
+lists the tokens to claim; tokens with nothing held are skipped. The third is
+where the funds go.
+
+```sh
+node carol.mjs
+```
+
+After a claim, the sender can no longer refund the deposits Carol took.
 
 ## Send tokens
 

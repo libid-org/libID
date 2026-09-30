@@ -10,6 +10,9 @@ support wildcard names ([ENSIP-10](https://docs.ens.domains/ensip/10)) and
 offchain lookups ([ERC-3668](https://eips.ethereum.org/EIPS/eip-3668)). viem
 and ethers v6 support both.
 
+This works once `handles.link` is live; see
+[Status](/docs/ens/names/#status). Until then the example returns `null`.
+
 ## With viem
 
 ENS lives on Ethereum mainnet, so connect to mainnet even if you send on

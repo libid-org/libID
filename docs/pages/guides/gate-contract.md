@@ -21,8 +21,8 @@ interface IIdentityNames {
 }
 ```
 
-`IdentityNames` has the same address on every network, so you can make it a
-constant.
+The contracts below take the `IdentityNames` address in their constructor, so
+the same code works on the local chain and on a public network.
 
 ## A guestbook for GitHub users
 
@@ -31,7 +31,7 @@ belongs to the caller, and that the proof is not too old:
 
 ```solidity
 contract Guestbook {
-    IIdentityNames constant NAMES = IIdentityNames(0xe78B53A183DD51763dF44beb2500dDaB9Bb0329e);
+    IIdentityNames public immutable names;
     bytes32 constant GITHUB = keccak256("github");
     uint256 constant MAX_AGE = 90 days;
 
@@ -40,12 +40,16 @@ contract Guestbook {
 
     event Signed(string handle, string message);
 
+    constructor(IIdentityNames names_) {
+        names = names_;
+    }
+
     function sign(string calldata handle, string calldata message) external {
-        bytes32 node = NAMES.nodeOf(GITHUB, handle);
-        (address owner, uint64 observedAt) = NAMES.byHandle(node);
+        bytes32 node = names.nodeOf(GITHUB, handle);
+        (address owner, uint64 observedAt) = names.byHandle(node);
 
         if (owner != msg.sender) revert NotYourHandle();
-        if (block.timestamp - observedAt > MAX_AGE) revert ProofTooOld();
+        if (observedAt + MAX_AGE < block.timestamp) revert ProofTooOld();
 
         emit Signed(handle, message);
     }
@@ -59,6 +63,11 @@ reverts with `UnusableHandle` if the text can never be a GitHub handle.
 Handles can be renamed and reused on GitHub. `MAX_AGE` limits how long ago
 the owner last proved it. Pick a value that fits what the call is worth.
 
+Write the age check as `observedAt + MAX_AGE < block.timestamp`, not
+`block.timestamp - observedAt > MAX_AGE`. `observedAt` can be a little ahead
+of the block time (for Google it is up to an hour ahead), and the subtraction
+would then revert. See [Freshness](/docs/concepts/freshness/).
+
 ## An airdrop, once per account
 
 A wallet can own many GitHub accounts, and an account can move to another
@@ -67,7 +76,7 @@ The account id never changes, so use it instead of the handle:
 
 ```solidity
 contract Airdrop {
-    IIdentityNames constant NAMES = IIdentityNames(0xe78B53A183DD51763dF44beb2500dDaB9Bb0329e);
+    IIdentityNames public immutable names;
     bytes32 constant GITHUB = keccak256("github");
     uint256 constant AMOUNT = 0.01 ether;
 
@@ -76,8 +85,12 @@ contract Airdrop {
     error NotYourAccount();
     error AlreadyClaimed();
 
+    constructor(IIdentityNames names_) {
+        names = names_;
+    }
+
     function claim(string calldata userId) external {
-        if (NAMES.resolveId(GITHUB, userId) != msg.sender) revert NotYourAccount();
+        if (names.resolveId(GITHUB, userId) != msg.sender) revert NotYourAccount();
 
         bytes32 account = keccak256(bytes(userId));
         if (claimed[account]) revert AlreadyClaimed();
@@ -96,12 +109,24 @@ Your app can find a user's account id with
 
 ## Try it
 
-Deploy either contract with [Foundry](https://getfoundry.sh), then call it
-from a wallet that has a GitHub binding:
+Put the interface and both contracts in `src/Gate.sol` of a
+[Foundry](https://getfoundry.sh) project, with
+`pragma solidity ^0.8.24;` at the top. With the
+[local chain](/docs/guides/local-chain/) running and `local.env` loaded,
+deploy the guestbook:
 
 ```sh
-cast send $GUESTBOOK 'sign(string,string)' octocat 'hello' \
-  --private-key $PRIVATE_KEY --rpc-url $RPC_URL
+GUESTBOOK=$(forge create src/Gate.sol:Guestbook --broadcast \
+  --rpc-url $RPC_URL --private-key $PRIVATE_KEY \
+  --constructor-args $IDENTITY_NAMES | awk '/Deployed to/ {print $3}')
 ```
 
-A call from any other wallet reverts with `NotYourHandle`.
+`PRIVATE_KEY`'s wallet owns the GitHub handle `alice-dev`, so it can sign:
+
+```sh
+cast send $GUESTBOOK 'sign(string,string)' alice-dev 'hello' \
+  --rpc-url $RPC_URL --private-key $PRIVATE_KEY
+```
+
+Signing as `octocat` from the same wallet reverts with `NotYourHandle`,
+because `octocat` belongs to another wallet.

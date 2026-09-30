@@ -12,9 +12,9 @@ wallet and no tokens.
 ## Set up
 
 You need [Node.js](https://nodejs.org) 20 or later, and a network that runs
-libID. No public network runs the version these docs describe yet, so start a
-local one: [Test on a local chain](/docs/guides/local-chain/) takes a few
-minutes and gives you known handles, including `octocat`.
+libID. No public network runs the version these docs describe yet, so start
+the [local chain](/docs/guides/local-chain/) first. When `local.env` is
+loaded, `RPC_URL` and `IDENTITY_NAMES` are set.
 
 Create a project and install [viem](https://viem.sh) and the libID contracts
 package:
@@ -27,9 +27,7 @@ npm install viem @libid/contracts
 
 ## Connect to IdentityNames
 
-`IdentityNames` is the contract that stores who owns which account. It has
-the same address on every public network. On the local chain it is
-`0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512`; use that instead.
+`IdentityNames` is the contract that stores who owns which account.
 
 Create `index.mjs`:
 
@@ -39,7 +37,7 @@ import { platformId, resolveHandle, primaryName } from '@libid/contracts';
 
 const names = {
   client: createPublicClient({ transport: http(process.env.RPC_URL) }),
-  address: '0xe78b53a183dd51763df44beb2500ddab9bb0329e',
+  address: process.env.IDENTITY_NAMES,
 };
 
 const github = platformId('github');
@@ -79,7 +77,7 @@ belongs to someone else.
 ## Run it
 
 ```sh
-RPC_URL=http://127.0.0.1:8545 node index.mjs
+node index.mjs
 ```
 
 On the local chain you will see:
@@ -89,19 +87,21 @@ On the local chain you will see:
 octocat
 ```
 
-On another network, you will see `null` if nobody has proved `octocat`
-there.
-
 ## Without code
 
 You can make the same call with [Foundry](https://getfoundry.sh)'s `cast`:
 
 ```sh
-cast call 0xe78b53a183dd51763df44beb2500ddab9bb0329e \
-  'resolveHandle(bytes32,string)(address)' \
-  $(cast keccak github) octocat \
-  --rpc-url $RPC_URL
+cast call $IDENTITY_NAMES 'resolveHandle(bytes32,string)(address)' \
+  $(cast keccak github) octocat --rpc-url $RPC_URL
 ```
+
+## On a public network
+
+Set `RPC_URL` to the network's RPC, and `IDENTITY_NAMES` to
+`0xe78b53a183dd51763df44beb2500ddab9bb0329e`, the address `IdentityNames` has
+on every public network. See [Networks](/docs/networks/eden/) for what runs
+where.
 
 ## Next steps
 

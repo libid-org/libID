@@ -13,6 +13,17 @@ about libID.
 Nobody registers these names. They exist as soon as the handle is proved, and
 they point wherever `IdentityNames` says the handle points.
 
+## Status
+
+No `handles.link` name resolves publicly yet. This section describes names
+as the resolver and gateway on `main` produce them.
+
+| Where | State |
+| --- | --- |
+| ENS on Ethereum mainnet | `handles.link` is not registered yet |
+| ENS on Sepolia | registered, with a test resolver whose gateway is not public |
+| Names for Eden | cannot work: Eden's chain id is too large for an ENS coin type |
+
 ## Name shape
 
 ```

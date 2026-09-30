@@ -16,7 +16,7 @@ import { createPublicClient, http } from 'viem';
 import { accountCount, accountsOf, platformId, primaryName } from '@libid/contracts';
 
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
-const names = { client, address: '0xe78b53a183dd51763df44beb2500ddab9bb0329e' };
+const names = { client, address: process.env.IDENTITY_NAMES };
 
 const wallet = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 ```

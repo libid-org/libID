@@ -18,6 +18,10 @@ evidence:
 | GitHub, X | when the notary signed the record of the user's session with the platform |
 | Google | the expiry time in Google's signed sign-in token, about an hour after sign-in |
 
+So `observedAt` can be ahead of the current time: up to five minutes for
+GitHub and X, and up to an hour for Google. Code that computes an age must
+not assume it is in the past.
+
 A GitHub or X proof must reach the chain within an hour of that time, and the
 time cannot be more than five minutes ahead of the block. A Google proof must
 reach the chain before its token expires. These limits are protocol
@@ -45,6 +49,7 @@ libID does not decide this for you. Pick a limit that fits what is at stake:
 - To show a name next to a wallet, any age is usually fine.
 - To send a payment to a handle, show the age to the sender, and warn when it
   is old.
-- To gate something valuable in a contract, compare `block.timestamp -
-  observedAt` with a maximum age. See
-  [Gate a contract](/docs/guides/gate-contract/).
+- To gate something valuable in a contract, require
+  `observedAt + maxAge >= block.timestamp`. Do not write
+  `block.timestamp - observedAt`: it reverts when `observedAt` is ahead of
+  the block. See [Gate a contract](/docs/guides/gate-contract/).

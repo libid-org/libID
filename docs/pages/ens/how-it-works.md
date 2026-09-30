@@ -33,8 +33,11 @@ answer that claims to be good for more than an hour. So a name stops pointing
 at an old owner soon after the handle changes hands.
 
 If the gateway's copy of a chain is behind, it does not answer for that chain.
-The client then tries the next URL, or gets no address. It never gets an old
-address.
+The client then tries the next URL, or gets no address.
+
+An answer the gateway has already signed stays valid until it expires, a few
+minutes later. A client that cached it can still use it in that time, even if
+the handle changed owner in between.
 
 ## What you trust
 

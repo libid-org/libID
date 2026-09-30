@@ -13,10 +13,17 @@ The examples use the setup from the [Quickstart](/docs/get-started/quickstart/):
 
 ```js
 import { createPublicClient, http } from 'viem';
-import { accountsOf, identityNamesAbi, platformId, resolveHandle, resolvePair } from '@libid/contracts';
+import {
+  accountCount,
+  accountsOf,
+  identityNamesAbi,
+  platformId,
+  resolveHandle,
+  resolvePair,
+} from '@libid/contracts';
 
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
-const names = { client, address: '0xe78b53a183dd51763df44beb2500ddab9bb0329e' };
+const names = { client, address: process.env.IDENTITY_NAMES };
 const github = platformId('github');
 ```
 
@@ -62,6 +69,14 @@ console.log(owner, new Date(Number(observedAt) * 1000));
 stores it under. `byHandle` returns the owner of that key and `observedAt`, a
 Unix time in seconds.
 
+`observedAt` can be a little ahead of the current time. For Google it is the
+expiry of the sign-in token, up to an hour after the user signed in. So count
+a negative age as zero:
+
+```js
+const age = Math.max(0, Math.floor(Date.now() / 1000) - Number(observedAt));
+```
+
 Handles can be renamed and reused on the platform. The older `observedAt`
 is, the more likely the handle now belongs to someone else there. Show it to
 your users before they send anything, or refuse bindings older than you are
@@ -77,19 +92,31 @@ owned the handle before. When a user first pays or saves a handle, store the
 account id behind it:
 
 ```js
-const [account] = (await accountsOf(names, wallet, 0n, 10n)).filter(
-  (a) => a.platformId === github && a.handle === 'octocat' && a.handleCurrent,
-);
-const savedUserId = account.userId; // keep this with the contact
+async function accountIdOf(wallet, platform, handle) {
+  const count = await accountCount(names, wallet);
+  for (let from = 0n; from < count; from += 10n) {
+    for (const a of await accountsOf(names, wallet, from, 10n)) {
+      if (a.platformId === platform && a.handle === handle && a.handleCurrent) return a.userId;
+    }
+  }
+  return null;
+}
+
+const savedUserId = await accountIdOf(wallet, github, 'octocat'); // keep this with the contact
 ```
+
+`accountIdOf` reads the wallet's accounts a page at a time and returns the
+account that holds the handle now, or `null`. Pass the handle in its
+normalized form, the way `IdentityBound` reports it: lowercase, without `@`.
 
 Next time, pass the saved id to `resolvePair`:
 
 ```js
-const { wallet: current, idAgrees } = await resolvePair(names, github, 'octocat', savedUserId);
-
-if (!idAgrees) {
-  console.log('@octocat now belongs to a different account.');
+if (savedUserId) {
+  const { wallet: current, idAgrees } = await resolvePair(names, github, 'octocat', savedUserId);
+  if (!idAgrees) {
+    console.log('@octocat now belongs to a different account.');
+  }
 }
 ```
 
