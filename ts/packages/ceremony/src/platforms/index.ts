@@ -108,16 +108,16 @@ export function assembleResult<P extends PlatformId>(
   } as IdentityResult<P>
 }
 
-/** Enumerate the local catalog/Distribution intersection in ascending version order. */
+/** The catalog's versions of `platform` that `available` names, in ascending order. */
 export function commonVersions<P extends PlatformId>(
   platform: P,
-  advertised: readonly number[],
+  available: readonly number[],
 ): readonly SupportedCeremonyVersion<P>[] {
   if (!isPlatformId(platform)) throw new TypeError('Unsupported platform')
   return Object.freeze(
     Object.keys(platforms[platform].versions)
       .map(Number)
-      .filter((v) => advertised.includes(v))
+      .filter((v) => available.includes(v))
       .sort((a, b) => a - b),
   ) as readonly SupportedCeremonyVersion<P>[]
 }

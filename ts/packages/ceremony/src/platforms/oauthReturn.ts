@@ -1,9 +1,10 @@
 import { isClientCredential } from '../ccdp/index.js'
 import { MAX_OAUTH_RETURN_CHARS } from '../ccdp/limits.js'
 import { type OAuthReturn, oauthState } from '../ccdp/navigation.js'
+import { messages } from '../ccdp/ui-messages.js'
 import { CeremonyError } from '../errors.js'
 import type { ProverContext } from './context.js'
-import { type PlatformId, platforms } from './index.js'
+import { ceremonyFor, type PlatformId, platforms, type SupportedCeremonyVersion } from './index.js'
 
 /** One platform's redirect: its transport, credential field, other rejected fields and any issuer. */
 export interface ReturnProfile {
@@ -86,17 +87,21 @@ export function parseOAuthReturn(
 }
 
 /**
- * Admit the request against its catalog entry and consume its ceremony-bound return once,
- * before any network use: null for valid denial, otherwise the accepted credential.
+ * Admit the request against its platform's ceremony at the requested version and consume its
+ * ceremony-bound return once, before any network use: null for valid denial, otherwise the
+ * accepted credential.
  */
 export function acceptReturn(context: ProverContext, platformId: PlatformId): string | null {
   const { request } = context
-  const platform = platforms[platformId],
-    version = platform.versions[1]
+  const platform = platforms[platformId]
   context.signal.throwIfAborted()
-  if (!platform.isClientId(request.clientId) || version.pkce !== (request.codeVerifier !== null))
-    throw new CeremonyError('authorization', 'Invalid proving request')
-  const returned = parseOAuthReturn(context.oauthReturn, version.oauthReturn)
+  const ceremony = ceremonyFor(
+    platformId,
+    request.platformCeremonyVersion as SupportedCeremonyVersion<PlatformId>,
+  )
+  if (!platform.isClientId(request.clientId) || ceremony.pkce !== (request.codeVerifier !== null))
+    throw new CeremonyError('authorization', messages.invalidProvingRequest)
+  const returned = parseOAuthReturn(context.oauthReturn, ceremony.oauthReturn)
   if (returned?.state !== oauthState(context.ceremonyId))
     throw new CeremonyError('authorization', 'Invalid OAuth return')
   if (returned.outcome === 'denied') return null

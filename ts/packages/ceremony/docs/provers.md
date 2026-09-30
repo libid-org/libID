@@ -125,6 +125,5 @@ prover and asset registrations. Type checking enforces table coverage; the build
 checks that the emitted prover chunks and asset profiles match the published
 catalog. Client and Prefetch remain free of execution imports.
 
-Only v1 return profiles exist today: `acceptReturn` reads the platform's v1 entry.
-A version with different OAuth return rules also needs version-aware validation
-in that helper; adding a registry entry alone does not change those rules.
+`acceptReturn` checks each request against its own version's return profile, so a
+version with different OAuth return rules declares them in its own `url.ts`.
