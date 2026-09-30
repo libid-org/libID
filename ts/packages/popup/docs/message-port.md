@@ -114,7 +114,12 @@ acknowledgement. The application exact-checks that record on its retained port
 before resolving its pending operation. This reuses the carrier-local handshake
 shape; it is not a caller message or an additional protocol control. A missing,
 malformed, duplicate, or mismatched acknowledgement closes both reachable
-endpoints and selects no carrier.
+endpoints and selects no carrier. A popup that refuses the response, for an
+application origin outside its allowlist or a malformed record, answers on the
+transferred port with the same record plus `refused: true` before closing it, so
+the application fails with `handshake-rejected` at once. An acknowledgement that
+never comes lapses after the 30-second opener deadline, so the application's
+window check can still see a popup that closed mid-handshake.
 
 The request may use an unrestricted target origin because it contains no
 capability or application value. The response targets the exact observed popup

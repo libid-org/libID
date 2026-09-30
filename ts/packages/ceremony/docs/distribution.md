@@ -255,7 +255,38 @@ between builds. A fresh empty output cannot retain resources from a previous
 deployment.
 
 Deploy the complete image pinned by digest (the one in the run summary), not by
-a tag, which can move. Retention currently covers immutable assets, not an
+a tag, which can move. Cut over atomically per origin: serve one revision at a
+time, never a mix of revisions behind one ingress. Blue/green or drain then
+switch does it without downtime; stopping the old instance before starting the
+new one (Kubernetes `Recreate`) does it with a brief outage. Retention carries only older assets forward, so a replica still on the
+previous build answers the new build's chunks with 404 and the Prover never
+starts.
+
+Roll back forward: revert on `main` and publish a new build, which still retains
+the rolled-back build's assets for the documents already running it. Redeploying
+an older image drops those assets. A browser that already holds the newer
+document revalidates correctly against the older one, because its changed ETag
+wins over the older `Last-Modified`
+([native SWS test](../build/sws.test.ts)).
+
+A CDN in front of SWS needs nothing from this package; configure it to:
+
+- honor origin `Cache-Control`: cache the `immutable` assets as long as it likes,
+  and revalidate the `no-cache` documents, `worker.js` and `versions.json` on every
+  use;
+- forward every response header unchanged, in particular
+  `Document-Isolation-Policy`, `Cross-Origin-Opener-Policy`,
+  `Cross-Origin-Embedder-Policy`, `Cross-Origin-Resource-Policy`,
+  `Content-Security-Policy` and `Service-Worker-Allowed`;
+- never transform bodies: HTML or script rewriting (minification, injected or
+  deferred scripts, email obfuscation) breaks the documents' inline-script
+  hashes, and they stop running;
+- forward `Range` requests and key compressed variants by `Accept-Encoding`
+  (SWS sends `Vary: Accept-Encoding`).
+
+A CDN does not replace the atomic switch: a request for a file it has not cached
+yet still reaches the origin. 404s are `no-store`, so it never caches a missing
+file. Retention currently covers immutable assets, not an
 automatic archive of every protocol version: only v1 is emitted. Adding or
 retiring protocol versions needs explicit build support and a
 compatibility-window plan. Application, Callback, Prover and root Worker must

@@ -20,7 +20,6 @@ export async function startPrefetch(fragment: string): Promise<void> {
   try {
     const input = readPrefetch(fragment),
       profile = profileKey(input.platformId, input.platformCeremonyVersion)
-    if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
     feed.emit({
       event: 'prefetch-dispatch',
       phase: 'started',
@@ -33,6 +32,8 @@ export async function startPrefetch(fragment: string): Promise<void> {
       allowedApplicationOrigins: '*',
     })
     await connection.ready
+    // Checked once connected, so the Application learns why instead of waiting.
+    if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
     const connected = performance.now()
     const registration = await registerRootWorker()
     const workerReady = performance.now()

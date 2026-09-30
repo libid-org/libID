@@ -86,15 +86,15 @@ it('a failed mandatory readiness send reports failure instead of silently contin
     { type: 'ceremony-failed', event: 'prefetch-dispatch', message: 'send failed' },
   ])
 })
-it('rejects a profile without bundled requests before accepting a connection', async () => {
-  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+it('tells the Application a profile without bundled requests is unsupported, starting no worker', async () => {
   const stop = vi.spyOn(ui, 'stop')
   await startPrefetch(fragment('x'))
   expect(registerRootWorker).not.toHaveBeenCalled()
-  expect(connection.sent).toEqual([])
-  expect(ui.events).toEqual([
-    expect.objectContaining({ status: 'failed', message: messages.unsupportedProfile }),
+  expect(connection.sent).toEqual([
+    { type: 'ceremony-failed', event: 'prefetch-dispatch', message: messages.unsupportedProfile },
   ])
+  expect(ui.events).toContainEqual(
+    expect.objectContaining({ status: 'failed', message: messages.unsupportedProfile }),
+  )
   expect(stop).toHaveBeenCalledOnce()
-  expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
 })

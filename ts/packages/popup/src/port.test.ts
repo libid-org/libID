@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CONNECTION_VERSION } from './message.js'
-import { listenForPopupPorts, PortCarrier, requestApplicationPort } from './port.js'
+import {
+  listenForPopupPorts,
+  OPENER_HANDSHAKE_TIMEOUT_MS,
+  PortCarrier,
+  requestApplicationPort,
+} from './port.js'
 import {
   APP_ORIGIN,
   type FakePair,
@@ -195,6 +200,32 @@ describe('MessagePort handshake [POPUP-PORT-001]', () => {
     h.stop()
   })
 
+  it('lets an unacknowledged attempt lapse so a closed popup can be seen', async () => {
+    vi.useFakeTimers()
+    try {
+      const pending = vi.fn()
+      const pair = fakePair()
+      listenForPopupPorts(
+        {
+          view: pair.appView,
+          source: pair.popupProxy as unknown as WindowProxy,
+          onBind: () => {},
+          allowedPopupOrigins: [POPUP_ORIGIN],
+          connectionId: ID,
+        },
+        { onPort: () => {}, onFail: () => {}, onPending: pending },
+      )
+      // The popup sends its handshake and is then gone before it can acknowledge.
+      pair.appProxy.postMessage(handshake(), '*')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(pending.mock.calls).toEqual([[true]])
+      await vi.advanceTimersByTimeAsync(OPENER_HANDSHAKE_TIMEOUT_MS)
+      expect(pending.mock.calls).toEqual([[true], [false]])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('stops listening and closes pending state on stop', async () => {
     const h = listen()
     h.stop()
@@ -230,6 +261,24 @@ describe('popup request', () => {
       await expect(pending).rejects.toMatchObject({ code: 'handshake-rejected' })
     }
     expect(pair.popupView.listeners.size).toBe(0)
+  })
+
+  it('answers a refused response on its port, so the application fails at once', async () => {
+    const pair = fakePair()
+    const channel = new MessageChannel()
+    const answered = new Promise((resolve) => {
+      channel.port2.onmessage = (e) => resolve(e.data)
+    })
+    const pending = request(pair)
+    pair.popupView.dispatch({
+      data: handshake(),
+      origin: 'https://evil.example',
+      source: pair.appProxy,
+      ports: [channel.port1],
+    })
+    await expect(pending).rejects.toMatchObject({ code: 'handshake-rejected' })
+    expect(await answered).toEqual({ ...handshake(), refused: true })
+    channel.port2.close()
   })
 
   it('ignores unrelated traffic and another window, then resolves null when the opener stays silent', async () => {

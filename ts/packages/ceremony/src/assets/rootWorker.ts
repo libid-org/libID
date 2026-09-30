@@ -34,11 +34,16 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
     if (
       event.ports.length !== 1 ||
       !hasExactKeys(value, ['type', 'profile']) ||
-      typeof value.profile !== 'string' ||
-      !Object.hasOwn(requestsByProfile, value.profile)
+      typeof value.profile !== 'string'
     )
       return false
     const [reply] = event.ports
+    // A build without this asset list (an older worker, or a retired version) says so at once.
+    if (!Object.hasOwn(requestsByProfile, value.profile)) {
+      reply.postMessage({ dispatched: false })
+      reply.close()
+      return true
+    }
     const jobs = requestsByProfile[value.profile].map((r) => cache.load(absolute(r)))
     for (const job of jobs) void job.response.catch(() => {})
     const dispatch = Promise.all(jobs.map((j) => j.dispatched)).then(() => {

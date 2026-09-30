@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
@@ -158,6 +166,46 @@ test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-02
     assert.equal(await changed.text(), '<p>other</p>')
     const warm = await fetch(url, { headers: { 'If-None-Match': changed.headers.get('etag')! } })
     assert.equal(warm.status, 304)
+  } finally {
+    await server.stop()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('native SWS serves a rolled-back document to a browser holding the newer one [LIBID-ASSET-027]', {
+  skip: nativeSkip('CEREMONY_SWS_BINARY'),
+}, async () => {
+  mkdirSync(cache, { recursive: true })
+  const dir = mkdtempSync(join(cache, 'sws-rollback-'))
+  const publish = (body: string, mtime?: Date) => {
+    const files = writeDistribution(
+      dir,
+      new Map([
+        ['/ccdp/v1/prefetch', { bytes: Buffer.from(body), headers: { ...documentHeaders } }],
+        ['/404.html', { bytes: Buffer.from('Not found'), headers: { ...documentHeaders } }],
+      ]),
+    )
+    // A redeployed older image carries its older file times.
+    if (mtime)
+      for (const file of Object.values(files)) utimesSync(join(dir, 'public', file), mtime, mtime)
+    localize(dir, testPort)
+  }
+  publish('<p>newer</p>')
+  const server = await serve(dir, testPort)
+  try {
+    const url = `${server.url}/ccdp/v1/prefetch`
+    const newer = await fetch(url)
+    assert.equal(await newer.text(), '<p>newer</p>')
+    const validators = {
+      'If-None-Match': newer.headers.get('etag')!,
+      'If-Modified-Since': newer.headers.get('last-modified')!,
+    }
+    assert.ok(validators['If-None-Match'] && validators['If-Modified-Since'])
+    publish('<p>older</p>', new Date(Date.now() - 3_600_000))
+    // Both validators, as browsers send them: the changed ETag must win over the older time.
+    const rolledBack = await fetch(url, { headers: validators })
+    assert.equal(rolledBack.status, 200)
+    assert.equal(await rolledBack.text(), '<p>older</p>')
   } finally {
     await server.stop()
     rmSync(dir, { recursive: true, force: true })

@@ -166,7 +166,6 @@ it.each([
   [{ type: 'ceremony-claim' }, 'https://evil.example/page'],
   [{ type: 'ceremony-claim', extra: true }, 'https://ccdp.example/ccdp/v1/prover'],
   [{ type: 'ceremony-prefetch', profile: 'google/1' }, 'https://evil.example/page'],
-  [{ type: 'ceremony-prefetch', profile: 'other/1' }, 'https://ccdp.example/ccdp/v1/prefetch'],
 ])('closes the ports of an invalid ceremony request %j from %s without replying', (data, url) => {
   const claim = vi.fn(async () => {})
   const reply = port()
@@ -183,7 +182,6 @@ it.each([
   ['a claim with two ports', { type: 'ceremony-claim' }, 2, PREFETCH],
   ['a prefetch without a port', { type: 'ceremony-prefetch', profile: 'google/1' }, 0, PREFETCH],
   ['a non-string profile', { type: 'ceremony-prefetch', profile: ['google/1'] }, 1, PREFETCH],
-  ['an inherited profile name', { type: 'ceremony-prefetch', profile: 'toString' }, 1, PREFETCH],
   ['a request without a client source', { type: 'ceremony-claim' }, 1, undefined],
 ])('closes every port of %s without replying', (_, data, count, url) => {
   const claim = vi.fn(async () => {})
@@ -203,6 +201,24 @@ it.each([
   expect(claim).not.toHaveBeenCalled()
   expect(load).not.toHaveBeenCalled()
 })
+
+it.each(['other/1', 'toString'])(
+  'answers a request for an asset list it does not serve, %s, at once',
+  (profile) => {
+    const reply = port()
+    const waitUntil = vi.fn()
+    start()('message', {
+      data: { type: 'ceremony-prefetch', profile },
+      ports: [reply],
+      source: { url: PREFETCH },
+      waitUntil,
+    })
+    expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ dispatched: false })
+    expect(reply.close).toHaveBeenCalledOnce()
+    expect(waitUntil).not.toHaveBeenCalled()
+    expect(load).not.toHaveBeenCalled()
+  },
+)
 
 it.each([
   ['popup port keeper traffic', { type: 'popup-port' }],

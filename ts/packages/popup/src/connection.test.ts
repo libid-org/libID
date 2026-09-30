@@ -826,6 +826,17 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     }
   })
 
+  it('fails the application at once when the popup refuses its origin', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const endpoint = PopupConnection.accept(new CurrentWindow(pair.popupWindow, noRegistration), {
+      connectionId: ID,
+      allowedApplicationOrigins: ['https://other.example'],
+    })
+    await expect(endpoint.ready).rejects.toThrow('handshake-rejected')
+    expect(await app.connection.closed).toEqual({ outcome: 'failed', code: 'handshake-rejected' })
+  })
+
   it('fails without looping when the fallback itself is not isolated, ending the application too', async () => {
     const pair = fakePair()
     pair.relocate(POPUP_ORIGIN, FALLBACK, '#c=1')

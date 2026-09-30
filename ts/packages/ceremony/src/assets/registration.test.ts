@@ -115,6 +115,33 @@ it('checks for a deployed update before dispatching to the active worker [LIBID-
   await expect(registerRootWorker()).resolves.toBe(root)
 })
 
+it('keeps a working active worker when the update check or the new worker stalls [LIBID-ASSET-014]', async () => {
+  vi.useFakeTimers()
+  const previous = serviceWorker('activated', { dispatched: true })
+  const root = registration(`${ORIGIN}/`, { active: previous })
+  // A stalled check of worker.js.
+  root.update.mockReturnValue(new Promise(() => {}))
+  install(root)
+  const stalledCheck = registerRootWorker()
+  await vi.advanceTimersByTimeAsync(3000)
+  await expect(stalledCheck).resolves.toBe(root)
+  // A new worker that cannot activate while the previous one is still busy.
+  Object.assign(root, { waiting: serviceWorker('installed') })
+  const waiting = registerRootWorker()
+  await vi.advanceTimersByTimeAsync(3000)
+  await expect(waiting).resolves.toBe(root)
+  vi.useRealTimers()
+  await dispatchPrefetch(root, 'google/1')
+  expect(previous.postMessage).toHaveBeenCalledOnce()
+})
+
+it('fails at once when the worker does not serve the asset list [LIBID-ASSET-014]', async () => {
+  const root = registration(`${ORIGIN}/`, {
+    active: serviceWorker('activated', { dispatched: false }),
+  })
+  await expect(dispatchPrefetch(root, 'google/9')).rejects.toThrow('Asset profile not served')
+})
+
 it('observes activation when a concurrent popup loses worker statechange notifications', async () => {
   vi.useFakeTimers()
   const worker = serviceWorker('installing')

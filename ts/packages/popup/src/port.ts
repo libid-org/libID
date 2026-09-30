@@ -32,6 +32,9 @@ const handshake = (connectionId: string): Handshake => ({
   connectionId,
 })
 
+/** The popup's answer to a response it will not accept, so the application fails at once. */
+const refusal = (connectionId: string) => ({ ...handshake(connectionId), refused: true })
+
 /** Whether an event is addressed to this connection at all. */
 function isAttempt(data: unknown, connectionId: string): data is Record<string, unknown> {
   return isRecord(data) && data.type === HANDSHAKE && data.connectionId === connectionId
@@ -78,8 +81,10 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
   const { view, allowedPopupOrigins, connectionId } = options
   let source = options.source
   let pending: MessagePort | null = null
+  let lapse: ReturnType<typeof setTimeout> | undefined
 
   const dropPending = (): void => {
+    clearTimeout(lapse)
     if (pending) {
       pending.onmessage = null
       pending.close()
@@ -106,13 +111,18 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
     const port = channel.port1
     pending = port
     handlers.onPending?.(true)
+    // A popup closed or navigated mid-handshake never acknowledges; the attempt then lapses
+    // so the window check can see the popup gone.
+    lapse = setTimeout(dropPending, OPENER_HANDSHAKE_TIMEOUT_MS)
     port.onmessage = (ack: MessageEvent): void => {
       if (pending !== port) return
+      // Anything but the exact echo, the popup's refusal included, fails the attempt.
       if (!isExactHandshake(ack.data, connectionId) || ack.ports.length !== 0) {
         dropPending()
         handlers.onFail()
         return
       }
+      clearTimeout(lapse)
       pending = null
       handlers.onPending?.(false)
       port.onmessage = null
@@ -167,6 +177,14 @@ export function requestApplicationPort(options: RequestOptions): Promise<PortCar
         !isExactHandshake(event.data, connectionId) ||
         event.ports.length !== 1
       ) {
+        // Answer a single-port response rather than leave the application waiting.
+        if (event.ports.length === 1) {
+          try {
+            event.ports[0].postMessage(refusal(connectionId))
+          } catch {
+            // A port that cannot carry the refusal only closes.
+          }
+        }
         for (const port of event.ports) port.close()
         finish(new PopupError('handshake-rejected'))
         return
