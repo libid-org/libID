@@ -203,7 +203,7 @@ it.each(['cross-origin isolation', 'shared memory'])(
     expect(w.errors()).toEqual([
       {
         type: 'error',
-        event: 'zk-proof-generation',
+        event: 'zk-proof-preparation',
         message: 'proof worker requires cross-origin isolation',
       },
     ])
@@ -241,7 +241,7 @@ it('a duplicate preload fails once and releases the started backend', async () =
   w.send(preload)
   await expect.poll(() => w.has('error')).toBe(true)
   expect(w.errors()).toEqual([
-    { type: 'error', event: 'zk-proof-generation', message: 'Duplicate engine initialization' },
+    { type: 'error', event: 'zk-proof-preparation', message: 'Duplicate engine initialization' },
   ])
   await expect
     .poll(() => w.finished('proof-circuit-load') && w.finished('proof-wasm-load'))

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import type { Rollup } from 'vite'
 import type { AssetRequest, ExternalAsset } from '../src/assets/index.js'
 import { messages } from '../src/ccdp/uiMessages.ts'
@@ -12,7 +12,7 @@ import { bundle, workerUrl } from './bundle.ts'
 import { captureInput } from './input.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { responseHeaders } from './profiles.ts'
-import { packageDir } from './sources.ts'
+import { outputDirectory, packageDir } from './sources.ts'
 import { errorHeaders, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
@@ -27,10 +27,7 @@ type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
 type Records = Map<string, PublicRecord>
 
 const index = process.argv.indexOf('--out-dir'),
-  out = resolve(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
-
-if (out === packageDir || !out.startsWith(`${resolve(packageDir, '../../..')}/`))
-  throw new Error('Output must be a dedicated directory inside this worktree')
+  out = outputDirectory(index < 0 ? join(packageDir, 'dist-artifacts') : process.argv[index + 1])
 
 const staging = `${out}.building`
 

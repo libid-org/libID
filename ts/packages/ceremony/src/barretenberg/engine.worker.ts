@@ -46,11 +46,12 @@ function destroyBackend(): Promise<void> {
 
 function fail(error: unknown): void {
   if (state === 'done') return
+  const event = state === 'proving' ? 'zk-proof-generation' : 'zk-proof-preparation'
   state = 'done'
   ready = null
   // Also releases a backend that finishes initializing after a sibling failed.
   void destroyBackend().catch(() => {})
-  const failure = ceremonyError(error, 'zk-proof-generation')
+  const failure = ceremonyError(error, event)
   send({ type: 'error', message: errorMessage(failure), event: failure.event })
 }
 
