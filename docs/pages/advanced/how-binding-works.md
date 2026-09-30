@@ -9,6 +9,21 @@ Most apps never do this themselves: the libID sign-in flow does it for the
 user. This page explains what happens, so you know what a binding rests on.
 The full rules are in the [specification](/specs/).
 
+```mermaid
+flowchart TD
+  U["User in the browser"] -- "signs in" --> P["Platform<br/>trusted: says who owns the account"]
+  P -- "Google: signed sign-in token" --> G["Zero-knowledge proof<br/>that Google signed it"]
+  P -- "GitHub, X: two TLS sessions" --> N["Notary signs the session records<br/>trusted: signs only true records"]
+  N --> Z["Zero-knowledge proof<br/>that one token opened both sessions"]
+  G --> B["User's wallet sends bind"]
+  Z --> B
+  B --> V["Proof verifier and platform verifier<br/>trusted, with their owners: check proofs correctly"]
+  V --> I["IdentityNames stores the binding<br/>public: wallet, account id, handle"]
+```
+
+The Google path needs no notary, because Google signs its tokens itself.
+Everything in the last box is public on chain.
+
 ## The steps
 
 1. **The app asks for a binding.** It names the wallet and any service fee.

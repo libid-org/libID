@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import mermaid from 'astro-mermaid';
 import { unified } from '@astrojs/markdown-remark';
 import specMarkdown from './src/spec-markdown.mjs';
 
@@ -7,6 +8,7 @@ export default defineConfig({
   site: 'https://lib.id',
   markdown: { processor: unified({ remarkPlugins: [specMarkdown] }) },
   integrations: [
+    mermaid({ autoTheme: true }),
     starlight({
       title: 'libID',
       description: 'Every social account is already a multichain identity.',

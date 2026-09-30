@@ -10,6 +10,18 @@ GitHub. If Carol has already proved the handle, she gets the funds right away.
 If not, the escrow holds them. Then one of two things happens: Carol proves
 the handle and claims the funds, or the sender takes them back first.
 
+```mermaid
+flowchart TD
+  D["Sender calls deposit"] --> Q{"Does someone hold the handle?"}
+  Q -- yes --> F["Paid to the holder at once<br/>Forwarded"]
+  Q -- no --> H["Held by the escrow<br/>Deposited"]
+  H -- "Carol proves the handle,<br/>then calls claim" --> C["Paid to Carol<br/>Claimed"]
+  H -- "the sender calls refund<br/>before any claim" --> R["Back to the sender<br/>Refunded"]
+```
+
+Held funds end one of two ways: Carol claims them, or the sender refunds
+them. Whichever comes first wins.
+
 In this guide you play both people: a sender, with `PRIVATE_KEY`, and Carol,
 with `CAROL_KEY`. Both keys are set by the [local chain](/docs/guides/local-chain/),
 which also sets `HANDLE_ESCROW`. `HandleEscrow` is not on a public network

@@ -11,6 +11,28 @@ it. No name is stored anywhere.
 
 ## Resolving a name
 
+```mermaid
+sequenceDiagram
+  participant W as Wallet on Base
+  participant E as ENS
+  participant R as Resolver
+  participant G as Gateway
+  W->>E: resolver for the name?
+  E-->>W: Resolver
+  W->>R: resolve, for Base
+  R-->>W: ask the gateway
+  W->>G: same question
+  G->>G: read IdentityNames on Base
+  G-->>W: signed answer
+  W->>R: resolveWithProof
+  R-->>W: address on Base, or none
+```
+
+The wallet names the chain it will send on, here Base, and gets the owner on
+that chain only. `Resolver` is `HandleResolver`, set on `handles.link` in ENS
+on Ethereum. The signed answer is valid for a few minutes.
+
+
 1. The client asks ENS for the resolver of `octocat.github.handles.link`.
    There is none for the full name, so ENS returns the one set on
    `handles.link`.

@@ -8,6 +8,30 @@ sidebar:
 A binding links a wallet to an account, and through the account to a handle.
 The two behave differently, and your app should know which one it relies on.
 
+```mermaid
+flowchart TB
+  subgraph s1["1. Alice proves alice"]
+    direction LR
+    a1["Account 1001"] -- holds --> h1["alice"]
+    a1 -- bound to --> w1["Wallet A"]
+  end
+  subgraph s2["2. Alice renames to alice2 and proves it"]
+    direction LR
+    a2["Account 1001"] -- holds --> h2["alice2"]
+    a2 -- bound to --> w2["Wallet A"]
+    x2["alice: held by nobody"]
+  end
+  subgraph s3["3. GitHub gives alice to Bob, and Bob proves it"]
+    direction LR
+    b3["Account 2002"] -- holds --> h3["alice"]
+    b3 -- bound to --> w3["Wallet B"]
+  end
+  s1 --> s2 --> s3
+```
+
+The account id stays the same through every step; the handle moves.
+`resolveHandle('alice')` returns wallet A, then nobody, then wallet B.
+
 ## Account ids stay
 
 An account id is fixed for the life of the account. If you need to remember
