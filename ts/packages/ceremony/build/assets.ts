@@ -32,7 +32,8 @@ const mediaTypes: Readonly<Record<string, string>> = {
 export const mediaType = (path: string): string =>
   mediaTypes[extname(path)] ?? 'application/octet-stream'
 
-export function assetHeaders(path: string, policy: Readonly<Record<string, string>> = {}) {
+/** Declared headers are well-formed, unique and leave representation metadata to SWS. */
+export function checkDeclaredHeaders(policy: Readonly<Record<string, string>>): void {
   const seen = new Set<string>()
   for (const [name, value] of Object.entries(policy)) {
     const lower = name.toLowerCase()
@@ -47,6 +48,10 @@ export function assetHeaders(path: string, policy: Readonly<Record<string, strin
     if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(name) || /[\r\n\0]/.test(value))
       throw new Error('Invalid header')
   }
+}
+
+export function assetHeaders(path: string, policy: Readonly<Record<string, string>> = {}) {
+  checkDeclaredHeaders(policy)
   const merged = new Headers({ ...headers.immutable, 'Content-Type': mediaType(path) })
   for (const [name, value] of Object.entries(policy)) merged.set(name, value)
   for (const [name, value] of Object.entries(headers.immutable))

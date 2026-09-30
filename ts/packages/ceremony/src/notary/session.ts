@@ -14,7 +14,13 @@ import type {
   Transcript,
 } from './protocol.js'
 
-/** One send-through-attestation budget; setup and idle bearer waiting are excluded. */
+/**
+ * One session's setup. With the send budget it keeps X's token request well inside X's
+ * 30-second code deadline, which the redirect and the Prover's load also spend.
+ */
+const PREPARE_TIMEOUT_MS = 10000
+
+/** One send-through-attestation budget; setup has its own and idle bearer waiting is excluded. */
 const REQUEST_TIMEOUT_MS = 10000
 
 /** Correlated provisional openings plus a separate promise for the final attestation. */
@@ -125,6 +131,10 @@ class Session implements NotarySession {
 
   async prepare(worker: Worker, notaryAddress: string): Promise<void> {
     const prepared = this.wait('prepared')
+    this.timer = setTimeout(
+      () => this.fail(new Error('Notary preparation timed out')),
+      PREPARE_TIMEOUT_MS,
+    )
     try {
       worker.postMessage(
         {
@@ -138,6 +148,7 @@ class Session implements NotarySession {
         [this.channel.port2],
       )
       await prepared
+      clearTimeout(this.timer)
       this.signal.throwIfAborted()
       this.phase = 'prepared'
     } catch (error) {

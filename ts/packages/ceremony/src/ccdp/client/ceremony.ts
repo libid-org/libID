@@ -92,6 +92,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   private readonly request: ProveIdentity
   private authorizationUrl: string
   private readonly prefetchUrl: string
+  private readonly ccdpOrigin: string
   private readonly fragment: URLSearchParams
   private result: PromiseWithResolvers<IdentityResult<P>> | undefined
   private binding: Binding | undefined
@@ -140,6 +141,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
         ? {}
         : { clientCredential: platformConfig.clientCredential }),
     }
+    this.ccdpOrigin = config.ccdpOrigin
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
@@ -181,6 +183,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   /** Prefetch readiness releases the one-shot authorization navigation. */
   private prefetched(event: OperationEvent): void {
     this.expect('prefetch')
+    this.expectCcdp()
     if (event.phase !== 'finished') throw sequenceError('Invalid prefetch readiness')
     this.state = 'oauth'
     const url = this.authorizationUrl
@@ -196,11 +199,19 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
 
   private proverReady(event: OperationEvent): void {
     this.expect('oauth')
+    // The request carries the code verifier, which the Bridge's Callback must never hold.
+    this.expectCcdp()
     if (event.phase !== 'started') throw sequenceError('Invalid prover readiness')
     this.state = 'proving'
     // Readiness processing precedes observers; no subscription is needed to start proving.
     this.connection.send({ ...this.request })
     this.emit(event)
+  }
+
+  /** Readiness counts only from a CCDP document; the Bridge is also an admitted popup origin. */
+  private expectCcdp(): void {
+    if (this.connection.peerOrigin !== this.ccdpOrigin)
+      throw sequenceError('Readiness from outside the CCDP')
   }
 
   /** Core observations must fit the run's state and platform, once each, started before finished. */
@@ -309,7 +320,10 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   /** The operation a failure interrupts. */
   private interruptedEvent(): string {
     if (this.state === 'new' || this.state === 'prefetch') return 'prefetch-dispatch'
-    return this.state === 'oauth' ? 'authorization' : 'prover'
+    // Once the return reached Callback, the Prover is what is still pending.
+    const returned =
+      this.observations.has('authorization/finished') || this.observations.has('prover-fallback/')
+    return this.state === 'oauth' && !returned ? 'authorization' : 'prover'
   }
 
   private fail(error: unknown): void {

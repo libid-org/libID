@@ -51,6 +51,7 @@ function socketIo(socket: WebSocket): Io {
 
   socket.binaryType = 'arraybuffer'
   socket.addEventListener('message', (event) => {
+    if (end) return
     if (!(event.data instanceof ArrayBuffer))
       return settle(new Error('notary sent non-binary data'))
     const chunk = new Uint8Array(event.data)

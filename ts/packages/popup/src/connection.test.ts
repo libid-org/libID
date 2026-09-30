@@ -825,14 +825,15 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
     }
   })
 
-  it('fails without looping when the fallback itself is not isolated', async () => {
+  it('fails without looping when the fallback itself is not isolated, ending the application too', async () => {
     const pair = fakePair()
     pair.relocate(POPUP_ORIGIN, FALLBACK, '#c=1')
-    connectApp(pair)
+    const app = connectApp(pair)
     const side = acceptIsolating(pair, { worker: fakeScope().worker })
     await expect(side.endpoint.ready).rejects.toThrow('isolation-unavailable')
     expect(pair.popupProxy.replaced).toEqual([])
     expect(await side.endpoint.closed).toEqual({ outcome: 'failed', code: 'isolation-unavailable' })
+    expect(await app.connection.closed).toEqual({ outcome: 'closed' })
   })
 
   it('rejects an invalid, non-HTTPS, or cross-origin fallback synchronously', () => {

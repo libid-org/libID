@@ -8,7 +8,7 @@ import { messages } from '../src/ccdp/uiMessages.ts'
 import { safePath } from './archive.ts'
 import type { AssetManifest } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
-import { assetHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
+import { checkDeclaredHeaders, externalRequest, mediaType, resolveAssets } from './assets.ts'
 import type { BundleNode } from './bundle.ts'
 import { bundle } from './bundle.ts'
 import { captureFragment } from './fragment.ts'
@@ -204,7 +204,8 @@ function retainPrevious(records: Records) {
   for (const [path, headers] of Object.entries(previous.headers)) {
     if (!path.startsWith('/ccdp/assets/')) continue
     safePath(path.slice(1))
-    assetHeaders(path, headers)
+    // A retained asset keeps the policy it was published with, so only its form is checked.
+    checkDeclaredHeaders(headers)
     const record = {
         bytes: readFileSync(join(out, 'public', path)),
         headers: Object.fromEntries(new Headers(headers)),

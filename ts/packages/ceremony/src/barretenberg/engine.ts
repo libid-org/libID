@@ -66,11 +66,11 @@ export class ProofEngine {
   async prove(inputs: Record<string, unknown>, signal?: AbortSignal): Promise<RawProof> {
     if (this.#inputsAt !== undefined) throw new Error('proof engine is single-use')
     this.#inputsAt = now()
-    this.#finishPreparation()
     const abort = () =>
       this.#fail(signal?.reason ?? new DOMException('Proving aborted', 'AbortError'))
     signal?.addEventListener('abort', abort, { once: true })
     if (signal?.aborted) abort()
+    this.#finishPreparation()
     try {
       await this.#ready.promise
       this.#generating = true

@@ -76,7 +76,8 @@ async function bindGoogleAction(
 The [development app](../../../apps/dev/src/app.ts) shows platform buttons,
 concurrent runs, independent Close controls and timing history. Each live run
 needs its own target, connection and fresh lowercase UUIDv4. Use the same UUID
-for popup's `connectionId` and `client.new`'s ceremony ID. Reserve no CCDP message
+for popup's `connectionId` and `client.new`'s ceremony ID; `new` rejects a different ID on a
+connection from `client.connect`. Reserve no CCDP message
 handlers yourself on that connection.
 
 `connect` accepts popup's `ConnectOptions` except `allowedPopupOrigins`; the client
@@ -84,6 +85,9 @@ supplies that allowlist from its frozen Bridge configuration. Fallback and
 diagnostic options pass through to the popup package. It adds no message handlers
 or navigation. The returned connection supports other application protocols;
 `client.new()` also continues to accept independently constructed connections.
+The Bridge and the CCDP are both admitted popup origins, but only CCDP documents
+advance a run: Prefetch and Prover readiness from any other origin fails it, so
+the Bridge's Callback never receives the code verifier or client credential.
 
 `new(connection, id, platformId, ledger, operationDomain, transactionData, version?)`
 is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`

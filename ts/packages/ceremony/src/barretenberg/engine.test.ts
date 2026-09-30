@@ -112,8 +112,9 @@ it('cancels an early witness, terminates the worker and ignores late delivery [L
   expect(e.terminate).toHaveBeenCalledOnce()
 })
 
-it('rejects an already-aborted proof without dispatching its inputs', async () => {
+it('rejects an already-aborted proof without dispatching its inputs or finishing preparation', async () => {
   const e = engine()
+  e.send({ type: 'backend-ready', timestamp: 2 })
   const reason = new Error('Ceremony closed')
   await expect(e.instance.prove({ fixture: 1 }, AbortSignal.abort(reason))).rejects.toMatchObject({
     event: 'zk-proof-preparation',
@@ -123,6 +124,9 @@ it('rejects an already-aborted proof without dispatching its inputs', async () =
   await Promise.resolve()
   expect(e.postMessage).toHaveBeenCalledTimes(1)
   expect(e.terminate).toHaveBeenCalledOnce()
+  expect(e.events).not.toContainEqual(
+    expect.objectContaining({ event: 'zk-proof-preparation', phase: 'finished' }),
+  )
 })
 
 it('delivers one proof, rejects a second request and ignores messages after settlement', async () => {

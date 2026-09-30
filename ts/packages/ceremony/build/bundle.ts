@@ -138,7 +138,8 @@ export async function bundle(
     name: 'ceremony-emitted-graph',
     generateBundle(_, output) {
       for (const item of Object.values(output)) {
-        if (worker) workerFiles.add(item.fileName)
+        // Only a worker build's own entry runs as a worker; its other chunks are modules.
+        if (worker && item.type === 'chunk' && item.isEntry) workerFiles.add(item.fileName)
         if (item.type === 'chunk')
           graph.set(item.fileName, {
             entry: item.facadeModuleId,

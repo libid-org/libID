@@ -763,6 +763,34 @@ it('only core readiness events advance the protocol; preserves occurrence times 
   expect(events).toHaveLength(count)
 })
 
+it.each([
+  ['Prefetch', event('prefetch-dispatch', 'finished')],
+  ['Prover', event('prover', 'started', 3)],
+])(
+  'accepts %s readiness only from the CCDP, never the Bridge [LIBID-OAUTH-023]',
+  async (document, readiness) => {
+    const { ceremony, connection } = setup()
+    const result = ceremony.proveUserIdentity()
+    if (document === 'Prover') prefetched(connection)
+    connection.peerOrigin = 'https://bridge.test'
+    connection.receive(readiness)
+    await expect(result).rejects.toThrow('Readiness from outside the CCDP')
+    expect(connection.sent).toEqual([])
+  },
+)
+
+it.each([
+  ['before the return', [], 'authorization'],
+  ['after Callback forwarded the return', [event('authorization', 'finished', 2)], 'prover'],
+])('blames a closure %s on the operation still pending', async (_name, observed, blamed) => {
+  const { ceremony, connection } = setup()
+  const result = ceremony.proveUserIdentity()
+  prefetched(connection)
+  for (const message of observed) connection.receive(message)
+  await connection.close()
+  await expect(result).rejects.toMatchObject({ status: 'closed', event: blamed })
+})
+
 it('cancellation at authorization entry prevents provider navigation [LIBID-BROWSER-018]', async () => {
   const { ceremony, connection } = setup()
   ceremony.onEvent((event) => {

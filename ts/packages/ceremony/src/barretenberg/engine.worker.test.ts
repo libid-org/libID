@@ -125,6 +125,15 @@ it('uses the released VK with exact ZK Keccak settings and preserves proof encod
   expect(mocks.destroy).toHaveBeenCalledOnce()
 })
 
+it('delivers a finished proof even when releasing the backend fails', async () => {
+  const w = await worker()
+  mocks.destroy.mockRejectedValue(new Error('destroy failed'))
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  w.prove({ fixture: 1 })
+  await expect.poll(() => w.has('result')).toBe(true)
+  expect(w.errors()).toEqual([])
+})
+
 it.each(['missing', 'empty'])(
   'fails for a %s VK without falling back to recomputation [LIBID-PROVER-001]',
   async (kind) => {

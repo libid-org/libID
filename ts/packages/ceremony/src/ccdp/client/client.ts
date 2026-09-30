@@ -70,6 +70,8 @@ export function ccdpClientFromConfig(
 ): CCDPClient {
   const popupOrigins = [...new Set([new URL(config.redirectUri).origin, config.ccdpOrigin])]
   const liveIds = new Set<string>()
+  // Each ceremony ID must be its connection's ID; a mismatch would never complete the handshake.
+  const connectionIds = new WeakMap<PopupConnection<Message>, string>()
   // A platform the Bridge does not configure has no client, whatever the Distribution bundles.
   const enabledVersions = <P extends PlatformId>(platform: P) =>
     commonVersions(
@@ -84,11 +86,15 @@ export function ccdpClientFromConfig(
     enabledPlatforms,
     enabledVersions,
     connect(popup, options) {
-      return PopupConnection.connect(popup, { ...options, allowedPopupOrigins: popupOrigins })
+      const conn = PopupConnection.connect(popup, { ...options, allowedPopupOrigins: popupOrigins })
+      connectionIds.set(conn as PopupConnection<Message>, options.connectionId)
+      return conn
     },
     new(conn, id, platformId, ledgerId, operationDomain, transactionData, ceremonyVersion) {
       if (typeof id !== 'string' || !isCeremonyId(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
+      if ((connectionIds.get(conn) ?? id) !== id)
+        throw new TypeError('Ceremony ID must be the connection ID')
       const version = selectVersion(enabledVersions(platformId), ceremonyVersion)
       const ledger = snapshotLedger(ledgerId)
       if (!isFixedBytes(operationDomain, OPERATION_DOMAIN_BYTES))

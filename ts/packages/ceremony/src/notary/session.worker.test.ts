@@ -326,6 +326,28 @@ it.each([
   },
 )
 
+it('reads nothing that arrives after the socket failed [LIBID-PROVER-008]', async () => {
+  // Delivered during finish, before the frame reader starts.
+  const { port, sockets } = await recording(target, () => {
+    const { socket } = sockets[0]
+    socket.dispatchEvent(new MessageEvent('message', { data: 'frame' }))
+    socket.dispatchEvent(
+      new MessageEvent('message', { data: new ArrayBuffer(MAX_FRAME_BYTES + 1) }),
+    )
+  })
+  port.send({ type: 'send', request })
+  await expect.poll(() => port.replied('sent')).toBe(true)
+  port.send({
+    type: 'reveal',
+    reveals: { sent: [{ start: 0, end: 2 }], received: [{ start: 0, end: 2 }] },
+  })
+  await expect.poll(() => port.close.mock.calls.length).toBe(1)
+  expect(port.postMessage.mock.calls.at(-1)?.[0]).toEqual({
+    type: 'error',
+    message: 'notary sent non-binary data',
+  })
+})
+
 /** A session whose runtime startup is gated and whose WebSocket starts out connecting. */
 async function preparing() {
   let socket!: Socket

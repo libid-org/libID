@@ -337,7 +337,8 @@ still-unstarted port through the worker so every value already sent travels
 with it, and replaces itself with the fallback, whose COOP isolates it; the
 fallback restores the port and becomes ready. The departing endpoint never
 becomes ready and delivers nothing. A fallback that is itself not isolated
-fails with `isolation-unavailable` instead of looping. The package assigns no
+fails with `isolation-unavailable` instead of looping, and reports its departure
+over the carrier it holds, so the application's side closes rather than waits. The package assigns no
 meaning to the paths; the application observes one connection throughout.
 
 When the opener was already severed, only the fallback constructor remains,

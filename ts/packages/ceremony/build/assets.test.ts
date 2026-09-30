@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { executionWorker } from '../src/assets/headers.ts'
-import { assetHeaders, externalRequest, loadAssetCatalog, resolveAssets } from './assets.ts'
+import {
+  assetHeaders,
+  checkDeclaredHeaders,
+  externalRequest,
+  loadAssetCatalog,
+  resolveAssets,
+} from './assets.ts'
 
 test('asset resolution publishes only declared files and archive members [LIBID-ASSET-024]', async () => {
   const { local, urls } = await resolveAssets()
@@ -35,6 +41,14 @@ test('policy cannot override server metadata or weaken immutable resources [LIBI
       'Cross-Origin-Embedder-Policy': 'unsafe-none',
     }),
   )
+})
+
+test('a retained policy is checked for form, not against the current constants', () => {
+  const published = { ...assetHeaders('file.js'), 'cache-control': 'public, max-age=60, immutable' }
+  assert.throws(() => assetHeaders('file.js', published), /Asset policy weakened/)
+  checkDeclaredHeaders(published)
+  assert.throws(() => checkDeclaredHeaders({ ETag: 'x' }))
+  assert.throws(() => checkDeclaredHeaders({ 'X-A': 'a\r\nX-B: b' }))
 })
 
 test('external declarations retain exact URL/range and derive size without downloading [LIBID-ASSET-022]', async () => {

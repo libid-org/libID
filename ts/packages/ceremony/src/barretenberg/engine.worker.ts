@@ -153,7 +153,8 @@ async function prove(message: Extract<ToWorker, { type: 'prove' }>): Promise<voi
     runtime: runtime!,
   }
   emit({ event: 'zk-proof-generation', phase: 'finished', timestamp: now() })
-  await span('proof-backend-destroy', destroyBackend)
+  // The proof is finished; failing to release the backend cannot take it back.
+  await span('proof-backend-destroy', destroyBackend).catch(() => {})
   if (state !== 'proving') return
   ready = null
   state = 'done'

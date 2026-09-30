@@ -1,5 +1,5 @@
 import { parseCsp, scriptHash } from '../build/profiles.ts'
-import { csp, documentHeaders } from '../src/assets/headers.ts'
+import { documentHeaders } from '../src/assets/headers.ts'
 
 /** The deployment inputs Callback reads, inserted in its positional order. */
 type CallbackInputs = { allowedApplicationOrigins: readonly string[]; ccdpOrigin: string }
@@ -42,8 +42,8 @@ export function prepareCallback(
     headers: {
       ...documentHeaders,
       'Cache-Control': 'no-store',
-      // The artifact declares any popup carrier's connect sources; none means no connections.
-      'Content-Security-Policy': `${csp.base}; script-src ${scriptHash(code)}; style-src 'unsafe-inline'; frame-src ${ccdpOrigin}; connect-src ${parseCsp(policy).get('connect-src')?.join(' ') ?? "'none'"}`,
+      // Inserting data changes no executable, so the artifact's own policy still applies.
+      'Content-Security-Policy': policy,
     },
   }
 }

@@ -33,8 +33,10 @@ sessions. Any session failure aborts sibling work. Successful sessions release
 their own prover/channel; the platform's `finally` abort releases the shared
 runtime. Each request has one 10-second timeout from `send()` until its final
 attestation arrives. The budget includes response receipt, disclosure selection,
-openings and finalization; it does not restart between these steps. WASM/session
-preparation, idle bearer waiting and ZK proving are outside that budget. Timeout
+openings and finalization; it does not restart between these steps. Each session's
+WASM/session preparation has its own 10-second deadline, which fails as that session's
+fetch; together they keep X's token request inside X's 30-second code deadline. Idle
+bearer waiting and ZK proving are outside both. Timeout
 rejects pending calls and terminates the shared worker without waiting for SDK
 completion. The platform retires its proof engine, and Prover reports one failure
 and stops its UI. Types and exact method constraints stay beside the implementation.

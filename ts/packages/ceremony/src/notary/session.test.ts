@@ -177,6 +177,28 @@ it.each(['abort', 'session-error'])(
   },
 )
 
+it('fails a stuck preparation as the fetch it would start, within 10 seconds [LIBID-BROWSER-010]', async () => {
+  vi.useFakeTimers()
+  const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
+  const stuck = notary.prepare(target, { fetch: 'token-fetch', attestation: 'token-attestation' })
+  const rejection = expect(stuck).rejects.toMatchObject({
+    event: 'token-fetch',
+    message: 'Notary preparation timed out',
+  })
+  await vi.advanceTimersByTimeAsync(9999)
+  expect(notary.signal.aborted).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  await rejection
+  expect(notary.signal.aborted).toBe(true)
+  // A prepared session's deadline starts only when it sends.
+  const idle = new NotaryRuntime('https://notary.test', new AbortController().signal)
+  const ready = idle.prepare(target)
+  ports().at(-1)!.postMessage({ type: 'prepared' })
+  await ready
+  await vi.advanceTimersByTimeAsync(60000)
+  expect(idle.signal.aborted).toBe(false)
+})
+
 it('exposes late worker failure after preparation through the runtime signal [LIBID-PROVER-018]', async () => {
   const parent = new AbortController()
   const notary = new NotaryRuntime('https://notary.test', parent.signal)
@@ -289,8 +311,9 @@ it.each(['send', 'reveal', 'attestation'])(
     vi.useFakeTimers()
     const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
     const ready = notary.prepare(target)
-    // Neither cold preparation nor an idle session waiting for its bearer uses the budget.
-    await vi.advanceTimersByTimeAsync(10000)
+    // Neither cold preparation (bounded on its own) nor an idle session waiting for its bearer
+    // uses the budget.
+    await vi.advanceTimersByTimeAsync(9999)
     expect(notary.signal.aborted).toBe(false)
     const port = ports()[0]
     port.postMessage({ type: 'prepared' })

@@ -252,6 +252,7 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
     allowedApplicationOrigins: ['https://other.test', '</script><script>alert(1)</script>$&'],
   })
   assert.equal(a.headers['Content-Security-Policy'], b.headers['Content-Security-Policy'])
+  assert.equal(a.headers['Content-Security-Policy'], headers['content-security-policy'])
   assert.ok(b.body.includes('\\u003c/script>'))
   assert.ok(b.body.includes('$&'))
   assert.equal(a.headers['Cache-Control'], 'no-store')
@@ -270,6 +271,16 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
     prepareCallback(html, { ...headers, 'content-security-policy': "script-src 'self'" }, inputs),
   )
   assert.equal(Object.hasOwn(metadata.headers, '/ccdp/v1/callback.js'), false)
+})
+
+test('only worker entry scripts carry worker isolation policies [LIBID-ASSET-001]', () => {
+  for (const [path, headers] of Object.entries(metadata.headers)) {
+    const node = metadata.graph[path.slice(1)]
+    // Prior immutable responses keep the policy they were published with.
+    if (!path.startsWith('/ccdp/assets/') || !node) continue
+    const worker = /\.worker\.[jt]s$/.test(node.entry ?? '')
+    assert.equal(Object.hasOwn(headers, 'cross-origin-embedder-policy'), worker, path)
+  }
 })
 
 test('CCDP contains no ledger implementation or build-time notary mapping [LIBID-ASSET-003]', () => {
