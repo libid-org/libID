@@ -8,6 +8,7 @@ import type { DistributionMetadata } from './distribution.ts'
 import { parseCsp } from './profiles.ts'
 import { packageDir } from './sources.ts'
 import { errorHeaders, nativeSkip } from './sws.ts'
+import { catalogVersions, proverPair, versionPairs } from './versions.ts'
 
 const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifacts'),
   graph: DistributionMetadata = JSON.parse(
@@ -100,7 +101,44 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
   assert.equal(existsSync(join(out, 'public/manifest.json')), false)
 })
 
-test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018] [TEST-DIST-01] [LIBID-ASSET-014]', {
+test('versions.json names the bundled platform ceremony versions, readable from any origin under the Callback cache policy [KIT-023] [LIBID-ASSET-008]', async () => {
+  const path = '/ccdp/versions.json'
+  const body = readFileSync(join(out, 'public', graph.files[path]), 'utf8')
+  const versions: Record<string, number[]> = JSON.parse(body)
+  assert.equal(graph.files[path], path)
+  assert.deepEqual(graph.headers[path], {
+    'content-type': 'application/json; charset=utf-8',
+    'x-content-type-options': 'nosniff',
+    'cache-control': graph.headers['/ccdp/callback.html']['cache-control'],
+    'access-control-allow-origin': '*',
+    'cross-origin-resource-policy': 'cross-origin',
+  })
+  assert.equal(graph.headers[path]['cache-control'], 'no-cache')
+  // The wildcard is the only CORS grant of the Distribution; nothing else is read cross-origin.
+  for (const [other, headers] of Object.entries(graph.headers))
+    if (other !== path)
+      assert.equal(new Headers(headers).has('Access-Control-Allow-Origin'), false, other)
+  assert.equal(new Headers(errorHeaders).has('Access-Control-Allow-Origin'), false)
+  // Exactly the pairs the Prover bundle executes, one emitted prover chunk and one asset
+  // profile each, as one compact object in catalog order.
+  const prover = Object.values(graph.graph).flatMap((node) => proverPair(node.entry) ?? [])
+  assert.ok(prover.length)
+  assert.deepEqual(new Set(versionPairs(versions)), new Set(prover))
+  assert.deepEqual(new Set(versionPairs(versions)), new Set(Object.keys(graph.requestsByProfile)))
+  assert.equal(body, JSON.stringify(versions))
+  // Exactly the catalog's platforms and versions, in catalog order.
+  assert.deepEqual(Object.entries(versions), Object.entries(await catalogVersions()))
+  for (const [platform, list] of Object.entries(versions)) {
+    assert.match(platform, /^[a-z][a-z0-9-]{0,63}$/)
+    assert.ok(list.length > 0, platform)
+    for (const [index, version] of list.entries()) {
+      assert.ok(Number.isInteger(version) && version >= 0 && version <= 65535, platform)
+      if (index) assert.ok(list[index - 1] < version, platform)
+    }
+  }
+})
+
+test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018] [TEST-DIST-01] [LIBID-ASSET-014] [KIT-023]', {
   skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
   for (const [path, expected] of Object.entries(graph.headers)) {
@@ -123,6 +161,29 @@ test('actual SWS exact-route HTTP policies [CSP-001] [CSP-018] [TEST-DIST-01] [L
   }
 })
 
+test('actual SWS serves versions.json to any origin, varying on nothing but encoding [KIT-023]', {
+  skip: nativeSkip('CEREMONY_SWS_URL'),
+}, async () => {
+  const path = '/ccdp/versions.json'
+  for (const method of ['GET', 'HEAD']) {
+    const response = await fetch(process.env.CEREMONY_SWS_URL + path, {
+      method,
+      headers: { Origin: 'https://app.test', 'Accept-Encoding': 'identity' },
+    })
+    assert.equal(response.status, 200, method)
+    assert.equal(response.redirected, false, method)
+    assert.equal(response.headers.get('access-control-allow-origin'), '*', method)
+    assert.equal(response.headers.get('cross-origin-resource-policy'), 'cross-origin', method)
+    assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8', method)
+    // The wildcard grant is origin-independent; only native negotiation may add a Vary.
+    assert.doesNotMatch(response.headers.get('vary') ?? '', /origin/i, method)
+    assert.ok(response.headers.get('etag'), method)
+    const body = Buffer.from(await response.arrayBuffer())
+    if (method === 'GET') assert.deepEqual(body, readFileSync(join(out, 'public', path)))
+    else assert.equal(body.length, 0)
+  }
+})
+
 test('actual SWS answers the health probe and serves every 404 with the error policy [KIT-001A]', {
   skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
@@ -142,6 +203,8 @@ test('actual SWS answers the health probe and serves every 404 with the error po
     `${asset}/${basename(asset)}`,
     '/ccdp/v1/prefetch.html/prefetch.html',
     '/ccdp/v1/prefetch/prefetch.html',
+    '/ccdp/versions',
+    '/ccdp/versions.json/versions.json',
     '/404.html/404.html',
   ]) {
     const missing = await fetch(url + path)
@@ -216,7 +279,7 @@ test('CCDP contains no ledger implementation or build-time notary mapping [LIBID
   }
 })
 
-test('native SWS negotiates representations, HEAD, conditional requests and ranges [LIBID-ASSET-026] [LIBID-ASSET-016] [KIT-001B]', {
+test('native SWS negotiates representations, HEAD, conditional requests and ranges [LIBID-ASSET-026] [LIBID-ASSET-016] [KIT-001B] [KIT-023]', {
   skip: nativeSkip('CEREMONY_SWS_URL'),
 }, async () => {
   const { request } = await import('node:http')
@@ -240,6 +303,7 @@ test('native SWS negotiates representations, HEAD, conditional requests and rang
     '/ccdp/v1/prover',
     '/ccdp/v1/prover/fallback',
     '/ccdp/v1/worker.js',
+    '/ccdp/versions.json',
     graph.requestsByProfile['google/1'].find((r) => r.url.endsWith('/barretenberg-threads.wasm'))!
       .url,
     ...Object.keys(graph.headers)

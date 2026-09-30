@@ -120,10 +120,13 @@ For another version-one platform:
    the catalog. The asset catalog derives its capacity-checked circuit list from those resource sets.
    Emitted JavaScript dependencies come from the compiler graph; do not copy
    those URLs into the resource set.
-4. Have Bridge advertise the implemented version and any required public
-   token-exchange credential; set `requiresClientCredential` in the catalog.
-   A future Bridge service needs an explicit platform-profile contract. Add
-   configuration and presentation in the [dev app](../../../apps/dev/README.md).
+4. Set `requiresClientCredential` in the catalog when the ceremony sends a
+   public token-exchange credential. The build publishes the catalog's versions
+   in `/ccdp/versions.json` once every pair has an emitted platform prover and
+   an asset profile; the client reads that list, and a Bridge deployment names
+   the platform's one OAuth client, which every version runs. A future
+   Bridge service needs an explicit platform-profile contract. Add configuration
+   and presentation in the [dev app](../../../apps/dev/README.md).
 5. Add canonical vectors, malformed-return/input cases, selected-asset/native-loader
    checks, actual-popup browser flows and released-key-verified real proofs.
    Map applicable [stable test IDs](test-plan.md) in [traceability](traceability.md).
@@ -133,5 +136,7 @@ These three registration points preserve Client/Prefetch import boundaries;
 there is no mutable plugin registry. A **second ceremony version** of a platform
 is the same three registrations under `platforms/<id>/<version>/`: the Prover
 dispatches on the request's platform and version, and the build looks each
-profile's prover up by its own version. Client discovery alone does not
-implement another version.
+profile's prover up by its own version. Client discovery and the published
+version set follow the catalog; the build refuses a catalog entry without an
+emitted platform prover and asset profile, and a prover or profile the
+catalog does not name.

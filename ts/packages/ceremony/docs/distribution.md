@@ -29,6 +29,7 @@ under the ceremony package's `.cache/downloads/`.
 dist-artifacts/
 ├── public/
 │   ├── ccdp/callback.html
+│   ├── ccdp/versions.json
 │   ├── ccdp/v1/prefetch.html
 │   ├── ccdp/v1/prover.html
 │   ├── ccdp/v1/prover-fallback.html
@@ -52,6 +53,27 @@ Unknown routes return 404 with no SPA fallback and an explicit error policy
 (`Cache-Control: no-store` and the inert `404.html` headers, see
 [Native server behavior](#native-server-behavior)): absent cache headers would
 leave a 404 heuristically cacheable.
+
+`/ccdp/versions.json` names the platform ceremony versions the Distribution
+bundles: one JSON object, platform id as the catalog spells it, value the
+nonempty, duplicate-free, ascending list of unsigned 16-bit versions, written in
+catalog order (`{"google":[1],"x":[1],"github":[1]}`). The build derives it from
+the [platform catalog](../src/platforms/index.ts) and fails, naming the pairs
+that differ, unless the executable provers the Prover bundle emits (one chunk
+per `platforms/<platform>/<version>/prover.ts` the
+[platform provers](../src/platforms/provers.ts) load) and
+the asset profiles name exactly that set. The path is unversioned because the
+set is a property of the Distribution, not of one CCDP version. The response is
+`application/json; charset=utf-8` with `X-Content-Type-Options: nosniff` under
+the same `no-cache`/native-ETag policy as `/ccdp/callback.html`, to `GET` and
+`HEAD`, without redirect. The [client](client.md#platform-and-version-discovery)
+reads it from the application's origin, so it alone carries
+`Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`;
+the wildcard grant is origin-independent, so the declared policy has no `Vary`
+(the server's encoding negotiation adds its own, as on every resource). No other
+resource of the Distribution carries a CORS header, CCDP browser resources never
+fetch it, and the Bridge does not retrieve it. It names versions, not assets:
+there is still no browser-visible asset manifest.
 
 ## Source declarations
 
@@ -124,8 +146,9 @@ it never imports execution to discover dependencies.
 [headers.ts](../src/ccdp/headers.ts) holds plain reusable policy records:
 `immutable`, `javascript`, `wasm`, `json`, `document`, `executionWorker`, `dip`
 and `isolated`. Resource declarations compose them with object spread and may
-add explicit headers. [profiles.ts](../build/profiles.ts) applies document and
-worker policies using compiler-produced script hashes and external origins.
+add explicit headers. [profiles.ts](../build/profiles.ts) applies document,
+worker and `versions.json` policies using compiler-produced script hashes and
+external origins.
 No Markdown table or deployment template is another header source.
 
 Declarations own MIME, caching, CSP and isolation policy. SWS owns ETags,
@@ -195,11 +218,14 @@ for readiness and liveness probes. Terminate TLS and set HSTS at the ingress;
 the server emits none. The container writes nothing, so run it read-only with
 all capabilities dropped, as CI does.
 
-Configure the independently deployed Bridge with the CCDP origin and admitted
-application origins. It fetches `/ccdp/callback.html`, inserts deployment JSON
-into its non-executable slot, and serves the complete configured document with
-matching executable hashes. Callback owns clearing and bundled CCDP selection;
-the Bridge injects no code and needs no per-version entry-script table.
+Configure the independently deployed Bridge with the CCDP origin, admitted
+application origins and one OAuth client per platform. It fetches
+`/ccdp/callback.html`, inserts deployment JSON into its non-executable slot, and
+serves the complete configured document with matching executable hashes. It
+retrieves nothing else: the client reads `/ccdp/versions.json` itself and runs
+every version of a platform with that platform's client. Callback owns clearing
+and bundled CCDP selection; the Bridge injects no code, enumerates no versions
+and needs no per-version entry-script table.
 The runnable reference configuration is in
 [the dev app](../../../apps/dev/README.md), not this package.
 
@@ -297,5 +323,8 @@ and derives the prefetch manifest from the emitted Prover graph;
 [assets.ts](../build/assets.ts) resolves declarations;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
 [sources.ts](../build/sources.ts) reads declared sources and caches downloads;
+[source.ts](../build/source.ts) loads a source module into a build script;
+[versions.ts](../build/versions.ts) reads the platform catalog's version set and
+reconciles it with the emitted platform provers and the asset profiles;
 [circuits.ts](../build/circuits.ts) checks capacity;
 [sws.ts](../build/sws.ts) writes files, sidecars and native server configuration.

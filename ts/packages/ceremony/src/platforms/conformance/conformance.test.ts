@@ -238,18 +238,39 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     for (const clientId of [42, null]) expect(platform.isClientId(clientId)).toBe(false)
   })
 
-  it('requires a valid public token-exchange credential in configuration exactly when the catalog does', () => {
+  it('requires a valid public token-exchange credential in configuration exactly when the catalog does [TEST-BRIDGE-03]', () => {
     const { clientCredential, ...withoutCredential } = platformConfig(platformId)
     expect(validate(platformConfig(platformId))).toEqual(platformConfig(platformId))
     if (platform.requiresClientCredential) {
       expect(clientCredential).toBeDefined()
       expect(() => validate(withoutCredential)).toThrow()
     } else
-      expect(validate({ ...withoutCredential, clientCredential: 'public-fixture' })).toMatchObject({
-        clientCredential: 'public-fixture',
-      })
-    for (const clientCredential of ['', 'has space', 'é', 'a\nb', 'x'.repeat(513)])
+      expect(() => validate({ ...withoutCredential, clientCredential: 'public-fixture' })).toThrow()
+    for (const clientCredential of [
+      undefined,
+      null,
+      1,
+      '',
+      'has space',
+      'tail\n',
+      'é',
+      'a\nb',
+      'x'.repeat(513),
+    ])
       expect(() => validate({ ...withoutCredential, clientCredential })).toThrow()
+  })
+
+  it('accepts exactly its one-client configuration record, refusing retired and unknown fields [LIBID-MOD-011] [LIBID-OAUTH-001]', () => {
+    const entry = platformConfig(platformId)
+    for (const value of [
+      ...recordViolations(entry),
+      // Retired per-version shapes: one OAuth client serves every version.
+      { ...entry, ceremonyVersions: [1] },
+      { ...entry, versions: [{ version: 1, clientId: entry.clientId }] },
+      { ...entry, versionOverrides: { '1': { clientId: 'other' } } },
+      { ...entry, tokenExchangeCredential: 'retired' },
+    ])
+      expect(() => validate(value), JSON.stringify(value)).toThrow(TypeError)
   })
 
   it('registers its own prover for its catalog version', async () => {

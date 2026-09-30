@@ -26,7 +26,7 @@ const graph = JSON.parse(readFileSync(join(artifactDir, 'distribution-graph.json
 const registrations = Object.fromEntries(
   Object.entries(browserPlatforms).map(([id, { clientId, clientCredential }]) => [
     id,
-    { clientId, ...(clientCredential && { clientCredential }), ceremonyVersions: [1] },
+    { clientId, ...(clientCredential && { clientCredential }) },
   ]),
 )
 

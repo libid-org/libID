@@ -20,8 +20,8 @@ services:
       - "127.0.0.1:4683:4683"
 
   bridge:
-    # libid-server-rs:0.4.0 by index digest.
-    image: ghcr.io/libid-org/libid-server-rs@sha256:65be861dfadcec292b3641572d2ef9bb08f0cf36c4dc80c94cd2752eab21866a
+    # libid-bridge-rs:0.5.0 by index digest.
+    image: ghcr.io/libid-org/libid-bridge-rs@sha256:e5fcb7a8ef26c4e372302206a1bdb3d0aeb183097a047727210721c7bd386757
     network_mode: service:notary
     depends_on:
       ccdp:

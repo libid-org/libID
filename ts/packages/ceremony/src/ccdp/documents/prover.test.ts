@@ -124,7 +124,7 @@ it.each([
   { platformId: 'github', platformCeremonyVersion: 0 },
   { platformId: 'future', platformCeremonyVersion: 1 },
 ])(
-  'refuses unbundled $platformId/$platformCeremonyVersion before proving [LIBID-ASSET-007]',
+  'refuses unbundled $platformId/$platformCeremonyVersion before proving [LIBID-ASSET-007] [KIT-023]',
   async (pair) => {
     await startProver(proverInput(''))
     // Exercise document dispatch directly: the wire codec also rejects unknown platforms.

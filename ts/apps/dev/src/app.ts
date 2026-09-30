@@ -53,10 +53,10 @@ async function initialize() {
     )
     status.textContent = client.enabledPlatforms.length
       ? 'Ready. Click a platform to start a ceremony.'
-      : 'The Bridge has no compatible platforms enabled.'
+      : 'The Bridge and its CCDP enable no compatible platforms.'
   } catch {
     status.textContent =
-      'Could not load Bridge configuration. Check its address and application allowlist, then reload this page.'
+      'Could not load Bridge configuration or the CCDP version list. Check the Bridge address, its application allowlist and its CCDP, then reload this page.'
   }
 }
 const operationNames: Record<string, string> = {

@@ -1,8 +1,11 @@
 # Client guide
 
-Create one client per Bridge configuration lifetime. It fetches public
-configuration once; create a new client to pick up a changed deployment.
-Bridge selects the CCDP origin. `client.connect(popup, options)` configures
+Create one client per Bridge configuration lifetime. It fetches the Bridge's
+public configuration once, then the version list of the CCDP Distribution that
+configuration names, once; create a new client to pick up a changed deployment.
+Bridge selects the CCDP origin. Both reads are cross-origin `fetch` calls, so an
+application whose Content-Security-Policy has `connect-src` lists the Bridge and
+CCDP origins there. `client.connect(popup, options)` configures
 `@libid/popup` with both exact origins, without duplicating CCDP configuration
 in the application. It returns the ordinary popup connection for application
 composition; window creation and closure remain application-owned.
@@ -97,27 +100,39 @@ neither them nor bearer credentials or private witnesses.
 
 ## Platform and version discovery
 
-- `client.enabledPlatforms`: frozen compatible platform IDs for this Bridge.
-- `client.enabledVersions(platform)`: compatible versions in ascending order;
-  empty for a known disabled platform.
+- `client.enabledPlatforms`: frozen platform IDs the Bridge configures and the
+  Distribution bundles at a version this package implements, in catalog order.
+- `client.enabledVersions(platform)`: the ascending intersection of the package
+  catalog and the Distribution's list; empty for a platform the Bridge does not
+  configure or a known disabled platform.
 - `supportedPlatforms`, exported from either entrypoint: package capabilities
   before fetching configuration. It does not establish Bridge availability.
 
 `PlatformId` is derived from the closed catalog (`google`, `x`, `github`). Display
 names and icons belong to the application. Only ceremony version 1 currently
-exists. An omitted version chooses the highest compatible one; pass the trailing
-version argument explicitly when selecting a particular disclosure behavior.
-Unsupported selections fail synchronously without starting OAuth.
+exists. The versions come from the Distribution's `/ccdp/versions.json`, read
+with `mode: 'cors'`, `credentials: 'omit'`, `cache: 'no-store'` and
+`redirect: 'error'` after the Bridge record: one JSON object, platform id to a
+nonempty, duplicate-free, ascending list of unsigned 16-bit versions. A platform
+key the package does not know is ignored; any other violation, or an
+unavailable list, fails client creation, as an unavailable or malformed Bridge
+record does. The Bridge enumerates no versions: a platform it configures that
+the list omits, and a platform the list names that it does not configure, are
+both disabled. An omitted version chooses the highest compatible one; pass the
+trailing version argument explicitly when selecting a particular disclosure
+behavior. Unsupported selections fail synchronously without starting OAuth.
 
 Client derives fixed `/auth/callback` from its configured Bridge origin; public
 configuration contains no callback path or redirect URI.
 
-GitHub configuration must include `clientCredential`, a nonempty printable
-ASCII public OAuth application credential without whitespace, of at most 512
-bytes. Client freezes and
-forwards it unchanged in `ProveIdentity`; Prover never refetches configuration.
-The field is optional for other platforms and validated whenever present. There
-is no per-ceremony credential override.
+The Bridge record names, per configured platform, one OAuth client: its
+`clientId` and, for GitHub only, a `clientCredential`: a nonempty printable
+ASCII public OAuth application credential without whitespace, of at most 512 bytes. Every version of
+the platform runs that client, frozen and unchanged in the authorization request
+and in `ProveIdentity`; Prover never refetches configuration. A credential on a
+platform whose ceremony sends none, a missing GitHub credential, or any field
+outside the record refuses the whole configuration. A ceremony cannot supply a
+credential of its own.
 
 ## Ledger and notary inputs
 
