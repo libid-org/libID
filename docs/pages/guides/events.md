@@ -103,5 +103,26 @@ const deposits = await client.getContractEvents({
 });
 ```
 
+`Deposited` events tell you what was sent, not what is left. Refunds and
+claims take funds out. To show what an owner can claim now, read
+`escrowed(handleNode, token)` for each token.
+
 Anyone can create a token and deposit it, so do not trust a token just because
 it appears in `Deposited`. Show only the tokens you know.
+
+## Keep an index in sync
+
+If you store events in your own database, follow these rules:
+
+- Read history in block ranges, then switch to watching. Start the watch from
+  the block after the last range you read, so you miss nothing.
+- Save the last block you processed. After a restart or a dropped
+  connection, read from that block again instead of trusting the watcher to
+  catch up.
+- Handle the same event twice without harm. Key each event by its
+  transaction hash and log index.
+- Blocks near the head can be replaced (a reorg). Either wait a few blocks
+  before you treat an event as final, or drop and re-read events from blocks
+  that changed. viem marks a removed log with `removed: true`.
+- When a handle changes owner, the newest `IdentityBound` for that
+  `handleNode` wins. Order events by block number, then log index.

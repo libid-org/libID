@@ -41,10 +41,14 @@ address with `_` or `+` in it has no ENS name.
 
 A handle can be proved on several chains, and each chain has its own
 `IdentityNames`. The name gives the address on the chain the sender asks
-about, and no address on a chain where the handle has no binding. Wallets
-that follow [ENSIP-11](https://docs.ens.domains/ensip/11) ask for the chain
-they are about to send on, so they never send to a chain where the handle
-has no owner.
+about, and no address on a chain where the handle has no binding.
+
+This only protects the sender if the wallet asks about the chain it will send
+on. Wallets that follow [ENSIP-11](https://docs.ens.domains/ensip/11) do,
+MetaMask among them. A client that asks without naming a chain gets the answer
+for Ethereum mainnet. If it then sends on another chain, the funds go to the
+Ethereum owner's address on that chain, who may be a different person or
+nobody.
 
 Add a chain label to make a name work on one chain only:
 

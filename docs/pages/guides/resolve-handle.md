@@ -93,16 +93,31 @@ if (!idAgrees) {
 }
 ```
 
-`idAgrees` is `true` only when the handle and the saved account id still
-point to the same wallet. It is `false` when another account has taken the
-handle since you saved it.
+`resolvePair` compares wallets, not accounts. `idAgrees` is `true` when the
+handle and the saved account id resolve to the same wallet, and that wallet
+is not zero. So:
+
+| What happened since you saved the id | `wallet` | `idAgrees` |
+| --- | --- | --- |
+| Nothing | the same wallet | `true` |
+| The account moved to a new wallet | the new wallet | `true` |
+| Another account, in another wallet, took the handle | the new wallet | `false` |
+| The account switched to a new handle, and nobody holds this one | zero | `false` |
+| Another account in the same wallet took the handle | the same wallet | `true` |
+
+The last row is the one it cannot see: the payment still goes to the same
+wallet, but through a different account.
 
 Only use this with an id you saved earlier. An id you read just now always
 agrees, so the check tells you nothing. If your app has nothing saved, show
 `observedAt` from the section above instead.
 
-Use the result to warn the user. Do not block the payment: the handle now
-belongs to the new owner.
+What to do with `false` depends on what the user asked for:
+
+- "Pay whoever holds @octocat now." The payment is right. Tell the user the
+  handle changed owner, and send.
+- "Pay the person I paid last time." The handle no longer leads to them.
+  Stop and ask the user before sending.
 
 ## From Solidity
 

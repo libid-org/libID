@@ -30,8 +30,10 @@ const escrow = { address: process.env.HANDLE_ESCROW, abi: handleEscrowAbi };
 const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 ```
 
-`NATIVE` is the address the escrow uses for ETH. Find the `HandleEscrow`
-address in [Addresses](/docs/reference/addresses/).
+`NATIVE` is the address the escrow uses for ETH. `HandleEscrow` is not on a
+public network yet. On the [local chain](/docs/guides/local-chain/) its
+address is `0x0B306BF915C4d645ff596e518fAf3F9669b97016`, and a funded
+private key is printed when anvil starts.
 
 ## Hash the handle
 
@@ -101,8 +103,13 @@ tells you how much a refund would return.
 
 ## Claim as the owner
 
-Once Carol proves `carol` on GitHub, she can claim from the wallet she proved
-it with:
+Carol proves `carol` on GitHub with the libID sign-in flow, which binds the
+handle to her wallet. See [How binding works](/docs/advanced/how-binding-works/).
+On the local chain, bind it with the script's `bind` function instead; the
+[local chain guide](/docs/guides/local-chain/#bind-another-handle) shows the
+exact command.
+
+Once `carol` is bound, Carol can claim from that wallet:
 
 ```js
 const hash3 = await wallet.writeContract({

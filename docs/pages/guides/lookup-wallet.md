@@ -51,7 +51,9 @@ for (const account of accounts) {
 Each account has:
 
 - `platformId`: the platform, as `platformId('github')` computes it.
-- `userId`: the account id the platform issued. It never changes.
+- `userId`: the account id the platform issued. It never changes. For
+  Google it is `0x` and a SHA-256 digest of the Google account id, so the
+  real id never reaches the chain.
 - `handle`: the handle this account proved most recently.
 - `handleCurrent`: `false` if another account has since proved the same
   handle. Do not route payments by a handle when this is `false`.

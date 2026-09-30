@@ -11,8 +11,10 @@ wallet and no tokens.
 
 ## Set up
 
-You need [Node.js](https://nodejs.org) 20 or later and an RPC URL for a
-network libID is deployed on. See [Networks](/docs/networks/ethereum/).
+You need [Node.js](https://nodejs.org) 20 or later, and a network that runs
+libID. No public network runs the version these docs describe yet, so start a
+local one: [Test on a local chain](/docs/guides/local-chain/) takes a few
+minutes and gives you known handles, including `octocat`.
 
 Create a project and install [viem](https://viem.sh) and the libID contracts
 package:
@@ -26,7 +28,8 @@ npm install viem @libid/contracts
 ## Connect to IdentityNames
 
 `IdentityNames` is the contract that stores who owns which account. It has
-the same address on every network.
+the same address on every public network. On the local chain it is
+`0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512`; use that instead.
 
 Create `index.mjs`:
 
@@ -76,18 +79,18 @@ belongs to someone else.
 ## Run it
 
 ```sh
-RPC_URL=https://your-rpc-url node index.mjs
+RPC_URL=http://127.0.0.1:8545 node index.mjs
 ```
 
-If `octocat` has a binding, you will see a wallet address and a handle:
+On the local chain you will see:
 
 ```
 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
 octocat
 ```
 
-If nobody has proved `octocat`, you will see `null`. Try a handle you know
-has a binding.
+On another network, you will see `null` if nobody has proved `octocat`
+there.
 
 ## Without code
 
