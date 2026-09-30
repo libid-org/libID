@@ -21,7 +21,7 @@ test('released circuit statistics fit the fixed launch SRS [LIBID-ASSET-013]', a
   const stats = await validateCircuitCapacity(releases, 2 ** 18)
   assert.deepEqual(stats, {
     bearer_link: { gates: 42006, dyadic: 2 ** 16 },
-    oidc_google: { gates: 179443, dyadic: 2 ** 18 },
+    oidc_google: { gates: 188185, dyadic: 2 ** 18 },
   })
   await assert.rejects(validateCircuitCapacity(releases, 2 ** 17), /exceeds/)
   await assert.rejects(

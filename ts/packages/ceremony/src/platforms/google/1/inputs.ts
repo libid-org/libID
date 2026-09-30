@@ -6,6 +6,7 @@ import {
 import { b64urlDecode, isRecord } from '../../../primitives.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../authorization.js'
 import type { ParsedGoogleIdToken } from './token.js'
+import { userIdOf } from './validation.js'
 
 /** Adapt a parsed platform token and the JWK selected by its `kid` to the circuit ABI and delivery. */
 export function prepareGoogleInputs(token: ParsedGoogleIdToken, jwk: unknown) {
@@ -34,7 +35,12 @@ export function prepareGoogleInputs(token: ParsedGoogleIdToken, jwk: unknown) {
   return {
     inputs: buildOidcGoogleInputs(token, modulus, authorizationDigest),
     authorizationDigest,
-    identity: { platformId: 'google' as const, oauthClientId: aud, userId: sub, userName: email },
+    identity: {
+      platformId: 'google' as const,
+      oauthClientId: aud,
+      userId: userIdOf(sub),
+      userName: email,
+    },
     proofFields: { tokenExpiresAt: exp, signingKeyModulus: modulus },
   }
 }

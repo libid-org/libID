@@ -4,12 +4,10 @@ import type { buildOidcGoogleInputs } from '../../../barretenberg/circuits/oidc_
 import {
   googlePublicInputs as BB_PUBLIC_INPUTS,
   googleV1 as fixture,
-  jwtPart,
-  jwtWith,
 } from '../../../testing/index.js'
 import { prepareGoogleInputs } from './inputs.js'
 import { parseGoogleIdToken } from './token.js'
-import { buildGooglePublicInputs, validateProof } from './validation.js'
+import { buildGooglePublicInputs, userIdOf, validateProof } from './validation.js'
 
 const digest = fixture.authorizationDigest
 
@@ -37,7 +35,7 @@ const ABI_KEYS: Array<keyof ReturnType<typeof buildOidcGoogleInputs>> = [
   'redc',
   'authorization_digest',
   'audience_hash',
-  'sub_packed',
+  'user_id_hash',
   'email_packed',
   'exp',
   'modulus',
@@ -46,10 +44,6 @@ const ABI_KEYS: Array<keyof ReturnType<typeof buildOidcGoogleInputs>> = [
 function recompose(limbs: string[]): bigint {
   return limbs.reduce((value, limb, index) => value | (BigInt(limb) << (120n * BigInt(index))), 0n)
 }
-
-const _tokenWith = (change: Parameters<typeof jwtWith>[1]) => jwtWith(fixture.idToken, change)
-
-const _tokenWithPayload = (payload: string) => jwtWith(fixture.idToken, { payload })
 
 describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifier fields', () => {
   it('builds the released ABI exactly from a valid fixed RS256 token and rejects each changed public input [TEST-COMMON-20]', () => {
@@ -94,6 +88,15 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifie
       iss: '1',
       aud: '37',
     })
+    expect(inputs.sub_len).toBe('21')
+    expect(inputs.sub_bytes).toEqual([
+      ...Buffer.from('123456789012345678901'),
+      ...Array(10).fill(0),
+    ])
+    expect(inputs.user_id_hash).toEqual([
+      '0x20078023c9d4bf6bffc2580ec3644607',
+      '0x5d10c8453cecbe4f1cb3d326b2b35560',
+    ])
     expect(inputs.authorization_digest).toEqual(Array.from(digest))
     expect(recompose(inputs.signature)).toBe(
       BigInt(`0x${Buffer.from(signature, 'base64url').toString('hex')}`),
@@ -116,11 +119,14 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifie
   })
 })
 
-it('refuses identifiers the circuit cannot hold with their own message [LIBID-PROVER-002]', () => {
-  const claims = jwtPart(fixture.idToken, 1)
-  const withEmail = (email: string) => jwtWith(fixture.idToken, { payload: { ...claims, email } })
-  expect(() => parseGoogleIdToken(withEmail(`${'a'.repeat(53)}@gmail.com`))).toThrow(
-    'exceed the lengths or characters the circuit supports',
-  )
-  expect(() => parseGoogleIdToken(withEmail(''))).toThrow('invalid Google ID token')
+describe('[TEST-PLAT-02] Google userId', () => {
+  // The platform-ceremonies §2.1 vector, then the ones libid-circuits checks its digest against.
+  it.each([
+    ['123456789012345678901', '0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560'],
+    ['100000000000000000001', '0x121c75456ead3d5fa8f601dbd629bddb84dcdb4934b2a6b6d2e46b5661c6d35b'],
+    ['1', '0xe5192d7e50d10d86d247e162e594fe359699d43cd78d36900994c5517d636029'],
+    [`!${'~'.repeat(30)}`, '0x6c55fe01d503ec6a122a30adcdad519ee185576e6432dfbdeef65a6e3907dd04'],
+  ])('derives the userId of sub %s', (sub, userId) => {
+    expect(userIdOf(sub)).toBe(userId)
+  })
 })

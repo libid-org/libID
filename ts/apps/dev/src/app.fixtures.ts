@@ -34,6 +34,14 @@ export const config = {
   },
 }
 
+/** The identity of the synthetic Google proof the prover fixture delivers. */
+const googleIdentity = {
+  platformId: 'google',
+  oauthClientId: 'client',
+  userId: `0x${'1'.repeat(64)}`,
+  userName: 'a@b.c',
+} as const
+
 export const versionsUrl = `${ccdp}/ccdp/versions.json`
 export const bundled = { google: [1], x: [1], github: [2] }
 
@@ -219,7 +227,7 @@ export async function serveCeremony(context: BrowserContext) {
           ? []
           : buildGooglePublicInputs(
               Uint8Array.from(Buffer.from(nonce, 'base64url')),
-              { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
+              googleIdentity,
               { tokenExpiresAt: 42, signingKeyModulus: new Uint8Array(256) },
             ),
       )};
@@ -279,15 +287,17 @@ export const send = (popup: Page, ...messages: { type: string; timestamp?: numbe
 
 /** Delivers a synthetic Google identity proof: UI delivery only, no proof is generated. */
 export const sendProof = (popup: Page) =>
-  popup.evaluate(() =>
-    window.eventConnection!.send({
-      type: 'identity-proof',
-      identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
-      proof: {
-        identityProof: new Uint8Array([1]),
-        publicInputs: window.googlePublicInputs,
-        tokenExpiresAt: 42,
-        signingKeyModulus: new Uint8Array(256),
-      },
-    }),
+  popup.evaluate(
+    (identity) =>
+      window.eventConnection!.send({
+        type: 'identity-proof',
+        identity,
+        proof: {
+          identityProof: new Uint8Array([1]),
+          publicInputs: window.googlePublicInputs,
+          tokenExpiresAt: 42,
+          signingKeyModulus: new Uint8Array(256),
+        },
+      }),
+    googleIdentity,
   )

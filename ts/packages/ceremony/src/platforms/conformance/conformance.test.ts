@@ -1849,6 +1849,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       })
       await expect((await fixture.prover()).prove(staged.context)).rejects.toMatchObject({
         event: change.rejectedAt,
+        ...(change.message === undefined ? {} : { message: change.message }),
       })
       if (change.rejectedAt === 'authorization') expectNoProvingWork(staged.keys)
       expect(generate).not.toHaveBeenCalled()

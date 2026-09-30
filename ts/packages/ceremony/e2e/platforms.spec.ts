@@ -185,7 +185,7 @@ const evidence = {
         expect(result.identity).toEqual({
           platformId: platform,
           oauthClientId: browserPlatforms[platform].clientId,
-          userId: '123456789012345678901',
+          userId: '0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560',
           userName: 'holder@example.com',
         })
         const proof: GoogleProofV1 = {

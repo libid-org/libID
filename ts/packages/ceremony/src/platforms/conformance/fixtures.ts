@@ -126,6 +126,8 @@ export interface EvidenceChange {
   jwk?: (jwk: Record<string, string>) => Record<string, string>
   /** `authorization` rejects before any key fetch or engine start. */
   rejectedAt: 'authorization' | 'signing-key-fetch' | 'circuit-inputs'
+  /** The refusal's text, where the prover names its cause. */
+  message?: string
 }
 
 export type PlatformFixture<P extends PlatformId> = BearerLinkFixture<P> | OidcFixture<P>
@@ -171,8 +173,7 @@ export const googleV1 = {
 }
 
 // Generated once by running googleV1 through the official libid-circuits
-// v0.3.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter. The v0.4.0 release ships a
-// byte-identical circuit and key.
+// v0.5.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter.
 export const googlePublicInputs = [
   '0x00000000000000000000000000000000000000000000000000000000000000b3',
   '0x0000000000000000000000000000000000000000000000000000000000000018',
@@ -208,7 +209,8 @@ export const googlePublicInputs = [
   '0x00000000000000000000000000000000000000000000000000000000000000f5',
   '0x000000000000000000000000000000002f36be056956af2b8464eba0d8b9c613',
   '0x00000000000000000000000000000000f8c22af17a2f81cb1421e176333e62ab',
-  '0x0031323334353637383930313233343536373839303100000000000000000000',
+  '0x0000000000000000000000000000000020078023c9d4bf6bffc2580ec3644607',
+  '0x000000000000000000000000000000005d10c8453cecbe4f1cb3d326b2b35560',
   '0x00686f6c646572406578616d706c652e636f6d00000000000000000000000000',
   '0x0000000000000000000000000000000000000000000000000000000000000000',
   '0x0000000000000000000000000000000000000000000000000000000066d17750',
@@ -244,6 +246,17 @@ const payloadText = (idToken: string, change: (json: string) => string) =>
 const expiry = (exp: unknown): EvidenceChange => ({
   idToken: (idToken) => jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), exp } }),
   rejectedAt: 'authorization',
+})
+
+/** How the runtime refuses identifiers the circuit cannot hold, before the key fetch. */
+const circuitRefusal =
+  'Google account identifiers exceed the lengths or characters the circuit supports'
+
+/** A token claiming `sub` as given, refused with `message`. */
+const subject = (sub: string, message = circuitRefusal): EvidenceChange => ({
+  idToken: (idToken) => jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), sub } }),
+  rejectedAt: 'authorization',
+  message,
 })
 
 /** `field` with its low bit flipped: still canonical, but a different value. */
@@ -337,17 +350,29 @@ export const fixtures = {
     identity: {
       platformId: 'google',
       oauthClientId: googleClaims.aud,
-      userId: googleClaims.sub,
+      // The platform-ceremonies §2.1 userId of the token's `sub`.
+      userId: '0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560',
       userName: googleClaims.email,
     },
     longest: {
       platformId: 'google',
       oauthClientId: 'a'.repeat(128),
-      userId: '1'.repeat(31),
+      userId: `0x${'f'.repeat(64)}`,
       userName: `${'a'.repeat(50)}@example.com`,
     },
-    // The shared quote, control and non-ASCII cases are exactly what circuit text excludes.
-    rejectedIdentity: { oauthClientId: [], userId: [], userName: [] },
+    // Circuit text excludes exactly the shared quote, control and non-ASCII cases. A userId is
+    // only the lowercase digest spelling, never the `sub` itself.
+    rejectedIdentity: {
+      oauthClientId: [],
+      userId: [
+        googleClaims.sub,
+        `0x${'A'.repeat(64)}`,
+        `0X${'a'.repeat(64)}`,
+        'a'.repeat(66),
+        `0x${'a'.repeat(63)}`,
+      ],
+      userName: [],
+    },
     admittedClientIds: ['a+b'],
     proof: {
       identityProof: new Uint8Array([1]),
@@ -367,7 +392,7 @@ export const fixtures = {
         [],
         googlePublicInputs.slice(1),
         [...googlePublicInputs, googlePublicInputs[0]],
-        new Array(56),
+        new Array(57),
         ...[
           0,
           null,
@@ -427,6 +452,7 @@ export const fixtures = {
             payload: { ...jwtPart(idToken, 1), email: `${'a'.repeat(53)}@gmail.com` },
           }),
         rejectedAt: 'authorization',
+        message: circuitRefusal,
       },
       'a nonce of the wrong width': {
         idToken: (idToken) =>
@@ -453,6 +479,13 @@ export const fixtures = {
           jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), email_verified: false } }),
         rejectedAt: 'authorization',
       },
+      // Only the userId hash leaves the circuit, which rejects these; the runtime refuses them first.
+      'an empty sub': subject('', 'invalid Google ID token'),
+      'a quote in the sub [REQ-PLAT-16C]': subject('a"b'),
+      'a control byte in the sub [REQ-PLAT-16C]': subject('a\x1fb'),
+      'a delete byte in the sub [REQ-PLAT-16C]': subject('a\x7fb'),
+      'a non-ASCII sub [REQ-PLAT-16C]': subject('é'),
+      'a sub over 31 bytes [REQ-PLAT-16C]': subject('1'.repeat(32)),
       'a fractional expiry [TEST-COMMON-12]': expiry(1.5),
       'a negative expiry [TEST-COMMON-12]': expiry(-1),
       'an unrepresentable expiry [TEST-COMMON-12]': expiry(2 ** 64),
@@ -475,7 +508,10 @@ export const fixtures = {
         identity: { ...identity, oauthClientId: 'other' },
         proof,
       }),
-      subject: ({ identity, proof }) => ({ identity: { ...identity, userId: '2' }, proof }),
+      'user ID': ({ identity, proof }) => ({
+        identity: { ...identity, userId: flipped(identity.userId) },
+        proof,
+      }),
       email: ({ identity, proof }) => ({
         identity: { ...identity, userName: 'b@example.com' },
         proof,

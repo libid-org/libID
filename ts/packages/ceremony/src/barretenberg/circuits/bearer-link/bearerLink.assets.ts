@@ -3,8 +3,8 @@ import { notaryAssets } from '../../../notary/notary.assets.js'
 import { proofAssets } from '../../barretenberg.assets.js'
 
 const release = archive(
-  'https://github.com/libid-org/libid-circuits/releases/download/v0.4.0/libid-circuits-0.4.0-bearer-link.tar.gz',
-  'circuits/v0.4.0/bearer-link',
+  'https://github.com/libid-org/libid-circuits/releases/download/v0.5.0/libid-circuits-0.5.0-bearer-link.tar.gz',
+  'circuits/v0.5.0/bearer-link',
 )
 
 export const circuit = release.member('bearer_link.json', {
