@@ -54,7 +54,11 @@ const inlineScript = (code: string) => code.replace(/<\/script/gi, '<\\/script')
 const page = (title: string, content: string) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body>${content}</body></html>`
 
-/** Each profile's declared assets and its platform entry's emitted closure, then the allowlist. */
+/**
+ * Each profile's declared assets and its platform entry's emitted closure, then the allowlist.
+ * The closure stops at other platforms' provers: the prover table reaches every one of them
+ * lazily, but a run loads only its own.
+ */
 function assetManifest(
   data: ResolvedAssets,
   graph: ReadonlyMap<string, BundleNode>,
@@ -62,10 +66,12 @@ function assetManifest(
   records: Records,
   external: readonly ExternalAsset[],
 ): AssetManifest {
-  const closure = (file: string, set = new Set<string>()): Set<string> => {
-    if (set.has(file)) return set
+  const closure = (profile: string, file: string, set = new Set<string>()): Set<string> => {
+    const pair = proverPair(graph.get(file)?.entry ?? null)
+    if (set.has(file) || (pair !== undefined && pair !== profile)) return set
     set.add(file)
-    for (const next of graph.get(file)?.dependencies ?? []) closure(next.replace(/^\//, ''), set)
+    for (const next of graph.get(file)?.dependencies ?? [])
+      closure(profile, next.replace(/^\//, ''), set)
     return set
   }
   const local = (url: string): AssetRequest => {
@@ -79,7 +85,7 @@ function assetManifest(
     if (!entry) throw new Error(`Missing emitted platform entry: ${profile}`)
     requestsByProfile[profile] = unique([
       ...assets.map((a) => (a.isExternal ? externalRequest(a) : local(data.urls[assetKey(a)]))),
-      ...[...closure(entry)].map((file) => local(`/${file}`)),
+      ...[...closure(profile, entry)].map((file) => local(`/${file}`)),
     ])
   }
   const allowedRequests = unique([

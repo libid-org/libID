@@ -15,7 +15,7 @@ const out = process.env.CEREMONY_ARTIFACT_DIR ?? join(packageDir, 'dist-artifact
     readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
   )
 
-test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-PROVER-005]', () => {
+test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-ASSET-012] [LIBID-PROVER-005]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
   assert.equal((config.general as TomlTable)['text-charset'], false)
   assert.equal(Object.hasOwn(config.general as object, 'port'), false)
@@ -87,6 +87,15 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
     assert.ok(existsSync(join(out, 'public', `${wasm.url}.${extension}`)))
   assert.ok(!google.some((r) => r.url.includes('tlsn')))
   assert.ok(x.some((r) => r.url.endsWith('/tlsn_wasm.js')))
+  // Code follows the same split: a profile loads its own platform's prover only, and a profile
+  // without the notary client loads none of the notary runtime.
+  const modules = (list: typeof google) =>
+    list.flatMap((r) => graph.graph[r.url.slice(1)]?.modules ?? [])
+  for (const [profile, list] of Object.entries(graph.requestsByProfile))
+    assert.deepEqual([...new Set(modules(list).map(proverPair).filter(Boolean))], [profile])
+  assert.ok(!modules(google).some((m) => m.includes('/src/notary/session')))
+  for (const list of [x, github])
+    assert.ok(modules(list).some((m) => m.includes('/src/notary/session')))
   assert.ok(!google.some((r) => r.url.endsWith('/bearer_link.json')))
   assert.ok(!x.some((r) => r.url.endsWith('/oidc_google.json')))
   assert.deepEqual(

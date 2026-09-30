@@ -206,8 +206,16 @@ export async function bundle(
             selfContained || !groupModules
               ? undefined
               : (id) => {
+                  // Circuits follow the platforms that import them, as platform modules do.
+                  if (id.includes('/src/barretenberg/circuits/')) return
                   if (id.includes('/src/barretenberg/')) return 'proof-engine'
-                  if (id.includes('/src/notary/')) return 'notary'
+                  // The catalog validates attestations with the decoder and its constants;
+                  // only the notary runtime stays in a chunk that a profile without it skips.
+                  if (
+                    id.includes('/src/notary/') &&
+                    !/\/notary\/(decode|limits|protocol)\.ts$/.test(id)
+                  )
+                    return 'notary'
                   // Platform modules, the prover table among them, stay out of the shared
                   // chunk: on a chunk every prover imports, the table would put every
                   // prover in every profile's set.

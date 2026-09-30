@@ -133,7 +133,9 @@ Each platform/version composes shared handles and its circuit/key in an asset
 leaf; X and GitHub share the bearer-link leaf.
 [platforms.assets.ts](../src/platforms/platforms.assets.ts) collects those sets and
 derives the circuit list whose capacity the build checks. The compiler adds the selected execution chunks and nested-worker
-edges, so their filenames are not declared again. Prefetch consumes metadata;
+edges, so their filenames are not declared again. A profile's chunks stop at other
+platforms' provers, which the prover table reaches only lazily, and the notary runtime
+has its own chunk, so Google fetches no notary code. Prefetch consumes metadata;
 it never imports execution to discover dependencies.
 
 ## Headers and compression
