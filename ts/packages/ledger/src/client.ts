@@ -1,41 +1,18 @@
-import type { Address, Hex, PublicClient } from 'viem'
-import { eip155 } from './eip155.js'
+import { eip155 } from './eip155/client.js'
+import type * as Eip155 from './eip155/index.js'
 import type { Account, Ledger, Namespace } from './index.js'
 
 export { LedgerError, type LedgerErrorCode } from './errors.js'
 
-/** A read pinned to one block. Actions default `blockNumber` (or `toBlock`) to `block`. */
-export interface Eip155Reader {
-  readonly ledger: Ledger<`eip155:${string}`>
-  readonly block: bigint
-  readonly readContract: PublicClient['readContract']
-  readonly getContractEvents: PublicClient['getContractEvents']
-  readonly getBalance: PublicClient['getBalance']
-  readonly call: PublicClient['call']
-  /** A named ledger deployment, checksummed; throws if the ledger has none. */
-  address(name: string): Address
-  parseAccount(raw: string): Account
-}
-export interface Eip155Tx {
-  to: Address
-  data: Hex
-  value?: bigint
-}
-/** The EIP-1193 surface a session uses. */
-export interface Eip1193Provider {
-  request(args: { method: string; params?: unknown }): Promise<unknown>
-  on(event: string, listener: (...args: unknown[]) => void): unknown
-  removeListener(event: string, listener: (...args: unknown[]) => void): unknown
-}
-
+/** Namespace-specific types, keyed by namespace; each namespace's module defines its own. */
 export interface Readers {
-  eip155: Eip155Reader
+  eip155: Eip155.Reader
 }
 export interface Txs {
-  eip155: Eip155Tx
+  eip155: Eip155.Tx
 }
 export interface Wallets {
-  eip155: Eip1193Provider
+  eip155: Eip155.Provider
 }
 export type NamespaceOf<L extends Ledger> =
   L['chain'] extends `${infer N extends Namespace}:${string}` ? N : never

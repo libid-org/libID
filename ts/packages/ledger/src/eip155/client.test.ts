@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { createPublicClient, custom, defineChain, HttpRequestError, http, toHex } from 'viem'
 import { afterEach, expect, it, vi } from 'vitest'
-import { readMethods, walletReads } from './eip155.js'
+import { readMethods, walletReads } from './client.js'
 
 type Request = { method: string; params?: unknown }
 

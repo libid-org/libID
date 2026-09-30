@@ -20,6 +20,10 @@
       "types": "./dist/client.d.ts",
       "default": "./dist/client.js"
     },
+    "./eip155": {
+      "types": "./dist/eip155/index.d.ts",
+      "default": "./dist/eip155/index.js"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"

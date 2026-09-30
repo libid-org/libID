@@ -12,16 +12,10 @@ import {
   type Transport,
   toHex,
 } from 'viem'
-import type {
-  Access,
-  Eip155Reader,
-  Eip155Tx,
-  Eip1193Provider,
-  LedgerClient,
-  Session,
-} from './client.js'
-import { errorCode, LedgerError } from './errors.js'
-import type { Account, Ledger } from './index.js'
+import type { Access, LedgerClient, Session } from '../client.js'
+import { errorCode, LedgerError } from '../errors.js'
+import type { Account, Ledger } from '../index.js'
+import type { Provider, Reader, Tx } from './index.js'
 
 type Request = { method: string; params?: unknown }
 type Client = PublicClient<Transport, Chain>
@@ -75,7 +69,7 @@ export function eip155<L extends Ledger>(ledger: L, access: Access): LedgerClien
       }),
       parseAccount,
       async read<A extends readonly unknown[], R>(
-        query: { eip155: (read: Eip155Reader, ...args: A) => Promise<R> },
+        query: { eip155: (read: Reader, ...args: A) => Promise<R> },
         args: A,
         { signal }: { signal?: AbortSignal } = {},
       ): Promise<R> {
@@ -92,7 +86,7 @@ export function eip155<L extends Ledger>(ledger: L, access: Access): LedgerClien
             signal?.throwIfAborted()
             return result
           }) as F
-        const reader: Eip155Reader = {
+        const reader: Reader = {
           ledger: ledger as Ledger<`eip155:${string}`>,
           block,
           readContract: pin(client.readContract, 'blockNumber'),
@@ -109,12 +103,12 @@ export function eip155<L extends Ledger>(ledger: L, access: Access): LedgerClien
         return query.eip155(reader, ...args)
       },
       tx<A extends readonly unknown[]>(
-        command: { eip155: (ledger: Ledger, ...args: A) => Eip155Tx },
+        command: { eip155: (ledger: Ledger, ...args: A) => Tx },
         args: A,
-      ): Eip155Tx {
+      ): Tx {
         return command.eip155(ledger, ...args)
       },
-      async estimate(tx: Eip155Tx, from: Account): Promise<bigint> {
+      async estimate(tx: Tx, from: Account): Promise<bigint> {
         const [gas, fees] = await Promise.all([
           client.estimateGas({ ...tx, account: from as `0x${string}` }),
           client.estimateFeesPerGas().catch((error) => {
@@ -127,7 +121,7 @@ export function eip155<L extends Ledger>(ledger: L, access: Access): LedgerClien
     }
   }
 
-  async function switchChain(provider: Eip1193Provider) {
+  async function switchChain(provider: Provider) {
     const params = [{ chainId: toHex(chainId) }]
     try {
       try {
@@ -156,7 +150,7 @@ export function eip155<L extends Ledger>(ledger: L, access: Access): LedgerClien
     if ((await walletChain(provider)) !== chainId) throw new LedgerError('wrong-chain')
   }
 
-  function session(provider: Eip1193Provider, address: `0x${string}`): Session<L> {
+  function session(provider: Provider, address: `0x${string}`): Session<L> {
     const transport = walletReads(provider, chainId, fallback)
     const client: Client = createPublicClient({
       chain,
@@ -165,7 +159,7 @@ export function eip155<L extends Ledger>(ledger: L, access: Access): LedgerClien
     return {
       ...reads(client),
       account: address as Account,
-      async send(tx: Eip155Tx) {
+      async send(tx: Tx) {
         let requested = false
         try {
           const [current, walletChainId] = await Promise.all([
@@ -226,7 +220,7 @@ function walletError(error: unknown, otherwise: 'no-account' | 'wrong-chain') {
   return new LedgerError(errorCode(error) === 4001 ? 'rejected' : otherwise, { cause: error })
 }
 
-async function walletAccount(provider: Eip1193Provider, prompt: boolean) {
+async function walletAccount(provider: Provider, prompt: boolean) {
   const accounts = await provider.request({
     method: prompt ? 'eth_requestAccounts' : 'eth_accounts',
   })
@@ -234,7 +228,7 @@ async function walletAccount(provider: Eip1193Provider, prompt: boolean) {
   return typeof first === 'string' && isAddress(first) ? getAddress(first) : null
 }
 
-async function walletChain(provider: Eip1193Provider): Promise<number> {
+async function walletChain(provider: Provider): Promise<number> {
   const value = await provider.request({ method: 'eth_chainId' })
   // WalletConnect's provider returns a number for this request.
   if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value
@@ -254,9 +248,9 @@ type WalletConnectSession = {
 }
 
 /** A WalletConnect provider exposes its CAIP-25 session; injected providers do not. */
-const isWalletConnect = (provider: Eip1193Provider) => 'session' in provider
+const isWalletConnect = (provider: Provider) => 'session' in provider
 
-function approved(provider: Eip1193Provider, chainId: number, method: string) {
+function approved(provider: Provider, chainId: number, method: string) {
   if (!isWalletConnect(provider) || method === 'eth_chainId') return true
   const chain = `eip155:${chainId}`
   const namespaces = (provider as WalletConnectSession).session?.namespaces ?? {}
@@ -273,7 +267,7 @@ function approved(provider: Eip1193Provider, chainId: number, method: string) {
  * A read that crosses a chain change is discarded rather than trusted.
  */
 export function walletReads(
-  provider: Eip1193Provider,
+  provider: Provider,
   chainId: number,
   fallback: { request(request: never): Promise<unknown> },
 ) {

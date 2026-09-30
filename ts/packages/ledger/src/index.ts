@@ -1,5 +1,4 @@
-import { keccak_256 } from '@noble/hashes/sha3.js'
-import { hexToBytes } from '@noble/hashes/utils.js'
+import * as eip155 from './eip155/chain.js'
 
 /** Ledger definitions own their chain identity, Chain Profile hash and notary routing. */
 export interface LedgerId {
@@ -48,8 +47,8 @@ export function defineLedger<
 >(definition: LedgerDefinition<C, A>): Ledger<C, Readonly<A>> {
   const { chain, name, testnet, currency, notary, addresses } = definition
   // ponytail: eip155 only; dispatch on the namespace when a second one lands.
-  const reference = /^eip155:([1-9][0-9]{0,31})$/.exec(chain)?.[1]
-  if (!reference) throw new TypeError(`Unsupported chain: ${chain}`)
+  const hash = eip155.chainHash(chain)
+  if (!hash) throw new TypeError(`Unsupported chain: ${chain}`)
   if (
     !name ||
     !currency.symbol ||
@@ -61,10 +60,8 @@ export function defineLedger<
   }
   // The notary origin is validated by the ceremony when a run snapshots the ledger.
   for (const [key, value] of Object.entries(addresses)) {
-    if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new TypeError(`Invalid ${key} address`)
+    if (!eip155.isAddress(value)) throw new TypeError(`Invalid ${key} address`)
   }
-  // Matches `keccak256(abi.encode(block.chainid))` in the ceremony verifier contracts.
-  const hash = keccak_256(hexToBytes(BigInt(reference).toString(16).padStart(64, '0')))
   return Object.freeze({
     chain,
     name,

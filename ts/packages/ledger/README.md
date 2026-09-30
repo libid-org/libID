@@ -44,10 +44,12 @@ Prover has no ledger dependency.
 
 `@libid/ledger/client` runs reads and writes without knowing what they mean.
 The layer above describes them with one function per namespace, so adding a
-namespace fails to compile until every query and command implements it:
+namespace fails to compile until every query and command implements it. Each
+namespace's own types (`Reader`, `Tx`, `Provider`) live in its module, such as
+`@libid/ledger/eip155`; the client entry point stays namespace-agnostic:
 
 ```ts
-import { connect, type Command, type Query } from '@libid/ledger/client'
+import { connect, type Query } from '@libid/ledger/client'
 
 const resolveHandle: Query<[platform: `0x${string}`, handle: string], `0x${string}`> = {
   eip155: (read, platform, handle) =>
