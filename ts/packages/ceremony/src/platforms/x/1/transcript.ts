@@ -1,5 +1,5 @@
+import { bearerTranscript } from '../../../barretenberg/circuits/bearer-link/transcript.js'
 import { isRecord } from '../../../primitives.js'
-import { bearerTranscript } from '../../bearer-transcript.js'
 import { isUserName, profile } from './profile.js'
 
 export const {

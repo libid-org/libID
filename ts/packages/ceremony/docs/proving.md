@@ -12,7 +12,7 @@ returns one proof and destroys its worker. Platform owners call `destroy()` in
 `finally` to cover abandoned or failed work. AbortSignals retire pending work;
 late initialization cannot resurrect a settled engine.
 
-[BearerLinkProver](../src/barretenberg/circuits/bearer_link/prover.ts) owns the
+[BearerLinkCircuit](../src/barretenberg/circuits/bearer-link/circuit.ts) owns the
 bearer circuit/key selection, witness preparation and public-input check. Its
 constructor starts the engine before token exchange; `prove()` consumes the
 selected private openings and returns proof bytes. The shared platform flow
@@ -43,7 +43,7 @@ against released keys and rejects altered public inputs.
 | Owner | Use |
 |---|---|
 | [oidc_google](../src/barretenberg/circuits/oidc_google/) | The released Google OIDC circuit's ABI encoding; the Google platform owns JWT extraction, identity and semantic public inputs. |
-| [bearer_link](../src/barretenberg/circuits/bearer_link/) | One private bearer opening token and identity commitments, shared by X/GitHub. |
+| [bearer_link](../src/barretenberg/circuits/bearer-link/) | One private bearer opening token and identity commitments, shared by X/GitHub. |
 
 The circuit repository owns the relation and ABI. Owner asset declarations pin
 compiled circuits and their keys together. Each circuit’s `parameters.ts` owns

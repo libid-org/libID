@@ -214,18 +214,17 @@ export function verifyAttestation(
   return decoded
 }
 
-/** Select one provisional opening and reconstruct SHA256(bearer || blinder) for the link witness. */
-export function bearerOpening(
+/** Select the one provisional opening of `range` and rebuild its commitment from known plaintext. */
+export function plaintextOpening(
   openings: readonly CommitmentOpening[],
   direction: 'sent' | 'received',
   range: ByteRange,
-  bearer: string,
+  plaintext: Uint8Array,
 ) {
   const matches = openings.filter((o) => o.direction === direction && sameRange(o, range))
-  if (matches.length !== 1) throw new Error('Bearer opening is not unique')
-  const opening = matches[0],
-    bytes = new TextEncoder().encode(bearer)
-  if (opening.blinder.length !== BLINDER_BYTES || opening.end - opening.start !== bytes.length)
-    throw new Error('Invalid bearer opening')
-  return { ...opening, hash: commitmentHash(bytes, opening.blinder) }
+  if (matches.length !== 1) throw new Error('Plaintext opening is not unique')
+  const opening = matches[0]
+  if (opening.blinder.length !== BLINDER_BYTES || opening.end - opening.start !== plaintext.length)
+    throw new Error('Invalid plaintext opening')
+  return { ...opening, hash: commitmentHash(plaintext, opening.blinder) }
 }

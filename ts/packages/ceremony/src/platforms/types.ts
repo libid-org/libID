@@ -4,10 +4,6 @@ import type { PlatformId } from './index.js'
 /** Browser acceptance cap on opaque ZK proof bytes, not a circuit dimension. */
 const MAX_PROOF_BYTES = 4 * 1024 * 1024
 
-/** X/GitHub identifiers are nonzero decimal u64 values. */
-const MAX_USER_ID = 0xffffffffffffffffn
-export const MAX_USER_ID_CHARS = MAX_USER_ID.toString().length
-
 export interface Identity<P extends PlatformId = PlatformId> {
   platformId: P
   oauthClientId: string
@@ -32,6 +28,3 @@ export const identityValidator = <P extends PlatformId>(
     userId: stringWhere(valid.userId),
     userName: stringWhere(valid.userName),
   })
-
-export const isUserId = (value: string): boolean =>
-  value.length <= MAX_USER_ID_CHARS && /^[1-9][0-9]*$/.test(value) && BigInt(value) <= MAX_USER_ID

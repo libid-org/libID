@@ -14,7 +14,7 @@ and assembles `OAuthProof`. Neither performs final cryptographic verification in
 | [ccdp/index](../src/ccdp/index.ts), [navigation](../src/ccdp/navigation.ts) | Browser-free message companions and route/fragment codecs. |
 | [ccdp/documents](../src/ccdp/documents/) | [Callback](../src/ccdp/documents/callback.ts), [Prefetch/Worker](../src/ccdp/documents/prefetch.ts) and [Prover](../src/ccdp/documents/prover.ts) entrypoints; package-owned UI. |
 | [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its prover. |
-| [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker and circuit ABI encoding; platform identity/proof assembly stays under platforms. |
+| [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker and its circuits: the oidc_google ABI, and the bearer-link circuit with the X/GitHub prover built on it. Google identity/proof assembly stays under platforms. |
 | [notary](../src/notary/session.ts) | TLSNotary sessions, HTTP/transcript helpers, canonical decoding and evidence correlation. |
 | [assets](../src/assets/index.ts) | Resource declarations and resolution, root Worker registration, byte caches and pending fetches. |
 | [build](../build/distribution.ts) | Compile the dependency graph and emit static files, response policies and the bundled version set. |

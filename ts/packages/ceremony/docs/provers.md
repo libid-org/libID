@@ -57,9 +57,9 @@ verify the proof or establish trust in the signing key; the ledger remains autho
 
 [X](../src/platforms/x/1/prover.ts) and [GitHub](../src/platforms/github/1/prover.ts)
 validate their returns and supply transcript profiles to
-[the shared bearer-link prover](../src/platforms/bearer.ts). It overlaps:
+[the shared bearer-link prover](../src/barretenberg/circuits/bearer-link/prover.ts). It overlaps:
 
-1. Start the [bearer circuit prover](../src/barretenberg/circuits/bearer_link/prover.ts)
+1. Start the [bearer-link circuit](../src/barretenberg/circuits/bearer-link/circuit.ts)
    and prepare token/identity sessions in one
    ceremony-owned notary runtime. Each TLS session has its own channel.
 2. Send the token request and parse its bearer. Start token reveal/finalization;
@@ -82,10 +82,10 @@ browser HTTP exchange. The [public-client profile](https://github.com/libid-org/
 owns GitHub's request layout; deployed verifiers must accept it.
 
 X and GitHub share the `bearer_link` circuit and
-[transcript machinery](../src/platforms/bearer-transcript.ts).
+[transcript machinery](../src/barretenberg/circuits/bearer-link/transcript.ts).
 Each platform's `profile.ts` owns endpoints, request fields, identity headers and
 user-name grammar; `transcript.ts` supplies its transcript selectors.
-[bearer-types.ts](../src/platforms/bearer-types.ts) supplies the shared
+[bearer-link/types.ts](../src/barretenberg/circuits/bearer-link/types.ts) supplies the shared
 client ID, identity and proof validators under each platform's names. The shared
 machinery validates the common token inputs (form client ID, code, redirect URI,
 PKCE verifier) and the circuit-width bearer once for both. Delivery
@@ -99,7 +99,7 @@ For another version-one platform:
    profile), `types.ts` (client ID, identity and proof validation, plus a
    `proofExpiresAt` adapter), event definitions
    (core operations and separate UI weights), `<id>.assets.ts` and `prover.ts`;
-   X/GitHub share `bearer.events.ts` and `bearer.assets.ts` instead. Reuse shared parsers,
+   X/GitHub share `barretenberg/circuits/bearer-link/` instead. Reuse shared parsers,
    notary sessions and circuit adapters only where their contracts fit. Keep
    platform-specific selectors and fixtures beside their tests.
 2. Register its lightweight definition in [the catalog](../src/platforms/index.ts).

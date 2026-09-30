@@ -1,14 +1,14 @@
-import { BearerLinkProver } from '../barretenberg/circuits/bearer_link/prover.js'
-import { CeremonyError, ceremonyError } from '../errors.js'
-import { operation } from '../events.js'
-import { responseJson } from '../notary/http.js'
-import type { Reveals } from '../notary/protocol.js'
-import { Notarization, type NotarizationSession } from '../notary/session.js'
-import { isRecord } from '../primitives.js'
-import type { BearerTranscript } from './bearer-transcript.js'
-import type { BearerLinkProofV1 } from './bearer-types.js'
-import type { ProverContext } from './context.js'
-import type { Identity } from './types.js'
+import { CeremonyError, ceremonyError } from '../../../errors.js'
+import { operation } from '../../../events.js'
+import { responseJson } from '../../../notary/http.js'
+import type { Reveals } from '../../../notary/protocol.js'
+import { Notarization, type NotarizationSession } from '../../../notary/session.js'
+import type { ProverContext } from '../../../platforms/context.js'
+import type { Identity } from '../../../platforms/types.js'
+import { isRecord } from '../../../primitives.js'
+import { BearerLinkCircuit } from './circuit.js'
+import type { BearerTranscript } from './transcript.js'
+import type { BearerLinkProofV1 } from './types.js'
 
 /** Attribute a failure to the operation it interrupted. */
 const failsAs = <T>(p: Promise<T>, event: string) =>
@@ -20,7 +20,7 @@ const failsAs = <T>(p: Promise<T>, event: string) =>
 export async function proveBearerLink<P extends 'x' | 'github'>(
   context: ProverContext,
   platformId: P,
-  profile: BearerTranscript,
+  transcript: BearerTranscript,
   code: string,
 ): Promise<{ identity: Identity<P>; proof: BearerLinkProofV1 }> {
   const { emit, request } = context
@@ -34,10 +34,10 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     codeVerifier: request.codeVerifier!,
     clientCredential,
   }
-  const tokenRequest = profile.buildTokenRequest(input)
+  const tokenRequest = transcript.buildTokenRequest(input)
   const controller = new AbortController()
   const signal = AbortSignal.any([context.signal, controller.signal])
-  const prover = new BearerLinkProver(emit)
+  const circuit = new BearerLinkCircuit(emit)
   // Observe every provisional branch immediately; any failure retires sibling work.
   const observe = <T>(p: Promise<T>) => {
     void p.catch((error) => controller.abort(error))
@@ -61,14 +61,14 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
       'token-fetch',
     )
     const identityPrepared = branch(
-      notary.prepare(profile.identityUrl, 'identity-attestation'),
+      notary.prepare(transcript.identityUrl, 'identity-attestation'),
       'identity-fetch',
     )
     const token = await operation(emit, 'token-fetch', async () => {
       const session = await tokenPrepared
-      const transcript = await session.send(tokenRequest)
-      const body = responseJson(transcript)
-      const selected = profile.selectToken(transcript, input)
+      const sent = await session.send(tokenRequest)
+      const body = responseJson(sent)
+      const selected = transcript.selectToken(sent, input)
       if (!isRecord(body) || body.access_token !== selected.accessToken)
         throw new Error('Invalid token response')
       return { session, selected }
@@ -77,10 +77,10 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     const tokenOpened = observe(reveal(token.session, token.selected.ranges, 'token-attestation'))
     const identity = await operation(emit, 'identity-fetch', async () => {
       const session = await identityPrepared
-      const transcript = await session.send(profile.buildIdentityRequest(bearer))
-      const body = responseJson(transcript)
-      const selected = profile.selectIdentity(transcript, bearer)
-      if (!isRecord(body) || !profile.identityResponse(body, selected))
+      const sent = await session.send(transcript.buildIdentityRequest(bearer))
+      const body = responseJson(sent)
+      const selected = transcript.selectIdentity(sent, bearer)
+      if (!isRecord(body) || !transcript.identityResponse(body, selected))
         throw new Error('Invalid identity response')
       return { session, selected }
     })
@@ -90,7 +90,7 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     const [tokenRevealed, identityRevealed] = await Promise.all([tokenOpened, identityOpened])
     const final = observe(Promise.all([tokenRevealed.attestation, identityRevealed.attestation]))
     const proof = observe(
-      prover.prove(
+      circuit.prove(
         bearer,
         { openings: tokenRevealed.openings, range: token.selected.bearerRange },
         { openings: identityRevealed.openings, range: identity.selected.bearerRange },
@@ -108,6 +108,6 @@ export async function proveBearerLink<P extends 'x' | 'github'>(
     }
   } finally {
     controller.abort()
-    prover.destroy()
+    circuit.destroy()
   }
 }

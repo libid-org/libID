@@ -2,10 +2,13 @@
 // the catalog fails typecheck here until its entry exists; conformance.test.ts then runs the
 // catalog, OAuth return, validator and prover checks over every entry.
 import { readFileSync } from 'node:fs'
+import type {
+  BearerTranscript,
+  TokenRequestInput,
+} from '../../barretenberg/circuits/bearer-link/transcript.js'
 import type { OAuthReturn } from '../../ccdp/navigation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import type { BearerTranscript, TokenRequestInput } from '../bearer-transcript.js'
 import * as githubTranscript from '../github/1/transcript.js'
 import * as githubTypes from '../github/1/types.js'
 import * as googleTypes from '../google/1/types.js'

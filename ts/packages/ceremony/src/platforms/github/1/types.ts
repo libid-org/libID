@@ -1,4 +1,4 @@
-import { bearerLinkTypes } from '../../bearer-types.js'
+import { bearerLinkTypes } from '../../../barretenberg/circuits/bearer-link/types.js'
 import { isUserName, profile } from './profile.js'
 
 /** Client identifier, identity and proof constraints for this platform. */

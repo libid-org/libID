@@ -1,5 +1,5 @@
+import * as bearerEvents from '../barretenberg/circuits/bearer-link/events.js'
 import type { IdentityProof } from '../ccdp/index.js'
-import * as bearerEvents from './bearer.events.js'
 import * as github from './github/1/types.js'
 import * as githubUrl from './github/1/url.js'
 import * as googleEvents from './google/1/events.js'

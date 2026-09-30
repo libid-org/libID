@@ -9,7 +9,7 @@ export const isBearer = (value: string): boolean =>
   value.length <= MAX_BEARER_BYTES && /^[\x21-\x7e]+$/.test(value)
 
 /**
- * The exact libid-circuits v0.4.0 `bearer_link` witness. Openings come from bearerOpening,
+ * The exact libid-circuits v0.4.0 `bearer_link` witness. Openings come from plaintextOpening,
  * which fixes their blinder width and bearer length.
  */
 export function buildBearerLinkWitness(

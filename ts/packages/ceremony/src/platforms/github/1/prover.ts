@@ -1,4 +1,4 @@
-import { proveBearerLink } from '../../bearer.js'
+import { proveBearerLink } from '../../../barretenberg/circuits/bearer-link/prover.js'
 import type { ProverContext } from '../../context.js'
 import { acceptReturn } from '../../oauthReturn.js'
 import * as transcript from './transcript.js'

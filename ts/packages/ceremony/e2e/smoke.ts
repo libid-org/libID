@@ -1,10 +1,10 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { assetUrl } from '../src/assets/index.js'
 import {
-  bearerCircuit,
-  bearerVerificationKey,
-} from '../src/barretenberg/circuits/bearer_link/bearer_link.assets.js'
-import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer_link/inputs.js'
+  circuit,
+  verificationKey,
+} from '../src/barretenberg/circuits/bearer-link/bearerLink.assets.js'
+import { buildBearerLinkWitness } from '../src/barretenberg/circuits/bearer-link/inputs.js'
 import { ProofEngine } from '../src/barretenberg/engine.js'
 import type { ExactHttpRequest } from '../src/notary/protocol.js'
 import { Notarization } from '../src/notary/session.js'
@@ -55,8 +55,8 @@ Object.assign(window, {
     }
     const inputs = buildBearerLinkWitness(bearer, opening(0), opening(16))
     const engine = new ProofEngine({
-      circuitUrl: assetUrl(bearerCircuit),
-      verificationKeyUrl: assetUrl(bearerVerificationKey),
+      circuitUrl: assetUrl(circuit),
+      verificationKeyUrl: assetUrl(verificationKey),
       threads: 2,
     })
     try {

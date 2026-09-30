@@ -4,6 +4,10 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type Asset, assetUrl } from '../../assets/index.js'
 import { proofAssets } from '../../barretenberg/barretenberg.assets.js'
+import type {
+  BearerTranscript,
+  TokenRequestInput,
+} from '../../barretenberg/circuits/bearer-link/transcript.js'
 import type { ProofEngineOptions, RawProof } from '../../barretenberg/engine.js'
 import { proofEvents, proofWeights } from '../../barretenberg/events.js'
 import { validateCeremonyConfig } from '../../ccdp/client/config.js'
@@ -39,7 +43,6 @@ import {
   utf8,
 } from '../../testing/index.js'
 import { deriveCodeChallenge, deriveCodeVerifier } from '../authorization.js'
-import type { BearerTranscript, TokenRequestInput } from '../bearer-transcript.js'
 import type { ProverContext } from '../context.js'
 import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from '../index.js'
 import {
@@ -855,7 +858,7 @@ function runContext(
 
 const bearerFailures = {
   'identity-shape': 'Invalid identity response',
-  'opening-range': 'Bearer opening is not unique',
+  'opening-range': 'Plaintext opening is not unique',
   'shifted-range': 'Identity commitment must match notarization',
   'attestation-mismatch': 'attested authority changed',
 }

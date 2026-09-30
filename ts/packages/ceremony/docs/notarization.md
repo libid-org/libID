@@ -85,9 +85,10 @@ and derives authoritative identity and proof inputs from them.
 
 [http.ts](../src/notary/http.ts) tokenizes HTTP heads on wire bytes for both
 directions and UTF-8-decodes a response body only after removing chunked framing.
-Each caller keeps its own field policy; [transcript.ts](../src/notary/transcript.ts)
-owns the request checks. X/GitHub
-[transcript machinery](../src/platforms/bearer-transcript.ts) consumes the fixed
+Each caller keeps its own field policy: [transcript.ts](../src/notary/transcript.ts)
+selects JSON fields from raw bytes, and the X/GitHub
+[transcript machinery](../src/barretenberg/circuits/bearer-link/transcript.ts) owns the token and
+identity request checks. It consumes the fixed
 profiles declared under `platforms/<id>/1/transcript.ts`. JSON whitespace and header
 order do not establish identity: selectors work from actual wire offsets, and numeric GitHub IDs are
 preserved losslessly. Additional headers are admitted subject to the profile's
