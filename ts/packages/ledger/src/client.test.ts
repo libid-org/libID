@@ -85,6 +85,15 @@ function conformance<F extends Family>(family: F, harness: Harness<F>) {
         await expect(fake.client.read(midway, [], { signal: controller.signal })).rejects.toThrow()
       })
 
+      it("ignores a query's indexer implementation without an indexer", async () => {
+        const { client } = harness.setup()
+        const both = {
+          ...query(async () => 'chain'),
+          indexer: async () => 'indexer',
+        } as Query<[], string>
+        expect(await client.read(both, [])).toBe('chain')
+      })
+
       it('propagates query failures unchanged', async () => {
         const { client } = harness.setup()
         const cause = new Error('query failed')

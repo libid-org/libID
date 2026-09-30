@@ -1,8 +1,10 @@
 import { evm } from './evm/client.js'
 import type * as Evm from './evm/index.js'
+import { type Indexer, type IndexerAccess, indexer } from './indexer.js'
 import type { Account, Chain, Family, Ledger } from './index.js'
 
 export { LedgerError, type LedgerErrorCode } from './errors.js'
+export type { IndexerAccess } from './indexer.js'
 
 /**
  * Each ledger family's own types, defined in its module. Besides the `connect` dispatch,
@@ -15,9 +17,26 @@ export type FamilyOf<L extends Ledger> = {
   [F in Family]: L['chain'] extends Chain<F> ? F : never
 }[Family]
 
-/** What to read: one function per ledger family. The ledger runs it without interpreting it. */
+/** Reads from a libID indexer, which serves state as of `block`, the last one it processed. */
+export interface IndexerReader {
+  readonly ledger: Ledger
+  readonly block: bigint
+  /** GETs a JSON object; throws on HTTP errors and non-object responses. */
+  get(path: string, params?: Record<string, string>): Promise<Record<string, unknown>>
+}
+
+/**
+ * What to read: one function per ledger family, reading the chain. The ledger runs it
+ * without interpreting it.
+ */
 export type Query<A extends readonly unknown[], R> = {
   readonly [F in Family]: (read: Families[F]['reader'], ...args: A) => Promise<R>
+} & {
+  /**
+   * The same result from an indexer. Used when the client has a current indexer; otherwise,
+   * or if the indexer fails, the chain implementation runs.
+   */
+  readonly indexer?: (read: IndexerReader, ...args: A) => Promise<R>
 }
 /** What to write: one transaction builder per ledger family. */
 export type Command<A extends readonly unknown[]> = {
@@ -27,6 +46,8 @@ export type Command<A extends readonly unknown[]> = {
 export interface Access {
   rpc: string
   explorer?: string
+  /** A libID indexer that queries with an `indexer` implementation read first. */
+  indexer?: IndexerAccess
 }
 
 /**
@@ -41,7 +62,7 @@ export interface LedgerClient<F extends Family = Family, L extends Ledger = Ledg
     readonly methods: readonly string[]
     readonly events: readonly string[]
   }
-  /** Runs a query against a single block. */
+  /** Runs a query against one chain state, from a current indexer when the query supports it. */
   read<A extends readonly unknown[], R>(
     query: Query<A, R>,
     args: A,
@@ -71,5 +92,29 @@ export interface Session<F extends Family = Family, L extends Ledger = Ledger<Ch
 
 export function connect<L extends Ledger>(ledger: L, access: Access): LedgerClient<FamilyOf<L>, L> {
   // ponytail: one family; dispatch on it (and lazy-load drivers) when a second one lands.
-  return evm(ledger, access) as LedgerClient<FamilyOf<L>, L>
+  const client = evm(ledger, access) as LedgerClient<FamilyOf<L>, L>
+  if (!access.indexer) return client
+  const source = indexer(ledger, access.indexer)
+  return {
+    ...client,
+    read: preferIndexer(client.read, source),
+    async connect(wallet, options) {
+      const session = await client.connect(wallet, options)
+      return { ...session, read: preferIndexer(session.read, source) }
+    },
+  }
+}
+
+function preferIndexer(chain: LedgerClient['read'], source: Indexer): LedgerClient['read'] {
+  return async (query, args, options) => {
+    if (query.indexer) {
+      try {
+        return await source.read(query.indexer, args, options?.signal)
+      } catch (error) {
+        // The chain stays authoritative: an unavailable or stale indexer only costs speed.
+        if (options?.signal?.aborted) throw error
+      }
+    }
+    return chain(query, args, options)
+  }
 }

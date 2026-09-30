@@ -83,6 +83,32 @@ await client.read(resolveHandle, [platform, 'alice'])
   connectors such as WalletConnect.
 - `family` tells clients of different families apart.
 
+### Indexers
+
+A query may add an `indexer` implementation that returns the same result from a
+libID indexer:
+
+```ts
+const identitiesOf: Query<[account: Account], Identity[]> = {
+  evm: async (read, account) => {
+    /* accountsOf pages and resolvePair, all at one block */
+  },
+  indexer: async (read, account) =>
+    parseIdentities(await read.get(`/v1/resolve/address/${account}`, { chain })),
+}
+
+const client = connect(ledger, { rpc, indexer: { origin, deployment: 'identityNames' } })
+```
+
+The client uses it only while the indexer is current. Its status must report
+indexing the named deployment on this chain, it must be within `maxLag` blocks
+(20 by default) of the head, and its index must not move backwards during the
+read. Otherwise, or if the indexer fails, the chain implementation runs: the
+chain stays authoritative, and an indexer only makes reads faster. Queries that
+must be authoritative, such as checking who owns a handle before relinking, omit
+`indexer`. The ledger knows the indexer's status protocol, not its application
+endpoints.
+
 The catalog and client take no RPC defaults; consumers supply endpoints.
 
 ## Conformance
