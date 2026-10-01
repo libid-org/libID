@@ -1,8 +1,9 @@
 # `@libid/ledger`
 
-Ledger identity and notary routing for application code. The package owns the
-Chain Profile hash and each ledger's notary address. It contains no RPC client,
-transaction handling, or ceremony dependency.
+The `LedgerId` contract that application code passes to ceremonies: a ledger's
+identity and the notary that serves it. The package defines only this interface.
+It contains no ledger definitions, RPC client, transaction handling, or ceremony
+dependency.
 
 ## API
 
@@ -13,19 +14,18 @@ export interface LedgerId {
 }
 ```
 
-`hash()` uses the ledger's canonical Chain Profile encoding and matches the
-identifier used by that ledger's verifier. Returned bytes cannot mutate the
-ledger value. The notary address is not part of this hash.
+`hash()` returns the ledger's canonical Chain Profile encoding, the identifier
+that ledger's verifier uses. Mutating the returned bytes must not change later
+results. The notary address is not part of this hash.
 
 `notaryAddress()` returns a canonical HTTPS origin with no credentials, path,
-query, or fragment. Ledger definitions use `https://notary.lib.id` for mainnets
-and `https://testnet.notary.lib.id` for testnets. Definitions can share these
-constants or choose another address without adding a profile abstraction or
-changing the ledger identity. The address selects a network destination, not
-the signing keys trusted by a ledger verifier.
+query, or fragment. The address selects a network destination, not the signing
+keys a ledger verifier trusts. For local development only, it may return a
+canonical HTTP origin on exactly `localhost` or `127.0.0.1`; ceremony then derives
+WS on the same authority. No other HTTP hosts are accepted.
 
-Tests and local development can supply a fixture that preserves the target
-ledger hash while selecting a local notary; no environment override is needed:
+Tests and local development can supply a fixture that keeps a target ledger's
+hash while selecting a local notary; no environment override is needed:
 
 ```ts
 const localLedger: LedgerId = {
@@ -34,19 +34,9 @@ const localLedger: LedgerId = {
 }
 ```
 
-Concrete ledger definitions and their hash/address checks belong beside
-their implementation. Sharing an implementation within a ledger family or
-using a class per ledger is an internal choice; neither a public registration
-API nor a class hierarchy is required.
+## Implementing a ledger
 
-## Checks
-
-For every supported ledger, test its notary address and exact 32-byte Chain
-Profile hash against the ledger's vectors. Distinct supported networks must
-retain distinct identities. A fixture changing only the notary address must
-retain the target ledger hash. Mutating returned hash bytes must not change
-later results.
-
-For local development only, `notaryAddress()` may return a canonical HTTP origin
-on exactly `localhost` or `127.0.0.1`. Ceremony derives WS on the same authority;
-public notaries continue to require HTTPS/WSS. No other HTTP hosts are accepted.
+A definition and its checks live beside its implementation; no public
+registration API or class hierarchy is required. Test its notary address and
+exact 32-byte Chain Profile hash against the ledger's vectors. Distinct networks
+must keep distinct identities.

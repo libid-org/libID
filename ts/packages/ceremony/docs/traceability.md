@@ -10,7 +10,7 @@ Index: all 155 stable IDs from [Test plan](test-plan.md); the Bridge-owned KIT-0
 | LIBID-MOD-012 | Partial | [browser flows](../e2e/popup.spec.ts): “actual popup” follows Prefetch → provider → Callback → isolated Prover; [Prover document tests](../src/ccdp/documents/prover.test.ts) gate readiness on isolation. Optional carrier execution remains external. |
 | LIBID-MOD-013 | Partial | [Bearer-link composition tests](../src/platforms/conformance/bearerLink.test.ts) stub `fetch` through an accepted X/GitHub ceremony and assert it is never called; [Platform conformance tests](../src/platforms/conformance/returns.test.ts) require a valid public credential before exchange exactly where the catalog does. [distribution assertions](../build/distribution.test.ts) run independently of Bridge. A blanket deployment-credential scan is absent. |
 | LIBID-MOD-014 | Partial | [Client tests](../src/ccdp/client/ceremony.test.ts) reject missing/throwing hash or address methods, malformed hash lengths and noncanonical notary origins before OAuth. All platforms, including Google, read the address uniformly. Compile-only checks reject the object form, missing positional arguments and incompatible argument order. |
-| LIBID-MOD-015 | Partial | [Client tests](../src/ccdp/client/ceremony.test.ts) snapshot hash/address methods once for every platform, reject invalid inputs before OAuth, and retain the original digest after buffer mutation. [Ledger fixture checks](../../ledger/src/index.test.ts) cover independent hash bytes and local routing without changing the hash; actual-popup tests exercise the shared fixtures. Real definitions and Chain Profile vectors are deferred. |
+| LIBID-MOD-015 | Partial | [Client tests](../src/ccdp/client/ceremony.test.ts) snapshot hash/address methods once for every platform, reject invalid inputs before OAuth, and retain the original digest after buffer mutation. Actual-popup tests exercise the shared ledger fixtures. Real definitions and Chain Profile vectors are deferred. |
 | LIBID-MOD-016 | Partial | [message/fragment tests](../src/ccdp/index.test.ts) reject legacy discriminators and invalid event instrumentation. The complete static dependency boundary is not independently mutation-tested. |
 | LIBID-MOD-017 | Partial | [connect tests](../src/ccdp/client/connect.test.ts) assert exact peers and caller option preservation; [client lifecycle tests](../src/ccdp/client/ceremony.test.ts) test independent state. No test proves the absence of every forbidden architectural dependency. |
 | LIBID-MOD-018 | Partial | [client lifecycle tests](../src/ccdp/client/ceremony.test.ts) check frozen launch fragments and one-shot proving; [browser flows](../e2e/popup.spec.ts) drive it through a real connection. There is no exhaustive compile-time negative public-surface suite. |
@@ -173,9 +173,8 @@ Browser contracts: [CCDP](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e
 and [Bridge](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/oauth-bridge.md#conformance).
 Evidence contracts: [Common](https://github.com/libid-org/libID/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/ceremony-common.md)
 and [Platforms](https://github.com/libid-org/libID/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md).
-The browser-spec branch's inherited GitHub service-based profile conflicts with
-the merged browser-exchange profile; the latter owns GitHub evidence behavior.
-GitHub issuer test TEST-PLAT-12A is defined in the browser-spec revision.
+GitHub issuer test [TEST-PLAT-12A](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/platform-ceremonies.md#8-conformance)
+is defined in the browser-spec revision.
 
 | Specification tests | Implementation rows / evidence boundary |
 |---|---|
