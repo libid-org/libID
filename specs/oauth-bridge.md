@@ -151,9 +151,10 @@ loads.
 For these profiles, no separate Callback script, prover, proving-asset,
 preparation, continuation, polling, status, result, cancellation, token-exchange,
 notarization, browser TLS bridge, or proof-recovery route exists on the OAuth
-bridge. Unsupported methods fail without route work.
-Operational endpoints such as health and metrics are outside this ceremony
-contract. CORS preflight handling performs no ceremony route work.
+bridge. Unsupported methods fail without route work, except that the Bridge may
+answer CORS preflight `OPTIONS` requests on the configuration route.
+Operational endpoints such as health and metrics, and CORS preflight handling,
+are outside this ceremony contract and perform no ceremony route work.
 Except for the OAuth-platform-mandated callback query, bridge routes accept
 no query or request body.
 
