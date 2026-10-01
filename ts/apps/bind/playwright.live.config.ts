@@ -7,7 +7,8 @@ const envFile = process.env.LIBID_TEST_ENV_FILE
 if (envFile) {
   for (const line of readFileSync(envFile, 'utf8').split('\n')) {
     const match = /^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line)
-    if (match && process.env[match[1]!] === undefined) process.env[match[1]!] = match[2]!.replace(/^(['"])(.*)\1$/, '$2')
+    if (match && process.env[match[1]!] === undefined)
+      process.env[match[1]!] = match[2]!.replace(/^(['"])(.*)\1$/, '$2')
   }
 }
 

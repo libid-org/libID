@@ -17,10 +17,93 @@ export function githubAccount(): GitHubAccount | undefined {
 
 function totp(secret: string): string {
   const normalized = secret.replace(/\s/g, '').toUpperCase()
-  return new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(normalized), algorithm: 'SHA1', digits: 6, period: 30 }).generate()
+  return new OTPAuth.TOTP({
+    secret: OTPAuth.Secret.fromBase32(normalized),
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+  }).generate()
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** What the login has done so far; each handler reads and updates it. */
+interface Progress {
+  filled: boolean
+  totpStep?: number
+  rateLimited: number
+  errored: number
+}
+
+async function onErrorPage(popup: Page, progress: Progress) {
+  progress.errored += 1
+  if (progress.errored > 3) throw new Error('GitHub answered its error page three times')
+  await sleep(10_000 * progress.errored)
+  await popup.goBack().catch(() => {})
+  progress.filled = false
+  progress.totpStep = undefined
+}
+
+async function onLogin(popup: Page, account: GitHubAccount, progress: Progress, text: string) {
+  if (text.includes('too many requests') || text.includes('rate limit')) {
+    progress.rateLimited += 1
+    if (progress.rateLimited > 3) throw new Error('GitHub rate-limited the login three times')
+    await sleep(30_000 * progress.rateLimited)
+    await popup.reload()
+    progress.filled = false
+    return
+  }
+  if (progress.filled || !(await popup.locator('#login_field').count())) return
+  await popup.fill('#login_field', account.username)
+  await popup.fill('#password', account.password)
+  await popup.click('input[type=submit][name=commit]')
+  progress.filled = true
+}
+
+async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
+  const step = Math.floor(Date.now() / 30_000)
+  if (progress.totpStep === step || !(await popup.locator('#app_totp').count())) return
+  await popup.fill('#app_totp', totp(account.totpSecret))
+  // GitHub submits the code on its own once six digits are in.
+  await popup
+    .locator('button[type=submit]')
+    .click({ timeout: 2_000 })
+    .catch(() => {})
+  progress.totpStep = step
+}
+
+async function onAuthorize(popup: Page, text: string) {
+  const authorize = popup.locator("button[name='authorize'][value='1']")
+  if (await authorize.count()) await authorize.click()
+  else if (text.includes('redirect_uri') || text.includes('be careful'))
+    throw new Error(
+      "GitHub refused the authorization request: the app's callback URL does not match",
+    )
+}
+
+/** Act on one GitHub page. */
+async function onGitHubPage(
+  popup: Page,
+  account: GitHubAccount,
+  progress: Progress,
+  path: string,
+  text: string,
+) {
+  if (
+    text.includes("couldn't respond to your request in time") ||
+    text.includes('something went wrong')
+  )
+    return onErrorPage(popup, progress)
+  if (path === '/login' || path === '/session') return onLogin(popup, account, progress, text)
+  if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress)
+  if (path.startsWith('/sessions/two-factor')) {
+    await popup.goto('https://github.com/sessions/two-factor/app')
+    return
+  }
+  if (path === '/login/oauth/authorize') return onAuthorize(popup, text)
+  if (path.startsWith('/sessions/verified-device'))
+    throw new Error('GitHub asked for device verification: the account has no TOTP method')
+}
 
 /**
  * Sign in and authorize on GitHub in `popup`, until it leaves github.com. A
@@ -30,69 +113,21 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
  */
 export async function authorizeOnGitHub(popup: Page, account: GitHubAccount, budgetMs = 180_000) {
   const started = Date.now()
-  let filled = false
-  let totpStep: number | undefined
-  let rateLimited = 0
-  let errored = 0
-
+  const progress: Progress = { filled: false, rateLimited: 0, errored: 0 }
   while (Date.now() - started < budgetMs) {
     if (popup.isClosed()) return
-    let url: URL
-    try {
-      url = new URL(popup.url())
-    } catch {
-      await sleep(250)
-      continue
-    }
-    if (url.hostname !== 'github.com') {
-      // Before GitHub (Prefetch) or after it (Callback, Prover): not ours to drive.
-      if (filled || url.pathname.startsWith('/auth/callback')) return
-      await sleep(250)
-      continue
-    }
-    const text = ((await popup.locator('body').textContent().catch(() => '')) ?? '').toLowerCase()
-    if (text.includes("couldn't respond to your request in time") || text.includes('something went wrong')) {
-      errored += 1
-      if (errored > 3) throw new Error('GitHub answered its error page three times')
-      await sleep(10_000 * errored)
-      await popup.goBack().catch(() => {})
-      filled = false
-      totpStep = undefined
-      continue
-    }
-    const path = url.pathname
-    if (path === '/login' || path === '/session') {
-      if (text.includes('too many requests') || text.includes('rate limit')) {
-        rateLimited += 1
-        if (rateLimited > 3) throw new Error('GitHub rate-limited the login three times')
-        await sleep(30_000 * rateLimited)
-        await popup.reload()
-        filled = false
-        continue
-      }
-      if (!filled && (await popup.locator('#login_field').count())) {
-        await popup.fill('#login_field', account.username)
-        await popup.fill('#password', account.password)
-        await popup.click('input[type=submit][name=commit]')
-        filled = true
-      }
-    } else if (path === '/sessions/two-factor/app') {
-      const step = Math.floor(Date.now() / 30_000)
-      if (totpStep !== step && (await popup.locator('#app_totp').count())) {
-        await popup.fill('#app_totp', totp(account.totpSecret))
-        // GitHub submits the code on its own once six digits are in.
-        await popup.locator('button[type=submit]').click({ timeout: 2_000 }).catch(() => {})
-        totpStep = step
-      }
-    } else if (path.startsWith('/sessions/two-factor')) {
-      await popup.goto('https://github.com/sessions/two-factor/app')
-    } else if (path === '/login/oauth/authorize') {
-      const authorize = popup.locator("button[name='authorize'][value='1']")
-      if (await authorize.count()) await authorize.click()
-      else if (text.includes('redirect_uri') || text.includes('be careful'))
-        throw new Error("GitHub refused the authorization request: the app's callback URL does not match")
-    } else if (path.startsWith('/sessions/verified-device')) {
-      throw new Error('GitHub asked for device verification: the account has no TOTP method')
+    const url = URL.parse(popup.url())
+    if (url?.hostname === 'github.com') {
+      const text = (
+        (await popup
+          .locator('body')
+          .textContent()
+          .catch(() => '')) ?? ''
+      ).toLowerCase()
+      await onGitHubPage(popup, account, progress, url.pathname, text)
+    } else if (url && progress.filled) {
+      // Back from GitHub: Callback and Prover take over.
+      return
     }
     await sleep(250)
   }

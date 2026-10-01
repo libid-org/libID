@@ -60,7 +60,8 @@ async function deployTool(): Promise<string> {
   const url = `https://github.com/libid-org/chain-configurations/releases/download/v${DEPLOY.version}/${DEPLOY.asset}.tar.gz`
   const archive = Buffer.from(await (await fetch(url)).arrayBuffer())
   const digest = createHash('sha256').update(archive).digest('hex')
-  if (digest !== DEPLOY.sha256) throw new Error(`libid-deploy archive digest ${digest} is not the pinned one`)
+  if (digest !== DEPLOY.sha256)
+    throw new Error(`libid-deploy archive digest ${digest} is not the pinned one`)
   const path = join(cache, `${DEPLOY.asset}.tar.gz`)
   writeFileSync(path, archive)
   execFileSync('tar', ['xzf', path, '-C', cache])
@@ -72,7 +73,16 @@ async function deploy() {
   const tool = await deployTool()
   execFileSync(
     tool,
-    ['apply', '--network', join(root, 'local-dev.toml'), '--rpc-url', RPC_URL, '--yes', '--confirm-fresh-deploy', '--dev'],
+    [
+      'apply',
+      '--network',
+      join(root, 'local-dev.toml'),
+      '--rpc-url',
+      RPC_URL,
+      '--yes',
+      '--confirm-fresh-deploy',
+      '--dev',
+    ],
     { stdio: 'inherit' },
   )
   const chain = createPublicClient({ transport: http(RPC_URL) })
@@ -83,7 +93,8 @@ async function deploy() {
     functionName: 'quoteBind',
     args: [platformId('github'), 1],
   })
-  if (quote !== 2_000_000_000_000_000n) throw new Error(`quoteBind(github, 1) is ${quote}, expected 2e15`)
+  if (quote !== 2_000_000_000_000_000n)
+    throw new Error(`quoteBind(github, 1) is ${quote}, expected 2e15`)
   const code = (await rpc('eth_getCode', [REGISTRY, 'latest'])) as string
   if (code === '0x') throw new Error('IdentityRegistry has no code after deploy')
 }

@@ -13,7 +13,12 @@ export default defineConfig({
     port: 4695,
     strictPort: true,
     // The indexer's read API, same-origin so the page needs no CORS from it.
-    proxy: { '/indexer': { target: 'http://127.0.0.1:4689', rewrite: (path) => path.replace(/^\/indexer/, '') } },
+    proxy: {
+      '/indexer': {
+        target: 'http://127.0.0.1:4689',
+        rewrite: (path) => path.replace(/^\/indexer/, ''),
+      },
+    },
   },
   build: { outDir: join(directory, 'app'), emptyOutDir: true },
 })

@@ -1,4 +1,9 @@
-import { type Ceremony, CeremonyStage, createCCDPClient, type IdentityResult } from '@libid/ceremony'
+import {
+  type Ceremony,
+  CeremonyStage,
+  createCCDPClient,
+  type IdentityResult,
+} from '@libid/ceremony'
 import { identityRegistryAbi, platformId, resolveId } from '@libid/contracts'
 import { PopupWindow } from '@libid/popup'
 import {
@@ -61,7 +66,11 @@ async function connect() {
   show('holder', holder)
 }
 
-async function submit(result: Extract<IdentityResult<'github'>, { status: 'accepted' }>, transactionData: Uint8Array, operationDomain: Uint8Array) {
+async function submit(
+  result: Extract<IdentityResult<'github'>, { status: 'accepted' }>,
+  transactionData: Uint8Array,
+  operationDomain: Uint8Array,
+) {
   if (!wallet || !holder) throw new Error('Wallet disconnected')
   show('proof-received', `${result.identity.userName} (${result.identity.userId})`)
   const github = platformId('github')
@@ -115,7 +124,11 @@ async function initialize() {
     return
   }
   const operationDomain = hexToBytes(
-    await publicClient.readContract({ address: REGISTRY, abi: identityRegistryAbi, functionName: 'OPERATION_DOMAIN' }),
+    await publicClient.readContract({
+      address: REGISTRY,
+      abi: identityRegistryAbi,
+      functionName: 'OPERATION_DOMAIN',
+    }),
   )
   connectButton.addEventListener('click', () => {
     connect().then(
@@ -123,7 +136,8 @@ async function initialize() {
         bindAnchor.setAttribute('aria-disabled', 'false')
         status('Ready. Click Bind GitHub.')
       },
-      (error: unknown) => status(error instanceof Error ? error.message : 'Could not connect a wallet.'),
+      (error: unknown) =>
+        status(error instanceof Error ? error.message : 'Could not connect a wallet.'),
     )
   })
   bindAnchor.addEventListener('click', (event) => {
@@ -150,7 +164,10 @@ async function initialize() {
     bindAnchor.href = ceremony.launchUrl
     if (popup.opened) event.preventDefault()
     const off = ceremony.onStage((update) => {
-      show('stage', update.status === 'active' ? CeremonyStage.message(update.stage, 'GitHub') : update.status)
+      show(
+        'stage',
+        update.status === 'active' ? CeremonyStage.message(update.stage, 'GitHub') : update.status,
+      )
     })
     void ceremony
       .proveUserIdentity()
@@ -162,10 +179,14 @@ async function initialize() {
         }
         await submit(result, transactionData, operationDomain)
       })
-      .catch((error: unknown) => status(error instanceof Error ? error.message : 'The binding failed.'))
+      .catch((error: unknown) =>
+        status(error instanceof Error ? error.message : 'The binding failed.'),
+      )
       .finally(off)
   })
   status('Connect a wallet to start.')
 }
 
-void initialize().catch(() => status('Could not load the Bridge configuration. Is the stack running?'))
+void initialize().catch(() =>
+  status('Could not load the Bridge configuration. Is the stack running?'),
+)
