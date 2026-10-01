@@ -38,6 +38,10 @@ contract Consumer {
         return LibID.resolve(platformId, handle, maxAge);
     }
 
+    function bindingOf(bytes32 platformId, string calldata handle) external view returns (address, uint64) {
+        return LibID.bindingOf(platformId, handle);
+    }
+
     function resolveId(bytes32 platformId, string calldata id) external view returns (address) {
         return LibID.resolveId(platformId, id);
     }
@@ -116,6 +120,30 @@ contract ShortApproveToken is TestERC20 {
         assembly {
             mstore8(0, 1)
             return(0, 1)
+        }
+    }
+}
+
+/// @notice `approve` answers true followed by more words.
+contract LongApproveToken is TestERC20 {
+    function approve(address spender, uint256 value) public override returns (bool) {
+        super.approve(spender, value);
+        assembly {
+            mstore(0, 1)
+            mstore(32, 7)
+            return(0, 64)
+        }
+    }
+}
+
+/// @notice `approve` answers true padded to 600 KB, to burn a caller that
+///         copies the whole answer.
+contract BombApproveToken is TestERC20 {
+    function approve(address spender, uint256 value) public override returns (bool) {
+        super.approve(spender, value);
+        assembly {
+            mstore(0, 1)
+            return(0, 600000)
         }
     }
 }
@@ -209,6 +237,49 @@ contract LibIDTest is Test {
         assertEq(consumer.resolve(LibID.GOOGLE, "@alice@gmail.com"), address(0));
     }
 
+    /// Rules but no verifier yet is not set up either: the age-checking reads
+    /// must say so, as `resolve` does, not answer "nobody holds it".
+    function test_aPlatformWithRulesButNoVerifierIsNotSetUp() public {
+        vm.prank(owner);
+        registry.setPlatform(LibID.X, HandleVectors.rulesFor(LibID.X));
+        bytes memory unknown = abi.encodeWithSelector(IIdentityRegistry.UnknownPlatform.selector, LibID.X);
+        vm.expectRevert(unknown);
+        consumer.resolve(LibID.X, "jack");
+        vm.expectRevert(unknown);
+        consumer.resolve(LibID.X, "jack", 1 days);
+        vm.expectRevert(unknown);
+        consumer.isHolder(alice, LibID.X, "jack", 1 days);
+        vm.expectRevert(unknown);
+        consumer.bindingOf(LibID.X, "jack");
+        vm.expectRevert(unknown);
+        consumer.bindingOf(LibID.X, "not a handle");
+        vm.prank(alice);
+        vm.expectRevert(unknown);
+        consumer.gated(LibID.X, "jack", 1 days);
+        assertEq(consumer.publishedHandleOf(alice, LibID.X), "", "published reads never revert");
+    }
+
+    function test_bindingOfTellsTheCasesApart() public {
+        _bind(alice, "1001", "octocat", true);
+        (address holder, uint64 observedAt) = consumer.bindingOf(LibID.GITHUB, "@Octocat");
+        assertEq(holder, alice);
+        assertEq(observedAt, _provedAt(LibID.GITHUB, "octocat"));
+
+        (holder, observedAt) = consumer.bindingOf(LibID.GITHUB, "nobody");
+        assertEq(holder, address(0));
+        assertEq(observedAt, 0);
+        (holder, observedAt) = consumer.bindingOf(LibID.GITHUB, "not a handle");
+        assertEq(holder, address(0));
+        assertEq(observedAt, 0);
+
+        // A retired handle is unheld but keeps the time of its last proof.
+        uint64 retiredAt = _provedAt(LibID.GITHUB, "octocat");
+        _bind(alice, "1001", "octocat2", true);
+        (holder, observedAt) = consumer.bindingOf(LibID.GITHUB, "octocat");
+        assertEq(holder, address(0));
+        assertEq(observedAt, retiredAt);
+    }
+
     function test_theReadsRevertForAPlatformThatIsNotSetUp() public {
         bytes memory unknown = abi.encodeWithSelector(IIdentityRegistry.UnknownPlatform.selector, LibID.X);
         vm.expectRevert(unknown);
@@ -242,6 +313,22 @@ contract LibIDTest is Test {
         _bindGoogle(bob, "0xabc", "bob@gmail.com");
         assertFalse(consumer.isHolder(bob, LibID.GOOGLE, "bob@gmail.com", 30 minutes));
         assertTrue(consumer.isHolder(bob, LibID.GOOGLE, "bob@gmail.com", 1 hours));
+    }
+
+    /// The verifiers accept a GitHub session up to an hour old, so a proof
+    /// can be 65 minutes old the moment it is bound.
+    function test_aGitHubProofBoundLateIsAlreadyOverAnHourOld() public {
+        _bindAfter(alice, "1001", "octocat", 59 minutes, true);
+        assertFalse(consumer.isHolder(alice, LibID.GITHUB, "octocat", 1 hours));
+        assertTrue(consumer.isHolder(alice, LibID.GITHUB, "octocat", 65 minutes));
+    }
+
+    /// The Google verifier accepts a token until it expires, so a proof can be
+    /// nearly 2 hours old the moment it is bound.
+    function test_aGoogleProofBoundLateIsAlreadyNearlyTwoHoursOld() public {
+        _bindGoogleIssued(alice, "0xabc", "alice@gmail.com", 59 minutes);
+        assertFalse(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 110 minutes));
+        assertTrue(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 2 hours));
     }
 
     function test_theLargestMaxAgeAcceptsAnyAge() public {
@@ -317,6 +404,7 @@ contract LibIDTest is Test {
         _bind(alice, "1001", "octocat", true);
         bytes32 node = consumer.pay(LibID.GITHUB, "@Octocat", 1 ether, sender);
         assertEq(node, IdentityNodes.handleNode(LibID.GITHUB, "octocat"));
+        assertEq(node, registry.handleNodeOfHash(LibID.GITHUB, registry.handleHashOf(LibID.GITHUB, "octocat")));
         assertEq(alice.balance, 1 ether);
     }
 
@@ -392,6 +480,28 @@ contract LibIDTest is Test {
         vm.prank(carol);
         escrow.claim(node, one(address(token)), carol);
         assertEq(token.balanceOf(carol), 990);
+    }
+
+    function test_payTokenAcceptsATrueFollowedByMoreWords() public {
+        LongApproveToken token = new LongApproveToken();
+        token.mint(address(consumer), 100);
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
+        assertEq(escrow.escrowed(node, address(token)), 25);
+    }
+
+    /// Only the first word of the answer is copied: `payToken` costs the
+    /// token's own `approve` plus the usual deposit, not a second copy of a
+    /// huge answer.
+    function test_aHugeApproveAnswerDoesNotBurnTheCallersGas() public {
+        BombApproveToken token = new BombApproveToken();
+        token.mint(address(consumer), 100);
+        uint256 start = gasleft();
+        token.approve(address(this), 1);
+        uint256 approveCost = start - gasleft();
+
+        start = gasleft();
+        consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
+        assertLt(start - gasleft(), approveCost + 400_000);
     }
 
     function test_payTokenRefusesAnAddressWithoutCode() public {
@@ -478,6 +588,13 @@ contract LibIDTest is Test {
         assertFalse(consumer.isEscrowAvailable());
     }
 
+    /// An answer that is not a clean address is a plain no, not a revert.
+    function test_aDirtyRegistryAnswerIsNotAvailable() public {
+        uint256 dirty = uint256(uint160(LibID.REGISTRY)) | (uint256(1) << 200);
+        vm.mockCall(LibID.ESCROW, abi.encodeWithSignature("registry()"), abi.encode(dirty));
+        assertFalse(consumer.isEscrowAvailable());
+    }
+
     function test_everyCallRevertsClearlyWhereLibIDIsNotDeployed() public {
         vm.etch(LibID.REGISTRY, "");
         vm.etch(LibID.ESCROW, "");
@@ -519,12 +636,19 @@ contract LibIDTest is Test {
         vm.store(at, IMPLEMENTATION_SLOT, bytes32(uint256(uint160(implementation))));
     }
 
-    /// Binds a GitHub handle as a proof made in this block would: the notary's
-    /// creation time, less GitHub's allowance. Moves the clock a second first,
-    /// so each proof is newer than the last.
+    /// Binds a GitHub handle from a session notarized in this block.
     function _bind(address who, string memory id, string memory handle, bool publish) internal {
+        _bindAfter(who, id, handle, 0, publish);
+    }
+
+    /// Binds a GitHub handle as the verifier dates it: the notary signed the
+    /// session `sessionAge` ago, which the verifier accepts for up to its proof
+    /// lifetime, and `observedAt` is that time less GitHub's allowance. Moves
+    /// the clock a second first, so each proof is newer than the last.
+    function _bindAfter(address who, string memory id, string memory handle, uint64 sessionAge, bool publish) internal {
+        require(sessionAge < CeremonyProfile.PROOF_LIFETIME_SECONDS_GITHUB, "the verifier would refuse it");
         vm.warp(vm.getBlockTimestamp() + 1);
-        uint64 createdAt = uint64(vm.getBlockTimestamp());
+        uint64 createdAt = uint64(vm.getBlockTimestamp()) - sessionAge;
         _bindWith(
             github,
             LibID.GITHUB,
@@ -536,11 +660,18 @@ contract LibIDTest is Test {
         );
     }
 
-    /// Binds a Google handle as a token issued in this block would: its `exp`,
-    /// an hour ahead, less Google's allowance.
+    /// Binds a Google handle from a token issued in this block.
     function _bindGoogle(address who, string memory id, string memory handle) internal {
+        _bindGoogleIssued(who, id, handle, 0);
+    }
+
+    /// Binds a Google handle as the verifier dates it: the token was issued
+    /// `issuedAgo` and expires an hour after issue, which the verifier accepts
+    /// until then, and `observedAt` is its `exp` less Google's allowance.
+    function _bindGoogleIssued(address who, string memory id, string memory handle, uint64 issuedAgo) internal {
+        require(issuedAgo < GOOGLE_TOKEN_LIFETIME, "the verifier would refuse it");
         vm.warp(vm.getBlockTimestamp() + 1);
-        uint64 exp = uint64(vm.getBlockTimestamp()) + GOOGLE_TOKEN_LIFETIME;
+        uint64 exp = uint64(vm.getBlockTimestamp()) - issuedAgo + GOOGLE_TOKEN_LIFETIME;
         _bindWith(
             google,
             LibID.GOOGLE,
@@ -576,11 +707,15 @@ contract LibIDTest is Test {
     }
 }
 
-/// Reads the real Eden deployment. Runs only with EDEN_RPC_URL set.
+/// Reads the real Eden deployment. Skipped without EDEN_RPC_URL, unless
+/// LIBID_REQUIRE_FORK is set, as CI sets it: then a missing RPC fails.
 contract LibIDForkTest is Test {
     function setUp() public {
         string memory rpc = vm.envOr("EDEN_RPC_URL", string(""));
-        if (bytes(rpc).length == 0) vm.skip(true);
+        if (bytes(rpc).length == 0) {
+            require(!vm.envOr("LIBID_REQUIRE_FORK", false), "LIBID_REQUIRE_FORK is set but EDEN_RPC_URL is empty");
+            vm.skip(true);
+        }
         vm.createSelectFork(rpc);
     }
 

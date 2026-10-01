@@ -79,6 +79,9 @@ jobs:
       - name: Formatting
         run: forge fmt --check
 
+      - name: Lint
+        run: forge lint -D notes
+
       # The oldest compiler the README promises, on the legacy pipeline,
       # building LibID.sol alone as an integrator's project would.
       - name: LibID compiles with solc 0.8.20
@@ -91,9 +94,11 @@ jobs:
       - name: Tests
         run: forge test -vv
 
+      # LIBID_REQUIRE_FORK turns a missing RPC into a failure, not a skip.
       - name: Eden fork test
         env:
           EDEN_RPC_URL: https://ev-reth-eden-testnet.binarybuilders.services:8545
+          LIBID_REQUIRE_FORK: "true"
         run: forge test -vv --match-contract LibIDForkTest
 
   # ---------------------------------------------------------------------------

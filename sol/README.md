@@ -42,6 +42,7 @@ It needs Solidity 0.8.20 or later.
 | --- | --- |
 | `resolve(platformId, handle)` | the holder of a handle, or zero |
 | `resolve(platformId, handle, maxAge)` | the same, or zero if the latest proof is older than `maxAge` seconds |
+| `bindingOf(platformId, handle)` | the holder and the `observedAt` of the latest proof, to apply your own rules |
 | `resolveId(platformId, id)` | the holder of the identity with that id, or zero |
 | `publishedHandleOf(holder, platformId)` | the handle the holder publishes, or `""` |
 | `isHolder(account, platformId, handle, maxAge)` | whether `account` holds the handle with a fresh enough proof |
@@ -53,26 +54,35 @@ It needs Solidity 0.8.20 or later.
 | `isEscrowAvailable()` | whether it also has the HandleEscrow, bound to that registry, for payments |
 
 Platform ids are `LibID.GITHUB`, `LibID.X` and `LibID.GOOGLE`. Case never
-matters in a handle. On GitHub and X a leading at-sign is dropped; a Google
-handle is an email address and must not start with one.
+matters in a handle. On GitHub and X a leading at-sign is dropped. A Google
+handle is the email address exactly as Google reports it: it must not start
+with an at-sign, and dots and plus tags are kept, so a dotted Gmail address
+and the same address without the dots are different handles, even though
+Gmail delivers both to one inbox.
 
 Where a contract is not deployed, the functions that need it revert
-`LibIDUnavailable`. A platform the chain has not set up makes the reads,
-`isHolder` included, revert `UnknownPlatform`.
+`LibIDUnavailable`. A platform the chain has not set up makes the reads and
+gates revert `UnknownPlatform`; `publishedHandleOf` returns `""` instead.
+
+`resolve` with a `maxAge` returns zero for a handle nobody holds, for a proof
+that is too old, and for text that is no handle. Use `bindingOf` to tell
+them apart.
 
 ## Proof age
 
-`maxAge` is counted from the proof's `observedAt`. The platform verifiers set
-it a fixed allowance before the evidence time, so a proof made just now is
-already that old:
+`maxAge` is counted from the proof's `observedAt`, which the platform
+verifiers set a fixed allowance before the evidence: 5 minutes before the
+notary signed the session on GitHub and X, and 2 hours before the expiry of
+Google's sign-in token. The verifiers also accept evidence that is already a
+while old, so a proof that was bound a moment ago can read as:
 
-| Platform | A fresh proof's age |
+| Platform | Age of a just-bound proof |
 | --- | --- |
-| GitHub, X | 5 minutes |
-| Google | about 1 hour (2 hours before the sign-in token's expiry) |
+| GitHub, X | 5 to 65 minutes (the session can be up to an hour old) |
+| Google | 1 to 2 hours (the token is good for an hour after issue) |
 
-So `maxAge` must be larger than that, or every holder fails. A `maxAge` of
-`type(uint256).max` accepts any age.
+A `maxAge` below the top of that range rejects some honest holders. A
+`maxAge` of `type(uint256).max` accepts any age.
 
 ## Payments
 
@@ -104,7 +114,7 @@ EDEN_RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545 forge tes
 ```
 
 The tests deploy the real libID contracts, pinned in `lib/libID-contracts`, at
-the addresses LibID has built in, and bind handles with the timing the real
-verifiers produce. One test checks the addresses against the factory's CREATE3
+the addresses LibID has built in, and bind handles with the dates the real
+verifiers give, at both ends of their acceptance windows. One test checks the addresses against the factory's CREATE3
 derivation of their canonical names. The fork test checks them against the
 live Eden deployment, and is skipped without `EDEN_RPC_URL`.

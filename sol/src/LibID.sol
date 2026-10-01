@@ -11,11 +11,15 @@ pragma solidity ^0.8.20;
 ///      link. Where a contract is not deployed, the functions that need it
 ///      revert `LibIDUnavailable`: check `isAvailable` before reading or
 ///      gating, and `isEscrowAvailable` before paying. A platform that is not
-///      set up on the chain makes the reads revert `UnknownPlatform`.
+///      set up on the chain makes the reads and gates revert `UnknownPlatform`;
+///      `publishedHandleOf` returns an empty string instead.
 ///
-///      Handles are matched the way the platform matches them. Case never
-///      matters. On GitHub and X a leading at-sign is dropped; a Google handle
-///      is an email address and takes none.
+///      Case never matters in a handle. On GitHub and X a leading at-sign is
+///      dropped. A Google handle is the email address exactly as Google
+///      reports it: dots and plus tags are kept, so a dotted Gmail address and
+///      the same address without the dots are different handles, even though
+///      Gmail delivers both to one inbox. A leading at-sign makes it no handle
+///      at all.
 ///
 ///      `pay`, `payToken` and `refund` call out. The escrow sends ETH straight
 ///      to a handle's holder, whose code runs and can revert or burn gas, and a
@@ -37,6 +41,9 @@ library LibID {
 
     /// @dev The registry's error for text that can never be a handle.
     bytes4 private constant UNUSABLE_HANDLE = bytes4(keccak256("UnusableHandle(uint8)"));
+    /// @dev The fixed domain of a handle node, as the registry and the escrow
+    ///      derive it: `keccak256(abi.encode(HANDLE_NODE_V1, platformId, hash))`.
+    bytes32 private constant HANDLE_NODE_V1 = keccak256("libid.identity.handle-node.v1");
 
     /// This chain has no libID contract where one is needed.
     error LibIDUnavailable();
@@ -58,7 +65,9 @@ library LibID {
     function isEscrowAvailable() internal view returns (bool) {
         if (REGISTRY.code.length == 0 || ESCROW.code.length == 0) return false;
         (bool ok, bytes memory ret) = ESCROW.staticcall(abi.encodeWithSelector(ILibIDEscrow.registry.selector));
-        return ok && ret.length == 32 && abi.decode(ret, (address)) == REGISTRY;
+        // Compared as a word, so an answer that is not a clean address is a
+        // plain no rather than a decoding revert.
+        return ok && ret.length == 32 && abi.decode(ret, (uint256)) == uint256(uint160(REGISTRY));
     }
 
     // ─── Reading ────────────────────────────────────────────────────
@@ -72,9 +81,24 @@ library LibID {
     /// @notice The address that holds a handle, or zero if nobody does or its
     ///         latest proof is older than `maxAge` seconds. See `isHolder` for
     ///         how age is counted.
+    /// @dev Zero does not say which: unheld, too old, or text that is no
+    ///      handle. Use `bindingOf` to tell them apart.
     function resolve(bytes32 platformId, string memory handle, uint256 maxAge) internal view returns (address) {
         (address holder, uint64 observedAt) = _binding(platformId, handle);
         return _isFresh(observedAt, maxAge) ? holder : address(0);
+    }
+
+    /// @notice The holder of a handle and the `observedAt` of its latest proof,
+    ///         to apply your own rules.
+    /// @dev `holder` is zero when nobody holds the handle; `observedAt` is
+    ///      then zero too, or the time of the proof that last held it. Text
+    ///      that can never be a handle reads as unheld.
+    function bindingOf(bytes32 platformId, string memory handle)
+        internal
+        view
+        returns (address holder, uint64 observedAt)
+    {
+        return _binding(platformId, handle);
     }
 
     /// @notice The address that holds the identity with this platform id, or
@@ -94,11 +118,14 @@ library LibID {
     /// @notice Whether `account` holds the handle with a proof no older than
     ///         `maxAge` seconds.
     /// @dev Age is counted from the proof's `observedAt`, which the platform
-    ///      verifiers set a fixed allowance before the evidence time: 5 minutes
-    ///      on GitHub and X, and 2 hours before a Google token's expiry, which
-    ///      is about an hour before the user signed in. A proof made just now
-    ///      is that old already, so `maxAge` must be larger. Any `maxAge` of at
-    ///      least the block time, such as `type(uint256).max`, accepts any age.
+    ///      verifiers set a fixed allowance before the evidence: 5 minutes before
+    ///      the notary signed the session on GitHub and X, and 2 hours before a
+    ///      Google token's expiry. The verifiers accept a session up to an hour
+    ///      old and a token until it expires, so a proof that was just bound can
+    ///      already be up to 65 minutes old on GitHub and X, and up to 2 hours
+    ///      on Google. A smaller `maxAge` rejects honest holders. Any `maxAge` of
+    ///      at least the block time, such as `type(uint256).max`, accepts any
+    ///      age.
     function isHolder(address account, bytes32 platformId, string memory handle, uint256 maxAge)
         internal
         view
@@ -132,8 +159,8 @@ library LibID {
         returns (bytes32 handleNode)
     {
         ILibIDEscrow escrow = _escrow();
-        bytes32 hash;
-        (hash, handleNode) = _hashAndNode(platformId, handle);
+        bytes32 hash = _registry().handleHashOf(platformId, handle);
+        handleNode = _node(platformId, hash);
         escrow.deposit{value: amount}(platformId, hash, NATIVE, amount, refundTo);
     }
 
@@ -148,8 +175,8 @@ library LibID {
         returns (bytes32 handleNode)
     {
         ILibIDEscrow escrow = _escrow();
-        bytes32 hash;
-        (hash, handleNode) = _hashAndNode(platformId, handle);
+        bytes32 hash = _registry().handleHashOf(platformId, handle);
+        handleNode = _node(platformId, hash);
         _forceApprove(token, amount);
         escrow.deposit(platformId, hash, token, amount, refundTo);
     }
@@ -176,31 +203,34 @@ library LibID {
         return ILibIDEscrow(ESCROW);
     }
 
-    function _hashAndNode(bytes32 platformId, string memory handle) private view returns (bytes32 hash, bytes32 node) {
-        ILibIDRegistry registry = _registry();
-        hash = registry.handleHashOf(platformId, handle);
-        node = registry.handleNodeOfHash(platformId, hash);
+    /// @dev The escrow's key for a handle hash. The formula is fixed: the
+    ///      registry and the escrow derive the same.
+    function _node(bytes32 platformId, bytes32 hash) private pure returns (bytes32) {
+        return keccak256(abi.encode(HANDLE_NODE_V1, platformId, hash));
     }
 
     /// @dev The holder and proof time of a handle. Text that can never be a
-    ///      handle reads as unheld; every other revert, `UnknownPlatform`
-    ///      among them, goes through.
+    ///      handle reads as unheld. Whenever the answer is "unheld",
+    ///      `resolveHandle` runs too: it reverts `UnknownPlatform` for a
+    ///      platform with no verifier yet, which `handleNodeOf` alone lets by.
+    ///      A held handle proves the platform works, so that call is skipped.
     function _binding(bytes32 platformId, string memory handle)
         private
         view
         returns (address holder, uint64 observedAt)
     {
         ILibIDRegistry registry = _registry();
-        bytes32 node;
-        try registry.handleNodeOf(platformId, handle) returns (bytes32 n) {
-            node = n;
+        try registry.handleNodeOf(platformId, handle) returns (bytes32 node) {
+            (holder, observedAt) = registry.handleBinding(node);
         } catch (bytes memory reason) {
-            if (reason.length >= 4 && bytes4(reason) == UNUSABLE_HANDLE) return (address(0), 0);
-            assembly ("memory-safe") {
-                revert(add(reason, 32), mload(reason))
+            // forge-lint: disable-next-line(unsafe-typecast)
+            if (reason.length < 4 || bytes4(reason) != UNUSABLE_HANDLE) {
+                assembly ("memory-safe") {
+                    revert(add(reason, 32), mload(reason))
+                }
             }
         }
-        return registry.handleBinding(node);
+        if (holder == address(0)) registry.resolveHandle(platformId, handle);
     }
 
     /// @dev Adds rather than subtracts, so no `maxAge` can underflow or
@@ -217,13 +247,20 @@ library LibID {
         if (!_approve(token, 0) || !_approve(token, amount)) revert ApproveFailed(token);
     }
 
-    /// @dev True if `approve` succeeded: no return data from a contract, or
-    ///      exactly the word 1. Any other answer is a refusal.
-    function _approve(address token, uint256 amount) private returns (bool) {
-        (bool ok, bytes memory ret) = token.call(abi.encodeWithSelector(0x095ea7b3, ESCROW, amount));
+    /// @dev True if `approve` succeeded: no return data from a contract, or a
+    ///      first word of 1, as the escrow's SafeERC20 accepts. Only the first
+    ///      word is copied, so a huge answer cannot burn the caller's gas.
+    function _approve(address token, uint256 amount) private returns (bool ok) {
+        bytes memory data = abi.encodeWithSelector(0x095ea7b3, ESCROW, amount);
+        uint256 size;
+        uint256 word;
+        assembly ("memory-safe") {
+            ok := call(gas(), token, 0, add(data, 32), mload(data), 0, 32)
+            size := returndatasize()
+            word := mload(0)
+        }
         if (!ok) return false;
-        if (ret.length == 0) return token.code.length != 0;
-        return ret.length == 32 && abi.decode(ret, (uint256)) == 1;
+        return size == 0 ? token.code.length != 0 : size >= 32 && word == 1;
     }
 }
 
@@ -233,7 +270,6 @@ interface ILibIDRegistry {
     function resolveId(bytes32 platformId, string calldata id) external view returns (address);
     function publishedHandleOf(address holder, bytes32 platformId) external view returns (string memory);
     function handleNodeOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
-    function handleNodeOfHash(bytes32 platformId, bytes32 handleHash) external view returns (bytes32);
     function handleBinding(bytes32 handleNode) external view returns (address holder, uint64 observedAt);
     function handleHashOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
 }
