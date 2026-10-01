@@ -68,8 +68,9 @@ identity fields, change the proof-bound operation, or widen proof validity.
 GitHub token exchange and identity notarization run in the browser; there is
 no confidential exchange service. The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
-transcripts and their creation times. Verifier governance selects accepted
-verifier artifacts, trust roots, and protocol parameters. The Consumer Chain
+transcripts and their creation times. Verifier governance selects the
+Supported Version Set, accepted verifier artifacts, and trust roots. Each
+Platform Profile fixes its protocol parameters. The Consumer Chain
 authenticates the Transaction Author and supplies its Chain ID and Block Time.
 
 | Principal | Knows and can | Trusted for | Not trusted for |
@@ -78,7 +79,7 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Application operator | configures clients and deployment assets; starts or withholds work | deployment availability and declared configuration | identity fields, proof target, or proof validity |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
-| Verifier governance administrator | activates verifier artifacts, trust roots, parameters, and the Supported Version Set | correct authority lifecycle | user consent |
+| Verifier governance administrator | activates verifier artifacts, trust roots, and the Supported Version Set | correct authority lifecycle | user consent |
 
 The principal trust roots are Google's active signing moduli, the active
 X/GitHub notary keys, the selected proof-verifier artifacts, the Proof Verifier
@@ -152,43 +153,60 @@ as shown here.
 
 ## Protocol parameters
 
-Protocol parameters are governance-owned unsigned 64-bit values expressed in
-seconds, read where they are enforced.
-The Verifier Governance Process may update a supported parameter and emits its
-key, previous value, and new value. The Platform Verifier reads the current
-value when it verifies a proof; browser reads are advisory only. Lowering a
-parameter may reject an outstanding proof, while raising one may extend an
-outstanding X/GitHub proof. Current trust-root membership remains required.
+Protocol parameters are unsigned 64-bit values expressed in seconds. The
+Platform Profile fixes the value of every parameter it names, as it fixes its
+request lines, so one `(identityPlatform, platformCeremonyVersion)` pair
+selects one value on every Consumer Chain and at every Verifier Version
+implementing that profile.
 
-| Parameter | Launch value | Use |
-|---|---:|---|
-| `proofLifetime[x]` | 3600 | maximum age of the X token attestation |
-| `proofLifetime[github]` | 3600 | maximum age of the GitHub token-exchange attestation |
-| `maxFutureAttestationSkew` | 300 | maximum X/GitHub attestation lead over Block Time |
+| Platform Profile | `proofLifetime` | `maxFutureAttestationSkew` |
+|---|---:|---:|
+| `("google", 1)` | not named | not named |
+| `("x", 1)` | 3600 | 300 |
+| `("github", 1)` | 3600 | 300 |
+
+`proofLifetime` is the maximum age of the attestation that supplies evidence
+time: the X token attestation and the GitHub token-exchange attestation.
+`maxFutureAttestationSkew` is the maximum lead of an X/GitHub attestation
+timestamp over Block Time. Google's signed `exp` bounds its validity, so
+`("google", 1)` names neither. Verifier governance controls the Supported
+Version Set and the trust roots, so a proof is accepted only while a Verifier
+Version implementing its profile is supported and the trust roots it relies
+on are active.
 
 - REQ-PARAM-01:
-  The Verifier Governance Process MUST reject an unknown parameter key and a
-  parameter value which is not a canonical unsigned 64-bit integer. The
-  Verifier Governance Process MUST emit the parameter key, previous value, and
-  new value after a successful update. Necessity: independent implementations
-  must read and observe one closed parameter set.
+  The Platform Profile MUST fix each protocol parameter it names as one
+  unsigned 64-bit number of seconds. The Platform Verifier MUST NOT expose an
+  operation that changes a value its profile fixes. The Verifier Governance
+  Process MUST NOT change that value, including by upgrading a Platform
+  Verifier registered for the profile. A different value changes the ceremony
+  boundary of REQ-COMMON-01B, so it takes a new Platform Ceremony Version,
+  verified by a new Platform Verifier registered under its own Verifier
+  Version. Necessity: the Canonical Runtime derives a proof's expiry from the
+  profile it ran, so one Platform Ceremony Version must mean one value on
+  every Consumer Chain and through every verifier upgrade.
 - REQ-PARAM-02:
-  The Platform Verifier MUST use the current governance value and checked
-  arithmetic whenever a ceremony rule names one of these parameters. The
+  The Platform Verifier MUST use the value its profile fixes, with checked
+  arithmetic, whenever a ceremony rule names one of these parameters. The
   Platform Verifier MUST NOT accept a caller-supplied substitute. Necessity:
   callers must not widen proof freshness.
 - TEST-PARAM-01 (exercises REQ-PARAM-01, REQ-PARAM-02):
-  The launch values reproduce the platform validity vectors; an unknown key,
-  caller override, and overflowing calculation fail, while a governance update
-  emits the previous and new values and affects subsequent verification.
+  The values above reproduce the platform validity vectors; a caller override
+  and an overflowing calculation fail; a Platform Verifier exposes no
+  operation that changes a value its profile fixes; and two Platform
+  Verifiers implementing one profile, on different Consumer Chains, under
+  different Verifier Versions, or before and after an upgrade, apply the same
+  values to the same evidence time.
 
 ## Security Considerations
 
-Verifier governance can shorten or widen the X/GitHub acceptance window. Every
-proof still requires a currently active trust root, and Google remains bounded
-by its signed expiry. The linked chapters define the remaining assumptions,
-security properties, requirements, and platform-specific security
-considerations.
+Each X and GitHub Platform Profile fixes its acceptance window, which is
+therefore the same on every Consumer Chain and at every Verifier Version
+implementing that profile. Verifier governance can end a proof's acceptance
+before the window closes by retiring a trust root it relies on or every
+Verifier Version implementing its profile. Google remains bounded by its
+signed expiry. The linked chapters define the remaining assumptions, security
+properties, requirements, and platform-specific security considerations.
 
 ## References
 

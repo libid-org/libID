@@ -31,9 +31,10 @@ Terms are imported from
 Each platform ceremony has an independently versioned immutable profile. Its
 Platform Ceremony Version is carried in its Authorization Digest and in the
 Submission Payload. Each platform section defines its own launch version. A
-version covers the digest, OAuth construction, and platform-specific proof
-statement, not any Consumer Chain's verifier implementation. A Consumer Chain
-routes on its own Verifier Version (common §5.1).
+version covers the digest, OAuth construction, platform-specific proof
+statement, and protocol parameter values, not any Consumer Chain's verifier
+implementation. A Consumer Chain routes on its own Verifier Version (common
+§5.1).
 
 A profile is selected by the pair `(identityPlatform,
 platformCeremonyVersion)`. Each platform section defines its exact canonical
@@ -180,8 +181,8 @@ Proof validity and mutable-metadata ordering use the authenticated times below.
 | Identity platform | `metadataObservedAt` | `proofValidUntil` |
 |---|---|---|
 | Google | signed ID-Token `exp` | signed ID-Token `exp` |
-| X | the token attestation's signed creation time | `metadataObservedAt + proofLifetime[x]` |
-| GitHub | the token-exchange attestation's signed creation time | `metadataObservedAt + proofLifetime[github]` |
+| X | the token attestation's signed creation time | `metadataObservedAt + proofLifetime` |
+| GitHub | the token-exchange attestation's signed creation time | `metadataObservedAt + proofLifetime` |
 
 For X and GitHub, "timestamp" is the signed TLSNotary attestation creation
 time. The token attestation is the one-time PKCE and Authorization Digest
@@ -189,8 +190,8 @@ binding, so it alone supplies evidence time: one signed timestamp anchors both m
 ordering and proof validity, exactly as Google's single signed `exp` does.
 The identity attestation opens the same bearer and carries the identity
 fields; its own creation time is not an evidence-time input and does not
-refresh the authorization. The named lifetimes are current
-[protocol parameters](libid.md#protocol-parameters).
+refresh the authorization. `proofLifetime` and `maxFutureAttestationSkew` are
+the [protocol parameters](libid.md#protocol-parameters) each profile fixes.
 
 Google's signed `exp` already supplies the accepted one-hour ordering and
 validity value. A Google proof also requires its signing modulus to remain in
@@ -201,7 +202,7 @@ block an otherwise valid authority operation.
 
 - REQ-PLAT-09 (upholds SP-FRESH-01):
   The Platform Verifier MUST reject an X or GitHub attestation timestamp more than
-  `maxFutureAttestationSkew` ahead of Block Time.
+  its profile's `maxFutureAttestationSkew` ahead of Block Time.
 - REQ-PLAT-09A (upholds SP-FRESH-01):
   The Platform Verifier MUST derive `metadataObservedAt` and
   `proofValidUntil` from the exact sources in the table above and from
@@ -1125,7 +1126,8 @@ observation ordering; client portability or a bounded client family; exact
 authorization and redirect transport; every authenticated request and
 response field with its provenance; how the Authorization Digest is carried
 through that platform's authorization; its authenticated client-binding source; an
-authenticated proof-validity rule and parameter keys; its trust-root lifecycle;
+authenticated proof-validity rule and the value of each protocol parameter it
+names; its trust-root lifecycle;
 browser and deployment data exposure, retry, interruption, and withholding
 behavior; and conformance vectors.
 
@@ -1169,8 +1171,8 @@ Platform Verifier, Notary Service, Consumer.
   `sub`.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
   A proof at or after `proofValidUntil`, and a token-attestation creation time
-  more than `maxFutureAttestationSkew` ahead of Block Time, are rejected. An
-  X or GitHub identity-attestation timestamp changes neither
+  more than its profile's `maxFutureAttestationSkew` ahead of Block Time, are
+  rejected. An X or GitHub identity-attestation timestamp changes neither
   `metadataObservedAt` nor `proofValidUntil`; Google uses its signed `exp`
   for both values.
 - TEST-PLAT-08 (exercises REQ-PLAT-24):

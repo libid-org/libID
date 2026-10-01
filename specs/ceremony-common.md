@@ -49,9 +49,10 @@ Platform Verifier: The component on the Consumer Chain registered under one
 
 Platform Ceremony Version: The unsigned 16-bit `platformCeremonyVersion`
    selecting one identity platform's immutable Authorization Digest
-   construction, OAuth construction, and platform-specific proof statement.
-   The digest binds it, so it is the same number on every Consumer Chain. It
-   identifies no Platform Verifier implementation and is not a routing key.
+   construction, OAuth construction, platform-specific proof statement, and
+   protocol parameter values. The digest binds it, so it is the same number on
+   every Consumer Chain. It identifies no Platform Verifier implementation and
+   is not a routing key.
 
 Verifier Version: The unsigned 16-bit key under which a Consumer Chain's
    Verifier Governance Process registers one Platform Verifier for one
@@ -114,13 +115,13 @@ Ceremony: The complete off-chain process that authenticates a user's selected
 
 Platform Profile: The immutable, independently versioned definition of one
    identity platform's ceremony: its endpoints, ordered request fields,
-   revealed ranges, authenticated response locations, proof-validity inputs,
-   parameter keys and rules, and, where its Attestation Count is nonzero, its
-   attestation protocol and format. A profile whose Attestation Count is zero
-   defines neither of those two. Every Platform Verifier registered for that
-   platform and version MUST enforce the same profile, but its implementation
-   and deployment are ledger-specific. The Consumer holds none of the profile
-   constants.
+   revealed ranges, authenticated response locations, proof-validity inputs
+   and rules, the value of each protocol parameter it names, and, where its
+   Attestation Count is nonzero, its attestation protocol and format. A
+   profile whose Attestation Count is zero defines neither of those two. Every
+   Platform Verifier registered for that platform and version MUST enforce the
+   same profile, but its implementation and deployment are ledger-specific.
+   The Consumer holds none of the profile constants.
 
 Proving Circuit: The zero-knowledge circuit whose proof a Platform Verifier
    checks. It proves only what cannot be read from authenticated evidence.
@@ -131,8 +132,8 @@ Redirect Runtime: The immutable browser component served at a registered
 
 Verifier Governance Process: The authority over the verification path: the
    Proof Verifier's Supported Version Set and the Verifier Version each entry
-   is registered under, each Platform Verifier's pinned constants and trust
-   roots, and the protocol parameters. It is not the Consumer's governance.
+   is registered under, and each Platform Verifier's verifier artifact, Notary
+   Service, and trust roots. It is not the Consumer's governance.
 
 Identity Platform: Google, X, GitHub, or a future source of authenticated
    identity evidence. "Provider" is reserved for the formal OIDC term and for
@@ -216,7 +217,7 @@ Attestation Count: The number of entries in the closed attestation list a
   The configured notary key is unforgeable, signs only transcripts it
   observed, and stamps their creation time from a clock within ordinary skew
   of real time. The enforced numeric bound on future skew is REQ-PLAT-09's
-  comparison against the current `maxFutureAttestationSkew` parameter, not
+  comparison against the Platform Profile's `maxFutureAttestationSkew`, not
   part of this assumption.
 - ASM-PROOF-01:
   A proof accepted under the verifier artifact selected for its platform and
@@ -319,8 +320,9 @@ bytes plus the Authorized Transaction Data.
   field.
 
 `platformCeremonyVersion` identifies the complete platform ceremony boundary:
-this Authorization Digest layout, the platform's OAuth construction, and its
-platform-specific proof statement. It is the only version the digest binds.
+this Authorization Digest layout, the platform's OAuth construction, its
+platform-specific proof statement, and its protocol parameter values. It is
+the only version the digest binds.
 The Verifier Version a Consumer Chain routes on is not in the digest, so a
 proof made for one ceremony version is acceptable at every Platform Verifier
 implementing it.
@@ -498,12 +500,12 @@ Verifier knows what the payload is; only the Notary Service knows whether the
 notary signed. Everything between them is dispatch. The Supported Version Set
 lives in the Proof Verifier and is keyed by Verifier Version. The Platform
 Profile defines every immutable platform constant — endpoints, revealed
-ranges, attestation format, validity rules, and parameter keys — and each
-Consumer Chain's Platform Verifier enforces that profile and fixes the
-encoding of its own Submission Payload. Verifier governance owns the mutable
-verifier artifact, Notary Service, trust roots, fees, parameter values, and
-the Verifier Version each verifier is registered under. The Consumer holds
-none of those constants.
+ranges, attestation format, validity rules, and protocol parameter values —
+and each Consumer Chain's Platform Verifier enforces that profile and fixes
+the encoding of its own Submission Payload. Verifier governance owns the
+mutable verifier artifact, Notary Service, trust roots, fees, and the
+Verifier Version each verifier is registered under. The Consumer holds none
+of those constants.
 
 Two versions travel this path, deliberately unrelated. The Platform Ceremony
 Version is inside the payload and the digest, fixed by the Canonical Runtime
@@ -1264,8 +1266,8 @@ Service.
   the Authorization Digest for no effect.
 - REQ-COMMON-26 (upholds SP-FRESH-01):
   The Platform Verifier MUST derive `proofValidUntil` from the platform profile's
-  authenticated validity input and any current protocol parameter that profile
-  names. The Platform Verifier MUST reject a Submission where
+  authenticated validity input and any protocol parameter value that profile
+  fixes. The Platform Verifier MUST reject a Submission where
   `Block Time >= proofValidUntil`.
 - REQ-COMMON-27 (upholds SP-FRESH-01):
   The Platform Verifier MUST NOT accept a caller-supplied validity bound.
