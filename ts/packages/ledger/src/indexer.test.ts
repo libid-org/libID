@@ -13,11 +13,11 @@ const ledgerOn = (id: number) =>
     testnet: true,
     currency: { symbol: 'TIA', decimals: 18 },
     notary: 'http://localhost:4687',
-    addresses: { identityNames: registry },
+    addresses: { identityRegistry: registry },
   })
 const eden = ledgerOn(4242)
 const rpcOf = (ledger: Ledger) => `https://rpc.example/${ledger.chain}`
-const names = (at = origin) => indexer({ origin: at, deployment: 'identityNames' })
+const names = (at = origin) => indexer({ origin: at, deployment: 'identityRegistry' })
 const clientOf = (ledger: Ledger = eden, source: Indexer = names()) =>
   connect({ ledgers: [{ ledger, rpc: rpcOf(ledger) }], indexer: source })
 
@@ -209,9 +209,9 @@ it('composes a default indexer with per-ledger overrides', async () => {
 
 it('rejects an invalid indexer, or a ledger without its deployment', () => {
   for (const options of [
-    { origin: 'http://indexer.example', deployment: 'identityNames' },
-    { origin: `${origin}/api`, deployment: 'identityNames' },
-    { origin, deployment: 'identityNames', maxLag: -1 },
+    { origin: 'http://indexer.example', deployment: 'identityRegistry' },
+    { origin: `${origin}/api`, deployment: 'identityRegistry' },
+    { origin, deployment: 'identityRegistry', maxLag: -1 },
   ]) {
     expect(() => indexer(options)).toThrow(TypeError)
   }

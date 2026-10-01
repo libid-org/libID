@@ -11,7 +11,8 @@ import { Ledgers } from '@libid/ledger'
 
 const eden = Ledgers.EdenTestnet
 eden.chain // 'eip155:3735928814'
-eden.addresses.identityNames // '0x5b86…'
+eden.addresses.identityRegistry // '0x0531…', the same on every EVM chain
+Ledgers.Sepolia.chain // 'eip155:11155111'
 ```
 
 Each entry is a `Ledger`: a `LedgerId` plus its name, testnet flag, native
@@ -35,7 +36,7 @@ const anvil = defineLedger({
   testnet: true,
   currency: { symbol: 'ETH', decimals: 18 },
   notary: 'http://localhost:4687',
-  addresses: { identityNames: '0x…' },
+  addresses: { identityRegistry: '0x…' },
 })
 ```
 
@@ -59,8 +60,8 @@ import { connect, indexer, type Query } from '@libid/ledger/client'
 const resolveHandle: Query<[platform: `0x${string}`, handle: string], `0x${string}`> = {
   evm: (read, platform, handle) =>
     read.readContract({
-      address: read.address('identityNames'),
-      abi: identityNamesAbi,
+      address: read.address('identityRegistry'),
+      abi: identityRegistryAbi,
       functionName: 'resolveHandle',
       args: [platform, handle],
     }),
@@ -71,7 +72,7 @@ const client = connect({
     { ledger: Ledgers.EdenTestnet }, // read through the connected wallet
     { ledger: anvil, rpc: 'http://127.0.0.1:8545', indexer: false },
   ],
-  indexer: indexer({ origin: 'https://…', deployment: 'identityNames' }),
+  indexer: indexer({ origin: 'https://…', deployment: 'identityRegistry' }),
 })
 await client.read(Ledgers.EdenTestnet, resolveHandle, [platform, 'alice'])
 ```

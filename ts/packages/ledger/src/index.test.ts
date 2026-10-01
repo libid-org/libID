@@ -14,15 +14,27 @@ const local = {
 
 it('eden testnet matches its deployed verifier', () => {
   const eden = Ledgers.EdenTestnet
-  // CeremonyProofVerifier.chainId() at 0x76BDc18f21c2db0FF796C7Cc50348528b2899275, read 2026-09-30.
+  // CeremonyProofVerifier.chainId() at 0x76BDc18f21c2db0FF796C7Cc50348528b2899275, read 2026-10-01.
   expect(hex(eden)).toBe('0x70c29a92a253d6f2a7ee351d43fd44734752ddb392efed6c31d16d3530a7e41c')
   expect(eden.notaryAddress()).toBe('https://testnet.notary.lib.id')
   expect(eden.rpc, 'libID pins no RPC').toBeUndefined()
   expect(eden.explorer).toBe('https://eden-testnet.blockscout.com')
   expectTypeOf(eden.chain).toEqualTypeOf<'eip155:3735928814'>()
   expectTypeOf(
-    eden.addresses.identityNames,
-  ).toEqualTypeOf<'0x5b86114eccd8259347294a2bdbf3da2c93857796'>()
+    eden.addresses.identityRegistry,
+  ).toEqualTypeOf<'0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366'>()
+})
+
+it('sepolia matches its deployed verifier', () => {
+  const sepolia = Ledgers.Sepolia
+  // CeremonyProofVerifier.chainId() at 0x76BDc18f21c2db0FF796C7Cc50348528b2899275, read 2026-10-01.
+  expect(hex(sepolia)).toBe('0x4679aa19497ce87eb9ffd768757c9397680da8c7963db8096790ee03622ae968')
+  expect(sepolia.notaryAddress()).toBe('https://testnet.notary.lib.id')
+  expect(sepolia.rpc, 'libID pins no RPC').toBeUndefined()
+  expect(sepolia.explorer).toBe('https://sepolia.etherscan.io')
+  expect(sepolia.addresses.identityRegistry, 'Canonical: the same on every EVM chain').toBe(
+    Ledgers.EdenTestnet.addresses.identityRegistry,
+  )
 })
 
 it('derives eip155 hashes as keccak256(abi.encode(chainId))', () => {

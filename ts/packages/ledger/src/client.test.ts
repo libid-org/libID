@@ -29,7 +29,7 @@ it('serves pinned ledgers only as defined, with their public endpoints by defaul
     testnet: eden.testnet,
     currency: eden.currency,
     notary: eden.notaryAddress(),
-    addresses: { identityNames: `0x${'9'.repeat(40)}` },
+    addresses: { identityRegistry: `0x${'9'.repeat(40)}` },
   })
   expect(() => connect({ ledgers: [{ ledger: altered, rpc: 'https://rpc.example/' }] })).toThrow(
     /pinned/,

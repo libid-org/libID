@@ -126,7 +126,16 @@ export const Ledgers = Object.freeze({
     testnet: true,
     currency: { symbol: 'TIA', decimals: 18 },
     notary: 'https://testnet.notary.lib.id',
-    addresses: { identityNames: '0x5b86114eccd8259347294a2bdbf3da2c93857796' },
+    addresses: { identityRegistry: '0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366' },
     explorer: 'https://eden-testnet.blockscout.com',
+  }),
+  Sepolia: defineLedger({
+    chain: 'eip155:11155111',
+    name: 'Sepolia',
+    testnet: true,
+    currency: { symbol: 'ETH', decimals: 18 },
+    notary: 'https://testnet.notary.lib.id',
+    addresses: { identityRegistry: '0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366' },
+    explorer: 'https://sepolia.etherscan.io',
   }),
 })

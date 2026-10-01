@@ -331,7 +331,7 @@ describe('EVM client', () => {
     testnet: true,
     currency: { symbol: 'TIA', decimals: 18 },
     notary: 'http://localhost:4687',
-    addresses: { identityNames: registry },
+    addresses: { identityRegistry: registry },
   })
   const feeBlock = { number: '0x1', baseFeePerGas: '0x64', transactions: [] }
   const tx = { to: registry, data: '0x1234' as const, value: 5n }
@@ -408,7 +408,7 @@ describe('EVM client', () => {
     const named = (name: string): Query<[], string> => ({
       evm: async (read) => read.address(name),
     })
-    expect(await client().read(ledger, named('identityNames'), [])).toBe(
+    expect(await client().read(ledger, named('identityRegistry'), [])).toBe(
       '0x2222222222222222222222222222222222222222',
     )
     await expect(client().read(ledger, named('verifier'), [])).rejects.toThrow(
@@ -477,7 +477,7 @@ describe('EVM client', () => {
       testnet: true,
       currency: { symbol: 'TIA', decimals: 18 },
       notary: 'http://localhost:4687',
-      addresses: { identityNames: registry },
+      addresses: { identityRegistry: registry },
       rpc: 'https://public-rpc.example/',
       explorer: 'https://public-explorer.example',
     })
@@ -531,7 +531,7 @@ describe('EVM client', () => {
       testnet: true,
       currency: { symbol: 'ETH', decimals: 18 },
       notary: 'http://localhost:4687',
-      addresses: { identityNames: registry },
+      addresses: { identityRegistry: registry },
     })
     const wallet = scriptedWallet({
       wallet_switchEthereumChain: ([params]) => {
