@@ -10,7 +10,8 @@
     "dev:stack": "pnpm build:deps && node stack.ts",
     "build:deps": "pnpm --filter '@libid/bind^...' build",
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:live": "playwright test -c playwright.live.config.ts"
   },
   "dependencies": {
     "@libid/ceremony": "workspace:^",
@@ -23,6 +24,7 @@
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "otpauth": "^9.4.0"
   }
 }

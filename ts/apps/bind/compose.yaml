@@ -2,10 +2,11 @@
 # contracts, the services a ceremony needs, and an indexer for the UI to read.
 services:
   anvil:
-    # foundry:v1.7.1 by index digest. Wall-clock block time: proofs carry
-    # real notary timestamps, and the verifiers bound their age by it.
+    # foundry:v1.7.1 by index digest. A block every second keeps block time
+    # at the wall clock, as on a live chain: proofs carry real notary
+    # timestamps, and the verifiers refuse one dated ahead of the block.
     image: ghcr.io/foundry-rs/foundry@sha256:8347b728d5d393dac1c018691b36f506d23b9dcd78341d40ea0fcb11c3a19cdd
-    entrypoint: ["anvil", "--host", "0.0.0.0", "--chain-id", "31337"]
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--chain-id", "31337", "--block-time", "1", "--silent"]
     ports:
       - "127.0.0.1:4688:8545"
     healthcheck:
