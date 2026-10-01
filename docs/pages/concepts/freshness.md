@@ -13,14 +13,15 @@ when the platform confirmed who holds the identity. `handleBinding` and `idBindi
 The time is not chosen by the user or by your app. It comes from signed
 evidence, moved back by a fixed allowance for each platform:
 
-| Platform | `observedAt` is | A proof made just now looks |
+| Platform | `observedAt` is | A proof bound a moment ago reads |
 | --- | --- | --- |
-| GitHub, X | the time the notary signed the user's session, minus 5 minutes | 5 minutes old |
-| Google | the expiry in Google's sign-in token, minus 2 hours | about an hour old |
+| GitHub, X | the time the notary signed the user's session, minus 5 minutes | 5 to 65 minutes old |
+| Google | the expiry in Google's sign-in token, minus 2 hours | 1 to 2 hours old |
 
 The allowance puts every platform on one scale and keeps `observedAt` from
-ever being ahead of the block. It also means a proof is never younger than
-its allowance: a limit shorter than that rejects every holder.
+ever being ahead of the block. The ranges come from how old the evidence may
+be when it is bound: a GitHub or X session up to an hour, a Google token until
+it expires. A limit below the top of the range rejects some honest holders.
 
 A GitHub or X proof must reach the chain within an hour of that time, and the
 time cannot be more than five minutes ahead of the block. A Google proof must
@@ -51,6 +52,6 @@ libID does not decide this for you. Pick a limit that fits what is at stake:
 - To send a payment to a handle, show the age to the sender, and warn when it
   is old.
 - To gate something valuable in a contract, require
-  `observedAt + maxAge >= block.timestamp`, with `maxAge` well above the
-  allowance: more than an hour if you accept Google. See
+  `observedAt + maxAge >= block.timestamp`, with `maxAge` above the ranges in
+  the table: at least 2 hours if you accept Google. See
   [Gate a contract](/docs/guides/gate-contract/).

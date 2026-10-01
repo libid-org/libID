@@ -64,8 +64,8 @@ reverts with `UnusableHandle` if the text can never be a GitHub handle.
 Handles can be renamed and reused on GitHub. `MAX_AGE` limits how long ago
 the holder last proved it. Pick a value that fits what the call is worth.
 
-A proof made just now already reads 5 minutes old on GitHub and about an hour
-old on Google, so keep `MAX_AGE` well above that. See
+A proof bound a moment ago can already read up to 65 minutes old on GitHub
+and up to 2 hours on Google, so keep `MAX_AGE` well above that. See
 [Freshness](/docs/concepts/freshness/).
 
 ## An airdrop, once per identity

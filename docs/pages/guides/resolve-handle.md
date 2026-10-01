@@ -75,8 +75,8 @@ The age of the proof is the time since then:
 const age = Math.floor(Date.now() / 1000) - Number(observedAt);
 ```
 
-A proof made just now already reads 5 minutes old on GitHub and X, and about
-an hour old on Google. See [Freshness](/docs/concepts/freshness/).
+A proof bound a moment ago can already read up to 65 minutes old on GitHub
+and X, and up to 2 hours on Google. See [Freshness](/docs/concepts/freshness/).
 
 Handles can be renamed and reused on the platform. The older `observedAt`
 is, the more likely the handle now belongs to someone else there. Show it to
