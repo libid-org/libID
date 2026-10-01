@@ -85,11 +85,13 @@ export function acceptGoogleIdToken(idToken: string, clientId: string): ParsedGo
 export async function fetchSigningKey(kid: string, signal: AbortSignal): Promise<unknown> {
   // A run closed before this point starts no key request.
   signal.throwIfAborted()
+  // The key set follows Google's own Cache-Control, so repeat ceremonies reuse it.
   const body = await fetchPublicJson(
     provider.jwksUrl,
     MAX_JWKS_BYTES,
     'Signing key request failed',
     signal,
+    'default',
   )
   if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')
   const keys = body.keys.filter((k) => isRecord(k) && k.kid === kid)
