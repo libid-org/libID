@@ -40,7 +40,8 @@ retain interaction and policy coverage; full proofs and matched-notary runtime
 qualification run per desktop engine. The `@live` runtime tests and the reveal stall
 test's setup sends, which run through the real notary against the X and GitHub APIs,
 retry once inside the test unless a deadline was missed; nothing else retries. Independent
-workspace/engine CI jobs run in parallel. Each engine generates the Google,
+workspace/engine CI jobs run in parallel; a pull request runs only the workspaces
+its changes can affect, and every push to `main` runs them all. Each engine generates the Google,
 X and GitHub ceremony proofs plus one real-notary coexistence proof. A configured
 test is not evidence that the current revision passed it.
 

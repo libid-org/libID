@@ -19,6 +19,54 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Changes: which browser workspaces a pull request can affect, and whether it
+  # can affect the CCDP image, so their jobs skip otherwise. Pushes to main run
+  # everything: a release promotes each main commit's own image. Plain git over
+  # the PR's range, as in DCO.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      workspaces: ${{ steps.paths.outputs.workspaces }}
+      image: ${{ steps.paths.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Affected workspaces
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo 'workspaces=["popup","ceremony","dev"]' >> "$GITHUB_OUTPUT"
+            echo "image=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          # What every job builds on: the TypeScript workspace setup and CI itself.
+          shared='^(ts/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json)|\.github/(workflows/(ci|ccdp-image)\.yml|actions/setup-ts/))'
+          # The ceremony and the workspace packages it bundles.
+          ceremony='^ts/packages/(ceremony|popup|ledger)/'
+          changed() { grep -qE "$shared|$1" <<<"$files"; }
+          workspaces=()
+          if changed '^ts/packages/popup/'; then workspaces+=(popup); fi
+          if changed "$ceremony"; then workspaces+=(ceremony); fi
+          if changed "$ceremony|^ts/apps/dev/"; then workspaces+=(dev); fi
+          image=false
+          if changed "$ceremony"; then image=true; fi
+          json=$(jq -cn '$ARGS.positional' --args "${workspaces[@]}")
+          echo "Browser workspaces: $json; CCDP image: $image"
+          { echo "workspaces=$json"; echo "image=$image"; } >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
   # TypeScript: build, tests (including the wallet-product isolation guard),
   # complete source/test/build-script type checking, lint, formatting.
   # ---------------------------------------------------------------------------
@@ -220,7 +268,8 @@ jobs:
   # ---------------------------------------------------------------------------
   ccdp-image:
     name: CCDP image
-    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+    needs: [changes]
+    if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && needs.changes.outputs.image == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/ccdp-image.yml
@@ -306,6 +355,8 @@ jobs:
   # ---------------------------------------------------------------------------
   ceremony-e2e-assets:
     name: Ceremony e2e assets
+    needs: [changes]
+    if: contains(fromJSON(needs.changes.outputs.workspaces), 'ceremony')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -335,27 +386,22 @@ jobs:
   # ---------------------------------------------------------------------------
   # Each workspace/engine pair has its own runner and test servers. Keep heavy
   # ceremony work serial inside a runner; independent jobs can run in parallel.
-  # Popup and dev jobs still run when the ceremony assets fail to build.
+  # Popup and dev jobs still run when the ceremony assets fail to build. The
+  # workspaces are the ones `changes` found affected; a matrix `include` would
+  # add back the pairs a filter removed, so each pair's projects are chosen in
+  # the test step.
   # ---------------------------------------------------------------------------
   browser:
     name: Browser tests (${{ matrix.workspace }}, ${{ matrix.engine }})
-    needs: [ceremony-e2e-assets]
-    if: ${{ !cancelled() }}
+    needs: [changes, ceremony-e2e-assets]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.workspaces != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { workspace: popup, engine: chromium, projects: '--project=chromium --project=mobile-chrome' }
-          - { workspace: popup, engine: firefox, projects: '--project=firefox' }
-          - { workspace: popup, engine: webkit, projects: '--project=webkit --project=mobile-webkit' }
-          - { workspace: ceremony, engine: chromium, projects: '--project=chromium --project=chromium-http --project=android-emulated' }
-          - { workspace: ceremony, engine: firefox, projects: '--project=firefox --project=firefox-http' }
-          - { workspace: ceremony, engine: webkit, projects: '--project=webkit --project=webkit-http --project=ios-emulated' }
-          - { workspace: dev, engine: chromium, projects: '--project=chromium --project=android-emulated' }
-          - { workspace: dev, engine: firefox, projects: '--project=firefox' }
-          - { workspace: dev, engine: webkit, projects: '--project=webkit --project=ios-emulated' }
+        workspace: ${{ fromJSON(needs.changes.outputs.workspaces) }}
+        engine: [chromium, firefox, webkit]
     permissions:
       contents: read
       packages: read
@@ -398,4 +444,20 @@ jobs:
       - name: Browser tests
         env:
           CEREMONY_E2E_PREBUILT: ${{ matrix.workspace == 'ceremony' && '1' || '' }}
-        run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}' run test:e2e ${{ matrix.projects }}
+          PAIR: ${{ matrix.workspace }}-${{ matrix.engine }}
+        run: |
+          set -euo pipefail
+          case "$PAIR" in
+            popup-chromium) projects='--project=chromium --project=mobile-chrome' ;;
+            popup-firefox) projects='--project=firefox' ;;
+            popup-webkit) projects='--project=webkit --project=mobile-webkit' ;;
+            ceremony-chromium) projects='--project=chromium --project=chromium-http --project=android-emulated' ;;
+            ceremony-firefox) projects='--project=firefox --project=firefox-http' ;;
+            ceremony-webkit) projects='--project=webkit --project=webkit-http --project=ios-emulated' ;;
+            dev-chromium) projects='--project=chromium --project=android-emulated' ;;
+            dev-firefox) projects='--project=firefox' ;;
+            dev-webkit) projects='--project=webkit --project=ios-emulated' ;;
+            *) echo "::error::no Playwright projects for $PAIR"; exit 1 ;;
+          esac
+          # Word-split on purpose: one argument per project.
+          pnpm -C ts --filter "@libid/${{ matrix.workspace }}" run test:e2e $projects
