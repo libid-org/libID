@@ -19,7 +19,7 @@ earns its keep exactly when the name works in wallets we do not control.
 ENS documents three ways to issue subnames: on-chain, on an L2, and offchain via
 CCIP-Read. None describes us, and the difference is in our favour: **we are not
 issuing names, we are projecting state that already exists.**
-`IdentityNames.resolveHandle(platformId, handle)` already answers the question an
+`IdentityRegistry.resolveHandle(platformId, handle)` already answers the question an
 ENS resolver asks, so a name needs no registry entry, no NFT, no mint, and no
 storage of its own.
 
@@ -159,7 +159,7 @@ safe.
 through `addr(node, coinType)`. Bare `addr(node)` is coin type 60 — Ethereum
 mainnet, a specific chain rather than an unknown one.
 
-`IdentityNames` sits at one CREATE3 address on every chain with its own state, so
+`IdentityRegistry` sits at one CREATE3 address on every chain with its own state, so
 the coin type says which chain's contract to read. The rule is one line with no
 exceptions:
 
@@ -280,7 +280,7 @@ keeps of every chain, and nothing else: no RPC, no per-chain configuration.
 The chains it serves are the chains indexers have written; a new indexer is
 served the first time it commits.
 
-**3. Nothing on the write path.** `IdentityNames` is untouched: no new call, no
+**3. Nothing on the write path.** `IdentityRegistry` is untouched: no new call, no
 migration, no per-user transaction.
 
 ## The backend
@@ -308,7 +308,7 @@ response  →  { "data": "0x…" }   → the resolver's callback verifies
   is answer wrongly.
 - **One secret**, the signing key, pinned by the resolver. Rotation is an owner
   transaction.
-- **Cacheable** — answers are `IdentityNames` reads and carry an expiry the
+- **Cacheable** — answers are `IdentityRegistry` reads and carry an expiry the
   resolver enforces.
 
 **What the gateway signs for.** The `resolver` in the digest is the address the
@@ -566,12 +566,12 @@ every chain we target provides.
 is right when a name is an asset in its own right. Here a name is derived from a
 proof, and minting it separately creates a **second source of truth that can
 disagree with the first**: a user rebinds `alice` to a new holder in
-`IdentityNames` while the subname NFT still records the old owner, and nothing
+`IdentityRegistry` while the subname NFT still records the old owner, and nothing
 decides which is correct.
 
 The consequence to accept: the user has **no on-chain claim to the ENS name
 itself**. It resolves while we run the gateway and keep the resolver pointed at
-it. The authoritative record is the binding in `IdentityNames`, which survives
+it. The authoritative record is the binding in `IdentityRegistry`, which survives
 independently and is readable without us. ENS is a display layer, not storage,
 and users should be told so.
 
@@ -582,7 +582,7 @@ Because the name is derived rather than registered:
 - **A rename follows automatically.** Alice re-proves as `@alice2`,
   `alice2.x.handles.link` starts resolving and `alice.x.handles.link` stops — no
   ENS transaction, because the handle retirement already happened in
-  `IdentityNames`.
+  `IdentityRegistry`.
 - **A wallet move follows automatically.** Alice re-proves from a new wallet and
   the same name resolves to it. With a registered subname this would be a
   transfer; here there is nothing to transfer.
