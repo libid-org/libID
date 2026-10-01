@@ -16,12 +16,10 @@ import {
   supportedPlatforms,
 } from '../../platforms/index.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import { bundledVersions, CEREMONY_ID, fixtures, platformConfig } from '../../testing/index.js'
+import { BRIDGE, CEREMONY_ID, ccdpClient, fixtures, platformConfig } from '../../testing/index.js'
 import { CeremonyFailed, EventMessage, IdentityProof, UserDenied } from '../index.js'
 import { popupErrorMessages } from '../uiMessages.js'
-import { type CCDPClient, ccdpClientFromConfig } from './client.js'
-import { validateCeremonyConfig } from './config.js'
-import { validatePlatformVersions } from './versions.js'
+import type { CCDPClient } from './client.js'
 
 type Spied = FakeConnection & Record<'send' | 'navigate' | 'navigateAway' | 'close', Mock>
 
@@ -35,22 +33,21 @@ function spiedConnection(): Spied {
 
 const id = CEREMONY_ID
 
+/** Client derives the fixed callback from the Bridge origin. */
+const redirectUri = `${BRIDGE}/auth/callback`
+
 const wireConfig = {
   ccdpOrigin: 'https://ccdp.test',
   platforms: { google: { clientId: 'client' } },
 }
 
-const config = validateCeremonyConfig(wireConfig, 'https://bridge.test')
 /** A client whose Bridge record configures `platformId` alone, with its fixture registration. */
 const clientFor = (platformId: PlatformId) =>
-  ccdpClientFromConfig(
-    { ...config, platforms: { [platformId]: platformConfig(platformId) } },
-    bundledVersions,
-  )
+  ccdpClient({ ...wireConfig, platforms: { [platformId]: platformConfig(platformId) } })
 
-/** A run on a fresh spied connection: Google version 1, transaction data [1, 2] by default. */
-function setup<P extends PlatformId = 'google'>({
-  client = ccdpClientFromConfig(config, bundledVersions),
+/** A run on a fresh spied connection and client: Google version 1, transaction data [1, 2] by default. */
+async function setup<P extends PlatformId = 'google'>({
+  client,
   connection = spiedConnection(),
   platformId = 'google' as P,
   ledgerId = testnet,
@@ -64,7 +61,7 @@ function setup<P extends PlatformId = 'google'>({
   transactionData?: Uint8Array
   version?: SupportedCeremonyVersion<P>
 } = {}) {
-  const ceremony = client.new(
+  const ceremony = (client ?? (await ccdpClient(wireConfig))).new(
     connection,
     id,
     platformId,
@@ -152,7 +149,7 @@ function proofFor(connection: FakeConnection, claimed: Identity<'google'> = iden
 
 describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
   it('uses distinct origins and frozen input; never receives raw OAuth return [TEST-CCDP-01] [LIBID-MOD-018] [LIBID-OAUTH-016] [LIBID-OAUTH-027] [LIBID-BROWSER-020]', async () => {
-    const { connection: c, ceremony, data } = setup()
+    const { connection: c, ceremony, data } = await setup()
     const events: string[] = []
     ceremony.onEvent((e) => events.push(e.status === 'active' ? `${e.event}.${e.phase}` : e.status))
     data[0] = 9
@@ -169,7 +166,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
         platformId: 'google',
         platformCeremonyVersion: 1,
         clientId: 'client',
-        redirectUri: config.redirectUri,
+        redirectUri,
         codeVerifier: null,
         notaryAddress: testnet.notaryAddress(),
       },
@@ -197,7 +194,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     )
     expect(result.oauthProof.authorizationDigest).toHaveLength(32)
     const authorization = authorizationUrl(c)
-    expect(authorization.searchParams.get('redirect_uri')).toBe(config.redirectUri)
+    expect(authorization.searchParams.get('redirect_uri')).toBe(redirectUri)
     expect(authorization.searchParams.get('nonce')).toBe(
       expectedNonce(result.oauthProof.authorizationNonce, new Uint8Array([1, 2])),
     )
@@ -216,7 +213,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('one-shot')
   })
   it('closing the connection wins over late delivery without a CCDP cancel [LIBID-OAUTH-024] [LIBID-OAUTH-025] [LIBID-BROWSER-018]', async () => {
-    const { connection: c, ceremony } = setup()
+    const { connection: c, ceremony } = await setup()
     const rejection = expect(ceremony.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
     await c.close()
     c.receive({ type: 'identity-proof', identity, proof: proofFor(c) })
@@ -225,7 +222,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     expect(c.sent).toEqual([])
   })
   it('protocol CeremonyFailed remains a failure even with cancellation-like text [LIBID-OAUTH-022]', async () => {
-    const { connection, ceremony } = setup()
+    const { connection, ceremony } = await setup()
     const events: CeremonyEvent[] = []
     ceremony.onEvent((event) => events.push(event))
     const result = ceremony.proveUserIdentity()
@@ -294,7 +291,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
       messages: [...ready, preparing, { type: 'user-denied' }],
     },
   ])('rejects invalid predecessors: $name [TEST-CCDP-05]', async ({ at, messages }) => {
-    const { connection: c, ceremony } = setup()
+    const { connection: c, ceremony } = await setup()
     const pending = ceremony.proveUserIdentity()
     for (const message of messages) c.receive(message)
     await expect(pending).rejects.toMatchObject({
@@ -304,7 +301,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     })
   })
   it('denial resolves only after start; observer failure is inert [TEST-CCDP-07] [LIBID-BROWSER-018]', async () => {
-    const { connection: c, ceremony } = setup()
+    const { connection: c, ceremony } = await setup()
     ceremony.onEvent(() => {
       throw new Error('observer')
     })
@@ -314,15 +311,14 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     await expect(pending).resolves.toEqual({ status: 'denied' })
   })
   it('rejects setup failures without leaking handlers or connection ownership [LIBID-BROWSER-002]', async () => {
-    const { connection: c, ceremony } = setup()
+    const { connection: c, ceremony } = await setup()
     const release = c.on(EventMessage, () => {})
     await expect(ceremony.proveUserIdentity()).rejects.toThrow('initialize')
     expect(registered(c)).toEqual(['event'])
     release()
-    const result = setup({
-      connection: c,
-      transactionData: new Uint8Array(),
-    }).ceremony.proveUserIdentity()
+    const result = (
+      await setup({ connection: c, transactionData: new Uint8Array() })
+    ).ceremony.proveUserIdentity()
     expect(registered(c)).toEqual(['event', 'identity-proof', 'user-denied', 'ceremony-failed'])
     const rejection = expect(result).rejects.toMatchObject({
       name: 'CeremonyError',
@@ -334,9 +330,9 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
 })
 
 it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async () => {
-  const client = ccdpClientFromConfig(config, bundledVersions)
-  const { connection, ceremony: first } = setup({ client })
-  expect(() => setup({ client })).toThrow('already live')
+  const client = await ccdpClient(wireConfig)
+  const { connection, ceremony: first } = await setup({ client })
+  await expect(setup({ client })).rejects.toThrow('already live')
   const boxed = Object(id) as string
   expect(() =>
     client.new(connection, boxed, 'google', testnet, new Uint8Array(32), new Uint8Array()),
@@ -344,7 +340,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
   const rejected = expect(first.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
   await connection.close()
   await rejected
-  expect(() => setup({ client, connection })).not.toThrow()
+  await expect(setup({ client, connection })).resolves.toBeDefined()
 })
 
 it.each(supportedPlatforms)(
@@ -359,7 +355,14 @@ it.each(supportedPlatforms)(
       notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
     }
     const connection = spiedConnection()
-    const ceremony = clientFor(platformId).new(connection, id, platformId, ledger, domain, data)
+    const ceremony = (await clientFor(platformId)).new(
+      connection,
+      id,
+      platformId,
+      ledger,
+      domain,
+      data,
+    )
     expect(ledger.hash).toHaveBeenCalledOnce()
     expect(ledger.notaryAddress).toHaveBeenCalledOnce()
     hash.fill(9)
@@ -424,8 +427,9 @@ it.each(supportedPlatforms)(
   },
 )
 
-it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014] [LIBID-OAUTH-003]', () => {
+it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014] [LIBID-OAUTH-003]', async () => {
   const connection = spiedConnection()
+  const client = await ccdpClient(wireConfig)
   for (const ledger of [
     null,
     {},
@@ -438,7 +442,7 @@ it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-
     },
   ])
     expect(() =>
-      ccdpClientFromConfig(config, bundledVersions).new(
+      client.new(
         connection,
         id,
         'google',
@@ -452,9 +456,9 @@ it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-
 
 it.each(supportedPlatforms)(
   'rejects invalid notary addresses before OAuth for %s [LIBID-OAUTH-021]',
-  (platformId) => {
+  async (platformId) => {
     const connection = spiedConnection()
-    const client = clientFor(platformId)
+    const client = await clientFor(platformId)
     for (const method of [
       undefined,
       1,
@@ -495,7 +499,7 @@ it.each([
   { ...identity, oauthClientId: 'other-client' },
   { ...identity, userId: '123456789012345678901' },
 ])('rejects a profile or client identity mismatch [LIBID-OAUTH-022]', async (identity) => {
-  const { connection, ceremony } = setup()
+  const { connection, ceremony } = await setup()
   const result = ceremony.proveUserIdentity()
   reachProving(connection)
   connection.receive({ type: 'identity-proof', identity, proof: proofFor(connection) })
@@ -508,7 +512,7 @@ it.each([
 })
 
 it('rejects a Google proof bound to another authorization before resolving or announcing success [LIBID-OAUTH-014]', async () => {
-  const { connection, ceremony } = setup()
+  const { connection, ceremony } = await setup()
   const statuses: string[] = []
   ceremony.onEvent((event) => statuses.push(event.status))
   const result = ceremony.proveUserIdentity()
@@ -528,7 +532,7 @@ it('rejects a Google proof bound to another authorization before resolving or an
 })
 
 it('keeps transport failure text instead of reporting it as an invalid sequence', async () => {
-  const { connection, ceremony } = setup()
+  const { connection, ceremony } = await setup()
   connection.send.mockImplementation(() => {
     throw new PopupError('send-unavailable')
   })
@@ -542,7 +546,7 @@ it('keeps transport failure text instead of reporting it as an invalid sequence'
 })
 
 it('keeps the Prefetch navigation error like the authorization navigation error', async () => {
-  const { connection, ceremony } = setup()
+  const { connection, ceremony } = await setup()
   connection.navigate.mockRejectedValueOnce(new PopupError('keep-failed'))
   await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({
     event: 'prefetch-dispatch',
@@ -551,8 +555,7 @@ it('keeps the Prefetch navigation error like the authorization navigation error'
 })
 
 // Compile-only API checks: rejected forms must remain rejected by TypeScript.
-function checkCreationTypes() {
-  const client = ccdpClientFromConfig(config, bundledVersions)
+function checkCreationTypes(client: CCDPClient) {
   const conn = spiedConnection(),
     ledger = testnet,
     bytes = new Uint8Array(32)
@@ -586,7 +589,7 @@ function checkCreationTypes() {
 void checkCreationTypes
 
 it('preserves opaque failure text and operation context for the application', async () => {
-  const { connection, ceremony } = setup()
+  const { connection, ceremony } = await setup()
   const result = ceremony.proveUserIdentity()
   connection.receive({
     type: 'ceremony-failed',
@@ -605,7 +608,7 @@ it.each(supportedPlatforms)(
   async (platformId) => {
     const notarized = fixtures[platformId].proverKind === 'bearer-link'
     const c = spiedConnection()
-    const ceremony = clientFor(platformId).new(
+    const ceremony = (await clientFor(platformId)).new(
       c,
       id,
       platformId,
@@ -657,7 +660,7 @@ it.each(supportedPlatforms)(
 it.each(['success', 'denied', 'failed', 'closed', 'invalid-result', 'setup'] as const)(
   'finishes exactly once for %s, before settling the promise [LIBID-BROWSER-008] [LIBID-OAUTH-029]',
   async (outcome) => {
-    const { ceremony, connection } = setup()
+    const { ceremony, connection } = await setup()
     const finish = {
       success: () =>
         connection.receive({ type: 'identity-proof', identity, proof: proofFor(connection) }),
@@ -717,7 +720,7 @@ it.each(['success', 'denied', 'failed', 'closed', 'invalid-result', 'setup'] as 
 )
 
 it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08] [LIBID-OAUTH-024] [LIBID-OAUTH-025] [LIBID-BROWSER-009] [LIBID-BROWSER-022]', async () => {
-  const { ceremony, connection } = setup()
+  const { ceremony, connection } = await setup()
   const events: CeremonyEvent[] = []
   ceremony.onEvent((event) => events.push(event))
   const result = ceremony.proveUserIdentity()
@@ -738,7 +741,7 @@ it('closure terminates the feed and late messages cannot revive it [TEST-CCDP-08
 })
 
 it('only core readiness events advance the protocol; preserves occurrence times [LIBID-BROWSER-006] [TEST-CCDP-06] [LIBID-OAUTH-028] [LIBID-BROWSER-030]', async () => {
-  const { ceremony, connection: c } = setup()
+  const { ceremony, connection: c } = await setup()
   const events: CeremonyEvent[] = []
   ceremony.onEvent((e) => events.push(e))
   const result = ceremony.proveUserIdentity()
@@ -767,7 +770,7 @@ it.each([
   ['Prefetch', event('prefetch-dispatch', 'finished')],
   ['Prover', event('prover', 'started', 3)],
 ])('accepts %s readiness only from the CCDP, never the Bridge', async (document, readiness) => {
-  const { ceremony, connection } = setup()
+  const { ceremony, connection } = await setup()
   const result = ceremony.proveUserIdentity()
   if (document === 'Prover') prefetched(connection)
   connection.peerOrigin = 'https://bridge.test'
@@ -780,7 +783,7 @@ it.each([
   ['a proof', (c: FakeConnection) => ({ type: 'identity-proof', identity, proof: proofFor(c) })],
   ['a denial', () => ({ type: 'user-denied' })],
 ])('accepts %s only from the CCDP, never the Bridge', async (_name, message) => {
-  const { ceremony, connection } = setup()
+  const { ceremony, connection } = await setup()
   const result = ceremony.proveUserIdentity()
   reachProving(connection)
   connection.peerOrigin = 'https://bridge.test'
@@ -792,7 +795,7 @@ it.each([
   ['before the return', [], 'authorization'],
   ['after Callback forwarded the return', [event('authorization', 'finished', 2)], 'prover'],
 ])('blames a closure %s on the operation still pending', async (_name, observed, blamed) => {
-  const { ceremony, connection } = setup()
+  const { ceremony, connection } = await setup()
   const result = ceremony.proveUserIdentity()
   prefetched(connection)
   for (const message of observed) connection.receive(message)
@@ -804,7 +807,7 @@ it('draws a fresh authorization nonce for every ceremony [LIBID-OAUTH-016] [TEST
   // Identical inputs: only the nonce can make the requested digests differ.
   const nonces: (string | null)[] = []
   for (const _ of [1, 2]) {
-    const { connection, ceremony } = setup()
+    const { connection, ceremony } = await setup()
     const result = ceremony.proveUserIdentity().catch(() => {})
     prefetched(connection)
     nonces.push(authorizationUrl(connection).searchParams.get('nonce'))
@@ -816,7 +819,7 @@ it('draws a fresh authorization nonce for every ceremony [LIBID-OAUTH-016] [TEST
 })
 
 it('cancellation at authorization entry prevents provider navigation [LIBID-BROWSER-018]', async () => {
-  const { ceremony, connection } = setup()
+  const { ceremony, connection } = await setup()
   ceremony.onEvent((event) => {
     if (event.status === 'active' && event.event === 'authorization' && event.phase === 'started')
       void connection.close()
@@ -829,7 +832,7 @@ it('cancellation at authorization entry prevents provider navigation [LIBID-BROW
 })
 
 it('readiness without the optional authorization observation still permits denial [LIBID-OAUTH-028]', async () => {
-  const { ceremony, connection: c } = setup()
+  const { ceremony, connection: c } = await setup()
   const stages: string[] = []
   ceremony.onStage((e) => stages.push(e.stage))
   const events: CeremonyEvent[] = []
@@ -846,17 +849,13 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
   // A second catalog entry tests selection only; it is not a new or qualified Google profile.
   Reflect.set(platforms.google.versions, '2', platforms.google.versions[1])
   try {
-    const record = validateCeremonyConfig(
+    // The Distribution lists x at a version this package lacks, and github, which the record omits.
+    const client = await ccdpClient(
       {
         ...wireConfig,
         platforms: { google: { clientId: identity.oauthClientId }, x: { clientId: 'client' } },
       },
-      'https://bridge.test',
-    )
-    // The Distribution lists x at a version this package lacks, and github, which the record omits.
-    const client = ccdpClientFromConfig(
-      record,
-      validatePlatformVersions({ google: [1, 2, 99], x: [99], github: [1], future: [1] }),
+      { google: [1, 2, 99], x: [99], github: [1], future: [1] },
     )
     expect(client.enabledPlatforms).toEqual(['google'])
     const versions = client.enabledVersions('google')
@@ -864,11 +863,17 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
     expect(Object.isFrozen(versions)).toBe(true)
     expect(client.enabledVersions('x')).toEqual([])
     expect(client.enabledVersions('github')).toEqual([])
-    const onlyNewer = ccdpClientFromConfig(config, validatePlatformVersions({ google: [2] }))
-    expect(() => setup({ client: onlyNewer, version: 1 })).toThrow('Unsupported ceremony version')
+    const onlyNewer = await ccdpClient(wireConfig, { google: [2] })
+    await expect(setup({ client: onlyNewer, version: 1 })).rejects.toThrow(
+      'Unsupported ceremony version',
+    )
     for (const selected of [1, undefined] as const) {
       const transactionData = new Uint8Array()
-      const { connection: c, ceremony: run } = setup({ client, transactionData, version: selected })
+      const { connection: c, ceremony: run } = await setup({
+        client,
+        transactionData,
+        version: selected,
+      })
       const version = selected ?? 2
       expect(new URLSearchParams(new URL(run.launchUrl).hash.slice(1)).get('ceremonyVersion')).toBe(
         String(version),
@@ -896,7 +901,7 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
 })
 
 it('rejects unavailable explicit versions before reading ledger or reserving the run [LIBID-MOD-015] [LIBID-ASSET-004] [LIBID-OAUTH-024]', async () => {
-  const client = ccdpClientFromConfig(config, bundledVersions)
+  const client = await ccdpClient(wireConfig)
   const ledger = { ...testnet, hash: vi.fn(testnet.hash) }
   const c = spiedConnection()
   for (const version of [0, 2, 99, -1, 1.5, NaN, null, '1']) {
@@ -920,7 +925,7 @@ it('rejects unavailable explicit versions before reading ledger or reserving the
 })
 
 it('a lost optional operation start does not prevent accepted proof delivery [LIBID-BROWSER-008]', async () => {
-  const { ceremony, connection: c } = setup()
+  const { ceremony, connection: c } = await setup()
   const result = ceremony.proveUserIdentity()
   reachProving(c)
   c.receive(event('proof', 'finished', 4))
@@ -929,7 +934,7 @@ it('a lost optional operation start does not prevent accepted proof delivery [LI
 })
 
 it('reports closure before the first start without mislabeling it as a repeat [LIBID-BROWSER-013] [LIBID-BROWSER-020]', async () => {
-  const { ceremony, connection } = setup()
+  const { ceremony, connection } = await setup()
   await connection.close()
   await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({
     name: 'CeremonyError',
@@ -946,19 +951,14 @@ it('freezes and forwards the public credential from validated configuration [KIT
     clientId: 'client',
     clientCredential: 'public&original=1',
   }
-  const config = validateCeremonyConfig(
-    { ...wireConfig, platforms: { github } },
-    'https://bridge.test',
-  )
-  const client = ccdpClientFromConfig(config, bundledVersions)
+  const client = await ccdpClient({ ...wireConfig, platforms: { github } })
   github.clientCredential = 'replacement'
-  const { connection, ceremony } = setup({ client, platformId: 'github' })
+  const { connection, ceremony } = await setup({ client, platformId: 'github' })
   const rejected = expect(ceremony.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
   reachProving(connection)
   expect(connection.sent).toEqual([
     expect.objectContaining({ clientCredential: 'public&original=1' }),
   ])
-  expect(Object.isFrozen(config.platforms.github)).toBe(true)
   await connection.close()
   await rejected
 })
@@ -966,7 +966,7 @@ it('freezes and forwards the public credential from validated configuration [KIT
 it.each(['closed', 'failed'] as const)(
   'preserves popup %s in errors and both terminal subscriptions [LIBID-OAUTH-029] [LIBID-BROWSER-002]',
   async (outcome) => {
-    const { connection, ceremony } = setup()
+    const { connection, ceremony } = await setup()
     const events = vi.fn(),
       stages = vi.fn()
     ceremony.onEvent(events)
@@ -987,7 +987,7 @@ it.each(['closed', 'failed'] as const)(
 )
 
 it('preserves closure before proving starts [LIBID-BROWSER-002]', async () => {
-  const { connection, ceremony } = setup()
+  const { connection, ceremony } = await setup()
   await connection.close()
   await expect(ceremony.proveUserIdentity()).rejects.toMatchObject({ status: 'closed' })
 })
@@ -1000,8 +1000,8 @@ it.each([
   { name: 'transaction data string', transactionData: '0102', error: 'transaction bytes' },
 ])(
   'rejects malformed operation bytes before OAuth: $name [LIBID-OAUTH-003]',
-  ({ operationDomain = new Uint8Array(32), transactionData = new Uint8Array(), error }) => {
-    const client = ccdpClientFromConfig(config, bundledVersions)
+  async ({ operationDomain = new Uint8Array(32), transactionData = new Uint8Array(), error }) => {
+    const client = await ccdpClient(wireConfig)
     const connection = spiedConnection()
     expect(() =>
       client.new(
@@ -1016,13 +1016,13 @@ it.each([
     expect(connection.navigations).toEqual([])
     expect(registered(connection)).toEqual([])
     // The rejected call reserved nothing.
-    expect(() => setup({ client, connection })).not.toThrow()
+    await expect(setup({ client, connection })).resolves.toBeDefined()
   },
 )
 
 it('binds one active ceremony per connection and rebinds it once that run finishes', async () => {
-  const client = ccdpClientFromConfig(config, bundledVersions)
-  const { connection, ceremony: first } = setup({ client })
+  const client = await ccdpClient(wireConfig)
+  const { connection, ceremony: first } = await setup({ client })
   const second = client.new(
     connection,
     crypto.randomUUID(),
@@ -1043,7 +1043,7 @@ it('binds one active ceremony per connection and rebinds it once that run finish
   connection.receive({ type: 'user-denied' })
   await expect(pending).resolves.toEqual({ status: 'denied' })
   // The finished run's handlers give way instead of failing the next run's setup.
-  const next = setup({ client, connection }).ceremony.proveUserIdentity()
+  const next = (await setup({ client, connection })).ceremony.proveUserIdentity()
   reachProving(connection)
   connection.receive({ type: 'identity-proof', identity, proof: proofFor(connection) })
   await expect(next).resolves.toMatchObject({ status: 'accepted' })

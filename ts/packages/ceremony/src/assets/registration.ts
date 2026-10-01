@@ -1,4 +1,4 @@
-import { route } from './keys.js'
+import { ROUTE_SCOPE, route } from './keys.js'
 
 const SERVICE_WORKER_TIMEOUT_MS = 15000
 const ACTIVATION_POLL_INTERVAL_MS = 50
@@ -63,7 +63,9 @@ export async function registerRootWorker(): Promise<ServiceWorkerRegistration> {
           if (worker.state === 'activating' || worker.state === 'activated') done()
           else if (worker.state === 'redundant') done(new Error('Service Worker failed'))
         }
-        // Concurrent Chromium popups can miss statechange while worker.state still updates.
+        // Concurrent Chromium popups were seen reaching 'activated' with no statechange in this
+        // document; `changed()` below already covers transitions before the listener. No upstream
+        // bug is known: drop the poll once two popups racing a first registration pass without it.
         const poll = setInterval(changed, ACTIVATION_POLL_INTERVAL_MS)
         signal.addEventListener('abort', () => clearInterval(poll))
         worker.addEventListener('statechange', changed, { signal })
@@ -80,7 +82,7 @@ export async function registerRootWorker(): Promise<ServiceWorkerRegistration> {
   for (const old of await navigator.serviceWorker.getRegistrations()) {
     const workers = [old.active, old.waiting, old.installing].filter((worker) => worker !== null)
     if (
-      old.scope === `${location.origin}/ccdp/v1/` &&
+      old.scope === `${location.origin}${ROUTE_SCOPE}` &&
       workers.length &&
       workers.every((worker) => worker.scriptURL === script)
     )

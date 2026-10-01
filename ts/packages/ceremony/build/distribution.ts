@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { Rollup } from 'vite'
 import type { AssetRequest, ExternalAsset } from '../src/assets/index.ts'
-import { assetKey, requestKey, route, VERSIONS_PATH } from '../src/assets/keys.ts'
+import { assetKey, CALLBACK_PATH, requestKey, route, VERSIONS_PATH } from '../src/assets/keys.ts'
 import { messages } from '../src/ccdp/uiMessages.ts'
 import type { AssetManifest } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
@@ -182,7 +182,7 @@ async function buildDistribution() {
       throw new Error('Callback must have no external dependencies')
     const code = inlineScript(item.code)
     tree.put(
-      '/ccdp/callback.html',
+      CALLBACK_PATH,
       page(
         messages.brand,
         `<main id="libid-root"></main><script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script>`,
@@ -196,10 +196,19 @@ async function buildDistribution() {
     manifest,
   })
   for (const item of prefetch.output) {
-    if (item.type === 'chunk' && item.isEntry) {
+    if (item.type === 'chunk' && item.isEntry)
       tree.document(route('prefetch'), item.code, 'prefetch')
-      tree.put(route('worker.js'), item.code, 'worker')
-    } else tree.put(`/${item.fileName}`, body(item), 'asset')
+    else tree.put(`/${item.fileName}`, body(item), 'asset')
+  }
+  // Module Service Workers cannot import dynamically, so the root worker is one script.
+  const worker = await bundle('src/assets/worker.entry.ts', data, {
+    selfContained: true,
+    manifest,
+  })
+  for (const item of worker.output) {
+    if (item.type !== 'chunk' || !item.isEntry)
+      throw new Error('The root worker must be one script')
+    tree.put(route('worker.js'), item.code, 'worker')
   }
   // The page every 404 serves; requested directly it declares the same error policy.
   tree.put('/404.html', page(messages.notFoundTitle, `<p>${messages.notFound}</p>`), {

@@ -8,8 +8,8 @@ import {
   type HashOpening,
   matchAttestedData,
   type NotarizationPlan,
-  planNotarization,
   plaintextOpening,
+  planNotarization,
 } from './notarize.js'
 import type { ByteRange, Transcript } from './protocol.js'
 
@@ -360,9 +360,9 @@ describe('plaintextOpening', () => {
 
   it('rejects a range with no or several openings', () => {
     expect(() => plaintextOpening(openings, 'received', range, utf8('cde'))).toThrow(/not unique/)
-    expect(() =>
-      plaintextOpening([...openings, ...openings], 'sent', range, utf8('cde')),
-    ).toThrow(/not unique/)
+    expect(() => plaintextOpening([...openings, ...openings], 'sent', range, utf8('cde'))).toThrow(
+      /not unique/,
+    )
   })
 })
 

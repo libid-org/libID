@@ -35,7 +35,7 @@ function validatePlatform(platform: PlatformId, v: unknown): PlatformConfig {
 }
 
 /** Validate public configuration and derive the fixed callback URL from the supplied Bridge origin. */
-export function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
+function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
   if (
     !hasExactKeys(v, ['ccdpOrigin', 'platforms']) ||
     !isOrigin(v.ccdpOrigin) ||

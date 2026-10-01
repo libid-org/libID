@@ -1,12 +1,13 @@
 import { createPublicKey, verify } from 'node:crypto'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { buildOidcGoogleInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
   googlePublicInputs as BB_PUBLIC_INPUTS,
   googleV1 as fixture,
+  jwtPart,
 } from '../../../testing/index.js'
 import { prepareGoogleInputs } from './inputs.js'
-import { parseGoogleIdToken } from './token.js'
+import { acceptGoogleIdToken } from './token.js'
 import { buildGooglePublicInputs, userIdOf, validateProof } from './validation.js'
 
 const digest = fixture.authorizationDigest
@@ -57,10 +58,12 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifie
       ),
     ).toBe(true)
 
-    const { inputs, identity, proofFields } = prepareGoogleInputs(
-      parseGoogleIdToken(fixture.idToken),
-      fixture.jwk,
-    )
+    const { aud, exp } = jwtPart(fixture.idToken, 1) as { aud: string; exp: number }
+    // The vector token is accepted as the Prover accepts it: for its audience, before expiry.
+    vi.useFakeTimers({ now: (exp - 1) * 1000 })
+    const token = acceptGoogleIdToken(fixture.idToken, aud)
+    vi.useRealTimers()
+    const { inputs, identity, proofFields } = prepareGoogleInputs(token, fixture.jwk)
     expect(Object.keys(inputs)).toEqual(ABI_KEYS)
     expect(inputs.signing_input_len).toBe('412')
     expect(inputs.header_b64_len).toBe('72')

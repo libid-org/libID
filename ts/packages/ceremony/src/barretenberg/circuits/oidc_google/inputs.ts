@@ -86,6 +86,7 @@ function findOffset(payload: Uint8Array, pattern: string): number {
   if (offset < 1)
     throw new Error(`missing canonical signed claim ${pattern.slice(0, pattern.indexOf(':'))}`)
   const trailing = payload[offset + needle.length]
+  // A comma or closing brace, kept local: importing notary/ would load it into the Google prover.
   if (trailing !== 0x2c && trailing !== 0x7d) {
     throw new Error('signed claim lacks a structural terminator')
   }
@@ -156,7 +157,7 @@ export function buildOidcGooglePublicInputs(values: {
   modulus: Uint8Array
 }): string[] {
   if (values.authorizationDigest.length !== AUTHORIZATION_DIGEST_BYTES)
-    throw new Error('authorizationDigest must be exactly 32 bytes')
+    throw new Error(`authorizationDigest must be exactly ${AUTHORIZATION_DIGEST_BYTES} bytes`)
   return [
     ...Array.from(values.authorizationDigest, fieldHex),
     ...audienceHash(encoder.encode(values.audience)).map(fieldHex),

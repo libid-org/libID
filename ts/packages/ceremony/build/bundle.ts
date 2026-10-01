@@ -2,11 +2,11 @@ import { dirname, join, posix, relative } from 'node:path'
 import type { NewExpression } from 'estree'
 import type { Plugin, Rollup } from 'vite'
 import { build } from 'vite'
+import { ASSETS_PREFIX } from '../src/assets/keys.ts'
 import { type AssetManifest, assetPlugin } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { applyEdits, type Edit, parseModule, replacement, walk } from './ast.ts'
 import { consumeFragment } from './fragment.ts'
-import { popupFallback } from './popup.ts'
 import { policyId, workerUrl } from './profiles.ts'
 import { hash, packageDir } from './sources.ts'
 
@@ -162,12 +162,6 @@ export async function bundle(
       'ceremony-entry',
       `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};${start}`,
     ),
-    virtualModule(
-      'ceremony-popup-fallback',
-      popupFallback.module
-        ? `export {fallback} from ${JSON.stringify(popupFallback.module)}`
-        : 'export const fallback=undefined',
-    ),
     assetPlugin(data, manifest),
     absoluteImports(),
     record(worker),
@@ -175,9 +169,9 @@ export async function bundle(
   const assetName = (asset: Rollup.PreRenderedAsset) => {
     const digest = hash(asset.source)
     const owned = Object.entries(data.bodyHashes).find(([, bodyHash]) => bodyHash === digest)
-    return owned ? owned[0].slice(1) : `ccdp/assets/${policyId}/[name]-[hash][extname]`
+    return owned ? owned[0].slice(1) : `${ASSETS_PREFIX.slice(1)}${policyId}/[name]-[hash][extname]`
   }
-  const chunkName = `ccdp/assets/${policyId}/[name]-[hash].js`,
+  const chunkName = `${ASSETS_PREFIX.slice(1)}${policyId}/[name]-[hash].js`,
     output = { entryFileNames: chunkName, chunkFileNames: chunkName, assetFileNames: assetName }
   const result = await build({
     configFile: false,

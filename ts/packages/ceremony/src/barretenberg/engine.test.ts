@@ -10,7 +10,7 @@ vi.mock('../assets/index.js', () => ({ assetUrl }))
 vi.mock('./barretenberg.assets.js', () => ({
   abi: { path: 'noir/abi.wasm' },
   acvm: { path: 'noir/acvm.wasm' },
-  bbWasm: { path: 'bb/barretenberg-threads.wasm' },
+  bbWasmPath: () => 'https://ccdp.test/assets/bb/barretenberg.wasm',
   crs: [{ path: 'crs/g1.dat' }],
 }))
 
@@ -59,8 +59,8 @@ it('posts one preload after boot with resolved resource URLs and capped threads 
     threads: 4,
     acvmUrl: 'https://ccdp.test/assets/noir/acvm.wasm',
     abiUrl: 'https://ccdp.test/assets/noir/abi.wasm',
-    // bb.js derives the threaded file name itself; the CRS base is its directory.
     wasmPath: 'https://ccdp.test/assets/bb/barretenberg.wasm',
+    // The CRS base is the declared CRS directory.
     crsPath: 'https://ccdp.test/assets/crs/',
   })
   engine({ threads: 2 })

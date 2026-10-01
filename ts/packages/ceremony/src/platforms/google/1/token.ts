@@ -6,7 +6,7 @@ import {
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
 import { b64urlDecode, isRecord, isUint } from '../../../primitives.js'
-import { readJson } from '../../../response.js'
+import { fetchPublicJson } from '../../../response.js'
 import { provider } from './provider.js'
 import { isCircuitText } from './validation.js'
 
@@ -54,7 +54,7 @@ const fitsCircuit = ({ aud, sub, email }: OidcGoogleToken['claims']) =>
   isCircuitText(email, MAX_EMAIL_BYTES)
 
 /** Parse the fixed RS256 token layout; any failure is an authorization error. */
-export function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
+function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
   const segments = idToken.split('.')
   const [headerB64, payloadB64] = segments
   const [header, payload, signature] =
@@ -85,13 +85,12 @@ export function acceptGoogleIdToken(idToken: string, clientId: string): ParsedGo
 export async function fetchSigningKey(kid: string, signal: AbortSignal): Promise<unknown> {
   // A run closed before this point starts no key request.
   signal.throwIfAborted()
-  const response = await fetch(provider.jwksUrl, {
-    credentials: 'omit',
-    redirect: 'error',
+  const body = await fetchPublicJson(
+    provider.jwksUrl,
+    MAX_JWKS_BYTES,
+    'Signing key request failed',
     signal,
-  })
-  if (!response.ok) throw new Error('Signing key request failed')
-  const body = await readJson(response, MAX_JWKS_BYTES)
+  )
   if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')
   const keys = body.keys.filter((k) => isRecord(k) && k.kid === kid)
   if (keys.length !== 1) throw new Error('Signing key is not unique')

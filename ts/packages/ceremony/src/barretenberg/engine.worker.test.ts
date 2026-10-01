@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { afterEach, expect, it, vi } from 'vitest'
 import { posted, stubWorkerScope } from '../testing/workers.js'
@@ -46,13 +49,28 @@ const preload = {
 
 const witness = () => ({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
 
+const bbMain = readFileSync(
+  join(
+    dirname(createRequire(import.meta.url).resolve('@aztec/bb.js')),
+    '../browser/barretenberg_wasm/barretenberg_wasm_main/index.js',
+  ),
+  'utf8',
+)
+
+/** The thread-pool clause the installed bb.js logs at initialization, in its exact format. */
+function bbRuntimeLog(threads: number, shared: boolean): string {
+  if (!/`threads: \$\{threads\}; shared memory: \$\{shared\}`/.test(bbMain))
+    throw new Error('The installed bb.js no longer logs its thread pool this way')
+  return `threads: ${threads}; shared memory: ${shared}`
+}
+
 /**
  * Boot the proof worker and deliver its preload. `runtime` is what bb logs about its thread pool
  * (nothing when null); `isolated` is the scope's cross-origin isolation.
  */
 async function worker(
   key: Response | Promise<Response> = new Response(Uint8Array.of(11, 12)),
-  { isolated = true, runtime = 'threads: 4; shared memory: true' as string | null } = {},
+  { isolated = true, runtime = bbRuntimeLog(4, true) as string | null } = {},
 ) {
   const request = vi.fn(async (url: string) =>
     url.endsWith('/vk')
@@ -159,10 +177,10 @@ it('preserves cleanup when bb rejects the supplied key [LIBID-PROVER-001]', asyn
 it.each(['backend', 'resources'])(
   'starts all preload branches before %s finishes [LIBID-PROVER-012]',
   async (first) => {
-    const backend = Promise.withResolvers<void>(),
-      acvm = Promise.withResolvers<void>(),
-      abi = Promise.withResolvers<void>(),
-      key = Promise.withResolvers<Response>()
+    const backend = Promise.withResolvers<void>()
+    const acvm = Promise.withResolvers<void>()
+    const abi = Promise.withResolvers<void>()
+    const key = Promise.withResolvers<Response>()
     mocks.initialize.mockReturnValueOnce(backend.promise)
     mocks.acvm.mockReturnValueOnce(acvm.promise)
     mocks.abi.mockReturnValueOnce(abi.promise)
@@ -223,8 +241,8 @@ it.each(['cross-origin isolation', 'shared memory'])(
 )
 
 it.each([
-  ['one thread', 'threads: 1; shared memory: true'],
-  ['no shared memory', 'threads: 4; shared memory: false'],
+  ['one thread', bbRuntimeLog(1, true)],
+  ['no shared memory', bbRuntimeLog(4, false)],
   ['no thread pool', null],
 ])(
   'fails and destroys a backend reporting %s instead of multithreaded execution [LIBID-PROVER-015] [LIBID-OAUTH-010]',

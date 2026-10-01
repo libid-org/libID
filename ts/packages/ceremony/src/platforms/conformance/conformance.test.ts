@@ -1,5 +1,6 @@
 // Catalog-driven platform conformance: every section iterates the catalog and reads the typed
 // fixture table, so a new platform is covered as soon as its fixture entry typechecks.
+import { isDeepStrictEqual } from 'node:util'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type Asset, assetUrl } from '../../assets/index.js'
@@ -10,7 +11,7 @@ import type {
 } from '../../barretenberg/circuits/bearer-link/exchange.js'
 import type { ProofEngineOptions, RawProof } from '../../barretenberg/engine.js'
 import { proofEvents, proofWeights } from '../../barretenberg/events.js'
-import { validateCeremonyConfig } from '../../ccdp/client/config.js'
+import { fetchCeremonyConfig } from '../../ccdp/client/config.js'
 import type { ProveIdentity } from '../../ccdp/index.js'
 import { type OAuthReturn, oauthState } from '../../ccdp/navigation.js'
 import { isCoreEvent, type OperationEvent } from '../../events.js'
@@ -212,18 +213,29 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     expect(() => ceremony.buildAuthorizationUrl(malformed)).toThrow()
   })
 
-  const validate = (entry: unknown) =>
-    validateCeremonyConfig(
-      { ccdpOrigin: 'https://ccdp.test', platforms: { [platformId]: entry } },
-      'https://bridge.test',
-    ).platforms[platformId]
+  /** Whether JSON, which the Bridge serves configuration as, can carry `value` unchanged. */
+  const onWire = (value: unknown) =>
+    isDeepStrictEqual(JSON.parse(JSON.stringify(value) ?? 'null'), value) &&
+    !(
+      value instanceof Object &&
+      ![Object.prototype, Array.prototype].includes(Object.getPrototypeOf(value))
+    )
 
-  it('admits its fixture, boundary and admitted client IDs and rejects empty, quoted, control, non-ASCII, over-length and platform-reserved ones, as a predicate and in configuration [TEST-COMMON-09]', () => {
+  /** The platform's entry as the Bridge serves it in configuration. */
+  async function validate(entry: unknown) {
+    const record = { ccdpOrigin: 'https://ccdp.test', platforms: { [platformId]: entry } }
+    vi.stubGlobal('fetch', async () => Response.json(record))
+    return (await fetchCeremonyConfig('https://bridge.test')).platforms[platformId]
+  }
+
+  it('admits its fixture, boundary and admitted client IDs and rejects empty, quoted, control, non-ASCII, over-length and platform-reserved ones, as a predicate and in configuration [TEST-COMMON-09]', async () => {
     const { config, identity, longest, rejectedIdentity, admittedClientIds } = fixture
     expect(identity.oauthClientId).toBe(config.clientId)
     for (const clientId of [config.clientId, longest.oauthClientId, ...admittedClientIds]) {
       expect(platform.isClientId(clientId), clientId).toBe(true)
-      expect(validate({ ...platformConfig(platformId), clientId })).toMatchObject({ clientId })
+      await expect(validate({ ...platformConfig(platformId), clientId })).resolves.toMatchObject({
+        clientId,
+      })
     }
     for (const clientId of [
       ...sharedTextRejections,
@@ -231,21 +243,25 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       ...rejectedIdentity.oauthClientId,
     ]) {
       expect(platform.isClientId(clientId), clientId).toBe(false)
-      expect(() => validate({ ...platformConfig(platformId), clientId }), clientId).toThrow()
+      await expect(
+        validate({ ...platformConfig(platformId), clientId }),
+        clientId,
+      ).rejects.toThrow()
     }
     for (const clientId of [42, null]) expect(platform.isClientId(clientId)).toBe(false)
   })
 
-  it('requires a valid public token-exchange credential in configuration exactly when the catalog does [TEST-BRIDGE-03]', () => {
+  it('requires a valid public token-exchange credential in configuration exactly when the catalog does [TEST-BRIDGE-03]', async () => {
     const { clientCredential, ...withoutCredential } = platformConfig(platformId)
-    expect(validate(platformConfig(platformId))).toEqual(platformConfig(platformId))
+    await expect(validate(platformConfig(platformId))).resolves.toEqual(platformConfig(platformId))
     if (platform.requiresClientCredential) {
       expect(clientCredential).toBeDefined()
-      expect(() => validate(withoutCredential)).toThrow()
+      await expect(validate(withoutCredential)).rejects.toThrow()
     } else
-      expect(() => validate({ ...withoutCredential, clientCredential: 'public-fixture' })).toThrow()
+      await expect(
+        validate({ ...withoutCredential, clientCredential: 'public-fixture' }),
+      ).rejects.toThrow()
     for (const clientCredential of [
-      undefined,
       null,
       1,
       '',
@@ -255,20 +271,20 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       'a\nb',
       'x'.repeat(513),
     ])
-      expect(() => validate({ ...withoutCredential, clientCredential })).toThrow()
+      await expect(validate({ ...withoutCredential, clientCredential })).rejects.toThrow()
   })
 
-  it('accepts exactly its one-client configuration record, refusing retired and unknown fields [LIBID-MOD-011] [LIBID-OAUTH-001]', () => {
+  it('accepts exactly its one-client configuration record, refusing retired and unknown fields [LIBID-MOD-011] [LIBID-OAUTH-001]', async () => {
     const entry = platformConfig(platformId)
     for (const value of [
-      ...recordViolations(entry),
+      ...recordViolations(entry).filter(onWire),
       // Retired per-version shapes: one OAuth client serves every version.
       { ...entry, ceremonyVersions: [1] },
       { ...entry, versions: [{ version: 1, clientId: entry.clientId }] },
       { ...entry, versionOverrides: { '1': { clientId: 'other' } } },
       { ...entry, tokenExchangeCredential: 'retired' },
     ])
-      expect(() => validate(value), JSON.stringify(value)).toThrow(TypeError)
+      await expect(validate(value), JSON.stringify(value)).rejects.toThrow(TypeError)
   })
 
   it('registers its own prover for its catalog version', async () => {
@@ -1065,8 +1081,7 @@ function stageOidc(
         ? []
         : [previousKey, jwk],
   )
-  const { config, returnRules: rules } = fixture
-  const accepted = fieldsOf(returnSamples(platformId).accepted.oauthReturn, rules)
+  const { config } = fixture
   const run = runContext(platformId, outcome, {
     credential: oidcToken(idToken, outcome),
     request: outcome === 'audience-mismatch' ? { clientId: `other-${config.clientId}` } : {},

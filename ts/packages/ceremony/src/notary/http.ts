@@ -61,8 +61,8 @@ export function responseJson(transcript: Transcript): unknown {
   const headers = framingHeaders(head.fields)
   const encoding = headers.get('content-encoding')
   if (encoding && encoding !== 'identity') throw new Error('Unsupported response encoding')
-  const length = headers.get('content-length'),
-    transfer = headers.get('transfer-encoding')
+  const length = headers.get('content-length')
+  const transfer = headers.get('transfer-encoding')
   let body = transcript.received.subarray(head.bodyStart)
   if (transfer !== undefined) {
     if (transfer.toLowerCase() !== 'chunked' || length !== undefined)
@@ -96,8 +96,8 @@ function framingHeaders(fields: readonly HeadField[]): Map<string, string> {
   return headers
 }
 
-const CR = 0x0d,
-  LF = 0x0a
+const CR = 0x0d
+const LF = 0x0a
 
 /** Whether CRLF starts at `at`; reads past the end are not CRLF, so this also bounds offsets. */
 const crlf = (bytes: Uint8Array, at: number) => bytes[at] === CR && bytes[at + 1] === LF

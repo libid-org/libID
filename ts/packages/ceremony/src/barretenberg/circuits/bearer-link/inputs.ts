@@ -13,7 +13,8 @@ export const isBearer = (value: string): boolean =>
  * which fixes their blinder width and bearer length.
  */
 export function buildBearerLinkInputs(bearer: string, token: HashOpening, identity: HashOpening) {
-  if (!isBearer(bearer)) throw new Error('bearer must be 1 to 128 visible ASCII bytes')
+  if (!isBearer(bearer))
+    throw new Error(`bearer must be 1 to ${MAX_BEARER_BYTES} visible ASCII bytes`)
   const bytes = encoder.encode(bearer)
   const padded = new Uint8Array(MAX_BEARER_BYTES)
   padded.set(bytes)

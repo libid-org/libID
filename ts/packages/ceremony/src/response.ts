@@ -39,12 +39,18 @@ export async function readJson(response: Response, maximum: number): Promise<unk
 }
 
 /** Public JSON fetched without cookies, redirects or persistent browser caching, read under `maximum`. */
-export async function fetchPublicJson(url: string, maximum: number, failure: string) {
+export async function fetchPublicJson(
+  url: string,
+  maximum: number,
+  failure: string,
+  signal?: AbortSignal,
+) {
   const response = await fetch(url, {
     mode: 'cors',
     credentials: 'omit',
     cache: 'no-store',
     redirect: 'error',
+    ...(signal && { signal }),
   })
   if (!response.ok) throw new Error(failure)
   return readJson(response, maximum)

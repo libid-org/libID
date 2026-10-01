@@ -86,8 +86,8 @@ it('shares one worker, routes overlapping replies per session and keeps it alive
   vi.useFakeTimers()
   const abort = new AbortController()
   const notary = new NotaryRuntime('https://notary.test', abort.signal)
-  const first = notary.prepare(target),
-    second = notary.prepare(target)
+  const first = notary.prepare(target)
+  const second = notary.prepare(target)
   expect(workers).toHaveLength(1)
   const [{ terminate }] = workers
   const [one, two] = ports()
@@ -96,8 +96,8 @@ it('shares one worker, routes overlapping replies per session and keeps it alive
   one.postMessage({ type: 'initialized' })
   one.postMessage({ type: 'prepared' })
   const [token, identity] = await Promise.all([first, second])
-  const a = token.send(request),
-    b = identity.send(request)
+  const a = token.send(request)
+  const b = identity.send(request)
   const transcript = (value: number) => ({
     sent: new Uint8Array([value]),
     received: new Uint8Array(),

@@ -222,10 +222,8 @@ origin's Proxy WebSocket for both token and identity sessions. Prover performs n
 Bridge fetch; its HTTPS fetch sources serve proving assets and Google's JWKS, while WSS (or the
 exact loopback WS exception) serves notarization. Bridge owns Callback refresh.
 
-Optional opener-independent fallback is supplied through
-[build/popup.ts](../build/popup.ts): a module exporting `fallback` and its required
-connect sources. Supply the matching adapter to the application's popup
-connection. Ceremony includes no WebRTC implementation or signaling service.
+The documents accept the popup connection without a fallback carrier; ceremony
+includes no WebRTC implementation or signaling service.
 
 ## Publication and upgrades
 
@@ -311,7 +309,6 @@ and derives the request lists from the emitted Prover graph;
 [assets.ts](../build/assets.ts) resolves declarations;
 [assetPlugin.ts](../build/assetPlugin.ts) lowers them to built URLs and serves the request lists;
 [profiles.ts](../build/profiles.ts) derives each response profile's headers and CSP;
-[popup.ts](../build/popup.ts) is the optional popup-carrier integration point;
 [ast.ts](../build/ast.ts) holds the AST helpers both plugins share;
 [archive.ts](../build/archive.ts) parses archives without extracting to their paths;
 [sources.ts](../build/sources.ts) reads declared sources, caches downloads and guards the output directory;

@@ -1,9 +1,22 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { AssetCache, validateResponse } from './cache.js'
+import { AssetCache } from './cache.js'
+import type { AssetRequest } from './index.js'
 
 const spec = { url: 'https://assets.example/g1', range: 'bytes=0-1', bytes: 2 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+/** Deliver `request` through an empty cache whose network answers with `response`. */
+function served(response: Response, request: AssetRequest = spec) {
+  vi.stubGlobal('caches', {
+    open: async () => ({ match: async () => undefined, put: async () => {} }),
+  })
+  vi.stubGlobal('fetch', async () => response)
+  return new AssetCache('https://ccdp.example').load(request).response
+}
+
+/** A body of `bytes` zero bytes under `init`. */
+const body = (bytes: number, init: ResponseInit = {}) => new Response(new Uint8Array(bytes), init)
 
 it('joins pending downloads and preserves independent readers and worker CSP in stored bodies [CSP-019] [LIBID-ASSET-019] [LIBID-ASSET-021] [LIBID-PROVER-016]', async () => {
   const stored = new Map<string, Response>()
@@ -49,34 +62,33 @@ it('joins pending downloads and preserves independent readers and worker CSP in 
   expect(fetching).toHaveBeenCalledTimes(1)
 })
 
-it.each([200, 404])('rejects status %i for range fetches [LIBID-ASSET-021]', (status) =>
-  expect(() => validateResponse(new Response(null, { status }), spec)).toThrow(),
-)
-
-it('allows unexposed range headers but rejects exposed mismatches and wrong lengths [LIBID-ASSET-021]', () => {
-  expect(() => validateResponse(new Response(null, { status: 206 }), spec)).not.toThrow()
-  for (const headers of [
-    new Headers({ 'Content-Range': 'bytes 2-3/100' }),
-    new Headers({ 'Content-Length': '3' }),
-  ])
-    expect(() => validateResponse(new Response(null, { status: 206, headers }), spec)).toThrow()
+it.each([200, 404])('rejects status %i for range fetches [LIBID-ASSET-021]', async (status) => {
+  await expect(served(body(2, { status }))).rejects.toThrow('Invalid asset response')
 })
 
-it('checks the exposed length only where the encoding is visible too [LIBID-ASSET-021]', () => {
+it('allows unexposed range headers but rejects exposed mismatches and wrong lengths [LIBID-ASSET-021]', async () => {
+  await expect(served(body(2, { status: 206 }))).resolves.toBeInstanceOf(Response)
+  await expect(
+    served(body(2, { status: 206, headers: { 'Content-Range': 'bytes 2-3/100' } })),
+  ).rejects.toThrow('Unexpected asset range')
+  await expect(
+    served(body(2, { status: 206, headers: { 'Content-Length': '3' } })),
+  ).rejects.toThrow('Unexpected asset size')
+})
+
+it('checks the exposed length only where the encoding is visible too [LIBID-ASSET-021]', async () => {
   const declared = { url: spec.url, bytes: 100 }
-  const compressed = () => new Response(null, { headers: { 'Content-Length': '40' } })
-  expect(() => validateResponse(compressed(), declared)).toThrow('Unexpected asset size')
+  const compressed = () => body(100, { headers: { 'Content-Length': '40' } })
+  await expect(served(compressed(), declared)).rejects.toThrow('Unexpected asset size')
   const cors = Object.defineProperty(compressed(), 'type', { value: 'cors' })
-  expect(() => validateResponse(cors, declared)).not.toThrow()
+  await expect(served(cors, declared)).resolves.toBeInstanceOf(Response)
 })
 
-it('rejects a malformed Content-Range even without a requested range [LIBID-ASSET-021]', () => {
+it('rejects a malformed Content-Range even without a requested range [LIBID-ASSET-021]', async () => {
   for (const range of ['bytes 0-1/0x10', 'bytes 0-1', 'items 0-1/2'])
-    expect(() =>
-      validateResponse(new Response(null, { headers: { 'Content-Range': range } }), {
-        url: spec.url,
-      }),
-    ).toThrow('Unexpected asset range')
+    await expect(
+      served(body(2, { headers: { 'Content-Range': range } }), { url: spec.url }),
+    ).rejects.toThrow('Unexpected asset range')
 })
 
 it('storage denial still fetches; failed bodies never become a reusable flight [LIBID-ASSET-019]', async () => {

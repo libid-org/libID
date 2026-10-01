@@ -14,10 +14,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./ccdp/client": {
-      "types": "./dist/ccdp/client/index.d.ts",
-      "default": "./dist/ccdp/client/index.js"
     }
   },
   "scripts": {

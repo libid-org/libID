@@ -1,12 +1,12 @@
-import { CeremonyError } from '@libid/ceremony'
 import {
   type CCDPClient,
+  CeremonyError,
   type CeremonyEvent,
   CeremonyStage,
   createCCDPClient,
   type IdentityResult,
   type PlatformId,
-} from '@libid/ceremony/ccdp/client'
+} from '@libid/ceremony'
 import type { LedgerId } from '@libid/ledger'
 import { testnet } from '@libid/ledger/testing'
 import { PopupWindow } from '@libid/popup'

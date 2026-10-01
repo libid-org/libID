@@ -97,20 +97,59 @@ interface Sent extends Omit<Prepared, 'phase'> {
 /** Each phase holds exactly what its next message needs; `busy` rejects overlapping messages. */
 type State = { phase: 'new' | 'busy' | 'ended' } | Prepared | Sent
 
-function session(port: MessagePort, initial: Prepare) {
-  let state: State = { phase: 'new' }
-  // Set once the socket exists, so any later failure closes it.
-  let opened: Io | undefined
-  const reply = (value: FromWorker) => port.postMessage(value)
+/** One notarization session over its own channel, from `prepare` through the final attestation. */
+class WorkerSession {
+  #state: State = { phase: 'new' }
+  /** Set once the socket exists, so any later failure closes it. */
+  #io?: Io
 
-  async function prepare(data: Prepare): Promise<Prepared> {
+  constructor(
+    private readonly port: MessagePort,
+    private readonly target: string,
+  ) {}
+
+  start(prepare: Prepare): void {
+    this.port.onmessage = (event: MessageEvent<ToWorker>) => this.#dispatch(event.data)
+    this.#dispatch(prepare)
+  }
+
+  #reply(value: FromWorker): void {
+    this.port.postMessage(value)
+  }
+
+  #dispatch(data: Prepare | ToWorker): void {
+    void this.#work(data).catch((error) =>
+      this.#end({ type: 'error', message: errorMessage(error) }),
+    )
+  }
+
+  async #work(data: Prepare | ToWorker): Promise<void> {
+    const current = this.#state
+    this.#state = { phase: 'busy' }
+    switch (data.type) {
+      case 'prepare':
+        if (current.phase !== 'new') break
+        this.#state = await this.#prepare(data)
+        return this.#reply({ type: 'prepared' })
+      case 'send':
+        if (current.phase !== 'prepared') break
+        this.#state = await this.#send(current, data.request)
+        return this.#reply({ type: 'sent', transcript: this.#state.transcript })
+      case 'reveal':
+        if (current.phase !== 'sent') break
+        return this.#reveal(current, data.reveals)
+    }
+    throw new Error('Invalid notarization sequence')
+  }
+
+  async #prepare(data: Prepare): Promise<Prepared> {
     const url = new URL(data.url)
     // The notary limits idle sockets; finish cold WASM startup before connecting.
     const tlsn = await initialize(data)
-    reply({ type: 'initialized' })
+    this.#reply({ type: 'initialized' })
     const ws = new WebSocket(deriveNotaryWebSocketUrl(data.notaryAddress))
     const io = socketIo(ws)
-    opened = io
+    this.#io = io
     await waitForOpen(ws)
     // The peer may close between the open event and this continuation.
     if (ws.readyState !== WebSocket.OPEN) throw new Error('notary WebSocket closed')
@@ -125,8 +164,8 @@ function session(port: MessagePort, initial: Prepare) {
     return { phase: 'prepared', url, io, prover }
   }
 
-  async function send(prepared: Prepared, request: ExactHttpRequest): Promise<Sent> {
-    if (request.url !== initial.url) throw new Error('Request target changed')
+  async #send(prepared: Prepared, request: ExactHttpRequest): Promise<Sent> {
+    if (request.url !== this.target) throw new Error('Request target changed')
     const { url, prover } = prepared
     await withHeartbeat(() =>
       prover.send_request(null, {
@@ -149,7 +188,7 @@ function session(port: MessagePort, initial: Prepare) {
     return { ...prepared, phase: 'sent', transcript }
   }
 
-  async function reveal({ url, io, prover, transcript }: Sent, reveals: Reveals): Promise<void> {
+  async #reveal({ url, io, prover, transcript }: Sent, reveals: Reveals): Promise<void> {
     const plan = planNotarization(transcript, reveals)
     const result = await withHeartbeat(() =>
       prover.reveal(
@@ -165,52 +204,33 @@ function session(port: MessagePort, initial: Prepare) {
     const openings: CommitmentOpening[] = (['sent', 'received'] as const).flatMap((direction) =>
       correlated[direction].map((commitment) => ({ direction, ...commitment })),
     )
-    reply({ type: 'revealed', openings })
+    this.#reply({ type: 'revealed', openings })
     await withHeartbeat(() => prover.finish())
     const wire = decodeAttestationFrame(await readFinalFrame(io))
     const decoded = matchAttestedData(url.hostname, transcript, plan, correlated, wire.attestedData)
-    await io.close()
-    prover.free()
-    reply({
-      type: 'attestation',
-      attestation: wire,
-      attributes: attestationAttributes(decoded, transcript.received),
-    })
+    await this.#end(
+      {
+        type: 'attestation',
+        attestation: wire,
+        attributes: attestationAttributes(decoded, transcript.received),
+      },
+      prover,
+    )
   }
 
-  async function work(data: Prepare | ToWorker): Promise<void> {
-    const current = state
-    state = { phase: 'busy' }
-    switch (data.type) {
-      case 'prepare':
-        if (current.phase !== 'new') break
-        state = await prepare(data)
-        return reply({ type: 'prepared' })
-      case 'send':
-        if (current.phase !== 'prepared') break
-        state = await send(current, data.request)
-        return reply({ type: 'sent', transcript: state.transcript })
-      case 'reveal':
-        if (current.phase !== 'sent') break
-        await reveal(current, data.reveals)
-        state = { phase: 'ended' }
-        return port.close()
-    }
-    throw new Error('Invalid notarization sequence')
+  /**
+   * The last step on either path: close the socket, free a prover that finished, then send the
+   * final reply and close the channel. A failed session's worker is terminated by its parent.
+   */
+  async #end(final: FromWorker, prover?: TlsnProver): Promise<void> {
+    this.#state = { phase: 'ended' }
+    await this.#io?.close()
+    prover?.free()
+    this.#reply(final)
+    this.port.close()
   }
-
-  function dispatch(data: Prepare | ToWorker) {
-    void work(data).catch(async (error) => {
-      reply({ type: 'error', message: errorMessage(error) })
-      state = { phase: 'ended' }
-      await opened?.close()
-      port.close()
-    })
-  }
-  port.onmessage = (event: MessageEvent<ToWorker>) => dispatch(event.data)
-  dispatch(initial)
 }
 
 self.addEventListener('message', (event: MessageEvent<Prepare>) => {
-  session(event.data.port, event.data)
+  new WorkerSession(event.data.port, event.data.url).start(event.data)
 })

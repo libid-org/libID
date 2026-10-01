@@ -1,6 +1,6 @@
-import { type Message, type MessageType, type PopupConnection, PopupError } from '@libid/popup'
+import { type Message, type PopupConnection, PopupError } from '@libid/popup'
 import { route } from '../../assets/keys.js'
-import { CeremonyError, toCeremonyError } from '../../errors.js'
+import { CeremonyError } from '../../errors.js'
 import {
   type CeremonyEvent,
   type CoreEvent,
@@ -24,6 +24,7 @@ import {
   type PlatformId,
   type SupportedCeremonyVersion,
 } from '../../platforms/index.js'
+import { ccdpError } from '../failure.js'
 import {
   CeremonyFailed,
   EventMessage,
@@ -57,22 +58,66 @@ interface CeremonyInput<P extends PlatformId> {
   transactionData: Uint8Array
 }
 
-type Binding = { active: boolean; remove: (() => void)[] }
-
 /** Ordering violations only; other handler failures keep their own, possibly localized, text. */
 const sequenceError = (reason: string) => new Error(`Invalid ceremony sequence: ${reason}`)
 
-const bindings = new WeakMap<PopupConnection<Message>, Binding>()
+/** The CCDP messages a run receives. */
+type Inbound = EventMessage | IdentityProof | UserDenied | CeremonyFailed
 
-// Keep decoding late CCDP traffic without retaining the completed run's inputs.
-function receiver<M extends Message>(handler: ((message: M) => void) | undefined) {
-  return {
-    receive(message: M) {
-      handler?.(message)
-    },
-    clear() {
-      handler = undefined
-    },
+/** A channel's current run, as the channel sees it. */
+interface Run {
+  receive(message: Inbound): void
+}
+
+/**
+ * One connection's CCDP message handlers, registered at its first run and routed to its current
+ * run. Late traffic stays decodable, and dropped, without retaining a finished run's inputs.
+ */
+class CeremonyChannel {
+  /** Connections belong to the application's popup package, so channels are found beside them. */
+  static readonly #channels = new WeakMap<PopupConnection<Message>, CeremonyChannel>()
+  #run: Run | null = null
+  readonly #remove: (() => void)[] = []
+
+  private constructor(private readonly connection: PopupConnection<Message>) {}
+
+  /** Whether a run is attached to `connection`. */
+  static active(connection: PopupConnection<Message>): boolean {
+    const channel = CeremonyChannel.#channels.get(connection)
+    return channel !== undefined && channel.#run !== null
+  }
+
+  /** The connection's channel; a registration failure leaves no handler and no channel. */
+  static of(connection: PopupConnection<Message>): CeremonyChannel {
+    const existing = CeremonyChannel.#channels.get(connection)
+    if (existing) return existing
+    const channel = new CeremonyChannel(connection)
+    try {
+      for (const type of [EventMessage, IdentityProof, UserDenied, CeremonyFailed])
+        channel.#remove.push(
+          connection.on(type, (message: Inbound) => channel.#run?.receive(message)),
+        )
+    } catch (error) {
+      channel.#close()
+      throw error
+    }
+    CeremonyChannel.#channels.set(connection, channel)
+    void connection.closed.then(() => channel.#close())
+    return channel
+  }
+
+  attach(run: Run): void {
+    this.#run = run
+  }
+
+  detach(run: Run): void {
+    if (this.#run === run) this.#run = null
+  }
+
+  #close(): void {
+    for (const remove of this.#remove.splice(0)) remove()
+    if (CeremonyChannel.#channels.get(this.connection) === this)
+      CeremonyChannel.#channels.delete(this.connection)
   }
 }
 
@@ -82,7 +127,6 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   private readonly feed = new EventFeed()
   private readonly observations = new Set<string>()
   private proofWorkStarted = false
-  private readonly clearHandlers: (() => void)[] = []
   private readonly platform: P
   private readonly version: SupportedCeremonyVersion<P>
   private readonly platformEvents: readonly CoreEvent[]
@@ -96,7 +140,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   private readonly ccdpOrigin: string
   private readonly fragment: URLSearchParams
   private result: PromiseWithResolvers<IdentityResult<P>> | undefined
-  private binding: Binding | undefined
+  private channel: CeremonyChannel | undefined
   private startFailure: CeremonyError | undefined
 
   constructor(
@@ -147,6 +191,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
     Object.defineProperty(this, 'launchUrl', { writable: false })
+    // Subscribed at creation: an ending before start still frees the ID and informs observers.
     void this.connection.closed.then((end) => {
       // A finished run ignores its connection ending; don't build an error nobody receives.
       if (this.state === 'done') return
@@ -195,7 +240,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
     if (this.state === 'oauth')
       void this.connection
         .navigateAway(url)
-        .catch((error) => this.fail(toCeremonyError(error, 'authorization')))
+        .catch((error) => this.fail(ccdpError(error, 'authorization')))
   }
 
   private proverReady(event: OperationEvent): void {
@@ -238,21 +283,41 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
     this.observations.add(key)
   }
 
-  private listen<M extends Message>(
-    binding: Binding,
-    type: MessageType<M>,
-    handler: (message: M) => void,
-  ): void {
-    const listener = receiver((m: M) => {
-      if (this.state === 'done') return
-      try {
-        handler(m)
-      } catch (error) {
-        this.fail(error)
-      }
-    })
-    binding.remove.push(this.connection.on(type, listener.receive))
-    this.clearHandlers.push(listener.clear)
+  /** One CCDP message for this run; a failure in handling it fails the run. */
+  receive(message: Inbound): void {
+    if (this.state === 'done') return
+    try {
+      if (message.type === 'event') this.receiveEvent(message)
+      else if (message.type === 'identity-proof') this.receiveProof(message)
+      else if (message.type === 'user-denied') this.receiveDenial()
+      else this.fail(new CeremonyError(message.event, message.message))
+    } catch (error) {
+      this.fail(error)
+    }
+  }
+
+  private receiveProof(message: IdentityProof): void {
+    this.expect('proving')
+    this.expectCcdp()
+    const result = assembleResult(
+      this.platform,
+      this.version,
+      message,
+      this.request.clientId,
+      this.authorizationNonce,
+      this.authorizationDigest,
+    )
+    this.finish(
+      { event: 'prover', phase: 'finished', status: 'completed', timestamp: now() },
+      result,
+    )
+  }
+
+  private receiveDenial(): void {
+    this.expect('proving')
+    this.expectCcdp()
+    if (this.proofWorkStarted) throw sequenceError('Denial after proof work began')
+    this.finish({ status: 'denied', timestamp: now() }, { status: 'denied' })
   }
 
   private expect(state: typeof this.state): void {
@@ -260,8 +325,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   }
 
   proveUserIdentity(): Promise<IdentityResult<P>> {
-    const previous = bindings.get(this.connection)
-    if (this.state === 'new' && previous?.active)
+    if (this.state === 'new' && CeremonyChannel.active(this.connection))
       this.fail(new CeremonyError('prefetch-dispatch', 'Connection already has an active ceremony'))
     if (this.startFailure) {
       const failure = this.startFailure
@@ -269,54 +333,21 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       return Promise.reject(failure)
     }
     if (this.state !== 'new') return Promise.reject(new Error('Ceremony is one-shot'))
-    for (const remove of previous?.remove ?? []) remove()
-    const binding = { active: true, remove: [] as (() => void)[] }
-    bindings.set(this.connection, binding)
-    this.binding = binding
-    void this.connection.closed.then(() => {
-      for (const remove of binding.remove) remove()
-      if (bindings.get(this.connection) === binding) bindings.delete(this.connection)
-    })
     this.state = 'prefetch'
     const result = Promise.withResolvers<IdentityResult<P>>()
     this.result = result
     try {
-      this.listen(binding, EventMessage, (event) => this.receiveEvent(event))
-      this.listen(binding, IdentityProof, (m) => {
-        this.expect('proving')
-        this.expectCcdp()
-        const result = assembleResult(
-          this.platform,
-          this.version,
-          m,
-          this.request.clientId,
-          this.authorizationNonce,
-          this.authorizationDigest,
-        )
-        this.finish(
-          { event: 'prover', phase: 'finished', status: 'completed', timestamp: now() },
-          result,
-        )
-      })
-      this.listen(binding, UserDenied, () => {
-        this.expect('proving')
-        this.expectCcdp()
-        if (this.proofWorkStarted) throw sequenceError('Denial after proof work began')
-        this.finish({ status: 'denied', timestamp: now() }, { status: 'denied' })
-      })
-      this.listen(binding, CeremonyFailed, (message) =>
-        this.fail(new CeremonyError(message.event, message.message)),
-      )
-      this.emit({ event: 'prefetch-dispatch', phase: 'started', timestamp: now() })
-      if (this.state === 'prefetch')
-        void this.connection
-          .navigate(this.prefetchUrl, this.fragment)
-          .catch((error) => this.fail(toCeremonyError(error, 'prefetch-dispatch')))
+      this.channel = CeremonyChannel.of(this.connection)
     } catch {
-      for (const remove of binding.remove.splice(0)) remove()
-      if (bindings.get(this.connection) === binding) bindings.delete(this.connection)
       this.fail(new Error(messages.connectionInitializationFailed))
+      return result.promise
     }
+    this.channel.attach(this)
+    this.emit({ event: 'prefetch-dispatch', phase: 'started', timestamp: now() })
+    if (this.state === 'prefetch')
+      void this.connection
+        .navigate(this.prefetchUrl, this.fragment)
+        .catch((error) => this.fail(ccdpError(error, 'prefetch-dispatch')))
     return result.promise
   }
 
@@ -331,7 +362,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
 
   private fail(error: unknown): void {
     if (this.state === 'done') return
-    const failure = toCeremonyError(error, this.interruptedEvent())
+    const failure = ccdpError(error, this.interruptedEvent())
     if (this.state === 'new') this.startFailure = failure
     this.finish(failureEvent(failure), failure)
   }
@@ -342,10 +373,9 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
     outcome: IdentityResult<P> | CeremonyError,
   ): void {
     const result = this.result
-    if (this.binding) this.binding.active = false
+    this.channel?.detach(this)
     this.state = 'done'
     this.releaseId()
-    for (const off of this.clearHandlers.splice(0)) off()
     this.observations.clear()
     this.request.codeVerifier = null
     this.authorizationUrl = ''

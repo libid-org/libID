@@ -1,4 +1,5 @@
 import type { PopupErrorCode } from '@libid/popup'
+import type { CeremonyStage as Stage } from '../events.js'
 
 /** Package-owned CCDP display text: document UI, client stages, failure text and the build's inline fallbacks. */
 export const messages = {
@@ -13,7 +14,6 @@ export const messages = {
   proofReceived: 'Proof received',
   proofDelivered: 'Proof delivered.',
   authorizationDeclined: 'Authorization declined.',
-  failed: 'Ceremony failed.',
   returning: 'Returning to your application',
   returnToApplication: (message: string) => `${message} Return to your application.`,
   unsupportedVersion:
@@ -53,3 +53,18 @@ export const popupErrorMessages = {
   'send-unavailable': 'Unable to send a message because the popup connection is unavailable.',
   'connection-closed': messages.connectionEnded,
 } satisfies Record<PopupErrorCode, string>
+
+export type CeremonyStage = Stage
+
+/** Package-owned presentation; stage intervals do not describe exclusive execution time. */
+export const CeremonyStage = {
+  message(stage: CeremonyStage, platform: string): string {
+    return {
+      preparation: messages.preparation,
+      authorization: messages.authorization(platform),
+      'proof-preparation': messages.proofPreparation,
+      notarization: messages.notarization,
+      'zk-proving': messages.zkProving,
+    }[stage]
+  },
+}

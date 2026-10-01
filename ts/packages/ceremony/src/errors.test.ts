@@ -1,7 +1,7 @@
 import { PopupError } from '@libid/popup'
 import { fakeConnection } from '@libid/popup/testing'
 import { expect, it, vi } from 'vitest'
-import { reportFailure } from './ccdp/documents/failure.js'
+import { ccdpError, reportFailure } from './ccdp/failure.js'
 import { CeremonyFailed } from './ccdp/index.js'
 import { popupErrorMessages } from './ccdp/uiMessages.js'
 import { CeremonyError, errorMessage, toCeremonyError } from './errors.js'
@@ -68,9 +68,9 @@ it('records undeliverable failures without logging opaque text or changing outco
   }
 })
 
-it('translates popup codes into CCDP copy while preserving the transport cause', () => {
+it('translates popup codes into CCDP copy at the CCDP edge while preserving the transport cause', () => {
   const cause = new PopupError('fallback-unavailable')
-  const error = toCeremonyError(cause, 'authorization')
+  const error = ccdpError(cause, 'authorization')
   expect(cause.message).toBe('fallback-unavailable')
   expect(error.cause).toBe(cause)
   expect(error.event).toBe('authorization')
@@ -78,4 +78,7 @@ it('translates popup codes into CCDP copy while preserving the transport cause',
   expect(error.message).toContain('The sign-in provider may have isolated this window')
   // Matching text in an ordinary exception is not a transport code.
   expect(errorMessage(new Error('fallback-unavailable'))).toBe('fallback-unavailable')
+  expect(ccdpError(new Error('fallback-unavailable'), 'prover').message).toBe(
+    'fallback-unavailable',
+  )
 })

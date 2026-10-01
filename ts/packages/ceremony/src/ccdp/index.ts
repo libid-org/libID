@@ -15,11 +15,14 @@ import {
   recordValidator,
 } from '../primitives.js'
 import {
+  MAX_ATTRIBUTE_TEXT_BYTES,
   MAX_CEREMONY_VERSION,
   MAX_CLIENT_CREDENTIAL_BYTES,
   MAX_CLIENT_ID_BYTES,
+  MAX_EVENT_ATTRIBUTES,
   MAX_FAILURE_TEXT_BYTES,
   MAX_IDENTITY_TEXT_BYTES,
+  MAX_OPERATION_ID_BYTES,
   MAX_REDIRECT_URI_BYTES,
 } from './limits.js'
 
@@ -103,11 +106,6 @@ export const ProveIdentity = codec<ProveIdentity>(
   },
   ['clientCredential'],
 )
-
-/** Bounded instrumentation payloads; text bounds are UTF-8 bytes. */
-const MAX_OPERATION_ID_BYTES = 64
-const MAX_EVENT_ATTRIBUTES = 16
-const MAX_ATTRIBUTE_TEXT_BYTES = 128
 
 /** Exact bounded records are validated at the transport boundary, independently of subscriptions. */
 function validateEvent(value: unknown): asserts value is OperationEvent {

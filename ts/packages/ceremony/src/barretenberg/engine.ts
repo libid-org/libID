@@ -2,7 +2,7 @@ import { assetUrl } from '../assets/index.js'
 import { toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, safeEmit } from '../events.js'
 import { workerThreads } from '../threads.js'
-import { abi, acvm, bbWasm, crs } from './barretenberg.assets.js'
+import { abi, acvm, bbWasmPath, crs } from './barretenberg.assets.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
 export type { RawProof } from './protocol.js'
@@ -52,8 +52,9 @@ export class ProofEngine {
         threads: workerThreads(threads),
         acvmUrl: assetUrl(acvm),
         abiUrl: assetUrl(abi),
-        wasmPath: assetUrl(bbWasm).replace('-threads.wasm', '.wasm'),
-        // Ignored by pinned bb.js; build/loaders.test.ts fails once a CRS base is honored.
+        wasmPath: bbWasmPath(),
+        // Pinned bb.js ignores this until its pending CRS-base patch lands upstream;
+        // build/loaders.test.ts fails once the loaders honor a base.
         crsPath: new URL('.', assetUrl(crs[0])).href,
       }
       this.#worker = this.#spawn()

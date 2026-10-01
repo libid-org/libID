@@ -1,14 +1,13 @@
-import { fallback } from 'virtual:ceremony-popup-fallback'
-import { PopupConnection, PopupWindow } from '@libid/popup'
+import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { route } from '../../assets/keys.js'
-import { toCeremonyError } from '../../errors.js'
-import { EventFeed, failureEvent, now } from '../../events.js'
+import { now } from '../../events.js'
 import { isOrigin } from '../../primitives.js'
+import { ccdpError, reportFailure } from '../failure.js'
 import { MAX_NAVIGATION_FRAGMENT_CHARS, MAX_OAUTH_RETURN_CHARS } from '../limits.js'
 import { type OAuthReturn, proverFragment, readOAuthState } from '../navigation.js'
 import { messages } from '../uiMessages.js'
-import { endError, reportFailure } from './failure.js'
-import { eventView, view } from './ui.js'
+import { CeremonyDocument } from './document.js'
+import { view } from './ui.js'
 
 /** The complete Callback artifact owns clearing and dispatch; the Bridge inserts data only. */
 export function startCallback(): void {
@@ -32,7 +31,7 @@ export function startCallback(): void {
     }
     callbackV1(oauthReturn, returnState.ceremonyId, deploymentInputs())
   } catch (error) {
-    const failure = toCeremonyError(error, 'authorization')
+    const failure = ccdpError(error, 'authorization')
     view(messages.returnToApplication(failure.message))
     reportFailure(undefined, failure)
   }
@@ -63,52 +62,55 @@ function callbackV1(oauthReturn: OAuthReturn, id: string, inputs: readonly unkno
     throw new TypeError(messages.invalidCallbackInputs)
   // Popup owns validation and matching of the Bridge's admission patterns.
   const connection = PopupConnection.accept(PopupWindow.current(), {
-    fallback,
     connectionId: id,
     allowedApplicationOrigins,
   })
-  let state: { phase: 'connecting'; oauthReturn: OAuthReturn } | { phase: 'navigating' | 'ended' } =
-    {
-      phase: 'connecting',
-      oauthReturn,
-    }
-  const feed = new EventFeed()
-  const ui = eventView(feed)
-  const cleanup = () => {
-    state = { phase: 'ended' }
-    ui.stop()
+  void new CallbackDocument(connection, id, oauthReturn, ccdpOrigin).start()
+}
+
+/** Forwards the one OAuth return from the Bridge to the Prover, navigating the popup there. */
+class CallbackDocument extends CeremonyDocument {
+  /** The return until navigation hands it to the Prover. */
+  #oauthReturn: OAuthReturn | null
+
+  constructor(
+    protected readonly connection: PopupConnection<Message>,
+    private readonly id: string,
+    oauthReturn: OAuthReturn,
+    private readonly ccdpOrigin: string,
+  ) {
+    super('authorization')
+    this.#oauthReturn = oauthReturn
   }
-  const fail = (error: unknown) => {
-    if (state.phase === 'ended') return
-    const failure = toCeremonyError(error, 'authorization')
-    feed.emit(failureEvent(failure))
-    cleanup()
-    reportFailure(connection, failure)
-  }
-  ui.message(messages.returning)
-  void connection.closed.then((end) => {
-    if (state.phase !== 'navigating' || end.outcome === 'failed')
-      fail(endError(end, messages.callbackClosed))
-  })
-  void connection.ready
-    .then(async () => {
-      if (state.phase !== 'connecting') return
-      const applicationOrigin = connection.peerOrigin
+
+  async start(): Promise<void> {
+    this.ui.message(messages.returning)
+    // Its own navigation ends the connection; only a failure ends it early then.
+    this.failOnEnd(
+      messages.callbackClosed,
+      (end) => this.#oauthReturn === null && end.outcome !== 'failed',
+    )
+    try {
+      await this.connection.ready
+      if (this.ended || this.#oauthReturn === null) return
+      const applicationOrigin = this.connection.peerOrigin
       if (!isOrigin(applicationOrigin)) throw new TypeError(messages.missingApplicationOrigin)
       const event = { event: 'authorization', phase: 'finished', timestamp: now() } as const
       try {
-        connection.send({ type: 'event', ...event })
+        this.connection.send({ type: 'event', ...event })
       } catch {
         /* A lost observation does not gate navigation. */
       }
-      feed.emit({ ...event, status: 'active' })
-      const fragment = proverFragment(id, applicationOrigin, state.oauthReturn)
+      this.feed.emit({ ...event, status: 'active' })
+      const fragment = proverFragment(this.id, applicationOrigin, this.#oauthReturn)
       // Re-encoding grows the return; the Prover refuses a fragment beyond its bound, `#` included.
       if (String(fragment).length >= MAX_NAVIGATION_FRAGMENT_CHARS)
         throw new TypeError(messages.oauthReturnTooLarge)
-      state = { phase: 'navigating' }
-      await connection.navigate(ccdpOrigin + route('prover'), fragment)
-      cleanup()
-    })
-    .catch(fail)
+      this.#oauthReturn = null
+      await this.connection.navigate(this.ccdpOrigin + route('prover'), fragment)
+      this.cleanup()
+    } catch (error) {
+      this.fail(error)
+    }
+  }
 }

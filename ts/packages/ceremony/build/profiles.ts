@@ -12,7 +12,6 @@ export type ResponseProfile =
 
 import { createHash } from 'node:crypto'
 import * as shared from '../src/assets/headers.ts'
-import { popupFallback } from './popup.ts'
 
 /** Hex characters of the policy directory under `/ccdp/assets/` that bundled code lives in. */
 const POLICY_HASH_HEX_CHARS = 12
@@ -33,9 +32,6 @@ export function parseCsp(policy: string): Map<string, string[]> {
 }
 
 const base = shared.csp.base
-
-/** The optional popup carrier's sources, for the documents that accept a popup connection only. */
-const carrier = popupFallback.connectSources.join(' ')
 
 const documents: readonly ResponseProfile[] = ['callback', 'prefetch', 'prover', 'proverFallback']
 
@@ -64,7 +60,7 @@ export function responseHeaders(
   if (profile === 'callback')
     return {
       ...headers,
-      'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'${carrier ? `; connect-src ${carrier}` : ''}`,
+      'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'`,
     }
   // The Application reads the version list cross-origin; the wildcard needs no Vary.
   if (profile === 'versions')
@@ -102,7 +98,7 @@ function executableCsp(
         : `'self' ${externalOrigins.join(' ')}`
   const connectBlob = profile === 'notaryWorker' ? ' blob:' : '',
     styles = documents.includes(profile) ? "; style-src 'unsafe-inline'" : ''
-  return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects}${documents.includes(profile) && carrier ? ` ${carrier}` : ''}${connectBlob}${styles}`
+  return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects}${connectBlob}${styles}`
 }
 
 /** Bundled code changes URL when its execution policy changes, even if its code does not. */

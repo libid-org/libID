@@ -6,6 +6,7 @@ import type { ByteRange, ExactHttpRequest, Transcript } from '../../../notary/pr
 import {
   decodePrintable,
   invalidTranscript,
+  JSON_MEMBER_END,
   jsonField,
   quotedRange,
   skipJsonWhitespace,
@@ -14,6 +15,8 @@ import { isPkceValue } from '../../../platforms/authorization.js'
 import { isBearer } from './inputs.js'
 import { MAX_BEARER_BYTES } from './parameters.js'
 import { isAuthorizationCode, isFormClientId, isUserId, MAX_USER_ID_CHARS } from './validation.js'
+
+const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded'
 
 export interface TokenRequestInput {
   clientId: string
@@ -66,7 +69,7 @@ export function bearerExchange(layout: {
       // The attested TLS server identity, not this prover-written Host field, is the authority.
       headers: {
         Host: encoder.encode(tokenUrl.host),
-        'Content-Type': encoder.encode('application/x-www-form-urlencoded'),
+        'Content-Type': encoder.encode(FORM_CONTENT_TYPE),
         'Content-Length': encoder.encode(String(body.length)),
         Accept: encoder.encode('application/json'),
         Connection: encoder.encode('close'),
@@ -165,7 +168,7 @@ function numericId(bytes: Uint8Array, field: string) {
   while (bytes[end] >= 0x30 && bytes[end] <= 0x39) end++
   const value = bytes.subarray(valueStart, end)
   end = skipJsonWhitespace(bytes, end)
-  if (![0x2c, 0x7d].includes(bytes[end])) throw new Error('Invalid identity id terminator')
+  if (!JSON_MEMBER_END.includes(bytes[end])) throw new Error('Invalid identity id terminator')
   return { value, range: { start, end: end + 1 } }
 }
 
@@ -186,7 +189,7 @@ function tokenRequestBody(request: Uint8Array, requestLine: string, host: string
   if (head.startLine !== requestLine) invalidTranscript('token request framing')
   const expected = new Map([
     ['host', host],
-    ['content-type', 'application/x-www-form-urlencoded'],
+    ['content-type', FORM_CONTENT_TYPE],
     ['content-length', String(request.length - head.bodyStart)],
   ])
   const seen = new Set<string>()

@@ -80,8 +80,10 @@ function mergeAdjacent(ranges: readonly ByteRange[]): ByteRange[] {
 
 /** Build the reveal ranges and their exact commitment complement. */
 export function planNotarization(transcript: Transcript, ranges: Reveals): NotarizationPlan {
-  if (transcript.sent.length > MAX_SENT_BYTES) invalid('sent transcript exceeds 4 KiB')
-  if (transcript.received.length > MAX_RECV_BYTES) invalid('received transcript exceeds 32 KiB')
+  if (transcript.sent.length > MAX_SENT_BYTES)
+    invalid(`sent transcript exceeds ${MAX_SENT_BYTES} bytes`)
+  if (transcript.received.length > MAX_RECV_BYTES)
+    invalid(`received transcript exceeds ${MAX_RECV_BYTES} bytes`)
   validateRanges(ranges.sent, transcript.sent.length, 'sent')
   validateRanges(ranges.received, transcript.received.length, 'received')
 
@@ -157,9 +159,9 @@ function correlateOpenings(
   const correlated: CorrelatedCommitment[] = []
   for (const opening of openings) {
     if (!isFixedBytes(opening.hash, COMMITMENT_BYTES))
-      invalid(`${direction} opening hash must be exactly 32 bytes`)
+      invalid(`${direction} opening hash must be exactly ${COMMITMENT_BYTES} bytes`)
     if (!isFixedBytes(opening.blinder, BLINDER_BYTES))
-      invalid(`${direction} opening blinder must be exactly 16 bytes`)
+      invalid(`${direction} opening blinder must be exactly ${BLINDER_BYTES} bytes`)
 
     const matches = [...unmatched].filter((index) =>
       bytesEqual(

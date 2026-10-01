@@ -4,7 +4,7 @@ import { dirname, extname, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import * as headers from '../src/assets/headers.ts'
 import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.ts'
-import { assetKey, profileKey } from '../src/assets/keys.ts'
+import { ASSETS_PREFIX, assetKey, profileKey } from '../src/assets/keys.ts'
 import { SRS_POINTS } from '../src/barretenberg/parameters.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetPlugin } from './assetPlugin.ts'
@@ -167,17 +167,17 @@ export async function resolveAssets() {
         archives.set(asset.source, readArchive(asset.source, asset.sha256))
       const files = await archives.get(asset.source)!
       const member = selectMember(files, asset.member)
-      path = `/ccdp/assets/${asset.mount}/${member}`
+      path = `${ASSETS_PREFIX}${asset.mount}/${member}`
       bytes = files.get(member)!
     } else if (asset.source.startsWith('npm:')) {
       // The installed version names the immutable path, so an upgrade cannot reuse it.
       if (!asset.mount.includes('{version}'))
         throw new Error(`An installed file's mount spells {version}: ${asset.mount}`)
       const installed = installedFile(asset.source)
-      path = `/ccdp/assets/${safePath(asset.mount.replaceAll('{version}', installed.version))}`
+      path = `${ASSETS_PREFIX}${safePath(asset.mount.replaceAll('{version}', installed.version))}`
       bytes = installed.bytes
     } else {
-      path = `/ccdp/assets/${safePath(asset.mount)}`
+      path = `${ASSETS_PREFIX}${safePath(asset.mount)}`
       bytes = await readSource(asset.source, asset.sha256)
     }
     register(path, bytes, assetHeaders(path, asset.headers))

@@ -1,8 +1,15 @@
-// How a CCDP document ends and reports a failed run; the workers need none of this.
+// How the CCDP presents, ends and reports a failed run; the workers need none of this.
 
 import { type ConnectionEnd, type Message, type PopupConnection, PopupError } from '@libid/popup'
-import type { CeremonyError } from '../../errors.js'
-import { isOrigin } from '../../primitives.js'
+import { CeremonyError, toCeremonyError } from '../errors.js'
+import { isOrigin } from '../primitives.js'
+import { popupErrorMessages } from './uiMessages.js'
+
+/** A failure of `event` from `error`, presenting popup transport codes in CCDP text. */
+export const ccdpError = (error: unknown, event: string): CeremonyError =>
+  error instanceof PopupError
+    ? new CeremonyError(event, popupErrorMessages[error.code], { cause: error })
+    : toCeremonyError(error, event)
 
 /** A failed end keeps its transport code; an orderly close fails the document's own run with `closedMessage`. */
 export const endError = (end: ConnectionEnd, closedMessage: string): Error =>

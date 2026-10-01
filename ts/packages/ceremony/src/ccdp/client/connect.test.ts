@@ -1,9 +1,7 @@
 import { testnet } from '@libid/ledger/testing'
 import { type Carrier, PopupWindow } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
-import { bundledVersions, CEREMONY_ID } from '../../testing/index.js'
-import { ccdpClientFromConfig } from './client.js'
-import { validateCeremonyConfig } from './config.js'
+import { CEREMONY_ID, ccdpClient } from '../../testing/index.js'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -18,13 +16,7 @@ it.each([
     const handle = { closed: false, close: vi.fn() }
     vi.stubGlobal('window', Object.assign(new EventTarget(), { open: () => handle }))
     const popup = PopupWindow.open('client-connect', 'left=0,top=0')
-    const client = ccdpClientFromConfig(
-      validateCeremonyConfig(
-        { ccdpOrigin, platforms: { google: { clientId: 'client' } } },
-        'https://bridge.test',
-      ),
-      bundledVersions,
-    )
+    const client = await ccdpClient({ ccdpOrigin, platforms: { google: { clientId: 'client' } } })
     let receive: (message: unknown) => void = () => {}
     const carrier: Carrier = {
       peerOrigin,
@@ -75,13 +67,10 @@ it.each([
 
 it('runs a ceremony only under its connection ID [KIT-008]', async () => {
   vi.stubGlobal('window', Object.assign(new EventTarget(), { open: () => ({ closed: false }) }))
-  const client = ccdpClientFromConfig(
-    validateCeremonyConfig(
-      { ccdpOrigin: 'https://ccdp.test', platforms: { google: { clientId: 'client' } } },
-      'https://bridge.test',
-    ),
-    bundledVersions,
-  )
+  const client = await ccdpClient({
+    ccdpOrigin: 'https://ccdp.test',
+    platforms: { google: { clientId: 'client' } },
+  })
   const connection = client.connect(PopupWindow.open('client-ids', 'left=0,top=0'), {
     connectionId: CEREMONY_ID,
   })

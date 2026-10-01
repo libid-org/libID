@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { makeCertificate } from '../../popup/e2e/tls.mjs'
 import { packageDir } from '../build/sources.ts'
 import { isolated } from '../src/assets/headers.ts'
+import { CALLBACK_PATH } from '../src/assets/keys.ts'
 import { prepareCallback } from './callback.ts'
 import { crsHosts, serveCrs } from './crs.mjs'
 import { browserPlatforms } from './platforms.ts'
@@ -60,8 +61,8 @@ for (const secure of [true, false]) {
   const server = secure ? createServer.bind(null, certificate) : createHttpServer
   // Prepared once, independently of OAuth requests; both bytes and policy change together.
   const callback = prepareCallback(
-    readFileSync(join(artifact, 'public/ccdp/callback.html'), 'utf8'),
-    metadata.headers['/ccdp/callback.html'],
+    readFileSync(join(artifact, 'public', CALLBACK_PATH), 'utf8'),
+    metadata.headers[CALLBACK_PATH],
     { allowedApplicationOrigins: allowedOrigins, ccdpOrigin: ccdp },
   )
   // Each route returns true once it has answered; unmatched paths fall through to 404.

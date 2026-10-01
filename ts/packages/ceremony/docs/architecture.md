@@ -20,10 +20,9 @@ and assembles `OAuthProof`. Neither performs final cryptographic verification in
 | [build](../build/distribution.ts) | Compile the dependency graph and emit static files, response policies and the bundled version set. |
 | [events](../src/events.ts), [errors](../src/errors.ts) | Shared operation feed, stage projection and bounded failure text. |
 
-The two public entrypoints are `@libid/ceremony` (discovery, result types and
-`CeremonyError`) and `@libid/ceremony/ccdp/client` (the client and subscriptions,
-plus the root exports). Codecs, document startup, execution and build helpers
-are private. See the [client guide](client.md) for application use.
+The one public entrypoint, `@libid/ceremony`, exports the client, its
+subscriptions and stage text, discovery, result types and `CeremonyError`.
+Codecs, document startup, execution and build helpers are private. See the [client guide](client.md) for application use.
 
 ## Document lifecycle
 

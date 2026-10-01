@@ -61,8 +61,8 @@ export function decodeAttestationFrame(frame: Uint8Array): NotaryAttestation {
 
 export function waitForOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve()
-  const listening = new AbortController(),
-    signal = listening.signal
+  const listening = new AbortController()
+  const signal = listening.signal
   return new Promise<void>((resolve, reject) => {
     const failed = () => reject(new Error('notary WebSocket failed to open'))
     socket.addEventListener('open', () => resolve(), { signal })

@@ -29,7 +29,10 @@ export const bbWasm = {
   ],
 }
 
-// bb.js 5.2.0 browser fetches ignore crsPath as an override. Keep these external
+/** bb.js takes the unthreaded file name and appends `-threads` itself under shared memory. */
+export const bbWasmPath = (): string => assets.assetUrl(bbWasm).replace(/-threads\.wasm$/, '.wasm')
+
+// bb.js 5.2.0 CRS loaders take no base URL and fetch Aztec's CDN. Keep these external
 // and matched to its native URLs/ranges; build/loaders.test.ts observes real loaders.
 const crsFile = (name: string, request: { range: string } | { bytes: number }) =>
   assets.external(`https://crs.aztec-cdn.foundation/${name}`, {

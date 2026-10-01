@@ -6,7 +6,7 @@ const CACHE = 'libid-ceremony-assets-v1',
   PREFIX = '/__libid_ceremony_cache__/'
 
 /** Validate status and exposed metadata before accepting an asset response. */
-export function validateResponse(response: Response, spec: AssetRequest): void {
+function validateResponse(response: Response, spec: AssetRequest): void {
   if (
     response.redirected ||
     response.type === 'opaque' ||

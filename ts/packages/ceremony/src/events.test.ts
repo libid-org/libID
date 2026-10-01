@@ -1,8 +1,7 @@
 import { expect, it, vi } from 'vitest'
-import { messages } from './ccdp/uiMessages.js'
+import { CeremonyStage, messages } from './ccdp/uiMessages.js'
 import {
   type CeremonyEvent,
-  CeremonyStage,
   EventFeed,
   type OperationEvent,
   operation,

@@ -74,7 +74,6 @@ it('clears before acceptance and preserves exact private return with shared depl
   await Promise.resolve()
   expect(fetch).not.toHaveBeenCalled()
   expect(accept).toHaveBeenCalledWith(undefined, {
-    fallback: undefined,
     connectionId: id,
     allowedApplicationOrigins: ['https://other-app.test', 'https://other-ccdp.test'],
   })

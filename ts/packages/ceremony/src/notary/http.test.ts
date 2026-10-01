@@ -7,16 +7,16 @@ const response = (head: string, body: string | Uint8Array) => receivedOnly(httpR
 const CHUNKED = 'Transfer-Encoding: chunked\r\n'
 
 it('parses chunked JSON without altering the transcript used for range commitments', () => {
-  const transcript = response(CHUNKED, chunked('{"id":', '1}')),
-    original = transcript.received.slice()
+  const transcript = response(CHUNKED, chunked('{"id":', '1}'))
+  const original = transcript.received.slice()
   expect(responseJson(transcript)).toEqual({ id: 1 })
   expect(transcript.received).toEqual(original)
   expect(responseJson(response('X-Name: café\r\nContent-Length:\t2 \r\n', '{}'))).toEqual({})
 })
 
 it('decodes UTF-8 only after removing chunk framing that splits a character', () => {
-  const json = utf8('{"id":1,"name":"é"}'),
-    split = json.indexOf(0xc3) + 1
+  const json = utf8('{"id":1,"name":"é"}')
+  const split = json.indexOf(0xc3) + 1
   const transcript = response(CHUNKED, chunked(json.subarray(0, split), json.subarray(split)))
   expect(responseJson(transcript)).toEqual({ id: 1, name: 'é' })
 })

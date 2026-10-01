@@ -1,5 +1,6 @@
-import { CeremonyStage, type EventFeed, type StageEvent } from '../../events.js'
-import { messages } from '../uiMessages.js'
+import { FAILED_TEXT } from '../../errors.js'
+import type { EventFeed, StageEvent } from '../../events.js'
+import { CeremonyStage, messages } from '../uiMessages.js'
 import { proofProgress } from './progress.js'
 
 const SLOW_PROVING_HINT_MS = 15000
@@ -29,7 +30,7 @@ function stageLabel(event: StageEvent): string {
   if (event.status === 'completed') return messages.proofReceived
   if (event.status === 'denied') return messages.returnToApplication(messages.authorizationDeclined)
   // Failed and closed updates always carry their display text.
-  return messages.returnToApplication(event.message ?? messages.failed)
+  return messages.returnToApplication(event.message ?? FAILED_TEXT)
 }
 
 /** The handle a document drives its package-owned UI through. */

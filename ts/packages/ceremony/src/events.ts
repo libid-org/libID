@@ -1,4 +1,3 @@
-import { messages } from './ccdp/uiMessages.js'
 import { type CeremonyError, toCeremonyError } from './errors.js'
 
 /** Core operations have protocol-owned meanings; extension events grant no protocol authority. */
@@ -57,19 +56,6 @@ export interface StageEvent {
   status: CeremonyStatus
   timestamp: number
   message?: string
-}
-
-/** Package-owned presentation; stage intervals do not describe exclusive execution time. */
-export const CeremonyStage = {
-  message(stage: CeremonyStage, platform: string): string {
-    return {
-      preparation: messages.preparation,
-      authorization: messages.authorization(platform),
-      'proof-preparation': messages.proofPreparation,
-      notarization: messages.notarization,
-      'zk-proving': messages.zkProving,
-    }[stage]
-  },
 }
 
 /** The stage each operation occurrence projects, keyed by `event/phase`. */

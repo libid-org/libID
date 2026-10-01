@@ -6,6 +6,9 @@ const JSON_WHITESPACE = [0x20, 0x09, 0x0a, 0x0d]
 const JSON_COLON = 0x3a
 const JSON_QUOTE = 0x22
 
+/** A comma or closing brace ends an object member. */
+export const JSON_MEMBER_END = [0x2c, 0x7d]
+
 const decoder = new TextDecoder('utf-8', { fatal: true })
 
 /** Reject a transcript that breaks its layout; offsets never leave the original bytes. */

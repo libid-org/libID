@@ -17,7 +17,7 @@ application setup, then let the user click the anchor. Supply the application's
 ledger, 32-byte operation-domain hash and opaque transaction bytes.
 
 ```ts
-import { CeremonyStage, createCCDPClient } from '@libid/ceremony/ccdp/client'
+import { CeremonyStage, createCCDPClient } from '@libid/ceremony'
 import type { LedgerId } from '@libid/ledger'
 import { PopupWindow } from '@libid/popup'
 

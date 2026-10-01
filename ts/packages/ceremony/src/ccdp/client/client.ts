@@ -63,11 +63,8 @@ export async function createCCDPClient(options: { oauthBridge: string }): Promis
   return ccdpClientFromConfig(config, await fetchPlatformVersions(config.ccdpOrigin))
 }
 
-/** Internal construction from an already validated, frozen Bridge configuration and Distribution list. */
-export function ccdpClientFromConfig(
-  config: CeremonyConfig,
-  versions: PlatformVersions,
-): CCDPClient {
+/** Construction from an already validated, frozen Bridge configuration and Distribution list. */
+function ccdpClientFromConfig(config: CeremonyConfig, versions: PlatformVersions): CCDPClient {
   const popupOrigins = [...new Set([new URL(config.redirectUri).origin, config.ccdpOrigin])]
   const liveIds = new Set<string>()
   // Each ceremony ID must be its connection's ID; a mismatch would never complete the handshake.
