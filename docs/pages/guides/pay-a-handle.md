@@ -1,6 +1,6 @@
 ---
 title: Send funds to a handle
-description: Pay a handle with HandleEscrow, even before its owner has a wallet.
+description: Pay a handle with HandleEscrow, even before anyone holds it.
 sidebar:
   order: 4
 ---
@@ -24,8 +24,8 @@ of two ways, `Claimed` or `Refunded`, whichever comes first.
 
 In this guide you play both people: a sender, with `PRIVATE_KEY`, and Carol,
 with `CAROL_KEY`. Both keys are set by the [local chain](/docs/guides/local-chain/),
-which also sets `HANDLE_ESCROW`. `HandleEscrow` is not on a public network
-yet.
+which also sets `HANDLE_ESCROW`. To use Eden instead, see
+[Eden testnet](/docs/networks/eden/).
 
 ## The sender's script
 
@@ -34,11 +34,11 @@ Create `sender.mjs`. Start with the setup:
 ```js
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { handleEscrowAbi, handleHash, handleNode, platformId, rulesOnChain } from '@libid/contracts';
+import { handleEscrowAbi, handleHash, handleNode, platformId, rulesOf } from '@libid/contracts';
 
 const transport = http(process.env.RPC_URL);
 const client = createPublicClient({ transport });
-const names = { client, address: process.env.IDENTITY_NAMES };
+const registry = { client, address: process.env.IDENTITY_REGISTRY };
 const escrow = { address: process.env.HANDLE_ESCROW, abi: handleEscrowAbi };
 
 const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
@@ -54,12 +54,12 @@ handle itself is never sent to the RPC:
 ```js
 const sender = createWalletClient({ account: privateKeyToAccount(process.env.PRIVATE_KEY), transport });
 
-const rules = await rulesOnChain(names, 'github');
+const rules = await rulesOf(registry, platformId('github'));
 const hash = handleHash('carol', rules);
-const node = handleNode('github', hash);
+const node = handleNode(platformId('github'), hash);
 ```
 
-`rulesOnChain` reads how the platform writes handles: GitHub ignores case,
+`rulesOf` reads how the platform writes handles: GitHub ignores case,
 X drops a leading `@`, and so on. `handleHash` applies those rules and hashes
 the result. It throws if the text can never be a handle on that platform.
 `handleNode` is the key the escrow keeps the funds under.
@@ -128,7 +128,7 @@ node sender.mjs
 ## Carol proves her handle
 
 In a real app, Carol proves `carol` on GitHub with the libID sign-in flow,
-which binds the handle to her wallet. See
+which binds the handle to her address. See
 [How binding works](/docs/advanced/how-binding-works/). On the local chain,
 bind it from the `local-chain` directory:
 
@@ -142,7 +142,7 @@ Create `carol.mjs`, starting with the same setup as `sender.mjs`, then:
 
 ```js
 const carol = createWalletClient({ account: privateKeyToAccount(process.env.CAROL_KEY), transport });
-const node = handleNode('github', handleHash('carol', await rulesOnChain(names, 'github')));
+const node = handleNode(platformId('github'), handleHash('carol', await rulesOf(registry, platformId('github'))));
 
 const tx = await carol.writeContract({
   ...escrow,
@@ -154,7 +154,7 @@ await client.waitForTransactionReceipt({ hash: tx });
 console.log('left for carol:', await client.readContract({ ...escrow, functionName: 'escrowed', args: [node, NATIVE] }));
 ```
 
-`claim` must come from the wallet that owns the handle. The second argument
+`claim` must come from the holder of the handle. The second argument
 lists the tokens to claim; tokens with nothing held are skipped. The third is
 where the funds go.
 
@@ -176,7 +176,7 @@ their own, do not work with the escrow.
 
 - A wrong hash sends funds to a slot nobody can claim. Only the refund
   address can get them back.
-- A handle can change owners. Before you send, you can show when the current
-  owner proved it. See [Resolve a handle](/docs/guides/resolve-handle/).
+- A handle can change holders. Before you send, you can show when the
+  current holder proved it. See [Resolve a handle](/docs/guides/resolve-handle/).
 - The refund address should be your user. If a contract sends on a user's
   behalf and names itself, the user cannot get the funds back.

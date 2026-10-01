@@ -8,7 +8,7 @@
     "check": "node check.mjs"
   },
   "dependencies": {
-    "@libid/contracts": "0.14.0",
+    "@libid/contracts": "0.15.0",
     "viem": "2.57.1"
   }
 }

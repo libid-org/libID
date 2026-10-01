@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-`IdentityNames` emits an event every time a wallet proves an account.
+`IdentityRegistry` emits an event every time an address proves an identity.
 `HandleEscrow` emits one for every payment. You can read past events or watch
 for new ones.
 
@@ -13,24 +13,24 @@ The examples use this setup:
 
 ```js
 import { createPublicClient, http } from 'viem';
-import { handleEscrowAbi, identityNamesAbi, platformId } from '@libid/contracts';
+import { handleEscrowAbi, identityRegistryAbi, platformId } from '@libid/contracts';
 
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
-const IDENTITY_NAMES = process.env.IDENTITY_NAMES;
+const IDENTITY_REGISTRY = process.env.IDENTITY_REGISTRY;
 ```
 
 ## Read past bindings
 
 ```js
 const bound = await client.getContractEvents({
-  address: IDENTITY_NAMES,
-  abi: identityNamesAbi,
+  address: IDENTITY_REGISTRY,
+  abi: identityRegistryAbi,
   eventName: 'IdentityBound',
   fromBlock: 0n,
 });
 
 for (const { args } of bound) {
-  console.log(args.owner, args.handle, args.userId);
+  console.log(args.holder, args.handle, args.id);
 }
 ```
 
@@ -41,41 +41,42 @@ network, set `fromBlock` and `toBlock` and read in ranges.
 
 | Field | Meaning |
 | --- | --- |
-| `owner` | The wallet that proved the account. |
+| `holder` | The address that proved the identity. |
 | `platformId` | The platform. |
-| `userId` | The account id. It never changes. |
+| `id` | The identity's id. It never changes. |
 | `handle` | The handle, normalized: `Alice-Dev` on GitHub is stored as `alice-dev`. |
-| `idNode`, `handleNode` | The keys the account and the handle are stored under. |
-| `observedAt` | When the platform confirmed the account, in Unix seconds. |
-| `published` | Whether the handle is now the wallet's shown name. |
+| `idNode`, `handleNode` | The keys the id and the handle are stored under. |
+| `observedAt` | When the platform confirmed the identity, in Unix seconds. |
+| `published` | Whether the handle is now the holder's published handle. |
 
-`owner`, `idNode` and `handleNode` are indexed, so you can filter by them:
+`holder`, `idNode` and `handleNode` are indexed, so you can filter by them:
 
 ```js
 const forWallet = await client.getContractEvents({
-  address: IDENTITY_NAMES,
-  abi: identityNamesAbi,
+  address: IDENTITY_REGISTRY,
+  abi: identityRegistryAbi,
   eventName: 'IdentityBound',
-  args: { owner: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
+  args: { holder: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
   fromBlock: 0n,
 });
 ```
 
-## Other IdentityNames events
+## Other IdentityRegistry events
 
-- `HandleRetired`: a handle stopped pointing at its owner, because the same
-  account proved a new handle.
-- `NameUnpublished`: a wallet stopped showing its name on a platform.
+- `HandleRetired`: a handle stopped pointing at its holder, because the same
+  identity proved a new handle.
+- `HandleUnpublished`: a holder stopped showing its published handle on a
+  platform.
 
 ## Watch for new bindings
 
 ```js
 const unwatch = client.watchContractEvent({
-  address: IDENTITY_NAMES,
-  abi: identityNamesAbi,
+  address: IDENTITY_REGISTRY,
+  abi: identityRegistryAbi,
   eventName: 'IdentityBound',
   onLogs: (logs) => {
-    for (const { args } of logs) console.log('bound', args.handle, args.owner);
+    for (const { args } of logs) console.log('bound', args.handle, args.holder);
   },
 });
 ```
@@ -87,17 +88,17 @@ Call `unwatch()` to stop.
 `HandleEscrow` emits:
 
 - `Deposited`: funds are held for a handle nobody owns yet.
-- `Forwarded`: the handle had an owner, who was paid right away.
-- `Claimed`: the owner took what was held.
+- `Forwarded`: the handle had a holder, who was paid right away.
+- `Claimed`: the holder took what was held.
 - `Refunded`: a sender took a deposit back.
 
 For example, to list the deposits ever made to one handle:
 
 ```js
 const carolNode = await client.readContract({
-  address: IDENTITY_NAMES,
-  abi: identityNamesAbi,
-  functionName: 'nodeOf',
+  address: IDENTITY_REGISTRY,
+  abi: identityRegistryAbi,
+  functionName: 'handleNodeOf',
   args: [platformId('github'), 'carol'],
 });
 
@@ -111,7 +112,7 @@ const deposits = await client.getContractEvents({
 ```
 
 `Deposited` events tell you what was sent, not what is left. Refunds and
-claims take funds out. To show what an owner can claim now, read
+claims take funds out. To show what a holder can claim now, read
 `escrowed(handleNode, token)` for each token.
 
 Anyone can create a token and deposit it, so do not trust a token just because
@@ -132,9 +133,10 @@ If you store events in your own database, follow these rules:
   before you treat an event as final, or drop and re-read events from blocks
   that changed. viem marks a removed log with `removed: true`.
 - Apply events in order: by block number, then log index.
-- On `IdentityBound`, set the owner of `handleNode` and of `idNode` to
-  `owner`.
-- On `HandleRetired`, mark `handleNode` as held by nobody. An account emits it
+- On `IdentityBound`, set the holder of `handleNode` and of `idNode` to
+  `holder`.
+- On `HandleRetired`, mark `handleNode` as held by nobody. An identity emits it
   when it proves a new handle. If you skip it, your index keeps routing the
-  old handle to that wallet.
-- On `NameUnpublished`, clear the wallet's primary name on that platform.
+  old handle to that holder.
+- On `HandleUnpublished`, clear the holder's published handle on that
+  platform.

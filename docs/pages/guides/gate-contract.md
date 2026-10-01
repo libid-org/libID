@@ -1,27 +1,28 @@
 ---
 title: Gate a contract
-description: Let only wallets with a verified account call a function.
+description: Let only holders of a verified identity call a function.
 sidebar:
   order: 3
 ---
 
-Your contract can ask `IdentityNames` who owns an account, and allow a call
-only from that owner. This guide builds two small contracts: a guestbook that
-only GitHub users can sign, and an airdrop that pays each GitHub account once.
+Your contract can ask `IdentityRegistry` who holds an identity, and allow a
+call only from that holder. This guide builds two small contracts: a guestbook
+that only GitHub users can sign, and an airdrop that pays each GitHub identity
+once.
 
 ## The interface
 
-Declare the functions you need from `IdentityNames`:
+Declare the functions you need from `IdentityRegistry`:
 
 ```solidity
-interface IIdentityNames {
-    function nodeOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
-    function byHandle(bytes32 handleNode) external view returns (address owner, uint64 observedAt);
-    function resolveId(bytes32 platformId, string calldata userId) external view returns (address);
+interface IIdentityRegistry {
+    function handleNodeOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
+    function handleBinding(bytes32 handleNode) external view returns (address holder, uint64 observedAt);
+    function resolveId(bytes32 platformId, string calldata id) external view returns (address);
 }
 ```
 
-The contracts below take the `IdentityNames` address in their constructor, so
+The contracts below take the `IdentityRegistry` address in their constructor, so
 the same code works on the local chain and on a public network.
 
 ## A guestbook for GitHub users
@@ -31,7 +32,7 @@ belongs to the caller, and that the proof is not too old:
 
 ```solidity
 contract Guestbook {
-    IIdentityNames public immutable names;
+    IIdentityRegistry public immutable registry;
     bytes32 constant GITHUB = keccak256("github");
     uint256 constant MAX_AGE = 90 days;
 
@@ -40,15 +41,15 @@ contract Guestbook {
 
     event Signed(string handle, string message);
 
-    constructor(IIdentityNames names_) {
-        names = names_;
+    constructor(IIdentityRegistry registry_) {
+        registry = registry_;
     }
 
     function sign(string calldata handle, string calldata message) external {
-        bytes32 node = names.nodeOf(GITHUB, handle);
-        (address owner, uint64 observedAt) = names.byHandle(node);
+        bytes32 node = registry.handleNodeOf(GITHUB, handle);
+        (address holder, uint64 observedAt) = registry.handleBinding(node);
 
-        if (owner != msg.sender) revert NotYourHandle();
+        if (holder != msg.sender) revert NotYourHandle();
         if (observedAt + MAX_AGE < block.timestamp) revert ProofTooOld();
 
         emit Signed(handle, message);
@@ -56,45 +57,45 @@ contract Guestbook {
 }
 ```
 
-`nodeOf` normalizes the handle and returns the key it is stored under.
-`byHandle` returns the owner and the time the platform confirmed it. `nodeOf`
+`handleNodeOf` normalizes the handle and returns the key it is stored under.
+`handleBinding` returns the holder and the time the platform confirmed it. `handleNodeOf`
 reverts with `UnusableHandle` if the text can never be a GitHub handle.
 
 Handles can be renamed and reused on GitHub. `MAX_AGE` limits how long ago
-the owner last proved it. Pick a value that fits what the call is worth.
+the holder last proved it. Pick a value that fits what the call is worth.
 
 Write the age check as `observedAt + MAX_AGE < block.timestamp`, not
 `block.timestamp - observedAt > MAX_AGE`. `observedAt` can be a little ahead
 of the block time (for Google it is up to an hour ahead), and the subtraction
 would then revert. See [Freshness](/docs/concepts/freshness/).
 
-## An airdrop, once per account
+## An airdrop, once per identity
 
-A wallet can own many GitHub accounts, and an account can move to another
-wallet. To pay each account once, record the account, not the wallet.
-The account id never changes, so use it instead of the handle:
+An address can hold many GitHub identities, and an identity can move to
+another address. To pay each identity once, record the identity, not the
+address. The id never changes, so use it instead of the handle:
 
 ```solidity
 contract Airdrop {
-    IIdentityNames public immutable names;
+    IIdentityRegistry public immutable registry;
     bytes32 constant GITHUB = keccak256("github");
     uint256 constant AMOUNT = 0.01 ether;
 
     mapping(bytes32 => bool) public claimed;
 
-    error NotYourAccount();
+    error NotYourIdentity();
     error AlreadyClaimed();
 
-    constructor(IIdentityNames names_) {
-        names = names_;
+    constructor(IIdentityRegistry registry_) {
+        registry = registry_;
     }
 
-    function claim(string calldata userId) external {
-        if (names.resolveId(GITHUB, userId) != msg.sender) revert NotYourAccount();
+    function claim(string calldata id) external {
+        if (registry.resolveId(GITHUB, id) != msg.sender) revert NotYourIdentity();
 
-        bytes32 account = keccak256(bytes(userId));
-        if (claimed[account]) revert AlreadyClaimed();
-        claimed[account] = true;
+        bytes32 identity = keccak256(bytes(id));
+        if (claimed[identity]) revert AlreadyClaimed();
+        claimed[identity] = true;
 
         payable(msg.sender).transfer(AMOUNT);
     }
@@ -103,9 +104,9 @@ contract Airdrop {
 }
 ```
 
-`resolveId` returns the wallet that owns the account id, or the zero address.
-Your app can find a user's account id with
-[`accountsOf`](/docs/guides/lookup-wallet/).
+`resolveId` returns the holder of the identity with that id, or the zero
+address. Your app can find a user's id with
+[`identitiesOf`](/docs/guides/lookup-wallet/).
 
 ## Try it
 
@@ -118,15 +119,15 @@ deploy the guestbook:
 ```sh
 GUESTBOOK=$(forge create src/Gate.sol:Guestbook --broadcast \
   --rpc-url $RPC_URL --private-key $PRIVATE_KEY \
-  --constructor-args $IDENTITY_NAMES | awk '/Deployed to/ {print $3}')
+  --constructor-args $IDENTITY_REGISTRY | awk '/Deployed to/ {print $3}')
 ```
 
-`PRIVATE_KEY`'s wallet owns the GitHub handle `alice-dev`, so it can sign:
+`PRIVATE_KEY`'s address holds the GitHub handle `alice-dev`, so it can sign:
 
 ```sh
 cast send $GUESTBOOK 'sign(string,string)' alice-dev 'hello' \
   --rpc-url $RPC_URL --private-key $PRIVATE_KEY
 ```
 
-Signing as `octocat` from the same wallet reverts with `NotYourHandle`,
-because `octocat` belongs to another wallet.
+Signing as `octocat` from the same address reverts with `NotYourHandle`,
+because another address holds `octocat`.

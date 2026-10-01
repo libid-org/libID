@@ -27,7 +27,7 @@ const PAGES = [
   'guides/events',
 ];
 
-for (const name of ['RPC_URL', 'IDENTITY_NAMES', 'HANDLE_ESCROW', 'PRIVATE_KEY', 'CAROL_KEY', 'LOCAL_CHAIN']) {
+for (const name of ['RPC_URL', 'IDENTITY_REGISTRY', 'HANDLE_ESCROW', 'PRIVATE_KEY', 'CAROL_KEY', 'LOCAL_CHAIN']) {
   if (!process.env[name]) throw new Error(`${name} is not set; source local.env and set LOCAL_CHAIN`);
 }
 

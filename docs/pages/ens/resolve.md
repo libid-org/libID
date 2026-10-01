@@ -31,7 +31,7 @@ const address = await client.getEnsAddress({
 });
 ```
 
-`address` is the wallet that owns `octocat` on GitHub, as recorded on Base.
+`address` is the holder of `octocat` on GitHub, as recorded on Base.
 It is `null` if nobody owns the handle on Base.
 
 Without `coinType`, you get the address on Ethereum mainnet.
@@ -41,13 +41,13 @@ Without `coinType`, you get the address on Ethereum mainnet.
 Paste the name into the recipient field. Wallets that support ENS subnames
 with offchain lookups, such as MetaMask, resolve it the same way.
 
-## Compared to IdentityNames
+## Compared to IdentityRegistry
 
-ENS and `IdentityNames` give the same answer. Which one to use depends on
+ENS and `IdentityRegistry` give the same answer. Which one to use depends on
 where the name comes from:
 
 - Use ENS when a person types or pastes a name, or when you want names to
   work in wallets you do not control.
-- Use `IdentityNames` from your own code and contracts. It needs no gateway,
+- Use `IdentityRegistry` from your own code and contracts. It needs no gateway,
   and it can also tell you when the handle was proved. See
   [Resolve a handle](/docs/guides/resolve-handle/).

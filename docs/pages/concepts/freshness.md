@@ -6,7 +6,7 @@ sidebar:
 ---
 
 Every binding stores `observedAt`: the time, in Unix seconds, at which the
-platform confirmed who owns the account. `byHandle` and `byId` return it.
+platform confirmed who holds the identity. `handleBinding` and `idBinding` return it.
 
 ## Where the time comes from
 
@@ -30,23 +30,24 @@ fixes these limits; see [Protocol parameters](/specs/#protocol-parameters).
 ## Newer wins
 
 A proof is accepted only if its `observedAt` is later than the one already
-stored for the same account and for the same handle. An old proof cannot undo
+stored for the same identity and for the same handle. An old proof cannot undo
 a newer one, and the same proof cannot be used twice.
 
 ## What it tells you
 
 `observedAt` says when the platform last confirmed the binding. It does not
-say that the owner still has the account, or still uses that handle, today.
+say that the same person still has the account, or still uses that handle,
+today.
 
 Nothing refreshes a binding automatically. It changes only when someone
-proves the account or the handle again. A binding from last year is still
+proves the identity or the handle again. A binding from last year is still
 there, unchanged, until then.
 
 ## How old is too old
 
 libID does not decide this for you. Pick a limit that fits what is at stake:
 
-- To show a name next to a wallet, any age is usually fine.
+- To show a handle next to an address, any age is usually fine.
 - To send a payment to a handle, show the age to the sender, and warn when it
   is old.
 - To gate something valuable in a contract, require

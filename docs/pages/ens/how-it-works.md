@@ -22,13 +22,13 @@ sequenceDiagram
   W->>R: resolve, for Base
   R-->>W: ask the gateway
   W->>G: same question
-  G->>G: read IdentityNames on Base
+  G->>G: read IdentityRegistry on Base
   G-->>W: signed answer
   W->>R: resolveWithProof
   R-->>W: address on Base, or none
 ```
 
-The wallet names the chain it will send on, here Base, and gets the owner on
+The wallet names the chain it will send on, here Base, and gets the holder on
 that chain only. `Resolver` is `HandleResolver`, set on `handles.link` in ENS
 on Ethereum. The signed answer is valid for a few minutes.
 
@@ -39,7 +39,7 @@ on Ethereum. The signed answer is valid for a few minutes.
 2. The client calls `resolve` on `HandleResolver`. It replies with an
    `OffchainLookup` error that lists the gateway URLs.
 3. The client asks the gateway. The gateway reads the handle from
-   `IdentityNames` on the chain the client asked about, and signs the answer.
+   `IdentityRegistry` on the chain the client asked about, and signs the answer.
 4. The client passes the signed answer back to `HandleResolver`, which checks
    the signature and returns the address.
 
@@ -52,14 +52,14 @@ It keeps a copy of every binding on every chain it serves.
 
 A signed answer is good for a few minutes, and `HandleResolver` refuses any
 answer that claims to be good for more than an hour. So a name stops pointing
-at an old owner soon after the handle changes hands.
+at an old holder soon after the handle changes hands.
 
 If the gateway's copy of a chain is behind, it does not answer for that chain.
 The client then tries the next URL, or gets no address.
 
 An answer the gateway has already signed stays valid until it expires, a few
 minutes later. A client that cached it can still use it in that time, even if
-the handle changed owner in between.
+the handle changed holder in between.
 
 ## What you trust
 
@@ -68,6 +68,6 @@ When you resolve through ENS, you trust:
 - the gateway's signing key, and
 - the owner of `HandleResolver`, who chooses which keys and URLs it accepts.
 
-Both are run by the libID team. When you call `IdentityNames` yourself, you
-trust neither: your code reads the chain directly. Use `IdentityNames` when
+Both are run by the libID team. When you call `IdentityRegistry` yourself, you
+trust neither: your code reads the chain directly. Use `IdentityRegistry` when
 the amount at stake is large.

@@ -6,8 +6,8 @@ sidebar:
 ---
 
 `HandleEscrow` sends ETH or ERC-20 tokens to a handle. It pays the handle's
-owner at once, or holds the funds until the owner proves the handle and
-claims them. It reads owners from `IdentityNames`. See
+holder at once, or holds the funds until someone proves the handle and
+claims them. It reads holders from `IdentityRegistry`. See
 [Send funds to a handle](/docs/guides/pay-a-handle/) for a walkthrough.
 
 The full source is
@@ -36,12 +36,12 @@ function deposit(bytes32 platformId, bytes32 handleHash, address token, uint256 
 ```
 
 Pays `amount` of `token` to a handle. `handleHash` is `keccak256` of the
-normalized handle (`IdentityNames.handleHashOf`, or `handleHash` in the
+normalized handle (`IdentityRegistry.handleHashOf`, or `handleHash` in the
 TypeScript package).
 
-- If someone owns the handle, they are paid now and `Forwarded` is emitted.
+- If someone holds the handle, they are paid now and `Forwarded` is emitted.
 - Otherwise the funds are held and `Deposited` is emitted. `refundTo` can
-  take them back until the owner claims.
+  take them back until the holder claims.
 
 For ETH, `msg.value` must equal `amount`. For a token, approve the escrow
 first and send no ETH.
@@ -56,7 +56,7 @@ function claim(bytes32 handleNode, address[] tokens, address recipient)
 ```
 
 Sends everything held for the handle, in each of `tokens`, to `recipient`.
-The caller must be the handle's owner (`IdentityNames.byHandle`). Tokens with
+The caller must be the handle's holder (`IdentityRegistry.handleBinding`). Tokens with
 nothing held are skipped. Reverts `NothingHeld` if nothing was paid.
 
 After a claim, earlier deposits can no longer be refunded.
@@ -69,7 +69,7 @@ function refund(bytes32 handleNode, address token, address recipient)
 
 Sends the caller's own deposits for the handle, in one token, to `recipient`.
 Only deposits made since the last claim can be refunded. Works whether or not
-the handle has an owner.
+the handle has a holder.
 
 ### escrowed
 
@@ -87,13 +87,13 @@ function refundable(bytes32 handleNode, address token, address refundTo) view re
 
 How much `refund` would pay `refundTo` right now.
 
-### names
+### registry
 
 ```solidity
-function names() view returns (address)
+function registry() view returns (address)
 ```
 
-The `IdentityNames` contract this escrow reads. It is set once and cannot be
+The `IdentityRegistry` contract this escrow reads. It is set once and cannot be
 changed.
 
 ## Events
@@ -135,9 +135,9 @@ tokens that take a fee.
 | `ZeroAmount()` | `amount` is zero, or nothing arrived. |
 | `ValueMismatch(uint256 expected, uint256 provided)` | `msg.value` does not match. |
 | `BadRefundTo(address refundTo)` | `refundTo` is zero or the escrow. |
-| `PayingYourself(address holder)` | You own the handle you are paying. |
-| `PlatformAcceptsNoBindings(bytes32 platformId)` | Nobody owns the handle and the platform accepts no new proofs, so the funds could never be claimed. |
-| `NotTheHolder(address holder, address caller)` | `claim` was called by someone other than the owner. |
+| `PayingYourself(address holder)` | You hold the handle you are paying. |
+| `PlatformAcceptsNoBindings(bytes32 platformId)` | Nobody holds the handle and the platform accepts no new proofs, so the funds could never be claimed. |
+| `NotTheHolder(address holder, address caller)` | `claim` was called by someone other than the holder. |
 | `NothingHeld(bytes32 handleNode)` | `claim` found nothing in any listed token. |
 | `NothingToRefund(bytes32 handleNode, address token, address refundTo)` | The caller has nothing to refund in this round. |
 | `BadRecipient(address recipient)` | `recipient` is zero or the escrow. |
@@ -146,5 +146,5 @@ tokens that take a fee.
 
 ## Admin functions
 
-The owner can upgrade the escrow with `upgradeToAndCall`. The owner cannot
-change which `IdentityNames` it reads.
+The owner of the contract can upgrade it with `upgradeToAndCall`. The owner cannot
+change which `IdentityRegistry` it reads.

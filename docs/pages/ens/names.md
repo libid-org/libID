@@ -11,7 +11,7 @@ wallet that supports ENS to send them funds. The sender does not need to know
 about libID.
 
 Nobody registers these names. They exist as soon as the handle is proved, and
-they point wherever `IdentityNames` says the handle points.
+they point wherever `IdentityRegistry` says the handle points.
 
 ## Status
 
@@ -51,14 +51,14 @@ address with `_` or `+` in it has no ENS name.
 ## Which chain
 
 A handle can be proved on several chains, and each chain has its own
-`IdentityNames`. The name gives the address on the chain the sender asks
+`IdentityRegistry`. The name gives the address on the chain the sender asks
 about, and no address on a chain where the handle has no binding.
 
 This only protects the sender if the wallet asks about the chain it will send
 on. Wallets that follow [ENSIP-11](https://docs.ens.domains/ensip/11) do,
 MetaMask among them. A client that asks without naming a chain gets the answer
 for Ethereum mainnet. If it then sends on another chain, the funds go to the
-Ethereum owner's address on that chain, who may be a different person or
+Ethereum holder's address on that chain, who may be a different person or
 nobody.
 
 Add a chain label to make a name work on one chain only:
@@ -71,7 +71,7 @@ This name gives an address only when the sender asks for Base.
 
 ## What resolves
 
-Only addresses. Text records and avatars come back empty, and a wallet's
-reverse name is not set. To show a name for a wallet, use
-[`primaryName`](/docs/guides/lookup-wallet/#show-a-name). To list every
-handle a wallet has, use [`accountsOf`](/docs/guides/lookup-wallet/#list-every-account).
+Only addresses. Text records and avatars come back empty, and an address
+has no reverse name. To show a handle for an address, use
+[`publishedHandleOf`](/docs/guides/lookup-wallet/#show-a-handle). To list every
+handle a wallet has, use [`identitiesOf`](/docs/guides/lookup-wallet/#list-every-identity).

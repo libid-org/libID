@@ -14,7 +14,7 @@ The libID contracts, circuits and notary have not been audited.
 The contracts are upgradeable proxies. Their owners can upgrade them and
 change which proofs are accepted. On the Eden testnet, one key owns every
 contract. See [What a binding proves](/docs/concepts/trust/#whom-you-trust)
-for what an owner can do.
+for what the owner of a contract can do.
 
 ## Reporting a problem
 

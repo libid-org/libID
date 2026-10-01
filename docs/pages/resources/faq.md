@@ -7,9 +7,9 @@ sidebar:
 
 ## Where can I test today?
 
-On a [local chain](/docs/guides/local-chain/). The Eden testnet runs an older
-version of `IdentityNames`, and `HandleEscrow` is not deployed on a public
-network yet. See [Networks](/docs/networks/eden/).
+On a [local chain](/docs/guides/local-chain/), which comes with known test
+data, or on the [Eden testnet](/docs/networks/eden/), which runs the current
+contracts but has no identities bound yet.
 
 ## How does a user create a binding?
 
@@ -25,19 +25,19 @@ escrow costs gas only.
 
 ## What happens if someone's account is hacked?
 
-The attacker can bind the account to their own wallet, and payments to the
-handle go to them until the owner proves the account again. See
+The attacker can bind the account to their own address, and payments to the
+handle go to them until the real owner proves the account again. See
 [What a binding proves](/docs/concepts/trust/#when-things-go-wrong).
 
 ## What if a handle is given to someone else?
 
-Once the new owner proves it, it points to their wallet. Apps that saved the
-old owner's account id can notice with `resolvePair`. See
-[Resolve a handle](/docs/guides/resolve-handle/#notice-a-new-owner).
+Once the new holder proves it, it points to their address. Apps that saved
+the old identity's id can notice with `resolveHandleAndId`. See
+[Resolve a handle](/docs/guides/resolve-handle/#notice-a-new-holder).
 
 ## Does libID stop one person from having many accounts?
 
-No. A binding proves that a wallet owns an account, not that a person owns
+No. A binding proves that an address holds an account, not that a person has
 only one.
 
 ## Is my email public if I bind Google?

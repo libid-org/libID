@@ -21,8 +21,8 @@ lists each party, from the [specification](/specs/#system-model-and-specificatio
 
 ## What limits the damage
 
-- A proof names one wallet and one operation, and the wallet must send it
-  itself. A stolen proof cannot bind a different wallet.
+- A proof names one holder and one operation, and the holder must send it
+  itself. A stolen proof cannot bind a different address.
 - Each proof can be used once, and an older proof cannot replace a newer one.
 - Replacing a verifier or a key stops new bindings made with it. It does not
   undo bindings already written.
