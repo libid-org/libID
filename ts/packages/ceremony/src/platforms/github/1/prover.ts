@@ -1,6 +1,7 @@
-import { proveBearerLink } from '../../../barretenberg/circuits/bearer-link/prover.js'
 import type { ProverContext } from '../../context.js'
-import * as exchange from './exchange.js'
+import { proveNotarized } from '../../notarized/prover.js'
+import { identity } from './identity.js'
+import { token } from './token.js'
 
 export const prove = (context: ProverContext<'github'>) =>
-  proveBearerLink(context, 'github', exchange)
+  proveNotarized(context, 'github', { token, identity })

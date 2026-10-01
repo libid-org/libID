@@ -8,10 +8,8 @@ import { buildBearerLinkInputs } from '../src/barretenberg/circuits/bearer-link/
 import { ProofEngine } from '../src/barretenberg/engine.js'
 import type { ExactHttpRequest } from '../src/notary/protocol.js'
 import { NotaryRuntime } from '../src/notary/session.js'
-import {
-  buildTokenRequest,
-  buildIdentityRequest as identityRequest,
-} from '../src/platforms/github/1/exchange.js'
+import { identity } from '../src/platforms/github/1/identity.js'
+import { token } from '../src/platforms/github/1/token.js'
 import type { NotaryPlatform } from './platforms.js'
 import { notary, origins } from './topology.js'
 
@@ -30,14 +28,14 @@ const notaryRequests: { [P in NotaryPlatform]: (index: number) => ExactHttpReque
   // exchange and an authenticated identity stay live-qualification cases.
   github: (index) =>
     index === 0
-      ? buildTokenRequest({
+      ? token.build({
           clientId: 'fixture',
           code: 'fixture',
           redirectUri: `${origins(false).bridge}/auth/callback`,
           codeVerifier: 'A'.repeat(43),
           clientCredential: 'fixture',
         })
-      : identityRequest('fixture'),
+      : identity.build('fixture'),
 }
 
 Object.assign(window, {

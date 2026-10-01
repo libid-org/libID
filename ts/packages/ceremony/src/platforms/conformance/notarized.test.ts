@@ -1,16 +1,16 @@
 import { PROOF_LIFETIME_SECONDS_GITHUB, PROOF_LIFETIME_SECONDS_X } from '@libid/contracts/ceremony'
 import { describe, expect, it, vi } from 'vitest'
-import type { TokenRequestInput } from '../../barretenberg/circuits/bearer-link/exchange.js'
 import { MAX_BEARER_BYTES } from '../../barretenberg/circuits/bearer-link/parameters.js'
-import { MAX_CODE_CHARS } from '../../barretenberg/circuits/bearer-link/validation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { planNotarization } from '../../notary/notarize.js'
+import type { TokenRequestInput } from '../../notary/oauth/token.js'
+import { MAX_CODE_CHARS } from '../../notary/oauth/validation.js'
 import type { ExactHttpRequest, NotaryAttestation } from '../../notary/protocol.js'
 import { NOTARY_SIGNATURE_BYTES } from '../../notary/protocol.js'
 import {
-  bearerLinkPlatforms,
   fixtures,
   httpResponse,
+  notarizedPlatforms,
   proverRequest,
   returnSamples,
   text,
@@ -20,8 +20,8 @@ import { ceremonyFor, platforms } from '../index.js'
 import { parseOAuthReturn } from '../oauthReturn.js'
 import { destroy, engine, generate, notarization, prepare } from './mocks.js'
 import {
-  bearerFailures,
   fieldsOf,
+  notarizedFailures,
   overLength,
   PKCE_VALUE,
   proverKinds,
@@ -29,7 +29,7 @@ import {
   requestHead,
   returnOf,
   setField,
-  stageBearer,
+  stageNotarized,
   tagged,
 } from './stages.js'
 
@@ -92,10 +92,10 @@ function formChanges(original: string, code: string) {
 
 const proofLifetime = { x: PROOF_LIFETIME_SECONDS_X, github: PROOF_LIFETIME_SECONDS_GITHUB }
 
-describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
+describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
   const fixture = fixtures[platformId]
-  const { exchange, config, evidence, identity, longest, rejectedIdentity } = fixture
-  const tags = `${proverKinds['bearer-link'].tags} ${fixture.specTests.prover}`
+  const { requests, config, evidence, identity, longest, rejectedIdentity } = fixture
+  const tags = `${proverKinds['notarized'].tags} ${fixture.specTests.prover}`
 
   it.each([
     ['a space', 'a+b'],
@@ -123,24 +123,24 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
     const tokenUrl = new URL(fixture.tokenRequest.url)
     const identityUrl = new URL(fixture.identityRequest.url)
     /** A request as the TLSN prover writes it: lowercase names, reordered headers. */
-    const tokenSent = (request: ExactHttpRequest = exchange.buildTokenRequest(input)) =>
+    const tokenSent = (request: ExactHttpRequest = requests.token.build(input)) =>
       text(proverRequest(`POST ${tokenUrl.pathname} HTTP/1.1`, request))
     const token = (sent: string, body = evidence.tokenBody, frozen = input) =>
-      exchange.selectToken({ sent: utf8(sent), received: httpResponse(body) }, frozen)
+      requests.token.select({ sent: utf8(sent), received: httpResponse(body) }, frozen)
     const identitySent = text(
       proverRequest(
         `GET ${identityUrl.pathname} HTTP/1.1`,
-        exchange.buildIdentityRequest(evidence.bearer),
+        requests.identity.build(evidence.bearer),
       ),
     )
     const identityOf = (body: string, sent = identitySent) =>
-      exchange.selectIdentity({ sent: utf8(sent), received: httpResponse(body) }, evidence.bearer)
+      requests.identity.select({ sent: utf8(sent), received: httpResponse(body) }, evidence.bearer)
     const members = (body: string) => revealed(httpResponse(body), identityOf(body).ranges.received)
 
     it('selects exactly the identity its validators admit from the identity response', () => {
-      const sent = requestHead(exchange.buildIdentityRequest(evidence.bearer))
+      const sent = requestHead(requests.identity.build(evidence.bearer))
       const select = (body: string) =>
-        exchange.selectIdentity(
+        requests.identity.select(
           { sent, received: utf8(`HTTP/1.1 200 OK\r\n\r\n${body}`) },
           evidence.bearer,
         )
@@ -169,10 +169,8 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
       { redirectUri: 'https://bridge.test/callback?next=1' },
       { codeVerifier: PKCE_VALUE.toLowerCase() },
     ])('rejects invalid token inputs before request construction: %j', (change) => {
-      expect(() => exchange.buildTokenRequest(input)).not.toThrow()
-      expect(() => exchange.buildTokenRequest({ ...input, ...change })).toThrow(
-        'Invalid token request',
-      )
+      expect(() => requests.token.build(input)).not.toThrow()
+      expect(() => requests.token.build({ ...input, ...change })).toThrow('Invalid token request')
     })
 
     describe('token request', () => {
@@ -182,7 +180,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
           tokenTags,
         ),
         () => {
-          const request = exchange.buildTokenRequest(input)
+          const request = requests.token.build(input)
           expect(request.url).toBe(fixture.tokenRequest.url)
           const body = text(request.body)
           expect([...new URLSearchParams(body)]).toEqual(fixture.tokenRequest.form(input))
@@ -242,7 +240,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
       })
 
       const host = `host: ${tokenUrl.host}`
-      const length = exchange.buildTokenRequest(input).body.length
+      const length = requests.token.build(input).body.length
       it.each([
         [host, 'host: other.com'],
         ['application/x-www-form-urlencoded', 'text/plain'],
@@ -264,13 +262,13 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         expect(() => token(sent.replace(from, to))).toThrow()
       })
 
-      it.each(formChanges(text(exchange.buildTokenRequest(input).body), input.code))(
+      it.each(formChanges(text(requests.token.build(input).body), input.code))(
         tagged(
           'rejects an altered form despite a matching Content-Length: %s [TEST-COMMON-05] [TEST-COMMON-06]',
           tokenTags,
         ),
         (body) => {
-          const request = exchange.buildTokenRequest(input)
+          const request = requests.token.build(input)
           const altered = utf8(body)
           const headers = { ...request.headers, 'Content-Length': utf8(String(altered.length)) }
           expect(() => token(tokenSent({ ...request, body: altered, headers }))).toThrow()
@@ -284,7 +282,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         ),
         (field) => {
           const changed = { ...input, [field]: frozenChanges[field] }
-          expect(() => exchange.buildTokenRequest(changed)).not.toThrow()
+          expect(() => requests.token.build(changed)).not.toThrow()
           expect(() => token(tokenSent(), evidence.tokenBody, changed)).toThrow(
             'Token request body changed',
           )
@@ -295,7 +293,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         it.each(['', 'has space', 'trailing\n', '\tcredential', 'é', '\x7f'])(
           'rejects an invalid public credential %j before request construction',
           (clientCredential) => {
-            expect(() => exchange.buildTokenRequest({ ...input, clientCredential })).toThrow()
+            expect(() => requests.token.build({ ...input, clientCredential })).toThrow()
           },
         )
     })
@@ -343,7 +341,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
           identityTags,
         ),
         () => {
-          const request = exchange.buildIdentityRequest(evidence.bearer)
+          const request = requests.identity.build(evidence.bearer)
           expect(request.url).toBe(fixture.identityRequest.url)
           expect(
             Object.fromEntries(
@@ -368,7 +366,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
 
       it('rejects whitespace in an HTTP bearer before sending', () => {
         for (const bearer of ['token token', ' token', 'token ', 'token\t', 'token\r\n'])
-          expect(() => exchange.buildIdentityRequest(bearer)).toThrow('Invalid bearer')
+          expect(() => requests.identity.build(bearer)).toThrow('Invalid bearer')
       })
 
       it.each(['x-extra: value', 'x-extra: café 😀', 'x-extra:', 'x-extra:\tvalue'])(
@@ -557,7 +555,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         // Only notary sessions carry HTTP; an ordinary fetch could leak the code or bearer.
         const fetch = vi.fn()
         vi.stubGlobal('fetch', fetch)
-        const staged = stageBearer(platformId, 'accepted')
+        const staged = stageNotarized(platformId, 'accepted')
         await (await proverOf(platformId)).prove(staged.context)
         expect(fetch).not.toHaveBeenCalled()
         const { transcripts, selected } = staged.notarized
@@ -587,7 +585,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
         tags,
       ),
       async (outcome) => {
-        const staged = stageBearer(platformId, 'accepted', { held: true })
+        const staged = stageNotarized(platformId, 'accepted', { held: true })
         const { gates, log } = staged.notarized
         // A failed final attestation must not wait for proof generation.
         if (outcome === 'failed') generate.mockReturnValue(new Promise(() => {}))
@@ -636,7 +634,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
     it.each(['closed', 'identity setup failed'])(
       tagged('retires both sessions and proving when %s during setup', tags),
       async (failure) => {
-        const staged = stageBearer(platformId, 'accepted')
+        const staged = stageNotarized(platformId, 'accepted')
         // Sessions stay in setup until the notary signal aborts; identity setup may fail first.
         const pending = () =>
           new Promise<never>((_, reject) => {
@@ -663,7 +661,7 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
     it(
       tagged('requires a notary address before notarization [LIBID-OAUTH-021]', tags),
       async () => {
-        const staged = stageBearer(platformId, 'accepted', {
+        const staged = stageNotarized(platformId, 'accepted', {
           change: { request: { notaryAddress: null } },
         })
         await expect((await proverOf(platformId)).prove(staged.context)).rejects.toBeInstanceOf(
@@ -675,12 +673,12 @@ describe.each(bearerLinkPlatforms)('%s bearer-link prover', (platformId) => {
       },
     )
 
-    it.each(Object.keys(bearerFailures) as (keyof typeof bearerFailures)[])(
+    it.each(Object.keys(notarizedFailures) as (keyof typeof notarizedFailures)[])(
       tagged('rejects %s and destroys its engine', tags),
       async (outcome) => {
-        const staged = stageBearer(platformId, outcome)
+        const staged = stageNotarized(platformId, outcome)
         const pending = (await proverOf(platformId)).prove(staged.context)
-        await expect(pending).rejects.toThrow(bearerFailures[outcome])
+        await expect(pending).rejects.toThrow(notarizedFailures[outcome])
         // Circuit-input construction attributes its own failures.
         if (outcome === 'opening-range')
           await expect(pending).rejects.toMatchObject({ event: 'circuit-inputs' })

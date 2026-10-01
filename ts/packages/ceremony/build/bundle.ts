@@ -202,14 +202,19 @@ export async function bundle(
               : (id) => {
                   // Classify by package path: the checkout's own path may contain `/src/`.
                   const path = relative(packageDir, id)
+                  // The catalog reads these data-only constants in every profile; left unassigned,
+                  // they would follow the first manual chunk importing them, such as the notary's.
+                  if (id.includes('/node_modules/@libid/contracts/')) return 'shared'
                   // Circuits follow the platforms that import them, as platform modules do.
                   if (path.startsWith('src/barretenberg/circuits/')) return
                   if (path.startsWith('src/barretenberg/')) return 'proof-engine'
-                  // The catalog validates attestations with the decoder and its constants;
-                  // only the notary runtime stays in a chunk that a profile without it skips.
+                  // The catalog validates attestations and token inputs with these data-only
+                  // modules; only the notary runtime stays in a chunk that a profile without it skips.
                   if (
                     path.startsWith('src/notary/') &&
-                    !/^src\/notary\/(decode|limits|protocol)\.ts$/.test(path)
+                    !/^src\/notary\/(decode|limits|protocol|oauth\/(events|validation))\.ts$/.test(
+                      path,
+                    )
                   )
                     return 'notary'
                   // Platform modules, the prover table among them, stay out of the shared

@@ -4,11 +4,10 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'
 import { concatBytes } from '@noble/hashes/utils.js'
-import { MAX_CEREMONY_VERSION } from '../ccdp/limits.js'
+import { AUTHORIZATION_DIGEST_BYTES, MAX_CEREMONY_VERSION } from '../ccdp/limits.js'
 import { b64urlDecode, b64urlEncode } from '../primitives.js'
 
 /** ceremony-common §5: digest/hash widths, fresh nonce and unsigned wire fields. */
-export const AUTHORIZATION_DIGEST_BYTES = keccak_256.outputLen
 export const OPERATION_DOMAIN_BYTES = keccak_256.outputLen
 export const CHAIN_ID_BYTES = keccak_256.outputLen
 export const AUTHORIZATION_NONCE_BYTES = 32

@@ -1,4 +1,4 @@
-import { isAuthorizationCode } from '../../../barretenberg/circuits/bearer-link/validation.js'
+import { isAuthorizationCode } from '../../../notary/oauth/validation.js'
 import { pkceAuthorizationUrlBuilder } from '../../authorization.js'
 import type { ReturnRules } from '../../oauthReturn.js'
 import { provider } from './provider.js'

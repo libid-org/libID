@@ -1,13 +1,13 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { afterEach, expect, vi } from 'vitest'
 import { type Asset, assetUrl } from '../../assets/index.js'
-import type { BearerExchange } from '../../barretenberg/circuits/bearer-link/exchange.js'
 import { MAX_BEARER_BYTES } from '../../barretenberg/circuits/bearer-link/parameters.js'
 import type { ProofEngineOptions, RawProof } from '../../barretenberg/engine.js'
 import { type OAuthReturn, oauthState } from '../../ccdp/navigation.js'
 import type { OperationEvent } from '../../events.js'
 import { concat, encodeAttestation, opening } from '../../notary/fixtures/attestation.js'
 import { correlateReveal, matchAttestedData, planNotarization } from '../../notary/notarize.js'
+import type { IdentityRequest } from '../../notary/oauth/identity.js'
 import type {
   CommitmentOpening,
   ExactHttpRequest,
@@ -18,11 +18,11 @@ import type {
 import { BLINDER_BYTES, NOTARY_SIGNATURE_BYTES } from '../../notary/protocol.js'
 import { b64urlEncode } from '../../primitives.js'
 import {
-  type BearerLinkPlatform,
   CEREMONY_ID,
   fixtures,
   jwtPart,
   jwtWith,
+  type NotarizedPlatform,
   type OidcPlatform,
   proverContext,
   text,
@@ -218,22 +218,22 @@ export function runContext(
   return { context, events, abort: (reason: Error) => controller.abort(reason) }
 }
 
-export const bearerFailures = {
+export const notarizedFailures = {
   'identity-shape': 'Invalid identity response',
   'opening-range': 'Plaintext opening is not unique',
   'shifted-range': 'Plaintext opening does not match its commitment',
   'attestation-mismatch': 'attested authority changed',
 }
 
-export type BearerOutcome = SharedOutcome | keyof typeof bearerFailures
+export type NotarizedOutcome = SharedOutcome | keyof typeof notarizedFailures
 
 /**
  * Mutate a selector consistently: both the hidden window and its returned range shift by one
  * byte without changing length, so the notarized commitment covers different bytes.
  */
-export function shiftIdentitySelection(transcript: BearerExchange) {
-  const select = transcript.selectIdentity
-  vi.spyOn(transcript, 'selectIdentity').mockImplementation((value: Transcript, bearer: string) => {
+export function shiftIdentitySelection(identity: IdentityRequest) {
+  const select = identity.select
+  vi.spyOn(identity, 'select').mockImplementation((value: Transcript, bearer: string) => {
     const selected = select(value, bearer)
     selected.bearerRange.start++
     selected.bearerRange.end++
@@ -249,8 +249,8 @@ export function shiftIdentitySelection(transcript: BearerExchange) {
  * records each session call as it happens.
  */
 export function fakeNotarization(
-  platformId: BearerLinkPlatform,
-  outcome: BearerOutcome,
+  platformId: NotarizedPlatform,
+  outcome: NotarizedOutcome,
   held = false,
 ) {
   const { evidence } = fixtures[platformId]
@@ -339,7 +339,7 @@ export function fakeNotarization(
 }
 
 /** The proof engine checks the witness it receives. */
-export function fakeBearerProof(bearer: string, outcome: BearerOutcome) {
+export function fakeBearerProof(bearer: string, outcome: NotarizedOutcome) {
   const hashes = [1, 2].map((byte) =>
     sha256(concat(utf8(bearer), new Uint8Array(BLINDER_BYTES).fill(byte))),
   )
@@ -365,16 +365,16 @@ export function fakeBearerProof(bearer: string, outcome: BearerOutcome) {
 }
 
 /** Stage `outcome`; `held` sessions wait on their gates, and `change` edits the run context. */
-export function stageBearer(
-  platformId: BearerLinkPlatform,
-  outcome: BearerOutcome,
+export function stageNotarized(
+  platformId: NotarizedPlatform,
+  outcome: NotarizedOutcome,
   {
     held = false,
     change = {},
   }: { held?: boolean; change?: Parameters<typeof proverContext>[1] } = {},
 ) {
   const fixture = fixtures[platformId]
-  if (outcome === 'shifted-range') shiftIdentitySelection(fixture.exchange)
+  if (outcome === 'shifted-range') shiftIdentitySelection(fixture.requests.identity)
   const notarized = fakeNotarization(platformId, outcome, held)
   fakeBearerProof(fixture.evidence.bearer, outcome)
   return {
@@ -479,8 +479,8 @@ export function stageOidc(
  * the platform passed to it is of that kind.
  */
 export const proverKinds = {
-  'bearer-link': {
-    stage: (platformId, outcome) => stageBearer(platformId as BearerLinkPlatform, outcome),
+  notarized: {
+    stage: (platformId, outcome) => stageNotarized(platformId as NotarizedPlatform, outcome),
     tags: '[LIBID-PROVER-003] [LIBID-PROVER-004] [LIBID-PROVER-009] [LIBID-PROVER-021]',
     // Reported by the notary session this suite replaces; the session's own tests cover them.
     sessionReported: ['token-attestation', 'identity-attestation'],

@@ -2,21 +2,21 @@
 // the catalog fails typecheck here until its entry exists; the conformance suites beside this
 // file then run the catalog, OAuth return, validator and prover checks over every entry.
 import { readFileSync } from 'node:fs'
-import type {
-  BearerExchange,
-  TokenRequestInput,
-} from '../../barretenberg/circuits/bearer-link/exchange.js'
 import type { OAuthReturn } from '../../ccdp/navigation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
+import type { IdentityRequest } from '../../notary/oauth/identity.js'
+import type { TokenRequest, TokenRequestInput } from '../../notary/oauth/token.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import * as githubExchange from '../github/1/exchange.js'
+import { identity as githubIdentity } from '../github/1/identity.js'
+import { token as githubToken } from '../github/1/token.js'
 import * as githubValidation from '../github/1/validation.js'
 import * as googleValidation from '../google/1/validation.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
 import type { ReturnRules } from '../oauthReturn.js'
 import type { ProverModule } from '../provers.js'
 import type { Identity } from '../validation.js'
-import * as xExchange from '../x/1/exchange.js'
+import { identity as xIdentity } from '../x/1/identity.js'
+import { token as xToken } from '../x/1/token.js'
 import * as xValidation from '../x/1/validation.js'
 
 type Proof<P extends PlatformId> = ProofByPlatformVersion[P] extends { 1: infer T } ? T : never
@@ -87,10 +87,10 @@ interface Entry<P extends PlatformId> {
   prover(): Promise<ProverModule<P>>
 }
 
-/** Code-exchange platforms proven by two notarized HTTP transcripts and the bearer-link circuit. */
-export interface BearerLinkFixture<P extends PlatformId> extends Entry<P> {
-  proverKind: 'bearer-link'
-  exchange: BearerExchange
+/** Code-flow platforms proven by two notarized HTTP transcripts and, last, the bearer-link circuit. */
+export interface NotarizedFixture<P extends PlatformId> extends Entry<P> {
+  proverKind: 'notarized'
+  requests: { token: TokenRequest; identity: IdentityRequest }
   /** The token endpoint and the form fields, in order, the platform must send for `input`. */
   tokenRequest: { url: string; form(input: TokenRequestInput): [string, string][] }
   /** The identity endpoint and the headers it pins beside Host, Authorization and Connection. */
@@ -144,7 +144,7 @@ export interface EvidenceChange {
   message?: string
 }
 
-export type PlatformFixture<P extends PlatformId> = BearerLinkFixture<P> | OidcFixture<P>
+export type PlatformFixture<P extends PlatformId> = NotarizedFixture<P> | OidcFixture<P>
 
 const decoder = new TextDecoder()
 
@@ -283,14 +283,14 @@ const bearer = 'fixture_BEARER-123'
 
 const userId = '9007199254740993' // Above Number.MAX_SAFE_INTEGER.
 
-const bearerLinkOperations = [
+const notarizedOperations = [
   'token-fetch',
   'token-attestation',
   'identity-fetch',
   'identity-attestation',
 ]
 
-const bearerLinkSpecTests = {
+const notarizedSpecTests = {
   identity: '[TEST-PLAT-02]',
   returns: '[TEST-PLAT-18]',
   prover: '[TEST-PLAT-15A] [TEST-PLAT-15B] [TEST-PLAT-17A] [TEST-PLAT-21]',
@@ -311,7 +311,7 @@ const bearerExpiresAt = Number(new DataView(LIBID_RS_ATTESTED_DATA.buffer).getBi
 
 const bearerDigest = new Uint8Array(32).fill(5)
 
-const bearerLinkProof = () => ({
+const notarizedProof = () => ({
   bearerLinkProof: new Uint8Array([1]),
   tokenAttestation: attestation(1),
   identityAttestation: attestation(2),
@@ -326,7 +326,7 @@ const rejectedAttestations = [
   { ...attestation(1), extra: 1 },
 ]
 
-const bearerLinkRejectedProof = {
+const notarizedRejectedProof = {
   bearerLinkProof: [new Uint8Array(), oversizedProof],
   tokenAttestation: rejectedAttestations,
   identityAttestation: rejectedAttestations,
@@ -559,7 +559,7 @@ export const fixtures = {
     },
   },
   x: {
-    proverKind: 'bearer-link',
+    proverKind: 'notarized',
     config: { clientId: 'client' },
     returnRules: {
       transport: 'query',
@@ -579,13 +579,13 @@ export const fixtures = {
       userName: ['a-b', 'a.b'],
     },
     admittedClientIds: [],
-    proof: bearerLinkProof(),
+    proof: notarizedProof(),
     digest: bearerDigest,
     expiresAt: bearerExpiresAt,
     validation: xValidation,
-    rejectedProof: bearerLinkRejectedProof,
-    operations: bearerLinkOperations,
-    specTests: { ...bearerLinkSpecTests, issuer: '[TEST-PLAT-18]' },
+    rejectedProof: notarizedRejectedProof,
+    operations: notarizedOperations,
+    specTests: { ...notarizedSpecTests, issuer: '[TEST-PLAT-18]' },
     authorizationRequest: {
       url: 'https://x.com/i/oauth2/authorize',
       fields: (input) => [
@@ -600,7 +600,7 @@ export const fixtures = {
     },
     returns: codeReturns(),
     prover: () => import('../x/1/prover.js'),
-    exchange: xExchange,
+    requests: { token: xToken, identity: xIdentity },
     tokenRequest: {
       url: 'https://api.x.com/2/oauth2/token',
       form: (input) => [
@@ -631,7 +631,7 @@ export const fixtures = {
     },
   },
   github: {
-    proverKind: 'bearer-link',
+    proverKind: 'notarized',
     config: { clientId: 'client', clientCredential: 'public-fixture' },
     returnRules: {
       transport: 'query',
@@ -652,13 +652,13 @@ export const fixtures = {
       userName: ['a_b', 'a--b', '-a', 'a-'],
     },
     admittedClientIds: [],
-    proof: bearerLinkProof(),
+    proof: notarizedProof(),
     digest: bearerDigest,
     expiresAt: bearerExpiresAt,
     validation: githubValidation,
-    rejectedProof: bearerLinkRejectedProof,
-    operations: bearerLinkOperations,
-    specTests: { ...bearerLinkSpecTests, issuer: '[LIBID-OAUTH-031] [TEST-PLAT-12A]' },
+    rejectedProof: notarizedRejectedProof,
+    operations: notarizedOperations,
+    specTests: { ...notarizedSpecTests, issuer: '[LIBID-OAUTH-031] [TEST-PLAT-12A]' },
     authorizationRequest: {
       url: 'https://github.com/login/oauth/authorize',
       fields: (input) => [
@@ -676,7 +676,7 @@ export const fixtures = {
       'application_suspended',
     ),
     prover: () => import('../github/1/prover.js'),
-    exchange: githubExchange,
+    requests: { token: githubToken, identity: githubIdentity },
     tokenRequest: {
       url: 'https://github.com/login/oauth/access_token',
       form: (input) => [

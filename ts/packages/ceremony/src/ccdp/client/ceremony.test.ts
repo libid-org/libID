@@ -613,7 +613,7 @@ it('preserves opaque failure text and operation context for the application', as
 it.each(supportedPlatforms)(
   'projects %s stages without delaying or summing overlapping work [LIBID-BROWSER-007]',
   async (platformId) => {
-    const notarized = fixtures[platformId].proverKind === 'bearer-link'
+    const notarized = fixtures[platformId].proverKind === 'notarized'
     const c = spiedConnection()
     const ceremony = (await clientFor(platformId)).new(
       c,

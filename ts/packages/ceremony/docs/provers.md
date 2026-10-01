@@ -59,11 +59,12 @@ verify the proof or establish trust in the signing key; the ledger remains autho
 ## X and GitHub
 
 [X](../src/platforms/x/1/prover.ts) and [GitHub](../src/platforms/github/1/prover.ts)
-validate their returns and supply their transcripts to
-[the shared bearer-link prover](../src/barretenberg/circuits/bearer-link/prover.ts). It overlaps:
+validate their returns and supply their token and identity requests to
+[the notarized prover](../src/platforms/notarized/prover.ts), which runs the
+[OAuth sessions](../src/notary/oauth/sessions.ts) and, last, the bearer-link proof. It overlaps:
 
-1. Start the [bearer-link circuit](../src/barretenberg/circuits/bearer-link/circuit.ts)
-   and prepare token/identity sessions in one
+1. Start the [bearer-link circuit](../src/barretenberg/circuits/bearer-link/circuit.ts),
+   then prepare token/identity sessions in one
    ceremony-owned notary runtime. Each TLS session has its own channel.
 2. Send the token request and parse its bearer. Start token reveal/finalization;
    the prepared identity session can immediately send its request with the bearer.
@@ -76,7 +77,7 @@ Only identity HTTP depends on the token. Session setup and proof initialization
 do not. Every provisional branch is observed immediately so a failure aborts
 siblings rather than leaving work or a promise rejection behind.
 
-GitHub's [token request](../src/platforms/github/1/exchange.ts) includes the
+GitHub's [token request](../src/platforms/github/1/token.ts) includes the
 public application credential frozen from Bridge configuration and forwarded in
 `ProveIdentity`. The complete request is revealed; the response bearer and both
 commitment openings remain private. Both platforms exchange the code through
@@ -84,14 +85,18 @@ browser TLSNotary Proxy sessions, without a Bridge token endpoint or ordinary
 browser HTTP exchange. The [public-client profile](https://github.com/libid-org/libid/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md)
 owns GitHub's request layout; deployed verifiers must accept it.
 
-X and GitHub share the `bearer_link` circuit and
-[exchange machinery](../src/barretenberg/circuits/bearer-link/exchange.ts).
+X and GitHub share the notarized flow: the [token](../src/notary/oauth/token.ts) and
+[identity](../src/notary/oauth/identity.ts) requests, then the `bearer_link` circuit.
 Each platform's `provider.ts` owns endpoints, request fields and identity headers, its
-`validation.ts` the user-name grammar; `exchange.ts` supplies its requests and transcript selectors.
-[bearer-link/validation.ts](../src/barretenberg/circuits/bearer-link/validation.ts) supplies the shared
-client ID, identity and proof validators under each platform's names. The shared
-machinery validates the common token inputs (form client ID, code, redirect URI,
-PKCE verifier) and the circuit-width bearer once for both. Delivery
+`validation.ts` the user grammar; its `token.ts` and `identity.ts` build the two requests,
+both with the decimal user ID grammar from [platforms/validation.ts](../src/platforms/validation.ts).
+The token request checks its own form inputs, client ID and code, with
+[notary/oauth/validation.ts](../src/notary/oauth/validation.ts); both sessions' four
+[operations](../src/notary/oauth/events.ts) live beside them. The coordinator's
+[notarizedToken](../src/platforms/notarized/token.ts) adds the redirect URI and PKCE
+verifier checks and the circuit-width bearer;
+[notarized/validation.ts](../src/platforms/notarized/validation.ts) composes the client ID,
+identity and proof validators from each platform's grammar. Neither names a platform. Delivery
 includes proof and both attestations; the shared identity is a convenience view, not an additional circuit output.
 
 ## Adding a platform
@@ -103,7 +108,8 @@ For another version-one platform:
    (client ID, identity and proof validation, plus a `proofExpiresAt` adapter),
    `events.ts` (core events and separate UI weights), `<id>.assets.ts`
    and `prover.ts`;
-   X/GitHub share `barretenberg/circuits/bearer-link/` instead. Reuse shared parsers,
+   X/GitHub share `platforms/notarized/` instead: `notary/oauth/` requests, then the
+   `bearer_link` circuit in `barretenberg/circuits/bearer-link/`. Reuse shared parsers,
    notary sessions and circuit adapters only where their contracts fit. Keep
    platform-specific selectors and fixtures beside their tests.
 2. Register its lightweight definition in [the catalog](../src/platforms/index.ts).

@@ -1,4 +1,3 @@
-import * as bearerLinkEvents from '../barretenberg/circuits/bearer-link/events.js'
 import type { IdentityProof } from '../ccdp/index.js'
 import type { CoreEvent } from '../events.js'
 import * as githubUrl from './github/1/url.js'
@@ -6,6 +5,7 @@ import * as github from './github/1/validation.js'
 import * as googleEvents from './google/1/events.js'
 import * as googleUrl from './google/1/url.js'
 import * as google from './google/1/validation.js'
+import * as notarizedEvents from './notarized/events.js'
 import type { ReturnRules } from './oauthReturn.js'
 import type { Identity } from './validation.js'
 import * as xUrl from './x/1/url.js'
@@ -64,12 +64,12 @@ export const platforms = {
   x: {
     requiresClientCredential: false,
     isClientId: x.isClientId,
-    versions: { 1: { ...xUrl, ...bearerLinkEvents, ...resultAdapter(x) } },
+    versions: { 1: { ...xUrl, ...notarizedEvents, ...resultAdapter(x) } },
   },
   github: {
     requiresClientCredential: true,
     isClientId: github.isClientId,
-    versions: { 1: { ...githubUrl, ...bearerLinkEvents, ...resultAdapter(github) } },
+    versions: { 1: { ...githubUrl, ...notarizedEvents, ...resultAdapter(github) } },
   },
 } as const satisfies Record<string, PlatformEntry>
 

@@ -1,4 +1,4 @@
-import { AUTHORIZATION_DIGEST_BYTES } from '../../../platforms/authorization.js'
+import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 
 /** Fixed oidc_google ABI in libid-circuits v0.5.0; changes require a matching circuit/key release. */
 export const ISSUER = 'https://accounts.google.com'

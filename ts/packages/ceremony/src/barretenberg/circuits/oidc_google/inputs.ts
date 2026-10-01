@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { concatBytes } from '@noble/hashes/utils.js'
-import { AUTHORIZATION_DIGEST_BYTES } from '../../../platforms/authorization.js'
+import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { fieldHex } from '../../parameters.js'
 import {
   BARRETT_OVERFLOW_BITS,

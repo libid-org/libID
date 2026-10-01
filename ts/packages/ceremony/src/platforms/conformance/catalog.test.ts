@@ -5,17 +5,11 @@ import type { Asset } from '../../assets/index.js'
 import { proofAssets } from '../../barretenberg/barretenberg.assets.js'
 import { proofEvents, proofWeights } from '../../barretenberg/events.js'
 import { fetchCeremonyConfig } from '../../ccdp/client/config.js'
-import { MAX_CLIENT_CREDENTIAL_BYTES } from '../../ccdp/limits.js'
+import { AUTHORIZATION_DIGEST_BYTES, MAX_CLIENT_CREDENTIAL_BYTES } from '../../ccdp/limits.js'
 import { isCoreEvent } from '../../events.js'
 import { notaryAssets } from '../../notary/notary.assets.js'
+import { fixtures, notarizedPlatforms, oidcPlatforms, platformConfig } from '../../testing/index.js'
 import {
-  bearerLinkPlatforms,
-  fixtures,
-  oidcPlatforms,
-  platformConfig,
-} from '../../testing/index.js'
-import {
-  AUTHORIZATION_DIGEST_BYTES,
   AUTHORIZATION_NONCE_BYTES,
   deriveCodeChallenge,
   deriveCodeVerifier,
@@ -40,7 +34,7 @@ vi.mock('../../notary/session.js', async () => (await import('./mocks.js')).sess
 it('covers exactly the catalog platforms', () => {
   expect(Object.keys(fixtures)).toEqual([...supportedPlatforms])
   expect(Object.keys(assetsByPlatform)).toEqual([...supportedPlatforms])
-  expect([...bearerLinkPlatforms, ...oidcPlatforms].sort()).toEqual([...supportedPlatforms].sort())
+  expect([...notarizedPlatforms, ...oidcPlatforms].sort()).toEqual([...supportedPlatforms].sort())
 })
 
 describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
@@ -68,7 +62,7 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       'returnRules',
     ])
     // Code exchange binds the digest through PKCE; an implicit ID token carries it as the nonce.
-    expect(ceremony.pkce).toBe(fixture.proverKind === 'bearer-link')
+    expect(ceremony.pkce).toBe(fixture.proverKind === 'notarized')
   })
 
   it('requests exactly its authorization endpoint and fields, in order, with the digest binding [TEST-PLAT-12]', () => {
@@ -191,7 +185,7 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     expect(events).toEqual(expect.arrayContaining([...proofEvents]))
     for (const event of events) expect(isCoreEvent(event)).toBe(true)
     const assets: readonly Asset[] = assetsByPlatform[platformId][1]
-    const proverAssets = fixture.proverKind === 'bearer-link' ? notaryAssets : []
+    const proverAssets = fixture.proverKind === 'notarized' ? notaryAssets : []
     expect(assets).toEqual(expect.arrayContaining([...proofAssets, ...proverAssets]))
     expect(circuits.filter((circuit) => assets.includes(circuit))).toHaveLength(1)
   })
