@@ -7,7 +7,8 @@ sidebar:
 
 libID deploys every contract through one factory with CREATE3. An address
 depends only on the contract's name, so each contract has the same address
-on every network where it is deployed.
+on every network where it is deployed. These addresses never change:
+contract updates are upgrades at the same address.
 
 | Contract | Address |
 | --- | --- |
