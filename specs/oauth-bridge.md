@@ -58,7 +58,7 @@ One bridge deployment has these inputs. Every origin follows the
 | `allowedAppOrigins` | Nonempty, duplicate-free set of canonical application origins, [origin patterns](popup-transport.md#6-origin-allowlists-and-binding), and `*` |
 | CCDP origin | One canonical origin selected by the operator; defaults to `https://lib.id` when omitted |
 | Platform profiles | For each enabled platform, one public OAuth client ID and a public `clientCredential` exactly when the platform's ceremony sends one; no version list |
-| Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, plus deployment-policy sources required by the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
+| Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, following the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
 
 Every enabled platform's OAuth registration uses `/auth/callback` on the
 externally reachable Bridge origin as its `redirect_uri`. The path is fixed,
