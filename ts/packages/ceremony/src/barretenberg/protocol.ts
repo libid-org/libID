@@ -7,7 +7,6 @@ import type { OperationEvent } from '../events.js'
 export interface RawProof {
   proof: Uint8Array
   publicInputs: string[]
-  runtime: { effectiveThreads: number; sharedMemory: boolean }
 }
 
 export type FromWorker =

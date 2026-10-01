@@ -58,8 +58,8 @@ Object.assign(window, {
       threads: 2,
     })
     try {
-      const { proof, publicInputs, runtime } = await engine.prove(inputs)
-      return { proof: Array.from(proof), publicInputs, runtime }
+      const { proof, publicInputs } = await engine.prove(inputs)
+      return { proof: Array.from(proof), publicInputs }
     } finally {
       engine.destroy()
     }

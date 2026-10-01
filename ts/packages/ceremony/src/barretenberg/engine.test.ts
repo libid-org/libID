@@ -147,7 +147,6 @@ it('delivers one proof, rejects a second request and ignores messages after sett
   const proof = {
     proof: new Uint8Array(64),
     publicInputs: [],
-    runtime: { effectiveThreads: 4, sharedMemory: true },
   }
   e.send({ type: 'result', result: proof })
   await expect(result).resolves.toBe(proof)

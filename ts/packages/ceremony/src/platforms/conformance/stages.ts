@@ -359,7 +359,6 @@ export function fakeBearerProof(bearer: string, outcome: NotarizedOutcome) {
         ordered.flatMap((hash) => [...hash].map((n) => `0x${n.toString(16).padStart(64, '0')}`)),
         outcome,
       ),
-      runtime: { effectiveThreads: 2, sharedMemory: true },
     }
   })
 }
@@ -459,7 +458,6 @@ export function stageOidc(
     return {
       proof: new Uint8Array([1]),
       publicInputs: changedEngineInputs(fields, outcome),
-      runtime: { effectiveThreads: 2, sharedMemory: true },
     }
   })
   return {

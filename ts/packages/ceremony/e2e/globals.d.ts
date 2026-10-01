@@ -25,7 +25,6 @@ declare global {
     proveBearerFixture(): Promise<{
       proof: number[]
       publicInputs: string[]
-      runtime: { effectiveThreads: number; sharedMemory: boolean }
     }>
     notarizeRequests(
       count: number,
