@@ -127,8 +127,9 @@ Proving Circuit: The zero-knowledge circuit whose proof a Platform Verifier
    checks. It proves only what cannot be read from authenticated evidence.
 
 Redirect Runtime: The immutable browser component served at a registered
-   redirect URI, which receives an authorization response and delivers it
-   across the application's live ceremony channel.
+   redirect URI, which receives an authorization response, authenticates the
+   Application, and privately carries that response to Prover as defined by
+   CCDP. It does not deliver the raw response to the Application.
 
 Verifier Governance Process: The authority over the verification path: the
    Proof Verifier's Supported Version Set and the Verifier Version each entry
@@ -260,8 +261,8 @@ notary-signature check before an authoritative effect.
   SHA-256 and keccak256.
 - SP-CLIENT-01:
   The browser Prover rejects a parsed OAuth client identifier differing from
-  the one fixed by its immutable ceremony profile. This checks local consistency,
-  not the authenticity of an attestation's claimed identifier; ledger
+  the one selected and frozen by the Application for the ceremony. This checks
+  local consistency, not the authenticity of an attestation's claimed identifier; ledger
   verification authenticates that identifier independently. Depends on ASM-PROV-05,
   ASM-PROV-07 for a profile that cites it, ASM-NOTARY-01, ASM-PROOF-01, and
   ASM-BROWSER-01.
@@ -270,8 +271,11 @@ notary-signature check before an authoritative effect.
 - SP-DELIVERY-01:
   The Identity Platform delivers an OAuth client's initial authorization
   response only to that client's registered redirect origin. Subsequent browser
-  release follows REQ-COMMON-30, so borrowing another deployment's client does
-  not authorize receipt of its response. Depends on ASM-PROV-01, ASM-BROWSER-01.
+  release follows REQ-COMMON-30: an Application outside that deployment's
+  allowlist cannot use a borrowed client to obtain its response through CCDP.
+  A shared or wildcard-admitting deployment deliberately permits other
+  Applications; this property does not establish client ownership or user
+  intent. Depends on ASM-PROV-01, ASM-BROWSER-01.
   Evidence: external audit of the registered redirect URI list, plus
   conformance tests (supporting).
 - SP-EXCHANGE-01:
@@ -724,7 +728,8 @@ attestation to verify carries no value at all.
   only after authenticating the exact Application origin against the deployment
   allowlist. The Canonical Runtime MUST carry the response only to the configured
   Prover, preserving that authenticated origin restriction as defined by CCDP
-  (REQ-CCDP-03, REQ-CCDP-04). The set MAY contain more than one origin.
+  (REQ-CCDP-03, REQ-CCDP-04). The deployment allowlist follows the member and
+  admission rules of popup transport REQ-POPUP-ALLOW-01 and REQ-POPUP-ALLOW-02.
 - REQ-COMMON-31 (upholds SP-DELIVERY-01):
   The Canonical Runtime MUST ignore a forwarding target supplied in the
   redirect request.
@@ -848,9 +853,10 @@ An Consumer that wants a fixed-size key derives one itself, as the keccak256 of
 the returned bytes. Deriving is cheap and lossless; returning only a digest is
 not, because the readable value cannot be recovered from it.
 - REQ-COMMON-17 (upholds SP-CLIENT-01):
-  The Canonical Runtime MUST reject a Submission whose authenticated
-  client identifier differs byte for byte from the client fixed by the
-  selected immutable ceremony profile.
+  The Prover MUST reject locally parsed evidence whose client identifier
+  differs byte for byte from the client selected and frozen by the Application
+  for the ceremony. This browser comparison does not authenticate that evidence;
+  ledger verification remains authoritative.
 - REQ-COMMON-17C (upholds SP-CLIENT-01):
   The Proof Verifier and the Platform Verifier MUST NOT require the exposed
   client identifier to belong to a registered set. The Consumer
@@ -1166,8 +1172,9 @@ constant.
   method and path revealed in the request, byte for byte with the profile
   constants it pins.
 - REQ-COMMON-21B (upholds SP-EXCHANGE-01):
-  The Implementation MUST construct every notarized request with the media type
-  and `redirect_uri` from its immutable deployment profile. Neither value is a
+  The Implementation MUST construct every notarized request with the media type fixed
+  by the selected Platform Profile and, where used, the `redirect_uri` frozen
+  by the Application for the ceremony. Neither value is a
   Consumer input. Necessity: media type selects the platform's request parser,
   while redirect URI is application delivery configuration rather than
   Consumer Chain identity authority.
@@ -1339,8 +1346,8 @@ the constructions that role implements.
   completes contains the raw `authorizationNonce` of a PKCE profile.
   Verification: inspection of the emitted artifacts.
 - TEST-COMMON-09 (exercises REQ-COMMON-16, REQ-COMMON-16A, REQ-COMMON-16B, REQ-COMMON-17, REQ-COMMON-17C, REQ-COMMON-22A):
-  The Canonical Runtime rejects a Submission carrying a client identifier
-  other than its immutable profile's client, while a proof carrying a client
+  The Prover rejects locally parsed evidence carrying a client identifier
+  other than the Application's frozen client, while a proof carrying a client
   identifier registered nowhere remains acceptable to the Platform Verifier.
   Every platform returns the identifier as exact bytes, never a digest, and a
   Submission whose supplied bytes its evidence does not authenticate is
@@ -1383,7 +1390,8 @@ the constructions that role implements.
 - TEST-COMMON-11 (exercises REQ-COMMON-21, REQ-COMMON-21A, REQ-COMMON-21B, REQ-COMMON-21C):
   The Platform Verifier rejects an authenticated foreign authority, method,
   or path. The request constructor refuses a media type or `redirect_uri`
-  differing from its immutable deployment profile. One verifying key serves
+  differing from the selected profile's media type or the Application's frozen
+  redirect URI, respectively. One verifying key serves
   two deployments configured with different clients and redirect URIs.
 - TEST-COMMON-12 (exercises REQ-COMMON-23, REQ-COMMON-24, REQ-COMMON-25):
   A fractional, negative, overflowing, or textual timestamp is rejected, and
@@ -1396,8 +1404,10 @@ the constructions that role implements.
   operation with a further authoritative effect succeeds, and a Consumer whose
   only effect is the metadata write rejects the Submission.
 - TEST-COMMON-14 (exercises REQ-COMMON-30, REQ-COMMON-31):
-  Each of two configured application origins can complete its own authenticated
-  live channel; an unlisted origin is rejected, and a redirect request carrying
+  Each of two explicitly admitted application origins can complete its own
+  authenticated live channel; an unadmitted origin is rejected. A pattern or
+  `*` admits the origins specified by the popup transport rules without granting
+  client ownership. A redirect request carrying
   a forwarding target cannot change either result. Callback privately carries
   the return only to the configured Prover; that Prover authenticates the same
   Application origin before credential use.
@@ -1508,17 +1518,20 @@ Transaction Author and the proof-bound Authorized Transaction Data. A copied
 proof creates no authority for a submitter that cannot satisfy that predicate.
 
 Client binding rejects evidence issued to a client other than the one whose
-ceremony the Canonical Runtime opened. The check is local because independent
-Application deployments own different OAuth clients. The Consumer
+ceremony the Canonical Runtime opened. The check is local: the Application
+freezes its selected Bridge's client configuration, which may be shared with
+other admitted Applications. The Consumer
 authenticates the proof-bound transaction and Transaction Author instead; it
 does not maintain an OAuth-client allowlist or admit applications on the
 Consumer Chain.
 
-Consent-screen phishing remains outside protocol enforcement. A hostile site
-borrowing an honest deployment's OAuth client does not receive its response,
-because the Identity Platform delivers it only to that client's registered
-redirect URI (ASM-PROV-01). A hostile site using its own client and redirect can
-receive evidence from a ceremony the user approves; the proof-bound operation,
+Consent-screen phishing remains outside protocol enforcement. The Identity
+Platform delivers a borrowed client's response only to that client's registered
+redirect URI (ASM-PROV-01); Callback then applies the deployment's allowlist.
+An unadmitted Application cannot receive the response through that flow, but
+a shared deployment or `*` may deliberately admit an unrelated Application.
+Such an Application, or one using its own client and redirect, can obtain
+evidence from a ceremony the user approves; the proof-bound operation,
 Transaction Author authentication, and any composition-owned transaction authorization
 contain that case. The ceremony layer defines no extra confirmation page. The
 registered redirect URI list and the origins on it are therefore trust-bearing

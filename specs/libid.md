@@ -77,8 +77,9 @@ what that transaction means. [Common §5.1](ceremony-common.md#51-verification-p
 owns this path.
 
 The Application, OAuth Bridge, and CCDP Distribution may have different operators.
-They control their frontend, redirect deployment, public OAuth configuration,
-and distributed browser code respectively. Those deployments are
+The Application controls its frontend and selects its ceremony configuration;
+the Bridge owns OAuth registrations, public client configuration, and callback
+ingress; the Distribution supplies CCDP browser code and proving assets. Those deployments are
 trusted for the local browser ceremony, but not to choose authoritative identity fields,
 change the proof-bound operation, or widen proof validity. GitHub token exchange
 and identity notarization run in the browser; there is no confidential exchange
@@ -92,7 +93,7 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
-| Application operator | configures clients and deployment assets; starts or withholds work | deployment availability and declared configuration | identity fields, proof target, or proof validity |
+| Application operator | selects a Bridge and operation; starts or withholds work | frontend availability and declared ceremony inputs | identity fields, proof target, or proof validity |
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
 | CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges | correct code and asset supply under ASM-CCDP-01 | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |

@@ -45,8 +45,9 @@ submission of a ledger-specific Submission remain composition-owned.
   credential-release guarantee; sharing an origin shares this failure domain.
 - ASM-CCDP-02: The OAuth Platform returns the selected profile's response to
   its registered redirect URI. Headers or navigation may sever the opener.
-  Progress then depends on an available authenticated fallback; CCDP does not
-  promise completion when no connection can be made.
+  Authenticated carrier fallback is optional. Without one, a severed opener
+  prevents Callback from reconnecting; CCDP does not promise completion when
+  no connection can be made.
 - SP-CCDP-01 (depends on ASM-CCDP-01, ASM-CCDP-02): Against unrelated documents
   and origins, only the authenticated ceremony and frozen profile may release
   the captured return to Prover or initiate credential use. This does not
@@ -62,6 +63,9 @@ browser's schemeful registrable-domain grouping: same-site actors may remain
 cross-origin and do not gain authority over each other.
 `Application` denotes both the actor and its top-level browser document when
 the distinction is immaterial.
+The CCDP participants are Application, Prefetch, Callback, and Prover. A
+recipient is the participant receiving a message; a composition is application
+logic which uses CCDP alongside other flows.
 
 | Actor | Browser authority | Responsibility |
 |---|---|---|
@@ -138,22 +142,23 @@ Worker. Authorization is an external document, not a CCDP resource.
 |---|---|
 | Parameters | <table><tr><th>Name</th><td><code>#ceremonyId</code></td><td><code>#applicationOrigin</code></td><td><code>#oauthQuery</code></td><td><code>#oauthFragment</code></td></tr><tr><th>Values</th><td>lowercase UUIDv4</td><td>exact Application origin authenticated by Callback</td><td>captured OAuth query, including leading <code>?</code> when nonempty</td><td>captured OAuth fragment, including leading <code>#</code> when nonempty</td></tr></table> |
 | Location and context | CCDP origin; versioned, top-level ceremony-popup participant; cross-origin isolated before protocol readiness |
+| Isolation replacement | `/prover/fallback` under the same versioned base path; the same Prover participant, parameters, and protocol, using the popup transport's isolation replacement when the primary response does not isolate |
 | Role | Accepts the logical Application connection during [Callback to Prover](#3-callback-to-prover), then validates the retained OAuth return under the Application-selected profile and runs [Prover execution](#4-prover-execution). The selected platform ceremony owns its proof and evidence semantics. |
 | Outcome and cleanup | Local proof delivery does not assert Application acceptance. Prover clears transient proving inputs and execution resources without closing or navigating the popup. UI is an implementation-owned projection of events. |
 
-### Worker `GET /worker.js`
+### Worker `GET /ccdp/worker.js`
 
 | Property | Contract |
 |---|---|
-| Location and context | CCDP origin; same-origin module Service Worker whose response sets `Service-Worker-Allowed: /` and which Prefetch registers with `scope: '/'` |
-| Role | Supports selected-profile fetches and the popup transport's same-origin continuity mechanism. It remains compatible with every live CCDP version and does not intercept unrelated origin traffic. |
+| Location and context | CCDP origin; one unversioned module Service Worker whose response sets `Service-Worker-Allowed: /` and which every Prefetch registers with `scope: '/'` |
+| Role | Supports selected-profile fetches and the popup transport's same-origin continuity mechanism. It remains compatible with every included CCDP version, reconciles its asset cache under the [Distribution contract](ccdp-distribution.md#browser-cache-reconciliation), and does not intercept unrelated origin traffic. |
 
 ### Version list `GET /ccdp/versions.json`
 
 | Property | Contract |
 |---|---|
 | Location and context | CCDP origin; unversioned JSON that the Application fetches cross-origin before Prefetch |
-| Role | Names, per platform, the platform ceremony versions the Distribution bundles. The [Distribution](ccdp-distribution.md#version-list) owns its grammar and response policy; the [OAuth Bridge contract](oauth-bridge.md#public-configuration) owns how the Application selects a version and client from it. |
+| Role | Names the included CCDP versions and the platform ceremony versions available through each. The [Distribution](ccdp-distribution.md#version-list) owns its grammar and response policy; the [OAuth Bridge contract](oauth-bridge.md#public-configuration) owns how the Application selects a version and client from it. |
 
 ### Common
 
@@ -163,25 +168,30 @@ Worker. Authorization is an external document, not a CCDP resource.
   compatible version selected below without silently selecting a newer version.
   Necessity: independently deployed documents must execute one protocol.
 
-Prefetch, Prover, and Worker routes are relative to
-`{ccdpOrigin}/ccdp/v{CCDPVersion}`. Callback executes at the frozen `redirectUri`
+Prefetch and Prover routes are relative to
+`{ccdpOrigin}/ccdp/v{CCDPVersion}`. Worker uses the shared unversioned path
+`{ccdpOrigin}/ccdp/worker.js`. Callback executes at the frozen `redirectUri`
 on the OAuth Bridge origin; the Distribution defines the public artifact the
 bridge retrieves to serve it. Authorization is the external frozen
 `platformAuthorizationUrl`, not a CCDP route.
 
 Before launch, the Application freezes the CCDP origin, redirect URI, platform
 authorization URL, ceremony ID, platform ID, and platform ceremony version.
-This document defines `CCDPVersion = 1`. The Application selects it in the
-Prefetch path, carries the same version through OAuth `state`, and uses the
+This document defines `CCDPVersion = 1`. Before opening Prefetch, the Application
+checks that the Distribution's version list includes that CCDP version; an
+absent version makes that protocol unavailable rather than launching into a
+missing route. The Application selects it in the Prefetch path, carries the
+same version through OAuth `state`, and uses the
 matching Prover path. Callback selects its bundled implementation from that
 state; fragments and messages do not repeat the version. Google returns state
 in the fragment, so the bridge cannot perform this selection at HTTP ingress.
 
 Compatible implementation changes keep the version. A breaking fragment
 grammar, navigation order, message shape, direction, ordering, or validation
-rule increments it, publishes new CCDP paths and Worker, and adds that version's
-implementation to the self-contained Callback artifact. The previous version's
-latest compatible release, including its bundled Callback implementation,
+rule increments it, publishes new document paths, updates the shared Worker,
+and adds that version's implementation to the self-contained Callback artifact.
+The Worker supports all included versions, not just the most recently visited
+one. The previous version's latest compatible release, including its bundled Callback implementation,
 remains available for a compatibility window, which ends when the Publisher
 stops including that version.
 
@@ -201,9 +211,11 @@ OAuth Bridge execution origin.
 The Prefetch and Prover paths select both CCDP version and document
 role.
 
-Platform Ceremony Version independently versions one platform's authorization,
-OAuth, proof, and output semantics. Popup connection controls and the OAuth
-Bridge API are independently versioned as well.
+[Platform Ceremony Version](ceremony-common.md#2-terminology) is independent
+of CCDP version. The Prefetch fragment names it `ceremonyVersion`; the
+`ProveIdentity` field names the same value `platformCeremonyVersion`.
+Popup connection controls and the OAuth Bridge API are independently versioned
+as well.
 
 #### Popup and fragment model
 
@@ -249,37 +261,40 @@ direction and state before acting.
 
 #### Origin policy
 
-- REQ-CCDP-04 (upholds SP-CCDP-01): The Callback and Prover MUST authenticate the
-  Application and carry its exact-origin restriction as specified below before
-  releasing the OAuth return or accepting proof work.
+- REQ-CCDP-04 (upholds SP-CCDP-01): The CCDP participants MUST enforce the connection
+  ID and origin restrictions below before accepting a protocol gate, releasing
+  the OAuth return, or accepting proof work.
 
 Origins use the canonical-origin and loopback rules owned by
-[Popup transport](popup-transport.md#6-origin-allowlists-and-binding). HTTPS is required except
-for HTTP on the exact hosts `localhost` and `127.0.0.1`; ports are not fixed.
+[Popup transport](popup-transport.md#6-origin-allowlists-and-binding), including
+its HTTP exception for exact `localhost` and `127.0.0.1` hosts at any valid port.
 Different ports, schemes, or those two hostnames remain different origins.
 URL-bearing fields retain their own path/query/fragment contract. The exception
 does not relax OAuth-platform TLS, external-resource policy, or browser secure
 context and isolation requirements.
 
+The Application uses the ceremony ID as the popup connection's Connection ID.
+Its popup-origin allowlist contains the exact OAuth Bridge origin of the frozen
+`redirectUri` and the exact configured CCDP origin, deduplicated when equal.
+It accepts `prefetch-dispatch.finished`, `prover.started`, `IdentityProof`, and
+`UserDenied` only from the authenticated CCDP origin; admission of the Bridge
+origin does not authorize those messages.
+
 One CCDP Distribution serves Applications admitted by any number of independent
-OAuth Bridges without a Distribution-wide allowlist. Prefetch uses
-`allowedApplicationOrigins: '*'` for public asset fetching and authenticates
-the exact Application peer. The Application exact-authenticates the configured
-CCDP origin.
+OAuth Bridges without a Distribution-wide allowlist. Prefetch admits `*` for
+public asset fetching while still authenticating its exact Application peer.
 
 Callback exact-authenticates the Application against its containing OAuth
-Bridge's explicit deployment allowlist, which admits a peer by exact member,
-by origin pattern, or by `*`, before navigating with the captured return to
-the configured CCDP origin. Admission tests canonicality before membership of
-any kind, so a claimed peer origin containing `*` fails there. The popup
-endpoint Callback constructs owns that admission test and the well-formedness
-of every member; Callback itself checks only that the list is one it can hand
-on and that the configured CCDP origin is a literal member of it. It sets
+Bridge's deployment allowlist under REQ-POPUP-ALLOW-01 and REQ-POPUP-ALLOW-02,
+before navigating with the captured return to the configured CCDP origin.
+The popup endpoint owns member validation and admission; Callback checks the
+input list's structure and that the configured CCDP origin is a literal member.
+It sets
 `applicationOrigin` in the Prover fragment from that connection's
 authenticated peer origin, never from OAuth parameters, request headers, a
 pattern member's spelling, or an Application-supplied value. Prover requires
 that field to satisfy the canonical origin rule above and to contain no `*`,
-and accepts only `allowedApplicationOrigins: [applicationOrigin]`. Every
+and admits only that exact `applicationOrigin`. Every
 document reading the field back applies the same two checks. Its connection
 authenticates the peer against that exact origin before readiness or proof
 requests, including after an isolation replacement or fallback-carrier
@@ -294,6 +309,14 @@ Callback's restriction, not proof of the peer's origin; connection authenticatio
 still establishes that. No additional handshake or configuration fetch is needed.
 This check does not protect against compromised code on an already trusted origin
 or change downstream proof verification.
+
+Authenticated carrier fallback is optional and follows the popup transport's
+authentication rules when configured at both endpoints. CCDP defines no
+signaling-service contract or mandatory fallback configuration. Without an
+available fallback, loss of the opener prevents Callback connection acceptance:
+it fails locally, releases no return, and sends neither `CeremonyFailed` nor
+`UserDenied` over a nonexistent connection. Prover's same-origin isolation
+replacement does not repair this earlier failure.
 
 The public Callback artifact contains no Bridge policy; the serving Bridge
 inserts its trusted configuration. Server-side artifact retrieval does not
@@ -320,10 +343,40 @@ defined below. Unknown fields, coercion, normalization, defaults, and
 unrecognized discriminators are invalid. Messages outside the listed direction,
 predecessor, and cardinality are invalid. Unknown discriminators and decoder
 rejections fail the logical connection under REQ-POPUP-MSG-04; they are not
-silently ignored. Handler state guards authorize no action for an invalid
-sequence. Denial, proof delivery, failure, and Application-local cancellation
+silently ignored. A structurally valid message violating direction, predecessor,
+or cardinality fails an active ceremony without performing the invalid action.
+Denial, proof delivery, failure, and Application-local cancellation
 make later valid CCDP messages inert even when they race in transit; transport
 validation still applies.
+
+### Wire limits
+
+These bounds are part of CCDP version 1, not deployment choices. Producers and
+recipients use the same bounds, including for otherwise unknown extension
+events. Text lengths count UTF-8 bytes; bounded text is nonempty and contains
+no Unicode `Cc` control characters. The selected platform may impose stricter
+semantic constraints on its own fields and proof.
+
+| Field | Accepted values |
+|---|---|
+| Platform IDs, event names, and attribute names | ASCII matching `^[a-z][a-z0-9-]{0,63}$` |
+| `ProveIdentity.platformCeremonyVersion` | Integer from 0 through 65535 |
+| `ProveIdentity.clientId`, `IdentityProof.identity.oauthClientId` | Bounded text, at most 512 bytes |
+| `ProveIdentity.clientCredential`, when present | 1–512 ASCII bytes in `0x21`–`0x7e` |
+| `ProveIdentity.redirectUri` | Bounded text, at most 2048 bytes; also satisfies the URI contract below |
+| `IdentityProof.identity.userId`, `IdentityProof.identity.userName` | Bounded text, at most 255 bytes; also satisfies the selected profile's identity encodings |
+| `CeremonyFailed.message` | Bounded text, at most 2048 bytes |
+| `Event.instrumentation.operationId`, when present | Bounded text, at most 64 bytes; absent on core events |
+| `Event.instrumentation.attributes`, when present | Plain record with at most 16 entries |
+| String attribute values | Bounded text, at most 128 bytes |
+| Numeric attribute values | Finite numbers |
+
+`Event.timestamp` is finite and nonnegative. Boolean attribute values are also
+accepted. Empty instrumentation and attribute records are valid; empty text
+values are not. Other encodings, including nullable fields, follow their
+message and profile definitions. A malformed or over-bound extension is not
+an ignorable unknown event: it fails decoding under REQ-POPUP-MSG-04. Producers
+bound observations and failure text before sending them.
 
 ### ProveIdentity
 
@@ -354,6 +407,9 @@ by Prover and is not repeated in the message.
 Starting Prover initiates OAuth validation; it does not assert acceptance or
 mean that proof generation has already begun.
 
+`codeVerifier` is null for a profile without PKCE; otherwise it is the canonical
+verifier derived under [common §7](ceremony-common.md#7-pkce-construction).
+
 `notaryAddress` may be supplied for any platform; a non-null value follows the
 [origin policy](#origin-policy). The Application can pass its resolved address
 uniformly without knowing which platforms use notarization. The selected
@@ -362,8 +418,10 @@ work that needs notarization. The local HTTP exception needs no client option or
 environment override. A remote HTTP address is rejected, never upgraded or used
 as a downgrade fallback.
 The Application selects and freezes a supplied address before OAuth. Prover
-validates it before credential use and, when needed, uses it unchanged for all
-sessions, including the GitHub token request. It neither selects defaults nor
+validates it before credential use and, when needed, derives the profile's
+transport URLs from that same origin for all sessions, including the GitHub
+token request. Scheme conversion and endpoint paths do not select a different
+notary authority. It neither selects defaults nor
 accepts a separate profile, ledger identifier, hash, or testnet flag. The address
 changes network routing, not the proof statement or trusted signing keys.
 
@@ -379,8 +437,7 @@ no configuration fetch.
 The Application origin is trusted for this transient input because it already
 supplies the operation being authorized. It retains the authorization nonce;
 only the derived code verifier crosses this boundary. The message contains no
-authorization digest, operation field, separate OAuth state, Job revision,
-composition state, connector, or carrier kind.
+authorization digest or operation data.
 
 Prover exact-validates the CCDP record and selected platform/version before
 credential use. That profile parses the retained query/fragment pair, enforcing exact
@@ -407,8 +464,11 @@ interface IdentityProof {
 ```
 
 `identity` is a separate, exact-shaped record of prover-extracted strings:
-platform identifier, OAuth client identifier, user identifier, and user name
-(the signed email for Google). The selected platform validator checks their
+platform identifier, OAuth client identifier, user identifier, and `userName`.
+`userName` is the profile's raw handle string (the signed email for Google),
+not a normalized handle or display label; normalization remains a separate
+consumption-time derivation under platform REQ-PLAT-08A through REQ-PLAT-08C.
+The selected platform validator checks their
 encodings and the platform/client binding to `ProveIdentity`.
 `proof` is the exact value defined by that platform ceremony version, without
 a nested identity copy. CCDP treats the proof as opaque; adding a platform does
@@ -500,7 +560,7 @@ concurrent instances of the same operation. Its `attributes` is a bounded plain
 record of event-defined scalar measurements or facts; numeric values are finite.
 
 Optional fields are absent when unused, not null. Event names, attribute names,
-string values, and record sizes are bounded by the implementation. Names and
+string values, and record sizes follow the [wire limits](#wire-limits). Names and
 attribute meanings are code-owned, not supplied by OAuth returns or callers.
 No event contains a UI stage, display label, progress percentage, overall
 ceremony status, or error text. Technical failure uses `CeremonyFailed`.
@@ -629,46 +689,6 @@ do not authenticate notary signatures or verify generated proofs. Omitting
 those early checks delays some forgery/mismatch rejection to the Ledger
 Verifier; it changes neither its checks nor accepted proof statements.
 
-## Conformance
-
-Application, Prefetch, Callback, and Prover implementations conform to their
-roles together with the resource policies and popup transport they use. Required
-events remain required even when no UI or tracing subscriber is installed.
-Conformance tests support the browser guarantees; they do not prove the
-cryptographic properties delegated to the common and platform specifications.
-
-- TEST-CCDP-01 (exercises REQ-CCDP-01, REQ-CCDP-08):
-  Proof delivery leaves the popup available for a same-origin composition; terminal traffic cannot restart CCDP.
-- TEST-CCDP-02 (exercises REQ-CCDP-02):
-  Frozen version/path/state agree; unsupported or retired Callback versions fail locally rather than falling forward.
-- TEST-CCDP-03 (exercises REQ-CCDP-03):
-  Separate query/fragment bytes survive private navigation and isolation replacement, are cleared before use, and never appear in Application/control/signaling records. Duplicate or malformed fields fail.
-- TEST-CCDP-04 (exercises REQ-CCDP-04):
-  Public Prefetch authenticates its exact peer; Callback rejects an unadmitted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Callback rejects a peer claiming a pattern member's own spelling, and Prover rejects a fragment carrying one. An exact member authenticates a peer observed at exactly that origin, and Prover receives that origin as `applicationOrigin`. Canonical HTTP loopback works at arbitrary ports.
-- TEST-CCDP-05 (exercises REQ-CCDP-05):
-  Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Legacy `cancel`, `denied`, and `abort` records and Application-sent `UserDenied` are invalid. Proof payloads pass the selected platform version's structural and result-consistency checks.
-  An unknown discriminator or rejected decoder fails the logical connection;
-  a handler's state guard permits no invalid transition. Late valid CCDP
-  messages cannot change a settled ceremony outcome.
-  A valid notary address is accepted for any platform, including one that does
-  not notarize; null is accepted when unused but rejected before work requiring
-  notarization. Malformed non-null addresses are rejected under the origin policy.
-  An optional public token-exchange credential is delivered unchanged; null,
-  empty, wrong-type, or whitespace/control-bearing values reject. A platform
-  requiring it rejects omission before exchange. No configuration fetch is made
-  by Prover.
-- TEST-CCDP-06 (exercises REQ-CCDP-05, REQ-CCDP-06):
-  X and GitHub each emit token-fetch and token-attestation independently;
-  token availability does not imply attestation completion, and proof delivery
-  waits for both attestations and the ZK proof.
-  Only the designated core occurrences open gates; extensions cannot do so. Omitted instrumentation and either or both nested fields are accepted when valid; null, unknown instrumentation members, nonfinite attribute numbers, and top-level operationId/attributes are rejected. Overlap, occurrence timestamps, and retrospective fallback timing are preserved.
-- TEST-CCDP-07 (exercises REQ-CCDP-07):
-  The four phases preserve navigation ownership and credential privacy; approval enters execution, bound denial exits before proving, and malformed returns abort.
-- TEST-CCDP-08 (exercises REQ-CCDP-08):
-  UserDenied/CeremonyFailed/IdentityProof and local-cancellation races settle once. Local cancellation sends no CCDP message; subsequent composition-owned navigation or closure cannot let late traffic revive the run. Errors are text-only, excluded from exported events, and undeliverable failures have a fixed local diagnostic.
-  Outcome cleanup leaves the popup connection available, and its authenticated
-  closure control still closes an isolated popup after the ceremony settles.
-
 ## Protocol
 
 - REQ-CCDP-07 (upholds SP-CCDP-01): Each Participant MUST follow the phase guards,
@@ -690,9 +710,9 @@ can reactivate an earlier phase.
   ownership supplies message correlation and its private version; loaded
   resources supply the CCDP version. CCDP messages repeat neither.
 - Each participant accepts only exact records permitted by its direction,
-  current state, and cardinality. Invalid or post-terminal traffic authorizes
-  no ceremony action; malformed or unregistered records still fail transport
-  under REQ-POPUP-MSG-04.
+  current state, and cardinality. Invalid sequencing fails an active ceremony;
+  late valid traffic cannot change its terminal outcome. Malformed or
+  unregistered records still fail transport under REQ-POPUP-MSG-04.
   Valid event extensions may be observed but never advance the protocol.
 - Browser-observed exact origins establish authority. Navigation history,
   request headers, and message fields do not substitute for connection
@@ -889,7 +909,7 @@ sequenceDiagram
     P->>P: Callback navigates to Prover with private return fragment
     P->>P: Prover accepts connection with isolation established
     opt Isolation replacement occurred
-        P-->>A: Event(prover-fallback), original navigation timestamp
+        P-->>A: Event(prover-fallback), replacement navigation timestamp
     end
     P-->>A: Event(prover, started)
     A-->>P: ProveIdentity
@@ -916,3 +936,65 @@ sequenceDiagram
 Terminal exits are shown without their cleanup details, which follow
 [Terminal outcomes](#terminal-outcomes) and the [message contracts](#messages).
 Carrier mechanics and proof-generation internals are omitted.
+
+## Conformance
+
+Application, Prefetch, Callback, and Prover implementations conform to their
+roles together with the resource policies and popup transport they use. Required
+events remain required even when no UI or tracing subscriber is installed.
+Conformance tests support the browser guarantees; they do not prove the
+cryptographic properties delegated to the common and platform specifications.
+
+- TEST-CCDP-01 (exercises REQ-CCDP-01, REQ-CCDP-08):
+  Proof delivery leaves the popup available for a same-origin composition; terminal traffic cannot restart CCDP.
+- TEST-CCDP-02 (exercises REQ-CCDP-02):
+  Frozen version/path/state agree; unsupported or retired Callback versions fail locally rather than falling forward.
+  An Application whose CCDP version is absent from the version list refuses
+  before Prefetch navigation. Switching between included versions uses the
+  same Worker script URL and root registration.
+- TEST-CCDP-03 (exercises REQ-CCDP-03):
+  Separate query/fragment bytes survive private navigation and isolation replacement, are cleared before use, and never appear in Application/control/signaling records. Duplicate or malformed fields fail.
+- TEST-CCDP-04 (exercises REQ-CCDP-04):
+  Application admits the exact Bridge and CCDP origins and uses the ceremony ID
+  as Connection ID. A different ID cannot bind that ceremony. When the Bridge
+  and CCDP origins differ, Bridge-origin delivery cannot satisfy the Prefetch
+  or Prover gate, deliver an identity proof, or report user denial, even though
+  that origin is admitted.
+  Public Prefetch authenticates its exact peer; Callback rejects an unadmitted Application; Prover rejects a different origin, including one occupying the same retained window after navigation. Callback rejects a peer claiming a pattern member's own spelling, and Prover rejects a fragment carrying one. An exact member authenticates a peer observed at exactly that origin, and Prover receives that origin as `applicationOrigin`. Canonical HTTP loopback works at arbitrary ports.
+- TEST-CCDP-05 (exercises REQ-CCDP-05):
+  Malformed, duplicated, wrong-direction, out-of-state, and post-terminal records cause no authorized action. Application-sent `UserDenied` is invalid. Proof payloads pass the selected platform version's structural and result-consistency checks; `userName` preserves the profile's raw handle string.
+  An unknown discriminator or rejected decoder fails the logical connection;
+  a structurally valid but out-of-sequence message fails an active ceremony
+  without executing that transition. Late valid CCDP
+  messages cannot change a settled ceremony outcome.
+  A valid notary address is accepted for any platform, including one that does
+  not notarize; null is accepted when unused but rejected before work requiring
+  notarization. Malformed non-null addresses are rejected under the origin policy.
+  A PKCE profile rejects a missing or malformed code verifier; a non-PKCE
+  profile uses null.
+  An optional public token-exchange credential is delivered unchanged; null,
+  empty, wrong-type, or whitespace/control-bearing values reject. A platform
+  requiring it rejects omission before exchange. No configuration fetch is made
+  by Prover.
+- TEST-CCDP-06 (exercises REQ-CCDP-05, REQ-CCDP-06):
+  X and GitHub each emit token-fetch and token-attestation independently;
+  token availability does not imply attestation completion, and proof delivery
+  waits for both attestations and the ZK proof.
+  Only the designated core occurrences open gates; extensions cannot do so. Omitted instrumentation and either or both nested fields are accepted when valid; null, unknown instrumentation members, nonfinite attribute numbers, and top-level operationId/attributes are rejected. Overlap, occurrence timestamps, and retrospective fallback timing are preserved.
+  Core and extension names and attribute keys accept a 64-character valid slug
+  and reject 65 characters or invalid syntax. Failure text accepts 2048 UTF-8
+  bytes and rejects 2049; operation IDs and attribute text likewise test 64/65
+  and 128/129 bytes, including multibyte characters. Sixteen attributes pass;
+  seventeen fail. Empty text and control characters fail. A valid unknown
+  extension may be ignored; an over-bound one fails decoding regardless of
+  subscriptions.
+- TEST-CCDP-07 (exercises REQ-CCDP-07):
+  The four phases preserve navigation ownership and credential privacy; approval enters execution, bound denial exits before proving, and malformed returns abort.
+  With no carrier fallback configured, an OAuth-severed opener leaves Callback
+  in local failure without credential release or a fabricated denial. A
+  configured fallback continues only after authenticating the same ceremony
+  and admitted exact peer origins.
+- TEST-CCDP-08 (exercises REQ-CCDP-08):
+  UserDenied/CeremonyFailed/IdentityProof and local-cancellation races settle once. Local cancellation sends no CCDP message; subsequent composition-owned navigation or closure cannot let late traffic revive the run. Errors are text-only, excluded from exported events, and undeliverable failures have a fixed local diagnostic.
+  Outcome cleanup leaves the popup connection available, and its authenticated
+  closure control still closes an isolated popup after the ceremony settles.

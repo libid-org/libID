@@ -25,8 +25,8 @@ and `127.0.0.1` hosts. It contains:
 
 - every protocol resource for each supported CCDP version, including one
   self-contained Callback artifact containing its supported implementations;
-- one [version list](#version-list) naming the platform ceremony versions it
-  bundles; and
+- one [version list](#version-list) naming its included CCDP versions and
+  shared platform ceremony versions; and
 - their bundled JavaScript, workers, WASM, circuits, and libID-owned assets.
 
 The resource graph distinguishes distributed assets from external assets.
@@ -91,9 +91,9 @@ executes CCDP code. Other methods execute no CCDP code.
 The not-found response is static HTML containing no script, style, link, form,
 redirect, or protocol data.
 
-Versioned protocol resources, the aggregate Callback artifact, and the version
-list use `Cache-Control: no-cache` and an ETag so a path may receive compatible
-implementation updates. A breaking protocol change publishes new versioned
+Versioned protocol resources, the shared Worker, aggregate Callback artifact,
+and version list use `Cache-Control: no-cache` and an ETag so a path may receive
+compatible implementation updates. A breaking protocol change publishes new versioned
 routes and adds its implementation to the Callback artifact. The Bridge serves
 its configured Callback response with `no-store`, independently of its own
 upstream artifact cache.
@@ -115,7 +115,7 @@ markup, executable code, or styling input is part of this contract.
 | Prefetch | top-level non-isolated HTML | `Cross-Origin-Opener-Policy: unsafe-none` and no COEP. Script/worker sources remain same-origin; `connect-src` admits local assets and the pinned external asset origins. |
 | Prover | top-level HTML | `Document-Isolation-Policy: isolate-and-require-corp`, `Cross-Origin-Opener-Policy: unsafe-none`, and no COEP. |
 | Prover isolation fallback | top-level HTML at `/ccdp/v{CCDPVersion}/prover/fallback` | `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Same Prover entrypoint, fragment contract, and non-isolation response rules. |
-| Worker | module Service Worker JavaScript | `text/javascript; charset=utf-8` and `Service-Worker-Allowed: /`. Prefetch registers it with `scope: '/'`; it remains compatible with every live CCDP version and passes unrelated requests through unchanged. Code is same-origin; `connect-src` also admits the pinned Aztec CRS origins for asset caching. |
+| Worker | module Service Worker JavaScript at `/ccdp/worker.js` | `text/javascript; charset=utf-8` and `Service-Worker-Allowed: /`. Every Prefetch registers this same script with `scope: '/'`; it remains compatible with every included CCDP version and passes unrelated requests through unchanged. Code is same-origin; `connect-src` also admits the pinned Aztec CRS origins for asset caching. |
 
 The Distribution may publish smaller Brotli and gzip transfer representations.
 It selects an available representation admitted by `Accept-Encoding` (including
@@ -207,7 +207,7 @@ The artifact contains the semantic equivalent of:
 </html>
 ```
 
-The build produces exactly one configuration marker, in this non-executable
+The artifact contains exactly one configuration marker, in this non-executable
 data block. The bridge substitutes serialized deployment data there, never
 JavaScript source. Serialization escapes `<` as `\u003c` so data cannot terminate
 the script element or introduce markup. Missing or repeated markers reject the
@@ -261,8 +261,8 @@ from the Distribution by the browser.
 
 #### Browser entry
 
-URL clearing, version dispatch, and startup/failure UI are built and tested
-with the bundled Callback implementations, not implemented by the Bridge.
+The bundled Callback implementations own URL clearing, version dispatch, and
+startup/failure UI; the Bridge does not implement them.
 A live document keeps the code and configuration it received.
 
 The embedded Callback code, before rendering, storage, error reporting, or any
@@ -275,7 +275,8 @@ network use:
 4. requires a JSON input list, validates the inputs the selected implementation
    reads itself, leaves each allowlist member to the popup endpoint that
    receives it, and freezes the list and captured location; and
-5. enters the selected Callback implementation once, without dynamic import.
+5. enters the selected Callback implementation once, without another
+   browser-side entry-script request.
 
 Oversized or malformed input is cleared and renders only fixed failure text.
 A version absent from the bundle, including a retired version, displays a
@@ -307,10 +308,9 @@ fragment, platform, or ceremony. The completed response uses:
   `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`;
 - CSP beginning with `default-src 'none'`, `object-src 'none'`,
   `base-uri 'none'`, `form-action 'none'`, and `frame-ancestors 'none'`;
-- `frame-src` admitting only the exact configured CCDP origin, retaining HTTP
-  and the configured port for an admitted localhost origin;
-- `connect-src` admitting only fixed sources required by the configured popup
-  fallback;
+- `frame-src 'none'`; Callback creates no frame;
+- `connect-src 'none'` without a configured carrier fallback; an optional
+  fallback admits only the fixed sources it needs;
 - `style-src 'unsafe-inline'` for package-owned inline styles; and
 - `script-src` containing only the build-generated hashes for the bundled
   executable code, with no external script source, JavaScript
@@ -331,28 +331,43 @@ while the configured browser response is non-cacheable.
 ### Version list
 
 - REQ-DIST-06: The Distribution MUST publish the version list below, naming
-  exactly the platform/version pairs whose Prover implementation it bundles;
+  exactly its included CCDP versions and their shared platform/version pairs;
   the Application MUST validate it by that contract. Necessity: an Application
-  must select only pairs its Distribution supports.
+  must select only protocol and profile versions its Distribution supports.
 
-`GET /ccdp/versions.json` is one JSON object keyed by the exact platform
-identifier of each bundled platform profile. Each value is the platform
-ceremony versions bundled for that platform: a nonempty, duplicate-free,
-ascending array of unsigned 16-bit integers. Key order carries no meaning.
+`GET /ccdp/versions.json` returns one object with exactly these fields:
+
+| Field | Contract |
+|---|---|
+| `ccdpVersions` | Nonempty, duplicate-free, ascending array of included CCDP version numbers; positive integers no greater than `9007199254740991`, so JSON readers preserve them exactly |
+| `platforms` | Object keyed by exact platform identifiers; each value is a nonempty, duplicate-free, ascending array of unsigned 16-bit platform ceremony versions |
+
+Object key order carries no meaning.
 
 ```json
-{"github":[1],"google":[1],"x":[1]}
+{"ccdpVersions":[1],"platforms":{"github":[1],"google":[1],"x":[1]}}
 ```
 
 The path is unversioned, beside `/ccdp/callback.html`: the set is a property of
-the Distribution, not of one CCDP version. The Application fetches it
+the Distribution, not of one CCDP version. Every included CCDP version has its
+Prefetch and Prover resources and bundled Callback implementation, and each
+Prover supports exactly the listed platform/version pairs. A release cannot
+advertise a pair that works under only some of its included CCDP versions.
+The shared Worker supports every included version's resource graph and
+continuity needs; all versions register the same `/ccdp/worker.js` URL at root
+scope, rather than replacing that registration with competing version-specific
+scripts.
+
+The Application fetches the list
 cross-origin without credentials or redirects; the
 [Bridge contract](oauth-bridge.md#public-configuration) owns how it selects
-versions and clients from the list and the public record. A reader holds every
-value to this grammar and ignores a platform key it does not know. Any other
-violation, including a non-object top level, a value that is not such an array,
-an empty array, a duplicate, and a non-ascending array, refuses the whole
-resource.
+versions and clients from the list and the public record. Before Prefetch,
+it checks membership of the CCDP version it will use; an absent version refuses
+the ceremony before navigation. It does not reinterpret another CCDP version
+as compatible. Readers validate the whole record, including values under
+unknown platform keys, then ignore versions or platforms they do not implement.
+Missing or extra top-level fields, wrong types, out-of-range integers, empty
+version arrays, duplicates, or non-ascending arrays refuse the whole resource.
 
 ### Prover isolation
 
@@ -371,8 +386,8 @@ replacement. Neither exposes readiness or executes proof work before isolation
 and connection establishment succeed. If the fallback is still unisolated,
 establishment fails; it does not loop or silently prove without shared memory.
 
-Both paths resolve the canonical root-scope Worker registration. A stale
-`/ccdp/v1/` registration, even with the same script URL, is not that registration.
+Both paths resolve the canonical root-scope registration for `/ccdp/worker.js`.
+A stale `/ccdp/v1/` registration, even with the same script URL, is not that registration.
 The host and participants uphold the popup transport's same-registration
 continuity prerequisite. Successful DIP avoids replacement; fallback needs no
 second window or extra user action. This mechanism does not repair an opener
@@ -406,18 +421,43 @@ catalog or request-time source resolution is required. External resources retain
 their declared URLs. Prefetch and execution resolve the same selected-profile
 resources, including shared resources, so their downloads and caches are reusable.
 
+### Browser cache reconciliation
+
+- REQ-DIST-07: The Worker MUST attempt to reconcile its managed proving-asset
+  cache on activation against the complete resource graph of its release.
+  Necessity: obsolete releases must not accumulate indefinitely in this cache,
+  while still-required shared resources remain reusable.
+
+One Worker-owned operation compares cached request keys with the union required
+by every included CCDP and platform ceremony version, including declared
+external resources. A key includes the exact URL and byte range when present.
+With storage accessible, reconciliation deletes entries absent from that union
+and leaves referenced entries unchanged. It neither guesses asset versions from
+filenames nor removes a resource merely because the current ceremony uses a
+different platform. Distinct revisions or ranges still required by supported
+profiles coexist.
+
+Reconciliation touches only the Worker's managed asset cache, not unrelated
+origin storage or the browser's automatic HTTP cache. Storage denial or a
+cleanup error is a cache-maintenance failure, not a ceremony failure; ordinary
+fetching remains available. Individual asset downloads need no separate
+version-management or eviction operation. Browser eviction and release changes
+can still cause cache misses; this policy guarantees no durable recovery for
+an older live ceremony.
+
 ### Publication and compatibility
 
 - REQ-DIST-05: The Publisher MUST activate a locally asset-complete release
   that serves the latest compatible release of each `CCDPVersion` it
-  includes, and no resource of an earlier compatible release. Necessity: an
+  includes, and no URL referenced only by an earlier compatible release. Necessity: an
   origin serves one self-contained release at a time, and unchanged bytes stay
   reusable across releases.
 
 Activation is asset-complete: every immutable resource referenced by an updated
 protocol resource or Worker is retrievable with its final bytes and response
 metadata before that update becomes reachable. The version list becomes
-reachable no earlier than the resources of every pair it names.
+reachable no earlier than all named CCDP resources, their compatible shared
+Worker, and the resources of every platform/version pair it names.
 The external Aztec request set is qualified before promotion; CDN availability
 cannot be made atomic with local deployment, and a later outage still fails
 proving if no usable cache is present.
@@ -444,7 +484,7 @@ Request-invariant Prover policy deliberately permits classes of secure network
 origins; runtime destination checks, not CSP, bind a ceremony to its Bridge and
 notary. Local HTTP exceptions are confined to the popup origin policy.
 
-The version list gates which platform ceremony versions an Application runs; a
+The version list gates which CCDP and platform ceremony versions an Application runs; a
 wrong list withholds or fails ceremonies and releases nothing.
 
 Callback deployment inputs are non-executable trusted configuration. Their
@@ -468,11 +508,33 @@ these observable responses.
   GET/HEAD serve invariant decoded bytes and policy; conditional/encoding responses preserve them. Protocol and asset resources never redirect; unknown paths are inert. Any directory slash redirect stays on the same origin and ends in an inert failure. Both isolation profiles support allowed local and external requests without admitting remote executable code.
 - TEST-DIST-02 (exercises REQ-DIST-02):
   Exactly one data marker is inserted safely; executable hashes remain valid; missing/duplicate slots fail. Query and fragment state select a supported bundled Callback without another script request; missing/retired versions fail locally.
+  Callback forbids frames and, without a configured optional carrier fallback,
+  network connections. Its policy does not interpolate `ccdpOrigin` as a CSP
+  source or impose extra hostname syntax on that canonical origin.
 - TEST-DIST-03 (exercises REQ-DIST-03):
   Primary isolation or one replacement establishes the same participant; retained fragments survive. With both root and stale narrower registrations present, participants resolve root even if script URLs match.
 - TEST-DIST-04 (exercises REQ-DIST-04):
   Empty-cache Prefetch and execution use the same declared resource graph; shared resources are reusable, and ranged external responses remain readable under both isolation profiles.
 - TEST-DIST-05 (exercises REQ-DIST-05):
-  Unchanged assets keep URLs, changed bytes get new URLs, a release serves no resource of an earlier compatible release of an included `CCDPVersion`, and no updated document or Worker becomes reachable before all its local dependencies. External availability is qualified, not reported as atomic.
+  Unchanged assets keep URLs, changed bytes get new URLs, and paths referenced
+  only by an earlier compatible release are no longer served. No updated
+  document, Worker, or version-list entry becomes reachable before its local
+  dependencies. External availability is qualified, not reported as atomic.
 - TEST-DIST-06 (exercises REQ-DIST-06):
-  GET and HEAD serve the version list as `application/json; charset=utf-8` with `no-cache`, an ETag, `nosniff`, `Access-Control-Allow-Origin: *`, and `Cross-Origin-Resource-Policy: cross-origin`, without redirect, and no other resource sends a CORS header; its pairs equal the bundled Prover implementations. A reader ignores an unknown platform key; a non-object body, a non-array or non-integer value under any key, and an empty, duplicate-bearing, or non-ascending array refuse the resource.
+  GET and HEAD serve the exact version-list record as
+  `application/json; charset=utf-8` with `no-cache`, an ETag, `nosniff`,
+  `Access-Control-Allow-Origin: *`, and `Cross-Origin-Resource-Policy: cross-origin`,
+  without redirect; no other resource sends a CORS header. Every advertised
+  CCDP version has all its resources, supports exactly the shared platform
+  pairs, and uses the same root Worker script. A missing CCDP version is refused
+  before Prefetch. Unknown platform keys and unsupported versions are ignored
+  only after validating their values; missing or extra fields, wrong types,
+  out-of-range integers, and empty, duplicate-bearing, or non-ascending arrays
+  refuse the whole record.
+- TEST-DIST-07 (exercises REQ-DIST-07):
+  Activate a Worker over a cache containing retained, superseded, shared, and
+  unrelated entries. Reconciliation removes only obsolete managed entries;
+  unchanged assets and all revisions/ranges needed by any included profile
+  survive, even when not used by the currently selected platform. Repeating
+  reconciliation is harmless. Storage denial or deletion failure does not
+  prevent fetching and proving.
