@@ -10,6 +10,8 @@ sessions, and no initialized runtime survives OAuth navigation.
 [registration.ts](../src/assets/registration.ts) registers the content-addressed
 Worker URL pinned by Prefetch at root scope. It dispatches only to that exact
 script, without a forced update check or fallback to an older active Worker.
+Prefetch starts the registration beside its popup handshake and dispatches once
+authenticated.
 An installing replacement has up to 15 seconds to become ready; a waiting Worker
 can receive dispatch before activation. Dispatch acknowledgement, rather than
 page control, establishes readiness. A stalled or failed replacement is terminal

@@ -49,7 +49,9 @@ phase-less core event.
 - `document-startup-ms`: navigation start to Prefetch entry execution, including
   document/module loading and evaluation; not the browser's `load` event.
 - `connection-ms`: entry execution through authenticated popup readiness.
-- `worker-ready-ms`: root Worker registration, activation and stale nested-registration cleanup.
+- `worker-ready-ms`: readiness until the pinned Worker can accept dispatch, including stale
+  nested-registration cleanup. The registration starts at entry, so this is only the part the
+  handshake did not overlap.
 - `dispatch-ms`: request to Worker dispatch acknowledgement, including cache lookups
   and any cached CRS body reads currently needed before acknowledgement.
 
