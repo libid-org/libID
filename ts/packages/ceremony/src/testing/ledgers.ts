@@ -1,6 +1,6 @@
-/** Synthetic identities for tests; neither represents a production ledger. */
-import type { LedgerId } from './index.js'
+import type { LedgerId } from '@libid/ledger'
 
+/** Synthetic identities for tests, with dummy hashes; neither represents a production ledger. */
 export const mainnet: LedgerId = Object.freeze({
   hash: () => new Uint8Array(32).fill(1),
   notaryAddress: () => 'https://notary.lib.id',

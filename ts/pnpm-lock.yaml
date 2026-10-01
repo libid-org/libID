@@ -211,9 +211,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
-      vitest:
-        specifier: 'catalog:'
-        version: 3.2.7(@types/node@22.20.1)
 
   packages/popup:
     devDependencies:

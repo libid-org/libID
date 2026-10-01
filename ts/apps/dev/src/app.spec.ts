@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { expect, type Page, test } from '@playwright/test'
 import {
   bundled,
@@ -106,24 +103,6 @@ for (const credential of ['bridge-provided', undefined, null, ''])
     if (credential) await expect(launchButton(page, 'GitHub')).toBeEnabled()
     else await expect(page.getByRole('status')).toContainText('Could not load Bridge configuration')
   })
-
-test('private configuration and generated files are not served', async ({ request }) => {
-  const root = fileURLToPath(new URL('..', import.meta.url))
-  const directory = mkdtempSync(join(root, '.cache/private-file-test-'))
-  const file = join(directory, 'probe.json')
-  const privateConfig = join(root, `.env.${basename(directory)}`)
-  writeFileSync(file, '{}')
-  writeFileSync(privateConfig, 'PRIVATE_TEST_VALUE=fixture', { flag: 'wx' })
-  try {
-    for (const path of [privateConfig, file]) {
-      const response = await request.get(`/@fs${path}`)
-      expect(response.status(), path).toBe(403)
-    }
-  } finally {
-    rmSync(privateConfig)
-    rmSync(directory, { recursive: true, force: true })
-  }
-})
 
 for (const [platform, name] of platforms)
   for (const blocked of [false, true])

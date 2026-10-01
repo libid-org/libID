@@ -8,7 +8,6 @@ import {
   type PlatformId,
 } from '@libid/ceremony'
 import type { LedgerId } from '@libid/ledger'
-import { testnet } from '@libid/ledger/testing'
 import { PopupWindow } from '@libid/popup'
 import { sha256 } from '@noble/hashes/sha2.js'
 
@@ -18,7 +17,11 @@ declare global {
   }
 }
 const oauthBridge = 'http://localhost:4682'
-const ledger: LedgerId = { ...testnet, notaryAddress: () => 'http://localhost:4687' }
+/** A synthetic ledger routed to the local notary; its hash names no real Chain Profile. */
+const ledger: LedgerId = {
+  hash: () => new Uint8Array(32).fill(2),
+  notaryAddress: () => 'http://localhost:4687',
+}
 const platforms = document.querySelector<HTMLElement>('#platforms')!
 const status = document.querySelector<HTMLElement>('#status')!
 window.results = new Map()
@@ -100,65 +103,91 @@ function outcomeText(event: CeremonyEvent): string {
   if (event.status === 'denied') return 'Denied'
   return `Failed (${'event' in event ? event.event : 'ceremony'})`
 }
+interface Operation {
+  name: string
+  started: number
+  finished?: number
+  cell: HTMLLIElement
+  label: HTMLElement
+}
+const now = () => performance.timeOrigin + performance.now()
+const duration = (start: number, end: number) => `${Math.max(0, (end - start) / 1000).toFixed(1)} s`
 /** One row owns its timings and presentation; its controls are bound to that run only. */
-function beginRun(platform: PlatformId, id: string) {
-  const now = () => performance.timeOrigin + performance.now()
-  const row = document.createElement('tr')
-  row.dataset.ceremonyId = id
-  const cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—'].map((text) =>
-    element('td', { textContent: text }),
-  )
-  const outcome = element('strong', { className: 'run-outcome', textContent: 'Running' })
-  const message = element('p', { className: 'run-status', textContent: 'Opening authorization…' })
-  message.setAttribute('role', 'status')
-  cells[2]!.replaceChildren(outcome, message)
-  const timings = element('ol', { className: 'operation-timings' })
-  const timingsCell = element('td')
-  timingsCell.append(timings)
-  const close = element('button', { type: 'button', textContent: 'Close', disabled: true })
-  const actions = element('td', { className: 'run-actions' })
-  actions.append(close)
-  row.append(...cells, timingsCell, actions)
-  document.querySelector('#history')!.prepend(row)
-  document.querySelector<HTMLElement>('#history-empty')!.hidden = true
-  const operations = new Map<
-    string,
-    { name: string; started: number; finished?: number; cell: HTMLLIElement; label: HTMLElement }
-  >()
-  let started: number | undefined
-  let finished = false
-  const duration = (start: number, end: number) =>
-    `${Math.max(0, (end - start) / 1000).toFixed(1)} s`
-  const render = (timestamp = now()) => {
-    if (started !== undefined) cells[3]!.textContent = duration(started, timestamp)
-    for (const op of operations.values()) {
+class RunRow {
+  readonly message = element('p', {
+    className: 'run-status',
+    textContent: 'Opening authorization…',
+  })
+  readonly close = element('button', { type: 'button', textContent: 'Close', disabled: true })
+  readonly #cells: HTMLTableCellElement[]
+  readonly #outcome = element('strong', { className: 'run-outcome', textContent: 'Running' })
+  readonly #timings = element('ol', { className: 'operation-timings' })
+  readonly #operations = new Map<string, Operation>()
+  readonly #timer = setInterval(() => this.#render(), 100)
+  #started: number | undefined
+  #finished = false
+
+  constructor(platform: PlatformId, id: string) {
+    const row = document.createElement('tr')
+    row.dataset.ceremonyId = id
+    this.#cells = [new Date().toLocaleTimeString(), names[platform], 'Running', '—'].map((text) =>
+      element('td', { textContent: text }),
+    )
+    this.message.setAttribute('role', 'status')
+    this.#cells[2]!.replaceChildren(this.#outcome, this.message)
+    const timingsCell = element('td')
+    timingsCell.append(this.#timings)
+    const actions = element('td', { className: 'run-actions' })
+    actions.append(this.close)
+    row.append(...this.#cells, timingsCell, actions)
+    document.querySelector('#history')!.prepend(row)
+    document.querySelector<HTMLElement>('#history-empty')!.hidden = true
+  }
+
+  /** Records one event; a terminal one finishes the row. */
+  readonly onEvent = (event: CeremonyEvent) => {
+    if (this.#finished) return
+    // Only the named core operations get a row; extension events would reorder it mid-read.
+    if ((event.status === 'active' || event.status === 'completed') && operationNames[event.event])
+      this.#track(event)
+    if (event.status !== 'active') this.finish(outcomeText(event), event.timestamp)
+    else this.#render()
+  }
+
+  finish(text: string, timestamp = now()) {
+    if (this.#finished) return
+    this.#finished = true
+    clearInterval(this.#timer)
+    this.#render(timestamp)
+    this.#outcome.textContent = text
+  }
+
+  #render(timestamp = now()) {
+    if (this.#started !== undefined)
+      this.#cells[3]!.textContent = duration(this.#started, timestamp)
+    for (const op of this.#operations.values()) {
+      const running = this.#finished ? ' (interrupted)' : ' (running)'
       op.cell.dataset.status =
-        op.finished !== undefined ? 'completed' : finished ? 'interrupted' : 'running'
-      op.label.textContent = `${op.name} · ${duration(op.started, op.finished ?? timestamp)}${op.finished === undefined ? (finished ? ' (interrupted)' : ' (running)') : ''}`
+        op.finished !== undefined ? 'completed' : this.#finished ? 'interrupted' : 'running'
+      op.label.textContent = `${op.name} · ${duration(op.started, op.finished ?? timestamp)}${op.finished === undefined ? running : ''}`
     }
   }
-  const timer = setInterval(render, 100)
-  const finish = (text: string, timestamp = now()) => {
-    if (finished) return
-    finished = true
-    clearInterval(timer)
-    render(timestamp)
-    outcome.textContent = text
-  }
-  const track = (event: Extract<CeremonyEvent, { status: 'active' | 'completed' }>) => {
-    if (event.event === 'prefetch-dispatch' && event.phase === 'started') started = event.timestamp
-    const op = operations.get(event.event)
+
+  #track(event: Extract<CeremonyEvent, { status: 'active' | 'completed' }>) {
+    if (event.event === 'prefetch-dispatch' && event.phase === 'started')
+      this.#started = event.timestamp
+    const op = this.#operations.get(event.event)
     if ((event.phase === 'started' || event.event === 'prover-fallback') && !op) {
       const cell = document.createElement('li')
       const label = document.createElement('span')
       cell.append(label)
-      operations.set(event.event, {
-        name: operationNames[event.event],
+      this.#operations.set(event.event, {
+        name: operationNames[event.event]!,
         started: event.timestamp,
         cell,
         label,
       })
-      timings.append(cell)
+      this.#timings.append(cell)
     } else if (event.phase === 'finished' && op) {
       op.finished = event.timestamp
       const attributes = event.status === 'active' ? event.instrumentation?.attributes : undefined
@@ -172,32 +201,17 @@ function beginRun(platform: PlatformId, id: string) {
     }
     // The single-shot fallback observation begins the interval ending at Prover readiness.
     if (event.event === 'prover' && event.phase === 'started') {
-      const fallback = operations.get('prover-fallback')
+      const fallback = this.#operations.get('prover-fallback')
       if (fallback) fallback.finished = event.timestamp
     }
-    const ordered = [...operations.values()].sort(
+    const ordered = [...this.#operations.values()].sort(
       (a, b) => (a.finished ?? Infinity) - (b.finished ?? Infinity) || a.started - b.started,
     )
     // Move existing rows only when necessary, preserving expanded details.
     for (const [index, { cell }] of ordered.entries()) {
-      const next = timings.children[index]
-      if (next !== cell) timings.insertBefore(cell, next ?? null)
+      const next = this.#timings.children[index]
+      if (next !== cell) this.#timings.insertBefore(cell, next ?? null)
     }
-  }
-  return {
-    finish,
-    message,
-    close,
-    onEvent(event: CeremonyEvent) {
-      if (finished) return
-      if (
-        (event.status === 'active' || event.status === 'completed') &&
-        operationNames[event.event]
-      )
-        track(event)
-      if (event.status !== 'active') finish(outcomeText(event), event.timestamp)
-      else render()
-    },
   }
 }
 function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformId) {
@@ -206,7 +220,7 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     return
   }
   const id = crypto.randomUUID()
-  const run = beginRun(platform, id)
+  const run = new RunRow(platform, id)
   launch.target = `ceremony-dev-${id}`
   // Keep creation and the native-anchor fallback inside the same user gesture.
   try {

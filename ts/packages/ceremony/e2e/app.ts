@@ -1,6 +1,6 @@
-import { mainnet, testnet } from '@libid/ledger/testing'
 import { type Message, type PopupConnection, PopupWindow } from '@libid/popup'
 import { CeremonyError, createCCDPClient, supportedPlatforms } from '../src/index.js'
+import { mainnet, testnet } from '../src/testing/ledgers.ts'
 import { origins } from './topology.js'
 
 const { bridge, ccdp } = origins(location.protocol === 'https:')

@@ -1,5 +1,4 @@
 import type { LedgerId } from '@libid/ledger'
-import { mainnet, testnet } from '@libid/ledger/testing'
 import { type Message, type MessageType, PopupError } from '@libid/popup'
 import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { describe, expect, it, type Mock, vi } from 'vitest'
@@ -16,7 +15,15 @@ import {
   supportedPlatforms,
 } from '../../platforms/index.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
-import { BRIDGE, CEREMONY_ID, ccdpClient, fixtures, platformConfig } from '../../testing/index.js'
+import {
+  BRIDGE,
+  CEREMONY_ID,
+  ccdpClient,
+  fixtures,
+  mainnet,
+  platformConfig,
+  testnet,
+} from '../../testing/index.js'
 import { CeremonyFailed, EventMessage, IdentityProof, UserDenied } from '../index.js'
 import { popupErrorMessages } from '../uiMessages.js'
 import type { CCDPClient } from './client.js'

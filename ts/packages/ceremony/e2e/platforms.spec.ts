@@ -1,5 +1,4 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
-import { testnet } from '@libid/ledger/testing'
 import type { APIRequestContext, BrowserContext, Page } from '@playwright/test'
 import { decodeAttestedData } from '../src/notary/decode.js'
 import {
@@ -11,6 +10,7 @@ import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { ty
 import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
 import type { PlatformId } from '../src/platforms/index.js'
+import { testnet } from '../src/testing/ledgers.ts'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'
 import { type BrowserPlatform, browserPlatforms, platformIds } from './platforms.js'
 import { verifyBrowserProof } from './verify.js'

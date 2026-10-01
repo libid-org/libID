@@ -1,7 +1,6 @@
-import { testnet } from '@libid/ledger/testing'
 import { type Carrier, PopupWindow } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
-import { CEREMONY_ID, ccdpClient } from '../../testing/index.js'
+import { CEREMONY_ID, ccdpClient, testnet } from '../../testing/index.js'
 
 afterEach(() => vi.unstubAllGlobals())
 
