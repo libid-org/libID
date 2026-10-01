@@ -79,6 +79,15 @@ jobs:
       - name: Formatting
         run: forge fmt --check
 
+      # The oldest compiler the README promises, on the legacy pipeline,
+      # building LibID.sol alone as an integrator's project would.
+      - name: LibID compiles with solc 0.8.20
+        env:
+          FOUNDRY_VIA_IR: "false"
+          FOUNDRY_OUT: ${{ runner.temp }}/libid-0.8.20/out
+          FOUNDRY_CACHE_PATH: ${{ runner.temp }}/libid-0.8.20/cache
+        run: forge build src/LibID.sol --use 0.8.20 --evm-version paris
+
       - name: Tests
         run: forge test -vv
 
