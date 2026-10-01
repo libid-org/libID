@@ -36,6 +36,37 @@ importers:
         specifier: ^1.86.0
         version: 1.86.0
 
+  apps/bind:
+    dependencies:
+      '@libid/ceremony':
+        specifier: workspace:^
+        version: link:../../packages/ceremony
+      '@libid/contracts':
+        specifier: 0.15.0
+        version: 0.15.0(viem@2.55.13(typescript@5.9.3))
+      '@libid/ledger':
+        specifier: workspace:^
+        version: link:../../packages/ledger
+      '@libid/popup':
+        specifier: workspace:^
+        version: link:../../packages/popup
+      viem:
+        specifier: ^2.48.11
+        version: 2.55.13(typescript@5.9.3)
+    devDependencies:
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.64.0-alpha-2026-09-29
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: 'catalog:'
+        version: 7.3.6(@types/node@22.20.1)
+
   apps/demo:
     dependencies:
       '@libid/claim':
@@ -580,6 +611,11 @@ packages:
 
   '@libid/contracts@0.13.1':
     resolution: {integrity: sha512-a+X7pJOoz0Rw4t9W/I7noD9rXTQDxxlPbqk4PpdPgu8JcO5i6fKYjfOw3blTjnOZ8WkN277fH3zRBSlE9stgVg==}
+    peerDependencies:
+      viem: ^2.48.11
+
+  '@libid/contracts@0.15.0':
+    resolution: {integrity: sha512-TOthZejhxj7NdY2Fr6dwgt+TVGEPuTSVSBcTJIvK7ZMQqJY4Ugwq9av20lfbj2qse9qbIVsknFRUr8QFfDfhoQ==}
     peerDependencies:
       viem: ^2.48.11
 
@@ -1923,6 +1959,10 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@libid/contracts@0.13.1(viem@2.55.13(typescript@5.9.3))':
+    dependencies:
+      viem: 2.55.13(typescript@5.9.3)
+
+  '@libid/contracts@0.15.0(viem@2.55.13(typescript@5.9.3))':
     dependencies:
       viem: 2.55.13(typescript@5.9.3)
 

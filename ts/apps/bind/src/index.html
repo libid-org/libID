@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bind an identity</title>
+    <style>
+      :root { font: 16px/1.5 system-ui, sans-serif; color-scheme: light dark; }
+      body { max-width: 48rem; margin: 3rem auto; padding: 0 1.25rem; }
+      .muted { opacity: .75; }
+      dl { display: grid; grid-template-columns: 10rem 1fr; gap: .5rem; }
+      dt { font-weight: 600; }
+      dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
+      button, .launch { font: inherit; padding: .5rem .8rem; }
+      .launch { border: 1px solid currentColor; border-radius: .25rem; text-decoration: none; cursor: pointer; }
+      .launch[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+      .actions { display: flex; gap: .75rem; margin: 1rem 0; align-items: center; }
+      #status { min-height: 1.5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Bind an identity</h1>
+    <p class="muted">Prove a GitHub account in the browser, then bind it on the local chain.</p>
+    <div class="actions">
+      <button id="connect" type="button">Connect wallet</button>
+      <a id="bind-github" class="launch" href="/" role="button" aria-disabled="true">Bind GitHub</a>
+    </div>
+    <p id="status" role="status" data-testid="status"></p>
+    <dl>
+      <dt>Wallet</dt><dd data-testid="holder">—</dd>
+      <dt>Stage</dt><dd data-testid="stage">—</dd>
+      <dt>Proved account</dt><dd data-testid="proof-received">—</dd>
+      <dt>Transaction</dt><dd data-testid="tx-hash">—</dd>
+      <dt>Receipt</dt><dd data-testid="receipt-status">—</dd>
+      <dt>Registry says</dt><dd data-testid="registry-holder">—</dd>
+      <dt>Indexer says</dt><dd data-testid="indexer-holder">—</dd>
+    </dl>
+    <script type="module" src="./app.ts"></script>
+  </body>
+</html>

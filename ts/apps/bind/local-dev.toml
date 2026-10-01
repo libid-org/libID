@@ -1,0 +1,92 @@
+# Local dev — the stack on a throwaway anvil, whether a docker-compose
+# service or a bare process on a host or CI runner.
+#
+# `rpc_url` below is the compose service name, reachable only from inside
+# that network. From anywhere else, keep this file as it is and name the
+# endpoint on the command line: `--rpc-url` replaces the transport and
+# nothing more — the chain id and every address declared here are the same
+# either way.
+#
+#   docker compose up -d anvil
+#   libid-deploy apply --network networks/local-dev.toml --yes \
+#     --confirm-fresh-deploy --dev
+#
+#   anvil --host 127.0.0.1 --port 8545 &
+#   libid-deploy apply --network networks/local-dev.toml \
+#     --rpc-url http://127.0.0.1:8545 --yes --confirm-fresh-deploy --dev
+#
+# Anvil ships the CREATE2 deployer predeployed, so the factory bootstrap is
+# one transaction; start it with `--disable-default-create2-deployer` to
+# rehearse the keyless install path instead.
+#
+# NOTHING HERE IS SECRET. The keys below are anvil's own deterministic test
+# accounts, printed by every anvil on startup and published in foundry's
+# documentation. They control nothing outside a throwaway chain.
+#
+# This network is deliberately absent from the `network` choice list in
+# .github/workflows/apply.yml: it has no KMS key and its chain exists only
+# inside a CI run.
+
+[network]
+name = "local-dev"
+chain_id = 31337
+# The endpoint this file's own environment reaches: the compose service
+# name. Every other caller passes `--rpc-url` and this value is not read;
+# nothing else in the file depends on it.
+rpc_url = "http://anvil:8545"
+
+[aws]
+# Never read on this network. The apply workflow parses it to pick a region
+# for the OIDC role assumption, and that workflow does not list local-dev;
+# `apply` itself takes credentials from the ambient AWS environment, which
+# the local signer below never reaches.
+region = "local"
+# The default signer. `--signer` specs are classified by SHAPE: 64 hex
+# characters is a local private key, anything else is a KMS key id — so
+# this is anvil account #0's key, and no AWS call happens. On a real
+# network this is an `alias/...` name and the key never leaves KMS.
+kms_deployer = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+
+# The ADDRESSES OF KEYS, not contracts.
+[accounts]
+# Anvil account #1. Separate from the deployer on purpose: the notary
+# signer and the contract owner are different roles, and a local stack that
+# collapses them hides a wiring mistake that a real deployment would show.
+notary = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+# Anvil account #0 — the same identity as the deployer above, named
+# explicitly so the ownership handover is exercised rather than defaulted.
+# On a dev chain apply completes the Ownable2Step acceptance by
+# impersonation, so the stack ends fully owned.
+owner = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+
+[notary_service]
+# 0.001 native. NOT zero on purpose: a local stack that meters at no charge
+# lets a client attaching the wrong value pass, and `WrongValue` is then
+# first seen on a network where it costs something.
+fee_wei = "1000000000000000"
+
+# OUTPUT: the canonical contract addresses — identical on every EVM chain,
+# this one included. Do not hand-edit; regenerate with
+# `libid-deploy plan --print-addresses`.
+[contracts]
+factory = "0xa92244c3f4462aad08bd1a33c3940b9b936321ad"
+notary_service = "0xbb5871167b0128939cab6850877981421e8dcbf5"
+ceremony_proof_verifier = "0x76bdc18f21c2db0ff796c7cc50348528b2899275"
+identity_registry = "0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366"
+# Initialized with identity_registry above, which it resolves every handle
+# through for life: no setter moves it.
+handle_escrow = "0xf7e3ad279f913ffe2ef74614e3046c15cbdabb9a"
+google_jwt_roots = "0xb7a2ce28e71dbb9c877d2b5a48de33b5f0e6838d"
+x_platform_verifier = "0xcfc880f62f2744dc000687edf47a98b585d9eb35"
+github_platform_verifier = "0xac878389da7a1b58826182da0d8b4cae5e6e4178"
+google_platform_verifier = "0xf3d537022362d187715b28bc547f8b2532e6d0cf"
+
+# The ceremony circuit verifiers are NOT declared here. `libid-deploy`
+# carries them: `libid-contracts` embeds each circuit's bb-generated
+# UltraHonk verifier from the libid-circuits release it pins, and apply
+# deploys it through the factory under a CREATE3 name carrying that
+# release and reads its code hash off the chain for the Platform Verifier
+# to pin. Moving the contracts pin to a new circuits release and
+# re-applying is the rotation path — a new release is a new name, a new
+# address and a `setTrustRoots`, with the proxy and its registration
+# untouched.
