@@ -21,7 +21,8 @@ export interface Preload {
   type: 'preload'
   circuitUrl: string
   verificationKeyUrl: string
-  threads: number
+  /** Requested proof threads, capped by the worker; four when absent. */
+  threads?: number
   acvmUrl: string
   abiUrl: string
   wasmPath: string

@@ -137,7 +137,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-PROVER-012 | [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts) |
 | LIBID-PROVER-013 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | LIBID-PROVER-014 | [src/barretenberg/engine.test.ts](../src/barretenberg/engine.test.ts), [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
-| LIBID-PROVER-015 | [e2e/runtime.spec.ts](../e2e/runtime.spec.ts), [src/barretenberg/engine.test.ts](../src/barretenberg/engine.test.ts), [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts) |
+| LIBID-PROVER-015 | [e2e/runtime.spec.ts](../e2e/runtime.spec.ts), [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts) |
 | LIBID-PROVER-016 | [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/cache.test.ts](../src/assets/cache.test.ts) |
 | LIBID-PROVER-017 | [src/notary/session.test.ts](../src/notary/session.test.ts) |
 | LIBID-PROVER-018 | [src/notary/session.test.ts](../src/notary/session.test.ts), [src/notary/session.worker.test.ts](../src/notary/session.worker.test.ts) |

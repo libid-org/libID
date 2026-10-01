@@ -246,12 +246,20 @@ it.each([
   },
 )
 
-it('caps bb threads using the proof worker hardware concurrency [LIBID-PROVER-015]', async () => {
-  vi.stubGlobal('navigator', { hardwareConcurrency: 2 })
-  const w = await worker()
-  await expect.poll(() => w.has('backend-ready')).toBe(true)
-  expect(mocks.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ threads: 2 }))
-})
+it.each([
+  { threads: 4, hardwareConcurrency: 2, capped: 2 },
+  { threads: 8, hardwareConcurrency: 16, capped: 4 },
+])(
+  'caps $threads requested bb threads at $capped with hardware concurrency $hardwareConcurrency [LIBID-PROVER-015]',
+  async ({ threads, hardwareConcurrency, capped }) => {
+    vi.stubGlobal('navigator', { hardwareConcurrency })
+    const w = await worker(undefined, { threads })
+    await expect.poll(() => w.has('backend-ready')).toBe(true)
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ threads: capped }),
+    )
+  },
+)
 
 it('a duplicate preload fails once and releases the started backend', async () => {
   const w = await worker()
