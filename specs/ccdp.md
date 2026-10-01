@@ -146,11 +146,11 @@ Worker. Authorization is an external document, not a CCDP resource.
 | Role | Accepts the logical Application connection during [Callback to Prover](#3-callback-to-prover), then validates the retained OAuth return under the Application-selected profile and runs [Prover execution](#4-prover-execution). The selected platform ceremony owns its proof and evidence semantics. |
 | Outcome and cleanup | Local proof delivery does not assert Application acceptance. Prover clears transient proving inputs and execution resources without closing or navigating the popup. UI is an implementation-owned projection of events. |
 
-### Worker `GET /ccdp/worker.js`
+### Worker `GET /ccdp/worker.{hash}.js`
 
 | Property | Contract |
 |---|---|
-| Location and context | CCDP origin; one unversioned module Service Worker whose response sets `Service-Worker-Allowed: /` and which every Prefetch registers with `scope: '/'` |
+| Location and context | CCDP origin; one content-addressed module Service Worker per release, shared by all included CCDP versions. Its response sets `Service-Worker-Allowed: /`; every Prefetch registers its build-pinned URL with `scope: '/'`, following [Worker selection](ccdp-distribution.md#worker-selection). |
 | Role | Supports selected-profile fetches and the popup transport's same-origin continuity mechanism. It remains compatible with every included CCDP version, reconciles its asset cache under the [Distribution contract](ccdp-distribution.md#browser-cache-reconciliation), and does not intercept unrelated origin traffic. |
 
 ### Version list `GET /ccdp/versions.json`
@@ -169,8 +169,10 @@ Worker. Authorization is an external document, not a CCDP resource.
   Necessity: independently deployed documents must execute one protocol.
 
 Prefetch and Prover routes are relative to
-`{ccdpOrigin}/ccdp/v{CCDPVersion}`. Worker uses the shared unversioned path
-`{ccdpOrigin}/ccdp/worker.js`. Callback executes at the frozen `redirectUri`
+`{ccdpOrigin}/ccdp/v{CCDPVersion}`. Worker uses the shared content-addressed path
+`{ccdpOrigin}/ccdp/worker.{hash}.js`, pinned by the Distribution rather than
+selected by the Application. Its hash is independent of `CCDPVersion`.
+Callback executes at the frozen `redirectUri`
 on the OAuth Bridge origin; the Distribution defines the public artifact the
 bridge retrieves to serve it. Authorization is the external frozen
 `platformAuthorizationUrl`, not a CCDP route.
@@ -758,7 +760,8 @@ popup at `about:blank`; if that fails, the same activation's real anchor
 navigates it directly to Prefetch.
 
 Prefetch clears and validates its fragment, accepts the connection, registers
-the Worker, and dispatches the selected profile's fetches. It then sends
+its build-pinned [Worker](ccdp-distribution.md#worker-selection), and awaits that
+Worker's acknowledgement of selected-profile dispatch. It then sends
 [`Event(prefetch-dispatch, finished)`](#event). Only after accepting that event
 from Prefetch, the Application records `authorization.started` locally and
 navigates the retained popup to
@@ -950,8 +953,9 @@ cryptographic properties delegated to the common and platform specifications.
 - TEST-CCDP-02 (exercises REQ-CCDP-02):
   Frozen version/path/state agree; unsupported or retired Callback versions fail locally rather than falling forward.
   An Application whose CCDP version is absent from the version list refuses
-  before Prefetch navigation. Switching between included versions uses the
-  same Worker script URL and root registration.
+  before Prefetch navigation. Switching between included versions of one
+  release uses the same Worker script URL and root registration; a changed
+  Worker hash updates that registration rather than creating another scope.
 - TEST-CCDP-03 (exercises REQ-CCDP-03):
   Separate query/fragment bytes survive private navigation and isolation replacement, are cleared before use, and never appear in Application/control/signaling records. Duplicate or malformed fields fail.
 - TEST-CCDP-04 (exercises REQ-CCDP-04):
@@ -990,6 +994,9 @@ cryptographic properties delegated to the common and platform specifications.
   subscriptions.
 - TEST-CCDP-07 (exercises REQ-CCDP-07):
   The four phases preserve navigation ownership and credential privacy; approval enters execution, bound denial exits before proving, and malformed returns abort.
+  A stale active Worker cannot satisfy the prefetch-dispatch gate. Failure to
+  establish or dispatch to the build-pinned Worker reports CeremonyFailed
+  without Authorization navigation; successful dispatch does not wait for downloads.
   With no carrier fallback configured, an OAuth-severed opener leaves Callback
   in local failure without credential release or a fabricated denial. A
   configured fallback continues only after authenticating the same ceremony

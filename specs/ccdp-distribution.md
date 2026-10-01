@@ -91,11 +91,12 @@ executes CCDP code. Other methods execute no CCDP code.
 The not-found response is static HTML containing no script, style, link, form,
 redirect, or protocol data.
 
-Versioned protocol resources, the shared Worker, aggregate Callback artifact,
+Versioned protocol resources, the aggregate Callback artifact,
 and version list use `Cache-Control: no-cache` and an ETag so a path may receive
 compatible implementation updates. A breaking protocol change publishes new versioned
-routes and adds its implementation to the Callback artifact. The Bridge serves
-its configured Callback response with `no-store`, independently of its own
+routes and adds its implementation to the Callback artifact. The content-addressed
+Worker instead uses `Cache-Control: public, max-age=31536000, immutable`.
+The Bridge serves its configured Callback response with `no-store`, independently of its own
 upstream artifact cache.
 
 All protocol resources send their exact media type and
@@ -115,7 +116,7 @@ markup, executable code, or styling input is part of this contract.
 | Prefetch | top-level non-isolated HTML | `Cross-Origin-Opener-Policy: unsafe-none` and no COEP. Script/worker sources remain same-origin; `connect-src` admits local assets and the pinned external asset origins. |
 | Prover | top-level HTML | `Document-Isolation-Policy: isolate-and-require-corp`, `Cross-Origin-Opener-Policy: unsafe-none`, and no COEP. |
 | Prover isolation fallback | top-level HTML at `/ccdp/v{CCDPVersion}/prover/fallback` | `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Same Prover entrypoint, fragment contract, and non-isolation response rules. |
-| Worker | module Service Worker JavaScript at `/ccdp/worker.js` | `text/javascript; charset=utf-8` and `Service-Worker-Allowed: /`. Every Prefetch registers this same script with `scope: '/'`; it remains compatible with every included CCDP version and passes unrelated requests through unchanged. Code is same-origin; `connect-src` also admits the pinned Aztec CRS origins for asset caching. |
+| [Worker](#worker-selection) | self-contained module Service Worker JavaScript at `/ccdp/worker.{hash}.js` | `text/javascript; charset=utf-8`, immutable caching, and `Service-Worker-Allowed: /`. Every Prefetch in a release registers this same script with `scope: '/'`; it remains compatible with every included CCDP version and passes unrelated requests through unchanged. Code is same-origin; `connect-src` also admits the pinned Aztec CRS origins for asset caching. |
 
 The Distribution may publish smaller Brotli and gzip transfer representations.
 It selects an available representation admitted by `Accept-Encoding` (including
@@ -354,9 +355,9 @@ Prefetch and Prover resources and bundled Callback implementation, and each
 Prover supports exactly the listed platform/version pairs. A release cannot
 advertise a pair that works under only some of its included CCDP versions.
 The shared Worker supports every included version's resource graph and
-continuity needs; all versions register the same `/ccdp/worker.js` URL at root
-scope, rather than replacing that registration with competing version-specific
-scripts.
+continuity needs; all versions in one release register the same
+[build-pinned Worker URL](#worker-selection) at root scope, rather than
+replacing that registration with competing version-specific scripts.
 
 The Application fetches the list
 cross-origin without credentials or redirects; the
@@ -368,6 +369,37 @@ as compatible. Readers validate the whole record, including values under
 unknown platform keys, then ignore versions or platforms they do not implement.
 Missing or extra top-level fields, wrong types, out-of-range integers, empty
 version arrays, duplicates, or non-ascending arrays refuse the whole resource.
+
+### Worker selection
+
+- REQ-DIST-08: The Publisher MUST pin the content-addressed Worker URL below
+  into every Prefetch in its release. The Prefetch document MUST dispatch
+  selected-profile fetches only to that matching Worker. Necessity: a compatible redeployment
+  must not report successful prefetch of an earlier release's resource graph.
+
+`/ccdp/worker.{hash}.js` serves the exact self-contained Worker script identified
+by `hash`: the lowercase hexadecimal SHA-256 of its uncompressed JavaScript
+bytes, including its embedded complete resource graph. This is a Worker-content
+hash, not a distribution-build, release, or commit identifier. Unchanged Worker
+bytes retain their URL; changes to its code or embedded graph produce a new URL.
+Other distribution changes alone do not change it. This path is an immutable
+file, not a query-based cache buster or an alias to the latest Worker.
+
+Prefetch uses the URL embedded in its own code, without a discovery request or
+a forced network update check for an already matching Worker. It registers with
+`scope: '/'` and selects the Worker with that exact script URL, waiting until it
+can accept dispatch. A changed URL updates the same root registration through
+the browser's installation lifecycle; it creates no build-specific scope.
+An older active Worker is not a substitute, even if it recognizes the same
+platform ceremony version. A waiting or installing replacement must be ready
+to accept dispatch before Prefetch proceeds; a timeout cannot select the old
+Worker instead.
+
+Only the matching Worker's dispatch acknowledgement permits
+`Event(prefetch-dispatch, finished)`; downloads need not finish. Failure follows
+[Prefetch to Authorization](ccdp.md#1-prefetch-to-authorization), before OAuth.
+This adds no CCDP message or runtime content-hash verification. Immutable paths
+identify release bytes; they do not guarantee retention of earlier releases.
 
 ### Prover isolation
 
@@ -386,7 +418,8 @@ replacement. Neither exposes readiness or executes proof work before isolation
 and connection establishment succeed. If the fallback is still unisolated,
 establishment fails; it does not loop or silently prove without shared memory.
 
-Both paths resolve the canonical root-scope registration for `/ccdp/worker.js`.
+Both paths resolve the canonical root-scope Worker registration, whose scope
+does not change with its content-addressed script URL.
 A stale `/ccdp/v1/` registration, even with the same script URL, is not that registration.
 The host and participants uphold the popup transport's same-registration
 continuity prerequisite. Successful DIP avoids replacement; fallback needs no
@@ -402,7 +435,7 @@ separate popup-transport concern.
 
 `GET /ccdp/assets/*` is the Distribution's static proving-resource namespace,
 not a CCDP API or versioned protocol route. Locally served proving resources
-other than the versioned protocol resources resolve there; Aztec CRS requests
+other than the protocol resources resolve there; Aztec CRS requests
 retain their upstream URLs. CCDP
 assigns no structure to the suffix: versioned code pins each exact path, while
 protocol code neither enumerates nor parses the namespace.
@@ -526,8 +559,8 @@ these observable responses.
   `Access-Control-Allow-Origin: *`, and `Cross-Origin-Resource-Policy: cross-origin`,
   without redirect; no other resource sends a CORS header. Every advertised
   CCDP version has all its resources, supports exactly the shared platform
-  pairs, and uses the same root Worker script. A missing CCDP version is refused
-  before Prefetch. Unknown platform keys and unsupported versions are ignored
+  pairs, and uses the release's same root Worker script. A missing CCDP version
+  is refused before Prefetch. Unknown platform keys and unsupported versions are ignored
   only after validating their values; missing or extra fields, wrong types,
   out-of-range integers, and empty, duplicate-bearing, or non-ascending arrays
   refuse the whole record.
@@ -538,3 +571,14 @@ these observable responses.
   survive, even when not used by the currently selected platform. Repeating
   reconciliation is harmless. Storage denial or deletion failure does not
   prevent fetching and proving.
+- TEST-DIST-08 (exercises REQ-DIST-08):
+  The Worker filename matches the SHA-256 of its decoded body, including under
+  compressed transfer, and its response is immutable with root scope allowed.
+  Unchanged Worker bytes keep the URL across an unrelated distribution change;
+  changing Worker code or an embedded asset URL changes it. Every included
+  CCDP version pins the same URL. Reusing a matching Worker needs no forced
+  update/discovery request. With an older active Worker and an unchanged
+  platform/version identifier, Prefetch waits for and dispatches to the new
+  matching Worker in the same root registration, including when initially
+  waiting or installing. A stalled or failed replacement never dispatches to
+  the old Worker or reports prefetch-dispatch finished.
