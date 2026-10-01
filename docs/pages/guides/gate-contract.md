@@ -64,10 +64,9 @@ reverts with `UnusableHandle` if the text can never be a GitHub handle.
 Handles can be renamed and reused on GitHub. `MAX_AGE` limits how long ago
 the holder last proved it. Pick a value that fits what the call is worth.
 
-Write the age check as `observedAt + MAX_AGE < block.timestamp`, not
-`block.timestamp - observedAt > MAX_AGE`. `observedAt` can be a little ahead
-of the block time (for Google it is up to an hour ahead), and the subtraction
-would then revert. See [Freshness](/docs/concepts/freshness/).
+A proof made just now already reads 5 minutes old on GitHub and about an hour
+old on Google, so keep `MAX_AGE` well above that. See
+[Freshness](/docs/concepts/freshness/).
 
 ## An airdrop, once per identity
 

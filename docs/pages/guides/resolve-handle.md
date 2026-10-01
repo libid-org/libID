@@ -69,13 +69,14 @@ console.log(current, new Date(Number(observedAt) * 1000));
 contract stores it under. `handleBinding` returns the holder of that key and
 `observedAt`, a Unix time in seconds.
 
-`observedAt` can be a little ahead of the current time. For Google it is the
-expiry of the sign-in token, up to an hour after the user signed in. So count
-a negative age as zero:
+The age of the proof is the time since then:
 
 ```js
-const age = Math.max(0, Math.floor(Date.now() / 1000) - Number(observedAt));
+const age = Math.floor(Date.now() / 1000) - Number(observedAt);
 ```
+
+A proof made just now already reads 5 minutes old on GitHub and X, and about
+an hour old on Google. See [Freshness](/docs/concepts/freshness/).
 
 Handles can be renamed and reused on the platform. The older `observedAt`
 is, the more likely the handle now belongs to someone else there. Show it to

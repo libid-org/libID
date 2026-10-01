@@ -5,22 +5,22 @@ sidebar:
   order: 3
 ---
 
-Every binding stores `observedAt`: the time, in Unix seconds, at which the
-platform confirmed who holds the identity. `handleBinding` and `idBinding` return it.
+Every binding stores `observedAt`: a time, in Unix seconds, that tells you
+when the platform confirmed who holds the identity. `handleBinding` and `idBinding` return it.
 
 ## Where the time comes from
 
 The time is not chosen by the user or by your app. It comes from signed
-evidence:
+evidence, moved back by a fixed allowance for each platform:
 
-| Platform | `observedAt` is |
-| --- | --- |
-| GitHub, X | when the notary signed the record of the user's session with the platform |
-| Google | the expiry time in Google's signed sign-in token, about an hour after sign-in |
+| Platform | `observedAt` is | A proof made just now looks |
+| --- | --- | --- |
+| GitHub, X | the time the notary signed the user's session, minus 5 minutes | 5 minutes old |
+| Google | the expiry in Google's sign-in token, minus 2 hours | about an hour old |
 
-So `observedAt` can be ahead of the current time: up to five minutes for
-GitHub and X, and up to an hour for Google. Code that computes an age must
-not assume it is in the past.
+The allowance puts every platform on one scale and keeps `observedAt` from
+ever being ahead of the block. It also means a proof is never younger than
+its allowance: a limit shorter than that rejects every holder.
 
 A GitHub or X proof must reach the chain within an hour of that time, and the
 time cannot be more than five minutes ahead of the block. A Google proof must
@@ -51,6 +51,6 @@ libID does not decide this for you. Pick a limit that fits what is at stake:
 - To send a payment to a handle, show the age to the sender, and warn when it
   is old.
 - To gate something valuable in a contract, require
-  `observedAt + maxAge >= block.timestamp`. Do not write
-  `block.timestamp - observedAt`: it reverts when `observedAt` is ahead of
-  the block. See [Gate a contract](/docs/guides/gate-contract/).
+  `observedAt + maxAge >= block.timestamp`, with `maxAge` well above the
+  allowance: more than an hour if you accept Google. See
+  [Gate a contract](/docs/guides/gate-contract/).
