@@ -34,7 +34,7 @@ export interface DecodedAttestedData extends Directions<DecodedDirection> {
 }
 
 function invalid(reason: string): never {
-  throw new Error(`invalid attested data: ${reason}`)
+  throw new Error(`Invalid attested data: ${reason}`)
 }
 
 class Cursor {

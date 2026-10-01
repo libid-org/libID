@@ -63,7 +63,7 @@ fail CI's TypeScript job, which runs ceremony's tests this way. On each push to
 
 ## Adding a platform
 
-The [conformance suite](../src/platforms/conformance/conformance.test.ts) and other
+The [conformance suite](../src/platforms/conformance/) and other
 per-platform unit tests iterate `supportedPlatforms` and read one typed
 [fixture table](../src/platforms/conformance/fixtures.ts) (through `src/testing`)
 instead of naming platforms. A catalog entry without a fixture fails `typecheck`
@@ -173,7 +173,6 @@ development app uses loopback HTTP without certificate setup.
 | [popup.spec.ts](../e2e/popup.spec.ts) | Actual popup and Callback flows: private handoff, isolation, denial, application continuation, local Callback failures and the Prover progress UI. |
 | [isolation.spec.ts](../e2e/isolation.spec.ts) | Independent concurrent connections, a changed Application origin in the same opener window and provider isolation. |
 | [assets.spec.ts](../e2e/assets.spec.ts) | Emitted CCDP route policies, Service Worker migration and pending Prefetch joins, Cache Storage/HTTP-cache reuse, Service Worker CRS loading, Worker failure before OAuth and mounted TLSN initialization. |
-| [admission.spec.ts](../e2e/admission.spec.ts) | Harness origin admission and CORS; not production Bridge egress or refresh. |
 | [runtime.spec.ts](../e2e/runtime.spec.ts) | The table's real-notary cases: one/two real X sessions and both GitHub endpoints through the matched notary; the GitHub pair runs alongside a separately verified bearer-link fixture proof. Notary send and reveal timeouts close the real sockets and workers. |
 | [fixtures.ts](../e2e/fixtures.ts) | Harness origins, popup launch, provider answers checked against the platform table, CCDP asset controls and fetch counts, and shared popup assertions. |
 | [verify.ts](../e2e/verify.ts) | Released-key verification of generated proofs and rejection of altered public inputs. |

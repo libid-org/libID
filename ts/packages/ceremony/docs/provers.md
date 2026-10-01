@@ -3,7 +3,7 @@
 Each platform/version owns authorization URLs, accepted OAuth returns, proof and
 identity validators, resource declarations, events and its prover.
 Shared Client, message and progress code consult that metadata instead of branching
-on provider names. The [normative profiles](https://github.com/libid-org/libid/blob/9ae438ac0c4d554fd1fc0085ae8e67b0c5c3b0ed/specs/platform-ceremonies.md)
+on provider names. The [normative profiles](https://github.com/libid-org/libid/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md)
 own authorization encodings and proof statements.
 
 ## Shared execution boundary
@@ -81,7 +81,7 @@ public application credential frozen from Bridge configuration and forwarded in
 `ProveIdentity`. The complete request is revealed; the response bearer and both
 commitment openings remain private. Both platforms exchange the code through
 browser TLSNotary Proxy sessions, without a Bridge token endpoint or ordinary
-browser HTTP exchange. The [public-client profile](https://github.com/libid-org/libid/blob/9ae438ac0c4d554fd1fc0085ae8e67b0c5c3b0ed/specs/platform-ceremonies.md)
+browser HTTP exchange. The [public-client profile](https://github.com/libid-org/libid/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md)
 owns GitHub's request layout; deployed verifiers must accept it.
 
 X and GitHub share the `bearer_link` circuit and

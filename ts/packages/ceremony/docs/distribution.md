@@ -2,7 +2,7 @@
 
 The build emits a static CCDP artifact; Static Web Server (SWS) serves it.
 Resource and response requirements belong to the
-[Distribution specification](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/ccdp-distribution.md).
+[Distribution specification](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp-distribution.md).
 The host needs no ceremony server, request-time compilation or asset downloads.
 
 ## Build and serve
@@ -249,10 +249,9 @@ nothing from earlier minors: a minor update replaces the previous minor's files
 whole. Which majors an image includes is an explicit choice; today only v1
 exists, so an image serves exactly the build it was made from. Publish changed
 content under a new mount so that a URL never changes its bytes; the sha256
-pins stop a release archive from changing under its mount. This departs from
-the Distribution specification's rule that old URLs stay available while a live
-ceremony may reference them: a ceremony running during a minor update can fail
-on a file the new build changed, and the user starts it again.
+pins stop a release archive from changing under its mount. As REQ-DIST-05
+allows, a ceremony running during a minor update can fail on a file the new
+build changed, and the user starts it again.
 
 Deploy the complete image pinned by digest (the one in the run summary), not by
 a tag, which can move. Cut over atomically per origin: serve one revision at a

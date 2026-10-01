@@ -45,7 +45,7 @@ port, excludes the apex, and includes nested subdomains. The private handoff to
 Prover always carries the one authenticated concrete Application origin; patterns
 do not enter that binding. Bridge service URLs and CCDP destinations remain exact.
 
-The [CCDP specification](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/ccdp.md)
+The [CCDP specification](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp.md)
 owns the five messages, routes and permitted transitions. Message companions
 check exact shape and bounds; the receiving Client/document enforces state and
 cardinality. Readiness processing does not depend on event subscriptions.

@@ -37,9 +37,9 @@ exists yet. The CCDP ships as a container image (see
 
 ## Specifications
 
-The [CCDP](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/ccdp.md),
-[Bridge](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/oauth-bridge.md),
-[Distribution](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/ccdp-distribution.md),
-and [platform](https://github.com/libid-org/libid/blob/9ae438ac0c4d554fd1fc0085ae8e67b0c5c3b0ed/specs/platform-ceremonies.md)
+The [CCDP](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp.md),
+[Bridge](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/oauth-bridge.md),
+[Distribution](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp-distribution.md),
+and [platform](https://github.com/libid-org/libid/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md)
 specifications own interoperability and proof semantics. Package docs explain
 this implementation.

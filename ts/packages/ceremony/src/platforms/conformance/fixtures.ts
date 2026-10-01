@@ -1,6 +1,6 @@
 // The platform conformance table: one typed entry per catalog platform. Adding a platform to
-// the catalog fails typecheck here until its entry exists; conformance.test.ts then runs the
-// catalog, OAuth return, validator and prover checks over every entry.
+// the catalog fails typecheck here until its entry exists; the conformance suites beside this
+// file then run the catalog, OAuth return, validator and prover checks over every entry.
 import { readFileSync } from 'node:fs'
 import type {
   BearerExchange,

@@ -16,7 +16,7 @@ export const isUserId = (value: string): boolean =>
 export const isFormClientId = (value: string): boolean => /^[A-Za-z0-9*._-]+$/.test(value)
 
 // A consumed redirect code that fits one header-free form field of the bounded sent transcript.
-const MAX_CODE_CHARS = 1024
+export const MAX_CODE_CHARS = 1024
 
 /** An authorization code the token request can carry: visible ASCII within its field bound. */
 export const isAuthorizationCode = (value: string): boolean =>

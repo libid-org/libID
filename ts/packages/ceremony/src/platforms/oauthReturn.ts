@@ -21,7 +21,7 @@ export type OAuthOutcome =
   | { outcome: 'error'; state: string; error: string }
 
 const MAX_FIELD_NAME_CHARS = 64
-const MAX_FIELD_VALUE_CHARS = 8192
+export const MAX_FIELD_VALUE_CHARS = 8192
 
 // Names are matched exactly, never percent-decoded; raw values are printable.
 const FIELD = /^([A-Za-z0-9_.-]+)=([\x20-\x7e]*)$/

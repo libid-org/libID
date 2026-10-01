@@ -2,7 +2,7 @@
 
 The [client subscriptions](client.md#events-and-presentation) and popup UI consume
 one operation feed. Core event meanings and readiness consequences belong to
-[CCDP](https://github.com/libid-org/libid/blob/2b9afbf0afe45c398b16506a7db46dd3a4e38693/specs/ccdp.md#event).
+[CCDP](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp.md#event).
 There is no separate metrics-record format or telemetry SDK in the documents.
 Application owns export, sampling, consent and retention. Full resource accounting
 and export are deferred; this guide preserves their required measurement rules.

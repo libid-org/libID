@@ -68,7 +68,7 @@ for (const { name, platforms, versions } of [
   { name: 'empty Distribution catalog', platforms: config.platforms, versions: {} },
   { name: 'no common version', platforms: config.platforms, versions: { x: [1], github: [2] } },
 ])
-  test(`${name} stays unavailable`, async ({ page }) => {
+  test(`${name} stays unavailable [KIT-023]`, async ({ page }) => {
     await serveBridge(page, platforms)
     await serveVersions(page, versions)
     await page.goto('/')
@@ -81,7 +81,7 @@ for (const { name, status, json } of [
   { name: 'duplicate version', status: 200, json: { google: [1, 1] } },
   { name: 'array', status: 200, json: [] },
 ])
-  test(`${name} Distribution catalog disables launch`, async ({ page }) => {
+  test(`${name} Distribution catalog disables launch [KIT-023]`, async ({ page }) => {
     await serveBridge(page)
     await page.route(versionsUrl, (route) =>
       route.fulfill({ status, json, headers: { 'Access-Control-Allow-Origin': '*' } }),
@@ -92,7 +92,7 @@ for (const { name, status, json } of [
   })
 
 for (const credential of ['bridge-provided', undefined, null, ''])
-  test(`validates the Bridge client credential: ${JSON.stringify(credential)}`, async ({
+  test(`validates the Bridge client credential: ${JSON.stringify(credential)} [KIT-002]`, async ({
     page,
   }) => {
     await serveVersions(page, { github: [1] })
@@ -252,7 +252,7 @@ for (const [platform, name, outcome = 'failed', fallback = false] of [
   ['google', 'Google', 'success', true],
   ['google', 'Google', 'failed', true],
 ] as const) {
-  test(`${name} operation timings${fallback ? ' with fallback' : ''} preserve occurrences and freeze on ${outcome}`, async ({
+  test(`${name} operation timings${fallback ? ' with fallback [LIBID-BROWSER-030]' : ''} preserve occurrences and freeze on ${outcome} [LIBID-BROWSER-006] [LIBID-BROWSER-007]`, async ({
     page,
     context,
   }) => {

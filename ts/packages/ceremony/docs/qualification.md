@@ -2,7 +2,7 @@
 
 **Release qualification is incomplete.** [Testing](testing.md) provides runnable
 commands and manual checkpoints. The [test index](test-plan.md) and
-[traceability](traceability.md) retain all 159 stable requirement IDs and identify
+[traceability](traceability.md) retain all 155 stable requirement IDs and identify
 untested properties separately from passing assertions.
 
 ## Pinned integration
