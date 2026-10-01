@@ -6,9 +6,6 @@ import { notary, runtime } from './topology.js'
 import { verifyBrowserProof } from './verify.js'
 
 // Controlled circuit inputs and runtime.ts's unauthenticated requests; no live OAuth credentials.
-// The sessions reach the live X and GitHub APIs: one retry absorbs a transient network failure,
-// while a persistent one still fails.
-test.describe.configure({ retries: 1 })
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`http://localhost:${runtime}/index.html`)
@@ -31,8 +28,8 @@ for (const { platform, sessions: count, alongsideProving } of notaryCases)
       if (/sdk-core\/src\/prover\.rs|session driver|HTTP connection error/.test(text))
         logs.push(text)
     })
-    const [proof, attestations] = await page
-      .evaluate(
+    const run = () =>
+      page.evaluate(
         async ({ platform, count, alongsideProving }) =>
           // One shared-runtime coexistence check per engine; X still exercises
           // both one and two real sessions without regenerating the same proof.
@@ -42,6 +39,14 @@ for (const { platform, sessions: count, alongsideProving } of notaryCases)
           ]),
         { platform, count, alongsideProving },
       )
+    // The sessions reach the live X and GitHub APIs: one retry absorbs a transient failure there.
+    // A missed deadline fails at once, so a timing regression cannot pass on the second attempt.
+    const [proof, attestations] = await run()
+      .catch((error: unknown) => {
+        if (/timed out/.test(String(error))) throw error
+        console.error('Retrying after:', String(error), JSON.stringify(logs.splice(0)))
+        return run()
+      })
       .catch((error: unknown) => {
         // These sessions contain only runtime.ts's synthetic, unauthenticated requests.
         console.error('Notary runtime progress:', JSON.stringify(logs))
