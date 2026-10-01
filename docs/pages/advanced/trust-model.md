@@ -16,7 +16,7 @@ lists each party, from the [specification](/specs/#system-model-and-specificatio
 | The notary (GitHub, X) | signing true records of the user's sessions | can bind any GitHub or X account |
 | Google's signing keys | signing true sign-in tokens | a stolen key can bind any Google account |
 | The proof verifier and platform verifiers | checking proofs correctly | a faulty one accepts false bindings for every platform it covers |
-| The contract owners | choosing verifiers, keys and parameters, and upgrading | can change every rule, and so bind any account |
+| The contract owners | choosing verifiers and keys, and upgrading | can change every rule, and so bind any account |
 | The chain | ordering transactions and reporting time | the usual risks of the chain |
 
 ## What limits the damage

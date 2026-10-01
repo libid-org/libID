@@ -24,8 +24,8 @@ not assume it is in the past.
 
 A GitHub or X proof must reach the chain within an hour of that time, and the
 time cannot be more than five minutes ahead of the block. A Google proof must
-reach the chain before its token expires. These limits are protocol
-parameters; see [Protocol parameters](/specs/#protocol-parameters).
+reach the chain before its token expires. Each platform's ceremony version
+fixes these limits; see [Protocol parameters](/specs/#protocol-parameters).
 
 ## Newer wins
 
