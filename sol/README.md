@@ -21,7 +21,8 @@ contract Guestbook {
 ```
 
 The libID contracts have the same address on every chain, so LibID has them
-built in. Every function is `internal`: it compiles into your contract, and
+built in. These addresses never change: contract updates are upgrades at the
+same address. Every function is `internal`: it compiles into your contract, and
 there is nothing to deploy or link. `LibID.sol` imports nothing.
 
 ## Install
