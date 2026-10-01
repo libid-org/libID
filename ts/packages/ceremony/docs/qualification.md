@@ -7,16 +7,15 @@ untested properties separately from passing assertions.
 
 ## Pinned integration
 
-Change dependency pins in the linked declarations and configuration.
+Each pin lives in its declaration; change it there.
 
-| Input | Version / owner |
-|---|---|
-| Circuits | v0.5.0, `d316ba5330c2e863e8befefcc49243a0733615f0`; [circuit declarations](../src/barretenberg/circuits/). |
-| Noir / bb.js | 1.0.0-beta.25 / 5.2.0; [package.json](../package.json), explicit EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts). |
-| Notary browser/runtime | v0.4.0, `829d8eb8778d4f1c30a2ec1f4c7cbd55e47d318a`; [declaration](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml). |
-| TLSN / MPZ | `da0f8488dfc55db8ed4271f817124306a2c07c09` / `4db9454a0b6380f1a23a7b4807989d866f838fff`, matched by the notary release. |
-| Development Bridge | v0.5.0, `63c9bfe7036ec9f16af19420254a9873aaae02a2`; [Compose pin](../../../apps/dev/compose.yaml). Publishes one OAuth client per platform and no version list. |
-| SWS | 3.0.0-beta.1; exact image digest in [ccdp.Dockerfile](../ccdp.Dockerfile). |
+| Input | Version | Declared in |
+|---|---|---|
+| Circuits | v0.5.0 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
+| Noir / bb.js | 1.0.0-beta.25 / 5.2.0 | [package.json](../package.json); EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts) |
+| Notary browser/runtime | v0.4.0, with the TLSN and MPZ revisions of that release | [notary.assets.ts](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml) |
+| Development Bridge | v0.5.0, one OAuth client per platform and no version list | [compose.yaml](../../../apps/dev/compose.yaml) |
+| SWS | 3.0.0-beta.1 | [ccdp.Dockerfile](../ccdp.Dockerfile) |
 
 Bridge v0.5.0 supports exact and wildcard admission. Browser tests cover both
 wildcard forms in Popup and `*` through the emitted Callback handoff; Callback
@@ -39,16 +38,10 @@ CI runs workspace type/unit checks, distribution/native-loader tests and browser
 coverage across Chromium, Firefox and WebKit. HTTP and mobile-emulated projects
 retain interaction and policy coverage; full proofs and matched-notary runtime
 qualification run per desktop engine. All runtime tests, which run through the
-real notary against the X and GitHub APIs, retry once; nothing else retries. Independent
+real notary against the X and GitHub APIs, retry once, and they are the only tests that retry. Independent
 workspace/engine CI jobs run in parallel. Each engine generates the Google,
 X and GitHub ceremony proofs plus one real-notary coexistence proof. A configured
 test is not evidence that the current revision passed it.
-
-Manual wallet PoC testing reports
-successful live Google, X and GitHub ceremony completion on desktop and mobile
-using the current ceremony package. Manual end-to-end runs also establish real
-verifier acceptance for all three platforms. Exact browser/device and verifier
-versions are not recorded.
 
 | Coverage | What it establishes / limit |
 |---|---|
@@ -59,12 +52,17 @@ versions are not recorded.
 | X/GitHub browser ceremony fixtures | Actual emitted Callback/Prover, Popup connection, session worker and Client execute success and changed-final-attestation rejection. Real bearer-link proofs verify against commitments extracted from delivered fixture attestations and the released key; digest/PKCE matches the frozen request. OAuth and the TLSN SDK/peer are substituted, and notary signatures are synthetic. This does not qualify real TLSN or authenticated provider evidence. |
 | Real matched-notary runtime tests | One/two X sessions and both GitHub endpoints run through the pinned notary in direct peer mode. The GitHub pair runs alongside a separately verified fixture proof and asserts real shared-memory proving with multiple threads. Unauthenticated requests and deliberately invalid credentials establish runtime/channel execution and authority correlation, not authenticated token/identity evidence. The separate fixture proof is not bound to these attestations. |
 | Development app checks | Independent concurrent rows, closure, timings, fallback display and immediate success/denial closure, using intercepted responses. |
-| Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through the e2e Bridge stand-in ([server.mjs](../e2e/server.mjs), which serves the record) and emitted CCDP, whose `versions.json` the client reads; no released Bridge image runs in these tests. Provider returns are intercepted; manual live success and verifier acceptance are described above. Production refresh behavior remains a separate gate. |
+| Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through the e2e Bridge stand-in ([server.mjs](../e2e/server.mjs), which serves the record) and emitted CCDP, whose `versions.json` the client reads; no released Bridge image runs in these tests. Provider returns are intercepted; live success and verifier acceptance are listed under remaining qualification. Production refresh behavior remains a separate gate. |
 
 ## Remaining qualification
 
+- Recorded live success and verifier acceptance. Manual wallet PoC runs reported
+  live Google, X and GitHub completion on desktop and mobile and real verifier
+  acceptance for all three, without recording the revision, CCDP image digest,
+  Bridge and notary versions, browser and device, verifier contract and chain,
+  or date; a qualifying run records each of them.
 - Live denial and interruption paths for each platform.
-- The full physical iOS/Android matrix beyond successful mobile completion:
+- The full physical iOS/Android matrix:
   Vanadium/JIT behavior, app-installed/absent handoff,
   background suspension, memory pressure, eviction, public WSS/mobile networks
   and primary DIP notarization. Emulation cannot establish these properties.

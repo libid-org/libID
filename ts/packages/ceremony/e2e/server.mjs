@@ -16,10 +16,10 @@ const sws = `http://127.0.0.1:${swsPort}`
 
 const artifact = join(packageDir, artifactDir)
 
-const counts = new Map(),
-  holds = new Map(),
-  failures = new Set(),
-  fixtures = new Map()
+const counts = new Map()
+const holds = new Map()
+const failures = new Set()
+const fixtures = new Map()
 
 const metadata = JSON.parse(readFileSync(join(artifact, 'distribution-graph.json')))
 
@@ -115,8 +115,8 @@ for (const secure of [true, false]) {
   }
   // Tests fail, hold, release or replace individual CCDP assets and read their fetch counts.
   const qualificationControl = (req, send) => {
-    const query = new URL(req.url, ccdp).searchParams,
-      target = query.get('asset')
+    const query = new URL(req.url, ccdp).searchParams
+    const target = query.get('asset')
     if (query.has('fail')) failures.add(target)
     if (query.has('restore')) {
       failures.delete(target)

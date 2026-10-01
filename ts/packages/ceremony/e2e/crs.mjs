@@ -27,8 +27,8 @@ export async function cacheCrs() {
       for (const asset of list)
         if (asset.isExternal) assets.set(`${asset.source} ${asset.range ?? ''}`.trim(), asset)
   mkdirSync(cacheDir, { recursive: true })
-  const manifest = [],
-    unpinned = []
+  const manifest = []
+  const unpinned = []
   for (const [key, asset] of assets) {
     const { range, bytes } = externalRequest(asset)
     const urls = [asset.source, ...(asset.fallback ?? [])]

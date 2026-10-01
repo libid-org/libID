@@ -26,8 +26,8 @@ function tar(entries: { path: string; type?: 'File' | 'SymbolicLink' | 'Link'; b
 
 test('safe archives preserve paths and wildcard selectors select exactly once [LIBID-ASSET-024] [LIBID-ASSET-025]', async () => {
   mkdirSync(cache, { recursive: true })
-  const dir = mkdtempSync(join(cache, 'archive-test-')),
-    path = join(dir, 'bundle.tar.gz')
+  const dir = mkdtempSync(join(cache, 'archive-test-'))
+  const path = join(dir, 'bundle.tar.gz')
   try {
     writeFileSync(
       path,

@@ -1,5 +1,5 @@
-// Exact HTTP/1.1 transcript bytes for notary and platform tests. The builders frame what they are
-// given and normalize nothing, so a test can still spell out any malformed variant it rejects.
+// Exact HTTP/1.1 transcript bytes for notary and platform tests. The builders frame their input
+// verbatim, so a test can spell out any malformed variant it rejects.
 import { concatBytes } from '@noble/hashes/utils.js'
 import type { ExactHttpRequest, Transcript } from '../notary/protocol.js'
 

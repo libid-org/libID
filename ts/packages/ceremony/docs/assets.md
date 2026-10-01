@@ -10,7 +10,8 @@ sessions, and no initialized runtime survives OAuth navigation.
 [registration.ts](../src/assets/registration.ts) resolves the canonical root
 registration, including when a stale nested registration uses the same script.
 It retires that known nested registration only when its workers use the canonical
-script URL; unrelated registrations remain untouched. It checks for a deployed
+script URL, leaving unrelated registrations untouched; the retirement goes once no
+served trial build predates the root registration. It checks for a deployed
 update and waits for an installing or waiting worker to become active. A working
 active worker bounds both waits to 3 seconds: past that, or when the check fails,
 Prefetch dispatches to it. A new worker cannot activate while the previous one still

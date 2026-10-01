@@ -76,8 +76,8 @@ export async function registerRootWorker(): Promise<ServiceWorkerRegistration> {
       if (!previous) throw error
     })
   }
-  // Retire only the known legacy scope. A root worker cannot claim pages that
-  // still match a longer registration; popup port selection alone cannot fix it.
+  // Retire only the nested scope trial builds registered: a root worker cannot claim pages
+  // that still match a longer registration. Remove once no served trial predates the root.
   const script = new URL(route('worker.js'), location.origin).href
   for (const old of await navigator.serviceWorker.getRegistrations()) {
     const workers = [old.active, old.waiting, old.installing].filter((worker) => worker !== null)

@@ -72,7 +72,7 @@ class EngineWorker {
     if (this.#state !== 'new') throw new Error('Duplicate engine initialization')
     this.#state = 'loading'
     if (!self.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
-      throw new Error('proof worker requires cross-origin isolation')
+      throw new Error('Proof worker requires cross-origin isolation')
     }
     const backend = span('proof-backend-initialization', async (): Promise<Backend> => {
       let runtime: RawProof['runtime'] | undefined
@@ -144,7 +144,7 @@ class EngineWorker {
   async #prove(message: Extract<ToWorker, { type: 'prove' }>): Promise<void> {
     const ready = this.#ready
     const backend = this.#backend
-    if (!ready || !backend || this.#state !== 'ready') throw new Error('proof engine is not ready')
+    if (!ready || !backend || this.#state !== 'ready') throw new Error('Proof engine is not ready')
     this.#state = 'proving'
     emit({ event: 'zk-proof-generation', phase: 'started', timestamp: now() })
     const { noir, circuit } = ready

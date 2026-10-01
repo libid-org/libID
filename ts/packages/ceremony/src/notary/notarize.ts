@@ -37,7 +37,7 @@ export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 function invalid(reason: string): never {
-  throw new Error(`invalid notarization: ${reason}`)
+  throw new Error(`Invalid notarization: ${reason}`)
 }
 
 function validateRanges(ranges: readonly ByteRange[], length: number, direction: string): void {
@@ -154,7 +154,7 @@ function correlateOpenings(
 ): CorrelatedCommitment[] {
   if (openings.length !== planned.length) invalid(`${direction} opening count changed`)
 
-  // ponytail: quadratic scan over the small, fixed per-platform range sets.
+  // A quadratic scan: each platform plans a few fixed ranges.
   const unmatched = new Set(planned.keys())
   const correlated: CorrelatedCommitment[] = []
   for (const opening of openings) {

@@ -55,7 +55,8 @@ export interface CCDPClient {
 
 /**
  * Fetch and validate the Bridge configuration, then the configured Distribution's version
- * list, once each. Rejects when either is unavailable or malformed: nothing could run.
+ * list, once each. Rejects when either is unavailable or malformed, since every ceremony
+ * needs both.
  */
 export async function createCCDPClient(options: { oauthBridge: string }): Promise<CCDPClient> {
   if (!hasExactKeys(options, ['oauthBridge'])) throw new TypeError('Invalid client options')

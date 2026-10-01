@@ -22,7 +22,7 @@ export function readOAuthState(state: string): { ccdpVersion: string; ceremonyId
 function fields<K extends string>(fragment: string, keys: readonly K[]): Record<K, string> {
   const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment
   if (raw.length > MAX_NAVIGATION_FRAGMENT_CHARS) throw new TypeError('Navigation input too large')
-  // URLSearchParams is deliberately forgiving; reject malformed UTF-8/escapes first.
+  // URLSearchParams accepts malformed escapes; reject them, and malformed UTF-8, first.
   decodeURIComponent(raw.replace(/\+/g, ' '))
   const p = new URLSearchParams(raw)
   if (p.size !== keys.length || keys.some((k) => p.getAll(k).length !== 1))

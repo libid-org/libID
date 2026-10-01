@@ -19,10 +19,10 @@ const id = CEREMONY_ID
 
 const v1Inputs = [['https://app.test', 'https://ccdp.test'], 'https://ccdp.test']
 
-let connection: FakeConnection,
-  ui: FakeDocumentUi,
-  config: unknown,
-  locationInput: { search: string; hash: string; pathname: string; origin: string }
+let connection: FakeConnection
+let ui: FakeDocumentUi
+let config: unknown
+let locationInput: { search: string; hash: string; pathname: string; origin: string }
 
 const cleared = () => expect(locationInput.search + locationInput.hash).toBe('')
 

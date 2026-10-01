@@ -82,10 +82,10 @@ it.each([
   'https://ccdp.test/circuit#fragment',
 ])('rejects the circuit resource URL %s before starting a worker', (url) => {
   expect(() => new ProofEngine({ ...options, circuitUrl: url })).toThrow(
-    'invalid circuit resource URL',
+    'Invalid circuit resource URL',
   )
   expect(() => new ProofEngine({ ...options, verificationKeyUrl: url })).toThrow(
-    'invalid circuit resource URL',
+    'Invalid circuit resource URL',
   )
   expect(workers).toHaveLength(0)
 })
@@ -139,7 +139,7 @@ it('rejects an already-aborted proof without dispatching its inputs or finishing
 it('delivers one proof, rejects a second request and ignores messages after settlement', async () => {
   const e = engine()
   const result = e.instance.prove({ fixture: 1 })
-  await expect(e.instance.prove({ fixture: 2 })).rejects.toThrow('proof engine is single-use')
+  await expect(e.instance.prove({ fixture: 2 })).rejects.toThrow('Proof engine is single-use')
   e.send({ type: 'witness-ready' })
   await vi.waitFor(() =>
     expect(e.postMessage).toHaveBeenLastCalledWith({ type: 'prove', inputs: { fixture: 1 } }),
@@ -185,7 +185,7 @@ it.each(['asset resolution', 'destroy'])(
     if (failure === 'destroy') instance.destroy()
     await expect(instance.prove({ fixture: 1 })).rejects.toMatchObject({
       event: 'zk-proof-preparation',
-      message: failure === 'destroy' ? 'proof engine destroyed' : 'Missing built asset',
+      message: failure === 'destroy' ? 'Proof engine destroyed' : 'Missing built asset',
     })
     // A missing asset never starts the worker; destroying retires the started one.
     expect(workers).toHaveLength(failure === 'destroy' ? 1 : 0)
@@ -208,7 +208,7 @@ it('fails the proof when its inputs cannot be posted to the worker', async () =>
 })
 
 it.each([
-  ['an unknown', { type: 'unknown' }, 'unexpected proof worker message'],
+  ['an unknown', { type: 'unknown' }, 'Unexpected proof worker message'],
   ['a malformed', null, "Cannot read properties of null (reading 'type')"],
 ])('fails the proof on %s worker message', async (_, message, reason) => {
   const e = engine()
@@ -258,6 +258,6 @@ it('reports a generic failure for an uncaught worker error without a message', a
   e.crash({ message: '' })
   await expect(result).rejects.toMatchObject({
     event: 'zk-proof-preparation',
-    message: 'proof worker failed',
+    message: 'Proof worker failed',
   })
 })

@@ -104,8 +104,8 @@ class PublicTree {
       typeof policy === 'string' ? responseHeaders(policy, this.options) : policy,
     )
     if (policy === 'asset') headers.set('Content-Type', mediaType(path))
-    const record = { bytes: Buffer.from(content), headers: Object.fromEntries(headers) },
-      old = this.records.get(path)
+    const record = { bytes: Buffer.from(content), headers: Object.fromEntries(headers) }
+    const old = this.records.get(path)
     if (old && !sameRecord(old, record)) throw new Error(`Conflicting output: ${path}`)
     this.records.set(path, record)
   }
@@ -221,8 +221,8 @@ async function buildDistribution() {
 /** Build into a staging tree beside `--out-dir` and swap it in whole once it is complete. */
 async function main() {
   const { values } = parseArgs({ options: { 'out-dir': { type: 'string' } }, strict: true })
-  const out = outputDirectory(values['out-dir'] ?? artifactsDir),
-    staging = `${out}.building`
+  const out = outputDirectory(values['out-dir'] ?? artifactsDir)
+  const staging = `${out}.building`
   mkdirSync(join(staging, 'public'), { recursive: true })
   try {
     const { records, manifest, graph } = await buildDistribution()

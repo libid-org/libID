@@ -125,8 +125,8 @@ function beginRun(platform: PlatformId, id: string) {
     string,
     { name: string; started: number; finished?: number; cell: HTMLLIElement; label: HTMLElement }
   >()
-  let started: number | undefined,
-    finished = false
+  let started: number | undefined
+  let finished = false
   const duration = (start: number, end: number) =>
     `${Math.max(0, (end - start) / 1000).toFixed(1)} s`
   const render = (timestamp = now()) => {

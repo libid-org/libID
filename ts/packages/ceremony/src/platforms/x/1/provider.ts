@@ -1,7 +1,7 @@
 import { X } from '@libid/contracts/ceremony'
 
-const token = X.token!,
-  identity = X.identity!
+const token = X.token!
+const identity = X.identity!
 
 /** The released v1 request layout plus the browser-owned OAuth endpoint and scope. */
 export const provider = {

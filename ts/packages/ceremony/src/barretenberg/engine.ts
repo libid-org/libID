@@ -36,7 +36,7 @@ export class ProofEngine {
     const [url, keyUrl] = [circuitUrl, verificationKeyUrl].map((value) => {
       const url = new URL(value, location.href)
       if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.hash)
-        throw new Error('invalid circuit resource URL')
+        throw new Error('Invalid circuit resource URL')
       return url.href
     })
     this.#emit = safeEmit(emit ?? (() => undefined))
@@ -65,7 +65,7 @@ export class ProofEngine {
 
   /** Execute one witness and proof; initialization overlaps until bb is needed. Aborting retires the worker. */
   async prove(inputs: Record<string, unknown>, signal?: AbortSignal): Promise<RawProof> {
-    if (this.#inputsAt !== undefined) throw new Error('proof engine is single-use')
+    if (this.#inputsAt !== undefined) throw new Error('Proof engine is single-use')
     this.#inputsAt = now()
     const abort = () =>
       this.#fail(signal?.reason ?? new DOMException('Proving aborted', 'AbortError'))
@@ -88,7 +88,7 @@ export class ProofEngine {
 
   /** Retire pending work and the worker; repeated calls after settlement are harmless. */
   destroy(): void {
-    this.#fail('proof engine destroyed')
+    this.#fail(new Error('Proof engine destroyed'))
   }
 
   #spawn(): Worker {
@@ -101,7 +101,9 @@ export class ProofEngine {
       }
     })
     // Worker file locations stay out of user-visible failure text.
-    worker.addEventListener('error', (event) => this.#fail(event.message || 'proof worker failed'))
+    worker.addEventListener('error', (event) =>
+      this.#fail(new Error(event.message || 'Proof worker failed')),
+    )
     return worker
   }
 
@@ -136,7 +138,7 @@ export class ProofEngine {
         this.#fail(toCeremonyError(message.message, message.event))
         break
       default:
-        this.#fail('unexpected proof worker message')
+        this.#fail(new Error('Unexpected proof worker message'))
     }
   }
 

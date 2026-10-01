@@ -231,7 +231,7 @@ it.each(['cross-origin isolation', 'shared memory'])(
       {
         type: 'error',
         event: 'zk-proof-preparation',
-        message: 'proof worker requires cross-origin isolation',
+        message: 'Proof worker requires cross-origin isolation',
       },
     ])
     expect(mocks.create).not.toHaveBeenCalled()

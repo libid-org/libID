@@ -1,8 +1,7 @@
 # @libid/ledger
 
 Shared `LedgerId` contract for application code: `hash()` and `notaryAddress()`.
-See the [identity contract](docs/identity.md), extracted from architecture PR #13
-at `0259e72c184e2be7b78a0ad92188e8722d8d6daf`.
+See the [identity contract](docs/identity.md).
 
 **No real ledger definitions are implemented yet.** Adding one requires its
 canonical Chain Profile hash vectors and notary-address checks. Ceremony stays

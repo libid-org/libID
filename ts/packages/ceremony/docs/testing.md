@@ -12,7 +12,7 @@ Each layer replaces less than the one before it:
 | Layer | Command | Real | Replaced | CI |
 |---|---|---|---|---|
 | Unit and conformance | `test` | Package logic, validators, transcripts, circuit inputs | Browser, workers, network, TLSN runtime, proof engine | TypeScript |
-| Distribution | `test:distribution` | The emitted artifact, its headers and pins; SWS when supplied | Nothing inside the artifact | CCDP image |
+| Distribution | `test:distribution` | The emitted artifact, its headers and pins; SWS when supplied | Only what the artifact references outside it | CCDP image |
 | Browser | `test:e2e` | Browsers, popup, documents, Service Worker, assets, proving and released-key verification; notary in `runtime.spec.ts` | Providers and, outside the runtime suite, the TLSN peer | Browser tests |
 | Dev app | `apps/dev` `test:e2e` | The dev UI over the real popup transport | Ceremony documents, OAuth, proofs | Browser tests |
 | Manual | [below](#manual-consent-and-device-checks) | Live providers, devices, the ledger verifier | — | — |

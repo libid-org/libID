@@ -30,9 +30,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Exact-shape gate: a plain record (see `isRecord`) that owns every required key
- * and nothing beyond the optional ones — unknown fields fail before use. Field
- * types are the caller's next check.
+ * Exact-shape gate: a plain record (see `isRecord`) owning every required key and
+ * otherwise only optional ones, so unknown fields fail before use. Field types are
+ * the caller's next check.
  */
 export function hasExactKeys(
   value: unknown,
@@ -57,8 +57,8 @@ export function isSlug(value: unknown): value is string {
 export type Predicates<T> = { [K in keyof T]-?: (value: unknown) => boolean }
 
 /**
- * Validate an exact-shape record: the declared fields (optional ones may be absent) and
- * nothing else, each present value satisfying its predicate; otherwise throw `message`.
+ * Validate an exact-shape record: exactly the declared fields (optional ones may be absent),
+ * each present value satisfying its predicate; otherwise throw `message`.
  */
 export function recordValidator<T>(
   message: string,

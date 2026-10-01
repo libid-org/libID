@@ -8,7 +8,7 @@ const FRAME_LENGTH_BYTES = Uint32Array.BYTES_PER_ELEMENT
 const MAX_FRAME_PAYLOAD_BYTES = MAX_FRAME_BYTES - FRAME_LENGTH_BYTES
 
 function invalid(reason: string): never {
-  throw new Error(`invalid notary transport: ${reason}`)
+  throw new Error(`Invalid notary transport: ${reason}`)
 }
 
 export function deriveNotaryWebSocketUrl(notaryAddress: string): string {
@@ -64,7 +64,7 @@ export function waitForOpen(socket: WebSocket): Promise<void> {
   const listening = new AbortController()
   const signal = listening.signal
   return new Promise<void>((resolve, reject) => {
-    const failed = () => reject(new Error('notary WebSocket failed to open'))
+    const failed = () => reject(new Error('Notary WebSocket failed to open'))
     socket.addEventListener('open', () => resolve(), { signal })
     socket.addEventListener('error', failed, { signal })
     socket.addEventListener('close', failed, { signal })
@@ -90,13 +90,13 @@ export function socketIo(socket: WebSocket): Io {
   socket.addEventListener('message', (event) => {
     if (end) return
     if (!(event.data instanceof ArrayBuffer))
-      return settle(new Error('notary sent non-binary data'))
+      return settle(new Error('Notary sent non-binary data'))
     const chunk = new Uint8Array(event.data)
     const reader = readers.shift()
     if (reader) reader.resolve(chunk)
     else chunks.push(chunk)
   })
-  socket.addEventListener('error', () => settle(new Error('notary WebSocket failed')))
+  socket.addEventListener('error', () => settle(new Error('Notary WebSocket failed')))
   socket.addEventListener('close', () => settle(null))
 
   return {
@@ -111,7 +111,7 @@ export function socketIo(socket: WebSocket): Io {
     write(data) {
       // The pinned SDK catches synchronous throws but discards write promises.
       if (socket.readyState !== WebSocket.OPEN) {
-        throw new Error('notary WebSocket is not open')
+        throw new Error('Notary WebSocket is not open')
       }
       socket.send(data)
       return Promise.resolve()
@@ -130,7 +130,7 @@ export async function readFinalFrame(io: Io): Promise<Uint8Array> {
   let length = 0
   for (let chunk = await io.read(); chunk !== null; chunk = await io.read()) {
     length += chunk.length
-    if (length > MAX_FRAME_BYTES) throw new Error('notary attestation frame exceeds size limit')
+    if (length > MAX_FRAME_BYTES) throw new Error('Notary attestation frame exceeds size limit')
     chunks.push(chunk)
   }
   return concatBytes(...chunks)

@@ -24,8 +24,8 @@ class PrefetchDocument extends CeremonyDocument {
   async start(fragment: string): Promise<void> {
     const started = this.started
     try {
-      const input = readPrefetch(fragment),
-        profile = profileKey(input.platformId, input.platformCeremonyVersion)
+      const input = readPrefetch(fragment)
+      const profile = profileKey(input.platformId, input.platformCeremonyVersion)
       this.feed.emit({
         event: 'prefetch-dispatch',
         phase: 'started',

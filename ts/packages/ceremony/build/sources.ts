@@ -17,8 +17,8 @@ export const artifactsDir = join(packageDir, 'dist-artifacts')
  * building past it would drop the assets that output retains.
  */
 export function outputDirectory(argument: string): string {
-  const out = resolve(argument),
-    own = resolve(packageDir)
+  const out = resolve(argument)
+  const own = resolve(packageDir)
   if (
     !out.startsWith(`${resolve(packageDir, '../../..')}/`) ||
     own === out ||

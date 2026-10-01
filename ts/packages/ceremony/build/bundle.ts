@@ -96,8 +96,8 @@ function workerImports(): Plugin {
       if (!source.includes('Worker') || id.includes('?')) return
       const parsed = await parseModule(this, source, id).catch(() => undefined)
       if (!parsed) return
-      const edits: Edit[] = [],
-        imports: string[] = []
+      const edits: Edit[] = []
+      const imports: string[] = []
       walk(parsed.ast, (node) => {
         if (node.type !== 'NewExpression') return
         const literal = workerUrlLiteral(node)
@@ -133,8 +133,8 @@ export async function bundle(
     manifest?: AssetManifest
   } = {},
 ) {
-  const graph = new Map<string, BundleNode>(),
-    workerFiles = new Set<string>()
+  const graph = new Map<string, BundleNode>()
+  const workerFiles = new Set<string>()
   const record = (worker: boolean): Plugin => ({
     name: 'ceremony-emitted-graph',
     generateBundle(_, output) {
@@ -171,8 +171,8 @@ export async function bundle(
     const owned = Object.entries(data.bodyHashes).find(([, bodyHash]) => bodyHash === digest)
     return owned ? owned[0].slice(1) : `${ASSETS_PREFIX.slice(1)}${policyId}/[name]-[hash][extname]`
   }
-  const chunkName = `${ASSETS_PREFIX.slice(1)}${policyId}/[name]-[hash].js`,
-    output = { entryFileNames: chunkName, chunkFileNames: chunkName, assetFileNames: assetName }
+  const chunkName = `${ASSETS_PREFIX.slice(1)}${policyId}/[name]-[hash].js`
+  const output = { entryFileNames: chunkName, chunkFileNames: chunkName, assetFileNames: assetName }
   const result = await build({
     configFile: false,
     root: packageDir,

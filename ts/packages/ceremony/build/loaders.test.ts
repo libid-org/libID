@@ -36,10 +36,10 @@ const external = requests.filter((r) => r.url.startsWith('https:'))
 // loaders, not proving: only the standalone browser qualification uses real CRS.
 test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASSET-018] [TEST-DIST-04] [LIBID-ASSET-011]', async () => {
   globalThis.fetch = async (input, init) => {
-    const url = String(input),
-      range = new Headers(init?.headers).get('range') ?? undefined
-    const method = init?.method ?? 'GET',
-      cache = init?.cache ?? 'default'
+    const url = String(input)
+    const range = new Headers(init?.headers).get('range') ?? undefined
+    const method = init?.method ?? 'GET'
+    const cache = init?.cache ?? 'default'
     observations.push({ url, range, method, cache })
     assert.equal(method, 'GET')
     assert.equal(cache, url.startsWith('https:') ? 'force-cache' : 'default')

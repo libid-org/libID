@@ -26,8 +26,8 @@ const notaryRequests: { [P in NotaryPlatform]: (index: number) => ExactHttpReque
     },
     body: new Uint8Array(),
   }),
-  // Deliberately invalid fixture credentials exercise both public GitHub endpoints,
-  // not a successful OAuth exchange or authenticated identity.
+  // Invalid fixture credentials exercise both public GitHub endpoints; a successful OAuth
+  // exchange and an authenticated identity stay live-qualification cases.
   github: (index) =>
     index === 0
       ? buildTokenRequest({

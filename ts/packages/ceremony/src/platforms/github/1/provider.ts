@@ -1,7 +1,7 @@
 import { GITHUB } from '@libid/contracts/ceremony'
 
-const token = GITHUB.token!,
-  identity = GITHUB.identity!
+const token = GITHUB.token!
+const identity = GITHUB.identity!
 
 /** The released v1 request layout plus the browser-owned OAuth endpoint and scope. */
 export const provider = {

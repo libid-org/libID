@@ -148,13 +148,12 @@ lists; it never imports execution to discover dependencies.
 and `isolated`. Resource declarations compose them with object spread and may
 add explicit headers. [profiles.ts](../build/profiles.ts) applies document,
 worker and `versions.json` policies using compiler-produced script hashes and
-external origins.
-No Markdown table or deployment template is another header source.
+external origins; these declarations are the only header source.
 
 Declarations own MIME, caching, CSP and isolation policy. SWS owns ETags,
 Last-Modified, lengths, encoding negotiation and range metadata. Handwritten
 representation metadata and policies weakening required resource headers are
-rejected. A whole CSP value is replaced, not implicitly concatenated.
+rejected. A declared CSP value replaces the whole default one.
 
 The build normalizes gzip-packed WASM to decoded `.wasm` bodies. It emits Brotli
 and gzip sidecars only when smaller. SWS uses native precompressed serving;
@@ -202,14 +201,14 @@ supported loopback origins; production platform requests still use HTTPS.
 
 The container listens on 8787 and answers `GET /health` with 200; use that path
 for readiness and liveness probes. Terminate TLS and set HSTS at the ingress;
-the server emits none. The container writes nothing, so run it read-only with
+the server emits neither. The container only reads, so run it read-only with
 all capabilities dropped, as CI does.
 
 Configure the independently deployed Bridge with the CCDP origin, admitted
 application origins and one OAuth client per platform. It fetches
 `/ccdp/callback.html`, inserts deployment JSON into its non-executable slot, and
-serves the complete configured document with matching executable hashes. It
-retrieves nothing else: the client reads `/ccdp/versions.json` itself and runs
+serves the complete configured document with matching executable hashes. That
+is its only fetch: the client reads `/ccdp/versions.json` itself and runs
 every version of a platform with that platform's client. Callback owns clearing
 and bundled CCDP selection; the Bridge injects no code, enumerates no versions
 and needs no per-version entry-script table.
@@ -269,7 +268,7 @@ document revalidates correctly against the older one, because its changed ETag
 wins over the older `Last-Modified`
 ([native SWS test](../build/sws.test.ts)).
 
-A CDN in front of SWS needs nothing from this package; configure it to:
+A CDN in front of SWS works with the responses as they are; configure it to:
 
 - honor origin `Cache-Control`: cache the `immutable` assets as long as it likes,
   and revalidate the `no-cache` documents, `worker.js` and `versions.json` on every

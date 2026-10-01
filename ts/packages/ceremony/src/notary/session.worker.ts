@@ -152,7 +152,7 @@ class WorkerSession {
     this.#io = io
     await waitForOpen(ws)
     // The peer may close between the open event and this continuation.
-    if (ws.readyState !== WebSocket.OPEN) throw new Error('notary WebSocket closed')
+    if (ws.readyState !== WebSocket.OPEN) throw new Error('Notary WebSocket closed')
     const prover = new tlsn.Prover({
       server_name: url.hostname,
       mode: 'Proxy',

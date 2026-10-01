@@ -10,10 +10,10 @@ import { errorHeaders } from './sws.ts'
 import { builtArtifacts, nativeSkip } from './testing.ts'
 import { catalogVersions, proverPair, versionPairs } from './versions.ts'
 
-const out = builtArtifacts,
-  metadata: DistributionMetadata = JSON.parse(
-    readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
-  )
+const out = builtArtifacts
+const metadata: DistributionMetadata = JSON.parse(
+  readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
+)
 
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-ASSET-012] [LIBID-PROVER-005]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
@@ -42,8 +42,8 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
     ),
   )
   for (const [path, headers] of Object.entries(metadata.headers)) {
-    const physical = metadata.files[path],
-      body = readFileSync(join(out, 'public', physical))
+    const physical = metadata.files[path]
+    const body = readFileSync(join(out, 'public', physical))
     for (const name of [
       'etag',
       'last-modified',
@@ -60,9 +60,9 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
       if (existsSync(sidecar)) assert.deepEqual(decode(readFileSync(sidecar)), body)
     }
   }
-  const google = metadata.requestsByProfile['google/1'],
-    x = metadata.requestsByProfile['x/1'],
-    github = metadata.requestsByProfile['github/1']
+  const google = metadata.requestsByProfile['google/1']
+  const x = metadata.requestsByProfile['x/1']
+  const github = metadata.requestsByProfile['github/1']
   for (const [list, name] of [
     [google, 'oidc-google'],
     [x, 'bearer-link'],

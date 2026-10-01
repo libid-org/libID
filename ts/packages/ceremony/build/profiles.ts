@@ -51,8 +51,8 @@ export function responseHeaders(
     externalOrigins?: string[]
   } = {},
 ): Record<string, string> {
-  const html = documents.includes(profile),
-    immutable = profile === 'asset' || isolatedWorkers.includes(profile)
+  const html = documents.includes(profile)
+  const immutable = profile === 'asset' || isolatedWorkers.includes(profile)
   const headers: Record<string, string> = {
     ...(html ? shared.documentHeaders : shared.javascript),
     ...(immutable ? shared.immutable : revalidated),
@@ -88,16 +88,16 @@ function executableCsp(
 ): string {
   const execution =
     profile === 'prover' || profile === 'proverFallback' || isolatedWorkers.includes(profile)
-  const scripts = `'self' ${inline.map(scriptHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}`,
-    workers = profile === 'leafWorker' ? "'none'" : `'self'${execution ? ' blob:' : ''}`
+  const scripts = `'self' ${inline.map(scriptHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}`
+  const workers = profile === 'leafWorker' ? "'none'" : `'self'${execution ? ' blob:' : ''}`
   const connects =
     profile === 'proofWorker' || profile === 'leafWorker'
       ? `${shared.csp.fetch} blob:`
       : execution
         ? `${shared.csp.fetch} ${shared.csp.websocket}`
         : `'self' ${externalOrigins.join(' ')}`
-  const connectBlob = profile === 'notaryWorker' ? ' blob:' : '',
-    styles = documents.includes(profile) ? "; style-src 'unsafe-inline'" : ''
+  const connectBlob = profile === 'notaryWorker' ? ' blob:' : ''
+  const styles = documents.includes(profile) ? "; style-src 'unsafe-inline'" : ''
   return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects}${connectBlob}${styles}`
 }
 

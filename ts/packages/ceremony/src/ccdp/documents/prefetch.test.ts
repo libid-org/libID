@@ -18,7 +18,8 @@ vi.mock('@libid/popup', async (original) => ({
 }))
 vi.mock('../../assets/registration.js', () => ({ registerRootWorker, dispatchPrefetch }))
 vi.mock('./ui.js', async () => (await import('../../testing/index.js')).documentUi(() => ui))
-let connection: FakeConnection, ui: FakeDocumentUi
+let connection: FakeConnection
+let ui: FakeDocumentUi
 const fragment = (platformId = 'google') =>
   new URLSearchParams({ ceremonyId: CEREMONY_ID, platformId, ceremonyVersion: '1' }).toString()
 beforeEach(() => {
@@ -32,7 +33,8 @@ afterEach(() => {
 it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () => {
   let elapsed = 25
   vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
-  let activated!: () => void, dispatched!: () => void
+  let activated!: () => void
+  let dispatched!: () => void
   connection = fakeConnection({ peerOrigin: 'https://app.test', ready: 'pending' })
   registerRootWorker.mockReturnValueOnce(
     new Promise<void>((resolve) => {

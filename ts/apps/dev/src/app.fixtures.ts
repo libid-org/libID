@@ -24,7 +24,7 @@ declare global {
 }
 
 export const configUrl = 'http://localhost:4682/api/v1/ceremony/config'
-// Deliberately differs from the development deployment: the Bridge selects CCDP.
+// The Bridge selects CCDP, so tests use their own origin, apart from the development one.
 export const ccdp = 'http://localhost:4684'
 export const config = {
   ccdpOrigin: ccdp,

@@ -17,8 +17,8 @@ export const crsProxy = 4989
 
 /** Application, Bridge and CCDP origins, on consecutive ports per scheme. */
 export function origins(secure: boolean) {
-  const scheme = secure ? 'https' : 'http',
-    port = secure ? 4881 : 4781
+  const scheme = secure ? 'https' : 'http'
+  const port = secure ? 4881 : 4781
   return {
     app: `${scheme}://localhost:${port}`,
     bridge: `${scheme}://localhost:${port + 1}`,

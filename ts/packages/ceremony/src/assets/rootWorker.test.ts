@@ -48,8 +48,8 @@ it.each(['fetch', 'message', 'failed-prefetch'])(
         : Promise.resolve(new Response(new Uint8Array([1])))
     load.mockReturnValue({ dispatched: Promise.resolve(), response, complete: complete.promise })
     const dispatch = start()
-    const waits: Promise<unknown>[] = [],
-      respondWith = vi.fn()
+    const waits: Promise<unknown>[] = []
+    const respondWith = vi.fn()
     dispatch(type === 'fetch' ? 'fetch' : 'message', {
       request: new Request('https://ccdp.example/asset'),
       respondWith,
@@ -121,8 +121,8 @@ it('claims a same-origin client before acknowledging on its port', async () => {
 
 it('activates without waiting and claims open clients', () => {
   const waits: unknown[] = []
-  const skipWaiting = vi.fn(async () => {}),
-    clients = { claim: vi.fn(async () => {}) }
+  const skipWaiting = vi.fn(async () => {})
+  const clients = { claim: vi.fn(async () => {}) }
   const dispatch = start({ skipWaiting, clients })
   const waitUntil = (p: unknown) => waits.push(p)
   dispatch('install', { waitUntil })
@@ -138,8 +138,8 @@ it.each([
   ['a listed URL with another range', 'GET', 'https://ccdp.example/g1.dat', { Range: 'bytes=0-9' }],
   ['a ranged asset without its range', 'GET', 'https://ccdp.example/g1.dat', {}],
 ])('leaves %s to the network', (_, method, url, headers) => {
-  const respondWith = vi.fn(),
-    waitUntil = vi.fn()
+  const respondWith = vi.fn()
+  const waitUntil = vi.fn()
   start()('fetch', { request: new Request(url, { method, headers }), respondWith, waitUntil })
   expect(respondWith).not.toHaveBeenCalled()
   expect(waitUntil).not.toHaveBeenCalled()

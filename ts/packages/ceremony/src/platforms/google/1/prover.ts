@@ -25,8 +25,8 @@ export async function prove(context: ProverContext<'google'>) {
       'circuit-inputs',
       () => prepareGoogleInputs(token, key),
     )
-    const raw = await engine.prove(inputs, signal),
-      proof = { identityProof: raw.proof, publicInputs: raw.publicInputs, ...proofFields }
+    const raw = await engine.prove(inputs, signal)
+    const proof = { identityProof: raw.proof, publicInputs: raw.publicInputs, ...proofFields }
     if (!isGooglePublicInputs(raw.publicInputs, authorizationDigest, identity, proof))
       throw new Error('Google public input mismatch')
     return { identity, proof }

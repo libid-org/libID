@@ -10,6 +10,10 @@ An accepted result has passed structural checks. The ledger verifier remains
 authoritative for proof and attestation validity. **Release qualification is
 incomplete**; see [evidence and remaining gates](docs/qualification.md).
 
+**Distribution:** the package is used from this workspace; no npm release
+exists yet. The CCDP ships as a container image (see
+[Build and deployment](docs/distribution.md)).
+
 ## Use and develop
 
 - [Client guide](docs/client.md): launch, platform/version discovery, results,

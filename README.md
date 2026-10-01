@@ -42,22 +42,24 @@ transact.
 ## In this repository
 
 Besides the protocol specifications under [`specs/`](specs/), this repo
-carries the browser claim library and the integration harness:
+carries the browser packages, their development app and the integration harness:
 
 - [`site/`](site/) — the static project website and Cloudflare deployment
   configuration. Starlight serves the docs at `lib.id/docs/`,
   publishing Markdown from [`docs/pages/`](docs/pages/). Specification sources
   stay in `specs/`.
-- [`ts/packages/claim`](ts/packages/claim) — **`@libid/claim`**, the browser
-  library for the OAuth handle-claim flows. GitHub (backend-driven MPC-TLS),
-  X (in-browser TLSNotary ProxyMode + a Noir/UltraHonk proof), and Google
-  (a SNARK over the OIDC id_token). Each flow opens the consent popup,
-  proves control of the account, and returns bind-ready proof bytes made
-  out to the holder address; encoding/submission/resolution helpers come
-  from [`@libid/contracts`](https://www.npmjs.com/package/@libid/contracts).
-  Framework-free (no React), wallet-product-free (a unit test enforces it).
-- [`ts/apps/demo`](ts/apps/demo) — a buttons-only vite demo consuming the
-  library: connect a wallet (or a dev key), claim a handle, resolve it.
+- [`ts/packages/ceremony`](ts/packages/ceremony) — **`@libid/ceremony`**, the
+  browser identity ceremonies for Google, X and GitHub: OAuth, notarization and
+  proving in a CCDP popup, returning proofs for the ledger to verify.
+- [`ts/packages/popup`](ts/packages/popup) — **`@libid/popup`**, one popup
+  browsing context and its authenticated connection to the application across
+  origins, isolation and document replacement.
+- [`ts/packages/ledger`](ts/packages/ledger) — **`@libid/ledger`**, the
+  `LedgerId` contract an application passes to a ceremony.
+- [`ts/apps/dev`](ts/apps/dev) — **`@libid/dev`**, the shared local services and
+  browser app for manual ceremony testing.
+- [`ts/packages/claim`](ts/packages/claim) and [`ts/apps/demo`](ts/apps/demo) —
+  the earlier browser claim library for the OAuth handle-claim flows, and its demo.
 - [`harness/`](harness) — the integration harness: a docker-compose stack
   (anvil + deterministic contract deploy + released notary and
   libID-bridge-rs images from before the rename) plus asset staging and one
@@ -67,8 +69,7 @@ carries the browser claim library and the integration harness:
 ## Repositories
 
 - [`libID`](https://github.com/libid-org/libID) — protocol specifications,
-  project overview, the `@libid/claim` browser library, and the
-  integration harness.
+  project overview, the browser packages, and the integration harness.
 - [`libID-rs`](https://github.com/libid-org/libID-rs) — Rust application
   backends and zero-knowledge proof tooling.
 - [`libID-contracts`](https://github.com/libid-org/libID-contracts) — Solidity
@@ -88,5 +89,3 @@ carries the browser claim library and the integration harness:
   across configured on-chain deployments.
 - [`repository-template`](https://github.com/libid-org/repository-template) —
   shared licensing, contribution, and AI-agent defaults for new repositories.
-
-For shared local services and the browser development app, see [@libid/dev](ts/apps/dev/README.md).

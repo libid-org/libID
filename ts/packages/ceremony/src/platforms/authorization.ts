@@ -1,13 +1,5 @@
-// The normative authorization constructions shared by the platform slices:
-// the Authorization Digest (ceremony-common §5, REQ-COMMON-01), the S256
-// PKCE derivation X and GitHub bind it with (§7, REQ-COMMON-12) and their
-// common code-request layout. Only the Ceremony Client derives these; the
-// prover receives the already-derived code verifier and does not receive the
-// authorization nonce.
-//
-// Hashes come from @noble/hashes: keccak256 has no native browser
-// implementation, and taking sha256 from the same audited pin keeps these
-// functions synchronous and dependency-minimal.
+// The Authorization Digest (ceremony-common §5, REQ-COMMON-01), its S256 PKCE derivation
+// (§7, REQ-COMMON-12) and the shared code-request layout.
 
 import { sha256 } from '@noble/hashes/sha2.js'
 import { keccak_256 } from '@noble/hashes/sha3.js'

@@ -17,8 +17,8 @@ export function safePath(path: string, selector = false): string {
 /** Read regular files into memory; archive entries never get filesystem write authority. */
 export async function readArchive(source: string, sha256?: string): Promise<Map<string, Buffer>> {
   const bytes = await readSource(source, sha256)
-  const files = new Map<string, Buffer>(),
-    entries = new Set<string>()
+  const files = new Map<string, Buffer>()
+  const entries = new Set<string>()
   await new Promise<void>((resolve, reject) => {
     const parser = new Parser({ strict: true })
     parser.on('error', reject)

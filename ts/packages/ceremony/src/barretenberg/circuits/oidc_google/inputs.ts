@@ -47,7 +47,7 @@ function limbs(value: bigint): bigint[] {
 
 /** Zero-pad a value to its fixed circuit width. */
 function pad(bytes: Uint8Array, length: number): Uint8Array {
-  if (bytes.length > length) throw new Error(`value exceeds circuit limit ${length}`)
+  if (bytes.length > length) throw new Error(`Value exceeds circuit limit ${length}`)
   const result = new Uint8Array(length)
   result.set(bytes)
   return result
@@ -84,11 +84,11 @@ function findOffset(payload: Uint8Array, pattern: string): number {
     needle.every((byte, index) => payload[start + index] === byte),
   )
   if (offset < 1)
-    throw new Error(`missing canonical signed claim ${pattern.slice(0, pattern.indexOf(':'))}`)
+    throw new Error(`Missing canonical signed claim ${pattern.slice(0, pattern.indexOf(':'))}`)
   const trailing = payload[offset + needle.length]
   // A comma or closing brace, kept local: importing notary/ would load it into the Google prover.
   if (trailing !== 0x2c && trailing !== 0x7d) {
-    throw new Error('signed claim lacks a structural terminator')
+    throw new Error('Signed claim lacks a structural terminator')
   }
   return offset
 }

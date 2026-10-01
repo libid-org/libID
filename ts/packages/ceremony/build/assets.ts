@@ -72,8 +72,8 @@ function validateWorkerCsp(policy: string): void {
   const directives = parseCsp(policy)
   for (const name of ['default-src', 'object-src', 'base-uri', 'form-action', 'frame-ancestors'])
     if (directives.get(name)?.join(' ') !== "'none'") throw new Error('Worker CSP base weakened')
-  const scripts = directives.get('script-src') ?? [],
-    workers = directives.get('worker-src') ?? []
+  const scripts = directives.get('script-src') ?? []
+  const workers = directives.get('worker-src') ?? []
   if (
     !scripts.includes("'self'") ||
     !scripts.includes("'wasm-unsafe-eval'") ||
@@ -111,9 +111,9 @@ export function externalRequest(asset: ExternalAsset): AssetRequest {
 
 /** An installed package file, and the package version its mount's `{version}` becomes. */
 function installedFile(source: string): { bytes: Buffer; version: string } {
-  const path = source.slice(4),
-    parts = path.split('/'),
-    pkg = path.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+  const path = source.slice(4)
+  const parts = path.split('/')
+  const pkg = path.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
   const manifest = findPackageJSON(pkg, import.meta.url)
   if (!manifest) throw new Error('Package root missing')
   const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as { version: string }
@@ -132,11 +132,11 @@ export async function resolveAssets() {
   )
   const declarations = Object.values(profiles).flat()
   const archives = new Map<string, Promise<Map<string, Buffer>>>()
-  const urls: Record<string, string> = {},
-    moduleUrls: Record<string, string> = {},
-    bodyHashes: Record<string, string> = {}
-  const local = new Map<string, PublicRecord>(),
-    mounts = new Map<string, string>()
+  const urls: Record<string, string> = {}
+  const moduleUrls: Record<string, string> = {}
+  const bodyHashes: Record<string, string> = {}
+  const local = new Map<string, PublicRecord>()
+  const mounts = new Map<string, string>()
   const register = (path: string, bytes: Buffer, policy: Record<string, string>) => {
     const old = local.get(path)
     if (old && JSON.stringify(old.headers) !== JSON.stringify(policy))
@@ -151,7 +151,8 @@ export async function resolveAssets() {
       externalRequest(asset)
       continue
     }
-    let path: string, bytes: Buffer
+    let path: string
+    let bytes: Buffer
     if (asset.member !== undefined) {
       safePath(asset.mount)
       if (mounts.has(asset.mount) && mounts.get(asset.mount) !== asset.source)

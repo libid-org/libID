@@ -79,9 +79,9 @@ export function parseOAuthReturn(
     (rules.authorizationIssuer !== undefined && fields.get('iss') !== rules.authorizationIssuer)
   )
     return null
-  const state = fields.get('state'),
-    credential = fields.get(rules.credentialField),
-    error = fields.get('error')
+  const state = fields.get('state')
+  const credential = fields.get(rules.credentialField)
+  const error = fields.get('error')
   if (!isValue(state) || (credential === undefined) === (error === undefined)) return null
   if (credential !== undefined)
     return isValue(credential) && (rules.isCredential?.(credential) ?? true)

@@ -34,7 +34,8 @@
     "rules": {
       "preset": "recommended",
       "style": {
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "useSingleVarDeclarator": "error"
       }
     }
   }

@@ -37,8 +37,8 @@ it('joins pending downloads and preserves independent readers and worker CSP in 
       }),
   )
   vi.stubGlobal('fetch', fetching)
-  const cache = new AssetCache('https://ccdp.example'),
-    first = cache.load(spec)
+  const cache = new AssetCache('https://ccdp.example')
+  const first = cache.load(spec)
   await first.dispatched
   expect(fetching).toHaveBeenCalledTimes(1)
   const second = cache.load(spec)
@@ -245,8 +245,8 @@ it('absorbs failed writes, releases the pending entry and retries later [LIBID-A
   })
   const fetcher = vi.fn(async () => new Response(new Uint8Array([4, 5])))
   vi.stubGlobal('fetch', fetcher)
-  const cache = new AssetCache('https://ccdp.example'),
-    spec = { url: 'https://ccdp.example/asset', bytes: 2 }
+  const cache = new AssetCache('https://ccdp.example')
+  const spec = { url: 'https://ccdp.example/asset', bytes: 2 }
   const first = cache.load(spec)
   await first.response
   reject(new Error('quota'))

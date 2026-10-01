@@ -23,9 +23,9 @@ export function assetPlugin(
     async transform(source, id) {
       if (!data || !id.endsWith('.ts') || !source.includes('assets/index.js')) return
       const { code, ast } = await parseModule(this, source, id)
-      const namespaces = new Set<string>(),
-        bindings = new Map<string, string>(),
-        archives = new Set<string>()
+      const namespaces = new Set<string>()
+      const bindings = new Map<string, string>()
+      const archives = new Set<string>()
       for (const node of ast.body) {
         if (
           node.type !== 'ImportDeclaration' ||
@@ -61,8 +61,8 @@ export function assetPlugin(
       const edits: Edit[] = []
       // Resource sources and options are build inputs; the runtime keeps only mounts and members.
       const stripCall = (node: CallExpression) => {
-        const args = node.arguments,
-          name = method(node.callee)
+        const args = node.arguments
+        const name = method(node.callee)
         if (name === 'archive' || name === 'file') {
           const [source, mount] = args
           if (!source || !mount) throw new Error('Missing resource source/mount')

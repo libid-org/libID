@@ -64,16 +64,15 @@ cannot safely infer their original sibling paths. Noir reuses those initialized
 module instances. The build emits decoded bb WASM and removes unused embedded
 WASM copies through the compiler plugin. HTTP compression belongs to SWS.
 
-**The pinned bb.js browser CRS loaders ignore `crsPath`.** The engine already
-passes the declared CRS base, but until a pending upstream patch lands they
-request Aztec's primary and fallback URLs, so the CRS stays external at exactly
-those URLs and ranges. Changing the declarations to local resources alone would
-break prefetch/execution agreement, and no fetch interception redirects them.
-Distributing the CRS needs that patched release, proven by the loader probe
-before the declarations change.
+**CRS requests go to Aztec's CDN.** The engine already passes the declared CRS
+base as `crsPath`, but the pinned bb.js browser loaders ignore it until a pending
+upstream patch lands, and request Aztec's primary and fallback URLs. So the CRS
+is declared external at exactly those URLs and ranges, and Prefetch and execution
+request the same bytes. Distributing the CRS needs that patched release, proven
+by the loader probe before the declarations change.
 
-Exact URL/range/fallback declarations live beside the dependency pin, not in a
-second Markdown request table. [parameters.ts](../src/barretenberg/parameters.ts)
+Exact URL/range/fallback declarations live beside the dependency pin, the one
+request table. [parameters.ts](../src/barretenberg/parameters.ts)
 owns the shared proving settings, `SRS_POINTS` and browser-loader dimensions.
 [Capacity checks](../build/circuits.ts) inspect the released circuits without
 downloading CRS; negative real-proof capacity qualification remains a separate gate.

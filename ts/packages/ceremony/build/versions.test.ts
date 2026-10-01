@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { proverPair, publishableVersions, versionPairs } from './versions.ts'
 
-const catalog = Object.freeze({ google: [1], x: [1], github: [1] }),
-  pairs = ['google/1', 'x/1', 'github/1']
+const catalog = Object.freeze({ google: [1], x: [1], github: [1] })
+const pairs = ['google/1', 'x/1', 'github/1']
 
 test('the published list is the catalog once the platform provers and asset profiles name its pairs [KIT-023]', () => {
   assert.equal(

@@ -286,7 +286,7 @@ it.each([
   [
     'non-binary data',
     (socket: Socket) => socket.dispatchEvent(new MessageEvent('message', { data: 'frame' })),
-    'notary sent non-binary data',
+    'Notary sent non-binary data',
   ],
   [
     'an oversize frame',
@@ -294,12 +294,12 @@ it.each([
       socket.dispatchEvent(
         new MessageEvent('message', { data: new ArrayBuffer(MAX_FRAME_BYTES + 1) }),
       ),
-    'notary attestation frame exceeds size limit',
+    'Notary attestation frame exceeds size limit',
   ],
   [
     'a socket error',
     (socket: Socket) => socket.dispatchEvent(new Event('error')),
-    'notary WebSocket failed',
+    'Notary WebSocket failed',
   ],
 ])(
   'fails the final attestation on %s arriving after openings [LIBID-PROVER-008]',
@@ -343,7 +343,7 @@ it('reads nothing that arrives after the socket failed [LIBID-PROVER-008]', asyn
   await expect.poll(() => port.close.mock.calls.length).toBe(1)
   expect(port.postMessage.mock.calls.at(-1)?.[0]).toEqual({
     type: 'error',
-    message: 'notary sent non-binary data',
+    message: 'Notary sent non-binary data',
   })
 })
 
@@ -473,7 +473,7 @@ it.each(['closed', 'send throws'])(
     await expect.poll(() => w.hooks.setup.mock.calls.length).toBe(1)
     const [io] = w.hooks.setup.mock.calls[0]
     const expected = new Error(
-      failure === 'closed' ? 'notary WebSocket is not open' : 'Socket send failed',
+      failure === 'closed' ? 'Notary WebSocket is not open' : 'Socket send failed',
     )
     if (failure === 'closed') w.socket.readyState = 3
     else

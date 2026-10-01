@@ -2,8 +2,8 @@ import { readBody } from '../response.js'
 import type { AssetRequest } from './index.js'
 import { requestKey } from './keys.js'
 
-const CACHE = 'libid-ceremony-assets-v1',
-  PREFIX = '/__libid_ceremony_cache__/'
+const CACHE = 'libid-ceremony-assets-v1'
+const PREFIX = '/__libid_ceremony_cache__/'
 
 /** Validate status and exposed metadata before accepting an asset response. */
 function validateResponse(response: Response, spec: AssetRequest): void {

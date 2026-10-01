@@ -10,8 +10,8 @@ test('emitted route policies and inert missing paths [CSP-001]', async ({ reques
     '/ccdp/v1/worker.js',
     '/ccdp/callback.html',
   ]) {
-    const a = await request.get(ccdp + path),
-      b = await request.get(`${ccdp + path}?not-a-config=1`)
+    const a = await request.get(ccdp + path)
+    const b = await request.get(`${ccdp + path}?not-a-config=1`)
     expect(a.status()).toBe(200)
     expect(await a.body()).toEqual(await b.body())
     expect(a.headers()['x-content-type-options']).toBe('nosniff')

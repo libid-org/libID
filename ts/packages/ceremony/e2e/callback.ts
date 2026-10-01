@@ -4,7 +4,7 @@ import { documentHeaders } from '../src/assets/headers.ts'
 /** The deployment inputs Callback reads, inserted in its positional order. */
 type CallbackInputs = { allowedApplicationOrigins: readonly string[]; ccdpOrigin: string }
 
-/** Reference Bridge data insertion only; this is not a production Bridge server. */
+/** Inserts the Bridge's Callback data into the built artifact, as a reference Bridge does. */
 export function prepareCallback(
   html: string,
   sourceHeaders: Record<string, string>,

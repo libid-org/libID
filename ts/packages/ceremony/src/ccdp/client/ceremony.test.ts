@@ -347,9 +347,9 @@ it.each(supportedPlatforms)(
   'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
   async (platformId) => {
     const oidc = fixtures[platformId].proverKind === 'oidc'
-    const hash = testnet.hash(),
-      domain = new Uint8Array(32),
-      data = new Uint8Array([1, 2])
+    const hash = testnet.hash()
+    const domain = new Uint8Array(32)
+    const data = new Uint8Array([1, 2])
     const ledger = {
       hash: vi.fn(() => hash),
       notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
@@ -556,9 +556,9 @@ it('keeps the Prefetch navigation error like the authorization navigation error'
 
 // Compile-only API checks: rejected forms must remain rejected by TypeScript.
 function checkCreationTypes(client: CCDPClient) {
-  const conn = spiedConnection(),
-    ledger = testnet,
-    bytes = new Uint8Array(32)
+  const conn = spiedConnection()
+  const ledger = testnet
+  const bytes = new Uint8Array(32)
   // @ts-expect-error Former object form is not supported.
   client.new(id, {
     connection: conn,
@@ -967,8 +967,8 @@ it.each(['closed', 'failed'] as const)(
   'preserves popup %s in errors and both terminal subscriptions [LIBID-OAUTH-029] [LIBID-BROWSER-002]',
   async (outcome) => {
     const { connection, ceremony } = await setup()
-    const events = vi.fn(),
-      stages = vi.fn()
+    const events = vi.fn()
+    const stages = vi.fn()
     ceremony.onEvent(events)
     ceremony.onStage(stages)
     const pending = ceremony.proveUserIdentity()

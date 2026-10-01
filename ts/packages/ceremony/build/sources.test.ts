@@ -28,10 +28,10 @@ test('a build replaces only a dedicated output directory', () => {
 })
 
 test('an HTTPS source must match its sha256 pin, fresh or cached', async () => {
-  const source = 'https://release.test/pinned.tar.gz',
-    body = Buffer.from('release bytes'),
-    pin = `sha256:${createHash('sha256').update(body).digest('hex')}`,
-    cached = join(cache, 'downloads', encodeURIComponent(source))
+  const source = 'https://release.test/pinned.tar.gz'
+  const body = Buffer.from('release bytes')
+  const pin = `sha256:${createHash('sha256').update(body).digest('hex')}`
+  const cached = join(cache, 'downloads', encodeURIComponent(source))
   const fetch = mock.method(globalThis, 'fetch', async () => new Response(body))
   rmSync(cached, { force: true })
   try {

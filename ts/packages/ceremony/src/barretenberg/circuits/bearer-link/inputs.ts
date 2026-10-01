@@ -14,7 +14,7 @@ export const isBearer = (value: string): boolean =>
  */
 export function buildBearerLinkInputs(bearer: string, token: HashOpening, identity: HashOpening) {
   if (!isBearer(bearer))
-    throw new Error(`bearer must be 1 to ${MAX_BEARER_BYTES} visible ASCII bytes`)
+    throw new Error(`Bearer must be 1 to ${MAX_BEARER_BYTES} visible ASCII bytes`)
   const bytes = encoder.encode(bearer)
   const padded = new Uint8Array(MAX_BEARER_BYTES)
   padded.set(bytes)
