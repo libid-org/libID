@@ -1,5 +1,5 @@
 import { gzipSync } from 'node:zlib'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { posted, stubWorkerScope } from '../testing/workers.js'
 
 const mocks = vi.hoisted(() => ({
@@ -26,6 +26,10 @@ vi.mock('@aztec/bb.js', () => ({
   BackendType: { Wasm: 'Wasm' },
   Barretenberg: { new: mocks.create },
 }))
+
+beforeEach(() => {
+  vi.stubGlobal('navigator', { hardwareConcurrency: 4 })
+})
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -220,14 +224,33 @@ it.each(['cross-origin isolation', 'shared memory'])(
   },
 )
 
-it('fails one requested thread before starting any preload branch [LIBID-PROVER-015] [LIBID-OAUTH-010]', async () => {
-  const w = await worker(undefined, { threads: 1 })
-  await expect.poll(() => w.has('error')).toBe(true)
-  expect(w.errors()).toEqual([
-    { type: 'error', event: 'zk-proof-preparation', message: 'Multithreaded backend unavailable' },
-  ])
-  expect(mocks.create).not.toHaveBeenCalled()
-  expect(w.request).not.toHaveBeenCalled()
+it.each([
+  { threads: 1, hardwareConcurrency: 4 },
+  { threads: 4, hardwareConcurrency: 1 },
+  { threads: 4, hardwareConcurrency: undefined },
+])(
+  'rejects $threads threads with worker hardware concurrency $hardwareConcurrency before preload [LIBID-PROVER-015] [LIBID-OAUTH-010]',
+  async ({ threads, hardwareConcurrency }) => {
+    vi.stubGlobal('navigator', { hardwareConcurrency })
+    const w = await worker(undefined, { threads })
+    await expect.poll(() => w.has('error')).toBe(true)
+    expect(w.errors()).toEqual([
+      {
+        type: 'error',
+        event: 'zk-proof-preparation',
+        message: 'Multithreaded backend unavailable',
+      },
+    ])
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(w.request).not.toHaveBeenCalled()
+  },
+)
+
+it('caps bb threads using the proof worker hardware concurrency [LIBID-PROVER-015]', async () => {
+  vi.stubGlobal('navigator', { hardwareConcurrency: 2 })
+  const w = await worker()
+  await expect.poll(() => w.has('backend-ready')).toBe(true)
+  expect(mocks.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ threads: 2 }))
 })
 
 it('a duplicate preload fails once and releases the started backend', async () => {

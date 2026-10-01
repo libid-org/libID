@@ -5,10 +5,11 @@ import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
 import { errorMessage, toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
+import { workerThreads } from '../threads.js'
 import { FIELD_BYTES, PROVING_SETTINGS, SRS_POINTS } from './parameters.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
-/** Refuse silent single-threaded proving: bb runs exactly the threads requested under isolation. */
+/** Refuse single-threaded proving after applying the worker CPU cap. */
 const MIN_PROOF_THREADS = 2
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
@@ -66,11 +67,12 @@ class EngineWorker {
     if (!self.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
       throw new Error('Proof worker requires cross-origin isolation')
     }
-    if (message.threads < MIN_PROOF_THREADS) throw new Error('Multithreaded backend unavailable')
+    const threads = workerThreads(message.threads)
+    if (threads < MIN_PROOF_THREADS) throw new Error('Multithreaded backend unavailable')
     const backend = span('proof-backend-initialization', () =>
       Barretenberg.new({
         backend: BackendType.Wasm,
-        threads: message.threads,
+        threads,
         srsSize: SRS_POINTS,
         wasmPath: message.wasmPath,
         crsPath: message.crsPath,
