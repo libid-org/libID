@@ -45,19 +45,32 @@ It needs Solidity 0.8.20 or later.
 | `requireHolder(platformId, handle, maxAge)` | reverts `NotHolder` or `ProofTooOld` unless `msg.sender` holds it |
 | `pay(platformId, handle, amount, refundTo)` | sends ETH from your contract to the handle through `HandleEscrow` |
 | `payToken(platformId, handle, token, amount, refundTo)` | the same for an ERC-20 your contract holds |
-| `isAvailable()` | whether this chain runs libID |
+| `refund(platformId, handle, token, recipient)` | takes back what your contract escrowed for a handle, before it is claimed |
+| `isAvailable()` | whether this chain has the IdentityRegistry, for reads and gates |
+| `isEscrowAvailable()` | whether it also has the HandleEscrow, for payments |
 
 Platform ids are `LibID.GITHUB`, `LibID.X` and `LibID.GOOGLE`. Handles are
 matched the way the platform matches them: case and a leading at-sign do not
 matter.
 
-A `maxAge` of `type(uint256).max` accepts any age. On a chain without libID,
-every function except `isAvailable` reverts `LibIDUnavailable`.
+A `maxAge` of `type(uint256).max` accepts any age. Where a contract is not
+deployed, the functions that need it revert `LibIDUnavailable`.
+
+## Payments
 
 `pay` and `payToken` pay the holder at once if the handle has one. Otherwise
 the escrow holds the funds until someone proves the handle and claims them,
-and `refundTo` can take them back until then. Set `refundTo` to your user, not
-your contract, unless your contract can call `refund` itself.
+and `refundTo` can take them back until then.
+
+- Set `refundTo` to your user, so they can call `HandleEscrow.refund`
+  themselves. If you set it to your contract, your contract must offer a way
+  to call `LibID.refund`, or the funds stay there until claimed.
+- Payments call out. The escrow may send ETH to the holder, which runs the
+  holder's code, and a token runs its own code. Protect the calling function
+  against reentrancy, and update your contract's state before you pay.
+- The escrow books what arrives, so a token that takes a fee from the amount
+  received works. A token that charges the sender on top of the amount, a
+  rebasing token, and a token that can block the escrow do not.
 
 ## Development
 

@@ -8,8 +8,13 @@ pragma solidity ^0.8.20;
 /// @dev The contracts sit at the same address on every chain that runs libID,
 ///      so the addresses are constants. Every function is `internal`: it is
 ///      compiled into the calling contract, and there is nothing to deploy or
-///      link. On a chain without libID, every function reverts
-///      `LibIDUnavailable`; check `isAvailable` first to avoid that.
+///      link. Where a contract is not deployed, the functions that need it
+///      revert `LibIDUnavailable`: check `isAvailable` before reading or
+///      gating, and `isEscrowAvailable` before paying.
+///
+///      `pay`, `payToken` and `refund` call out: the escrow can send ETH to
+///      the handle's holder, and a token runs its own code. Guard the calling
+///      function against reentrancy, and update your own state before calling.
 ///
 ///      Handles are matched the way the platform matches them: case and a
 ///      leading at-sign do not matter.
@@ -36,8 +41,15 @@ library LibID {
     /// The token refused to approve the escrow.
     error ApproveFailed(address token);
 
-    /// @notice Whether this chain runs libID.
+    /// @notice Whether this chain has the IdentityRegistry: everything except
+    ///         payments works.
     function isAvailable() internal view returns (bool) {
+        return REGISTRY.code.length != 0;
+    }
+
+    /// @notice Whether this chain also has the HandleEscrow, so `pay`,
+    ///         `payToken` and `refund` work.
+    function isEscrowAvailable() internal view returns (bool) {
         return REGISTRY.code.length != 0 && ESCROW.code.length != 0;
     }
 
@@ -98,8 +110,10 @@ library LibID {
 
     /// @notice Send `amount` of an ERC-20 token held by this contract to a
     ///         handle, as `pay` does for ETH.
-    /// @dev Tokens that charge a fee on transfer or change balances on their
-    ///      own do not work with the escrow.
+    /// @dev The escrow books what arrives, so a token that takes a fee from
+    ///      the amount received works. These do not: a token that charges
+    ///      the sender on top of the amount (its claims and refunds revert),
+    ///      a rebasing token, and a token that can block the escrow.
     function payToken(bytes32 platformId, string memory handle, address token, uint256 amount, address refundTo)
         internal
     {
@@ -110,6 +124,16 @@ library LibID {
         _approve(token, 0);
         _approve(token, amount);
         escrow.deposit(platformId, hash, token, amount, refundTo);
+    }
+
+    /// @notice Take back this contract's escrowed deposits for a handle, in
+    ///         one token, and send them to `recipient`.
+    /// @dev Works only for deposits that named this contract as `refundTo`,
+    ///      and only until the handle's holder claims them. Reverts
+    ///      `NothingToRefund` when there is nothing to take back.
+    function refund(bytes32 platformId, string memory handle, address token, address recipient) internal {
+        bytes32 node = _registry().handleNodeOf(platformId, handle);
+        _escrow().refund(node, token, recipient);
     }
 
     // ─── Internals ──────────────────────────────────────────────────
@@ -162,9 +186,10 @@ interface ILibIDRegistry {
     function handleHashOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
 }
 
-/// @dev The HandleEscrow call LibID makes.
+/// @dev The HandleEscrow calls LibID makes.
 interface ILibIDEscrow {
     function deposit(bytes32 platformId, bytes32 handleHash, address token, uint256 amount, address refundTo)
         external
         payable;
+    function refund(bytes32 handleNode, address token, address recipient) external;
 }

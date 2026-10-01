@@ -8,7 +8,7 @@ import {CeremonyProofVerifier} from "libid-contracts/ceremony/CeremonyProofVerif
 import {IPlatformVerifier} from "libid-contracts/ceremony/IPlatformVerifier.sol";
 import {IProofVerifier} from "libid-contracts/ceremony/IProofVerifier.sol";
 import {HandleEscrow} from "libid-contracts/escrow/HandleEscrow.sol";
-import {NoReturnToken, TestERC20, one} from "libid-contracts/escrow/test/EscrowMocks.sol";
+import {FeeToken, NoReturnToken, TestERC20, one} from "libid-contracts/escrow/test/EscrowMocks.sol";
 import {Create3} from "libid-contracts/factory/Create3.sol";
 import {HandleVectors} from "libid-contracts/identity/HandleVectors.sol";
 import {IdentityNodes} from "libid-contracts/identity/IdentityNodes.sol";
@@ -22,6 +22,10 @@ import {LibID} from "../src/LibID.sol";
 contract Consumer {
     function isAvailable() external view returns (bool) {
         return LibID.isAvailable();
+    }
+
+    function isEscrowAvailable() external view returns (bool) {
+        return LibID.isEscrowAvailable();
     }
 
     function resolve(bytes32 platformId, string calldata handle) external view returns (address) {
@@ -61,6 +65,10 @@ contract Consumer {
         external
     {
         LibID.payToken(platformId, handle, token, amount, refundTo);
+    }
+
+    function refund(bytes32 platformId, string calldata handle, address token, address recipient) external {
+        LibID.refund(platformId, handle, token, recipient);
     }
 
     receive() external payable {}
@@ -260,6 +268,43 @@ contract LibIDTest is Test {
         assertEq(escrow.escrowed(IdentityNodes.handleNode(LibID.GITHUB, "carol"), address(token)), 25);
     }
 
+    /// The escrow books what arrives, so a token that takes its fee from the
+    /// amount received still reaches the holder.
+    function test_payTokenWorksWithATokenThatTakesAFeeFromTheAmount() public {
+        FeeToken token = new FeeToken();
+        token.mint(address(consumer), 1000);
+        consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, sender);
+        bytes32 node = IdentityNodes.handleNode(LibID.GITHUB, "carol");
+        assertEq(escrow.escrowed(node, address(token)), 990);
+
+        address carol = makeAddr("carol");
+        _bind(carol, "3003", "carol", true);
+        vm.prank(carol);
+        escrow.claim(node, one(address(token)), carol);
+        assertEq(token.balanceOf(carol), 990);
+    }
+
+    function test_aContractTakesBackWhatItEscrowed() public {
+        address recipient = makeAddr("recipient");
+        consumer.pay(LibID.GITHUB, "carol", 1 ether, address(consumer));
+        consumer.refund(LibID.GITHUB, "@Carol", LibID.NATIVE, recipient);
+        assertEq(recipient.balance, 1 ether);
+    }
+
+    function test_refundAfterTheHolderClaimedReverts() public {
+        consumer.pay(LibID.GITHUB, "carol", 1 ether, address(consumer));
+        address carol = makeAddr("carol");
+        _bind(carol, "3003", "carol", true);
+        bytes32 node = IdentityNodes.handleNode(LibID.GITHUB, "carol");
+        vm.prank(carol);
+        escrow.claim(node, one(LibID.NATIVE), carol);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(HandleEscrow.NothingToRefund.selector, node, LibID.NATIVE, address(consumer))
+        );
+        consumer.refund(LibID.GITHUB, "carol", LibID.NATIVE, makeAddr("recipient"));
+    }
+
     function test_payTokenRefusesAnAddressWithoutCode() public {
         address notAToken = makeAddr("notAToken");
         vm.expectRevert(abi.encodeWithSelector(LibID.ApproveFailed.selector, notAToken));
@@ -268,10 +313,27 @@ contract LibIDTest is Test {
 
     // ─── A chain without libID ──────────────────────────────────────
 
+    /// Reads and gates need only the registry; payments need the escrow too.
+    function test_aChainWithOnlyTheRegistryStillReadsAndGates() public {
+        _bind(alice, "1001", "octocat", true);
+        vm.etch(LibID.ESCROW, "");
+        assertTrue(consumer.isAvailable());
+        assertFalse(consumer.isEscrowAvailable());
+        assertEq(consumer.resolve(LibID.GITHUB, "octocat", 1 days), alice);
+        vm.prank(alice);
+        assertTrue(consumer.gated("octocat", 1 days));
+
+        vm.expectRevert(abi.encodeWithSelector(LibID.LibIDUnavailable.selector));
+        consumer.pay(LibID.GITHUB, "octocat", 1 ether, sender);
+        vm.expectRevert(abi.encodeWithSelector(LibID.LibIDUnavailable.selector));
+        consumer.refund(LibID.GITHUB, "octocat", LibID.NATIVE, sender);
+    }
+
     function test_everyCallRevertsClearlyWhereLibIDIsNotDeployed() public {
         vm.etch(LibID.REGISTRY, "");
         vm.etch(LibID.ESCROW, "");
         assertFalse(consumer.isAvailable());
+        assertFalse(consumer.isEscrowAvailable());
 
         bytes memory unavailable = abi.encodeWithSelector(LibID.LibIDUnavailable.selector);
         vm.expectRevert(unavailable);
@@ -288,6 +350,7 @@ contract LibIDTest is Test {
 
     function test_isAvailableWhenBothContractsAreThere() public view {
         assertTrue(consumer.isAvailable());
+        assertTrue(consumer.isEscrowAvailable());
     }
 
     // ─── Helpers ────────────────────────────────────────────────────
@@ -334,6 +397,7 @@ contract LibIDForkTest is Test {
     function test_edenRunsLibIDAtTheEmbeddedAddresses() public {
         Consumer consumer = new Consumer();
         assertTrue(consumer.isAvailable());
+        assertTrue(consumer.isEscrowAvailable());
         assertEq(address(HandleEscrow(LibID.ESCROW).registry()), LibID.REGISTRY);
         assertEq(consumer.resolve(LibID.GITHUB, "nobody-has-this-handle-xyz"), address(0));
     }
