@@ -35,7 +35,6 @@ jobs:
     env:
       # A missing secret fails the run instead of skipping the test.
       LIBID_REQUIRE_LIVE: "1"
-      LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -46,6 +45,7 @@ jobs:
 
       - name: Bind GitHub, X and Google identities end to end
         env:
+          LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
           GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
           GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
