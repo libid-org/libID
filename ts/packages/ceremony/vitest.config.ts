@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       'virtual:ceremony-assets': testing('virtual/assets.ts'),
+      'virtual:ceremony-worker': testing('virtual/worker.ts'),
     },
   },
   test: {

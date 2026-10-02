@@ -33,7 +33,7 @@ dist-artifacts/
 │   ├── ccdp/v1/prefetch.html
 │   ├── ccdp/v1/prover.html
 │   ├── ccdp/v1/prover-fallback.html
-│   ├── ccdp/v1/worker.js
+│   ├── ccdp/worker.<sha256>.js
 │   ├── ccdp/assets/...
 │   └── 404.html
 ├── sws.toml
@@ -50,6 +50,11 @@ Unknown routes return 404 with no SPA fallback and an explicit error policy
 (`Cache-Control: no-store` and the inert `404.html` headers, see
 [Native server behavior](#native-server-behavior)): absent cache headers would
 leave a 404 heuristically cacheable.
+
+The Worker is built before Prefetch and named by the full lowercase SHA-256 of
+its final uncompressed script, including its resource graph. Prefetch embeds that
+exact URL. The Worker response is immutable; unrelated document changes do not
+change it. Its one registration remains at root scope across replacements.
 
 ## Version catalog
 
@@ -272,7 +277,7 @@ wins over the older `Last-Modified`
 A CDN in front of SWS works with the responses as they are; configure it to:
 
 - honor origin `Cache-Control`: cache the `immutable` assets as long as it likes,
-  and revalidate the `no-cache` documents, `worker.js` and `versions.json` on every
+  and revalidate the `no-cache` documents and `versions.json` on every
   use;
 - forward every response header unchanged, in particular
   `Document-Isolation-Policy`, `Cross-Origin-Opener-Policy`,

@@ -8,12 +8,36 @@ import type { DistributionMetadata } from './distribution.ts'
 import { parseCsp } from './profiles.ts'
 import { errorHeaders } from './sws.ts'
 import { builtArtifacts, nativeSkip } from './testing.ts'
+import { hash } from './sources.ts'
 import { catalogVersions, proverPair, versionPairs } from './versions.ts'
 
 const out = builtArtifacts
 const metadata: DistributionMetadata = JSON.parse(
   readFileSync(join(out, 'distribution-graph.json'), 'utf8'),
 )
+
+const workerPath = Object.keys(metadata.headers).find((path) =>
+  /^\/ccdp\/worker\.[a-f0-9]{64}\.js$/.test(path),
+)!
+
+test('Prefetch pins the exact immutable Worker body [TEST-DIST-08]', () => {
+  assert.ok(workerPath)
+  const code = readFileSync(join(out, 'public', workerPath))
+  assert.equal(workerPath, `/ccdp/worker.${hash(code)}.js`)
+  assert.equal(metadata.headers[workerPath]['cache-control'], 'public, max-age=31536000, immutable')
+  assert.equal(metadata.headers[workerPath]['service-worker-allowed'], '/')
+  const prefetch = readFileSync(join(out, 'public', metadata.files['/ccdp/v1/prefetch']), 'utf8')
+  // Prefetch's entry may import an immutable chunk instead of inlining the whole bundle.
+  const modules = Object.keys(metadata.files).filter(
+    (path) => path.endsWith('.js') && prefetch.includes(path),
+  )
+  assert.ok(
+    [prefetch, ...modules.map((path) => readFileSync(join(out, 'public', path), 'utf8'))].some(
+      (code) => code.includes(workerPath),
+    ),
+  )
+  assert.equal(Object.hasOwn(metadata.files, '/ccdp/v1/worker.js'), false)
+})
 
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-ASSET-012] [LIBID-PROVER-005]', () => {
   const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
@@ -356,7 +380,7 @@ test('actual SWS negotiates representations, HEAD, conditional requests and rang
     '/ccdp/v1/prefetch',
     '/ccdp/v1/prover',
     '/ccdp/v1/prover/fallback',
-    '/ccdp/v1/worker.js',
+    workerPath,
     '/ccdp/versions.json',
     metadata.requestsByProfile['google/1'].find((r) =>
       r.url.endsWith('/barretenberg-threads.wasm'),

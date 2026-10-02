@@ -1,3 +1,4 @@
+import { rootWorkerUrl } from 'virtual:ceremony-worker'
 import { requestsByProfile } from 'virtual:ceremony-assets'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { profileKey } from '../../assets/keys.js'
@@ -41,9 +42,9 @@ class PrefetchDocument extends CeremonyDocument {
       // Checked once connected, so the Application learns why instead of waiting.
       if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
       const connected = performance.now()
-      const registration = await registerRootWorker()
+      const worker = await registerRootWorker(rootWorkerUrl)
       const workerReady = performance.now()
-      await dispatchPrefetch(registration, profile)
+      await dispatchPrefetch(worker, profile)
       const dispatched = performance.now()
       const event = {
         event: 'prefetch-dispatch',

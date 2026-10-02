@@ -123,6 +123,7 @@ export async function bundle(
     fragment = false,
     groupModules = true,
     manifest,
+    rootWorkerUrl,
   }: {
     /** One inlined chunk without module groups or imports. */
     selfContained?: boolean
@@ -131,6 +132,8 @@ export async function bundle(
     fragment?: boolean
     groupModules?: boolean
     manifest?: AssetManifest
+    /** Content-addressed Worker URL, supplied only when bundling Prefetch. */
+    rootWorkerUrl?: string
   } = {},
 ) {
   const graph = new Map<string, BundleNode>()
@@ -163,6 +166,14 @@ export async function bundle(
       `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};${start}`,
     ),
     assetPlugin(data, manifest),
+    ...(rootWorkerUrl
+      ? [
+          virtualModule(
+            'ceremony-worker',
+            `export const rootWorkerUrl=${JSON.stringify(rootWorkerUrl)};`,
+          ),
+        ]
+      : []),
     absoluteImports(),
     record(worker),
   ]

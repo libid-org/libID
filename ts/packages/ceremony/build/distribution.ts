@@ -14,7 +14,7 @@ import { captureFragment } from './fragment.ts'
 import { sameRecord, swapInto } from './output.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { emittedProfile, responseHeaders } from './profiles.ts'
-import { artifactsDir, outputDirectory } from './sources.ts'
+import { artifactsDir, hash, outputDirectory } from './sources.ts'
 import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
@@ -190,25 +190,26 @@ async function buildDistribution() {
       responseHeaders('callback', { ...options, inline: [code] }),
     )
   }
+  // Hash the final, self-contained bytes before building the Prefetch that pins them.
+  const worker = await bundle('src/assets/worker.entry.ts', data, {
+    selfContained: true,
+    manifest,
+  })
+  if (worker.output.length !== 1 || worker.output[0].type !== 'chunk' || !worker.output[0].isEntry)
+    throw new Error('The root worker must be one script')
+  const code = worker.output[0].code
+  const rootWorkerUrl = `/ccdp/worker.${hash(code)}.js`
+  tree.put(rootWorkerUrl, code, 'worker')
   const prefetch = await bundle('src/ccdp/documents/prefetch.ts', data, {
     invoke: 'startPrefetch',
     fragment: true,
     manifest,
+    rootWorkerUrl,
   })
   for (const item of prefetch.output) {
     if (item.type === 'chunk' && item.isEntry)
       tree.document(route('prefetch'), item.code, 'prefetch')
     else tree.put(`/${item.fileName}`, body(item), 'asset')
-  }
-  // Module Service Workers cannot import dynamically, so the root worker is one script.
-  const worker = await bundle('src/assets/worker.entry.ts', data, {
-    selfContained: true,
-    manifest,
-  })
-  for (const item of worker.output) {
-    if (item.type !== 'chunk' || !item.isEntry)
-      throw new Error('The root worker must be one script')
-    tree.put(route('worker.js'), item.code, 'worker')
   }
   // The page every 404 serves; requested directly it declares the same error policy.
   tree.put('/404.html', page(messages.notFoundTitle, `<p>${messages.notFound}</p>`), {

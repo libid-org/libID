@@ -1,9 +1,7 @@
-import { ROUTE_SCOPE, route } from './keys.js'
+import { ROUTE_SCOPE } from './keys.js'
 
 const SERVICE_WORKER_TIMEOUT_MS = 15000
 const ACTIVATION_POLL_INTERVAL_MS = 50
-/** How long an update check or a new worker's activation may hold up a working active worker. */
-const ACTIVE_WORKER_GRACE_MS = 3000
 
 /**
  * Settle through `done` within `ms` (15 seconds by default). Settling, including a synchronous
@@ -31,71 +29,47 @@ function within(
   return promise
 }
 
-/** Register the canonical root worker and retire only the known legacy nested scope. */
-export async function registerRootWorker(): Promise<ServiceWorkerRegistration> {
-  const registration = await navigator.serviceWorker.register(route('worker.js'), {
+/** Register the build-pinned root script and return that Worker, never an older active one. */
+export async function registerRootWorker(url: string): Promise<ServiceWorker> {
+  const script = new URL(url, location.origin).href
+  const registration = await navigator.serviceWorker.register(script, {
     scope: '/',
     type: 'module',
-    updateViaCache: 'none',
+    updateViaCache: 'all',
   })
   if (registration.scope !== `${location.origin}/`)
     throw new Error('Incorrect Service Worker scope')
-  // Registering an unchanged URL skips the update check, so after a deployment the new
-  // worker may not exist yet. A failed or slow check keeps the active worker.
-  if (registration.active && !registration.installing && !registration.waiting)
-    await within(
-      'Service Worker update timed out',
-      (done) => void registration.update().then(() => done(), done),
-      ACTIVE_WORKER_GRACE_MS,
-    ).catch(() => {})
-  const worker = registration.installing ?? registration.waiting ?? registration.active
-  if (!worker) throw new Error('Missing Service Worker')
-  // An active worker can handle messages while activating. WebKit can retain that
-  // state in another document; the dispatch acknowledgement is our readiness gate.
-  if (worker !== registration.active) {
-    // A new worker cannot activate while the previous one still serves another Prefetch; that
-    // one can serve this dispatch too, and answers an asset list it lacks at once.
-    const previous = registration.active
-    await within(
-      'Service Worker activation timed out',
-      (done, signal) => {
-        const changed = () => {
-          if (worker.state === 'activating' || worker.state === 'activated') done()
-          else if (worker.state === 'redundant') done(new Error('Service Worker failed'))
-        }
-        // Concurrent Chromium popups were seen reaching 'activated' with no statechange in this
-        // document; `changed()` below already covers transitions before the listener. No upstream
-        // bug is known: drop the poll once two popups racing a first registration pass without it.
-        const poll = setInterval(changed, ACTIVATION_POLL_INTERVAL_MS)
-        signal.addEventListener('abort', () => clearInterval(poll))
-        worker.addEventListener('statechange', changed, { signal })
-        changed()
-      },
-      previous ? ACTIVE_WORKER_GRACE_MS : SERVICE_WORKER_TIMEOUT_MS,
-    ).catch((error: unknown) => {
-      if (!previous) throw error
-    })
-  }
-  // Retire only the nested scope trial builds registered: a root worker cannot claim pages
-  // that still match a longer registration. Remove once no served trial predates the root.
-  const script = new URL(route('worker.js'), location.origin).href
+  const worker = [registration.installing, registration.waiting, registration.active].find(
+    (worker) => worker?.scriptURL === script,
+  )
+  if (!worker) throw new Error('Missing build-pinned Service Worker')
+  await within('Service Worker installation timed out', (done, signal) => {
+    const changed = () => {
+      if (worker.state === 'redundant') done(new Error('Service Worker failed'))
+      else if (worker.state !== 'installing' && worker.state !== 'parsed') done()
+    }
+    // Concurrent Chromium popups can lose statechange notifications; sample the same state too.
+    const poll = setInterval(changed, ACTIVATION_POLL_INTERVAL_MS)
+    signal.addEventListener('abort', () => clearInterval(poll))
+    worker.addEventListener('statechange', changed, { signal })
+    changed()
+  })
+  // Retire only the known nested registration; it otherwise takes precedence over root scope.
+  const legacyScript = `${location.origin}${ROUTE_SCOPE}worker.js`
   for (const old of await navigator.serviceWorker.getRegistrations()) {
     const workers = [old.active, old.waiting, old.installing].filter((worker) => worker !== null)
     if (
       old.scope === `${location.origin}${ROUTE_SCOPE}` &&
       workers.length &&
-      workers.every((worker) => worker.scriptURL === script)
+      workers.every((worker) => worker.scriptURL === script || worker.scriptURL === legacyScript)
     )
       await old.unregister()
   }
-  return registration
+  return worker
 }
 
-/** Wait for fetch-dispatch acknowledgement for this profile, not download completion. */
-export async function dispatchPrefetch(
-  registration: ServiceWorkerRegistration,
-  profile: string,
-): Promise<void> {
+/** Dispatch directly to the selected Worker, including while it waits behind an older active one. */
+export async function dispatchPrefetch(worker: ServiceWorker, profile: string): Promise<void> {
   await within('Asset dispatch timed out', (done, signal) => {
     const channel = new MessageChannel()
     signal.addEventListener('abort', () => channel.port1.close())
@@ -106,7 +80,7 @@ export async function dispatchPrefetch(
       else done(new Error('Invalid dispatch acknowledgement'))
     }
     try {
-      registration.active!.postMessage({ type: 'ceremony-prefetch', profile }, [channel.port2])
+      worker.postMessage({ type: 'ceremony-prefetch', profile }, [channel.port2])
     } catch {
       channel.port2.close()
       done(new Error('Asset dispatch failed'))
