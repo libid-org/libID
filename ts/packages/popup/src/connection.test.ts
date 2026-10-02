@@ -388,35 +388,41 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     error.mockRestore()
   })
 
-  it('reports departure when the popup closes before the worker takes the port', async () => {
-    const pair = fakePair()
-    const app = connectApp(pair)
-    const scope = fakeScope()
-    let lookup!: () => void
-    const destination = new Promise<readonly ServiceWorkerRegistration[]>((resolve) => {
-      lookup = () => resolve([{ active: scope.worker } as unknown as ServiceWorkerRegistration])
-    })
-    let looked = false
-    const registrations = (url?: string) => {
-      if (url === undefined) return Promise.resolve([])
-      looked = true
-      return destination
-    }
-    const endpoint = PopupConnection.accept<Messages>(
-      new CurrentWindow(pair.popupWindow, registrations),
-      { connectionId: ID, allowedApplicationOrigins: [APP_ORIGIN] },
-    )
-    await endpoint.ready
-    await app.connection.ready
-    const leaving = endpoint.navigate('https://popup.example/next')
-    await vi.waitFor(() => expect(looked).toBe(true))
-    pair.popupView.pagehide()
-    expect(await app.connection.closed).toEqual({ outcome: 'closed' })
-    lookup()
-    await expect(leaving).rejects.toThrow('connection-closed')
-    expect(pair.popupProxy.replaced).toEqual([])
-    expect(scope.pending).toHaveLength(0)
-  })
+  it.each([
+    ['pagehide', (_: unknown, pair: ReturnType<typeof fakePair>) => pair.popupView.pagehide()],
+    ['close()', (endpoint: { close(): Promise<void> }) => void endpoint.close()],
+  ])(
+    'reports departure when the popup closes before the worker takes the port: %s',
+    async (_, closing) => {
+      const pair = fakePair()
+      const app = connectApp(pair)
+      const scope = fakeScope()
+      let lookup!: () => void
+      const destination = new Promise<readonly ServiceWorkerRegistration[]>((resolve) => {
+        lookup = () => resolve([{ active: scope.worker } as unknown as ServiceWorkerRegistration])
+      })
+      let looked = false
+      const registrations = (url?: string) => {
+        if (url === undefined) return Promise.resolve([])
+        looked = true
+        return destination
+      }
+      const endpoint = PopupConnection.accept<Messages>(
+        new CurrentWindow(pair.popupWindow, registrations),
+        { connectionId: ID, allowedApplicationOrigins: [APP_ORIGIN] },
+      )
+      await endpoint.ready
+      await app.connection.ready
+      const leaving = endpoint.navigate('https://popup.example/next')
+      await vi.waitFor(() => expect(looked).toBe(true))
+      closing(endpoint, pair)
+      expect(await app.connection.closed).toEqual({ outcome: 'closed' })
+      lookup()
+      await expect(leaving).rejects.toThrow('connection-closed')
+      expect(pair.popupProxy.replaced).toEqual([])
+      expect(scope.pending).toHaveLength(0)
+    },
+  )
 
   it('reports departure over a restored port the destination will not admit', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})

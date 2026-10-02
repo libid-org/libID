@@ -354,6 +354,23 @@ describe('PortCarrier [POPUP-PORT-002]', () => {
     carrier.close()
   })
 
+  it('hands the undelivered backlog on when a delivered value makes the document leave [POPUP-CONNECTION-003]', async () => {
+    const channel = new MessageChannel()
+    channel.port2.postMessage({ type: 'queued' })
+    const backlog = [{ type: 'leave' }, { type: 'second' }, { type: 'third' }]
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN, backlog)
+    const received: unknown[] = []
+    let handedOn: unknown[] = []
+    carrier.on((value) => {
+      received.push(value)
+      if ((value as { type: string }).type === 'leave') handedOn = carrier.detach().backlog
+    })
+    await tick()
+    expect(received).toEqual([{ type: 'leave' }])
+    // What the port still dispatches joins after the values the handler did not reach.
+    expect(handedOn).toEqual([{ type: 'second' }, { type: 'third' }, { type: 'queued' }])
+  })
+
   it('surrenders an unstarted port untouched, with only the backlog it was given', () => {
     const channel = new MessageChannel()
     const carrier = new PortCarrier(channel.port1, APP_ORIGIN, [{ type: 'held' }])

@@ -542,14 +542,8 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
             popup.fragment,
           )
     const onPageHide = () => {
-      if (this.handoff) {
-        // Closed before the worker took the port.
-        depart(this.handoff)
-        this.handoff = null
-        return this.release()
-      }
-      if (this.ended || this.leaving) return
-      this.depart()
+      // A port on its way to the worker still reports departure: closed before the worker took it.
+      if (this.handoff || !(this.ended || this.leaving)) this.depart()
     }
     // WebKit otherwise skips pagehide when closing a window. This listener never
     // prompts or reports departure; a beforeunload can still be cancelled.
@@ -827,6 +821,8 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   /** Ends this endpoint, telling the application its document departed. */
   private depart(): void {
     if (this.carrier) this.discard(this.carrier)
+    if (this.handoff) depart(this.handoff)
+    this.handoff = null
     this.release()
   }
 

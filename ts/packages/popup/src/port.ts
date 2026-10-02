@@ -254,10 +254,10 @@ export class PortCarrier implements Carrier {
     // A value that cannot be deserialized reaches routing as one that cannot be decoded.
     port.onmessageerror = (): void => handler(undefined)
     port.start()
-    // A microtask still precedes every task that dispatches the port's own values.
-    const backlog = this.backlog.splice(0)
+    // A microtask still precedes every task that dispatches the port's own values. Values leave
+    // the backlog one at a time, so a handler that hands the port on hands the rest on with it.
     queueMicrotask(() => {
-      for (const value of backlog) if (this.port === port) handler(value)
+      while (this.port === port && this.backlog.length) handler(this.backlog.shift())
     })
     return () => {
       if (this.port === port) {
