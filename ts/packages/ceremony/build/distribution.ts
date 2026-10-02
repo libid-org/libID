@@ -178,7 +178,7 @@ async function buildDistribution() {
   })
   for (const item of callback.output) {
     if (item.type !== 'chunk' || !item.isEntry) throw new Error('Callback must be self-contained')
-    if (item.imports.length || item.dynamicImports.length || item.referencedFiles.length)
+    if (item.imports.length || item.dynamicImports.length)
       throw new Error('Callback must have no external dependencies')
     const code = inlineScript(item.code)
     tree.put(

@@ -21,7 +21,7 @@ const bundle = (entry, fileName, emptyOutDir) =>
       target: 'es2022',
       minify: false,
       lib: { entry: join(packageDir, entry), formats: ['es'], fileName: () => fileName },
-      rollupOptions: { output: { inlineDynamicImports: true } },
+      rolldownOptions: { output: { codeSplitting: false } },
     },
   })
 
