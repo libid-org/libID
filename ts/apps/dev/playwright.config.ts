@@ -7,7 +7,8 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: 'http://localhost:4692',
-    trace: 'off',
+    // Kept only for failures, which CI uploads.
+    trace: 'retain-on-failure',
     video: 'off',
     screenshot: 'off',
   },

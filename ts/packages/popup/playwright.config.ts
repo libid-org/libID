@@ -8,7 +8,8 @@ export default defineConfig({
   fullyParallel: true,
   timeout: 60_000,
   reporter: 'list',
-  use: { ignoreHTTPSErrors: true },
+  // Traces are kept only for failures, which CI uploads.
+  use: { ignoreHTTPSErrors: true, trace: 'retain-on-failure' },
   webServer: {
     command: 'node e2e/build.mjs && node e2e/server.mjs',
     url: 'https://popup.localhost:4583/health',

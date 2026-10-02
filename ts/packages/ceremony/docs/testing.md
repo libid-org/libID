@@ -182,7 +182,10 @@ The harness proxies real SWS responses and inserts deployment data into emitted
 Callback HTML. It does not reproduce the production Bridge's refresh lifecycle.
 The runtime probes use unauthenticated requests; their separate fixture proof is
 not bound to their attestations. Real consent, authenticated evidence and physical
-devices remain distinct gates. Traces, video and screenshots are disabled.
+devices remain distinct gates. Video and screenshots are disabled. A failing test
+keeps its Playwright trace, and CI uploads them as the `traces-<workspace>-<engine>`
+artifact for 7 days: fetch one with `gh run download <run> -n traces-ceremony-webkit`
+and replay it with `npx playwright show-trace <trace.zip>`.
 
 For focused iteration, select a project or case through Playwright, for example:
 
