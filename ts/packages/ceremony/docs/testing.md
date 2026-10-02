@@ -157,8 +157,9 @@ declared request once, pinned in [crs.pins.json](../e2e/crs.pins.json), and ever
 project reaches Aztec's CDN hosts through a harness proxy that serves that cache
 with the CDN's status and headers ([crs.mjs](../e2e/crs.mjs)); live CDN availability
 stays a [qualification gate](qualification.md#remaining-qualification). The
-real-notary session tests, tagged `@live`, reach the X and GitHub APIs and retry
-once inside the test, unless a deadline was missed; no Playwright test retries.
+real-notary session tests, tagged `@live`, and the reveal stall test's setup sends
+reach the X and GitHub APIs and retry once inside the test, unless a deadline was
+missed; no Playwright test retries.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
 Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987/4989 and

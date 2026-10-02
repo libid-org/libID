@@ -97,37 +97,59 @@ for (const stall of ['send', 'reveal'] as const)
     try {
       const address = relay.address()
       if (!address || typeof address === 'string') throw new Error('Missing relay port')
-      const runtime = await page.evaluateHandle(async (notaryAddress) => {
-        const abort = new AbortController()
-        const notary = new window.NotaryRuntime(notaryAddress, abort.signal)
-        const request = {
-          url: 'https://api.x.com/2/users/me',
-          method: 'GET' as const,
-          headers: {
-            Host: new TextEncoder().encode('api.x.com'),
-            Connection: new TextEncoder().encode('close'),
-          },
-          body: new Uint8Array(),
-        }
-        const sessions = await Promise.all([
-          notary.prepare(request.url),
-          notary.prepare(request.url),
-        ])
-        return {
-          abort,
-          notary,
-          sessions,
-          request,
-          transcripts: [] as { sent: Uint8Array; received: Uint8Array }[],
-        }
-      }, `http://127.0.0.1:${address.port}`)
+      const prepare = () =>
+        page.evaluateHandle(async (notaryAddress) => {
+          const abort = new AbortController()
+          const notary = new window.NotaryRuntime(notaryAddress, abort.signal)
+          const request = {
+            url: 'https://api.x.com/2/users/me',
+            method: 'GET' as const,
+            headers: {
+              Host: new TextEncoder().encode('api.x.com'),
+              Connection: new TextEncoder().encode('close'),
+            },
+            body: new Uint8Array(),
+          }
+          const sessions = await Promise.all([
+            notary.prepare(request.url),
+            notary.prepare(request.url),
+          ])
+          return {
+            abort,
+            notary,
+            sessions,
+            request,
+            transcripts: [] as { sent: Uint8Array; received: Uint8Array }[],
+          }
+        }, `http://127.0.0.1:${address.port}`)
+      const release = (handle: Awaited<ReturnType<typeof prepare>>) =>
+        handle
+          .evaluate(({ abort }) => abort.abort())
+          .catch(() => {})
+          .then(() => handle.dispose())
+      let runtime = await prepare()
       try {
         expect(sockets.size).toBe(4)
         expect(page.workers().length).toBeGreaterThan(0)
-        if (stall === 'reveal')
-          await runtime.evaluate(async (state) => {
-            state.transcripts = await Promise.all(state.sessions.map((s) => s.send(state.request)))
+        if (stall === 'reveal') {
+          const sendAll = (handle: typeof runtime) =>
+            handle.evaluate(async (state) => {
+              state.transcripts = await Promise.all(
+                state.sessions.map((s) => s.send(state.request)),
+              )
+            })
+          // These sends reach the live X API: one retry, on fresh sessions, absorbs a transient
+          // failure there. A missed deadline fails at once, and the stall below never retries.
+          await sendAll(runtime).catch(async (error: unknown) => {
+            if (/timed out/.test(String(error))) throw error
+            console.error('Retrying setup after:', String(error))
+            await release(runtime)
+            await expect.poll(() => sockets.size, { timeout: 5000 }).toBe(0)
+            runtime = await prepare()
+            expect(sockets.size).toBe(4)
+            await sendAll(runtime)
           })
+        }
         stalled = true
         const outcome = await runtime.evaluate(async (state, stall) => {
           const results = await Promise.allSettled(
@@ -155,8 +177,7 @@ for (const stall of ['send', 'reveal'] as const)
         await expect.poll(() => sockets.size, { timeout: 5000 }).toBe(0)
         await expect.poll(() => page.workers().length, { timeout: 5000 }).toBe(0)
       } finally {
-        await runtime.evaluate(({ abort }) => abort.abort()).catch(() => {})
-        await runtime.dispose()
+        await release(runtime)
       }
     } finally {
       for (const socket of sockets) socket.destroy()
