@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,11 +9,15 @@ const workspace = fileURLToPath(new URL('..', import.meta.url))
 const output = join(workspace, '.cache/npm')
 rmSync(output, { recursive: true, force: true })
 mkdirSync(output, { recursive: true })
-// Every package that is not private is published, so every one is packed and checked here.
-const packages = readdirSync(join(workspace, 'packages')).filter(
-  (name) =>
-    !JSON.parse(readFileSync(join(workspace, 'packages', name, 'package.json'), 'utf8')).private,
-)
+// Dependencies first: packing builds each package against its dependencies' declarations.
+const packages = ['ledger', 'popup', 'ceremony']
+// Every package that is not private is releasable, so each must be checked here. A directory
+// without a manifest is not a package.
+const releasable = readdirSync(join(workspace, 'packages')).filter((name) => {
+  const manifest = join(workspace, 'packages', name, 'package.json')
+  return existsSync(manifest) && !JSON.parse(readFileSync(manifest, 'utf8')).private
+})
+assert.deepEqual(releasable.sort(), [...packages].sort(), 'packages must list every public package')
 const dependencies: Record<string, string> = {}
 for (const name of packages) {
   const archive = join(output, `${name}.tgz`)

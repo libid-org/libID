@@ -54,7 +54,10 @@ Once per repository, set up two settings that cover every package:
   release tag can publish.
 
 On each npm package, configure its GitHub Actions trusted publisher:
-`libid-org/libID`, workflow `release.yml`, environment `npm-release`. npm
+`libid-org/libID`, workflow `release.yml`, environment `npm-release`, and
+allow direct publishing with `npm publish`. A trusted publisher created after
+3 September 2026 otherwise permits only `npm stage publish`, and the release
+job cannot publish. npm
 checks the repository, workflow file and environment, not the branch, so the
 environment and the tag ruleset are what keep an edited workflow from
 publishing. Then require trusted publishing/2FA according to the organization's
@@ -82,11 +85,12 @@ inspect the registry before retrying a failed release.
 
 ## Adding a package
 
-Every package under `ts/packages` that is not `private` is packed, checked and
-releasable by its directory name; the workflow needs no change. Add its public
-imports to the consumer in `ts/scripts/check-packages.ts`, then publish its
-first version and configure its trusted publisher as under
-[First publication](#first-publication).
+Every package under `ts/packages` that is not `private` is releasable by its
+directory name; the workflow needs no change. In `ts/scripts/check-packages.ts`,
+add it to `packages` after its workspace dependencies, and add its public imports
+to the consumer. The check fails while a public package is missing from that
+list. Then publish its first version and configure its trusted publisher as
+under [First publication](#first-publication).
 
 ## Versions
 
