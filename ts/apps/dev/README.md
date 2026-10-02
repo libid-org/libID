@@ -89,8 +89,11 @@ pnpm --filter @libid/dev... build
 pnpm --filter @libid/dev test:e2e
 ```
 
-The browser tests use port 4692 and cover frontend behavior with intercepted
-responses. Real OAuth and proving checks are documented in the
+The browser tests use port 4692 and intercepted responses for smoke coverage of
+launch/close, outcomes, concurrent runs and a representative timing display.
+Protocol validation and event ordering belong to the ceremony and popup suites;
+the dev suite does not exhaustively test timing arithmetic, sorting or delayed
+delivery, or retest native disclosure controls. Real OAuth and proving checks are documented in the
 [ceremony qualification guide](../../packages/ceremony/docs/qualification.md).
 
 Run history shows core operation durations from their occurrence timestamps, plus

@@ -28,7 +28,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | CSP-020 | [e2e/platforms.spec.ts](../e2e/platforms.spec.ts) |
 | KIT-001A | [build/distribution.test.ts](../build/distribution.test.ts), [build/sws.test.ts](../build/sws.test.ts) |
 | KIT-001B | [build/distribution.test.ts](../build/distribution.test.ts) |
-| KIT-002 | [apps/dev/src/app.spec.ts](../../../apps/dev/src/app.spec.ts), [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts) |
+| KIT-002 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts) |
 | KIT-006 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |
 | KIT-008 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/connect.test.ts](../src/ccdp/client/connect.test.ts) |
 | KIT-009 | [build/distribution.test.ts](../build/distribution.test.ts) |

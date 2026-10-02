@@ -4,7 +4,6 @@ export default defineConfig({
   testDir: 'src',
   testMatch: '*.spec.ts',
   timeout: 30000,
-  // The private-file test writes watched files; engines run on separate CI runners.
   workers: 1,
   use: {
     baseURL: 'http://localhost:4692',

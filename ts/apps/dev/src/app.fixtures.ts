@@ -14,12 +14,11 @@ declare global {
     /** Where the fake provider page returns to: the prover fixture for its ceremony. */
     returnUrl?: string
     /** The prover fixture's ready connection. */
-    eventConnection?: { send(value: unknown): void; close(): Promise<void> }
+    eventConnection?: { send(value: unknown): void }
     /** Public inputs binding the synthetic Google proof to the returned authorization nonce. */
     googlePublicInputs?: string[]
-    /** The prover fixture received `prove-identity`, whose value is `proveIdentity`. */
+    /** The prover fixture received `prove-identity`. */
     requested?: true
-    proveIdentity?: { clientCredential: string }
   }
 }
 
@@ -122,38 +121,12 @@ export async function closeRun(row: Locator, popup: Page, outcome?: string) {
 
 export const expectClosed = (popup: Page) => expect.poll(() => popup.isClosed()).toBe(true)
 
-/** Closes the prover fixture's connection from inside the popup; resolves once it has closed. */
-export async function closeFromPopup(popup: Page) {
-  // Firefox may destroy the target before acknowledging its self-close.
-  await Promise.all([
-    popup.waitForEvent('close'),
-    popup
-      .evaluate(() => window.eventConnection!.close())
-      .catch((error) => {
-        expect(error.message).toContain('Target page, context or browser has been closed')
-      }),
-  ])
-}
-
 /** The results the app recorded, in launch order. */
 export const results = (page: Page) => page.evaluate(() => [...window.results.values()])
 
 /** One operation timing entry of the run history, by its text. */
 export const timing = (page: Page, hasText: string | RegExp) =>
   page.locator('.operation-timings li').filter({ hasText })
-
-/** The expandable attribute details of the operation timings whose summary matches `hasText`. */
-export const timingDetails = (page: Page, hasText: RegExp) =>
-  page.locator('.operation-timings details').filter({
-    has: page.locator('summary', { hasText }),
-  })
-
-/** Expects the run history to stay unchanged while the page clock advances. */
-export async function expectFrozen(page: Page) {
-  const history = await page.locator('#history').textContent()
-  await page.clock.runFor(2000)
-  await expect(page.locator('#history')).toHaveText(history!)
-}
 
 /** Waits until the popup's fixture document defines `name`. */
 export const waitForFixture = (
@@ -220,7 +193,7 @@ export async function serveCeremony(context: BrowserContext) {
       popupModule,
       'Event transport fixture',
       `const connection = accept();
-      connection.on({ type: 'prove-identity', decode: value => value }, value => { window.requested = true; window.proveIdentity = value });
+      connection.on({ type: 'prove-identity', decode: value => value }, () => { window.requested = true });
       await connection.ready;
       window.googlePublicInputs = ${JSON.stringify(
         nonce === null
@@ -257,18 +230,11 @@ export async function returnToProver(popup: Page) {
   await popup.waitForFunction(() => !!window.eventConnection)
 }
 
-/** A ceremony event message; `attributes` become its instrumentation. */
-export const event = (
-  name: string,
-  phase?: 'started' | 'finished',
-  timestamp?: number,
-  attributes?: Record<string, number>,
-) => ({
+/** A ceremony event; `send` supplies its occurrence timestamp. */
+export const event = (name: string, phase?: 'started' | 'finished') => ({
   type: 'event',
   event: name,
   ...(phase ? { phase } : {}),
-  ...(timestamp === undefined ? {} : { timestamp }),
-  ...(attributes ? { instrumentation: { attributes } } : {}),
 })
 
 export const identityFetchFailure = (message: string) => ({
