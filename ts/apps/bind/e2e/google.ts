@@ -1,0 +1,87 @@
+import type { Page } from '@playwright/test'
+import { savedSession } from './session.ts'
+
+/**
+ * The saved Google session, from GOOGLE_TEST_ALICE_COOKIES or
+ * GOOGLE_TEST_ALICE_COOKIES_FILE. Renew it with `cargo run --bin ceremony --
+ * export google` in libid-server-rs' ceremony-tests: Google refuses a sign-in
+ * in an automated browser, but honours a session made elsewhere.
+ */
+export const googleSession = () =>
+  savedSession('GOOGLE_TEST_ALICE', ['SID', '__Secure-1PSID', '__Secure-3PSID'])
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Pages that no automation gets past: the session or the OAuth client needs a person. */
+const REFUSED: [string, string][] = [
+  ['this browser or app may not be secure', 'Google refused this browser'],
+  ["verify it's you", 'Google asks to verify the account interactively'],
+  ['verify you’re human', 'Google asks to verify the account interactively'],
+  ['redirect_uri_mismatch', 'Google rejected the redirect URI of the OAuth client'],
+  ['access blocked', 'Google blocked the OAuth client'],
+  ['has not completed the google verification process', 'Google blocked the OAuth client'],
+  ['invalid_client', 'Google does not know the OAuth client'],
+  ['unauthorized_client', 'Google refused the OAuth client'],
+  ['unsupported_response_type', 'Google refused the id_token response type'],
+]
+
+const LOGIN_VISIBLE = `[...document.querySelectorAll('input[type=password],input[type=email],input[name=identifier]')]
+  .some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden')`
+
+/** The account row for `email`, else a Continue or Allow button, marked for a real click. */
+const markNext = (email: string) => `(() => {
+  document.querySelectorAll('[data-libid-google]').forEach(e => e.removeAttribute('data-libid-google'));
+  const usable = e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+  const account = [...document.querySelectorAll('[data-identifier]')].find(e => usable(e) && e.getAttribute('data-identifier').toLowerCase() === ${JSON.stringify(email.toLowerCase())});
+  const consent = [...document.querySelectorAll('button,[role=button],input[type=submit]')].find(e => usable(e) && /^(continue|allow)$/i.test((e.innerText || e.value || '').trim()));
+  const next = account || consent;
+  if (!next) return false;
+  next.setAttribute('data-libid-google', '1');
+  return true;
+})()`
+
+/**
+ * Choose the account and consent on Google in `popup`, signed in by the saved
+ * session, until it leaves Google. A port of libid-server-rs'
+ * ceremony-tests/src/browser/google.rs without its sign-in: a login page means
+ * the saved session has expired.
+ */
+export async function authorizeOnGoogle(popup: Page, email: string, budgetMs = 180_000) {
+  const started = Date.now()
+  let visited = false
+  let clickedAt = 0
+  while (Date.now() - started < budgetMs) {
+    if (popup.isClosed()) return
+    const url = URL.parse(popup.url())
+    if (url?.hostname !== 'accounts.google.com') {
+      if (visited) return
+      await sleep(250)
+      continue
+    }
+    visited = true
+    const text = (
+      (await popup
+        .locator('body')
+        .textContent()
+        .catch(() => '')) ?? ''
+    ).toLowerCase()
+    const refused = REFUSED.find(([marker]) => text.includes(marker))
+    if (refused) throw new Error(`${refused[1]} (${url.pathname})`)
+    if (await popup.evaluate(LOGIN_VISIBLE).catch(() => false))
+      throw new Error(
+        'Google asked to sign in: the saved session has expired. Renew it with `ceremony export google`.',
+      )
+    if (
+      Date.now() - clickedAt > 3_000 &&
+      (await popup.evaluate(markNext(email)).catch(() => false))
+    ) {
+      await popup
+        .locator('[data-libid-google="1"]')
+        .click({ timeout: 5_000 })
+        .catch(() => {})
+      clickedAt = Date.now()
+    }
+    await sleep(250)
+  }
+  throw new Error(`No Google authorization in ${budgetMs / 1000} s; stopped on ${popup.url()}`)
+}

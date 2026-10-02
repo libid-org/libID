@@ -1,0 +1,142 @@
+import type { Page } from '@playwright/test'
+import * as OTPAuth from 'otpauth'
+
+export interface GitHubAccount {
+  username: string
+  password: string
+  totpSecret: string
+}
+
+/**
+ * The test account, from GH_TEST_ALICE_*; undefined when any is missing,
+ * which skips the test locally. With LIBID_REQUIRE_LIVE set, as CI sets it, a
+ * missing secret fails instead.
+ */
+export function githubAccount(): GitHubAccount | undefined {
+  const username = process.env.GH_TEST_ALICE_USERNAME
+  const password = process.env.GH_TEST_ALICE_PASSWORD
+  const totpSecret = process.env.GH_TEST_ALICE_TOTP_SECRET
+  if (username && password && totpSecret) return { username, password, totpSecret }
+  if (process.env.LIBID_REQUIRE_LIVE)
+    throw new Error('LIBID_REQUIRE_LIVE is set but GH_TEST_ALICE_* are missing')
+  return undefined
+}
+
+function totp(secret: string): string {
+  const normalized = secret.replace(/\s/g, '').toUpperCase()
+  return new OTPAuth.TOTP({
+    secret: OTPAuth.Secret.fromBase32(normalized),
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+  }).generate()
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** What the login has done so far; each handler reads and updates it. */
+interface Progress {
+  filled: boolean
+  totpStep?: number
+  rateLimited: number
+  errored: number
+}
+
+async function onErrorPage(popup: Page, progress: Progress) {
+  progress.errored += 1
+  if (progress.errored > 3) throw new Error('GitHub answered its error page three times')
+  await sleep(10_000 * progress.errored)
+  await popup.goBack().catch(() => {})
+  progress.filled = false
+  progress.totpStep = undefined
+}
+
+async function onLogin(popup: Page, account: GitHubAccount, progress: Progress, text: string) {
+  if (text.includes('too many requests') || text.includes('rate limit')) {
+    progress.rateLimited += 1
+    if (progress.rateLimited > 3) throw new Error('GitHub rate-limited the login three times')
+    await sleep(30_000 * progress.rateLimited)
+    await popup.reload()
+    progress.filled = false
+    return
+  }
+  if (progress.filled || !(await popup.locator('#login_field').count())) return
+  await popup.fill('#login_field', account.username)
+  await popup.fill('#password', account.password)
+  await popup.click('input[type=submit][name=commit]')
+  progress.filled = true
+}
+
+async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
+  const step = Math.floor(Date.now() / 30_000)
+  if (progress.totpStep === step || !(await popup.locator('#app_totp').count())) return
+  await popup.fill('#app_totp', totp(account.totpSecret))
+  // GitHub submits the code on its own once six digits are in.
+  await popup
+    .locator('button[type=submit]')
+    .click({ timeout: 2_000 })
+    .catch(() => {})
+  progress.totpStep = step
+}
+
+async function onAuthorize(popup: Page, text: string) {
+  const authorize = popup.locator("button[name='authorize'][value='1']")
+  if (await authorize.count()) await authorize.click()
+  else if (text.includes('redirect_uri') || text.includes('be careful'))
+    throw new Error(
+      "GitHub refused the authorization request: the app's callback URL does not match",
+    )
+}
+
+/** Act on one GitHub page. */
+async function onGitHubPage(
+  popup: Page,
+  account: GitHubAccount,
+  progress: Progress,
+  path: string,
+  text: string,
+) {
+  if (
+    text.includes("couldn't respond to your request in time") ||
+    text.includes('something went wrong')
+  )
+    return onErrorPage(popup, progress)
+  if (path === '/login' || path === '/session') return onLogin(popup, account, progress, text)
+  if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress)
+  if (path.startsWith('/sessions/two-factor')) {
+    await popup.goto('https://github.com/sessions/two-factor/app')
+    return
+  }
+  if (path === '/login/oauth/authorize') return onAuthorize(popup, text)
+  if (path.startsWith('/sessions/verified-device'))
+    throw new Error('GitHub asked for device verification: the account has no TOTP method')
+}
+
+/**
+ * Sign in and authorize on GitHub in `popup`, until it leaves github.com. A
+ * port of libid-server-rs' ceremony-tests/src/browser/github.rs: fill the login
+ * form once, answer the authenticator step once per 30-second code, approve the
+ * OAuth app, and back off on GitHub's error and rate-limit pages.
+ */
+export async function authorizeOnGitHub(popup: Page, account: GitHubAccount, budgetMs = 180_000) {
+  const started = Date.now()
+  const progress: Progress = { filled: false, rateLimited: 0, errored: 0 }
+  while (Date.now() - started < budgetMs) {
+    if (popup.isClosed()) return
+    const url = URL.parse(popup.url())
+    if (url?.hostname === 'github.com') {
+      const text = (
+        (await popup
+          .locator('body')
+          .textContent()
+          .catch(() => '')) ?? ''
+      ).toLowerCase()
+      await onGitHubPage(popup, account, progress, url.pathname, text)
+    } else if (url && progress.filled) {
+      // Back from GitHub: Callback and Prover take over.
+      return
+    }
+    await sleep(250)
+  }
+  throw new Error(`No GitHub authorization in ${budgetMs / 1000} s; stopped on ${popup.url()}`)
+}
