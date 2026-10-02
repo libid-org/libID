@@ -32,6 +32,13 @@ specifications.
   protocols cite it instead of restating opener, isolation, and continuity
   mechanics.
 
+## Names
+
+- [ENS integration](ens-integration.md) defines how a binding is read as an
+  ENS name under `handles.link`: the name grammar, the handle-to-label
+  transform, the Handle Resolver contract, and the Gateway that signs its
+  answers.
+
 ## System model and specification ownership
 
 libID turns an identity-platform authorization into a proof that a Consumer
@@ -104,6 +111,7 @@ root and verifier.
 | Chain ID, Transaction Author, Block Time, and transaction-data encoding | [Chain profiles](chain-profiles.md), with the Consumer's protocol fixing each transaction kind's arguments |
 | Platform endpoints, fields, trust roots, and proof projections | [Identity-platform ceremonies](platform-ceremonies.md) |
 | Popup origin allowlists, message model, delivery, navigation, closure, and continuity guarantees | [Popup transport](popup-transport.md) |
+| ENS names, the handle-to-label transform, the Handle Resolver, and the Gateway | [ENS integration](ens-integration.md) |
 | Redirect transport, interruption behavior, and UI control flow | browser architecture |
 | Transaction dispatch and author authentication | Consumer protocol |
 | Verification dispatch, replay recording, trust roots, and version governance | [Common ceremony rules](ceremony-common.md) |
