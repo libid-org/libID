@@ -1,4 +1,5 @@
 import {
+  type CCDPClient,
   type Ceremony,
   CeremonyStage,
   createCCDPClient,
@@ -46,7 +47,16 @@ const show = (id: string, text: string) => {
 }
 const status = (text: string) => show('status', text)
 const connectButton = document.querySelector<HTMLButtonElement>('#connect')!
-const bindAnchor = document.querySelector<HTMLAnchorElement>('#bind-github')!
+
+/** The platforms whose proofs this app encodes: both are TLSNotary ceremonies. */
+type Platform = 'github' | 'x'
+const names: Record<Platform, string> = { github: 'GitHub', x: 'X' }
+const anchors = Object.fromEntries(
+  (Object.keys(names) as Platform[]).map((platform) => [
+    platform,
+    document.querySelector<HTMLAnchorElement>(`#bind-${platform}`)!,
+  ]),
+) as Record<Platform, HTMLAnchorElement>
 
 let wallet: WalletClient | undefined
 let holder: Address | undefined
@@ -67,18 +77,19 @@ async function connect() {
 }
 
 async function submit(
-  result: Extract<IdentityResult<'github'>, { status: 'accepted' }>,
+  platform: Platform,
+  result: Extract<IdentityResult<Platform>, { status: 'accepted' }>,
   transactionData: Uint8Array,
   operationDomain: Uint8Array,
 ) {
   if (!wallet || !holder) throw new Error('Wallet disconnected')
   show('proof-received', `${result.identity.userName} (${result.identity.userId})`)
-  const github = platformId('github')
+  const id = platformId(platform)
   const value = await publicClient.readContract({
     address: REGISTRY,
     abi: identityRegistryAbi,
     functionName: 'quoteBind',
-    args: [github, result.oauthProof.platformCeremonyVersion],
+    args: [id, result.oauthProof.platformCeremonyVersion],
   })
   const payload = encodeTlsNotaryPayload(result.oauthProof, operationDomain, transactionData)
   status('Submitting the binding…')
@@ -87,7 +98,7 @@ async function submit(
     address: REGISTRY,
     abi: identityRegistryAbi,
     functionName: 'bind',
-    args: [github, result.oauthProof.platformCeremonyVersion, payload, true],
+    args: [id, result.oauthProof.platformCeremonyVersion, payload, true],
     value,
   })
   const hash = await wallet.writeContract({ ...request, account: wallet.account ?? holder })
@@ -96,17 +107,17 @@ async function submit(
   show('receipt-status', `${receipt.status} in block ${receipt.blockNumber}`)
   if (receipt.status !== 'success') throw new Error('The binding transaction reverted')
 
-  const bound = await resolveId(registry, github, result.identity.userId)
+  const bound = await resolveId(registry, id, result.identity.userId)
   show('registry-holder', bound ?? 'not bound')
   status('Bound on chain. Waiting for the indexer…')
-  show('indexer-holder', await indexed(result.identity.userId))
+  show('indexer-holder', await indexed(platform, result.identity.userId))
   status('Done.')
 }
 
-/** The holder the indexer reports for a GitHub id, polled until it appears. */
-async function indexed(userId: string): Promise<string> {
+/** The holder the indexer reports for an id, polled until it appears. */
+async function indexed(platform: Platform, userId: string): Promise<string> {
   for (let attempt = 0; attempt < 60; attempt++) {
-    const response = await fetch(`/indexer/v1/resolve/id/github/${encodeURIComponent(userId)}`)
+    const response = await fetch(`/indexer/v1/resolve/id/${platform}/${encodeURIComponent(userId)}`)
     if (response.ok) {
       const body = (await response.json()) as { bindings: { chainId: number; owner: string }[] }
       const local = body.bindings.find((binding) => binding.chainId === chain.id)
@@ -117,12 +128,65 @@ async function indexed(userId: string): Promise<string> {
   return 'not indexed after 60 s'
 }
 
-async function initialize() {
-  const client = await createCCDPClient({ oauthBridge: BRIDGE })
-  if (!client.enabledPlatforms.includes('github')) {
-    status('The Bridge does not enable GitHub.')
+/** Start a ceremony for `platform` from its anchor's click, then bind what it proves. */
+function launch(
+  client: CCDPClient,
+  platform: Platform,
+  event: MouseEvent,
+  operationDomain: Uint8Array,
+) {
+  const anchor = anchors[platform]
+  if (!holder) {
+    event.preventDefault()
     return
   }
+  const id = crypto.randomUUID()
+  const target = `ceremony-${id}`
+  // Window creation stays synchronous with the click.
+  const popup = PopupWindow.open(target)
+  const connection = client.connect(popup, { connectionId: id })
+  const transactionData = authorizedTransactionData(holder)
+  let ceremony: Ceremony<Platform>
+  try {
+    ceremony = client.new(connection, id, platform, ledger, operationDomain, transactionData)
+  } catch (error) {
+    event.preventDefault()
+    connection.close()
+    status(error instanceof Error ? error.message : 'Unable to start the ceremony.')
+    return
+  }
+  anchor.target = target
+  anchor.href = ceremony.launchUrl
+  if (popup.opened) event.preventDefault()
+  const off = ceremony.onStage((update) => {
+    show(
+      'stage',
+      update.status === 'active'
+        ? CeremonyStage.message(update.stage, names[platform])
+        : update.status,
+    )
+  })
+  void ceremony
+    .proveUserIdentity()
+    .then(async (result) => {
+      connection.close()
+      if (result.status !== 'accepted') {
+        status(`${names[platform]} denied the authorization.`)
+        return
+      }
+      await submit(platform, result, transactionData, operationDomain)
+    })
+    .catch((error: unknown) =>
+      status(error instanceof Error ? error.message : 'The binding failed.'),
+    )
+    .finally(off)
+}
+
+async function initialize() {
+  const client = await createCCDPClient({ oauthBridge: BRIDGE })
+  const enabled = (Object.keys(names) as Platform[]).filter((platform) =>
+    client.enabledPlatforms.includes(platform),
+  )
   const operationDomain = hexToBytes(
     await publicClient.readContract({
       address: REGISTRY,
@@ -133,57 +197,17 @@ async function initialize() {
   connectButton.addEventListener('click', () => {
     connect().then(
       () => {
-        bindAnchor.setAttribute('aria-disabled', 'false')
-        status('Ready. Click Bind GitHub.')
+        for (const platform of enabled) anchors[platform].setAttribute('aria-disabled', 'false')
+        status('Ready. Choose a platform to bind.')
       },
       (error: unknown) =>
         status(error instanceof Error ? error.message : 'Could not connect a wallet.'),
     )
   })
-  bindAnchor.addEventListener('click', (event) => {
-    if (!holder) {
-      event.preventDefault()
-      return
-    }
-    const id = crypto.randomUUID()
-    const target = `ceremony-${id}`
-    // Window creation stays synchronous with the click.
-    const popup = PopupWindow.open(target)
-    const connection = client.connect(popup, { connectionId: id })
-    const transactionData = authorizedTransactionData(holder)
-    let ceremony: Ceremony<'github'>
-    try {
-      ceremony = client.new(connection, id, 'github', ledger, operationDomain, transactionData)
-    } catch (error) {
-      event.preventDefault()
-      connection.close()
-      status(error instanceof Error ? error.message : 'Unable to start the ceremony.')
-      return
-    }
-    bindAnchor.target = target
-    bindAnchor.href = ceremony.launchUrl
-    if (popup.opened) event.preventDefault()
-    const off = ceremony.onStage((update) => {
-      show(
-        'stage',
-        update.status === 'active' ? CeremonyStage.message(update.stage, 'GitHub') : update.status,
-      )
-    })
-    void ceremony
-      .proveUserIdentity()
-      .then(async (result) => {
-        connection.close()
-        if (result.status !== 'accepted') {
-          status('GitHub denied the authorization.')
-          return
-        }
-        await submit(result, transactionData, operationDomain)
-      })
-      .catch((error: unknown) =>
-        status(error instanceof Error ? error.message : 'The binding failed.'),
-      )
-      .finally(off)
-  })
+  for (const platform of enabled)
+    anchors[platform].addEventListener('click', (event) =>
+      launch(client, platform, event, operationDomain),
+    )
   status('Connect a wallet to start.')
 }
 

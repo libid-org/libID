@@ -14,7 +14,8 @@
       "!**/playwright-report",
       "!**/coverage",
       "!apps/dev/.cache",
-      "!apps/bind/.cache"
+      "!apps/bind/.cache",
+      "!apps/bind/e2e/stealth.js"
     ]
   },
   "formatter": {

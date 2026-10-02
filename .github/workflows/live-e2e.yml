@@ -21,8 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  github:
-    name: GitHub binding (live)
+  bind:
+    name: GitHub and X bindings (live)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -37,18 +37,21 @@ jobs:
       - name: Install Chromium
         run: pnpm -C ts --filter @libid/bind exec playwright install --with-deps chromium
 
-      - name: Bind a GitHub identity end to end
+      - name: Bind GitHub and X identities end to end
         env:
           GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
           GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
+          X_TEST_ALICE_USERNAME: ${{ secrets.X_TEST_ALICE_USERNAME }}
+          # The saved X session, base64 of libid-server-rs' `ceremony export x`.
+          X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/bind test:live
 
       - name: Keep the trace, video and container logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: live-e2e-github
+          name: live-e2e
           path: |
             ts/apps/bind/test-results
             ${{ runner.temp }}/stack.log
