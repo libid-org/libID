@@ -52,7 +52,7 @@ jobs:
           fi
           files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
           # What every job builds on: the TypeScript workspace setup and CI itself.
-          shared='^(ts/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json)|\.github/(workflows/(ci|ccdp-image)\.yml|actions/setup-ts/))'
+          shared='^(ts/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|scripts/)|\.github/(workflows/(ci|ccdp-image)\.yml|actions/setup-ts/))'
           # The ceremony and the workspace packages it bundles.
           ceremony='^ts/packages/(ceremony|popup|ledger)/'
           changed() { grep -qE "$shared|$1" <<<"$files"; }
@@ -82,6 +82,9 @@ jobs:
 
       - name: Build
         run: pnpm -C ts build
+
+      - name: Packed npm consumer
+        run: pnpm -C ts test:packages
 
       - name: Type checking
         run: pnpm -C ts typecheck

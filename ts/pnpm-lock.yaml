@@ -66,21 +66,22 @@ importers:
 
   packages/ceremony:
     dependencies:
-      '@aztec/bb.js':
-        specifier: 5.2.0
-        version: 5.2.0
       '@libid/contracts':
         specifier: 0.13.1
         version: 0.13.1(viem@2.55.13(typescript@5.9.3))
       '@libid/ledger':
         specifier: workspace:^
         version: link:../ledger
-      '@libid/popup':
-        specifier: workspace:^
-        version: link:../popup
       '@noble/hashes':
         specifier: ^2.3.0
         version: 2.4.0
+    devDependencies:
+      '@aztec/bb.js':
+        specifier: 5.2.0
+        version: 5.2.0
+      '@libid/popup':
+        specifier: workspace:^
+        version: link:../popup
       '@noir-lang/acvm_js':
         specifier: 1.0.0-beta.25
         version: 1.0.0-beta.25
@@ -90,7 +91,6 @@ importers:
       '@noir-lang/noirc_abi':
         specifier: 1.0.0-beta.25
         version: 1.0.0-beta.25
-    devDependencies:
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.64.0-alpha-2026-09-29

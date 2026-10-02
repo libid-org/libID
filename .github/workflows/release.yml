@@ -1,6 +1,7 @@
 name: Release
 
 # A published GitHub Release's tag selects what it publishes:
+# - `<popup|ledger|ceremony>-v<version>` publishes that npm package.
 # - `ccdp-v<version>` promotes the CCDP image of the tagged commit, which must
 #   be on main, to `ghcr.io/libid-org/ccdp:<version>` (plus `:latest` for a
 #   stable version). CCDP versions are their own, never a package's.
@@ -147,3 +148,61 @@ jobs:
             [ "$got" = "$digest" ] || { echo "::error::$ref resolved to $got, not $digest"; exit 1; }
             echo "- \`$ref\` = \`$got\`" >> "$GITHUB_STEP_SUMMARY"
           done
+
+  publish-npm:
+    name: Publish an npm package
+    if: startsWith(github.event.release.tag_name, 'popup-v') || startsWith(github.event.release.tag_name, 'ledger-v') || startsWith(github.event.release.tag_name, 'ceremony-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select a package version with successful main CI
+        id: package
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          case "$TAG" in
+            popup-v*) package=popup ;;
+            ledger-v*) package=ledger ;;
+            ceremony-v*) package=ceremony ;;
+            *) exit 1 ;;
+          esac
+          version=$(node -p "require('./ts/packages/$package/package.json').version")
+          [ "$TAG" = "$package-v$version" ] || {
+            echo "::error::$TAG does not match $package's package.json version $version"
+            exit 1
+          }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          runs=$(gh run list --workflow ci.yml --branch main --event push \
+            --commit "$GITHUB_SHA" --status success --json databaseId --jq 'length')
+          [ "$runs" -gt 0 ] || {
+            echo "::error::wait for successful main CI for $GITHUB_SHA before releasing"
+            exit 1
+          }
+          dist_tag=latest
+          if [[ "$version" == *-* || "$PRERELEASE" == true ]]; then dist_tag=next; fi
+          { echo "name=$package"; echo "dist-tag=$dist_tag"; } >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ts
+
+      # npm 11 bundled with Node 24 supports trusted publishing. No registry token:
+      # configure release.yml as a trusted publisher on each existing npm package.
+      - name: Build and test the packed packages
+        run: pnpm -C ts test:packages
+
+      - name: Publish the checked tarball with npm OIDC
+        env:
+          PACKAGE: ${{ steps.package.outputs.name }}
+          DIST_TAG: ${{ steps.package.outputs.dist-tag }}
+        run: npm publish "ts/.cache/npm/$PACKAGE.tgz" --access public --tag "$DIST_TAG"

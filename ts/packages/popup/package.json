@@ -1,7 +1,6 @@
 {
   "name": "@libid/popup",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Own one popup browsing context and connect it to an application page across origins, isolation, and popup-document replacement, carrying caller-defined messages.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
@@ -27,17 +26,19 @@
   },
   "files": [
     "dist",
-    "src",
-    "!src/**/*.test.ts"
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node build/check-exports.mjs",
+    "build": "node ../../scripts/build-package.ts && node build/check-exports.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium firefox webkit",
-    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
+    "prepack": "pnpm build"
   },
   "devDependencies": {
     "@playwright/test": "catalog:",
@@ -46,5 +47,8 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

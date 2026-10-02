@@ -244,8 +244,8 @@ binary. [CI](../../../../.github/workflows/ci.yml) uses it as follows:
 | [Custom workflow](../../../../.github/workflows/ccdp-custom.yml), or `ccdp-custom/<tag>` branch | Publish `:custom-<tag>` only. |
 | GitHub Release `ccdp-v<version>`, such as `ccdp-v1` or `ccdp-v1.2.0` | [Promote](../../../../.github/workflows/release.yml) the commit's sha image to `:<version>` and, for a version without `-`, `:latest`. |
 
-CCDP versions are their own; a `v<version>` release publishes only the npm
-packages. Release promotion requires the tagged commit to be on `main` and the
+CCDP versions are independent of the [npm package releases](../../../RELEASING.md).
+Image promotion requires the tagged commit to be on `main` and the
 source image's revision and version labels to name it as a `main` publication,
 and it preserves the digest; it never rebuilds. If the sha image is missing, re-run
 that commit's `ccdp-publish` job, then re-publish the release. Image digests appear

@@ -28,3 +28,9 @@ ts/apps/dev/playwright-report/
 
 # Updating the checkout does not move developers' untracked old credentials.
 ts/packages/ceremony/dev/.env*
+
+# npm package staging and copies of the repository licenses
+ts/.cache/
+ts/packages/*/LICENSE-MIT
+ts/packages/*/LICENSE-APACHE
+ts/packages/*/NOTICE

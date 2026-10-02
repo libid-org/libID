@@ -13,7 +13,8 @@
     "dev": "pnpm --filter @libid/dev dev",
     "dev:services": "pnpm --filter @libid/dev dev:services",
     "dev:ccdp": "pnpm --filter @libid/dev dev:ccdp",
-    "dev:app": "pnpm --filter @libid/dev dev:app"
+    "dev:app": "pnpm --filter @libid/dev dev:app",
+    "test:packages": "node scripts/check-packages.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.8",

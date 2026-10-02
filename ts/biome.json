@@ -11,7 +11,8 @@
       "!**/test-results",
       "!**/playwright-report",
       "!**/coverage",
-      "!apps/dev/.cache"
+      "!apps/dev/.cache",
+      "!.cache"
     ]
   },
   "formatter": {

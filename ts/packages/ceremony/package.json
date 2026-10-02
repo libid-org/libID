@@ -1,12 +1,11 @@
 {
   "name": "@libid/ceremony",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Browser OAuth identity ceremonies using an externally supplied popup connection.",
+  "version": "0.1.0",
+  "description": "Browser OAuth identity ceremonies over an application-owned popup connection.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/libid-org/libid.git",
+    "url": "git+https://github.com/libid-org/libID.git",
     "directory": "ts/packages/ceremony"
   },
   "type": "module",
@@ -17,7 +16,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node ../../scripts/build-package.ts",
     "typecheck": "tsc --noEmit && pnpm typecheck:build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -26,9 +25,15 @@
     "test:e2e:install": "playwright install --with-deps chromium firefox webkit",
     "build:ccdp-artifacts": "node build/distribution.ts",
     "test:distribution": "node --test build/*.test.ts",
-    "typecheck:build": "tsc -p tsconfig.scripts.json"
+    "typecheck:build": "tsc -p tsconfig.scripts.json",
+    "prepack": "pnpm build"
   },
   "devDependencies": {
+    "@aztec/bb.js": "5.2.0",
+    "@libid/popup": "workspace:^",
+    "@noir-lang/acvm_js": "1.0.0-beta.25",
+    "@noir-lang/noir_js": "1.0.0-beta.25",
+    "@noir-lang/noirc_abi": "1.0.0-beta.25",
     "@playwright/test": "catalog:",
     "@types/estree": "^1.0.8",
     "@types/node": "catalog:",
@@ -40,14 +45,21 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@aztec/bb.js": "5.2.0",
     "@libid/contracts": "0.13.1",
     "@libid/ledger": "workspace:^",
-    "@libid/popup": "workspace:^",
-    "@noble/hashes": "^2.3.0",
-    "@noir-lang/acvm_js": "1.0.0-beta.25",
-    "@noir-lang/noir_js": "1.0.0-beta.25",
-    "@noir-lang/noirc_abi": "1.0.0-beta.25"
+    "@noble/hashes": "^2.3.0"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@libid/popup": "^0.1.0"
+  }
 }
