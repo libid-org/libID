@@ -8,6 +8,6 @@ catalog:
   '@playwright/test': 1.64.0-alpha-2026-09-29
   '@types/node': ^24.19.1
   '@vitest/coverage-v8': ^5.0.3
-  typescript: ^5.9.3
+  typescript: ^7.0.2
   vite: ^7.3.6
   vitest: ^5.0.3
