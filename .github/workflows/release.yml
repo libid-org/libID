@@ -4,6 +4,7 @@ name: Release
 # - `ccdp-v<version>` promotes the CCDP image of the tagged commit, which must
 #   be on main, to `ghcr.io/libid-org/ccdp:<version>` (plus `:latest` for a
 #   stable version). CCDP versions are their own, never a package's.
+# Any other tag fails the release rather than publishing nothing.
 
 on:
   release:
@@ -13,6 +14,19 @@ permissions:
   contents: read
 
 jobs:
+  known-tag:
+    name: Release tag names a release scheme
+    if: ${{ !startsWith(github.event.release.tag_name, 'ccdp-v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reject the unknown tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          echo "::error::$TAG matches no release scheme (ccdp-v<version>); nothing was published"
+          exit 1
+
   verify-tag:
     name: CCDP release tag points to main
     if: startsWith(github.event.release.tag_name, 'ccdp-v')

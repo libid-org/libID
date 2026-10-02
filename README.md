@@ -42,7 +42,7 @@ transact.
 ## In this repository
 
 Besides the protocol specifications under [`specs/`](specs/), this repo
-carries the browser packages and their development app:
+carries the project website, the browser packages and their development app:
 
 - [`site/`](site/) — the static project website and Cloudflare deployment
   configuration. Starlight serves the docs at `lib.id/docs/`,
