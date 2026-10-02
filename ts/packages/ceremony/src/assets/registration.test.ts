@@ -36,7 +36,7 @@ function registration(
   scope: string,
   workers: Partial<Record<'active' | 'waiting' | 'installing', FakeServiceWorker | object>> = {},
 ) {
-  const double = {
+  const double = Object.assign(new EventTarget(), {
     scope,
     active: null,
     waiting: null,
@@ -44,7 +44,7 @@ function registration(
     unregister: vi.fn(async () => true),
     update: vi.fn(async () => double),
     ...workers,
-  }
+  })
   return double as unknown as ServiceWorkerRegistration & { unregister: Mock; update: Mock }
 }
 
@@ -157,9 +157,32 @@ it.each([
     'Service Worker failed',
   ],
 ])('rejects an unusable registration: %s', async (current, reason) => {
+  vi.useFakeTimers()
   install(current)
-  await expect(registerRootWorker(SCRIPT)).rejects.toThrow(reason)
+  const rejected = expect(registerRootWorker(SCRIPT)).rejects.toThrow(reason)
+  // A pinned Worker that never appears fails once the installation bound passes.
+  await vi.advanceTimersByTimeAsync(15000)
+  await rejected
+  expect(vi.getTimerCount()).toBe(0)
 })
+
+it.each(['updatefound', 'a sampled slot'])(
+  'waits for the pinned Worker that a resolved register() does not show yet, via %s [TEST-DIST-08]',
+  async (signal) => {
+    vi.useFakeTimers()
+    const previous = serviceWorker('activated', undefined, OLD_SCRIPT)
+    const current = registration(`${ORIGIN}/`, { active: previous })
+    install(current)
+    const ready = registerRootWorker(SCRIPT)
+    await vi.advanceTimersByTimeAsync(0)
+    const worker = serviceWorker('installed')
+    Object.assign(current, { waiting: worker })
+    if (signal === 'updatefound') current.dispatchEvent(new Event('updatefound'))
+    else await vi.advanceTimersByTimeAsync(50)
+    await expect(ready).resolves.toBe(worker)
+    expect(vi.getTimerCount()).toBe(0)
+  },
+)
 
 it.each([
   [{ dispatched: false }, 'Asset profile not served'],

@@ -37,10 +37,21 @@ export async function registerRootWorker(url: string): Promise<ServiceWorker> {
   })
   if (registration.scope !== `${location.origin}/`)
     throw new Error('Incorrect Service Worker scope')
-  const worker = [registration.installing, registration.waiting, registration.active].find(
-    (worker) => worker?.scriptURL === script,
-  )
-  if (!worker) throw new Error('Missing build-pinned Service Worker')
+  // WebKit can resolve register() before the registration shows the Worker it installs.
+  let pinned: ServiceWorker | null | undefined
+  await within('Missing build-pinned Service Worker', (done, signal) => {
+    const find = () => {
+      pinned = [registration.installing, registration.waiting, registration.active].find(
+        (worker) => worker?.scriptURL === script,
+      )
+      if (pinned) done()
+    }
+    const poll = setInterval(find, ACTIVATION_POLL_INTERVAL_MS)
+    signal.addEventListener('abort', () => clearInterval(poll))
+    registration.addEventListener('updatefound', find, { signal })
+    find()
+  })
+  const worker = pinned!
   await within('Service Worker installation timed out', (done, signal) => {
     const changed = () => {
       if (worker.state === 'redundant') done(new Error('Service Worker failed'))
