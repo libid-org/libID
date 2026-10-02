@@ -68,8 +68,9 @@ const appPage = html(`
       window.__conn = connection
       window.__popupWindow = popupWindow
       connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
-      // The spec sets the destination on the anchor; navigate also points a blocked anchor there.
-      const [base, hash = ''] = anchor.href.split('#')
+      // The spec sets the destination; the anchor's own href is a placeholder that carries no
+      // connection, so a blocked activation connects only if navigate points the anchor there.
+      const [base, hash = ''] = window.__destination.split('#')
       void connection.navigate(base, new URLSearchParams(hash)).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
     })
   </script>

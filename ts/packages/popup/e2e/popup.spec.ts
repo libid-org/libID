@@ -31,7 +31,6 @@ async function open(
     id?: string
     href?: string
     blocked?: boolean
-    rel?: string
     /** Send this ping the instant the application's handshake completes. */
     pingOnHandshake?: number
   } = {},
@@ -39,17 +38,16 @@ async function open(
   const id = options.id ?? freshId()
   await page.goto(options.app ?? APP_A)
   await page.evaluate(
-    ([id, href, blocked, rel, ping]) => {
+    ([id, href, blocked, ping]) => {
       const w = window as unknown as {
         __id: string
+        __destination: string
         open: unknown
         __onDiag?: (code: string) => void
         __conn: { send(v: unknown): void }
       }
       w.__id = id
-      const anchor = document.getElementById('go') as HTMLAnchorElement
-      anchor.href = href
-      if (rel) anchor.rel = rel
+      w.__destination = href
       if (blocked) w.open = () => null
       if (ping !== null) {
         w.__onDiag = (code) => {
@@ -61,7 +59,6 @@ async function open(
       id,
       options.href ?? `${POPUP}/p#c=${id}`,
       options.blocked ?? false,
-      options.rel ?? '',
       options.pingOnHandshake ?? null,
     ] as const,
   )
@@ -153,11 +150,10 @@ test('[POPUP-WINDOW-005] concurrent opens receive distinct placement hints and c
   const { popup: first } = await open(page)
   await expect(first.locator('#status')).toHaveText('connected')
   const id = freshId()
-  await page.evaluate((id) => {
-    ;(window as unknown as { __id: string }).__id = id
-    const anchor = document.getElementById('go') as HTMLAnchorElement
-    anchor.href = `${anchor.origin}/p#c=${id}`
-  }, id)
+  await page.evaluate(
+    ([id, destination]) => Object.assign(window, { __id: id, __destination: destination }),
+    [id, `${POPUP}/p#c=${id}`] as const,
+  )
   const opened = page.waitForEvent('popup')
   await page.click('#go')
   const second = await opened
@@ -219,14 +215,10 @@ test('[POPUP-WINDOW-003] a noopener anchor is refused before anything opens', as
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto(APP_A)
   const url = page.url()
-  await page.evaluate(
-    ([href]) => {
-      const anchor = document.getElementById('go') as HTMLAnchorElement
-      anchor.href = href
-      anchor.rel = 'noopener'
-    },
-    [`${POPUP}/p#c=${freshId()}`] as const,
-  )
+  await page.evaluate(() => {
+    // Browsers read link types case-insensitively, so the check must too.
+    ;(document.getElementById('go') as HTMLAnchorElement).rel = 'NoOpEnEr'
+  })
   const pages = page.context().pages().length
   await page.click('#go')
   await expect
