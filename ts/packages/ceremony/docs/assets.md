@@ -15,8 +15,7 @@ authenticated.
 An installing replacement has up to 15 seconds to become ready; a waiting Worker
 can receive dispatch before activation. Dispatch acknowledgement, rather than
 page control, establishes readiness. A stalled or failed replacement is terminal
-before OAuth. The known stale nested registration is retired without touching
-unrelated registrations; Prover still resolves and claims the canonical root.
+before OAuth. Prover resolves and claims the canonical root registration.
 
 [worker.entry.ts](../src/assets/worker.entry.ts) is the root Worker script's own entry.
 The [Worker](../src/assets/rootWorker.ts) combines popup's port keeper with asset

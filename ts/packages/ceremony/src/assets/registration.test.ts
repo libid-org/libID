@@ -139,28 +139,6 @@ it('observes readiness when a concurrent popup loses worker statechange notifica
   expect(vi.getTimerCount()).toBe(0)
 })
 
-it('retires only the known nested worker scope [LIBID-ASSET-020]', async () => {
-  const active = serviceWorker('activated')
-  const root = registration(`${ORIGIN}/`, { active })
-  const legacyWorker = serviceWorker('activated', undefined, `${ORIGIN}/ccdp/v1/worker.js`)
-  const legacy = registration(`${ORIGIN}/ccdp/v1/`, { active: legacyWorker })
-  const kept = [
-    registration(`${ORIGIN}/ccdp/v1/`, {
-      active: serviceWorker('activated', undefined, `${ORIGIN}/ccdp/v1/other.js`),
-    }),
-    registration(`${ORIGIN}/ccdp/v1/`, {
-      active: legacyWorker,
-      installing: serviceWorker('installing', undefined, `${ORIGIN}/ccdp/v2/worker.js`),
-    }),
-    registration(`${ORIGIN}/ccdp/`, { active: legacyWorker }),
-    registration(`${ORIGIN}/ccdp/v1/`),
-  ]
-  install(root, [root, legacy, ...kept])
-  await expect(registerRootWorker(SCRIPT)).resolves.toBe(active)
-  expect(legacy.unregister).toHaveBeenCalledOnce()
-  for (const other of [root, ...kept]) expect(other.unregister).not.toHaveBeenCalled()
-})
-
 it.each([
   [
     registration(`${ORIGIN}/ccdp/v1/`, { active: serviceWorker('activated') }),

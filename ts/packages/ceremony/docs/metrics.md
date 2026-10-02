@@ -2,7 +2,7 @@
 
 The [client subscriptions](client.md#events-and-presentation) and popup UI consume
 one operation feed. Core event meanings and readiness consequences belong to
-[CCDP](https://github.com/libid-org/libid/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/ccdp.md#event).
+[CCDP](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/ccdp.md#event).
 There is no separate metrics-record format or telemetry SDK in the documents.
 Application owns export, sampling, consent and retention. Full resource accounting
 and export are deferred; this guide preserves their required measurement rules.
@@ -49,9 +49,8 @@ phase-less core event.
 - `document-startup-ms`: navigation start to Prefetch entry execution, including
   document/module loading and evaluation; not the browser's `load` event.
 - `connection-ms`: entry execution through authenticated popup readiness.
-- `worker-ready-ms`: readiness until the pinned Worker can accept dispatch, including stale
-  nested-registration cleanup. The registration starts once the connection is accepted, so this
-  is only the part the handshake did not overlap.
+- `worker-ready-ms`: readiness until the pinned Worker can accept dispatch. The registration
+  starts once the connection is accepted, so this is only the part the handshake did not overlap.
 - `dispatch-ms`: request to Worker dispatch acknowledgement, including cache lookups
   and any cached CRS body reads currently needed before acknowledgement.
 

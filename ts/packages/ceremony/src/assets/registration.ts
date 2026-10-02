@@ -1,5 +1,3 @@
-import { ROUTE_SCOPE } from './keys.js'
-
 const SERVICE_WORKER_TIMEOUT_MS = 15000
 const ACTIVATION_POLL_INTERVAL_MS = 50
 
@@ -54,17 +52,6 @@ export async function registerRootWorker(url: string): Promise<ServiceWorker> {
     worker.addEventListener('statechange', changed, { signal })
     changed()
   })
-  // Retire only the known nested registration; it otherwise takes precedence over root scope.
-  const legacyScript = `${location.origin}${ROUTE_SCOPE}worker.js`
-  for (const old of await navigator.serviceWorker.getRegistrations()) {
-    const workers = [old.active, old.waiting, old.installing].filter((worker) => worker !== null)
-    if (
-      old.scope === `${location.origin}${ROUTE_SCOPE}` &&
-      workers.length &&
-      workers.every(({ scriptURL }) => scriptURL === legacyScript)
-    )
-      await old.unregister()
-  }
   return worker
 }
 

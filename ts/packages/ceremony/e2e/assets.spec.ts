@@ -75,7 +75,7 @@ test('activation reconciles the full managed graph without touching other storag
   ).toBe('other application')
 })
 
-test('moves a returning browser to the pinned worker, migrates the nested one and joins a pending prefetch [LIBID-ASSET-014] [LIBID-ASSET-020] [TEST-DIST-03] [TEST-DIST-08] [LIBID-MOD-002] [LIBID-ASSET-012] [LIBID-PROVER-016]', async ({
+test("moves a returning browser to the next release's worker and joins a pending prefetch [LIBID-ASSET-014] [LIBID-ASSET-020] [TEST-DIST-03] [TEST-DIST-08] [LIBID-MOD-002] [LIBID-ASSET-012] [LIBID-PROVER-016]", async ({
   ccdp,
   page,
   context,
@@ -92,18 +92,16 @@ test('moves a returning browser to the pinned worker, migrates the nested one an
   const seed = await context.newPage()
   await seed.goto(`${ccdp}/ccdp/v1/seed`)
   await seed.evaluate(async () => {
-    // An earlier release's versioned Worker at both scopes. It answers nothing, so the run below
-    // completes only if Prefetch dispatches to the content-addressed Worker it pins.
-    for (const scope of ['/', '/ccdp/v1/']) {
-      const r = await navigator.serviceWorker.register('/ccdp/v1/worker.js', {
-        scope,
-        type: 'module',
-      })
-      await new Promise<void>((resolve) => {
-        const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
-        poll()
-      })
-    }
+    // An earlier release's Worker answers nothing, so the run below completes only if Prefetch
+    // dispatches to the Worker it pins.
+    const r = await navigator.serviceWorker.register(`/ccdp/worker.${'0'.repeat(64)}.js`, {
+      scope: '/',
+      type: 'module',
+    })
+    await new Promise<void>((resolve) => {
+      const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
+      poll()
+    })
   })
   await seed.close()
   await googleProvider()
