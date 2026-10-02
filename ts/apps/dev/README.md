@@ -58,7 +58,7 @@ It rebuilds the packages and static distribution, then recreates only CCDP.
 Bridge, notary and the app stay running; no Docker images are built. Refresh
 the app and start a fresh ceremony to use updated Prover/Prefetch code.
 The Bridge caches Callback
-([refresh rules](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/oauth-bridge.md#callback-document)),
+([refresh rules](https://github.com/libid-org/libID/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/oauth-bridge.md#callback-document)),
 so restart `pnpm dev` after Callback changes. Also restart after changing service
 configuration or dependency images. Bridge runs from its released container image.
 
