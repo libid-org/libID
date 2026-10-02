@@ -18,7 +18,11 @@ unrelated registrations; Prover still resolves and claims the canonical root.
 
 [worker.entry.ts](../src/assets/worker.entry.ts) is the root Worker script's own entry.
 The [Worker](../src/assets/rootWorker.ts) combines popup's port keeper with asset
-fetching. Install uses `skipWaiting`, activation uses `clients.claim`, and Prover
+fetching. Activation reconciles only its managed asset cache against the union
+of every supported profile: exact URL/range entries still referenced stay intact;
+obsolete entries are deleted. Other origin storage is untouched. Storage denial
+or deletion failure never fails a ceremony. Install uses `skipWaiting`, activation
+also uses `clients.claim`, and Prover
 explicitly joins root-worker control before readiness. Failure to establish the
 required registration or control is terminal.
 

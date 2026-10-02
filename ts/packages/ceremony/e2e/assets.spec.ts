@@ -30,6 +30,51 @@ test('emitted route policies and inert missing paths [CSP-001]', async ({ reques
   expect((await request.get(`${ccdp}/ccdp/v99/prover`)).status()).toBe(404)
 })
 
+test('activation reconciles the full managed graph without touching other storage [TEST-DIST-07]', async ({
+  page,
+  ccdp,
+}) => {
+  await page.goto(`${ccdp}/ccdp/v1/seed`)
+  const required = ['google/1', 'x/1', 'github/1'].flatMap(artifactRequests)
+  const expected = await page.evaluate(
+    async ({ required, script }) => {
+      const cache = await caches.open('libid-ceremony-assets-v1')
+      const key = (url: string, range = '') =>
+        location.origin + '/__libid_ceremony_cache__/' + encodeURIComponent(`${url}\n${range}`)
+      const keep = [
+        ...new Set(required.map((r) => key(new URL(r.url, location.origin).href, r.range))),
+      ]
+      for (const url of keep) await cache.put(url, new Response('retained'))
+      await cache.put(key(location.origin + '/ccdp/assets/obsolete.wasm'), new Response('obsolete'))
+      await cache.put(
+        key('https://external.invalid/crs', 'bytes=0-3'),
+        new Response('obsolete range'),
+      )
+      const unrelated = location.origin + '/unrelated-cache-entry'
+      await cache.put(unrelated, new Response('unrelated'))
+      const other = await caches.open('another-application')
+      await other.put(unrelated, new Response('other application'))
+      await navigator.serviceWorker.register(script, { scope: '/', type: 'module' })
+      return [...keep, unrelated].sort()
+    },
+    { required, script: rootWorkerPath() },
+  )
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const cache = await caches.open('libid-ceremony-assets-v1')
+        return (await cache.keys()).map((key) => key.url).sort()
+      }),
+    )
+    .toEqual(expected)
+  expect(
+    await page.evaluate(async () => {
+      const cache = await caches.open('another-application')
+      return (await cache.match(location.origin + '/unrelated-cache-entry'))?.text()
+    }),
+  ).toBe('other application')
+})
+
 test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020] [TEST-DIST-03] [LIBID-MOD-002] [LIBID-ASSET-012] [LIBID-PROVER-016]', async ({
   ccdp,
   page,

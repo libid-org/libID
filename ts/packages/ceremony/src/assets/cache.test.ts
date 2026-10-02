@@ -257,3 +257,78 @@ it('absorbs failed writes, releases the pending entry and retries later [LIBID-A
   reject(new Error('quota'))
   await second.complete
 })
+
+it('reconciles exact URLs and ranges across the whole release without rewriting retained entries [TEST-DIST-07]', async () => {
+  const origin = 'https://ccdp.example'
+  const required = [
+    { url: `${origin}/ccdp/assets/shared/v1.js` },
+    { url: `${origin}/ccdp/assets/shared/v2.js` },
+    { url: `${origin}/ccdp/assets/another-platform.wasm` },
+    { url: 'https://external.test/crs', range: 'bytes=0-1' },
+    { url: 'https://external.test/crs', range: 'bytes=2-3' },
+  ]
+  const obsolete = [
+    { url: `${origin}/ccdp/assets/old.js` },
+    { url: 'https://external.test/crs', range: 'bytes=0-3' },
+  ]
+  const stored = new Map<string, Response>()
+  const deleted = vi.fn(async (key: Request) => stored.delete(key.url))
+  const open = vi.fn(async (_name: string) => ({
+    match: async (key: string) => stored.get(key)?.clone(),
+    put: async (key: string, value: Response) => {
+      stored.set(key, value)
+    },
+    keys: async () => [...stored.keys()].map((key) => new Request(key)),
+    delete: deleted,
+  }))
+  vi.stubGlobal('caches', { open })
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) =>
+    body(2, { status: (init.headers as Record<string, string>).Range ? 206 : 200 }),
+  )
+  const cache = new AssetCache(origin)
+  for (const spec of required) await cache.load(spec).complete
+  const retained = new Map(stored)
+  for (const spec of obsolete) await cache.load(spec).complete
+  const unrelated = `${origin}/another-app`
+  stored.set(unrelated, new Response('untouched'))
+  const other = stored.get(unrelated)
+  await cache.reconcile(required)
+  expect(stored.size).toBe(required.length + 1)
+  for (const [key, response] of retained) expect(stored.get(key)).toBe(response)
+  expect(stored.get(unrelated)).toBe(other)
+  expect(deleted).toHaveBeenCalledTimes(2)
+  await cache.reconcile(required)
+  expect(deleted).toHaveBeenCalledTimes(2)
+  expect(open.mock.calls.every(([name]) => name === 'libid-ceremony-assets-v1')).toBe(true)
+})
+
+it.each(['open', 'keys', 'delete'])(
+  'failed reconciliation at %s does not disable asset delivery [TEST-DIST-07]',
+  async (failure) => {
+    const origin = 'https://ccdp.example'
+    const denied = () => {
+      throw new Error('storage denied')
+    }
+    vi.stubGlobal('caches', {
+      open: async () => {
+        if (failure === 'open') denied()
+        return {
+          keys: async () => {
+            if (failure === 'keys') denied()
+            return [new Request(`${origin}/__libid_ceremony_cache__/obsolete`)]
+          },
+          delete: async () => denied(),
+          match: async () => undefined,
+          put: async () => {},
+        }
+      },
+    })
+    vi.stubGlobal('fetch', async () => body(2))
+    const cache = new AssetCache(origin)
+    const spec = { url: `${origin}/current`, bytes: 2 }
+    await expect(cache.reconcile([spec])).resolves.toBeUndefined()
+    const loaded = cache.load(spec)
+    expect((await (await loaded.response).arrayBuffer()).byteLength).toBe(2)
+    await loaded.complete
+  },
+)

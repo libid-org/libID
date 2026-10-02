@@ -192,6 +192,7 @@ is defined in the browser-spec revision.
 | TEST-DIST-04 | LIBID-ASSET-011/017/018/019/021/023, CSP-019; loader/cache tests. Live CRS/CORS and full cache-fault matrix remain open. |
 | TEST-DIST-05 | LIBID-ASSET-014/027; stable URLs and native invalidation. Production atomic promotion remains external. |
 | TEST-DIST-06 | KIT-023; exact Distribution envelope, CCDP membership before client creation, platform lists, and emitted version-list headers. |
+| TEST-DIST-07 | [Cache tests](../src/assets/cache.test.ts) preserve shared revisions and external ranges, delete only obsolete managed entries, repeat harmlessly, and tolerate storage failures. [Worker tests](../src/assets/rootWorker.test.ts) pass the complete graph on activation. |
 | TEST-DIST-08 | [Worker selection tests](../src/assets/registration.test.ts) cover exact-script dispatch, waiting replacements, lost state notifications, and stalled replacement refusal. [Distribution tests](../build/distribution.test.ts) check the final script hash, immutable headers, and the URL embedded in Prefetch. |
 | TEST-BRIDGE-01/02 | KIT-016/022, LIBID-OAUTH-002; Bridge startup, origin admission and Fetch Metadata are the Bridge's own tests. |
 | TEST-BRIDGE-03 | LIBID-MOD-011, KIT-002, LIBID-OAUTH-016; client tests freeze and forward public credentials and reject invalid config. |
