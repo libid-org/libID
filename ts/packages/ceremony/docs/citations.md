@@ -48,7 +48,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-ASSET-011 | [build/distribution.test.ts](../build/distribution.test.ts), [build/loaders.test.ts](../build/loaders.test.ts) |
 | LIBID-ASSET-012 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/assets.spec.ts](../e2e/assets.spec.ts) |
 | LIBID-ASSET-013 | [build/circuits.test.ts](../build/circuits.test.ts) |
-| LIBID-ASSET-014 | [build/distribution.test.ts](../build/distribution.test.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
+| LIBID-ASSET-014 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
 | LIBID-ASSET-015 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/navigation.test.ts](../src/ccdp/navigation.test.ts) |
 | LIBID-ASSET-016 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | LIBID-ASSET-017 | [e2e/assets.spec.ts](../e2e/assets.spec.ts) |
@@ -180,7 +180,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-DIST-04 | [build/loaders.test.ts](../build/loaders.test.ts) |
 | TEST-DIST-06 | [src/ccdp/client/versions.test.ts](../src/ccdp/client/versions.test.ts) |
 | TEST-DIST-07 | [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/cache.test.ts](../src/assets/cache.test.ts), [src/assets/rootWorker.test.ts](../src/assets/rootWorker.test.ts) |
-| TEST-DIST-08 | [build/distribution.test.ts](../build/distribution.test.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
+| TEST-DIST-08 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
 | TEST-PLAT-01 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
 | TEST-PLAT-02 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts) |
 | TEST-PLAT-03 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
