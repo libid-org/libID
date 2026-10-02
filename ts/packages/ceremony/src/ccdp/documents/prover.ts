@@ -14,7 +14,7 @@ import { view } from './ui.js'
 
 type ProverState =
   | { phase: 'connecting' | 'ready'; input: ReturnType<typeof readProver> }
-  | { phase: 'proving' }
+  | { phase: 'proving' | 'ended' }
 
 /** Accept the private callback fragment, run the selected prover and deliver one terminal result. */
 export async function startProver(fragment: string): Promise<void> {
@@ -142,6 +142,8 @@ class ProverDocument extends CeremonyDocument {
 
   /** Ending also aborts the prover; its later observations are dropped. */
   protected override cleanup(): void {
+    // Failure before ProveIdentity must release the OAuth capture just as execution does.
+    this.state = { phase: 'ended' }
     super.cleanup()
     this.controller.abort()
   }
