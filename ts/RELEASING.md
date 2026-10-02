@@ -44,15 +44,19 @@ npm publish ts/.cache/npm/popup.tgz --access public
 npm publish ts/.cache/npm/ceremony.tgz --access public
 ```
 
-In the repository settings, create the `npm-release` environment. Limit its
-deployment branches and tags to the tags `popup-v*`, `ledger-v*` and
-`ceremony-v*`, and add required reviewers if releases need a second person.
-Only the publish job runs there, so only it can obtain an npm OIDC token.
+Once per repository, set up two settings that cover every package:
+
+- The `npm-release` environment deploys only tags matching `*-v*`, never
+  branches. Add required reviewers if releases need a second person. Only the
+  publish job runs there, so only it can obtain an npm OIDC token.
+- A tag ruleset lets only maintainers create, move or delete `*-v*` tags. A
+  release runs the workflow of its tagged commit, so whoever can create a
+  release tag can publish.
 
 On each npm package, configure its GitHub Actions trusted publisher:
 `libid-org/libID`, workflow `release.yml`, environment `npm-release`. npm
 checks the repository, workflow file and environment, not the branch, so the
-environment is what keeps an edited workflow on another branch from
+environment and the tag ruleset are what keep an edited workflow from
 publishing. Then require trusted publishing/2FA according to the organization's
 policy and log the bootstrap session out of npm. Routine releases use OIDC and
 automatic npm provenance; they need no `NPM_TOKEN`. See
@@ -65,15 +69,26 @@ automatic npm provenance; they need no `NPM_TOKEN`. See
    Workspace dependency ranges become registry versions during `pnpm pack`.
 2. Merge and wait for successful main CI. Publish newly required ledger/popup
    versions before a ceremony version that depends on them.
-3. Create a GitHub Release at that tested commit with a matching tag:
-   `popup-v0.1.1`, `ledger-v0.1.1` or `ceremony-v0.1.1`.
+3. Create a GitHub Release at that tested commit with the tag
+   `<package>-v<version>`, such as `popup-v0.1.1`, where `<package>` is the
+   directory under `ts/packages`.
 
 The release workflow verifies the package version, main ancestry and successful
 CI, builds the tarballs, runs the consumer check, and checks that the package's
 `@libid/*` dependencies are already on npm. A separate job in the `npm-release`
-environment then publishes that same checked tarball. Stable releases use `latest`; a prerelease version or GitHub prerelease
-uses `next`. A retry after successful publication cannot replace an npm version;
+environment then publishes that same checked tarball. Stable releases use
+`latest`; a prerelease version or GitHub prerelease uses `next`. A retry after successful publication cannot replace an npm version;
 inspect the registry before retrying a failed release.
+
+## Adding a package
+
+Every package under `ts/packages` that is not `private` is packed, checked and
+releasable by its directory name; the workflow needs no change. Add its public
+imports to the consumer in `ts/scripts/check-packages.ts`, then publish its
+first version and configure its trusted publisher as under
+[First publication](#first-publication).
+
+## Versions
 
 npm versions are independent of CCDP protocol/platform versions and the
 `ccdp-v…` container releases. Changing package code does not itself change the

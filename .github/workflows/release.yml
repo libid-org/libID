@@ -1,7 +1,7 @@
 name: Release
 
 # A published GitHub Release's tag selects what it publishes:
-# - `<popup|ledger|ceremony>-v<version>` publishes that npm package.
+# - `<package>-v<version>` publishes `ts/packages/<package>` to npm.
 # - `ccdp-v<version>` promotes the CCDP image of the tagged commit, which must
 #   be on main, to `ghcr.io/libid-org/ccdp:<version>` (plus `:latest` for a
 #   stable version). CCDP versions are their own, never a package's.
@@ -17,7 +17,7 @@ permissions:
 jobs:
   known-tag:
     name: Release tag names a release scheme
-    if: ${{ !startsWith(github.event.release.tag_name, 'ccdp-v') && !startsWith(github.event.release.tag_name, 'popup-v') && !startsWith(github.event.release.tag_name, 'ledger-v') && !startsWith(github.event.release.tag_name, 'ceremony-v') }}
+    if: ${{ !contains(github.event.release.tag_name, '-v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -25,7 +25,7 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          echo "::error::$TAG matches no release scheme (ccdp-v, popup-v, ledger-v or ceremony-v<version>); nothing was published"
+          echo "::error::$TAG matches no release scheme (<package>-v<version> or ccdp-v<version>); nothing was published"
           exit 1
 
   verify-tag:
@@ -155,7 +155,7 @@ jobs:
   # ---------------------------------------------------------------------------
   check-npm:
     name: Check an npm package release
-    if: startsWith(github.event.release.tag_name, 'popup-v') || startsWith(github.event.release.tag_name, 'ledger-v') || startsWith(github.event.release.tag_name, 'ceremony-v')
+    if: ${{ contains(github.event.release.tag_name, '-v') && !startsWith(github.event.release.tag_name, 'ccdp-v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -178,12 +178,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          case "$TAG" in
-            popup-v*) package=popup ;;
-            ledger-v*) package=ledger ;;
-            ceremony-v*) package=ceremony ;;
-            *) exit 1 ;;
-          esac
+          [[ "$TAG" =~ ^([a-z0-9][a-z0-9-]*)-v[0-9] ]] && package=${BASH_REMATCH[1]} &&
+            [ -f "ts/packages/$package/package.json" ] &&
+            [ "$(node -p "require('./ts/packages/$package/package.json').private === true")" = false ] || {
+              echo "::error::$TAG names no published package under ts/packages"
+              exit 1
+            }
           version=$(node -p "require('./ts/packages/$package/package.json').version")
           [ "$TAG" = "$package-v$version" ] || {
             echo "::error::$TAG does not match $package's package.json version $version"
