@@ -15,7 +15,7 @@ it.each([
   async (ccdpOrigin, peerOrigin, admitted) => {
     const handle = { closed: false, close: vi.fn() }
     vi.stubGlobal('window', Object.assign(new EventTarget(), { open: () => handle }))
-    const popup = PopupWindow.open('client-connect', 'left=0,top=0')
+    const popup = PopupWindow.open('left=0,top=0')
     const client = await ccdpClient({ ccdpOrigin, platforms: { google: { clientId: 'client' } } })
     let receive: (message: unknown) => void = () => {}
     const carrier: Carrier = {
@@ -72,9 +72,7 @@ it('gives each connection a fresh ID, which its ceremony runs under [KIT-007] [K
     ccdpOrigin: 'https://ccdp.test',
     platforms: { google: { clientId: 'client' } },
   })
-  const [first, second] = ['client-ids-1', 'client-ids-2'].map((target) =>
-    client.connect(PopupWindow.open(target, 'left=0,top=0')),
-  )
+  const [first, second] = [1, 2].map(() => client.connect(PopupWindow.open('left=0,top=0')))
   for (const { connectionId } of [first, second]) expect(isCeremonyId(connectionId)).toBe(true)
   expect(first.connectionId).not.toBe(second.connectionId)
   const ceremony = client.new(first, 'google', testnet, new Uint8Array(32), new Uint8Array())

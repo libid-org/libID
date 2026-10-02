@@ -6,6 +6,8 @@ import { CurrentWindow, OpenedWindow, PopupWindow } from './window.js'
 const ORIGIN = 'https://popup.example'
 const DOCUMENT = `${ORIGIN}/prover/x`
 const NEXT = `${ORIGIN}/next`
+/** The names `open` and `fromAnchor` give popups. */
+const NAME = /^popup-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 /** A fake ServiceWorker that activates on demand. */
 function worker(state: 'installing' | 'activated') {
@@ -149,10 +151,10 @@ describe('default popup placement [POPUP-WINDOW-005]', () => {
       },
     }
     nativeOpen.mockReturnValueOnce(first)
-    open('one', 'width=480,height=720')
-    open('two', 'innerWidth=600,height=720')
-    open('three', 'width=480,height=720')
-    open('four', 'width=480,height=720')
+    open('width=480,height=720')
+    open('innerWidth=600,height=720')
+    open('width=480,height=720')
+    open('width=480,height=720')
     expect(nativeOpen.mock.calls.map((call) => call[2])).toEqual([
       'popup,width=480,height=720,left=-1600,top=24',
       'popup,innerWidth=600,height=720,left=-1088,top=24',
@@ -162,23 +164,27 @@ describe('default popup placement [POPUP-WINDOW-005]', () => {
   })
 
   it('uses the final width declaration after normalizing its alias', () => {
-    open('wide', 'width=100,innerWidth=900')
-    open('next', 'width=480')
+    open('width=100,innerWidth=900')
+    open('width=480')
     expect(nativeOpen).toHaveBeenLastCalledWith(
       'about:blank',
-      'next',
+      expect.stringMatching(NAME),
       'popup,width=480,left=-668,top=24',
     )
   })
 
   it('keeps explicit positions, including aliases, and blocked opens out of the sequence', () => {
     for (const features of ['left=10', ' TOP = 10', 'ScreenX=-20', 'screenY=40']) {
-      open('explicit', features)
-      expect(nativeOpen).toHaveBeenLastCalledWith('about:blank', 'explicit', `popup,${features}`)
+      open(features)
+      expect(nativeOpen).toHaveBeenLastCalledWith(
+        'about:blank',
+        expect.stringMatching(NAME),
+        `popup,${features}`,
+      )
     }
     nativeOpen.mockReturnValueOnce(null)
-    expect(open('blocked', 'width=480').opened).toBe(false)
-    expect(open('first', 'width=480').opened).toBe(true)
+    expect(open('width=480').opened).toBe(false)
+    expect(open('width=480').opened).toBe(true)
     expect(nativeOpen.mock.calls.slice(-2).map((call) => call[2])).toEqual([
       'popup,width=480,left=-1600,top=24',
       'popup,width=480,left=-1600,top=24',
@@ -186,10 +192,14 @@ describe('default popup placement [POPUP-WINDOW-005]', () => {
   })
 
   it('uses opener width when omitted and bounds repeated large-window launches', () => {
-    open('default')
-    expect(nativeOpen).toHaveBeenLastCalledWith('about:blank', 'default', 'popup,left=-1600,top=24')
+    open()
+    expect(nativeOpen).toHaveBeenLastCalledWith(
+      'about:blank',
+      expect.stringMatching(NAME),
+      'popup,left=-1600,top=24',
+    )
     for (let i = 0; i < 20; i++) {
-      open(`large-${i}`, 'width=9000')
+      open('width=9000')
       const features = nativeOpen.mock.lastCall![2] as string
       expect(features).toMatch(/,left=-1600,top=\d+$/)
       expect(Number(/top=(\d+)/.exec(features)![1])).toBeLessThan(280)
@@ -198,31 +208,87 @@ describe('default popup placement [POPUP-WINDOW-005]', () => {
 })
 
 describe('PopupWindow', () => {
-  it('PopupWindow.open rejects reserved and empty targets [POPUP-WINDOW-001/003]', () => {
-    for (const target of ['', '_blank', '_self', '_parent', '_top', '_custom']) {
-      expect(() => PopupWindow.open(target)).toThrow(TypeError)
-    }
-  })
-
-  it('PopupWindow.open always requests a separate window and keeps the opener [POPUP-WINDOW-001]', () => {
-    const open = vi.fn(() => null)
+  const stubWindow = (open: () => unknown) =>
     vi.stubGlobal('window', {
       open,
       outerWidth: 1280,
       screen: { availWidth: 1920, availLeft: 0, availTop: 0 },
     })
+
+  it('PopupWindow.open names each popup freshly, always separate and keeping the opener [POPUP-WINDOW-001]', () => {
+    const open = vi.fn((..._: string[]) => null)
+    stubWindow(open)
     try {
-      PopupWindow.open('libid-popup')
-      PopupWindow.open('libid-popup', 'width=480,height=720')
+      PopupWindow.open()
+      PopupWindow.open('width=480,height=720')
       expect(open.mock.calls).toEqual([
-        ['about:blank', 'libid-popup', 'popup,left=0,top=0'],
-        ['about:blank', 'libid-popup', 'popup,width=480,height=720,left=0,top=0'],
+        ['about:blank', expect.stringMatching(NAME), 'popup,left=0,top=0'],
+        ['about:blank', expect.stringMatching(NAME), 'popup,width=480,height=720,left=0,top=0'],
       ])
-      expect(() => PopupWindow.open('libid-popup', 'noopener')).toThrow(TypeError)
-      expect(() => PopupWindow.open('libid-popup', 'width=1,NoReferrer')).toThrow(TypeError)
+      expect(open.mock.calls[0][1]).not.toBe(open.mock.calls[1][1])
+      expect(() => PopupWindow.open('noopener')).toThrow(TypeError)
+      expect(() => PopupWindow.open('width=1,NoReferrer')).toThrow(TypeError)
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  describe('fromAnchor [POPUP-WINDOW-002]', () => {
+    class Anchor {
+      target = ''
+      href = ''
+      constructor(readonly rel = '') {}
+      relList = { contains: (token: string) => this.rel.split(' ').includes(token) }
+    }
+    const click = (currentTarget: unknown) => ({
+      currentTarget,
+      eventPhase: Event.AT_TARGET as number,
+      preventDefault: vi.fn(),
+    })
+    beforeEach(() => vi.stubGlobal('HTMLAnchorElement', Anchor))
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('opens the scripted window first and then suppresses the anchor', () => {
+      const open = vi.fn((..._: string[]) => ({ closed: false }))
+      stubWindow(open)
+      const anchor = new Anchor()
+      const event = click(anchor)
+      const popup = PopupWindow.fromAnchor(
+        event as unknown as MouseEvent,
+        'width=480',
+      ) as OpenedWindow
+      expect(popup.opened).toBe(true)
+      expect(event.preventDefault).toHaveBeenCalledOnce()
+      expect(anchor.target).toBe(open.mock.calls[0][1])
+      expect(popup.anchor).toBeNull()
+    })
+
+    it('leaves a blocked activation to the anchor, pointed only while it still dispatches', () => {
+      stubWindow(() => null)
+      const anchor = new Anchor()
+      const event = click(anchor)
+      const popup = PopupWindow.fromAnchor(event as unknown as MouseEvent) as OpenedWindow
+      expect(popup.opened).toBe(false)
+      expect(event.preventDefault).not.toHaveBeenCalled()
+      expect(anchor.target).toMatch(NAME)
+      popup.pointAnchor(`${NEXT}#a=1`)
+      expect(anchor.href).toBe(`${NEXT}#a=1`)
+      // After dispatch the anchor has navigated already; a late destination changes nothing.
+      event.eventPhase = Event.NONE
+      popup.pointAnchor(DOCUMENT)
+      expect(anchor.href).toBe(`${NEXT}#a=1`)
+    })
+
+    it('refuses, navigating nowhere, an activation without an anchor that keeps the opener', () => {
+      const open = vi.fn(() => null)
+      stubWindow(open)
+      for (const target of [{}, null, new Anchor('noopener'), new Anchor('external noreferrer')]) {
+        const event = click(target)
+        expect(() => PopupWindow.fromAnchor(event as unknown as MouseEvent)).toThrow(TypeError)
+        expect(event.preventDefault).toHaveBeenCalledOnce()
+      }
+      expect(open).not.toHaveBeenCalled()
+    })
   })
 
   it('PopupWindow.current rejects an embedded document', () => {

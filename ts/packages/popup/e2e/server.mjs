@@ -46,7 +46,7 @@ const protocol = `
 const html = (body) => `<!doctype html><meta charset="utf-8"><title>popup e2e</title>${body}`
 
 const appPage = html(`
-  <a id="go" href="${ORIGINS.popup}/p" target="libid-popup">open</a>
+  <a id="go" href="${ORIGINS.popup}/p">open</a>
   <script type="module">
     import { PopupConnection, PopupWindow } from '/popup.js'
     ${protocol}
@@ -55,7 +55,7 @@ const appPage = html(`
     window.open = (...args) => (window.__handle = realOpen(...args))
     const anchor = document.getElementById('go')
     anchor.addEventListener('click', (event) => {
-      const popupWindow = PopupWindow.open(anchor.target, 'width=480,height=720')
+      const popupWindow = PopupWindow.fromAnchor(event, 'width=480,height=720')
       const connection = PopupConnection.connect(popupWindow, {
         connectionId: window.__id,
         allowedPopupOrigins: ['${ORIGINS.popup}', '${ORIGINS.popupB}'],
@@ -68,11 +68,9 @@ const appPage = html(`
       window.__conn = connection
       window.__popupWindow = popupWindow
       connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
-      // The anchor keeps its fragment for the native path; the scripted path
-      // passes fragment fields through the structured argument.
+      // The spec sets the destination on the anchor; navigate also points a blocked anchor there.
       const [base, hash = ''] = anchor.href.split('#')
       void connection.navigate(base, new URLSearchParams(hash)).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
-      if (popupWindow.opened) event.preventDefault()
     })
   </script>
 `)

@@ -287,6 +287,17 @@ describe('native-anchor path [POPUP-WINDOW-002] [POPUP-CONTROL-001]', () => {
     expect(app.popup.opened).toBe(true)
     expect(codes(app.events)).toEqual(['window-blocked', 'window-bound', 'carrier-message-port'])
   })
+
+  it('points a blocked anchor activation at the navigation destination', async () => {
+    const app = connectApp(fakePair(), { blocked: true })
+    const element = { href: '' } as HTMLAnchorElement
+    const event = { eventPhase: Event.AT_TARGET } as Event
+    app.popup.anchor = { element, event }
+    await app.connection.navigate('https://popup.example/p', new URLSearchParams({ a: '1' }))
+    expect(element.href).toBe('https://popup.example/p#a=1')
+    await app.connection.navigateAway('https://provider.example/auth')
+    expect(element.href).toBe('https://provider.example/auth')
+  })
 })
 
 describe('controls [POPUP-CONTROL-001/002/003/004]', () => {

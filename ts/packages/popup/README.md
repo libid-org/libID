@@ -16,22 +16,20 @@ Acceptance is indexed by the [test plan](TEST_PLAN.md), while
 
 ### Open the popup
 
-The application creates a lifecycle object during the user activation. It then
-constructs the connection before deciding whether to suppress the action's
-native navigation:
+The application creates a lifecycle object during an anchor's activation,
+connects it, and navigates before the handler returns:
 
 ```ts
-const popupWindow = PopupWindow.open(anchor.target)
-const connection = PopupConnection.connect<Messages>(popupWindow, {
-  connectionId,
-  allowedPopupOrigins,
-  fallback,
-  onDiagnostic,
+anchor.addEventListener('click', (event) => {
+  const popupWindow = PopupWindow.fromAnchor(event, 'width=480,height=720')
+  const connection = PopupConnection.connect<Messages>(popupWindow, {
+    connectionId,
+    allowedPopupOrigins,
+    fallback,
+    onDiagnostic,
+  })
+  void connection.navigate(url, new URLSearchParams({ c: connectionId }))
 })
-
-const [href, fragment = ''] = anchor.href.split('#')
-void connection.navigate(href, new URLSearchParams(fragment))
-if (popupWindow.opened) event.preventDefault()
 ```
 
 Navigation takes a fragment-free URL and, separately, the fragment fields as
@@ -41,9 +39,16 @@ ID. A URL that spells its own fragment, even an empty `#`, is rejected. The
 anchor keeps its fragment because the native-anchor path navigates it as
 written.
 
-`PopupWindow.open(target, features?)` synchronously attempts
-`window.open('about:blank', target, 'popup,…')` and returns a wrapper even when
-the browser returns no handle. The popup is always requested as a separate
+`PopupWindow.fromAnchor(event, features?)` names the popup itself and attempts
+`window.open('about:blank', name, 'popup,…')` first. When that returns a handle,
+it suppresses the anchor's native navigation. When the browser blocks it, the
+anchor's own navigation creates the popup under the same name, and a `navigate`
+during the activation points the anchor at its destination; the anchor needs
+no `target` or `href` of its own. Unless the activation's target is an anchor
+without `noopener` or `noreferrer`, it suppresses that navigation and throws
+`TypeError`. `PopupWindow.open(features?)`
+opens a named popup the same way for an activation without an anchor, with no
+fallback. Both return a wrapper even when the browser returns no handle. The popup is always requested as a separate
 window; `features` may add size or position (`width=480,height=720`) and must
 not contain `noopener` or `noreferrer`. Without a caller position (`left`, `top`,
 `screenX`, or `screenY`), successful launches from that application document are
@@ -54,9 +59,8 @@ isolation can make a live popup's retained handle appear closed. Positioning is
 best-effort; browser or window-manager policy may override it.
 
 A popup adopted by native-anchor binding and mobile browsers present a tab
-instead, which changes no rule. It throws `TypeError` before opening for an
-empty target or one beginning with `_`. When no handle is returned, the
-connection binds the popup created by the same action's real anchor. See [popup
+instead, which changes no rule. When no handle is returned, the connection
+binds the popup created by the same action's real anchor. See [popup
 creation and native-anchor
 binding](docs/connection.md#popup-creation-and-native-anchor-binding).
 
@@ -64,7 +68,8 @@ binding](docs/connection.md#popup-creation-and-native-anchor-binding).
 declare class PopupWindow {
   readonly opened: boolean
 
-  static open(target: string, features?: string): PopupWindow
+  static fromAnchor(event: MouseEvent, features?: string): PopupWindow
+  static open(features?: string): PopupWindow
   static current(fragment?: string, options?: { scope?: string }): PopupWindow
 }
 ```

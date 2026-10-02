@@ -34,48 +34,77 @@ function usable(handle: WindowProxy | null): handle is WindowProxy {
 let nextLeft = 0
 let cascade = 0
 
+/**
+ * Attempts `window.open('about:blank', name, 'popup,…')`. The popup is always requested as a
+ * separate window; `features` may add size or position and MUST NOT sever the opener. Without a
+ * position, new windows are placed side by side, then staggered when the screen is full.
+ * Placement is best-effort; browsers and window managers may ignore it.
+ */
+function openWindow(name: string, features: string): OpenedWindow {
+  if (/\b(noopener|noreferrer)\b/i.test(features)) {
+    throw new TypeError('popup features must not sever the opener')
+  }
+  let windowFeatures = features === '' ? 'popup' : `popup,${features}`
+  const positioned = /(?:^|[\s,])(?:left|top|screenx|screeny)(?:[\s,=]|$)/i.test(features)
+  let left = nextLeft
+  let offset = cascade
+  let width = 0
+  if (!positioned) {
+    const { screen } = window
+    // availLeft/Top are supported by desktop engines but absent from lib.dom.
+    const bounds = screen as Screen & { availLeft?: number; availTop?: number }
+    const requested = [
+      ...features.matchAll(/(?:^|[\s,])(?:width|innerwidth)\s*=\s*([+-]?\d+)/gi),
+    ].at(-1)?.[1]
+    width = Math.min(screen.availWidth, Math.max(100, Number(requested) || window.outerWidth))
+    if (left + width > screen.availWidth) {
+      offset = (offset + 32) % 256
+      left = Math.min(offset, Math.max(0, screen.availWidth - width))
+    }
+    windowFeatures += `,left=${(bounds.availLeft ?? window.screenX) + left},top=${(bounds.availTop ?? window.screenY) + offset}`
+  }
+  const handle = window.open('about:blank', name, windowFeatures)
+  if (handle && !positioned) {
+    nextLeft = left + width + 32
+    cascade = offset
+  }
+  return new OpenedWindow(handle, window)
+}
+
+/** A fresh window name: random, so a page reload never reuses an earlier popup by name. */
+const windowName = () => `popup-${crypto.randomUUID()}`
+
 export class PopupWindow {
   protected constructor() {}
 
+  /** Synchronously opens a popup under a fresh name, for an activation with no anchor fallback. */
+  static open(features = ''): PopupWindow {
+    return openWindow(windowName(), features)
+  }
+
   /**
-   * Synchronously attempts `window.open('about:blank', target, 'popup,…')`.
-   * The popup is always requested as a separate window; `features` may add
-   * size or position and MUST NOT sever the opener. Without a position, new
-   * windows are placed side by side, then staggered when the screen is full.
-   * Placement is best-effort; browsers and window managers may ignore it.
+   * Opens the popup for an anchor's activation, scripted first. When the window opens, the
+   * anchor's own navigation is suppressed. When the browser blocks it, that navigation creates
+   * the popup under the same name and the connection binds it; a `navigate` during the
+   * activation points the anchor at its destination, so the anchor needs no target or href.
    */
-  static open(target: string, features = ''): PopupWindow {
-    if (target === '' || target.startsWith('_')) {
-      throw new TypeError('popup target must be a nonempty name not beginning with "_"')
+  static fromAnchor(event: MouseEvent, features = ''): PopupWindow {
+    const anchor = event.currentTarget
+    // A refused activation navigates nowhere, the application page included.
+    if (typeof HTMLAnchorElement === 'undefined' || !(anchor instanceof HTMLAnchorElement)) {
+      event.preventDefault()
+      throw new TypeError('fromAnchor requires an anchor activation')
     }
-    if (/\b(noopener|noreferrer)\b/i.test(features)) {
-      throw new TypeError('popup features must not sever the opener')
+    if (anchor.relList.contains('noopener') || anchor.relList.contains('noreferrer')) {
+      event.preventDefault()
+      throw new TypeError('the anchor must not sever the opener')
     }
-    let windowFeatures = features === '' ? 'popup' : `popup,${features}`
-    const positioned = /(?:^|[\s,])(?:left|top|screenx|screeny)(?:[\s,=]|$)/i.test(features)
-    let left = nextLeft
-    let offset = cascade
-    let width = 0
-    if (!positioned) {
-      const { screen } = window
-      // availLeft/Top are supported by desktop engines but absent from lib.dom.
-      const bounds = screen as Screen & { availLeft?: number; availTop?: number }
-      const requested = [
-        ...features.matchAll(/(?:^|[\s,])(?:width|innerwidth)\s*=\s*([+-]?\d+)/gi),
-      ].at(-1)?.[1]
-      width = Math.min(screen.availWidth, Math.max(100, Number(requested) || window.outerWidth))
-      if (left + width > screen.availWidth) {
-        offset = (offset + 32) % 256
-        left = Math.min(offset, Math.max(0, screen.availWidth - width))
-      }
-      windowFeatures += `,left=${(bounds.availLeft ?? window.screenX) + left},top=${(bounds.availTop ?? window.screenY) + offset}`
-    }
-    const handle = window.open('about:blank', target, windowFeatures)
-    if (handle && !positioned) {
-      nextLeft = left + width + 32
-      cascade = offset
-    }
-    return new OpenedWindow(handle, window)
+    const name = windowName()
+    const popup = openWindow(name, features)
+    anchor.target = name
+    if (popup.opened) event.preventDefault()
+    else popup.anchor = { element: anchor, event }
+    return popup
   }
 
   /**
@@ -122,6 +151,8 @@ export class OpenedWindow extends PopupWindow {
   handle: WindowProxy | null
   /** One-shot: a second `connect` over the same object throws. */
   connected = false
+  /** The anchor a blocked `fromAnchor` activation leaves to create the popup. */
+  anchor: { element: HTMLAnchorElement; event: Event } | null = null
 
   constructor(
     handle: WindowProxy | null,
@@ -147,6 +178,11 @@ export class OpenedWindow extends PopupWindow {
 
   replace(url: string): void {
     this.handle?.location.replace(url)
+  }
+
+  /** Point a still-dispatching anchor activation at `url`, where its own navigation then goes. */
+  pointAnchor(url: string): void {
+    if (this.anchor && this.anchor.event.eventPhase !== Event.NONE) this.anchor.element.href = url
   }
 
   closeHandle(): void {

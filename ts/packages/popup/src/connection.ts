@@ -455,8 +455,11 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
       this.report('control-direct')
       return
     }
-    // Native-anchor binding pending: the activation's own navigation proceeds.
-    if (!this.popup.opened) return
+    // Native-anchor binding pending: the activation's own navigation proceeds, here.
+    if (!this.popup.opened) {
+      this.popup.pointAnchor(target)
+      return
+    }
     this.report('popup-unavailable')
     throw new PopupError('popup-unavailable')
   }
@@ -464,7 +467,10 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
   async navigateAway(url: string, fragment?: URLSearchParams): Promise<void> {
     if (this.ended) throw new PopupError('connection-closed')
     const target = destination(url, fragment, this.report)
-    if (!this.popup.opened) return
+    if (!this.popup.opened) {
+      this.popup.pointAnchor(target)
+      return
+    }
     if (!this.popup.direct) {
       this.report('popup-unavailable')
       throw new PopupError('popup-unavailable')

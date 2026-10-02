@@ -140,7 +140,7 @@ resources; connection constructors receive only that injectable wrapper and
 authentication inputs:
 
 ```ts
-const openedWindow = PopupWindow.open(anchor.target)
+const openedWindow = PopupWindow.fromAnchor(event)
 const applicationConnection = PopupConnection.connect<Messages>(openedWindow, {
   connectionId,
   allowedPopupOrigins,
@@ -162,17 +162,14 @@ Messages are caller-owned classes registered independently. The connection
 requires unique discriminators but defines no protocol namespace, closed union,
 or caller message type.
 
-`PopupWindow.open(target, features?)` creates the application-side lifecycle
-object and synchronously attempts `window.open('about:blank', target,
-'popup,…')`: the popup is always requested as a separate window, and the
-optional `features` string adds only size or position; a string carrying
-`noopener` or `noreferrer` is rejected because the MessagePort carrier needs
-the opener.
-It rejects an empty target and every name beginning with `_` before invoking
-the browser, matching the HTML
-[valid navigable target name](https://html.spec.whatwg.org/multipage/document-sequences.html#valid-navigable-target-name-or-keyword)
-rule and excluding reserved keywords such as `_blank`, `_self`, `_parent`, and
-`_top`.
+`PopupWindow.fromAnchor(event, features?)` and `PopupWindow.open(features?)`
+create the application-side lifecycle object under a fresh random window name
+and synchronously attempt `window.open('about:blank', name, 'popup,…')`: the
+popup is always requested as a separate window, and the optional `features`
+string adds only size or position; a string carrying `noopener` or
+`noreferrer` is rejected because the MessagePort carrier needs the opener.
+The name is random rather than counted, so a page reload never reuses an
+earlier popup by name.
 `PopupConnection.connect` composes over that exact object, synchronously arms
 native-anchor binding, and never accepts a caller-supplied `WindowProxy`. It never
 constructs a `PortKeeper`. `PopupWindow.current()` captures the popup document,
@@ -260,8 +257,7 @@ authenticated endpoint origin and role; the ID alone grants no authority. The
 application endpoint validates and consumes the control without exposing it to
 caller code.
 
-`PopupWindow.open(target)` throws `TypeError` for an invalid target and otherwise
-binds a returned handle privately. When the browser
+`PopupWindow.fromAnchor` and `PopupWindow.open` bind a returned handle privately. When the browser
 returns no handle, `PopupConnection.connect` listens for the popup created by the
 native anchor. It considers only the expected initial private control with the exact
 connection ID and connection version from an allowed popup origin. After
@@ -285,39 +281,38 @@ connection. These mechanics are transparent to the caller.
 
 ### Popup creation and native-anchor binding
 
-The caller renders an action-specific anchor with the destination URL and a
-unique valid target. On activation it lets the package attempt popup
-creation and synchronously arms native-anchor binding before the handler returns:
+The caller renders an action-specific anchor. On its activation the package
+attempts popup creation and arms native-anchor binding; the caller connects and
+navigates before the handler returns:
 
 ```ts
 function activate(event: MouseEvent) {
-  const anchor = event.currentTarget as HTMLAnchorElement
-  const popupWindow = PopupWindow.open(anchor.target)
+  const popupWindow = PopupWindow.fromAnchor(event)
   const connection = PopupConnection.connect(popupWindow, {
     connectionId,
     allowedPopupOrigins,
   })
-
-  const [href, fragment = ''] = anchor.href.split('#')
-  void connection.navigate(href, new URLSearchParams(fragment))
-  if (popupWindow.opened) event.preventDefault()
+  void connection.navigate(url, fragment)
 }
 ```
 
-`PopupWindow.open(target, features?)` is one-shot and always attempts
-`window.open('about:blank', target, 'popup,…')`.
-When the browser returns a usable handle, `PopupWindow` retains the exact
-`WindowProxy` and the caller prevents native anchor navigation; only a later
-`navigate(url)` chooses
-the destination. When creation returns `null`, the caller leaves the same
-activation's native anchor navigation untouched and `navigate` performs no
-browser operation while that binding is pending. The application connection
-binds only the popup whose initial private control authenticates for this
-connection ID and one of its allowed popup origins.
+`PopupWindow.fromAnchor(event, features?)` is one-shot. It names the popup,
+sets the anchor's `target` to that name, and always attempts
+`window.open('about:blank', name, 'popup,…')` first. When the browser returns a
+usable handle, `PopupWindow` retains the exact `WindowProxy` and suppresses the
+anchor's native navigation; only a later `navigate(url)` chooses the
+destination. When creation returns `null`, the activation's native anchor
+navigation proceeds, and a `navigate` or `navigateAway` while the activation is
+still dispatching sets the anchor's `href` to its destination; after dispatch it
+performs no browser operation while binding is pending. The application
+connection binds only the popup whose initial private control authenticates for
+this connection ID and one of its allowed popup origins.
 
-The anchor must use that same valid, unique target and
-must not request `noopener` or `noreferrer`: native-anchor binding needs its
-opener relationship long enough to authenticate and transfer the carrier port.
+The anchor must not request `noopener` or `noreferrer`: native-anchor binding
+needs its opener relationship long enough to authenticate and transfer the
+carrier port, so for such an anchor, or an activation whose target is not an
+anchor, `fromAnchor` suppresses the navigation and throws `TypeError` before
+opening anything.
 
 The anchor is a compatibility hedge for an environment or embedding policy
 which rejects scripted popup creation, not a second user flow. It must exist
@@ -344,7 +339,8 @@ declare class PopupWindow {
   /** @internal PopupConnection.connect calls this after exact validation. */
   bind(source: WindowProxy): void
 
-  static open(target: string, features?: string): PopupWindow
+  static fromAnchor(event: MouseEvent, features?: string): PopupWindow
+  static open(features?: string): PopupWindow
   static current(fragment?: string, options?: { scope?: string }): PopupWindow
 }
 

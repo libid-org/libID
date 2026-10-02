@@ -32,17 +32,12 @@ async function bindGoogleAction(
   const client = await createCCDPClient({ oauthBridge: bridgeOrigin })
 
   anchor.addEventListener('click', (event) => {
-    const target = `ceremony-${crypto.randomUUID()}`
-    // Keep window creation synchronous with the user's activation.
-    const popup = PopupWindow.open(target)
-    const connection = client.connect(popup)
+    // Keep window creation and the run's start synchronous with the user's activation.
+    const connection = client.connect(PopupWindow.fromAnchor(event))
     try {
       const ceremony = client.new(
         connection, 'google', ledger, operationDomain, transactionData,
       )
-      anchor.target = target
-      anchor.href = ceremony.launchUrl
-      if (popup.opened) event.preventDefault() // Otherwise let the real anchor launch.
       const off = ceremony.onStage((update) => {
         status.textContent = update.status === 'active'
           ? CeremonyStage.message(update.stage, 'Google')
@@ -72,7 +67,7 @@ async function bindGoogleAction(
 
 The [development app](../../../apps/dev/src/app.ts) shows platform buttons,
 concurrent runs, independent Close controls and timing history. Each live run
-needs its own target and connection. `client.connect` gives each connection a fresh
+needs its own popup and connection. `client.connect` gives each connection a fresh
 `connectionId`, and `client.new` runs the ceremony under it. Reserve no CCDP message
 handlers yourself on that connection.
 
@@ -98,8 +93,9 @@ Invalid selection, ledger values or inputs fail before OAuth. A client cannot re
 ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
 [client.ts](../src/ccdp/client/client.ts) and [ceremony.ts](../src/ccdp/client/ceremony.ts).
 
-`launchUrl` is the complete Prefetch URL for a native anchor.
-`proveUserIdentity()` starts the run once and owns subsequent protocol navigation.
+`proveUserIdentity()` starts the run once and owns its protocol navigation. Called
+during the anchor's activation, its first navigation also points a blocked
+`fromAnchor` popup's anchor at Prefetch; `launchUrl` is that same Prefetch URL.
 Raw OAuth returns stay inside Callback and Prover; the application receives
 neither them nor bearer credentials or private witnesses.
 

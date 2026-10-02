@@ -156,7 +156,6 @@ test('[POPUP-WINDOW-005] concurrent opens receive distinct placement hints and c
   await page.evaluate((id) => {
     ;(window as unknown as { __id: string }).__id = id
     const anchor = document.getElementById('go') as HTMLAnchorElement
-    anchor.target = `popup-${id}`
     anchor.href = `${anchor.origin}/p#c=${id}`
   }, id)
   const opened = page.waitForEvent('popup')
@@ -215,14 +214,29 @@ test('[POPUP-CONNECTION-009/011] HTTP loopback authenticates and preserves an is
   expect(await expectPong(page, 1)).toMatchObject({ path: '/isolated', isolated: true })
 })
 
-test('[POPUP-WINDOW-003] a noopener anchor never binds and the popup fails closed', async ({
-  page,
-}) => {
-  const { popup } = await open(page, { blocked: true, rel: 'noopener' })
-  await expect(popup.locator('#status')).toHaveText('failed: fallback-unavailable')
-  expect(await diag(popup)).toEqual(['fallback-unavailable', 'connection-failed'])
+test('[POPUP-WINDOW-003] a noopener anchor is refused before anything opens', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto(APP_A)
+  const url = page.url()
+  await page.evaluate(
+    ([href]) => {
+      const anchor = document.getElementById('go') as HTMLAnchorElement
+      anchor.href = href
+      anchor.rel = 'noopener'
+    },
+    [`${POPUP}/p#c=${freshId()}`] as const,
+  )
+  const pages = page.context().pages().length
+  await page.click('#go')
+  await expect
+    .poll(() => errors)
+    .toEqual([expect.stringContaining('the anchor must not sever the opener')])
   await page.waitForTimeout(300)
-  expect(await diag(page)).toEqual(['window-blocked'])
+  // Neither a popup nor the application page navigated, and no connection exists.
+  expect(page.context().pages()).toHaveLength(pages)
+  expect(page.url()).toBe(url)
+  expect(await diag(page)).toEqual([])
 })
 
 test('[POPUP-CONNECTION-001] an unlisted application origin is rejected by the popup', async ({
@@ -729,16 +743,15 @@ for (const allowedOrigins of [['*'], ['*.lib.id']] as const) {
         }
         const body =
           url.origin === appOrigin
-            ? `<a id="launch" target="${id}" href="${popupOrigin}/#c=${id}">Open</a>
+            ? `<a id="launch" href="${popupOrigin}/#c=${id}">Open</a>
             <script type="module">
               import { PopupConnection, PopupWindow } from '/popup.js'
               document.querySelector('a').onclick = (event) => {
-                const popup = PopupWindow.open('${id}')
+                const popup = PopupWindow.fromAnchor(event)
                 const connection = PopupConnection.connect(popup, {connectionId:'${id}', allowedPopupOrigins:${allowlist}})
                 window.connection = connection
                 connection.on({type:'ready',decode:value=>value}, value => { window.peer = connection.peerOrigin; window.received = value.peer })
                 void connection.navigate('${popupOrigin}/', new URLSearchParams({c:'${id}'}))
-                if (popup.opened) event.preventDefault()
               }
             </script>`
             : `<script type="module">
