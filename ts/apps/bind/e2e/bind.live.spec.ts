@@ -1,6 +1,8 @@
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
 import { authorizeOnGitHub, githubAccount } from './github.ts'
+import { authorizeOnGoogle, googleSession } from './google.ts'
 import { presentAsPerson } from './person.ts'
+import { restoreSession } from './session.ts'
 import { injectWallet } from './wallet.ts'
 import { authorizeOnX, restoreXSession, xSession } from './x.ts'
 
@@ -17,7 +19,7 @@ const HOLDER = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'
 async function bindThroughTheUi(
   page: Page,
   context: BrowserContext,
-  platform: 'GitHub' | 'X',
+  platform: 'GitHub' | 'X' | 'Google',
   expectedUser: string,
   authorize: (popup: Page) => Promise<void>,
 ) {
@@ -70,4 +72,19 @@ test('an X identity is proved in the browser, bound on chain, and shown', async 
   await presentAsPerson(context)
   await restoreXSession(context, session!)
   await bindThroughTheUi(page, context, 'X', username!, (popup) => authorizeOnX(popup))
+})
+
+test('a Google identity is proved in the browser, bound on chain, and shown', async ({
+  page,
+  context,
+}) => {
+  const session = googleSession()
+  test.skip(!session, 'GOOGLE_TEST_ALICE_COOKIES or GOOGLE_TEST_ALICE_COOKIES_FILE is not set')
+  const email = process.env.GOOGLE_TEST_ALICE_EMAIL
+  test.skip(!email, 'GOOGLE_TEST_ALICE_EMAIL is not set')
+  await presentAsPerson(context)
+  await restoreSession(context, session!)
+  await bindThroughTheUi(page, context, 'Google', email!, (popup) =>
+    authorizeOnGoogle(popup, email!),
+  )
 })

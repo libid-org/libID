@@ -1,5 +1,6 @@
-// Start a local chain with the real libID contracts, the notary, Bridge, CCDP
-// and the indexer; with --app, also the bind application. No OAuth mocks.
+// Start a local chain with the real libID contracts and Google's keys rotated in,
+// the notary, Bridge, CCDP and the indexer; with --app, also the bind
+// application. No OAuth mocks.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
@@ -17,6 +18,7 @@ const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
 
 export const RPC_URL = 'http://127.0.0.1:4688'
 export const REGISTRY = '0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366' as const
+const GOOGLE_JWT_ROOTS = '0xb7a2ce28e71dbb9c877d2b5a48de33b5f0e6838d' as const
 const BRIDGE = 'http://127.0.0.1:4682'
 const API = 'http://127.0.0.1:4689'
 const APP_ORIGIN = 'http://localhost:4695'
@@ -99,6 +101,34 @@ async function deploy() {
   if (code === '0x') throw new Error('IdentityRegistry has no code after deploy')
 }
 
+const jwtRootsAbi = [
+  {
+    type: 'function',
+    name: 'needsRotation',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'bool' }],
+  },
+] as const
+
+/**
+ * One keeper rotation: a notarized reading of Google's keys into
+ * GoogleJwtRoots, which the Google verifier trusts. Without it no Google proof
+ * verifies.
+ */
+async function rotateGoogleKeys() {
+  execFileSync('docker', [...composeArgs, '--profile', 'keeper', 'run', '--rm', 'keeper'], {
+    stdio: 'inherit',
+  })
+  const chain = createPublicClient({ transport: http(RPC_URL) })
+  const stale = await chain.readContract({
+    address: GOOGLE_JWT_ROOTS,
+    abi: jwtRootsAbi,
+    functionName: 'needsRotation',
+  })
+  if (stale) throw new Error('GoogleJwtRoots still needs a rotation after the keeper ran')
+}
+
 async function ready() {
   await until('Bridge', async () => {
     const response = await fetch(`${BRIDGE}/api/v1/ceremony/config`, {
@@ -172,6 +202,7 @@ compose.on('exit', (code) => {
 try {
   await until('anvil', async () => (await rpc('eth_chainId', [])) === '0x7a69')
   await deploy()
+  await rotateGoogleKeys()
   await ready()
   console.info(`Stack ready: chain ${RPC_URL}, registry ${REGISTRY}, indexer ${API}`)
   if (process.argv.includes('--app') && !stopping) {

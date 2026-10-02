@@ -2,8 +2,9 @@ name: Live end-to-end
 
 # Binds a real platform identity from the browser UI to a mined transaction:
 # real OAuth sign-in, real notary, in-browser proving, the real libID contracts
-# on a local anvil, and the indexer. Not a required check: it depends on the
-# platforms, their test accounts and the network.
+# on a local anvil with Google's keys rotated in by the keeper, and the
+# indexer. Not a required check: it depends on the platforms, their test
+# accounts and the network.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a comment.
 
@@ -22,7 +23,7 @@ permissions:
 
 jobs:
   bind:
-    name: GitHub and X bindings (live)
+    name: GitHub, X and Google bindings (live)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -37,7 +38,7 @@ jobs:
       - name: Install Chromium
         run: pnpm -C ts --filter @libid/bind exec playwright install --with-deps chromium
 
-      - name: Bind GitHub and X identities end to end
+      - name: Bind GitHub, X and Google identities end to end
         env:
           GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
@@ -45,6 +46,9 @@ jobs:
           X_TEST_ALICE_USERNAME: ${{ secrets.X_TEST_ALICE_USERNAME }}
           # The saved X session, base64 of libid-server-rs' `ceremony export x`.
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
+          GOOGLE_TEST_ALICE_EMAIL: ${{ secrets.GOOGLE_TEST_ALICE_EMAIL }}
+          # The saved Google session, base64 of `ceremony export google`.
+          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/bind test:live
 
       - name: Keep the trace, video and container logs

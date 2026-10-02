@@ -10,6 +10,7 @@ import {
   hexToBytes,
   keccak256,
   numberToHex,
+  stringToHex,
   zeroAddress,
 } from 'viem'
 
@@ -77,6 +78,47 @@ export function encodeTlsNotaryPayload(
         proof: bytesToHex(proof.identityAttestation.signature),
       },
       proof: bytesToHex(proof.bearerLinkProof),
+    },
+  ])
+}
+
+/** `GooglePlatformVerifier.GoogleProof`, the payload the Google verifier decodes. */
+const googleProof = [
+  {
+    type: 'tuple',
+    components: [
+      { name: 'ceremonyVersion', type: 'uint16' },
+      { name: 'operationDomain', type: 'bytes32' },
+      { name: 'authorizationNonce', type: 'bytes32' },
+      { name: 'transactionData', type: 'bytes' },
+      { name: 'clientIdentifier', type: 'bytes' },
+      { name: 'publicInputs', type: 'bytes32[]' },
+      { name: 'proof', type: 'bytes' },
+    ],
+  },
+] as const
+
+/**
+ * The `payload` of `IdentityRegistry.bind` for a Google ceremony. The client
+ * identifier is the token's audience, which the result carries on its identity
+ * rather than its proof.
+ */
+export function encodeGooglePayload(
+  oauthProof: OAuthProof<'google'>,
+  oauthClientId: string,
+  operationDomain: Uint8Array,
+  transactionData: Uint8Array,
+): Hex {
+  const { proof } = oauthProof
+  return encodeAbiParameters(googleProof, [
+    {
+      ceremonyVersion: oauthProof.platformCeremonyVersion,
+      operationDomain: bytesToHex(operationDomain),
+      authorizationNonce: bytesToHex(oauthProof.authorizationNonce),
+      transactionData: bytesToHex(transactionData),
+      clientIdentifier: stringToHex(oauthClientId),
+      publicInputs: proof.publicInputs as Hex[],
+      proof: bytesToHex(proof.identityProof),
     },
   ])
 }

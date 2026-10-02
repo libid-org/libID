@@ -25,6 +25,8 @@ services:
       NOTARY_MAX_SESSIONS_PER_IP: "0"
       NOTARY_PER_IP_UPGRADES: ""
       NOTARY_PER_IP_BYTES: ""
+      # The MPC-TLS wire port, for the keeper's reading of Google's keys.
+      NOTARY_PORT: "7047"
       # anvil account #1, the signer chain-configurations' local-dev network
       # trusts. A public test key, never a production notary identity.
       SIGNING_KEY: "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
@@ -63,6 +65,21 @@ services:
     volumes:
       - .cache/ccdp/public:/home/sws/public:ro
       - .cache/ccdp/sws.toml:/etc/sws.toml:ro
+
+  keeper:
+    # keeper:0.3.1 by index digest. Not started by `up`: stack.ts runs it once
+    # after the deploy, so GoogleJwtRoots trusts Google's current keys.
+    image: ghcr.io/libid-org/keeper@sha256:6a97a1bf4d398ab2747155c4f8490c580bef522d83d5c4475ac8bad24daa546d
+    profiles: [keeper]
+    command: ["--config", "/keeper.toml", "once"]
+    configs:
+      - source: keeper
+        target: /keeper.toml
+    depends_on:
+      notary:
+        condition: service_healthy
+      anvil:
+        condition: service_healthy
 
   postgres:
     # postgres:16 by index digest. No volume: every run starts empty.
@@ -112,3 +129,5 @@ services:
 configs:
   bridge:
     file: ./bridge-config.toml
+  keeper:
+    file: ./keeper.toml

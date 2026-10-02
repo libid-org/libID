@@ -4,6 +4,7 @@ import {
   CeremonyStage,
   createCCDPClient,
   type IdentityResult,
+  type OAuthProof,
 } from '@libid/ceremony'
 import { identityRegistryAbi, platformId, resolveId } from '@libid/contracts'
 import { PopupWindow } from '@libid/popup'
@@ -19,7 +20,12 @@ import {
   type WalletClient,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { authorizedTransactionData, encodeTlsNotaryPayload, evmLedger } from './evm.ts'
+import {
+  authorizedTransactionData,
+  encodeGooglePayload,
+  encodeTlsNotaryPayload,
+  evmLedger,
+} from './evm.ts'
 
 declare global {
   interface Window {
@@ -48,9 +54,8 @@ const show = (id: string, text: string) => {
 const status = (text: string) => show('status', text)
 const connectButton = document.querySelector<HTMLButtonElement>('#connect')!
 
-/** The platforms whose proofs this app encodes: both are TLSNotary ceremonies. */
-type Platform = 'github' | 'x'
-const names: Record<Platform, string> = { github: 'GitHub', x: 'X' }
+type Platform = 'github' | 'x' | 'google'
+const names: Record<Platform, string> = { github: 'GitHub', x: 'X', google: 'Google' }
 const anchors = Object.fromEntries(
   (Object.keys(names) as Platform[]).map((platform) => [
     platform,
@@ -76,9 +81,27 @@ async function connect() {
   show('holder', holder)
 }
 
+type Accepted = Extract<IdentityResult<Platform>, { status: 'accepted' }>
+
+/** GitHub and X prove through TLSNotary sessions; Google through a signed ID token. */
+function payloadOf(result: Accepted, operationDomain: Uint8Array, transactionData: Uint8Array) {
+  return result.identity.platformId === 'google'
+    ? encodeGooglePayload(
+        result.oauthProof as OAuthProof<'google'>,
+        result.identity.oauthClientId,
+        operationDomain,
+        transactionData,
+      )
+    : encodeTlsNotaryPayload(
+        result.oauthProof as OAuthProof<'github' | 'x'>,
+        operationDomain,
+        transactionData,
+      )
+}
+
 async function submit(
   platform: Platform,
-  result: Extract<IdentityResult<Platform>, { status: 'accepted' }>,
+  result: Accepted,
   transactionData: Uint8Array,
   operationDomain: Uint8Array,
 ) {
@@ -91,7 +114,7 @@ async function submit(
     functionName: 'quoteBind',
     args: [id, result.oauthProof.platformCeremonyVersion],
   })
-  const payload = encodeTlsNotaryPayload(result.oauthProof, operationDomain, transactionData)
+  const payload = payloadOf(result, operationDomain, transactionData)
   status('Submitting the binding…')
   const { request } = await publicClient.simulateContract({
     account: holder,
