@@ -1,6 +1,6 @@
 name: CI
 
-# TypeScript checks, workspace browser tests, infrastructure smoke, CCDP image and DCO.
+# TypeScript and Solidity checks, workspace browser tests, infrastructure smoke, CCDP image and DCO.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -103,6 +103,51 @@ jobs:
 
       - name: Lint and formatting
         run: pnpm -C ts lint && pnpm -C ts fmt:check
+
+  # ---------------------------------------------------------------------------
+  # Solidity: LibID, tested against the real libID contracts placed at their
+  # canonical addresses. The fork test against Eden reads a public RPC.
+  # ---------------------------------------------------------------------------
+  sol:
+    name: Solidity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: sol
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: v1.7.1
+
+      - name: Formatting
+        run: forge fmt --check
+
+      - name: Lint
+        run: forge lint -D notes
+
+      # The oldest compiler the README promises, on the legacy pipeline,
+      # building LibID.sol alone as an integrator's project would.
+      - name: LibID compiles with solc 0.8.20
+        env:
+          FOUNDRY_VIA_IR: "false"
+          FOUNDRY_OUT: ${{ runner.temp }}/libid-0.8.20/out
+          FOUNDRY_CACHE_PATH: ${{ runner.temp }}/libid-0.8.20/cache
+        run: forge build src/LibID.sol --use 0.8.20 --evm-version paris
+
+      - name: Tests
+        run: forge test -vv
+
+      # LIBID_REQUIRE_FORK turns a missing RPC into a failure, not a skip.
+      - name: Eden fork test
+        env:
+          EDEN_RPC_URL: https://ev-reth-eden-testnet.binarybuilders.services:8545
+          LIBID_REQUIRE_FORK: "true"
+        run: forge test -vv --match-contract LibIDForkTest
 
   # ---------------------------------------------------------------------------
   # Ceremony coverage badge: on pushes to main, publish the unit-test line
