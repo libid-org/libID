@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import { VERSIONS_PATH } from '../assets/keys.js'
+import { CCDP_VERSION, VERSIONS_PATH } from '../assets/keys.js'
 import { type CCDPClient, createCCDPClient } from '../ccdp/client/client.js'
 import { bundledVersions } from './platforms.js'
 
@@ -17,7 +17,11 @@ export async function ccdpClient(
   const fetch = vi
     .spyOn(globalThis, 'fetch')
     .mockImplementation(async (input) =>
-      Response.json(String(input).endsWith(VERSIONS_PATH) ? versions : config),
+      Response.json(
+        String(input).endsWith(VERSIONS_PATH)
+          ? { ccdpVersions: [CCDP_VERSION], platforms: versions }
+          : config,
+      ),
     )
   try {
     return await createCCDPClient({ oauthBridge: BRIDGE })

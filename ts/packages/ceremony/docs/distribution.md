@@ -54,7 +54,9 @@ leave a 404 heuristically cacheable.
 ## Version catalog
 
 `/ccdp/versions.json` publishes the bundled platform ceremony versions, for example
-`{"google":[1],"x":[1],"github":[1]}`. Each list is nonempty, duplicate-free,
+`{"ccdpVersions":[1],"platforms":{"google":[1],"x":[1],"github":[1]}}`.
+CCDP versions are positive safe integers; client creation requires this package's
+CCDP version in that list. The platform lists are nonempty, duplicate-free,
 ascending and limited to unsigned 16-bit versions. The build derives the record
 in [catalog](../src/platforms/index.ts) order and fails by pair name unless the
 emitted [platform provers](../src/platforms/provers.ts) and asset profiles name

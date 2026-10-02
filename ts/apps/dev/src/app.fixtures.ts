@@ -47,7 +47,10 @@ export const bundled = { google: [1], x: [1], github: [2] }
 /** Answers the Distribution catalog request independently of Bridge registration. */
 export const serveVersions = (page: Page, versions: unknown = bundled) =>
   page.route(versionsUrl, (route) =>
-    route.fulfill({ json: versions, headers: { 'Access-Control-Allow-Origin': '*' } }),
+    route.fulfill({
+      json: { ccdpVersions: [1], platforms: versions },
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    }),
   )
 
 /** Answers the Bridge configuration request with `platforms` in place of the default set. */

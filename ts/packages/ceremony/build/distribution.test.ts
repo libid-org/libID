@@ -131,7 +131,10 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
 test('versions.json names the bundled platform ceremony versions, readable from any origin under the Callback cache policy [KIT-023] [LIBID-ASSET-008]', async () => {
   const path = '/ccdp/versions.json'
   const body = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
-  const versions: Record<string, number[]> = JSON.parse(body)
+  const record = JSON.parse(body)
+  assert.deepEqual(Object.keys(record).sort(), ['ccdpVersions', 'platforms'])
+  assert.deepEqual(record.ccdpVersions, [1])
+  const versions: Record<string, number[]> = record.platforms
   assert.equal(metadata.files[path], path)
   assert.deepEqual(metadata.headers[path], {
     'content-type': 'application/json; charset=utf-8',
@@ -155,7 +158,7 @@ test('versions.json names the bundled platform ceremony versions, readable from 
     new Set(versionPairs(versions)),
     new Set(Object.keys(metadata.requestsByProfile)),
   )
-  assert.equal(body, JSON.stringify(versions))
+  assert.equal(body, JSON.stringify(record))
   // Exactly the catalog's platforms and versions, in catalog order.
   assert.deepEqual(Object.entries(versions), Object.entries(await catalogVersions()))
   for (const [platform, list] of Object.entries(versions)) {

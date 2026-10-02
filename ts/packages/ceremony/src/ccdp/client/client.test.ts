@@ -37,7 +37,7 @@ it('creates a client from the Bridge record, then the Distribution list, refusin
   }
   const created = create(
     () => json(wireConfig),
-    () => json({ google: [1], x: [1], future: [1] }),
+    () => json({ ccdpVersions: [1], platforms: { google: [1], x: [1], future: [1] } }),
   )
   const client = await created.client
   expect(created.fetch.mock.calls).toEqual([
@@ -49,8 +49,13 @@ it('creates a client from the Bridge record, then the Distribution list, refusin
   for (const [record, list, listRead] of [
     [() => json('Unavailable', 503), () => json({ google: [1] }), false],
     [() => json(wireConfig), () => new Response('Not found', { status: 404 }), true],
-    [() => json(wireConfig), () => json({ google: [1, 1] }), true],
+    [
+      () => json(wireConfig),
+      () => json({ ccdpVersions: [1], platforms: { google: [1, 1] } }),
+      true,
+    ],
     [() => json(wireConfig), () => json([1]), true],
+    [() => json(wireConfig), () => json({ ccdpVersions: [2], platforms: { google: [1] } }), true],
     [() => json(wireConfig), () => new Response('{', { status: 200 }), true],
   ] as const) {
     const failed = create(record, list)
