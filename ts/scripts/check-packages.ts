@@ -63,6 +63,8 @@ writeFileSync(
     dependencies,
     devDependencies: {
       typescript: require('typescript/package.json').version,
+      // Applications still on TypeScript 5 read the declarations TypeScript 7 emits.
+      'typescript-5': 'npm:typescript@^5',
       vite: require('vite/package.json').version,
     },
   }),
@@ -119,7 +121,8 @@ for (const [entry, lib] of [
       files: [`${entry}.ts`],
     }),
   )
-  execFileSync('node', ['node_modules/typescript/bin/tsc'], { cwd: consumer, stdio: 'inherit' })
+  for (const compiler of ['typescript', 'typescript-5'])
+    execFileSync('node', [`node_modules/${compiler}/bin/tsc`], { cwd: consumer, stdio: 'inherit' })
 }
 writeFileSync(
   join(consumer, 'vite.config.js'),

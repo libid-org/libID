@@ -24,11 +24,13 @@ pnpm -C ts test:packages
 ```
 
 This builds and packs all three packages into `ts/.cache/npm/`, installs those
-exact tarballs into an isolated consumer, then typechecks and bundles the public
-imports. The worker entry is typechecked separately from the browser entry. It
-also checks the published file allowlist, that every `exports` target ships, and
-resolution of workspace dependency ranges. CI runs the same check alongside the existing tests; it adds no browser
-or protocol suite. The consumer and its npm cache stay in ignored local paths.
+exact tarballs into an isolated consumer, then typechecks the public imports
+with both the workspace TypeScript and TypeScript 5, and bundles them. The
+worker entry is typechecked separately from the browser entry. It also checks
+the published file allowlist, that every `exports` target ships, and resolution
+of workspace dependency ranges. CI runs the same check alongside the existing
+tests; it adds no browser or protocol suite. The consumer and its npm cache stay
+in ignored local paths.
 
 ## First publication
 
