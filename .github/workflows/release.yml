@@ -4,10 +4,6 @@ name: Release
 # - `ccdp-v<version>` promotes the CCDP image of the tagged commit, which must
 #   be on main, to `ghcr.io/libid-org/ccdp:<version>` (plus `:latest` for a
 #   stable version). CCDP versions are their own, never a package's.
-# - `v<version>` publishes @libid/claim and @libid/claim-full (whose version
-#   tracks claim's) to npm. The tag is a pointer, never a source: it must equal
-#   both package.json versions. npm auth is token-first (org NPM_TOKEN secret)
-#   with OIDC trusted publishing as the fallback — same model as libid-contracts.
 
 on:
   release:
@@ -18,7 +14,8 @@ permissions:
 
 jobs:
   verify-tag:
-    name: Release tag matches its source
+    name: CCDP release tag points to main
+    if: startsWith(github.event.release.tag_name, 'ccdp-v')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -27,94 +24,16 @@ jobs:
           # Full history, so origin/main is present for the ancestry check.
           fetch-depth: 0
           persist-credentials: false
-      - name: A CCDP tag is on main; a package tag equals the package versions
+      - name: The CCDP tag is on main
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          if [[ "$TAG" == ccdp-v* ]]; then
-            git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-              echo "::error::$TAG targets $GITHUB_SHA, which is not on main; only main publications are released"
-              exit 1
-            }
-            echo "tag: $TAG  commit: $GITHUB_SHA (on main)"
-            exit 0
-          fi
-          version="${TAG#v}"
-          for dir in claim claim-full; do
-            pkg=$(node -p "require('./ts/packages/$dir/package.json').version")
-            echo "tag: $TAG  $dir: $pkg"
-            [ "$version" = "$pkg" ] || { echo "::error::tag $TAG != @libid/$dir version $pkg"; exit 1; }
-          done
-
-  publish-npm:
-    name: Publish @libid/claim + @libid/claim-full to npm
-    if: ${{ !startsWith(github.event.release.tag_name, 'ccdp-v') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [verify-tag]
-    environment: npm-deploy
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      # Public repo: provenance attestation is on.
-      NPM_CONFIG_PROVENANCE: "true"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: ./.github/actions/setup-ts
-
-      - name: Update npm for OIDC trusted publishing
-        run: npm install -g npm@latest && npm --version
-
-      - name: Build and test
-        run: |
-          pnpm -C ts build
-          pnpm -C ts test
-
-      # Derive the dist-tag: a prerelease publishes under its first
-      # prerelease identifier (1.2.0-rc.1 -> rc), a plain version -> latest.
-      - name: Derive dist-tag from version
-        id: dist-tag
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -euo pipefail
-          version="${TAG#v}"
-          base="${version%%+*}"
-          if [ "$base" != "${base#*-}" ]; then
-            pre="${base#*-}"
-            dist_tag="${pre%%.*}"
-            printf '%s' "$dist_tag" | grep -qE '^[A-Za-z][A-Za-z0-9._-]*$' || {
-              echo "::error::prerelease identifier '$dist_tag' is not a usable npm dist-tag" >&2
-              exit 1
-            }
-          else
-            dist_tag=latest
-          fi
-          echo "dist-tag=$dist_tag" >> "$GITHUB_OUTPUT"
-
-      # From the package directories, not `pnpm -C` (pnpm 10 mangles
-      # forwarded flags under -C). Token-first with OIDC fallback, as in
-      # libid-contracts. claim first: claim-full's workspace:^ dep resolves
-      # to it. claim-full's assets/ tree was staged by its build above and
-      # rides in the tarball via `files`.
-      - name: pnpm publish
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -n "${NPM_TOKEN}" ]; then
-            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> "$HOME/.npmrc"
-            echo "Authenticating with the org npm token"
-          else
-            echo "No NPM_TOKEN secret; relying on OIDC trusted publishing"
-          fi
-          for dir in claim claim-full; do
-            (cd "ts/packages/$dir" \
-              && pnpm publish --access public --no-git-checks --tag "${{ steps.dist-tag.outputs.dist-tag }}")
-          done
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::$TAG targets $GITHUB_SHA, which is not on main; only main publications are released"
+            exit 1
+          }
+          echo "tag: $TAG  commit: $GITHUB_SHA (on main)"
 
   # ---------------------------------------------------------------------------
   # CCDP image: publish the released commit's image under the version. The

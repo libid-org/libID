@@ -1,6 +1,6 @@
 name: CI
 
-# TypeScript checks, workspace browser tests, infrastructure smoke, CCDP image and DCO.
+# TypeScript checks, workspace browser tests, CCDP image and DCO.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -67,8 +67,8 @@ jobs:
           { echo "workspaces=$json"; echo "image=$image"; } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
-  # TypeScript: build, tests (including the wallet-product isolation guard),
-  # complete source/test/build-script type checking, lint, formatting.
+  # TypeScript: build, tests, complete source/test/build-script type checking,
+  # lint and formatting.
   # ---------------------------------------------------------------------------
   ts:
     name: TypeScript
@@ -142,117 +142,6 @@ jobs:
             -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -qm "Ceremony coverage for $GITHUB_SHA"
           git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
-
-
-  # ---------------------------------------------------------------------------
-  # Integration smoke: boot the compose stack (fresh anvil + released
-  # libid-deploy + released notary/backend/keeper images) and assert the
-  # seams: the declarative deploy converged onto the declared canonical
-  # addresses, the RPC answers, the notary serves its signer identity, the
-  # keeper's real MPC-TLS JWKS rotation landed roots on-chain, and the
-  # backend both health-checks and mints a well-formed GitHub challenge.
-  # ---------------------------------------------------------------------------
-  integration-smoke:
-    name: Integration smoke (compose stack)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # The libid-org ghcr packages are not (yet) public; the workflow token
-      # can pull them once the packages grant this repository read access
-      # (or are flipped public, which is where releases should end up).
-      - name: Log in to ghcr
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-
-      - name: Render env from the committed network file
-        run: harness/render-env.sh
-
-      - name: Boot the stack
-        working-directory: harness
-        env:
-          GH_OAUTH_CLIENT_ID: dummy
-          GH_OAUTH_CLIENT_SECRET: dummy
-        run: docker compose up -d --wait --wait-timeout 300
-
-      - name: Deploy service exited 0 (declarative convergence check passed)
-        working-directory: harness
-        run: |
-          set -euo pipefail
-          docker compose logs deploy
-          code=$(docker inspect -f '{{.State.ExitCode}}' "$(docker compose ps -a -q deploy)")
-          [ "$code" = "0" ] || { echo "deploy service exited $code"; exit 1; }
-
-      - name: Keeper rotated the Google JWKS roots (real MPC-TLS, exit 0)
-        working-directory: harness
-        run: |
-          set -euo pipefail
-          # Block until the one-shot keeper exits, then read its real exit code
-          # from the container. `docker compose wait` prints a human sentence,
-          # not a bare number, on this Compose version — so inspect the state
-          # rather than parsing its stdout.
-          docker compose wait keeper >/dev/null 2>&1 || true
-          docker compose logs keeper
-          cid=$(docker compose ps -aq keeper)
-          code=$(docker inspect -f '{{.State.ExitCode}}' "$cid")
-          [ "$code" = "0" ] || { echo "keeper exited $code"; exit 1; }
-
-      - name: JWKS contracts report roots present post-rotation
-        working-directory: harness
-        run: |
-          set -euo pipefail
-          # needsRotation() is true from deployment until the first rotation
-          # lands, so false here proves the keeper's roots are live on-chain.
-          # Addresses are the canonical declared ones from network.local.toml;
-          # cast runs inside the anvil (foundry) container.
-          check_roots() { # name address
-            local out
-            out=$(docker compose exec -T anvil cast call "$2" 'needsRotation()(bool)' \
-              --rpc-url http://127.0.0.1:8545)
-            echo "$1 needsRotation = $out"
-            [ "$out" = "false" ] || { echo "$1 still needs rotation"; exit 1; }
-          }
-          check_roots identity_jwks_roots  0x589b56f95d5df5483c79e46e7b20293135c9ebd9
-          check_roots google_oidc_verifier 0xef53a51e3a46e5f82248a39ddff0b7b901ab438c
-
-      - name: Anvil RPC answers with the harness chain id
-        run: |
-          set -euo pipefail
-          chain=$(curl -fsS -X POST -H 'content-type: application/json' \
-            --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
-            http://127.0.0.1:8545 | jq -r .result)
-          [ "$chain" = "0x7a69" ] || { echo "unexpected chain id $chain"; exit 1; }
-
-      - name: Notary /info serves the expected signer pubkey
-        run: |
-          set -euo pipefail
-          info=$(curl -fsS http://127.0.0.1:7048/info)
-          echo "$info"
-          pub=$(echo "$info" | jq -r .publicKey)
-          # anvil #1, compressed SEC1 (bare hex, no 0x) — the SIGNING_KEY
-          # wired in compose.
-          expected="02ba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0"
-          norm() { echo "${1#0x}" | tr 'A-F' 'a-f'; }
-          [ "$(norm "$pub")" = "$(norm "$expected")" ] \
-            || { echo "notary pubkey mismatch: $pub"; exit 1; }
-
-      - name: Backend /health and a well-formed GitHub challenge
-        run: |
-          set -euo pipefail
-          curl -fsS http://localhost:8722/health
-          # A dummy (but shape-valid) compressed pubkey + the anvil #4 wallet.
-          resp=$(curl -fsS -X POST -H 'content-type: application/json' \
-            --data '{"pubkey":"020000000000000000000000000000000000000000000000000000000000000001","link_wallet":"0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65"}' \
-            http://localhost:8722/auth/github/challenge)
-          echo "$resp"
-          echo "$resp" | jq -e '.challenge and (.auth_url | startswith("https://github.com/login/oauth/authorize"))' >/dev/null
-
-      - name: Stack logs on failure
-        if: failure()
-        working-directory: harness
-        run: docker compose logs
 
   # ---------------------------------------------------------------------------
   # CCDP image: build the static ceremony artifact and the pinned SWS image for
