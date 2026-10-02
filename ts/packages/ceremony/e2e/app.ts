@@ -72,6 +72,7 @@ anchor.addEventListener('click', (event) => {
       Object.assign(window, {
         result: { status: 'failed' },
         failureEvent: error instanceof CeremonyError ? error.event : undefined,
+        failureMessage: error instanceof Error ? error.message : String(error),
       })
     })
 })

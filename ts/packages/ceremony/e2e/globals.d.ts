@@ -7,6 +7,8 @@ declare global {
   interface Window {
     NotaryRuntime: typeof NotaryRuntime
     failureEvent?: string
+    /** The failed run's display text, so an assertion can show why it failed. */
+    failureMessage?: string
     ready: boolean
     completed: IdentityResult[]
     runs: { events: CeremonyEvent[]; diagnostics: string[]; outcome?: string; closed?: unknown }[]

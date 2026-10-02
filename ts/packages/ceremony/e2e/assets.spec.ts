@@ -106,7 +106,10 @@ test("moves a returning browser to the next release's worker and joins a pending
   await seed.close()
   await googleProvider()
   const popup = await launch()
-  await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
+  // A failure shows its reason: once in CI, Firefox failed this run fast, before OAuth.
+  await expect
+    .poll(() => page.evaluate(() => ({ result: window.result, failure: window.failureMessage })))
+    .toEqual({ result: { status: 'denied' } })
   expect(
     await popup.evaluate(async () =>
       (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname),
