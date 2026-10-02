@@ -219,15 +219,13 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     event.preventDefault()
     return
   }
-  const id = crypto.randomUUID()
-  const run = new RunRow(platform, id)
-  launch.target = `ceremony-dev-${id}`
+  launch.target = `ceremony-dev-${crypto.randomUUID()}`
   // Keep creation and the native-anchor fallback inside the same user gesture.
+  const popup = PopupWindow.open(launch.target, 'width=480,height=720')
+  const current = client.connect(popup)
+  const id = current.connectionId
+  const run = new RunRow(platform, id)
   try {
-    const popup = PopupWindow.open(launch.target, 'width=480,height=720')
-    const current = client.connect(popup, {
-      connectionId: id,
-    })
     run.close.disabled = !popup.opened
     // A native-anchor popup supplies its window handle only when it authenticates.
     void current.ready

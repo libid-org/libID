@@ -31,14 +31,12 @@ Object.assign(window, {
 anchor.addEventListener('click', (event) => {
   const run: Window['runs'][number] = { events: [], diagnostics: [] }
   window.runs.push(run)
-  const id = crypto.randomUUID()
-  activeId = id
-  anchor.target = `ceremony-${id}`
+  anchor.target = `ceremony-${crypto.randomUUID()}`
   const popup = PopupWindow.open(anchor.target, 'width=480,height=720')
   connection = client.connect(popup, {
-    connectionId: id,
     onDiagnostic: ({ code }) => run.diagnostics.push(code),
   })
+  activeId = connection.connectionId
   connection.on(
     {
       type: 'after',

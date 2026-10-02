@@ -30,6 +30,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | KIT-001B | [build/distribution.test.ts](../build/distribution.test.ts) |
 | KIT-002 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts) |
 | KIT-006 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |
+| KIT-007 | [src/ccdp/client/connect.test.ts](../src/ccdp/client/connect.test.ts) |
 | KIT-008 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/connect.test.ts](../src/ccdp/client/connect.test.ts) |
 | KIT-009 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | KIT-010 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/popup.spec.ts](../e2e/popup.spec.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |

@@ -32,13 +32,10 @@ async function bindGoogleAction(
   const client = await createCCDPClient({ oauthBridge: bridgeOrigin })
 
   anchor.addEventListener('click', (event) => {
-    const id = crypto.randomUUID()
-    const target = `ceremony-${id}`
+    const target = `ceremony-${crypto.randomUUID()}`
     // Keep window creation synchronous with the user's activation.
     const popup = PopupWindow.open(target)
-    const connection = client.connect(popup, {
-      connectionId: id,
-    })
+    const connection = client.connect(popup)
     try {
       const ceremony = client.new(
         connection, 'google', ledger, operationDomain, transactionData,
@@ -75,16 +72,18 @@ async function bindGoogleAction(
 
 The [development app](../../../apps/dev/src/app.ts) shows platform buttons,
 concurrent runs, independent Close controls and timing history. Each live run
-needs its own target, connection and fresh lowercase UUIDv4. The connection's
-`connectionId` is the ceremony ID, so `client.new` takes none. Reserve no CCDP message
+needs its own target and connection. `client.connect` gives each connection a fresh
+`connectionId`, and `client.new` runs the ceremony under it. Reserve no CCDP message
 handlers yourself on that connection.
 
-`connect` accepts popup's `ConnectOptions` except `allowedPopupOrigins`; the client
-supplies that allowlist from its frozen Bridge configuration. Fallback and
+`connect` accepts popup's `ConnectOptions` except `allowedPopupOrigins` and
+`connectionId`; the client supplies the allowlist from its frozen Bridge configuration
+and generates the ID. Fallback and
 diagnostic options pass through to the popup package. It adds no message handlers
 or navigation. The returned connection supports other application protocols;
-`client.new()` also accepts independently constructed connections; it runs only one
-whose `connectionId` is a canonical UUIDv4.
+`client.new()` also accepts independently constructed connections, such as one that
+admits an application's own pages before and after the ceremony. Their creator generates
+a fresh `connectionId`, and `client.new` runs only a canonical UUIDv4.
 The Bridge and the CCDP are both admitted popup origins. Prefetch/Prover gates,
 proof delivery, denial, fallback observations, and proving operations require the
 CCDP origin; `authorization.finished` requires the Bridge origin. When both share

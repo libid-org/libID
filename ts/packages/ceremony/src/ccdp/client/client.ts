@@ -20,12 +20,13 @@ import { fetchPlatformVersions, type PlatformVersions } from './versions.js'
 /** Application-scoped Bridge configuration used to construct independent ceremony runs. */
 export interface CCDPClient {
   /**
-   * Connect an application-owned popup, admitting only this Bridge and its configured CCDP.
-   * Other popup options pass through; the caller retains the connection and owns closure.
+   * Connect an application-owned popup under a fresh connection ID, admitting only this Bridge
+   * and its configured CCDP. Other popup options pass through; the caller retains the connection
+   * and owns closure.
    */
   connect<Out extends Message = Message, In extends Message = Out>(
     popup: PopupWindow,
-    options: Omit<ConnectOptions, 'allowedPopupOrigins'>,
+    options?: Omit<ConnectOptions, 'allowedPopupOrigins' | 'connectionId'>,
   ): PopupConnection<Out, In>
   /**
    * Platforms the Bridge configures and the Distribution bundles at a version this package
@@ -80,8 +81,13 @@ function ccdpClientFromConfig(config: CeremonyConfig, versions: PlatformVersions
   const client: CCDPClient = {
     enabledPlatforms,
     enabledVersions,
-    connect(popup, options) {
-      return PopupConnection.connect(popup, { ...options, allowedPopupOrigins: popupOrigins })
+    connect(popup, options = {}) {
+      // The client generates the ID, as the carried protocol (REQ-POPUP-ID-02); each is fresh.
+      return PopupConnection.connect(popup, {
+        ...options,
+        connectionId: crypto.randomUUID(),
+        allowedPopupOrigins: popupOrigins,
+      })
     },
     new(conn, platformId, ledgerId, operationDomain, transactionData, ceremonyVersion) {
       // A connection constructed elsewhere may carry any value; only a canonical UUID runs.
