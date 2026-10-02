@@ -1,0 +1,500 @@
+import {
+  createPublicClient,
+  createWalletClient,
+  custom,
+  defineChain,
+  Eip1559FeesNotSupportedError,
+  getAddress,
+  http,
+  isAddress,
+  type PublicClient,
+  type Transport,
+  toHex,
+  type Chain as ViemChain,
+} from 'viem'
+import type { Driver, WalletDriver } from '../client.js'
+import { errorCode, LedgerError, ledgerErrorIn } from '../errors.js'
+import type { Account, Ledger } from '../index.js'
+import type { Provider, Reader, Tx } from './index.js'
+
+type Request = { method: string; params?: unknown }
+type Client = PublicClient<Transport, ViemChain>
+
+/** Read-only methods used by queries, simulation and fee estimation. */
+export const readMethods: readonly string[] = Object.freeze([
+  'eth_chainId',
+  'eth_blockNumber',
+  'eth_call',
+  'eth_estimateGas',
+  'eth_gasPrice',
+  'eth_maxPriorityFeePerGas',
+  'eth_getBalance',
+  'eth_getCode',
+  'eth_getBlockByNumber',
+  'eth_getBlockByHash',
+  'eth_getLogs',
+  'eth_getTransactionByHash',
+  'eth_getTransactionReceipt',
+])
+const sendMethods = ['eth_sendTransaction', 'wallet_sendTransaction']
+
+export function evm(
+  ledger: Ledger<'evm'>,
+  access: { rpc?: string; explorer?: string },
+): Driver<'evm'> {
+  const chainId = Number(ledger.chain.slice('eip155:'.length))
+  if (!Number.isSafeInteger(chainId)) throw new TypeError(`Unsupported EVM chain: ${ledger.chain}`)
+  const chain = defineChain({
+    id: chainId,
+    name: ledger.name,
+    nativeCurrency: { name: ledger.currency.symbol, ...ledger.currency },
+    rpcUrls: { default: { http: access.rpc ? [access.rpc] : [] } },
+    blockExplorers: access.explorer
+      ? { default: { name: 'Explorer', url: access.explorer } }
+      : undefined,
+    testnet: ledger.testnet,
+  })
+  const rpc = access.rpc ? http(access.rpc, { timeout: 15_000, retryCount: 1 }) : undefined
+  const fallback = rpc?.({ chain })
+  const parseAccount = (raw: string) => getAddress(raw) as Account
+
+  /** Reads through whichever client `clientOf` gives when each read or estimate starts. */
+  function reads(clientOf: () => Client | null) {
+    const reachable = () => {
+      const client = clientOf()
+      if (!client) throw new LedgerError('unreachable')
+      return client
+    }
+    return {
+      walletRequirements: Object.freeze({
+        methods: Object.freeze([
+          'eth_sendTransaction',
+          'wallet_switchEthereumChain',
+          'wallet_addEthereumChain',
+          'wallet_requestPermissions',
+          ...readMethods,
+        ]),
+        events: Object.freeze(['accountsChanged', 'chainChanged']),
+      }),
+      parseAccount,
+      async read<A extends readonly unknown[], R>(
+        run: (read: Reader, ...args: A) => Promise<R>,
+        args: A,
+        { signal }: { signal?: AbortSignal } = {},
+      ): Promise<R> {
+        signal?.throwIfAborted()
+        const client = reachable()
+        return unwrapped(async () => {
+          const block = await client.getBlockNumber({ cacheTime: 0 })
+          // Every action defaults to the same block, so a query sees one consistent state.
+          const pin = <F>(action: unknown, key: 'blockNumber' | 'toBlock'): F =>
+            (async (params: object) => {
+              signal?.throwIfAborted()
+              const result = await (action as (params: object) => Promise<unknown>)({
+                [key]: block,
+                ...params,
+              })
+              signal?.throwIfAborted()
+              return result
+            }) as F
+          const reader: Reader = {
+            ledger,
+            block,
+            readContract: pin(client.readContract, 'blockNumber'),
+            getContractEvents: pin(client.getContractEvents, 'toBlock'),
+            getBalance: pin(client.getBalance, 'blockNumber'),
+            call: pin(client.call, 'blockNumber'),
+            address(name) {
+              const value = ledger.addresses[name]
+              if (!value) throw new TypeError(`${ledger.name} has no ${name} address`)
+              return getAddress(value)
+            },
+            parseAccount,
+          }
+          return run(reader, ...args)
+        })
+      },
+      async estimate(tx: Tx, from: Account): Promise<bigint> {
+        const client = reachable()
+        return unwrapped(async () => {
+          const [gas, fees] = await Promise.all([
+            client.estimateGas({ ...tx, account: from as `0x${string}` }),
+            client.estimateFeesPerGas().catch((error) => {
+              if (!(error instanceof Eip1559FeesNotSupportedError)) throw error
+              return client.estimateFeesPerGas({ type: 'legacy' })
+            }),
+          ])
+          return gas * (fees.maxFeePerGas ?? fees.gasPrice)
+        })
+      },
+    }
+  }
+
+  async function switchChain(provider: Provider) {
+    const params = [{ chainId: toHex(chainId) }]
+    try {
+      try {
+        await provider.request({ method: 'wallet_switchEthereumChain', params })
+      } catch (error) {
+        // Without an RPC there is nothing to offer a wallet that does not know the chain.
+        if (errorCode(error) !== 4902 || !access.rpc) throw error
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [
+            {
+              chainId: toHex(chainId),
+              chainName: ledger.name,
+              nativeCurrency: chain.nativeCurrency,
+              rpcUrls: [access.rpc],
+              blockExplorerUrls: access.explorer ? [access.explorer] : undefined,
+            },
+          ],
+        })
+        if ((await walletChain(provider)) !== chainId) {
+          await provider.request({ method: 'wallet_switchEthereumChain', params })
+        }
+      }
+    } catch (error) {
+      throw walletError(error, 'wrong-chain')
+    }
+    if ((await walletChain(provider)) !== chainId) throw new LedgerError('wrong-chain')
+  }
+
+  // The ledger reads through the wallet attached last, then its RPC.
+  const direct: Client | null = rpc ? createPublicClient({ chain, transport: rpc }) : null
+  let active: Client | null = null
+  return {
+    ...reads(() => active ?? direct),
+    async attach(provider: Provider) {
+      const transport = walletReads(provider, chainId, fallback)
+      const client: Client = createPublicClient({
+        chain,
+        transport: custom(transport, { retryCount: 0 }),
+      })
+      active = client
+      return {
+        async send(tx: Tx, from: Account) {
+          const address = from as `0x${string}`
+          let requested = false
+          try {
+            if ((await walletChain(provider)) !== chainId) await switchChain(provider)
+            const [current, walletChainId] = await Promise.all([
+              walletAccount(provider, false),
+              walletChain(provider),
+            ])
+            if (current !== address || walletChainId !== chainId) {
+              throw new LedgerError('wallet-changed')
+            }
+            await client.call({ ...tx, account: address })
+            const signer = createWalletClient({
+              account: address,
+              chain,
+              transport: custom({
+                async request(request: Request) {
+                  // Everything before this point provably sent nothing.
+                  if (sendMethods.includes(request.method)) requested = true
+                  return provider.request(request)
+                },
+              }),
+            })
+            return await signer.sendTransaction(tx)
+          } catch (error) {
+            if (!requested) {
+              throw error instanceof LedgerError
+                ? error
+                : new LedgerError('not-sent', { cause: error })
+            }
+            if (errorCode(error) === 4001) throw new LedgerError('rejected', { cause: error })
+            throw error
+          }
+        },
+        detach() {
+          transport.close()
+          if (active === client) active = null
+        },
+      }
+    },
+  }
+}
+
+/** @internal The EVM wallet itself: its account, account changes, and its account picker. */
+export function evmWallet(provider: Provider): WalletDriver {
+  const accountOf = (accounts: unknown) => {
+    const [first] = Array.isArray(accounts) ? accounts : []
+    return typeof first === 'string' && isAddress(first) ? (getAddress(first) as Account) : null
+  }
+  return {
+    async account(prompt) {
+      try {
+        return accountOf(
+          await provider.request({ method: prompt ? 'eth_requestAccounts' : 'eth_accounts' }),
+        )
+      } catch (error) {
+        throw walletError(error, 'no-account')
+      }
+    },
+    async choose() {
+      try {
+        await provider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        })
+      } catch (error) {
+        const code = errorCode(error)
+        if (code === 4001) throw new LedgerError('rejected', { cause: error })
+        if (code === 4200 || code === -32601) throw new LedgerError('unsupported', { cause: error })
+        throw error
+      }
+    },
+    watch(listener) {
+      const changed = (accounts: unknown) => listener(accountOf(accounts))
+      const disconnected = () => listener(null)
+      provider.on('accountsChanged', changed)
+      provider.on('disconnect', disconnected)
+      return () => {
+        provider.removeListener('accountsChanged', changed)
+        provider.removeListener('disconnect', disconnected)
+      }
+    },
+  }
+}
+
+/** viem wraps errors a transport throws; surface this package's own errors as themselves. */
+async function unwrapped<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    throw ledgerErrorIn(error) ?? error
+  }
+}
+
+function walletError(error: unknown, otherwise: 'no-account' | 'wrong-chain') {
+  return new LedgerError(errorCode(error) === 4001 ? 'rejected' : otherwise, { cause: error })
+}
+
+async function walletAccount(provider: Provider, prompt: boolean) {
+  const accounts = await provider.request({
+    method: prompt ? 'eth_requestAccounts' : 'eth_accounts',
+  })
+  const [first] = Array.isArray(accounts) ? accounts : []
+  return typeof first === 'string' && isAddress(first) ? getAddress(first) : null
+}
+
+async function walletChain(provider: Provider): Promise<number> {
+  const value = await provider.request({ method: 'eth_chainId' })
+  // WalletConnect's provider returns a number for this request.
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value
+  if (
+    typeof value !== 'string' ||
+    !/^0x[0-9a-f]+$/i.test(value) ||
+    !Number.isSafeInteger(Number(value)) ||
+    Number(value) <= 0
+  ) {
+    throw new Error('The wallet returned an invalid network.')
+  }
+  return Number(value)
+}
+
+type WalletConnectSession = {
+  session?: { namespaces?: Record<string, { accounts: string[]; methods: string[] }> }
+}
+
+/** A WalletConnect provider exposes its CAIP-25 session; injected providers do not. */
+const isWalletConnect = (provider: Provider) => 'session' in provider
+
+function approved(provider: Provider, chainId: number, method: string) {
+  if (!isWalletConnect(provider) || method === 'eth_chainId') return true
+  const chain = `eip155:${chainId}`
+  const namespaces = (provider as WalletConnectSession).session?.namespaces ?? {}
+  return Object.entries(namespaces).some(
+    ([key, namespace]) =>
+      (key === 'eip155' || key === chain) &&
+      namespace.accounts.some((account) => account.startsWith(`${chain}:`)) &&
+      namespace.methods.includes(method),
+  )
+}
+
+/**
+ * @internal Reads through the wallet's RPC when it supports them, otherwise `fallback`.
+ * A read that crosses a chain change is discarded rather than trusted.
+ */
+export function walletReads(
+  provider: Provider,
+  chainId: number,
+  fallback?: { request(request: never): Promise<unknown> },
+) {
+  const context = { closed: false, unsupported: new Set<string>(), revision: 0, retryAfter: 0 }
+  const unavailable = new Error('Wallet RPC changed or is on another network.')
+  const timedOut = new Error('Wallet RPC timed out.')
+  const changed = () => {
+    context.revision++
+    context.unsupported.clear()
+    context.retryAfter = 0
+  }
+  const events = ['chainChanged', 'disconnect', 'connect']
+  for (const event of events) provider.on(event, changed)
+  const toFallback = (request: Request) => {
+    if (!fallback) throw new LedgerError('unreachable')
+    return (fallback.request as (request: Request) => Promise<unknown>)(request)
+  }
+  return {
+    async request(request: Request): Promise<unknown> {
+      if (!readMethods.includes(request.method)) {
+        throw new TypeError(`${request.method} is not a read method.`)
+      }
+      if (
+        !context.closed &&
+        !context.unsupported.has(request.method) &&
+        Date.now() >= context.retryAfter &&
+        approved(provider, chainId, request.method)
+      ) {
+        const revision = context.revision
+        const current = () => !context.closed && context.revision === revision
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          return await Promise.race([
+            (async () => {
+              if ((await walletChain(provider)) !== chainId || !current()) throw unavailable
+              const result =
+                request.method === 'eth_chainId' ? toHex(chainId) : await provider.request(request)
+              if (!current() || (await walletChain(provider)) !== chainId || !current()) {
+                throw unavailable
+              }
+              return result
+            })(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(timedOut), 5_000)
+            }),
+          ])
+        } catch (error) {
+          const failure = readFailure(error, isWalletConnect(provider))
+          if (!current() || error === unavailable) {
+            // Discard reads that crossed a chain change, including away and back.
+          } else if (failure === 'unsupported') {
+            context.unsupported.add(request.method)
+          } else if (error === timedOut || failure === 'unavailable') {
+            // Retry transient wallet failures later, without delaying every read.
+            context.retryAfter = Date.now() + 30_000
+          } else {
+            // A revert, rejection or invalid input is not evidence of missing RPC support.
+            throw error
+          }
+        } finally {
+          clearTimeout(timer)
+        }
+      }
+      if (!context.closed && request.method === 'eth_maxPriorityFeePerGas') {
+        // Let viem derive the tip from the wallet's gas price and base fee before using HTTP.
+        throw Object.assign(new Error('Priority fee is unavailable from the wallet.'), {
+          code: 4200,
+        })
+      }
+      return toFallback(request)
+    },
+    close() {
+      if (context.closed) return
+      context.closed = true
+      for (const event of events) provider.removeListener(event, changed)
+    },
+  }
+}
+
+function readFailure(error: unknown, walletConnect: boolean) {
+  const pending = [error]
+  const seen = new Set<object>()
+  let failure: 'unsupported' | 'unavailable' | undefined
+  while (pending.length) {
+    const value = pending.pop()
+    if (!value || typeof value !== 'object' || seen.has(value)) continue
+    // Error objects can be cyclic. Refuse ambiguous, excessively nested wrappers.
+    if (seen.size === 16) return
+    seen.add(value)
+    const wrapper = wrapperOf(value)
+    if (isRefusal(wrapper, walletConnect)) return
+    if (isTransient(wrapper)) failure = 'unavailable'
+    else if (isUnsupported(wrapper.code, walletConnect) && !failure) failure = 'unsupported'
+    // Inspect all wrappers before accepting a transport failure: a nested refusal wins.
+    for (const key of ['cause', 'error', 'originalError', 'data'] as const) {
+      pending.push((value as Record<string, unknown>)[key])
+    }
+  }
+  return failure
+}
+
+/** The fields one error wrapper may carry. */
+interface Wrapper {
+  code: unknown
+  httpStatus: unknown
+  name: unknown
+  message: unknown
+  messages: unknown[]
+  data: unknown
+}
+
+function wrapperOf(value: object): Wrapper {
+  const { code, status, statusCode, name, message, details, shortMessage, data } = value as Record<
+    string,
+    unknown
+  >
+  const messages = [message, details, shortMessage]
+  return { code, httpStatus: status ?? statusCode, name, message, messages, data }
+}
+
+const isUnsupported = (code: unknown, walletConnect: boolean) =>
+  code === 4200 || code === -32601 || code === -32004 || (walletConnect && code === 5101)
+
+const isUnavailableCode = (code: unknown) =>
+  code === 4900 || code === 4901 || code === 429 || code === -32005 || code === -32002
+
+function isTransportError({ name, code }: Wrapper) {
+  return (
+    ['NetworkError', 'TimeoutError', 'SocketClosedError', 'WebSocketRequestError'].includes(
+      String(name),
+    ) &&
+    (typeof code !== 'number' ||
+      (name === 'NetworkError' && code === 19) ||
+      (name === 'TimeoutError' && code === 23))
+  )
+}
+
+const refusalMessage =
+  /\brevert(?:ed)?\b|\buser (?:rejected|denied)\b|\bunauthori[sz]ed\b|\binvalid (?:params|parameters|input|request)\b/i
+
+/** A revert, rejection or invalid input: the wallet answered, so it is not missing support. */
+function isRefusal(wrapper: Wrapper, walletConnect: boolean) {
+  const { code, httpStatus, name, messages, data } = wrapper
+  return (
+    (typeof code === 'number' &&
+      code !== -32603 &&
+      !isUnsupported(code, walletConnect) &&
+      !isUnavailableCode(code) &&
+      !isTransportError(wrapper)) ||
+    ['ACTION_REJECTED', 'CALL_EXCEPTION', 'INVALID_ARGUMENT'].includes(String(code)) ||
+    name === 'AbortError' ||
+    (typeof httpStatus === 'number' &&
+      httpStatus >= 400 &&
+      httpStatus < 500 &&
+      httpStatus !== 408 &&
+      httpStatus !== 429) ||
+    (typeof data === 'string' && /^0x[\da-f]*$/i.test(data)) ||
+    messages.some((text) => typeof text === 'string' && refusalMessage.test(text))
+  )
+}
+
+const fetchFailure =
+  /^(?:TypeError: )?(?:failed to fetch|fetch failed|network request failed|NetworkError when attempting to fetch resource\.?|load failed)$/i
+
+/** A transport or availability failure: the wallet may answer later. */
+function isTransient(wrapper: Wrapper) {
+  const { code, httpStatus, message } = wrapper
+  return (
+    isUnavailableCode(code) ||
+    (typeof httpStatus === 'number' &&
+      (httpStatus === 408 || httpStatus === 429 || (httpStatus >= 500 && httpStatus < 600))) ||
+    ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH'].includes(
+      String(code),
+    ) ||
+    isTransportError(wrapper) ||
+    (typeof message === 'string' && fetchFailure.test(message))
+  )
+}

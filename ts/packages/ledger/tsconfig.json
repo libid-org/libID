@@ -1,7 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
+    // Tests and fakes run under Node; TypeScript 6+ includes no @types package by default.
+    "types": ["node"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
