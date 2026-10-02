@@ -1,0 +1,39 @@
+{
+  "name": "@libid/identity",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Multichain libID identity reads and bindings over @libid/ledger.",
+  "license": "(MIT OR Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libid-org/libID.git",
+    "directory": "ts/packages/identity"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/build-package.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "@libid/ledger": "workspace:^"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
