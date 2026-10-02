@@ -137,8 +137,9 @@ records, and `Uint8Array`; this carrier adds no JSON encoding, byte tag,
 normalization, or additional copy. Received `MessageEvent.data` remains
 `unknown` until the connection selects and applies its registered `MessageType`.
 A successful decode returns that same received object rather than allocating a
-replacement. A `DataCloneError` or `messageerror` closes the carrier. A failed
-decode makes the connection close it. None releases a value.
+replacement. A `DataCloneError` closes the carrier. A `messageerror` reaches the
+connection as an undecodable value, and a failed decode makes the connection
+close it. None releases a value.
 
 ## Continuity across navigations
 

@@ -62,7 +62,9 @@ available on both endpoints. `PopupConnection.close()` is the
 application-facing lifetime operation.
 
 While native-anchor binding is pending, `navigate` performs no browser
-operation and leaves that same activation's default navigation intact. With an
+operation on the popup. During that same activation it points the anchor at
+its destination, so the anchor's default navigation creates the popup there;
+afterwards it changes nothing. With an
 active carrier, the application endpoint sends `Navigate`; without one, it uses
 the exact retained `WindowProxy` only while the handle is non-null and not
 closed. A popup endpoint calling `navigate` acts locally and sends no
