@@ -115,7 +115,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-OAUTH-020 | [e2e/isolation.spec.ts](../e2e/isolation.spec.ts) |
 | LIBID-OAUTH-021 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts), [src/platforms/conformance/oidc.test.ts](../src/platforms/conformance/oidc.test.ts), [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
 | LIBID-OAUTH-022 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts), [src/errors.test.ts](../src/errors.test.ts) |
-| LIBID-OAUTH-023 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |
+| LIBID-OAUTH-023 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-OAUTH-024 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts) |
 | LIBID-OAUTH-025 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |
 | LIBID-OAUTH-026 | [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts) |

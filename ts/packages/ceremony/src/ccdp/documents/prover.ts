@@ -60,6 +60,10 @@ class ProverDocument extends CeremonyDocument {
       })
       // The fallback document continues this ceremony; this page is only leaving.
       this.failOnEnd(messages.proverClosed, (end) => end.outcome === 'closed' && this.hop.leaving)
+      // Leaving still ends this run, releasing its capture.
+      void this.connection.closed.then(() => {
+        if (!this.ended) this.cleanup()
+      })
       await this.connection.ready
       if (this.controller.signal.aborted) return
       if (
@@ -142,7 +146,7 @@ class ProverDocument extends CeremonyDocument {
 
   /** Ending also aborts the prover; its later observations are dropped. */
   protected override cleanup(): void {
-    // Failure before ProveIdentity must release the OAuth capture just as execution does.
+    // Failure or leaving before ProveIdentity must release the OAuth capture just as execution does.
     this.state = { phase: 'ended' }
     super.cleanup()
     this.controller.abort()

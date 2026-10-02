@@ -374,7 +374,7 @@ it.each([
   },
 )
 
-it('leaves quietly when popup moves the run to the isolated fallback [LIBID-BROWSER-022]', async () => {
+it('leaves quietly when popup moves the run to the isolated fallback, releasing its capture [LIBID-BROWSER-022] [LIBID-OAUTH-023]', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
   connection = spiedConnection('pending')
   void startProver(proverInput())
@@ -383,10 +383,14 @@ it('leaves quietly when popup moves the run to the isolated fallback [LIBID-BROW
   connection.end()
   await connection.closed
   await new Promise((resolve) => setTimeout(resolve))
+  // Leaving ends this run: a request reaching it later admits nothing from the dropped return.
+  expect(ui.stop).toHaveBeenCalledOnce()
+  connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1](proveIdentity())
+  await new Promise((resolve) => setTimeout(resolve))
+  expect(prove).not.toHaveBeenCalled()
   expect(ui.events.filter((event) => event.status !== 'active')).toEqual([])
   expect(connection.sent).toEqual([])
   expect(log).not.toHaveBeenCalled()
-  expect(ui.stop).not.toHaveBeenCalled()
 })
 
 it('announces no readiness when the connection ends while the root worker is claimed [LIBID-BROWSER-022]', async () => {
