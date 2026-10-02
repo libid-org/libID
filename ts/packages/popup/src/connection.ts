@@ -517,6 +517,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   private leaving = false
   /** A port on its way to the worker; closure before the transfer must still report departure. */
   private handoff: MessagePort | null = null
+  /** Its hash holds the captured fragment until this endpoint ends. */
   private readonly isolationFallback: URL | null
 
   constructor(
@@ -539,8 +540,18 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
         : resolveIsolationFallback(
             options.isolationFallbackUrl,
             popup.view.location,
-            popup.fragment,
+            // Only a non-isolated document leaves for the fallback; it never installs here.
+            popup.isolated ? '' : popup.fragment,
           )
+    // The endpoint takes the snapshot and drops it on ending; a hop reads it before releasing.
+    popup.fragment = ''
+    this.controller.signal.addEventListener(
+      'abort',
+      () => {
+        if (this.isolationFallback) this.isolationFallback.hash = ''
+      },
+      { once: true },
+    )
     const onPageHide = () => {
       // A port on its way to the worker still reports departure: closed before the worker took it.
       if (this.handoff || !(this.ended || this.leaving)) this.depart()
@@ -595,8 +606,9 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
           return this.fail('isolation-unavailable', true)
         }
         this.report('isolation-fallback')
+        const { href } = this.isolationFallback
         this.release()
-        this.popup.view.location.replace(this.isolationFallback.href)
+        this.popup.view.location.replace(href)
         return
       }
       const carrier = await fallback(this.controller.signal)

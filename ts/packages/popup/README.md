@@ -326,7 +326,10 @@ fragment.
 so a bootstrap may read `location.hash`, clear the URL, and only then import
 the package; it defaults to the current `location.hash`. The package keeps a
 snapshot, so later clearing or mutation changes nothing, and never puts the
-value in the worker, storage, or a diagnostic.
+value in the worker, storage, or a diagnostic. `accept` takes the snapshot from
+the window and keeps it only while a non-isolated document may still leave for
+the isolation fallback, dropping it when that endpoint ends; an isolated
+document, or one accepted without the option, keeps none.
 
 ```ts
 PopupConnection.accept(popupWindow, {

@@ -198,9 +198,12 @@ and replaces itself with the isolation fallback, which restores the port and
 becomes ready. The isolation fallback is resolved against the current document, must be
 same-origin, with the URL policy below and without a fragment of its own, and always carries the
 document's captured fragment, the value `PopupWindow.current` was given or
-read at adoption. Because the host may register its worker in the same
-document, the endpoint waits up to the keeper reply deadline for that
-registration to become active before it keeps the port. A document that
+read at adoption. The endpoint takes that snapshot from the window and keeps it
+only while it may still leave for the isolation fallback: a non-isolated
+document drops it once its endpoint ends, and an isolated one keeps none.
+Because the host may register its worker in the same document, the endpoint
+waits up to the keeper reply deadline for that registration to become active
+before it keeps the port. A document that
 already is the isolation fallback, compared by origin, path, and query, and remains
 non-isolated fails with
 `isolation-unavailable` and reports its departure over the carrier it holds, so

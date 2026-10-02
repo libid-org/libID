@@ -47,6 +47,9 @@ type Messages = Ready | Start
 
 const codes = (events: PopupDiagnostic[]) => events.map((e) => e.code)
 
+/** The fragment a popup endpoint still holds for its isolation fallback. */
+const held = (endpoint: unknown) => (endpoint as { isolationFallback: URL }).isolationFallback.hash
+
 interface Side {
   events: PopupDiagnostic[]
 }
@@ -811,7 +814,7 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
       isolationFallbackUrl: opts.fallback ?? FALLBACK,
       onDiagnostic: (e) => void events.push(e),
     })
-    return { endpoint, events }
+    return { endpoint, events, popup }
   }
 
   it('installs without navigating when the document is already isolated', async () => {
@@ -988,6 +991,43 @@ describe('isolation fallback [POPUP-CONNECTION-011/012]', () => {
         }),
       ).toThrow(TypeError)
     }
+  })
+
+  it('holds the captured fragment only while the document may still leave with it [POPUP-CONNECTION-013]', async () => {
+    // An isolated document never leaves for the fallback, so nothing keeps the fragment.
+    const isolated = fakePair()
+    isolated.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    isolated.setIsolated(true)
+    connectApp(isolated)
+    const here = acceptIsolating(isolated)
+    expect([here.popup.fragment, held(here.endpoint)]).toEqual(['', ''])
+    await here.endpoint.ready
+
+    // A non-isolated one holds it for the hop and drops it once it has left.
+    const pair = fakePair()
+    pair.relocate(POPUP_ORIGIN, '/prover', '#c=1')
+    connectApp(pair)
+    const leaving = acceptIsolating(pair, { worker: fakeScope().worker })
+    expect([leaving.popup.fragment, held(leaving.endpoint)]).toEqual(['', '#c=1'])
+    expect(await leaving.endpoint.closed).toEqual({ outcome: 'closed' })
+    expect(pair.popupProxy.replaced).toEqual([`${POPUP_ORIGIN}${FALLBACK}#c=1`])
+    expect(held(leaving.endpoint)).toBe('')
+
+    // Failing instead of leaving drops it too.
+    const stuck = fakePair()
+    stuck.relocate(POPUP_ORIGIN, FALLBACK, '#c=1')
+    connectApp(stuck)
+    const failed = acceptIsolating(stuck, { worker: fakeScope().worker })
+    expect(await failed.endpoint.closed).toEqual({
+      outcome: 'failed',
+      code: 'isolation-unavailable',
+    })
+    expect(held(failed.endpoint)).toBe('')
+
+    // Without the option the endpoint needs none at all.
+    const plain = new CurrentWindow(fakePair().popupWindow, noRegistration, '#c=1')
+    PopupConnection.accept(plain, { connectionId: ID, allowedApplicationOrigins: [APP_ORIGIN] })
+    expect(plain.fragment).toBe('')
   })
 
   it('aborts on close during the hop and reports a refused keep as failure', async () => {
@@ -1223,6 +1263,8 @@ describe('isolation fallback over a non-transferable carrier [POPUP-CONNECTION-0
       second.endpoint.on(Start, leaked)
       expect(await second.endpoint.closed).toEqual({ outcome: 'closed' })
       expect(pair.popupProxy.replaced.at(-1)).toBe(`${targetOrigin}/prover/fallback#c=1`)
+      // Leaving drops the endpoint's copy of the fragment.
+      expect(held(second.endpoint)).toBe('')
       expect(codes(second.events)).toEqual(['isolation-fallback', 'connection-closed'])
       expect(hub.carriers).toHaveLength(rounds)
       expect(leaked).not.toHaveBeenCalled()

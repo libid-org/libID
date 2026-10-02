@@ -116,7 +116,8 @@ export class PopupWindow {
    * Adopts the current popup document; creates nothing. `fragment` is the
    * document's URL fragment as the host captured it, for a bootstrap that
    * clears the URL before importing the package; it defaults to the current
-   * `location.hash`. The package treats it as opaque and keeps a snapshot.
+   * `location.hash`. The package treats it as opaque and keeps a snapshot
+   * only while an isolation fallback may still need it.
    * `scope` pins continuity to one registration, which need not exist yet.
    */
   static current(fragment?: string, options: CurrentOptions = {}): PopupWindow {
@@ -214,8 +215,8 @@ export class CurrentWindow extends PopupWindow {
     this.fragment = fragment.startsWith('#') ? fragment.slice(1) : fragment
   }
 
-  /** The captured fragment without its `#`; immutable once adopted. */
-  readonly fragment: string
+  /** The captured fragment without its `#`, until `accept` takes it. */
+  fragment: string
 
   override get opened(): boolean {
     return true
