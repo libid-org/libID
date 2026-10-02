@@ -6,9 +6,9 @@ import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { parseCsp } from './profiles.ts'
+import { hash } from './sources.ts'
 import { errorHeaders } from './sws.ts'
 import { builtArtifacts, nativeSkip } from './testing.ts'
-import { hash } from './sources.ts'
 import { catalogVersions, proverPair, versionPairs } from './versions.ts'
 
 const out = builtArtifacts

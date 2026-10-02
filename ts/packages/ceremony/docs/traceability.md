@@ -83,7 +83,7 @@ Index: all 155 stable IDs from [Test plan](test-plan.md); the Bridge-owned KIT-0
 | LIBID-OAUTH-019 | Partial | [client lifecycle tests](../src/ccdp/client/ceremony.test.ts) reject invalid predecessors and duplicate start; [Prover document tests](../src/ccdp/documents/prover.test.ts) consumes the return once. Stale documents combined with every alternate carrier remain untested. |
 | LIBID-OAUTH-020 | Partial | [browser flows](../e2e/isolation.spec.ts) activates provider COOP and checks local Callback failure. Successful optional opener-independent transport is an external integration gate. |
 | LIBID-OAUTH-021 | Partial | [CCDP tests](../src/ccdp/index.test.ts) accept null or a canonical notary origin for any platform, validate nullable verifier syntax and reject ledger/hash/flag fields. [Platform conformance tests](../src/platforms/conformance/returns.test.ts) admit a code verifier exactly where the catalog declares PKCE, and X/GitHub prover tests reject missing notary addresses before network work. [Prover tests](../src/ccdp/documents/prover.test.ts) pass the validated address to platform work without ledger decoding. Browser tests use the actual popup carrier and explicit shared ledger fixture. |
-| LIBID-OAUTH-022 | Partial | [Wire codecs](../src/ccdp/index.test.ts), [client state tests](../src/ccdp/client/ceremony.test.ts), and [error tests](../src/errors.test.ts) cover the five exact records, unknown fields, core phases, bounded extensions, operation context and opaque text. Error bounds are not a credential-redaction guarantee; see [CeremonyFailed](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp.md#ceremonyfailed). Codecs reject unsupported `cancel`, `denied`, and `abort` records; the Prover registers no cancellation handler (Callback's absence is not asserted). Nested instrumentation shape and bounds are covered. |
+| LIBID-OAUTH-022 | Partial | [Wire codecs](../src/ccdp/index.test.ts), [client state tests](../src/ccdp/client/ceremony.test.ts), and [error tests](../src/errors.test.ts) cover the five exact records, unknown fields, core phases, bounded extensions, operation context and opaque text. Error bounds are not a credential-redaction guarantee; see [CeremonyFailed](https://github.com/libid-org/libid/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/ccdp.md#ceremonyfailed). Codecs reject unsupported `cancel`, `denied`, and `abort` records; the Prover registers no cancellation handler (Callback's absence is not asserted). Nested instrumentation shape and bounds are covered. |
 | LIBID-OAUTH-023 | Partial | [Callback tests](../src/ccdp/documents/callback.test.ts) and [Prover document tests](../src/ccdp/documents/prover.test.ts) clear retained captures at terminal boundaries. No exhaustive origin-storage inspection covers all browser termination paths. |
 | LIBID-OAUTH-024 | Partial | [client lifecycle tests](../src/ccdp/client/ceremony.test.ts) test closing against late delivery and unavailable versions; [message/fragment tests](../src/ccdp/index.test.ts) reject invalid records. Wrong-carrier/old-document delivery combinations remain external to this unit boundary. |
 | LIBID-OAUTH-025 | Partial | [client lifecycle tests](../src/ccdp/client/ceremony.test.ts) prevents late delivery after closure. Destroying each actual browser context between proof generation and acceptance is not fully exercised. |
@@ -168,13 +168,11 @@ Bridge or physical device. Package-only tests keep their existing IDs above. Nor
 names tag the specific assertions covered; they do not claim every clause of a
 compound specification vector passes. The boundaries below remain authoritative.
 
-Browser contracts: [CCDP](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp.md#conformance),
-[Distribution](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp-distribution.md#conformance),
-and [Bridge](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/oauth-bridge.md#conformance).
-Evidence contracts: [Common](https://github.com/libid-org/libID/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/ceremony-common.md)
-and [Platforms](https://github.com/libid-org/libID/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md).
-GitHub issuer test [TEST-PLAT-12A](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/platform-ceremonies.md#8-conformance)
-is defined in the browser-spec revision.
+Browser contracts: [CCDP](https://github.com/libid-org/libID/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/ccdp.md#conformance),
+[Distribution](https://github.com/libid-org/libID/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/ccdp-distribution.md#conformance),
+and [Bridge](https://github.com/libid-org/libID/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/oauth-bridge.md#conformance).
+Evidence contracts: [Common](https://github.com/libid-org/libID/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/ceremony-common.md)
+and [Platforms](https://github.com/libid-org/libID/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/platform-ceremonies.md).
 
 | Specification tests | Implementation rows / evidence boundary |
 |---|---|
@@ -192,7 +190,7 @@ is defined in the browser-spec revision.
 | TEST-DIST-04 | LIBID-ASSET-011/017/018/019/021/023, CSP-019; loader/cache tests. Live CRS/CORS and full cache-fault matrix remain open. |
 | TEST-DIST-05 | LIBID-ASSET-014/027; stable URLs and native invalidation. Production atomic promotion remains external. |
 | TEST-DIST-06 | KIT-023; exact Distribution envelope, CCDP membership before client creation, platform lists, and emitted version-list headers. |
-| TEST-DIST-07 | [Cache tests](../src/assets/cache.test.ts) preserve shared revisions and external ranges, delete only obsolete managed entries, repeat harmlessly, and tolerate storage failures. [Worker tests](../src/assets/rootWorker.test.ts) pass the complete graph on activation. |
+| TEST-DIST-07 | [Cache tests](../src/assets/cache.test.ts) preserve shared revisions and external ranges, delete only obsolete managed entries, repeat harmlessly, and tolerate storage failures. [Worker tests](../src/assets/rootWorker.test.ts) pass the complete graph on activation; the [browser check](../e2e/assets.spec.ts) exercises actual Cache Storage and preserves unrelated storage. |
 | TEST-DIST-08 | [Worker selection tests](../src/assets/registration.test.ts) cover exact-script dispatch, waiting replacements, lost state notifications, and stalled replacement refusal. [Distribution tests](../build/distribution.test.ts) check the final script hash, immutable headers, and the URL embedded in Prefetch. |
 | TEST-BRIDGE-01/02 | KIT-016/022, LIBID-OAUTH-002; Bridge startup, origin admission and Fetch Metadata are the Bridge's own tests. |
 | TEST-BRIDGE-03 | LIBID-MOD-011, KIT-002, LIBID-OAUTH-016; client tests freeze and forward public credentials and reject invalid config. |

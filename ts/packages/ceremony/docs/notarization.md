@@ -3,7 +3,7 @@
 The [notary module](../src/notary/) adapts the pinned TLSNotary WASM Proxy API.
 Platform code owns exact requests, response parsing and disclosure selection;
 the adapter owns sessions, transcript bounds, final-frame delivery and correlation.
-The [platform specification](https://github.com/libid-org/libid/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md)
+The [platform specification](https://github.com/libid-org/libid/blob/2a3be2a3613e5ab8a6c062e6072b50515bb9c740/specs/platform-ceremonies.md)
 owns authoritative request/evidence rules.
 
 ## Session lifecycle

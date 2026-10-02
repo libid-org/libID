@@ -2,9 +2,9 @@
 import { readFileSync } from 'node:fs'
 import {
   artifactRequests,
-  rootWorkerPath,
   expect,
   expectApplicationContinues,
+  rootWorkerPath,
   test,
 } from './fixtures.js'
 
@@ -40,17 +40,17 @@ test('activation reconciles the full managed graph without touching other storag
     async ({ required, script }) => {
       const cache = await caches.open('libid-ceremony-assets-v1')
       const key = (url: string, range = '') =>
-        location.origin + '/__libid_ceremony_cache__/' + encodeURIComponent(`${url}\n${range}`)
+        `${location.origin}/__libid_ceremony_cache__/${encodeURIComponent(`${url}\n${range}`)}`
       const keep = [
         ...new Set(required.map((r) => key(new URL(r.url, location.origin).href, r.range))),
       ]
       for (const url of keep) await cache.put(url, new Response('retained'))
-      await cache.put(key(location.origin + '/ccdp/assets/obsolete.wasm'), new Response('obsolete'))
+      await cache.put(key(`${location.origin}/ccdp/assets/obsolete.wasm`), new Response('obsolete'))
       await cache.put(
         key('https://external.invalid/crs', 'bytes=0-3'),
         new Response('obsolete range'),
       )
-      const unrelated = location.origin + '/unrelated-cache-entry'
+      const unrelated = `${location.origin}/unrelated-cache-entry`
       await cache.put(unrelated, new Response('unrelated'))
       const other = await caches.open('another-application')
       await other.put(unrelated, new Response('other application'))
@@ -70,7 +70,7 @@ test('activation reconciles the full managed graph without touching other storag
   expect(
     await page.evaluate(async () => {
       const cache = await caches.open('another-application')
-      return (await cache.match(location.origin + '/unrelated-cache-entry'))?.text()
+      return (await cache.match(`${location.origin}/unrelated-cache-entry`))?.text()
     }),
   ).toBe('other application')
 })

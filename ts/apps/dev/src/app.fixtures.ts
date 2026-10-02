@@ -144,6 +144,7 @@ export async function servePopup(context: BrowserContext) {
   await context.route(`${ccdp}/popup-test/**`, (route) =>
     route.fulfill({
       contentType: 'text/javascript',
+      headers: { 'Access-Control-Allow-Origin': '*' },
       body: readFileSync(
         new URL(
           new URL(route.request().url()).pathname.slice('/popup-test/'.length),
@@ -156,7 +157,7 @@ export async function servePopup(context: BrowserContext) {
 }
 
 /**
- * A fixture document at the CCDP origin running module `script`, in which `accept()` accepts the
+ * A fixture document running module `script`, in which `accept()` accepts the
  * app's connection for the ceremony named by the fragment.
  */
 export const fixtureDocument = (popupModule: string, title: string, script: string) =>
@@ -215,6 +216,22 @@ export async function serveCeremony(context: BrowserContext) {
       body: prover(new URL(route.request().url()).searchParams.get('nonce')),
     }),
   )
+  await context.route(`${new URL(configUrl).origin}/event-test**`, (route) => {
+    const url = new URL(route.request().url())
+    const timestamp = Number(url.searchParams.get('authorizationAt'))
+    url.searchParams.delete('authorizationAt')
+    return route.fulfill({
+      contentType: 'text/html',
+      body: fixtureDocument(
+        popupModule,
+        'Callback transport fixture',
+        `const connection = accept();
+        await connection.ready;
+        connection.send(${JSON.stringify({ ...event('authorization', 'finished'), timestamp })});
+        await connection.navigate(${JSON.stringify(`${ccdp}${url.pathname}${url.search}`)}, new URLSearchParams(location.hash.slice(1)));`,
+      ),
+    })
+  })
   await context.route(/https:\/\/(accounts\.google\.com|x\.com|github\.com)\//, (route) => {
     const params = new URL(route.request().url()).searchParams
     const id = params.get('state')!.slice(3)
@@ -227,9 +244,20 @@ export async function serveCeremony(context: BrowserContext) {
   })
 }
 
-/** Navigates a fake provider page to its prover fixture and waits for that connection. */
-export async function returnToProver(popup: Page) {
-  await popup.evaluate(() => location.replace(window.returnUrl!))
+/** Returns to Prover through a Bridge-origin Callback reporting authorization at `timestamp`, now by default. */
+export async function returnToProver(popup: Page, timestamp?: number) {
+  await popup.evaluate(
+    ({ bridge, timestamp }) => {
+      const url = new URL(window.returnUrl!)
+      url.host = new URL(bridge).host
+      url.searchParams.set(
+        'authorizationAt',
+        String(timestamp ?? performance.timeOrigin + performance.now()),
+      )
+      location.replace(url.href)
+    },
+    { bridge: configUrl, timestamp },
+  )
   await popup.waitForFunction(() => !!window.eventConnection)
 }
 

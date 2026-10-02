@@ -1,5 +1,5 @@
-import { rootWorkerUrl } from 'virtual:ceremony-worker'
 import { requestsByProfile } from 'virtual:ceremony-assets'
+import { rootWorkerUrl } from 'virtual:ceremony-worker'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { profileKey } from '../../assets/keys.js'
 import { dispatchPrefetch, registerRootWorker } from '../../assets/registration.js'
