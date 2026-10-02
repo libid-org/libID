@@ -31,6 +31,8 @@ export class ProofEngine {
   /** Witness readiness and the proof; both reject with the engine's failure. */
   readonly #ready = Promise.withResolvers<void>()
   readonly #result = Promise.withResolvers<RawProof>()
+  /** Rejects with the engine's failure as soon as it happens, so callers can retire sibling work. */
+  readonly outcome: Promise<void> = this.#result.promise.then(() => {})
 
   constructor({ circuitUrl, verificationKeyUrl, emit, threads }: ProofEngineOptions) {
     const [url, keyUrl] = [circuitUrl, verificationKeyUrl].map((value) => {
@@ -42,6 +44,7 @@ export class ProofEngine {
     this.#emit = safeEmit(emit ?? (() => undefined))
     void this.#ready.promise.catch(() => {})
     void this.#result.promise.catch(() => {})
+    void this.outcome.catch(() => {})
     this.#emit({ event: 'zk-proof-preparation', phase: 'started', timestamp: now() })
     this.#emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: now() })
     try {

@@ -8,6 +8,8 @@ export const prepare = vi.fn()
 export const generate = vi.fn()
 export const destroy = vi.fn()
 export const engine = vi.fn()
+/** A ProofEngine's `outcome`; it stays pending unless a test fails the backend. */
+export const engineOutcome = vi.fn<() => Promise<void> | undefined>()
 export const notarization = vi.fn()
 
 export function assetsModule<M extends object>(original: M) {
@@ -27,6 +29,7 @@ export const engineModule = {
       engine(options)
       options.emit?.({ event: 'zk-proof-preparation', phase: 'started', timestamp: 0 })
     }
+    outcome = engineOutcome() ?? new Promise<void>(() => {})
     prove = generate
     destroy = destroy
   },

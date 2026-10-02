@@ -32,6 +32,8 @@ export async function proveNotarized<P extends PlatformId>(
     void p.catch((error) => controller.abort(error))
     return p
   }
+  // A backend failure retires the sessions at once, not after both reveals.
+  observe(circuit.outcome)
   try {
     const { bearer, token, identity } = await notarizeOAuth({
       notaryAddress,

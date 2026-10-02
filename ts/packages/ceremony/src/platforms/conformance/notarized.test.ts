@@ -1,6 +1,7 @@
 import { PROOF_LIFETIME_SECONDS_GITHUB, PROOF_LIFETIME_SECONDS_X } from '@libid/contracts/ceremony'
 import { describe, expect, it, vi } from 'vitest'
 import { MAX_BEARER_BYTES } from '../../barretenberg/circuits/bearer-link/parameters.js'
+import { CeremonyError } from '../../errors.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { planNotarization } from '../../notary/notarize.js'
 import type { TokenRequestInput } from '../../notary/oauth/token.js'
@@ -18,7 +19,7 @@ import {
 } from '../../testing/index.js'
 import { ceremonyFor, platforms } from '../index.js'
 import { parseOAuthReturn } from '../oauthReturn.js'
-import { destroy, engine, generate, notarization, prepare } from './mocks.js'
+import { destroy, engine, engineOutcome, generate, notarization, prepare } from './mocks.js'
 import {
   fieldsOf,
   notarizedFailures,
@@ -651,6 +652,35 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
         await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2))
         if (failure === 'closed') staged.abort(new Error(failure))
         identitySetup.reject(new Error(failure))
+        await checked
+        expect(notarization.mock.calls[0][1].aborted).toBe(true)
+        expect(generate).not.toHaveBeenCalled()
+        expect(destroy).toHaveBeenCalledOnce()
+      },
+    )
+
+    it(
+      tagged('retires both sessions as soon as the proof backend fails [LIBID-PROVER-014]', tags),
+      async () => {
+        const staged = stageNotarized(platformId, 'accepted')
+        const backend = Promise.withResolvers<void>()
+        engineOutcome.mockReturnValueOnce(backend.promise)
+        // Both sessions stay in setup until the notary signal aborts.
+        prepare.mockImplementation(
+          () =>
+            new Promise<never>((_, reject) => {
+              const signal: AbortSignal = notarization.mock.calls[0][1]
+              signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+            }),
+        )
+        const result = (await proverOf(platformId)).prove(staged.context)
+        const failure = new CeremonyError(
+          'zk-proof-preparation',
+          'Multithreaded backend unavailable',
+        )
+        const checked = expect(result).rejects.toBe(failure)
+        await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2))
+        backend.reject(failure)
         await checked
         expect(notarization.mock.calls[0][1].aborted).toBe(true)
         expect(generate).not.toHaveBeenCalled()

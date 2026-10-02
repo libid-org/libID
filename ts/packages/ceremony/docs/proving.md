@@ -27,7 +27,9 @@ are not exclusive timing stages.
 
 The worker requires isolation and shared memory. It caps the requested proof
 threads at four and its own hardware concurrency, then requires at least two
-before starting bb.js. Missing hardware concurrency counts as one.
+before starting bb.js. Missing hardware concurrency counts as one. Either check fails
+as `zk-proof-preparation`, which the notarized prover observes at once, retiring its
+sessions rather than finishing them first.
 
 The engine supplies each circuit's matching released verification key to
 `circuitProve`, avoiding local key generation. Missing or empty keys fail.

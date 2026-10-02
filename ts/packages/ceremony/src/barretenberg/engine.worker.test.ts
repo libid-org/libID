@@ -56,8 +56,10 @@ const witness = () => ({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
  */
 async function worker(
   key: Response | Promise<Response> = new Response(Uint8Array.of(11, 12)),
-  { isolated = true, threads = preload.threads } = {},
+  // `threads` absent sends the preload's request; present, even undefined, replaces it.
+  { isolated = true, ...requested }: { isolated?: boolean; threads?: number } = {},
 ) {
+  const threads = 'threads' in requested ? requested.threads : preload.threads
   const request = vi.fn(async (url: string) =>
     url.endsWith('/vk')
       ? key
@@ -228,6 +230,7 @@ it.each([
   { threads: 1, hardwareConcurrency: 4 },
   { threads: 4, hardwareConcurrency: 1 },
   { threads: 4, hardwareConcurrency: undefined },
+  { threads: Number.NaN, hardwareConcurrency: 4 },
 ])(
   'rejects $threads threads with worker hardware concurrency $hardwareConcurrency before preload [LIBID-PROVER-015] [LIBID-OAUTH-010]',
   async ({ threads, hardwareConcurrency }) => {
@@ -249,6 +252,9 @@ it.each([
 it.each([
   { threads: 4, hardwareConcurrency: 2, capped: 2 },
   { threads: 8, hardwareConcurrency: 16, capped: 4 },
+  // Production sends no request; the worker's default of four is capped the same way.
+  { threads: undefined, hardwareConcurrency: 2, capped: 2 },
+  { threads: undefined, hardwareConcurrency: 16, capped: 4 },
 ])(
   'caps $threads requested bb threads at $capped with hardware concurrency $hardwareConcurrency [LIBID-PROVER-015]',
   async ({ threads, hardwareConcurrency, capped }) => {

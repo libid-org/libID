@@ -68,7 +68,8 @@ class EngineWorker {
       throw new Error('Proof worker requires cross-origin isolation')
     }
     const threads = workerThreads(message.threads)
-    if (threads < MIN_PROOF_THREADS) throw new Error('Multithreaded backend unavailable')
+    if (!Number.isInteger(threads) || threads < MIN_PROOF_THREADS)
+      throw new Error('Multithreaded backend unavailable')
     const backend = span('proof-backend-initialization', () =>
       Barretenberg.new({
         backend: BackendType.Wasm,

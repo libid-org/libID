@@ -89,7 +89,7 @@ X and GitHub share the notarized flow: the [token](../src/notary/oauth/token.ts)
 [identity](../src/notary/oauth/identity.ts) requests, then the `bearer_link` circuit.
 Each platform's `provider.ts` owns endpoints, request fields and identity headers, its
 `validation.ts` the user grammar; its `token.ts` and `identity.ts` build the two requests,
-both with the decimal user ID grammar from [platforms/validation.ts](../src/platforms/validation.ts).
+the identity request with the decimal user ID grammar from [platforms/validation.ts](../src/platforms/validation.ts).
 The token request checks its own form inputs, client ID and code, with
 [notary/oauth/validation.ts](../src/notary/oauth/validation.ts); both sessions' four
 [operations](../src/notary/oauth/events.ts) live beside them. The coordinator's

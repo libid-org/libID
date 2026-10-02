@@ -62,6 +62,21 @@ it('posts one preload after boot with resolved resource URLs and the requested t
     // The CRS base is the declared CRS directory.
     crsPath: 'https://ccdp.test/assets/crs/',
   })
+  // Without a request, the worker applies its default and cap.
+  engine()
+  expect(workers.at(-1)!.postMessage.mock.calls[0][0]).toMatchObject({
+    type: 'preload',
+    threads: undefined,
+  })
+})
+
+it('reports a backend failure through outcome before any proof is requested [LIBID-PROVER-014]', async () => {
+  const e = engine()
+  const event = 'proof-backend-initialization'
+  const failed = expect(e.instance.outcome).rejects.toMatchObject({ event })
+  e.send({ type: 'error', event, message: 'Multithreaded backend unavailable' })
+  await failed
+  expect(e.terminate).toHaveBeenCalledOnce()
 })
 
 it.each([

@@ -11,6 +11,8 @@ type BearerOpening = { openings: readonly CommitmentOpening[]; range: ByteRange 
 /** Starts the circuit backend before notarization; the caller destroys it in `finally`. */
 export class BearerLinkCircuit {
   private readonly engine: ProofEngine
+  /** Rejects as soon as the backend fails, before any proof is requested. */
+  readonly outcome: Promise<void>
 
   constructor(private readonly emit: (event: OperationEvent) => void) {
     this.engine = new ProofEngine({
@@ -18,6 +20,7 @@ export class BearerLinkCircuit {
       verificationKeyUrl: assetUrl(verificationKey),
       emit,
     })
+    this.outcome = this.engine.outcome
   }
 
   /** Prove the same bearer opens the token response and identity request commitments. */
