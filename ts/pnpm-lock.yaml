@@ -67,8 +67,8 @@ importers:
   packages/ceremony:
     dependencies:
       '@libid/contracts':
-        specifier: 0.13.1
-        version: 0.13.1(viem@2.55.13(typescript@7.0.2))
+        specifier: 0.15.0
+        version: 0.15.0(viem@2.55.13(typescript@7.0.2))
       '@libid/ledger':
         specifier: workspace:^
         version: link:../ledger
@@ -403,8 +403,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@libid/contracts@0.13.1':
-    resolution: {integrity: sha512-a+X7pJOoz0Rw4t9W/I7noD9rXTQDxxlPbqk4PpdPgu8JcO5i6fKYjfOw3blTjnOZ8WkN277fH3zRBSlE9stgVg==}
+  '@libid/contracts@0.15.0':
+    resolution: {integrity: sha512-TOthZejhxj7NdY2Fr6dwgt+TVGEPuTSVSBcTJIvK7ZMQqJY4Ugwq9av20lfbj2qse9qbIVsknFRUr8QFfDfhoQ==}
     peerDependencies:
       viem: ^2.48.11
 
@@ -1380,7 +1380,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@libid/contracts@0.13.1(viem@2.55.13(typescript@7.0.2))':
+  '@libid/contracts@0.15.0(viem@2.55.13(typescript@7.0.2))':
     dependencies:
       viem: 2.55.13(typescript@7.0.2)
 
