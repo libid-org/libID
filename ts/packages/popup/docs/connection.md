@@ -308,11 +308,11 @@ performs no browser operation while binding is pending. The application
 connection binds only the popup whose initial private control authenticates for
 this connection ID and one of its allowed popup origins.
 
-The anchor must not request `noopener` or `noreferrer`: native-anchor binding
-needs its opener relationship long enough to authenticate and transfer the
-carrier port, so for such an anchor, or an activation whose target is not an
-anchor, `fromAnchor` suppresses the navigation and throws `TypeError` before
-opening anything.
+Neither the anchor, in any letter case, nor `features` may request `noopener`
+or `noreferrer`: native-anchor binding needs its opener relationship long
+enough to authenticate and transfer the carrier port, so for such a request, or
+an activation whose target is not an anchor, `fromAnchor` suppresses the
+navigation and throws `TypeError` before opening anything.
 
 The anchor is a compatibility hedge for an environment or embedding policy
 which rejects scripted popup creation, not a second user flow. It must exist

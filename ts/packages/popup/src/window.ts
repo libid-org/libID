@@ -86,25 +86,30 @@ export class PopupWindow {
    * Opens the popup for an anchor's activation, scripted first. When the window opens, the
    * anchor's own navigation is suppressed. When the browser blocks it, that navigation creates
    * the popup under the same name and the connection binds it; a `navigate` during the
-   * activation points the anchor at its destination, so the anchor needs no target or href.
+   * activation points the anchor at its destination; the anchor needs no target, and its href
+   * can stay a placeholder that keeps it focusable.
    */
   static fromAnchor(event: MouseEvent, features = ''): PopupWindow {
     const anchor = event.currentTarget
-    // A refused activation navigates nowhere, the application page included.
-    if (typeof HTMLAnchorElement === 'undefined' || !(anchor instanceof HTMLAnchorElement)) {
+    try {
+      if (typeof HTMLAnchorElement === 'undefined' || !(anchor instanceof HTMLAnchorElement)) {
+        throw new TypeError('fromAnchor requires an anchor activation')
+      }
+      // Link types are ASCII case-insensitive; relList.contains is not.
+      if (/(?:^|\s)no(?:opener|referrer)(?:\s|$)/i.test(anchor.rel)) {
+        throw new TypeError('the anchor must not sever the opener')
+      }
+      const name = windowName()
+      const popup = openWindow(name, features)
+      anchor.target = name
+      if (popup.opened) event.preventDefault()
+      else popup.anchor = { element: anchor, event }
+      return popup
+    } catch (error) {
+      // A refused activation navigates nowhere, the application page included.
       event.preventDefault()
-      throw new TypeError('fromAnchor requires an anchor activation')
+      throw error
     }
-    if (anchor.relList.contains('noopener') || anchor.relList.contains('noreferrer')) {
-      event.preventDefault()
-      throw new TypeError('the anchor must not sever the opener')
-    }
-    const name = windowName()
-    const popup = openWindow(name, features)
-    anchor.target = name
-    if (popup.opened) event.preventDefault()
-    else popup.anchor = { element: anchor, event }
-    return popup
   }
 
   /**

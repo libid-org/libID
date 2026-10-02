@@ -238,7 +238,6 @@ describe('PopupWindow', () => {
       target = ''
       href = ''
       constructor(readonly rel = '') {}
-      relList = { contains: (token: string) => this.rel.split(' ').includes(token) }
     }
     const click = (currentTarget: unknown) => ({
       currentTarget,
@@ -279,12 +278,22 @@ describe('PopupWindow', () => {
       expect(anchor.href).toBe(`${NEXT}#a=1`)
     })
 
-    it('refuses, navigating nowhere, an activation without an anchor that keeps the opener', () => {
+    it('refuses, navigating nowhere, an activation that would not keep the opener', () => {
       const open = vi.fn(() => null)
       stubWindow(open)
-      for (const target of [{}, null, new Anchor('noopener'), new Anchor('external noreferrer')]) {
+      for (const [target, features] of [
+        [{}, ''],
+        [null, ''],
+        [new Anchor('noopener'), ''],
+        [new Anchor('external noreferrer'), ''],
+        [new Anchor('NoOpEnEr'), ''],
+        [new Anchor('external\tNoReFeRrEr'), ''],
+        [new Anchor(), 'width=480,noopener'],
+      ] as const) {
         const event = click(target)
-        expect(() => PopupWindow.fromAnchor(event as unknown as MouseEvent)).toThrow(TypeError)
+        expect(() => PopupWindow.fromAnchor(event as unknown as MouseEvent, features)).toThrow(
+          TypeError,
+        )
         expect(event.preventDefault).toHaveBeenCalledOnce()
       }
       expect(open).not.toHaveBeenCalled()

@@ -35,17 +35,17 @@ anchor.addEventListener('click', (event) => {
 Navigation takes a fragment-free URL and, separately, the fragment fields as
 `URLSearchParams`. The package serializes them at the call and treats them as
 opaque protocol data: no field is reserved, parsed, or tied to the connection
-ID. A URL that spells its own fragment, even an empty `#`, is rejected. The
-anchor keeps its fragment because the native-anchor path navigates it as
-written.
+ID. A URL that spells its own fragment, even an empty `#`, is rejected.
 
 `PopupWindow.fromAnchor(event, features?)` names the popup itself and attempts
 `window.open('about:blank', name, 'popup,…')` first. When that returns a handle,
 it suppresses the anchor's native navigation. When the browser blocks it, the
 anchor's own navigation creates the popup under the same name, and a `navigate`
-during the activation points the anchor at its destination; the anchor needs
-no `target` or `href` of its own. Unless the activation's target is an anchor
-without `noopener` or `noreferrer`, it suppresses that navigation and throws
+during the activation points the anchor at its destination. The anchor needs
+no `target`; keep a placeholder `href` so it stays focusable and opens from the
+keyboard. Unless the activation's target is an anchor without `noopener` or
+`noreferrer`, in any letter case, and `features` requests neither, it
+suppresses that navigation and throws
 `TypeError`. `PopupWindow.open(features?)`
 opens a named popup the same way for an activation without an anchor, with no
 fallback. Both return a wrapper even when the browser returns no handle. The popup is always requested as a separate
