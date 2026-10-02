@@ -420,7 +420,6 @@ establishment fails; it does not loop or silently prove without shared memory.
 
 Both paths resolve the canonical root-scope Worker registration, whose scope
 does not change with its content-addressed script URL.
-A stale `/ccdp/v1/` registration, even with the same script URL, is not that registration.
 The host and participants uphold the popup transport's same-registration
 continuity prerequisite. Successful DIP avoids replacement; fallback needs no
 second window or extra user action. This mechanism does not repair an opener
@@ -545,7 +544,7 @@ these observable responses.
   network connections. Its policy does not interpolate `ccdpOrigin` as a CSP
   source or impose extra hostname syntax on that canonical origin.
 - TEST-DIST-03 (exercises REQ-DIST-03):
-  Primary isolation or one replacement establishes the same participant; retained fragments survive. With both root and stale narrower registrations present, participants resolve root even if script URLs match.
+  Primary isolation or one replacement establishes the same participant; retained fragments survive.
 - TEST-DIST-04 (exercises REQ-DIST-04):
   Empty-cache Prefetch and execution use the same declared resource graph; shared resources are reusable, and ranged external responses remain readable under both isolation profiles.
 - TEST-DIST-05 (exercises REQ-DIST-05):
