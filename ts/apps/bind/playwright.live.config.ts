@@ -12,13 +12,23 @@ if (envFile) {
   }
 }
 
-/** Live: real GitHub, real notary, real chain. Needs `pnpm dev` running. */
+/** Live: real GitHub, real notary, real chain. */
 export default defineConfig({
   testDir: 'e2e',
   testMatch: '*.live.spec.ts',
   workers: 1,
   timeout: 10 * 60_000,
   reporter: [['list']],
+  // One command: start the stack and the app, test, then stop both. A stack
+  // already running locally is reused.
+  webServer: {
+    command: 'pnpm dev',
+    url: 'http://localhost:4695',
+    reuseExistingServer: !process.env.CI,
+    timeout: 15 * 60_000,
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 120_000 },
+    stdout: 'pipe',
+  },
   use: {
     ...devices['Desktop Chrome'],
     baseURL: 'http://localhost:4695',

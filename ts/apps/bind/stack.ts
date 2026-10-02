@@ -138,6 +138,18 @@ function stop(code: number) {
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
     }
   }
+  // LIBID_STACK_LOGS keeps every container's log, for a failed CI run to upload.
+  const logs = process.env.LIBID_STACK_LOGS
+  if (logs) {
+    try {
+      writeFileSync(
+        logs,
+        execFileSync('docker', [...composeArgs, 'logs', '--no-color'], { maxBuffer: 1 << 28 }),
+      )
+    } catch {
+      console.error('Could not save the container logs.')
+    }
+  }
   const down = spawn('docker', [...composeArgs, 'down', '--volumes'], { stdio: 'inherit' })
   down.on('close', (code) => {
     if (code !== 0) process.exitCode = 1

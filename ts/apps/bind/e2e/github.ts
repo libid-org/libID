@@ -7,12 +7,19 @@ export interface GitHubAccount {
   totpSecret: string
 }
 
-/** The test account, from GH_TEST_ALICE_*; undefined when any is missing. */
+/**
+ * The test account, from GH_TEST_ALICE_*; undefined when any is missing,
+ * which skips the test locally. With LIBID_REQUIRE_LIVE set, as CI sets it, a
+ * missing secret fails instead.
+ */
 export function githubAccount(): GitHubAccount | undefined {
   const username = process.env.GH_TEST_ALICE_USERNAME
   const password = process.env.GH_TEST_ALICE_PASSWORD
   const totpSecret = process.env.GH_TEST_ALICE_TOTP_SECRET
-  return username && password && totpSecret ? { username, password, totpSecret } : undefined
+  if (username && password && totpSecret) return { username, password, totpSecret }
+  if (process.env.LIBID_REQUIRE_LIVE)
+    throw new Error('LIBID_REQUIRE_LIVE is set but GH_TEST_ALICE_* are missing')
+  return undefined
 }
 
 function totp(secret: string): string {
