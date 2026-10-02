@@ -9,6 +9,10 @@ name: Live end-to-end
 # Every third-party action is pinned by commit SHA, with the tag in a comment.
 
 on:
+  pull_request:
+    paths:
+      - "ts/**"
+      - ".github/workflows/live-e2e.yml"
   workflow_dispatch:
   schedule:
     - cron: "23 3 * * *"
@@ -24,6 +28,8 @@ permissions:
 jobs:
   bind:
     name: GitHub, X and Google bindings (live)
+    # A pull request from a fork gets no secrets, so it does not run.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
