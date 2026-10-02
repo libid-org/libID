@@ -262,6 +262,10 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
 
   /** Core observations must fit the run's state and platform, once each, started before finished. */
   private observe(event: CoreEvent, phase: OperationEvent['phase']): void {
+    if (event === 'authorization') {
+      if (this.connection.peerOrigin !== new URL(this.request.redirectUri).origin)
+        throw sequenceError('Authorization observation from outside the Bridge')
+    } else this.expectCcdp()
     if (event === 'authorization' || event === 'prover-fallback') {
       this.expect('oauth')
       if (event === 'authorization' && phase !== 'finished')

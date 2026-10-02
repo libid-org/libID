@@ -85,9 +85,11 @@ supplies that allowlist from its frozen Bridge configuration. Fallback and
 diagnostic options pass through to the popup package. It adds no message handlers
 or navigation. The returned connection supports other application protocols;
 `client.new()` also continues to accept independently constructed connections.
-The Bridge and the CCDP are both admitted popup origins, but only CCDP documents
-advance a run: Prefetch and Prover readiness from any other origin fails it, so
-the Bridge's Callback never receives the code verifier or client credential.
+The Bridge and the CCDP are both admitted popup origins. Prefetch/Prover gates,
+proof delivery, denial, fallback observations, and proving operations require the
+CCDP origin; `authorization.finished` requires the Bridge origin. When both share
+an origin, normal protocol state still determines which occurrences are valid.
+The code verifier is sent only after CCDP-origin Prover readiness.
 
 `new(connection, id, platformId, ledger, operationDomain, transactionData, version?)`
 is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`

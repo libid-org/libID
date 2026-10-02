@@ -633,7 +633,9 @@ it.each(supportedPlatforms)(
     const emit = (event: string, phase: 'started' | 'finished', timestamp = 10) =>
       c.receive({ type: 'event', event, phase, timestamp })
     emit('prefetch-dispatch', 'finished')
+    c.peerOrigin = BRIDGE
     emit('authorization', 'finished', 20)
+    c.peerOrigin = wireConfig.ccdpOrigin
     emit('prover', 'started', 30)
     emit('zk-proof-preparation', 'started', 40)
     if (notarized) emit('token-fetch', 'started', 50)
@@ -755,7 +757,9 @@ it('only core readiness events advance the protocol; preserves occurrence times 
   c.receive(event('extension-ready'))
   expect(c.navigateAway).not.toHaveBeenCalled()
   c.receive(event('prefetch-dispatch', 'finished', 2))
+  c.peerOrigin = BRIDGE
   c.receive(event('authorization', 'finished', 3))
+  c.peerOrigin = wireConfig.ccdpOrigin
   c.receive(event('prover-fallback', undefined, 4))
   expect(c.sent).toEqual([])
   c.receive(event('prover', 'started', 7))
@@ -805,6 +809,7 @@ it.each([
   const { ceremony, connection } = await setup()
   const result = ceremony.proveUserIdentity()
   prefetched(connection)
+  connection.peerOrigin = BRIDGE
   for (const message of observed) connection.receive(message)
   await connection.close()
   await expect(result).rejects.toMatchObject({ status: 'closed', event: blamed })
@@ -1054,4 +1059,46 @@ it('binds one active ceremony per connection and rebinds it once that run finish
   reachProving(connection)
   connection.receive({ type: 'identity-proof', identity, proof: proofFor(connection) })
   await expect(next).resolves.toMatchObject({ status: 'accepted' })
+})
+
+it.each([
+  'authorization',
+  'prover-fallback',
+  'token-fetch',
+  'token-attestation',
+  'identity-fetch',
+  'identity-attestation',
+  'zk-proof-preparation',
+  'zk-proof-generation',
+])(
+  'rejects %s from the other admitted origin before publishing it [TEST-CCDP-06]',
+  async (name) => {
+    const { ceremony, connection } = await setup({ client: await clientFor('x'), platformId: 'x' })
+    const seen: CeremonyEvent[] = []
+    ceremony.onEvent((event) => seen.push(event))
+    const result = ceremony.proveUserIdentity()
+    prefetched(connection)
+    const early = name === 'authorization' || name === 'prover-fallback'
+    if (!early) connection.receive(event('prover', 'started'))
+    connection.peerOrigin = name === 'authorization' ? wireConfig.ccdpOrigin : BRIDGE
+    const phase =
+      name === 'authorization' ? 'finished' : name === 'prover-fallback' ? undefined : 'started'
+    const before = seen.length
+    connection.receive(event(name, phase))
+    await expect(result).rejects.toThrow(/outside the (Bridge|CCDP)/)
+    expect(seen.slice(before)).toEqual([expect.objectContaining({ status: 'failed' })])
+  },
+)
+
+it('accepts Callback and Prover observations when both share the admitted origin [TEST-CCDP-06]', async () => {
+  const client = await ccdpClient({ ...wireConfig, ccdpOrigin: BRIDGE })
+  const { ceremony, connection } = await setup({ client })
+  connection.peerOrigin = BRIDGE
+  const result = ceremony.proveUserIdentity()
+  prefetched(connection)
+  connection.receive(event('authorization', 'finished'))
+  connection.receive(event('prover-fallback'))
+  connection.receive(event('prover', 'started'))
+  connection.receive({ type: 'user-denied' })
+  await expect(result).resolves.toEqual({ status: 'denied' })
 })
