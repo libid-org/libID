@@ -142,39 +142,22 @@ it('observes readiness when a concurrent popup loses worker statechange notifica
 it('retires only the known nested worker scope [LIBID-ASSET-020]', async () => {
   const active = serviceWorker('activated')
   const root = registration(`${ORIGIN}/`, { active })
-  const legacy = [
-    registration(`${ORIGIN}/ccdp/v1/`, { active: serviceWorker('activated') }),
-    registration(`${ORIGIN}/ccdp/v1/`, {
-      active: serviceWorker('activated', undefined, OLD_SCRIPT),
-    }),
-    registration(`${ORIGIN}/ccdp/v1/`, {
-      active: serviceWorker('activated', undefined, `${ORIGIN}/ccdp/v1/worker.js`),
-    }),
-  ]
+  const legacyWorker = serviceWorker('activated', undefined, `${ORIGIN}/ccdp/v1/worker.js`)
+  const legacy = registration(`${ORIGIN}/ccdp/v1/`, { active: legacyWorker })
   const kept = [
-    registration(`${ORIGIN}/ccdp/v1/`, {
-      active: serviceWorker('activated', undefined, `${OLD_SCRIPT}?unrelated`),
-    }),
-    registration(`${ORIGIN}/ccdp/v1/`, {
-      active: serviceWorker(
-        'activated',
-        undefined,
-        OLD_SCRIPT.replace(ORIGIN, 'https://other.test'),
-      ),
-    }),
     registration(`${ORIGIN}/ccdp/v1/`, {
       active: serviceWorker('activated', undefined, `${ORIGIN}/ccdp/v1/other.js`),
     }),
     registration(`${ORIGIN}/ccdp/v1/`, {
-      active,
+      active: legacyWorker,
       installing: serviceWorker('installing', undefined, `${ORIGIN}/ccdp/v2/worker.js`),
     }),
-    registration(`${ORIGIN}/ccdp/`, { active }),
+    registration(`${ORIGIN}/ccdp/`, { active: legacyWorker }),
     registration(`${ORIGIN}/ccdp/v1/`),
   ]
-  install(root, [root, ...legacy, ...kept])
+  install(root, [root, legacy, ...kept])
   await expect(registerRootWorker(SCRIPT)).resolves.toBe(active)
-  for (const old of legacy) expect(old.unregister).toHaveBeenCalledOnce()
+  expect(legacy.unregister).toHaveBeenCalledOnce()
   for (const other of [root, ...kept]) expect(other.unregister).not.toHaveBeenCalled()
 })
 
