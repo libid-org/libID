@@ -1,4 +1,7 @@
-# ENS integration
+---
+title: ENS integration
+description: How libID handles resolve as ENS names in wallets.
+---
 
 **Status: design proposal.** Nothing here is built. It is not a protocol spec in
 the sense of `specs/` and defines no `ASM-*`/`SP-*`/`REQ-*` identifiers; the parts
