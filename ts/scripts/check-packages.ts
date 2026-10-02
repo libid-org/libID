@@ -29,6 +29,15 @@ for (const name of packages) {
   for (const file of ['README.md', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE']) {
     assert(files.includes(`package/${file}`), `${name} is missing ${file}`)
   }
+  // Every export target ships, including runtime ones the consumer imports only as types.
+  const manifest = JSON.parse(
+    execFileSync('tar', ['-xOzf', archive, 'package/package.json'], { encoding: 'utf8' }),
+  )
+  const targets = (value: unknown): string[] =>
+    typeof value === 'string' ? [value] : Object.values(value ?? {}).flatMap(targets)
+  for (const target of targets(manifest.exports)) {
+    assert(files.includes(`package/${target.slice(2)}`), `${name} exports missing ${target}`)
+  }
   dependencies[`@libid/${name}`] = `file:${archive}`
 }
 
@@ -61,7 +70,14 @@ execFileSync(
     '--cache',
     join(output, 'npm-cache'),
   ],
-  { cwd: consumer, stdio: 'inherit' },
+  {
+    cwd: consumer,
+    stdio: 'inherit',
+    // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
+    env: Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
+    ),
+  },
 )
 writeFileSync(
   join(consumer, 'client.ts'),

@@ -26,8 +26,8 @@ pnpm -C ts test:packages
 This builds and packs all three packages into `ts/.cache/npm/`, installs those
 exact tarballs into an isolated consumer, then typechecks and bundles the public
 imports. The worker entry is typechecked separately from the browser entry. It
-also checks the published file allowlist and resolution of workspace dependency
-ranges. CI runs the same check alongside the existing tests; it adds no browser
+also checks the published file allowlist, that every `exports` target ships, and
+resolution of workspace dependency ranges. CI runs the same check alongside the existing tests; it adds no browser
 or protocol suite. The consumer and its npm cache stay in ignored local paths.
 
 ## First publication
@@ -35,7 +35,8 @@ or protocol suite. The consumer and its npm cache stay in ignored local paths.
 The npm organization must permit publishing all three names. npm requires a
 package to exist before a trusted publisher can be configured. From a checked
 main commit, run the command above, authenticate to npm with a maintainer
-account, and publish ledger and popup before ceremony:
+account, and publish ledger and popup before ceremony. These first versions
+carry no provenance; every later one does:
 
 ```sh
 npm publish ts/.cache/npm/ledger.tgz --access public
@@ -43,12 +44,19 @@ npm publish ts/.cache/npm/popup.tgz --access public
 npm publish ts/.cache/npm/ceremony.tgz --access public
 ```
 
+In the repository settings, create the `npm-release` environment. Limit its
+deployment branches and tags to the tags `popup-v*`, `ledger-v*` and
+`ceremony-v*`, and add required reviewers if releases need a second person.
+Only the publish job runs there, so only it can obtain an npm OIDC token.
+
 On each npm package, configure its GitHub Actions trusted publisher:
-`libid-org/libID`, workflow `release.yml`. Allow publishing and leave the
-GitHub environment unset (the workflow uses none). Then require trusted
-publishing/2FA according to the organization's policy and remove any bootstrap
-publish token. Routine releases use OIDC and automatic npm provenance; they need
-no `NPM_TOKEN`. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
+`libid-org/libID`, workflow `release.yml`, environment `npm-release`. npm
+checks the repository, workflow file and environment, not the branch, so the
+environment is what keeps an edited workflow on another branch from
+publishing. Then require trusted publishing/2FA according to the organization's
+policy and log the bootstrap session out of npm. Routine releases use OIDC and
+automatic npm provenance; they need no `NPM_TOKEN`. See
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
 ## Subsequent releases
 
@@ -61,8 +69,9 @@ no `NPM_TOKEN`. See [npm trusted publishing](https://docs.npmjs.com/trusted-publ
    `popup-v0.1.1`, `ledger-v0.1.1` or `ceremony-v0.1.1`.
 
 The release workflow verifies the package version, main ancestry and successful
-CI, builds the tarballs, runs the consumer check and publishes the same checked
-tarball. Stable releases use `latest`; a prerelease version or GitHub prerelease
+CI, builds the tarballs, runs the consumer check, and checks that the package's
+`@libid/*` dependencies are already on npm. A separate job in the `npm-release`
+environment then publishes that same checked tarball. Stable releases use `latest`; a prerelease version or GitHub prerelease
 uses `next`. A retry after successful publication cannot replace an npm version;
 inspect the registry before retrying a failed release.
 
