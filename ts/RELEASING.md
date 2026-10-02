@@ -59,8 +59,9 @@ On each npm package, configure its GitHub Actions trusted publisher:
 `libid-org/libID`, workflow `release.yml`, environment `npm-release`, and
 allow direct publishing with `npm publish`. A trusted publisher created after
 3 September 2026 otherwise permits only `npm stage publish`, and the release
-job cannot publish. npm
-checks the repository, workflow file and environment, not the branch, so the
+job cannot publish. With the CLI this needs npm 12 or later:
+`npx npm@12 trust github @libid/<package> --repo libid-org/libID --file release.yml --env npm-release --allow-publish`.
+npm checks the repository, workflow file and environment, not the branch, so the
 environment and the tag ruleset are what keep an edited workflow from
 publishing. Then require trusted publishing/2FA according to the organization's
 policy and log the bootstrap session out of npm. Routine releases use OIDC and
