@@ -55,7 +55,7 @@ const spaced = (json: string, space: string, after = space) =>
 const frozenChanges: Record<keyof TokenRequestInput, string> = {
   clientId: 'other-client',
   code: 'other-code',
-  redirectUri: 'https://bridge.test/other',
+  redirectUri: 'https://other-bridge.test/auth/callback',
   codeVerifier: `B${PKCE_VALUE.slice(1)}`,
   clientCredential: 'other-credential',
 }
