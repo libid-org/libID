@@ -32,7 +32,7 @@ type Spied = FakeConnection & Record<'send' | 'navigate' | 'navigateAway' | 'clo
 
 /** The shared connection double, with spies on the outbound calls tests count or replace. */
 function spiedConnection(): Spied {
-  const connection = fakeConnection({ peerOrigin: 'https://ccdp.test' })
+  const connection = fakeConnection({ connectionId: CEREMONY_ID, peerOrigin: 'https://ccdp.test' })
   for (const method of ['send', 'navigate', 'navigateAway', 'close'] as const)
     vi.spyOn(connection, method)
   return connection as Spied
@@ -70,7 +70,6 @@ async function setup<P extends PlatformId = 'google'>({
 } = {}) {
   const ceremony = (client ?? (await ccdpClient(wireConfig))).new(
     connection,
-    id,
     platformId,
     ledgerId,
     new Uint8Array(32),
@@ -340,10 +339,11 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
   const client = await ccdpClient(wireConfig)
   const { connection, ceremony: first } = await setup({ client })
   await expect(setup({ client })).rejects.toThrow('already live')
-  const boxed = Object(id) as string
-  expect(() =>
-    client.new(connection, boxed, 'google', testnet, new Uint8Array(32), new Uint8Array()),
-  ).toThrow()
+  // A connection constructed elsewhere may carry a boxed ID; only a string UUID runs.
+  const boxed = Object.assign(spiedConnection(), { connectionId: Object(id) as string })
+  expect(() => client.new(boxed, 'google', testnet, new Uint8Array(32), new Uint8Array())).toThrow(
+    'Invalid ceremony selection',
+  )
   const rejected = expect(first.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
   await connection.close()
   await rejected
@@ -362,14 +362,7 @@ it.each(supportedPlatforms)(
       notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
     }
     const connection = spiedConnection()
-    const ceremony = (await clientFor(platformId)).new(
-      connection,
-      id,
-      platformId,
-      ledger,
-      domain,
-      data,
-    )
+    const ceremony = (await clientFor(platformId)).new(connection, platformId, ledger, domain, data)
     expect(ledger.hash).toHaveBeenCalledOnce()
     expect(ledger.notaryAddress).toHaveBeenCalledOnce()
     hash.fill(9)
@@ -449,14 +442,7 @@ it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-
     },
   ])
     expect(() =>
-      client.new(
-        connection,
-        id,
-        'google',
-        ledger as LedgerId,
-        new Uint8Array(32),
-        new Uint8Array(),
-      ),
+      client.new(connection, 'google', ledger as LedgerId, new Uint8Array(32), new Uint8Array()),
     ).toThrow()
   expect(connection.navigate).not.toHaveBeenCalled()
 })
@@ -489,7 +475,6 @@ it.each(supportedPlatforms)(
       expect(() =>
         client.new(
           connection,
-          id,
           platformId,
           { hash: mainnet.hash, notaryAddress: method } as LedgerId,
           new Uint8Array(32),
@@ -575,11 +560,11 @@ function checkCreationTypes(client: CCDPClient) {
     transactionData: bytes,
   })
   // @ts-expect-error Missing transaction data.
-  client.new(conn, id, 'google', ledger, bytes)
-  // @ts-expect-error Connection and ceremony ID have incompatible positions.
-  client.new(id, conn, 'google', ledger, bytes, bytes)
+  client.new(conn, 'google', ledger, bytes)
+  // @ts-expect-error The ceremony ID comes from the connection, not an argument.
+  client.new(conn, id, 'google', ledger, bytes, bytes)
   void client
-    .new(conn, id, 'google', ledger, bytes, bytes)
+    .new(conn, 'google', ledger, bytes, bytes)
     .proveUserIdentity()
     .then((result) => {
       if (result.status !== 'accepted') return
@@ -617,7 +602,6 @@ it.each(supportedPlatforms)(
     const c = spiedConnection()
     const ceremony = (await clientFor(platformId)).new(
       c,
-      id,
       platformId,
       testnet,
       new Uint8Array(32),
@@ -920,7 +904,6 @@ it('rejects unavailable explicit versions before reading ledger or reserving the
     expect(() =>
       client.new(
         c,
-        id,
         'google',
         ledger,
         new Uint8Array(32),
@@ -932,7 +915,7 @@ it('rejects unavailable explicit versions before reading ledger or reserving the
   }
   expect(ledger.hash).not.toHaveBeenCalled()
   expect(registered(c)).toEqual([])
-  client.new(c, id, 'google', ledger, new Uint8Array(32), new Uint8Array(), 1)
+  client.new(c, 'google', ledger, new Uint8Array(32), new Uint8Array(), 1)
   await c.close()
 })
 
@@ -1018,7 +1001,6 @@ it.each([
     expect(() =>
       client.new(
         connection,
-        id,
         'google',
         testnet,
         operationDomain as Uint8Array,
@@ -1035,9 +1017,9 @@ it.each([
 it('binds one active ceremony per connection and rebinds it once that run finishes', async () => {
   const client = await ccdpClient(wireConfig)
   const { connection, ceremony: first } = await setup({ client })
-  const second = client.new(
+  // One client refuses the live ID at once; another client sharing the connection is refused here.
+  const second = (await ccdpClient(wireConfig)).new(
     connection,
-    crypto.randomUUID(),
     'google',
     testnet,
     new Uint8Array(32),

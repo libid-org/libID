@@ -259,6 +259,12 @@ describe('MessagePort selection and delivery', () => {
     // Popup A's handshake reaches both listeners on the shared page.
     const popupA = await acceptPopup(a).connection
     await tick()
+    // Each endpoint exposes the ID it was given.
+    expect([appA.connection.connectionId, popupA.connectionId, connB.connectionId]).toEqual([
+      ID,
+      ID,
+      OTHER_ID,
+    ])
     expect(codes(appA.events)).toContain('carrier-message-port')
     expect(codes(eventsB)).not.toContain('handshake-rejected')
     expect(codes(eventsB)).not.toContain('connection-failed')

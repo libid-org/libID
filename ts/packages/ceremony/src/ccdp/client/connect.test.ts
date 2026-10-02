@@ -73,9 +73,8 @@ it('runs a ceremony only under its connection ID [KIT-008]', async () => {
   const connection = client.connect(PopupWindow.open('client-ids', 'left=0,top=0'), {
     connectionId: CEREMONY_ID,
   })
-  const run = (id: string) =>
-    client.new(connection, id, 'google', testnet, new Uint8Array(32), new Uint8Array())
-  expect(() => run(crypto.randomUUID())).toThrow('Ceremony ID must be the connection ID')
-  expect(run(CEREMONY_ID).launchUrl).toContain(CEREMONY_ID)
+  expect(connection.connectionId).toBe(CEREMONY_ID)
+  const ceremony = client.new(connection, 'google', testnet, new Uint8Array(32), new Uint8Array())
+  expect(ceremony.launchUrl).toContain(CEREMONY_ID)
   await connection.close()
 })

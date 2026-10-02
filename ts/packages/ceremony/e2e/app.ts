@@ -55,7 +55,6 @@ anchor.addEventListener('click', (event) => {
   })
   const ceremony = client.new(
     connection,
-    id,
     platform,
     new URL(location.href).searchParams.get('ledger') === 'test:mainnet' ? mainnet : testnet,
     new Uint8Array(32),

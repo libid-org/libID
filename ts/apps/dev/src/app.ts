@@ -246,7 +246,6 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     }
     const ceremony = client.new(
       current,
-      id,
       platform,
       ledger,
       sha256(new TextEncoder().encode('libid/ceremony/dev')),

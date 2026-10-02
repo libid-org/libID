@@ -45,7 +45,7 @@ exact value.
 Connection constructors validate the grammar before starting carrier,
 continuity, or signaling work. They do not normalize uppercase or other UUID
 spellings. Freshness is a caller invariant: the package keeps no durable reuse
-registry.
+registry. Each endpoint exposes its validated value as `connection.connectionId`.
 
 The topology is an ordinary browser tab running the application and one
 adjacent popup. The application and popup may be cross-origin and cross-site.
@@ -349,6 +349,7 @@ declare class PopupWindow {
 }
 
 interface PopupConnection<Out extends Message, In extends Message = Out> {
+  readonly connectionId: string
   readonly ready: Promise<void>
   readonly closed: Promise<ConnectionEnd>
   readonly peerOrigin: string | null

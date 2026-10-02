@@ -41,6 +41,8 @@ import { CurrentWindow, OpenedWindow, type PopupWindow } from './window.js'
 export type ConnectionEnd = { outcome: 'closed' } | { outcome: 'failed'; code: PopupErrorCode }
 
 export interface PopupConnection<Out extends Message, In extends Message = Out> {
+  /** The logical connection's UUID, which both endpoints were given. */
+  readonly connectionId: string
   /**
    * Settles when this endpoint has selected its first carrier, or rejects if it failed first.
    * The application's also rejects with `connection-closed` if it ends closed first.
@@ -179,6 +181,7 @@ abstract class Endpoint<Out extends Message, In extends Message>
     protected readonly report: Reporter,
     private readonly allowedOrigins: OriginAllowlist,
     private readonly closedRejectsReady: boolean,
+    readonly connectionId: string,
   ) {
     this.ready = new Promise((resolve, reject) => {
       this.resolveReady = resolve
@@ -348,8 +351,8 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
     options: ConnectOptions,
   ) {
     const allowedPopupOrigins = requireOrigins(options.allowedPopupOrigins, 'allowedPopupOrigins')
-    super(createReporter(options.onDiagnostic), allowedPopupOrigins, true)
     const connectionId = requireConnectionId(options.connectionId)
+    super(createReporter(options.onDiagnostic), allowedPopupOrigins, true, connectionId)
     if (popup.connected) throw new Error('PopupWindow is already connected')
     popup.connected = true
     this.fallbackPending = options.fallback !== undefined
@@ -508,7 +511,6 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
   private leaving = false
   /** A port on its way to the worker; closure before the transfer must still report departure. */
   private handoff: MessagePort | null = null
-  private readonly connectionId: string
   private readonly isolationFallback: URL | null
 
   constructor(
@@ -519,8 +521,12 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       options.allowedApplicationOrigins,
       'allowedApplicationOrigins',
     )
-    super(createReporter(options.onDiagnostic), allowedOrigins, false)
-    this.connectionId = requireConnectionId(options.connectionId)
+    super(
+      createReporter(options.onDiagnostic),
+      allowedOrigins,
+      false,
+      requireConnectionId(options.connectionId),
+    )
     this.isolationFallback =
       options.isolationFallbackUrl === undefined
         ? null

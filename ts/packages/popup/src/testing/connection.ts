@@ -1,7 +1,7 @@
 import type { ConnectionEnd, PopupConnection } from '../connection.js'
 import { PopupError } from '../diagnostics.js'
 import type { Message, MessageType } from '../message.js'
-import { POPUP_ORIGIN } from './fakes.js'
+import { ID, POPUP_ORIGIN } from './fakes.js'
 
 /** A connection whose peer the test drives: it records sends and navigations, delivers messages, and ends. */
 export interface FakeConnection<Out extends Message = Message, In extends Message = Out>
@@ -33,10 +33,12 @@ export interface FakeConnection<Out extends Message = Message, In extends Messag
  * `connection-closed`; a popup document's (the default) leaves it pending for its successor.
  */
 export function fakeConnection<Out extends Message = Message, In extends Message = Out>({
+  connectionId = ID,
   peerOrigin = POPUP_ORIGIN,
   ready = 'resolved',
   endpoint = 'popup',
 }: {
+  connectionId?: string
   peerOrigin?: string | null
   ready?: 'resolved' | 'pending'
   endpoint?: 'application' | 'popup'
@@ -52,6 +54,7 @@ export function fakeConnection<Out extends Message = Message, In extends Message
   const handlers = new Map<string, (value: unknown) => void>()
   const closedError = () => new PopupError('connection-closed')
   const connection: FakeConnection<Out, In> = {
+    connectionId,
     peerOrigin,
     ready: readiness,
     closed: new Promise<ConnectionEnd>((resolve) => {
