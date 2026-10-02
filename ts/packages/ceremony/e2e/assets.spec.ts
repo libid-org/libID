@@ -1,4 +1,5 @@
 // Served CCDP routes, the asset Service Worker and its caches, and mounted TLSN assets.
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import {
   artifactRequests,
@@ -91,18 +92,27 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
   await request.get(`${control}&hold=1`)
   const seed = await context.newPage()
   await seed.goto(`${ccdp}/ccdp/v1/seed`)
-  await seed.evaluate(async (workerPath) => {
-    for (const scope of ['/', '/ccdp/v1/']) {
-      const r = await navigator.serviceWorker.register(workerPath, {
-        scope,
-        type: 'module',
-      })
-      await new Promise<void>((resolve) => {
-        const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
-        poll()
-      })
-    }
-  }, rootWorkerPath())
+  await seed.evaluate(
+    async ({ workerPath, previousWorkerPath }) => {
+      for (const scope of ['/', '/ccdp/v1/']) {
+        const r = await navigator.serviceWorker.register(
+          scope === '/' ? workerPath : previousWorkerPath,
+          {
+            scope,
+            type: 'module',
+          },
+        )
+        await new Promise<void>((resolve) => {
+          const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
+          poll()
+        })
+      }
+    },
+    {
+      workerPath: rootWorkerPath(),
+      previousWorkerPath: `/ccdp/worker.${createHash('sha256').update('').digest('hex')}.js`,
+    },
+  )
   await seed.close()
   await googleProvider()
   const popup = await launch()

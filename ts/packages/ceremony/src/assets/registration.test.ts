@@ -145,10 +145,23 @@ it('retires only the known nested worker scope [LIBID-ASSET-020]', async () => {
   const legacy = [
     registration(`${ORIGIN}/ccdp/v1/`, { active: serviceWorker('activated') }),
     registration(`${ORIGIN}/ccdp/v1/`, {
+      active: serviceWorker('activated', undefined, OLD_SCRIPT),
+    }),
+    registration(`${ORIGIN}/ccdp/v1/`, {
       active: serviceWorker('activated', undefined, `${ORIGIN}/ccdp/v1/worker.js`),
     }),
   ]
   const kept = [
+    registration(`${ORIGIN}/ccdp/v1/`, {
+      active: serviceWorker('activated', undefined, `${OLD_SCRIPT}?unrelated`),
+    }),
+    registration(`${ORIGIN}/ccdp/v1/`, {
+      active: serviceWorker(
+        'activated',
+        undefined,
+        OLD_SCRIPT.replace(ORIGIN, 'https://other.test'),
+      ),
+    }),
     registration(`${ORIGIN}/ccdp/v1/`, {
       active: serviceWorker('activated', undefined, `${ORIGIN}/ccdp/v1/other.js`),
     }),

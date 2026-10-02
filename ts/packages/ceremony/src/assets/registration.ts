@@ -61,7 +61,16 @@ export async function registerRootWorker(url: string): Promise<ServiceWorker> {
     if (
       old.scope === `${location.origin}${ROUTE_SCOPE}` &&
       workers.length &&
-      workers.every((worker) => worker.scriptURL === script || worker.scriptURL === legacyScript)
+      workers.every(({ scriptURL }) => {
+        const url = new URL(scriptURL)
+        return (
+          scriptURL === legacyScript ||
+          (url.origin === location.origin &&
+            /^\/ccdp\/worker\.[a-f0-9]{64}\.js$/.test(url.pathname) &&
+            !url.search &&
+            !url.hash)
+        )
+      })
     )
       await old.unregister()
   }
