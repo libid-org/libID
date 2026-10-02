@@ -16,7 +16,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const REFUSED: [string, string][] = [
   ['this browser or app may not be secure', 'Google refused this browser'],
   ["verify it's you", 'Google asks to verify the account interactively'],
-  ['verify you’re human', 'Google asks to verify the account interactively'],
+  ["verify you're human", 'Google asks to verify the account interactively'],
   ['redirect_uri_mismatch', 'Google rejected the redirect URI of the OAuth client'],
   ['access blocked', 'Google blocked the OAuth client'],
   ['has not completed the google verification process', 'Google blocked the OAuth client'],
@@ -64,9 +64,13 @@ export async function authorizeOnGoogle(popup: Page, email: string, budgetMs = 1
         .locator('body')
         .textContent()
         .catch(() => '')) ?? ''
-    ).toLowerCase()
+    )
+      .toLowerCase()
+      .replaceAll('’', "'")
     const refused = REFUSED.find(([marker]) => text.includes(marker))
     if (refused) throw new Error(`${refused[1]} (${url.pathname})`)
+    if (url.pathname.includes('/challenge/'))
+      throw new Error(`Google asks to verify the account interactively (${url.pathname})`)
     if (await popup.evaluate(LOGIN_VISIBLE).catch(() => false))
       throw new Error(
         'Google asked to sign in: the saved session has expired. Renew it with `ceremony export google`.',

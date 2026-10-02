@@ -11,6 +11,23 @@ const RPC_URL = 'http://127.0.0.1:4688'
 const HOLDER = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'
 
 /**
+ * Wait for the page to show `expectedUser` as proved. Proving runs in the
+ * popup's Prover document after the OAuth return; a failed ceremony ends the
+ * wait with the page's own message.
+ */
+async function proofReceived(page: Page, expectedUser: string, timeoutMs = 300_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if ((await page.getByTestId('stage').textContent()) === 'failed')
+      throw new Error(`The ceremony failed: ${await page.getByTestId('status').textContent()}`)
+    const proved = await page.getByTestId('proof-received').textContent()
+    if (proved?.toLowerCase().includes(expectedUser.toLowerCase())) return
+    await page.waitForTimeout(500)
+  }
+  throw new Error(`No proof for ${expectedUser} in ${timeoutMs / 1000} s`)
+}
+
+/**
  * Connect the wallet, start the platform's ceremony from its link, let
  * `authorize` drive the popup through the platform, then check every step the
  * page reports: the proved account, the transaction, its receipt, and the
@@ -35,11 +52,7 @@ async function bindThroughTheUi(
   ])
   await authorize(popup)
 
-  // Proving runs in the popup's Prover document after the OAuth return.
-  await expect(page.getByTestId('proof-received')).toContainText(expectedUser, {
-    ignoreCase: true,
-    timeout: 300_000,
-  })
+  await proofReceived(page, expectedUser)
   await expect(page.getByTestId('tx-hash')).toHaveText(/^0x[0-9a-f]{64}$/, { timeout: 60_000 })
   await expect(page.getByTestId('receipt-status')).toHaveText(/^success in block \d+$/, {
     timeout: 60_000,
