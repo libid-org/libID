@@ -7,7 +7,7 @@ Six UI colors per theme and one shared logo color live in [`src/palette.mjs`](sr
 
 ## Local
 
-Node.js 22.12+, pnpm 10.30.3. From the repository root:
+Node.js 22.12+, pnpm 10.34.6. From the repository root:
 
 ```sh
 pnpm -C site install --frozen-lockfile
@@ -20,7 +20,7 @@ Run `pnpm -C site test` for theme and spec-link checks.
 ## Cloudflare
 
 Worker: **libid**. Root: `/`. Production branch: `main`.
-Environment: `NODE_VERSION=22`, `PNPM_VERSION=10.30.3`.
+Environment: `NODE_VERSION=22`, `PNPM_VERSION=10.34.6`.
 
 | Command | Value |
 | --- | --- |

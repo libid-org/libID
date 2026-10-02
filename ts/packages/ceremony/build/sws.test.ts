@@ -26,7 +26,8 @@ const testPort = Number(process.env.CEREMONY_SWS_TEST_PORT ?? 4990)
 /** Point an emitted `sws.toml` at its own output on a loopback port. */
 function localize(dir: string, port: number, edit?: (config: TomlTable) => void) {
   const path = join(dir, 'sws.toml')
-  const config = parse(readFileSync(path, 'utf8'))
+  // smol-toml returns null-prototype tables; deep equality compares prototypes too.
+  const config = structuredClone(parse(readFileSync(path, 'utf8')))
   Object.assign(config.general as object, {
     host: '127.0.0.1',
     port,
@@ -115,7 +116,7 @@ test('emitted header rules: the error policy catch-all, then one exact rule per 
         ['/ccdp/v1/prefetch', { bytes: Buffer.from('<p>p</p>'), headers: { ...documentHeaders } }],
       ]),
     )
-    const config = parse(readFileSync(join(dir, 'sws.toml'), 'utf8'))
+    const config = structuredClone(parse(readFileSync(join(dir, 'sws.toml'), 'utf8')))
     assert.equal((config.general as TomlTable).health, true)
     assert.equal((config.general as TomlTable)['security-headers'], false)
     // Plain-path matching of the rules below depends on the trailing-slash redirect staying on.

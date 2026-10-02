@@ -6,8 +6,8 @@ packages:
 catalog:
   # Alpha until a stable release bundles libsoup ≥3.6.6 (microsoft/playwright#42803).
   '@playwright/test': 1.64.0-alpha-2026-09-29
-  '@types/node': ^22.0.0
-  '@vitest/coverage-v8': ^3.2.0
-  typescript: ^5.9.0
+  '@types/node': ^22.20.5
+  '@vitest/coverage-v8': ^3.2.7
+  typescript: ^5.9.3
   vite: ^7.3.6
-  vitest: ^3.2.0
+  vitest: ^3.2.7

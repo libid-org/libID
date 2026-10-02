@@ -40,7 +40,8 @@ test('Prefetch pins the exact immutable Worker body [TEST-DIST-08]', () => {
 })
 
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-ASSET-012] [LIBID-PROVER-005]', () => {
-  const config = parse(readFileSync(join(out, 'sws.toml'), 'utf8'))
+  // smol-toml returns null-prototype tables; deep equality compares prototypes too.
+  const config = structuredClone(parse(readFileSync(join(out, 'sws.toml'), 'utf8')))
   assert.equal((config.general as TomlTable)['text-charset'], false)
   assert.equal(Object.hasOwn(config.general as object, 'port'), false)
   assert.equal((config.general as TomlTable).health, true)

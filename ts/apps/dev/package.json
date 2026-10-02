@@ -19,7 +19,7 @@
     "@libid/ceremony": "workspace:^",
     "@libid/ledger": "workspace:^",
     "@libid/popup": "workspace:^",
-    "@noble/hashes": "^2.3.0"
+    "@noble/hashes": "^2.4.0"
   },
   "devDependencies": {
     "@playwright/test": "catalog:",

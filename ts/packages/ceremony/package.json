@@ -35,10 +35,10 @@
     "@noir-lang/noir_js": "1.0.0-beta.25",
     "@noir-lang/noirc_abi": "1.0.0-beta.25",
     "@playwright/test": "catalog:",
-    "@types/estree": "^1.0.8",
+    "@types/estree": "^1.0.9",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "smol-toml": "^1.8.0",
+    "smol-toml": "^1.9.0",
     "tar": "^7.5.22",
     "typescript": "catalog:",
     "vite": "catalog:",
@@ -47,7 +47,7 @@
   "dependencies": {
     "@libid/contracts": "0.13.1",
     "@libid/ledger": "workspace:^",
-    "@noble/hashes": "^2.3.0"
+    "@noble/hashes": "^2.4.0"
   },
   "sideEffects": false,
   "files": [
