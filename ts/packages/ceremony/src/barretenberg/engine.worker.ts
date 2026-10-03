@@ -1,4 +1,4 @@
-import { BackendType, Barretenberg } from '@aztec/bb.js'
+import { BackendType, Barretenberg } from '@aztec-foundation/bb.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import initACVM from '@noir-lang/acvm_js'
 import { Noir } from '@noir-lang/noir_js'
