@@ -187,7 +187,8 @@ export const googleV1 = {
 }
 
 // Generated once by running googleV1 through the official libid-circuits
-// v0.5.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter.
+// v0.5.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter; v0.6.0 with
+// bb.js 6.0.0-rc.2 yields the same values.
 export const googlePublicInputs = [
   '0x00000000000000000000000000000000000000000000000000000000000000b3',
   '0x0000000000000000000000000000000000000000000000000000000000000018',
