@@ -71,7 +71,7 @@ test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASS
         await import(pathToFileURL(resolve(dirname(require.resolve(pkg)), '../web', file)).href)
       await module.default({ module_or_path: select(wasm).url })
     }
-    const bb = resolve(dirname(require.resolve('@aztec/bb.js')), '../browser')
+    const bb = resolve(dirname(require.resolve('@aztec-foundation/bb.js')), '../browser')
     const { fetchCode } = await import(
       pathToFileURL(join(bb, 'barretenberg_wasm/fetch_code/browser/index.js')).href
     )

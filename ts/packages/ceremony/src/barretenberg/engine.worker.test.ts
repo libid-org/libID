@@ -22,7 +22,7 @@ vi.mock('@noir-lang/noir_js', () => ({
   },
 }))
 
-vi.mock('@aztec/bb.js', () => ({
+vi.mock('@aztec-foundation/bb.js', () => ({
   BackendType: { Wasm: 'Wasm' },
   Barretenberg: { new: mocks.create },
 }))

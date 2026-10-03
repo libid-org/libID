@@ -76,21 +76,21 @@ importers:
         specifier: ^2.4.0
         version: 2.4.0
     devDependencies:
-      '@aztec/bb.js':
-        specifier: 5.2.0
-        version: 5.2.0
+      '@aztec-foundation/bb.js':
+        specifier: 6.0.0-rc.2
+        version: 6.0.0-rc.2
       '@libid/popup':
         specifier: workspace:^
         version: link:../popup
       '@noir-lang/acvm_js':
-        specifier: 1.0.0-beta.25
-        version: 1.0.0-beta.25
+        specifier: 1.0.0-rc.3
+        version: 1.0.0-rc.3
       '@noir-lang/noir_js':
-        specifier: 1.0.0-beta.25
-        version: 1.0.0-beta.25
+        specifier: 1.0.0-rc.3
+        version: 1.0.0-rc.3
       '@noir-lang/noirc_abi':
-        specifier: 1.0.0-beta.25
-        version: 1.0.0-beta.25
+        specifier: 1.0.0-rc.3
+        version: 1.0.0-rc.3
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.64.0-alpha-2026-09-29
@@ -148,8 +148,8 @@ importers:
 
 packages:
 
-  '@aztec/bb.js@5.2.0':
-    resolution: {integrity: sha512-XQRbl6TfHg7xXwf4b3cNSggtwsIxl2z2/zV49/Ahxa1Nc1D7x05NY0QL5mYSRdOJlGKZ3TUTH48lDWAwJSVulg==}
+  '@aztec-foundation/bb.js@6.0.0-rc.2':
+    resolution: {integrity: sha512-/svyRDr0fPpMddEr0lAFphoLMFvUtTZNNlBRODP2Bgg2g9PVpV6tD9lXGH9LbSIUhiu96avRawsFsVTZRO2hrg==}
     hasBin: true
 
   '@babel/helper-string-parser@7.29.7':
@@ -442,17 +442,17 @@ packages:
     resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
     engines: {node: '>= 20.19.0'}
 
-  '@noir-lang/acvm_js@1.0.0-beta.25':
-    resolution: {integrity: sha512-FDLST/Sya92n0dHVFM5B/LiscvKnhYiXfn1RmYQFPdxtA+GLUrGEW1RYF6Pot49Mi8u1Q4TDydylVgwSfBvDPQ==}
+  '@noir-lang/acvm_js@1.0.0-rc.3':
+    resolution: {integrity: sha512-bTTrcPphNHVrFkbJPVcFrrigwwU/N9+trgEa9PF2X/VWWAX0B1gOGSBwqziOKMwThpU7H2Jb3Z6OFMEhpMKaEQ==}
 
-  '@noir-lang/noir_js@1.0.0-beta.25':
-    resolution: {integrity: sha512-Lr+CmJzOGFNR3txRJ7s3hT2RTGQEpYagRaj9XfRJDaHA+Z2FJbSSYWZ+BXwEjtXxVcXsA1fSpCa3yqNOhvzVIw==}
+  '@noir-lang/noir_js@1.0.0-rc.3':
+    resolution: {integrity: sha512-NrJZPd7zpBWXzP240rP78fr6RE8vg3mFIMIsT5Xiqbh6zdBKfLI8Nb7Ea4UFwFWyRFDqZO3qGd3HbGyRWxxZ8Q==}
 
-  '@noir-lang/noirc_abi@1.0.0-beta.25':
-    resolution: {integrity: sha512-bB11NuEeq7Qz26fkBiY0upzdByr8KJG2lvXX9Kl9vgZnuO4HKfajHyEAInNupnxkgH1DVwVyD/1RDXXwsjTOmA==}
+  '@noir-lang/noirc_abi@1.0.0-rc.3':
+    resolution: {integrity: sha512-jax7q2CAAG4jxCzr8MllH/LZxnxnS5PF1YyzmFJ7DTf97k3+LaHSnBPXE8TwQYDsWwyNxQTqDWw1QVEoO1ESaQ==}
 
-  '@noir-lang/types@1.0.0-beta.25':
-    resolution: {integrity: sha512-rgCgzyPLw2WHQGlP9EBqIT0tLQu0SIJRvc7RafV3aMQJ18oqmpq3X5p5l9BGhzOscrrfzcxKMjCvmag+Wk0ElQ==}
+  '@noir-lang/types@1.0.0-rc.3':
+    resolution: {integrity: sha512-k1UHd67/OSPJb9E6WNKeMtuoDbflLpu803jtbaVqDlr2P/rH8+joDuIxK+nwBMVlnCO2LlcJaN4wpQ/TRHJ78w==}
 
   '@oxc-project/types@0.152.0':
     resolution: {integrity: sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw==}
@@ -901,6 +901,9 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  graceful-fs@4.2.11:
+    resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
   idb-keyval@6.3.0:
     resolution: {integrity: sha512-um+2dgAWmYsu615EXpWVwSmapJhON0G43t3Ka/EVaohzPQXSMqKEqeDK/oIW3Ow+BXaF2PvSc+oBTFp793A5Ow==}
 
@@ -1031,6 +1034,9 @@ packages:
   pako@2.2.0:
     resolution: {integrity: sha512-zJq6RP/5q+TO2OpFV3FHzlPnFjmkb7Nc99a5SNjJE+uu/PkpChs+NIZSSzbBoD+6kjiISXjfYdwj1ZRQ81dz/w==}
 
+  pako@3.0.2:
+    resolution: {integrity: sha512-uBv6IT2aT1A78iU6dpNEbf6+CyhlV/6g9JlJs9kpgjFGFhruIICVRysF/W0SLzXg5+hCl+KroH7e4YUyfEmgLg==}
+
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -1052,10 +1058,20 @@ packages:
     resolution: {integrity: sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==}
     engines: {node: ^10 || ^12 || >=14}
 
+  proper-lockfile@4.1.2:
+    resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
+
+  retry@0.12.0:
+    resolution: {integrity: sha512-9LkiTwjUh6rT555DtE9rTX+BKByPfrMzEAtnlEtdEwr3Nkffwiihqe2bWADg+OQRjt9gl6ICdmB/ZFDCGAtSow==}
+    engines: {node: '>= 4'}
+
   rolldown@1.2.12:
     resolution: {integrity: sha512-8wafseiaG80xmXSfqidUNqZcylTlhmPZZt+za2m+js2sFZ8dTNlhIOV2WcbIPx2hgwPBJpEUGFAMZ9bgBBLTSQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
+
+  signal-exit@3.0.7:
+    resolution: {integrity: sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==}
 
   smol-toml@1.9.0:
     resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
@@ -1194,13 +1210,14 @@ packages:
 
 snapshots:
 
-  '@aztec/bb.js@5.2.0':
+  '@aztec-foundation/bb.js@6.0.0-rc.2':
     dependencies:
       comlink: 4.4.2
       commander: 12.1.0
       idb-keyval: 6.3.0
       msgpackr: 1.12.1
       pako: 2.2.0
+      proper-lockfile: 4.1.2
       tslib: 2.8.1
 
   '@babel/helper-string-parser@7.29.7': {}
@@ -1366,20 +1383,20 @@ snapshots:
 
   '@noble/hashes@2.4.0': {}
 
-  '@noir-lang/acvm_js@1.0.0-beta.25': {}
+  '@noir-lang/acvm_js@1.0.0-rc.3': {}
 
-  '@noir-lang/noir_js@1.0.0-beta.25':
+  '@noir-lang/noir_js@1.0.0-rc.3':
     dependencies:
-      '@noir-lang/acvm_js': 1.0.0-beta.25
-      '@noir-lang/noirc_abi': 1.0.0-beta.25
-      '@noir-lang/types': 1.0.0-beta.25
-      pako: 2.2.0
+      '@noir-lang/acvm_js': 1.0.0-rc.3
+      '@noir-lang/noirc_abi': 1.0.0-rc.3
+      '@noir-lang/types': 1.0.0-rc.3
+      pako: 3.0.2
 
-  '@noir-lang/noirc_abi@1.0.0-beta.25':
+  '@noir-lang/noirc_abi@1.0.0-rc.3':
     dependencies:
-      '@noir-lang/types': 1.0.0-beta.25
+      '@noir-lang/types': 1.0.0-rc.3
 
-  '@noir-lang/types@1.0.0-beta.25': {}
+  '@noir-lang/types@1.0.0-rc.3': {}
 
   '@oxc-project/types@0.152.0': {}
 
@@ -1656,6 +1673,8 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
+  graceful-fs@4.2.11: {}
+
   idb-keyval@6.3.0: {}
 
   js-tokens@10.0.0: {}
@@ -1774,6 +1793,8 @@ snapshots:
 
   pako@2.2.0: {}
 
+  pako@3.0.2: {}
+
   picocolors@1.1.1: {}
 
   picomatch@4.0.7: {}
@@ -1789,6 +1810,14 @@ snapshots:
       nanoid: 3.3.19
       picocolors: 1.1.1
       source-map-js: 1.2.2
+
+  proper-lockfile@4.1.2:
+    dependencies:
+      graceful-fs: 4.2.11
+      retry: 0.12.0
+      signal-exit: 3.0.7
+
+  retry@0.12.0: {}
 
   rolldown@1.2.12:
     dependencies:
@@ -1810,6 +1839,8 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.12
       '@rolldown/binding-win32-arm64-msvc': 1.2.12
       '@rolldown/binding-win32-x64-msvc': 1.2.12
+
+  signal-exit@3.0.7: {}
 
   smol-toml@1.9.0: {}
 
