@@ -100,7 +100,8 @@ Refusal: An unsigned HTTP error. It asserts nothing about any binding.
 - SP-ENS-03:
   The Gateway never signs absence it does not know: a chain it does not
   index, a Coin Type two indexed chains share, and an index too far behind
-  each get a Refusal, never a Signed Null.
+  each get a Refusal, never a Signed Null. Depends on the Gateway's handle
+  rules admitting every handle an indexed chain binds (§11).
 - SP-ENS-04:
   No two handles reach one name, and a name carries its handle: the Gateway
   reads a name with no mapping table.
@@ -153,9 +154,12 @@ platform's rules, never raw input. It returns Handle Labels or refuses. A
 refused handle has no name; its binding stays readable through the
 `IdentityRegistry` and by address.
 
-ENSIP-15 accepts every label below except where a rule refuses, and two of
-its rules shape them: `_` may appear only at the start of a label, and a
-label's third and fourth characters must not both be `-`.
+Every Handle Label also satisfies REQ-ENS-NAME-04, so the transform refuses
+a handle that would give a label longer than 63 bytes. Two ENSIP-15 rules
+shape the labels below: `_` may appear only at the start of a label, and a
+label's third and fourth characters must not both be `-`. The rules below
+keep every Handle Label within both, so ENSIP-15 leaves every name they
+produce unchanged.
 
 - REQ-ENS-LABEL-01 (X):
   The Handle Labels of an X handle are one label: the handle with every `_`
@@ -176,17 +180,22 @@ label's third and fourth characters must not both be `-`.
 - REQ-ENS-LABEL-04 (Google Workspace):
   For any other Google handle, the Handle Labels are the local part split at
   `.`, then `_at`, then the domain split at `.`. Every label other than
-  `_at` MUST be non-empty and match `[a-z0-9-]+`; the transform MUST refuse
-  otherwise. Necessity: joining local part and domain with dots alone is
-  ambiguous (`a.b@c.com`, `a@b.c.com`); `_at` cannot collide with a Handle
-  Label, because a leading `_` is the only one ENSIP-15 admits and no other
-  Handle Label holds one.
+  `_at` MUST be non-empty and match `[a-z0-9-]+`, and the transform MUST
+  refuse a handle with a label whose third and fourth characters are both
+  `-`, such as the local part `ab--x` or the IDNA domain label
+  `xn--bcher-kva`. Necessity: joining local part and domain with dots alone
+  is ambiguous (`a.b@c.com`, `a@b.c.com`); `_at` cannot collide with a
+  Handle Label, because a leading `_` is the only one ENSIP-15 admits and no
+  other Handle Label holds one; and ENSIP-15 refuses a label matching
+  `/^..--/`, so no client could send such a name.
 - REQ-ENS-LABEL-05 (upholds SP-ENS-04):
   The Gateway MUST read Handle Labels by the exact inverse of
-  REQ-ENS-LABEL-01 to -04, run the result through the chain's handle rules,
-  and answer a Signed Null when either step fails. It SHOULD answer a Signed
-  Null for labels outside the transform's image, such as an X label with
-  `--` at the third and fourth characters, or `_at` followed by `gmail.com`.
+  REQ-ENS-LABEL-01 to -04, run the result through the platform's handle
+  rules built into the Gateway, which are the same for every chain, and
+  answer a Signed Null when either step fails. It SHOULD answer a Signed Null
+  for labels outside the transform's image, such as an X or Workspace label
+  with `--` at the third and fourth characters, or `_at` followed by
+  `gmail.com`.
   Necessity: the labels carry the handle, so no table maps names to handles;
   the inverse is the only reading.
 
@@ -334,7 +343,9 @@ label's third and fourth characters must not both be `-`.
 - TEST-ENS-01 (exercises REQ-ENS-LABEL-01 to -05):
   Forward and inverse vectors for each platform round-trip; `a__b` maps to
   `a--b` and `ab__cd` is refused; a Gmail local part with `+`, `-` or `_` is
-  refused; `a.b@c.com` and `a@b.c.com` give different names.
+  refused; `a.b@c.com` and `a@b.c.com` give different names;
+  `ab--x@company.com` and `alice@xn--bcher-kva.example` have no name; a
+  handle giving a 64-byte label has no name.
 - TEST-ENS-02 (exercises REQ-ENS-RES-03, REQ-ENS-GW-08):
   One digest vector reproduces in the Handle Resolver and the Gateway; the
   callback rejects an expired answer, one past the ceiling, an untrusted
@@ -371,6 +382,20 @@ label's third and fourth characters must not both be `-`.
 - One Signer may serve Handle Resolvers on several chains. The digest covers
   no chain ID, but it covers the resolver's address, and REQ-ENS-KEY-02 keeps
   those apart, so an answer verifies only at the resolver it was signed for.
+- The Gateway applies the handle rules it was built with to every chain. A
+  chain whose `IdentityRegistry` admits a platform's handles under wider
+  rules than those can hold a binding the Gateway's rules refuse; that
+  binding's name gets a Signed Null although the binding exists. A change to
+  a platform's rules on any indexed chain needs a Gateway built with the
+  same rules before such bindings resolve.
+- The Gateway does not implement REQ-ENS-LABEL-05's SHOULD. It reads
+  `alice._at.gmail.com.google.handles.link` as `alice@gmail.com`, so every
+  Gmail handle has a second name that resolves to the same binding, and
+  that form takes a local part outside the Gmail alphabet of
+  REQ-ENS-LABEL-03, such as one with `-`, on to the handle rules and the
+  lookup. It likewise reads an X or Workspace label with `--` at the third
+  and fourth characters, which no ENSIP-15 client sends. Each such name
+  resolves to the binding of the handle the Gateway reads from it.
 - A user has no onchain claim to the name. It resolves while the Gateway
   runs and the Parent Name points at the Handle Resolver. The binding in the
   `IdentityRegistry` survives either, and is readable without them.
