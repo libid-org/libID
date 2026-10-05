@@ -70,8 +70,8 @@ Refusal: An unsigned HTTP error. It asserts nothing about any binding.
 - ASM-ENS-01:
   A client resolving a name implements ENSIP-10 wildcard resolution, ERC-3668
   CCIP-Read, and ENSIP-11 chain address resolution. A client lacking one of
-  them reports an error or asks only for coin type 60; it never receives an
-  address for a chain it did not ask about.
+  them reports an error or asks only for coin type 60. A client may also
+  fall back from one Coin Type to another (§11).
 - ASM-ENS-02:
   A client applies ENSIP-15 normalization before hashing a name, so the
   Handle Resolver and the Gateway receive normalized labels.
@@ -149,6 +149,14 @@ alice._at.company.com.google.handles.link
   ended by the root label with no bytes after it. A label containing an
   uppercase letter or a byte at or below `0x20` is not a name any handle
   produces; the Gateway answers an `addr` call for it under REQ-ENS-GW-05.
+- REQ-ENS-NAME-05:
+  A Chain Label of the production deployment MUST NOT equal the first label
+  of another deployment's Parent Name under `handles.link`, such as
+  `testnet`. Necessity: ENSIP-10 resolves a name through its nearest
+  ancestor that has a resolver, so where `testnet.handles.link` has its own
+  resolver, `alice.x.testnet.handles.link` reaches that deployment; a
+  production Chain Label `testnet` would be unreachable there and would
+  read as that deployment's names.
 
 ## 6. Handle labels
 
@@ -307,6 +315,19 @@ produce unchanged.
   the deployment's maximum lag behind, or its indexer report has expired or
   is unknown. Necessity: a stale index
   can deny a binding that already exists.
+
+- REQ-ENS-GW-12:
+  A deployment that answers Coin Type `60` MUST index the ENS Chain, which
+  is then a Consumer Chain. Necessity: `60` matches only the ENS Chain
+  (REQ-ENS-GW-03), so a Gateway that does not index it returns a Refusal for
+  every `60` query, and `addr(bytes32)`, the default query of most clients,
+  asks with `60`.
+- REQ-ENS-GW-13 (upholds SP-ENS-03):
+  The Gateways in one Handle Resolver's URL list MUST map the same Chain
+  Labels to the same chains. Necessity: a Gateway answers a Chain Label its
+  Indexed Store does not map with a Signed Null (REQ-ENS-GW-05), which ends
+  the client's walk; a Gateway missing a label that another in the list maps
+  to the selected chain would deny a binding the other could serve.
 
 ### 8.3 Answers
 
@@ -471,6 +492,23 @@ produce unchanged.
   would be deciding rather than reporting; this specification does not.
 - A binding on a chain means funds sent to the name on that chain reach its
   holder. A Workspace name publishes the employer's domain.
+- A Gateway signs a Signed Null for a Chain Label its Indexed Store does not
+  map, whether or not another Gateway in the URL list maps it. REQ-ENS-GW-13
+  is a deployment rule; nothing checks it, and a Gateway that breaks it
+  denies bindings under that label.
+- A deployment that does not index the ENS Chain answers every Coin Type
+  `60` query, including every `addr(bytes32)`, with a Refusal
+  (REQ-ENS-GW-12). Its names resolve only for clients that ask with a
+  chain's ENSIP-11 Coin Type.
+- MetaMask's ENS resolution (`@metamask/ens-resolver-snap`) was observed to
+  ask with the current chain's Coin Type first and, when that answer is
+  empty, to ask `addr(bytes32)` (Coin Type `60`, the ENS Chain), using that
+  address unless it has code on the current chain. A name without a Chain
+  Label can therefore give the ENS Chain's holder for a payment on a chain
+  where the handle is unbound or bound to someone else. A name with a Chain
+  Label naming a chain other than the ENS Chain defeats the fallback: the
+  `60` query names the ENS Chain, the label names another, and the answer is
+  a Signed Null.
 - The chain a transaction is finally sent on is the client's choice. A Chain
   Label cannot make a wallet send on that chain; it makes the Gateway
   withhold the address when the Coin Type disagrees.
@@ -494,6 +532,7 @@ produce unchanged.
 | REQ-ENS-LABEL-01 to LABEL-04 | `libID` `ts/packages/ens` (`@libid/ens`, libID PR #109, unmerged): the forward transform for the Parent Name `handles.link` only; it does not refuse a Workspace label with `--` at the third and fourth characters |
 | REQ-ENS-LABEL-05 | `usernames-indexer` `crates/usernames-core/src/ens.rs`, `crates/usernames-core/src/nodes.rs`: the MUST; the SHOULD is not implemented (§11) |
 | REQ-ENS-GW-01 to GW-11 | `usernames-indexer` `bin/usernames-api/src/ens.rs`, `crates/usernames-core/src/ens.rs`; the TTL ceiling of REQ-ENS-GW-08 in `bin/usernames-api/src/lib.rs` |
+| REQ-ENS-NAME-05, REQ-ENS-GW-12, REQ-ENS-GW-13 | deployment rules; nothing enforces them. `usernames-indexer` `bin/usernames-api/src/ens.rs` documents REQ-ENS-GW-12 |
 | REQ-ENS-KEY-01 | not met by the current deployment (§11) |
 
 ## 14. References
