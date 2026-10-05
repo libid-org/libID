@@ -284,9 +284,9 @@ produce unchanged.
   EVM chain when it is below 2^64 and is `60` or has bit 31 set; every Coin
   Type at or above 2^64 is non-EVM, and no indexed chain matches one, because
   the Indexed Store holds chain IDs below 2^64 only. With two or more matches
-  the Gateway MUST return a Refusal (HTTP 503). Necessity:
-  the resolver has one URL list for every query, and ERC-3668 has the client
-  walk it until one succeeds. A Signed Null is a success that ends the walk,
+  the Gateway MUST return a Refusal (HTTP 503). Necessity: the resolver has
+  one URL list for every query, and ERC-3668 has the client walk it until
+  one succeeds. A Signed Null is a success that ends the walk,
   so signing absence for a chain this Gateway does not hold would deny a
   binding a later Gateway in the list could serve. No libID binding is ever
   a non-EVM address, so that absence is known.
@@ -295,9 +295,10 @@ produce unchanged.
   the inverse of REQ-ENS-LABEL-05 refuses, and a Chain Label not naming the
   selected chain MUST each get a Signed Null.
 - REQ-ENS-GW-06 (upholds SP-ENS-03):
-  Before answering from a chain, the Gateway MUST return a Refusal (HTTP 503)
-  when that chain's index is more than the deployment's maximum lag behind,
-  or its indexer report has expired or is unknown. Necessity: a stale index
+  Before applying the handle rules or reading a holder, the Gateway MUST
+  return a Refusal (HTTP 503) when the selected chain's index is more than
+  the deployment's maximum lag behind, or its indexer report has expired or
+  is unknown. Necessity: a stale index
   can deny a binding that already exists.
 
 ### 8.3 Answers
@@ -318,9 +319,8 @@ produce unchanged.
   Handle Resolver address it is configured to serve, never the `{sender}` of
   the request, and with `expires` at most 3300 seconds after signing. It
   MUST sign the digest itself, with no further prefix, and encode the
-  signature as REQ-ENS-RES-03 requires. It MAY
-  refuse a `{sender}` that is not that address with HTTP 400, comparing
-  addresses case-insensitively. Necessity: on the Universal Resolver's
+  signature as REQ-ENS-RES-03 requires. It MAY refuse a `{sender}` that is
+  not that address with HTTP 400, comparing addresses case-insensitively. Necessity: on the Universal Resolver's
   direct-call route `{sender}` names the Universal Resolver, and the 300 s
   below the resolver's ceiling absorbs clock skew between Gateway and chain.
 - REQ-ENS-GW-09:
