@@ -244,6 +244,18 @@ URL-search-parameter encoding layer; decoding that layer reproduces the
 captured components without normalization or merging. The selected profile's
 OAuth parser handles their contents later.
 
+CCDP version 1 bounds these URL inputs. Browsers serialize URL components as
+ASCII, so each character below is one byte.
+
+| Input | Bound | Enforced by |
+|---|---|---|
+| Captured OAuth return: query and fragment together, `?` and `#` included | 32768 characters | Callback before connecting; the selected profile's OAuth parser |
+| Prefetch or Prover navigation fragment, `#` included | 65536 characters | the receiving document; Callback before navigating to Prover |
+| OAuth return field name | 64 characters | the selected profile's OAuth parser |
+| OAuth return field value, once decoded | 8192 UTF-16 code units | the selected profile's OAuth parser |
+
+Each listed participant refuses an input beyond its bound.
+
 Callback constructs this fragment locally for the frozen CCDP-origin Prover;
 the Application receives neither the return nor the navigation target.
 The Prover captures and clears it before use. Any internal isolation
@@ -958,6 +970,11 @@ cryptographic properties delegated to the common and platform specifications.
   Worker hash updates that registration rather than creating another scope.
 - TEST-CCDP-03 (exercises REQ-CCDP-03):
   Separate query/fragment bytes survive private navigation and isolation replacement, are cleared before use, and never appear in Application/control/signaling records. Duplicate or malformed fields fail.
+  Each fragment-model bound passes at its value and fails one past it:
+  Callback captures a 32768-character return and refuses 32769; Prefetch and
+  Prover read a 65536-character fragment and refuse 65537; the OAuth parser
+  accepts a 64-character field name and an 8192-unit decoded value and
+  refuses 65 and 8193.
 - TEST-CCDP-04 (exercises REQ-CCDP-04):
   Application admits the exact Bridge and CCDP origins and uses the ceremony ID
   as Connection ID. A different ID cannot bind that ceremony. When the Bridge
