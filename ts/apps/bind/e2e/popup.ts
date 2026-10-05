@@ -12,8 +12,6 @@ export interface Driver {
   onHost: (url: URL) => boolean
   /** Act on one of the platform's pages; `text` is its body, lowercased. */
   step: (url: URL, text: string) => Promise<void>
-  /** Whether leaving the platform now means the authorization is done. */
-  done?: () => boolean
 }
 
 /**
@@ -35,7 +33,7 @@ export async function drivePopup(popup: Page, driver: Driver) {
           .catch(() => '')) ?? ''
       ).toLowerCase()
       await driver.step(url, text)
-    } else if (url && visited && (driver.done?.() ?? true)) {
+    } else if (url && visited) {
       return
     }
     await sleep(250)

@@ -29,6 +29,8 @@ function totp(secret: string): string {
 
 /** What the login has done so far; each handler reads and updates it. */
 interface Progress {
+  /** The first GitHub page of the run: the authorization request, which a restart reopens. */
+  start?: string
   filled: boolean
   totpStep?: number
   rateLimited: number
@@ -39,7 +41,8 @@ async function onErrorPage(popup: Page, progress: Progress) {
   progress.errored += 1
   if (progress.errored > 3) throw new Error('GitHub answered its error page three times')
   await sleep(10_000 * progress.errored)
-  await popup.goBack().catch(() => {})
+  // Reopening the request keeps the popup on github.com until GitHub redirects.
+  if (progress.start) await popup.goto(progress.start).catch(() => {})
   progress.filled = false
   progress.totpStep = undefined
 }
@@ -86,9 +89,11 @@ async function onGitHubPage(
   popup: Page,
   account: GitHubAccount,
   progress: Progress,
-  path: string,
+  url: URL,
   text: string,
 ) {
+  progress.start ??= url.href
+  const path = url.pathname
   if (
     text.includes("couldn't respond to your request in time") ||
     text.includes('something went wrong')
@@ -106,17 +111,17 @@ async function onGitHubPage(
 }
 
 /**
- * Sign in and authorize on GitHub in `popup`, until it leaves github.com. A
- * port of libid-server-rs' ceremony-tests/src/browser/github.rs: fill the login
- * form once, answer the authenticator step once per 30-second code, approve the
- * OAuth app, and back off on GitHub's error and rate-limit pages.
+ * Sign in and authorize on GitHub in `popup`, until GitHub redirects away from
+ * github.com. A port of libid-server-rs' ceremony-tests/src/browser/github.rs:
+ * fill the login form once, answer the authenticator step once per 30-second
+ * code, approve the OAuth app, back off on rate-limit pages, and start the
+ * authorization over on GitHub's error page.
  */
 export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
   const progress: Progress = { filled: false, rateLimited: 0, errored: 0 }
   await drivePopup(popup, {
     name: 'GitHub',
     onHost: (url) => url.hostname === 'github.com',
-    step: (url, text) => onGitHubPage(popup, account, progress, url.pathname, text),
-    done: () => progress.filled,
+    step: (url, text) => onGitHubPage(popup, account, progress, url, text),
   })
 }
