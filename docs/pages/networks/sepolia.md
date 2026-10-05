@@ -8,8 +8,6 @@ sidebar:
 | | |
 | --- | --- |
 | Chain id | `11155111` |
-| `IdentityRegistry` | `0x25f29c8c765db2f27d1e2b23987a7b0655c7d640` |
-| `HandleEscrow` | `0x57355e1d1bcf61fec9b2e5cad60dcccdddc4d8e5` |
 
 Sepolia is a testnet: its contracts have the testnet
 [addresses](/docs/reference/addresses/), the same as Eden's. It runs

@@ -22,8 +22,8 @@ With that you can:
 
 - [Quickstart](/docs/get-started/quickstart/): read your first binding in a
   few minutes.
-- [Test on a local chain](/docs/guides/local-chain/): run everything on your
-  machine with known test data.
+- [Test on a local chain](/docs/guides/local-chain/): run the libID contracts
+  on your machine.
 
 ## Guides
 

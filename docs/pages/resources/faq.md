@@ -7,9 +7,11 @@ sidebar:
 
 ## Where can I test today?
 
-On a [local chain](/docs/guides/local-chain/), which comes with known test
-data, or on the [Eden testnet](/docs/networks/eden/), which runs the current
-contracts but has no identities bound yet.
+On [Sepolia](/docs/networks/sepolia/) or the
+[Eden testnet](/docs/networks/eden/), which run the current contracts, or on
+anvil with the full stack; see
+[Test on a local chain](/docs/guides/local-chain/). The local-chain project
+with known test data is not published yet.
 
 ## How does a user create a binding?
 

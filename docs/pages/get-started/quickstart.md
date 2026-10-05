@@ -12,10 +12,16 @@ wallet and no tokens.
 ## Set up
 
 You need [Node.js](https://nodejs.org) 20 or later, and a network that runs
-libID with some identities bound. Start the
-[local chain](/docs/guides/local-chain/) first: it binds known handles,
-including `octocat`. When `local.env` is loaded, `RPC_URL` and
-`IDENTITY_REGISTRY` are set.
+libID. Set `RPC_URL` and `IDENTITY_REGISTRY` for it. For Ethereum mainnet:
+
+```sh
+export RPC_URL=https://ethereum-rpc.publicnode.com
+export IDENTITY_REGISTRY=0xbefd300aff7d4a67fb381afe8b3596793d3e9a83
+```
+
+The other networks are listed under [Networks](/docs/networks/ethereum/).
+The output below comes from a [local chain](/docs/guides/local-chain/#the-guides-test-data)
+where `octocat` is bound.
 
 Create a project and install [viem](https://viem.sh) and the libID contracts
 package:
@@ -82,7 +88,9 @@ belongs to someone else.
 node index.mjs
 ```
 
-On the local chain you will see:
+If nobody has bound `octocat` on your network, it prints `null`. Try a
+handle that someone has bound. On the local chain, where `octocat` is bound,
+you will see:
 
 ```
 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
@@ -98,17 +106,8 @@ cast call $IDENTITY_REGISTRY 'resolveHandle(bytes32,string)(address)' \
   $(cast keccak github) octocat --rpc-url $RPC_URL
 ```
 
-## On a public network
-
-Set `RPC_URL` to the network's RPC, and `IDENTITY_REGISTRY` to the address
-`IdentityRegistry` has there:
-
-| Networks | `IDENTITY_REGISTRY` |
-| --- | --- |
-| Ethereum mainnet | `0xbefd300aff7d4a67fb381afe8b3596793d3e9a83` |
-| Sepolia, Eden testnet | `0x25f29c8c765db2f27d1e2b23987a7b0655c7d640` |
-
-See [Addresses](/docs/reference/addresses/) for the other contracts.
+See [Addresses](/docs/reference/addresses/) for every contract on every
+network.
 
 ## Next steps
 

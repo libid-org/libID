@@ -23,9 +23,10 @@ A paid deposit emits `Forwarded`, a held one `Deposited`. Held funds end one
 of two ways, `Claimed` or `Refunded`, whichever comes first.
 
 In this guide you play both people: a sender, with `PRIVATE_KEY`, and Carol,
-with `CAROL_KEY`. Both keys are set by the [local chain](/docs/guides/local-chain/),
-which also sets `HANDLE_ESCROW`. To use Eden instead, see
-[Eden testnet](/docs/networks/eden/).
+with `CAROL_KEY`. Set them, and `HANDLE_ESCROW`, as
+[Test on a local chain](/docs/guides/local-chain/) shows. Binding Carol's
+handle without a real proof needs the local-chain project, which is not
+published yet. On other networks, Carol binds with the libID sign-in flow.
 
 ## The sender's script
 
@@ -130,8 +131,9 @@ node sender.mjs
 
 In a real app, Carol proves `carol` on GitHub with the libID sign-in flow,
 which binds the handle to her address. See
-[How binding works](/docs/advanced/how-binding-works/). On the local chain,
-bind it from the `local-chain` directory:
+[How binding works](/docs/advanced/how-binding-works/). On the
+[local chain](/docs/guides/local-chain/#the-guides-test-data), bind it from
+the `local-chain` directory:
 
 ```sh
 ./bind.sh github 777 carol $CAROL_KEY

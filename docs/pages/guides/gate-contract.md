@@ -117,9 +117,10 @@ address. Your app can find a user's id with
 
 Put the interface and both contracts in `src/Gate.sol` of a
 [Foundry](https://getfoundry.sh) project, with
-`pragma solidity ^0.8.24;` at the top. With the
-[local chain](/docs/guides/local-chain/) running and `local.env` loaded,
-deploy the guestbook:
+`pragma solidity ^0.8.24;` at the top. Set `RPC_URL`,
+`IDENTITY_REGISTRY` and `PRIVATE_KEY` as
+[Test on a local chain](/docs/guides/local-chain/) shows, then deploy the
+guestbook:
 
 ```sh
 GUESTBOOK=$(forge create src/Gate.sol:Guestbook --broadcast \
@@ -127,7 +128,9 @@ GUESTBOOK=$(forge create src/Gate.sol:Guestbook --broadcast \
   --constructor-args $IDENTITY_REGISTRY | awk '/Deployed to/ {print $3}')
 ```
 
-`PRIVATE_KEY`'s address holds the GitHub handle `alice-dev`, so it can sign:
+On the [local chain](/docs/guides/local-chain/#the-guides-test-data),
+`PRIVATE_KEY`'s address holds the GitHub handle `alice-dev`, so it can sign.
+Elsewhere, use a handle your address has bound:
 
 ```sh
 cast send $GUESTBOOK 'sign(string,string)' alice-dev 'hello' \

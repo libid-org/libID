@@ -9,15 +9,12 @@ sidebar:
 | --- | --- |
 | Chain id | `3735928814` |
 | RPC | `https://ev-reth-eden-testnet.binarybuilders.services:8545` |
-| `IdentityRegistry` | `0x25f29c8c765db2f27d1e2b23987a7b0655c7d640` |
-| `HandleEscrow` | `0x57355e1d1bcf61fec9b2e5cad60dcccdddc4d8e5` |
 
 Eden is a testnet: its contracts have the testnet
 [addresses](/docs/reference/addresses/), the same as Sepolia's. It runs
 libID-contracts v0.17.0, the version these docs describe. GitHub,
 X and Google accept bindings there. No identity is bound on this registry
-yet, so lookups return `null` until someone binds one. Use the
-[local chain](/docs/guides/local-chain/) for known test data.
+yet, so lookups return `null` until someone binds one.
 
 To run a guide against Eden, set:
 

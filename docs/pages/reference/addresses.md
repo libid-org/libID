@@ -28,10 +28,6 @@ Production is [Ethereum mainnet](/docs/networks/ethereum/). The testnets are
 The same address on two networks does not mean the same version. Check each
 network's page for what it runs.
 
-The [local chain](/docs/guides/local-chain/) is an environment of its own,
-deployed by anvil's first account, so its contracts land at other addresses
-again. Its guide lists them.
-
 These addresses come from
 [chain-configurations](https://github.com/libid-org/chain-configurations/tree/main/networks),
 where `libid-deploy plan --print-addresses` generates them. If this page and
@@ -39,3 +35,36 @@ that repository disagree, trust the repository.
 
 Most apps only need `IdentityRegistry`. Your code talks to the others only if it
 builds proofs itself.
+
+## Local stacks
+
+Two ways to run libID on anvil give two different sets of addresses. See
+[Test on a local chain](/docs/guides/local-chain/) for both.
+
+`local-dev.toml` in chain-configurations deploys the full stack the way the
+public networks do: through a factory with CREATE3, with anvil's first
+account as the deployer. On a fresh anvil:
+
+| Contract | Address |
+| --- | --- |
+| `IdentityRegistry` | `0x105b32e3daa9fda3572e89992c73b85a8a1065b3` |
+| `HandleEscrow` | `0xcd1fb9627c011cce322dabfcbcb4a09f66b26432` |
+| `CeremonyProofVerifier` | `0xbf95e2ecad436a807f3204ac4cf388f3fa7b7b77` |
+| `NotaryService` | `0x562ff3231d8d3f8b0615914186e858c7cbfc2994` |
+| GitHub platform verifier | `0x12126c434c906ae8fc9731a96845bbf7bb679b9b` |
+| X platform verifier | `0x2a529253505b724a2ebd284ad40fcde5cc1dd5a7` |
+| Google platform verifier | `0xc32fca530bfe3c7f54bcb69cec8d965d4a52c73d` |
+| `GoogleJwtRoots` | `0x70580b148be716ad86da3f94243c9a8f3d5768bc` |
+| `LibidFactory` | `0x49852bc32a52a5cb5cdda135d1b244f5f5d57226` |
+
+The local-chain project the guides' output comes from is different. It
+deploys `IdentityRegistry`, a `CeremonyProofVerifier` with test verifiers,
+and `HandleEscrow`, with plain CREATE from anvil's first account. The two
+your code uses land at:
+
+| Contract | Address |
+| --- | --- |
+| `IdentityRegistry` | `0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512` |
+| `HandleEscrow` | `0x0B306BF915C4d645ff596e518fAf3F9669b97016` |
+
+That project is not published yet.

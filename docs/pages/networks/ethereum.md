@@ -8,8 +8,6 @@ sidebar:
 | | |
 | --- | --- |
 | Chain id | `1` |
-| `IdentityRegistry` | `0xbefd300aff7d4a67fb381afe8b3596793d3e9a83` |
-| `HandleEscrow` | `0x17a244e23ef1f12071298a1862194fea3d00bbf7` |
 
 Ethereum mainnet is libID's production network. Its contracts have the
 production [addresses](/docs/reference/addresses/). It runs libID-contracts
