@@ -15,11 +15,13 @@ import {
   custom,
   defineChain,
   type EIP1193Provider,
+  getContract,
   hexToBytes,
   http,
   type WalletClient,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
+import { BRIDGE, CHAIN_ID, NOTARY, type Platform, REGISTRY, RPC_URL } from '../local.ts'
 import {
   authorizedTransactionData,
   encodeGooglePayload,
@@ -33,18 +35,14 @@ declare global {
   }
 }
 
-const RPC_URL = import.meta.env.VITE_RPC_URL ?? 'http://127.0.0.1:4688'
-const REGISTRY: Address = '0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366'
-const BRIDGE = 'http://localhost:4682'
-const NOTARY = 'http://localhost:4687'
 const chain = defineChain({
-  id: 31337,
+  id: CHAIN_ID,
   name: 'Local',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: { default: { http: [RPC_URL] } },
 })
 const publicClient = createPublicClient({ chain, transport: http(RPC_URL) })
-const registry = { client: publicClient, address: REGISTRY }
+const registry = getContract({ address: REGISTRY, abi: identityRegistryAbi, client: publicClient })
 const ledger = evmLedger(chain.id, NOTARY)
 
 const field = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!
@@ -54,7 +52,6 @@ const show = (id: string, text: string) => {
 const status = (text: string) => show('status', text)
 const connectButton = document.querySelector<HTMLButtonElement>('#connect')!
 
-type Platform = 'github' | 'x' | 'google'
 const names: Record<Platform, string> = { github: 'GitHub', x: 'X', google: 'Google' }
 const anchors = Object.fromEntries(
   (Object.keys(names) as Platform[]).map((platform) => [
@@ -108,20 +105,12 @@ async function submit(
   if (!wallet || !holder) throw new Error('Wallet disconnected')
   show('proof-received', `${result.identity.userName} (${result.identity.userId})`)
   const id = platformId(platform)
-  const value = await publicClient.readContract({
-    address: REGISTRY,
-    abi: identityRegistryAbi,
-    functionName: 'quoteBind',
-    args: [id, result.oauthProof.platformCeremonyVersion],
-  })
+  const version = result.oauthProof.platformCeremonyVersion
+  const value = await registry.read.quoteBind([id, version])
   const payload = payloadOf(result, operationDomain, transactionData)
   status('Submitting the binding…')
-  const { request } = await publicClient.simulateContract({
+  const { request } = await registry.simulate.bind([id, version, payload, true], {
     account: holder,
-    address: REGISTRY,
-    abi: identityRegistryAbi,
-    functionName: 'bind',
-    args: [id, result.oauthProof.platformCeremonyVersion, payload, true],
     value,
   })
   const hash = await wallet.writeContract({ ...request, account: wallet.account ?? holder })
@@ -130,11 +119,16 @@ async function submit(
   show('receipt-status', `${receipt.status} in block ${receipt.blockNumber}`)
   if (receipt.status !== 'success') throw new Error('The binding transaction reverted')
 
-  const bound = await resolveId(registry, id, result.identity.userId)
+  const bound = await resolveId(
+    { client: publicClient, address: REGISTRY },
+    id,
+    result.identity.userId,
+  )
   show('registry-holder', bound ?? 'not bound')
   status('Bound on chain. Waiting for the indexer…')
   show('indexer-holder', await indexed(platform, result.identity.userId))
   status('Done.')
+  show('outcome', 'bound')
 }
 
 /** The holder the indexer reports for an id, polled until it appears. */
@@ -186,15 +180,15 @@ function launch(
     .proveUserIdentity()
     .then(async (result) => {
       connection.close()
-      if (result.status !== 'accepted') {
-        status(`${names[platform]} denied the authorization.`)
-        return
-      }
+      if (result.status !== 'accepted')
+        throw new Error(`${names[platform]} denied the authorization.`)
       await submit(platform, result, transactionData, operationDomain)
     })
-    .catch((error: unknown) =>
-      status(error instanceof Error ? error.message : 'The binding failed.'),
-    )
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'The binding failed.'
+      status(message)
+      show('outcome', `failed: ${message}`)
+    })
     .finally(off)
 }
 
@@ -203,13 +197,7 @@ async function initialize() {
   const enabled = (Object.keys(names) as Platform[]).filter((platform) =>
     client.enabledPlatforms.includes(platform),
   )
-  const operationDomain = hexToBytes(
-    await publicClient.readContract({
-      address: REGISTRY,
-      abi: identityRegistryAbi,
-      functionName: 'OPERATION_DOMAIN',
-    }),
-  )
+  const operationDomain = hexToBytes(await registry.read.OPERATION_DOMAIN())
   connectButton.addEventListener('click', () => {
     connect().then(
       () => {

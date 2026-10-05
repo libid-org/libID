@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@libid/ceremony": "workspace:^",
-    "@libid/contracts": "0.15.0",
+    "@libid/contracts": "0.15.1",
     "@libid/ledger": "workspace:^",
     "@libid/popup": "workspace:^",
     "viem": "^2.48.11"

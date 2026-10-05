@@ -103,7 +103,7 @@ services:
       IDENTITY_NAMES_ADDRESS: "0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366"
       CHAIN_NAMES: local
       CHAIN_ID: "31337"
-      # anvil mines only when a transaction arrives: no confirmations to wait for.
+      # A local chain does not reorganize: no confirmations to wait for.
       CONFIRMATIONS: "0"
       POLL_INTERVAL_SECS: "1"
     depends_on:

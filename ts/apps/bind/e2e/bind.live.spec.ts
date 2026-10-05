@@ -1,31 +1,17 @@
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
+import { RPC_URL } from '../local.ts'
 import { authorizeOnGitHub, githubAccount } from './github.ts'
 import { authorizeOnGoogle, googleSession } from './google.ts'
+import { isLive, liveSecret } from './live.ts'
 import { presentAsPerson } from './person.ts'
 import { restoreSession } from './session.ts'
 import { injectWallet } from './wallet.ts'
 import { authorizeOnX, restoreXSession, xSession } from './x.ts'
 
-const RPC_URL = 'http://127.0.0.1:4688'
 /** anvil account #2: unlocked by anvil, funded, and not one the deploy uses. */
 const HOLDER = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'
-
-/**
- * Wait for the page to show `expectedUser` as proved. Proving runs in the
- * popup's Prover document after the OAuth return; a failed ceremony ends the
- * wait with the page's own message.
- */
-async function proofReceived(page: Page, expectedUser: string, timeoutMs = 300_000) {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if ((await page.getByTestId('stage').textContent()) === 'failed')
-      throw new Error(`The ceremony failed: ${await page.getByTestId('status').textContent()}`)
-    const proved = await page.getByTestId('proof-received').textContent()
-    if (proved?.toLowerCase().includes(expectedUser.toLowerCase())) return
-    await page.waitForTimeout(500)
-  }
-  throw new Error(`No proof for ${expectedUser} in ${timeoutMs / 1000} s`)
-}
+/** Proving, the transaction, and the indexer's poll, after the platform returns. */
+const OUTCOME_TIMEOUT = 8 * 60_000
 
 /**
  * Connect the wallet, start the platform's ceremony from its link, let
@@ -52,21 +38,22 @@ async function bindThroughTheUi(
   ])
   await authorize(popup)
 
-  await proofReceived(page, expectedUser)
-  await expect(page.getByTestId('tx-hash')).toHaveText(/^0x[0-9a-f]{64}$/, { timeout: 60_000 })
-  await expect(page.getByTestId('receipt-status')).toHaveText(/^success in block \d+$/, {
-    timeout: 60_000,
-  })
+  // The page reports one outcome when the run ends, its own message on failure.
+  const outcome = page.getByTestId('outcome')
+  await expect(outcome).not.toHaveText('—', { timeout: OUTCOME_TIMEOUT })
+  await expect(outcome).toHaveText('bound')
+  await expect(page.getByTestId('proof-received')).toContainText(expectedUser, { ignoreCase: true })
+  await expect(page.getByTestId('tx-hash')).toHaveText(/^0x[0-9a-f]{64}$/)
+  await expect(page.getByTestId('receipt-status')).toHaveText(/^success in block \d+$/)
   await expect(page.getByTestId('registry-holder')).toHaveText(HOLDER)
-  await expect(page.getByTestId('indexer-holder')).toHaveText(new RegExp(`^${HOLDER}$`, 'i'), {
-    timeout: 90_000,
-  })
+  await expect(page.getByTestId('indexer-holder')).toHaveText(new RegExp(`^${HOLDER}$`, 'i'))
 }
 
 test('a GitHub identity is proved in the browser, bound on chain, and shown', async ({
   page,
   context,
 }) => {
+  test.skip(!isLive('github'), 'GitHub is not in LIBID_LIVE_PLATFORMS')
   const account = githubAccount()
   test.skip(!account, 'GH_TEST_ALICE_USERNAME, _PASSWORD and _TOTP_SECRET are not set')
   await bindThroughTheUi(page, context, 'GitHub', account!.username, (popup) =>
@@ -78,9 +65,10 @@ test('an X identity is proved in the browser, bound on chain, and shown', async 
   page,
   context,
 }) => {
+  test.skip(!isLive('x'), 'X is not in LIBID_LIVE_PLATFORMS')
   const session = xSession()
   test.skip(!session, 'X_TEST_ALICE_COOKIES or X_TEST_ALICE_COOKIES_FILE is not set')
-  const username = process.env.X_TEST_ALICE_USERNAME
+  const username = liveSecret('X_TEST_ALICE_USERNAME')
   test.skip(!username, 'X_TEST_ALICE_USERNAME is not set')
   await presentAsPerson(context)
   await restoreXSession(context, session!)
@@ -91,9 +79,10 @@ test('a Google identity is proved in the browser, bound on chain, and shown', as
   page,
   context,
 }) => {
+  test.skip(!isLive('google'), 'Google is not in LIBID_LIVE_PLATFORMS')
   const session = googleSession()
   test.skip(!session, 'GOOGLE_TEST_ALICE_COOKIES or GOOGLE_TEST_ALICE_COOKIES_FILE is not set')
-  const email = process.env.GOOGLE_TEST_ALICE_EMAIL
+  const email = liveSecret('GOOGLE_TEST_ALICE_EMAIL')
   test.skip(!email, 'GOOGLE_TEST_ALICE_EMAIL is not set')
   await presentAsPerson(context)
   await restoreSession(context, session!)

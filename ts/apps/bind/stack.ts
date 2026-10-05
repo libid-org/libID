@@ -1,27 +1,33 @@
-// Start a local chain with the real libID contracts and Google's keys rotated in,
-// the notary, Bridge, CCDP and the indexer; with --app, also the bind
-// application. No OAuth mocks.
+// Start a local chain with the real libID contracts and, when this run binds
+// Google (LIBID_LIVE_PLATFORMS), Google's keys rotated in; the notary, Bridge,
+// CCDP and the indexer; with --app, also the bind application. No OAuth mocks.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { identityRegistryAbi, platformId } from '@libid/contracts'
+import { googleJwtRootsAbi, identityRegistryAbi, platformId } from '@libid/contracts'
 import { createPublicClient, http } from 'viem'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
+import {
+  API,
+  APP_ORIGIN,
+  CHAIN_ID,
+  GOOGLE_JWT_ROOTS,
+  livePlatforms,
+  REGISTRY,
+  RPC_URL,
+} from './local.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 const cache = join(root, '.cache')
 const project = `libid-bind-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
 
-export const RPC_URL = 'http://127.0.0.1:4688'
-export const REGISTRY = '0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366' as const
-const GOOGLE_JWT_ROOTS = '0xb7a2ce28e71dbb9c877d2b5a48de33b5f0e6838d' as const
+// Docker publishes on 127.0.0.1; the browser reaches Bridge as localhost.
 const BRIDGE = 'http://127.0.0.1:4682'
-const API = 'http://127.0.0.1:4689'
-const APP_ORIGIN = 'http://localhost:4695'
+const chain = createPublicClient({ transport: http(RPC_URL) })
 
 /** chain-configurations' deploy tool; it deploys the real verifiers, not stubs. */
 const DEPLOY = {
@@ -30,16 +36,15 @@ const DEPLOY = {
   sha256: 'dc1cc678d861bf91494bcf827bd321904b6c3d5855df9821eafae2afd77914a6',
 }
 
-async function rpc(method: string, params: unknown[]): Promise<unknown> {
-  const response = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    signal: AbortSignal.timeout(2000),
+/** Run a command to completion, its output on ours; reject on a nonzero exit. */
+function run(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: 'inherit' })
+    child.on('error', reject)
+    child.on('exit', (code) =>
+      code === 0 ? resolve() : reject(new Error(`${command} ${args[0]} exited with ${code}`)),
+    )
   })
-  const body = (await response.json()) as { result?: unknown; error?: { message: string } }
-  if (body.error) throw new Error(body.error.message)
-  return body.result
 }
 
 async function until(what: string, check: () => Promise<boolean>, seconds = 120) {
@@ -73,21 +78,16 @@ async function deployTool(): Promise<string> {
 /** Deploy the stack to the fresh anvil, then check what the app relies on. */
 async function deploy() {
   const tool = await deployTool()
-  execFileSync(
-    tool,
-    [
-      'apply',
-      '--network',
-      join(root, 'local-dev.toml'),
-      '--rpc-url',
-      RPC_URL,
-      '--yes',
-      '--confirm-fresh-deploy',
-      '--dev',
-    ],
-    { stdio: 'inherit' },
-  )
-  const chain = createPublicClient({ transport: http(RPC_URL) })
+  await run(tool, [
+    'apply',
+    '--network',
+    join(root, 'local-dev.toml'),
+    '--rpc-url',
+    RPC_URL,
+    '--yes',
+    '--confirm-fresh-deploy',
+    '--dev',
+  ])
   // Two notary fees: the GitHub verifier is registered and the notary service wired.
   const quote = await chain.readContract({
     address: REGISTRY,
@@ -97,19 +97,7 @@ async function deploy() {
   })
   if (quote !== 2_000_000_000_000_000n)
     throw new Error(`quoteBind(github, 1) is ${quote}, expected 2e15`)
-  const code = (await rpc('eth_getCode', [REGISTRY, 'latest'])) as string
-  if (code === '0x') throw new Error('IdentityRegistry has no code after deploy')
 }
-
-const jwtRootsAbi = [
-  {
-    type: 'function',
-    name: 'needsRotation',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'bool' }],
-  },
-] as const
 
 /**
  * One keeper rotation: a notarized reading of Google's keys into
@@ -117,20 +105,17 @@ const jwtRootsAbi = [
  * verifies.
  */
 async function rotateGoogleKeys() {
-  execFileSync('docker', [...composeArgs, '--profile', 'keeper', 'run', '--rm', 'keeper'], {
-    stdio: 'inherit',
-  })
-  const chain = createPublicClient({ transport: http(RPC_URL) })
+  await run('docker', [...composeArgs, '--profile', 'keeper', 'run', '--rm', 'keeper'])
   const stale = await chain.readContract({
     address: GOOGLE_JWT_ROOTS,
-    abi: jwtRootsAbi,
+    abi: googleJwtRootsAbi,
     functionName: 'needsRotation',
   })
   if (stale) throw new Error('GoogleJwtRoots still needs a rotation after the keeper ran')
 }
 
 async function ready() {
-  await until('Bridge', async () => {
+  const bridge = until('Bridge', async () => {
     const response = await fetch(`${BRIDGE}/api/v1/ceremony/config`, {
       headers: { Origin: APP_ORIGIN },
       redirect: 'error',
@@ -139,11 +124,18 @@ async function ready() {
     await response.body?.cancel()
     return response.status === 200
   })
-  await until('indexer API', async () => {
+  const api = until('indexer API', async () => {
     const response = await fetch(`${API}/v1/status`, { signal: AbortSignal.timeout(1000) })
     await response.body?.cancel()
     return response.status === 200
   })
+  await Promise.all([bridge, api])
+}
+
+/** The chain's contracts, then Google's keys when this run binds Google. */
+async function chainReady() {
+  await deploy()
+  if (livePlatforms(process.env).includes('google')) await rotateGoogleKeys()
 }
 
 // ─── Main ───────────────────────────────────────────────────────
@@ -200,10 +192,9 @@ compose.on('exit', (code) => {
 })
 
 try {
-  await until('anvil', async () => (await rpc('eth_chainId', [])) === '0x7a69')
-  await deploy()
-  await rotateGoogleKeys()
-  await ready()
+  await until('anvil', async () => (await chain.getChainId()) === CHAIN_ID)
+  // Bridge and the indexer need neither the deploy nor the keeper.
+  await Promise.all([chainReady(), ready()])
   console.info(`Stack ready: chain ${RPC_URL}, registry ${REGISTRY}, indexer ${API}`)
   if (process.argv.includes('--app') && !stopping) {
     frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })

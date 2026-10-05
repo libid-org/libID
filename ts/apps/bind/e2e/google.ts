@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import { clickMarked, drivePopup } from './popup.ts'
 import { savedSession } from './session.ts'
 
 /**
@@ -9,8 +10,6 @@ import { savedSession } from './session.ts'
  */
 export const googleSession = () =>
   savedSession('GOOGLE_TEST_ALICE', ['SID', '__Secure-1PSID', '__Secure-3PSID'])
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** Pages that no automation gets past: the session or the OAuth client needs a person. */
 const REFUSED: [string, string][] = [
@@ -30,13 +29,13 @@ const LOGIN_VISIBLE = `[...document.querySelectorAll('input[type=password],input
 
 /** The account row for `email`, else a Continue or Allow button, marked for a real click. */
 const markNext = (email: string) => `(() => {
-  document.querySelectorAll('[data-libid-google]').forEach(e => e.removeAttribute('data-libid-google'));
+  document.querySelectorAll('[data-libid-click]').forEach(e => e.removeAttribute('data-libid-click'));
   const usable = e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
   const account = [...document.querySelectorAll('[data-identifier]')].find(e => usable(e) && e.getAttribute('data-identifier').toLowerCase() === ${JSON.stringify(email.toLowerCase())});
   const consent = [...document.querySelectorAll('button,[role=button],input[type=submit]')].find(e => usable(e) && /^(continue|allow)$/i.test((e.innerText || e.value || '').trim()));
   const next = account || consent;
   if (!next) return false;
-  next.setAttribute('data-libid-google', '1');
+  next.setAttribute('data-libid-click', '1');
   return true;
 })()`
 
@@ -46,46 +45,23 @@ const markNext = (email: string) => `(() => {
  * ceremony-tests/src/browser/google.rs without its sign-in: a login page means
  * the saved session has expired.
  */
-export async function authorizeOnGoogle(popup: Page, email: string, budgetMs = 180_000) {
-  const started = Date.now()
-  let visited = false
+export async function authorizeOnGoogle(popup: Page, email: string) {
   let clickedAt = 0
-  while (Date.now() - started < budgetMs) {
-    if (popup.isClosed()) return
-    const url = URL.parse(popup.url())
-    if (url?.hostname !== 'accounts.google.com') {
-      if (visited) return
-      await sleep(250)
-      continue
-    }
-    visited = true
-    const text = (
-      (await popup
-        .locator('body')
-        .textContent()
-        .catch(() => '')) ?? ''
-    )
-      .toLowerCase()
-      .replaceAll('’', "'")
-    const refused = REFUSED.find(([marker]) => text.includes(marker))
-    if (refused) throw new Error(`${refused[1]} (${url.pathname})`)
-    if (url.pathname.includes('/challenge/'))
-      throw new Error(`Google asks to verify the account interactively (${url.pathname})`)
-    if (await popup.evaluate(LOGIN_VISIBLE).catch(() => false))
-      throw new Error(
-        'Google asked to sign in: the saved session has expired. Renew it with `ceremony export google`.',
-      )
-    if (
-      Date.now() - clickedAt > 3_000 &&
-      (await popup.evaluate(markNext(email)).catch(() => false))
-    ) {
-      await popup
-        .locator('[data-libid-google="1"]')
-        .click({ timeout: 5_000 })
-        .catch(() => {})
-      clickedAt = Date.now()
-    }
-    await sleep(250)
-  }
-  throw new Error(`No Google authorization in ${budgetMs / 1000} s; stopped on ${popup.url()}`)
+  await drivePopup(popup, {
+    name: 'Google',
+    onHost: (url) => url.hostname === 'accounts.google.com',
+    step: async (url, body) => {
+      const text = body.replaceAll('’', "'")
+      const refused = REFUSED.find(([marker]) => text.includes(marker))
+      if (refused) throw new Error(`${refused[1]} (${url.pathname})`)
+      if (url.pathname.includes('/challenge/'))
+        throw new Error(`Google asks to verify the account interactively (${url.pathname})`)
+      if (await popup.evaluate(LOGIN_VISIBLE).catch(() => false))
+        throw new Error(
+          'Google asked to sign in: the saved session has expired. Renew it with `ceremony export google`.',
+        )
+      if (Date.now() - clickedAt > 3_000 && (await clickMarked(popup, markNext(email))))
+        clickedAt = Date.now()
+    },
+  })
 }

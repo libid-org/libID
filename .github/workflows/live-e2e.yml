@@ -45,9 +45,10 @@ jobs:
 
       # Google is left out: it challenges a saved session arriving from a
       # runner's address ("Verify it's you"), which no automation passes. Its
-      # test still runs locally.
+      # test still runs locally, and the stack rotates no Google keys here.
       - name: Bind GitHub and X identities end to end
         env:
+          LIBID_LIVE_PLATFORMS: github,x
           LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
           GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
@@ -55,33 +56,20 @@ jobs:
           X_TEST_ALICE_USERNAME: ${{ secrets.X_TEST_ALICE_USERNAME }}
           # The saved X session, base64 of libid-server-rs' `ceremony export x`.
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
-        run: pnpm -C ts/apps/bind test:live --grep-invert Google
+        run: pnpm -C ts/apps/bind test:live
 
-      # The artifact is public. Refuse to upload it if any file holds a secret:
-      # the password, the TOTP secret, or a value of the saved X session.
+      # The artifact is public: only screenshots, Playwright's error notes and
+      # the container log go up, and only when none of them holds a secret.
       - name: Check the failure output for secrets
         id: scan
         if: failure()
         env:
-          LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
+          # A session that is not configured is nothing to look for.
+          LIBID_REQUIRE_LIVE: ""
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
           GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
-        run: |
-          node --input-type=module -e '
-            import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
-            import { join } from "node:path"
-            const env = process.env
-            const cookies = JSON.parse(Buffer.from(env.X_TEST_ALICE_COOKIES ?? "", "base64").toString() || "[]")
-            const secrets = [env.GH_TEST_ALICE_PASSWORD, env.GH_TEST_ALICE_TOTP_SECRET,
-              ...(Array.isArray(cookies) ? cookies : cookies.cookies).map((c) => c.value)]
-              .filter((s) => s && s.length >= 8)
-            const files = (p) => !existsSync(p) ? [] : statSync(p).isDirectory()
-              ? readdirSync(p).flatMap((f) => files(join(p, f))) : [p]
-            const found = [...files("ts/apps/bind/test-results"), ...files(env.LIBID_STACK_LOGS)]
-              .filter((f) => { const b = readFileSync(f); return secrets.some((s) => b.includes(s)) })
-            if (found.length) { console.error("Secrets in:", found.join(", ")); process.exit(1) }
-          '
+        run: node ts/apps/bind/e2e/scan-secrets.ts ts/apps/bind/test-results "${{ runner.temp }}/stack.log"
 
       - name: Keep the screenshots and container logs
         if: failure() && steps.scan.outcome == 'success'
@@ -89,7 +77,8 @@ jobs:
         with:
           name: live-e2e
           path: |
-            ts/apps/bind/test-results
+            ts/apps/bind/test-results/**/*.png
+            ts/apps/bind/test-results/**/*.md
             ${{ runner.temp }}/stack.log
           retention-days: 14
           if-no-files-found: ignore

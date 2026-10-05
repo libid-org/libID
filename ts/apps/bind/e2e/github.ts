@@ -1,5 +1,7 @@
 import type { Page } from '@playwright/test'
 import * as OTPAuth from 'otpauth'
+import { liveSecret } from './live.ts'
+import { drivePopup, sleep } from './popup.ts'
 
 export interface GitHubAccount {
   username: string
@@ -7,19 +9,12 @@ export interface GitHubAccount {
   totpSecret: string
 }
 
-/**
- * The test account, from GH_TEST_ALICE_*; undefined when any is missing,
- * which skips the test locally. With LIBID_REQUIRE_LIVE set, as CI sets it, a
- * missing secret fails instead.
- */
+/** The test account, from GH_TEST_ALICE_*; undefined when any is missing (see liveSecret). */
 export function githubAccount(): GitHubAccount | undefined {
-  const username = process.env.GH_TEST_ALICE_USERNAME
-  const password = process.env.GH_TEST_ALICE_PASSWORD
-  const totpSecret = process.env.GH_TEST_ALICE_TOTP_SECRET
-  if (username && password && totpSecret) return { username, password, totpSecret }
-  if (process.env.LIBID_REQUIRE_LIVE)
-    throw new Error('LIBID_REQUIRE_LIVE is set but GH_TEST_ALICE_* are missing')
-  return undefined
+  const username = liveSecret('GH_TEST_ALICE_USERNAME')
+  const password = liveSecret('GH_TEST_ALICE_PASSWORD')
+  const totpSecret = liveSecret('GH_TEST_ALICE_TOTP_SECRET')
+  return username && password && totpSecret ? { username, password, totpSecret } : undefined
 }
 
 function totp(secret: string): string {
@@ -31,8 +26,6 @@ function totp(secret: string): string {
     period: 30,
   }).generate()
 }
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** What the login has done so far; each handler reads and updates it. */
 interface Progress {
@@ -118,25 +111,12 @@ async function onGitHubPage(
  * form once, answer the authenticator step once per 30-second code, approve the
  * OAuth app, and back off on GitHub's error and rate-limit pages.
  */
-export async function authorizeOnGitHub(popup: Page, account: GitHubAccount, budgetMs = 180_000) {
-  const started = Date.now()
+export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
   const progress: Progress = { filled: false, rateLimited: 0, errored: 0 }
-  while (Date.now() - started < budgetMs) {
-    if (popup.isClosed()) return
-    const url = URL.parse(popup.url())
-    if (url?.hostname === 'github.com') {
-      const text = (
-        (await popup
-          .locator('body')
-          .textContent()
-          .catch(() => '')) ?? ''
-      ).toLowerCase()
-      await onGitHubPage(popup, account, progress, url.pathname, text)
-    } else if (url && progress.filled) {
-      // Back from GitHub: Callback and Prover take over.
-      return
-    }
-    await sleep(250)
-  }
-  throw new Error(`No GitHub authorization in ${budgetMs / 1000} s; stopped on ${popup.url()}`)
+  await drivePopup(popup, {
+    name: 'GitHub',
+    onHost: (url) => url.hostname === 'github.com',
+    step: (url, text) => onGitHubPage(popup, account, progress, url.pathname, text),
+    done: () => progress.filled,
+  })
 }

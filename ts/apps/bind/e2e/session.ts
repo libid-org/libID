@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import type { BrowserContext } from '@playwright/test'
+import { liveSecret } from './live.ts'
 
 /** One cookie as libid-server-rs' `ceremony export` saves it; both key casings occur. */
 export interface Stored {
@@ -32,9 +33,11 @@ export function savedSession(prefix: string, required: string[]): Stored[] | und
       isAbsolute(file) ? file : join(process.env.LIBID_TEST_ENV_DIR ?? '.', file),
       'utf8',
     )
-  else if (process.env.LIBID_REQUIRE_LIVE)
-    throw new Error(`LIBID_REQUIRE_LIVE is set but ${prefix}_COOKIES(_FILE) is not`)
-  else return undefined
+  else {
+    // Neither is set: fails under LIBID_REQUIRE_LIVE, skips otherwise.
+    liveSecret(`${prefix}_COOKIES`)
+    return undefined
+  }
   const parsed = JSON.parse(json) as Stored[] | { cookies: Stored[] }
   const cookies = Array.isArray(parsed) ? parsed : parsed.cookies
   if (!cookies.some((cookie) => required.includes(cookie.name)))
@@ -53,22 +56,24 @@ const sameSite = (value: string | null | undefined): 'Strict' | 'Lax' | 'None' |
         : undefined
 }
 
-/** Put saved cookies in the browser context, each on its own domain unless `domainOf` maps it. */
+/** Put saved cookies in the browser context, on their own domain or each of `domainsOf`'s. */
 export async function restoreSession(
   context: BrowserContext,
   cookies: Stored[],
-  domainOf: (domain: string) => string = (domain) => domain,
+  domainsOf: (domain: string) => string[] = (domain) => [domain],
 ) {
   await context.addCookies(
-    cookies.map((cookie) => ({
-      name: cookie.name,
-      value: cookie.value,
-      domain: domainOf(cookie.domain),
-      path: cookie.path || '/',
-      secure: cookie.secure ?? true,
-      httpOnly: cookie.http_only ?? cookie.httpOnly ?? false,
-      sameSite: sameSite(cookie.same_site ?? cookie.sameSite),
-      expires: cookie.expires && cookie.expires > 0 ? cookie.expires : -1,
-    })),
+    cookies.flatMap((cookie) =>
+      domainsOf(cookie.domain).map((domain) => ({
+        name: cookie.name,
+        value: cookie.value,
+        domain,
+        path: cookie.path || '/',
+        secure: cookie.secure ?? true,
+        httpOnly: cookie.http_only ?? cookie.httpOnly ?? false,
+        sameSite: sameSite(cookie.same_site ?? cookie.sameSite),
+        expires: cookie.expires && cookie.expires > 0 ? cookie.expires : -1,
+      })),
+    ),
   )
 }
