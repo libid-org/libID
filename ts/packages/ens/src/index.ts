@@ -12,8 +12,8 @@ import {
 
 export { HandleError, type Rules } from '@libid/contracts/identity'
 
-/** The ENS name libID names sit under unless a deployment names another. */
-export const PARENT_NAME = 'handles.link'
+/** The production deployment's Parent Name (ENS integration spec §2). */
+const PARENT_NAME = 'handles.link'
 
 const PLATFORMS = [PLATFORM_GITHUB_KEY, PLATFORM_X_KEY, PLATFORM_GOOGLE_KEY] as const
 
@@ -33,7 +33,7 @@ export interface NameOptions {
   chain?: string
   /**
    * The name the gateway answers under, such as `testnet.handles.link`.
-   * Defaults to {@link PARENT_NAME}.
+   * Defaults to `handles.link`.
    */
   parent?: string
   /**
