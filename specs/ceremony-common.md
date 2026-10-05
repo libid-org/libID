@@ -247,8 +247,11 @@ Attestation Count: The number of entries in the closed attestation list a
   A proof accepted under the verifier artifact selected for its platform and
   version pair satisfies that Platform Profile's complete proof statement.
   Verifier governance MAY replace an artifact only with one that enforces the
-  same statement; changing the statement requires a new Platform Ceremony
-  Version.
+  same statement; changing the statement of a released Platform Ceremony
+  Version requires a new Platform Ceremony Version. A version is released
+  once a Consumer Chain accepts proofs under it in production. Before then
+  its statement is edited in place, under the same number, and an artifact
+  built for an earlier edit enforces no statement of that version.
 - ASM-BROWSER-01:
   The Canonical Runtime executes unmodified, and the user agent enforces the
   same-origin policy over authorization responses.
