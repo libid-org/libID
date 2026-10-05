@@ -110,7 +110,7 @@ Refusal: An unsigned HTTP error. It asserts nothing about any binding.
   Type's answer.
 
 These properties do not survive compromise of a Signer key, which can answer
-with any address (§10).
+with any address (§11).
 
 ## 5. Names
 
@@ -221,9 +221,11 @@ produce unchanged.
   The Handle Resolver MUST be the resolver of the Parent Name and MUST hold
   no per-name state. It MUST answer `supportsInterface` true for ENSIP-10
   `IExtendedResolver` (`0x9061b923`) and ERC-165 (`0x01ffc9a7`) only.
-  Necessity: announcing ERC-7996 makes the ENS Universal Resolver raise the
-  lookup under its own address (ENSIP-22), which the Gateway refuses under
-  REQ-ENS-GW-08.
+  Necessity: announcing ERC-7996 lets the ENS Universal Resolver call the
+  resolver directly and raise the lookup under its own address (ENSIP-22),
+  so `{sender}` names the Universal Resolver. REQ-ENS-GW-08 permits a
+  Gateway to refuse that `{sender}` with HTTP 400, the deployed Gateway does
+  (step 1 of REQ-ENS-GW-11), and a 4xx ends the client's lookup.
 - REQ-ENS-RES-02:
   `resolve(bytes name, bytes data)` MUST revert with ERC-3668
   `OffchainLookup(address(this), urls, callData, resolveWithProof.selector,
@@ -370,7 +372,8 @@ produce unchanged.
 
   1. `{sender}` (REQ-ENS-GW-08) and `{data}` (REQ-ENS-GW-01): HTTP 400.
   2. The name's wire rules and Parent Name (REQ-ENS-GW-02): HTTP 400.
-  3. A record other than `addr`: the signed empty result.
+  3. A record other than `addr`, or an `addr` call whose arguments do not
+     decode: the signed empty result.
   4. An `addr` node that is not the name's namehash: HTTP 400.
   5. Choosing the chain (REQ-ENS-GW-03, REQ-ENS-GW-04): a Refusal, or a
      Signed Null for a non-EVM Coin Type.
@@ -383,7 +386,8 @@ produce unchanged.
   client walks on to a Gateway that may read the name; and no step before
   staleness reads a binding.
 
-  Consequence: a record other than `addr` gets its signed empty result
+  Consequence: a record other than `addr`, and an `addr` call whose
+  arguments do not decode, get the signed empty result
   whatever the Coin Type and however stale the index, and the Signed Nulls of
   REQ-ENS-GW-05 are signed while the selected chain's index is stale or its
   report has expired or is unknown. Those answers depend on the name, the
@@ -452,6 +456,32 @@ produce unchanged.
   the name's namehash gets the signed empty result; with the selected
   chain's index stale, a mismatched Chain Label gets a Signed Null and a
   readable handle gets a Refusal.
+- TEST-ENS-08 (exercises REQ-ENS-RES-01):
+  `supportsInterface` is true for `0x9061b923` and `0x01ffc9a7`, and false
+  for ERC-7996 (`0x582de3e7`), `0xffffffff`, and any other identifier.
+- TEST-ENS-09 (exercises REQ-ENS-RES-02):
+  `resolve` reverts `OffchainLookup` whose sender is the Handle Resolver,
+  whose URL list is the stored one, whose `callData` and `extraData` both
+  equal the ABI-encoded `resolve(name, data)` call, and whose callback is
+  the `resolveWithProof` selector; with the URL list empty it reverts
+  `NoUrls()`.
+- TEST-ENS-10 (exercises REQ-ENS-RES-04):
+  A non-owner calling `setUrls` or `setSigner` reverts; ownership moves only
+  when the new owner accepts it; `renounceOwnership` reverts.
+- TEST-ENS-11 (exercises REQ-ENS-RES-05):
+  Every deploy path refuses a URL lacking `{sender}` or `{data}`, and every
+  URL a deployed Handle Resolver stores carries both.
+- TEST-ENS-12 (exercises REQ-ENS-GW-01):
+  One `{data}` with and without `0x`, and with and without `.json`, gets one
+  answer; a `{data}` that is not hex, a call that is not `resolve`, and
+  `resolve` arguments that do not decode each get HTTP 400.
+- TEST-ENS-13 (exercises REQ-ENS-KEY-02, REQ-ENS-NAME-05, REQ-ENS-GW-12,
+  REQ-ENS-GW-13):
+  A deployment check over every Handle Resolver and Gateway of a deployment
+  finds that resolvers trusting one Signer have different addresses, that
+  no production Chain Label is `testnet` or another deployment's first
+  label, that the ENS Chain is indexed, and that the Gateways in one URL
+  list map the same Chain Labels to the same chains.
 
 ## 11. Security Considerations
 
