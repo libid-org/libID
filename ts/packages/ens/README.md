@@ -73,7 +73,7 @@ ensName('x', 'alice', { rules })
 A chain label or parent name that is not a lowercase ASCII label of 1 to 63
 bytes, or has `--` at its third and fourth characters, throws.
 
-The rules are those of the [ENS integration spec](https://github.com/libid-org/libID/blob/3ae0186acf668d94c63aa57fb38260afb5513fcc/specs/ens-integration.md), §5 and §6.
+The rules are those of the [ENS integration spec](https://github.com/libid-org/libID/blob/91215f6ea2bb0d700a0ec5090cf6f4625cea2821/specs/ens-integration.md), §5 and §6.
 
 [`vectors/names.json`](https://github.com/libid-org/libID/blob/main/ts/packages/ens/vectors/names.json)
 in the repository lists names with their handles, handles with no name, and
