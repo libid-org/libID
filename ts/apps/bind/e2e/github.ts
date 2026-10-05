@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import * as OTPAuth from 'otpauth'
 import { liveSecret } from './live.ts'
-import { drivePopup, sleep } from './popup.ts'
+import { drivePopup, type Pause } from './popup.ts'
 
 export interface GitHubAccount {
   username: string
@@ -33,26 +33,37 @@ interface Progress {
   start?: string
   filled: boolean
   totpStep?: number
+  /** When the authorize button was last clicked; it is not clicked again within 5 s. */
+  authorizedAt: number
   rateLimited: number
   errored: number
 }
 
-async function onErrorPage(popup: Page, progress: Progress) {
+async function onErrorPage(popup: Page, progress: Progress, pause: Pause) {
   progress.errored += 1
   if (progress.errored > 3) throw new Error('GitHub answered its error page three times')
-  await sleep(10_000 * progress.errored)
+  await pause(10_000 * progress.errored, `GitHub answered its error page ${progress.errored} times`)
   // Reopening the request keeps the popup on github.com until GitHub redirects.
   if (progress.start) await popup.goto(progress.start).catch(() => {})
   progress.filled = false
   progress.totpStep = undefined
 }
 
-async function onLogin(popup: Page, account: GitHubAccount, progress: Progress, text: string) {
+async function onLogin(
+  popup: Page,
+  account: GitHubAccount,
+  progress: Progress,
+  text: string,
+  pause: Pause,
+) {
   if (text.includes('too many requests') || text.includes('rate limit')) {
     progress.rateLimited += 1
     if (progress.rateLimited > 3) throw new Error('GitHub rate-limited the login three times')
-    await sleep(30_000 * progress.rateLimited)
-    await popup.reload()
+    await pause(
+      30_000 * progress.rateLimited,
+      `GitHub rate-limited the login ${progress.rateLimited} times`,
+    )
+    await popup.reload().catch(() => {})
     progress.filled = false
     return
   }
@@ -75,10 +86,14 @@ async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
   progress.totpStep = step
 }
 
-async function onAuthorize(popup: Page, text: string) {
+async function onAuthorize(popup: Page, progress: Progress, text: string) {
   const authorize = popup.locator("button[name='authorize'][value='1']")
-  if (await authorize.count()) await authorize.click()
-  else if (text.includes('redirect_uri') || text.includes('be careful'))
+  if (await authorize.count()) {
+    if (Date.now() - progress.authorizedAt < 5_000) return
+    progress.authorizedAt = Date.now()
+    // The page may already be leaving for the redirect; the next poll sees where it went.
+    await authorize.click({ timeout: 5_000 }).catch(() => {})
+  } else if (text.includes('redirect_uri') || text.includes('be careful'))
     throw new Error(
       "GitHub refused the authorization request: the app's callback URL does not match",
     )
@@ -91,6 +106,7 @@ async function onGitHubPage(
   progress: Progress,
   url: URL,
   text: string,
+  pause: Pause,
 ) {
   progress.start ??= url.href
   const path = url.pathname
@@ -98,30 +114,31 @@ async function onGitHubPage(
     text.includes("couldn't respond to your request in time") ||
     text.includes('something went wrong')
   )
-    return onErrorPage(popup, progress)
-  if (path === '/login' || path === '/session') return onLogin(popup, account, progress, text)
+    return onErrorPage(popup, progress, pause)
+  if (path === '/login' || path === '/session')
+    return onLogin(popup, account, progress, text, pause)
   if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress)
   if (path.startsWith('/sessions/two-factor')) {
-    await popup.goto('https://github.com/sessions/two-factor/app')
+    await popup.goto('https://github.com/sessions/two-factor/app').catch(() => {})
     return
   }
-  if (path === '/login/oauth/authorize') return onAuthorize(popup, text)
+  if (path === '/login/oauth/authorize') return onAuthorize(popup, progress, text)
   if (path.startsWith('/sessions/verified-device'))
     throw new Error('GitHub asked for device verification: the account has no TOTP method')
 }
 
 /**
- * Sign in and authorize on GitHub in `popup`, until GitHub redirects away from
- * github.com. A port of libid-server-rs' ceremony-tests/src/browser/github.rs:
+ * Sign in and authorize on GitHub in `popup`, until GitHub redirects it to
+ * Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/github.rs:
  * fill the login form once, answer the authenticator step once per 30-second
  * code, approve the OAuth app, back off on rate-limit pages, and start the
  * authorization over on GitHub's error page.
  */
 export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
-  const progress: Progress = { filled: false, rateLimited: 0, errored: 0 }
+  const progress: Progress = { filled: false, authorizedAt: 0, rateLimited: 0, errored: 0 }
   await drivePopup(popup, {
     name: 'GitHub',
     onHost: (url) => url.hostname === 'github.com',
-    step: (url, text) => onGitHubPage(popup, account, progress, url, text),
+    step: (url, text, pause) => onGitHubPage(popup, account, progress, url, text, pause),
   })
 }

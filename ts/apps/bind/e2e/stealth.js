@@ -1,4 +1,5 @@
-// Ported from libid-server-rs ceremony-tests/src/browser/stealth.js.
+// Ported from libid-server-rs ceremony-tests/src/browser/stealth.js, and
+// installed in every page by presentAsPerson (person.ts).
 // Runs in every new document before the page's own scripts: what the page
 // can read is a person's Chrome on a Mac.
 
@@ -12,8 +13,8 @@ Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] })
 Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' })
 Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' })
 
-// The client hints are the user agent metadata `person::prepare` sets over
-// CDP, which Chrome itself reports through `navigator.userAgentData` and the
+// The client hints are the user agent metadata presentAsPerson (person.ts)
+// sets over CDP, which Chrome itself reports through `navigator.userAgentData` and the
 // `sec-ch-ua` headers.
 
 // `window.chrome`, with the members a page reads off it.

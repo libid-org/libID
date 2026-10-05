@@ -5,7 +5,8 @@ import { restoreSession, type Stored, savedSession } from './session.ts'
 /**
  * The saved X session, from X_TEST_ALICE_COOKIES or X_TEST_ALICE_COOKIES_FILE.
  * Renew it with `cargo run --bin ceremony -- export x` in libid-server-rs'
- * ceremony-tests.
+ * ceremony-tests, which lives on its feat/live-ceremony-tests branch
+ * (libid-server-rs PR #12).
  */
 export const xSession = () => savedSession('X_TEST_ALICE', ['auth_token'])
 
@@ -43,7 +44,7 @@ const onX = (url: URL) =>
 
 /**
  * Approve the OAuth app on X in `popup`, signed in by the saved session, until
- * it leaves X. A port of libid-server-rs' ceremony-tests/src/browser/x.rs
+ * X returns it to Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/x.rs
  * without its interactive sign-in: a login page means the saved session has
  * expired.
  */
@@ -60,7 +61,7 @@ export async function authorizeOnX(popup: Page) {
           throw new Error('X security verification did not clear within 90 s')
       } else if (url.pathname.startsWith('/i/flow/login') || url.pathname === '/login') {
         throw new Error(
-          'X asked to sign in: the saved session has expired. Renew it with `ceremony export x`.',
+          'X asked to sign in: the saved session has expired. Renew it with `ceremony export x` (libid-server-rs, branch feat/live-ceremony-tests).',
         )
       } else if (url.pathname.startsWith('/i/oauth2/authorize')) {
         challengedAt = undefined
