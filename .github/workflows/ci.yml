@@ -1,6 +1,6 @@
 name: CI
 
-# TypeScript checks, workspace browser tests, infrastructure smoke and DCO.
+# TypeScript checks, workspace browser tests, CCDP image and DCO.
 #
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -10,14 +10,65 @@ on:
   push:
     branches: [main]
 
+# A pull request's newer run cancels its older one. Each push to main has its own
+# group, so every main commit completes its checks; ccdp-publish serializes the
+# publications themselves.
 concurrency:
-  group: ci-${{ github.head_ref || github.ref }}
+  group: ci-${{ github.head_ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
   # ---------------------------------------------------------------------------
-  # TypeScript: build, tests (including the wallet-product isolation guard),
-  # lint, formatting.
+  # Changes: which browser workspaces a pull request can affect, and whether it
+  # can affect the CCDP image, so their jobs skip otherwise. Pushes to main run
+  # everything: a release promotes each main commit's own image. Plain git over
+  # the PR's range, as in DCO.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      workspaces: ${{ steps.paths.outputs.workspaces }}
+      image: ${{ steps.paths.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Affected workspaces
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo 'workspaces=["popup","ceremony","dev"]' >> "$GITHUB_OUTPUT"
+            echo "image=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          # What every job builds on: the TypeScript workspace setup and CI itself.
+          shared='^(ts/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|scripts/)|\.github/(workflows/(ci|ccdp-image)\.yml|actions/setup-ts/))'
+          # The ceremony and the workspace packages it bundles.
+          ceremony='^ts/packages/(ceremony|popup|ledger)/'
+          changed() { grep -qE "$shared|$1" <<<"$files"; }
+          workspaces=()
+          if changed '^ts/packages/popup/'; then workspaces+=(popup); fi
+          if changed "$ceremony"; then workspaces+=(ceremony); fi
+          if changed "$ceremony|^ts/apps/dev/"; then workspaces+=(dev); fi
+          image=false
+          if changed "$ceremony"; then image=true; fi
+          json=$(jq -cn '$ARGS.positional' --args "${workspaces[@]}")
+          echo "Browser workspaces: $json; CCDP image: $image"
+          { echo "workspaces=$json"; echo "image=$image"; } >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # TypeScript: build, tests, complete source/test/build-script type checking,
+  # lint and formatting.
   # ---------------------------------------------------------------------------
   ts:
     name: TypeScript
@@ -26,137 +77,114 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # pnpm before setup-node: `cache: pnpm` shells out to pnpm to locate
-      # the store, so the binary has to exist first.
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: 10
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm -C ts install --frozen-lockfile
+      # pnpm, Node and the frozen-lockfile install, pinned in one place.
+      - uses: ./.github/actions/setup-ts
 
       - name: Build
         run: pnpm -C ts build
 
+      - name: Packed npm consumer
+        run: pnpm -C ts test:packages
+
+      - name: Type checking
+        run: pnpm -C ts typecheck
+
+      # Ceremony runs under coverage, whose thresholds gate the job.
       - name: Tests
-        run: pnpm -C ts test
+        run: |
+          pnpm -C ts --filter '!@libid/ceremony' --filter '!{.}' test
+          pnpm -C ts/packages/ceremony test:coverage
+
+      - name: Keep the ceremony coverage summary for the badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ceremony-coverage
+          path: ts/packages/ceremony/coverage/coverage-summary.json
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Lint and formatting
         run: pnpm -C ts lint && pnpm -C ts fmt:check
 
-
   # ---------------------------------------------------------------------------
-  # Integration smoke: boot the compose stack (fresh anvil + released
-  # libid-deploy + released notary/backend/keeper images) and assert the
-  # seams: the declarative deploy converged onto the declared canonical
-  # addresses, the RPC answers, the notary serves its signer identity, the
-  # keeper's real MPC-TLS JWKS rotation landed roots on-chain, and the
-  # backend both health-checks and mints a well-formed GitHub challenge.
+  # Ceremony coverage badge: on pushes to main, publish the unit-test line
+  # coverage the TypeScript job measured as a shields.io endpoint on the orphan
+  # `badges` branch, replaced each run. Only this job holds `contents: write`,
+  # pull requests never run it, and it runs no repository code.
   # ---------------------------------------------------------------------------
-  integration-smoke:
-    name: Integration smoke (compose stack)
+  coverage-badge:
+    name: Ceremony coverage badge
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [ts]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ceremony-coverage
+          path: coverage
 
-      # The libid-org ghcr packages are not (yet) public; the workflow token
-      # can pull them once the packages grant this repository read access
-      # (or are flipped public, which is where releases should end up).
-      - name: Log in to ghcr
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Render env from the committed network file
-        run: harness/render-env.sh
-
-      - name: Boot the stack
-        working-directory: harness
+      - name: Publish the badge
         env:
-          GH_OAUTH_CLIENT_ID: dummy
-          GH_OAUTH_CLIENT_SECRET: dummy
-        run: docker compose up -d --wait --wait-timeout 300
-
-      - name: Deploy service exited 0 (declarative convergence check passed)
-        working-directory: harness
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          docker compose logs deploy
-          code=$(docker inspect -f '{{.State.ExitCode}}' "$(docker compose ps -a -q deploy)")
-          [ "$code" = "0" ] || { echo "deploy service exited $code"; exit 1; }
+          badge=$(mktemp -d)
+          node -e '
+            const { pct } = JSON.parse(require("fs").readFileSync(process.argv[1])).total.lines
+            const color = pct >= 90 ? "brightgreen" : pct >= 80 ? "yellow" : "red"
+            console.log(JSON.stringify({ schemaVersion: 1, label: "coverage", message: `${pct.toFixed(1)}%`, color }))
+          ' coverage/coverage-summary.json > "$badge/ceremony-coverage.json"
+          cd "$badge"
+          git init -q -b badges
+          git add ceremony-coverage.json
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -qm "Ceremony coverage for $GITHUB_SHA"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
 
-      - name: Keeper rotated the Google JWKS roots (real MPC-TLS, exit 0)
-        working-directory: harness
-        run: |
-          set -euo pipefail
-          # Block until the one-shot keeper exits, then read its real exit code
-          # from the container. `docker compose wait` prints a human sentence,
-          # not a bare number, on this Compose version — so inspect the state
-          # rather than parsing its stdout.
-          docker compose wait keeper >/dev/null 2>&1 || true
-          docker compose logs keeper
-          cid=$(docker compose ps -aq keeper)
-          code=$(docker inspect -f '{{.State.ExitCode}}' "$cid")
-          [ "$code" = "0" ] || { echo "keeper exited $code"; exit 1; }
+  # ---------------------------------------------------------------------------
+  # CCDP image: build the static ceremony artifact and the pinned SWS image for
+  # linux/amd64, prove the image against the running container and the pinned
+  # native binary, and publish it to ghcr on pushes to main. The steps live in
+  # the reusable ccdp-image.yml. A release only promotes the `sha-<commit sha>`
+  # image published here to the release version; it never builds one.
+  #
+  # Two callers so the token matches the run. Pull requests execute
+  # PR-controlled build code, so they get a read-only token (the called
+  # workflow inherits these permissions and cannot widen them) and never push.
+  # Only a push to main holds `packages: write`, and only it publishes.
+  # ---------------------------------------------------------------------------
+  ccdp-image:
+    name: CCDP image
+    needs: [changes]
+    if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && needs.changes.outputs.image == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ccdp-image.yml
 
-      - name: JWKS contracts report roots present post-rotation
-        working-directory: harness
-        run: |
-          set -euo pipefail
-          # needsRotation() is true from deployment until the first rotation
-          # lands, so false here proves the keeper's roots are live on-chain.
-          # Addresses are the canonical declared ones from network.local.toml;
-          # cast runs inside the anvil (foundry) container.
-          check_roots() { # name address
-            local out
-            out=$(docker compose exec -T anvil cast call "$2" 'needsRotation()(bool)' \
-              --rpc-url http://127.0.0.1:8545)
-            echo "$1 needsRotation = $out"
-            [ "$out" = "false" ] || { echo "$1 still needs rotation"; exit 1; }
-          }
-          check_roots identity_jwks_roots  0x589b56f95d5df5483c79e46e7b20293135c9ebd9
-          check_roots google_oidc_verifier 0xef53a51e3a46e5f82248a39ddff0b7b901ab438c
-
-      - name: Anvil RPC answers with the harness chain id
-        run: |
-          set -euo pipefail
-          chain=$(curl -fsS -X POST -H 'content-type: application/json' \
-            --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
-            http://127.0.0.1:8545 | jq -r .result)
-          [ "$chain" = "0x7a69" ] || { echo "unexpected chain id $chain"; exit 1; }
-
-      - name: Notary /info serves the expected signer pubkey
-        run: |
-          set -euo pipefail
-          info=$(curl -fsS http://127.0.0.1:7048/info)
-          echo "$info"
-          pub=$(echo "$info" | jq -r .publicKey)
-          # anvil #1, compressed SEC1 (bare hex, no 0x) — the SIGNING_KEY
-          # wired in compose.
-          expected="02ba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0"
-          norm() { echo "${1#0x}" | tr 'A-F' 'a-f'; }
-          [ "$(norm "$pub")" = "$(norm "$expected")" ] \
-            || { echo "notary pubkey mismatch: $pub"; exit 1; }
-
-      - name: Backend /health and a well-formed GitHub challenge
-        run: |
-          set -euo pipefail
-          curl -fsS http://localhost:8722/health
-          # A dummy (but shape-valid) compressed pubkey + the anvil #4 wallet.
-          resp=$(curl -fsS -X POST -H 'content-type: application/json' \
-            --data '{"pubkey":"020000000000000000000000000000000000000000000000000000000000000001","link_wallet":"0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65"}' \
-            http://localhost:8722/auth/github/challenge)
-          echo "$resp"
-          echo "$resp" | jq -e '.challenge and (.auth_url | startswith("https://github.com/login/oauth/authorize"))' >/dev/null
-
-      - name: Stack logs on failure
-        if: failure()
-        working-directory: harness
-        run: docker compose logs
+  # Publications run one at a time and a running one is never cancelled, so
+  # every main commit gets its `sha-<commit sha>` image. A third push while one
+  # runs replaces the queued one; re-run that commit's ccdp-publish before
+  # releasing it.
+  ccdp-publish:
+    name: CCDP image (publish)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: ccdp-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ccdp-image.yml
+    with:
+      push: true
+      # `sha-<commit sha>` is what a release promotes; `:main` names the latest build.
+      sha_tag: true
+      tag: main
 
   # ---------------------------------------------------------------------------
   # DCO: every commit carries a Signed-off-by trailer. Plain git over the
@@ -214,47 +242,124 @@ jobs:
           exit "$missing"
 
   # ---------------------------------------------------------------------------
-  # Browser tests: each workspace owns its suite, browser installation and
-  # test servers. Ceremony also exercises real proving and matched-notary
-  # containers, with release downloads and external network requests.
+  # Ceremony e2e assets: the qualification Distribution and the release
+  # downloads, built once for every ceremony browser job.
+  # ---------------------------------------------------------------------------
+  ceremony-e2e-assets:
+    name: Ceremony e2e assets
+    needs: [changes]
+    if: contains(fromJSON(needs.changes.outputs.workspaces), 'ceremony')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ts
+
+      - name: Build the ceremony and its dependencies
+        run: pnpm -C ts --filter '@libid/ceremony...' build
+
+      - name: Build the qualification Distribution
+        working-directory: ts/packages/ceremony
+        run: node build/distribution.ts --out-dir .cache/qualification-assets
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ceremony-e2e-assets
+          path: |
+            ts/packages/ceremony/.cache/qualification-assets
+            ts/packages/ceremony/.cache/downloads
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Each workspace/engine pair has its own runner and test servers. Keep heavy
+  # ceremony work serial inside a runner; independent jobs can run in parallel.
+  # Popup and dev jobs still run when the ceremony assets fail to build. The
+  # workspaces are the ones `changes` found affected; a matrix `include` would
+  # add back the pairs a filter removed, so each pair's projects are chosen in
+  # the test step.
   # ---------------------------------------------------------------------------
   browser:
-    name: Browser tests
+    name: Browser tests (${{ matrix.workspace }}, ${{ matrix.engine }})
+    needs: [changes, ceremony-e2e-assets]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.workspaces != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: ${{ fromJSON(needs.changes.outputs.workspaces) }}
+        engine: [chromium, firefox, webkit]
     permissions:
       contents: read
       packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: 10
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
+      - uses: ./.github/actions/setup-ts
 
-      - name: Install dependencies
-        run: pnpm -C ts install --frozen-lockfile
+      - name: Build workspace and dependencies
+        run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}...' build
 
-      - name: Build workspace
-        run: pnpm -C ts build
-
-      # Each package that has a Playwright suite installs the browsers it
-      # needs and runs its own suite; packages without one are skipped.
-      - name: Install browsers
-        run: pnpm -C ts -r --if-present run test:e2e:install
+      - name: Install browser
+        run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}' exec playwright install --with-deps ${{ matrix.engine }}
 
       - name: Check browser test types
-        run: pnpm -C ts -r --if-present run typecheck:e2e
+        run: pnpm -C ts --filter '@libid/${{ matrix.workspace }}' --if-present run typecheck:e2e
+
+      # The CRS the ceremony e2e build caches once (e2e/crs.mjs). The build checks every file
+      # against its pins and downloads again on a mismatch, so a restored cache is never trusted.
+      - name: Restore the cached CRS
+        if: matrix.workspace == 'ceremony'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ts/packages/ceremony/.cache/crs
+          key: ceremony-crs-${{ hashFiles('ts/packages/ceremony/e2e/crs.pins.json') }}
+
+      - name: Download the ceremony e2e assets
+        if: matrix.workspace == 'ceremony'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ceremony-e2e-assets
+          path: ts/packages/ceremony/.cache
 
       - name: Log in to ghcr for the matched notary image
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        if: matrix.workspace == 'ceremony'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
-      # Run suites serially so proof generation has the runner to itself.
-      # Keep running independent suites after a failure; the job still fails.
       - name: Browser tests
-        run: pnpm -C ts -r --workspace-concurrency=1 --no-bail --if-present run test:e2e
+        env:
+          CEREMONY_E2E_PREBUILT: ${{ matrix.workspace == 'ceremony' && '1' || '' }}
+          PAIR: ${{ matrix.workspace }}-${{ matrix.engine }}
+        run: |
+          set -euo pipefail
+          case "$PAIR" in
+            popup-chromium) projects='--project=chromium --project=mobile-chrome' ;;
+            popup-firefox) projects='--project=firefox' ;;
+            popup-webkit) projects='--project=webkit --project=mobile-webkit' ;;
+            ceremony-chromium) projects='--project=chromium --project=chromium-http --project=android-emulated' ;;
+            ceremony-firefox) projects='--project=firefox --project=firefox-http' ;;
+            ceremony-webkit) projects='--project=webkit --project=webkit-http --project=ios-emulated' ;;
+            dev-chromium) projects='--project=chromium --project=android-emulated' ;;
+            dev-firefox) projects='--project=firefox' ;;
+            dev-webkit) projects='--project=webkit --project=ios-emulated' ;;
+            *) echo "::error::no Playwright projects for $PAIR"; exit 1 ;;
+          esac
+          # Word-split on purpose: one argument per project.
+          pnpm -C ts --filter "@libid/${{ matrix.workspace }}" run test:e2e $projects
+
+      # A failing test keeps its Playwright trace; replay it with `npx playwright show-trace <zip>`.
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: traces-${{ matrix.workspace }}-${{ matrix.engine }}
+          path: ts/*/${{ matrix.workspace }}/test-results
+          retention-days: 7
+          if-no-files-found: ignore

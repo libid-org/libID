@@ -1,0 +1,128 @@
+# Architecture
+
+Ceremony obtains identity evidence for an application-owned operation. The caller
+supplies a popup connection and keeps control of its lifetime. Client can configure
+that connection through `@libid/popup`, using its discovered Bridge/CCDP origins.
+Prover extracts identity and builds evidence; Client checks the result structure
+and assembles `OAuthProof`. Neither performs final cryptographic verification in the browser.
+
+## Ownership
+
+| Owner | Responsibility |
+|---|---|
+| [ccdp/client](../src/ccdp/client/client.ts) | Fetch/freeze Bridge config and Distribution versions, configure popup connection admission, derive authorization inputs, run one ceremony, validate and assemble its result. |
+| [ccdp/index](../src/ccdp/index.ts), [navigation](../src/ccdp/navigation.ts) | Browser-free message companions and route/fragment codecs. |
+| [ccdp/documents](../src/ccdp/documents/) | [Callback](../src/ccdp/documents/callback.ts), [Prefetch/Worker](../src/ccdp/documents/prefetch.ts) and [Prover](../src/ccdp/documents/prover.ts) entrypoints; package-owned UI. |
+| [platforms](../src/platforms/index.ts) | Client-safe catalog; each platform/version owns URL construction, validators, assets, events and its prover. [platforms/notarized](../src/platforms/notarized/) coordinates X and GitHub without naming either: it starts the circuit, runs the OAuth sessions, proves the bearer link from their openings last, and composes validators and events from the platform's grammar, the OAuth requests and the proof. |
+| [barretenberg](../src/barretenberg/engine.ts) | Dedicated Noir/bb.js proof worker and its circuits: the oidc_google and bearer-link inputs, parameters and assets. It holds proving code only and imports nothing from platforms. |
+| [notary](../src/notary/session.ts) | TLSNotary sessions, HTTP/transcript helpers, canonical decoding and evidence correlation. [notary/oauth](../src/notary/oauth/sessions.ts) holds the attested [token](../src/notary/oauth/token.ts) and [identity](../src/notary/oauth/identity.ts) requests: their exact bytes, input rules, disclosure selection, operations and two-session run. |
+| [assets](../src/assets/index.ts) | Resource declarations and resolution, root Worker registration, byte caches and pending fetches. |
+| [build](../build/distribution.ts) | Compile the dependency graph and emit static files, response policies and the bundled version set. |
+| [events](../src/events.ts), [errors](../src/errors.ts) | Shared operation feed, stage projection and bounded failure text. |
+
+The one public entrypoint, `@libid/ceremony`, exports the client, its
+subscriptions and stage text, discovery, result types and `CeremonyError`.
+Codecs, document startup, execution and build helpers are private. See the [client guide](client.md) for application use.
+
+## Document lifecycle
+
+1. **Prefetch**, on the CCDP origin, authenticates the connection, activates the
+   canonical root Worker and dispatches the selected assets. Its completion
+   event permits Client to navigate to the provider; downloads may continue.
+2. **Callback**, on the Bridge origin, captures and clears the OAuth return
+   before other work. Its self-contained HTML selects bundled CCDP code and
+   validates the Bridge's inserted deployment data. It authenticates Application,
+   reports the authorization return, and navigates privately to Prover.
+3. **Prover**, on the CCDP origin, accepts only Callback's authenticated
+   `connection.peerOrigin`, forwarded in the private fragment. That origin is
+   never inferred from OAuth fields or allowlist order. After popup connection
+   readiness, isolation checks and root-worker claim, Prover requests inputs
+   through `prover.started`, runs the selected prover and sends one outcome.
+
+Bridge admission entries can contain `*` or `*.lib.id` patterns. Callback passes
+them to Popup for matching. A subdomain pattern admits only HTTPS at the default
+port, excludes the apex, and includes nested subdomains. The private handoff to
+Prover always carries the one authenticated concrete Application origin; patterns
+do not enter that binding. Bridge service URLs and CCDP destinations remain exact.
+
+The [CCDP specification](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/ccdp.md)
+owns the five messages, routes and permitted transitions. Message companions
+check exact shape and bounds; the receiving Client/document enforces state and
+cardinality. Readiness processing does not depend on event subscriptions.
+Unknown extension events cannot authorize a transition or complete a ceremony.
+
+Popup owns window creation, native-anchor fallback, authentication, navigation,
+isolation replacement, port continuity and closure. Ceremony's root Worker
+composes popup's keeper with asset fetching; it adds no handshake or transport.
+Callback installs no Worker. Application, documents and Worker must use compatible
+popup transport versions, including the authenticated-origin handoff.
+
+Proving stays in the foreground popup. A shared abort signal tears down reachable
+workers and private state after delivery, denial, failure or connection loss.
+There is no persistent proof checkpoint, application iframe prover, Job store,
+wallet operation or transaction submission inside this package.
+
+## Import boundaries
+
+The client-safe catalog imports URL builders, proof validators and event
+metadata. It never imports platform execution. Only the Prover document imports
+the lazy [prover registry](../src/platforms/provers.ts). Execution code may consult
+the lightweight catalog through shared return validation; it does not import the
+registry that selects it.
+
+Shared integrations declare resources once in `*.assets.ts`; platform/version
+leaves compose those handles. Prefetch imports only the request lists the build derives from them.
+The compiler adds actual chunks and nested-worker edges to each selected set.
+Execution resolves the same handles. Fetching scripts as bytes before OAuth
+never initializes WASM, proof backends or TLSNotary sessions.
+
+[Platform provers](provers.md) compose the independent proving and notary
+modules. Early transcripts and commitment openings permit overlap, but proof
+delivery joins every required final attestation and correlation.
+
+## Versioning and compatibility
+
+Client selects from the intersection of its catalog and the Distribution's
+version list, restricted to platforms the Bridge configures. Each run freezes
+its selection and OAuth client. See [discovery](client.md#platform-and-version-discovery)
+for the default and explicit selection API.
+
+Platform ceremony, CCDP, popup transport and Bridge API versions have separate
+owners. Internal UI or asset changes need no platform ceremony version when the
+proof semantics remain compatible. Only version 1 is implemented today;
+[adding another version](provers.md#adding-a-platform) registers it in the
+catalog, the [platform provers](../src/platforms/provers.ts) and the asset catalog, which the compiler
+and the build hold to one set.
+
+## Code and documentation conventions
+
+Keep cross-module rationale here, user contracts in the client/deployment guides,
+and byte layouts, limits, ownership and ordering comments beside their code.
+Link normative encodings instead of defining them again. Module-specific fixtures
+live beside their tests or in the owner's `fixtures/`.
+Shared ceremony builders live in `src/testing`; the platform matrix lives in
+`platforms/conformance`. Package contents exclude these test sources.
+
+Use workspace Biome formatting: two spaces, single quotes, no semicolons and
+organized imports. Separate declarations and methods with a blank line. JSDoc
+explains meaningful input, lifetime and failure constraints; internal comments
+explain invariants rather than restating types. Run `pnpm -C ts lint` and
+`pnpm -C ts fmt:check` for mechanical checks.
+
+## Constants and providers
+
+Constants live with their owner. [CCDP limits](../src/ccdp/limits.ts) are shared
+by message validation and document startup. [Authorization](../src/platforms/authorization.ts)
+owns digest/nonce widths and derives its wire offsets. [Notary limits](../src/notary/limits.ts)
+bound acceptance; [its protocol](../src/notary/protocol.ts) owns encoding widths.
+Local deadlines, UI timings and instrumentation caps stay beside their consumers.
+Names distinguish bytes, characters, milliseconds, seconds and CRS points.
+
+Each platform version’s `provider.ts` owns its endpoints and request layout; its `validation.ts` owns identity constraints.
+X/GitHub import request layouts and launch lifetimes from the pinned, data-only
+`@libid/contracts/ceremony` entry point; no EVM client or on-chain lookup is used.
+These lifetime constants describe the released policy, not live governance state.
+[Proving parameters](proving.md#circuits) belong to the released circuit/backend,
+while asset declarations keep their own release locations and headers. None of
+these definitions adds a caller configuration API. Canonical vectors and artifact
+checks retain independent expected values rather than importing every expectation.

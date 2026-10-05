@@ -2,7 +2,7 @@
   "name": "@libid/site",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.30.3",
+  "packageManager": "pnpm@10.34.6",
   "engines": { "node": ">=22.12.0" },
   "scripts": {
     "dev": "astro dev",
@@ -10,14 +10,14 @@
     "preview": "astro preview",
     "test": "node theme.test.mjs && node specs.test.mjs",
     "deploy": "wrangler deploy",
-    "deploy:preview": "wrangler versions upload"
+    "deploy:preview": "wrangler preview"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "7.3.1",
-    "@astrojs/starlight": "0.42.1",
-    "astro": "7.3.2"
+    "@astrojs/starlight": "0.42.5",
+    "astro": "7.3.5"
   },
   "devDependencies": {
-    "wrangler": "4.132.0"
+    "wrangler": "4.147.0"
   }
 }

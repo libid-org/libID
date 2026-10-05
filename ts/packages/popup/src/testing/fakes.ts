@@ -21,9 +21,8 @@ export const ID = '1c037b6a-2f08-4b17-9f9e-0d9a6a5b3c2d'
 export const OTHER_ID = '2d148c7b-3f19-4c28-8a0f-1e0b7b6c4d3e'
 
 /**
- * Lets pending deliveries land. Fake window dispatch is synchronous; real
- * MessagePort values arrive in the event loop's poll phase, which a timer
- * firing after a stall can precede, so two further loop turns follow it.
+ * Yields to pending MessagePort deliveries. Multi-step handoffs must await
+ * their ready/closed signal; a fixed number of event-loop turns is not enough.
  */
 export const tick = async (ms = 5): Promise<void> => {
   for (const delay of [ms, 0, 0]) await new Promise((resolve) => setTimeout(resolve, delay))
@@ -210,26 +209,30 @@ export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
     addEventListener: (type: string, handler: (event: unknown) => void) => {
       handlers.set(type, handler)
     },
-    skipWaiting: () => Promise.resolve(),
-    clients: { claim: () => Promise.resolve() },
   } as unknown as ServiceWorkerGlobalScope)
+  const deliver = (url: string, data: unknown, ports: readonly MessagePort[]): void =>
+    handlers.get('message')?.({
+      data,
+      ports,
+      source: { url },
+      waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
+    })
+  // A real transfer, as to a Service Worker: the sender's ports are neutered at once.
   const post = (url: string): KeeperWorker => ({
     postMessage(message, transfer) {
-      setTimeout(() => {
-        handlers.get('message')?.({
-          data: structuredClone(message),
-          ports: transfer,
-          source: { url },
-          waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
-        })
-      }, 0)
+      const channel = new MessageChannel()
+      channel.port2.onmessage = (event) => {
+        channel.port2.close()
+        deliver(url, event.data, event.ports)
+      }
+      channel.port1.postMessage(message, transfer)
     },
   })
   return {
     worker: post(`${origin}/p`),
     foreignWorker: post('https://evil.example/p'),
     pending,
-    postRaw: (message, ports) => post(`${origin}/p`).postMessage(message, ports),
+    postRaw: (message, ports) => setTimeout(() => deliver(`${origin}/p`, message, ports), 0),
   }
 }
 

@@ -1,0 +1,28 @@
+version: 2
+multi-ecosystem-groups:
+  dependencies:
+    schedule:
+      interval: "cron"
+      cronjob: "0 9 * * mon%2" # Every other Monday at 09:00 UTC.
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "chore(deps)"
+updates:
+  - package-ecosystem: "npm"
+    directory: "/site"
+    allow:
+      - dependency-type: "all"
+    cooldown:
+      default-days: 7
+    patterns: ["*"]
+    multi-ecosystem-group: "dependencies"
+  - package-ecosystem: "npm"
+    directory: "/ts"
+    allow:
+      - dependency-type: "all"
+    patterns: ["*"]
+    multi-ecosystem-group: "dependencies"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    patterns: ["*"]
+    multi-ecosystem-group: "dependencies"

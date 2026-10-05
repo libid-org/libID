@@ -1,0 +1,334 @@
+import { afterEach, expect, it, vi } from 'vitest'
+import { AssetCache } from './cache.js'
+import type { AssetRequest } from './index.js'
+
+const spec = { url: 'https://assets.example/g1', range: 'bytes=0-1', bytes: 2 }
+
+afterEach(() => vi.unstubAllGlobals())
+
+/** Deliver `request` through an empty cache whose network answers with `response`. */
+function served(response: Response, request: AssetRequest = spec) {
+  vi.stubGlobal('caches', {
+    open: async () => ({ match: async () => undefined, put: async () => {} }),
+  })
+  vi.stubGlobal('fetch', async () => response)
+  return new AssetCache('https://ccdp.example').load(request).response
+}
+
+/** A body of `bytes` zero bytes under `init`. */
+const body = (bytes: number, init: ResponseInit = {}) => new Response(new Uint8Array(bytes), init)
+
+it('joins pending downloads and preserves independent readers and worker CSP in stored bodies [CSP-019] [LIBID-ASSET-019] [LIBID-ASSET-021] [LIBID-PROVER-016]', async () => {
+  const stored = new Map<string, Response>()
+  vi.stubGlobal('caches', {
+    open: async () => ({
+      match: async (k: string) => stored.get(k)?.clone(),
+      put: async (k: string, r: Response) => {
+        stored.set(k, r)
+      },
+      delete: async (k: string) => stored.delete(k),
+    }),
+  })
+  let resolve!: (response: Response) => void
+  const fetching = vi.fn(
+    () =>
+      new Promise<Response>((r) => {
+        resolve = r
+      }),
+  )
+  vi.stubGlobal('fetch', fetching)
+  const cache = new AssetCache('https://ccdp.example')
+  const first = cache.load(spec)
+  await first.dispatched
+  expect(fetching).toHaveBeenCalledTimes(1)
+  const second = cache.load(spec)
+  await second.dispatched
+  expect(fetching).toHaveBeenCalledTimes(1)
+  resolve(
+    new Response(new Uint8Array([4, 5]), {
+      status: 206,
+      headers: {
+        'Content-Security-Policy': "default-src 'none'",
+        'Content-Range': 'bytes 0-1/100',
+      },
+    }),
+  )
+  const [a, b] = await Promise.all([first.response, second.response])
+  expect(new Uint8Array(await a.arrayBuffer())).toEqual(new Uint8Array([4, 5]))
+  expect(new Uint8Array(await b.arrayBuffer())).toEqual(new Uint8Array([4, 5]))
+  const hit = await cache.load(spec).response
+  expect(hit.status).toBe(206)
+  expect(hit.headers.get('content-security-policy')).toBe("default-src 'none'")
+  expect(fetching).toHaveBeenCalledTimes(1)
+})
+
+it.each([200, 404])('rejects status %i for range fetches [LIBID-ASSET-021]', async (status) => {
+  await expect(served(body(2, { status }))).rejects.toThrow('Invalid asset response')
+})
+
+it('allows unexposed range headers but rejects exposed mismatches and wrong lengths [LIBID-ASSET-021]', async () => {
+  await expect(served(body(2, { status: 206 }))).resolves.toBeInstanceOf(Response)
+  await expect(
+    served(body(2, { status: 206, headers: { 'Content-Range': 'bytes 2-3/100' } })),
+  ).rejects.toThrow('Unexpected asset range')
+  await expect(
+    served(body(2, { status: 206, headers: { 'Content-Length': '3' } })),
+  ).rejects.toThrow('Unexpected asset size')
+})
+
+it('checks the exposed length only where the encoding is visible too [LIBID-ASSET-021]', async () => {
+  const declared = { url: spec.url, bytes: 100 }
+  const compressed = () => body(100, { headers: { 'Content-Length': '40' } })
+  await expect(served(compressed(), declared)).rejects.toThrow('Unexpected asset size')
+  const cors = Object.defineProperty(compressed(), 'type', { value: 'cors' })
+  await expect(served(cors, declared)).resolves.toBeInstanceOf(Response)
+})
+
+it('rejects a malformed Content-Range even without a requested range [LIBID-ASSET-021]', async () => {
+  for (const range of ['bytes 0-1/0x10', 'bytes 0-1', 'items 0-1/2'])
+    await expect(
+      served(body(2, { headers: { 'Content-Range': range } }), { url: spec.url }),
+    ).rejects.toThrow('Unexpected asset range')
+})
+
+it('storage denial still fetches; failed bodies never become a reusable flight [LIBID-ASSET-019]', async () => {
+  vi.stubGlobal('caches', {
+    open: async () => {
+      throw new Error('denied')
+    },
+  })
+  const fetcher = vi.fn(async () => new Response(new Uint8Array([1]), { status: 206 }))
+  vi.stubGlobal('fetch', fetcher)
+  const cache = new AssetCache('https://ccdp.example')
+  await expect(cache.load(spec).response).rejects.toThrow('Incomplete')
+  await expect(cache.load(spec).response).rejects.toThrow('Incomplete')
+  expect(fetcher).toHaveBeenCalledTimes(2)
+})
+
+it.each(['application/wasm', 'text/javascript'])(
+  'returns ordinary cached %s bodies without consuming them',
+  async (mime) => {
+    const hit = new Response(new Uint8Array([4, 5]), {
+      headers: {
+        'Content-Type': mime,
+        'Content-Length': '2',
+        'Content-Security-Policy': "default-src 'none'",
+      },
+    })
+    vi.stubGlobal('caches', { open: async () => ({ match: async () => hit }) })
+    const fetching = vi.fn()
+    vi.stubGlobal('fetch', fetching)
+    const loaded = new AssetCache('https://ccdp.example').load({
+      url: 'https://ccdp.example/asset',
+      bytes: 2,
+      mime,
+    })
+    const result = await loaded.response
+    await loaded.dispatched
+    expect(hit.bodyUsed).toBe(false)
+    expect(fetching).not.toHaveBeenCalled()
+    expect(result.headers.get('content-security-policy')).toBe("default-src 'none'")
+    expect(new Uint8Array(await result.arrayBuffer())).toEqual(new Uint8Array([4, 5]))
+  },
+)
+
+it.each(['miss', 'denied'])(
+  'uses the browser HTTP cache after a Cache Storage %s, retaining request options [LIBID-ASSET-021]',
+  async (storage) => {
+    vi.stubGlobal('caches', {
+      open: async () => {
+        if (storage === 'denied') throw new Error('denied')
+        return { match: async () => undefined, put: async () => {} }
+      },
+    })
+    const fetching = vi.fn(async () => new Response(new Uint8Array([4, 5]), { status: 206 }))
+    vi.stubGlobal('fetch', fetching)
+    await new AssetCache('https://ccdp.example').load(spec).response
+    expect(fetching).toHaveBeenCalledWith(spec.url, {
+      credentials: 'omit',
+      mode: 'cors',
+      redirect: 'error',
+      headers: { Range: spec.range },
+      cache: 'force-cache',
+    })
+  },
+)
+
+it.each([
+  { 'Content-Type': 'text/html', 'Content-Length': '2' },
+  { 'Content-Type': 'application/wasm', 'Content-Length': '3' },
+])(
+  'rejects invalid cached metadata and validates the fetched body [LIBID-ASSET-019]',
+  async (headers) => {
+    vi.stubGlobal('caches', {
+      open: async () => ({
+        match: async () => new Response(new Uint8Array([4, 5]), { headers }),
+        put: async () => {},
+      }),
+    })
+    const fetching = vi.fn(
+      async () =>
+        new Response(new Uint8Array([4]), {
+          headers: { 'Content-Type': 'application/wasm' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetching)
+    await expect(
+      new AssetCache('https://ccdp.example').load({
+        url: 'https://ccdp.example/asset.wasm',
+        bytes: 2,
+        mime: 'application/wasm',
+      }).response,
+    ).rejects.toThrow('Incomplete')
+    expect(fetching).toHaveBeenCalledTimes(1)
+  },
+)
+
+it.each([false, true])(
+  'delivers validated bytes before persistence, keeping joiners until write completion (range=%s) [LIBID-ASSET-019] [LIBID-ASSET-021]',
+  async (range) => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const stored = new Map<string, Response>()
+    const put = vi.fn(async (key: string, response: Response) => {
+      await held
+      stored.set(key, response)
+    })
+    vi.stubGlobal('caches', {
+      open: async () => ({ match: async (key: string) => stored.get(key)?.clone(), put }),
+    })
+    const fetcher = vi.fn(
+      async () => new Response(new Uint8Array([4, 5]), { status: range ? 206 : 200 }),
+    )
+    vi.stubGlobal('fetch', fetcher)
+    const cache = new AssetCache('https://ccdp.example')
+    const spec = {
+      url: 'https://ccdp.example/asset',
+      bytes: 2,
+      ...(range ? { range: 'bytes=0-1' } : {}),
+    }
+    const first = cache.load(spec)
+    let complete = false
+    void first.complete.then(() => {
+      complete = true
+    })
+    const a = await first.response
+    expect(Array.from(new Uint8Array(await a.arrayBuffer()))).toEqual([4, 5])
+    expect(a.status).toBe(range ? 206 : 200)
+    expect(complete).toBe(false)
+    expect(stored.size).toBe(0)
+    const joined = cache.load(spec)
+    expect(joined.complete).toBe(first.complete)
+    expect(Array.from(new Uint8Array(await (await joined.response).arrayBuffer()))).toEqual([4, 5])
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(put).toHaveBeenCalledTimes(1)
+    release()
+    await first.complete
+    expect(complete).toBe(true)
+    await cache.load(spec).response
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  },
+)
+
+it('absorbs failed writes, releases the pending entry and retries later [LIBID-ASSET-019]', async () => {
+  let reject!: (error: Error) => void
+  vi.stubGlobal('caches', {
+    open: async () => ({
+      match: async () => undefined,
+      put: () =>
+        new Promise<void>((_, r) => {
+          reject = r
+        }),
+    }),
+  })
+  const fetcher = vi.fn(async () => new Response(new Uint8Array([4, 5])))
+  vi.stubGlobal('fetch', fetcher)
+  const cache = new AssetCache('https://ccdp.example')
+  const spec = { url: 'https://ccdp.example/asset', bytes: 2 }
+  const first = cache.load(spec)
+  await first.response
+  reject(new Error('quota'))
+  await first.complete
+  const second = cache.load(spec)
+  await second.response
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  reject(new Error('quota'))
+  await second.complete
+})
+
+it('reconciles exact URLs and ranges across the whole release without rewriting retained entries [TEST-DIST-07]', async () => {
+  const origin = 'https://ccdp.example'
+  const required = [
+    { url: `${origin}/ccdp/assets/shared/v1.js` },
+    { url: `${origin}/ccdp/assets/shared/v2.js` },
+    { url: `${origin}/ccdp/assets/another-platform.wasm` },
+    { url: 'https://external.test/crs', range: 'bytes=0-1' },
+    { url: 'https://external.test/crs', range: 'bytes=2-3' },
+  ]
+  const obsolete = [
+    { url: `${origin}/ccdp/assets/old.js` },
+    { url: 'https://external.test/crs', range: 'bytes=0-3' },
+  ]
+  const stored = new Map<string, Response>()
+  const deleted = vi.fn(async (key: Request) => stored.delete(key.url))
+  const open = vi.fn(async (_name: string) => ({
+    match: async (key: string) => stored.get(key)?.clone(),
+    put: async (key: string, value: Response) => {
+      stored.set(key, value)
+    },
+    keys: async () => [...stored.keys()].map((key) => new Request(key)),
+    delete: deleted,
+  }))
+  vi.stubGlobal('caches', { open })
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) =>
+    body(2, { status: (init.headers as Record<string, string>).Range ? 206 : 200 }),
+  )
+  const cache = new AssetCache(origin)
+  for (const spec of required) await cache.load(spec).complete
+  const retained = new Map(stored)
+  for (const spec of obsolete) await cache.load(spec).complete
+  const unrelated = `${origin}/another-app`
+  stored.set(unrelated, new Response('untouched'))
+  const other = stored.get(unrelated)
+  await cache.reconcile(required)
+  expect(stored.size).toBe(required.length + 1)
+  for (const [key, response] of retained) expect(stored.get(key)).toBe(response)
+  expect(stored.get(unrelated)).toBe(other)
+  expect(deleted).toHaveBeenCalledTimes(2)
+  await cache.reconcile(required)
+  expect(deleted).toHaveBeenCalledTimes(2)
+  expect(open.mock.calls.every(([name]) => name === 'libid-ceremony-assets-v1')).toBe(true)
+})
+
+it.each(['open', 'keys', 'delete'])(
+  'failed reconciliation at %s does not disable asset delivery [TEST-DIST-07]',
+  async (failure) => {
+    const origin = 'https://ccdp.example'
+    const denied = () => {
+      throw new Error('storage denied')
+    }
+    vi.stubGlobal('caches', {
+      open: async () => {
+        if (failure === 'open') denied()
+        return {
+          keys: async () => {
+            if (failure === 'keys') denied()
+            return [new Request(`${origin}/__libid_ceremony_cache__/obsolete`)]
+          },
+          delete: async () => denied(),
+          match: async () => undefined,
+          put: async () => {},
+        }
+      },
+    })
+    vi.stubGlobal('fetch', async () => body(2))
+    const cache = new AssetCache(origin)
+    const spec = { url: `${origin}/current`, bytes: 2 }
+    await expect(cache.reconcile([spec])).resolves.toBeUndefined()
+    const loaded = cache.load(spec)
+    expect((await (await loaded.response).arrayBuffer()).byteLength).toBe(2)
+    await loaded.complete
+  },
+)

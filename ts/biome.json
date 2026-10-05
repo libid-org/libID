@@ -1,13 +1,18 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "vcs": { "enabled": false },
   "files": {
     "includes": [
       "**",
       "!**/dist",
       "!**/node_modules",
-      "!apps/demo/public",
-      "!packages/claim-full/assets"
+      "!packages/ceremony/.cache",
+      "!packages/ceremony/dist-artifacts",
+      "!**/test-results",
+      "!**/playwright-report",
+      "!**/coverage",
+      "!apps/dev/.cache",
+      "!.cache"
     ]
   },
   "formatter": {
@@ -28,7 +33,8 @@
     "rules": {
       "preset": "recommended",
       "style": {
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "useSingleVarDeclarator": "error"
       }
     }
   }

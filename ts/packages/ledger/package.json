@@ -1,0 +1,36 @@
+{
+  "name": "@libid/ledger",
+  "version": "0.1.0",
+  "description": "Shared ledger identity and notary routing contract.",
+  "license": "(MIT OR Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libid-org/libID.git",
+    "directory": "ts/packages/ledger"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.ts",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm build"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  },
+  "files": [
+    "dist",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
