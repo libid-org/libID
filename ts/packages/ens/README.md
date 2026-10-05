@@ -51,9 +51,14 @@ These handles have no name:
 ## Options
 
 ```ts
-ensName('x', 'alice', { chain: 'base' })                    // 'alice.x.base.handles.link'
-ensName('x', 'alice', { parent: 'testnet.handles.link' })   // 'alice.x.testnet.handles.link'
-ensName('x', 'alice', { rules: await rulesOf(reader, id) }) // the chain's current rules
+import { platformId, rulesOf } from '@libid/contracts/identity'
+
+ensName('x', 'alice', { chain: 'base' })                  // 'alice.x.base.handles.link'
+ensName('x', 'alice', { parent: 'testnet.handles.link' }) // 'alice.x.testnet.handles.link'
+
+// The chain's current rules, read from the IdentityRegistry with a viem client.
+const rules = await rulesOf(reader, platformId('x'))
+ensName('x', 'alice', { rules })
 ```
 
 - `chain` narrows a name to one chain. Without one, the wallet's chain
