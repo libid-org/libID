@@ -291,9 +291,8 @@ but still fail the applicable downstream proof, digest-binding, trusted signing-
 notary-signature check before an authoritative effect.
 
 SP-PRIV-01 bounds what the chain's artifacts yield, not who learns the
-handle. A Google ID Token, with its email and `sub`, passes through the
-OAuth Bridge's Callback and reaches the Prover documents the CCDP
-Distribution supplies, and the email reaches the Application in the
+handle. A Google ID Token, with its email and `sub`, reaches the Prover
+documents the CCDP Distribution supplies, and the email reaches the Application in the
 ceremony result. Each of those operators can send the handle anywhere, and
 a transaction that carries it is one the property permits. A modified
 Prover could also leak the witness through the proof bytes, so the property
@@ -1657,9 +1656,8 @@ bytes outside a profile's revealed ranges are withheld from published
 evidence.
 
 SP-PRIV-01 is a statement about the chain's artifacts, not about who
-learns the identity (§4). The ID Token, and the email and `sub` in it, pass
-through the OAuth Bridge's Callback and reach the Prover documents the CCDP
-Distribution supplies, and the email reaches the Application in the
+learns the identity (§4). The ID Token, and the email and `sub` in it, reach
+the Prover documents the CCDP Distribution supplies, and the email reaches the Application in the
 ceremony result, so whether a Submission carries the handle is the
 Application's choice, made for the user (platform REQ-PLAT-03A); an operator that
 wants the address public can send it, and no Consumer check can tell that
