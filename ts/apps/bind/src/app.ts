@@ -18,6 +18,7 @@ import {
   getContract,
   hexToBytes,
   http,
+  isAddressEqual,
   type WalletClient,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
@@ -138,14 +139,20 @@ async function submit(
     result.identity.userId,
   )
   show('registry-holder', bound ?? 'not bound')
+  if (!bound || !isAddressEqual(bound, holder))
+    throw new Error(`The registry binds the identity to ${bound ?? 'no one'}, not ${holder}`)
   status('Bound on chain. Waiting for the indexer…')
-  show('indexer-holder', await indexed(platform, result.identity.userId))
+  const owner = await indexed(platform, result.identity.userId)
+  show('indexer-holder', owner ?? 'not indexed after 60 s')
+  if (!owner) throw new Error('The indexer did not report the binding within 60 s')
+  if (!isAddressEqual(owner as Address, holder))
+    throw new Error(`The indexer reports ${owner} as the holder, not ${holder}`)
   status('Done.')
   show('outcome', 'bound')
 }
 
-/** The holder the indexer reports for an id, polled until it appears. */
-async function indexed(platform: Platform, userId: string): Promise<string> {
+/** The holder the indexer reports for an id, polled until it appears; undefined after 60 s. */
+async function indexed(platform: Platform, userId: string): Promise<string | undefined> {
   for (let attempt = 0; attempt < 60; attempt++) {
     const response = await fetch(`/indexer/v1/resolve/id/${platform}/${encodeURIComponent(userId)}`)
     if (response.ok) {
@@ -155,7 +162,7 @@ async function indexed(platform: Platform, userId: string): Promise<string> {
     }
     await new Promise((resolve) => setTimeout(resolve, 1000))
   }
-  return 'not indexed after 60 s'
+  return undefined
 }
 
 /** Start a ceremony for `platform` from its anchor's click, then bind what it proves. */
@@ -179,7 +186,9 @@ function launch(
   } catch (error) {
     event.preventDefault()
     connection.close()
-    status(error instanceof Error ? error.message : 'Unable to start the ceremony.')
+    const message = error instanceof Error ? error.message : 'Unable to start the ceremony.'
+    status(message)
+    show('outcome', `failed: ${message}`)
     return
   }
   const off = ceremony.onStage((update) => {
