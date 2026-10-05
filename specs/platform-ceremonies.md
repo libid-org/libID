@@ -109,15 +109,20 @@ used in the resulting Submission.
 
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
-| Google | signed ID-Token `sub` | the REQ-PLAT-05A digest of its exact 1–255 case-sensitive ASCII bytes | normalized email |
+| Google | signed ID-Token `sub` | the REQ-PLAT-05A digest of its exact 1–31 case-sensitive ASCII bytes | normalized email |
 | X | `/2/users/me.data.id` JSON string | canonical nonzero unsigned 64-bit decimal | normalized `username` |
 | GitHub | `/user.id` JSON integer token | canonical nonzero unsigned 64-bit decimal | normalized `login` |
 
 - REQ-PLAT-04:
-  The Implementation MUST accept a Google `sub` of bytes `0x20` through `0x7e`
-  only. The Implementation MUST reject empty, control, non-ASCII, and
-  over-255-byte values. Necessity: identity compatibility across
-  implementations.
+  The Implementation MUST accept a Google `sub` of 1 to 31 bytes, each in
+  `0x20` through `0x7e` except the quotation mark `0x22`. The Implementation
+  MUST reject empty, control, non-ASCII, quote-bearing, and over-31-byte
+  values. Google documents a `sub` of up to 255 ASCII characters and issues
+  decimal values of about 21 digits; an account whose `sub` exceeded 31 bytes
+  could not prove under `("google", 1)`. Necessity: identity compatibility
+  across implementations. The quotation mark would close the signed string
+  under common REQ-COMMON-19B, and 31 bytes is the `sub` capacity of
+  REQ-PLAT-76.
 - REQ-PLAT-05:
   The Implementation MUST NOT trim or case-convert a Google `sub`. Necessity:
   identity compatibility.
@@ -320,9 +325,9 @@ The Proving Circuit and Consumer enforce all of the following:
   The Proving Circuit MUST hash the exact ASCII
   `BASE64URL_NOPAD(header) || "." || BASE64URL_NOPAD(payload)` bytes with
   SHA-256. The Proving Circuit MUST verify the signature as
-  RSASSA-PKCS1-v1_5 under the exact RSA modulus `n` and the profile-fixed
-  exponent `e = 65537`. The Proving Circuit MUST decode the claims checked
-  below from that signed payload, not from a detached copy.
+  RSASSA-PKCS1-v1_5 under the exact 2048-bit RSA modulus `n` and the
+  profile-fixed exponent `e = 65537`. The Proving Circuit MUST decode the
+  claims checked below from that signed payload, not from a detached copy.
 
 The profile fixes RS256; the circuit performs no algorithm dispatch and does
 not parse the protected header. A signature that does not satisfy this fixed
@@ -331,6 +336,26 @@ an untrusted modulus can satisfy the circuit but fails REQ-PLAT-23 downstream.
 Algorithm-confusion attacks require a verifier that dispatches on the header
 `alg`; none exists here.
 
+- REQ-PLAT-76:
+  The Proving Circuit for `("google", 1)` MUST admit each token part up to
+  the capacity below. The Proving Circuit MUST fail a token with any part
+  beyond it.
+  Necessity: a circuit takes fixed-width inputs, so the Platform Ceremony
+  Version fixes which tokens can be proven, and every implementation of it
+  must admit the same ones.
+
+  | Token part | Capacity |
+  |---|---|
+  | signing input that REQ-PLAT-16 hashes | 1280 bytes |
+  | decoded payload JSON | 768 bytes |
+  | `aud` | 128 bytes |
+  | `sub` | 31 bytes, per REQ-PLAT-04 |
+  | `email` | 62 bytes |
+  | `exp` | 12 decimal digits, per REQ-PLAT-21 |
+  | RSA modulus `n` | 2048 bits, per REQ-PLAT-16 |
+
+  A Google client identifier is therefore at most 128 bytes, narrower than the
+  512-byte `ProveIdentity.clientId` [wire limit](ccdp.md#wire-limits).
 - REQ-PLAT-16A (upholds SP-CLIENT-01):
   The Proving Circuit MUST expose the exact RSA modulus used for REQ-PLAT-16
   as a public proof input. Its internal field or limb representation belongs to
@@ -387,10 +412,10 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   The prover supplies the offset of each checked claim as a private input.
   The Proving Circuit MUST check the string claims `iss`, `sub`, `aud`,
   `nonce`, and `email` under common REQ-COMMON-19 and REQ-COMMON-19B. The
-  Proving Circuit MUST check `exp` as a canonical unsigned JSON integer bounded
-  by an unsigned 64-bit integer, and `email_verified` as the exact unquoted
-  JSON boolean `true`,
-  under common REQ-COMMON-19D.
+  Proving Circuit MUST check `exp` as a canonical unsigned JSON integer of at
+  most 12 decimal digits, and `email_verified` as the exact unquoted JSON
+  boolean `true`, under common REQ-COMMON-19D. The 12-digit bound is the
+  profile's integer type for `exp` and covers every time before the year 33000.
   Duplicate-free top-level structure is the issuer's behavior under
   ASM-PROV-06; the circuit performs no search and no duplicate scan.
 - REQ-PLAT-22 (upholds SP-FRESH-01):
@@ -437,10 +462,14 @@ Launch fixes X's `/2/oauth2/token` and `/2/users/me` sessions and GitHub's
   carry an empty fragment and a query containing exactly one `state` plus
   exactly one `code` XOR `error`. The Prover MUST reject duplicate,
   mixed-transport, additional
-  authoritative, and malformed fields. The single accepted `code` is the code
-  consumed at redirect ingress that REQ-PLAT-29 and REQ-PLAT-46 compare
-  against. GitHub's required `iss` under REQ-PLAT-34A is a profile field, not
-  an additional authoritative field to reject.
+  authoritative, and malformed fields. The Prover MUST treat a `code` as
+  malformed unless, decoded once as `application/x-www-form-urlencoded`, it
+  is 1 to 1024 bytes, each in `0x21` through `0x7e`; the bound keeps its
+  serialization inside the token session's bounded sent transcript. The
+  single accepted `code` is the code consumed at redirect ingress that
+  REQ-PLAT-29 and REQ-PLAT-46 compare against. GitHub's required `iss` under
+  REQ-PLAT-34A is a profile field, not an additional authoritative field to
+  reject.
 - REQ-PLAT-28A (upholds SP-DELIVERY-01):
   The Prover MUST match the redirect's `state` to its bound live ceremony and
   accept that return only once before starting the token request. No
@@ -504,7 +533,8 @@ REQ-COMMON-07A.
   byte for byte, under common REQ-COMMON-07.
 - REQ-PLAT-30 (upholds SP-BIND-01):
   The Proving Circuit MUST constrain the opened bearer range to nonempty
-  printable ASCII of at most 4096 bytes. The carriage-return and line-feed
+  printable ASCII of at most 128 bytes; a longer bearer cannot be proven
+  under `("x", 1)`. The carriage-return and line-feed
   exclusion of common REQ-COMMON-37 applies to this range, because the
   identity session sends it inside a header. Necessity: the range is opened
   to link two attestations, so it needs a bound and a charset; the circuit
@@ -517,11 +547,12 @@ REQ-COMMON-07A.
   spelling, an extra or duplicate field, or bytes outside that complete body.
   The Prover and Platform Verifier MUST enforce common REQ-COMMON-16B's
   charset for `client_id` and common §7's canonical unpadded base64url
-  encoding of exactly 32 bytes for `code_verifier`. `code` and
-  `redirect_uri` are nonempty values with no further constraint: the Platform
-  Verifier reads neither and judges only their bytes under REQ-COMMON-07A,
-  and the Canonical Runtime compares them with the values it serialized under
-  REQ-PLAT-29 and REQ-PLAT-29C. The `grant_type` value is the exact ASCII
+  encoding of exactly 32 bytes for `code_verifier`. Within this body grammar,
+  `code` and `redirect_uri` are nonempty values with no further constraint:
+  the Platform Verifier reads neither and judges only their bytes under
+  REQ-COMMON-07A, and the Canonical Runtime compares them with the values it
+  serialized under REQ-PLAT-29 and REQ-PLAT-29C. REQ-PLAT-28 bounds the
+  `code` itself at redirect ingress. The `grant_type` value is the exact ASCII
   bytes `authorization_code`, which REQ-PLAT-56 compares. No `refresh_token`,
   device-flow field, or other grant field is admitted; the pinned endpoint
   receives only this authorization-code request. Acceptance does not depend
@@ -881,11 +912,12 @@ forbidden by REQ-PLAT-56A.
   spelling, an extra or duplicate field, or bytes outside that complete body.
   The Prover and Platform Verifier MUST enforce common REQ-COMMON-16B's
   charset for `client_id` and common §7's canonical unpadded base64url
-  encoding of exactly 32 bytes for `code_verifier`. `code`, `redirect_uri`
-  and `client_secret` are nonempty values with no further constraint: the
-  Platform Verifier reads none of them and judges only their bytes under
-  REQ-COMMON-07A, and the Prover compares `code` and `redirect_uri` with the
-  values it serialized under REQ-PLAT-46 and REQ-PLAT-48A.
+  encoding of exactly 32 bytes for `code_verifier`. Within this body grammar,
+  `code`, `redirect_uri` and `client_secret` are nonempty values with no
+  further constraint: the Platform Verifier reads none of them and judges
+  only their bytes under REQ-COMMON-07A, and the Prover compares `code` and
+  `redirect_uri` with the values it serialized under REQ-PLAT-46 and
+  REQ-PLAT-48A. REQ-PLAT-28 bounds the `code` itself at redirect ingress.
   No `grant_type`, `refresh_token`, device-flow field, or other extension is
   admitted; the pinned endpoint receives only this authorization-code request.
   Acceptance does not depend on GitHub rejecting malformed or duplicate forms.
@@ -910,7 +942,8 @@ forbidden by REQ-PLAT-56A.
   representation of one fact.
 - REQ-PLAT-36 (upholds SP-BIND-01):
   The Proving Circuit MUST constrain the opened bearer range to nonempty
-  printable ASCII of at most 4096 bytes. The Proving Circuit MUST verify no
+  printable ASCII of at most 128 bytes; a longer bearer cannot be proven
+  under `("github", 1)`. The Proving Circuit MUST verify no
   other property of the exchange response. The carriage-return and
   line-feed exclusion of common REQ-COMMON-37 applies to this range,
   because the `/user` session sends it inside a header. Necessity:
@@ -1233,11 +1266,11 @@ Platform Verifier, Notary Service, Consumer.
   A Google response carrying an authorization code or access token is rejected,
   and the deployment contains no Google exchange route or client secret.
   Verification: inspection of emitted artifacts.
-- TEST-PLAT-06 (exercises REQ-COMMON-19D, REQ-PLAT-16, REQ-PLAT-16A, REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-17, REQ-PLAT-19, REQ-PLAT-19A, REQ-PLAT-20, REQ-PLAT-21, REQ-PLAT-23):
+- TEST-PLAT-06 (exercises REQ-COMMON-19D, REQ-PLAT-16, REQ-PLAT-16A, REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-17, REQ-PLAT-19, REQ-PLAT-19A, REQ-PLAT-20, REQ-PLAT-21, REQ-PLAT-23, REQ-PLAT-76):
   The browser Prover rejects an audience differing from its frozen client.
   A token with a foreign issuer, `email_verified: false`, a
   quoted or non-boolean `email_verified`, a quoted, negative, fractional,
-  exponent, leading-zero, or overflowing `exp` cannot satisfy the circuit.
+  exponent, leading-zero, or 13-digit `exp` cannot satisfy the circuit.
   A signature incompatible with the fixed RS256 relation or supplied modulus
   likewise fails the circuit. Substitution of signed header/payload bytes or
   signature invalidates that relation; public-output substitution fails proof
@@ -1246,9 +1279,11 @@ Platform Verifier, Notary Service, Consumer.
   circuit verification but is rejected by the Platform Verifier. A submission
   whose supplied `aud` bytes do not hash to the audience public input is
   rejected, and an accepted one returns those exact bytes as the client
-  identifier. A token whose `sub` is empty or carries a byte outside `0x20`
-  through `0x7e` fails the Proving Circuit, and no public input carries the
-  `sub`.
+  identifier. A token whose `sub` is empty, exceeds 31 bytes, carries a byte
+  outside `0x20` through `0x7e`, or carries `0x22` fails the Proving Circuit,
+  and no public input carries the `sub`. A token whose parts each sit at
+  their REQ-PLAT-76 capacity proves; a token with any part beyond its
+  capacity fails.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
   A proof at or after `proofValidUntil`, and a token-attestation creation time
   more than its profile's `maxFutureAttestationSkew` ahead of Block Time, are
@@ -1305,11 +1340,11 @@ Platform Verifier, Notary Service, Consumer.
   passes the form check, which the Implementation never emits, and fails those
   comparisons.
 - TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52):
-  An opened bearer range that is empty, over 4096 bytes, or outside printable
-  ASCII fails to prove; a revealed identity response missing `id` or the
-  handle field is rejected; and a proof whose two attestations commit
-  different bearers is rejected. No proof statement covers `token_type` or the
-  granted scope.
+  An opened bearer range of 128 printable ASCII bytes proves; one that is
+  empty, over 128 bytes, or outside printable ASCII fails to prove; a revealed
+  identity response missing `id` or the handle field is rejected; and a proof
+  whose two attestations commit different bearers is rejected. No proof
+  statement covers `token_type` or the granted scope.
 - TEST-PLAT-11 (exercises REQ-PLAT-33):
   The complete request direction of X's first notarized session reaches X
   before the authorization-code deadline in the success case; delaying its
@@ -1408,7 +1443,9 @@ Platform Verifier, Notary Service, Consumer.
   response, or redirect carrying two `code` fields, two `state` fields, both
   `code` and `error`, or a malformed field is rejected
   before any token request starts, as is a redirect whose `state` matches no
-  live local ceremony or a ceremony already consumed.
+  live local ceremony or a ceremony already consumed. A decoded `code` of 1024
+  visible-ASCII bytes passes; one of 1025 bytes, or one carrying a space or a
+  non-ASCII byte, is rejected as malformed.
 - TEST-PLAT-19 (exercises REQ-COMMON-32; supports ASM-PROV-07):
   For each production Platform Profile that cites ASM-PROV-07, recurring
   integration probes send each profile-listed token request field twice, in
