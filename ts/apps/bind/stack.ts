@@ -25,9 +25,9 @@ const APP_ORIGIN = 'http://localhost:4695'
 
 /** chain-configurations' deploy tool; it deploys the real verifiers, not stubs. */
 const DEPLOY = {
-  version: '0.14.0',
-  asset: 'libid-deploy-0.14.0-x86_64-unknown-linux-gnu',
-  sha256: '131166dcc90dcbcbb9b10d471310ed34db30062328a5e5e03789d9636b61dc9c',
+  version: '0.15.0',
+  asset: 'libid-deploy-0.15.0-x86_64-unknown-linux-gnu',
+  sha256: 'dc1cc678d861bf91494bcf827bd321904b6c3d5855df9821eafae2afd77914a6',
 }
 
 async function rpc(method: string, params: unknown[]): Promise<unknown> {
