@@ -83,7 +83,10 @@ ingress; the Distribution supplies CCDP browser code and proving assets. Those d
 trusted for the local browser ceremony, but not to choose authoritative identity fields,
 change the proof-bound operation, or widen proof validity. GitHub token exchange
 and identity notarization run in the browser; there is no confidential exchange
-service. The identity platform
+service. The Application receives a Google identity's email in the ceremony
+result, so under Google version 2 whether the handle reaches the chain is
+its choice
+([common §12](ceremony-common.md#12-security-considerations)). The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
 transcripts and their creation times. Verifier governance selects the
 Supported Version Set, accepted verifier artifacts, and trust roots. Each
@@ -93,9 +96,9 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
-| Application operator | selects a Bridge and operation; starts or withholds work | frontend availability and declared ceremony inputs | identity fields, proof target, or proof validity |
+| Application operator | selects a Bridge and operation; starts or withholds work; receives a Google email in plaintext and decides whether a Submission carries it | frontend availability and declared ceremony inputs | identity fields, proof target, or proof validity |
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
-| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges | correct code and asset supply under ASM-CCDP-01 | authority to change ledger verification rules |
+| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges; its Prover holds a Google ID Token, with the email and `sub` | correct code and asset supply under ASM-CCDP-01; for a digest profile, a Prover that proves in the zero-knowledge mode with fresh randomness, on which SP-PRIV-01 rests | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots, and the Supported Version Set | correct authority lifecycle | user consent |
@@ -146,10 +149,22 @@ the proof under the artifact selected for the submitted platform and version
 (REQ-COMMON-45), and enforces authenticated freshness. Proof-field provenance
 is the signed ID Token on Google and the revealed attestation bytes on X and
 GitHub; the Proving Circuit proves only what cannot be read from that
-evidence, which is Google's signature relation and, on X and GitHub, that one
-hidden bearer opens both sessions' commitments. The Consumer enforces replay
+evidence. On Google that is the signature relation and, because the `sub`
+stays hidden, its validation and digest; under Google version 2, where the
+`email` stays hidden too, also the email's validation, normalization, and
+digest; on X and GitHub it is that one hidden bearer opens both
+sessions' commitments. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
-an effect (REQ-COMMON-03, REQ-COMMON-03A). The Canonical Runtime
+an effect (REQ-COMMON-03, REQ-COMMON-03A). For a profile that exposes identity
+digests, Google version 2, the Consumer keys the binding on the digests and
+puts the handle on chain only from a transaction that carried it, and the
+account identifier its `userId` digests, Google's `sub`, never; the
+`userId` digest itself is public (SP-PRIV-01). It does not prevent
+confirmation of a guessed identity by hashing, nor an application or Distribution operator, each of which handles the email, from
+sending the handle itself. It rests on the
+CCDP Distribution as well: the Prover it supplies holds the ID Token, and
+the proof bytes hide the email and `sub` only because that Prover proves in
+the zero-knowledge mode with fresh randomness (REQ-COMMON-45A). The Canonical Runtime
 locally enforces the selected OAuth client and redirect profile. The protocol
 assumes the named identity-platform parser,
 PKCE, delivery, notary, browser, verifier-soundness, and chain behaviors. It
@@ -184,6 +199,7 @@ implementing that profile.
 | Platform Profile | `proofLifetime` | `maxFutureAttestationSkew` |
 |---|---:|---:|
 | `("google", 1)` | not named | not named |
+| `("google", 2)` | not named | not named |
 | `("x", 1)` | 3600 | 300 |
 | `("github", 1)` | 3600 | 300 |
 
@@ -191,7 +207,7 @@ implementing that profile.
 time: the X token attestation and the GitHub token-exchange attestation.
 `maxFutureAttestationSkew` is the maximum lead of an X/GitHub attestation
 timestamp over Block Time. Google's signed `exp` bounds its validity, so
-`("google", 1)` names neither. Verifier governance controls the Supported
+neither Google version names either parameter. Verifier governance controls the Supported
 Version Set and the trust roots, so a proof is accepted only while a Verifier
 Version implementing its profile is supported and the trust roots it relies
 on are active.
