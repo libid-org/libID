@@ -35,3 +35,92 @@
     justify-content: center;
   }
 }
+
+/* Tables */
+.sl-markdown-content table {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--sl-text-sm);
+}
+.sl-markdown-content :is(th, td) {
+  padding: 0.55rem 0.9rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  text-align: left;
+}
+.sl-markdown-content th {
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+.sl-markdown-content tr:last-child td {
+  border-bottom: 0;
+}
+.sl-markdown-content :is(th, td) code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  white-space: nowrap;
+}
+
+/* Diagrams: colours come from the palette, so they follow the theme. */
+.sl-markdown-content pre.mermaid[data-processed] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+}
+pre.mermaid svg text,
+pre.mermaid svg .nodeLabel,
+pre.mermaid svg .edgeLabel,
+pre.mermaid svg .cluster-label {
+  font-family: var(--sl-font) !important;
+  color: var(--text) !important;
+  fill: var(--text) !important;
+}
+pre.mermaid svg :is(.node rect, .node polygon, rect.actor) {
+  fill: var(--background) !important;
+  stroke: var(--border) !important;
+  stroke-width: 1px !important;
+}
+pre.mermaid svg .cluster rect {
+  fill: transparent !important;
+  stroke: var(--border) !important;
+  stroke-dasharray: 4 4;
+}
+pre.mermaid svg :is(.flowchart-link, .edgePath path, .messageLine0, .messageLine1) {
+  stroke: var(--muted) !important;
+  stroke-width: 1px !important;
+}
+pre.mermaid svg :is(.actor-line) {
+  stroke: var(--border) !important;
+}
+pre.mermaid svg :is(marker path, .arrowheadPath, #arrowhead path) {
+  fill: var(--muted) !important;
+  stroke: var(--muted) !important;
+}
+pre.mermaid svg :is(.edgeLabel, .edgeLabel p, .edgeLabel span, .labelBkg) {
+  background: var(--surface) !important;
+  background-color: var(--surface) !important;
+  color: var(--muted) !important;
+}
+pre.mermaid svg .edgeLabel rect {
+  fill: var(--surface) !important;
+  opacity: 1 !important;
+}
+pre.mermaid svg .node.trusted rect {
+  stroke: var(--accent) !important;
+}
+pre.mermaid svg .node.public rect {
+  stroke: var(--logo) !important;
+}
+pre.mermaid svg .messageText {
+  fill: var(--muted) !important;
+}
+pre.mermaid svg text.actor > tspan {
+  fill: var(--text) !important;
+}
