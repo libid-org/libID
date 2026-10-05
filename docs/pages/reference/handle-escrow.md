@@ -40,8 +40,8 @@ normalized handle (`IdentityRegistry.handleHashOf`, or `handleHash` in the
 TypeScript package).
 
 - If someone holds the handle, they are paid now and `Forwarded` is emitted.
-- Otherwise the funds are held and `Deposited` is emitted. `refundTo` can
-  take them back until the holder claims.
+- Otherwise the funds are held and `Deposited` is emitted. Until the holder
+  claims, `refundTo` can take them back by calling `refund` itself.
 
 For ETH, `msg.value` must equal `amount`. For a token, approve the escrow
 first and send no ETH.
@@ -67,9 +67,10 @@ After a claim, earlier deposits can no longer be refunded.
 function refund(bytes32 handleNode, address token, address recipient)
 ```
 
-Sends the caller's own deposits for the handle, in one token, to `recipient`.
-Only deposits made since the last claim can be refunded. Works whether or not
-the handle has a holder.
+Sends `recipient` every deposit for the handle, in one token, that named the
+caller as `refundTo`. The depositor does not count: only the `refundTo`
+address can call it. Only deposits made since the last claim can be refunded.
+Works whether or not the handle has a holder.
 
 ### escrowed
 
@@ -93,8 +94,9 @@ How much `refund` would pay `refundTo` right now.
 function registry() view returns (address)
 ```
 
-The `IdentityRegistry` contract this escrow reads. It is set once and cannot be
-changed.
+The `IdentityRegistry` contract this escrow reads. It is set when the escrow
+is deployed. No function changes it, but an upgrade can; see
+[Admin functions](#admin-functions).
 
 ## Events
 
@@ -139,12 +141,15 @@ tokens that take a fee.
 | `PlatformAcceptsNoBindings(bytes32 platformId)` | Nobody holds the handle and the platform accepts no new proofs, so the funds could never be claimed. |
 | `NotTheHolder(address holder, address caller)` | `claim` was called by someone other than the holder. |
 | `NothingHeld(bytes32 handleNode)` | `claim` found nothing in any listed token. |
-| `NothingToRefund(bytes32 handleNode, address token, address refundTo)` | The caller has nothing to refund in this round. |
+| `NothingToRefund(bytes32 handleNode, address token, address refundTo)` | No deposit in this round named the caller as `refundTo`. |
 | `BadRecipient(address recipient)` | `recipient` is zero or the escrow. |
 | `OverDebited(address token, uint256 booked, uint256 debited)` | The token took more than the escrow booked. |
 | `NativeTransferFailed(address recipient, uint256 amount)` | The recipient rejected ETH. |
 
 ## Admin functions
 
-The owner of the contract can upgrade it with `upgradeToAndCall`. The owner cannot
-change which `IdentityRegistry` it reads.
+The owner of the contract can upgrade it with `upgradeToAndCall`. The new
+code can read another registry or move the funds the escrow holds. So you
+trust the owner with every held deposit. `renounceOwnership` always reverts.
+
+See [Security](/docs/resources/security/#admin-keys) for who the owner is.

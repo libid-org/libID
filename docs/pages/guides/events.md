@@ -90,7 +90,7 @@ Call `unwatch()` to stop.
 - `Deposited`: funds are held for a handle nobody owns yet.
 - `Forwarded`: the handle had a holder, who was paid right away.
 - `Claimed`: the holder took what was held.
-- `Refunded`: a sender took a deposit back.
+- `Refunded`: a deposit's `refundTo` address took it back.
 
 For example, to list the deposits ever made to one handle:
 
@@ -134,9 +134,15 @@ If you store events in your own database, follow these rules:
   that changed. viem marks a removed log with `removed: true`.
 - Apply events in order: by block number, then log index.
 - On `IdentityBound`, set the holder of `handleNode` and of `idNode` to
-  `holder`.
+  `holder`. If `published` is `true`, set `holder`'s published handle on
+  `platformId` to `handle`. If it is `false`, leave the published handle
+  as it is.
 - On `HandleRetired`, mark `handleNode` as held by nobody. An identity emits it
   when it proves a new handle. If you skip it, your index keeps routing the
   old handle to that holder.
 - On `HandleUnpublished`, clear the holder's published handle on that
   platform.
+- When you show a published handle, check that your index still has its
+  `handleNode` held by the same holder. If someone else has proved the
+  handle since, or it was retired, show nothing. No event clears the
+  published handle in that case. `publishedHandleOf` makes the same check.

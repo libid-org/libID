@@ -15,8 +15,8 @@ With that you can:
 - show a name instead of an address,
 - send funds to a handle, even before anyone holds it,
 - let only verified accounts call a contract,
-- resolve a handle as an ENS name, such as `octocat.github.handles.link`
-  (not live yet).
+- resolve a handle as an ENS name, such as `octocat.github.handles.link`,
+  for bindings on Ethereum mainnet.
 
 ## Start here
 

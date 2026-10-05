@@ -15,14 +15,21 @@ they point wherever `IdentityRegistry` says the handle points.
 
 ## Status
 
-No `handles.link` name resolves publicly yet. This section describes names
-as the resolver and gateway on `main` produce them.
+Names resolve for bindings on Ethereum mainnet. The gateway does not answer
+for any other chain yet.
 
 | Where | State |
 | --- | --- |
-| ENS on Ethereum mainnet | `handles.link` is not registered yet |
-| ENS on Sepolia | registered, with a test resolver whose gateway is not public |
-| Names for Eden | cannot work: Eden's chain id is too large for an ENS coin type |
+| ENS on Ethereum mainnet | `handles.link` resolver is `HandleResolver`, `0xc09bF842BAD6350a1600277a11D954c6891974CE` |
+| Gateway | `https://names.handles.link/ens/{sender}/{data}.json`, serving Ethereum mainnet only |
+| ENS on Sepolia | resolver `0x84ba4D9CBAaB51180d02D9635CD9FDd0735350f3`, pointing at the same gateway, which does not serve Sepolia, so Sepolia names do not resolve |
+| Names for Eden | not served; viem also cannot compute a coin type for Eden's chain id |
+
+To see which chains the gateway serves right now:
+
+```sh
+curl https://names.handles.link/ens/status
+```
 
 ## Name shape
 
@@ -64,10 +71,11 @@ nobody.
 Add a chain label to make a name work on one chain only:
 
 ```
-octocat.github.base.handles.link
+octocat.github.ethereum.handles.link
 ```
 
-This name gives an address only when the sender asks for Base.
+This name gives an address only when the sender asks for Ethereum mainnet.
+The gateway's status lists the labels each chain answers to.
 
 ## What resolves
 

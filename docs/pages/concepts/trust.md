@@ -29,7 +29,8 @@ cannot bind another.
 
 Binding an identity publishes, on chain and forever, the holder, the platform,
 the id and the handle. For Google, the handle is the email address.
-The Google id is a digest, so Google's internal id stays private.
+The Google id is a digest of Google's internal id, which stays private. See
+[Platforms and nodes](/docs/concepts/platforms-and-nodes/#ids-and-handles).
 
 ## Whom you trust
 
@@ -47,6 +48,10 @@ A binding is only as good as the parties that produce and check it:
   verifier, the notary service, the platform verifiers and `GoogleJwtRoots`
   can change which proofs are accepted, or upgrade the contracts. Whoever
   controls these keys can bind any account to any address.
+- **The owner of `HandleEscrow`.** It can upgrade the escrow to new code,
+  and new code can move the funds it holds or read another registry.
+- **The owner of `handles.link`**, if you resolve names through ENS. See
+  [How it works](/docs/ens/how-it-works/#what-you-trust).
 - **The chain** your app reads from.
 
 `HandleEscrow` pays whoever `IdentityRegistry` says holds a handle. So every
@@ -74,5 +79,6 @@ already written.
 
 ## Current status
 
-The contracts have not been audited. They are upgradeable. On the Eden
-testnet one key owns all of them. See [Security](/docs/resources/security/).
+The contracts have not been audited. They are upgradeable. On each network
+one key owns all of them, and on Ethereum mainnet the same key owns
+`handles.link` in ENS. See [Security](/docs/resources/security/#admin-keys).

@@ -10,31 +10,31 @@ support wildcard names ([ENSIP-10](https://docs.ens.domains/ensip/10)) and
 offchain lookups ([ERC-3668](https://eips.ethereum.org/EIPS/eip-3668)). viem
 and ethers v6 support both.
 
-This works once `handles.link` is live; see
-[Status](/docs/ens/names/#status). Until then the example returns `null`.
+The gateway answers for Ethereum mainnet only; see
+[Status](/docs/ens/names/#status).
 
 ## With viem
 
-ENS lives on Ethereum mainnet, so connect to mainnet even if you send on
-another chain. Pass the chain you want an address for as a coin type:
+ENS lives on Ethereum mainnet, so connect to mainnet. Pass the chain you want
+an address for as a coin type:
 
 ```js
-import { createPublicClient, http } from 'viem';
-import { mainnet, base } from 'viem/chains';
-import { toCoinType } from 'viem';
+import { createPublicClient, http, toCoinType } from 'viem';
+import { mainnet } from 'viem/chains';
 
 const client = createPublicClient({ chain: mainnet, transport: http() });
 
 const address = await client.getEnsAddress({
   name: 'octocat.github.handles.link',
-  coinType: toCoinType(base.id),
+  coinType: toCoinType(mainnet.id),
 });
 ```
 
-`address` is the holder of `octocat` on GitHub, as recorded on Base.
-It is `null` if nobody owns the handle on Base.
+`address` is the holder of `octocat` on GitHub, as recorded on Ethereum
+mainnet. It is `null` if nobody holds the handle there.
 
-Without `coinType`, you get the address on Ethereum mainnet.
+`toCoinType(1)` is `60`, the coin type ENS uses for Ethereum, so leaving out
+`coinType` gives the same answer.
 
 ## In a wallet
 

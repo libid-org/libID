@@ -16,7 +16,7 @@ flowchart TD
   Q -- yes --> F["Carol is paid at once"]
   Q -- no --> H["The escrow holds the funds"]
   H -- "Carol binds, then claims" --> C["Carol is paid"]
-  H -- "the sender refunds first" --> R["The sender is paid back"]
+  H -- "refundTo refunds first" --> R["refundTo is paid back"]
 ```
 
 A paid deposit emits `Forwarded`, a held one `Deposited`. Held funds end one
@@ -98,7 +98,8 @@ console.log('held for carol:', held);
 
 ### Take it back
 
-Until Carol claims, the sender can take its own deposits back:
+Until Carol claims, the `refundTo` address of a deposit can take it back.
+The sender named itself as `refundTo`, so it can call `refund`:
 
 ```js
 const tx = await sender.writeContract({
