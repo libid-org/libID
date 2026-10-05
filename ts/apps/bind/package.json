@@ -1,0 +1,30 @@
+{
+  "name": "@libid/bind",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "An application that binds a platform identity on a local chain, end to end.",
+  "license": "(MIT OR Apache-2.0)",
+  "scripts": {
+    "dev": "pnpm build:deps && node stack.ts --app",
+    "dev:stack": "pnpm build:deps && node stack.ts",
+    "build:deps": "pnpm --filter '@libid/bind^...' build",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test:live": "playwright test -c playwright.live.config.ts"
+  },
+  "dependencies": {
+    "@libid/ceremony": "workspace:^",
+    "@libid/contracts": "0.15.1",
+    "@libid/ledger": "workspace:^",
+    "@libid/popup": "workspace:^",
+    "viem": "^2.48.11"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "otpauth": "^9.4.0"
+  }
+}
