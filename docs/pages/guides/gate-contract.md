@@ -84,6 +84,7 @@ contract Airdrop {
 
     error NotYourIdentity();
     error AlreadyClaimed();
+    error PayoutFailed();
 
     constructor(IIdentityRegistry registry_) {
         registry = registry_;
@@ -96,12 +97,17 @@ contract Airdrop {
         if (claimed[identity]) revert AlreadyClaimed();
         claimed[identity] = true;
 
-        payable(msg.sender).transfer(AMOUNT);
+        (bool ok, ) = msg.sender.call{value: AMOUNT}("");
+        if (!ok) revert PayoutFailed();
     }
 
     receive() external payable {}
 }
 ```
+
+`claim` marks the identity as paid before it sends the ETH, so a holder
+that calls back into `claim` finds it already claimed. It sends with `call`,
+not `transfer`, so a smart wallet such as a Safe can receive the payment.
 
 `resolveId` returns the holder of the identity with that id, or the zero
 address. Your app can find a user's id with

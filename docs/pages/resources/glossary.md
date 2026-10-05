@@ -13,7 +13,8 @@ sidebar:
   under. See [Platforms and nodes](/docs/concepts/platforms-and-nodes/).
 - **Holder**: the address an identity is bound to.
 - **Id**: the id a platform gives an account. It never changes. For Google,
-  libID stores a digest of it.
+  libID stores `SHA256("libid.google-user-id" || sub)`, as `0x` and 64
+  lowercase hex digits.
 - **Identity**: a platform account proved to a holder. It has an id and a
   handle.
 - **Normalization**: the rules that turn the different ways of writing a

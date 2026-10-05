@@ -52,9 +52,10 @@ for (const identity of identities) {
 Each identity has:
 
 - `platformId`: the platform, as `platformId('github')` computes it.
-- `id`: the id the platform issued. It never changes. For Google it is `0x`
-  and a SHA-256 digest of the Google account id, so the real id never reaches
-  the chain.
+- `id`: the id the platform issued. It never changes. For Google it is
+  `SHA256("libid.google-user-id" || sub)` as `0x` and 64 lowercase hex
+  digits, so Google's own id never reaches the chain. See
+  [Platforms and nodes](/docs/concepts/platforms-and-nodes/#ids-and-handles).
 - `handle`: the handle this identity proved most recently.
 - `handleCurrent`: `false` if another identity has since proved the same
   handle. Do not route payments by a handle when this is `false`.

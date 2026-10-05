@@ -15,13 +15,14 @@ evidence, moved back by a fixed allowance for each platform:
 
 | Platform | `observedAt` is | A proof bound a moment ago reads |
 | --- | --- | --- |
-| GitHub, X | the time the notary signed the user's session, minus 5 minutes | 5 to 65 minutes old |
+| GitHub, X | the time the notary signed the user's session, minus 5 minutes | 0 to 65 minutes old |
 | Google | the expiry in Google's sign-in token, minus 2 hours | 1 to 2 hours old |
 
 The allowance puts every platform on one scale and keeps `observedAt` from
 ever being ahead of the block. The ranges come from how old the evidence may
 be when it is bound: a GitHub or X session up to an hour, a Google token until
-it expires. A limit below the top of the range rejects some honest holders.
+it expires. The notary's clock may run up to 5 minutes ahead of the block, so
+a GitHub or X binding can read 0 minutes old. A limit below the top of the range rejects some honest holders.
 
 A GitHub or X proof must reach the chain within an hour of that time, and the
 time cannot be more than five minutes ahead of the block. A Google proof must

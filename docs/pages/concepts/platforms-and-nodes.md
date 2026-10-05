@@ -20,11 +20,29 @@ An identity, a platform account proved to a holder, has two things:
 
 | | GitHub | X | Google |
 | --- | --- | --- | --- |
-| Id | the numeric user id | the numeric user id | a SHA-256 digest of the account's `sub` |
+| Id | the numeric user id | the numeric user id | a digest of the account's `sub`, see below |
 | Handle | the login, like `octocat` | the username, like `jack` | the email address |
 
 The id never changes. The handle can: users rename themselves, and platforms
 give old handles to new users.
+
+A Google id is not Google's own id. It is this digest, written as `0x` and
+64 lowercase hex digits:
+
+```
+SHA256("libid.google-user-id" || sub)
+```
+
+`sub` is the exact `sub` claim from Google's sign-in token, not trimmed or
+lowercased, and `||` joins the two byte strings. From a shell:
+
+```sh
+printf '%s%s' libid.google-user-id "$SUB" | sha256sum | sed 's/^/0x/; s/ .*//'
+```
+
+For `SUB=123456789012345678901` it prints
+`0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560`.
+The real `sub` never reaches the chain.
 
 ## Nodes
 
