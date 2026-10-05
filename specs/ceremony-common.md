@@ -100,8 +100,9 @@ Block Time: The Consumer Chain's consensus-provided integer Unix time in
    seconds, bounded by an unsigned 64-bit integer.
 
 Chain Profile: The normative mapping from one Consumer Chain to its Chain ID,
-   Transaction Author authentication, Block Time, and Authorized Transaction
-   Data encoding.
+   Transaction Author authentication, Block Time, Authorized Transaction Data
+   encoding, native value-transfer path, fee unit, and the mechanism by which
+   a rejected call leaves no value transferred and no state changed.
 
 Submission: The complete input a Consumer passes to the Proof Verifier for
    one verification: the identity platform, the Verifier Version, the native

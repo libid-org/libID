@@ -9,12 +9,12 @@ Part of the [libID protocol specification](libid.md).
 ## 1. Scope
 
 This document holds one profile per family of Consumer Chains. [Common](ceremony-common.md)
-§2 defines what a Chain Profile is, and REQ-COMMON-01C, REQ-COMMON-01D and
-REQ-COMMON-01F say what one owes. §2 below is what holds across every
-profile; each later section answers those duties for one family. EVM chains
-are §3; a family that identifies, authenticates, or encodes differently —
-Solana, Move — takes a section of its own here rather than a document of its
-own.
+§2 defines what a Chain Profile is, and REQ-COMMON-01C, REQ-COMMON-01D,
+REQ-COMMON-01F, REQ-COMMON-34B and REQ-COMMON-42 say what one owes. §2 below
+is what holds across every profile; each later section answers those duties
+for one family. EVM chains are §3; a family that identifies, authenticates,
+or encodes differently — Solana, Move — takes a section of its own here
+rather than a document of its own.
 
 A profile defines no ceremony construction. It says what the values a
 ceremony already commits are on one chain, so that a Canonical Runtime
@@ -29,13 +29,19 @@ the same bytes. Selecting one is destination selection, not proof authority.
 | how the chain authenticates the Transaction Author | REQ-COMMON-01D |
 | how the chain supplies Block Time | REQ-COMMON-01D |
 | how Authorized Transaction Data is encoded | REQ-COMMON-01F |
+| the native value-transfer path a fee travels over | REQ-COMMON-34B |
+| the unit a fee is denominated in | REQ-COMMON-34B |
+| how a rejected call leaves no value transferred and no state changed | REQ-COMMON-42 |
 
 - REQ-CHAIN-01 (upholds SP-BIND-01):
-  A Chain Profile MUST answer all four duties for exactly one family of
-  Consumer Chains, and MUST leave none of them to an implementation.
-  Necessity: the Canonical Runtime and the Platform Verifier derive these
-  independently, so an answer left open is two answers, and they disagree
-  only as a digest the destination rebuilds differently.
+  A Chain Profile MUST answer every duty of the table above for exactly one
+  family of Consumer Chains, and MUST leave none of them to an implementation.
+  Necessity: the Canonical Runtime and the Platform Verifier derive the first
+  four independently, so an answer left open is two answers, and they disagree
+  only as a digest the destination rebuilds differently. The Consumer, the
+  Proof Verifier, the Platform Verifier, and the Notary Service pass the fee
+  under the last three, so an answer left open there is a fee one hop cannot
+  pay or a rejection that keeps it.
 - REQ-CHAIN-02 (upholds SP-REPLAY-01):
   A Chain Profile MUST state the preimage shape it claims in §2.1, and MUST
   NOT claim a shape another Chain Profile claims. Necessity: REQ-COMMON-01C
@@ -128,11 +134,30 @@ chainIdentifier = 11155111     chainId = 0x4679aa19497ce87eb9ffd768757c9397680da
   decoder that rejects trailing bytes and any other argument shape
   (REQ-COMMON-01F).
 
+### 3.5 Fees and rejection
+
+The native value-transfer path is the call value: the native value a call
+carries, which the callee reads as `msg.value`. The Consumer attaches the
+quoted value to its call to the Proof Verifier, the Proof Verifier attaches
+exactly that value to its call to the Platform Verifier, and the Platform
+Verifier attaches one Notary Fee to each Notary Service call. The unit is
+wei, the smallest unit of the chain's native asset, and every quotation,
+Notary Fee, and call value is a count of wei. The Proof Verifier, the
+Platform Verifier, and the Notary Service each compare the call value they
+receive with the value they require for exact equality (REQ-COMMON-06D,
+REQ-COMMON-34E).
+
+Rejection is a revert. A revert undoes every state change and value transfer
+of the reverting call, including those of the calls it made, and no caller on
+the path, the Consumer included, catches the revert of the role it calls. A
+Submission rejected at any hop therefore reverts the Consumer's call with no
+fee delivered and no state changed (REQ-COMMON-42).
+
 ## 4. Conformance tests
 
 - TEST-CHAIN-01 (exercises REQ-CHAIN-01, REQ-CHAIN-02):
-  Every profile in this document answers all four duties of §2, and no two
-  claim one preimage shape in §2.1. Verification: inspection.
+  Every profile in this document answers every duty of §2, and no two claim
+  one preimage shape in §2.1. Verification: inspection.
 - TEST-CHAIN-02 (exercises REQ-CHAIN-03, REQ-CHAIN-04, REQ-CHAIN-04B):
   The §3.1 vectors reproduce, and the Chain ID read from the destination
   equals the one its digest recomputation commits.
