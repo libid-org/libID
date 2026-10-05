@@ -85,22 +85,32 @@ REQ-COMMON-15A.
   participants must support the selected profile.
 - REQ-PLAT-03 (upholds SP-CLIENT-01):
   The Prover MUST derive the local identity fields exclusively from the
-  Platform Profile's canonical sources in the evidence it returns.
+  Platform Profile's canonical sources in the evidence it returns: for X and
+  GitHub, the revealed identity-response bytes; for a digest profile
+  (§2.1b), the signed ID Token it verified under §3.2 whose digests the
+  proof it returns carries.
   Those fields are not an authority decision; only the Consumer's
   acceptance of the resulting Submission is. For X and GitHub, the Prover
   MUST parse the exact revealed identity-response bytes that the
   Platform Verifier extracts, using the same canonical extraction rules.
+  For a digest profile, the Prover MUST derive the local `userId` from the
+  signed `sub` under REQ-PLAT-05A and the local handle from the signed
+  `email`.
   The delivered handle remains raw; a local normalized display value follows
-  REQ-PLAT-08C and does not replace it. The Prover MUST take `metadataObservedAt`
+  REQ-PLAT-08C and does not replace it. The handle digest and handle key are
+  over the normalized handle (REQ-PLAT-08M), not over the delivered bytes.
+  The Prover MUST take `metadataObservedAt`
   from the profile's evidence-time source in §2.2, not from a detached identity value.
   The Prover MUST reject a caller-supplied or detached value used as an
-  alternative source for `userId`, handle, or `metadataObservedAt`. For a
-  digest profile (§2.1b), the Prover MUST derive the local `userId` from the
-  signed `sub` under REQ-PLAT-05A, and the local handle from the signed
-  `email` normalized under §2.1a, of the ID Token it verified under §3.2.
-  The Prover MUST place the signed `email` bytes in the Submission as its
-  plaintext handle only when its caller asks to disclose the handle. The
-  Prover MUST NOT place the `sub` in any Submission.
+  alternative source for `userId`, handle, or `metadataObservedAt`.
+- REQ-PLAT-03A (upholds SP-PRIV-01):
+  For a digest profile, the Canonical Runtime (its Application, which builds
+  the Submission) MUST place the delivered handle in the Submission as its
+  plaintext handle only when the user asks to disclose it. The Canonical
+  Runtime MUST NOT place the `sub` in any Submission. Necessity: the Prover delivers the handle with every proof
+  and builds no Submission, so the choice of sending it falls to the role
+  that does; SP-PRIV-01 bounds the chain only for a Submission built this
+  way.
 
 This is a data-source invariant, not a browser-flow requirement. It defines
 the identity fields returned to callers and used by any composition-owned UI;
@@ -380,7 +390,7 @@ REQ-PLAT-08K; publication is state.
   holds only digests, so it cannot re-key a binding under new rules, and a
   disclosed handle normalized under rules the circuit does not apply stops
   hashing to its own key.
-- TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08G, REQ-PLAT-08L):
+- TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08G, REQ-PLAT-08L):
   The same Google account submitted with and without its handle lands on
   the same two keys. A Submission without the handle, made with
   recognizable test values, carries neither the email nor the `sub` in its
@@ -394,9 +404,10 @@ REQ-PLAT-08K; publication is state.
   same caller took over; a disclosure of a held handle publishes it, and its
   event carries the normalized handle. A Submission without the handle after
   a disclosure leaves the binding resolvable by its handle, the name as it
-  was, and its event without the handle. The Prover places the
-  signed `email` in a Submission only when asked to disclose and places no
-  `sub` in any. A change to Google's handle normalization is refused once a
+  was, and its event without the handle. The Prover delivers the raw signed
+  `email` as the handle and the REQ-PLAT-05A digest as the `userId`; the
+  Application places that `email` in a Submission only when the user asks
+  to disclose it, and places no `sub` in any. A change to Google's handle normalization is refused once a
   Google identity is bound. A platform configured as a digest profile
   rejects a verifier result carrying bytes, and one configured otherwise
   rejects a result carrying digests.

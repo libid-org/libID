@@ -151,7 +151,10 @@ Identity Platform: Google, X, GitHub, or a future source of authenticated
 
 Canonical Runtime: The browser-side implementation that constructs
    Authorization Digests, performs the required local evidence checks, and
-   builds Submissions and derives their local identity fields.
+   builds Submissions and derives their local identity fields. Under
+   [CCDP](ccdp.md) it spans the Application, which builds the Submission,
+   and its browser participants, among them the Prover, which parses the
+   evidence, derives the local identity fields, and makes the proof.
 
 Notary Service: The role that observes a TLS session and signs the resulting
    attestation, and that answers whether an attestation is authentic. Its
@@ -255,8 +258,8 @@ Attestation Count: The number of entries in the closed attestation list a
   zero-knowledge proving mode: a proof made in that mode with fresh prover
   randomness reveals nothing of the witness beyond the proof's public
   inputs. No verifier can tell what randomness a proof was made with, so
-  this holds only for proofs the Prover makes as REQ-COMMON-45A
-  requires.
+  this holds only for proofs the Canonical Runtime (its Prover) makes as
+  REQ-COMMON-45A requires.
 
 ## 4. Security properties
 
@@ -655,8 +658,8 @@ an identity session — so one Submission on either path pays two fees.
   role is obliged to run it, and every public input the surrounding rules
   compare is then a number the caller wrote down.
 - REQ-COMMON-45A (upholds SP-PRIV-01):
-  For a digest profile, the Prover MUST make every proof in the
-  proof system's zero-knowledge proving mode. The Prover MUST
+  For a digest profile, the Canonical Runtime (its Prover) MUST make every
+  proof in the proof system's zero-knowledge proving mode. It MUST
   draw that proof's prover randomness freshly from a cryptographically
   secure random source. Necessity: the proof bytes sit in calldata beside
   the public inputs, and whether they reveal the email and `sub` is decided
@@ -1369,8 +1372,8 @@ Service.
 
 ## 11. Conformance
 
-Roles: Canonical Runtime, Redirect Runtime, Proving Circuit, Proof Verifier,
-Platform Verifier, Notary Service, Consumer. The
+Roles: Canonical Runtime (including Prover), Redirect Runtime, Proving
+Circuit, Proof Verifier, Platform Verifier, Notary Service, Consumer. The
 Implementation claiming a role MUST pass the vectors covering
 the constructions that role implements.
 
@@ -1555,14 +1558,17 @@ the constructions that role implements.
   Notary Service; a Submission on a two-count profile is quoted and charged
   exactly two fees; and a Submission whose second attestation verification
   rejects leaves no fee delivered for the first.
-- TEST-COMMON-22 (exercises REQ-COMMON-45, REQ-COMMON-45A):
+- TEST-COMMON-22 (exercises REQ-COMMON-45):
   A Submission whose proof does not verify under the artifact selected for
   the Platform Verifier registered under its identity platform and Verifier
   Version is rejected; a proof verifying only under another platform's or
   another ceremony version's artifact is rejected; a caller-supplied artifact, verifying key, or precomputed
   verification result changes no decision; and for a digest profile, a
   proof of the right statement made outside the zero-knowledge proving mode
-  is rejected, and two proofs the Prover makes of one witness
+  is rejected.
+- TEST-COMMON-22A (exercises REQ-COMMON-45A):
+  For a digest profile, the Canonical Runtime (its Prover) makes every proof
+  in the zero-knowledge proving mode, and two proofs it makes of one witness
   differ.
 - TEST-COMMON-23 (exercises REQ-COMMON-02, REQ-COMMON-46):
   The Platform Verifier recomputes the digest from the operation domain,
@@ -1630,7 +1636,7 @@ canonical `userId` is a digest of Google's `sub`
 ([platform profiles §2.1](platform-ceremonies.md#21-canonical-platform-user-identifiers)),
 because Google shows a `sub` only to the applications a user signs in to;
 the `sub` is never sent, and the handle is sent only where the Application
-building the Submission chooses to send it (platform §2.1b). That is not
+building the Submission chooses to send it (platform REQ-PLAT-03A). That is not
 secrecy: whoever guesses the handle, or holds the `sub` from another relying
 party, confirms it by hashing (ASM-HASH-01). GitHub's application credential
 is public, including in its revealed token request; knowing it does not
