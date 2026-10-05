@@ -18,7 +18,8 @@ export default defineConfig({
   testDir: 'e2e',
   testMatch: '*.live.spec.ts',
   workers: 1,
-  timeout: 10 * 60_000,
+  // Each test: the popup driver's 3 minutes and the page's 8-minute outcome wait.
+  timeout: 12 * 60_000,
   reporter: [['list']],
   // One command: start the stack and the app, test, then stop both. A stack
   // already running locally is reused.

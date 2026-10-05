@@ -28,15 +28,22 @@ permissions:
 jobs:
   bind:
     name: GitHub and X bindings (live)
-    # A pull request from a fork gets no secrets, so it does not run.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # A pull request from a fork or from Dependabot gets no secrets, so it
+    # does not run.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The test step's budget plus setup, the secret scan and the upload.
+    timeout-minutes: 55
     env:
       # A missing secret fails the run instead of skipping the test.
       LIBID_REQUIRE_LIVE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-ts
 
@@ -46,7 +53,12 @@ jobs:
       # Google is left out: it challenges a saved session arriving from a
       # runner's address ("Verify it's you"), which no automation passes. Its
       # test still runs locally, and the stack rotates no Google keys here.
+      # Its own timeout, so a run that hangs still reaches the steps below:
+      # the stack's 15-minute start, two tests of 12 minutes, and 2 minutes
+      # to stop the stack (playwright.live.config.ts), with room to spare.
       - name: Bind GitHub and X identities end to end
+        id: test
+        timeout-minutes: 45
         env:
           LIBID_LIVE_PLATFORMS: github,x
           LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
@@ -60,9 +72,10 @@ jobs:
 
       # The artifact is public: only screenshots, Playwright's error notes and
       # the container log go up, and only when none of them holds a secret.
+      # A timed-out test step counts too; a cancelled run uploads nothing.
       - name: Check the failure output for secrets
         id: scan
-        if: failure()
+        if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
         env:
           # A session that is not configured is nothing to look for.
           LIBID_REQUIRE_LIVE: ""
@@ -72,7 +85,7 @@ jobs:
         run: node ts/apps/bind/e2e/scan-secrets.ts ts/apps/bind/test-results "${{ runner.temp }}/stack.log"
 
       - name: Keep the screenshots and container logs
-        if: failure() && steps.scan.outcome == 'success'
+        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: live-e2e
