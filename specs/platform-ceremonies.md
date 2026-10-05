@@ -455,6 +455,160 @@ ceremony profile whenever it changes the proof statement, attestation format,
 ceremony behavior, or security assumptions; it is not deployment configuration
 under the X or GitHub profile.
 
+### 4.1 Attested data
+
+Common REQ-COMMON-18 has every profile with a nonzero Attestation Count fix
+its attestation format. The X and GitHub profiles fix the same one: the record
+and signature below. The Notary Service writes one record per notarized
+session and signs it. The Platform Verifier holds no transcript and reads
+every field it checks out of that record. Every range commitment §5 and §6
+name is the commitment this section defines.
+
+The record, `attestedData`, is a 48-byte header, then the sent (request)
+direction block, then the received (response) direction block, which ends the
+record. Every integer is unsigned and big-endian at the width shown.
+No field is padded, aligned, or tagged.
+
+| Offset | Bytes | Field | Value |
+|---|---|---|---|
+| 0 | 32 | `authorityId` | keccak256 of the authority bytes of [common §9](ceremony-common.md#9-notarized-transcripts-and-attestation-verification): the lowercase ASCII TLS server DNS name the Notary Service authenticated, with no trailing dot |
+| 32 | 8 | `createdAt` | Unix seconds on the Notary Service's own clock when the session completed; the signed creation time of §2.2 |
+| 40 | 4 | `sentTranscriptLength` | total bytes of the request direction; a signed length of common REQ-COMMON-36 |
+| 44 | 4 | `recvTranscriptLength` | total bytes of the response direction; a signed length of common REQ-COMMON-36 |
+| 48 | variable | sent direction block | the request direction's ranges |
+| after the sent block | variable | received direction block | the response direction's ranges |
+
+The record names no platform, session, chain, or verifier. The Platform
+Verifier tells a token session from an identity session by the revealed
+request line it compares under common REQ-COMMON-21A.
+
+A direction block lists its revealed ranges, then its range commitments:
+
+| Field | Bytes | Value |
+|---|---|---|
+| revealed count | 8 | number of revealed ranges that follow |
+| revealed range `start` | 4 | offset of the range's first byte |
+| revealed range `length` | 8 | number of revealed bytes; the range ends at `start + length` |
+| revealed range bytes | `length` | the revealed transcript bytes |
+| commitment count | 8 | number of range commitments that follow |
+| commitment `start` | 4 | offset of the committed range's first byte |
+| commitment `end` | 4 | offset one past the committed range's last byte |
+| commitment value | 32 | the range commitment below |
+
+Offsets are zero-based into that direction's transcript. A revealed range
+carries no `end`: its byte count is its length.
+
+A range commitment covers one contiguous range of one direction:
+
+```text
+commitment = SHA-256(plaintext || blinder)
+```
+
+`plaintext` is that direction's transcript bytes `[start, end)`, and
+`blinder` is the 16 bytes common REQ-COMMON-44 draws for the commitment. No
+length prefix, separator, or domain tag enters the hash. In the X and GitHub
+profiles the Proving Circuit opens only the bearer range.
+
+The Notary Service signs the record under [EIP-191] version `0x45`, with the
+32-byte digest as the message:
+
+```text
+digest     = keccak256(attestedData)
+signedHash = keccak256(0x19 || "Ethereum Signed Message:\n32" || digest)
+signature  = r || s || v
+```
+
+`signature` is a secp256k1 ECDSA signature over `signedHash`: `r` and `s`
+are 32 bytes each, big-endian, and `v` is one byte. A notary key is
+identified by its address, the last 20 bytes of keccak256 of the 64-byte
+uncompressed public key. The Notary Service returns the attested data and
+the signature as a pair; the Prover carries both unchanged into the
+Submission, and the Platform Verifier hands that pair to the Notary Service
+under common REQ-COMMON-33.
+
+Verifying a record checks its signature and its shape. Whether the ranges
+tile a direction, and which revealed bytes anchor a commitment, are the
+Platform Verifier's checks under common REQ-COMMON-18A and REQ-COMMON-35.
+
+- REQ-PLAT-64 (upholds SP-BIND-01, SP-EXCHANGE-01):
+  The Notary Service MUST encode the attested data of every X and GitHub
+  session in exactly the layout above, with each integer unsigned and
+  big-endian at its stated width and no byte before, between, or after the
+  fields. Necessity: the Platform Verifier reads each field at the offset
+  the bytes before it imply, so a record in any other layout reads as fields
+  the notary never signed.
+- REQ-PLAT-65 (upholds SP-BIND-01, SP-FRESH-01):
+  The Notary Service MUST set `authorityId` to keccak256 of the canonical
+  authority bytes of the server name it authenticated under common
+  REQ-COMMON-21. The Notary Service MUST set `createdAt` from its own clock
+  when the session completes. The Notary Service MUST set each transcript
+  length to the total bytes it observed in that direction. The Notary
+  Service MUST write each maximal run of revealed bytes as one revealed range,
+  and order revealed ranges and commitments by ascending `start`. Necessity:
+  the Platform Verifier compares `authorityId` with keccak256 of its pinned
+  authority, so another spelling of the same host names an authority no
+  profile pins; and the Prover compares the signed ranges with its planned
+  ranges one for one.
+- REQ-PLAT-66 (upholds SP-EXCHANGE-01):
+  The Implementation MUST compute every range commitment as SHA-256 over the
+  committed transcript bytes followed directly by a 16-byte blinder, one
+  contiguous range per commitment. The Proving Circuit MUST open a range
+  commitment by recomputing exactly that construction from its private
+  plaintext and blinder. Necessity: common REQ-COMMON-38 pins the hash but
+  not its preimage, and a circuit placing or sizing the blinder differently
+  opens no commitment the session produced.
+- REQ-PLAT-67 (upholds SP-EXCHANGE-01):
+  The Notary Service MUST sign the [EIP-191] version `0x45` message whose
+  content is the 32-byte `keccak256(attestedData)` with a secp256k1 key. The
+  Notary Service MUST encode that signature as the 65 bytes `r || s || v`,
+  with `s` at most half the secp256k1 group order, rounded down, and `v`
+  equal to 27 or 28. The Notary Service MUST return the attested data byte
+  for byte as it signed it, together with that signature. Necessity: the
+  verifying side recomputes the digest from the bytes it is handed, so a
+  record re-encoded on the way, or signed under another scheme, recovers a
+  key nobody trusts.
+- REQ-PLAT-68 (upholds SP-EXCHANGE-01):
+  The Notary Service MUST compute the digest from the attested data handed to
+  it, recover the signer's address from the signature over that digest's
+  EIP-191 hash, and compare that address with the keys it holds as trusted
+  under common REQ-COMMON-33A. The Notary Service MUST reject a signature
+  that is not 65 bytes, whose `s` exceeds half the group order, whose `v` is
+  not 27 or 28, or from which no public key recovers. Necessity: a digest
+  taken from the caller authenticates whatever the caller hashed, per common
+  REQ-COMMON-33, and the encoding checks accept exactly the form REQ-PLAT-67
+  produces and no malleated twin of it.
+- REQ-PLAT-69 (upholds SP-EXCHANGE-01):
+  The Notary Service MUST reject attested data that ends inside a field,
+  carries a byte after the received direction block, or holds a direction
+  block with an empty range, a range starting before the previous range of
+  its list ends, a range ending past its direction's signed transcript
+  length, or a commitment overlapping a revealed range. Necessity: a suffix
+  is a second message riding on the first signature; a byte inside two
+  ranges has two readings, or is both read and hidden; and a range past the
+  signed length describes bytes the session never carried.
+
+Conformance vector, for an X identity-shaped record with placeholder
+commitment values: authority `api.x.com`, `createdAt` 1770000000, transcript
+lengths 60 and 40, sent ranges `[0, 20)` and `[40, 60)` revealed around a
+commitment over `[20, 40)`, and received range `[0, 10)` revealed before a
+commitment over `[10, 40)`. `attestedData` is the 246 bytes below with the
+labels and spaces removed:
+
+```text
+header    4930142f5283d4a8eab0d24c588f00b21213ae2a47e7ed6c1dc6a57044f1655d
+          0000000069800e80 0000003c 00000028
+sent      0000000000000002
+          00000000 0000000000000014 6161616161616161616161616161616161616161
+          00000028 0000000000000014 6262626262626262626262626262626262626262
+          0000000000000001
+          00000014 00000028 0707070707070707070707070707070707070707070707070707070707070707
+received  0000000000000001
+          00000000 000000000000000a 63636363636363636363
+          0000000000000001
+          0000000a 00000028 0909090909090909090909090909090909090909090909090909090909090909
+digest    0x48162f05bdb27b19b3544bf2aae608745861bf357bb31e07f536b6fb50e95936
+```
+
 ## 5. X ceremony
 
 ```text
@@ -539,8 +693,8 @@ separate ranges; the attested record carries adjacent revealed ranges as one,
 so a plan of one range per field would not survive signing.
 
 Per common §9, the token session reveals exactly these ranges; every other
-byte stays behind a charset-constrained range commitment of the pinned
-attestation format:
+byte stays behind a charset-constrained [§4.1](#41-attested-data) range
+commitment:
 
 | Range | Revealed | Why |
 |---|---|---|
@@ -662,7 +816,7 @@ REQ-PLAT-56A does not forbid.
   adds nothing to the Proving Circuit.
 - REQ-PLAT-30A (upholds SP-EXCHANGE-01):
   The Implementation MUST commit the returned `access_token` range of the
-  notarized token session as the attestation format's blinded hash
+  notarized token session as a [§4.1](#41-attested-data) range
   commitment. The Implementation MUST keep the plaintext token bytes
   redacted.
 - REQ-PLAT-57 (upholds SP-EXCHANGE-01):
@@ -698,7 +852,7 @@ with no gap and no overlap, per common REQ-COMMON-35 and REQ-COMMON-36, so
 the request leaves no byte undisclosed and uncommitted.
 
 The response direction reveals exactly these ranges; every other response
-byte stays behind a range commitment of the pinned attestation format:
+byte stays behind a [§4.1](#41-attested-data) range commitment:
 
 | Range | Revealed | Why |
 |---|---|---|
@@ -741,7 +895,7 @@ REQ-COMMON-18A requires.
   notarized session.
 - REQ-PLAT-32A (upholds SP-EXCHANGE-01):
   The Implementation MUST commit the `Authorization` bearer range of the
-  notarized identity session as the attestation format's blinded hash
+  notarized identity session as a [§4.1](#41-attested-data) range
   commitment. The Implementation MUST keep the plaintext token bytes
   redacted. Necessity: each notarized session carries its own blinder, so the
   same bearer commits to two different values. Nothing outside a proof can
@@ -979,7 +1133,7 @@ as it verifies the `/user` attestation.
 | `client_secret` | yes | public application credential; complete form validation under REQ-PLAT-61 leaves no hidden request field |
 | everything else | no | the response status line and headers, `scope`, `token_type`, other response fields |
 
-Every unrevealed range stays behind the pinned attestation format's range
+Every unrevealed range stays behind a [§4.1](#41-attested-data) range
 commitment. The delimiter row is what anchors the committed bearer range in
 the received direction, which would otherwise carry no revealed byte and
 leave that range indistinguishable from a `refresh_token` value. Neither the
@@ -1100,7 +1254,7 @@ with no gap and no overlap, per common REQ-COMMON-35 and REQ-COMMON-36, so
 the request leaves no byte undisclosed and uncommitted.
 
 The response direction reveals exactly these ranges; every other response
-byte stays behind a range commitment of the pinned attestation format:
+byte stays behind a [§4.1](#41-attested-data) range commitment:
 
 | Range | Revealed | Why |
 |---|---|---|
@@ -1429,6 +1583,17 @@ Platform Verifier, Notary Service, Consumer.
   `refresh_token` value instead; and an X `/2/users/me` or GitHub `/user`
   attestation revealing no `id`, `username`, or `login` range, or revealing
   a value without its full delimiter, is rejected.
+- TEST-PLAT-23 (exercises REQ-PLAT-64, REQ-PLAT-65, REQ-PLAT-66, REQ-PLAT-67, REQ-PLAT-68, REQ-PLAT-69):
+  The §4.1 vector encodes and decodes exactly, digest included. A notary
+  authenticating `API.X.com` or `api.x.com.` writes the `authorityId` of
+  `api.x.com`, and adjacent revealed spans reach the record as one range.
+  A record with a byte appended or removed, an empty range, ranges out of
+  order or overlapping, a range past its signed length, or a commitment
+  overlapping a revealed range is rejected. A commitment computed with the
+  blinder first, with another blinder width, or under BLAKE3 fails to open
+  in the Proving Circuit. A signature over the bare digest, a 64-byte
+  signature, the high-`s` twin of a valid signature, a `v` other than 27 or
+  28, and a valid signature by an untrusted key are each rejected.
 
 ## 9. Security Considerations
 
@@ -1520,9 +1685,11 @@ and stays public, so a Google binding is not anonymous.
 ## 10. References
 
 Normative: [RFC6749], [RFC7636], [RFC7515], [RFC7517], [RFC7518], [RFC7519],
-[RFC8017], [OIDC], [RFC8446], [RFC9207].
+[RFC8017], [OIDC], [RFC8446], [RFC9207], [EIP-191].
 
 Informative: [RFC9700], [TLSNotary-Proxy], [GitHub-public-clients].
+
+[EIP-191]: https://eips.ethereum.org/EIPS/eip-191
 
 [GitHub-public-clients]: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/best-practices-for-creating-an-oauth-app#client-secrets
 
