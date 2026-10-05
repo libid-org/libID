@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
-
 import {CeremonyProfile} from "libid-contracts/ceremony/CeremonyProfile.sol";
 import {HandleEscrow} from "libid-contracts/escrow/HandleEscrow.sol";
 import {FeeToken, NoReturnToken, PayoutFeeToken, TestERC20, one} from "libid-contracts/escrow/test/EscrowMocks.sol";
@@ -163,8 +161,6 @@ contract LibIDTest is LibIDTestBase {
     address internal bob = makeAddr("bob");
     address internal sender = makeAddr("sender");
 
-    IdentityRegistry internal registry = IdentityRegistry(LibID.REGISTRY);
-    HandleEscrow internal escrow = HandleEscrow(LibID.ESCROW);
     Consumer internal consumer;
 
     function setUp() public {
@@ -218,8 +214,8 @@ contract LibIDTest is LibIDTestBase {
     /// Rules but no verifier yet is not set up either: the age-checking reads
     /// must say so, as `resolve` does, not answer "nobody holds it".
     function test_aPlatformWithRulesButNoVerifierIsNotSetUp() public {
-        vm.prank(libidOwner);
-        registry.setPlatform(LibID.X, HandleVectors.rulesFor(LibID.X));
+        vm.prank(libidRegistry.owner());
+        libidRegistry.setPlatform(LibID.X, HandleVectors.rulesFor(LibID.X));
         bytes memory unknown = abi.encodeWithSelector(IIdentityRegistry.UnknownPlatform.selector, LibID.X);
         vm.expectRevert(unknown);
         consumer.resolve(LibID.X, "jack");
@@ -414,35 +410,37 @@ contract LibIDTest is LibIDTestBase {
         _bind(alice, "1001", "octocat", true);
         bytes32 node = consumer.pay(LibID.GITHUB, "@Octocat", 1 ether, sender);
         assertEq(node, IdentityNodes.handleNode(LibID.GITHUB, "octocat"));
-        assertEq(node, registry.handleNodeOfHash(LibID.GITHUB, registry.handleHashOf(LibID.GITHUB, "octocat")));
+        assertEq(
+            node, libidRegistry.handleNodeOfHash(LibID.GITHUB, libidRegistry.handleHashOf(LibID.GITHUB, "octocat"))
+        );
         assertEq(alice.balance, 1 ether);
     }
 
     /// `pay` returns the node the registry gives for the hash, which is the
     /// node the escrow books the deposit at, whatever formula derives it.
     function test_payReturnsTheNodeTheEscrowBooks() public {
-        bytes32 hash = registry.handleHashOf(LibID.GITHUB, "carol");
+        bytes32 hash = libidRegistry.handleHashOf(LibID.GITHUB, "carol");
         bytes32 node = keccak256("another node");
         vm.mockCall(
             LibID.REGISTRY, abi.encodeCall(IIdentityRegistry.handleNodeOfHash, (LibID.GITHUB, hash)), abi.encode(node)
         );
         assertEq(consumer.pay(LibID.GITHUB, "carol", 1 ether, sender), node);
-        assertEq(escrow.escrowed(node, LibID.NATIVE), 1 ether);
+        assertEq(libidEscrow.escrowed(node, LibID.NATIVE), 1 ether);
 
         TestERC20 token = new TestERC20();
         token.mint(address(consumer), 100);
         assertEq(consumer.payToken(LibID.GITHUB, "carol", address(token), 40, sender), node);
-        assertEq(escrow.escrowed(node, address(token)), 40);
+        assertEq(libidEscrow.escrowed(node, address(token)), 40);
     }
 
     function test_payToAnUnheldHandleWaitsForItsHolder() public {
         bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether, sender);
-        assertEq(escrow.escrowed(node, LibID.NATIVE), 1 ether);
+        assertEq(libidEscrow.escrowed(node, LibID.NATIVE), 1 ether);
 
         address carol = makeAddr("carol");
         _bind(carol, "3003", "carol", true);
         vm.prank(carol);
-        escrow.claim(node, one(LibID.NATIVE), carol);
+        libidEscrow.claim(node, one(LibID.NATIVE), carol);
         assertEq(carol.balance, 1 ether);
     }
 
@@ -475,14 +473,14 @@ contract LibIDTest is LibIDTestBase {
         NoReturnToken token = new NoReturnToken();
         token.mint(address(consumer), 100);
         bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
-        assertEq(escrow.escrowed(node, address(token)), 25);
+        assertEq(libidEscrow.escrowed(node, address(token)), 25);
     }
 
     function test_payTokenWorksWithATokenThatRefusesAZeroApproval() public {
         NoZeroApproveToken token = new NoZeroApproveToken();
         token.mint(address(consumer), 100);
         bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
-        assertEq(escrow.escrowed(node, address(token)), 25);
+        assertEq(libidEscrow.escrowed(node, address(token)), 25);
     }
 
     function test_payTokenResetsAnAllowanceTheTokenWillNotChange() public {
@@ -490,7 +488,7 @@ contract LibIDTest is LibIDTestBase {
         token.mint(address(consumer), 100);
         token.setAllowance(address(consumer), LibID.ESCROW, 7);
         bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
-        assertEq(escrow.escrowed(node, address(token)), 25);
+        assertEq(libidEscrow.escrowed(node, address(token)), 25);
         assertEq(token.allowance(address(consumer), LibID.ESCROW), 0);
     }
 
@@ -500,12 +498,12 @@ contract LibIDTest is LibIDTestBase {
         FeeToken token = new FeeToken();
         token.mint(address(consumer), 1000);
         bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, sender);
-        assertEq(escrow.escrowed(node, address(token)), 990);
+        assertEq(libidEscrow.escrowed(node, address(token)), 990);
 
         address carol = makeAddr("carol");
         _bind(carol, "3003", "carol", true);
         vm.prank(carol);
-        escrow.claim(node, one(address(token)), carol);
+        libidEscrow.claim(node, one(address(token)), carol);
         assertEq(token.balanceOf(carol), 990);
     }
 
@@ -513,7 +511,7 @@ contract LibIDTest is LibIDTestBase {
         LongApproveToken token = new LongApproveToken();
         token.mint(address(consumer), 100);
         bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
-        assertEq(escrow.escrowed(node, address(token)), 25);
+        assertEq(libidEscrow.escrowed(node, address(token)), 25);
     }
 
     /// Only the first word of the answer is copied: `payToken` costs the
@@ -564,7 +562,7 @@ contract LibIDTest is LibIDTestBase {
         consumer.refund(node, address(token), recipient);
         assertEq(token.balanceOf(recipient), 40);
         assertEq(token.balanceOf(address(consumer)), 60);
-        assertEq(escrow.escrowed(node, address(token)), 0);
+        assertEq(libidEscrow.escrowed(node, address(token)), 0);
     }
 
     /// A token that takes a fee from what the escrow receives: the refund is
@@ -574,10 +572,10 @@ contract LibIDTest is LibIDTestBase {
         token.mint(address(consumer), 1000);
         address recipient = makeAddr("recipient");
         bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, address(consumer));
-        assertEq(escrow.escrowed(node, address(token)), 990);
+        assertEq(libidEscrow.escrowed(node, address(token)), 990);
         consumer.refund(node, address(token), recipient);
         assertEq(token.balanceOf(recipient), 990);
-        assertEq(escrow.escrowed(node, address(token)), 0);
+        assertEq(libidEscrow.escrowed(node, address(token)), 0);
     }
 
     /// A token that takes a fee from what the escrow sends out: the refund
@@ -587,10 +585,10 @@ contract LibIDTest is LibIDTestBase {
         token.mint(address(consumer), 1000);
         address recipient = makeAddr("recipient");
         bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, address(consumer));
-        assertEq(escrow.escrowed(node, address(token)), 1000);
+        assertEq(libidEscrow.escrowed(node, address(token)), 1000);
         consumer.refund(node, address(token), recipient);
         assertEq(token.balanceOf(recipient), 990);
-        assertEq(escrow.escrowed(node, address(token)), 0);
+        assertEq(libidEscrow.escrowed(node, address(token)), 0);
         assertEq(token.balanceOf(LibID.ESCROW), 0);
     }
 
@@ -600,8 +598,8 @@ contract LibIDTest is LibIDTestBase {
         bytes32 node = consumer.pay(LibID.GITHUB, "carol-long-handle", 1 ether, address(consumer));
         HandleNormalizer.Rules memory narrow = HandleVectors.rulesFor(LibID.GITHUB);
         narrow.maxLength = 10;
-        vm.prank(libidOwner);
-        registry.setPlatform(LibID.GITHUB, narrow);
+        vm.prank(libidRegistry.owner());
+        libidRegistry.setPlatform(LibID.GITHUB, narrow);
 
         address recipient = makeAddr("recipient");
         consumer.refund(node, LibID.NATIVE, recipient);
@@ -613,7 +611,7 @@ contract LibIDTest is LibIDTestBase {
         address carol = makeAddr("carol");
         _bind(carol, "3003", "carol", true);
         vm.prank(carol);
-        escrow.claim(node, one(LibID.NATIVE), carol);
+        libidEscrow.claim(node, one(LibID.NATIVE), carol);
 
         vm.expectRevert(
             abi.encodeWithSelector(HandleEscrow.NothingToRefund.selector, node, LibID.NATIVE, address(consumer))
@@ -706,7 +704,7 @@ contract LibIDTest is LibIDTestBase {
     // ─── Helpers ────────────────────────────────────────────────────
 
     function _provedAt(bytes32 platformId, string memory handle) internal view returns (uint64 observedAt) {
-        (, observedAt) = registry.handleBinding(IdentityNodes.handleNode(platformId, handle));
+        (, observedAt) = libidRegistry.handleBinding(IdentityNodes.handleNode(platformId, handle));
     }
 
     /// Moves the clock a second, so each proof is newer than the last.
@@ -763,6 +761,124 @@ contract LibIDTest is LibIDTestBase {
         bindHandle(
             who, LibID.GOOGLE, id, handle, exp - CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GOOGLE, true
         );
+    }
+}
+
+/// Reports who called it.
+contract Caller {
+    function caller() external view returns (address) {
+        return msg.sender;
+    }
+}
+
+/// `LibIDTestBase`'s entry points, as an integrator's tests use them.
+contract LibIDTestBaseTest is LibIDTestBase {
+    address internal alice = makeAddr("alice");
+    address internal bob = makeAddr("bob");
+
+    function setUp() public {
+        vm.warp(1_800_000_000);
+    }
+
+    function deployLibIDFromOutside() external {
+        deployLibID();
+    }
+
+    /// Every platform is set up, and a proof bound now reads as old as it
+    /// would with the clocks in step: 5 minutes on GitHub and X, an hour on
+    /// Google.
+    function test_deployLibIDSetsUpEveryPlatform() public {
+        deployLibID();
+        assertTrue(LibID.isEscrowAvailable());
+
+        bindHandle(alice, LibID.GITHUB, "1001", "octocat");
+        assertTrue(LibID.isHolder(alice, LibID.GITHUB, "octocat", 5 minutes));
+        assertFalse(LibID.isHolder(alice, LibID.GITHUB, "octocat", 5 minutes - 1));
+
+        bindHandle(alice, LibID.X, "2002", "jack");
+        assertTrue(LibID.isHolder(alice, LibID.X, "jack", 5 minutes));
+        assertFalse(LibID.isHolder(alice, LibID.X, "jack", 5 minutes - 1));
+
+        bindHandle(alice, LibID.GOOGLE, "0xabc", "alice@gmail.com");
+        assertTrue(LibID.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 1 hours));
+        assertFalse(LibID.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 1 hours - 1));
+
+        assertEq(LibID.resolve(LibID.GITHUB, "@OctoCat"), alice);
+        assertEq(LibID.resolve(LibID.X, "@Jack"), alice);
+        assertEq(LibID.resolve(LibID.GOOGLE, "Alice@Gmail.com"), alice);
+        assertEq(LibID.publishedHandleOf(alice, LibID.GITHUB), "octocat");
+    }
+
+    function test_deployLibIDTestnetUsesTheTestnetAddresses() public {
+        deployLibIDTestnet();
+        assertFalse(LibID.isAvailable());
+        assertTrue(LibIDTestnet.isEscrowAvailable());
+        bindHandle(alice, LibID.GITHUB, "1001", "octocat");
+        assertEq(LibIDTestnet.resolve(LibIDTestnet.GITHUB, "octocat"), alice);
+    }
+
+    /// Each bind moves the clock, so binds in one block do not refuse each
+    /// other as stale.
+    function test_bindsInOneBlockAreEachNewer() public {
+        deployLibID();
+        bindHandle(alice, LibID.GITHUB, "1001", "octocat");
+        bindHandle(bob, LibID.GITHUB, "2002", "octocat");
+        bindHandle(alice, LibID.GITHUB, "1001", "octocat2");
+        assertEq(LibID.resolve(LibID.GITHUB, "octocat"), bob);
+        assertEq(LibID.resolve(LibID.GITHUB, "octocat2"), alice);
+    }
+
+    /// A test's clock starts near zero, earlier than a proof's age.
+    function test_bindHandleWorksAtTheStartOfATest() public {
+        vm.warp(1);
+        deployLibID();
+        bindHandle(alice, LibID.GOOGLE, "0xabc", "alice@gmail.com");
+        assertTrue(LibID.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 1 hours));
+        assertFalse(LibID.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 1 hours - 1));
+    }
+
+    function test_bindHandleTakesTheProofTime() public {
+        deployLibID();
+        bindHandle(alice, LibID.GITHUB, "1001", "octocat", 1_700_000_000, false);
+        (address holder, uint64 observedAt) = LibID.bindingOf(LibID.GITHUB, "octocat");
+        assertEq(holder, alice);
+        assertEq(observedAt, 1_700_000_000);
+        assertEq(LibID.publishedHandleOf(alice, LibID.GITHUB), "");
+    }
+
+    /// A second call uses what the first deployed.
+    function test_aSecondDeployKeepsTheFirst() public {
+        deployLibID();
+        bindHandle(alice, LibID.GITHUB, "1001", "octocat");
+        deployLibID();
+        assertEq(LibID.resolve(LibID.GITHUB, "octocat"), alice);
+        bindHandle(bob, LibID.GITHUB, "2002", "hubot");
+        assertEq(LibID.resolve(LibID.GITHUB, "hubot"), bob);
+    }
+
+    function test_codeThatIsNotLibIDIsRefused() public {
+        vm.etch(LibID.REGISTRY, hex"00");
+        vm.expectRevert(bytes("LibIDTestBase: code at the addresses is not a libID deployment"));
+        this.deployLibIDFromOutside();
+    }
+
+    /// The test's own prank survives every call into the base.
+    function test_theTestsPrankSurvives() public {
+        Caller caller = new Caller();
+        address carol = makeAddr("carol");
+
+        vm.startPrank(carol);
+        deployLibID();
+        bindHandle(alice, LibID.GITHUB, "1001", "octocat");
+        assertEq(caller.caller(), carol);
+        assertEq(caller.caller(), carol);
+        vm.stopPrank();
+
+        vm.prank(carol);
+        bindHandle(bob, LibID.GITHUB, "2002", "hubot");
+        assertEq(caller.caller(), carol);
+        assertEq(caller.caller(), address(this));
+        assertEq(LibID.resolve(LibID.GITHUB, "hubot"), bob);
     }
 }
 
@@ -835,7 +951,7 @@ contract TestnetConsumer is IConsumer {
 /// Runs a library against a live deployment, on a local fork of the chain in
 /// the RPC URL in `rpcVariable`. Skipped when that is empty, unless
 /// LIBID_REQUIRE_FORK is set, as CI sets it: then a missing RPC fails.
-abstract contract ForkTest is Test {
+abstract contract ForkTest is LibIDTestBase {
     IConsumer internal consumer;
     IdentityRegistry internal registry;
     HandleEscrow internal escrow;
@@ -844,6 +960,9 @@ abstract contract ForkTest is Test {
 
     /// A consumer of the library under test, and the addresses it has built in.
     function newConsumer() internal virtual returns (IConsumer, address registry_, address escrow_);
+
+    /// `LibIDTestBase`'s entry point for the library under test.
+    function deployLive() internal virtual;
 
     function setUp() public {
         string memory rpc = vm.envOr(rpcVariable(), string(""));
@@ -883,7 +1002,8 @@ abstract contract ForkTest is Test {
     function test_aPaymentToAnUnheldHandleIsEscrowedAndRefunded() public {
         string memory handle = _unheldHandle();
         bytes32 expected = registry.handleNodeOf(LibID.GITHUB, handle);
-        address recipient = makeAddr("recipient");
+        address recipient = makeAddr(string.concat(handle, " recipient"));
+        assertEq(recipient.code.length, 0);
         uint256 before = recipient.balance;
         vm.deal(address(consumer), 1 ether);
 
@@ -904,10 +1024,40 @@ abstract contract ForkTest is Test {
         assertEq(escrow.escrowed(node, address(token)), 0);
     }
 
-    /// A GitHub handle new to each run, so nobody holds it on the fork.
+    /// `LibIDTestBase` uses the live deployment and binds through it.
+    function test_theTestBaseBindsOnTheLiveDeployment() public {
+        deployLive();
+        assertEq(address(libidRegistry), address(registry));
+        assertEq(address(libidEscrow), address(escrow));
+
+        string memory handle = _unheldHandle();
+        // An address new to the run: a well-known test address can carry
+        // code on a live chain.
+        address alice = makeAddr(handle);
+        assertEq(alice.code.length, 0);
+        bindHandle(alice, LibID.GITHUB, vm.toString(vm.randomUint(64)), handle);
+        assertEq(consumer.resolve(LibID.GITHUB, handle), alice);
+        assertTrue(consumer.isHolder(alice, LibID.GITHUB, handle, 5 minutes));
+        assertFalse(consumer.isHolder(alice, LibID.GITHUB, handle, 5 minutes - 1));
+        (address holder, uint64 observedAt) = consumer.bindingOf(LibID.GITHUB, handle);
+        assertEq(holder, alice);
+        assertEq(observedAt, vm.getBlockTimestamp() - 5 minutes);
+
+        vm.deal(address(consumer), 1 ether);
+        uint256 before = alice.balance;
+        consumer.pay(LibID.GITHUB, handle, 1 ether, address(consumer));
+        assertEq(alice.balance - before, 1 ether);
+    }
+
+    /// A GitHub handle new to each run, so nobody holds it on the fork. The
+    /// registry takes the text, so the reads go through its binding.
     function _unheldHandle() private view returns (string memory handle) {
         handle = string.concat("libid-fork-", vm.toString(vm.randomUint(64)));
         assertEq(consumer.resolve(LibID.GITHUB, handle), address(0));
+        (address holder, uint64 observedAt) = consumer.bindingOf(LibID.GITHUB, handle);
+        assertEq(holder, address(0));
+        assertEq(observedAt, 0);
+        assertFalse(consumer.isHolder(address(0), LibID.GITHUB, handle, type(uint256).max));
     }
 }
 
@@ -920,6 +1070,10 @@ contract LibIDForkTest is ForkTest {
     function newConsumer() internal override returns (IConsumer, address, address) {
         return (IConsumer(address(new Consumer())), LibID.REGISTRY, LibID.ESCROW);
     }
+
+    function deployLive() internal override {
+        deployLibID();
+    }
 }
 
 /// LibIDTestnet against Sepolia.
@@ -931,6 +1085,10 @@ contract LibIDTestnetSepoliaForkTest is ForkTest {
     function newConsumer() internal override returns (IConsumer, address, address) {
         return (new TestnetConsumer(), LibIDTestnet.REGISTRY, LibIDTestnet.ESCROW);
     }
+
+    function deployLive() internal override {
+        deployLibIDTestnet();
+    }
 }
 
 /// LibIDTestnet against Eden testnet.
@@ -941,5 +1099,9 @@ contract LibIDTestnetEdenForkTest is ForkTest {
 
     function newConsumer() internal override returns (IConsumer, address, address) {
         return (new TestnetConsumer(), LibIDTestnet.REGISTRY, LibIDTestnet.ESCROW);
+    }
+
+    function deployLive() internal override {
+        deployLibIDTestnet();
     }
 }

@@ -66,8 +66,11 @@ import {LibID} from "libid/LibID.sol";
 import {LibIDTestBase} from "libid/test/LibIDTestBase.sol";
 
 contract GuestbookTest is LibIDTestBase {
-    function test_theHolderSigns() public {
+    function setUp() public {
         deployLibID(); // or deployLibIDTestnet() for LibIDTestnet
+    }
+
+    function test_theHolderSigns() public {
         address alice = makeAddr("alice");
         bindHandle(alice, LibID.GITHUB, "1001", "octocat");
         // ...
@@ -75,31 +78,46 @@ contract GuestbookTest is LibIDTestBase {
 }
 ```
 
-`bindHandle` also takes the proof's `observedAt`, to test proof ages. The
-platform verifiers are stand-ins that check nothing; everything else is the
-real code.
+- `bindHandle(holder, platformId, id, handle)` binds and publishes the handle
+  as a proof made now would: it reads 5 minutes old on GitHub and X and an
+  hour old on Google, as with the notary's or Google's clock on the block's.
+  It moves the clock forward a second first, so binds in one block do not
+  refuse each other as stale.
+- `bindHandle(holder, platformId, id, handle, observedAt, publish)` takes the
+  proof time, to test proof ages. It does not move the clock.
+- Where libID is already deployed, as on a fork, `deployLibID` uses that
+  deployment and adds the stand-in verifiers to it. Code there that is not
+  libID makes it revert.
+- The functions work inside your `vm.prank` or `vm.startPrank`, and leave it
+  in place.
+- The platform verifiers are stand-ins, `LibIDStandInVerifier`, that check
+  nothing. Everything else is the real code.
 
 Unlike `LibID.sol`, the base imports the libID contracts. They come from
 the `lib/libID-contracts` submodule of this repository and its own
 submodules; if `lib/libid/sol/lib/libID-contracts` is empty, run
 `git submodule update --init --recursive` in `lib/libid`. The base needs
-Solidity 0.8.24 or later and these lines in `remappings.txt`:
+Solidity 0.8.24 or later and these lines in `remappings.txt`. They apply only
+to files under `lib/libid/`, so your own OpenZeppelin is untouched:
 
 ```text
-libid-contracts/=lib/libid/sol/lib/libID-contracts/solidity/contracts/
-@openzeppelin/contracts/=lib/libid/sol/lib/libID-contracts/solidity/lib/openzeppelin-contracts/contracts/
-@openzeppelin/contracts-upgradeable/=lib/libid/sol/lib/libID-contracts/solidity/lib/openzeppelin-contracts-upgradeable/contracts/
+lib/libid/:libid-contracts/=lib/libid/sol/lib/libID-contracts/solidity/contracts/
+lib/libid/:@openzeppelin/contracts/=lib/libid/sol/lib/libID-contracts/solidity/lib/openzeppelin-contracts/contracts/
+lib/libid/:@openzeppelin/contracts-upgradeable/=lib/libid/sol/lib/libID-contracts/solidity/lib/openzeppelin-contracts-upgradeable/contracts/
 ```
 
-The libID contracts compile only through IR. To keep your own contracts on
-the legacy pipeline, add to `foundry.toml`:
+The libID contracts compile only through IR. Add to `foundry.toml`:
 
 ```toml
 additional_compiler_profiles = [{ name = "libid", via_ir = true }]
 compilation_restrictions = [{ paths = "lib/libid/sol/lib/libID-contracts/**", via_ir = true }]
 ```
 
-Your contracts never import the base, so none of this reaches them.
+A test that imports the base then builds through IR, with every contract it
+imports. Your contracts get two builds: the one you deploy, on your own
+settings (`out/Guestbook.sol/Guestbook.json`), and the IR one your tests run
+(`Guestbook.libid.json`). To test the build you deploy, set `via_ir = true`
+for the whole project instead.
 
 ## Functions
 
