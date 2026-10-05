@@ -122,7 +122,8 @@ Platform Profile: The immutable, independently versioned definition of one
    Platform Verifier registered for that platform and version MUST enforce the
    same profile, but its implementation and deployment are ledger-specific.
    The Consumer holds none of the profile constants except, for each
-   platform, its handle normalization and whether it admits digest profiles
+   platform, its handle normalization, whether it admits digest profiles,
+   and each accepted version's handle-digest construction
    (platform §2.1a, REQ-PLAT-08L).
 
 Account identifier: The authenticated value a Platform Profile derives the
@@ -1664,11 +1665,11 @@ nothing a transaction did not carry, and a transaction that carries a handle pub
 since a Submission or disclosure call the Consumer refuses still leaves its
 calldata on chain. The proof bytes hide the witness only because an
 unmodified Prover proves in the zero-knowledge mode with fresh randomness
-(ASM-BROWSER-01, ASM-ZK-01, REQ-COMMON-45A). A digest profile keys its
-bindings as the byte-profile versions of its platform do (platform
-REQ-PLAT-08M), so an account already bound under Google version 1 has its
-email in a public event, and a later version 2 binding of it hides nothing
-that event published. The keys an undisclosed identity is stored under are
+(ASM-BROWSER-01, ASM-ZK-01, REQ-COMMON-45A). An account already bound
+under Google version 1 has its email in a public event, and a later
+version 2 binding of it, which writes a new handle key and retires the
+version 1 one (platform REQ-PLAT-08I, REQ-PLAT-08M), hides nothing that
+event published. The keys an undisclosed identity is stored under are
 unsalted digests of its normalized handle and its account identifier, so that
 whoever already knows an address can resolve it; by the same arithmetic,
 whoever suspects an address, or holds the `sub` from another relying party,

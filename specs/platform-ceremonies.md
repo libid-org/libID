@@ -242,15 +242,18 @@ such table is ineligible.
 The Consumer stores every binding under two keys. An identity's **identity
 key** is derived from its identity platform and the keccak256 digest of its
 canonical `userId`; its **handle key** is derived from its identity platform
-and the handle digest, the keccak256 digest of its normalized handle
-(§2.1a, REQ-PLAT-08M). Each key depends
+and its handle digest, the digest of its normalized handle under the
+construction of the Platform Ceremony Version that bound it (§2.1a,
+REQ-PLAT-08M). Each key depends
 on the value only through that inner digest, so a Consumer that receives
 the digest derives the same key as one that receives the bytes. The
 Consumer records for each key its **owner**, the Transaction Author that
 last bound it, and its **watermark**, the `metadataObservedAt` of the
 binding that last wrote it (common REQ-COMMON-25A). It also records two pairings: each identity key's current
-handle key, and each handle key's current identity key. A Transaction
-Author **holds** a handle on a platform while it owns that handle's key.
+handle key, and each handle key's current identity key. One handle has one
+handle key for each construction its platform's versions use. A
+Transaction Author **holds** a handle on a platform while it owns the
+handle key that REQ-PLAT-08N resolves for that handle.
 
 - REQ-PLAT-08H (upholds SP-BIND-01):
   The Consumer MUST derive identity keys and handle keys with two
@@ -263,15 +266,22 @@ Author **holds** a handle on a platform while it owns that handle's key.
   `keccak256(abi.encode(tag, platformId, digest))` with one fixed tag for
   each kind of key.
 - REQ-PLAT-08M (upholds SP-BIND-01, SP-PRIV-01):
-  A handle digest is the 32-byte `keccak256` of a normalized handle's bytes,
-  on every platform and in every Platform Ceremony Version. The Consumer
-  computes it from handle bytes it receives; a digest profile's Proving
-  Circuit computes it from the signed bytes and exposes it. Every role that
-  derives a handle digest MUST use that construction. Necessity: the handle
-  digest is the inner digest of the handle key, and the Consumer cannot
-  turn one digest into another without the handle, so a digest profile
-  whose circuit hashed differently would key a handle apart from the
-  bindings other versions of its platform already wrote.
+  A handle digest is the 32-byte `keccak256` of a normalized handle's
+  bytes, except under Google version 2, where it is
+  `SHA256(UTF8("libid.google-handle") || email)` over the normalized
+  `email` bytes. The construction belongs to the Platform Ceremony Version,
+  not to the platform, and a version's construction never changes. Every
+  role that derives a handle digest for a binding, the Consumer from handle
+  bytes it receives and a digest profile's Proving Circuit from the signed
+  bytes, MUST use the construction of the binding's version. Necessity: the
+  handle digest is the inner digest of the handle key, so a role that used
+  another construction would key the binding where no reader looks. The
+  Google version 2 circuit already computes SHA-256 for REQ-PLAT-05A, and
+  the tag keeps the digest apart from a plain `SHA256` of the address that
+  another system may publish. The cost is that a Google version 1 binding
+  and a Google version 2 binding of one address write different handle
+  keys; the identity key is the same, because both versions derive the
+  `userId` under REQ-PLAT-05A.
 - REQ-PLAT-08I (upholds SP-BIND-01, SP-FRESH-01):
   The Consumer MUST write the binding of an accepted Submission only when
   its `metadataObservedAt` is strictly newer than the watermark of the
@@ -282,8 +292,12 @@ Author **holds** a handle on a platform while it owns that handle's key.
   its previous one, the Consumer MUST clear the owner of the previous
   handle key if that handle key's current identity key is still this one,
   and MUST keep that key's watermark. The Consumer MUST NOT change an
-  owner, a watermark, or a pairing on any other path. Necessity: an account
-  that proves a new handle has stopped holding the old one, and leaving its
+  owner, a watermark, or a pairing on any other path. A binding under a
+  version whose construction differs from the one that wrote the
+  identity's previous handle key pairs the identity with a different
+  handle key even for the same handle, and the previous key is retired as
+  for a rename. Necessity: an account that proves a new handle has stopped
+  holding the old one, and leaving its
   owner in place would route to the renamed account whatever is sent to
   that handle; a handle another account has since proved is that
   account's, and is left alone. This retirement is what makes ownership of
@@ -291,6 +305,23 @@ Author **holds** a handle on a platform while it owns that handle's key.
   evidence older than another account's proof of the handle from taking it
   back, and a retired key keeps its watermark so that evidence older than
   the binding it retired cannot claim it either.
+
+- REQ-PLAT-08N (upholds SP-BIND-01):
+  The Consumer MUST resolve a plaintext handle on a platform by normalizing
+  it under §2.1a, deriving its handle key under each construction the
+  platform's accepted versions use, and answering the owner of the owned
+  key with the newest watermark, together with that key. Where none of
+  those keys has an owner, the Consumer MUST answer that the handle is
+  unbound, together with its handle key under the construction of the
+  newest Platform Ceremony Version the platform accepts. The Consumer MUST
+  NOT resolve a handle by one construction alone where its platform's
+  accepted versions use more than one. A party that addresses a handle key
+  through a digest it computed itself reaches only bindings made under that
+  digest's construction. Necessity: a reader that knows an address cannot
+  know which version its holder bound under, and of two owned keys of one
+  handle the newer evidence is the current holder; a party that pays an
+  unbound handle needs one key its holder can come to own, and the newest
+  version is the one a holder binding later is expected to use.
 
 A Transaction Author's **name** on a platform is the one handle the
 Consumer stores for that author and platform to display, the analogue of an
@@ -317,8 +348,8 @@ as that author is its authority, and no proof binds it.
   that carries the handle (REQ-PLAT-08I), the Consumer MUST store that
   handle as the author's name when the Submission asks to publish it. On
   writing such a binding, the Consumer MUST also store the handle when the
-  stored name's handle key has as its current identity key the identity key
-  the Submission binds. Where the stored name no longer normalizes under the
+  handle key REQ-PLAT-08N resolves for the stored name has as its current
+  identity key the identity key the Submission binds. Where the stored name no longer normalizes under the
   platform's current rules (§2.1a), it has no handle key, and the Consumer
   MUST skip that second path, leaving the name unchanged, and MUST NOT
   reject the Submission for it. The Consumer MUST leave the name unchanged on
@@ -369,18 +400,20 @@ REQ-PLAT-08K; publication is state.
 - REQ-PLAT-08L (upholds SP-BIND-01, SP-PRIV-01):
   The Consumer MUST record, in its configuration of each platform and beside
   that platform's normalization, whether the platform admits digests: whether
-  any of its Platform Ceremony Versions it accepts is a digest profile.
-  Every Platform Ceremony Version of one platform MUST share the platform's
-  normalization; versions MAY differ in whether they expose the handle as
-  bytes or as a digest. The Consumer MUST reject a Submission whose Platform
+  any of its Platform Ceremony Versions it accepts is a digest profile, and,
+  for each version it accepts, that version's handle-digest construction
+  (REQ-PLAT-08M). Every Platform Ceremony Version of one platform MUST share
+  the platform's normalization; versions MAY differ in whether they expose
+  the handle as bytes or as a digest, and in their construction. The Consumer MUST reject a Submission whose Platform
   Verifier result returns a handle digest on a platform that does not admit
   digests. The Consumer MUST accept a result returning verified handle bytes
   on either kind of platform, and MUST reject a result that returns neither
   verified handle bytes nor a handle digest. The unverified handle a
   digest-profile result passes through beside its handle digest (common
-  REQ-COMMON-05E) is not verified handle bytes. Necessity: every version of
-  a platform binds into the same keys, so two versions that normalized
-  differently would key one handle twice; the disclosure call and the
+  REQ-COMMON-05E) is not verified handle bytes. Necessity: two versions
+  that normalized differently would key one handle apart even under one
+  construction; resolution (REQ-PLAT-08N) needs every construction the
+  platform's versions use; the disclosure call and the
   freeze of REQ-PLAT-08G apply before any digest-profile Submission of the
   platform exists, so the Consumer needs the fact from configuration; and a
   platform's earlier byte-profile versions stay acceptable beside a digest
@@ -390,8 +423,9 @@ REQ-PLAT-08K; publication is state.
   canonical `userId` and the handle digest the Platform Verifier returns, in
   every Submission. Where a Submission carries the plaintext handle, the
   Consumer MUST normalize it under §2.1a. The Consumer MUST reject such a
-  Submission unless the REQ-PLAT-08M digest of the normalized handle equals
-  the handle digest. The Consumer MUST reject a Submission that asks to publish a name
+  Submission unless the REQ-PLAT-08M digest of the normalized handle, under
+  the construction of the Submission's Platform Ceremony Version, equals the
+  handle digest. The Consumer MUST reject a Submission that asks to publish a name
   and carries no handle. Necessity: the plaintext handle arrives unverified
   and only the digest comparison ties it to the proof, and a request to
   publish with no handle asks for a name the Consumer has nothing to store
@@ -399,8 +433,8 @@ REQ-PLAT-08K; publication is state.
 - REQ-PLAT-08E (upholds SP-BIND-01):
   For a platform that admits digests, the Consumer MUST offer a disclosure
   call that takes a platform and a plaintext handle. The Consumer MUST normalize the
-  handle under §2.1a and derive its handle key. The Consumer MUST accept the
-  call only when the caller holds that handle. The Consumer MUST NOT require
+  handle under §2.1a and resolve it under REQ-PLAT-08N. The Consumer MUST
+  accept the call only when the caller holds that handle. The Consumer MUST NOT require
   a new proof or the `userId` for a disclosure. Necessity: the handle's
   preimage is the evidence and ownership of its key the authority. A handle
   a later claim of the same account renamed away from has lost its owner to
@@ -428,18 +462,21 @@ REQ-PLAT-08K; publication is state.
   whose case-folding, character-set, and shape rows the digest profile's
   Proving Circuit reproduces (TEST-PLAT-20). Once a platform admits digests
   and has bound any identity, the Consumer MUST refuse a change to its
-  normalization. Once it has accepted a digest-profile result for a
-  platform, the Consumer MUST refuse to stop admitting digests for it.
+  normalization. The Consumer MUST refuse a change to the construction it
+  records for a version once it has bound any identity under that version.
+  Once it has accepted a digest-profile result for a platform, the Consumer
+  MUST refuse to stop admitting digests for it.
   The Consumer MAY start admitting digests for a platform that has already
   bound identities. Necessity: the Consumer holds only digests for some
   bindings, so it cannot re-key them under new rules, and a disclosed
-  handle normalized other than as the circuit does stops hashing to its own
-  key; withdrawing admission would strand the disclosure call of bindings
+  handle normalized or hashed other than as the circuit does stops hashing
+  to its own key; withdrawing admission would strand the disclosure call of bindings
   made under it; a platform whose byte-profile versions are already in use
   must be able to add a digest profile.
 - TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08G, REQ-PLAT-08L):
   The same Google account submitted under version 2 with and without its
-  handle, and under version 1, lands on the same two keys. A Submission without the handle, made with
+  handle lands on the same two keys; submitted under version 1, it lands on
+  the same identity key and a different handle key. A Submission without the handle, made with
   recognizable test values, carries neither the email nor the `sub` in its
   decoded payload or its decoded events, and a Submission with the handle
   carries no `sub` in either. A Submission with an empty handle field is
@@ -456,13 +493,24 @@ REQ-PLAT-08K; publication is state.
   Application places that `email` in a Submission only when the user asks
   to disclose it, and places no `sub` in any. On a Consumer whose Google
   configuration admits digests, a change to Google's handle normalization
-  is refused once a Google identity is bound, and withdrawing admission is
+  is refused once a Google identity is bound, a change to version 2's
+  recorded construction is refused once a version 2 identity is bound, and withdrawing admission is
   refused once a version 2 result has been accepted; admission can be
   turned on after version 1 bindings exist. A platform that admits digests
   accepts a version 1 result carrying verified handle bytes and a version 2
   result carrying the handle digest beside an unverified carried handle; a
   platform that does not admit digests rejects a result carrying a handle
   digest.
+- TEST-PLAT-20C (exercises REQ-PLAT-08I, REQ-PLAT-08M, REQ-PLAT-08N):
+  A Google account bound under version 1 with handle H and then under
+  version 2 with H pairs its identity key with H's version 2 handle key and
+  leaves H's version 1 handle key without an owner, its watermark kept.
+  Resolving H then answers the version 2 key's owner. When account A holds
+  H's version 1 key and account B, of another wallet, holds H's version 2
+  key with newer evidence, resolving H answers B's wallet and the version 2
+  key; with B's evidence older, A's wallet and the version 1 key. An
+  unbound H resolves as unbound with its version 2 key. Addressing H by the
+  keccak256 digest of its normalized form reaches only its version 1 key.
 - TEST-PLAT-20B (exercises REQ-PLAT-08H, REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
   A numeric handle and a `userId` of the same digits land on different keys.
   An identity that proves a new handle leaves its old handle without an
@@ -713,9 +761,11 @@ The signing key is fetched from Google's JWKS endpoint as witness input.
 
 Version 2 changes only the identity outputs: the Proving Circuit exposes a
 handle digest in place of the `email` bytes, validates and normalizes the
-`email` itself, and bounds the `sub` more tightly. Its identity key and
-handle key are those of version 1 (§2.1b), so a binding made under either
-version keys the same account and handle.
+`email` itself, bounds the `sub` more tightly, and digests the handle with
+its own construction (REQ-PLAT-08M). Its identity key is that of version
+1; its handle key is not, so a version 1 and a version 2 binding of one
+address write two handle keys, which REQ-PLAT-08I retires and REQ-PLAT-08N
+resolves (§2.1b).
 
 A profile is implementable only when its exact proving artifacts are
 published ([libID](libid.md#system-model-and-specification-ownership)).
@@ -730,9 +780,9 @@ artifacts.
   expose the handle digest, the REQ-PLAT-08M digest of the signed `email`
   after the normalization of §2.1a (REQ-PLAT-16F). The Proving Circuit MUST
   NOT expose a detached second representation of a claim. Necessity: the
-  handle digest is the inner digest of the handle key (§2.1b), so a claim
-  that carries its handle, one that does not, and a version 1 claim of the
-  same address key the same binding.
+  handle digest is the inner digest of the handle key (§2.1b), so a
+  version 2 claim that carries its handle and one that does not key the
+  same binding.
 - REQ-PLAT-16F (upholds SP-BIND-01, SP-PRIV-01):
   For version 2, the Proving Circuit MUST NOT expose the signed `sub` or `email` in any
   public input. The Proving Circuit MUST reject a `sub` that REQ-PLAT-04A
@@ -1548,8 +1598,8 @@ authorization and redirect transport; every authenticated request and
 response field with its provenance; how the Authorization Digest is carried
 through that platform's authorization; its authenticated client-binding source; an
 authenticated proof-validity rule and the value of each protocol parameter it
-names; whether it exposes identity bytes or is a digest profile (§2.1b); its
-trust-root lifecycle;
+names; whether it exposes identity bytes or is a digest profile (§2.1b),
+and its handle-digest construction (REQ-PLAT-08M); its trust-root lifecycle;
 browser and deployment data exposure, retry, interruption, and withholding
 behavior; and conformance vectors.
 
@@ -1608,10 +1658,10 @@ Platform Verifier, Notary Service, Consumer.
 - TEST-PLAT-06A (exercises REQ-PLAT-04A, REQ-PLAT-08M, REQ-PLAT-16D, REQ-PLAT-16E, REQ-PLAT-16F):
   Under version 2, `Alice@Gmail.com` and `alice@gmail.com` prove the same
   handle digest,
-  `0x6675dc2b4eac35a5f88a319515852146c659bcc326e47041caafc668f97f7167`, the
+  `0x5ecf20af6a3cb20cb8e5e2c6e7a7c3ae5aa37239c008643be631d93498ef23e1`, the
   REQ-PLAT-08M digest of the normalized handle the Consumer derives from the
-  plaintext, and the inner digest of the handle key a version 1 binding of
-  either address writes. An `email` with a space, two `@`, an empty local
+  plaintext, and not the inner digest of the handle key a version 1
+  binding of either address writes. An `email` with a space, two `@`, an empty local
   part, a byte outside the normalization's alphabet, or bytes past its
   signed length cannot satisfy the circuit; neither can a `sub` holding `\`
   (as `12\/3` does), a 32-byte `sub`, or a 63-byte `email`. A `sub` signed
@@ -1894,10 +1944,16 @@ Google version 1 publishes the `email` bytes in every proof's public
 inputs, and the Consumer emits the normalized handle. Google version 2 is a
 digest profile (§2.1b): its `email` reaches the chain only as its
 REQ-PLAT-08M digest unless a transaction carries it, and the Consumer keys
-the binding on that digest and the `userId`, the same keys a version 1
-binding of the account writes. A version 2 binding therefore supersedes a
-version 1 binding of the same account under the ordering of REQ-PLAT-08I,
-but it hides nothing a version 1 transaction already published.
+the binding on that digest and the `userId`. The identity key is the one a
+version 1 binding of the account writes; the handle key is a new one,
+because the two versions digest the handle differently. A version 2
+binding of an account bound under version 1 retires its version 1 handle
+key as a rename would (REQ-PLAT-08I), and resolution by address tries both
+keys (REQ-PLAT-08N). It hides nothing a version 1 transaction already
+published. A party that addresses a Google handle by a digest it computed
+itself, as an escrow deposit does, reaches only the key of that digest's
+construction, so it takes the key from the Consumer's resolution rather
+than computing one.
 What version 2 hides is stated in
 [common §12](ceremony-common.md#12-security-considerations) together with
 what it does not hide: a guessed address or a `sub` held by another relying
