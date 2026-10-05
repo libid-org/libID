@@ -143,9 +143,10 @@ alice._at.company.com.google.handles.link
   the chain that label names. A name without one is answered for the chain
   the Coin Type names.
 - REQ-ENS-NAME-04:
-  A name MUST be DNS wire format with every label 1 to 63 bytes. A label
-  containing an uppercase letter or a byte at or below `0x20` is not a name
-  any handle produces.
+  A name MUST be DNS wire format: labels of 1 to 63 bytes, each valid UTF-8,
+  ended by the root label with no bytes after it. A label containing an
+  uppercase letter or a byte at or below `0x20` is not a name any handle
+  produces; the Gateway answers it under REQ-ENS-GW-05.
 
 ## 6. Handle labels
 
@@ -246,11 +247,15 @@ produce unchanged.
   suffix. A `{data}` that is not hex, not a `resolve` call, or not decodable
   MUST get HTTP 400.
 - REQ-ENS-GW-02:
-  The Gateway MUST answer HTTP 400 for a name outside its Parent Name, a name
-  violating REQ-ENS-NAME-04's wire rules, and a record call whose node is not
-  the namehash of the name. Necessity: these are malformed queries, not
-  names; and a node that differs from the name means the client and the
-  Gateway normalized differently, which must not be signed.
+  The Gateway MUST answer HTTP 400 for a name violating REQ-ENS-NAME-04's
+  wire rules, a label that is not UTF-8 among them, and for a name outside
+  its Parent Name, whatever the record. It MUST answer HTTP 400 for an `addr`
+  call whose node is not the namehash of the name. For any other record it
+  answers the signed empty result of REQ-ENS-GW-07 without comparing the
+  node. Necessity: the first are malformed queries, not names; and a node
+  that differs from the name means the client and the Gateway normalized
+  differently, which must not be signed as an address. The empty result
+  asserts nothing about the node.
 
 ### 8.2 Choosing the chain
 
@@ -275,9 +280,9 @@ produce unchanged.
   binding a later Gateway in the list could serve. No libID binding is ever
   a non-EVM address, so that absence is known.
 - REQ-ENS-GW-05 (upholds SP-ENS-05):
-  Once a chain is selected, a name the Gateway cannot parse, a Handle Label
-  outside REQ-ENS-LABEL-05, and a Chain Label not naming the selected chain
-  MUST each get a Signed Null.
+  Once a chain is selected, a name the Gateway cannot parse, Handle Labels
+  the inverse of REQ-ENS-LABEL-05 refuses, and a Chain Label not naming the
+  selected chain MUST each get a Signed Null.
 - REQ-ENS-GW-06 (upholds SP-ENS-03):
   Before answering from a chain, the Gateway MUST return a Refusal (HTTP 503)
   when that chain's index is more than the deployment's maximum lag behind,
@@ -315,6 +320,35 @@ produce unchanged.
   Resolver's `x-batch-gateway:true` entry makes the client fetch the Gateway
   from the wallet's page; without the header the page never sees the answer.
   The answers are public and signed, and no credentials are sent.
+
+### 8.4 Order
+
+- REQ-ENS-GW-11 (upholds SP-ENS-03):
+  The Gateway MUST take these steps in order, and the first that answers
+  ends the request:
+
+  1. `{sender}` (REQ-ENS-GW-08) and `{data}` (REQ-ENS-GW-01): HTTP 400.
+  2. The name's wire rules and Parent Name (REQ-ENS-GW-02): HTTP 400.
+  3. A record other than `addr`: the signed empty result.
+  4. An `addr` node that is not the name's namehash: HTTP 400.
+  5. Choosing the chain (REQ-ENS-GW-03, REQ-ENS-GW-04): a Refusal, or a
+     Signed Null for a non-EVM Coin Type.
+  6. The Signed Nulls of REQ-ENS-GW-05.
+  7. Staleness (REQ-ENS-GW-06): a Refusal.
+  8. The handle rules of REQ-ENS-LABEL-05: a Signed Null.
+  9. The holder (REQ-ENS-GW-07).
+
+  Necessity: a chain the Gateway does not serve keeps its Refusal, so the
+  client walks on to a Gateway that may read the name; and no step before
+  staleness reads a binding.
+
+  Consequence: a record other than `addr` gets its signed empty result
+  whatever the Coin Type and however stale the index, and the Signed Nulls of
+  REQ-ENS-GW-05 are signed while the selected chain's index is stale or its
+  report has expired or is unknown. Those answers depend on the name, the
+  Coin Type and the Chain Labels the Indexed Store holds when asked, never on
+  a binding. A handle the rules refuse, and every holder, is answered only
+  from an index that passes REQ-ENS-GW-06.
 
 ## 9. Keys
 
@@ -365,12 +399,17 @@ produce unchanged.
   A name resolves through the ENS Universal Resolver on the ENS Chain, with
   the batch gateway played by the test. The same name fails with CCIP-Read
   disabled on the client, which shows the answer came offchain.
-
 - TEST-ENS-06 (exercises REQ-ENS-NAME-02, REQ-ENS-GW-02):
   With the Parent Name `testnet.handles.link`, `alice.x.testnet.handles.link`
   reads as the X handle `alice` with no Chain Label,
   `alice.x.sepolia.testnet.handles.link` carries the Chain Label `sepolia`,
   and `alice.x.handles.link` gets HTTP 400.
+- TEST-ENS-07 (exercises REQ-ENS-NAME-04, REQ-ENS-GW-02, REQ-ENS-GW-11):
+  A name with a label that is not UTF-8, and an `addr` call whose node is
+  not the name's namehash, each get HTTP 400; a `text` call whose node is not
+  the name's namehash gets the signed empty result; with the selected
+  chain's index stale, a mismatched Chain Label gets a Signed Null and a
+  readable handle gets a Refusal.
 
 ## 11. Security Considerations
 
