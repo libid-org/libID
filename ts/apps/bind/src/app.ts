@@ -158,29 +158,22 @@ function launch(
   event: MouseEvent,
   operationDomain: Uint8Array,
 ) {
-  const anchor = anchors[platform]
   if (!holder) {
     event.preventDefault()
     return
   }
-  const id = crypto.randomUUID()
-  const target = `ceremony-${id}`
-  // Window creation stays synchronous with the click.
-  const popup = PopupWindow.open(target)
-  const connection = client.connect(popup, { connectionId: id })
+  // Window creation and the run's start stay synchronous with the click.
+  const connection = client.connect(PopupWindow.fromAnchor(event))
   const transactionData = authorizedTransactionData(holder)
   let ceremony: Ceremony<Platform>
   try {
-    ceremony = client.new(connection, id, platform, ledger, operationDomain, transactionData)
+    ceremony = client.new(connection, platform, ledger, operationDomain, transactionData)
   } catch (error) {
     event.preventDefault()
     connection.close()
     status(error instanceof Error ? error.message : 'Unable to start the ceremony.')
     return
   }
-  anchor.target = target
-  anchor.href = ceremony.launchUrl
-  if (popup.opened) event.preventDefault()
   const off = ceremony.onStage((update) => {
     show(
       'stage',
