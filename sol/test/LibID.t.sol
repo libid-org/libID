@@ -918,3 +918,13 @@ contract LibIDTestnetSepoliaForkTest is ForkTest {
     }
 }
 
+/// LibIDTestnet against Eden testnet.
+contract LibIDTestnetEdenForkTest is ForkTest {
+    function rpcVariable() internal pure override returns (string memory) {
+        return "EDEN_RPC_URL";
+    }
+
+    function newConsumer() internal override returns (IConsumer, address, address) {
+        return (new TestnetConsumer(), LibIDTestnet.REGISTRY, LibIDTestnet.ESCROW);
+    }
+}

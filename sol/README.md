@@ -181,6 +181,7 @@ cd sol
 forge test
 ETH_RPC_URL=https://ethereum-rpc.publicnode.com \
 SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
+EDEN_RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545 \
   forge test --match-contract 'ForkTest$'
 ```
 
@@ -192,6 +193,9 @@ The tests use `LibIDTestBase`: they deploy the real libID contracts, pinned
 in `lib/libID-contracts`, at the addresses LibID has built in, and bind handles with the dates the real
 verifiers give, at both ends of their acceptance windows. One test checks
 both libraries' addresses against their environment's factory and the CREATE3
-derivation of the canonical names. The fork tests check `LibID` against
-Ethereum mainnet and `LibIDTestnet` against Sepolia, and are skipped without
-`ETH_RPC_URL` and `SEPOLIA_RPC_URL`.
+derivation of the canonical names. The fork tests run `LibID` against
+Ethereum mainnet and `LibIDTestnet` against Sepolia and Eden testnet, on
+local forks: they read, and pay a handle nobody holds and refund it. Each is
+skipped without its RPC URL (`ETH_RPC_URL`, `SEPOLIA_RPC_URL`,
+`EDEN_RPC_URL`), unless `LIBID_REQUIRE_FORK=true`, which CI sets: then a
+missing URL fails.

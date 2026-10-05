@@ -109,8 +109,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Solidity: LibID, tested against the real libID contracts placed at their
-  # canonical addresses. The fork tests read Ethereum mainnet and Sepolia
-  # through public RPCs.
+  # canonical addresses. The fork tests run against Ethereum mainnet, Sepolia
+  # and Eden testnet through public RPCs, on local forks.
   # ---------------------------------------------------------------------------
   sol:
     name: Solidity
@@ -150,10 +150,11 @@ jobs:
         run: forge test -vv
 
       # LIBID_REQUIRE_FORK turns a missing RPC into a failure, not a skip.
-      - name: Mainnet and Sepolia fork tests
+      - name: Mainnet, Sepolia and Eden fork tests
         env:
           ETH_RPC_URL: https://ethereum-rpc.publicnode.com
           SEPOLIA_RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
+          EDEN_RPC_URL: https://ev-reth-eden-testnet.binarybuilders.services:8545
           LIBID_REQUIRE_FORK: "true"
         run: forge test -vv --match-contract 'ForkTest$'
 
