@@ -122,8 +122,8 @@ importers:
   packages/ens:
     dependencies:
       '@libid/contracts':
-        specifier: ^0.17.0
-        version: 0.17.0(viem@2.57.3(typescript@7.0.2))
+        specifier: 0.15.1
+        version: 0.15.1(viem@2.57.3(typescript@7.0.2))
     devDependencies:
       '@adraffy/ens-normalize':
         specifier: ^1.11.1
@@ -424,14 +424,6 @@ packages:
 
   '@libid/contracts@0.15.1':
     resolution: {integrity: sha512-jBq+srAfauhYW068qB+XXnZohbLmC6TEppFCDD40bnsebAwHk1/jmzXdEtHk6G9yaA74rIs4FS7GhkkBsZOjAQ==}
-    peerDependencies:
-      viem: ^2.48.11
-    peerDependenciesMeta:
-      viem:
-        optional: true
-
-  '@libid/contracts@0.17.0':
-    resolution: {integrity: sha512-fgfuDXjv4d1UVKjB+QfuMY2Ora0QjJrKPL+ZpML8GMNHglfAUPYAd05RABpMtOoSshrkXsSa5EL3Ic6lEJWJGw==}
     peerDependencies:
       viem: ^2.48.11
     peerDependenciesMeta:
@@ -1462,10 +1454,6 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.6.0
 
   '@libid/contracts@0.15.1(viem@2.57.3(typescript@7.0.2))':
-    optionalDependencies:
-      viem: 2.57.3(typescript@7.0.2)
-
-  '@libid/contracts@0.17.0(viem@2.57.3(typescript@7.0.2))':
     optionalDependencies:
       viem: 2.57.3(typescript@7.0.2)
 

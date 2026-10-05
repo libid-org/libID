@@ -7,8 +7,9 @@ ESM packages with TypeScript declarations. Their initial package versions are
 Popup exports its main API, `/worker` and `/testing`. Ceremony exports its
 application client API; it requires the app's compatible popup installation as a
 peer so both use the same popup classes. Ledger is a regular dependency because
-ceremony's declarations use `LedgerId`. Ens depends on `@libid/contracts` for
-handle normalization and takes viem as a peer, as `@libid/contracts` does.
+ceremony's declarations use `LedgerId`. Ens depends on `@libid/contracts`, pinned to
+the version ceremony uses, for handle normalization. It requires viem as a
+peer because `@libid/contracts/identity` imports viem when it loads.
 
 The npm packages contain only the public entry graphs, source maps with embedded
 sources, README and repository license/notice files. Source, tests and CCDP

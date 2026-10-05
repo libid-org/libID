@@ -1,7 +1,7 @@
 import { ens_normalize } from '@adraffy/ens-normalize'
-import { HandleError, RULES_GOOGLE, RULES_X } from '@libid/contracts'
+import { RULES_GOOGLE, RULES_X } from '@libid/contracts/identity'
 import { describe, expect, it } from 'vitest'
-import { ensName } from './index.js'
+import { ensName, HandleError } from './index.js'
 
 describe('ensName', () => {
   it.each([

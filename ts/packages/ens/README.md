@@ -17,7 +17,17 @@ ensName('x', 'alice', { chain: 'base' }) // 'alice.x.base.handles.link'
 `ensName` normalizes the handle with the registry's rules from
 `@libid/contracts` first, so it takes a handle as a user typed it. It returns
 `null` when a handle has no name, and throws `HandleError` for text that is
-not a handle on that platform.
+not a handle on that platform. `HandleError` is re-exported from
+`@libid/ens`, so `instanceof` works without importing `@libid/contracts`.
+
+## Install
+
+```sh
+npm install @libid/ens viem
+```
+
+viem is a peer dependency. `@libid/contracts/identity`, where the
+normalization lives, imports viem when it loads, so `@libid/ens` does too.
 
 ## Rules
 

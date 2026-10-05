@@ -8,7 +8,9 @@ import {
   PLATFORM_X_KEY,
   type Rules,
   rulesFor,
-} from '@libid/contracts'
+} from '@libid/contracts/identity'
+
+export { HandleError, type Rules } from '@libid/contracts/identity'
 
 /** The ENS name libID names sit under unless a deployment names another. */
 export const PARENT_NAME = 'handles.link'

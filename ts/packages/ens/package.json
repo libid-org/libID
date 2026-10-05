@@ -23,7 +23,7 @@
     "prepack": "pnpm build"
   },
   "dependencies": {
-    "@libid/contracts": "^0.17.0"
+    "@libid/contracts": "0.15.1"
   },
   "peerDependencies": {
     "viem": "^2.48.11"
