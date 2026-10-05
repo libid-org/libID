@@ -244,18 +244,6 @@ URL-search-parameter encoding layer; decoding that layer reproduces the
 captured components without normalization or merging. The selected profile's
 OAuth parser handles their contents later.
 
-CCDP version 1 bounds these URL inputs. Browsers serialize URL components as
-ASCII, so each character below is one byte.
-
-| Input | Bound | Enforced by |
-|---|---|---|
-| Captured OAuth return: query and fragment together, `?` and `#` included | 32768 characters | Callback before connecting; the selected profile's OAuth parser |
-| Prefetch or Prover navigation fragment, `#` included | 65536 characters | the receiving document; Callback before navigating to Prover |
-| OAuth return field name | 64 characters | the selected profile's OAuth parser |
-| OAuth return field value, once decoded | 8192 UTF-16 code units | the selected profile's OAuth parser |
-
-Each listed participant refuses an input beyond its bound.
-
 Callback constructs this fragment locally for the frozen CCDP-origin Prover;
 the Application receives neither the return nor the navigation target.
 The Prover captures and clears it before use. Any internal isolation
@@ -267,6 +255,18 @@ Opaque dependency error text follows the
 redaction. Proofs and other proving inputs never enter
 navigation fragments. The OAuth-platform-mandated query on `redirectUri`
 remains the sole credential-bearing HTTP-request URL.
+
+CCDP version 1 bounds these URL inputs. Browsers serialize URL components as
+ASCII, so each character in the first three rows is one byte.
+
+| Input | Bound | Enforced by |
+|---|---|---|
+| Captured OAuth return: query and fragment together, `?` and `#` included | 32768 characters | Callback before connecting; the selected profile's OAuth parser |
+| Prefetch or Prover navigation fragment, `#` included | 65536 characters | the receiving document; Callback before navigating to Prover |
+| OAuth return field name | 64 characters | the selected profile's OAuth parser |
+| OAuth return field value, once decoded | 8192 UTF-16 code units | the selected profile's OAuth parser |
+
+Each listed participant refuses an input beyond its bound.
 
 CCDP is connection-neutral. It defines which document runs at each location,
 which participant initiates each navigation, what each message means, and their
