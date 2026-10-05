@@ -242,7 +242,8 @@ REQ-PLAT-08M). Each key depends
 on the value only through that inner digest, so a Consumer that receives
 the digest derives the same key as one that receives the bytes. The
 Consumer records for each key its **owner**, the Transaction Author that
-last bound it. It also records two pairings: each identity key's current
+last bound it, and its **watermark**, the `metadataObservedAt` of the
+binding that last wrote it (common REQ-COMMON-25A). It also records two pairings: each identity key's current
 handle key, and each handle key's current identity key. A Transaction
 Author **holds** a handle on a platform while it owns that handle's key.
 
@@ -272,18 +273,25 @@ Author **holds** a handle on a platform while it owns that handle's key.
   computes SHA-256 for REQ-PLAT-05A, so its handle digest adds no second
   hash function, and the tag keeps the digest apart from a plain `SHA256`
   of the address that another system may publish.
-- REQ-PLAT-08I (upholds SP-BIND-01):
-  On writing the binding of an accepted Submission, which common
-  REQ-COMMON-25A permits only for strictly newer evidence, the Consumer MUST
-  make the Transaction Author the owner of both keys it binds and pair them
-  in both directions. When it pairs an identity key with a handle key other
-  than its previous one, the Consumer MUST clear the owner of the previous
-  handle key if that handle key's current identity key is still this one. The Consumer MUST NOT change an owner or a
-  pairing on any other path. Necessity: an account that proves a new handle
-  has stopped holding the old one, and leaving its owner in place would route
-  to the renamed account whatever is sent to that handle; a handle another
-  account has since proved is that account's, and is left alone. This
-  retirement is what makes ownership of a handle key mean holding it now.
+- REQ-PLAT-08I (upholds SP-BIND-01, SP-FRESH-01):
+  The Consumer MUST write the binding of an accepted Submission only when
+  its `metadataObservedAt` is strictly newer than the watermark of the
+  identity key and the watermark of the handle key it binds. On writing it,
+  the Consumer MUST make the Transaction Author the owner of both keys, set
+  both watermarks to that `metadataObservedAt`, and pair the keys in both
+  directions. When it pairs an identity key with a handle key other than
+  its previous one, the Consumer MUST clear the owner of the previous
+  handle key if that handle key's current identity key is still this one,
+  and MUST keep that key's watermark. The Consumer MUST NOT change an
+  owner, a watermark, or a pairing on any other path. Necessity: an account
+  that proves a new handle has stopped holding the old one, and leaving its
+  owner in place would route to the renamed account whatever is sent to
+  that handle; a handle another account has since proved is that
+  account's, and is left alone. This retirement is what makes ownership of
+  a handle key mean holding it now. The handle key's own watermark keeps
+  evidence older than another account's proof of the handle from taking it
+  back, and a retired key keeps its watermark so that evidence older than
+  the binding it retired cannot claim it either.
 
 A Transaction Author's **name** on a platform is the one handle the
 Consumer stores for that author and platform to display, the analogue of an
@@ -311,7 +319,10 @@ as that author is its authority, and no proof binds it.
   handle as the author's name when the Submission asks to publish it. On
   writing such a binding, the Consumer MUST also store the handle when the
   stored name's handle key has as its current identity key the identity key
-  the Submission binds. The Consumer MUST leave the name unchanged on
+  the Submission binds. Where the stored name no longer normalizes under the
+  platform's current rules (§2.1a), it has no handle key, and the Consumer
+  MUST skip that second path, leaving the name unchanged, and MUST NOT
+  reject the Submission for it. The Consumer MUST leave the name unchanged on
   accepting any other Submission, including one whose binding it does not
   write because its evidence is not strictly newer (common REQ-COMMON-25A).
   The Consumer MUST store the handle of an accepted disclosure call
@@ -358,12 +369,21 @@ REQ-PLAT-08K; publication is state.
   The Consumer MUST record, in its configuration of each platform and beside
   that platform's normalization, whether the platform's profile is a digest
   profile and, for a digest profile, the handle-digest construction it
-  fixes (REQ-PLAT-08M). The Consumer MUST reject a Submission whose Platform Verifier
-  result exposes digests on a platform not recorded as a digest profile, or
-  bytes on one that is. Necessity: the disclosure call and the freeze of
-  REQ-PLAT-08G apply before any Submission of the platform exists, so the
-  Consumer needs both facts from configuration, and checking every result
-  against it keeps configuration and verifier from disagreeing.
+  fixes (REQ-PLAT-08M). These are facts of the platform, not of a Platform
+  Ceremony Version: every Platform Ceremony Version of one platform MUST
+  share its normalization, its digest-profile flag, and its handle-digest
+  construction. The Consumer MUST reject a Submission whose Platform
+  Verifier result returns a handle digest on a platform not recorded as a
+  digest profile, or returns verified handle bytes and no handle digest on
+  one that is. The unverified handle a digest-profile result passes through
+  beside its handle digest (common REQ-COMMON-05E) is not verified handle
+  bytes. Necessity: every version of a platform binds into the same keys,
+  so two versions that normalized, hashed, or exposed the handle
+  differently would key one handle twice; the disclosure call and the
+  freeze of REQ-PLAT-08G apply before any Submission of the platform
+  exists, so the Consumer needs these facts from configuration, and
+  checking every result against them keeps configuration and verifier from
+  disagreeing.
 - REQ-PLAT-08D (upholds SP-BIND-01, SP-PRIV-01):
   For a digest profile, the Consumer MUST derive the identity's keys from the
   canonical `userId` and the handle digest the Platform Verifier returns, in
@@ -405,12 +425,14 @@ REQ-PLAT-08K; publication is state.
   For a digest profile, the Consumer MUST normalize the platform's handles
   with the handle table the profile publishes (§2.1a), whose case-folding,
   character-set, and shape rows the Proving Circuit reproduces
-  (TEST-PLAT-20). The Consumer MUST refuse a change to that normalization,
-  or to the platform's handle-digest construction, once it has bound any
-  identity of that platform. Necessity: the Consumer holds only digests, so
-  it cannot re-key a binding under new rules, and a disclosed handle
+  (TEST-PLAT-20). Once it has bound any identity of a platform, the
+  Consumer MUST refuse a change to whether that platform is a digest
+  profile, and, for a digest profile, a change to its normalization or its
+  handle-digest construction. Necessity: the Consumer holds only digests,
+  so it cannot re-key a binding under new rules; a disclosed handle
   normalized or hashed other than as the circuit does stops hashing to its
-  own key.
+  own key; and changing the flag changes which construction every handle
+  key of the platform is derived with.
 - TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08G, REQ-PLAT-08L):
   The same Google account submitted with and without its handle lands on
   the same two keys. A Submission without the handle, made with
@@ -430,9 +452,11 @@ REQ-PLAT-08K; publication is state.
   Application places that `email` in a Submission only when the user asks
   to disclose it, and places no `sub` in any. A change to Google's handle normalization is refused once a
   Google identity is bound, as is a change to its handle-digest
-  construction. A platform configured as a digest profile
-  rejects a verifier result carrying bytes, and one configured otherwise
-  rejects a result carrying digests.
+  construction or to its digest-profile flag. A platform configured as a
+  digest profile rejects a verifier result carrying verified handle bytes
+  and no handle digest, and accepts one carrying the handle digest beside
+  an unverified carried handle; a platform configured otherwise rejects a
+  result carrying a handle digest.
 - TEST-PLAT-20B (exercises REQ-PLAT-08H, REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
   A numeric handle and a `userId` of the same digits land on different keys.
   An identity that proves a new handle leaves its old handle without an
@@ -449,7 +473,13 @@ REQ-PLAT-08K; publication is state.
   it. After A renames from handle H, a Submission of A under H whose
   evidence is not strictly newer than the binding, carrying H and asking to
   publish, binds nothing, whether the Consumer rejects it or completes
-  another effect, and leaves the name unchanged. On X or GitHub, a
+  another effect, and leaves the name unchanged. When identity A proves H
+  at 100 and identity B proves H at 200, a Submission of A proving H at 150
+  binds nothing, although 150 is newer than A's own watermark. When A
+  proves H at 100 and then H2 at 300, H keeps its watermark of 100: another
+  identity proving H at 50 binds nothing. A claim of A under a new handle
+  while A's stored name no longer normalizes under the current rules is
+  accepted and leaves that name stored. On X or GitHub, a
   claim asking to publish stores the revealed handle. Each binding event
   states whether it stored the name.
 
