@@ -58,21 +58,34 @@ The platform is part of the node, so `alice` on X and `alice` on GitHub are
 different nodes.
 
 You rarely compute nodes yourself. `IdentityRegistry.handleNodeOf(platformId, handle)`
-returns a handle's node, and `handleNode` in the TypeScript package computes it
-locally.
+returns a handle's node. The TypeScript package computes it locally in two
+steps:
+
+```js
+const rules = await rulesOf(registry, platformId('github'));
+const node = handleNode(platformId('github'), handleHash('@Octocat', rules));
+```
+
+`handleHash` normalizes the handle with the platform's rules and hashes it.
+`handleNode` takes that hash, not the handle.
 
 ## Normalization
 
 Before a handle is hashed, it is normalized, so that the different ways of
 writing one handle reach the same node:
 
-- Letters are lowercased.
-- On GitHub and X, one leading `@` is removed.
-- X allows `_` but not `-`. GitHub allows `-` but not `_`. A `-` can never be
-  first, last, or doubled.
+- Spaces at the start and end are removed. Other whitespace is refused.
+- On GitHub and X, one leading `@` is then removed.
+- `A` to `Z` are lowercased.
+- Letters and digits are allowed everywhere. Beyond those, GitHub allows `-`,
+  X allows `_`, and Google allows `.`, `+`, `-`, `_` and one `@`. Anything
+  else, including any non-ASCII byte, is refused.
+- On GitHub, a `-` can never be first, last, or next to another `-`.
+- A Google address needs exactly one `@`, with something on each side.
+  Nothing else about its shape is checked, so `-a@example.com` and
+  `a--b@example.com` are accepted.
 - Handles longer than 15 characters on X, 39 on GitHub, or 62 for Google are
-  refused.
-- Only ASCII is allowed.
+  refused. The length is counted after the spaces and the `@` are removed.
 
 So `@Octocat`, `octocat` and `OCTOCAT` are the same GitHub handle. Text that
 breaks these rules is not a handle: `resolveHandle` returns the zero address

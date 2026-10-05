@@ -59,7 +59,8 @@ Sends everything held for the handle, in each of `tokens`, to `recipient`.
 The caller must be the handle's holder (`IdentityRegistry.handleBinding`). Tokens with
 nothing held are skipped. Reverts `NothingHeld` if nothing was paid.
 
-After a claim, earlier deposits can no longer be refunded.
+After a claim, the deposits it took, in the tokens it claimed, can no
+longer be refunded.
 
 ### refund
 
@@ -69,7 +70,8 @@ function refund(bytes32 handleNode, address token, address recipient)
 
 Sends `recipient` every deposit for the handle, in one token, that named the
 caller as `refundTo`. The depositor does not count: only the `refundTo`
-address can call it. Only deposits made since the last claim can be refunded.
+address can call it. Only deposits made since the last claim of that token
+can be refunded.
 Works whether or not the handle has a holder.
 
 ### escrowed
@@ -119,8 +121,9 @@ event Refunded(
 );
 ```
 
-`round` groups deposits between claims. A claim ends a round, and the next
-deposit starts the next one. A `Refunded` belongs to the deposits of its
+`round` groups deposits between claims, separately for each handle and
+token. A claim ends the round only for the tokens it paid out; the other
+tokens' rounds stay open. A `Refunded` belongs to the deposits of its
 round.
 
 `amount` in `Deposited` is what arrived. `released` is what left the escrow's

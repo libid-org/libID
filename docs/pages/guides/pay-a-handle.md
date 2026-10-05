@@ -60,8 +60,8 @@ const hash = handleHash('carol', rules);
 const node = handleNode(platformId('github'), hash);
 ```
 
-`rulesOf` reads how the platform writes handles: GitHub ignores case,
-X drops a leading `@`, and so on. `handleHash` applies those rules and hashes
+`rulesOf` reads how the platform writes handles. GitHub and X both ignore
+case and drop a leading `@`; they differ in which characters they allow. `handleHash` applies those rules and hashes
 the result. It throws if the text can never be a handle on that platform.
 `handleNode` is the key the escrow keeps the funds under.
 

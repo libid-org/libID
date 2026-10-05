@@ -31,4 +31,5 @@ sidebar:
   zero-knowledge proof.
 - **Published handle**: the one handle a holder chose to show on a platform.
   See [Published handles](/docs/concepts/published-handles/).
-- **Round**: in `HandleEscrow`, the deposits made between two claims.
+- **Round**: in `HandleEscrow`, the deposits of one token to one handle made
+  between two claims of that token.
