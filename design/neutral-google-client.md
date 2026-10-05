@@ -1,9 +1,9 @@
 # A neutral Google client, so the application never sees the address
 
 **Status: design option, not specified.** Nothing here is built, and no
-requirement text is written for it. It layers on the digest profile of
-`private-gmail-handle.md` and does not replace it: without the digests the
-proof itself carries the address. It changes the OAuth Bridge, the CCDP
+requirement text is written for it. It layers on Google version 2, the
+digest profile of `private-gmail-handle.md`, and does not replace it: under
+version 1 the proof itself carries the address. It changes the OAuth Bridge, the CCDP
 Distribution and the SDK, and would be specified in a PR of its own.
 
 ## The thing that must work

@@ -1,7 +1,10 @@
 # A private mode for Gmail handles
 
 **Status: design proposal, with its specification written.** Nothing here
-is built. This note is the rationale; the normative text is on this branch,
+is built. The design is Google Platform Ceremony Version 2. Version 1 is
+released: Ethereum mainnet has accepted google/1 bindings since 2026-10-04
+on the libid-circuits v0.6.0 circuit, which publishes the email, and it
+stays as it is. This note is the rationale; the normative text is on this branch,
 and "Spec changes" below maps it. Where the two differ, the specification
 holds. Contract references are to `libid-contracts` `origin/main` at
 `0a6c5d3`, whose Consumer is `IdentityRegistry`. The gate counts and
@@ -26,8 +29,8 @@ shares, is named at the end under what we deliberately do not do.
 
 ## Who learns the email today
 
-A Google binding publishes the address in four places on chain and two off
-it. Its `userId` is already a digest: `SHA256("libid.google-user-id" ||
+A Google version 1 binding publishes the address in four places on chain
+and two off it. Its `userId` is already a digest: `SHA256("libid.google-user-id" ||
 sub)` (REQ-PLAT-05A), which the verifier returns as `0x` and 64 hex digits
 (`GooglePlatformVerifier.sol:251`).
 
@@ -143,7 +146,7 @@ computes from the normalized handle in public mode. This freezes the Google rule
 `handles.json` into the circuit: a rules edit without a circuit release makes
 every public claim fail the equality check, which is the enforced form of
 REQ-PLAT-08L's invariant that every ceremony version of a platform shares
-its normalization and handle-digest construction. **Recommended.** It amends REQ-PLAT-08A for
+its normalization. **Recommended.** It amends REQ-PLAT-08A for
 the one profile that exposes a digest instead of bytes.
 
 **Hash the raw bytes under a new node tag.** Rejected. `Alice@gmail.com` and
@@ -158,40 +161,34 @@ uppercase letter splits the namespace silently.
 
 ### Which hash
 
-The choice decides whether Google's `handleNode` stays what it is today.
-The specification takes the tagged SHA-256 (REQ-PLAT-08M).
+The choice decides whether Google's `handleNode` stays what it is, and so
+whether a version 1 binding and a version 2 binding of one address meet.
+The specification takes keccak256 (REQ-PLAT-08M).
 
-**keccak256 of the normalized bytes.** Not taken. The digest would be the
-inner hash of `handleNode` exactly (`IdentityNodes.sol:39-46`), so the
-contract, the indexer's node arithmetic (`usernames-core/src/nodes.rs`),
-the TypeScript resolver and the ENS gateway would keep their derivation
-untouched. It costs a keccak library in the circuit and the most gates of
-the options measured below.
+**keccak256 of the normalized bytes.** Taken. The digest is the inner hash
+of `handleNode` exactly (`IdentityNodes.sol:39-46`), so the node of a
+private version 2 binding, a public one, a version 1 binding and an ENS
+lookup is one value. The contract, `handleHashOf` and
+`HandleEscrow.deposit`, the indexer's node arithmetic
+(`usernames-core/src/nodes.rs`), the TypeScript resolver and the ENS
+gateway keep their derivation untouched. The release of version 1 decides
+it: mainnet already holds Google bindings under keccak256 nodes, and the
+Consumer, holding only a digest for a private binding, cannot map one hash
+function onto another without the address. It costs a keccak library in
+the circuit, the most gates of the options measured below.
 
-**SHA-256 of the normalized bytes, tagged.** Taken:
-`SHA256(UTF8("libid.google-handle") || email)`. SHA-256 is already in the
-circuit, which hashes the signing input and, under REQ-PLAT-05A, the
-`sub` with the same construction and the tag `libid.google-user-id`; the
-tag keeps the digest apart from a plain SHA-256 of the address another
-system may publish. The cost is a per-platform inner hash: Google's node
-is derived from a SHA-256 digest and every other platform's from a
-keccak256 one, so `IdentityNodes`, the indexer's `nodes.rs`, the
-TypeScript node helpers and the gateway all grow that case, and every
-Google node changes. The specification makes it a profile constant the
-Consumer configures beside the normalization and freezes with it
-(REQ-PLAT-08L, REQ-PLAT-08G). The escrow follows: `HandleEscrow.deposit`
-takes a `handleHash` that `IdentityRegistry.handleHashOf` computes as
-keccak256 of the normalized handle (`IdentityRegistry.sol:835-841`,
-`HandleEscrow.sol:169-178`), so for Google both must use the tagged
-SHA-256, or a deposit funds a node no binding reaches. One network does
-deploy the registry and the Google verifier, eden-testnet (`chain-configurations`
-`networks/eden-testnet.toml:66,74`), but nothing is released, so its
-Google bindings are test data redeployed with the new statement rather
-than a namespace to migrate.
+**SHA-256 of the normalized bytes, tagged.** Rejected.
+`SHA256(UTF8("libid.google-handle") || email)` reuses the hash the circuit
+already computes for the signing input and the `sub`, and measured fewer
+gates. But every version 2 node would differ from the version 1 node of
+the same address: one address would hold two handle nodes, a version 2
+binding would not supersede a version 1 binding of it, and a
+`HandleEscrow` deposit made to one node would not reach a holder bound at
+the other.
 
 **Poseidon.** Cheapest in a circuit and no precedent anywhere in libID's
-Solidity, Rust or TypeScript. The contract would compute Poseidon in `_write`,
-`handleHashOf` and `resolveHandle`, and so would the gateway. Not for this design.
+Solidity, Rust or TypeScript. It splits the nodes as the tagged SHA-256
+does. Not for this design.
 
 Measured on a scratch copy of the circuit at nargo 1.0.0-beta.25 and bb
 5.2.0, with the fold-and-shape loop included in both variants (`nargo
@@ -203,10 +200,8 @@ compile`, then `bb gates --oracle_hash keccak`):
 | fold + SHA-256 | 49,918 | 192,254 | +7.1% |
 | fold + keccak256 (library v0.1.3) | 49,911 | 203,878 | +13.6% |
 
-Proving time is measured in "Measured proving time" below, for keccak256
-builds only. The specification takes SHA-256 for the email: it reuses the
-hash the `sub` digest already needs and measured fewer gates than
-keccak256, at the price of the per-platform inner hash described above.
+Proving time for keccak256 builds is measured in "Measured proving time"
+below.
 
 ### The account id, `sub`
 
@@ -217,18 +212,19 @@ exposes as `user_id_hash` with a 31-byte `sub` buffer
 `userId` string, `0x` and 64 lowercase hex digits
 (`GooglePlatformVerifier.sol:251`); `idNode` is the keccak256 node of that
 string (`IdentityNodes.sol:31-33`), and `IdentityBound` carries it as
-`id`. This design changes none of that, and a Submission never carries the
-`sub` itself.
+`id`, in both versions. This design changes none of that, and a
+Submission never carries the `sub` itself, so a version 1 and a version 2
+binding of one account share their identity node.
 
 A verifier that receives a digest can inspect nothing, so the circuit owns
-the whole of the id's validation, which REQ-PLAT-04 states for every
-implementation: `sub_len` at least 1; every byte within `sub_len` in `0x20`
+the whole of the id's validation, which REQ-PLAT-04 and, for version 2,
+REQ-PLAT-04A state for every implementation: `sub_len` at least 1; every byte within `sub_len` in `0x20`
 through `0x7e`, so no control byte, no non-ASCII byte and no quote; no
 backslash, because every JSON escape begins with one and an escaped `sub`
 would digest its escaped form; the padding zero; and the digest over
 exactly `sub_len` bytes. v0.6.0 refuses a quote but not a backslash
-(`main.nr:78-79`), so the release this design needs adds that refusal.
-`SUB_MAX` is 31, the profile's bound in REQ-PLAT-04, a Google `sub` being
+(`main.nr:78-79`), so the version 2 release adds that refusal.
+`SUB_MAX` is 31, version 2's bound in REQ-PLAT-04A, a Google `sub` being
 21 digits, and a `sub` longer than it fails to prove rather than
 truncating. That Google issues no longer `sub` is part of ASM-PROV-05, a
 liveness dependency: an account outside it could not be bound, and none
@@ -242,8 +238,8 @@ the baseline of "Measured proving time":
 |---|---|---|---|
 | fold + keccak256 of the email, keccak256 of `sub` | 50,375 | 223,582 | +24.6% |
 
-The specification uses SHA-256 for both digests, and that build has not
-been measured.
+The specification digests the `sub` with SHA-256 (REQ-PLAT-05A) and the
+email with keccak256; that build has not been measured.
 
 ### Measured proving time
 
@@ -310,10 +306,11 @@ bytes, because the check needs the handle normalized and normalization is
 the Consumer's (REQ-PLAT-08B). `IdentityRegistry._write` is the one place
 the equality holds: it derives the handle node from the digest in both
 modes; when the email is present it normalizes it, requires its
-REQ-PLAT-08M digest, `SHA256("libid.google-handle" || normalized)`, to
+REQ-PLAT-08M digest, `keccak256(normalized)`, to
 equal `handleHash`, and only then stores or emits the handle, normalized.
 `bind(..., publish: true)` without the email reverts. X and GitHub
-verifiers return no handle digest and keep the plaintext path they have.
+verifiers, and the version 1 Google verifier, return no handle digest and
+keep the plaintext path they have.
 **Recommended:** one optional payload field, no change to the signature of
 `bind` or to any binding's Authorized Transaction Data. It
 keeps REQ-PLAT-08B honest in the form that matters: the Consumer still
@@ -366,7 +363,7 @@ returns no handle string for it; a later disclosure fills it.
 
 ### Default, and moving between modes
 
-**Google is private unless the application sends the email.** That is the premise
+**Google version 2 is private unless the application sends the email.** That is the premise
 of this note. Public by default with a private opt-in would leave §12's
 rationale intact and is recorded here only as the alternative not taken.
 
@@ -444,7 +441,9 @@ published, and the last event saying `disclosed: false`, all three true at
 once.
 
 **Public to private.** Impossible, and the note should say so where users
-read it. The log line exists. `unpublish` already documents this for the
+read it. That includes every account bound under version 1: a version 2
+binding of it lands on the same nodes and supersedes the version 1 binding,
+but the version 1 event already carried the address. The log line exists. `unpublish` already documents this for the
 storage string; the same sentence covers the event.
 
 ### Downstream
@@ -484,16 +483,6 @@ resolves private bindings once `resolve_handle` selects by node, the same
 change the resolve route needs above, and not before; the rollout ships
 the two together.
 
-**Escrow.** `HandleEscrow.deposit(platformId, handleHash, ...)` pays to
-the node of a `handleHash` its caller supplies, and
-`IdentityRegistry.handleHashOf` computes that hash as keccak256 of the
-normalized handle for every platform (`IdentityRegistry.sol:835-841`,
-`HandleEscrow.sol:169-178`). For Google it must return the tagged
-SHA-256 of REQ-PLAT-08M, and every client that computes `handleHash`
-itself, the TypeScript helpers and the Rust bindings included, must use
-the platform's construction; otherwise a deposit to a Google handle funds
-a node no binding reaches, recoverable only by refund.
-
 **TypeScript claim SDK.** The Google proof type carries `email` as a required
 string; it becomes optional, absent for private, and the proof type carries
 no `sub` at all. Client-side normalization
@@ -529,44 +518,47 @@ Written, on this branch. The map, for a reader coming from the specs:
   its revealed handle, a digest-profile one when its field is nonempty)
   and places the publish request in the Consumer's call, outside the
   Submission Payload and the Authorized Transaction Data, as `bind`'s
-  `publish` argument is. REQ-PLAT-08M fixes each profile's handle-digest
-  construction: keccak256 for a profile that exposes bytes, and for Google
-  `SHA256("libid.google-handle" || email)`. For a digest profile it defines
-  the profile, the Consumer's configured record of it and of its
-  handle-digest construction, shared by every ceremony version of the
-  platform, with verified handle bytes told apart from the unverified
-  carried handle (08L), that its account identifier, the
+  `publish` argument is. REQ-PLAT-08M fixes the handle digest as
+  keccak256 of the normalized handle on every platform and version, so a
+  version 1 and a version 2 Google binding of one address share a handle
+  key. For a digest profile it defines the profile, the Consumer's
+  configured record of whether a platform admits digests, with every
+  version sharing the platform's normalization and verified handle bytes
+  told apart from the unverified carried handle (08L), that its account
+  identifier, the
   `sub`, is never sent, disclosure (history) and publication (state), and
   holds REQ-PLAT-08D (keys from the digests, a handle accepted
   only when it hashes to its digest), 08E (the disclosure call on the handle
   alone, accepted only when the caller holds it, and what a refusal does
   not protect), 08F (the event's flags, the normalized handle where one was
-  carried, never the `sub`), 08G (the digest-profile flag, and the
-  published handle table and the handle-digest construction, fixed once
-  the platform has bound anything) and TEST-PLAT-20A. §7 requires a new profile to say whether it
-  is a digest profile, and its construction if so.
+  carried, never the `sub`), 08G (the published handle table, fixed once
+  a platform admits digests and has bound anything; admission that can
+  start after bindings exist and cannot be withdrawn once used) and
+  TEST-PLAT-20A. §7 requires a new profile to say whether it is a digest
+  profile.
   REQ-PLAT-03 and TEST-PLAT-17 name the ID Token as a digest profile's
   local source, with the delivered handle raw; REQ-PLAT-03A gives the
   disclosure choice to the Application, which builds the Submission, since
-  the CCDP Prover builds none; REQ-PLAT-04 and the §2.1 table bound a Google `sub` at 31
-  bytes and refuse a backslash, both checked on the signed bytes; REQ-PLAT-16B lists the two digests as
-  public inputs; 16C moves the `sub` and `email` validation into the
-  circuit and states the 31- and 62-byte buffers; 16D has the verifier
-  return the digests, pass the email through unchecked, store and emit no
-  email, and carry no `sub`; §3.3 states that version 1 is implementable
-  only once a libid-circuits release enforces it; TEST-PLAT-06A
-  exercises the three; §9 states what the digests protect and what they do
-  not. The Google profile stays Platform Ceremony Version 1: nothing is
-  released, so its statement is edited in place.
+  the CCDP Prover builds none. §3 keeps Google version 1 as main states it
+  and adds version 2, whose §3.4 states only what it changes: REQ-PLAT-04A
+  bounds its `sub` at 31 bytes and refuses a backslash, both checked on
+  the signed bytes; REQ-PLAT-16E replaces the raw `email` public input
+  with the handle digest; 16F moves the `sub` and `email` validation and
+  the normalization into the circuit and states the 31- and 62-byte
+  buffers; 16D has the verifier return the digests, pass the email through
+  unchecked, store and emit no email, and carry no `sub`; §3.4 also says
+  version 1's artifacts are the v0.6.0 circuit and version 2 awaits a
+  release. TEST-PLAT-06A exercises them; §9 states what version 2 protects,
+  what it does not, and that it hides nothing a version 1 transaction
+  already published.
 - `ceremony-common.md`: the digest profile as a term; ASM-PROV-05 gains the
-  Google `sub` shape as a liveness clause; ASM-HASH-01, ASM-ZK-01 (the
+  version 2 `sub` shape as a liveness clause; ASM-HASH-01, ASM-ZK-01 (the
   zero-knowledge proving mode), SP-PRIV-01 (the Consumer, the Proof
   Verifier and the Platform Verifier emit or store only what a transaction
   carried, and no account identifier), with §4 stating that it bounds the
-  chain's artifacts, not who learns the handle (the Application, the OAuth
-  Bridge and the CCDP Distribution all can), and rests on an unmodified
-  Prover; ASM-PROOF-01 lets an unreleased ceremony version be edited in
-  place; REQ-COMMON-05E returns the digests, and
+  chain's artifacts, not who learns the handle (the Application and the
+  CCDP Distribution both can), and rests on an unmodified Prover;
+  REQ-COMMON-05E returns the digests, and
   the handle marked unverified, where a profile exposes digests;
   REQ-COMMON-45 and 45A have governance select zero-knowledge artifacts and
   the Canonical Runtime (its Prover) prove in that mode with fresh
@@ -577,20 +569,22 @@ Written, on this branch. The map, for a reader coming from the specs:
   the account identifier is the term for the value a `userId` is derived
   from, Google's `sub`;
   §12 replaces "published deliberately" for the handle and user identifier
-  with what a digest profile keeps off the chain and its limits.
+  with what a digest profile keeps off the chain and its limits, including
+  an account already bound under version 1.
 - `libid.md`: sentences among the enforceable guarantees, including what
-  the Google circuit proves, and the Application, OAuth Bridge and CCDP
+  each Google version's circuit proves; the Application and CCDP
   Distribution rows in the trust table: the Application decides whether a
-  Google handle is sent, the Bridge's Callback captures the ID Token, and
-  the Distribution's Prover holds it and must prove in the zero-knowledge
-  mode.
+  Google handle is sent, and the Distribution's Prover holds the ID Token
+  and must prove in the zero-knowledge mode; and `("google", 2)` in the
+  protocol-parameter table.
 - `ccdp.md`: normalization is the Consumer's and, for a digest profile,
   also the Proving Circuit's.
 
 ## The recommendation
 
-Hash in the circuit, normalize in the circuit, the tagged SHA-256 over the
-email and over `sub`, the mode set by the presence of the email in the payload and
+A new Google Platform Ceremony Version 2; hash in the circuit, normalize in
+the circuit, keccak256 over the email so that version 1 and version 2
+bindings share a node, main's tagged SHA-256 over the `sub`, the mode set by the presence of the email in the payload and
 the `sub` never sent, private by default for Google alone, `publish` to go public later, ENS forward names
 resolving for private bindings as for public ones, and the resolve routes as
 they are. This is the one combination where neither the email nor the
@@ -610,16 +604,20 @@ read the ID Token, sending the address itself.
    that the trim rows do not apply to the circuit, which refuses a space
    instead. Done when a reader can follow the new property to its
    requirements and its test.
-2. **Circuit** (`libid-circuits`): the fold-and-shape loop, `handle_hash`,
-   the tagged SHA-256 of the normalized email, in place of `email_packed`,
+2. **Circuit** (`libid-circuits`): a version 2 `oidc-google` circuit beside
+   the version 1 one: the fold-and-shape loop, the keccak library,
+   `handle_hash`, the keccak256 of the normalized email, in place of
+   `email_packed`,
    the backslash refusal beside the quote refusal on the `sub` that
    `user_id_hash` digests, a gate count in the commit, and a release whose
    artifacts the ceremony can pin. Done when `Alice@Gmail.com`
-   and `alice@gmail.com` prove the same digest, and a space, two `@`, an
+   and `alice@gmail.com` prove the same digest, equal to `cast keccak` of
+   `alice@gmail.com`, and a space, two `@`, an
    empty local part and a garbage tail each fail to prove, as does a `sub`
    holding a backslash.
-3. **Contracts** (`libid-contracts`): the Google verifier regenerated, `bytes
-   email` in the payload, `handleHash` in `VerifiedClaim` beside the
+3. **Contracts** (`libid-contracts`): a version 2 Google Platform Verifier
+   registered under its own Verifier Version beside version 1's, `bytes
+   email` in its payload, `handleHash` in `VerifiedClaim` beside the
    `userId` digest string it already carries, the equality check and the
    hash-derived handle node in `_write`; `_write` storing the name only
    for a binding carrying the handle that asks to publish or whose
@@ -627,18 +625,15 @@ read the ID Token, sending the address itself.
    (`idNodeByHandle[node(name)] == idNode`), and only when it writes the
    binding, never for a private binding, a binding of another account, or
    evidence not newer than both nodes; no `handlePreimages` entry for an
-   undisclosed handle; `disclosed` in the event; `handleHashOf` and every
-   client that computes a `handleHash` for `HandleEscrow.deposit` using the
-   platform's construction;
+   undisclosed handle; `disclosed` in the event;
    `publish(platformId, handle)` accepted only when the caller owns the
-   handle's node; a per-platform digest-profile flag and handle-digest
-   construction beside the rules in `setPlatform`, the flag checked
-   against every verifier result; `setPlatform` refusing a change to the
-   flag once the platform has bound anything, and to Google's rules or
-   construction; the
-   circuit pin. Done when
-   the same account bound public and then private lands on the same two
-   nodes; when a private transaction, made with recognizable test values,
+   handle's node; a per-platform flag beside the rules in `setPlatform`
+   saying whether the platform admits digest results, checked against
+   every verifier result, settable after version 1 bindings exist and not
+   clearable once a digest result was accepted; `setPlatform` refusing a
+   Google rules change once the flag is set and Google has bound anything;
+   the circuit pin. Done when the same account bound under version 1, and
+   under version 2 public and then private, lands on the same two nodes; when a private transaction, made with recognizable test values,
    carries no plaintext email or account id in its decoded calldata or its
    decoded events, the payload's email field and the event's handle string
    being empty, rather than a byte search over proof bytes that can contain
@@ -646,8 +641,7 @@ read the ID Token, sending the address itself.
    when `bind(..., publish: true)` without the email, and a `publish` of a
    handle the caller does not own, both revert; when a wallet holding two
    accounts of one platform keeps the first account's name through any
-   binding of the second; and when a deposit to a Google handle reaches
-   the account that binds it.
+   binding of the second.
 4. **Indexer, SDK, demo**: nullable handle, node-keyed handle resolve,
    the ENS gateway on the node-keyed lookup, `IdentityPublished`
    filling the handle row and the publication state, optional `email` and
@@ -695,18 +689,21 @@ one platform and has one name there, which no binding of another account
 and no private binding writes, and which reads as a name only while the
 wallet holds it; the application chooses whether a binding carries the
 email, and the privacy is against readers of the chain, not against an
-operator that handles the email; the email and the `sub` are both
-hidden with a tagged SHA-256; Google's handle rules and handle-digest
-construction are fixed once Google has bound anything; and the proof is made in the
+operator that handles the email; the design is Google version 2, version
+1 being released; the email is hidden as keccak256 of the normalized
+address, so version 1 and version 2 bindings share a handle node, and the
+`sub` as main's tagged SHA-256; Google's handle rules are fixed once a
+Consumer admits version 2 and Google has bound anything; and the proof is
+made in the
 zero-knowledge mode with fresh randomness, which the privacy rests on as
 much as on the hash.
 
-One thing is open: no published libid-circuits release enforces the
-Google version 1 statement. v0.6.0 exposes the email bytes as
+One thing is open: no published libid-circuits release proves Google
+version 2. v0.6.0, version 1's circuit, exposes the email bytes as
 `email_packed`, normalizes nothing, and admits a backslash in the `sub`
-(`oidc-google/src/main.nr:78-79,133`), so the profile is implementable
-only once a release that enforces REQ-PLAT-16B and REQ-PLAT-16C publishes
-its artifacts (platform §3.3).
+(`oidc-google/src/main.nr:78-79,133`), so version 2 is implementable only
+once a release that enforces REQ-PLAT-16E and REQ-PLAT-16F publishes its
+artifacts (platform §3.4).
 
 The indexer and the deployer derive nodes and platform ids from the same
 generated table the contract's constants come from (`libid-identity`
@@ -730,7 +727,7 @@ measured circuit builds are against the revisions named below, as of
   (752-759), `unpublish` (761-779), `handleHashOf` (835-841),
   `publishedHandleOf` (916-924); `identity/IdentityNodes.sol` (25-46);
   `identity/HandleNormalizer.sol`; `identity/handles.json`;
-  `escrow/HandleEscrow.sol` (`deposit`, 169-178).
+  `escrow/HandleEscrow.sol` (`deposit`, 169-178), which needs no change.
 - `libid-circuits` `circuits/bearer-link/src/main.nr:51-70`
   (`verify_hash_commit`).
 - `usernames-indexer` at `origin/main` `bec6765`, `crates/usernames-core`:
