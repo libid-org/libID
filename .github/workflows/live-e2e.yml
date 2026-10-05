@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   bind:
-    name: GitHub, X and Google bindings (live)
+    name: GitHub and X bindings (live)
     # A pull request from a fork gets no secrets, so it does not run.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -43,7 +43,10 @@ jobs:
       - name: Install Chromium
         run: pnpm -C ts --filter @libid/bind exec playwright install --with-deps chromium
 
-      - name: Bind GitHub, X and Google identities end to end
+      # Google is left out: it challenges a saved session arriving from a
+      # runner's address ("Verify it's you"), which no automation passes. Its
+      # test still runs locally.
+      - name: Bind GitHub and X identities end to end
         env:
           LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
           GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
@@ -52,10 +55,7 @@ jobs:
           X_TEST_ALICE_USERNAME: ${{ secrets.X_TEST_ALICE_USERNAME }}
           # The saved X session, base64 of libid-server-rs' `ceremony export x`.
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
-          GOOGLE_TEST_ALICE_EMAIL: ${{ secrets.GOOGLE_TEST_ALICE_EMAIL }}
-          # The saved Google session, base64 of `ceremony export google`.
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        run: pnpm -C ts/apps/bind test:live
+        run: pnpm -C ts/apps/bind test:live --grep-invert Google
 
       - name: Keep the trace, video and container logs
         if: failure()
