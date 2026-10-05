@@ -84,9 +84,10 @@ Refusal: An unsigned HTTP error. It asserts nothing about any binding.
 
 - SP-ENS-01:
   The Handle Resolver returns an answer only when a current Signer signed
-  that exact answer, for that exact query, for that resolver, and the answer
-  has not expired. An answer cannot be replayed for another name, another
-  record, another resolver, or after its deadline. Depends on ASM-ENS-04.
+  that exact answer, for that exact query, for that resolver's address, and
+  the answer has not expired. An answer cannot be replayed for another name,
+  another record, a resolver at another address, or after its deadline.
+  Depends on ASM-ENS-04 and REQ-ENS-KEY-02.
 - SP-ENS-02:
   A signed address is the holder the Indexed Store records for the handle on
   the one chain the Coin Type names. Depends on ASM-ENS-03.
@@ -309,6 +310,11 @@ label's third and fourth characters must not both be `-`.
   rejects its answer; a Signer key answers anything; the DNS credentials take
   the whole namespace. Held together, the least guarded one decides all
   three.
+- REQ-ENS-KEY-02 (upholds SP-ENS-01):
+  Handle Resolvers that trust one Signer MUST sit at different addresses,
+  whichever chains they are on. Necessity: the digest binds an answer to its
+  resolver's address and not to a chain, so one Signer may serve resolvers
+  on several chains only while their addresses differ.
 
 ## 10. Conformance
 
@@ -337,15 +343,13 @@ label's third and fourth characters must not both be `-`.
 ## 11. Security Considerations
 
 - A compromised Signer key can answer with any address, and for a system
-  routing payments that is the whole risk. Removing the Signer is one owner
-  transaction; answers already signed stay valid until they expire, at most
-  an hour.
-- The digest covers no chain ID, so one Signer may serve Handle Resolvers on
-  several chains. An answer signed for a resolver address then also verifies
-  on a resolver at the same address on another chain that trusts the same
-  Signer, until it expires. That replay returns the answer the Gateway gave,
-  which is wrong only where the two resolvers' Gateways read different
-  Indexed Stores.
+  routing payments that is the whole risk. Removing it takes one owner
+  transaction on each chain whose resolver trusts it. The callback checks the
+  Signer when it runs, so the answers it signed stop verifying from that
+  block on.
+- One Signer may serve Handle Resolvers on several chains. The digest covers
+  no chain ID, but it covers the resolver's address, and REQ-ENS-KEY-02 keeps
+  those apart, so an answer verifies only at the resolver it was signed for.
 - A user has no onchain claim to the name. It resolves while the Gateway
   runs and the Parent Name points at the Handle Resolver. The binding in the
   `IdentityRegistry` survives either, and is readable without them.
