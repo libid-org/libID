@@ -201,9 +201,9 @@ the maximum lead of a profile's evidence time over Block Time, and the amount
 subtracted from that time to give `metadataObservedAt` on the scale every
 profile shares
 ([platform profiles §2.2](platform-ceremonies.md#22-metadata-ordering-and-validity-ceilings)).
-Google's `exp` runs about an hour ahead of the moment it describes, so its
-allowance is two hours; a notary stamps its own clock, so the X and GitHub
-allowances cover clock skew alone. Verifier governance controls the Supported
+Google's `exp` runs about an hour ahead of the moment it describes, and the
+Google allowance is two hours. A notary stamps its own clock, so the X and
+GitHub allowances cover clock skew alone. Verifier governance controls the Supported
 Version Set and the trust roots, so a proof is accepted only while a Verifier
 Version implementing its profile is supported and the trust roots it relies
 on are active.
@@ -222,8 +222,11 @@ on are active.
 - REQ-PARAM-02:
   The Platform Verifier MUST use the value its profile fixes, with checked
   arithmetic, whenever a ceremony rule names one of these parameters. The
-  Platform Verifier MUST NOT accept a caller-supplied substitute. Necessity:
-  callers must not widen proof freshness.
+  one exception to checked arithmetic is the subtraction that gives
+  `metadataObservedAt`, which saturates at zero under
+  [platform profiles §2.2](platform-ceremonies.md#22-metadata-ordering-and-validity-ceilings).
+  The Platform Verifier MUST NOT accept a caller-supplied substitute.
+  Necessity: callers must not widen proof freshness.
 - TEST-PARAM-01 (exercises REQ-PARAM-01, REQ-PARAM-02):
   The values above reproduce the platform validity vectors; a caller override
   and an overflowing calculation fail; a Platform Verifier exposes no
