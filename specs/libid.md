@@ -148,8 +148,10 @@ the proof under the artifact selected for the submitted platform and version
 (REQ-COMMON-45), and enforces authenticated freshness. Proof-field provenance
 is the signed ID Token on Google and the revealed attestation bytes on X and
 GitHub; the Proving Circuit proves only what cannot be read from that
-evidence, which is Google's signature relation and, on X and GitHub, that one
-hidden bearer opens both sessions' commitments. The Consumer enforces replay
+evidence. On Google that is the signature relation and, because the `sub`
+and `email` stay hidden, their validation, the email's normalization, and
+both digests; on X and GitHub it is that one hidden bearer opens both
+sessions' commitments. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
 an effect (REQ-COMMON-03, REQ-COMMON-03A). For a profile that exposes identity
 digests, Google at launch, the Consumer keys the binding on the digests and
