@@ -226,8 +226,14 @@ produce unchanged.
                      ‖ keccak256(extraData) ‖ keccak256(result))
   ```
 
-  where `resolver` is the Handle Resolver's 20-byte address. It reverts
-  `SignatureExpired`, `DeadlineTooFar`, or `UntrustedSigner` otherwise.
+  where `resolver` is the Handle Resolver's 20-byte address. `signature` is
+  the encoding OpenZeppelin `ECDSA.recover` accepts: 65 bytes `r ‖ s ‖ v`,
+  with `v` 27 or 28 and `s` at most half the secp256k1 group order. It
+  reverts `SignatureExpired`, `DeadlineTooFar`, or `UntrustedSigner` when a
+  check fails. A malformed answer reverts too: a `response` that does not
+  decode reverts in `abi.decode`, and a `signature` outside that encoding
+  reverts `ECDSAInvalidSignatureLength`, `ECDSAInvalidSignatureS`, or
+  `ECDSAInvalidSignature`. A client treats any revert as a rejected answer.
   Necessity: the resolver address binds the answer to one resolver, the
   request hash to one query, the result hash to one answer, and the ceiling
   stops a leaked answer living indefinitely.
@@ -236,6 +242,11 @@ produce unchanged.
   Ownership MUST transfer in two steps and MUST NOT be renounceable. The
   Handle Resolver is not upgradeable; it is replaced by setting another
   resolver on the Parent Name.
+- REQ-ENS-RES-05:
+  Every URL in the Handle Resolver's list MUST contain both `{sender}` and
+  `{data}`, in the `{base}/{sender}/{data}` form of REQ-ENS-GW-01.
+  Necessity: an ERC-3668 client sends a POST to a URL without `{data}`, and
+  the Gateway serves GET only, so such a URL answers nothing.
 
 ## 8. Gateway
 
@@ -305,7 +316,9 @@ produce unchanged.
 - REQ-ENS-GW-08 (upholds SP-ENS-01):
   The Gateway MUST sign the REQ-ENS-RES-03 digest with `resolver` set to the
   Handle Resolver address it is configured to serve, never the `{sender}` of
-  the request, and with `expires` at most 3300 seconds after signing. It MAY
+  the request, and with `expires` at most 3300 seconds after signing. It
+  MUST sign the digest itself, with no further prefix, and encode the
+  signature as REQ-ENS-RES-03 requires. It MAY
   refuse a `{sender}` that is not that address with HTTP 400, comparing
   addresses case-insensitively. Necessity: on the Universal Resolver's
   direct-call route `{sender}` names the Universal Resolver, and the 300 s
@@ -383,7 +396,8 @@ produce unchanged.
 - TEST-ENS-02 (exercises REQ-ENS-RES-03, REQ-ENS-GW-08):
   One digest vector reproduces in the Handle Resolver and the Gateway; the
   callback rejects an expired answer, one past the ceiling, an untrusted
-  Signer, and an answer signed for another resolver address.
+  Signer, an answer signed for another resolver address, a 64-byte
+  signature, a signature with `v` 0 or 1, and one with a high `s`.
 - TEST-ENS-03 (exercises REQ-ENS-GW-03 to -06):
   An unindexed EVM Coin Type, coin type 60 without the ENS Chain indexed,
   two chains sharing one Coin Type, and a stale index each get a Refusal; a
