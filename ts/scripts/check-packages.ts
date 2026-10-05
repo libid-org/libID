@@ -55,21 +55,21 @@ const consumer = fileURLToPath(new URL('../../.ceremony-local/npm-consumer', imp
 rmSync(consumer, { recursive: true, force: true })
 mkdirSync(consumer, { recursive: true })
 const require = createRequire(new URL('../packages/ceremony/package.json', import.meta.url))
-writeFileSync(
-  join(consumer, 'package.json'),
-  JSON.stringify({
-    private: true,
-    type: 'module',
-    dependencies,
-    devDependencies: {
-      typescript: require('typescript/package.json').version,
-      // Applications still on TypeScript 5 read the declarations TypeScript 7 emits.
-      'typescript-5': 'npm:typescript@^5',
-      vite: require('vite/package.json').version,
-    },
-  }),
-)
-const npmInstall = (cwd: string) =>
+const install = (dependencies: Record<string, string>) => {
+  writeFileSync(
+    join(consumer, 'package.json'),
+    JSON.stringify({
+      private: true,
+      type: 'module',
+      dependencies,
+      devDependencies: {
+        typescript: require('typescript/package.json').version,
+        // Applications still on TypeScript 5 read the declarations TypeScript 7 emits.
+        'typescript-5': 'npm:typescript@^5',
+        vite: require('vite/package.json').version,
+      },
+    }),
+  )
   execFileSync(
     'npm',
     [
@@ -82,7 +82,7 @@ const npmInstall = (cwd: string) =>
       join(output, 'npm-cache'),
     ],
     {
-      cwd,
+      cwd: consumer,
       stdio: 'inherit',
       // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
       env: Object.fromEntries(
@@ -90,7 +90,22 @@ const npmInstall = (cwd: string) =>
       ),
     },
   )
-npmInstall(consumer)
+}
+// Ens requires viem as a peer. An app without ens must not: ledger, popup and ceremony load
+// with no viem installed.
+const { '@libid/ens': _, ...withoutEns } = dependencies
+install(withoutEns)
+assert(!existsSync(join(consumer, 'node_modules/viem')), 'an app without ens installs viem')
+execFileSync(
+  'node',
+  [
+    '--input-type=module',
+    '-e',
+    "await import('@libid/ceremony'); await import('@libid/popup'); await import('@libid/popup/worker'); await import('@libid/popup/testing')",
+  ],
+  { cwd: consumer, stdio: 'inherit' },
+)
+install(dependencies)
 writeFileSync(
   join(consumer, 'client.ts'),
   `export * from '@libid/ceremony'
@@ -141,32 +156,4 @@ for (const name of packages) {
   const manifest = readFileSync(join(consumer, 'node_modules/@libid', name, 'package.json'), 'utf8')
   assert.doesNotMatch(manifest, /workspace:|catalog:/)
 }
-// Ens requires viem as a peer, so the consumer above has it. An app without ens must not:
-// ledger, popup and ceremony load with no viem installed.
-const viemFree = fileURLToPath(
-  new URL('../../.ceremony-local/npm-consumer-viem-free', import.meta.url),
-)
-rmSync(viemFree, { recursive: true, force: true })
-mkdirSync(viemFree, { recursive: true })
-writeFileSync(
-  join(viemFree, 'package.json'),
-  JSON.stringify({
-    private: true,
-    type: 'module',
-    dependencies: Object.fromEntries(
-      Object.entries(dependencies).filter(([name]) => name !== '@libid/ens'),
-    ),
-  }),
-)
-npmInstall(viemFree)
-assert(!existsSync(join(viemFree, 'node_modules/viem')), 'an app without ens installs viem')
-execFileSync(
-  'node',
-  [
-    '--input-type=module',
-    '-e',
-    "await import('@libid/ceremony'); await import('@libid/popup'); await import('@libid/popup/worker'); await import('@libid/popup/testing')",
-  ],
-  { cwd: viemFree, stdio: 'inherit' },
-)
 console.log(`Checked tarballs: ${output}`)

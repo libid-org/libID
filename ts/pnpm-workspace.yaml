@@ -4,9 +4,9 @@ packages:
 
 # Tool versions shared across packages, referenced as `catalog:`.
 catalog:
-  # Alpha until a stable release bundles libsoup ≥3.6.6 (microsoft/playwright#42803).
   # One copy shared by ceremony and ens, so HandleError is one class.
   '@libid/contracts': 0.15.1
+  # Alpha until a stable release bundles libsoup ≥3.6.6 (microsoft/playwright#42803).
   '@playwright/test': 1.64.0-alpha-2026-09-29
   '@types/node': ^24.19.1
   '@vitest/coverage-v8': ^5.0.3
