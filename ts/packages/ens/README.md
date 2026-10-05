@@ -43,7 +43,10 @@ These handles have no name:
 - an X handle whose third and fourth characters are both `_`, which ENS
   reserves (`ab__cd` would be `ab--cd`);
 - a Gmail address with `+`, `-` or `_` in the local part;
-- any other Google address with `_` or `+`.
+- any other Google address with `_` or `+`, an empty piece, `_at` as a piece,
+  or a piece whose third and fourth characters are both `-` (ENSIP-15 reserves
+  them, so `xn--` domains have no name);
+- a handle with a piece longer than 63 bytes, which DNS cannot carry.
 
 ## Options
 
@@ -65,5 +68,9 @@ ensName('x', 'alice', { rules: await rulesOf(reader, id) }) // the chain's curre
 A chain label or parent name that is not a lowercase ASCII label of 1 to 63
 bytes, or has `--` at its third and fourth characters, throws.
 
-The rules are those of the
-[ENS integration spec](../../../specs/ens-integration.md), §5 and §6.
+The rules are those of the [ENS integration spec](https://github.com/libid-org/libID/blob/3ae0186acf668d94c63aa57fb38260afb5513fcc/specs/ens-integration.md), §5 and §6.
+
+[`vectors/names.json`](https://github.com/libid-org/libID/blob/main/ts/packages/ens/vectors/names.json)
+in the repository lists names with their handles, handles with no name, and
+names that read back as no handle. The tests here run it in both directions;
+the gateway's inverse should check against the same file.

@@ -25,7 +25,7 @@ pnpm -C ts install --frozen-lockfile
 pnpm -C ts test:packages
 ```
 
-This builds and packs all three packages into `ts/.cache/npm/`, installs those
+This builds and packs all four packages into `ts/.cache/npm/`, installs those
 exact tarballs into an isolated consumer, then typechecks the public imports
 with both the workspace TypeScript and TypeScript 5, and bundles them. The
 worker entry is typechecked separately from the browser entry. It also checks
@@ -36,16 +36,18 @@ in ignored local paths.
 
 ## First publication
 
-The npm organization must permit publishing all three names. npm requires a
+The npm organization must permit publishing all four names. npm requires a
 package to exist before a trusted publisher can be configured. From a checked
 main commit, run the command above, authenticate to npm with a maintainer
-account, and publish ledger and popup before ceremony. These first versions
+account, and publish ledger and popup before ceremony; ens depends on none of
+them. These first versions
 carry no provenance; every later one does:
 
 ```sh
 npm publish ts/.cache/npm/ledger.tgz --access public
 npm publish ts/.cache/npm/popup.tgz --access public
 npm publish ts/.cache/npm/ceremony.tgz --access public
+npm publish ts/.cache/npm/ens.tgz --access public
 ```
 
 Once per repository, set up two settings that cover every package:
