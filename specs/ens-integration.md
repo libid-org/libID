@@ -432,6 +432,11 @@ produce unchanged.
   transaction on each chain whose resolver trusts it. The callback checks the
   Signer when it runs, so the answers it signed stop verifying from that
   block on.
+- The current deployment does not meet REQ-ENS-KEY-01. One key, the KMS
+  key the contracts' deploy workflow signs with, deploys the Handle
+  Resolver, owns it, and owns the Parent Name in the ENS registry. Whoever
+  can use that key can trust a Signer of their own and point the URL list at
+  their own endpoint, with no Signer key involved.
 - One Signer may serve Handle Resolvers on several chains. The digest covers
   no chain ID, but it covers the resolver's address, and REQ-ENS-KEY-02 keeps
   those apart, so an answer verifies only at the resolver it was signed for.
@@ -477,9 +482,12 @@ produce unchanged.
 | Requirement | Source |
 |---|---|
 | REQ-ENS-RES-01 to RES-04 | `libid-contracts` `solidity/contracts/ens/HandleResolver.sol` |
-| REQ-ENS-NAME-01 to NAME-04, REQ-ENS-LABEL-05 | `usernames-indexer` `crates/usernames-core/src/ens.rs` |
-| REQ-ENS-GW-01 to GW-10 | `usernames-indexer` `bin/usernames-api/src/ens.rs`, `crates/usernames-core/src/ens.rs` |
-| REQ-ENS-LABEL-01 to LABEL-04 | no implementation yet |
+| REQ-ENS-RES-05 | `libid-contracts` `scripts/setup-ens-resolver.sh` refuses a URL without both placeholders; the contract does not check |
+| REQ-ENS-NAME-01 to NAME-04 | `usernames-indexer` `crates/usernames-core/src/ens.rs` |
+| REQ-ENS-LABEL-01 to LABEL-04 | `libID` `ts/packages/ens` (`@libid/ens`, libID PR #109, unmerged): the forward transform for the Parent Name `handles.link` only; it does not yet refuse a Workspace label with `--` at the third and fourth characters |
+| REQ-ENS-LABEL-05 | `usernames-indexer` `crates/usernames-core/src/ens.rs`, `crates/usernames-core/src/nodes.rs`: the MUST; the SHOULD is not implemented (§11) |
+| REQ-ENS-GW-01 to GW-11 | `usernames-indexer` `bin/usernames-api/src/ens.rs`, `crates/usernames-core/src/ens.rs`; the TTL ceiling of REQ-ENS-GW-08 in `bin/usernames-api/src/lib.rs` |
+| REQ-ENS-KEY-01 | not met by the current deployment (§11) |
 
 ## 14. References
 
