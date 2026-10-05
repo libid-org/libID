@@ -13,7 +13,7 @@ lists each party, from the [specification](/specs/#system-model-and-specificatio
 | The user | choosing the account and approving the binding | nothing beyond their own account |
 | The app | running the sign-in flow and its configuration | can refuse to work, but cannot change the account, the wallet, or the proof's time limits |
 | The platform (GitHub, X, Google) | saying who owns an account | can bind any account on that platform |
-| The notary (GitHub, X) | signing true records of the user's sessions | can bind any GitHub or X account |
+| The notary | signing true records of the user's GitHub and X sessions, and of Google's key list | can bind any GitHub or X account, and, by sending a false key list to `GoogleJwtRoots.rotate`, any Google account |
 | Google's signing keys | signing true sign-in tokens | a stolen key can bind any Google account |
 | The proof verifier and platform verifiers | checking proofs correctly | a faulty one accepts false bindings for every platform it covers |
 | The contract owners | choosing verifiers and keys, and upgrading | can change every rule, and so bind any account; can upgrade `HandleEscrow` and move the funds it holds |

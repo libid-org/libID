@@ -11,9 +11,9 @@ on every testnet. See [Addresses](/docs/reference/addresses/).
 
 Terms used below:
 
-- An **identity** is a platform account proved to a holder. Its **id** never
-  changes; its **handle** can.
-- The **holder** is the address an identity is bound to.
+- An identity is a platform account proved to a holder. Its id never
+  changes; its handle can.
+- The holder is the address an identity is bound to.
 - `platformId` is `keccak256` of the platform key: `"github"`, `"x"` or
   `"google"`.
 - `idNode` and `handleNode` are the keys an id and a handle are stored under.

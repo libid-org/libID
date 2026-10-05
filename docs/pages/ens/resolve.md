@@ -43,8 +43,10 @@ with offchain lookups, such as MetaMask, resolve it the same way.
 
 ## Compared to IdentityRegistry
 
-ENS and `IdentityRegistry` give the same answer. Which one to use depends on
-where the name comes from:
+ENS answers from the gateway's copy of `IdentityRegistry`, which can be a few
+blocks behind, and a signed answer stays valid for 5 minutes. So right after
+a handle changes holder, ENS can still give the old one. Which one to use
+depends on where the name comes from:
 
 - Use ENS when a person types or pastes a name, or when you want names to
   work in wallets you do not control.
