@@ -101,7 +101,8 @@ Refusal: An unsigned HTTP error. It asserts nothing about any binding.
   The Gateway never signs absence it does not know: a chain it does not
   index, a Coin Type two indexed chains share, and an index too far behind
   each get a Refusal, never a Signed Null. Depends on the Gateway's handle
-  rules admitting every handle an indexed chain binds (§11).
+  rules admitting every handle an indexed chain binds (§11), and on
+  REQ-ENS-GW-13.
 - SP-ENS-04:
   No two handles reach one name, and a name carries its handle: the Gateway
   reads a name with no mapping table.
@@ -493,10 +494,10 @@ produce unchanged.
   transaction on each chain whose resolver trusts it. The callback checks the
   Signer when it runs, so the answers it signed stop verifying from that
   block on.
-- The current deployment does not meet REQ-ENS-KEY-01. In each
-  environment one AWS KMS key, which the contracts' deploy workflow signs
-  with from CI, deploys the Handle Resolver, owns it, and owns the Parent
-  Name in the ENS registry. That key is online, not cold. Whoever can use it
+- The current deployment does not meet REQ-ENS-KEY-01. The contracts'
+  deploy workflow gives each environment one AWS KMS key that signs from
+  CI, deploys the Handle Resolver, owns it, and owns that environment's
+  Parent Name in the ENS registry. That key is online, not cold. Whoever can use it
   can trust a Signer of their own and point the URL list at their own
   endpoint, with no Signer key involved.
 - Whoever controls a host in the URL list, without a Signer key, cannot
@@ -567,7 +568,7 @@ produce unchanged.
 | Requirement | Source |
 |---|---|
 | REQ-ENS-RES-01 to RES-04 | `libid-contracts` `solidity/contracts/ens/HandleResolver.sol` |
-| REQ-ENS-RES-05 | `libid-contracts` `scripts/setup-ens-resolver.sh` refuses a URL without both placeholders; the contract does not check |
+| REQ-ENS-RES-05 | `libid-contracts` `.github/workflows/deploy.yml` and `scripts/setup-ens-resolver.sh` refuse a URL without both placeholders; the contract does not check |
 | REQ-ENS-NAME-01 to NAME-04 | `usernames-indexer` `crates/usernames-core/src/ens.rs`; its `ChainName::parse` accepts a Chain Label longer than 63 bytes or with `--` at the third and fourth characters, which REQ-ENS-NAME-01 refuses |
 | REQ-ENS-LABEL-01 to LABEL-04 | `libID` `ts/packages/ens` (`@libid/ens`, libID PR #109, unmerged): the forward transform with its refusals, and a `parent` option for the Parent Name |
 | REQ-ENS-LABEL-05 | `usernames-indexer` `crates/usernames-core/src/ens.rs`, `crates/usernames-core/src/nodes.rs`: the MUST; the SHOULD is not implemented (§11) |
