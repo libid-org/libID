@@ -151,8 +151,14 @@ library LibIDTestnet {
     /// @dev If someone holds the handle, the escrow sends them the ETH in the
     ///      same call: their code runs, and if it reverts so does this call.
     ///      Otherwise the escrow holds the funds until the handle is proved and
-    ///      claimed, and `refundTo` can take them back until then. Reverts
-    ///      `UnusableHandle` for text that can never be a handle.
+    ///      claimed, and `refundTo` can take them back until then.
+    ///
+    ///      Reverts `LibIDUnavailable` unless `isEscrowAvailable`, and
+    ///      `UnusableHandle` for text that can never be a handle. The escrow
+    ///      reverts `ZeroAmount` when nothing would arrive, `BadRefundTo` when
+    ///      `refundTo` is zero or the escrow, `PayingYourself` when this
+    ///      contract holds the handle, and `PlatformAcceptsNoBindings` when
+    ///      nobody holds it and the platform takes no new proofs.
     /// @return handleNode Where the escrow keeps the funds. Keep it to `refund`:
     ///         a later change to the platform's rules can stop the handle text
     ///         from reaching this node.
@@ -160,10 +166,9 @@ library LibIDTestnet {
         internal
         returns (bytes32 handleNode)
     {
-        ILibIDTestnetEscrow escrow = _escrow();
         bytes32 hash;
         (hash, handleNode) = _hashAndNode(platformId, handle);
-        escrow.deposit{value: amount}(platformId, hash, NATIVE, amount, refundTo);
+        ILibIDTestnetEscrow(ESCROW).deposit{value: amount}(platformId, hash, NATIVE, amount, refundTo);
     }
 
     /// @notice Send `amount` of an ERC-20 token held by this contract to a
@@ -171,16 +176,16 @@ library LibIDTestnet {
     /// @dev The escrow books what arrives, so a token that takes a fee from
     ///      the amount received works. These do not: a token that charges the
     ///      sender on top of the amount (its claims and refunds revert), a
-    ///      rebasing token, and a token that can block the escrow.
+    ///      rebasing token, and a token that can block the escrow. Reverts as
+    ///      `pay` does, and `ApproveFailed` when the token refuses the approval.
     function payToken(bytes32 platformId, string memory handle, address token, uint256 amount, address refundTo)
         internal
         returns (bytes32 handleNode)
     {
-        ILibIDTestnetEscrow escrow = _escrow();
         bytes32 hash;
         (hash, handleNode) = _hashAndNode(platformId, handle);
         _forceApprove(token, amount);
-        escrow.deposit(platformId, hash, token, amount, refundTo);
+        ILibIDTestnetEscrow(ESCROW).deposit(platformId, hash, token, amount, refundTo);
     }
 
     /// @notice Take back this contract's escrowed deposits at `handleNode`, in
@@ -207,13 +212,15 @@ library LibIDTestnet {
 
     /// @dev A handle's hash under the platform's current rules, and the node
     ///      the escrow books a deposit of that hash at. Both come from the
-    ///      registry, which the escrow asks for the same node.
+    ///      registry, which must be the escrow's: the escrow asks its own
+    ///      registry for the node.
     function _hashAndNode(bytes32 platformId, string memory handle)
         private
         view
         returns (bytes32 hash, bytes32 handleNode)
     {
-        ILibIDTestnetRegistry registry = _registry();
+        if (!isEscrowAvailable()) revert LibIDUnavailable();
+        ILibIDTestnetRegistry registry = ILibIDTestnetRegistry(REGISTRY);
         hash = registry.handleHashOf(platformId, handle);
         handleNode = registry.handleNodeOfHash(platformId, hash);
     }

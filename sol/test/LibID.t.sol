@@ -647,10 +647,25 @@ contract LibIDTest is LibIDTestBase {
         consumer.refund(bytes32(0), LibID.NATIVE, sender);
     }
 
-    /// An escrow that resolves through another registry is not this one's.
+    /// An escrow that resolves through another registry is not this one's:
+    /// it would book a payment at that registry's node, so paying reverts.
+    /// What was escrowed before can still be refunded.
     function test_anEscrowBoundToAnotherRegistryIsNotAvailable() public {
+        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether, address(consumer));
         vm.mockCall(LibID.ESCROW, abi.encodeWithSignature("registry()"), abi.encode(address(0xbeef)));
         assertFalse(consumer.isEscrowAvailable());
+
+        bytes memory unavailable = abi.encodeWithSelector(LibID.LibIDUnavailable.selector);
+        vm.expectRevert(unavailable);
+        consumer.pay(LibID.GITHUB, "carol", 1 ether, sender);
+        TestERC20 token = new TestERC20();
+        token.mint(address(consumer), 100);
+        vm.expectRevert(unavailable);
+        consumer.payToken(LibID.GITHUB, "carol", address(token), 40, sender);
+
+        address recipient = makeAddr("recipient");
+        consumer.refund(node, LibID.NATIVE, recipient);
+        assertEq(recipient.balance, 1 ether);
     }
 
     /// An answer that is not a clean address is a plain no, not a revert.
