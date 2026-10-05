@@ -134,7 +134,7 @@ Redirect Runtime: The immutable browser component served at a registered
 
 Deployment: The party that holds the OAuth client registrations and their
    redirect URIs with each Identity Platform, the deployment allowlist, and
-   the choice of which Platform Profiles new ceremonies may use. The
+   the choice of which Identity Platforms new ceremonies may use. The
    [OAuth Bridge](oauth-bridge.md) operator is the Deployment.
 
 Verifier Governance Process: The authority over the verification path: the
