@@ -1,20 +1,25 @@
 // The ENS name of a libID handle, as specs/ens-integration.md §5 and §6 define
 // it. A name is derived from the handle alone: nothing is registered, and the
 // gateway reads the handle back out of the labels.
-import { normalize, rulesFor } from '@libid/contracts'
+import {
+  normalize,
+  PLATFORM_GITHUB_KEY,
+  PLATFORM_GOOGLE_KEY,
+  PLATFORM_X_KEY,
+  rulesFor,
+} from '@libid/contracts'
 
 /** The ENS name every libID name sits under. */
 export const PARENT_NAME = 'handles.link'
 
-/** The platforms with a label of their own. The label is the platform's key. */
-export type Platform = 'github' | 'x' | 'google'
+const PLATFORMS = [PLATFORM_GITHUB_KEY, PLATFORM_X_KEY, PLATFORM_GOOGLE_KEY] as const
 
-const PLATFORMS: readonly string[] = ['github', 'x', 'google']
-const CHAIN_LABEL = /^[a-z0-9-]+$/
-const LABEL = /^[a-z0-9-]+$/
+/** The platforms with a label of their own. The label is the platform's key. */
+export type Platform = (typeof PLATFORMS)[number]
+
 const GMAIL_LOCAL = /^[a-z0-9]+(\.[a-z0-9]+)*$/
-/** A DNS label's ceiling (RFC 1035), which the gateway enforces. */
-const MAX_LABEL = 63
+/** Separates a Workspace address's local part from its domain. */
+const AT = '_at'
 
 export interface NameOptions {
   /**
@@ -40,48 +45,70 @@ export function ensName(
   handle: string,
   options: NameOptions = {},
 ): string | null {
+  if (!PLATFORMS.includes(platform)) throw new Error(`Not a platform: ${JSON.stringify(platform)}`)
+  if (typeof handle !== 'string') throw new TypeError('The handle must be a string')
+  const chain = options.chain === undefined ? [] : [chainLabel(options.chain)]
   const labels = handleLabels(platform, normalized(platform, handle))
   if (labels === null) return null
-  const chain = options.chain === undefined ? [] : [chainLabel(options.chain)]
   return [...labels, platform, ...chain, PARENT_NAME].join('.')
 }
 
 /**
- * The labels a normalized handle becomes, before the platform label (REQ-ENS-LABEL-01
- * to -04), or `null` when the handle has none.
+ * Whether ENSIP-15 leaves `label` unchanged and DNS can carry it: lowercase
+ * ASCII letters, digits and `-`, 1 to 63 bytes, and not `-` at both the third
+ * and fourth characters, which ENSIP-15 reserves.
  */
-export function handleLabels(platform: Platform, handle: string): string[] | null {
-  const labels = platformLabels(platform, handle)
-  return labels?.every((label) => label.length <= MAX_LABEL) ? labels : null
+function isLabel(label: unknown): label is string {
+  return (
+    typeof label === 'string' &&
+    /^[a-z0-9-]{1,63}$/.test(label) &&
+    !(label[2] === '-' && label[3] === '-')
+  )
 }
 
-function platformLabels(platform: Platform, handle: string): string[] | null {
+/**
+ * The labels a normalized handle becomes, before the platform label
+ * (REQ-ENS-LABEL-01 to -04), or `null` when the handle has none.
+ */
+function handleLabels(platform: Platform, handle: string): string[] | null {
   switch (platform) {
     case 'x':
       return xLabels(handle)
     case 'github':
-      return LABEL.test(handle) ? [handle] : null
+      return isLabel(handle) ? [handle] : null
     case 'google':
       return googleLabels(handle)
   }
 }
 
-/** X issues no `-`, so `_` becomes `-` and comes back; `__` at the 3rd and 4th characters is ENSIP-15's `xn--` reserve. */
+/**
+ * X issues no `-`, so `_` becomes `-` and comes back. `__` at the third and
+ * fourth characters becomes ENSIP-15's reserved `--`, which has no name.
+ */
 function xLabels(handle: string): string[] | null {
-  if (handle[2] === '_' && handle[3] === '_') return null
+  if (handle.includes('-')) return null
   const label = handle.replaceAll('_', '-')
-  return LABEL.test(label) ? [label] : null
+  return isLabel(label) ? [label] : null
 }
 
-/** Gmail: the local part's dot-separated pieces. Any other domain: the local part, `_at`, then the domain. */
+/**
+ * Gmail: the local part's dot-separated pieces. Any other domain: the local
+ * part's pieces, `_at`, then the domain's pieces, each piece a label of its own
+ * so no piece can be `_at`.
+ */
 function googleLabels(handle: string): string[] | null {
-  const at = handle.indexOf('@')
-  if (at < 0 || handle.indexOf('@', at + 1) >= 0) return null
-  const local = handle.slice(0, at)
-  const domain = handle.slice(at + 1)
-  if (domain === 'gmail.com') return GMAIL_LOCAL.test(local) ? local.split('.') : null
-  const labels = [...local.split('.'), '_at', ...domain.split('.')]
-  return labels.every((label) => label === '_at' || LABEL.test(label)) ? labels : null
+  const [local, domain, ...rest] = handle.split('@')
+  if (local === undefined || domain === undefined || rest.length > 0) return null
+  if (domain === 'gmail.com') return GMAIL_LOCAL.test(local) ? pieces(local) : null
+  const localLabels = pieces(local)
+  const domainLabels = pieces(domain)
+  return localLabels && domainLabels ? [...localLabels, AT, ...domainLabels] : null
+}
+
+/** The dot-separated pieces of `text`, or `null` unless every one is a label. */
+function pieces(text: string): string[] | null {
+  const labels = text.split('.')
+  return labels.every(isLabel) ? labels : null
 }
 
 function normalized(platform: Platform, handle: string): string {
@@ -90,8 +117,8 @@ function normalized(platform: Platform, handle: string): string {
   return normalize(handle, rules)
 }
 
-function chainLabel(chain: string): string {
-  if (!CHAIN_LABEL.test(chain) || PLATFORMS.includes(chain))
+function chainLabel(chain: unknown): string {
+  if (!isLabel(chain) || (PLATFORMS as readonly string[]).includes(chain))
     throw new Error(`Not a chain label: ${JSON.stringify(chain)}`)
   return chain
 }

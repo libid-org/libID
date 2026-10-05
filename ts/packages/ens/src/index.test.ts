@@ -1,7 +1,7 @@
 import { ens_normalize } from '@adraffy/ens-normalize'
 import { HandleError } from '@libid/contracts'
 import { describe, expect, it } from 'vitest'
-import { ensName, handleLabels } from './index.js'
+import { ensName } from './index.js'
 
 describe('ensName', () => {
   it.each([
@@ -26,10 +26,22 @@ describe('ensName', () => {
     expect(ensName('x', 'alice', { chain: 'base' })).toBe('alice.x.base.handles.link')
   })
 
-  it('refuses a chain label that is malformed or names a platform', () => {
-    expect(() => ensName('x', 'alice', { chain: 'Base' })).toThrow('Not a chain label')
-    expect(() => ensName('x', 'alice', { chain: 'github' })).toThrow('Not a chain label')
-    expect(() => ensName('x', 'alice', { chain: '' })).toThrow('Not a chain label')
+  it.each([
+    ['uppercase', 'Base'],
+    ['a platform key', 'github'],
+    ['empty', ''],
+    ['an underscore', 'op_mainnet'],
+    ['a dot', 'op.mainnet'],
+    ['ENSIP-15 reserved `--`', 'ab--cd'],
+    ['past 63 bytes', 'a'.repeat(64)],
+    ['not a string', null],
+  ])('refuses a chain label that is %s', (_, chain) => {
+    expect(() => ensName('x', 'alice', { chain: chain as string })).toThrow('Not a chain label')
+  })
+
+  it('takes a chain label of 63 bytes', () => {
+    const chain = 'a'.repeat(63)
+    expect(ensName('x', 'alice', { chain })).toBe(`alice.x.${chain}.handles.link`)
   })
 
   it.each([
@@ -42,6 +54,15 @@ describe('ensName', () => {
     // An underscore has no label form outside X.
     ['google', 'alice_b@company.com'],
     ['google', 'alice+b@company.com'],
+    // `_at` separates a Workspace local part from its domain and is never a piece.
+    ['google', 'alice._at@company.com'],
+    ['google', 'alice@_at.company.com'],
+    // An empty piece is not a label.
+    ['google', 'alice..b@company.com'],
+    ['google', 'alice@company..com'],
+    // ENSIP-15 reserves `--` at the third and fourth characters, IDN domains included.
+    ['google', 'ab--cd@company.com'],
+    ['google', 'alice@xn--bcher-kva.example'],
   ] as const)('%s %s has no name', (platform, handle) => {
     expect(ensName(platform, handle)).toBeNull()
   })
@@ -49,17 +70,10 @@ describe('ensName', () => {
   it('throws for text that is not a handle', () => {
     expect(() => ensName('github', 'not a handle')).toThrow(HandleError)
   })
-})
 
-describe('handleLabels', () => {
-  it('takes the normalized handle and returns the labels before the platform', () => {
-    expect(handleLabels('google', 'alice.smith@gmail.com')).toEqual(['alice', 'smith'])
-    expect(handleLabels('x', 'ab__cd')).toBeNull()
-  })
-
-  it('has no labels when one would pass the 63-byte DNS limit', () => {
-    expect(handleLabels('google', `${'a'.repeat(64)}@company.com`)).toBeNull()
-    expect(handleLabels('google', `${'a'.repeat(63)}@company.com`)).not.toBeNull()
+  it('throws for a platform it does not know or a handle that is not a string', () => {
+    expect(() => ensName('mastodon' as 'x', 'alice')).toThrow('Not a platform')
+    expect(() => ensName('github', null as unknown as string)).toThrow(TypeError)
   })
 })
 
@@ -73,13 +87,18 @@ describe('ENSIP-15', () => {
     ['x', 'trail_'],
     ['google', 'alice.smith@gmail.com'],
     ['google', 'first-last@my-co.io'],
+    ['google', 'a.b@c.com'],
   ] as const)('%s %s gives an already normalized name', (platform, handle) => {
     const name = ensName(platform, handle)
     expect(name).not.toBeNull()
     expect(ens_normalize(name!)).toBe(name)
   })
 
-  it('refuses the X form the transform refuses', () => {
-    expect(() => ens_normalize('ab--cd.x.handles.link')).toThrow()
+  it.each([
+    'ab--cd.x.handles.link',
+    'ab--cd._at.company.com.google.handles.link',
+    'alice._at.xn--bcher-kva.example.google.handles.link',
+  ])('refuses %s, a form the transform refuses', (name) => {
+    expect(() => ens_normalize(name)).toThrow()
   })
 })
