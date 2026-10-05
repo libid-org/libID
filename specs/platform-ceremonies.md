@@ -692,9 +692,11 @@ body. The rows below name what the Platform Verifier reads out of it, not
 separate ranges; the attested record carries adjacent revealed ranges as one,
 so a plan of one range per field would not survive signing.
 
-Per common §9, the token session reveals exactly these ranges; every other
-byte stays behind a charset-constrained [§4.1](#41-attested-data) range
-commitment:
+Every token-session byte the table below does not reveal stays behind a
+[§4.1](#41-attested-data) range commitment. The Proving Circuit opens only
+the bearer range and constrains its charset under REQ-PLAT-30. Nothing opens
+any other committed range or constrains its bytes. Per common §9, the token
+session reveals exactly these ranges:
 
 | Range | Revealed | Why |
 |---|---|---|
