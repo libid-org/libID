@@ -38,4 +38,4 @@ With that you can:
 
 - [What a binding proves](/docs/concepts/trust/), and whom you trust for it.
 - [Security](/docs/resources/security/): the contracts have not been audited.
-- [Networks](/docs/networks/eden/): what is deployed where.
+- [Networks](/docs/networks/ethereum/): what is deployed where.

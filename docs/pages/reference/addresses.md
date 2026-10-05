@@ -25,8 +25,9 @@ never change: contract updates are upgrades at the same address.
 
 Production is [Ethereum mainnet](/docs/networks/ethereum/). The testnets are
 [Sepolia](/docs/networks/sepolia/) and [Eden testnet](/docs/networks/eden/).
-The same address on two networks does not mean the same version. Check each
-network's page for what it runs.
+Every network listed here runs libID-contracts v0.17.0, the version these
+docs describe. The same address on two networks does not by itself mean the
+same version: an upgrade on one network does not change the other.
 
 These addresses come from
 [chain-configurations](https://github.com/libid-org/chain-configurations/tree/main/networks),

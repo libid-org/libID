@@ -16,12 +16,15 @@ project is not published yet. Until it is, you can:
 
 ## Read from a public network
 
-The code in the guides reads `RPC_URL` and `IDENTITY_REGISTRY`. Point them at
+The code in the guides reads `RPC_URL`, `IDENTITY_REGISTRY` and
+`HANDLE_ESCROW`, and the events guide reads `FROM_BLOCK`. Point them at
 Ethereum mainnet:
 
 ```sh
 export RPC_URL=https://ethereum-rpc.publicnode.com
 export IDENTITY_REGISTRY=0xbefd300aff7d4a67fb381afe8b3596793d3e9a83
+export HANDLE_ESCROW=0x17a244e23ef1f12071298a1862194fea3d00bbf7
+export FROM_BLOCK=26122774
 ```
 
 See [Networks](/docs/networks/ethereum/) for the others. The guides' test

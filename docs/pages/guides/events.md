@@ -17,25 +17,43 @@ import { handleEscrowAbi, identityRegistryAbi, platformId } from '@libid/contrac
 
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
 const IDENTITY_REGISTRY = process.env.IDENTITY_REGISTRY;
+const FROM_BLOCK = BigInt(process.env.FROM_BLOCK ?? 0);
+
+// Read events from FROM_BLOCK to the latest block, 5000 blocks at a time.
+async function readEvents(filter) {
+  const latest = await client.getBlockNumber();
+  const events = [];
+  for (let from = FROM_BLOCK; from <= latest; from += 5000n) {
+    const to = from + 4999n < latest ? from + 4999n : latest;
+    events.push(...(await client.getContractEvents({ ...filter, fromBlock: from, toBlock: to })));
+  }
+  return events;
+}
 ```
+
+`FROM_BLOCK` is the block the contracts were deployed in. Nothing happened
+before it, so do not read earlier blocks. Each network's page gives it; see
+[Ethereum](/docs/networks/ethereum/). On a local chain, leave it unset to
+start from block 0.
+
+Most RPC providers limit how many blocks one request can cover, so
+`readEvents` reads in ranges. Free public RPCs may also refuse log requests
+for older blocks, sometimes only on some attempts. For a reliable index, use
+an RPC that keeps the full history.
 
 ## Read past bindings
 
 ```js
-const bound = await client.getContractEvents({
+const bound = await readEvents({
   address: IDENTITY_REGISTRY,
   abi: identityRegistryAbi,
   eventName: 'IdentityBound',
-  fromBlock: 0n,
 });
 
 for (const { args } of bound) {
   console.log(args.holder, args.handle, args.id);
 }
 ```
-
-Many RPC providers limit how many blocks one request can cover. On a real
-network, set `fromBlock` and `toBlock` and read in ranges.
 
 `IdentityBound` has these fields:
 
@@ -52,12 +70,11 @@ network, set `fromBlock` and `toBlock` and read in ranges.
 `holder`, `idNode` and `handleNode` are indexed, so you can filter by them:
 
 ```js
-const forWallet = await client.getContractEvents({
+const forWallet = await readEvents({
   address: IDENTITY_REGISTRY,
   abi: identityRegistryAbi,
   eventName: 'IdentityBound',
   args: { holder: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
-  fromBlock: 0n,
 });
 ```
 
@@ -102,12 +119,11 @@ const carolNode = await client.readContract({
   args: [platformId('github'), 'carol'],
 });
 
-const deposits = await client.getContractEvents({
+const deposits = await readEvents({
   address: process.env.HANDLE_ESCROW,
   abi: handleEscrowAbi,
   eventName: 'Deposited',
   args: { handleNode: carolNode },
-  fromBlock: 0n,
 });
 ```
 

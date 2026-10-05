@@ -94,6 +94,7 @@ id of the identity behind it:
 
 ```js
 async function idOf(holder, platform, handle) {
+  if (!holder) return null;
   const count = await identityCount(registry, holder);
   for (let from = 0n; from < count; from += 10n) {
     for (const i of await identitiesOf(registry, holder, from, 10n)) {
@@ -107,7 +108,8 @@ const savedId = await idOf(holder, github, 'octocat'); // keep this with the con
 ```
 
 `idOf` reads the holder's identities a page at a time and returns the id of
-the one that holds the handle now, or `null`. Pass the handle in its
+the one that holds the handle now. It returns `null` if nobody holds the
+handle. Pass the handle in its
 normalized form, the way `IdentityBound` reports it: lowercase, without `@`.
 
 Next time, pass the saved id to `resolveHandleAndId`:

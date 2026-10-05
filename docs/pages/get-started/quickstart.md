@@ -11,7 +11,7 @@ wallet and no tokens.
 
 ## Set up
 
-You need [Node.js](https://nodejs.org) 20 or later, and a network that runs
+You need [Node.js](https://nodejs.org) 22.12 or later, and a network that runs
 libID. Set `RPC_URL` and `IDENTITY_REGISTRY` for it. For Ethereum mainnet:
 
 ```sh
