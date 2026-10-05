@@ -21,7 +21,11 @@ const PLATFORMS = [PLATFORM_GITHUB_KEY, PLATFORM_X_KEY, PLATFORM_GOOGLE_KEY] as 
 /** The platforms with a label of their own. The label is the platform's key. */
 export type Platform = (typeof PLATFORMS)[number]
 
-const GMAIL_LOCAL = /^[a-z0-9]+(\.[a-z0-9]+)*$/
+function isPlatform(value: unknown): value is Platform {
+  return (PLATFORMS as readonly unknown[]).includes(value)
+}
+
+const LABEL = /^[a-z0-9-]{1,63}$/
 /** Separates a Workspace address's local part from its domain. */
 const AT = '_at'
 
@@ -30,9 +34,7 @@ export interface NameOptions {
    * A chain label, such as `base`. A name with one is answered only for that
    * chain; without one, for whichever chain the wallet asks about. The labels a
    * gateway knows are deployment data, so this only checks the label's shape
-   * and that it is not a platform key. ENS asks the nearest name with a
-   * resolver, so a chain label that names a subname with a deployment of its
-   * own, such as `testnet`, is answered by that deployment instead.
+   * and that it is not a platform key.
    */
   chain?: string
   /**
@@ -58,7 +60,7 @@ export function ensName(
   handle: string,
   options?: NameOptions | null,
 ): string | null {
-  if (!PLATFORMS.includes(platform)) throw new Error(`Not a platform: ${JSON.stringify(platform)}`)
+  if (!isPlatform(platform)) throw new Error(`Not a platform: ${JSON.stringify(platform)}`)
   if (typeof handle !== 'string') throw new TypeError('The handle must be a string')
   const parent = options?.parent === undefined ? PARENT_NAME : parentName(options.parent)
   const chain = options?.chain === undefined ? [] : [chainLabel(options.chain)]
@@ -74,11 +76,7 @@ export function ensName(
  * and fourth characters, which ENSIP-15 reserves.
  */
 function isLabel(label: unknown): label is string {
-  return (
-    typeof label === 'string' &&
-    /^[a-z0-9-]{1,63}$/.test(label) &&
-    !(label[2] === '-' && label[3] === '-')
-  )
+  return typeof label === 'string' && LABEL.test(label) && !(label[2] === '-' && label[3] === '-')
 }
 
 /**
@@ -107,14 +105,14 @@ function xLabels(handle: string): string[] | null {
 }
 
 /**
- * Gmail: the local part's dot-separated pieces. Any other domain: the local
- * part's pieces, `_at`, then the domain's pieces, each piece a label of its own
- * so no piece can be `_at`.
+ * Gmail: the local part's dot-separated pieces, with no `-`. Any other
+ * domain: the local part's pieces, `_at`, then the domain's pieces, each piece
+ * a label of its own so no piece can be `_at`.
  */
 function googleLabels(handle: string): string[] | null {
   const [local, domain, ...rest] = handle.split('@')
   if (local === undefined || domain === undefined || rest.length > 0) return null
-  if (domain === 'gmail.com') return GMAIL_LOCAL.test(local) ? pieces(local) : null
+  if (domain === 'gmail.com') return local.includes('-') ? null : pieces(local)
   const localLabels = pieces(local)
   const domainLabels = pieces(domain)
   return localLabels && domainLabels ? [...localLabels, AT, ...domainLabels] : null
@@ -127,13 +125,13 @@ function pieces(text: string): string[] | null {
 }
 
 function chainLabel(chain: unknown): string {
-  if (!isLabel(chain) || (PLATFORMS as readonly string[]).includes(chain))
+  if (!isLabel(chain) || isPlatform(chain))
     throw new Error(`Not a chain label: ${JSON.stringify(chain)}`)
   return chain
 }
 
 function parentName(parent: unknown): string {
-  if (typeof parent !== 'string' || !parent.split('.').every(isLabel))
+  if (typeof parent !== 'string' || pieces(parent) === null)
     throw new Error(`Not a parent name: ${JSON.stringify(parent)}`)
   return parent
 }
