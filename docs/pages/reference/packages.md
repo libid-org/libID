@@ -11,13 +11,12 @@ sidebar:
 npm install @libid/contracts viem
 ```
 
-Use version 0.15.0 or later. The package works with
-[viem](https://viem.sh). It has:
+These docs describe version 0.17.0, which matches libID-contracts v0.17.0.
+The package works with [viem](https://viem.sh). It has:
 
 - ABIs: `identityRegistryAbi`, `handleEscrowAbi`, and the other contracts.
 - Reading helpers: `resolveHandle`, `resolveId`, `resolveHandleAndId`,
-  `resolveHandleAndId`, `publishedHandleOf`, `identityCount`, `identitiesOf`,
-  `rulesOf`.
+  `publishedHandleOf`, `identityCount`, `identitiesOf`, `rulesOf`.
 - Keys: `platformId`, `handleHash`, `handleNode`.
 - Handle rules: `normalize`, `RULES_GITHUB`, `RULES_X`, `RULES_GOOGLE`.
 
