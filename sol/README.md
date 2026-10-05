@@ -139,15 +139,18 @@ them apart.
 `maxAge` is counted from the proof's `observedAt`, which the platform
 verifiers set a fixed allowance before the evidence: 5 minutes before the
 notary signed the session on GitHub and X, and 2 hours before the expiry of
-Google's sign-in token. The verifiers also accept evidence that is already a
-while old, so a proof that was bound a moment ago can read as:
+Google's sign-in token. The verifiers accept evidence that is already a while
+old, and evidence dated up to the allowance ahead of the block, so a proof
+that was bound a moment ago can read as:
 
-| Platform | Age of a just-bound proof |
-| --- | --- |
-| GitHub, X | 5 to 65 minutes (the session can be up to an hour old) |
-| Google | 1 to 2 hours (the token is good for an hour after issue) |
+| Platform | Age of a just-bound proof | With clocks in step |
+| --- | --- | --- |
+| GitHub, X | 0 to 65 minutes (the session can be up to an hour old, or signed up to 5 minutes ahead of the block) | 5 minutes |
+| Google | 0 to 2 hours (the token is accepted until it expires, if that is at most 2 hours ahead of the block) | 1 hour |
 
-A `maxAge` below the top of that range rejects some honest holders. A
+The last column is a fresh session, or a token Google just issued, with the
+notary's or Google's clock on the block's. A `maxAge` below the top of the
+range rejects some honest holders. A
 `maxAge` of `type(uint256).max` accepts any age.
 
 ## Payments

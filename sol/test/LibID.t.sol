@@ -280,35 +280,65 @@ contract LibIDTest is LibIDTestBase {
         assertEq(consumer.resolve(LibID.GITHUB, "not a handle", 1 days), address(0));
     }
 
-    /// The verifiers date a proof a fixed allowance before its evidence, so a
-    /// proof made in this block already has an age: 5 minutes on GitHub, about
-    /// an hour on Google.
-    function test_aProofMadeNowIsAlreadyOlderThanItsAllowance() public {
+    /// The verifiers date a proof a fixed allowance before its evidence. With
+    /// the notary's and Google's clocks on the block's, a GitHub proof made
+    /// now reads 5 minutes old and a Google one an hour old.
+    function test_aProofMadeNowReadsAsOldAsItsAllowance() public {
         _bind(alice, "1001", "octocat", true);
-        assertFalse(consumer.isHolder(alice, LibID.GITHUB, "octocat", 4 minutes));
+        assertFalse(consumer.isHolder(alice, LibID.GITHUB, "octocat", 5 minutes - 1));
         assertTrue(consumer.isHolder(alice, LibID.GITHUB, "octocat", 5 minutes));
 
         _bindGoogle(bob, "0xabc", "bob@gmail.com");
-        assertFalse(consumer.isHolder(bob, LibID.GOOGLE, "bob@gmail.com", 30 minutes));
+        assertFalse(consumer.isHolder(bob, LibID.GOOGLE, "bob@gmail.com", 1 hours - 1));
         assertTrue(consumer.isHolder(bob, LibID.GOOGLE, "bob@gmail.com", 1 hours));
     }
 
-    /// The verifiers accept a GitHub session up to an hour old, so a proof
-    /// can be 65 minutes old the moment it is bound.
-    function test_aGitHubProofBoundLateIsAlreadyOverAnHourOld() public {
+    /// The GitHub verifier accepts a session signed as far ahead of the block
+    /// as its allowance, so a proof can have no age at all when bound.
+    function test_aGitHubProofSignedAheadOfTheBlockCanHaveNoAge() public {
         _tick();
-        _bindSignedAt(alice, "1001", "octocat", uint64(vm.getBlockTimestamp()) - 59 minutes, true);
-        assertFalse(consumer.isHolder(alice, LibID.GITHUB, "octocat", 1 hours));
-        assertTrue(consumer.isHolder(alice, LibID.GITHUB, "octocat", 65 minutes));
+        uint64 blockTime = uint64(vm.getBlockTimestamp());
+        uint64 ahead = CeremonyProfile.MAX_FUTURE_ATTESTATION_SKEW_SECONDS_GITHUB;
+        uint64 allowance = CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GITHUB;
+        if (ahead > allowance) ahead = allowance;
+        _bindSignedAt(alice, "1001", "octocat", blockTime + ahead, true);
+
+        uint64 youngest = allowance - ahead;
+        assertEq(youngest, 0);
+        assertEq(_provedAt(LibID.GITHUB, "octocat"), blockTime);
+        assertTrue(consumer.isHolder(alice, LibID.GITHUB, "octocat", youngest));
     }
 
-    /// The Google verifier accepts a token until it expires, so a proof can be
-    /// nearly 2 hours old the moment it is bound.
+    /// The Google verifier accepts a token that expires as far ahead of the
+    /// block as its allowance, so a proof can have no age at all when bound.
+    function test_aGoogleProofExpiringAtTheAllowanceCanHaveNoAge() public {
+        _tick();
+        uint64 blockTime = uint64(vm.getBlockTimestamp());
+        _bindGoogleExpiring(
+            alice, "0xabc", "alice@gmail.com", blockTime + CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GOOGLE
+        );
+        assertEq(_provedAt(LibID.GOOGLE, "alice@gmail.com"), blockTime);
+        assertTrue(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 0));
+    }
+
+    /// The verifiers accept a GitHub session up to an hour old, so a proof
+    /// can be nearly 65 minutes old the moment it is bound.
+    function test_aGitHubProofBoundLateIsAlreadyOverAnHourOld() public {
+        _tick();
+        uint64 blockTime = uint64(vm.getBlockTimestamp());
+        _bindSignedAt(alice, "1001", "octocat", blockTime - (CeremonyProfile.PROOF_LIFETIME_SECONDS_GITHUB - 1), true);
+        assertFalse(consumer.isHolder(alice, LibID.GITHUB, "octocat", 1 hours));
+        assertFalse(consumer.isHolder(alice, LibID.GITHUB, "octocat", 65 minutes - 2));
+        assertTrue(consumer.isHolder(alice, LibID.GITHUB, "octocat", 65 minutes - 1));
+    }
+
+    /// The Google verifier accepts a token until it expires, so a proof can
+    /// be nearly 2 hours old the moment it is bound.
     function test_aGoogleProofBoundLateIsAlreadyNearlyTwoHoursOld() public {
         _tick();
-        _bindGoogleExpiring(alice, "0xabc", "alice@gmail.com", uint64(vm.getBlockTimestamp()) + 1 minutes);
-        assertFalse(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 110 minutes));
-        assertTrue(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 2 hours));
+        _bindGoogleExpiring(alice, "0xabc", "alice@gmail.com", uint64(vm.getBlockTimestamp()) + 1);
+        assertFalse(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 2 hours - 2));
+        assertTrue(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 2 hours - 1));
     }
 
     function test_theLargestMaxAgeAcceptsAnyAge() public {
