@@ -40,8 +40,7 @@ The npm organization must permit publishing all four names. npm requires a
 package to exist before a trusted publisher can be configured. From a checked
 main commit, run the command above, authenticate to npm with a maintainer
 account, and publish ledger and popup before ceremony; ens depends on none of
-them. These first versions
-carry no provenance; every later one does:
+them. These first versions carry no provenance; every later one does:
 
 ```sh
 npm publish ts/.cache/npm/ledger.tgz --access public

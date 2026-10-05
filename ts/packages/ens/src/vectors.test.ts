@@ -1,6 +1,6 @@
-// The vector table for the transform and its inverse. The gateway's inverse
-// does not read this file yet; the inverse here is this package's own, written
-// from REQ-ENS-LABEL-05 and REQ-ENS-NAME-02 apart from the transform it reverses.
+// The vector table for the transform and its inverse. The inverse here is this
+// package's own, written from REQ-ENS-LABEL-05 and REQ-ENS-NAME-02 apart from
+// the transform it reverses.
 import { readFileSync } from 'node:fs'
 import {
   normalize,

@@ -79,5 +79,4 @@ The rules are those of the [ENS integration spec](https://github.com/libid-org/l
 in the repository lists names with their handles, handles with no name, and
 names that read back as no handle. The tests here run it forward through
 `ensName` and back through this package's own reading of the spec. The
-gateway's inverse does not read this file yet; it should check against the
-same file.
+gateway's inverse does not read this file.
