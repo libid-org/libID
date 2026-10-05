@@ -3,7 +3,14 @@ pragma solidity ^0.8.24;
 
 import {CeremonyProfile} from "libid-contracts/ceremony/CeremonyProfile.sol";
 import {HandleEscrow} from "libid-contracts/escrow/HandleEscrow.sol";
-import {FeeToken, NoReturnToken, PayoutFeeToken, TestERC20, one} from "libid-contracts/escrow/test/EscrowMocks.sol";
+import {
+    FeeToken,
+    NoReturnToken,
+    PayoutFeeToken,
+    RejectEther,
+    TestERC20,
+    one
+} from "libid-contracts/escrow/test/EscrowMocks.sol";
 import {Create3} from "libid-contracts/factory/Create3.sol";
 import {HandleNormalizer} from "libid-contracts/identity/HandleNormalizer.sol";
 import {HandleVectors} from "libid-contracts/identity/HandleVectors.sol";
@@ -15,8 +22,27 @@ import {LibID} from "../src/LibID.sol";
 import {LibIDTestnet} from "../src/LibIDTestnet.sol";
 import {LibIDTestBase} from "../src/test/LibIDTestBase.sol";
 
+/// What the fork tests call, on `Consumer` and `TestnetConsumer` alike.
+interface IConsumer {
+    function isAvailable() external view returns (bool);
+    function isEscrowAvailable() external view returns (bool);
+    function resolve(bytes32 platformId, string calldata handle) external view returns (address);
+    function bindingOf(bytes32 platformId, string calldata handle) external view returns (address, uint64);
+    function isHolder(address account, bytes32 platformId, string calldata handle, uint256 maxAge)
+        external
+        view
+        returns (bool);
+    function pay(bytes32 platformId, string calldata handle, uint256 amount, address refundTo)
+        external
+        returns (bytes32);
+    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount, address refundTo)
+        external
+        returns (bytes32);
+    function refund(bytes32 handleNode, address token, address recipient) external;
+}
+
 /// @notice A contract that uses LibID, as an integrator's would.
-contract Consumer {
+contract Consumer is IConsumer {
     function isAvailable() external view returns (bool) {
         return LibID.isAvailable();
     }
@@ -143,13 +169,6 @@ contract BombApproveToken is TestERC20 {
     }
 }
 
-/// @notice A holder that refuses ETH.
-contract RejectsEther {
-    receive() external payable {
-        revert("no");
-    }
-}
-
 contract LibIDTest is LibIDTestBase {
     /// The factories every canonical address derives from, one per environment.
     address constant FACTORY = 0xb7432C991Be3167689d5e80c9E2bf1ff5cCCd2E0;
@@ -216,21 +235,7 @@ contract LibIDTest is LibIDTestBase {
     function test_aPlatformWithRulesButNoVerifierIsNotSetUp() public {
         vm.prank(libidRegistry.owner());
         libidRegistry.setPlatform(LibID.X, HandleVectors.rulesFor(LibID.X));
-        bytes memory unknown = abi.encodeWithSelector(IIdentityRegistry.UnknownPlatform.selector, LibID.X);
-        vm.expectRevert(unknown);
-        consumer.resolve(LibID.X, "jack");
-        vm.expectRevert(unknown);
-        consumer.resolve(LibID.X, "jack", 1 days);
-        vm.expectRevert(unknown);
-        consumer.isHolder(alice, LibID.X, "jack", 1 days);
-        vm.expectRevert(unknown);
-        consumer.bindingOf(LibID.X, "jack");
-        vm.expectRevert(unknown);
-        consumer.bindingOf(LibID.X, "not a handle");
-        vm.prank(alice);
-        vm.expectRevert(unknown);
-        consumer.gated(LibID.X, "jack", 1 days);
-        assertEq(consumer.publishedHandleOf(alice, LibID.X), "", "published reads never revert");
+        _assertXIsNotSetUp();
     }
 
     function test_bindingOfTellsTheCasesApart() public {
@@ -255,13 +260,7 @@ contract LibIDTest is LibIDTestBase {
     }
 
     function test_theReadsRevertForAPlatformThatIsNotSetUp() public {
-        bytes memory unknown = abi.encodeWithSelector(IIdentityRegistry.UnknownPlatform.selector, LibID.X);
-        vm.expectRevert(unknown);
-        consumer.resolve(LibID.X, "octocat");
-        vm.expectRevert(unknown);
-        consumer.resolve(LibID.X, "octocat", 1 days);
-        vm.expectRevert(unknown);
-        consumer.isHolder(alice, LibID.X, "octocat", 1 days);
+        _assertXIsNotSetUp();
     }
 
     function test_resolveWithAMaxAgeDropsOldProofs() public {
@@ -454,7 +453,7 @@ contract LibIDTest is LibIDTestBase {
     /// The holder's code runs inside `pay`; a holder that refuses ETH makes
     /// the payment revert.
     function test_aHolderThatRefusesEtherMakesPayRevert() public {
-        address holder = address(new RejectsEther());
+        address holder = address(new RejectEther());
         _bind(holder, "4004", "refuser", true);
         vm.expectRevert(abi.encodeWithSelector(HandleEscrow.NativeTransferFailed.selector, holder, 1 ether));
         consumer.pay(LibID.GITHUB, "refuser", 1 ether, sender);
@@ -703,6 +702,26 @@ contract LibIDTest is LibIDTestBase {
 
     // ─── Helpers ────────────────────────────────────────────────────
 
+    /// Every read and gate on X reverts `UnknownPlatform`, but
+    /// `publishedHandleOf`, which returns an empty string.
+    function _assertXIsNotSetUp() internal {
+        bytes memory unknown = abi.encodeWithSelector(IIdentityRegistry.UnknownPlatform.selector, LibID.X);
+        vm.expectRevert(unknown);
+        consumer.resolve(LibID.X, "jack");
+        vm.expectRevert(unknown);
+        consumer.resolve(LibID.X, "jack", 1 days);
+        vm.expectRevert(unknown);
+        consumer.isHolder(alice, LibID.X, "jack", 1 days);
+        vm.expectRevert(unknown);
+        consumer.bindingOf(LibID.X, "jack");
+        vm.expectRevert(unknown);
+        consumer.bindingOf(LibID.X, "not a handle");
+        vm.prank(alice);
+        vm.expectRevert(unknown);
+        consumer.gated(LibID.X, "jack", 1 days);
+        assertEq(consumer.publishedHandleOf(alice, LibID.X), "");
+    }
+
     function _provedAt(bytes32 platformId, string memory handle) internal view returns (uint64 observedAt) {
         (, observedAt) = libidRegistry.handleBinding(IdentityNodes.handleNode(platformId, handle));
     }
@@ -882,25 +901,6 @@ contract LibIDTestBaseTest is LibIDTestBase {
     }
 }
 
-/// What the fork tests call, on `Consumer` and `TestnetConsumer` alike.
-interface IConsumer {
-    function isAvailable() external view returns (bool);
-    function isEscrowAvailable() external view returns (bool);
-    function resolve(bytes32 platformId, string calldata handle) external view returns (address);
-    function bindingOf(bytes32 platformId, string calldata handle) external view returns (address, uint64);
-    function isHolder(address account, bytes32 platformId, string calldata handle, uint256 maxAge)
-        external
-        view
-        returns (bool);
-    function pay(bytes32 platformId, string calldata handle, uint256 amount, address refundTo)
-        external
-        returns (bytes32);
-    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount, address refundTo)
-        external
-        returns (bytes32);
-    function refund(bytes32 handleNode, address token, address recipient) external;
-}
-
 /// `Consumer`'s fork-tested calls, through LibIDTestnet.
 contract TestnetConsumer is IConsumer {
     function isAvailable() external view returns (bool) {
@@ -990,11 +990,7 @@ abstract contract ForkTest is LibIDTestBase {
     /// GitHub never issues a handle with a space, so the registry refuses it
     /// and nobody can ever hold it.
     function test_textGitHubCannotIssueIsUnheld() public view {
-        assertEq(consumer.resolve(LibID.GITHUB, "not a handle"), address(0));
-        assertFalse(consumer.isHolder(address(0), LibID.GITHUB, "not a handle", type(uint256).max));
-        (address holder, uint64 observedAt) = consumer.bindingOf(LibID.GITHUB, "not a handle");
-        assertEq(holder, address(0));
-        assertEq(observedAt, 0);
+        _assertUnheld("not a handle");
     }
 
     /// Escrows ETH and a token for a handle nobody holds, at the node the
@@ -1053,11 +1049,17 @@ abstract contract ForkTest is LibIDTestBase {
     /// registry takes the text, so the reads go through its binding.
     function _unheldHandle() private view returns (string memory handle) {
         handle = string.concat("libid-fork-", vm.toString(vm.randomUint(64)));
+        _assertUnheld(handle);
+    }
+
+    /// Nobody holds the GitHub `handle`, by every read, and no proof of it
+    /// was ever bound.
+    function _assertUnheld(string memory handle) private view {
         assertEq(consumer.resolve(LibID.GITHUB, handle), address(0));
+        assertFalse(consumer.isHolder(address(0), LibID.GITHUB, handle, type(uint256).max));
         (address holder, uint64 observedAt) = consumer.bindingOf(LibID.GITHUB, handle);
         assertEq(holder, address(0));
         assertEq(observedAt, 0);
-        assertFalse(consumer.isHolder(address(0), LibID.GITHUB, handle, type(uint256).max));
     }
 }
 
@@ -1068,7 +1070,7 @@ contract LibIDForkTest is ForkTest {
     }
 
     function newConsumer() internal override returns (IConsumer, address, address) {
-        return (IConsumer(address(new Consumer())), LibID.REGISTRY, LibID.ESCROW);
+        return (new Consumer(), LibID.REGISTRY, LibID.ESCROW);
     }
 
     function deployLive() internal override {
@@ -1076,12 +1078,8 @@ contract LibIDForkTest is ForkTest {
     }
 }
 
-/// LibIDTestnet against Sepolia.
-contract LibIDTestnetSepoliaForkTest is ForkTest {
-    function rpcVariable() internal pure override returns (string memory) {
-        return "SEPOLIA_RPC_URL";
-    }
-
+/// LibIDTestnet against a testnet chain.
+abstract contract TestnetForkTest is ForkTest {
     function newConsumer() internal override returns (IConsumer, address, address) {
         return (new TestnetConsumer(), LibIDTestnet.REGISTRY, LibIDTestnet.ESCROW);
     }
@@ -1091,17 +1089,16 @@ contract LibIDTestnetSepoliaForkTest is ForkTest {
     }
 }
 
+/// LibIDTestnet against Sepolia.
+contract LibIDTestnetSepoliaForkTest is TestnetForkTest {
+    function rpcVariable() internal pure override returns (string memory) {
+        return "SEPOLIA_RPC_URL";
+    }
+}
+
 /// LibIDTestnet against Eden testnet.
-contract LibIDTestnetEdenForkTest is ForkTest {
+contract LibIDTestnetEdenForkTest is TestnetForkTest {
     function rpcVariable() internal pure override returns (string memory) {
         return "EDEN_RPC_URL";
-    }
-
-    function newConsumer() internal override returns (IConsumer, address, address) {
-        return (new TestnetConsumer(), LibIDTestnet.REGISTRY, LibIDTestnet.ESCROW);
-    }
-
-    function deployLive() internal override {
-        deployLibIDTestnet();
     }
 }
