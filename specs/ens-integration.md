@@ -399,7 +399,9 @@ produce unchanged.
 
 - REQ-ENS-KEY-01:
   The DNS registrar account with the DNSSEC keys, the owner of the Parent
-  Name and the Handle Resolver, and each Signer MUST be distinct keys.
+  Name and the Handle Resolver, and each Signer MUST be distinct keys. The
+  owner key MUST be held cold: offline, and brought online only to sign an
+  owner transaction.
 
   | key | grants | lives |
   |---|---|---|
@@ -407,10 +409,11 @@ produce unchanged.
   | Parent Name and Handle Resolver owner | resolver, URL list, Signers | cold |
   | Signer | answers | Gateway host |
 
-  Necessity: a URL without a Signer key buys nothing, because the callback
-  rejects its answer; a Signer key answers anything; the DNS credentials take
-  the whole namespace. Held together, the least guarded one decides all
-  three.
+  Necessity: a URL without a Signer key cannot forge an answer, though it
+  can replay a signed answer until it expires and end lookups (§11); a
+  Signer key answers anything; the owner key replaces both; the DNS
+  credentials take the whole namespace. Held together, the least guarded
+  one decides all of them.
 - REQ-ENS-KEY-02 (upholds SP-ENS-01):
   Handle Resolvers that trust one Signer MUST sit at different addresses,
   whichever chains they are on. Necessity: the digest binds an answer to its
@@ -490,11 +493,18 @@ produce unchanged.
   transaction on each chain whose resolver trusts it. The callback checks the
   Signer when it runs, so the answers it signed stop verifying from that
   block on.
-- The current deployment does not meet REQ-ENS-KEY-01. One key, the KMS
-  key the contracts' deploy workflow signs with, deploys the Handle
-  Resolver, owns it, and owns the Parent Name in the ENS registry. Whoever
-  can use that key can trust a Signer of their own and point the URL list at
-  their own endpoint, with no Signer key involved.
+- The current deployment does not meet REQ-ENS-KEY-01. In each
+  environment one AWS KMS key, which the contracts' deploy workflow signs
+  with from CI, deploys the Handle Resolver, owns it, and owns the Parent
+  Name in the ENS registry. That key is online, not cold. Whoever can use it
+  can trust a Signer of their own and point the URL list at their own
+  endpoint, with no Signer key involved.
+- Whoever controls a host in the URL list, without a Signer key, cannot
+  forge an answer. It can serve any signed answer it has seen for the same
+  request until that answer expires, at most an hour (REQ-ENS-RES-03), so a
+  binding that moved can resolve to its previous holder for that long. It
+  can also end every lookup that reaches it with a 4xx, from which a client
+  does not walk on. Removing the URL is an owner transaction.
 - One Signer may serve Handle Resolvers on several chains. The digest covers
   no chain ID, but it covers the resolver's address, and REQ-ENS-KEY-02 keeps
   those apart, so an answer verifies only at the resolver it was signed for.
@@ -559,11 +569,12 @@ produce unchanged.
 | REQ-ENS-RES-01 to RES-04 | `libid-contracts` `solidity/contracts/ens/HandleResolver.sol` |
 | REQ-ENS-RES-05 | `libid-contracts` `scripts/setup-ens-resolver.sh` refuses a URL without both placeholders; the contract does not check |
 | REQ-ENS-NAME-01 to NAME-04 | `usernames-indexer` `crates/usernames-core/src/ens.rs`; its `ChainName::parse` accepts a Chain Label longer than 63 bytes or with `--` at the third and fourth characters, which REQ-ENS-NAME-01 refuses |
-| REQ-ENS-LABEL-01 to LABEL-04 | `libID` `ts/packages/ens` (`@libid/ens`, libID PR #109, unmerged): the forward transform for the Parent Name `handles.link` only; it does not refuse a Workspace label with `--` at the third and fourth characters |
+| REQ-ENS-LABEL-01 to LABEL-04 | `libID` `ts/packages/ens` (`@libid/ens`, libID PR #109, unmerged): the forward transform with its refusals, and a `parent` option for the Parent Name |
 | REQ-ENS-LABEL-05 | `usernames-indexer` `crates/usernames-core/src/ens.rs`, `crates/usernames-core/src/nodes.rs`: the MUST; the SHOULD is not implemented (§11) |
 | REQ-ENS-GW-01 to GW-11 | `usernames-indexer` `bin/usernames-api/src/ens.rs`, `crates/usernames-core/src/ens.rs`; the TTL ceiling of REQ-ENS-GW-08 in `bin/usernames-api/src/lib.rs` |
 | REQ-ENS-NAME-05, REQ-ENS-GW-12, REQ-ENS-GW-13 | deployment rules; nothing enforces them. `usernames-indexer` `bin/usernames-api/src/ens.rs` documents REQ-ENS-GW-12 |
 | REQ-ENS-KEY-01 | not met by the current deployment (§11) |
+| REQ-ENS-KEY-02 | nothing enforces it: both deploy paths, `libid-contracts` `.github/workflows/deploy.yml` and `scripts/setup-ens-resolver.sh`, deploy with nonce-based `forge create`, and `deploy.yml` picks the deployer key per environment |
 
 ## 14. References
 
