@@ -75,7 +75,7 @@ bytes, or has `--` at its third and fourth characters, throws.
 
 The rules are those of the [ENS integration spec](https://github.com/libid-org/libID/blob/91215f6ea2bb0d700a0ec5090cf6f4625cea2821/specs/ens-integration.md), §5 and §6.
 
-[`vectors/names.json`](https://github.com/libid-org/libID/blob/main/ts/packages/ens/vectors/names.json)
+[`vectors/names.json`](https://github.com/libid-org/libID/blob/f79fbf8e9f7d79587f96954b27867e54d668fc3d/ts/packages/ens/vectors/names.json)
 in the repository lists names with their handles, handles with no name, and
 names that read back as no handle. The tests here run it forward through
 `ensName` and back through this package's own reading of the spec. The
