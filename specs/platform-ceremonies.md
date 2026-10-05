@@ -174,16 +174,19 @@ derivation, layered strictly:
   proof statement or Consumer behavior may rely on it. Necessity: a check
   running in software the prover chooses whether to run is not a defense.
 
-Normalization applies these per-platform criteria: ASCII-only input with
-disallowed bytes rejected; lowercasing; Google validates the value as an
-email address and keeps its `@`; X and GitHub strip one leading `@`;
-underscore is allowed on X and not on GitHub; hyphen is allowed on GitHub and
-not on X, and never leading, trailing, or doubled; a per-platform maximum
-length; an empty result is rejected. The exact byte-level algorithm is fixed
-by the shared cross-language handle vector table this profile publishes
-alongside the specification, which every implementation reproduces; that
+Normalization applies these per-platform criteria: every leading and
+trailing 0x20 byte is trimmed before the `@` strip, and none after it;
+ASCII-only input with disallowed bytes rejected; lowercasing; Google
+validates the value as an email address and keeps its `@`; X and GitHub strip
+one leading `@`; underscore is allowed on X and not on GitHub; hyphen is
+allowed on GitHub and not on X, and never leading, trailing, or doubled; a
+per-platform maximum length; an empty result is rejected. The exact
+byte-level algorithm is fixed by the shared cross-language handle vector
+table this profile publishes, which every implementation reproduces; that
 table, not this prose, is the precision anchor. A profile that publishes no
-such table is ineligible.
+such table is ineligible. The launch profiles publish version 1 of
+[`handles.json`][libid-handle-vectors]: 44 vectors, with maximum normalized
+lengths of 15 bytes on X, 39 on GitHub, and 62 on Google.
 
 - TEST-PLAT-20 (exercises REQ-PLAT-08A, REQ-PLAT-08B, REQ-PLAT-08C):
   Every implementation reproduces the shared handle vector table byte for
@@ -754,7 +757,7 @@ REQ-COMMON-18A requires.
   | Public input | Meaning |
   |---|---|
   | token bearer commitment | the commitment the Platform Verifier matches against the verified token attestation |
-  | identity bearer commitment | the commitment the Platform Verifier matches against the verified `/users/me` attestation |
+  | identity bearer commitment | the commitment the Platform Verifier matches against the verified `/2/users/me` attestation |
 
   The Proving Circuit MUST keep the bearer private. The Proving Circuit MUST
   NOT add an Authorization Digest, client identifier, timestamp, endpoint,
@@ -1442,9 +1445,9 @@ distinction between local consistency and circuit/downstream verification;
 TEST-PLAT-04 and TEST-PLAT-15 distinguish those later rejections from early
 browser rejection. No ledger verification guarantee is weakened.
 
-This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01, and
-SP-FRESH-01 for the launch platforms, under the assumptions of
-[common §3](ceremony-common.md#3-assumptions).
+This document enforces SP-BIND-01, SP-CLIENT-01, SP-DELIVERY-01,
+SP-EXCHANGE-01, and SP-FRESH-01 for the launch platforms, under the
+assumptions of [common §3](ceremony-common.md#3-assumptions).
 
 Google is the only platform whose evidence is a bearer artifact: an ID Token
 is complete evidence to whoever holds it. Its delivery is therefore
@@ -1520,10 +1523,12 @@ and stays public, so a Google binding is not anonymous.
 ## 10. References
 
 Normative: [RFC6749], [RFC7636], [RFC7515], [RFC7517], [RFC7518], [RFC7519],
-[RFC8017], [OIDC], [RFC8446], [RFC9207].
+[RFC8017], [OIDC], [RFC8446], [RFC9207], [libid-handle-vectors].
 
 Informative: [RFC9700], [TLSNotary-Proxy], [GitHub-public-clients].
 
 [GitHub-public-clients]: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/best-practices-for-creating-an-oauth-app#client-secrets
 
 [RFC9207]: https://www.rfc-editor.org/rfc/rfc9207.html
+
+[libid-handle-vectors]: https://github.com/libid-org/libid-contracts/blob/v0.17.0/solidity/contracts/identity/handles.json
