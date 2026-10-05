@@ -84,7 +84,7 @@ test('pins every response profile security policy [CSP-001/002/003/009/015]', ()
   // Prefetch and Callback keep the opener: they must not sever the application's handle.
   assert.deepEqual(isolation('prefetch'), [null, 'unsafe-none', null])
   assert.deepEqual(isolation('callback'), [null, 'unsafe-none', null])
-  // WASM only where it compiles; no spawning from leaves.
+  // WASM only where it compiles; no spawning from leaves or the root Service Worker.
   for (const profile of [
     'prover',
     'proverFallback',
