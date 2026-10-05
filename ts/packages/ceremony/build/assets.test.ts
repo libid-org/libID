@@ -26,7 +26,7 @@ test('an installed file lives under its installed package version', async () => 
   )
   assert.equal(
     urls['bb/{version}/wasm/barretenberg-threads.wasm/'],
-    `/ccdp/assets/bb/${version('@aztec/bb.js')}/wasm/barretenberg-threads.wasm`,
+    `/ccdp/assets/bb/${version('@aztec-foundation/bb.js')}/wasm/barretenberg-threads.wasm`,
   )
 })
 

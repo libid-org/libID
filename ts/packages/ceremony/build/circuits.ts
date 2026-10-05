@@ -1,5 +1,5 @@
 import { gunzipSync } from 'node:zlib'
-import { BackendType, Barretenberg } from '@aztec/bb.js'
+import { BackendType, Barretenberg } from '@aztec-foundation/bb.js'
 import {
   CRS_CHUNK_BYTES,
   G1_POINT_BYTES,

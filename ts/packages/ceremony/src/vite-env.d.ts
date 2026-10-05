@@ -6,3 +6,7 @@ declare module 'virtual:ceremony-assets' {
   export const allowedRequests: readonly import('./assets/index.js').AssetRequest[]
   export const urls: Record<string, string>
 }
+
+declare module 'virtual:ceremony-worker' {
+  export const rootWorkerUrl: string
+}

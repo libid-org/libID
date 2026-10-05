@@ -1,6 +1,7 @@
 import { type Carrier, PopupWindow } from '@libid/popup'
 import { afterEach, expect, it, vi } from 'vitest'
 import { CEREMONY_ID, ccdpClient, testnet } from '../../testing/index.js'
+import { isCeremonyId } from '../navigation.js'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -14,7 +15,7 @@ it.each([
   async (ccdpOrigin, peerOrigin, admitted) => {
     const handle = { closed: false, close: vi.fn() }
     vi.stubGlobal('window', Object.assign(new EventTarget(), { open: () => handle }))
-    const popup = PopupWindow.open('client-connect', 'left=0,top=0')
+    const popup = PopupWindow.open('left=0,top=0')
     const client = await ccdpClient({ ccdpOrigin, platforms: { google: { clientId: 'client' } } })
     let receive: (message: unknown) => void = () => {}
     const carrier: Carrier = {
@@ -28,7 +29,7 @@ it.each([
     }
     const fallback = vi.fn(async (_signal: AbortSignal) => carrier)
     const onDiagnostic = vi.fn()
-    // A JavaScript caller cannot widen the configuration-derived allowlist.
+    // A JavaScript caller can neither widen the configuration-derived allowlist nor pick the ID.
     const options = {
       connectionId: CEREMONY_ID,
       fallback,
@@ -36,6 +37,7 @@ it.each([
       allowedPopupOrigins: ['*'],
     }
     const connection = client.connect<{ type: 'wallet' }>(popup, options)
+    expect(connection.connectionId).not.toBe(CEREMONY_ID)
     const observed = vi.fn()
     connection.on({ type: 'wallet', decode: () => ({ type: 'wallet' }) }, observed)
     try {
@@ -64,18 +66,16 @@ it.each([
   },
 )
 
-it('runs a ceremony only under its connection ID [KIT-008]', async () => {
+it('gives each connection a fresh ID, which its ceremony runs under [KIT-007] [KIT-008]', async () => {
   vi.stubGlobal('window', Object.assign(new EventTarget(), { open: () => ({ closed: false }) }))
   const client = await ccdpClient({
     ccdpOrigin: 'https://ccdp.test',
     platforms: { google: { clientId: 'client' } },
   })
-  const connection = client.connect(PopupWindow.open('client-ids', 'left=0,top=0'), {
-    connectionId: CEREMONY_ID,
-  })
-  const run = (id: string) =>
-    client.new(connection, id, 'google', testnet, new Uint8Array(32), new Uint8Array())
-  expect(() => run(crypto.randomUUID())).toThrow('Ceremony ID must be the connection ID')
-  expect(run(CEREMONY_ID).launchUrl).toContain(CEREMONY_ID)
-  await connection.close()
+  const [first, second] = [1, 2].map(() => client.connect(PopupWindow.open('left=0,top=0')))
+  for (const { connectionId } of [first, second]) expect(isCeremonyId(connectionId)).toBe(true)
+  expect(first.connectionId).not.toBe(second.connectionId)
+  const ceremony = client.new(first, 'google', testnet, new Uint8Array(32), new Uint8Array())
+  expect(new URL(ceremony.launchUrl).hash).toContain(`ceremonyId=${first.connectionId}`)
+  await Promise.all([first.close(), second.close()])
 })

@@ -38,17 +38,21 @@ export async function readJson(response: Response, maximum: number): Promise<unk
   )
 }
 
-/** Public JSON fetched without cookies, redirects or persistent browser caching, read under `maximum`. */
+/**
+ * Public JSON fetched without cookies or redirects, read under `maximum`. It bypasses the
+ * browser's HTTP cache unless `cache` says otherwise.
+ */
 export async function fetchPublicJson(
   url: string,
   maximum: number,
   failure: string,
   signal?: AbortSignal,
+  cache: RequestCache = 'no-store',
 ) {
   const response = await fetch(url, {
     mode: 'cors',
     credentials: 'omit',
-    cache: 'no-store',
+    cache,
     redirect: 'error',
     ...(signal && { signal }),
   })

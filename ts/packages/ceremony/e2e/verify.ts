@@ -1,4 +1,4 @@
-import { Barretenberg, UltraHonkVerifierBackend } from '@aztec/bb.js'
+import { Barretenberg, UltraHonkVerifierBackend } from '@aztec-foundation/bb.js'
 import { readArchive } from '../build/archive.ts'
 import { loadAssetCatalog } from '../build/assets.ts'
 

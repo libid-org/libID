@@ -1,4 +1,5 @@
 import { requestsByProfile } from 'virtual:ceremony-assets'
+import { rootWorkerUrl } from 'virtual:ceremony-worker'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { profileKey } from '../../assets/keys.js'
 import { dispatchPrefetch, registerRootWorker } from '../../assets/registration.js'
@@ -37,13 +38,18 @@ class PrefetchDocument extends CeremonyDocument {
         allowedApplicationOrigins: '*',
       })
       this.connection = connection
+      // The registration needs no connection, so it overlaps the handshake.
+      const registering = Object.hasOwn(requestsByProfile, profile)
+        ? registerRootWorker(rootWorkerUrl)
+        : undefined
+      registering?.catch(() => {})
       await connection.ready
-      // Checked once connected, so the Application learns why instead of waiting.
-      if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
+      // Reported once connected, so the Application learns why instead of waiting.
+      if (!registering) throw new Error(messages.unsupportedProfile)
       const connected = performance.now()
-      const registration = await registerRootWorker()
+      const worker = await registering
       const workerReady = performance.now()
-      await dispatchPrefetch(registration, profile)
+      await dispatchPrefetch(worker, profile)
       const dispatched = performance.now()
       const event = {
         event: 'prefetch-dispatch',

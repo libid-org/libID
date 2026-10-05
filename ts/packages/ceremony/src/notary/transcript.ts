@@ -1,4 +1,4 @@
-import { latin1 } from './http.js'
+import { FIELD_NAME, latin1 } from './http.js'
 import type { ByteRange } from './protocol.js'
 
 // JSON permits only space, tab, LF and CR between tokens.
@@ -54,6 +54,26 @@ export function quotedRange(
     valueStart,
     value: transcript.slice(valueStart, end),
   }
+}
+
+/** An unquoted JSON integer member: its digits, and the member range through the next `,` or `}`. */
+export function numericRange(
+  transcript: Uint8Array,
+  name: string,
+): { range: ByteRange; value: Uint8Array } {
+  const { start, valueStart } = jsonField(transcript, name)
+  let end = valueStart
+  while (transcript[end] >= 0x30 && transcript[end] <= 0x39) end++
+  const value = transcript.subarray(valueStart, end)
+  end = skipJsonWhitespace(transcript, end)
+  if (!JSON_MEMBER_END.includes(transcript[end])) invalidTranscript(`${name} is not an integer`)
+  return { value, range: { start, end: end + 1 } }
+}
+
+/** Case-fold a request field name, treating `_` as `-` as servers may for forbidden names. */
+export function requestFieldName(name: string, reason: string): string {
+  if (!FIELD_NAME.test(name)) invalidTranscript(reason)
+  return name.toLowerCase().replaceAll('_', '-')
 }
 
 export function decodePrintable(value: Uint8Array, name: string, maximum: number): string {

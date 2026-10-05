@@ -14,7 +14,7 @@ export interface CurrentOptions {
   scope?: string
 }
 
-/** @internal The listening surface of a Window, injectable for unit tests. */
+/** The listening surface of a Window, injectable for unit tests. */
 export interface View {
   addEventListener(type: 'message', listener: (event: MessageEvent) => void): void
   removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void
@@ -34,55 +34,90 @@ function usable(handle: WindowProxy | null): handle is WindowProxy {
 let nextLeft = 0
 let cascade = 0
 
+/**
+ * Attempts `window.open('about:blank', name, 'popup,…')`. The popup is always requested as a
+ * separate window; `features` may add size or position and MUST NOT sever the opener. Without a
+ * position, new windows are placed side by side, then staggered when the screen is full.
+ * Placement is best-effort; browsers and window managers may ignore it.
+ */
+function openWindow(name: string, features: string): OpenedWindow {
+  if (/\b(noopener|noreferrer)\b/i.test(features)) {
+    throw new TypeError('popup features must not sever the opener')
+  }
+  let windowFeatures = features === '' ? 'popup' : `popup,${features}`
+  const positioned = /(?:^|[\s,])(?:left|top|screenx|screeny)(?:[\s,=]|$)/i.test(features)
+  let left = nextLeft
+  let offset = cascade
+  let width = 0
+  if (!positioned) {
+    const { screen } = window
+    // availLeft/Top are supported by desktop engines but absent from lib.dom.
+    const bounds = screen as Screen & { availLeft?: number; availTop?: number }
+    const requested = [
+      ...features.matchAll(/(?:^|[\s,])(?:width|innerwidth)\s*=\s*([+-]?\d+)/gi),
+    ].at(-1)?.[1]
+    width = Math.min(screen.availWidth, Math.max(100, Number(requested) || window.outerWidth))
+    if (left + width > screen.availWidth) {
+      offset = (offset + 32) % 256
+      left = Math.min(offset, Math.max(0, screen.availWidth - width))
+    }
+    windowFeatures += `,left=${(bounds.availLeft ?? window.screenX) + left},top=${(bounds.availTop ?? window.screenY) + offset}`
+  }
+  const handle = window.open('about:blank', name, windowFeatures)
+  if (handle && !positioned) {
+    nextLeft = left + width + 32
+    cascade = offset
+  }
+  return new OpenedWindow(handle, window)
+}
+
+/** A fresh window name: random, so a page reload never reuses an earlier popup by name. */
+const windowName = () => `popup-${crypto.randomUUID()}`
+
 export class PopupWindow {
   protected constructor() {}
 
+  /** Synchronously opens a popup under a fresh name, for an activation with no anchor fallback. */
+  static open(features = ''): PopupWindow {
+    return openWindow(windowName(), features)
+  }
+
   /**
-   * Synchronously attempts `window.open('about:blank', target, 'popup,…')`.
-   * The popup is always requested as a separate window; `features` may add
-   * size or position and MUST NOT sever the opener. Without a position, new
-   * windows are placed side by side, then staggered when the screen is full.
-   * Placement is best-effort; browsers and window managers may ignore it.
+   * Opens the popup for an anchor's activation, scripted first. When the window opens, the
+   * anchor's own navigation is suppressed. When the browser blocks it, that navigation creates
+   * the popup under the same name and the connection binds it; a `navigate` during the
+   * activation points the anchor at its destination; the anchor needs no target, and its href
+   * can stay a placeholder that keeps it focusable.
    */
-  static open(target: string, features = ''): PopupWindow {
-    if (target === '' || target.startsWith('_')) {
-      throw new TypeError('popup target must be a nonempty name not beginning with "_"')
-    }
-    if (/\b(noopener|noreferrer)\b/i.test(features)) {
-      throw new TypeError('popup features must not sever the opener')
-    }
-    let windowFeatures = features === '' ? 'popup' : `popup,${features}`
-    const positioned = /(?:^|[\s,])(?:left|top|screenx|screeny)(?:[\s,=]|$)/i.test(features)
-    let left = nextLeft
-    let offset = cascade
-    let width = 0
-    if (!positioned) {
-      const { screen } = window
-      // availLeft/Top are supported by desktop engines but absent from lib.dom.
-      const bounds = screen as Screen & { availLeft?: number; availTop?: number }
-      const requested = [
-        ...features.matchAll(/(?:^|[\s,])(?:width|innerwidth)\s*=\s*([+-]?\d+)/gi),
-      ].at(-1)?.[1]
-      width = Math.min(screen.availWidth, Math.max(100, Number(requested) || window.outerWidth))
-      if (left + width > screen.availWidth) {
-        offset = (offset + 32) % 256
-        left = Math.min(offset, Math.max(0, screen.availWidth - width))
+  static fromAnchor(event: MouseEvent, features = ''): PopupWindow {
+    const anchor = event.currentTarget
+    try {
+      if (typeof HTMLAnchorElement === 'undefined' || !(anchor instanceof HTMLAnchorElement)) {
+        throw new TypeError('fromAnchor requires an anchor activation')
       }
-      windowFeatures += `,left=${(bounds.availLeft ?? window.screenX) + left},top=${(bounds.availTop ?? window.screenY) + offset}`
+      // Link types are ASCII case-insensitive; relList.contains is not.
+      if (/(?:^|\s)no(?:opener|referrer)(?:\s|$)/i.test(anchor.rel)) {
+        throw new TypeError('the anchor must not sever the opener')
+      }
+      const name = windowName()
+      const popup = openWindow(name, features)
+      anchor.target = name
+      if (popup.opened) event.preventDefault()
+      else popup.anchor = { element: anchor, event }
+      return popup
+    } catch (error) {
+      // A refused activation navigates nowhere, the application page included.
+      event.preventDefault()
+      throw error
     }
-    const handle = window.open('about:blank', target, windowFeatures)
-    if (handle && !positioned) {
-      nextLeft = left + width + 32
-      cascade = offset
-    }
-    return new OpenedWindow(handle, window)
   }
 
   /**
    * Adopts the current popup document; creates nothing. `fragment` is the
    * document's URL fragment as the host captured it, for a bootstrap that
    * clears the URL before importing the package; it defaults to the current
-   * `location.hash`. The package treats it as opaque and keeps a snapshot.
+   * `location.hash`. The package treats it as opaque and keeps a snapshot
+   * only while an isolation fallback may still need it.
    * `scope` pins continuity to one registration, which need not exist yet.
    */
   static current(fragment?: string, options: CurrentOptions = {}): PopupWindow {
@@ -122,6 +157,8 @@ export class OpenedWindow extends PopupWindow {
   handle: WindowProxy | null
   /** One-shot: a second `connect` over the same object throws. */
   connected = false
+  /** The anchor a blocked `fromAnchor` activation leaves to create the popup. */
+  anchor: { element: HTMLAnchorElement; event: Event } | null = null
 
   constructor(
     handle: WindowProxy | null,
@@ -149,6 +186,11 @@ export class OpenedWindow extends PopupWindow {
     this.handle?.location.replace(url)
   }
 
+  /** Point a still-dispatching anchor activation at `url`, where its own navigation then goes. */
+  pointAnchor(url: string): void {
+    if (this.anchor && this.anchor.event.eventPhase !== Event.NONE) this.anchor.element.href = url
+  }
+
   closeHandle(): void {
     try {
       this.handle?.close()
@@ -173,8 +215,8 @@ export class CurrentWindow extends PopupWindow {
     this.fragment = fragment.startsWith('#') ? fragment.slice(1) : fragment
   }
 
-  /** The captured fragment without its `#`; immutable once adopted. */
-  readonly fragment: string
+  /** The captured fragment without its `#`, until `accept` takes it. */
+  fragment: string
 
   override get opened(): boolean {
     return true

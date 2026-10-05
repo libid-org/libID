@@ -21,13 +21,13 @@ type OfProverKind<K extends string> = {
   [P in PlatformId]: (typeof fixtures)[P] extends { proverKind: K } ? P : never
 }[PlatformId]
 
-export type BearerLinkPlatform = OfProverKind<'bearer-link'>
+export type NotarizedPlatform = OfProverKind<'notarized'>
 
 export type OidcPlatform = OfProverKind<'oidc'>
 
-/** Catalog platforms proven by the shared bearer-link prover, in catalog order. */
-export const bearerLinkPlatforms = supportedPlatforms.filter(
-  (p): p is BearerLinkPlatform => fixtures[p].proverKind === 'bearer-link',
+/** Catalog platforms proven by the notarized prover, in catalog order. */
+export const notarizedPlatforms = supportedPlatforms.filter(
+  (p): p is NotarizedPlatform => fixtures[p].proverKind === 'notarized',
 )
 
 /** Catalog platforms proven from a signed OIDC ID token, in catalog order. */

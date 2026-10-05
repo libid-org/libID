@@ -7,7 +7,6 @@ import type { OperationEvent } from '../events.js'
 export interface RawProof {
   proof: Uint8Array
   publicInputs: string[]
-  runtime: { effectiveThreads: number; sharedMemory: boolean }
 }
 
 export type FromWorker =
@@ -22,7 +21,8 @@ export interface Preload {
   type: 'preload'
   circuitUrl: string
   verificationKeyUrl: string
-  threads: number
+  /** Requested proof threads, capped by the worker; four when absent. */
+  threads?: number
   acvmUrl: string
   abiUrl: string
   wasmPath: string

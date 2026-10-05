@@ -44,7 +44,7 @@ async function initialize() {
         launch.href = '/'
         launch.setAttribute('role', 'button')
         launch.textContent = names[platform]
-        launch.addEventListener('click', (event) => start(event, launch, platform))
+        launch.addEventListener('click', (event) => start(event, platform))
         launch.addEventListener('keydown', (event) => {
           if (event.key === ' ') {
             event.preventDefault()
@@ -214,20 +214,17 @@ class RunRow {
     }
   }
 }
-function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformId) {
+function start(event: MouseEvent, platform: PlatformId) {
   if (!client) {
     event.preventDefault()
     return
   }
-  const id = crypto.randomUUID()
-  const run = new RunRow(platform, id)
-  launch.target = `ceremony-dev-${id}`
   // Keep creation and the native-anchor fallback inside the same user gesture.
+  const popup = PopupWindow.fromAnchor(event, 'width=480,height=720')
+  const current = client.connect(popup)
+  const id = current.connectionId
+  const run = new RunRow(platform, id)
   try {
-    const popup = PopupWindow.open(launch.target, 'width=480,height=720')
-    const current = client.connect(popup, {
-      connectionId: id,
-    })
     run.close.disabled = !popup.opened
     // A native-anchor popup supplies its window handle only when it authenticates.
     void current.ready
@@ -246,15 +243,12 @@ function start(event: MouseEvent, launch: HTMLAnchorElement, platform: PlatformI
     }
     const ceremony = client.new(
       current,
-      id,
       platform,
       ledger,
       sha256(new TextEncoder().encode('libid/ceremony/dev')),
       new TextEncoder().encode('Ceremony development walkthrough'),
     )
     document.querySelector('#ccdp')!.textContent = new URL(ceremony.launchUrl).origin
-    launch.href = ceremony.launchUrl
-    if (popup.opened) event.preventDefault()
     const off = ceremony.onEvent(run.onEvent)
     const offStage = ceremony.onStage((event) => {
       if (event.status === 'active')

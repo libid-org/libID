@@ -25,10 +25,11 @@ while bb continues preparing. Proof generation joins witness and backend readine
 `zk-proof-preparation` therefore may overlap `zk-proof-generation`; these events
 are not exclusive timing stages.
 
-The worker requires isolation, shared memory and at least two effective proof
-threads. The request is capped at four and available hardware concurrency;
-requesting threads alone is insufficient. There is no unisolated or silently
-single-threaded proving path.
+The worker requires isolation and shared memory. It caps the requested proof
+threads at four and its own hardware concurrency, then requires at least two
+before starting bb.js. Missing hardware concurrency counts as one. Either check fails
+as `zk-proof-preparation`, which the notarized prover observes at once, retiring its
+sessions rather than finishing them first.
 
 The engine supplies each circuit's matching released verification key to
 `circuitProve`, avoiding local key generation. Missing or empty keys fail.

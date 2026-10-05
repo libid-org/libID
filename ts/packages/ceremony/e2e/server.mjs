@@ -152,6 +152,9 @@ for (const secure of [true, false]) {
     if (path === '/qualification-control') return qualificationControl(req, send)
     if (path === '/qualification-crs') return send(JSON.stringify(crs.served()))
     if (path === '/ccdp/v1/seed') return send(html('<title>Worker seed</title>'))
+    // An earlier release's Worker; it answers nothing.
+    if (path === `/ccdp/worker.${'0'.repeat(64)}.js`)
+      return send('', { 'Content-Type': 'text/javascript', 'Service-Worker-Allowed': '/' })
 
     if (staticModule(send, path, { 'Cross-Origin-Resource-Policy': 'same-origin' })) return true
     if (path === '/after')

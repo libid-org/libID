@@ -4,7 +4,6 @@
 
 /** Exact-matched in every private transport record; never negotiated. */
 export const CONNECTION_VERSION = 1 as const
-export type ConnectionVersion = typeof CONNECTION_VERSION
 
 export interface Message {
   readonly type: string
@@ -60,6 +59,8 @@ export interface ClosePopup {
 export interface DocumentDeparted {
   readonly type: 'document-departed'
 }
+
+export const DEPARTED: DocumentDeparted = { type: 'document-departed' }
 
 export type PopupControl = Navigate | ClosePopup | DocumentDeparted
 

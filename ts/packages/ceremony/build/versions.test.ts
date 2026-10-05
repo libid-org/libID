@@ -6,13 +6,13 @@ const catalog = Object.freeze({ google: [1], x: [1], github: [1] })
 const pairs = ['google/1', 'x/1', 'github/1']
 
 test('the published list is the catalog once the platform provers and asset profiles name its pairs [KIT-023]', () => {
-  assert.equal(
-    publishableVersions(catalog, ['x/1', 'github/1', 'google/1'], new Set(pairs)),
-    catalog,
-  )
+  assert.deepEqual(publishableVersions(catalog, ['x/1', 'github/1', 'google/1'], new Set(pairs)), {
+    ccdpVersions: [1],
+    platforms: catalog,
+  })
   assert.equal(
     JSON.stringify(publishableVersions(catalog, pairs, pairs)),
-    '{"google":[1],"x":[1],"github":[1]}',
+    '{"ccdpVersions":[1],"platforms":{"google":[1],"x":[1],"github":[1]}}',
   )
   assert.deepEqual(versionPairs({ google: [1, 2], x: [1] }), ['google/1', 'google/2', 'x/1'])
 })

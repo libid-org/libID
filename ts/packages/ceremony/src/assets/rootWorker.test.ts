@@ -1,11 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const { load } = vi.hoisted(() => ({ load: vi.fn() }))
+const { load, reconcile } = vi.hoisted(() => ({ load: vi.fn(), reconcile: vi.fn() }))
 
 vi.mock('./cache.js', async (original) => ({
   ...(await original<typeof import('./cache.js')>()),
   AssetCache: class {
     load = load
+    reconcile = reconcile
   },
 }))
 
@@ -20,6 +21,7 @@ import { startRootWorker } from './rootWorker.js'
 
 beforeEach(() => {
   load.mockReset()
+  reconcile.mockReset()
 })
 
 const PREFETCH = 'https://ccdp.example/ccdp/v1/prefetch'
@@ -119,7 +121,7 @@ it('claims a same-origin client before acknowledging on its port', async () => {
   expect(reply.close).toHaveBeenCalledOnce()
 })
 
-it('activates without waiting and claims open clients', () => {
+it('reconciles every allowed URL/range on activation while claiming clients [TEST-DIST-07]', async () => {
   const waits: unknown[] = []
   const skipWaiting = vi.fn(async () => {})
   const clients = { claim: vi.fn(async () => {}) }
@@ -129,7 +131,13 @@ it('activates without waiting and claims open clients', () => {
   expect(skipWaiting).toHaveBeenCalledOnce()
   dispatch('activate', { waitUntil })
   expect(clients.claim).toHaveBeenCalledOnce()
+  expect(reconcile).toHaveBeenCalledOnce()
+  expect([...reconcile.mock.calls[0][0]]).toEqual([
+    { url: 'https://ccdp.example/asset' },
+    { url: 'https://ccdp.example/g1.dat', range: 'bytes=0-1' },
+  ])
   expect(waits).toHaveLength(2)
+  await Promise.all(waits)
 })
 
 it.each([

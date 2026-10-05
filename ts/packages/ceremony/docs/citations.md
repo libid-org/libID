@@ -28,8 +28,9 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | CSP-020 | [e2e/platforms.spec.ts](../e2e/platforms.spec.ts) |
 | KIT-001A | [build/distribution.test.ts](../build/distribution.test.ts), [build/sws.test.ts](../build/sws.test.ts) |
 | KIT-001B | [build/distribution.test.ts](../build/distribution.test.ts) |
-| KIT-002 | [apps/dev/src/app.spec.ts](../../../apps/dev/src/app.spec.ts), [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts) |
+| KIT-002 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts) |
 | KIT-006 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |
+| KIT-007 | [src/ccdp/client/connect.test.ts](../src/ccdp/client/connect.test.ts) |
 | KIT-008 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/connect.test.ts](../src/ccdp/client/connect.test.ts) |
 | KIT-009 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | KIT-010 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/popup.spec.ts](../e2e/popup.spec.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |
@@ -48,7 +49,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-ASSET-011 | [build/distribution.test.ts](../build/distribution.test.ts), [build/loaders.test.ts](../build/loaders.test.ts) |
 | LIBID-ASSET-012 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/assets.spec.ts](../e2e/assets.spec.ts) |
 | LIBID-ASSET-013 | [build/circuits.test.ts](../build/circuits.test.ts) |
-| LIBID-ASSET-014 | [build/distribution.test.ts](../build/distribution.test.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
+| LIBID-ASSET-014 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
 | LIBID-ASSET-015 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/navigation.test.ts](../src/ccdp/navigation.test.ts) |
 | LIBID-ASSET-016 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | LIBID-ASSET-017 | [e2e/assets.spec.ts](../e2e/assets.spec.ts) |
@@ -86,7 +87,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-MOD-003 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | LIBID-MOD-011 | [src/ccdp/client/client.test.ts](../src/ccdp/client/client.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts), [src/platforms/conformance/catalog.test.ts](../src/platforms/conformance/catalog.test.ts) |
 | LIBID-MOD-012 | [e2e/popup.spec.ts](../e2e/popup.spec.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
-| LIBID-MOD-013 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts), [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
+| LIBID-MOD-013 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts), [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
 | LIBID-MOD-014 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |
 | LIBID-MOD-015 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |
 | LIBID-MOD-016 | [src/ccdp/index.test.ts](../src/ccdp/index.test.ts) |
@@ -100,21 +101,21 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-OAUTH-003 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |
 | LIBID-OAUTH-005 | [e2e/popup.spec.ts](../e2e/popup.spec.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |
 | LIBID-OAUTH-006 | [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
-| LIBID-OAUTH-007 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts), [src/platforms/conformance/oidc.test.ts](../src/platforms/conformance/oidc.test.ts), [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
+| LIBID-OAUTH-007 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts), [src/platforms/conformance/oidc.test.ts](../src/platforms/conformance/oidc.test.ts), [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
 | LIBID-OAUTH-010 | [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-OAUTH-011 | [e2e/popup.spec.ts](../e2e/popup.spec.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts) |
-| LIBID-OAUTH-012 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
+| LIBID-OAUTH-012 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | LIBID-OAUTH-013 | [src/platforms/conformance/results.test.ts](../src/platforms/conformance/results.test.ts) |
 | LIBID-OAUTH-014 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/platforms/conformance/oidc.test.ts](../src/platforms/conformance/oidc.test.ts) |
-| LIBID-OAUTH-015 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
+| LIBID-OAUTH-015 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | LIBID-OAUTH-016 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
 | LIBID-OAUTH-017 | [e2e/isolation.spec.ts](../e2e/isolation.spec.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |
 | LIBID-OAUTH-018 | [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts), [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
 | LIBID-OAUTH-019 | [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-OAUTH-020 | [e2e/isolation.spec.ts](../e2e/isolation.spec.ts) |
-| LIBID-OAUTH-021 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts), [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts), [src/platforms/conformance/oidc.test.ts](../src/platforms/conformance/oidc.test.ts), [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
+| LIBID-OAUTH-021 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts), [src/platforms/conformance/oidc.test.ts](../src/platforms/conformance/oidc.test.ts), [src/platforms/conformance/returns.test.ts](../src/platforms/conformance/returns.test.ts) |
 | LIBID-OAUTH-022 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts), [src/errors.test.ts](../src/errors.test.ts) |
-| LIBID-OAUTH-023 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts) |
+| LIBID-OAUTH-023 | [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-OAUTH-024 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts) |
 | LIBID-OAUTH-025 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |
 | LIBID-OAUTH-026 | [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/ccdp/index.test.ts](../src/ccdp/index.test.ts) |
@@ -129,21 +130,21 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-PROVER-004 | [e2e/platforms.spec.ts](../e2e/platforms.spec.ts), [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/conformance/stages.ts](../src/platforms/conformance/stages.ts) |
 | LIBID-PROVER-005 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | LIBID-PROVER-006 | [e2e/assets.spec.ts](../e2e/assets.spec.ts) |
-| LIBID-PROVER-007 | [src/notary/http.test.ts](../src/notary/http.test.ts), [src/notary/session.test.ts](../src/notary/session.test.ts), [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
+| LIBID-PROVER-007 | [src/notary/http.test.ts](../src/notary/http.test.ts), [src/notary/session.test.ts](../src/notary/session.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | LIBID-PROVER-008 | [src/notary/session.test.ts](../src/notary/session.test.ts), [src/notary/session.worker.test.ts](../src/notary/session.worker.test.ts) |
 | LIBID-PROVER-009 | [src/notary/notarize.test.ts](../src/notary/notarize.test.ts), [src/platforms/conformance/stages.ts](../src/platforms/conformance/stages.ts) |
 | LIBID-PROVER-010 | [src/notary/decode.test.ts](../src/notary/decode.test.ts) |
 | LIBID-PROVER-011 | [e2e/popup.spec.ts](../e2e/popup.spec.ts), [src/ccdp/documents/progress.test.ts](../src/ccdp/documents/progress.test.ts) |
 | LIBID-PROVER-012 | [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts) |
-| LIBID-PROVER-013 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
-| LIBID-PROVER-014 | [src/barretenberg/engine.test.ts](../src/barretenberg/engine.test.ts), [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts), [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
-| LIBID-PROVER-015 | [e2e/runtime.spec.ts](../e2e/runtime.spec.ts), [src/barretenberg/engine.test.ts](../src/barretenberg/engine.test.ts), [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts) |
+| LIBID-PROVER-013 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
+| LIBID-PROVER-014 | [src/barretenberg/engine.test.ts](../src/barretenberg/engine.test.ts), [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
+| LIBID-PROVER-015 | [e2e/runtime.spec.ts](../e2e/runtime.spec.ts), [src/barretenberg/engine.worker.test.ts](../src/barretenberg/engine.worker.test.ts) |
 | LIBID-PROVER-016 | [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/cache.test.ts](../src/assets/cache.test.ts) |
 | LIBID-PROVER-017 | [src/notary/session.test.ts](../src/notary/session.test.ts) |
 | LIBID-PROVER-018 | [src/notary/session.test.ts](../src/notary/session.test.ts), [src/notary/session.worker.test.ts](../src/notary/session.worker.test.ts) |
 | LIBID-PROVER-019 | [e2e/runtime.spec.ts](../e2e/runtime.spec.ts) |
 | LIBID-PROVER-021 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/notary/decode.test.ts](../src/notary/decode.test.ts), [src/platforms/conformance/stages.ts](../src/platforms/conformance/stages.ts) |
-| REQ-COMMON-39B | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
+| REQ-COMMON-39B | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | REQ-PLAT-16C | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | REQ-PLAT-56A | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | REQ-PLAT-56B | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
@@ -161,13 +162,13 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-CCDP-08 | [e2e/isolation.spec.ts](../e2e/isolation.spec.ts), [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts), [src/errors.test.ts](../src/errors.test.ts) |
 | TEST-COMMON-01 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
 | TEST-COMMON-04 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
-| TEST-COMMON-05 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts), [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
-| TEST-COMMON-06 | [src/notary/http.test.ts](../src/notary/http.test.ts), [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
+| TEST-COMMON-05 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
+| TEST-COMMON-06 | [src/notary/http.test.ts](../src/notary/http.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | TEST-COMMON-07 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
 | TEST-COMMON-09 | [src/platforms/conformance/catalog.test.ts](../src/platforms/conformance/catalog.test.ts) |
-| TEST-COMMON-10 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
-| TEST-COMMON-10A | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
-| TEST-COMMON-11 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
+| TEST-COMMON-10 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
+| TEST-COMMON-10A | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
+| TEST-COMMON-11 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | TEST-COMMON-12 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-COMMON-14 | [e2e/isolation.spec.ts](../e2e/isolation.spec.ts) |
 | TEST-COMMON-18 | [src/notary/notarize.test.ts](../src/notary/notarize.test.ts) |
@@ -178,19 +179,22 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-DIST-02 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | TEST-DIST-03 | [e2e/assets.spec.ts](../e2e/assets.spec.ts) |
 | TEST-DIST-04 | [build/loaders.test.ts](../build/loaders.test.ts) |
+| TEST-DIST-06 | [src/ccdp/client/versions.test.ts](../src/ccdp/client/versions.test.ts) |
+| TEST-DIST-07 | [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/cache.test.ts](../src/assets/cache.test.ts), [src/assets/rootWorker.test.ts](../src/assets/rootWorker.test.ts) |
+| TEST-DIST-08 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
 | TEST-PLAT-01 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
 | TEST-PLAT-02 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts) |
 | TEST-PLAT-03 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-05 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-06 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts) |
-| TEST-PLAT-09 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
+| TEST-PLAT-09 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | TEST-PLAT-09A | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-09B | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-09C | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-10 | [src/barretenberg/circuits/bearer-link/inputs.test.ts](../src/barretenberg/circuits/bearer-link/inputs.test.ts) |
 | TEST-PLAT-12 | [src/platforms/conformance/catalog.test.ts](../src/platforms/conformance/catalog.test.ts), [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-12A | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
-| TEST-PLAT-13 | [src/platforms/conformance/bearerLink.test.ts](../src/platforms/conformance/bearerLink.test.ts) |
+| TEST-PLAT-13 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | TEST-PLAT-14 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-15 | [src/notary/notarize.test.ts](../src/notary/notarize.test.ts) |
 | TEST-PLAT-15A | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |

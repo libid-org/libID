@@ -1,13 +1,11 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "vcs": { "enabled": false },
   "files": {
     "includes": [
       "**",
       "!**/dist",
       "!**/node_modules",
-      "!apps/demo/public",
-      "!packages/claim-full/assets",
       "!packages/ceremony/.cache",
       "!packages/ceremony/dist-artifacts",
       "!**/test-results",
@@ -15,7 +13,8 @@
       "!**/coverage",
       "!apps/dev/.cache",
       "!apps/bind/.cache",
-      "!apps/bind/e2e/stealth.js"
+      "!apps/bind/e2e/stealth.js",
+      "!.cache"
     ]
   },
   "formatter": {

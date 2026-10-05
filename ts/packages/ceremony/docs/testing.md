@@ -156,9 +156,10 @@ fail rather than silently skip. The CRS is the exception: the build step caches 
 declared request once, pinned in [crs.pins.json](../e2e/crs.pins.json), and every
 project reaches Aztec's CDN hosts through a harness proxy that serves that cache
 with the CDN's status and headers ([crs.mjs](../e2e/crs.mjs)); live CDN availability
-stays a [qualification gate](qualification.md#remaining-qualification). Every
-runtime test retries once, since each runs through the real notary against the X and
-GitHub APIs; the real-notary session tests are also tagged `@live`.
+stays a [qualification gate](qualification.md#remaining-qualification). The
+real-notary session tests, tagged `@live`, and the reveal stall test's setup sends
+reach the X and GitHub APIs and retry once inside the test, unless a deadline was
+missed; no Playwright test retries.
 
 The suite uses actual popup connections across HTTP and HTTPS origins in
 Chromium, Firefox, WebKit and mobile emulation. Test ports 4980/4986/4987/4989 and
@@ -181,7 +182,10 @@ The harness proxies real SWS responses and inserts deployment data into emitted
 Callback HTML. It does not reproduce the production Bridge's refresh lifecycle.
 The runtime probes use unauthenticated requests; their separate fixture proof is
 not bound to their attestations. Real consent, authenticated evidence and physical
-devices remain distinct gates. Traces, video and screenshots are disabled.
+devices remain distinct gates. Video and screenshots are disabled. A failing test
+keeps its Playwright trace, and CI uploads them as the `traces-<workspace>-<engine>`
+artifact for 7 days: fetch one with `gh run download <run> -n traces-ceremony-webkit`
+and replay it with `npx playwright show-trace <trace.zip>`.
 
 For focused iteration, select a project or case through Playwright, for example:
 
@@ -208,9 +212,8 @@ manually; automated fixtures do not replace these checkpoints.
 3. On physical devices, background the application while Prover remains visible,
    then exercise suspension/resume and memory pressure. Check openerless/native
    app handoff only with the corresponding popup fallback adapter installed.
-4. Record component revisions, browser/device versions, nonsecret outcome,
-   effective proof-thread information where observed, and total/post-authorization
-   timings. Missing measurements are unavailable. Verify produced evidence against
+4. Record component revisions, browser/device versions, nonsecret outcome, and
+   total/post-authorization timings. Missing measurements are unavailable. Verify produced evidence against
    the matching released verifier before recording cryptographic qualification;
    the dev app's synthetic ledger and success label do not establish this.
 

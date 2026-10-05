@@ -6,13 +6,11 @@ export interface PopupDiagnostic {
   readonly code: string
   readonly timestamp: number
   readonly durationMs?: number
-  readonly count?: number
 }
 
 /** The codes an operation or the connection's terminal outcome can carry. */
 export type PopupErrorCode =
   | 'handshake-rejected'
-  | 'opener-timeout'
   | 'fallback-unavailable'
   | 'fallback-failed'
   | 'decode-rejected'
@@ -37,6 +35,7 @@ export type DiagnosticCode =
   | 'control-connected'
   | 'keep-acknowledged'
   | 'claim-empty'
+  | 'opener-timeout'
   | 'isolation-fallback'
   | 'connection-failed'
 

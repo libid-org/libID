@@ -20,12 +20,13 @@ import { fetchPlatformVersions, type PlatformVersions } from './versions.js'
 /** Application-scoped Bridge configuration used to construct independent ceremony runs. */
 export interface CCDPClient {
   /**
-   * Connect an application-owned popup, admitting only this Bridge and its configured CCDP.
-   * Other popup options pass through; the caller retains the connection and owns closure.
+   * Connect an application-owned popup under a fresh connection ID, admitting only this Bridge
+   * and its configured CCDP. Other popup options pass through; the caller retains the connection
+   * and owns closure.
    */
   connect<Out extends Message = Message, In extends Message = Out>(
     popup: PopupWindow,
-    options: Omit<ConnectOptions, 'allowedPopupOrigins'>,
+    options?: Omit<ConnectOptions, 'allowedPopupOrigins' | 'connectionId'>,
   ): PopupConnection<Out, In>
   /**
    * Platforms the Bridge configures and the Distribution bundles at a version this package
@@ -39,12 +40,11 @@ export interface CCDPClient {
   enabledVersions<P extends PlatformId>(platformId: P): readonly SupportedCeremonyVersion<P>[]
   /**
    * Snapshot ledger hash/address and input bytes before OAuth; invalid inputs throw synchronously.
-   * Use the supplied connection's UUID as ceremonyId and one connection per live run.
+   * The connection's `connectionId` is the ceremony ID; use one connection per live run.
    * Omitted version selects the highest compatible version, not a disclosure preference.
    */
   new: <P extends PlatformId>(
     conn: PopupConnection<Message>,
-    ceremonyId: string,
     platformId: P,
     ledgerId: LedgerId,
     operationDomain: Uint8Array,
@@ -68,8 +68,6 @@ export async function createCCDPClient(options: { oauthBridge: string }): Promis
 function ccdpClientFromConfig(config: CeremonyConfig, versions: PlatformVersions): CCDPClient {
   const popupOrigins = [...new Set([new URL(config.redirectUri).origin, config.ccdpOrigin])]
   const liveIds = new Set<string>()
-  // Each ceremony ID must be its connection's ID; a mismatch would never complete the handshake.
-  const connectionIds = new WeakMap<PopupConnection<Message>, string>()
   // A platform the Bridge does not configure has no client, whatever the Distribution bundles.
   const enabledVersions = <P extends PlatformId>(platform: P) =>
     commonVersions(
@@ -83,16 +81,19 @@ function ccdpClientFromConfig(config: CeremonyConfig, versions: PlatformVersions
   const client: CCDPClient = {
     enabledPlatforms,
     enabledVersions,
-    connect(popup, options) {
-      const conn = PopupConnection.connect(popup, { ...options, allowedPopupOrigins: popupOrigins })
-      connectionIds.set(conn as PopupConnection<Message>, options.connectionId)
-      return conn
+    connect(popup, options = {}) {
+      // The client generates the ID, as the carried protocol (REQ-POPUP-ID-02); each is fresh.
+      return PopupConnection.connect(popup, {
+        ...options,
+        connectionId: crypto.randomUUID(),
+        allowedPopupOrigins: popupOrigins,
+      })
     },
-    new(conn, id, platformId, ledgerId, operationDomain, transactionData, ceremonyVersion) {
+    new(conn, platformId, ledgerId, operationDomain, transactionData, ceremonyVersion) {
+      // A connection constructed elsewhere may carry any value; only a canonical UUID runs.
+      const id = conn.connectionId
       if (typeof id !== 'string' || !isCeremonyId(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
-      if ((connectionIds.get(conn) ?? id) !== id)
-        throw new TypeError('Ceremony ID must be the connection ID')
       const version = selectVersion(enabledVersions(platformId), ceremonyVersion)
       const ledger = snapshotLedger(ledgerId)
       if (!isFixedBytes(operationDomain, OPERATION_DOMAIN_BYTES))

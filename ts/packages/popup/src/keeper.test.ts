@@ -37,6 +37,15 @@ describe('PortKeeper [POPUP-KEEPER-001/004]', () => {
     await expect(scope.pending[0]).resolves.toBeUndefined()
   })
 
+  it('holds a backlog with the port, unread, and returns it with the claim', async () => {
+    const scope = fakeScope()
+    const keeper = new PortKeeper(scope.worker)
+    await keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN, [{ type: 'held' }])
+    expect((await keeper.claim(ID))?.backlog).toEqual([{ type: 'held' }])
+    await keeper.keep(OTHER_ID, new MessageChannel().port1, APP_ORIGIN)
+    expect((await keeper.claim(OTHER_ID))?.backlog).toEqual([])
+  })
+
   it('returns null for an unknown id without touching anything', async () => {
     const scope = fakeScope()
     expect(await new PortKeeper(scope.worker).claim(ID)).toBeNull()
@@ -96,6 +105,7 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
       peerOrigin: APP_ORIGIN,
     }
     expect(decodeKeeperRequest(ok)).toEqual(ok)
+    expect(decodeKeeperRequest({ ...ok, backlog: [1] })).toEqual({ ...ok, backlog: [1] })
     expect(
       decodeKeeperRequest({ type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId: ID })
         ?.type,
@@ -107,6 +117,9 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
       { ...ok, peerOrigin: undefined },
       { ...ok, peerOrigin: 'https://app.example/' },
       { ...ok, peerOrigin: 'null' },
+      { ...ok, backlog: [] },
+      { ...ok, backlog: { length: 1 } },
+      { type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId: ID, backlog: [1] },
       { ...ok, type: CLAIM },
       { ...ok, type: 'other' },
       null,

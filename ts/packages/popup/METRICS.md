@@ -10,7 +10,6 @@ interface PopupDiagnostic {
   readonly code: string
   readonly timestamp: number
   readonly durationMs?: number
-  readonly count?: number
 }
 ```
 
@@ -18,9 +17,8 @@ interface PopupDiagnostic {
 because the catalog is open: each carrier adds its own codes, and a closed
 union would break exhaustive consumers on every addition. Renaming or removing
 a catalogued code is a breaking change. `timestamp` uses
-`performance.timeOrigin + performance.now()`. Optional finite, nonnegative
-`durationMs` and integer `count` fields are present only where their meaning is
-fixed by the code. The callback receives no arbitrary details map, raw
+`performance.timeOrigin + performance.now()`. An optional finite, nonnegative
+`durationMs` is present only where its meaning is fixed by the code. The callback receives no arbitrary details map, raw
 exception, URL, origin, connection ID, message discriminator, or transported
 value.
 
@@ -37,9 +35,9 @@ value.
 
 `fallback-unavailable` is emitted exactly once only when opener-based
 connection has failed and no fallback constructor exists. Merely omitting the
-constructor or successfully selecting MessagePort emits no fallback failure.
+constructor or successfully selecting MessagePort emits no fallback-carrier failure.
 A supplied constructor which rejects retains its own stable failure code;
-connection records it only if that fallback path is selected.
+connection records it only if that fallback-carrier path is selected.
 
 ## Privacy and failure handling
 

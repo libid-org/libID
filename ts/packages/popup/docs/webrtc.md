@@ -1,5 +1,9 @@
 # WebRTC carrier
 
+> **Status: specified, not implemented.** No WebRTC carrier ships yet; the
+> package provides only the `CarrierConstructor` seam it will plug into, and
+> every POPUP-RTC row in the [test plan](../TEST_PLAN.md) is deferred.
+
 This document defines the WebRTC fallback carrier for the
 [popup connection](connection.md) when response policy severs popup opener
 authentication. It owns peer establishment and logical-value delivery over one
@@ -21,7 +25,7 @@ No known alternative to WebRTC satisfies the connection constraints after that
 severance: cross-site operation, current-engine support, mobile suspension, no
 application-origin endpoint, no additional window, and direct browser-local
 application messages. WebRTC is therefore the available opener-independent
-fallback. Its signaling service establishes the peers but never relays
+fallback carrier. Its signaling service establishes the peers but never relays
 application-level messages. A deployment without TURN accepts that direct ICE
 can fail on restrictive networks.
 
@@ -36,7 +40,7 @@ terminates the `RTCDataChannel`.
 Every participating popup document must use an origin accepted by the signaling
 service. Unrelated external navigations are non-participating: they create no
 peer and preserve no current carrier. A later participating document may select
-the still-unused initial fallback as its first RTC carrier. Once RTC has been
+the still-unused initial fallback carrier as its first RTC carrier. Once RTC has been
 selected, an unmanaged navigation has no prepared next round and terminates the
 logical connection.
 
@@ -130,7 +134,7 @@ fragment component, adding `#` when the target had no fragment delimiter and
 separator. A caller target whose fragment already contains a raw component
 named `__libid_popup`, in any position, rejects before navigation.
 
-The destination constructs its popup-side WebRTC fallback factory before
+The destination constructs its popup-side WebRTC fallback-constructor factory before
 calling `PopupConnection.accept`. That factory synchronously finds exactly one
 final canonical reserved field, copies its round, and uses
 `history.replaceState` to remove only the package-added delimiter and field.
@@ -138,7 +142,7 @@ The `had-fragment` bit therefore restores the caller URL exactly, including
 absence or presence of an empty fragment; a nonempty caller fragment retains
 its byte spelling, order, duplicates, escapes, and separators. The factory
 returns a `CarrierConstructor` which retains the copied round and starts the
-fresh offer only if fallback is later selected. Thus MessagePort may win
+fresh offer only if the fallback carrier is later selected. Thus MessagePort may win
 without leaving package metadata in the address bar or starting RTC.
 
 No reserved field means initial round zero. A reserved name that is duplicate,
@@ -186,7 +190,7 @@ Signaling is private carrier machinery. Both endpoints receive the connection
 ID as a connection-construction input before any caller message exists; neither
 finds it by inspecting a transported value. The application starts connecting
 before popup navigation, and the popup endpoint connects only after connection
-commits RTC fallback:
+commits the RTC fallback carrier:
 
 ```ts
 interface ApplicationWebRTCOptions {
@@ -238,7 +242,7 @@ constructor as `fallback`. The factory performs only the eager fragment
 bootstrap described above; it starts no signaling or peer work.
 `PopupConnection.connect` invokes `connectApplicationWebRTC` exactly once for
 the logical connection. That call synchronously starts bounded answerer round
-zero and returns its pending carrier promise; no later fallback invocation can
+zero and returns its pending carrier promise; no later fallback-constructor invocation can
 restart round zero. It creates the answering peer only after a valid fresh
 offer arrives.
 `connectPopupWebRTC` creates the offering peer and data channel, publishes its
@@ -255,7 +259,7 @@ MessagePort selection leaves that promise pending under the logical
 connection's abort signal. During controlled replacement, the active application
 RTC carrier internally starts the exact next round while the old channel remains
 usable and reports only its pending authenticated carrier through the
-package-private replacement hook. Each popup fallback creates a new physical
+package-private replacement hook. Each popup fallback carrier creates a new physical
 peer; the application creates a new peer and answer rather than reusing an
 earlier description. Under RTC selection each endpoint otherwise exposes only
 the common carrier API.
@@ -352,7 +356,7 @@ logical connection; unexpected carrier failure closes the connection.
 - The caller-generated, canonical UUIDv4 connection ID is randomized logical
   rendezvous correlation, not a standalone capability. It is exact-matched with
   the authenticated endpoint origin and role and the bounded monotonic round
-  for every signaling record, then retired when the logical connection closes.
+  for every signaling record, then discarded when the logical connection closes.
   Round zero is initial; each replacement uses exactly the previous round plus
   one. Neither the connection ID nor round grants authority alone.
 - A private navigation control cannot reach caller code or another carrier, and
@@ -369,7 +373,7 @@ logical connection; unexpected carrier failure closes the connection.
 
 ## Connection establishment
 
-These diagrams show initial RTC fallback and controlled RTC replacement. They do
+These diagrams show the initial RTC fallback carrier and controlled RTC replacement. They do
 not define signaling-service wire records or show transported values.
 
 ```mermaid
@@ -399,7 +403,7 @@ sequenceDiagram
     A-->>P: Private NavigationReady(round N+1)
     P->>N: Navigate with round N+1 fragment
     N->>N: Factory copies round and exactly restores caller fragment
-    N->>N: PopupConnection.accept selects fallback
+    N->>N: PopupConnection.accept selects fallback carrier
     N->>G: Fresh offer + ICE (connectionId, round N+1)
     G-->>A: Deliver offer and candidates
     A->>G: Fresh answer + trickled ICE candidates

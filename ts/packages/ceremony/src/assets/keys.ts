@@ -15,12 +15,11 @@ export const profileKey = (platformId: string, version: number | string) =>
 /** The CCDP version this build's documents and routes implement. */
 export const CCDP_VERSION = 1
 
-/** The path prefix of this version's documents and worker. */
+/** The path prefix of this version's documents. */
 export const ROUTE_SCOPE = `/ccdp/v${CCDP_VERSION}/`
 
-/** A CCDP document or worker route of this version. */
-export const route = (name: 'prefetch' | 'prover' | 'prover/fallback' | 'worker.js') =>
-  `${ROUTE_SCOPE}${name}`
+/** A CCDP document route of this version. */
+export const route = (name: 'prefetch' | 'prover' | 'prover/fallback') => `${ROUTE_SCOPE}${name}`
 
 /** The path prefix of every built local asset. */
 export const ASSETS_PREFIX = '/ccdp/assets/'
