@@ -115,17 +115,17 @@ used in the resulting Submission.
 
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
-| Google | signed ID-Token `sub` | the REQ-PLAT-05A digest of its exact 1–255 case-sensitive ASCII bytes | normalized email |
+| Google | signed ID-Token `sub` | the REQ-PLAT-05A digest of its exact 1–31 case-sensitive ASCII bytes | normalized email |
 | X | `/2/users/me.data.id` JSON string | canonical nonzero unsigned 64-bit decimal | normalized `username` |
 | GitHub | `/user.id` JSON integer token | canonical nonzero unsigned 64-bit decimal | normalized `login` |
 
 - REQ-PLAT-04:
   The Implementation MUST accept a Google `sub` of bytes `0x20` through `0x7e`
   only, other than `"` and `\`. The Implementation MUST reject empty,
-  control, non-ASCII, and over-255-byte values. The Implementation MUST apply
+  control, non-ASCII, and over-31-byte values. The Implementation MUST apply
   both checks to the `sub` bytes exactly as they appear in the signed
   payload, before any JSON unescaping. Necessity: identity
-  compatibility across implementations; 255 bytes is the Proving Circuit's
+  compatibility across implementations; 31 bytes is the Proving Circuit's
   buffer (REQ-PLAT-16C), which holds every `sub` Google issues only under
   ASM-PROV-05; a signed value holding a backslash is one whose JSON encoding
   escapes a byte, and an implementation that decodes the escape and one that
@@ -577,7 +577,7 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   The Proving Circuit MUST admit an `email` only when the normalization of
   §2.1a admits it, MUST refuse an `email` that normalization would trim, and
   MUST digest exactly the normalized `email` bytes. The Proving Circuit MUST
-  fail to prove, rather than truncate, a `sub` longer than 255 bytes or an
+  fail to prove, rather than truncate, a `sub` longer than 31 bytes or an
   `email` longer than 62 bytes; these are the Google profile's buffer
   lengths, and 62 is the handle rules' own maximum. No value the circuit
   hashes holds an escaped byte: every JSON escape begins with `\`, which the
@@ -1494,7 +1494,7 @@ Platform Verifier, Notary Service, Consumer.
   the plaintext. An `email` with a space, two `@`, an empty local part, a
   byte outside the normalization's alphabet, or bytes past its signed length
   cannot satisfy the circuit; neither can a `sub` holding `\` (as `12\/3`
-  does), a 256-byte `sub`, or a 63-byte `email`. The public inputs carry no
+  does), a 32-byte `sub`, or a 63-byte `email`. The public inputs carry no
   `sub` or `email` byte. The Platform Verifier returns the `userId` and the
   handle digest, returns the `email` a Submission carried byte for byte, and
   returns none where the Submission carried none; the payload has no field

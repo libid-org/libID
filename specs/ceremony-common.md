@@ -204,7 +204,7 @@ Attestation Count: The number of entries in the closed attestation list a
 - ASM-PROV-05:
   Google signs ID Tokens with a key published at its JWKS endpoint, and
   includes the requested `nonce` verbatim. Google issues every account a
-  `sub` of 1 to 255 bytes from `0x20` through `0x7e` holding neither `"` nor
+  `sub` of 1 to 31 bytes from `0x20` through `0x7e` holding neither `"` nor
   `\`; observed values are 21 decimal digits. That clause is a liveness
   dependency only: an account whose `sub` falls outside it cannot be bound
   under the Google profile (platform REQ-PLAT-04), and none is bound to the
