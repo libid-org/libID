@@ -26,8 +26,11 @@ zone's operation, or wallet behavior before the Gateway is called.
 
 ## 2. Terminology
 
-Parent Name: `handles.link`, a DNS name imported into the ENS registry on the
-   ENS chain through the ENS DNS registrar.
+Parent Name: The name a deployment's names sit under, a deployment
+   parameter: `handles.link` in production, which is a DNS name imported into
+   the ENS registry on the ENS Chain through the ENS DNS registrar. A test
+   deployment may use a name under it, such as `testnet.handles.link`. Every
+   label of the Parent Name matches `[a-z0-9-]+`.
 
 ENS Chain: The chain whose ENS registry holds the Parent Name: Ethereum
    mainnet for a production deployment, an Ethereum test network that hosts
@@ -79,9 +82,9 @@ Refusal: An unsigned HTTP error. It asserts nothing about any binding.
 - ASM-ENS-04:
   Each Signer's private key is known only to the Gateway operator.
 - ASM-ENS-05:
-  Whoever controls the Parent Name's DNS registration and DNSSEC keys
-  controls the Parent Name in ENS: a later valid DNSSEC proof overwrites its
-  owner.
+  Whoever controls the DNS registration and DNSSEC keys of `handles.link`
+  controls it in ENS, and with it every Parent Name under it: a later valid
+  DNSSEC proof overwrites its owner.
 
 ## 4. Security properties
 
@@ -111,8 +114,10 @@ with any address (§10).
 ## 5. Names
 
 ```text
-name = handleLabels "." platformLabel [ "." chainLabel ] ".handles.link"
+name = handleLabels "." platformLabel [ "." chainLabel ] "." parentName
 ```
+
+With the production Parent Name `handles.link`:
 
 ```text
 alice.x.handles.link                  short form
@@ -127,8 +132,8 @@ alice._at.company.com.google.handles.link
   match `[a-z0-9-]+`. Necessity: the parse below tells the two apart only by
   membership.
 - REQ-ENS-NAME-02 (upholds SP-ENS-04):
-  A name MUST be parsed right to left. After `handles.link`, the last label
-  is the Platform Label if it is one; otherwise it is the Chain Label and the
+  A name MUST be parsed right to left. After the Parent Name's labels, the
+  last label is the Platform Label if it is one; otherwise it is the Chain Label and the
   label before it is the Platform Label. Every remaining label is a Handle
   Label. Necessity: a Gmail or Workspace handle contributes a variable number
   of labels, so only the right end has fixed positions.
@@ -232,7 +237,7 @@ label's third and fourth characters must not both be `-`.
   suffix. A `{data}` that is not hex, not a `resolve` call, or not decodable
   MUST get HTTP 400.
 - REQ-ENS-GW-02:
-  The Gateway MUST answer HTTP 400 for a name outside `handles.link`, a name
+  The Gateway MUST answer HTTP 400 for a name outside its Parent Name, a name
   violating REQ-ENS-NAME-04's wire rules, and a record call whose node is not
   the namehash of the name. Necessity: these are malformed queries, not
   names; and a node that differs from the name means the client and the
@@ -349,6 +354,12 @@ label's third and fourth characters must not both be `-`.
   A name resolves through the ENS Universal Resolver on the ENS Chain, with
   the batch gateway played by the test. The same name fails with CCIP-Read
   disabled on the client, which shows the answer came offchain.
+
+- TEST-ENS-06 (exercises REQ-ENS-NAME-02, REQ-ENS-GW-02):
+  With the Parent Name `testnet.handles.link`, `alice.x.testnet.handles.link`
+  reads as the X handle `alice` with no Chain Label,
+  `alice.x.sepolia.testnet.handles.link` carries the Chain Label `sepolia`,
+  and `alice.x.handles.link` gets HTTP 400.
 
 ## 11. Security Considerations
 
