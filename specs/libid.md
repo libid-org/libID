@@ -45,6 +45,14 @@ These chapters are normative browser/service boundaries. TypeScript APIs, build
 tooling, UI projections, dependency pins, and qualification evidence belong to
 the implementation documentation, not this specification.
 
+## Names
+
+- [ENS integration](ens-integration.md) defines how a binding is read as an
+  ENS name under the Parent Name, a deployment parameter that is
+  `handles.link` in production: the name grammar, the handle-to-label
+  transform, the Handle Resolver contract, and the Gateway that signs its
+  answers.
+
 ## System model and specification ownership
 
 libID turns an identity-platform authorization into a proof that a Consumer
@@ -99,12 +107,18 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots, and the Supported Version Set | correct authority lifecycle | user consent |
+| ENS Gateway operator | holds the ENS Signer keys; reads the Indexed Store and signs ENS answers | answers that report the Indexed Store, and refusals where it cannot know | bindings, proofs, or anything a Consumer accepts |
+| Handle Resolver and Parent Name owner | sets the Parent Name's resolver, the Handle Resolver's URL list, and its Signers | pointing ENS names at honest Gateways and Signers | bindings or proofs |
+| DNS registrar account and DNSSEC key holder | controls `handles.link` in DNS and, through DNSSEC proofs, its owner in ENS | keeping the Parent Name with its owner | bindings or proofs |
 
 The principal trust roots are Google's active signing moduli, the active
 X/GitHub notary keys, the selected proof-verifier artifacts, the Proof Verifier
 that dispatches to them, the Platform Verifiers it selects, Verifier governance,
-and Consumer Chain consensus. The Proof Verifier is the most concentrated of
-these: every Consumer takes its accept-or-reject decision, operation domain,
+and Consumer Chain consensus. For ENS names only, the ENS Signer keys, the
+Handle Resolver and Parent Name owner key, and the DNS registrar account and
+DNSSEC keys are trust roots as well: none of them reaches a binding, but each
+decides where funds sent to a name go. The Proof Verifier is the most
+concentrated of these: every Consumer takes its accept-or-reject decision, operation domain,
 and Authorized Transaction Data from that one component, so its compromise
 authorizes arbitrary transactions at every Consumer at once. A compromised
 Platform Verifier does the same for one platform and version, because it is the
@@ -127,6 +141,7 @@ root and verifier.
 | Public ceremony configuration and callback ingress | [OAuth Bridge](oauth-bridge.md) |
 | Static response policies, aggregate Callback artifact, immutable asset publication | [CCDP Distribution](ccdp-distribution.md) |
 | Package APIs, UI projections, build tooling, and qualification evidence | implementation documentation (non-normative) |
+| ENS names, the handle-to-label transform, the Handle Resolver, and the Gateway | [ENS integration](ens-integration.md) |
 | Transaction dispatch and author authentication | Consumer protocol |
 | Verification dispatch, replay recording, trust roots, and version governance | [Common ceremony rules](ceremony-common.md) |
 
