@@ -751,49 +751,170 @@ contract LibIDTest is LibIDTestBase {
     }
 }
 
-/// Selects a fork from an RPC URL in `variable`. Skipped when it is empty,
-/// unless LIBID_REQUIRE_FORK is set, as CI sets it: then a missing RPC fails.
+/// What the fork tests call, on `Consumer` and `TestnetConsumer` alike.
+interface IConsumer {
+    function isAvailable() external view returns (bool);
+    function isEscrowAvailable() external view returns (bool);
+    function resolve(bytes32 platformId, string calldata handle) external view returns (address);
+    function bindingOf(bytes32 platformId, string calldata handle) external view returns (address, uint64);
+    function isHolder(address account, bytes32 platformId, string calldata handle, uint256 maxAge)
+        external
+        view
+        returns (bool);
+    function pay(bytes32 platformId, string calldata handle, uint256 amount, address refundTo)
+        external
+        returns (bytes32);
+    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount, address refundTo)
+        external
+        returns (bytes32);
+    function refund(bytes32 handleNode, address token, address recipient) external;
+}
+
+/// `Consumer`'s fork-tested calls, through LibIDTestnet.
+contract TestnetConsumer is IConsumer {
+    function isAvailable() external view returns (bool) {
+        return LibIDTestnet.isAvailable();
+    }
+
+    function isEscrowAvailable() external view returns (bool) {
+        return LibIDTestnet.isEscrowAvailable();
+    }
+
+    function resolve(bytes32 platformId, string calldata handle) external view returns (address) {
+        return LibIDTestnet.resolve(platformId, handle);
+    }
+
+    function bindingOf(bytes32 platformId, string calldata handle) external view returns (address, uint64) {
+        return LibIDTestnet.bindingOf(platformId, handle);
+    }
+
+    function isHolder(address account, bytes32 platformId, string calldata handle, uint256 maxAge)
+        external
+        view
+        returns (bool)
+    {
+        return LibIDTestnet.isHolder(account, platformId, handle, maxAge);
+    }
+
+    function pay(bytes32 platformId, string calldata handle, uint256 amount, address refundTo)
+        external
+        returns (bytes32)
+    {
+        return LibIDTestnet.pay(platformId, handle, amount, refundTo);
+    }
+
+    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount, address refundTo)
+        external
+        returns (bytes32)
+    {
+        return LibIDTestnet.payToken(platformId, handle, token, amount, refundTo);
+    }
+
+    function refund(bytes32 handleNode, address token, address recipient) external {
+        LibIDTestnet.refund(handleNode, token, recipient);
+    }
+
+    receive() external payable {}
+}
+
+/// Runs a library against a live deployment, on a local fork of the chain in
+/// the RPC URL in `rpcVariable`. Skipped when that is empty, unless
+/// LIBID_REQUIRE_FORK is set, as CI sets it: then a missing RPC fails.
 abstract contract ForkTest is Test {
-    function _fork(string memory variable) internal {
-        string memory rpc = vm.envOr(variable, string(""));
+    IConsumer internal consumer;
+    IdentityRegistry internal registry;
+    HandleEscrow internal escrow;
+
+    function rpcVariable() internal pure virtual returns (string memory);
+
+    /// A consumer of the library under test, and the addresses it has built in.
+    function newConsumer() internal virtual returns (IConsumer, address registry_, address escrow_);
+
+    function setUp() public {
+        string memory rpc = vm.envOr(rpcVariable(), string(""));
         if (bytes(rpc).length == 0) {
             require(
                 !vm.envOr("LIBID_REQUIRE_FORK", false),
-                string.concat("LIBID_REQUIRE_FORK is set but ", variable, " is empty")
+                string.concat("LIBID_REQUIRE_FORK is set but ", rpcVariable(), " is empty")
             );
             vm.skip(true);
         }
         vm.createSelectFork(rpc);
-    }
-}
-
-/// Reads the real Ethereum mainnet deployment through LibID.
-contract LibIDForkTest is ForkTest {
-    function setUp() public {
-        _fork("ETH_RPC_URL");
+        address registry_;
+        address escrow_;
+        (consumer, registry_, escrow_) = newConsumer();
+        registry = IdentityRegistry(registry_);
+        escrow = HandleEscrow(escrow_);
     }
 
-    function test_mainnetRunsLibIDAtTheEmbeddedAddresses() public {
-        Consumer consumer = new Consumer();
+    function test_theEmbeddedAddressesRunLibID() public view {
         assertTrue(consumer.isAvailable());
         assertTrue(consumer.isEscrowAvailable());
-        assertEq(address(HandleEscrow(LibID.ESCROW).registry()), LibID.REGISTRY);
-        assertEq(consumer.resolve(LibID.GITHUB, "nobody-has-this-handle-xyz"), address(0));
-        assertFalse(consumer.isHolder(address(1), LibID.GITHUB, "nobody-has-this-handle-xyz", 1 days));
+        assertEq(address(escrow.registry()), address(registry));
+    }
+
+    /// GitHub never issues a handle with a space, so the registry refuses it
+    /// and nobody can ever hold it.
+    function test_textGitHubCannotIssueIsUnheld() public view {
+        assertEq(consumer.resolve(LibID.GITHUB, "not a handle"), address(0));
+        assertFalse(consumer.isHolder(address(0), LibID.GITHUB, "not a handle", type(uint256).max));
+        (address holder, uint64 observedAt) = consumer.bindingOf(LibID.GITHUB, "not a handle");
+        assertEq(holder, address(0));
+        assertEq(observedAt, 0);
+    }
+
+    /// Escrows ETH and a token for a handle nobody holds, at the node the
+    /// live registry gives, and takes both back.
+    function test_aPaymentToAnUnheldHandleIsEscrowedAndRefunded() public {
+        string memory handle = _unheldHandle();
+        bytes32 expected = registry.handleNodeOf(LibID.GITHUB, handle);
+        address recipient = makeAddr("recipient");
+        uint256 before = recipient.balance;
+        vm.deal(address(consumer), 1 ether);
+
+        bytes32 node = consumer.pay(LibID.GITHUB, handle, 1 ether, address(consumer));
+        assertEq(node, expected);
+        assertEq(escrow.escrowed(node, LibID.NATIVE), 1 ether);
+        assertEq(escrow.refundable(node, LibID.NATIVE, address(consumer)), 1 ether);
+        consumer.refund(node, LibID.NATIVE, recipient);
+        assertEq(recipient.balance - before, 1 ether);
+        assertEq(escrow.escrowed(node, LibID.NATIVE), 0);
+
+        TestERC20 token = new TestERC20();
+        token.mint(address(consumer), 100);
+        assertEq(consumer.payToken(LibID.GITHUB, handle, address(token), 40, address(consumer)), expected);
+        assertEq(escrow.escrowed(node, address(token)), 40);
+        consumer.refund(node, address(token), recipient);
+        assertEq(token.balanceOf(recipient), 40);
+        assertEq(escrow.escrowed(node, address(token)), 0);
+    }
+
+    /// A GitHub handle new to each run, so nobody holds it on the fork.
+    function _unheldHandle() private view returns (string memory handle) {
+        handle = string.concat("libid-fork-", vm.toString(vm.randomUint(64)));
+        assertEq(consumer.resolve(LibID.GITHUB, handle), address(0));
     }
 }
 
-/// Reads the real Sepolia deployment through LibIDTestnet.
-contract LibIDTestnetForkTest is ForkTest {
-    function setUp() public {
-        _fork("SEPOLIA_RPC_URL");
+/// LibID against Ethereum mainnet.
+contract LibIDForkTest is ForkTest {
+    function rpcVariable() internal pure override returns (string memory) {
+        return "ETH_RPC_URL";
     }
 
-    function test_sepoliaRunsLibIDTestnetAtTheEmbeddedAddresses() public view {
-        assertTrue(LibIDTestnet.isAvailable());
-        assertTrue(LibIDTestnet.isEscrowAvailable());
-        assertEq(address(HandleEscrow(LibIDTestnet.ESCROW).registry()), LibIDTestnet.REGISTRY);
-        assertEq(LibIDTestnet.resolve(LibIDTestnet.GITHUB, "nobody-has-this-handle-xyz"), address(0));
-        assertFalse(LibIDTestnet.isHolder(address(1), LibIDTestnet.GITHUB, "nobody-has-this-handle-xyz", 1 days));
+    function newConsumer() internal override returns (IConsumer, address, address) {
+        return (IConsumer(address(new Consumer())), LibID.REGISTRY, LibID.ESCROW);
     }
 }
+
+/// LibIDTestnet against Sepolia.
+contract LibIDTestnetSepoliaForkTest is ForkTest {
+    function rpcVariable() internal pure override returns (string memory) {
+        return "SEPOLIA_RPC_URL";
+    }
+
+    function newConsumer() internal override returns (IConsumer, address, address) {
+        return (new TestnetConsumer(), LibIDTestnet.REGISTRY, LibIDTestnet.ESCROW);
+    }
+}
+
