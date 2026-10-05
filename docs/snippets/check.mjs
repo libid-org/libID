@@ -1,15 +1,15 @@
 // Runs the code in the docs pages, unchanged, against a fresh local chain.
 //
-// Start anvil, run examples/local-chain/start.sh, source its local.env, and
-// set LOCAL_CHAIN to that directory. Then: pnpm -C docs/snippets check
+// Start anvil, run the local-chain project's start.sh, source its local.env,
+// and set LOCAL_CHAIN to that directory. Then: pnpm -C docs/snippets check
 //
-// A page's js blocks run as one module. A `./bind.sh` block splits a page into
-// separate scripts, each starting with the page's first js block, as the
-// guide tells the reader to do. `cast`, `forge create` and `./bind.sh` blocks
-// run in bash, in order. A plain block after "you will see" must appear in
-// the output.
+// A page's js blocks run as one module. A `cast`, `forge create` or
+// `./bind.sh` block ends the module, and the next js block starts a new one
+// with the page's first js block in front of it, as the guide tells the
+// reader to do. Shell blocks run in bash, in order. A plain block after
+// "you will see" must appear in the output.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,8 +43,11 @@ function blocks(markdown) {
 
 const RUN_SH = /^(\.\/bind\.sh|cast |forge create|[A-Z_]+=\$\(forge create)/;
 
+// Modules are written under this directory, so that their imports resolve
+// from its node_modules, and removed afterwards.
+let modules = 0;
 function runModule(code, dir) {
-  const file = join(dir, `page-${Date.now()}.mjs`);
+  const file = join(dir, `module-${modules++}.mjs`);
   writeFileSync(file, `${code}\nprocess.exit(0);\n`);
   return execFileSync('node', [file], { cwd: here, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
 }
@@ -54,11 +57,16 @@ for (const page of PAGES) {
   const all = blocks(readFileSync(join(pages, `${page}.md`), 'utf8'));
   const setup = all.find((b) => b.lang === 'js');
   const work = mkdtempSync(join(tmpdir(), 'libid-docs-'));
+  const scripts = mkdtempSync(join(here, '.run-'));
   let shell = [];
   let js = [];
   let output = '';
+  const addJs = (b) => {
+    if (js.length === 0 && setup && b !== setup) js.push(setup.code);
+    js.push(b.code);
+  };
   const flushJs = () => {
-    if (js.length) output += runModule(js.join('\n'), here);
+    if (js.length) output += runModule(js.join('\n'), scripts);
     js = [];
   };
   const flushShell = () => {
@@ -67,7 +75,7 @@ for (const page of PAGES) {
   };
   const sol = all.filter((b) => b.lang === 'solidity').map((b) => b.code);
   if (sol.length) {
-    execFileSync('mkdir', ['-p', join(work, 'src')]);
+    mkdirSync(join(work, 'src'), { recursive: true });
     writeFileSync(join(work, 'foundry.toml'), '[profile.default]\n');
     writeFileSync(join(work, 'src', 'Gate.sol'), `// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\n\n${sol.join('\n')}`);
   }
@@ -75,12 +83,11 @@ for (const page of PAGES) {
     for (const b of all) {
       if (b.lang === 'js') {
         flushShell();
-        js.push(b.code);
+        addJs(b);
       } else if (b.lang === 'sh' && b.code.startsWith('./bind.sh')) {
         flushJs();
         flushShell();
         output += execFileSync('bash', ['-euo', 'pipefail', '-c', b.code], { cwd: process.env.LOCAL_CHAIN, encoding: 'utf8' });
-        js = [setup.code];
       } else if (b.lang === 'sh' && RUN_SH.test(b.code)) {
         flushJs();
         shell.push(b.code);
@@ -97,6 +104,9 @@ for (const page of PAGES) {
   } catch (e) {
     failed++;
     console.log(`FAIL ${page}: ${e.message.split('\n')[0]}`);
+  } finally {
+    rmSync(scripts, { recursive: true, force: true });
+    rmSync(work, { recursive: true, force: true });
   }
 }
 process.exit(failed ? 1 : 0);
