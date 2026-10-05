@@ -22,6 +22,7 @@ import { createServer as createViteServer, type ViteDevServer } from 'vite'
 import {
   API,
   APP_ORIGIN,
+  BRIDGE,
   CHAIN_ID,
   GOOGLE_JWT_ROOTS,
   livePlatforms,
@@ -37,8 +38,9 @@ const project = `libid-bind-${createHash('sha256').update(root).digest('hex').sl
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
 
 // Docker publishes on 127.0.0.1; the browser reaches Bridge as localhost.
-const BRIDGE = 'http://127.0.0.1:4682'
+const BRIDGE_ON_HOST = BRIDGE.replace('localhost', '127.0.0.1')
 const chain = createPublicClient({ transport: http(RPC_URL) })
+const platforms = livePlatforms(process.env)
 
 const logs = process.env.LIBID_STACK_LOGS
 /** Where children write: the LIBID_STACK_LOGS file, or our own output. */
@@ -59,10 +61,14 @@ const DEPLOY_ARCHIVES: Record<string, string> = {
   'aarch64-apple-darwin': '042c444679473fa83ec8e089ea79d14df29f13c3a13e67b2c986524bf07e057e',
 }
 
-/** Run a command to completion; reject on a nonzero exit. */
+/** Aborted once the stack stops: waits end and running commands are terminated. */
+const stopping = new AbortController()
+const { signal } = stopping
+
+/** Run a command to completion; reject on a nonzero exit or once the stack stops. */
 function run(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: childOutput })
+    const child = spawn(command, args, { cwd: root, stdio: childOutput, signal })
     child.on('error', reject)
     child.on('exit', (code) =>
       code === 0 ? resolve() : reject(new Error(`${command} ${args[0]} exited with ${code}`)),
@@ -70,21 +76,26 @@ function run(command: string, args: string[]): Promise<void> {
   })
 }
 
-let stopping = false
-
-/** Poll `check` until it holds; reject on the deadline or once the stack is stopping. */
+/** Poll `check` until it holds; reject on the deadline or once the stack stops. */
 async function until(what: string, check: () => Promise<boolean>, seconds = 120) {
   const deadline = Date.now() + seconds * 1000
   while (Date.now() < deadline) {
-    if (stopping) throw new Error(`Stopped while waiting for ${what}`)
+    signal.throwIfAborted()
     try {
       if (await check()) return
     } catch {
       /* not up yet */
     }
-    await delay(500)
+    await delay(500, undefined, { signal })
   }
   throw new Error(`Timed out waiting for ${what}`)
+}
+
+/** Whether `url` answers 200 within a second. */
+async function answers(url: string, init: RequestInit = {}): Promise<boolean> {
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(1000) })
+  await response.body?.cancel()
+  return response.status === 200
 }
 
 /** This host's libid-deploy, downloaded and checked against its pinned digest once. */
@@ -106,9 +117,7 @@ async function deployTool(): Promise<string> {
   const digest = createHash('sha256').update(archive).digest('hex')
   if (digest !== sha256)
     throw new Error(`libid-deploy archive digest ${digest} is not the pinned one`)
-  const path = join(cache, `${asset}.tar.gz`)
-  writeFileSync(path, archive)
-  execFileSync('tar', ['xzf', path, '-C', cache])
+  execFileSync('tar', ['xz', '-C', cache], { input: archive })
   return binary
 }
 
@@ -131,8 +140,8 @@ function listening(port: number): Promise<boolean> {
  */
 async function portsFree() {
   const ports = [RPC_URL, NOTARY, BRIDGE, API].map((url) => Number(new URL(url).port))
-  const taken = []
-  for (const port of ports) if (await listening(port)) taken.push(port)
+  const open = await Promise.all(ports.map(listening))
+  const taken = ports.filter((_, index) => open[index])
   if (taken.length)
     throw new Error(
       `Already in use on 127.0.0.1: port ${taken.join(', ')}. Stop the stack holding it (see docker ps).`,
@@ -223,10 +232,9 @@ function releaseLock() {
   }
 }
 
-/** Deploy the stack to the fresh anvil, then check what the app relies on. */
-async function deploy() {
-  const tool = await deployTool()
-  await run(tool, [
+/** Deploy the stack to the fresh anvil with `tool`, then check what the app relies on. */
+async function deploy(tool: Promise<string>) {
+  await run(await tool, [
     'apply',
     '--network',
     join(root, 'local-dev.toml'),
@@ -251,7 +259,7 @@ async function deploy() {
     abi: identityRegistryAbi,
     functionName: 'proofVerifier',
   })
-  for (const platform of livePlatforms(process.env)) {
+  for (const platform of platforms) {
     const verifier = await chain.readContract({
       address: proofVerifier,
       abi: ceremonyProofVerifierAbi,
@@ -278,30 +286,35 @@ async function rotateGoogleKeys() {
   if (stale) throw new Error('GoogleJwtRoots still needs a rotation after the keeper ran')
 }
 
+/** Bridge and the indexer API, which need neither the deploy nor the keeper. */
 async function ready() {
-  const bridge = until('Bridge', async () => {
-    const response = await fetch(`${BRIDGE}/api/v1/ceremony/config`, {
-      headers: { Origin: APP_ORIGIN },
-      redirect: 'error',
-      signal: AbortSignal.timeout(1000),
-    })
-    await response.body?.cancel()
-    return response.status === 200
-  })
-  const api = until('indexer API', async () => {
-    const response = await fetch(`${API}/v1/status`, { signal: AbortSignal.timeout(1000) })
-    await response.body?.cancel()
-    return response.status === 200
-  })
-  await Promise.all([bridge, api])
+  await Promise.all([
+    until('Bridge', () =>
+      answers(`${BRIDGE_ON_HOST}/api/v1/ceremony/config`, {
+        headers: { Origin: APP_ORIGIN },
+        redirect: 'error',
+      }),
+    ),
+    until('indexer API', () => answers(`${API}/v1/status`)),
+  ])
 }
 
 /** The chain's contracts, then Google's keys when this run binds Google. */
-async function chainReady() {
-  if (stopping) return
-  await deploy()
-  if (stopping) return
-  if (livePlatforms(process.env).includes('google')) await rotateGoogleKeys()
+async function chainReady(tool: Promise<string>) {
+  await deploy(tool)
+  if (platforms.includes('google')) await rotateGoogleKeys()
+}
+
+/** Report `error` and exit before the stack has started. */
+function fail(error: unknown): never {
+  console.error(error instanceof Error ? error.message : error)
+  process.exit(1)
+}
+
+/** `promise`, marked handled: its rejection reaches whoever awaits it later instead of ending the process first. */
+function started<T>(promise: Promise<T>): Promise<T> {
+  promise.catch(() => {})
+  return promise
 }
 
 // ─── Main ───────────────────────────────────────────────────────
@@ -310,38 +323,44 @@ try {
   configAgrees()
   takeLock()
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error)
-  process.exit(1)
+  fail(error)
 }
-execFileSync(
-  'pnpm',
-  ['--filter', '@libid/ceremony', 'build:ccdp-artifacts', '--out-dir', join(cache, 'ccdp')],
-  { cwd: root, stdio: childOutput },
+// The deploy tool downloads and CCDP builds while Docker clears a stack this
+// checkout left behind, volumes and all, so every run starts from a fresh
+// chain and database; a port still taken then belongs to another stack. The
+// images come down before anything is timed.
+const tool = started(deployTool())
+const ccdp = started(
+  run('pnpm', [
+    '--filter',
+    '@libid/ceremony',
+    'build:ccdp-artifacts',
+    '--out-dir',
+    join(cache, 'ccdp'),
+  ]),
 )
-// A stack this checkout left behind goes first, volumes and all, so every run
-// starts from a fresh chain and database; a port still taken then belongs to
-// another stack. The images come down before anything is timed.
 try {
-  await run('docker', [...composeArgs, 'down', '--volumes', '--remove-orphans'])
-  await run('docker', [...composeArgs, '--profile', 'keeper', 'pull', '--quiet'])
+  await Promise.all([
+    run('docker', [...composeArgs, 'down', '--volumes', '--remove-orphans']),
+    run('docker', [...composeArgs, '--profile', 'keeper', 'pull', '--quiet']),
+  ])
 } catch {
-  console.error(
+  fail(
     'Could not run Docker Compose or pull its images. Install Docker with Compose and start its engine.',
   )
-  process.exit(1)
 }
 try {
+  await ccdp
   await portsFree()
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error)
-  process.exit(1)
+  fail(error)
 }
 
 let frontend: ViteDevServer | undefined
 /** Stop what this process started: the frontend, then its own Compose project. */
 function stop(code: number) {
-  if (stopping) return
-  stopping = true
+  if (signal.aborted) return
+  stopping.abort()
   process.exitCode = code
   void frontend?.close()
   if (compose.pid) {
@@ -367,27 +386,23 @@ compose.on('error', () => {
   console.error('Could not start Docker Compose. Install Docker with Compose and start its engine.')
   stop(1)
 })
-compose.on('exit', (code) => {
-  if (!stopping) stop(code || 1)
-})
+compose.on('exit', (code) => stop(code || 1))
 
 try {
   await until('anvil', async () => (await chain.getChainId()) === CHAIN_ID)
-  // Bridge and the indexer need neither the deploy nor the keeper.
-  if (!stopping) await Promise.all([chainReady(), ready()])
-  if (!stopping) {
-    console.info(`Stack ready: chain ${RPC_URL}, registry ${REGISTRY}, indexer ${API}`)
-    if (process.argv.includes('--app')) {
-      frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })
-      if (stopping) await frontend.close()
-      else {
-        await frontend.listen()
-        frontend.printUrls()
-      }
+  await Promise.all([chainReady(tool), ready()])
+  signal.throwIfAborted()
+  console.info(`Stack ready: chain ${RPC_URL}, registry ${REGISTRY}, indexer ${API}`)
+  if (process.argv.includes('--app')) {
+    frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })
+    if (signal.aborted) await frontend.close()
+    else {
+      await frontend.listen()
+      frontend.printUrls()
     }
   }
 } catch (error) {
-  if (!stopping) {
+  if (!signal.aborted) {
     console.error(error instanceof Error ? error.message : error)
     stop(1)
   }
