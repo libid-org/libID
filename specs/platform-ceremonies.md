@@ -495,8 +495,11 @@ A direction block lists its revealed ranges, then its range commitments:
 | commitment `end` | 4 | offset one past the committed range's last byte |
 | commitment value | 32 | the range commitment below |
 
-Offsets are zero-based into that direction's transcript. A revealed range
-carries no `end`: its byte count is its length.
+The revealed ranges follow their count one after another, each as its
+`start`, `length` and bytes in that order. The commitments follow their count
+the same way, each as its `start`, `end` and value. Offsets are zero-based
+into that direction's transcript. A revealed range carries no `end`: its byte
+count is its length.
 
 A range commitment covers one contiguous range of one direction:
 
@@ -543,12 +546,12 @@ Platform Verifier's checks under common REQ-COMMON-18A and REQ-COMMON-35.
   REQ-COMMON-21. The Notary Service MUST set `createdAt` from its own clock
   when the session completes. The Notary Service MUST set each transcript
   length to the total bytes it observed in that direction. The Notary
-  Service MUST write each maximal run of revealed bytes as one revealed range,
-  and order revealed ranges and commitments by ascending `start`. Necessity:
-  the Platform Verifier compares `authorityId` with keccak256 of its pinned
-  authority, so another spelling of the same host names an authority no
-  profile pins; and the Prover compares the signed ranges with its planned
-  ranges one for one.
+  Service MUST write each maximal run of revealed bytes as one revealed range.
+  The Notary Service MUST order revealed ranges and commitments by ascending
+  `start`. Necessity: the Platform Verifier compares `authorityId` with
+  keccak256 of its pinned authority, so another spelling of the same host
+  names an authority no profile pins; and the Prover compares the signed
+  ranges with its planned ranges one for one.
 - REQ-PLAT-66 (upholds SP-EXCHANGE-01):
   The Implementation MUST compute every range commitment as SHA-256 over the
   committed transcript bytes followed directly by a 16-byte blinder, one
@@ -694,9 +697,8 @@ so a plan of one range per field would not survive signing.
 
 Every token-session byte the table below does not reveal stays behind a
 [§4.1](#41-attested-data) range commitment. The Proving Circuit opens only
-the bearer range and constrains its charset under REQ-PLAT-30. Nothing opens
-any other committed range or constrains its bytes. Per common §9, the token
-session reveals exactly these ranges:
+the bearer range and constrains its charset under REQ-PLAT-30. Per common
+§9, the token session reveals exactly these ranges:
 
 | Range | Revealed | Why |
 |---|---|---|
