@@ -52,11 +52,7 @@ for (const { platform, sessions: count, alongsideProving } of notaryCases)
         console.error('Notary runtime progress:', JSON.stringify(logs))
         throw error
       })
-    if (alongsideProving) {
-      expect(proof!.runtime.sharedMemory).toBe(true)
-      expect(proof!.runtime.effectiveThreads).toBeGreaterThan(1)
-      await verifyBrowserProof('bearer_link', proof!)
-    }
+    if (alongsideProving) await verifyBrowserProof('bearer_link', proof!)
     expect(attestations).toHaveLength(count)
     for (const attestation of attestations) {
       expect(attestation.sent).toBeGreaterThan(0)

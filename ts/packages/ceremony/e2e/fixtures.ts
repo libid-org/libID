@@ -9,6 +9,12 @@ export { expect }
 
 const metadataUrl = new URL(`../${artifactDir}/distribution-graph.json`, import.meta.url)
 
+/** The build-pinned root Worker, read from private artifact metadata. */
+export const rootWorkerPath = () =>
+  Object.keys(JSON.parse(readFileSync(metadataUrl, 'utf8')).headers).find((path) =>
+    /^\/ccdp\/worker\.[a-f0-9]{64}\.js$/.test(path),
+  )!
+
 /** The exact requests of `profile` in the emitted metadata of the artifact the harness serves. */
 export const artifactRequests = (profile: string): AssetRequest[] =>
   JSON.parse(readFileSync(metadataUrl, 'utf8')).requestsByProfile[profile]

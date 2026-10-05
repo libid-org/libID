@@ -31,14 +31,10 @@ Object.assign(window, {
 anchor.addEventListener('click', (event) => {
   const run: Window['runs'][number] = { events: [], diagnostics: [] }
   window.runs.push(run)
-  const id = crypto.randomUUID()
-  activeId = id
-  anchor.target = `ceremony-${id}`
-  const popup = PopupWindow.open(anchor.target, 'width=480,height=720')
-  connection = client.connect(popup, {
-    connectionId: id,
+  connection = client.connect(PopupWindow.fromAnchor(event, 'width=480,height=720'), {
     onDiagnostic: ({ code }) => run.diagnostics.push(code),
   })
+  activeId = connection.connectionId
   connection.on(
     {
       type: 'after',
@@ -55,13 +51,11 @@ anchor.addEventListener('click', (event) => {
   })
   const ceremony = client.new(
     connection,
-    id,
     platform,
     new URL(location.href).searchParams.get('ledger') === 'test:mainnet' ? mainnet : testnet,
     new Uint8Array(32),
     new Uint8Array([1]),
   )
-  anchor.href = ceremony.launchUrl
   ceremony.onEvent((event) => {
     run.events.push(event)
     window.events.push(event)
@@ -78,7 +72,7 @@ anchor.addEventListener('click', (event) => {
       Object.assign(window, {
         result: { status: 'failed' },
         failureEvent: error instanceof CeremonyError ? error.event : undefined,
+        failureMessage: error instanceof Error ? error.message : String(error),
       })
     })
-  if (popup.opened) event.preventDefault()
 })

@@ -43,7 +43,6 @@ export const popupErrorMessages = {
   'fallback-failed': 'This popup could not establish a fallback connection to the application.',
   'handshake-rejected':
     'The popup connection failed authentication. Check the application and popup origins and connection configuration.',
-  'opener-timeout': 'The application did not respond to the popup connection request.',
   'decode-rejected': 'The popup connection received an invalid message.',
   'control-rejected': 'The popup connection received an invalid control message.',
   'continuity-unsupported': 'This browser cannot preserve the popup connection across navigation.',

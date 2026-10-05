@@ -19,7 +19,6 @@ let workers: FakeWorker[]
 beforeEach(() => {
   assetUrl.mockImplementation(({ path }) => `https://ccdp.test/assets/${path}`)
   vi.stubGlobal('location', { href: 'https://ccdp.test/prover' })
-  vi.stubGlobal('navigator', { hardwareConcurrency: 4 })
   workers = stubWorkers()
 })
 
@@ -49,29 +48,35 @@ function engine(extra: Partial<ProofEngineOptions> = {}) {
   }
 }
 
-it('posts one preload after boot with resolved resource URLs and capped threads [LIBID-PROVER-015]', () => {
+it('posts one preload after boot with resolved resource URLs and the requested threads', () => {
   const e = engine({ circuitUrl: 'circuits/bearer_link.json', threads: 8 })
   e.send({ type: 'booted', timestamp: 2 })
   expect(e.postMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'preload',
     circuitUrl: 'https://ccdp.test/circuits/bearer_link.json',
     verificationKeyUrl: 'https://ccdp.test/vk',
-    threads: 4,
+    threads: 8,
     acvmUrl: 'https://ccdp.test/assets/noir/acvm.wasm',
     abiUrl: 'https://ccdp.test/assets/noir/abi.wasm',
     wasmPath: 'https://ccdp.test/assets/bb/barretenberg.wasm',
     // The CRS base is the declared CRS directory.
     crsPath: 'https://ccdp.test/assets/crs/',
   })
-  engine({ threads: 2 })
-  expect(workers[1].postMessage.mock.calls[0][0]).toMatchObject({ type: 'preload', threads: 2 })
-  // The fixed cap holds on a larger machine; a smaller one caps the default.
-  vi.stubGlobal('navigator', { hardwareConcurrency: 16 })
-  engine({ threads: 8 })
-  expect(workers[2].postMessage.mock.calls[0][0]).toMatchObject({ threads: 4 })
-  vi.stubGlobal('navigator', { hardwareConcurrency: 2 })
+  // Without a request, the worker applies its default and cap.
   engine()
-  expect(workers[3].postMessage.mock.calls[0][0]).toMatchObject({ threads: 2 })
+  expect(workers.at(-1)!.postMessage.mock.calls[0][0]).toMatchObject({
+    type: 'preload',
+    threads: undefined,
+  })
+})
+
+it('reports a backend failure through outcome before any proof is requested [LIBID-PROVER-014]', async () => {
+  const e = engine()
+  const event = 'proof-backend-initialization'
+  const failed = expect(e.instance.outcome).rejects.toMatchObject({ event })
+  e.send({ type: 'error', event, message: 'Multithreaded backend unavailable' })
+  await failed
+  expect(e.terminate).toHaveBeenCalledOnce()
 })
 
 it.each([
@@ -147,7 +152,6 @@ it('delivers one proof, rejects a second request and ignores messages after sett
   const proof = {
     proof: new Uint8Array(64),
     publicInputs: [],
-    runtime: { effectiveThreads: 4, sharedMemory: true },
   }
   e.send({ type: 'result', result: proof })
   await expect(result).resolves.toBe(proof)

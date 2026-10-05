@@ -86,6 +86,26 @@ export class AssetCache {
 
   constructor(private readonly origin: string) {}
 
+  /** The stored key includes both the exact URL and Range, as a same-origin synthetic URL. */
+  private storageKey(spec: AssetRequest): string {
+    return this.origin + PREFIX + encodeURIComponent(requestKey(spec))
+  }
+
+  /** On activation, retain the complete release graph; inaccessible storage never blocks fetching. */
+  async reconcile(required: Iterable<AssetRequest>): Promise<void> {
+    try {
+      const keep = new Set(Array.from(required, (spec) => this.storageKey(spec)))
+      const cache = await caches.open(CACHE)
+      await Promise.all(
+        (await cache.keys())
+          .filter((key) => key.url.startsWith(this.origin + PREFIX) && !keep.has(key.url))
+          .map((key) => cache.delete(key).catch(() => false)),
+      )
+    } catch {
+      /* Cache maintenance is best effort, independent of ceremony readiness. */
+    }
+  }
+
   /**
    * Join one URL/range fetch, with an independently consumable response for each caller.
    * `dispatched` acknowledges a cache hit or fetch invocation, allowing OAuth navigation.
@@ -99,7 +119,7 @@ export class AssetCache {
     const dispatched = Promise.withResolvers<void>()
     let writing = Promise.resolve()
     const response = (async () => {
-      const cacheKey = this.origin + PREFIX + encodeURIComponent(key)
+      const cacheKey = this.storageKey(spec)
       let cache: Cache | undefined
       try {
         cache = await caches.open(CACHE)

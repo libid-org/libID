@@ -1,5 +1,5 @@
+import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { b64urlEncode } from '../../../primitives.js'
-import { AUTHORIZATION_DIGEST_BYTES } from '../../authorization.js'
 import type { ReturnRules } from '../../oauthReturn.js'
 import { provider } from './provider.js'
 

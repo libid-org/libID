@@ -10,9 +10,10 @@ An accepted result has passed structural checks. The ledger verifier remains
 authoritative for proof and attestation validity. **Release qualification is
 incomplete**; see [evidence and remaining gates](docs/qualification.md).
 
-**Distribution:** the package is used from this workspace; no npm release
-exists yet. The CCDP ships as a container image (see
-[Build and deployment](docs/distribution.md)).
+**Distribution:** the npm package contains the application client and requires
+`@libid/popup` as a peer. Proving runs in the separately deployed CCDP container
+(see [Build and deployment](docs/distribution.md)).
+See [npm releases](../../RELEASING.md) for packaging and publication.
 
 ## Use and develop
 
@@ -37,9 +38,9 @@ exists yet. The CCDP ships as a container image (see
 
 ## Specifications
 
-The [CCDP](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp.md),
-[Bridge](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/oauth-bridge.md),
-[Distribution](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp-distribution.md),
-and [platform](https://github.com/libid-org/libid/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md)
+The [CCDP](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/ccdp.md),
+[Bridge](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/oauth-bridge.md),
+[Distribution](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/ccdp-distribution.md),
+and [platform](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/platform-ceremonies.md)
 specifications own interoperability and proof semantics. Package docs explain
 this implementation.

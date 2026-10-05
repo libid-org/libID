@@ -52,7 +52,7 @@ export function responseHeaders(
   } = {},
 ): Record<string, string> {
   const html = documents.includes(profile)
-  const immutable = profile === 'asset' || isolatedWorkers.includes(profile)
+  const immutable = profile === 'asset' || profile === 'worker' || isolatedWorkers.includes(profile)
   const headers: Record<string, string> = {
     ...(html ? shared.documentHeaders : shared.javascript),
     ...(immutable ? shared.immutable : revalidated),

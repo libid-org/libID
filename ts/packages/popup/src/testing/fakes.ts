@@ -209,26 +209,30 @@ export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
     addEventListener: (type: string, handler: (event: unknown) => void) => {
       handlers.set(type, handler)
     },
-    skipWaiting: () => Promise.resolve(),
-    clients: { claim: () => Promise.resolve() },
   } as unknown as ServiceWorkerGlobalScope)
+  const deliver = (url: string, data: unknown, ports: readonly MessagePort[]): void =>
+    handlers.get('message')?.({
+      data,
+      ports,
+      source: { url },
+      waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
+    })
+  // A real transfer, as to a Service Worker: the sender's ports are neutered at once.
   const post = (url: string): KeeperWorker => ({
     postMessage(message, transfer) {
-      setTimeout(() => {
-        handlers.get('message')?.({
-          data: structuredClone(message),
-          ports: transfer,
-          source: { url },
-          waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
-        })
-      }, 0)
+      const channel = new MessageChannel()
+      channel.port2.onmessage = (event) => {
+        channel.port2.close()
+        deliver(url, event.data, event.ports)
+      }
+      channel.port1.postMessage(message, transfer)
     },
   })
   return {
     worker: post(`${origin}/p`),
     foreignWorker: post('https://evil.example/p'),
     pending,
-    postRaw: (message, ports) => post(`${origin}/p`).postMessage(message, ports),
+    postRaw: (message, ports) => setTimeout(() => deliver(`${origin}/p`, message, ports), 0),
   }
 }
 

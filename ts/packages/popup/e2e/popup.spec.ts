@@ -31,7 +31,6 @@ async function open(
     id?: string
     href?: string
     blocked?: boolean
-    rel?: string
     /** Send this ping the instant the application's handshake completes. */
     pingOnHandshake?: number
   } = {},
@@ -39,17 +38,16 @@ async function open(
   const id = options.id ?? freshId()
   await page.goto(options.app ?? APP_A)
   await page.evaluate(
-    ([id, href, blocked, rel, ping]) => {
+    ([id, href, blocked, ping]) => {
       const w = window as unknown as {
         __id: string
+        __destination: string
         open: unknown
         __onDiag?: (code: string) => void
         __conn: { send(v: unknown): void }
       }
       w.__id = id
-      const anchor = document.getElementById('go') as HTMLAnchorElement
-      anchor.href = href
-      if (rel) anchor.rel = rel
+      w.__destination = href
       if (blocked) w.open = () => null
       if (ping !== null) {
         w.__onDiag = (code) => {
@@ -61,7 +59,6 @@ async function open(
       id,
       options.href ?? `${POPUP}/p#c=${id}`,
       options.blocked ?? false,
-      options.rel ?? '',
       options.pingOnHandshake ?? null,
     ] as const,
   )
@@ -123,7 +120,7 @@ async function expectPong(page: Page, n: number): Promise<Pong> {
   return (await events(page)).find((e) => (e as Pong).n === n) as Pong
 }
 
-test('[POPUP-WINDOW-001] [POPUP-PORT-001] scripted open connects over MessagePort', async ({
+test('[POPUP-WINDOW-001] [POPUP-WINDOW-004] [POPUP-PORT-001] scripted open connects over MessagePort', async ({
   page,
 }) => {
   const { popup } = await open(page)
@@ -153,12 +150,10 @@ test('[POPUP-WINDOW-005] concurrent opens receive distinct placement hints and c
   const { popup: first } = await open(page)
   await expect(first.locator('#status')).toHaveText('connected')
   const id = freshId()
-  await page.evaluate((id) => {
-    ;(window as unknown as { __id: string }).__id = id
-    const anchor = document.getElementById('go') as HTMLAnchorElement
-    anchor.target = `popup-${id}`
-    anchor.href = `${anchor.origin}/p#c=${id}`
-  }, id)
+  await page.evaluate(
+    ([id, destination]) => Object.assign(window, { __id: id, __destination: destination }),
+    [id, `${POPUP}/p#c=${id}`] as const,
+  )
   const opened = page.waitForEvent('popup')
   await page.click('#go')
   const second = await opened
@@ -178,10 +173,12 @@ test('[POPUP-WINDOW-005] concurrent opens receive distinct placement hints and c
   await second.close()
 })
 
-test('[POPUP-WINDOW-002] blocked scripted open binds the native anchor popup', async ({ page }) => {
+test('[POPUP-WINDOW-002] [POPUP-WINDOW-004] blocked scripted open binds the native anchor popup', async ({
+  page,
+}) => {
   const { popup } = await open(page, { blocked: true })
   await expect(popup.locator('#status')).toHaveText('connected')
-  // An anchor carries no features, so the fallback popup is a tab.
+  // An anchor carries no features, so the popup it creates is a tab.
   expect(await popup.evaluate(() => window.toolbar.visible)).toBe(true)
   await ping(page, 1)
   await expectPong(page, 1)
@@ -213,14 +210,25 @@ test('[POPUP-CONNECTION-009/011] HTTP loopback authenticates and preserves an is
   expect(await expectPong(page, 1)).toMatchObject({ path: '/isolated', isolated: true })
 })
 
-test('[POPUP-WINDOW-003] a noopener anchor never binds and the popup fails closed', async ({
-  page,
-}) => {
-  const { popup } = await open(page, { blocked: true, rel: 'noopener' })
-  await expect(popup.locator('#status')).toHaveText('failed: fallback-unavailable')
-  expect(await diag(popup)).toEqual(['fallback-unavailable', 'connection-failed'])
+test('[POPUP-WINDOW-003] a noopener anchor is refused before anything opens', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto(APP_A)
+  const url = page.url()
+  await page.evaluate(() => {
+    // Browsers read link types case-insensitively, so the check must too.
+    ;(document.getElementById('go') as HTMLAnchorElement).rel = 'NoOpEnEr'
+  })
+  const pages = page.context().pages().length
+  await page.click('#go')
+  await expect
+    .poll(() => errors)
+    .toEqual([expect.stringContaining('the anchor must not sever the opener')])
   await page.waitForTimeout(300)
-  expect(await diag(page)).toEqual(['window-blocked'])
+  // Neither a popup nor the application page navigated, and no connection exists.
+  expect(page.context().pages()).toHaveLength(pages)
+  expect(page.url()).toBe(url)
+  expect(await diag(page)).toEqual([])
 })
 
 test('[POPUP-CONNECTION-001] an unlisted application origin is rejected by the popup', async ({
@@ -285,6 +293,53 @@ test('[POPUP-CONTROL-002] [POPUP-CONNECTION-003] [POPUP-KEEPER-003] one port sur
   expect(appDiag).not.toContain('fallback-unavailable')
 })
 
+/** Navigate, then call `then` on the connection in the same task. */
+const navigateThen = (page: Page, url: string, then: 'ping' | 'close') =>
+  page.evaluate(
+    ([[base, hash], then]) => {
+      const conn = (
+        window as unknown as {
+          __conn: {
+            navigate(u: string, f: URLSearchParams): Promise<void>
+            send(v: unknown): void
+            close(): Promise<void>
+          }
+        }
+      ).__conn
+      void conn.navigate(base, new URLSearchParams(hash))
+      if (then === 'ping') conn.send({ type: 'ping', n: 5 })
+      else void conn.close()
+    },
+    [split(url), then] as const,
+  )
+
+test('[POPUP-CONNECTION-003] a value sent right after navigate waits in the kept port for the destination', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  await nextDocument(popup, () => navigateThen(page, `${POPUP}/isolated#c=${id}`, 'ping'))
+  expect(await expectPong(page, 5)).toMatchObject({ path: '/isolated', isolated: true })
+})
+
+test('[POPUP-CONTROL-003] a close right after navigate reaches the destination through the kept port', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  // Sever the handle first, so the close must travel over the port as ClosePopup.
+  await nextDocument(popup, () => navigate(page, `${POPUP}/isolated#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(
+    await page.evaluate(() => (window as unknown as { __handle: Window }).__handle.closed),
+  ).toBe(true)
+  const closed = popup.waitForEvent('close', { timeout: 15_000 })
+  await navigateThen(page, `${POPUP}/p#c=${id}`, 'close')
+  await closed
+})
+
 test('[POPUP-CONTROL-003] [POPUP-CONTROL-004] close reaches a severed popup over the port', async ({
   page,
 }) => {
@@ -301,7 +356,7 @@ test('[POPUP-CONTROL-003] [POPUP-CONTROL-004] close reaches a severed popup over
   expect(await diag(page)).toContain('connection-closed')
 })
 
-test('[POPUP-CONTROL-001] close uses the live handle directly', async ({ page }) => {
+test('[POPUP-CONTROL-003] close uses the live handle directly', async ({ page }) => {
   const { popup } = await open(page)
   await expectPong(page, 0)
   const closed = popup.waitForEvent('close')
@@ -437,7 +492,7 @@ test('[POPUP-CONNECTION-008] [POPUP-CONNECTION-009] a cross-origin participating
   expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(3)
 })
 
-test('[POPUP-CONNECTION-008] a cross-origin isolated destination needs a fallback', async ({
+test('[POPUP-CONNECTION-008] a cross-origin isolated destination needs a fallback constructor', async ({
   page,
 }) => {
   const { id, popup } = await open(page)
@@ -545,7 +600,7 @@ async function prepareKeeper(page: Page, nestedScope: string): Promise<void> {
     .toEqual(['activated', 'activated'])
 }
 
-test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or by its COOP fallback, delivering once', async ({
+test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or by its COOP isolation fallback, delivering once', async ({
   page,
 }) => {
   const id = freshId()
@@ -571,7 +626,7 @@ test('[POPUP-CONNECTION-011] an isolation-requiring document isolates by DIP or 
   await expectPong(page, 78)
 })
 
-test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed without looping', async ({
+test('[POPUP-CONNECTION-012] an isolation fallback that stays non-isolated fails closed without looping', async ({
   page,
 }) => {
   const id = freshId()
@@ -580,7 +635,7 @@ test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed wit
   await expect(popup.locator('#status')).toHaveText(/connected|failed/)
   test.skip(
     await popup.evaluate(() => crossOriginIsolated),
-    'engine isolates by DIP; no fallback runs',
+    'engine isolates by DIP; no isolation fallback runs',
   )
   await expect(popup.locator('#status')).toHaveText('failed: isolation-unavailable')
   expect(popup.url()).toContain('/dip-broken/fallback')
@@ -589,6 +644,8 @@ test('[POPUP-CONNECTION-012] a fallback that stays non-isolated fails closed wit
     'isolation-unavailable',
     'connection-failed',
   ])
+  // The reported departure ends the application's side instead of leaving it waiting.
+  await expect.poll(() => events(page)).toContainEqual({ type: 'end', outcome: 'closed' })
 })
 
 for (const isolated of [false, true])
@@ -659,7 +716,7 @@ test('[POPUP-CONNECTION-006] provider COOP without recovery fails even while the
 
 for (const allowedOrigins of [['*'], ['*.lib.id']] as const) {
   for (const native of [false, true]) {
-    test(`wildcard admission ${JSON.stringify(allowedOrigins)} binds exact peers${native ? ' with native anchor' : ''}`, async ({
+    test(`[POPUP-CONNECTION-009] wildcard admission ${JSON.stringify(allowedOrigins)} binds exact peers${native ? ' with native anchor' : ''}`, async ({
       page,
       context,
       request,
@@ -678,16 +735,15 @@ for (const allowedOrigins of [['*'], ['*.lib.id']] as const) {
         }
         const body =
           url.origin === appOrigin
-            ? `<a id="launch" target="${id}" href="${popupOrigin}/#c=${id}">Open</a>
+            ? `<a id="launch" href="${popupOrigin}/#c=${id}">Open</a>
             <script type="module">
               import { PopupConnection, PopupWindow } from '/popup.js'
               document.querySelector('a').onclick = (event) => {
-                const popup = PopupWindow.open('${id}')
+                const popup = PopupWindow.fromAnchor(event)
                 const connection = PopupConnection.connect(popup, {connectionId:'${id}', allowedPopupOrigins:${allowlist}})
                 window.connection = connection
                 connection.on({type:'ready',decode:value=>value}, value => { window.peer = connection.peerOrigin; window.received = value.peer })
                 void connection.navigate('${popupOrigin}/', new URLSearchParams({c:'${id}'}))
-                if (popup.opened) event.preventDefault()
               }
             </script>`
             : `<script type="module">

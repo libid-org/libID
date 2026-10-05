@@ -1,13 +1,11 @@
 name: Release
 
 # A published GitHub Release's tag selects what it publishes:
+# - `<package>-v<version>` publishes `ts/packages/<package>` to npm.
 # - `ccdp-v<version>` promotes the CCDP image of the tagged commit, which must
 #   be on main, to `ghcr.io/libid-org/ccdp:<version>` (plus `:latest` for a
 #   stable version). CCDP versions are their own, never a package's.
-# - `v<version>` publishes @libid/claim and @libid/claim-full (whose version
-#   tracks claim's) to npm. The tag is a pointer, never a source: it must equal
-#   both package.json versions. npm auth is token-first (org NPM_TOKEN secret)
-#   with OIDC trusted publishing as the fallback — same model as libid-contracts.
+# Any other tag fails the release rather than publishing nothing.
 
 on:
   release:
@@ -17,8 +15,22 @@ permissions:
   contents: read
 
 jobs:
+  known-tag:
+    name: Release tag names a release scheme
+    if: ${{ !contains(github.event.release.tag_name, '-v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reject the unknown tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          echo "::error::$TAG matches no release scheme (<package>-v<version> or ccdp-v<version>); nothing was published"
+          exit 1
+
   verify-tag:
-    name: Release tag matches its source
+    name: CCDP release tag points to main
+    if: startsWith(github.event.release.tag_name, 'ccdp-v')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -27,94 +39,16 @@ jobs:
           # Full history, so origin/main is present for the ancestry check.
           fetch-depth: 0
           persist-credentials: false
-      - name: A CCDP tag is on main; a package tag equals the package versions
+      - name: The CCDP tag is on main
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          if [[ "$TAG" == ccdp-v* ]]; then
-            git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-              echo "::error::$TAG targets $GITHUB_SHA, which is not on main; only main publications are released"
-              exit 1
-            }
-            echo "tag: $TAG  commit: $GITHUB_SHA (on main)"
-            exit 0
-          fi
-          version="${TAG#v}"
-          for dir in claim claim-full; do
-            pkg=$(node -p "require('./ts/packages/$dir/package.json').version")
-            echo "tag: $TAG  $dir: $pkg"
-            [ "$version" = "$pkg" ] || { echo "::error::tag $TAG != @libid/$dir version $pkg"; exit 1; }
-          done
-
-  publish-npm:
-    name: Publish @libid/claim + @libid/claim-full to npm
-    if: ${{ !startsWith(github.event.release.tag_name, 'ccdp-v') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [verify-tag]
-    environment: npm-deploy
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      # Public repo: provenance attestation is on.
-      NPM_CONFIG_PROVENANCE: "true"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: ./.github/actions/setup-ts
-
-      - name: Update npm for OIDC trusted publishing
-        run: npm install -g npm@latest && npm --version
-
-      - name: Build and test
-        run: |
-          pnpm -C ts build
-          pnpm -C ts test
-
-      # Derive the dist-tag: a prerelease publishes under its first
-      # prerelease identifier (1.2.0-rc.1 -> rc), a plain version -> latest.
-      - name: Derive dist-tag from version
-        id: dist-tag
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -euo pipefail
-          version="${TAG#v}"
-          base="${version%%+*}"
-          if [ "$base" != "${base#*-}" ]; then
-            pre="${base#*-}"
-            dist_tag="${pre%%.*}"
-            printf '%s' "$dist_tag" | grep -qE '^[A-Za-z][A-Za-z0-9._-]*$' || {
-              echo "::error::prerelease identifier '$dist_tag' is not a usable npm dist-tag" >&2
-              exit 1
-            }
-          else
-            dist_tag=latest
-          fi
-          echo "dist-tag=$dist_tag" >> "$GITHUB_OUTPUT"
-
-      # From the package directories, not `pnpm -C` (pnpm 10 mangles
-      # forwarded flags under -C). Token-first with OIDC fallback, as in
-      # libid-contracts. claim first: claim-full's workspace:^ dep resolves
-      # to it. claim-full's assets/ tree was staged by its build above and
-      # rides in the tarball via `files`.
-      - name: pnpm publish
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -n "${NPM_TOKEN}" ]; then
-            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> "$HOME/.npmrc"
-            echo "Authenticating with the org npm token"
-          else
-            echo "No NPM_TOKEN secret; relying on OIDC trusted publishing"
-          fi
-          for dir in claim claim-full; do
-            (cd "ts/packages/$dir" \
-              && pnpm publish --access public --no-git-checks --tag "${{ steps.dist-tag.outputs.dist-tag }}")
-          done
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::$TAG targets $GITHUB_SHA, which is not on main; only main publications are released"
+            exit 1
+          }
+          echo "tag: $TAG  commit: $GITHUB_SHA (on main)"
 
   # ---------------------------------------------------------------------------
   # CCDP image: publish the released commit's image under the version. The
@@ -214,3 +148,115 @@ jobs:
             [ "$got" = "$digest" ] || { echo "::error::$ref resolved to $got, not $digest"; exit 1; }
             echo "- \`$ref\` = \`$got\`" >> "$GITHUB_STEP_SUMMARY"
           done
+
+  # ---------------------------------------------------------------------------
+  # npm package: one job builds and checks the tarball without publishing
+  # rights; the next publishes exactly that tarball and runs no repository code.
+  # ---------------------------------------------------------------------------
+  check-npm:
+    name: Check an npm package release
+    if: ${{ contains(github.event.release.tag_name, '-v') && !startsWith(github.event.release.tag_name, 'ccdp-v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      name: ${{ steps.package.outputs.name }}
+      dist-tag: ${{ steps.package.outputs.dist-tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select a package version with successful main CI
+        id: package
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^([a-z0-9][a-z0-9-]*)-v[0-9] ]] && package=${BASH_REMATCH[1]} &&
+            [ -f "ts/packages/$package/package.json" ] &&
+            [ "$(node -p "require('./ts/packages/$package/package.json').private === true")" = false ] || {
+              echo "::error::$TAG names no published package under ts/packages"
+              exit 1
+            }
+          version=$(node -p "require('./ts/packages/$package/package.json').version")
+          [ "$TAG" = "$package-v$version" ] || {
+            echo "::error::$TAG does not match $package's package.json version $version"
+            exit 1
+          }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::$TAG targets $GITHUB_SHA, which is not on main"
+            exit 1
+          }
+          runs=$(gh run list --workflow ci.yml --branch main --event push \
+            --commit "$GITHUB_SHA" --status success --json databaseId --jq 'length')
+          [ "$runs" -gt 0 ] || {
+            echo "::error::wait for successful main CI for $GITHUB_SHA before releasing"
+            exit 1
+          }
+          dist_tag=latest
+          if [[ "$version" == *-* || "$PRERELEASE" == true ]]; then dist_tag=next; fi
+          { echo "name=$package"; echo "dist-tag=$dist_tag"; } >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ts
+
+      - name: Build and test the packed packages
+        run: pnpm -C ts test:packages
+
+      - name: Its @libid dependencies are on npm
+        env:
+          PACKAGE: ${{ steps.package.outputs.name }}
+        run: |
+          set -euo pipefail
+          tar -xOzf "ts/.cache/npm/$PACKAGE.tgz" package/package.json > "$RUNNER_TEMP/manifest.json"
+          node -e '
+            const m = require(process.argv[1])
+            for (const [name, range] of Object.entries({ ...m.dependencies, ...m.peerDependencies }))
+              if (name.startsWith("@libid/")) console.log(`${name}@${range}`)
+          ' "$RUNNER_TEMP/manifest.json" | while read -r spec; do
+            [ -n "$(npm view "$spec" version 2>/dev/null)" ] || {
+              echo "::error::$spec is not on npm; release it first"
+              exit 1
+            }
+          done
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-package
+          path: ts/.cache/npm/${{ steps.package.outputs.name }}.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-npm:
+    name: Publish an npm package
+    needs: check-npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Each package's npm trusted publisher accepts only this environment, which
+    # deploys only package release tags (ts/RELEASING.md). A workflow edited on a
+    # branch therefore cannot publish, and the OIDC token never meets repository code.
+    environment: npm-release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-package
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Use an npm with trusted publishing
+        run: npm install -g npm@^11.5.1
+
+      - name: Publish the checked tarball with npm OIDC
+        env:
+          PACKAGE: ${{ needs.check-npm.outputs.name }}
+          DIST_TAG: ${{ needs.check-npm.outputs.dist-tag }}
+        run: npm publish "$PACKAGE.tgz" --access public --tag "$DIST_TAG"

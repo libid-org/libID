@@ -212,9 +212,8 @@ manually; automated fixtures do not replace these checkpoints.
 3. On physical devices, background the application while Prover remains visible,
    then exercise suspension/resume and memory pressure. Check openerless/native
    app handoff only with the corresponding popup fallback adapter installed.
-4. Record component revisions, browser/device versions, nonsecret outcome,
-   effective proof-thread information where observed, and total/post-authorization
-   timings. Missing measurements are unavailable. Verify produced evidence against
+4. Record component revisions, browser/device versions, nonsecret outcome, and
+   total/post-authorization timings. Missing measurements are unavailable. Verify produced evidence against
    the matching released verifier before recording cryptographic qualification;
    the dev app's synthetic ledger and success label do not establish this.
 

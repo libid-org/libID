@@ -11,8 +11,8 @@ Each pin lives in its declaration; change it there.
 
 | Input | Version | Declared in |
 |---|---|---|
-| Circuits | v0.5.0 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
-| Noir / bb.js | 1.0.0-beta.25 / 5.2.0 | [package.json](../package.json); EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts) |
+| Circuits | v0.6.0 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
+| Noir / bb.js | 1.0.0-rc.3 / 6.0.0-rc.2 | [package.json](../package.json); EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts) |
 | Notary browser/runtime | v0.4.0, with the TLSN and MPZ revisions of that release | [notary.assets.ts](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml) |
 | Development Bridge | v0.5.0, one OAuth client per platform and no version list | [compose.yaml](../../../apps/dev/compose.yaml) |
 | SWS | 3.0.0-beta.1 | [ccdp.Dockerfile](../ccdp.Dockerfile) |

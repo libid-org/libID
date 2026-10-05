@@ -33,7 +33,12 @@ export const isClientCredential = (value: unknown): value is string =>
   /^[\x21-\x7e]+$/.test(value)
 
 export function isRedirectUri(value: unknown): value is string {
-  return isText(value, MAX_REDIRECT_URI_BYTES) && isWebUrl(value) && !/[?#]/.test(value)
+  return (
+    isText(value, MAX_REDIRECT_URI_BYTES) &&
+    isWebUrl(value) &&
+    !/[?#]/.test(value) &&
+    new URL(value).pathname === '/auth/callback'
+  )
 }
 
 /** Shared identity shape; each platform slice checks its own platform ID and byte limits. */

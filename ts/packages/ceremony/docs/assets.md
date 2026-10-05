@@ -7,23 +7,23 @@ sessions, and no initialized runtime survives OAuth navigation.
 
 ## Worker ownership
 
-[registration.ts](../src/assets/registration.ts) resolves the canonical root
-registration, including when a stale nested registration uses the same script.
-It retires that known nested registration only when its workers use the canonical
-script URL, leaving unrelated registrations untouched; the retirement goes once no
-served trial build predates the root registration. It checks for a deployed
-update and waits for an installing or waiting worker to become active. A working
-active worker bounds both waits to 3 seconds: past that, or when the check fails,
-Prefetch dispatches to it. A new worker cannot activate while the previous one still
-serves another Prefetch, and the previous one can serve this dispatch too; one that
-lacks the requested asset list answers at once, so the ceremony fails fast instead
-of waiting. Without an active worker, activation waits up to 15 seconds and failure
-is terminal. The dispatch acknowledgement establishes readiness; WebKit can leave
-another document's state stuck at `activating` after activation.
+[registration.ts](../src/assets/registration.ts) registers the content-addressed
+Worker URL pinned by Prefetch at root scope. It dispatches only to that exact
+script, without a forced update check or fallback to an older active Worker.
+Prefetch starts the registration beside its popup handshake and dispatches once
+authenticated.
+An installing replacement has up to 15 seconds to become ready; a waiting Worker
+can receive dispatch before activation. Dispatch acknowledgement, rather than
+page control, establishes readiness. A stalled or failed replacement is terminal
+before OAuth. Prover resolves and claims the canonical root registration.
 
 [worker.entry.ts](../src/assets/worker.entry.ts) is the root Worker script's own entry.
 The [Worker](../src/assets/rootWorker.ts) combines popup's port keeper with asset
-fetching. Install uses `skipWaiting`, activation uses `clients.claim`, and Prover
+fetching. Activation reconciles only its managed asset cache against the union
+of every supported profile: exact URL/range entries still referenced stay intact;
+obsolete entries are deleted. Other origin storage is untouched. Storage denial
+or deletion failure never fails a ceremony. Install uses `skipWaiting`, activation
+also uses `clients.claim`, and Prover
 explicitly joins root-worker control before readiness. Failure to establish the
 required registration or control is terminal.
 

@@ -55,7 +55,9 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
   }
 
   scope.addEventListener('install', (event) => event.waitUntil(scope.skipWaiting()))
-  scope.addEventListener('activate', (event) => event.waitUntil(scope.clients.claim()))
+  scope.addEventListener('activate', (event) =>
+    event.waitUntil(Promise.all([cache.reconcile(allowed.values()), scope.clients.claim()])),
+  )
   scope.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return
     const spec = allowed.get(

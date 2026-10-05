@@ -6,6 +6,7 @@
 import { PopupError } from './diagnostics.js'
 import {
   CONNECTION_VERSION,
+  DEPARTED,
   hasExactKeys,
   isAllowedOrigin,
   isConnectionId,
@@ -18,29 +19,50 @@ export const KEEPER_REPLY_TIMEOUT_MS = 2_000
 export const KEEP = 'libid-popup-keep'
 export const CLAIM = 'libid-popup-claim'
 
+/**
+ * A backlog holds the values a started port dispatched to the source after
+ * it chose to leave. The worker holds it with the port, unread; it is
+ * spelled only when nonempty.
+ */
 export type KeeperRequest = {
   connectionVersion: typeof CONNECTION_VERSION
   connectionId: string
-} & ({ type: typeof KEEP; peerOrigin: string } | { type: typeof CLAIM })
+} & ({ type: typeof KEEP; peerOrigin: string; backlog?: unknown[] } | { type: typeof CLAIM })
+
+const isBacklog = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0
 
 export function decodeKeeperRequest(value: unknown): KeeperRequest | null {
   if (
     !isRecord(value) ||
     !hasExactKeys(
       value,
-      value.type === KEEP
-        ? ['type', 'connectionVersion', 'connectionId', 'peerOrigin']
-        : ['type', 'connectionVersion', 'connectionId'],
+      value.type !== KEEP
+        ? ['type', 'connectionVersion', 'connectionId']
+        : 'backlog' in value
+          ? ['type', 'connectionVersion', 'connectionId', 'peerOrigin', 'backlog']
+          : ['type', 'connectionVersion', 'connectionId', 'peerOrigin'],
     ) ||
     (value.type !== KEEP && value.type !== CLAIM) ||
     value.connectionVersion !== CONNECTION_VERSION ||
     !isConnectionId(value.connectionId) ||
     (value.type === KEEP &&
-      (typeof value.peerOrigin !== 'string' || !isAllowedOrigin(value.peerOrigin, '*')))
+      (typeof value.peerOrigin !== 'string' ||
+        !isAllowedOrigin(value.peerOrigin, '*') ||
+        ('backlog' in value && !isBacklog(value.backlog))))
   ) {
     return null
   }
   return value as KeeperRequest
+}
+
+/** Closes a port, telling the application first: a closed port alone tells it nothing. */
+export function depart(port: MessagePort): void {
+  try {
+    port.postMessage(DEPARTED)
+  } catch {
+    // Nothing more can reach the application.
+  }
+  port.close()
 }
 
 /** The subset of ServiceWorker the keeper needs; injectable for tests. */
@@ -48,32 +70,13 @@ export interface KeeperWorker {
   postMessage(message: unknown, transfer: Transferable[]): void
 }
 
-/** Resolves to undefined once the deadline passes. */
-export function bounded<T>(
-  promise: Promise<T>,
-  timeoutMs = KEEPER_REPLY_TIMEOUT_MS,
-): Promise<T | undefined> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(undefined), timeoutMs)
-    promise.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      () => {
-        clearTimeout(timer)
-        resolve(undefined)
-      },
-    )
-  })
-}
-
 /**
- * The registration's active worker, waiting briefly for one still
+ * The registration's active worker, waiting up to `timeoutMs` for one still
  * installing (the host registers in the first participating document).
  */
-export function activeWorker(
+function activeWorker(
   registration: ServiceWorkerRegistration,
+  timeoutMs: number,
 ): Promise<ServiceWorker | null> {
   if (registration.active) return Promise.resolve(registration.active)
   const worker = registration.installing ?? registration.waiting
@@ -88,14 +91,14 @@ export function activeWorker(
       if (worker.state === 'activated') finish(worker)
       else if (worker.state === 'redundant') finish(null)
     }
-    const timer = setTimeout(() => finish(null), KEEPER_REPLY_TIMEOUT_MS)
+    const timer = setTimeout(() => finish(null), timeoutMs)
     worker.addEventListener('statechange', onChange)
   })
 }
 
 /**
  * The registration `lookup` names once it exists and is active, or undefined
- * past the keeper reply deadline. The host may register in this very
+ * past the one keeper reply deadline covering both waits. The host may register in this very
  * document, so an absent registration, or one the engine already exposes
  * before attaching its installing worker, is polled for rather than refused.
  */
@@ -103,25 +106,37 @@ export async function activeRegistration(
   lookup: () => Promise<ServiceWorkerRegistration | undefined>,
 ): Promise<ServiceWorkerRegistration | undefined> {
   const deadline = Date.now() + KEEPER_REPLY_TIMEOUT_MS
+  const remaining = (): number => Math.max(0, deadline - Date.now())
   const attached = (r?: ServiceWorkerRegistration): boolean =>
     !!r && (r.active ?? r.installing ?? r.waiting) !== null
   let registration = await lookup()
-  while (!attached(registration) && Date.now() < deadline) {
+  while (!attached(registration) && remaining() > 0) {
     // ponytail: nothing announces a new registration; poll until the deadline.
     await new Promise((resolve) => setTimeout(resolve, 50))
     registration = await lookup()
   }
   if (!registration) return undefined
-  return (await activeWorker(registration)) ? registration : undefined
+  return (await activeWorker(registration, remaining())) ? registration : undefined
 }
 
 export class PortKeeper {
   constructor(private readonly worker: KeeperWorker) {}
 
-  /** Resolves only after the worker owns the port. */
-  async keep(connectionId: string, port: MessagePort, peerOrigin: string): Promise<void> {
+  /** Resolves only after the worker owns the port and its backlog. */
+  async keep(
+    connectionId: string,
+    port: MessagePort,
+    peerOrigin: string,
+    backlog: unknown[] = [],
+  ): Promise<void> {
     const reply = await this.exchange(
-      { type: KEEP, connectionVersion: CONNECTION_VERSION, connectionId, peerOrigin },
+      {
+        type: KEEP,
+        connectionVersion: CONNECTION_VERSION,
+        connectionId,
+        peerOrigin,
+        ...(backlog.length > 0 && { backlog }),
+      },
       [port],
       'keep-failed',
     )
@@ -136,7 +151,9 @@ export class PortKeeper {
    * worker on the origin never blocks a fresh handshake; a malformed
    * answer is a failure.
    */
-  async claim(connectionId: string): Promise<{ port: MessagePort; peerOrigin: string } | null> {
+  async claim(
+    connectionId: string,
+  ): Promise<{ port: MessagePort; peerOrigin: string; backlog: unknown[] } | null> {
     const reply = await this.exchange(
       { type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId },
       [],
@@ -146,14 +163,20 @@ export class PortKeeper {
     const { data, ports } = reply
     if (isRecord(data)) {
       if (hasExactKeys(data, ['port']) && data.port === false && ports.length === 0) return null
+      const backlog = 'backlog' in data
       if (
-        hasExactKeys(data, ['port', 'peerOrigin']) &&
+        hasExactKeys(data, backlog ? ['port', 'peerOrigin', 'backlog'] : ['port', 'peerOrigin']) &&
         data.port === true &&
         ports.length === 1 &&
         typeof data.peerOrigin === 'string' &&
-        isAllowedOrigin(data.peerOrigin, '*')
+        isAllowedOrigin(data.peerOrigin, '*') &&
+        (!backlog || isBacklog(data.backlog))
       )
-        return { port: ports[0], peerOrigin: data.peerOrigin }
+        return {
+          port: ports[0],
+          peerOrigin: data.peerOrigin,
+          backlog: backlog ? (data.backlog as unknown[]) : [],
+        }
     }
     for (const port of ports) port.close()
     throw new PopupError('claim-failed')

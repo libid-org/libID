@@ -9,7 +9,11 @@ export const posted = (postMessage: Mock, type: string): boolean =>
   postMessage.mock.calls.some(([message]) => message?.type === type)
 
 /** Stub the global scope a worker module registers on; `deliver` runs its message listener. */
-export function stubWorkerScope(fields: Record<string, unknown> = {}) {
+export function stubWorkerScope(fields: Record<string, unknown> = {}): {
+  postMessage: Mock
+  close: Mock
+  deliver(data: unknown): void
+} {
   let listener: Listener | undefined
   const scope = {
     postMessage: vi.fn(),
@@ -33,8 +37,8 @@ export function stubWorkerScope(fields: Record<string, unknown> = {}) {
 /** A parent's view of one worker: tests observe what it is sent and drive what it reports. */
 export class FakeWorker extends EventTarget {
   onerror: ((event: ErrorEvent) => void) | null = null
-  readonly postMessage = vi.fn()
-  readonly terminate = vi.fn()
+  readonly postMessage: Mock = vi.fn()
+  readonly terminate: Mock = vi.fn()
 
   /** Deliver a message from the worker. */
   reply(data: unknown): void {

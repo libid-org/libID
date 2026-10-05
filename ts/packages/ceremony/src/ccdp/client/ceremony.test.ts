@@ -32,7 +32,7 @@ type Spied = FakeConnection & Record<'send' | 'navigate' | 'navigateAway' | 'clo
 
 /** The shared connection double, with spies on the outbound calls tests count or replace. */
 function spiedConnection(): Spied {
-  const connection = fakeConnection({ peerOrigin: 'https://ccdp.test' })
+  const connection = fakeConnection({ connectionId: CEREMONY_ID, peerOrigin: 'https://ccdp.test' })
   for (const method of ['send', 'navigate', 'navigateAway', 'close'] as const)
     vi.spyOn(connection, method)
   return connection as Spied
@@ -70,7 +70,6 @@ async function setup<P extends PlatformId = 'google'>({
 } = {}) {
   const ceremony = (client ?? (await ccdpClient(wireConfig))).new(
     connection,
-    id,
     platformId,
     ledgerId,
     new Uint8Array(32),
@@ -340,10 +339,11 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
   const client = await ccdpClient(wireConfig)
   const { connection, ceremony: first } = await setup({ client })
   await expect(setup({ client })).rejects.toThrow('already live')
-  const boxed = Object(id) as string
-  expect(() =>
-    client.new(connection, boxed, 'google', testnet, new Uint8Array(32), new Uint8Array()),
-  ).toThrow()
+  // A connection constructed elsewhere may carry a boxed ID; only a string UUID runs.
+  const boxed = Object.assign(spiedConnection(), { connectionId: Object(id) as string })
+  expect(() => client.new(boxed, 'google', testnet, new Uint8Array(32), new Uint8Array())).toThrow(
+    'Invalid ceremony selection',
+  )
   const rejected = expect(first.proveUserIdentity()).rejects.toBeInstanceOf(CeremonyError)
   await connection.close()
   await rejected
@@ -362,14 +362,7 @@ it.each(supportedPlatforms)(
       notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
     }
     const connection = spiedConnection()
-    const ceremony = (await clientFor(platformId)).new(
-      connection,
-      id,
-      platformId,
-      ledger,
-      domain,
-      data,
-    )
+    const ceremony = (await clientFor(platformId)).new(connection, platformId, ledger, domain, data)
     expect(ledger.hash).toHaveBeenCalledOnce()
     expect(ledger.notaryAddress).toHaveBeenCalledOnce()
     hash.fill(9)
@@ -449,14 +442,7 @@ it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-
     },
   ])
     expect(() =>
-      client.new(
-        connection,
-        id,
-        'google',
-        ledger as LedgerId,
-        new Uint8Array(32),
-        new Uint8Array(),
-      ),
+      client.new(connection, 'google', ledger as LedgerId, new Uint8Array(32), new Uint8Array()),
     ).toThrow()
   expect(connection.navigate).not.toHaveBeenCalled()
 })
@@ -489,7 +475,6 @@ it.each(supportedPlatforms)(
       expect(() =>
         client.new(
           connection,
-          id,
           platformId,
           { hash: mainnet.hash, notaryAddress: method } as LedgerId,
           new Uint8Array(32),
@@ -575,11 +560,11 @@ function checkCreationTypes(client: CCDPClient) {
     transactionData: bytes,
   })
   // @ts-expect-error Missing transaction data.
-  client.new(conn, id, 'google', ledger, bytes)
-  // @ts-expect-error Connection and ceremony ID have incompatible positions.
-  client.new(id, conn, 'google', ledger, bytes, bytes)
+  client.new(conn, 'google', ledger, bytes)
+  // @ts-expect-error The ceremony ID comes from the connection, not an argument.
+  client.new(conn, id, 'google', ledger, bytes, bytes)
   void client
-    .new(conn, id, 'google', ledger, bytes, bytes)
+    .new(conn, 'google', ledger, bytes, bytes)
     .proveUserIdentity()
     .then((result) => {
       if (result.status !== 'accepted') return
@@ -613,11 +598,10 @@ it('preserves opaque failure text and operation context for the application', as
 it.each(supportedPlatforms)(
   'projects %s stages without delaying or summing overlapping work [LIBID-BROWSER-007]',
   async (platformId) => {
-    const notarized = fixtures[platformId].proverKind === 'bearer-link'
+    const notarized = fixtures[platformId].proverKind === 'notarized'
     const c = spiedConnection()
     const ceremony = (await clientFor(platformId)).new(
       c,
-      id,
       platformId,
       testnet,
       new Uint8Array(32),
@@ -633,7 +617,9 @@ it.each(supportedPlatforms)(
     const emit = (event: string, phase: 'started' | 'finished', timestamp = 10) =>
       c.receive({ type: 'event', event, phase, timestamp })
     emit('prefetch-dispatch', 'finished')
+    c.peerOrigin = BRIDGE
     emit('authorization', 'finished', 20)
+    c.peerOrigin = wireConfig.ccdpOrigin
     emit('prover', 'started', 30)
     emit('zk-proof-preparation', 'started', 40)
     if (notarized) emit('token-fetch', 'started', 50)
@@ -755,7 +741,9 @@ it('only core readiness events advance the protocol; preserves occurrence times 
   c.receive(event('extension-ready'))
   expect(c.navigateAway).not.toHaveBeenCalled()
   c.receive(event('prefetch-dispatch', 'finished', 2))
+  c.peerOrigin = BRIDGE
   c.receive(event('authorization', 'finished', 3))
+  c.peerOrigin = wireConfig.ccdpOrigin
   c.receive(event('prover-fallback', undefined, 4))
   expect(c.sent).toEqual([])
   c.receive(event('prover', 'started', 7))
@@ -805,6 +793,7 @@ it.each([
   const { ceremony, connection } = await setup()
   const result = ceremony.proveUserIdentity()
   prefetched(connection)
+  connection.peerOrigin = BRIDGE
   for (const message of observed) connection.receive(message)
   await connection.close()
   await expect(result).rejects.toMatchObject({ status: 'closed', event: blamed })
@@ -915,7 +904,6 @@ it('rejects unavailable explicit versions before reading ledger or reserving the
     expect(() =>
       client.new(
         c,
-        id,
         'google',
         ledger,
         new Uint8Array(32),
@@ -927,7 +915,7 @@ it('rejects unavailable explicit versions before reading ledger or reserving the
   }
   expect(ledger.hash).not.toHaveBeenCalled()
   expect(registered(c)).toEqual([])
-  client.new(c, id, 'google', ledger, new Uint8Array(32), new Uint8Array(), 1)
+  client.new(c, 'google', ledger, new Uint8Array(32), new Uint8Array(), 1)
   await c.close()
 })
 
@@ -1013,7 +1001,6 @@ it.each([
     expect(() =>
       client.new(
         connection,
-        id,
         'google',
         testnet,
         operationDomain as Uint8Array,
@@ -1030,9 +1017,9 @@ it.each([
 it('binds one active ceremony per connection and rebinds it once that run finishes', async () => {
   const client = await ccdpClient(wireConfig)
   const { connection, ceremony: first } = await setup({ client })
-  const second = client.new(
+  // One client refuses the live ID at once; another client sharing the connection is refused here.
+  const second = (await ccdpClient(wireConfig)).new(
     connection,
-    crypto.randomUUID(),
     'google',
     testnet,
     new Uint8Array(32),
@@ -1054,4 +1041,46 @@ it('binds one active ceremony per connection and rebinds it once that run finish
   reachProving(connection)
   connection.receive({ type: 'identity-proof', identity, proof: proofFor(connection) })
   await expect(next).resolves.toMatchObject({ status: 'accepted' })
+})
+
+it.each([
+  'authorization',
+  'prover-fallback',
+  'token-fetch',
+  'token-attestation',
+  'identity-fetch',
+  'identity-attestation',
+  'zk-proof-preparation',
+  'zk-proof-generation',
+])(
+  'rejects %s from the other admitted origin before publishing it [TEST-CCDP-06]',
+  async (name) => {
+    const { ceremony, connection } = await setup({ client: await clientFor('x'), platformId: 'x' })
+    const seen: CeremonyEvent[] = []
+    ceremony.onEvent((event) => seen.push(event))
+    const result = ceremony.proveUserIdentity()
+    prefetched(connection)
+    const early = name === 'authorization' || name === 'prover-fallback'
+    if (!early) connection.receive(event('prover', 'started'))
+    connection.peerOrigin = name === 'authorization' ? wireConfig.ccdpOrigin : BRIDGE
+    const phase =
+      name === 'authorization' ? 'finished' : name === 'prover-fallback' ? undefined : 'started'
+    const before = seen.length
+    connection.receive(event(name, phase))
+    await expect(result).rejects.toThrow(/outside the (Bridge|CCDP)/)
+    expect(seen.slice(before)).toEqual([expect.objectContaining({ status: 'failed' })])
+  },
+)
+
+it('accepts Callback and Prover observations when both share the admitted origin [TEST-CCDP-06]', async () => {
+  const client = await ccdpClient({ ...wireConfig, ccdpOrigin: BRIDGE })
+  const { ceremony, connection } = await setup({ client })
+  connection.peerOrigin = BRIDGE
+  const result = ceremony.proveUserIdentity()
+  prefetched(connection)
+  connection.receive(event('authorization', 'finished'))
+  connection.receive(event('prover-fallback'))
+  connection.receive(event('prover', 'started'))
+  connection.receive({ type: 'user-denied' })
+  await expect(result).resolves.toEqual({ status: 'denied' })
 })

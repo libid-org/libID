@@ -1,14 +1,15 @@
-import { BackendType, Barretenberg } from '@aztec/bb.js'
+import { BackendType, Barretenberg } from '@aztec-foundation/bb.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import initACVM from '@noir-lang/acvm_js'
 import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
 import { errorMessage, toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
+import { workerThreads } from '../threads.js'
 import { FIELD_BYTES, PROVING_SETTINGS, SRS_POINTS } from './parameters.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
-/** Require the qualified shared-memory backend rather than silent single-threaded proving. */
+/** Refuse single-threaded proving after applying the worker CPU cap. */
 const MIN_PROOF_THREADS = 2
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
@@ -16,15 +17,6 @@ type Circuit = ConstructorParameters<typeof Noir>[0]
 type Api = Awaited<ReturnType<typeof Barretenberg.new>>
 
 type ProvingCircuit = Parameters<Api['circuitProve']>[0]['circuit']
-
-/** An initialized backend and the thread pool bb.js reported for it. */
-type Backend = { api: Api; runtime: RawProof['runtime'] }
-
-/**
- * bb.js 5.2.0 logs this clause while initializing, and it is the only report of the thread pool
- * it runs; engine.worker.test.ts renders it from the installed package.
- */
-const BB_RUNTIME_LOG = /threads: ([0-9]+); shared memory: (true|false)/
 
 const send = (message: FromWorker): void => self.postMessage(message)
 
@@ -43,7 +35,7 @@ async function inflate(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
 class EngineWorker {
   #state: 'new' | 'loading' | 'ready' | 'proving' | 'done' = 'new'
   #ready: { noir: Noir; circuit: ProvingCircuit } | null = null
-  #backend: Promise<Backend> | null = null
+  #backend: Promise<Api> | null = null
 
   receive(message: ToWorker): void {
     const work = message.type === 'preload' ? this.#preload(message) : this.#prove(message)
@@ -53,7 +45,7 @@ class EngineWorker {
   #destroyBackend(): Promise<void> {
     const pending = this.#backend
     this.#backend = null
-    return pending ? pending.then(({ api }) => api.destroy()) : Promise.resolve()
+    return pending ? pending.then((api) => api.destroy()) : Promise.resolve()
   }
 
   #fail(error: unknown): void {
@@ -71,29 +63,22 @@ class EngineWorker {
   async #preload(message: Preload): Promise<void> {
     if (this.#state !== 'new') throw new Error('Duplicate engine initialization')
     this.#state = 'loading'
+    // bb.js shares its memory exactly when SharedArrayBuffer and isolation are present.
     if (!self.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
       throw new Error('Proof worker requires cross-origin isolation')
     }
-    const backend = span('proof-backend-initialization', async (): Promise<Backend> => {
-      let runtime: RawProof['runtime'] | undefined
-      const api = await Barretenberg.new({
+    const threads = workerThreads(message.threads)
+    if (!Number.isInteger(threads) || threads < MIN_PROOF_THREADS)
+      throw new Error('Multithreaded backend unavailable')
+    const backend = span('proof-backend-initialization', () =>
+      Barretenberg.new({
         backend: BackendType.Wasm,
-        threads: message.threads,
-        logger: (line) => {
-          const match = BB_RUNTIME_LOG.exec(line)
-          if (match)
-            runtime = { effectiveThreads: Number(match[1]), sharedMemory: match[2] === 'true' }
-        },
+        threads,
         srsSize: SRS_POINTS,
         wasmPath: message.wasmPath,
         crsPath: message.crsPath,
-      })
-      if (!runtime?.sharedMemory || runtime.effectiveThreads < MIN_PROOF_THREADS) {
-        await api.destroy()
-        throw new Error('Multithreaded backend unavailable')
-      }
-      return { api, runtime }
-    })
+      }),
+    )
     this.#backend = backend
     void backend.catch((error) => this.#fail(error))
     const [{ compiled, circuit }] = await Promise.all([
@@ -148,7 +133,7 @@ class EngineWorker {
     this.#state = 'proving'
     emit({ event: 'zk-proof-generation', phase: 'started', timestamp: now() })
     const { noir, circuit } = ready
-    const [{ api, runtime }, { witness }] = await Promise.all([
+    const [api, { witness }] = await Promise.all([
       backend,
       span('witness', () => noir.execute(message.inputs as Parameters<typeof noir.execute>[0])),
     ])
@@ -168,7 +153,6 @@ class EngineWorker {
     const result: RawProof = {
       proof,
       publicInputs: generated.publicInputs.map((field) => `0x${bytesToHex(field)}`),
-      runtime,
     }
     emit({ event: 'zk-proof-generation', phase: 'finished', timestamp: now() })
     // The proof is finished; failing to release the backend cannot take it back.

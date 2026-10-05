@@ -1,13 +1,18 @@
 // Served CCDP routes, the asset Service Worker and its caches, and mounted TLSN assets.
 import { readFileSync } from 'node:fs'
-import { artifactRequests, expect, expectApplicationContinues, test } from './fixtures.js'
+import {
+  artifactRequests,
+  expect,
+  expectApplicationContinues,
+  rootWorkerPath,
+  test,
+} from './fixtures.js'
 
 test('emitted route policies and inert missing paths [CSP-001]', async ({ request, ccdp }) => {
   for (const path of [
     '/ccdp/v1/prefetch',
     '/ccdp/v1/prover',
     '/ccdp/v1/prover/fallback',
-    '/ccdp/v1/worker.js',
     '/ccdp/callback.html',
   ]) {
     const a = await request.get(ccdp + path)
@@ -19,12 +24,58 @@ test('emitted route policies and inert missing paths [CSP-001]', async ({ reques
   }
   const fallback = await request.get(`${ccdp}/ccdp/v1/prover/fallback`)
   expect(fallback.headers()['cross-origin-embedder-policy']).toBe('require-corp')
-  const worker = await request.get(`${ccdp}/ccdp/v1/worker.js`)
+  const worker = await request.get(ccdp + rootWorkerPath())
   expect(worker.headers()['service-worker-allowed']).toBe('/')
+  expect(worker.headers()['cache-control']).toBe('public, max-age=31536000, immutable')
   expect((await request.get(`${ccdp}/ccdp/v99/prover`)).status()).toBe(404)
 })
 
-test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET-020] [TEST-DIST-03] [LIBID-MOD-002] [LIBID-ASSET-012] [LIBID-PROVER-016]', async ({
+test('activation reconciles the full managed graph without touching other storage [TEST-DIST-07]', async ({
+  page,
+  ccdp,
+}) => {
+  await page.goto(`${ccdp}/ccdp/v1/seed`)
+  const required = ['google/1', 'x/1', 'github/1'].flatMap(artifactRequests)
+  const expected = await page.evaluate(
+    async ({ required, script }) => {
+      const cache = await caches.open('libid-ceremony-assets-v1')
+      const key = (url: string, range = '') =>
+        `${location.origin}/__libid_ceremony_cache__/${encodeURIComponent(`${url}\n${range}`)}`
+      const keep = [
+        ...new Set(required.map((r) => key(new URL(r.url, location.origin).href, r.range))),
+      ]
+      for (const url of keep) await cache.put(url, new Response('retained'))
+      await cache.put(key(`${location.origin}/ccdp/assets/obsolete.wasm`), new Response('obsolete'))
+      await cache.put(
+        key('https://external.invalid/crs', 'bytes=0-3'),
+        new Response('obsolete range'),
+      )
+      const unrelated = `${location.origin}/unrelated-cache-entry`
+      await cache.put(unrelated, new Response('unrelated'))
+      const other = await caches.open('another-application')
+      await other.put(unrelated, new Response('other application'))
+      await navigator.serviceWorker.register(script, { scope: '/', type: 'module' })
+      return [...keep, unrelated].sort()
+    },
+    { required, script: rootWorkerPath() },
+  )
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const cache = await caches.open('libid-ceremony-assets-v1')
+        return (await cache.keys()).map((key) => key.url).sort()
+      }),
+    )
+    .toEqual(expected)
+  expect(
+    await page.evaluate(async () => {
+      const cache = await caches.open('another-application')
+      return (await cache.match(`${location.origin}/unrelated-cache-entry`))?.text()
+    }),
+  ).toBe('other application')
+})
+
+test("moves a returning browser to the next release's worker and joins a pending prefetch [LIBID-ASSET-014] [LIBID-ASSET-020] [TEST-DIST-03] [TEST-DIST-08] [LIBID-MOD-002] [LIBID-ASSET-012] [LIBID-PROVER-016]", async ({
   ccdp,
   page,
   context,
@@ -41,21 +92,24 @@ test('migrates the known nested worker and joins a pending prefetch [LIBID-ASSET
   const seed = await context.newPage()
   await seed.goto(`${ccdp}/ccdp/v1/seed`)
   await seed.evaluate(async () => {
-    for (const scope of ['/', '/ccdp/v1/']) {
-      const r = await navigator.serviceWorker.register('/ccdp/v1/worker.js', {
-        scope,
-        type: 'module',
-      })
-      await new Promise<void>((resolve) => {
-        const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
-        poll()
-      })
-    }
+    // An earlier release's Worker answers nothing, so the run below completes only if Prefetch
+    // dispatches to the Worker it pins.
+    const r = await navigator.serviceWorker.register(`/ccdp/worker.${'0'.repeat(64)}.js`, {
+      scope: '/',
+      type: 'module',
+    })
+    await new Promise<void>((resolve) => {
+      const poll = () => (r.active?.state === 'activated' ? resolve() : setTimeout(poll, 20))
+      poll()
+    })
   })
   await seed.close()
   await googleProvider()
   const popup = await launch()
-  await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'denied' })
+  // A failure shows its reason: once in CI, Firefox failed this run fast, before OAuth.
+  await expect
+    .poll(() => page.evaluate(() => ({ result: window.result, failure: window.failureMessage })))
+    .toEqual({ result: { status: 'denied' } })
   expect(
     await popup.evaluate(async () =>
       (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname),
@@ -102,8 +156,8 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
   try {
     const page = await context.newPage()
     await page.goto(`${ccdp}/ccdp/v1/seed`)
-    await page.evaluate(async () => {
-      await navigator.serviceWorker.register('/ccdp/v1/worker.js', { scope: '/', type: 'module' })
+    await page.evaluate(async (workerPath) => {
+      await navigator.serviceWorker.register(workerPath, { scope: '/', type: 'module' })
       await navigator.serviceWorker.ready
       if (!navigator.serviceWorker.controller)
         await new Promise<void>((resolve) =>
@@ -111,7 +165,7 @@ test('immutable assets reuse the HTTP cache after Cache Storage eviction [LIBID-
             once: true,
           }),
         )
-    })
+    }, rootWorkerPath())
     // No Playwright routes: routing disables the browser HTTP cache being tested.
     expect(
       await page.evaluate(
@@ -157,7 +211,7 @@ test('authenticated worker failure aborts before OAuth [LIBID-OAUTH-026]', async
     oauth++
     return route.abort()
   })
-  const control = assetControl('/ccdp/v1/worker.js')
+  const control = assetControl(rootWorkerPath())
   await context.request.get(`${control}&fail`)
   await launch()
   await expect.poll(() => page.evaluate(() => window.result)).toEqual({ status: 'failed' })
