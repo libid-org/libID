@@ -35,9 +35,25 @@ These handles have no name:
 - a Gmail address with `+`, `-` or `_` in the local part;
 - any other Google address with `_` or `+`.
 
-A chain label narrows a name to one chain. Without one, the wallet's chain
-decides. Which chain labels a gateway knows is deployment data; `ensName` only
-checks the label's shape.
+## Options
+
+```ts
+ensName('x', 'alice', { chain: 'base' })                    // 'alice.x.base.handles.link'
+ensName('x', 'alice', { parent: 'testnet.handles.link' })   // 'alice.x.testnet.handles.link'
+ensName('x', 'alice', { rules: await rulesOf(reader, id) }) // the chain's current rules
+```
+
+- `chain` narrows a name to one chain. Without one, the wallet's chain
+  decides. Which chain labels a gateway knows is deployment data; `ensName`
+  only checks the label's shape and that it is not a platform key.
+- `parent` is the name the gateway answers under. It defaults to
+  `handles.link`.
+- `rules` are the handle rules to normalize with. They default to the rules
+  `@libid/contracts` was released with. A chain's owner can change them, so
+  pass the ones `rulesOf` reads from the chain when that matters.
+
+A chain label or parent name that is not a lowercase ASCII label of 1 to 63
+bytes, or has `--` at its third and fourth characters, throws.
 
 The rules are those of the
 [ENS integration spec](../../../specs/ens-integration.md), §5 and §6.

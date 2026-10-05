@@ -6,10 +6,11 @@ import {
   PLATFORM_GITHUB_KEY,
   PLATFORM_GOOGLE_KEY,
   PLATFORM_X_KEY,
+  type Rules,
   rulesFor,
 } from '@libid/contracts'
 
-/** The ENS name every libID name sits under. */
+/** The ENS name libID names sit under unless a deployment names another. */
 export const PARENT_NAME = 'handles.link'
 
 const PLATFORMS = [PLATFORM_GITHUB_KEY, PLATFORM_X_KEY, PLATFORM_GOOGLE_KEY] as const
@@ -28,6 +29,17 @@ export interface NameOptions {
    * gateway knows are deployment data, so this only checks the label's shape.
    */
   chain?: string
+  /**
+   * The name the gateway answers under, such as `testnet.handles.link`.
+   * Defaults to {@link PARENT_NAME}.
+   */
+  parent?: string
+  /**
+   * The handle rules to normalize with. Defaults to the rules
+   * `@libid/contracts` was released with (`rulesFor`); pass the chain's
+   * current ones, read with `rulesOf`, when its owner may have changed them.
+   */
+  rules?: Rules
 }
 
 /**
@@ -48,9 +60,12 @@ export function ensName(
   if (!PLATFORMS.includes(platform)) throw new Error(`Not a platform: ${JSON.stringify(platform)}`)
   if (typeof handle !== 'string') throw new TypeError('The handle must be a string')
   const chain = options.chain === undefined ? [] : [chainLabel(options.chain)]
-  const labels = handleLabels(platform, normalized(platform, handle))
+  const parent = options.parent === undefined ? PARENT_NAME : parentName(options.parent)
+  const rules = options.rules ?? rulesFor(platform)
+  if (rules === null) throw new Error(`No handle rules for platform ${platform}`)
+  const labels = handleLabels(platform, normalize(handle, rules))
   if (labels === null) return null
-  return [...labels, platform, ...chain, PARENT_NAME].join('.')
+  return [...labels, platform, ...chain, parent].join('.')
 }
 
 /**
@@ -111,14 +126,14 @@ function pieces(text: string): string[] | null {
   return labels.every(isLabel) ? labels : null
 }
 
-function normalized(platform: Platform, handle: string): string {
-  const rules = rulesFor(platform)
-  if (rules === null) throw new Error(`No handle rules for platform ${platform}`)
-  return normalize(handle, rules)
-}
-
 function chainLabel(chain: unknown): string {
   if (!isLabel(chain) || (PLATFORMS as readonly string[]).includes(chain))
     throw new Error(`Not a chain label: ${JSON.stringify(chain)}`)
   return chain
+}
+
+function parentName(parent: unknown): string {
+  if (typeof parent !== 'string' || !parent.split('.').every(isLabel))
+    throw new Error(`Not a parent name: ${JSON.stringify(parent)}`)
+  return parent
 }

@@ -1,5 +1,5 @@
 import { ens_normalize } from '@adraffy/ens-normalize'
-import { HandleError } from '@libid/contracts'
+import { HandleError, RULES_GOOGLE, RULES_X } from '@libid/contracts'
 import { describe, expect, it } from 'vitest'
 import { ensName } from './index.js'
 
@@ -24,6 +24,43 @@ describe('ensName', () => {
 
   it('adds a chain label before the parent name', () => {
     expect(ensName('x', 'alice', { chain: 'base' })).toBe('alice.x.base.handles.link')
+  })
+
+  it('puts the name under the parent a deployment answers under', () => {
+    expect(ensName('x', 'alice', { parent: 'testnet.handles.link' })).toBe(
+      'alice.x.testnet.handles.link',
+    )
+    expect(ensName('x', 'alice', { chain: 'base', parent: 'testnet.handles.link' })).toBe(
+      'alice.x.base.testnet.handles.link',
+    )
+  })
+
+  it.each([
+    '',
+    'handles..link',
+    '.handles.link',
+    'Handles.link',
+    'ab--cd.link',
+    `${'a'.repeat(64)}.link`,
+    null,
+  ])('refuses the parent name %j', (parent) => {
+    expect(() => ensName('x', 'alice', { parent: parent as string })).toThrow('Not a parent name')
+  })
+
+  it('normalizes with the rules it is given', () => {
+    expect(() => ensName('x', 'alice', { rules: { ...RULES_X, maxLength: 4 } })).toThrow(
+      HandleError,
+    )
+  })
+
+  // A Google address is at most 62 bytes under the released rules, so only a
+  // chain whose owner raised the limit can produce a piece past 63.
+  it('gives no name when a piece would pass the 63-byte DNS limit', () => {
+    const rules = { ...RULES_GOOGLE, maxLength: 200 }
+    expect(ensName('google', `${'a'.repeat(64)}@company.com`, { rules })).toBeNull()
+    expect(ensName('google', `${'a'.repeat(63)}@company.com`, { rules })).toBe(
+      `${'a'.repeat(63)}._at.company.com.google.handles.link`,
+    )
   })
 
   it.each([
