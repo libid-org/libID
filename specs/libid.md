@@ -84,7 +84,8 @@ trusted for the local browser ceremony, but not to choose authoritative identity
 change the proof-bound operation, or widen proof validity. GitHub token exchange
 and identity notarization run in the browser; there is no confidential exchange
 service. The Application receives a Google identity's email in the ceremony
-result, so whether a Google handle reaches the chain is its choice
+result, so under Google version 2 whether the handle reaches the chain is
+its choice
 ([common §12](ceremony-common.md#12-security-considerations)). The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
 transcripts and their creation times. Verifier governance selects the
@@ -149,12 +150,13 @@ the proof under the artifact selected for the submitted platform and version
 is the signed ID Token on Google and the revealed attestation bytes on X and
 GitHub; the Proving Circuit proves only what cannot be read from that
 evidence. On Google that is the signature relation and, because the `sub`
-and `email` stay hidden, their validation, the email's normalization, and
-both digests; on X and GitHub it is that one hidden bearer opens both
+stays hidden, its validation and digest; under Google version 2, where the
+`email` stays hidden too, also the email's validation, normalization, and
+digest; on X and GitHub it is that one hidden bearer opens both
 sessions' commitments. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
 an effect (REQ-COMMON-03, REQ-COMMON-03A). For a profile that exposes identity
-digests, Google at launch, the Consumer keys the binding on the digests and
+digests, Google version 2, the Consumer keys the binding on the digests and
 puts the handle on chain only from a transaction that carried it, and the
 account identifier its `userId` digests, Google's `sub`, never; the
 `userId` digest itself is public (SP-PRIV-01). It does not prevent
@@ -197,6 +199,7 @@ implementing that profile.
 | Platform Profile | `proofLifetime` | `maxFutureAttestationSkew` |
 |---|---:|---:|
 | `("google", 1)` | not named | not named |
+| `("google", 2)` | not named | not named |
 | `("x", 1)` | 3600 | 300 |
 | `("github", 1)` | 3600 | 300 |
 
@@ -204,7 +207,7 @@ implementing that profile.
 time: the X token attestation and the GitHub token-exchange attestation.
 `maxFutureAttestationSkew` is the maximum lead of an X/GitHub attestation
 timestamp over Block Time. Google's signed `exp` bounds its validity, so
-`("google", 1)` names neither. Verifier governance controls the Supported
+neither Google version names either parameter. Verifier governance controls the Supported
 Version Set and the trust roots, so a proof is accepted only while a Verifier
 Version implementing its profile is supported and the trust roots it relies
 on are active.

@@ -122,9 +122,8 @@ Platform Profile: The immutable, independently versioned definition of one
    Platform Verifier registered for that platform and version MUST enforce the
    same profile, but its implementation and deployment are ledger-specific.
    The Consumer holds none of the profile constants except, for each
-   platform, its handle normalization, whether its profile is a digest
-   profile, and a digest profile's handle-digest construction (platform
-   §2.1a, REQ-PLAT-08L).
+   platform, its handle normalization and whether it admits digest profiles
+   (platform §2.1a, REQ-PLAT-08L).
 
 Account identifier: The authenticated value a Platform Profile derives the
    canonical `userId` from: Google's signed `sub`, and the X and GitHub
@@ -135,7 +134,7 @@ Digest profile: A Platform Profile whose Proving Circuit exposes the handle
    canonical `userId` that is itself a digest of the account identifier. Its
    Platform Verifier returns the handle digest (REQ-COMMON-05E), and a
    Submission may carry the plaintext handle beside it but never the account
-   identifier (platform §2.1b). Google is the launch digest profile.
+   identifier (platform §2.1b). Google version 2 is a digest profile.
 
 Proving Circuit: The zero-knowledge circuit whose proof a Platform Verifier
    checks. It proves only what cannot be read from authenticated evidence.
@@ -215,7 +214,7 @@ Attestation Count: The number of entries in the closed attestation list a
   `sub` of 1 to 31 bytes from `0x20` through `0x7e` holding neither `"` nor
   `\`; observed values are 21 decimal digits. That clause is a liveness
   dependency only: an account whose `sub` falls outside it cannot be bound
-  under the Google profile (platform REQ-PLAT-04), and none is bound to the
+  under Google version 2 (platform REQ-PLAT-04A), and none is bound to the
   wrong identity. Evidence for the clause: recurring integration probes of
   issued tokens.
 - ASM-PROV-06:
@@ -247,11 +246,8 @@ Attestation Count: The number of entries in the closed attestation list a
   A proof accepted under the verifier artifact selected for its platform and
   version pair satisfies that Platform Profile's complete proof statement.
   Verifier governance MAY replace an artifact only with one that enforces the
-  same statement; changing the statement of a released Platform Ceremony
-  Version requires a new Platform Ceremony Version. A version is released
-  once a Consumer Chain accepts proofs under it in production. Before then
-  its statement is edited in place, under the same number, and an artifact
-  built for an earlier edit enforces no statement of that version.
+  same statement; changing the statement requires a new Platform Ceremony
+  Version.
 - ASM-BROWSER-01:
   The Canonical Runtime executes unmodified, and the user agent enforces the
   same-origin policy over authorization responses.
@@ -1639,9 +1635,10 @@ leaves a profile with no attestation unaffected.
 The client identifier is published deliberately: a binding exists to be
 read, and the client is discoverable from the identity platform. The handle
 and the canonical `userId` are published where a Platform Profile exposes
-them as bytes, X and GitHub at launch, whose handles are public on the
-platform itself. A digest profile, Google at launch, publishes its
-canonical `userId`, puts its handle on chain in plaintext only from a
+the handle as bytes: X and GitHub, whose handles are public on the platform
+itself, and Google version 1, which publishes the email in every proof's
+public inputs. A digest profile, Google version 2, publishes its canonical
+`userId`, puts its handle on chain in plaintext only from a
 transaction that carries it, and its account identifier never
 (SP-PRIV-01). Its canonical `userId` is a digest of Google's `sub`
 ([platform profiles §2.1](platform-ceremonies.md#21-canonical-platform-user-identifiers)),
@@ -1667,7 +1664,11 @@ nothing a transaction did not carry, and a transaction that carries a handle pub
 since a Submission or disclosure call the Consumer refuses still leaves its
 calldata on chain. The proof bytes hide the witness only because an
 unmodified Prover proves in the zero-knowledge mode with fresh randomness
-(ASM-BROWSER-01, ASM-ZK-01, REQ-COMMON-45A). The keys an undisclosed identity is stored under are
+(ASM-BROWSER-01, ASM-ZK-01, REQ-COMMON-45A). A digest profile keys its
+bindings as the byte-profile versions of its platform do (platform
+REQ-PLAT-08M), so an account already bound under Google version 1 has its
+email in a public event, and a later version 2 binding of it hides nothing
+that event published. The keys an undisclosed identity is stored under are
 unsalted digests of its normalized handle and its account identifier, so that
 whoever already knows an address can resolve it; by the same arithmetic,
 whoever suspects an address, or holds the `sub` from another relying party,

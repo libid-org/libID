@@ -126,22 +126,26 @@ used in the resulting Submission.
 
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
-| Google | signed ID-Token `sub` | the REQ-PLAT-05A digest of its exact 1–31 case-sensitive ASCII bytes | normalized email |
+| Google | signed ID-Token `sub` | the REQ-PLAT-05A digest of its exact 1–255 case-sensitive ASCII bytes, 1–31 in version 2 (REQ-PLAT-04A) | normalized email |
 | X | `/2/users/me.data.id` JSON string | canonical nonzero unsigned 64-bit decimal | normalized `username` |
 | GitHub | `/user.id` JSON integer token | canonical nonzero unsigned 64-bit decimal | normalized `login` |
 
 - REQ-PLAT-04:
   The Implementation MUST accept a Google `sub` of bytes `0x20` through `0x7e`
-  only, other than `"` and `\`. The Implementation MUST reject empty,
-  control, non-ASCII, and over-31-byte values. The Implementation MUST apply
-  both checks to the `sub` bytes exactly as they appear in the signed
-  payload, before any JSON unescaping. Necessity: identity
-  compatibility across implementations; 31 bytes is the Proving Circuit's
-  buffer (REQ-PLAT-16C), which holds every `sub` Google issues only under
-  ASM-PROV-05; a signed value holding a backslash is one whose JSON encoding
-  escapes a byte, and an implementation that decodes the escape and one that
-  reads the signed bytes would key it differently, so the signed bytes are
-  the ones every implementation checks.
+  only. The Implementation MUST reject empty, control, non-ASCII, and
+  over-255-byte values. Necessity: identity compatibility across
+  implementations.
+- REQ-PLAT-04A:
+  For Google version 2 (§3.4), the Implementation MUST accept a `sub` only
+  under REQ-PLAT-04 and only when it holds neither `"` nor `\` and is at
+  most 31 bytes. The Implementation MUST apply these checks and those of
+  REQ-PLAT-04 to the `sub` bytes exactly as they appear in the signed
+  payload, before any JSON unescaping. Necessity: 31 bytes is the version 2
+  Proving Circuit's buffer (REQ-PLAT-16F), which holds every `sub` Google
+  issues only under ASM-PROV-05; a signed value holding a backslash is one
+  whose JSON encoding escapes a byte, and an implementation that decodes the
+  escape and one that reads the signed bytes would key it differently, so
+  the signed bytes are the ones every implementation checks.
 - REQ-PLAT-05:
   The Implementation MUST NOT trim or case-convert a Google `sub`. Necessity:
   identity compatibility.
@@ -193,7 +197,7 @@ digests, because the Consumer receives no bytes to normalize.
   Proving Circuit of a profile that exposes identity digests (§2.1b) MUST
   apply the profile's published normalization to the handle bytes it
   digests, refusing any input that normalization would trim rather than
-  trimming it (REQ-PLAT-16C), and no other transform, so that the digest
+  trimming it (REQ-PLAT-16F), and no other transform, so that the digest
   equals the one the Consumer derives from the normalized handle.
 - REQ-PLAT-08B (upholds SP-BIND-01):
   The Consumer MUST derive the normalized handle from the proof-verified raw
@@ -238,8 +242,8 @@ such table is ineligible.
 The Consumer stores every binding under two keys. An identity's **identity
 key** is derived from its identity platform and the keccak256 digest of its
 canonical `userId`; its **handle key** is derived from its identity platform
-and the platform's handle digest of its normalized handle (§2.1a,
-REQ-PLAT-08M). Each key depends
+and the handle digest, the keccak256 digest of its normalized handle
+(§2.1a, REQ-PLAT-08M). Each key depends
 on the value only through that inner digest, so a Consumer that receives
 the digest derives the same key as one that receives the bytes. The
 Consumer records for each key its **owner**, the Transaction Author that
@@ -259,21 +263,15 @@ Author **holds** a handle on a platform while it owns that handle's key.
   `keccak256(abi.encode(tag, platformId, digest))` with one fixed tag for
   each kind of key.
 - REQ-PLAT-08M (upholds SP-BIND-01, SP-PRIV-01):
-  A handle digest is the 32-byte digest of a normalized handle under the
-  construction its Platform Profile fixes. A profile that exposes handle
-  bytes MUST fix the `keccak256` of the normalized handle's bytes, which the
-  Consumer computes itself. A digest profile MUST fix its construction in
-  its proof statement, and the Consumer takes it from its configuration of
-  the platform (REQ-PLAT-08L). The Google profile fixes
-  `SHA256(UTF8("libid.google-handle") || email)` over the normalized
-  `email` bytes. Every role that derives a handle digest, the Proving
-  Circuit of a digest profile from the signed bytes and the Consumer from
-  a carried handle, MUST use the platform's construction. Necessity: the
-  handle digest is the inner digest of the handle key, so two
-  constructions would key one handle twice; the Google circuit already
-  computes SHA-256 for REQ-PLAT-05A, so its handle digest adds no second
-  hash function, and the tag keeps the digest apart from a plain `SHA256`
-  of the address that another system may publish.
+  A handle digest is the 32-byte `keccak256` of a normalized handle's bytes,
+  on every platform and in every Platform Ceremony Version. The Consumer
+  computes it from handle bytes it receives; a digest profile's Proving
+  Circuit computes it from the signed bytes and exposes it. Every role that
+  derives a handle digest MUST use that construction. Necessity: the handle
+  digest is the inner digest of the handle key, and the Consumer cannot
+  turn one digest into another without the handle, so a digest profile
+  whose circuit hashed differently would key a handle apart from the
+  bindings other versions of its platform already wrote.
 - REQ-PLAT-08I (upholds SP-BIND-01, SP-FRESH-01):
   The Consumer MUST write the binding of an accepted Submission only when
   its `metadataObservedAt` is strictly newer than the watermark of the
@@ -350,8 +348,10 @@ same test; the stored string alone is not a name.
 A digest profile is a Platform Profile whose Proving Circuit exposes the
 handle as a digest (REQ-PLAT-08M) rather than bytes, beside a canonical
 `userId` that is itself a digest of the platform's account identifier
-(common §2); Google is one (§3.3). The Consumer knows a platform's profile is one from
-its own configuration of that platform (REQ-PLAT-08L). The Consumer keys
+(common §2); Google version 2 is one (§3.4). The Consumer knows a
+Submission's profile is one from the result its Platform Verifier returns,
+and that a platform admits digests from its own configuration of that
+platform (REQ-PLAT-08L). The Consumer keys
 every such identity on the digests, so an identity is resolvable by whoever
 knows its handle or `userId` whether or not either was ever sent in
 plaintext. What a digest profile adds is the choice of sending the handle.
@@ -368,23 +368,23 @@ REQ-PLAT-08K; publication is state.
 
 - REQ-PLAT-08L (upholds SP-BIND-01, SP-PRIV-01):
   The Consumer MUST record, in its configuration of each platform and beside
-  that platform's normalization, whether the platform's profile is a digest
-  profile and, for a digest profile, the handle-digest construction it
-  fixes (REQ-PLAT-08M). These are facts of the platform, not of a Platform
-  Ceremony Version: every Platform Ceremony Version of one platform MUST
-  share its normalization, its digest-profile flag, and its handle-digest
-  construction. The Consumer MUST reject a Submission whose Platform
-  Verifier result returns a handle digest on a platform not recorded as a
-  digest profile, or returns verified handle bytes and no handle digest on
-  one that is. The unverified handle a digest-profile result passes through
-  beside its handle digest (common REQ-COMMON-05E) is not verified handle
-  bytes. Necessity: every version of a platform binds into the same keys,
-  so two versions that normalized, hashed, or exposed the handle
+  that platform's normalization, whether the platform admits digests: whether
+  any of its Platform Ceremony Versions it accepts is a digest profile.
+  Every Platform Ceremony Version of one platform MUST share the platform's
+  normalization; versions MAY differ in whether they expose the handle as
+  bytes or as a digest. The Consumer MUST reject a Submission whose Platform
+  Verifier result returns a handle digest on a platform that does not admit
+  digests. The Consumer MUST accept a result returning verified handle bytes
+  on either kind of platform, and MUST reject a result that returns neither
+  verified handle bytes nor a handle digest. The unverified handle a
+  digest-profile result passes through beside its handle digest (common
+  REQ-COMMON-05E) is not verified handle bytes. Necessity: every version of
+  a platform binds into the same keys, so two versions that normalized
   differently would key one handle twice; the disclosure call and the
-  freeze of REQ-PLAT-08G apply before any Submission of the platform
-  exists, so the Consumer needs these facts from configuration, and
-  checking every result against them keeps configuration and verifier from
-  disagreeing.
+  freeze of REQ-PLAT-08G apply before any digest-profile Submission of the
+  platform exists, so the Consumer needs the fact from configuration; and a
+  platform's earlier byte-profile versions stay acceptable beside a digest
+  profile.
 - REQ-PLAT-08D (upholds SP-BIND-01, SP-PRIV-01):
   For a digest profile, the Consumer MUST derive the identity's keys from the
   canonical `userId` and the handle digest the Platform Verifier returns, in
@@ -397,8 +397,8 @@ REQ-PLAT-08K; publication is state.
   publish with no handle asks for a name the Consumer has nothing to store
   for.
 - REQ-PLAT-08E (upholds SP-BIND-01):
-  For a digest profile, the Consumer MUST offer a disclosure call that
-  takes a platform and a plaintext handle. The Consumer MUST normalize the
+  For a platform that admits digests, the Consumer MUST offer a disclosure
+  call that takes a platform and a plaintext handle. The Consumer MUST normalize the
   handle under §2.1a and derive its handle key. The Consumer MUST accept the
   call only when the caller holds that handle. The Consumer MUST NOT require
   a new proof or the `userId` for a disclosure. Necessity: the handle's
@@ -423,20 +423,23 @@ REQ-PLAT-08K; publication is state.
   the handle disclosed, the name as it was, and its own event without the
   handle.
 - REQ-PLAT-08G (upholds SP-BIND-01):
-  For a digest profile, the Consumer MUST normalize the platform's handles
-  with the handle table the profile publishes (§2.1a), whose case-folding,
-  character-set, and shape rows the Proving Circuit reproduces
-  (TEST-PLAT-20). Once it has bound any identity of a platform, the
-  Consumer MUST refuse a change to whether that platform is a digest
-  profile, and, for a digest profile, a change to its normalization or its
-  handle-digest construction. Necessity: the Consumer holds only digests,
-  so it cannot re-key a binding under new rules; a disclosed handle
-  normalized or hashed other than as the circuit does stops hashing to its
-  own key; and changing the flag changes which construction every handle
-  key of the platform is derived with.
+  For a platform that admits digests, the Consumer MUST normalize the
+  platform's handles with the handle table the profile publishes (§2.1a),
+  whose case-folding, character-set, and shape rows the digest profile's
+  Proving Circuit reproduces (TEST-PLAT-20). Once a platform admits digests
+  and has bound any identity, the Consumer MUST refuse a change to its
+  normalization. Once it has accepted a digest-profile result for a
+  platform, the Consumer MUST refuse to stop admitting digests for it.
+  The Consumer MAY start admitting digests for a platform that has already
+  bound identities. Necessity: the Consumer holds only digests for some
+  bindings, so it cannot re-key them under new rules, and a disclosed
+  handle normalized other than as the circuit does stops hashing to its own
+  key; withdrawing admission would strand the disclosure call of bindings
+  made under it; a platform whose byte-profile versions are already in use
+  must be able to add a digest profile.
 - TEST-PLAT-20A (exercises REQ-PLAT-03, REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08G, REQ-PLAT-08L):
-  The same Google account submitted with and without its handle lands on
-  the same two keys. A Submission without the handle, made with
+  The same Google account submitted under version 2 with and without its
+  handle, and under version 1, lands on the same two keys. A Submission without the handle, made with
   recognizable test values, carries neither the email nor the `sub` in its
   decoded payload or its decoded events, and a Submission with the handle
   carries no `sub` in either. A Submission with an empty handle field is
@@ -451,13 +454,15 @@ REQ-PLAT-08K; publication is state.
   was, and its event without the handle. The Prover delivers the raw signed
   `email` as the handle and the REQ-PLAT-05A digest as the `userId`; the
   Application places that `email` in a Submission only when the user asks
-  to disclose it, and places no `sub` in any. A change to Google's handle normalization is refused once a
-  Google identity is bound, as is a change to its handle-digest
-  construction or to its digest-profile flag. A platform configured as a
-  digest profile rejects a verifier result carrying verified handle bytes
-  and no handle digest, and accepts one carrying the handle digest beside
-  an unverified carried handle; a platform configured otherwise rejects a
-  result carrying a handle digest.
+  to disclose it, and places no `sub` in any. On a Consumer whose Google
+  configuration admits digests, a change to Google's handle normalization
+  is refused once a Google identity is bound, and withdrawing admission is
+  refused once a version 2 result has been accepted; admission can be
+  turned on after version 1 bindings exist. A platform that admits digests
+  accepts a version 1 result carrying verified handle bytes and a version 2
+  result carrying the handle digest beside an unverified carried handle; a
+  platform that does not admit digests rejects a result carrying a handle
+  digest.
 - TEST-PLAT-20B (exercises REQ-PLAT-08H, REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
   A numeric handle and a `userId` of the same digits land on different keys.
   An identity that proves a new handle leaves its old handle without an
@@ -523,11 +528,14 @@ block an otherwise valid authority operation.
 ```text
 identityPlatform = "google"
 platformCeremonyVersion = 1
+platformCeremonyVersion = 2
 ```
 
 Google uses direct authentication-only OIDC and has no server-side token
 exchange. Identity evidence is the signed ID Token delivered in the redirect
-fragment.
+fragment. Version 2 is a digest profile (§2.1b). It is version 1 except
+where §3.4 states otherwise; every other rule of this section applies to
+both versions.
 
 ### 3.1 Authorization request
 
@@ -607,14 +615,6 @@ Google nonce         = sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU
 
 ### 3.3 Proof statement
 
-A profile is implementable only when its exact proving artifacts are
-published ([libID](libid.md#system-model-and-specification-ownership)). No
-published libid-circuits release enforces this statement yet: the
-`oidc-google` circuit of v0.6.0 exposes the `email` bytes as a public
-input, normalizes nothing, and admits a `\` in the `sub`. Google version 1
-is implementable once a release that enforces REQ-PLAT-16B and REQ-PLAT-16C
-publishes its artifacts.
-
 The Proving Circuit and Consumer enforce all of the following:
 
 - REQ-PLAT-16 (upholds SP-CLIENT-01):
@@ -641,7 +641,7 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   REQ-PLAT-23. JWK decoding and canonical-encoding validation happen where a
   modulus is admitted to the trusted set, per REQ-PLAT-24; the JWK encoding
   appears in no signed artifact, so proving it would add nothing.
-- REQ-PLAT-16B (upholds SP-BIND-01, SP-CLIENT-01, SP-FRESH-01, SP-PRIV-01):
+- REQ-PLAT-16B (upholds SP-BIND-01, SP-CLIENT-01, SP-FRESH-01):
   The Proving Circuit MUST expose exactly the following Google public inputs,
   each derived from the signed payload or verified signing key:
 
@@ -650,43 +650,18 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   | Authorization Digest | signed `nonce`, decoded as exactly 32 bytes |
   | client-identifier digest | `SHA256` of the signed `aud` |
   | canonical `userId` digest | signed `sub`, hashed per REQ-PLAT-05A |
-  | handle digest | REQ-PLAT-08M digest of the signed `email` after the normalization of §2.1a (REQ-PLAT-16C) |
+  | raw `email` bytes | signed `email`; the Consumer derives the normalized handle |
   | evidence timestamp | signed `exp`; used for both `metadataObservedAt` and `proofValidUntil` |
   | RSA modulus | exact `n` that verified the JWS; `e = 65537` is profile-fixed |
 
   The Proving Circuit MUST NOT expose a detached second representation of a
-  claim. The handle digest is the inner digest of the handle key (§2.1b),
-  so a claim that carries its handle and one that does not key the same
-  binding.
-- REQ-PLAT-16C (upholds SP-BIND-01, SP-PRIV-01):
-  The Proving Circuit MUST NOT expose the signed `sub` or `email` in any
-  public input. The Proving Circuit MUST reject a `sub` that REQ-PLAT-04
-  rejects, and MUST hash exactly the signed `sub` bytes under REQ-PLAT-05A.
-  The Proving Circuit MUST admit an `email` only when the normalization of
-  §2.1a admits it, MUST refuse an `email` that normalization would trim, and
-  MUST digest exactly the normalized `email` bytes. The Proving Circuit MUST
-  fail to prove, rather than truncate, a `sub` longer than 31 bytes or an
-  `email` longer than 62 bytes; these are the Google profile's buffer
-  lengths, and 62 is the handle rules' own maximum. Neither the `sub` nor
-  the `email` the circuit digests holds an escaped byte: every JSON escape
-  begins with `\`, which the `sub` rule refuses and the `email` alphabet
-  does not contain. Necessity:
-  REQ-PLAT-05A keeps the `sub` off the Consumer Chain and this profile keeps
-  the `email` off it unless a transaction carries it, which leaves the
-  Proving Circuit the only role that sees their bytes, and a verifier that
-  receives a digest inspects nothing.
-- REQ-PLAT-16D (upholds SP-BIND-01, SP-PRIV-01):
-  The Platform Verifier MUST return the canonical `userId` and the handle
-  digest as the fields of common REQ-COMMON-05E. Where the Submission
-  carries the plaintext `email`, the Platform Verifier MUST pass those bytes
-  to the Consumer unchanged and unchecked, as the unverified handle of
-  REQ-COMMON-05E. An empty `email` field carries no handle (§2.1b). The
-  Google Submission Payload MUST carry no plaintext `sub`. The Platform
-  Verifier MUST NOT emit or store the `email`. The Platform
-  Verifier MUST NOT derive a normalized handle or a key from the `email`;
-  the check that it hashes to the handle digest is the Consumer's under
-  REQ-PLAT-08D, because it needs the normalization of §2.1a. Necessity: one
-  party owns the equality, and it is the one that owns the normalization.
+  claim. Proofs are over raw bytes; normalization, such as lowercasing the
+  handle, is the Consumer's decision at consumption time.
+- REQ-PLAT-16C:
+  The Proving Circuit MUST NOT expose the signed `sub` in any public input.
+  The Proving Circuit MUST reject a `sub` that REQ-PLAT-04 rejects.
+  Necessity: REQ-PLAT-05A keeps the `sub` off the Consumer Chain, which leaves
+  the Proving Circuit the only role that sees its bytes.
 - REQ-PLAT-17 (upholds SP-BIND-01):
   The Proving Circuit MUST prove the signed `iss` equals
   `https://accounts.google.com`.
@@ -733,6 +708,60 @@ The signing key is fetched from Google's JWKS endpoint as witness input.
   modulus to the trusted set before Google signs with it in production.
   Necessity: Google rotates signing keys on the order of weekly, so every
   Google ceremony fails closed while an active modulus is untrusted.
+
+### 3.4 Version 2: the digest profile
+
+Version 2 changes only the identity outputs: the Proving Circuit exposes a
+handle digest in place of the `email` bytes, validates and normalizes the
+`email` itself, and bounds the `sub` more tightly. Its identity key and
+handle key are those of version 1 (§2.1b), so a binding made under either
+version keys the same account and handle.
+
+A profile is implementable only when its exact proving artifacts are
+published ([libID](libid.md#system-model-and-specification-ownership)).
+Version 1's artifacts are those of the `oidc-google` circuit of
+libid-circuits v0.6.0. No published release proves version 2; it is implementable
+once a release that enforces REQ-PLAT-16E and REQ-PLAT-16F publishes its
+artifacts.
+
+- REQ-PLAT-16E (upholds SP-BIND-01, SP-CLIENT-01, SP-FRESH-01, SP-PRIV-01):
+  For version 2, the Proving Circuit MUST expose the public inputs of
+  REQ-PLAT-16B with one change: in place of the raw `email` bytes it MUST
+  expose the handle digest, the REQ-PLAT-08M digest of the signed `email`
+  after the normalization of §2.1a (REQ-PLAT-16F). The Proving Circuit MUST
+  NOT expose a detached second representation of a claim. Necessity: the
+  handle digest is the inner digest of the handle key (§2.1b), so a claim
+  that carries its handle, one that does not, and a version 1 claim of the
+  same address key the same binding.
+- REQ-PLAT-16F (upholds SP-BIND-01, SP-PRIV-01):
+  For version 2, the Proving Circuit MUST NOT expose the signed `sub` or `email` in any
+  public input. The Proving Circuit MUST reject a `sub` that REQ-PLAT-04A
+  rejects, and MUST hash exactly the signed `sub` bytes under REQ-PLAT-05A.
+  The Proving Circuit MUST admit an `email` only when the normalization of
+  §2.1a admits it, MUST refuse an `email` that normalization would trim, and
+  MUST digest exactly the normalized `email` bytes. The Proving Circuit MUST
+  fail to prove, rather than truncate, a `sub` longer than 31 bytes or an
+  `email` longer than 62 bytes; these are the version 2 buffer lengths,
+  and 62 is the handle rules' own maximum. Neither the `sub` nor the
+  `email` the circuit digests holds an escaped byte: every JSON escape
+  begins with `\`, which the `sub` rule refuses and the `email` alphabet
+  does not contain. Necessity:
+  REQ-PLAT-05A keeps the `sub` off the Consumer Chain and this profile keeps
+  the `email` off it unless a transaction carries it, which leaves the
+  Proving Circuit the only role that sees their bytes, and a verifier that
+  receives a digest inspects nothing.
+- REQ-PLAT-16D (upholds SP-BIND-01, SP-PRIV-01):
+  For version 2, the Platform Verifier MUST return the canonical `userId` and the handle
+  digest as the fields of common REQ-COMMON-05E. Where the Submission
+  carries the plaintext `email`, the Platform Verifier MUST pass those bytes
+  to the Consumer unchanged and unchecked, as the unverified handle of
+  REQ-COMMON-05E. An empty `email` field carries no handle (§2.1b). The
+  Google Submission Payload MUST carry no plaintext `sub`. The Platform
+  Verifier MUST NOT emit or store the `email`. The Platform
+  Verifier MUST NOT derive a normalized handle or a key from the `email`;
+  the check that it hashes to the handle digest is the Consumer's under
+  REQ-PLAT-08D, because it needs the normalization of §2.1a. Necessity: one
+  party owns the equality, and it is the one that owns the normalization.
 
 ## 4. Browser TLSNotary launch transport
 
@@ -1519,8 +1548,7 @@ authorization and redirect transport; every authenticated request and
 response field with its provenance; how the Authorization Digest is carried
 through that platform's authorization; its authenticated client-binding source; an
 authenticated proof-validity rule and the value of each protocol parameter it
-names; whether it exposes identity bytes or is a digest profile (§2.1b),
-and a digest profile's handle-digest construction (REQ-PLAT-08M); its
+names; whether it exposes identity bytes or is a digest profile (§2.1b); its
 trust-root lifecycle;
 browser and deployment data exposure, retry, interruption, and withholding
 behavior; and conformance vectors.
@@ -1536,9 +1564,7 @@ Platform Verifier, Notary Service, Consumer.
   recomputed digest, independently of the browser result-consistency checks.
 - TEST-PLAT-02 (exercises REQ-PLAT-04, REQ-PLAT-05, REQ-PLAT-05A, REQ-PLAT-06, REQ-PLAT-07, REQ-PLAT-08):
   The §2.1 identifier vectors reproduce, the Google one as its digest, and
-  each listed malformed identifier is rejected. A Google `sub` signed as
-  `12\/3` is rejected by an implementation that JSON-decodes the token, as
-  by one that reads the signed bytes.
+  each listed malformed identifier is rejected.
 - TEST-PLAT-03 (exercises REQ-PLAT-11, REQ-PLAT-12):
   A Google authorization request not using the exact direct-ID-token fragment
   profile is rejected. A nonempty query, mixed query/fragment response, or
@@ -1579,16 +1605,20 @@ Platform Verifier, Notary Service, Consumer.
   identifier. A token whose `sub` is empty or carries a byte outside `0x20`
   through `0x7e` fails the Proving Circuit, and no public input carries the
   `sub`.
-- TEST-PLAT-06A (exercises REQ-PLAT-08M, REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-16D):
-  `Alice@Gmail.com` and `alice@gmail.com` prove the same handle digest,
-  `0x5ecf20af6a3cb20cb8e5e2c6e7a7c3ae5aa37239c008643be631d93498ef23e1`, the
+- TEST-PLAT-06A (exercises REQ-PLAT-04A, REQ-PLAT-08M, REQ-PLAT-16D, REQ-PLAT-16E, REQ-PLAT-16F):
+  Under version 2, `Alice@Gmail.com` and `alice@gmail.com` prove the same
+  handle digest,
+  `0x6675dc2b4eac35a5f88a319515852146c659bcc326e47041caafc668f97f7167`, the
   REQ-PLAT-08M digest of the normalized handle the Consumer derives from the
-  plaintext. An `email` with a space, two `@`, an empty local part, a
-  byte outside the normalization's alphabet, or bytes past its signed length
-  cannot satisfy the circuit; neither can a `sub` holding `\` (as `12\/3`
-  does), a 32-byte `sub`, or a 63-byte `email`. The public inputs carry no
-  `sub` or `email` byte. The Platform Verifier returns the `userId` and the
-  handle digest, returns the `email` a Submission carried byte for byte, and
+  plaintext, and the inner digest of the handle key a version 1 binding of
+  either address writes. An `email` with a space, two `@`, an empty local
+  part, a byte outside the normalization's alphabet, or bytes past its
+  signed length cannot satisfy the circuit; neither can a `sub` holding `\`
+  (as `12\/3` does), a 32-byte `sub`, or a 63-byte `email`. A `sub` signed
+  as `12\/3` is rejected by an implementation that JSON-decodes the token,
+  as by one that reads the signed bytes. The public inputs carry no `sub` or
+  `email` byte. The Platform Verifier returns the `userId` and the handle
+  digest, returns the `email` a Submission carried byte for byte, and
   returns none where the Submission carried none; the payload has no field
   for a `sub`.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
@@ -1722,7 +1752,8 @@ Platform Verifier, Notary Service, Consumer.
   A ceremony whose exchange response was lost restarts from authorization.
 - TEST-PLAT-17 (exercises REQ-PLAT-01, REQ-PLAT-01A, REQ-PLAT-01B, REQ-PLAT-02, REQ-PLAT-03):
   The launch profile pairs are exactly `("google", 1)`, `("x", 1)`, and
-  `("github", 1)`; a suffixed platform string is not one of those profiles. A
+  `("github", 1)`, and `("google", 2)` is the one further pair; a suffixed
+  platform string is not one of those profiles. A
   live ceremony that substitutes a newer profile is rejected, a profile missing
   from the Application, Distribution list, or Bridge configuration is
   ineligible, and the profile identifies the same proof statement
@@ -1786,7 +1817,7 @@ TEST-PLAT-04 and TEST-PLAT-15 distinguish those later rejections from early
 browser rejection. No ledger verification guarantee is weakened.
 
 This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01, and
-SP-FRESH-01 for the launch platforms, and SP-PRIV-01 for Google, under the
+SP-FRESH-01 for the launch platforms, and SP-PRIV-01 for Google version 2, under the
 assumptions of [common §3](ceremony-common.md#3-assumptions).
 
 Google is the only platform whose evidence is a bearer artifact: an ID Token
@@ -1859,18 +1890,23 @@ knows that user's `sub` and can recompute the digest to find the binding.
 Google's `sub` values are 21-digit decimal strings in practice, too few to
 resist a well-resourced search.
 
-Google is the launch digest profile (§2.1b): its `email` reaches the chain
-only as its REQ-PLAT-08M digest unless a transaction carries it, and the Consumer
-keys the binding on that digest and the `userId`.
-What this hides is stated in
+Google version 1 publishes the `email` bytes in every proof's public
+inputs, and the Consumer emits the normalized handle. Google version 2 is a
+digest profile (§2.1b): its `email` reaches the chain only as its
+REQ-PLAT-08M digest unless a transaction carries it, and the Consumer keys
+the binding on that digest and the `userId`, the same keys a version 1
+binding of the account writes. A version 2 binding therefore supersedes a
+version 1 binding of the same account under the ordering of REQ-PLAT-08I,
+but it hides nothing a version 1 transaction already published.
+What version 2 hides is stated in
 [common §12](ceremony-common.md#12-security-considerations) together with
 what it does not hide: a guessed address or a `sub` held by another relying
 party confirms the binding by hashing, the binding's existence and
 observation time stay public, and a name that resolves through an ENS
 gateway or an off-chain resolver is the address itself. The normalization
-of §2.1a runs inside the Proving Circuit for this profile (REQ-PLAT-16C), so
-the profile's handle rules are part of its proof statement, and the
-Consumer holds them fixed once it has bound a Google identity
+of §2.1a runs inside the version 2 Proving Circuit (REQ-PLAT-16F), so the
+profile's handle rules are part of its proof statement, and a Consumer that
+admits version 2 holds them fixed once it has bound a Google identity
 (REQ-PLAT-08G).
 
 A stored name is not evidence. A handle moves without its name being
