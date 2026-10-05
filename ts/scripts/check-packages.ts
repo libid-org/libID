@@ -10,7 +10,7 @@ const output = join(workspace, '.cache/npm')
 rmSync(output, { recursive: true, force: true })
 mkdirSync(output, { recursive: true })
 // Dependencies first: packing builds each package against its dependencies' declarations.
-const packages = ['ledger', 'popup', 'ceremony']
+const packages = ['ledger', 'popup', 'ceremony', 'ens']
 // Every package that is not private is releasable, so each must be checked here. A directory
 // without a manifest is not a package.
 const releasable = readdirSync(join(workspace, 'packages')).filter((name) => {
@@ -55,46 +55,64 @@ const consumer = fileURLToPath(new URL('../../.ceremony-local/npm-consumer', imp
 rmSync(consumer, { recursive: true, force: true })
 mkdirSync(consumer, { recursive: true })
 const require = createRequire(new URL('../packages/ceremony/package.json', import.meta.url))
-writeFileSync(
-  join(consumer, 'package.json'),
-  JSON.stringify({
-    private: true,
-    type: 'module',
-    dependencies,
-    devDependencies: {
-      typescript: require('typescript/package.json').version,
-      // Applications still on TypeScript 5 read the declarations TypeScript 7 emits.
-      'typescript-5': 'npm:typescript@^5',
-      vite: require('vite/package.json').version,
+const install = (dependencies: Record<string, string>) => {
+  writeFileSync(
+    join(consumer, 'package.json'),
+    JSON.stringify({
+      private: true,
+      type: 'module',
+      dependencies,
+      devDependencies: {
+        typescript: require('typescript/package.json').version,
+        // Applications still on TypeScript 5 read the declarations TypeScript 7 emits.
+        'typescript-5': 'npm:typescript@^5',
+        vite: require('vite/package.json').version,
+      },
+    }),
+  )
+  execFileSync(
+    'npm',
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--package-lock=false',
+      '--cache',
+      join(output, 'npm-cache'),
+    ],
+    {
+      cwd: consumer,
+      stdio: 'inherit',
+      // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
+      ),
     },
-  }),
-)
+  )
+}
+// Ens requires viem as a peer. An app without ens must not: ledger, popup and ceremony load
+// with no viem installed.
+const { '@libid/ens': _, ...withoutEns } = dependencies
+install(withoutEns)
+assert(!existsSync(join(consumer, 'node_modules/viem')), 'an app without ens installs viem')
 execFileSync(
-  'npm',
+  'node',
   [
-    'install',
-    '--ignore-scripts',
-    '--no-audit',
-    '--no-fund',
-    '--package-lock=false',
-    '--cache',
-    join(output, 'npm-cache'),
+    '--input-type=module',
+    '-e',
+    "await import('@libid/ceremony'); await import('@libid/popup'); await import('@libid/popup/worker'); await import('@libid/popup/testing')",
   ],
-  {
-    cwd: consumer,
-    stdio: 'inherit',
-    // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
-    env: Object.fromEntries(
-      Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
-    ),
-  },
+  { cwd: consumer, stdio: 'inherit' },
 )
+install(dependencies)
 writeFileSync(
   join(consumer, 'client.ts'),
   `export * from '@libid/ceremony'
 export * from '@libid/popup'
 export { fakeConnection } from '@libid/popup/testing'
 export type { LedgerId } from '@libid/ledger'
+export { ensName, HandleError, type NameOptions, type Platform } from '@libid/ens'
 `,
 )
 writeFileSync(

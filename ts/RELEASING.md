@@ -1,13 +1,15 @@
 # npm packages
 
-`@libid/popup`, `@libid/ledger` and `@libid/ceremony` are independently versioned
+`@libid/popup`, `@libid/ledger`, `@libid/ceremony` and `@libid/ens` are independently versioned
 ESM packages with TypeScript declarations. Their initial package versions are
 `0.1.0`; publication is a separate maintainer action.
 
 Popup exports its main API, `/worker` and `/testing`. Ceremony exports its
 application client API; it requires the app's compatible popup installation as a
 peer so both use the same popup classes. Ledger is a regular dependency because
-ceremony's declarations use `LedgerId`.
+ceremony's declarations use `LedgerId`. Ens depends on `@libid/contracts`, pinned to
+the version ceremony uses, for handle normalization. It requires viem as a
+peer because `@libid/contracts/identity` imports viem when it loads.
 
 The npm packages contain only the public entry graphs, source maps with embedded
 sources, README and repository license/notice files. Source, tests and CCDP
@@ -23,7 +25,7 @@ pnpm -C ts install --frozen-lockfile
 pnpm -C ts test:packages
 ```
 
-This builds and packs all three packages into `ts/.cache/npm/`, installs those
+This builds and packs all four packages into `ts/.cache/npm/`, installs those
 exact tarballs into an isolated consumer, then typechecks the public imports
 with both the workspace TypeScript and TypeScript 5, and bundles them. The
 worker entry is typechecked separately from the browser entry. It also checks
@@ -34,16 +36,17 @@ in ignored local paths.
 
 ## First publication
 
-The npm organization must permit publishing all three names. npm requires a
+The npm organization must permit publishing all four names. npm requires a
 package to exist before a trusted publisher can be configured. From a checked
 main commit, run the command above, authenticate to npm with a maintainer
-account, and publish ledger and popup before ceremony. These first versions
-carry no provenance; every later one does:
+account, and publish ledger and popup before ceremony; ens depends on none of
+them. These first versions carry no provenance; every later one does:
 
 ```sh
 npm publish ts/.cache/npm/ledger.tgz --access public
 npm publish ts/.cache/npm/popup.tgz --access public
 npm publish ts/.cache/npm/ceremony.tgz --access public
+npm publish ts/.cache/npm/ens.tgz --access public
 ```
 
 Once per repository, set up two settings that cover every package:

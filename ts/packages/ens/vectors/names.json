@@ -1,0 +1,144 @@
+{
+  "$comment": "ENS name vectors for REQ-ENS-LABEL-01 to -05 and REQ-ENS-NAME-01 to -02 of specs/ens-integration.md. `handle` is the normalized handle. `names`: the handle's name, and the handle the name reads back as. `unnamed`: normalized handles that have no name. `nonNames`: names that read back as no handle, which the gateway answers with a Signed Null. `parent` is handles.link unless a vector names another.",
+  "parent": "handles.link",
+  "names": [
+    {
+      "platform": "github",
+      "handle": "octocat",
+      "chain": null,
+      "name": "octocat.github.handles.link"
+    },
+    { "platform": "github", "handle": "a-b-c", "chain": null, "name": "a-b-c.github.handles.link" },
+    { "platform": "x", "handle": "alice", "chain": null, "name": "alice.x.handles.link" },
+    {
+      "platform": "x",
+      "handle": "some_handle",
+      "chain": null,
+      "name": "some-handle.x.handles.link"
+    },
+    { "platform": "x", "handle": "a__b", "chain": null, "name": "a--b.x.handles.link" },
+    { "platform": "x", "handle": "_lead", "chain": null, "name": "-lead.x.handles.link" },
+    { "platform": "x", "handle": "trail_", "chain": null, "name": "trail-.x.handles.link" },
+    { "platform": "x", "handle": "alice", "chain": "base", "name": "alice.x.base.handles.link" },
+    {
+      "platform": "x",
+      "handle": "alice",
+      "chain": "op-mainnet",
+      "name": "alice.x.op-mainnet.handles.link"
+    },
+    {
+      "platform": "x",
+      "handle": "alice",
+      "chain": null,
+      "parent": "testnet.handles.link",
+      "name": "alice.x.testnet.handles.link"
+    },
+    {
+      "platform": "x",
+      "handle": "alice",
+      "chain": "eden",
+      "parent": "testnet.handles.link",
+      "name": "alice.x.eden.testnet.handles.link"
+    },
+    {
+      "platform": "google",
+      "handle": "alice@gmail.com",
+      "chain": null,
+      "name": "alice.google.handles.link"
+    },
+    {
+      "platform": "google",
+      "handle": "alice.smith@gmail.com",
+      "chain": null,
+      "name": "alice.smith.google.handles.link"
+    },
+    {
+      "platform": "google",
+      "handle": "alice@company.com",
+      "chain": null,
+      "name": "alice._at.company.com.google.handles.link"
+    },
+    {
+      "platform": "google",
+      "handle": "a.b@c.com",
+      "chain": null,
+      "name": "a.b._at.c.com.google.handles.link"
+    },
+    {
+      "platform": "google",
+      "handle": "a@b.c.com",
+      "chain": null,
+      "name": "a._at.b.c.com.google.handles.link"
+    },
+    {
+      "platform": "google",
+      "handle": "first-last@my-co.io",
+      "chain": null,
+      "name": "first-last._at.my-co.io.google.handles.link"
+    },
+    {
+      "platform": "google",
+      "handle": "green.baneling@fuel.sh",
+      "chain": "base",
+      "name": "green.baneling._at.fuel.sh.google.base.handles.link"
+    }
+  ],
+  "unnamed": [
+    {
+      "platform": "x",
+      "handle": "ab__cd",
+      "why": "`--` at the third and fourth characters (ENSIP-15)"
+    },
+    { "platform": "google", "handle": "alice+tag@gmail.com", "why": "Gmail issues no `+`" },
+    { "platform": "google", "handle": "alice_b@gmail.com", "why": "Gmail issues no `_`" },
+    { "platform": "google", "handle": ".alice@gmail.com", "why": "Gmail issues no empty piece" },
+    { "platform": "google", "handle": "alice.@gmail.com", "why": "Gmail issues no empty piece" },
+    { "platform": "google", "handle": "a..b@gmail.com", "why": "Gmail issues no empty piece" },
+    { "platform": "google", "handle": "alice-b@gmail.com", "why": "Gmail issues no `-`" },
+    {
+      "platform": "google",
+      "handle": "alice_b@company.com",
+      "why": "`_` is not a label character"
+    },
+    {
+      "platform": "google",
+      "handle": "alice+b@company.com",
+      "why": "`+` is not a label character"
+    },
+    { "platform": "google", "handle": "alice._at@company.com", "why": "`_at` is never a piece" },
+    { "platform": "google", "handle": "alice@_at.company.com", "why": "`_at` is never a piece" },
+    {
+      "platform": "google",
+      "handle": "alice..b@company.com",
+      "why": "an empty piece is not a label"
+    },
+    {
+      "platform": "google",
+      "handle": "alice@company..com",
+      "why": "an empty piece is not a label"
+    },
+    {
+      "platform": "google",
+      "handle": "ab--cd@company.com",
+      "why": "`--` at the third and fourth characters (ENSIP-15)"
+    },
+    {
+      "platform": "google",
+      "handle": "alice@xn--bcher-kva.example",
+      "why": "`--` at the third and fourth characters (ENSIP-15)"
+    }
+  ],
+  "nonNames": [
+    { "name": "alice.handles.link", "why": "no platform label" },
+    { "name": "x.handles.link", "why": "no handle label" },
+    { "name": "alice.mastodon.handles.link", "why": "not a platform label" },
+    { "name": "a.b.x.handles.link", "why": "an X handle is one label" },
+    { "name": "a.b.github.handles.link", "why": "a GitHub handle is one label" },
+    { "name": "alice_b.x.handles.link", "why": "`_` is not a label character" },
+    { "name": "a--b.github.handles.link", "why": "GitHub's rules refuse a doubled `-`" },
+    { "name": "alice-b.google.handles.link", "why": "Gmail issues no `-`" },
+    { "name": "_at.company.com.google.handles.link", "why": "an empty local part" },
+    { "name": "alice._at.google.handles.link", "why": "an empty domain" },
+    { "name": "a._at.b._at.c.google.handles.link", "why": "a second `_at`" }
+  ]
+}
