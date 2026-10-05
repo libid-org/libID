@@ -85,7 +85,8 @@ change the proof-bound operation, or widen proof validity. GitHub token exchange
 and identity notarization run in the browser; there is no confidential exchange
 service. The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
-transcripts and their creation times. Verifier governance selects the
+transcripts, the readings that admit Google's signing keys, and their
+creation times. Verifier governance selects the
 Supported Version Set, accepted verifier artifacts, and trust roots. Each
 Platform Profile fixes its protocol parameters. The Consumer Chain
 authenticates the Transaction Author and supplies its Chain ID and Block Time.
@@ -97,11 +98,11 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
 | CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges | correct code and asset supply under ASM-CCDP-01 | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
-| Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
-| Verifier governance administrator | activates verifier artifacts, trust roots, and the Supported Version Set | correct authority lifecycle | user consent |
+| Notary operator | operates the attestation key and observes X/GitHub sessions and Google signing-key readings | `ASM-NOTARY-01` | user intent or transaction authorization |
+| Verifier governance administrator | activates verifier artifacts, trust roots other than Google's signing moduli, and the Supported Version Set | correct authority lifecycle | user consent |
 
 The principal trust roots are Google's active signing moduli, the active
-X/GitHub notary keys, the selected proof-verifier artifacts, the Proof Verifier
+notary keys, the selected proof-verifier artifacts, the Proof Verifier
 that dispatches to them, the Platform Verifiers it selects, Verifier governance,
 and Consumer Chain consensus. The Proof Verifier is the most concentrated of
 these: every Consumer takes its accept-or-reject decision, operation domain,
@@ -114,8 +115,11 @@ or sessions already committed. Loss of an application deployment is a liveness
 failure. Compromise of the Canonical Runtime build or its supply chain defeats
 local client and operation construction. Compromise of a platform signing root,
 notary key, or selected Platform Verifier can mint future evidence for the
-affected profiles. Compromise of Verifier governance can change every accepted
-root and verifier.
+affected profiles. A notary key also authenticates the readings that admit
+Google's signing moduli
+([platform profiles §3.4](platform-ceremonies.md#34-signing-key-lifecycle)),
+so its compromise reaches Google as well as X and GitHub. Compromise of
+Verifier governance can change every accepted root and verifier.
 
 | Subject | Single normative owner |
 |---|---|
@@ -233,7 +237,11 @@ therefore the same on every Consumer Chain and at every Verifier Version
 implementing that profile. Verifier governance can end a proof's acceptance
 before the window closes by retiring a trust root it relies on or every
 Verifier Version implementing its profile. Google remains bounded by its
-signed expiry. The linked chapters define the remaining assumptions, security
+signed expiry. Its signing moduli enter by notarized reading, not by
+governance, and lapse 30 days after the latest reading that lists them.
+Governance can end their trust sooner only all at once, by selecting another
+Google Key List or retiring every Verifier Version of the profile. The linked
+chapters define the remaining assumptions, security
 properties, requirements, and platform-specific security considerations.
 
 ## References

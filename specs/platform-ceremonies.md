@@ -354,7 +354,7 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   The Proving Circuit MUST NOT decide trusted-set membership or take the active
   set as an input. The Platform Verifier alone checks the modulus under
   REQ-PLAT-23. JWK decoding and canonical-encoding validation happen where a
-  modulus is admitted to the trusted set, per REQ-PLAT-24; the JWK encoding
+  modulus is admitted to the trusted set, per REQ-PLAT-70; the JWK encoding
   appears in no signed artifact, so proving it would add nothing.
 - REQ-PLAT-16B (upholds SP-BIND-01, SP-CLIENT-01, SP-FRESH-01):
   The Proving Circuit MUST expose exactly the following Google public inputs,
@@ -414,16 +414,110 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   `proofValidUntil` at or before Block Time. That `exp` is also the evidence
   time REQ-PLAT-09A holds to at most 7200 seconds ahead of Block Time.
 
-The signing key is fetched from Google's JWKS endpoint as witness input.
+The signing key is fetched from Google's JWKS endpoint (§3.4) as witness input.
 
 - REQ-PLAT-23 (upholds SP-CLIENT-01):
-  The Platform Verifier MUST reject a proof whose RSA modulus is absent from
-  the Platform Verifier's active trusted Google modulus set.
-- REQ-PLAT-24:
-  The Verifier Governance Process MUST add a newly published Google signing
-  modulus to the trusted set before Google signs with it in production.
-  Necessity: Google rotates signing keys on the order of weekly, so every
-  Google ceremony fails closed while an active modulus is untrusted.
+  The Platform Verifier MUST reject a proof whose RSA modulus the Google Key
+  List of §3.4 does not trust, or whose trust under REQ-PLAT-72 ends at or
+  before Block Time.
+
+### 3.4 Signing-key lifecycle
+
+Google rotates the keys it signs ID Tokens with and publishes its current
+set, including the key it will sign with next, at
+`https://www.googleapis.com/oauth2/v3/certs`. The Platform Verifier reads its
+trusted Google modulus set from a Google Key List: a ledger component the
+Verifier Governance Process selects for it, which admits moduli only from
+notarized readings of that endpoint. A reading is one TLSNotary session,
+authenticated under common §9.1 by the Notary Service the Google Key List
+pins, with both directions wholly revealed. Anyone may submit a reading, and
+each submission pays that Notary Service one Notary Fee. Google Submissions
+still reach no Notary Service and pay no fee. The Google Key List keeps two
+generations, each one reading's key set and creation time, and trust in a
+generation lapses by time alone.
+
+| Constant | Value | Meaning |
+|---|---|---|
+| reading authority | `www.googleapis.com` | the attested TLS server name, and the one `Host` value |
+| reading request line | `GET /oauth2/v3/certs HTTP/1.1` | the request's first line, through its CRLF |
+| maximum reading lead | 300 s | how far a reading's creation time may run ahead of Block Time |
+| maximum reading age | 3600 s | how far a reading's creation time may trail Block Time |
+| generation lifetime | 2592000 s (30 days) | how long a generation stays trusted after its reading's creation time |
+| key limit | 8 | the most keys one reading may carry |
+| modulus length | 256 bytes | the decoded `n` of every key: an RSA-2048 modulus |
+| public exponent | `AQAB` | the `e` of every key: 65537 |
+| renewal margin | 604800 s (7 days) | remaining trust at or below which the Google Key List reports a reading is due |
+
+- REQ-PLAT-24 (upholds SP-BIND-01, SP-CLIENT-01):
+  The Google Key List MUST admit a modulus only from a reading the Notary
+  Service it pins accepts. The Google Key List MUST reject a reading whose
+  attested TLS server name is not the reading authority. The Google Key List
+  MUST reject a reading whose request does not begin with the reading request
+  line, has a line ending other than CRLF or a folded line, or does not carry
+  exactly one `Host` header in its head with the reading authority as its
+  value. The Google Key List MUST reject a reading in which either direction
+  carries a range commitment or a byte outside its revealed ranges.
+  Necessity: the notary vouches that the bytes crossed a TLS session to the
+  authority, not which of the host's virtual backends answered or what the
+  request asked. The `Host` header pins the backend, the whole request line
+  keeps out a query such as `?callback=` that would make the body bytes the
+  requester chose, and a wholly revealed transcript leaves no hidden range to
+  hold a second `Host` header or a decoy `keys` member.
+- REQ-PLAT-70 (upholds SP-BIND-01, SP-CLIENT-01):
+  The Google Key List MUST reject a reading whose response does not begin
+  with `HTTP/1.1 200 `, declares a `Content-Encoding`, carries more than one
+  framing header, frames with a `Transfer-Encoding` other than `chunked`, or
+  declares a `Content-Length` other than the body length. The Google Key
+  List MUST reject a body that is not one `keys` member holding an array of
+  one to the key limit of flat JWK objects, followed only by the closing
+  brace and whitespace. The Google Key List MUST reject a key whose `kid`,
+  `n`, or `e` is not exactly one string without escapes. The Google Key List
+  MUST reject a key whose `e` is not the public exponent or whose `n` does
+  not base64url-decode to the modulus length. The Google Key List MUST reject
+  a reading that lists one modulus twice. Necessity: the Platform Verifier
+  trusts a key by its modulus alone, and the circuit verifies RS256 under a
+  2048-bit modulus and the exponent 65537. A key published under any other
+  exponent or size would be trusted for a signature the circuit never checks.
+- REQ-PLAT-71 (upholds SP-BIND-01, SP-CLIENT-01):
+  The Google Key List MUST reject a reading whose attested creation time is
+  more than the maximum reading lead ahead of Block Time. The Google Key List
+  MUST reject a reading whose attested creation time is more than the maximum
+  reading age behind Block Time. The Google Key List MUST reject a reading
+  whose creation time is not strictly later than the current generation's.
+  Necessity: a reading names no contract and rotation is open, so anyone can
+  replay any reading on any chain. The age bound and the strict order keep an
+  old reading from restoring a key set Google has dropped or from restarting
+  a generation's lifetime.
+- REQ-PLAT-72 (upholds SP-BIND-01, SP-CLIENT-01):
+  When an admitted reading lists the same set of moduli as the current
+  generation, the Google Key List MUST restart the current generation from
+  that reading's creation time and leave the previous generation unchanged.
+  When an admitted reading lists a different set, the Google Key List MUST
+  make the current generation the previous one, discard the generation that
+  was previous, and make the reading the current generation. The Google Key
+  List MUST trust a modulus until one generation lifetime after the creation
+  time of the latest generation that lists it. The Google Key List MUST NOT
+  trust any other modulus. Necessity: a token minted under a key Google has
+  just dropped is presented for the rest of its hour, and the previous
+  generation covers it. Trust that lapses by time retires a key Google stopped
+  publishing with no transaction from anyone, and 30 days is runway for a
+  submitter outage, not a key's life.
+- REQ-PLAT-73 (upholds SP-BIND-01, SP-CLIENT-01):
+  The Google Key List MUST NOT expose an operation, other than admitting a
+  reading, that adds, removes, or re-dates a modulus. The Verifier Governance
+  Process MUST own the selection of the Google Key List each Platform
+  Verifier of a Google profile reads and of the Notary Service that Google
+  Key List pins. Necessity: short of upgrading either component, those two
+  selections are governance's whole control over which Google keys are
+  trusted, and replacing the Google Key List is its one way to end trust in a
+  set before the set lapses.
+
+Rotation is permissionless, so Google ceremonies stay live while some party
+pays the Notary Fee for a reading after each change to Google's published
+set and at least once per generation lifetime. Google lists a key before it
+signs with it, so a reading taken in that interval trusts the key in time.
+The Google Key List reports when its current generation has at most the
+renewal margin of trust left, so a submitter can renew well before the lapse.
 
 ## 4. Browser TLSNotary launch transport
 
@@ -1217,7 +1311,7 @@ behavior; and conformance vectors.
 ## 8. Conformance
 
 Roles: Canonical Runtime (including Prover), Proving Circuit,
-Platform Verifier, Notary Service, Consumer.
+Platform Verifier, Google Key List, Notary Service, Consumer.
 
 - TEST-PLAT-01 (exercises REQ-PLAT-10, REQ-PLAT-18):
   The §3.1 nonce vector reproduces exactly. A proof bound to another token
@@ -1277,9 +1371,17 @@ Platform Verifier, Notary Service, Consumer.
   time minus 300 as `metadataObservedAt` and expires 3600 seconds after that
   creation time. An
   evidence time no greater than its profile's allowance returns zero.
-- TEST-PLAT-08 (exercises REQ-PLAT-24):
-  The trusted modulus set contains every modulus currently published at
-  Google's JWKS endpoint, and every corresponding exponent is 65537.
+- TEST-PLAT-08 (exercises REQ-PLAT-24, REQ-PLAT-70):
+  A notarized reading of Google's live JWKS endpoint is admitted, and the
+  trusted modulus set then holds every modulus published there, each with
+  exponent 65537. A reading is rejected when its attested authority is
+  another host, its request line differs or carries a query, its request
+  has a bare CR or LF, a folded line, or no, two, or a foreign `Host`
+  header, or either direction commits a range. A reading is also rejected
+  when its status is not 200, its body is encoded, doubly framed, or
+  mis-sized, its key set is empty, holds more than 8 keys, or repeats a
+  modulus, or a key has an exponent other than `AQAB` or a modulus other
+  than 256 bytes.
 - TEST-PLAT-09 (exercises REQ-PLAT-29, REQ-PLAT-46):
   A transcript whose disclosed `code` differs from the code consumed at
   redirect ingress is rejected on X and on GitHub. A code containing a
@@ -1451,6 +1553,21 @@ Platform Verifier, Notary Service, Consumer.
   `refresh_token` value instead; and an X `/2/users/me` or GitHub `/user`
   attestation revealing no `id`, `username`, or `login` range, or revealing
   a value without its full delimiter, is rejected.
+- TEST-PLAT-24 (exercises REQ-PLAT-23, REQ-PLAT-71, REQ-PLAT-72):
+  A reading dated more than 300 seconds ahead of Block Time, more than 3600
+  seconds behind it, or no later than the current generation is rejected. A
+  newer reading of the same set restarts the current generation and keeps
+  the previous one. A newer reading of a different set makes the current
+  generation previous and drops the older one. A modulus in either
+  generation is trusted until 2592000 seconds after the latest reading
+  listing it. A Google proof under it is rejected from that moment on, as is
+  one under a modulus neither generation lists.
+- TEST-PLAT-25 (exercises REQ-PLAT-73):
+  No Google Key List operation other than an admitted reading adds, removes,
+  or re-dates a modulus. A caller other than the Verifier Governance Process
+  cannot change which Google Key List a Platform Verifier reads or which
+  Notary Service that Google Key List pins. A Platform Verifier switched to a
+  new Google Key List trusts no modulus until a reading lands there.
 
 ## 9. Security Considerations
 
@@ -1512,9 +1629,12 @@ Proxy notarization exposes session traffic to the notary; the protocol does
 not promise bearer confidentiality from that notary. The bearer remains
 hidden from the published proof by the two commitments and link circuit.
 
-The notary key is a trust root for X and GitHub evidence. Its compromise
-mints fresh evidence until the key is removed, and does not revoke authority
-already committed.
+The notary key is a trust root for X and GitHub evidence and for Google's
+signing moduli, which enter the Google Key List only through readings it
+authenticates (§3.4). Its compromise mints fresh X and GitHub evidence until
+the key is removed. It can also admit a forged Google modulus, trusted for up
+to 30 days after its forged reading unless governance selects another Google
+Key List. Neither undoes authority already committed.
 
 Google has no server-side token exchange. Its fragment is not visible at
 HTTP ingress, although the deployment controls Callback code. Its signed
@@ -1523,13 +1643,16 @@ before other work. The browser checks `state`, the configured audience, and
 canonical nonce encoding and checks the delivered public-input projection;
 the circuit binds the signed nonce and claims, and ledger verification binds
 that proof to the recomputed authorization digest
-and trusted signing key. A deployment backend can withhold the static redirect
+and to a signing key the Google Key List trusts from a notarized reading. A
+deployment backend can withhold the static redirect
 document but cannot substitute an ID Token through a server exchange that
 does not exist.
 
 Google's JWKS rotation makes the trusted modulus set a liveness dependency
-(REQ-PLAT-24): ledger verification rejects proofs while Google signs with an
-untrusted modulus, even if browser proof generation completes.
+(REQ-PLAT-72): ledger verification rejects proofs while Google signs with an
+untrusted modulus, even if browser proof generation completes. Each reading
+pays one Notary Fee, so an unpayable fee, or no reading for 30 days, stops
+every Google ceremony.
 
 A Google binding publishes the REQ-PLAT-05A digest, never the `sub`. The
 digest keeps the `sub` from readers of the Consumer Chain, not from a party

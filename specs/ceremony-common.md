@@ -1542,11 +1542,16 @@ Proof Verifier's decision, operation domain, and Authorized Transaction Data
 without rechecking them, so a compromised Proof Verifier authorizes arbitrary
 transactions at every Consumer at once; a compromised Platform Verifier does
 the same for one platform and version; a compromised Notary Service accepts
-attestations no notary signed. Their selection is verifier governance, which
+attestations no notary signed, including readings that admit Google signing
+keys. Their selection is verifier governance, which
 is therefore a trust root rather than configuration. The Notary Fees are a
 liveness dependency only: they cannot forge evidence, but an unbounded fee
-stops every ceremony for the platforms whose profiles carry attestations, and
-leaves a profile with no attestation unaffected.
+stops every ceremony for the platforms whose profiles carry attestations.
+Google's profile carries none, yet each reading that renews its signing keys
+pays one Notary Fee
+([platform profiles §3.4](platform-ceremonies.md#34-signing-key-lifecycle)).
+An unpayable fee, like a gap with no reading, therefore stops every Google
+ceremony 30 days after the last reading.
 
 The handle, the platform user identifier, and the client identifier are
 published deliberately. A binding exists to be read, and each of these values
