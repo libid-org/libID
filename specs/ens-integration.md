@@ -29,8 +29,10 @@ zone's operation, or wallet behavior before the Gateway is called.
 Parent Name: `handles.link`, a DNS name imported into the ENS registry on the
    ENS chain through the ENS DNS registrar.
 
-ENS Chain: Ethereum mainnet for a production deployment; a test deployment
-   uses an Ethereum test network that hosts the ENS registry.
+ENS Chain: The chain whose ENS registry holds the Parent Name: Ethereum
+   mainnet for a production deployment, an Ethereum test network that hosts
+   the ENS registry for a test deployment. The Gateway is configured with its
+   chain ID.
 
 Handle Resolver: The contract set as the resolver of the Parent Name. It holds
    no names.
@@ -50,8 +52,9 @@ Chain Label: A label naming one Consumer Chain. The set of Chain Labels is
 
 Handle Labels: The labels a handle becomes under §6.
 
-Coin Type: The ENSIP-11 coin type a client asks with. `60` is Ethereum
-   mainnet; an EVM chain `c` is `0x80000000 | c`.
+Coin Type: The ENSIP-11 coin type a client asks with. `60` is the coin of
+   the ENS Chain, and `addr(bytes32)` asks with `60`; an EVM chain `c` is
+   `0x80000000 | c`.
 
 Signer: An address the Handle Resolver trusts to sign Gateway answers.
 
@@ -239,14 +242,19 @@ label's third and fourth characters must not both be `-`.
 
 - REQ-ENS-GW-03 (upholds SP-ENS-02, SP-ENS-03):
   The Gateway MUST match the Coin Type forward against the chain IDs in the
-  Indexed Store: chain `c` matches `0x80000000 | c`, and chain 1 also
+  Indexed Store: chain `c` matches `0x80000000 | c`, and the ENS Chain also
   matches `60`. It MUST NOT decode a Coin Type into a chain ID. Exactly one
   match selects that chain. Necessity: `0x80000000 | c` is not injective for
-  `c >= 2^31`, so decoding would answer for a different chain.
+  `c >= 2^31`, so decoding would answer for a different chain; and a client
+  that asks with `60` sends on the chain whose registry it asked, so `60`
+  through a test network's registry is that test network, never chain 1.
 - REQ-ENS-GW-04 (upholds SP-ENS-03):
   With no match, the Gateway MUST return a Refusal (HTTP 503) when the Coin
-  Type names an EVM chain (`60`, or bit 31 set), and a Signed Null otherwise.
-  With two or more matches it MUST return a Refusal (HTTP 503). Necessity:
+  Type names an EVM chain, and a Signed Null otherwise. A Coin Type names an
+  EVM chain when it is below 2^64 and is `60` or has bit 31 set; every Coin
+  Type at or above 2^64 is non-EVM, and no indexed chain matches one, because
+  the Indexed Store holds chain IDs below 2^64 only. With two or more matches
+  the Gateway MUST return a Refusal (HTTP 503). Necessity:
   the resolver has one URL list for every query, and ERC-3668 has the client
   walk it until one succeeds. A Signed Null is a success that ends the walk,
   so signing absence for a chain this Gateway does not hold would deny a
@@ -327,10 +335,12 @@ label's third and fourth characters must not both be `-`.
   callback rejects an expired answer, one past the ceiling, an untrusted
   Signer, and an answer signed for another resolver address.
 - TEST-ENS-03 (exercises REQ-ENS-GW-03 to -06):
-  An unindexed EVM Coin Type, coin type 60 without chain 1 indexed, two
-  chains sharing one Coin Type, and a stale index each get a Refusal; a
-  non-EVM Coin Type, an unknown Handle Label, and a mismatched Chain Label
-  each get a Signed Null.
+  An unindexed EVM Coin Type, coin type 60 without the ENS Chain indexed,
+  two chains sharing one Coin Type, and a stale index each get a Refusal; a
+  non-EVM Coin Type (`0`, and `2^64 | 0x80000000`), an unknown Handle Label,
+  and a mismatched Chain Label each get a Signed Null. With the ENS Chain set
+  to Sepolia (11155111) and both Sepolia and chain 1 indexed, coin type 60
+  selects Sepolia.
 - TEST-ENS-04 (exercises REQ-ENS-GW-07, REQ-ENS-GW-09, REQ-ENS-GW-10):
   Both `addr` shapes answer a bound and an unbound handle; a `text` call gets
   the signed empty result; a 200 and a Refusal both carry
