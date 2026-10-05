@@ -1445,9 +1445,9 @@ distinction between local consistency and circuit/downstream verification;
 TEST-PLAT-04 and TEST-PLAT-15 distinguish those later rejections from early
 browser rejection. No ledger verification guarantee is weakened.
 
-This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01, and
-SP-FRESH-01 for the launch platforms, under the assumptions of
-[common §3](ceremony-common.md#3-assumptions).
+This document enforces SP-BIND-01, SP-CLIENT-01, SP-DELIVERY-01,
+SP-EXCHANGE-01, and SP-FRESH-01 for the launch platforms, under the
+assumptions of [common §3](ceremony-common.md#3-assumptions).
 
 Google is the only platform whose evidence is a bearer artifact: an ID Token
 is complete evidence to whoever holds it. Its delivery is therefore
