@@ -4,35 +4,15 @@ import { describe, expect, it } from 'vitest'
 import { ensName, HandleError } from './index.js'
 
 describe('ensName', () => {
+  // The normalized forms are in vectors/names.json; these are raw inputs.
   it.each([
-    ['github', 'octocat', 'octocat.github.handles.link'],
     ['github', '@OctoCat', 'octocat.github.handles.link'],
-    ['github', 'a-b-c', 'a-b-c.github.handles.link'],
-    ['x', 'some_handle', 'some-handle.x.handles.link'],
     ['x', '@Some_Handle', 'some-handle.x.handles.link'],
-    ['x', 'a__b', 'a--b.x.handles.link'],
-    ['x', '_lead', '-lead.x.handles.link'],
-    ['google', 'alice@gmail.com', 'alice.google.handles.link'],
+    ['x', '  alice ', 'alice.x.handles.link'],
     ['google', 'Alice.Smith@Gmail.com', 'alice.smith.google.handles.link'],
-    ['google', 'alice@company.com', 'alice._at.company.com.google.handles.link'],
-    ['google', 'a.b@c.com', 'a.b._at.c.com.google.handles.link'],
-    ['google', 'a@b.c.com', 'a._at.b.c.com.google.handles.link'],
-    ['google', 'first-last@my-co.io', 'first-last._at.my-co.io.google.handles.link'],
-  ] as const)('%s %s → %s', (platform, handle, name) => {
+    ['google', 'Alice@Company.com', 'alice._at.company.com.google.handles.link'],
+  ] as const)('normalizes %s %j first: %s', (platform, handle, name) => {
     expect(ensName(platform, handle)).toBe(name)
-  })
-
-  it('adds a chain label before the parent name', () => {
-    expect(ensName('x', 'alice', { chain: 'base' })).toBe('alice.x.base.handles.link')
-  })
-
-  it('puts the name under the parent a deployment answers under', () => {
-    expect(ensName('x', 'alice', { parent: 'testnet.handles.link' })).toBe(
-      'alice.x.testnet.handles.link',
-    )
-    expect(ensName('x', 'alice', { chain: 'base', parent: 'testnet.handles.link' })).toBe(
-      'alice.x.base.testnet.handles.link',
-    )
   })
 
   it.each([
@@ -81,29 +61,6 @@ describe('ensName', () => {
     expect(ensName('x', 'alice', { chain })).toBe(`alice.x.${chain}.handles.link`)
   })
 
-  it.each([
-    // ENSIP-15 reserves `--` at the third and fourth characters.
-    ['x', 'ab__cd'],
-    // Gmail issues no `+`, `-` or `_`, and a `+tag` is never a canonical address.
-    ['google', 'alice+tag@gmail.com'],
-    ['google', 'alice_b@gmail.com'],
-    ['google', 'alice-b@gmail.com'],
-    // An underscore has no label form outside X.
-    ['google', 'alice_b@company.com'],
-    ['google', 'alice+b@company.com'],
-    // `_at` separates a Workspace local part from its domain and is never a piece.
-    ['google', 'alice._at@company.com'],
-    ['google', 'alice@_at.company.com'],
-    // An empty piece is not a label.
-    ['google', 'alice..b@company.com'],
-    ['google', 'alice@company..com'],
-    // ENSIP-15 reserves `--` at the third and fourth characters, IDN domains included.
-    ['google', 'ab--cd@company.com'],
-    ['google', 'alice@xn--bcher-kva.example'],
-  ] as const)('%s %s has no name', (platform, handle) => {
-    expect(ensName(platform, handle)).toBeNull()
-  })
-
   it('throws for text that is not a handle', () => {
     expect(() => ensName('github', 'not a handle')).toThrow(HandleError)
   })
@@ -115,22 +72,9 @@ describe('ensName', () => {
 })
 
 // ENSIP-15 is what every wallet applies before hashing, through
-// @adraffy/ens-normalize. A name it changes or refuses is one no wallet resolves.
+// @adraffy/ens-normalize. The vector test checks every name is normal; these
+// are the forms the transform refuses because ENSIP-15 does.
 describe('ENSIP-15', () => {
-  it.each([
-    ['github', 'octocat'],
-    ['x', 'a__b'],
-    ['x', '_lead'],
-    ['x', 'trail_'],
-    ['google', 'alice.smith@gmail.com'],
-    ['google', 'first-last@my-co.io'],
-    ['google', 'a.b@c.com'],
-  ] as const)('%s %s gives an already normalized name', (platform, handle) => {
-    const name = ensName(platform, handle)
-    expect(name).not.toBeNull()
-    expect(ens_normalize(name!)).toBe(name)
-  })
-
   it.each([
     'ab--cd.x.handles.link',
     'ab--cd._at.company.com.google.handles.link',

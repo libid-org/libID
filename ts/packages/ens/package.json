@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@adraffy/ens-normalize": "^1.11.1",
+    "@types/node": "catalog:",
     "typescript": "catalog:",
     "viem": "^2.48.11",
     "vitest": "catalog:"

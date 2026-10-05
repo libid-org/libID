@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "declarationMap": false,
+    "types": [],
     "inlineSources": true
   },
   "include": ["src/index.ts"]
