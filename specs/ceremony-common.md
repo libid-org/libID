@@ -1275,9 +1275,9 @@ Service.
   The Implementation MUST reject a fractional, negative, overflowing, or
   textual timestamp.
 - REQ-COMMON-25 (upholds SP-FRESH-01):
-  The Implementation MUST take `metadataObservedAt` from the platform-profile
-  value. The Implementation MUST NOT infer it from an HTTP `Date` header or a
-  local clock.
+  The Implementation MUST take `metadataObservedAt` from the value the
+  Platform Profile derives from its signed evidence time. The Implementation
+  MUST NOT infer it from an HTTP `Date` header or a local clock.
 - REQ-COMMON-25A (upholds SP-FRESH-01):
   The Consumer MUST update mutable metadata and its watermark only when
   `metadataObservedAt` is strictly newer than the stored watermark. The

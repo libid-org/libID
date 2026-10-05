@@ -91,8 +91,8 @@ REQ-COMMON-15A.
   MUST parse the exact revealed identity-response bytes that the
   Platform Verifier extracts, using the same canonical extraction rules.
   The delivered handle remains raw; a local normalized display value follows
-  REQ-PLAT-08C and does not replace it. The Prover MUST take `metadataObservedAt`
-  from the profile's evidence-time source in §2.2, not from a detached identity value.
+  REQ-PLAT-08C and does not replace it. The Prover MUST derive `metadataObservedAt`
+  under §2.2 from the profile's evidence time, not from a detached identity value.
   The Prover MUST reject a caller-supplied or detached value used as an
   alternative source for `userId`, handle, or `metadataObservedAt`.
 
@@ -195,11 +195,14 @@ such table is ineligible.
 
 Proof validity and mutable-metadata ordering use the authenticated times below.
 
-| Identity platform | `metadataObservedAt` | `proofValidUntil` |
-|---|---|---|
-| Google | signed ID-Token `exp` | signed ID-Token `exp` |
-| X | the token attestation's signed creation time | `metadataObservedAt + proofLifetime` |
-| GitHub | the token-exchange attestation's signed creation time | `metadataObservedAt + proofLifetime` |
+| Identity platform | Evidence time | `metadataObservedAt` | `proofValidUntil` |
+|---|---|---|---|
+| Google | signed ID-Token `exp` | evidence time minus `futureObservationAllowance` | evidence time |
+| X | the token attestation's signed creation time | evidence time minus `futureObservationAllowance` | evidence time plus `proofLifetime` |
+| GitHub | the token-exchange attestation's signed creation time | evidence time minus `futureObservationAllowance` | evidence time plus `proofLifetime` |
+
+The subtraction saturates at zero: an evidence time no greater than the
+allowance gives a `metadataObservedAt` of zero.
 
 For X and GitHub, "timestamp" is the signed TLSNotary attestation creation
 time. The token attestation is the one-time PKCE and Authorization Digest
@@ -207,23 +210,36 @@ binding, so it alone supplies evidence time: one signed timestamp anchors both m
 ordering and proof validity, exactly as Google's single signed `exp` does.
 The identity attestation opens the same bearer and carries the identity
 fields; its own creation time is not an evidence-time input and does not
-refresh the authorization. `proofLifetime` and `maxFutureAttestationSkew` are
-the [protocol parameters](libid.md#protocol-parameters) each profile fixes.
+refresh the authorization. `proofLifetime`, `maxFutureAttestationSkew`, and
+`futureObservationAllowance` are the
+[protocol parameters](libid.md#protocol-parameters) each profile fixes.
 
-Google's signed `exp` already supplies the accepted one-hour ordering and
-validity value. A Google proof also requires its signing modulus to remain in
-the Platform Verifier's active set. The Authorization Digest carries no expiration.
+Evidence times do not describe the same moment. Google's `exp` runs about an
+hour ahead of the token's issue, while a notary stamps its own clock.
+Subtracting each profile's `futureObservationAllowance` puts
+`metadataObservedAt` on one scale every profile shares, so comparing two
+profiles' values does not let one of them always win. The allowance is also a
+ceiling. A Consumer supersedes stored metadata only on a strictly newer
+`metadataObservedAt` (common REQ-COMMON-25A), so without a ceiling a
+longer-lived token would buy a proportionally longer lock on a name, and
+re-proving would not supersede it until Block Time caught up.
+
+Google's signed `exp` alone supplies the accepted one-hour validity value
+and, less its allowance, the ordering value. A Google proof also requires its
+signing modulus to remain in the Platform Verifier's active set. The Authorization Digest carries no expiration.
 `metadataObservedAt` is the monotone metadata watermark of common
 REQ-COMMON-25A. Older evidence cannot regress stored metadata and does not
 block an otherwise valid authority operation.
 
 - REQ-PLAT-09 (upholds SP-FRESH-01):
-  The Platform Verifier MUST reject an X or GitHub attestation timestamp more than
-  its profile's `maxFutureAttestationSkew` ahead of Block Time.
+  The Platform Verifier MUST reject an X or GitHub token-attestation timestamp
+  more than its profile's `maxFutureAttestationSkew` ahead of Block Time.
 - REQ-PLAT-09A (upholds SP-FRESH-01):
   The Platform Verifier MUST derive `metadataObservedAt` and
-  `proofValidUntil` from the exact sources in the table above and from
-  nothing else.
+  `proofValidUntil` from the exact sources and arithmetic in the table above
+  and from nothing else. The Platform Verifier MUST reject a Submission whose
+  evidence time is more than its profile's `futureObservationAllowance` ahead
+  of Block Time.
 
 ## 3. Google OIDC ceremony
 
@@ -350,7 +366,7 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   | client-identifier digest | `SHA256` of the signed `aud` |
   | canonical `userId` digest | signed `sub`, hashed per REQ-PLAT-05A |
   | raw `email` bytes | signed `email`; the Consumer derives the normalized handle |
-  | evidence timestamp | signed `exp`; used for both `metadataObservedAt` and `proofValidUntil` |
+  | evidence timestamp | signed `exp`; the evidence time from which §2.2 derives `metadataObservedAt` and `proofValidUntil` |
   | RSA modulus | exact `n` that verified the JWS; `e = 65537` is profile-fixed |
 
   The Proving Circuit MUST NOT expose a detached second representation of a
@@ -395,7 +411,8 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   ASM-PROV-06; the circuit performs no search and no duplicate scan.
 - REQ-PLAT-22 (upholds SP-FRESH-01):
   The Platform Verifier MUST reject a proof whose signed `exp` places
-  `proofValidUntil` at or before Block Time.
+  `proofValidUntil` at or before Block Time. That `exp` is also the evidence
+  time REQ-PLAT-09A holds to at most 7200 seconds ahead of Block Time.
 
 The signing key is fetched from Google's JWKS endpoint as witness input.
 
@@ -1250,11 +1267,16 @@ Platform Verifier, Notary Service, Consumer.
   through `0x7e` fails the Proving Circuit, and no public input carries the
   `sub`.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
-  A proof at or after `proofValidUntil`, and a token-attestation creation time
-  more than its profile's `maxFutureAttestationSkew` ahead of Block Time, are
-  rejected. An X or GitHub identity-attestation timestamp changes neither
-  `metadataObservedAt` nor `proofValidUntil`; Google uses its signed `exp`
-  for both values.
+  A proof at or after `proofValidUntil`, a token-attestation creation time
+  more than its profile's `maxFutureAttestationSkew` ahead of Block Time, and
+  a Google `exp` more than 7200 seconds ahead of Block Time are rejected. An X
+  or GitHub identity-attestation timestamp changes neither
+  `metadataObservedAt` nor `proofValidUntil`. An accepted Google proof returns
+  its signed `exp` minus 7200 as `metadataObservedAt` and expires at that
+  `exp`. An accepted X or GitHub proof returns its token-attestation creation
+  time minus 300 as `metadataObservedAt` and expires 3600 seconds after that
+  creation time. An
+  evidence time no greater than its profile's allowance returns zero.
 - TEST-PLAT-08 (exercises REQ-PLAT-24):
   The trusted modulus set contains every modulus currently published at
   Google's JWKS endpoint, and every corresponding exponent is 65537.

@@ -181,17 +181,23 @@ request lines, so one `(identityPlatform, platformCeremonyVersion)` pair
 selects one value on every Consumer Chain and at every Verifier Version
 implementing that profile.
 
-| Platform Profile | `proofLifetime` | `maxFutureAttestationSkew` |
-|---|---:|---:|
-| `("google", 1)` | not named | not named |
-| `("x", 1)` | 3600 | 300 |
-| `("github", 1)` | 3600 | 300 |
+| Platform Profile | `proofLifetime` | `maxFutureAttestationSkew` | `futureObservationAllowance` |
+|---|---:|---:|---:|
+| `("google", 1)` | not named | not named | 7200 |
+| `("x", 1)` | 3600 | 300 | 300 |
+| `("github", 1)` | 3600 | 300 | 300 |
 
 `proofLifetime` is the maximum age of the attestation that supplies evidence
 time: the X token attestation and the GitHub token-exchange attestation.
-`maxFutureAttestationSkew` is the maximum lead of an X/GitHub attestation
+`maxFutureAttestationSkew` is the maximum lead of that token attestation's
 timestamp over Block Time. Google's signed `exp` bounds its validity, so
-`("google", 1)` names neither. Verifier governance controls the Supported
+`("google", 1)` names neither. `futureObservationAllowance` is the maximum
+lead of a profile's evidence time over Block Time, and the amount subtracted
+from that time to give `metadataObservedAt` on the scale every profile shares
+([platform profiles §2.2](platform-ceremonies.md#22-metadata-ordering-and-validity-ceilings)).
+Google's `exp` runs about an hour ahead of the moment it describes, so its
+allowance is two hours; a notary stamps its own clock, so the X and GitHub
+allowances cover clock skew alone. Verifier governance controls the Supported
 Version Set and the trust roots, so a proof is accepted only while a Verifier
 Version implementing its profile is supported and the trust roots it relies
 on are active.
