@@ -576,6 +576,14 @@ Google nonce         = sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU
 
 ### 3.3 Proof statement
 
+A profile is implementable only when its exact proving artifacts are
+published ([libID](libid.md#system-model-and-specification-ownership)). No
+published libid-circuits release enforces this statement yet: the
+`oidc-google` circuit of v0.6.0 exposes the `email` bytes as a public
+input, normalizes nothing, and admits a `\` in the `sub`. Google version 1
+is implementable once a release that enforces REQ-PLAT-16B and REQ-PLAT-16C
+publishes its artifacts.
+
 The Proving Circuit and Consumer enforce all of the following:
 
 - REQ-PLAT-16 (upholds SP-CLIENT-01):
@@ -616,10 +624,9 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   | RSA modulus | exact `n` that verified the JWS; `e = 65537` is profile-fixed |
 
   The Proving Circuit MUST NOT expose a detached second representation of a
-  claim: the `sub` and `email` bytes appear in no public input, only their
-  digests do, and the handle digest is the inner digest of the handle key
-  (§2.1b), so a claim that carries its handle and one that does not key the
-  same binding.
+  claim. The handle digest is the inner digest of the handle key (§2.1b),
+  so a claim that carries its handle and one that does not key the same
+  binding.
 - REQ-PLAT-16C (upholds SP-BIND-01, SP-PRIV-01):
   The Proving Circuit MUST NOT expose the signed `sub` or `email` in any
   public input. The Proving Circuit MUST reject a `sub` that REQ-PLAT-04
@@ -629,9 +636,10 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   MUST digest exactly the normalized `email` bytes. The Proving Circuit MUST
   fail to prove, rather than truncate, a `sub` longer than 31 bytes or an
   `email` longer than 62 bytes; these are the Google profile's buffer
-  lengths, and 62 is the handle rules' own maximum. No value the circuit
-  hashes holds an escaped byte: every JSON escape begins with `\`, which the
-  `sub` rule refuses and the `email` alphabet does not contain. Necessity:
+  lengths, and 62 is the handle rules' own maximum. Neither the `sub` nor
+  the `email` the circuit digests holds an escaped byte: every JSON escape
+  begins with `\`, which the `sub` rule refuses and the `email` alphabet
+  does not contain. Necessity:
   REQ-PLAT-05A keeps the `sub` off the Consumer Chain and this profile keeps
   the `email` off it unless a transaction carries it, which leaves the
   Proving Circuit the only role that sees their bytes, and a verifier that
