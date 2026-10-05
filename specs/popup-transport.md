@@ -393,10 +393,12 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   MUST navigate that handle through Direct Control without sending the
   destination over any Carrier, MUST retire the current Carrier without
   attempting Continuity, and MUST remain ready to authenticate the next
-  Participating Document. While native-anchor binding is pending and no
-  handle exists, the Application Endpoint MUST perform no browser operation
-  on the Popup and MAY point the activating anchor at the destination while
-  that activation still dispatches; navigation away then succeeds locally.
+  Participating Document. While no handle exists, because scripted creation
+  returned none and no native-anchor binding has completed
+  (REQ-POPUP-ALLOW-06), the Application Endpoint MUST perform no browser
+  operation on the Popup and MAY point the activating anchor, when there is
+  one, at the destination while that activation still dispatches; navigation
+  away then succeeds locally.
   The Application Endpoint MUST reject navigation away once the handle
   reports closed. A Popup Endpoint navigating away MUST release its
   Carrier and replace its document without attempting Continuity. The
@@ -782,7 +784,7 @@ from; those documents keep the mechanics.
 | REQ-POPUP-ALLOW-03 to ALLOW-05 | message-port.md, Failure and security invariants; Authentication |
 | REQ-POPUP-ALLOW-06 | connection.md, Popup creation and native-anchor binding |
 | REQ-POPUP-MSG-01 to MSG-07 | connection.md, API (`send` and `on`); message-port.md, Message delivery |
-| REQ-POPUP-DELIVER-01 to DELIVER-06 | connection.md, Failure and security rules; message-port.md, invariants |
+| REQ-POPUP-DELIVER-01 to DELIVER-06 | connection.md, Failure and security rules; message-port.md, Failure and security invariants |
 | REQ-POPUP-LIFE-01, LIFE-02 | connection.md, Selection |
 | REQ-POPUP-CONTROL-01 to CONTROL-08 | control.md, Records; Execution; Document departure; Security boundary |
 | REQ-POPUP-LIFE-03 to LIFE-06 | connection.md, API (`navigate` and `navigateAway`); Continuity across navigations |
