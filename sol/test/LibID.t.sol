@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {CeremonyProfile} from "libid-contracts/ceremony/CeremonyProfile.sol";
 import {HandleEscrow} from "libid-contracts/escrow/HandleEscrow.sol";
-import {FeeToken, NoReturnToken, TestERC20, one} from "libid-contracts/escrow/test/EscrowMocks.sol";
+import {FeeToken, NoReturnToken, PayoutFeeToken, TestERC20, one} from "libid-contracts/escrow/test/EscrowMocks.sol";
 import {Create3} from "libid-contracts/factory/Create3.sol";
 import {HandleNormalizer} from "libid-contracts/identity/HandleNormalizer.sol";
 import {HandleVectors} from "libid-contracts/identity/HandleVectors.sol";
@@ -554,6 +554,44 @@ contract LibIDTest is LibIDTestBase {
         bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether, address(consumer));
         consumer.refund(node, LibID.NATIVE, recipient);
         assertEq(recipient.balance, 1 ether);
+    }
+
+    function test_aContractTakesBackTheTokensItEscrowed() public {
+        TestERC20 token = new TestERC20();
+        token.mint(address(consumer), 100);
+        address recipient = makeAddr("recipient");
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 40, address(consumer));
+        consumer.refund(node, address(token), recipient);
+        assertEq(token.balanceOf(recipient), 40);
+        assertEq(token.balanceOf(address(consumer)), 60);
+        assertEq(escrow.escrowed(node, address(token)), 0);
+    }
+
+    /// A token that takes a fee from what the escrow receives: the refund is
+    /// what the escrow booked.
+    function test_aRefundOfAFeeTakingTokenReturnsWhatWasBooked() public {
+        FeeToken token = new FeeToken();
+        token.mint(address(consumer), 1000);
+        address recipient = makeAddr("recipient");
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, address(consumer));
+        assertEq(escrow.escrowed(node, address(token)), 990);
+        consumer.refund(node, address(token), recipient);
+        assertEq(token.balanceOf(recipient), 990);
+        assertEq(escrow.escrowed(node, address(token)), 0);
+    }
+
+    /// A token that takes a fee from what the escrow sends out: the refund
+    /// releases what was booked and the recipient gets it less the fee.
+    function test_aRefundOfATokenThatTakesAFeeOnPayoutArrivesLessTheFee() public {
+        PayoutFeeToken token = new PayoutFeeToken();
+        token.mint(address(consumer), 1000);
+        address recipient = makeAddr("recipient");
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, address(consumer));
+        assertEq(escrow.escrowed(node, address(token)), 1000);
+        consumer.refund(node, address(token), recipient);
+        assertEq(token.balanceOf(recipient), 990);
+        assertEq(escrow.escrowed(node, address(token)), 0);
+        assertEq(token.balanceOf(LibID.ESCROW), 0);
     }
 
     /// The node `pay` returned still reaches the deposit after the platform's
