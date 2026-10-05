@@ -95,7 +95,10 @@ test('pins every response profile security policy [CSP-001/002/003/009/015]', ()
     assert.ok(csp(profile).get('script-src')!.includes("'wasm-unsafe-eval'"), profile)
   for (const profile of ['prefetch', 'callback', 'worker'] as const)
     assert.ok(!csp(profile).get('script-src')!.includes("'wasm-unsafe-eval'"), profile)
-  assert.deepEqual(csp('leafWorker').get('worker-src'), ["'none'"])
+  for (const profile of ['worker', 'leafWorker'] as const)
+    assert.deepEqual(csp(profile).get('worker-src'), ["'none'"], profile)
+  // Prefetch registers the root Service Worker.
+  assert.deepEqual(csp('prefetch').get('worker-src'), ["'self'"])
   for (const profile of ['notaryWorker', 'proofWorker'] as const) {
     assert.deepEqual(csp(profile).get('worker-src'), ["'self'", 'blob:'], profile)
     assert.equal(headers(profile).get('cross-origin-embedder-policy'), 'require-corp', profile)
