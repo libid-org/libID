@@ -412,6 +412,23 @@ contract LibIDTest is Test {
         assertEq(alice.balance, 1 ether);
     }
 
+    /// `pay` returns the node the registry gives for the hash, which is the
+    /// node the escrow books the deposit at, whatever formula derives it.
+    function test_payReturnsTheNodeTheEscrowBooks() public {
+        bytes32 hash = registry.handleHashOf(LibID.GITHUB, "carol");
+        bytes32 node = keccak256("another node");
+        vm.mockCall(
+            LibID.REGISTRY, abi.encodeCall(IIdentityRegistry.handleNodeOfHash, (LibID.GITHUB, hash)), abi.encode(node)
+        );
+        assertEq(consumer.pay(LibID.GITHUB, "carol", 1 ether, sender), node);
+        assertEq(escrow.escrowed(node, LibID.NATIVE), 1 ether);
+
+        TestERC20 token = new TestERC20();
+        token.mint(address(consumer), 100);
+        assertEq(consumer.payToken(LibID.GITHUB, "carol", address(token), 40, sender), node);
+        assertEq(escrow.escrowed(node, address(token)), 40);
+    }
+
     function test_payToAnUnheldHandleWaitsForItsHolder() public {
         bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether, sender);
         assertEq(escrow.escrowed(node, LibID.NATIVE), 1 ether);

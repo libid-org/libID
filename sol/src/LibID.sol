@@ -45,9 +45,6 @@ library LibID {
 
     /// @dev The registry's error for text that can never be a handle.
     bytes4 private constant UNUSABLE_HANDLE = bytes4(keccak256("UnusableHandle(uint8)"));
-    /// @dev The fixed domain of a handle node, as the registry and the escrow
-    ///      derive it: `keccak256(abi.encode(HANDLE_NODE_V1, platformId, hash))`.
-    bytes32 private constant HANDLE_NODE_V1 = keccak256("libid.identity.handle-node.v1");
 
     /// This chain has no libID contract where one is needed.
     error LibIDUnavailable();
@@ -163,8 +160,8 @@ library LibID {
         returns (bytes32 handleNode)
     {
         ILibIDEscrow escrow = _escrow();
-        bytes32 hash = _registry().handleHashOf(platformId, handle);
-        handleNode = _node(platformId, hash);
+        bytes32 hash;
+        (hash, handleNode) = _hashAndNode(platformId, handle);
         escrow.deposit{value: amount}(platformId, hash, NATIVE, amount, refundTo);
     }
 
@@ -179,8 +176,8 @@ library LibID {
         returns (bytes32 handleNode)
     {
         ILibIDEscrow escrow = _escrow();
-        bytes32 hash = _registry().handleHashOf(platformId, handle);
-        handleNode = _node(platformId, hash);
+        bytes32 hash;
+        (hash, handleNode) = _hashAndNode(platformId, handle);
         _forceApprove(token, amount);
         escrow.deposit(platformId, hash, token, amount, refundTo);
     }
@@ -207,10 +204,17 @@ library LibID {
         return ILibIDEscrow(ESCROW);
     }
 
-    /// @dev The escrow's key for a handle hash. The formula is fixed: the
-    ///      registry and the escrow derive the same.
-    function _node(bytes32 platformId, bytes32 hash) private pure returns (bytes32) {
-        return keccak256(abi.encode(HANDLE_NODE_V1, platformId, hash));
+    /// @dev A handle's hash under the platform's current rules, and the node
+    ///      the escrow books a deposit of that hash at. Both come from the
+    ///      registry, which the escrow asks for the same node.
+    function _hashAndNode(bytes32 platformId, string memory handle)
+        private
+        view
+        returns (bytes32 hash, bytes32 handleNode)
+    {
+        ILibIDRegistry registry = _registry();
+        hash = registry.handleHashOf(platformId, handle);
+        handleNode = registry.handleNodeOfHash(platformId, hash);
     }
 
     /// @dev The holder and proof time of a handle. Text that can never be a
@@ -276,6 +280,7 @@ interface ILibIDRegistry {
     function handleNodeOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
     function handleBinding(bytes32 handleNode) external view returns (address holder, uint64 observedAt);
     function handleHashOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
+    function handleNodeOfHash(bytes32 platformId, bytes32 handleHash) external view returns (bytes32);
 }
 
 /// @dev The HandleEscrow calls LibID makes.
