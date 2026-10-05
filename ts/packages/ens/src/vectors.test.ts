@@ -1,8 +1,7 @@
-// The vector table the gateway's inverse is checked against too. The inverse
-// here is written from REQ-ENS-LABEL-05 and REQ-ENS-NAME-02 alone, apart from
-// the transform it reverses.
+// The vector table for the transform and its inverse. The gateway's inverse
+// does not read this file yet; the inverse here is this package's own, written
+// from REQ-ENS-LABEL-05 and REQ-ENS-NAME-02 apart from the transform it reverses.
 import { readFileSync } from 'node:fs'
-import { ens_normalize } from '@adraffy/ens-normalize'
 import {
   normalize,
   PLATFORM_GITHUB_KEY,
@@ -10,6 +9,7 @@ import {
   PLATFORM_X_KEY,
   rulesFor,
 } from '@libid/contracts/identity'
+import { normalize as ensNormalize } from 'viem/ens'
 import { describe, expect, it } from 'vitest'
 import { ensName, type Platform } from './index.js'
 
@@ -44,16 +44,26 @@ describe('names', () => {
     })
   })
 
-  // ENSIP-15 is what every wallet applies before hashing. A name it changes or
-  // refuses is one no wallet resolves.
+  // ENSIP-15 is what every wallet applies before hashing (viem's `normalize`
+  // is @adraffy/ens-normalize). A name it changes or refuses is one no wallet
+  // resolves.
   it.each(vectors.names)('$name is ENSIP-15 normal', ({ name }) => {
-    expect(ens_normalize(name)).toBe(name)
+    expect(ensNormalize(name)).toBe(name)
   })
 
   it('gives distinct handles distinct names', () => {
     const names = vectors.names.map((v) => v.name)
     expect(new Set(names).size).toBe(names.length)
   })
+})
+
+describe('handles', () => {
+  it.each([...vectors.names, ...vectors.unnamed])(
+    '$platform $handle is already normalized',
+    ({ platform, handle }) => {
+      expect(normalize(handle, rulesFor(platform)!)).toBe(handle)
+    },
+  )
 })
 
 describe('unnamed', () => {

@@ -125,9 +125,6 @@ importers:
         specifier: 0.15.1
         version: 0.15.1(viem@2.57.3(typescript@7.0.2))
     devDependencies:
-      '@adraffy/ens-normalize':
-        specifier: ^1.11.1
-        version: 1.11.1
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1

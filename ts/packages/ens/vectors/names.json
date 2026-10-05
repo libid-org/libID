@@ -91,6 +91,9 @@
     },
     { "platform": "google", "handle": "alice+tag@gmail.com", "why": "Gmail issues no `+`" },
     { "platform": "google", "handle": "alice_b@gmail.com", "why": "Gmail issues no `_`" },
+    { "platform": "google", "handle": ".alice@gmail.com", "why": "Gmail issues no empty piece" },
+    { "platform": "google", "handle": "alice.@gmail.com", "why": "Gmail issues no empty piece" },
+    { "platform": "google", "handle": "a..b@gmail.com", "why": "Gmail issues no empty piece" },
     { "platform": "google", "handle": "alice-b@gmail.com", "why": "Gmail issues no `-`" },
     {
       "platform": "google",
