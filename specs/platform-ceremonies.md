@@ -431,7 +431,7 @@ Verifier Governance Process selects for it, which admits moduli only from
 notarized readings of that endpoint. A reading is one TLSNotary session,
 authenticated under common §9.1 by the Notary Service the Google Key List
 pins, with both directions wholly revealed. Anyone may submit a reading, and
-each submission pays that Notary Service one Notary Fee. Google Submissions
+each admitted reading pays that Notary Service one Notary Fee. Google Submissions
 still reach no Notary Service and pay no fee. The Google Key List keeps two
 generations, each one reading's key set and creation time, and trust in a
 generation lapses by time alone.
@@ -448,7 +448,7 @@ generation lapses by time alone.
 | public exponent | `AQAB` | the `e` of every key: 65537 |
 | renewal margin | 604800 s (7 days) | remaining trust at or below which the Google Key List reports a reading is due |
 
-- REQ-PLAT-24 (upholds SP-BIND-01, SP-CLIENT-01):
+- REQ-PLAT-24 (upholds SP-BIND-01):
   The Google Key List MUST admit a modulus only from a reading the Notary
   Service it pins accepts. The Google Key List MUST reject a reading whose
   attested TLS server name is not the reading authority. The Google Key List
@@ -463,14 +463,15 @@ generation lapses by time alone.
   keeps out a query such as `?callback=` that would make the body bytes the
   requester chose, and a wholly revealed transcript leaves no hidden range to
   hold a second `Host` header or a decoy `keys` member.
-- REQ-PLAT-70 (upholds SP-BIND-01, SP-CLIENT-01):
+- REQ-PLAT-70 (upholds SP-BIND-01):
   The Google Key List MUST reject a reading whose response does not begin
   with `HTTP/1.1 200 `, declares a `Content-Encoding`, carries more than one
   framing header, frames with a `Transfer-Encoding` other than `chunked`, or
   declares a `Content-Length` other than the body length. The Google Key
-  List MUST reject a body that is not one `keys` member holding an array of
-  one to the key limit of flat JWK objects, followed only by the closing
-  brace and whitespace. The Google Key List MUST reject a key whose `kid`,
+  List MUST reject a body in which the token `"keys"` does not occur exactly
+  once, or is not followed by a colon, an array of one to the key limit of
+  flat JWK objects, and then only the closing brace and whitespace. The
+  Google Key List MUST reject a key whose `kid`,
   `n`, or `e` is not exactly one string without escapes. The Google Key List
   MUST reject a key whose `e` is not the public exponent or whose `n` does
   not base64url-decode to the modulus length. The Google Key List MUST reject
@@ -478,7 +479,7 @@ generation lapses by time alone.
   trusts a key by its modulus alone, and the circuit verifies RS256 under a
   2048-bit modulus and the exponent 65537. A key published under any other
   exponent or size would be trusted for a signature the circuit never checks.
-- REQ-PLAT-71 (upholds SP-BIND-01, SP-CLIENT-01):
+- REQ-PLAT-71 (upholds SP-BIND-01):
   The Google Key List MUST reject a reading whose attested creation time is
   more than the maximum reading lead ahead of Block Time. The Google Key List
   MUST reject a reading whose attested creation time is more than the maximum
@@ -488,7 +489,7 @@ generation lapses by time alone.
   replay any reading on any chain. The age bound and the strict order keep an
   old reading from restoring a key set Google has dropped or from restarting
   a generation's lifetime.
-- REQ-PLAT-72 (upholds SP-BIND-01, SP-CLIENT-01):
+- REQ-PLAT-72 (upholds SP-BIND-01):
   When an admitted reading lists the same set of moduli as the current
   generation, the Google Key List MUST restart the current generation from
   that reading's creation time and leave the previous generation unchanged.
@@ -502,7 +503,7 @@ generation lapses by time alone.
   generation covers it. Trust that lapses by time retires a key Google stopped
   publishing with no transaction from anyone, and 30 days is runway for a
   submitter outage, not a key's life.
-- REQ-PLAT-73 (upholds SP-BIND-01, SP-CLIENT-01):
+- REQ-PLAT-73 (upholds SP-BIND-01):
   The Google Key List MUST NOT expose an operation, other than admitting a
   reading or an upgrade by the Verifier Governance Process, that adds,
   removes, or re-dates a modulus. The Verifier Governance Process MUST own
