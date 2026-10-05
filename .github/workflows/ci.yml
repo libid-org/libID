@@ -9,12 +9,17 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Nightly, for the Solidity fork tests alone: they catch a change on the
+  # live chains that no commit made.
+  schedule:
+    - cron: "23 4 * * *"
 
 # A pull request's newer run cancels its older one. Each push to main has its own
 # group, so every main commit completes its checks; ccdp-publish serializes the
-# publications themselves.
+# publications themselves. A nightly run has a group of its own, so it never
+# cancels a push's run of the same commit.
 concurrency:
-  group: ci-${{ github.head_ref || github.sha }}
+  group: ci-${{ github.event_name }}-${{ github.head_ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -22,7 +27,8 @@ jobs:
   # Changes: which browser workspaces a pull request can affect, and whether it
   # can affect the CCDP image or the Solidity library, so their jobs skip
   # otherwise. Pushes to main run everything: a release promotes each main
-  # commit's own image. Plain git over the PR's range, as in DCO.
+  # commit's own image. The nightly run is the Solidity job only. Plain git
+  # over the PR's range, as in DCO.
   # ---------------------------------------------------------------------------
   changes:
     name: Changes
@@ -46,6 +52,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            { echo 'workspaces=[]'; echo "image=false"; echo "sol=true"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "$EVENT_NAME" != "pull_request" ]; then
             { echo 'workspaces=["popup","ceremony","dev"]'; echo "image=true"; echo "sol=true"; } >> "$GITHUB_OUTPUT"
             exit 0
@@ -75,6 +85,7 @@ jobs:
   # ---------------------------------------------------------------------------
   ts:
     name: TypeScript
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -254,6 +265,7 @@ jobs:
   # ---------------------------------------------------------------------------
   dco:
     name: DCO
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
