@@ -4,10 +4,16 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { connect } from 'node:net'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { googleJwtRootsAbi, identityRegistryAbi, platformId } from '@libid/contracts'
+import {
+  ceremonyProofVerifierAbi,
+  googleJwtRootsAbi,
+  identityRegistryAbi,
+  platformId,
+} from '@libid/contracts'
 import { createPublicClient, http } from 'viem'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 import {
@@ -16,8 +22,10 @@ import {
   CHAIN_ID,
   GOOGLE_JWT_ROOTS,
   livePlatforms,
+  NOTARY,
   REGISTRY,
   RPC_URL,
+  VERIFIER_VERSION,
 } from './local.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
@@ -47,9 +55,13 @@ function run(command: string, args: string[]): Promise<void> {
   })
 }
 
+let stopping = false
+
+/** Poll `check` until it holds; reject on the deadline or once the stack is stopping. */
 async function until(what: string, check: () => Promise<boolean>, seconds = 120) {
   const deadline = Date.now() + seconds * 1000
   while (Date.now() < deadline) {
+    if (stopping) throw new Error(`Stopped while waiting for ${what}`)
     try {
       if (await check()) return
     } catch {
@@ -75,6 +87,33 @@ async function deployTool(): Promise<string> {
   return binary
 }
 
+/** Whether something on this host accepts connections on `port`. */
+function listening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect(port, '127.0.0.1')
+    socket.once('connect', () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once('error', () => resolve(false))
+  })
+}
+
+/**
+ * Refuse to start over another stack: with a port this project publishes
+ * already taken, a check could pass against that stack, and the deploy would
+ * go to its chain.
+ */
+async function portsFree() {
+  const ports = [RPC_URL, NOTARY, BRIDGE, API].map((url) => Number(new URL(url).port))
+  const taken = []
+  for (const port of ports) if (await listening(port)) taken.push(port)
+  if (taken.length)
+    throw new Error(
+      `Already in use on 127.0.0.1: port ${taken.join(', ')}. Stop the stack holding it (see docker ps).`,
+    )
+}
+
 /** Deploy the stack to the fresh anvil, then check what the app relies on. */
 async function deploy() {
   const tool = await deployTool()
@@ -93,10 +132,26 @@ async function deploy() {
     address: REGISTRY,
     abi: identityRegistryAbi,
     functionName: 'quoteBind',
-    args: [platformId('github'), 1],
+    args: [platformId('github'), VERIFIER_VERSION],
   })
   if (quote !== 2_000_000_000_000_000n)
-    throw new Error(`quoteBind(github, 1) is ${quote}, expected 2e15`)
+    throw new Error(`quoteBind(github, ${VERIFIER_VERSION}) is ${quote}, expected 2e15`)
+  // Every platform this run binds has a verifier in the slot the app binds through.
+  const proofVerifier = await chain.readContract({
+    address: REGISTRY,
+    abi: identityRegistryAbi,
+    functionName: 'proofVerifier',
+  })
+  for (const platform of livePlatforms(process.env)) {
+    const verifier = await chain.readContract({
+      address: proofVerifier,
+      abi: ceremonyProofVerifierAbi,
+      functionName: 'verifierOf',
+      args: [platformId(platform), VERIFIER_VERSION],
+    })
+    if (BigInt(verifier) === 0n)
+      throw new Error(`No ${platform} verifier is registered at version ${VERIFIER_VERSION}`)
+  }
 }
 
 /**
@@ -134,7 +189,9 @@ async function ready() {
 
 /** The chain's contracts, then Google's keys when this run binds Google. */
 async function chainReady() {
+  if (stopping) return
   await deploy()
+  if (stopping) return
   if (livePlatforms(process.env).includes('google')) await rotateGoogleKeys()
 }
 
@@ -145,9 +202,23 @@ execFileSync(
   ['--filter', '@libid/ceremony', 'build:ccdp-artifacts', '--out-dir', join(cache, 'ccdp')],
   { cwd: root, stdio: 'inherit' },
 )
+// A stack this checkout left behind goes first, volumes and all, so every run
+// starts from a fresh chain and database; a port still taken then belongs to
+// another stack.
+try {
+  await run('docker', [...composeArgs, 'down', '--volumes', '--remove-orphans'])
+} catch {
+  console.error('Could not run Docker Compose. Install Docker with Compose and start its engine.')
+  process.exit(1)
+}
+try {
+  await portsFree()
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error)
+  process.exit(1)
+}
 
 let frontend: ViteDevServer | undefined
-let stopping = false
 function stop(code: number) {
   if (stopping) return
   stopping = true
@@ -173,6 +244,7 @@ function stop(code: number) {
     }
   }
   const down = spawn('docker', [...composeArgs, 'down', '--volumes'], { stdio: 'inherit' })
+  down.on('error', () => console.error('Could not stop the stack containers. Check Docker.'))
   down.on('close', (code) => {
     if (code !== 0) process.exitCode = 1
   })
@@ -194,14 +266,21 @@ compose.on('exit', (code) => {
 try {
   await until('anvil', async () => (await chain.getChainId()) === CHAIN_ID)
   // Bridge and the indexer need neither the deploy nor the keeper.
-  await Promise.all([chainReady(), ready()])
-  console.info(`Stack ready: chain ${RPC_URL}, registry ${REGISTRY}, indexer ${API}`)
-  if (process.argv.includes('--app') && !stopping) {
-    frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })
-    await frontend.listen()
-    frontend.printUrls()
+  if (!stopping) await Promise.all([chainReady(), ready()])
+  if (!stopping) {
+    console.info(`Stack ready: chain ${RPC_URL}, registry ${REGISTRY}, indexer ${API}`)
+    if (process.argv.includes('--app')) {
+      frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })
+      if (stopping) await frontend.close()
+      else {
+        await frontend.listen()
+        frontend.printUrls()
+      }
+    }
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error)
-  stop(1)
+  if (!stopping) {
+    console.error(error instanceof Error ? error.message : error)
+    stop(1)
+  }
 }
