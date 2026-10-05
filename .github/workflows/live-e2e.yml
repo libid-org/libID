@@ -17,10 +17,13 @@ on:
   schedule:
     - cron: "23 3 * * *"
 
-# One run at a time: runs share the platforms' test accounts.
+# One run per pull request, a newer push replacing an older run; scheduled
+# and dispatched runs queue in a group of their own. Runs of different groups
+# overlap on the platforms' test accounts, which hold concurrent sign-ins:
+# each run binds on its own chain, and a rate-limited login backs off.
 concurrency:
-  group: live-e2e
-  cancel-in-progress: false
+  group: live-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -66,12 +69,18 @@ jobs:
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
           GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
           X_TEST_ALICE_USERNAME: ${{ secrets.X_TEST_ALICE_USERNAME }}
-          # The saved X session, base64 of libid-server-rs' `ceremony export x`.
+          # The saved X session, base64 of `ceremony export x` from
+          # libid-server-rs' ceremony-tests (branch feat/live-ceremony-tests,
+          # libid-server-rs PR #12).
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/bind test:live
 
-      # The artifact is public: only screenshots, Playwright's error notes and
-      # the container log go up, and only when none of them holds a secret.
+      # The artifact is public. Screenshots, Playwright's error notes and the
+      # stack's log go up only when the scan finds none of the test accounts'
+      # secrets in them. The scan reads bytes, not pixels: a screenshot shows
+      # what the page showed, and the pages driven never display the password,
+      # the TOTP secret or a session cookie. The job log carries none of the
+      # stack's output (playwright.live.config.ts).
       # A timed-out test step counts too; a cancelled run uploads nothing.
       - name: Check the failure output for secrets
         id: scan
@@ -82,7 +91,13 @@ jobs:
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
           GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
-        run: node ts/apps/bind/e2e/scan-secrets.ts ts/apps/bind/test-results "${{ runner.temp }}/stack.log"
+        # A stack the test step left running stops first, so nothing writes to
+        # the log after it is scanned; what goes up is the copy scanned.
+        run: |
+          docker compose ls -q --all --filter name=libid-bind |
+            xargs -r -I{} docker compose -p {} down --volumes
+          if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
+          node ts/apps/bind/e2e/scan-secrets.ts ts/apps/bind/test-results "$RUNNER_TEMP/stack-scanned.log"
 
       - name: Keep the screenshots and container logs
         if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
@@ -92,6 +107,6 @@ jobs:
           path: |
             ts/apps/bind/test-results/**/*.png
             ts/apps/bind/test-results/**/*.md
-            ${{ runner.temp }}/stack.log
+            ${{ runner.temp }}/stack-scanned.log
           retention-days: 14
           if-no-files-found: ignore
