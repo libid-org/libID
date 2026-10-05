@@ -20,10 +20,29 @@ contract Guestbook {
 }
 ```
 
-The libID contracts have the same address on every chain, so LibID has them
-built in. These addresses never change: contract updates are upgrades at the
-same address. Every function is `internal`: it compiles into your contract, and
-there is nothing to deploy or link. `LibID.sol` imports nothing.
+The libID contracts have the same address on every chain of one environment,
+so LibID has them built in. Within an environment these addresses never
+change: contract updates are upgrades at the same address. Every function is
+`internal`: it compiles into your contract, and there is nothing to deploy or
+link. `LibID.sol` imports nothing.
+
+## Testnets
+
+`LibID` has the production addresses. `LibIDTestnet` has the same functions
+with the testnet addresses. To build for a testnet, change the import and
+nothing else:
+
+```solidity
+import {LibIDTestnet as LibID} from "libid/LibIDTestnet.sol";
+```
+
+| Library | Chains | IdentityRegistry | HandleEscrow |
+|---|---|---|---|
+| `LibID` | Ethereum mainnet | `0xbefD300aFf7D4A67fb381Afe8B3596793D3E9a83` | `0x17a244e23ef1f12071298A1862194FeA3D00bbf7` |
+| `LibIDTestnet` | Sepolia, Eden testnet | `0x25F29C8C765db2f27d1e2b23987A7b0655C7D640` | `0x57355e1D1Bcf61FeC9b2E5CaD60DccCDdDC4d8e5` |
+
+On a local chain, deploy libID with chain-configurations' `local-dev.toml`;
+it lands at other addresses, so test against your own deployment there.
 
 ## Install
 
@@ -110,11 +129,19 @@ and `refundTo` can take them back until then.
 git submodule update --init --recursive
 cd sol
 forge test
-EDEN_RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545 forge test --match-contract LibIDForkTest
+ETH_RPC_URL=https://ethereum-rpc.publicnode.com \
+SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
+  forge test --match-contract 'ForkTest$'
 ```
+
+`src/LibIDTestnet.sol` is generated: edit `src/LibID.sol`, then run
+`./script/testnet.sh`. CI fails when the two differ in anything but the names
+and addresses.
 
 The tests deploy the real libID contracts, pinned in `lib/libID-contracts`, at
 the addresses LibID has built in, and bind handles with the dates the real
-verifiers give, at both ends of their acceptance windows. One test checks the addresses against the factory's CREATE3
-derivation of their canonical names. The fork test checks them against the
-live Eden deployment, and is skipped without `EDEN_RPC_URL`.
+verifiers give, at both ends of their acceptance windows. One test checks
+both libraries' addresses against their environment's factory and the CREATE3
+derivation of the canonical names. The fork tests check `LibID` against
+Ethereum mainnet and `LibIDTestnet` against Sepolia, and are skipped without
+`ETH_RPC_URL` and `SEPOLIA_RPC_URL`.

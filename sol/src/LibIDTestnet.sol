@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+// Generated from LibID.sol by script/testnet.sh. Do not edit.
 pragma solidity ^0.8.20;
 
-/// @title LibID
+/// @title LibIDTestnet
 /// @notice Use libID from a contract: find who holds a handle, gate a call on
 ///         it, or pay a handle through the escrow.
 ///
@@ -29,11 +30,11 @@ pragma solidity ^0.8.20;
 ///      to a handle's holder, whose code runs and can revert or burn gas, and a
 ///      token runs its own code. Guard the calling function against reentrancy
 ///      and update your own state before paying.
-library LibID {
+library LibIDTestnet {
     /// @notice The IdentityRegistry: which address holds which identity.
-    address internal constant REGISTRY = 0xbefD300aFf7D4A67fb381Afe8B3596793D3E9a83;
+    address internal constant REGISTRY = 0x25F29C8C765db2f27d1e2b23987A7b0655C7D640;
     /// @notice The HandleEscrow: value sent to a handle before anyone holds it.
-    address internal constant ESCROW = 0x17a244e23ef1f12071298A1862194FeA3D00bbf7;
+    address internal constant ESCROW = 0x57355e1D1Bcf61FeC9b2E5CaD60DccCDdDC4d8e5;
 
     /// @notice Platform ids: `keccak256` of the platform key.
     bytes32 internal constant GITHUB = keccak256("github");
@@ -68,7 +69,7 @@ library LibID {
     ///         that same registry, so `pay`, `payToken` and `refund` work.
     function isEscrowAvailable() internal view returns (bool) {
         if (REGISTRY.code.length == 0 || ESCROW.code.length == 0) return false;
-        (bool ok, bytes memory ret) = ESCROW.staticcall(abi.encodeWithSelector(ILibIDEscrow.registry.selector));
+        (bool ok, bytes memory ret) = ESCROW.staticcall(abi.encodeWithSelector(ILibIDTestnetEscrow.registry.selector));
         // Compared as a word, so an answer that is not a clean address is a
         // plain no rather than a decoding revert.
         return ok && ret.length == 32 && abi.decode(ret, (uint256)) == uint256(uint160(REGISTRY));
@@ -162,7 +163,7 @@ library LibID {
         internal
         returns (bytes32 handleNode)
     {
-        ILibIDEscrow escrow = _escrow();
+        ILibIDTestnetEscrow escrow = _escrow();
         bytes32 hash = _registry().handleHashOf(platformId, handle);
         handleNode = _node(platformId, hash);
         escrow.deposit{value: amount}(platformId, hash, NATIVE, amount, refundTo);
@@ -178,7 +179,7 @@ library LibID {
         internal
         returns (bytes32 handleNode)
     {
-        ILibIDEscrow escrow = _escrow();
+        ILibIDTestnetEscrow escrow = _escrow();
         bytes32 hash = _registry().handleHashOf(platformId, handle);
         handleNode = _node(platformId, hash);
         _forceApprove(token, amount);
@@ -197,14 +198,14 @@ library LibID {
 
     // ─── Internals ──────────────────────────────────────────────────
 
-    function _registry() private view returns (ILibIDRegistry) {
+    function _registry() private view returns (ILibIDTestnetRegistry) {
         if (REGISTRY.code.length == 0) revert LibIDUnavailable();
-        return ILibIDRegistry(REGISTRY);
+        return ILibIDTestnetRegistry(REGISTRY);
     }
 
-    function _escrow() private view returns (ILibIDEscrow) {
+    function _escrow() private view returns (ILibIDTestnetEscrow) {
         if (ESCROW.code.length == 0) revert LibIDUnavailable();
-        return ILibIDEscrow(ESCROW);
+        return ILibIDTestnetEscrow(ESCROW);
     }
 
     /// @dev The escrow's key for a handle hash. The formula is fixed: the
@@ -223,7 +224,7 @@ library LibID {
         view
         returns (address holder, uint64 observedAt)
     {
-        ILibIDRegistry registry = _registry();
+        ILibIDTestnetRegistry registry = _registry();
         try registry.handleNodeOf(platformId, handle) returns (bytes32 node) {
             (holder, observedAt) = registry.handleBinding(node);
         } catch (bytes memory reason) {
@@ -269,7 +270,7 @@ library LibID {
 }
 
 /// @dev The IdentityRegistry calls LibID makes.
-interface ILibIDRegistry {
+interface ILibIDTestnetRegistry {
     function resolveHandle(bytes32 platformId, string calldata handle) external view returns (address);
     function resolveId(bytes32 platformId, string calldata id) external view returns (address);
     function publishedHandleOf(address holder, bytes32 platformId) external view returns (string memory);
@@ -279,7 +280,7 @@ interface ILibIDRegistry {
 }
 
 /// @dev The HandleEscrow calls LibID makes.
-interface ILibIDEscrow {
+interface ILibIDTestnetEscrow {
     function registry() external view returns (address);
     function deposit(bytes32 platformId, bytes32 handleHash, address token, uint256 amount, address refundTo)
         external

@@ -19,6 +19,7 @@ import {IIdentityRegistry} from "libid-contracts/identity/IIdentityRegistry.sol"
 import {StubPlatformVerifier} from "libid-contracts/identity/test/StubPlatformVerifier.sol";
 
 import {LibID} from "../src/LibID.sol";
+import {LibIDTestnet} from "../src/LibIDTestnet.sol";
 
 /// @notice A contract that uses LibID, as an integrator's would.
 contract Consumer {
@@ -156,8 +157,9 @@ contract RejectsEther {
 }
 
 contract LibIDTest is Test {
-    /// The factory every canonical address derives from.
-    address constant FACTORY = 0xa92244C3F4462aaD08bD1A33c3940b9B936321AD;
+    /// The factories every canonical address derives from, one per environment.
+    address constant FACTORY = 0xb7432C991Be3167689d5e80c9E2bf1ff5cCCd2E0;
+    address constant TESTNET_FACTORY = 0x9dBF2b5F96cb31A48cCa4e25D2c8348Be414ebC8;
     bytes32 constant IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
     /// A Google ID token lives an hour; its `exp` is the evidence time.
     uint64 constant GOOGLE_TOKEN_LIFETIME = 1 hours;
@@ -211,6 +213,8 @@ contract LibIDTest is Test {
     function test_theAddressesAreTheFactoryAddressesOfTheCanonicalNames() public pure {
         assertEq(LibID.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry"), FACTORY));
         assertEq(LibID.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.2"), FACTORY));
+        assertEq(LibIDTestnet.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry"), TESTNET_FACTORY));
+        assertEq(LibIDTestnet.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.2"), TESTNET_FACTORY));
     }
 
     function test_thePlatformIdsAreTheContractsOwn() public pure {
@@ -707,24 +711,49 @@ contract LibIDTest is Test {
     }
 }
 
-/// Reads the real Eden deployment. Skipped without EDEN_RPC_URL, unless
-/// LIBID_REQUIRE_FORK is set, as CI sets it: then a missing RPC fails.
-contract LibIDForkTest is Test {
-    function setUp() public {
-        string memory rpc = vm.envOr("EDEN_RPC_URL", string(""));
+/// Selects a fork from an RPC URL in `variable`. Skipped when it is empty,
+/// unless LIBID_REQUIRE_FORK is set, as CI sets it: then a missing RPC fails.
+abstract contract ForkTest is Test {
+    function _fork(string memory variable) internal {
+        string memory rpc = vm.envOr(variable, string(""));
         if (bytes(rpc).length == 0) {
-            require(!vm.envOr("LIBID_REQUIRE_FORK", false), "LIBID_REQUIRE_FORK is set but EDEN_RPC_URL is empty");
+            require(
+                !vm.envOr("LIBID_REQUIRE_FORK", false),
+                string.concat("LIBID_REQUIRE_FORK is set but ", variable, " is empty")
+            );
             vm.skip(true);
         }
         vm.createSelectFork(rpc);
     }
+}
 
-    function test_edenRunsLibIDAtTheEmbeddedAddresses() public {
+/// Reads the real Ethereum mainnet deployment through LibID.
+contract LibIDForkTest is ForkTest {
+    function setUp() public {
+        _fork("ETH_RPC_URL");
+    }
+
+    function test_mainnetRunsLibIDAtTheEmbeddedAddresses() public {
         Consumer consumer = new Consumer();
         assertTrue(consumer.isAvailable());
         assertTrue(consumer.isEscrowAvailable());
         assertEq(address(HandleEscrow(LibID.ESCROW).registry()), LibID.REGISTRY);
         assertEq(consumer.resolve(LibID.GITHUB, "nobody-has-this-handle-xyz"), address(0));
         assertFalse(consumer.isHolder(address(1), LibID.GITHUB, "nobody-has-this-handle-xyz", 1 days));
+    }
+}
+
+/// Reads the real Sepolia deployment through LibIDTestnet.
+contract LibIDTestnetForkTest is ForkTest {
+    function setUp() public {
+        _fork("SEPOLIA_RPC_URL");
+    }
+
+    function test_sepoliaRunsLibIDTestnetAtTheEmbeddedAddresses() public view {
+        assertTrue(LibIDTestnet.isAvailable());
+        assertTrue(LibIDTestnet.isEscrowAvailable());
+        assertEq(address(HandleEscrow(LibIDTestnet.ESCROW).registry()), LibIDTestnet.REGISTRY);
+        assertEq(LibIDTestnet.resolve(LibIDTestnet.GITHUB, "nobody-has-this-handle-xyz"), address(0));
+        assertFalse(LibIDTestnet.isHolder(address(1), LibIDTestnet.GITHUB, "nobody-has-this-handle-xyz", 1 days));
     }
 }

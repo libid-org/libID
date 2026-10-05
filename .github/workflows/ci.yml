@@ -109,7 +109,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Solidity: LibID, tested against the real libID contracts placed at their
-  # canonical addresses. The fork test against Eden reads a public RPC.
+  # canonical addresses. The fork tests read Ethereum mainnet and Sepolia
+  # through public RPCs.
   # ---------------------------------------------------------------------------
   sol:
     name: Solidity
@@ -127,6 +128,9 @@ jobs:
         with:
           version: v1.7.1
 
+      - name: LibIDTestnet is generated from LibID
+        run: ./script/testnet.sh && git diff --exit-code -- src/LibIDTestnet.sol
+
       - name: Formatting
         run: forge fmt --check
 
@@ -135,22 +139,23 @@ jobs:
 
       # The oldest compiler the README promises, on the legacy pipeline,
       # building LibID.sol alone as an integrator's project would.
-      - name: LibID compiles with solc 0.8.20
+      - name: LibID and LibIDTestnet compile with solc 0.8.20
         env:
           FOUNDRY_VIA_IR: "false"
           FOUNDRY_OUT: ${{ runner.temp }}/libid-0.8.20/out
           FOUNDRY_CACHE_PATH: ${{ runner.temp }}/libid-0.8.20/cache
-        run: forge build src/LibID.sol --use 0.8.20 --evm-version paris
+        run: forge build src/LibID.sol src/LibIDTestnet.sol --use 0.8.20 --evm-version paris
 
       - name: Tests
         run: forge test -vv
 
       # LIBID_REQUIRE_FORK turns a missing RPC into a failure, not a skip.
-      - name: Eden fork test
+      - name: Mainnet and Sepolia fork tests
         env:
-          EDEN_RPC_URL: https://ev-reth-eden-testnet.binarybuilders.services:8545
+          ETH_RPC_URL: https://ethereum-rpc.publicnode.com
+          SEPOLIA_RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
           LIBID_REQUIRE_FORK: "true"
-        run: forge test -vv --match-contract LibIDForkTest
+        run: forge test -vv --match-contract 'ForkTest$'
 
   # ---------------------------------------------------------------------------
   # Ceremony coverage badge: on pushes to main, publish the unit-test line
