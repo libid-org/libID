@@ -19,7 +19,9 @@ rather than a document of its own.
 A profile defines no ceremony construction. It says what the values a
 ceremony already commits are on one chain, so that a Canonical Runtime
 composing for a destination and the Platform Verifier deployed there commit
-the same bytes. Selecting one is destination selection, not proof authority.
+the same bytes. It also says how a fee travels on that chain and how a
+rejected call undoes it, so that every hop of the verification path pays and
+rolls back alike. Selecting one is destination selection, not proof authority.
 
 ## 2. What every profile fixes
 
@@ -39,9 +41,9 @@ the same bytes. Selecting one is destination selection, not proof authority.
   Necessity: the Canonical Runtime and the Platform Verifier derive the first
   four independently, so an answer left open is two answers, and they disagree
   only as a digest the destination rebuilds differently. The Consumer, the
-  Proof Verifier, the Platform Verifier, and the Notary Service pass the fee
-  under the last three, so an answer left open there is a fee one hop cannot
-  pay or a rejection that keeps it.
+  Proof Verifier, and the Platform Verifier pass the fee under the last three
+  and the Notary Service receives it, so an answer left open there is a fee
+  one hop cannot pay or a rejection that keeps it.
 - REQ-CHAIN-02 (upholds SP-REPLAY-01):
   A Chain Profile MUST state the preimage shape it claims in §2.1, and MUST
   NOT claim a shape another Chain Profile claims. Necessity: REQ-COMMON-01C
@@ -148,10 +150,11 @@ receive with the value they require for exact equality (REQ-COMMON-06D,
 REQ-COMMON-34E).
 
 Rejection is a revert. A revert undoes every state change and value transfer
-of the reverting call, including those of the calls it made, and no caller on
-the path, the Consumer included, catches the revert of the role it calls. A
-Submission rejected at any hop therefore reverts the Consumer's call with no
-fee delivered and no state changed (REQ-COMMON-42).
+of the reverting call, including those of the calls it made. The Proof
+Verifier and the Platform Verifier let the revert of the role they call
+propagate, so a Submission rejected at any hop reverts the Consumer's call to
+the Proof Verifier. A Consumer that lets that revert propagate leaves no fee
+delivered and no state changed (REQ-COMMON-42).
 
 ## 4. Conformance tests
 
