@@ -122,8 +122,9 @@ Platform Profile: The immutable, independently versioned definition of one
    Platform Verifier registered for that platform and version MUST enforce the
    same profile, but its implementation and deployment are ledger-specific.
    The Consumer holds none of the profile constants except, for each
-   platform, its handle normalization and whether its profile is a digest
-   profile (platform §2.1a, §2.1b).
+   platform, its handle normalization, whether its profile is a digest
+   profile, and a digest profile's handle-digest construction (platform
+   §2.1a, REQ-PLAT-08L).
 
 Account identifier: The authenticated value a Platform Profile derives the
    canonical `userId` from: Google's signed `sub`, and the X and GitHub
