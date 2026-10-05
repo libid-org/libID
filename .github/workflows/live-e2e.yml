@@ -57,8 +57,34 @@ jobs:
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/bind test:live --grep-invert Google
 
-      - name: Keep the trace, video and container logs
+      # The artifact is public. Refuse to upload it if any file holds a secret:
+      # the password, the TOTP secret, or a value of the saved X session.
+      - name: Check the failure output for secrets
+        id: scan
         if: failure()
+        env:
+          LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
+          GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
+          GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
+          X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
+        run: |
+          node --input-type=module -e '
+            import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
+            import { join } from "node:path"
+            const env = process.env
+            const cookies = JSON.parse(Buffer.from(env.X_TEST_ALICE_COOKIES ?? "", "base64").toString() || "[]")
+            const secrets = [env.GH_TEST_ALICE_PASSWORD, env.GH_TEST_ALICE_TOTP_SECRET,
+              ...(Array.isArray(cookies) ? cookies : cookies.cookies).map((c) => c.value)]
+              .filter((s) => s && s.length >= 8)
+            const files = (p) => !existsSync(p) ? [] : statSync(p).isDirectory()
+              ? readdirSync(p).flatMap((f) => files(join(p, f))) : [p]
+            const found = [...files("ts/apps/bind/test-results"), ...files(env.LIBID_STACK_LOGS)]
+              .filter((f) => { const b = readFileSync(f); return secrets.some((s) => b.includes(s)) })
+            if (found.length) { console.error("Secrets in:", found.join(", ")); process.exit(1) }
+          '
+
+      - name: Keep the screenshots and container logs
+        if: failure() && steps.scan.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: live-e2e

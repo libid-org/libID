@@ -37,8 +37,10 @@ export default defineConfig({
     headless: !process.env.HEADED,
     // Automation X and Google can see makes them challenge; see e2e/person.ts.
     launchOptions: { args: ['--disable-blink-features=AutomationControlled'] },
-    trace: 'retain-on-failure',
+    // A trace records every fill and cookie, the test accounts' password and
+    // sessions included, so CI keeps screenshots only.
+    trace: process.env.CI ? 'off' : 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: process.env.CI ? 'off' : 'retain-on-failure',
   },
 })
