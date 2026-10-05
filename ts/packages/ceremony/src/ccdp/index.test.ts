@@ -1,0 +1,311 @@
+import { describe, expect, it } from 'vitest'
+import { supportedPlatforms } from '../platforms/index.js'
+import { isOrigin } from '../primitives.js'
+import { CEREMONY_ID } from '../testing/index.js'
+import {
+  CeremonyFailed,
+  EventMessage,
+  IdentityProof,
+  isRedirectUri,
+  ProveIdentity,
+  UserDenied,
+} from './index.js'
+import { prefetchFragment, proverFragment, readPrefetch, readProver } from './navigation.js'
+
+const id = CEREMONY_ID
+
+describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
+  const samples = [
+    [
+      CeremonyFailed,
+      { type: 'ceremony-failed', event: 'proof', message: 'Unexpected proving failure.' },
+    ],
+    [
+      ProveIdentity,
+      {
+        type: 'prove-identity',
+        platformId: 'google',
+        platformCeremonyVersion: 1,
+        clientId: 'client',
+        redirectUri: 'https://bridge.test/auth/callback',
+        codeVerifier: null,
+        notaryAddress: null,
+      },
+    ],
+    [UserDenied, { type: 'user-denied' }],
+    [EventMessage, { type: 'event', event: 'prefetch-dispatch', phase: 'finished', timestamp: 1 }],
+    [EventMessage, { type: 'event', event: 'prover', phase: 'started', timestamp: 2 }],
+    [
+      EventMessage,
+      {
+        type: 'event',
+        event: 'proof',
+        phase: 'started',
+        timestamp: 1,
+      },
+    ],
+    [
+      IdentityProof,
+      {
+        type: 'identity-proof',
+        identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
+        proof: { arbitrary: true },
+      },
+    ],
+  ] as const
+  for (const [codec, value] of samples)
+    it(codec.type, () => {
+      expect(codec.decode(value)).toBe(value)
+      const { decode } = codec
+      expect(decode(value)).toBe(value)
+      expect(() => codec.decode({ ...value, ceremonyId: id })).toThrow()
+      expect(() => codec.decode({ ...value, type: 'other' })).toThrow()
+      expect(() => codec.decode(Object.assign(new Date(), value))).toThrow()
+    })
+  /**
+   * On every platform, each accepted `field` value decodes unchanged and still admits no retired
+   * credential; each rejected value throws.
+   */
+  function checkField(field: string, accepted: unknown[], rejected: unknown[]) {
+    // The codec admits any slug: every catalog platform and one it does not know yet.
+    for (const platformId of [...supportedPlatforms, 'new-platform']) {
+      const base = { ...samples[1][1], platformId }
+      expect(ProveIdentity.decode(base)).toBe(base)
+      for (const value of accepted) {
+        const valid = { ...base, [field]: value }
+        expect(ProveIdentity.decode(valid)).toBe(valid)
+        expect(() =>
+          ProveIdentity.decode({ ...valid, tokenExchangeCredential: 'retired' }),
+        ).toThrow()
+      }
+      for (const value of rejected)
+        expect(() => ProveIdentity.decode({ ...base, [field]: value })).toThrow()
+    }
+  }
+  it('requires the fixed callback path on every ProveIdentity [TEST-CCDP-05]', () => {
+    checkField(
+      'redirectUri',
+      [
+        'https://bridge.test/auth/callback',
+        'https://bridge.test:8443/auth/callback',
+        'https://[::1]/auth/callback',
+        'http://localhost:4682/auth/callback',
+        'http://127.0.0.1:4682/auth/callback',
+      ],
+      [
+        'https://bridge.test',
+        'https://bridge.test/',
+        'https://bridge.test/callback',
+        'https://bridge.test/arbitrary/path',
+        'https://bridge.test/auth/callback/',
+        'https://bridge.test/auth/%63allback',
+        'https://bridge.test/auth/../auth/callback',
+        'https://bridge.test/auth/callback?x=1',
+        'https://bridge.test/auth/callback#x',
+      ],
+    )
+  })
+  it('validates nullable notary routing independently of platform [LIBID-OAUTH-021]', () => {
+    checkField(
+      'notaryAddress',
+      [null, 'https://notary.test', 'https://localhost:4687', 'http://localhost:4687'],
+      [
+        undefined,
+        0,
+        {},
+        'http://notary.test',
+        'https://notary.test/',
+        'https://user@notary.test',
+        'https://notary.test?x=1',
+        'https://notary.test#x',
+      ],
+    )
+    for (const extra of [
+      { ledgerId: 'test:mainnet' },
+      { isTestnet: false },
+      { chainId: new Uint8Array(32) },
+    ])
+      expect(() => ProveIdentity.decode({ ...samples[1][1], ...extra })).toThrow()
+  })
+  it('validates nullable code verifiers without deciding platform applicability [LIBID-OAUTH-021]', () => {
+    checkField(
+      'codeVerifier',
+      [null, 'A'.repeat(43)],
+      [undefined, '', 'A'.repeat(42), '+'.repeat(43), `${'A'.repeat(43)}=`],
+    )
+  })
+  it('validates the optional public credential independently of platform [TEST-CCDP-05]', () => {
+    // An absent credential is valid: checkField decodes each platform's base message without one.
+    checkField(
+      'clientCredential',
+      ['public&credential=1', 'x'.repeat(512)],
+      [undefined, null, '', 1, [], 'has space', 'tail\n', '\t', 'é', '\x7f', 'x'.repeat(513)],
+    )
+  })
+
+  it('rejects malformed event records and terminal claims without coercion [LIBID-OAUTH-024]', () => {
+    const message = samples[5][1]
+    for (const timestamp of [NaN, Infinity, -1, '0'])
+      expect(() => EventMessage.decode({ ...message, timestamp })).toThrow()
+    for (const extra of [
+      { status: 'completed' },
+      { stage: 'zk-proving' },
+      { phase: 'failed' },
+      { proof: 'secret' },
+      { attributes: { bytes: Infinity } },
+    ])
+      expect(() => EventMessage.decode({ ...message, ...extra })).toThrow()
+  })
+  it('preserves private return components with one outer encoding [LIBID-OAUTH-026] [TEST-CCDP-03] [LIBID-OAUTH-011]', () => {
+    const input = { query: `?code=a%2Bb&state=v1.${id}`, fragment: '' }
+    expect(readProver(String(proverFragment(id, 'https://app.test', input)))).toEqual({
+      ceremonyId: id,
+      applicationOrigin: 'https://app.test',
+      oauthReturn: input,
+    })
+    expect(readPrefetch(String(prefetchFragment(id, 'x', 1))).platformId).toBe('x')
+    for (const extra of [`&ceremonyId=${id}`, '&other=1'])
+      expect(() =>
+        readProver(String(proverFragment(id, 'https://app.test', input)) + extra),
+      ).toThrow()
+    expect(() =>
+      readProver(
+        `ceremonyId=${id}&applicationOrigin=https%3A%2F%2Fapp.test&oauthQuery=%FF&oauthFragment=`,
+      ),
+    ).toThrow()
+  })
+})
+
+it.each([
+  null,
+  {},
+  { platformId: 'google', oauthClientId: 'client', userId: 1, userName: 'a' },
+  { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a', extra: true },
+  { platformId: 'google', oauthClientId: 'client', userId: '1', userName: '\n' },
+])('rejects malformed shared identities [LIBID-MOD-016]', (identity) => {
+  expect(() => IdentityProof.decode({ type: 'identity-proof', identity, proof: null })).toThrow()
+})
+
+it('rejects the retired delivery message and embedded-identity shape [LIBID-OAUTH-024]', () => {
+  expect(() => IdentityProof.decode({ type: 'prover-deliver-proof', proof: {} })).toThrow()
+  expect(() => IdentityProof.decode({ type: 'identity-proof', proof: { identity: {} } })).toThrow()
+})
+
+it('admits explicit loopback HTTP without widening public URL validation [LIBID-OAUTH-021]', () => {
+  for (const suffix of ['?', '#', '?x=1', '#x']) {
+    const redirectUri = `https://bridge.test/auth/callback${suffix}`
+    expect(isRedirectUri(redirectUri)).toBe(false)
+    expect(() =>
+      ProveIdentity.decode({
+        type: 'prove-identity',
+        platformId: 'google',
+        platformCeremonyVersion: 1,
+        clientId: 'client',
+        redirectUri,
+        codeVerifier: null,
+        notaryAddress: null,
+      }),
+    ).toThrow()
+  }
+  for (const value of ['http://localhost:4682', 'http://127.0.0.1:4682']) {
+    expect(isOrigin(value)).toBe(true)
+    expect(isRedirectUri(`${value}/auth/callback`)).toBe(true)
+  }
+  for (const value of [
+    'http://bridge.test',
+    'http://localhost.evil.test',
+    'http://192.168.1.1',
+    'http://localtest.me',
+    'http://localhost.',
+    'http://user@localhost',
+    'http://LOCALHOST',
+    'http://127.1',
+  ]) {
+    expect(isOrigin(value), value).toBe(false)
+    expect(isRedirectUri(`${value}/auth/callback`), value).toBe(false)
+  }
+})
+
+it('supports bounded extension observations and disambiguated operations [LIBID-MOD-016]', () => {
+  for (const event of [
+    {
+      type: 'event',
+      event: 'resource-request',
+      timestamp: 1,
+      instrumentation: { attributes: { bytes: 1024, cache: 'hit' } },
+    },
+    {
+      type: 'event',
+      event: 'tls-session',
+      phase: 'started',
+      instrumentation: { operationId: 'identity' },
+      timestamp: 1,
+    },
+    {
+      type: 'event',
+      event: 'tls-session',
+      phase: 'finished',
+      instrumentation: { operationId: 'identity' },
+      timestamp: 2,
+    },
+    { type: 'event', event: 'prover-fallback', timestamp: 3 },
+  ])
+    expect(EventMessage.decode(event)).toBe(event)
+  for (const event of [
+    { event: 'prover-fallback', phase: 'started' },
+    { event: 'prover' },
+    { event: 'prover', phase: 'started', instrumentation: { operationId: 'extra' } },
+    { event: 'some-event', phase: 'unknown' },
+    { event: 'unknown', instrumentation: { operationId: '' } },
+    { event: 'unknown', instrumentation: { attributes: { data: {} } } },
+    {
+      event: 'unknown',
+      instrumentation: {
+        attributes: Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`field-${i}`, i])),
+      },
+    },
+  ])
+    expect(() => EventMessage.decode({ type: 'event', timestamp: 1, ...event })).toThrow()
+})
+
+it('accepts only the current outcome names [TEST-CCDP-05]', () => {
+  for (const type of ['cancel', 'denied', 'abort']) {
+    const value =
+      type === 'abort' ? { type, event: 'prover', message: 'Retired message' } : { type }
+    for (const codec of [UserDenied, CeremonyFailed, ProveIdentity, IdentityProof, EventMessage])
+      expect(() => codec.decode(value)).toThrow()
+  }
+})
+
+it('validates the exact optional instrumentation record [TEST-CCDP-06]', () => {
+  const value = { type: 'event', event: 'session', phase: 'started', timestamp: 1 }
+  for (const instrumentation of [
+    {},
+    { operationId: 'first' },
+    { attributes: {} },
+    { operationId: 'first', attributes: { bytes: 1, cached: true, source: 'worker' } },
+  ])
+    expect(EventMessage.decode({ ...value, instrumentation })).toMatchObject({ instrumentation })
+  expect(EventMessage.decode(value)).not.toHaveProperty('instrumentation')
+  for (const instrumentation of [
+    null,
+    undefined,
+    [],
+    new Date(),
+    { unknown: true },
+    { operationId: null },
+    { operationId: undefined },
+    { operationId: '' },
+    { operationId: 'x'.repeat(65) },
+    { attributes: null },
+    { attributes: undefined },
+    { attributes: [] },
+    { attributes: { bytes: Infinity } },
+    { attributes: { bytes: NaN } },
+    { attributes: { text: 'x'.repeat(129) } },
+    { attributes: Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`field-${i}`, i])) },
+  ])
+    expect(() => EventMessage.decode({ ...value, instrumentation })).toThrow()
+  for (const extra of [{ operationId: 'first' }, { attributes: {} }])
+    expect(() => EventMessage.decode({ ...value, ...extra })).toThrow()
+})

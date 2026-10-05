@@ -16,34 +16,39 @@ Acceptance is indexed by the [test plan](TEST_PLAN.md), while
 
 ### Open the popup
 
-The application creates a lifecycle object during the user activation. It then
-constructs the connection before deciding whether to suppress the action's
-native navigation:
+The application creates a lifecycle object during an anchor's activation,
+connects it, and navigates before the handler returns:
 
 ```ts
-const popupWindow = PopupWindow.open(anchor.target)
-const connection = PopupConnection.connect<Messages>(popupWindow, {
-  connectionId,
-  allowedPopupOrigins,
-  fallback,
-  onDiagnostic,
+anchor.addEventListener('click', (event) => {
+  const popupWindow = PopupWindow.fromAnchor(event, 'width=480,height=720')
+  const connection = PopupConnection.connect<Messages>(popupWindow, {
+    connectionId,
+    allowedPopupOrigins,
+    fallback,
+    onDiagnostic,
+  })
+  void connection.navigate(url, new URLSearchParams({ c: connectionId }))
 })
-
-const [href, fragment = ''] = anchor.href.split('#')
-void connection.navigate(href, new URLSearchParams(fragment))
-if (popupWindow.opened) event.preventDefault()
 ```
 
 Navigation takes a fragment-free URL and, separately, the fragment fields as
 `URLSearchParams`. The package serializes them at the call and treats them as
 opaque protocol data: no field is reserved, parsed, or tied to the connection
-ID. A URL that spells its own fragment, even an empty `#`, is rejected. The
-anchor keeps its fragment because the native-anchor path navigates it as
-written.
+ID. A URL that spells its own fragment, even an empty `#`, is rejected.
 
-`PopupWindow.open(target, features?)` synchronously attempts
-`window.open('about:blank', target, 'popup,…')` and returns a wrapper even when
-the browser returns no handle. The popup is always requested as a separate
+`PopupWindow.fromAnchor(event, features?)` names the popup itself and attempts
+`window.open('about:blank', name, 'popup,…')` first. When that returns a handle,
+it suppresses the anchor's native navigation. When the browser blocks it, the
+anchor's own navigation creates the popup under the same name, and a `navigate`
+during the activation points the anchor at its destination. The anchor needs
+no `target`; keep a placeholder `href` so it stays focusable and opens from the
+keyboard. Unless the activation's target is an anchor without `noopener` or
+`noreferrer`, in any letter case, and `features` requests neither, it
+suppresses that navigation and throws
+`TypeError`. `PopupWindow.open(features?)`
+opens a named popup the same way for an activation without an anchor, with no
+fallback. Both return a wrapper even when the browser returns no handle. The popup is always requested as a separate
 window; `features` may add size or position (`width=480,height=720`) and must
 not contain `noopener` or `noreferrer`. Without a caller position (`left`, `top`,
 `screenX`, or `screenY`), successful launches from that application document are
@@ -53,17 +58,18 @@ already-open windows alone. It does not track or reclaim closed positions:
 isolation can make a live popup's retained handle appear closed. Positioning is
 best-effort; browser or window-manager policy may override it.
 
-The native-anchor fallback and mobile
-browsers present a tab instead, which changes no rule. It throws `TypeError` before opening for an empty target or
-one beginning with `_`. When no handle is returned, the connection binds the
-popup created by the same action's real anchor. See [popup creation and
-native-anchor fallback](docs/connection.md#popup-creation-and-native-anchor-fallback).
+A popup adopted by native-anchor binding and mobile browsers present a tab
+instead, which changes no rule. When no handle is returned, the connection
+binds the popup created by the same action's real anchor. See [popup
+creation and native-anchor
+binding](docs/connection.md#popup-creation-and-native-anchor-binding).
 
 ```ts
 declare class PopupWindow {
   readonly opened: boolean
 
-  static open(target: string, features?: string): PopupWindow
+  static fromAnchor(event: MouseEvent, features?: string): PopupWindow
+  static open(features?: string): PopupWindow
   static current(fragment?: string, options?: { scope?: string }): PopupWindow
 }
 ```
@@ -116,7 +122,8 @@ carrier can continue or be established, the logical connection fails closed.
 Same-origin replacement may preserve a `MessagePort` through the continuity
 worker. Cross-origin replacement, including navigation to another site, never
 transfers a port between Service Workers: the next participating document
-authenticates a fresh carrier through its opener or the configured fallback.
+authenticates a fresh carrier through its opener or the configured fallback
+constructor.
 A cross-origin destination whose isolation policy severs its opener therefore
 requires a fallback constructor; without one, the connection fails closed.
 This is best-effort logical continuity, not guaranteed delivery across a
@@ -178,13 +185,14 @@ not end the application's connection.
 This is best-effort `pagehide` reporting, not a guaranteed window-close event.
 Mobile termination may skip it, and provider pages run no package code. During
 periods without a carrier, the application polls its retained handle every 250 ms.
-If that handle becomes unavailable and no fallback is pending, the connection
-fails with `popup-unavailable` immediately on detection, without a grace period.
+If that handle becomes unavailable while neither an authenticated handshake nor
+a fallback carrier is pending, the connection fails with `popup-unavailable`
+immediately on detection, without a grace period.
 The error covers both window closure and provider COOP severance; it cannot
 identify which happened. `PopupError.code` identifies the failure; the host owns
 user-facing wording.
 
-A selected carrier survives handle severance. A pending fallback keeps recovery
+A selected carrier survives handle severance. A pending fallback carrier keeps recovery
 open without a connection timeout until it resolves, rejects, or the caller
 closes. Native-anchor launches gain the same detection after authentication binds
 the handle; closure before that binding remains unobservable. Browser suspension
@@ -195,10 +203,12 @@ may delay polling. No heartbeat currently treats silence as closure. Neither
 
 `closed` describes this endpoint's lifecycle, not the physical window or a user
 intent. On Application, `{ outcome: 'failed', code: 'popup-unavailable' }` means
-its retained handle became unavailable without a carrier or pending fallback;
+its retained handle became unavailable without a carrier or pending fallback carrier;
 it cannot distinguish user closure from COOP severance. A popup-originated
 `DocumentDeparted` instead produces `{ outcome: 'closed' }` and can also mean
-Back or reload. Planned Prover isolation preserves the carrier.
+Back or reload. Planned Prover isolation preserves the carrier. Inside a popup
+document, `navigate` and `navigateAway` throw `popup-unavailable` once that
+document has accepted a control or started leaving.
 
 An Application failure does not stop an external provider page or notify a
 severed popup. When the user returns to a participating popup document, that
@@ -214,9 +224,9 @@ try {
 }
 ```
 
-Without an opener or fallback, `ready` rejects with `fallback-unavailable`.
+Without an opener or fallback constructor, `ready` rejects with `fallback-unavailable`.
 An opener that exists but does not answer gets the existing 30-second handshake
-wait before fallback selection. An available fallback is awaited; a rejection
+wait before fallback-carrier selection. An available fallback carrier is awaited; a rejection
 reports `fallback-failed`. Authentication failures report `handshake-rejected`.
 These are connection/setup failures, not OAuth denial or proof of user closure.
 The package provides programmatic errors; the host translates their codes into
@@ -298,7 +308,6 @@ interface PopupDiagnostic {
   readonly code: string
   readonly timestamp: number
   readonly durationMs?: number
-  readonly count?: number
 }
 ```
 
@@ -309,7 +318,7 @@ interface PopupDiagnostic {
 
 A participating document that needs cross-origin isolation passes
 `isolationFallbackUrl`. Its presence requires isolation and names a
-same-origin fallback, resolved against the current document and carrying the
+same-origin isolation fallback, resolved against the current document and carrying the
 document's captured fragment unchanged; the value itself must not spell a
 fragment.
 
@@ -317,7 +326,10 @@ fragment.
 so a bootstrap may read `location.hash`, clear the URL, and only then import
 the package; it defaults to the current `location.hash`. The package keeps a
 snapshot, so later clearing or mutation changes nothing, and never puts the
-value in the worker, storage, or a diagnostic.
+value in the worker, storage, or a diagnostic. `accept` takes the snapshot from
+the window and keeps it only while a non-isolated document may still leave for
+the isolation fallback, dropping it when that endpoint ends; an isolated
+document, or one accepted without the option, keeps none.
 
 ```ts
 PopupConnection.accept(popupWindow, {
@@ -334,15 +346,16 @@ with `Cross-Origin-Opener-Policy: same-origin` and
 engine honours DIP, `/prover` is isolated and keeps its opener, so nothing
 else happens. Where it does not, `/prover` establishes its carrier, keeps the
 still-unstarted port through the worker so every value already sent travels
-with it, and replaces itself with the fallback, whose COOP isolates it; the
-fallback restores the port and becomes ready. The departing endpoint never
-becomes ready and delivers nothing. A fallback that is itself not isolated
-fails with `isolation-unavailable` instead of looping. The package assigns no
+with it, and replaces itself with the isolation fallback, whose COOP isolates it and
+which restores the port and becomes ready. The departing endpoint never
+becomes ready and delivers nothing. An isolation fallback that is itself not isolated
+fails with `isolation-unavailable` instead of looping, and reports its departure
+over the carrier it holds, so the application's side closes rather than waits. The package assigns no
 meaning to the paths; the application observes one connection throughout.
 
 When the opener was already severed, only the fallback constructor remains,
 and that carrier could not cross the replacement, so the non-isolated document
-does not construct it: it replaces itself first, and the isolated fallback
+does not construct it: it replaces itself first, and the isolation fallback, now isolated,
 establishes the only carrier through its own constructor from the same
 still-unused signaling round. No connection is spent on the intermediate
 document. Before initial selection application sends throw; if it retains a
@@ -383,7 +396,7 @@ activate. See [continuity across navigations](docs/message-port.md#continuity-ac
 
 ### Fallback carrier
 
-The optional fallback is a carrier constructor supplied independently in every
+The optional fallback constructor builds a carrier and is supplied independently in every
 participating document:
 
 ```ts
@@ -397,9 +410,10 @@ interface Carrier {
 }
 ```
 
-Omitting it starts no fallback work. If opener-based connection fails, the
+Omitting it starts no fallback-carrier work. If opener-based connection fails, the
 connection terminates with the stable `fallback-unavailable` diagnostic. The
-WebRTC application constructor closes over its own signaling and ICE
+[WebRTC carrier](docs/webrtc.md) is specified but not implemented yet; what
+follows describes its intended shape. The WebRTC application constructor closes over its own signaling and ICE
 configuration. Its popup-side factory eagerly consumes package-owned navigation
 metadata and returns the later constructor without starting RTC. Callers do not
 manage carrier selection, replacement, or lifetime.
@@ -418,5 +432,5 @@ remain deferred or manual.
 
 After `ready`, `connection.peerOrigin` identifies the authenticated peer; it is
 `null` without a selected carrier. [Origin binding](docs/connection.md#authenticated-peer-origin)
-describes preservation and fallback. Application, popup documents, and worker
+describes preservation and fallback carriers. Application, popup documents, and worker
 use the same connection protocol version.

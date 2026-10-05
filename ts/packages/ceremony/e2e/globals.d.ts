@@ -1,0 +1,36 @@
+import type { EventFeed } from '../src/events.js'
+import type { CeremonyEvent, IdentityResult } from '../src/index.js'
+import type { NotaryRuntime } from '../src/notary/session.js'
+import type { NotaryPlatform } from './platforms.js'
+
+declare global {
+  interface Window {
+    NotaryRuntime: typeof NotaryRuntime
+    failureEvent?: string
+    /** The failed run's display text, so an assertion can show why it failed. */
+    failureMessage?: string
+    ready: boolean
+    completed: IdentityResult[]
+    runs: { events: CeremonyEvent[]; diagnostics: string[]; outcome?: string; closed?: unknown }[]
+    testFeed: EventFeed
+    testView: {
+      trackProof(weights: Readonly<Record<string, number>>): void
+      finishProof(): Promise<void>
+      delivered(): void
+      stop(): void
+    }
+    result: IdentityResult | { status: 'failed' } | undefined
+    events: CeremonyEvent[]
+    ceremonyClosed: unknown
+    afterReady: boolean
+    after(): Promise<void>
+    proveBearerFixture(): Promise<{
+      proof: number[]
+      publicInputs: string[]
+    }>
+    notarizeRequests(
+      count: number,
+      platform?: NotaryPlatform,
+    ): Promise<{ sent: number; received: number; attestedData: number }[]>
+  }
+}

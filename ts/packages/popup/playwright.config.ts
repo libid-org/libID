@@ -1,14 +1,15 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// The same five-project matrix the ceremony package qualifies against.
-// Serial workers: every test drives one popup per page.
+// Browser contexts isolate popup/worker state; the shared harness serves static bytes.
+// CI also separates engines onto independent runners.
 export default defineConfig({
   testDir: './e2e',
-  workers: 1,
-  fullyParallel: false,
+  workers: 2,
+  fullyParallel: true,
   timeout: 60_000,
   reporter: 'list',
-  use: { ignoreHTTPSErrors: true },
+  // Traces are kept only for failures, which CI uploads.
+  use: { ignoreHTTPSErrors: true, trace: 'retain-on-failure' },
   webServer: {
     command: 'node e2e/build.mjs && node e2e/server.mjs',
     url: 'https://popup.localhost:4583/health',

@@ -1,0 +1,189 @@
+name: CCDP image
+
+# Builds the static ceremony artifact and the pinned SWS image for linux/amd64,
+# proves the image against the running container and the pinned native
+# binary, and — when `push` is true — publishes it to ghcr. Called by ci.yml
+# (build and test on pull requests; publish `:sha-<commit sha>` and `:main`
+# from main). A manual dispatch is a dry run: it builds and tests and never
+# pushes. release.yml never builds; it promotes the `:sha-<commit sha>` image
+# published from main.
+#
+# No `permissions` here: a called workflow runs with its caller's token and
+# can only narrow it, so each caller declares what its run needs:
+# `packages: write` only for the runs that push. A dispatch runs with the
+# repository's default token, which is read-only.
+#
+# The checks run against the local reference `ghcr.io/libid-org/ccdp:sha-<commit sha>`
+# (the full 40-hex sha, so two commits can never share a tag). Only a main
+# publication passes `sha_tag` and pushes it: that is the reference release.yml
+# promotes after checking the image's revision and version labels. `tag` adds
+# one more tag (`main`, `custom-<name>`), checked here against the tag grammar
+# before anything is built; it is also the version label.
+# Each image serves only its own build (see "Publication and upgrades" in
+# ts/packages/ceremony/docs/distribution.md).
+#
+# Every third-party action is pinned by commit SHA, with the tag in a
+# comment, so a moved tag cannot change what executes.
+
+on:
+  workflow_call:
+    inputs:
+      push:
+        description: Push the image to ghcr once the checks pass.
+        type: boolean
+        default: false
+      tag:
+        description: A tag of ghcr.io/libid-org/ccdp to push, such as main or custom-<name>.
+        type: string
+        default: ""
+      sha_tag:
+        description: Also push sha-<commit sha>, the reference a release promotes. Only main publications pass true.
+        type: boolean
+        default: false
+  workflow_dispatch:
+
+jobs:
+  image:
+    name: Build, test and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE: ghcr.io/libid-org/ccdp
+      ARTIFACTS: ts/packages/ceremony/dist-artifacts
+      # The release of the SWS image pinned in ccdp.Dockerfile and both compose
+      # files; build/pins.test.ts checks they agree.
+      SWS_VERSION: v3.0.0-beta.1
+      # sha256 of static-web-server-$SWS_VERSION-x86_64-unknown-linux-musl.tar.gz,
+      # computed from the downloaded release asset; recompute when bumping SWS_VERSION.
+      SWS_SHA256: c4b043f61eb63ea0fb6b13d42cc29d5732e893ab17fcee320982dcf57574378b
+      # A dispatch has no inputs, so this is "false" unless a caller asked.
+      PUSH: ${{ inputs.push == true }}
+      TAG: ${{ inputs.tag }}
+      SHA_TAG: ${{ inputs.sha_tag == true }}
+    steps:
+      # SHA_REF is the commit's own tag, which every check runs against; REFS is
+      # what a push publishes (SHA_REF only with `sha_tag`, then `tag`).
+      # IMAGE_VERSION, the `org.opencontainers.image.version` label, is `tag` or
+      # else the sha tag. The whole input must be one tag: a space or newline
+      # cannot smuggle in a second reference. It runs first, so a bad input
+      # fails before the build.
+      - name: Resolve the image references
+        run: |
+          set -euo pipefail
+          sha_ref="$IMAGE:sha-$GITHUB_SHA"
+          refs=""
+          if [ "$SHA_TAG" = "true" ]; then refs="$sha_ref"; fi
+          version="sha-$GITHUB_SHA"
+          if [ -n "$TAG" ]; then
+            if ! [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "::error::${TAG@Q} is not usable as a tag of $IMAGE"
+              exit 1
+            fi
+            [ "$TAG" = "$version" ] || refs="${refs:+$refs }$IMAGE:$TAG"
+            version="$TAG"
+          fi
+          if [ "$PUSH" = "true" ] && [ -z "$refs" ]; then
+            echo "::error::a push needs a tag or sha_tag"
+            exit 1
+          fi
+          echo "Image references: $sha_ref ${refs:+(publishes $refs) }(push: $PUSH, version label: $version)"
+          {
+            echo "SHA_REF=$sha_ref"
+            echo "REFS=$refs"
+            echo "IMAGE_VERSION=$version"
+          } >> "$GITHUB_ENV"
+
+      # The build and tests run with a token that may write packages; keep it
+      # out of .git/config.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ts
+
+      - name: Build
+        run: pnpm -C ts --filter '@libid/ceremony...' build
+
+      - name: Build the CCDP artifact
+        run: pnpm -C ts --filter @libid/ceremony build:ccdp-artifacts
+
+      # The OCI labels carry the built commit inside the image, where a moved
+      # or reused tag cannot change it; release.yml refuses to promote an
+      # image whose revision label is not the released commit.
+      - name: Build the image (linux/amd64)
+        run: |
+          set -euo pipefail
+          tags=(-t "$SHA_REF")
+          for ref in $REFS; do [ "$ref" = "$SHA_REF" ] || tags+=(-t "$ref"); done
+          docker buildx build --platform linux/amd64 --load "${tags[@]}" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.version=$IMAGE_VERSION" \
+            -f ts/packages/ceremony/ccdp.Dockerfile "$ARTIFACTS"
+          docker image inspect "$SHA_REF" \
+            -f 'built {{.Os}}/{{.Architecture}} {{.Id}} revision {{index .Config.Labels "org.opencontainers.image.revision"}}'
+
+      - name: Run the image hardened and wait for /health
+        run: |
+          set -euo pipefail
+          docker run -d --name ccdp --read-only --cap-drop ALL --security-opt no-new-privileges \
+            -p 127.0.0.1:28787:8787 "$SHA_REF"
+          for _ in $(seq 1 50); do
+            if curl -fsS -o /dev/null http://127.0.0.1:28787/health; then
+              echo "CCDP image answers /health"
+              exit 0
+            fi
+            sleep 0.2
+          done
+          docker logs ccdp
+          echo "::error::CCDP image did not answer /health"
+          exit 1
+
+      # The same-length ETag regression and the header-matching canary need the
+      # native binary; its bytes must hash to the sha256 pinned in SWS_SHA256.
+      - name: Fetch the pinned SWS binary and check its sha256
+        run: |
+          set -euo pipefail
+          asset="static-web-server-$SWS_VERSION-x86_64-unknown-linux-musl.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/sws.tar.gz" \
+            "https://github.com/static-web-server/static-web-server/releases/download/$SWS_VERSION/$asset"
+          echo "$SWS_SHA256  $RUNNER_TEMP/sws.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/sws"
+          tar -xzf "$RUNNER_TEMP/sws.tar.gz" -C "$RUNNER_TEMP/sws"
+          bin=$(find "$RUNNER_TEMP/sws" -type f -name static-web-server)
+          "$bin" --version
+          echo "CEREMONY_SWS_BINARY=$bin" >> "$GITHUB_ENV"
+
+      # Both the server URL and the binary are provided, so CEREMONY_REQUIRE_NATIVE
+      # fails any test that would otherwise skip for want of either.
+      - name: Distribution tests against the running image and the native binary
+        env:
+          CEREMONY_SWS_URL: http://127.0.0.1:28787
+          CEREMONY_SWS_TEST_PORT: "28790"
+          CEREMONY_REQUIRE_NATIVE: "1"
+        run: pnpm -C ts --filter @libid/ceremony test:distribution
+
+      - name: Push the image
+        if: env.PUSH == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null' EXIT
+          for ref in $REFS; do docker push "$ref"; done
+          digest=$(docker image inspect -f '{{index .RepoDigests 0}}' "$SHA_REF")
+          {
+            echo "### CCDP image published"
+            echo
+            echo "- \`$digest\`"
+            for ref in $REFS; do echo "- \`$ref\`"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summary (not pushed)
+        if: env.PUSH != 'true'
+        run: echo "### CCDP image built and tested; not pushed (push is false on ${{ github.event_name }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs ccdp || true

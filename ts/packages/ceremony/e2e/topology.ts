@@ -1,0 +1,27 @@
+// Dedicated test ports, separate from the shared development app; compose.yaml publishes the
+// container ports. Harness code and tests derive every origin from here.
+
+/** The qualification artifact, relative to the package. compose.yaml mounts the same path. */
+export const artifactDir = '.cache/qualification-assets'
+
+/** SWS serving the qualification artifact behind the CCDP origins. */
+export const sws = 4980
+
+/** SWS serving the runtime qualification page. */
+export const runtime = 4986
+
+/** The pinned notary. */
+export const notary = 4987
+/** The harness proxy that serves the cached CRS and tunnels every other host. */
+export const crsProxy = 4989
+
+/** Application, Bridge and CCDP origins, on consecutive ports per scheme. */
+export function origins(secure: boolean) {
+  const scheme = secure ? 'https' : 'http'
+  const port = secure ? 4881 : 4781
+  return {
+    app: `${scheme}://localhost:${port}`,
+    bridge: `${scheme}://localhost:${port + 1}`,
+    ccdp: `${scheme}://localhost:${port + 2}`,
+  }
+}

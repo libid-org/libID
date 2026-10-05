@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "ES2024.Promise", "DOM", "DOM.Iterable", "WebWorker"],
+    // Tests and fixtures run under Node; TypeScript 6+ includes no @types package by default.
+    "types": ["node"],
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}

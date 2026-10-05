@@ -1,0 +1,65 @@
+{
+  "name": "@libid/ceremony",
+  "version": "0.1.0",
+  "description": "Browser OAuth identity ceremonies over an application-owned popup connection.",
+  "license": "(MIT OR Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libid-org/libID.git",
+    "directory": "ts/packages/ceremony"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.ts",
+    "typecheck": "tsc --noEmit && pnpm typecheck:build",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
+    "test:e2e:install": "playwright install --with-deps chromium firefox webkit",
+    "build:ccdp-artifacts": "node build/distribution.ts",
+    "test:distribution": "node --test build/*.test.ts",
+    "typecheck:build": "tsc -p tsconfig.scripts.json",
+    "prepack": "pnpm build"
+  },
+  "devDependencies": {
+    "@aztec-foundation/bb.js": "6.0.0-rc.2",
+    "@libid/popup": "workspace:^",
+    "@noir-lang/acvm_js": "1.0.0-rc.3",
+    "@noir-lang/noir_js": "1.0.0-rc.3",
+    "@noir-lang/noirc_abi": "1.0.0-rc.3",
+    "@playwright/test": "catalog:",
+    "@types/estree": "^1.0.9",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "smol-toml": "^1.9.0",
+    "tar": "^7.5.22",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@libid/contracts": "0.15.1",
+    "@libid/ledger": "workspace:^",
+    "@noble/hashes": "^2.4.0"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@libid/popup": "^0.1.0"
+  }
+}

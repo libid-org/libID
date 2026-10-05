@@ -1,0 +1,85 @@
+import { CCDP_VERSION } from '../assets/keys.js'
+import { isOrigin, isSlug, isUint } from '../primitives.js'
+import { MAX_CEREMONY_VERSION, MAX_NAVIGATION_FRAGMENT_CHARS } from './limits.js'
+
+/** A ceremony ID: a lowercase UUIDv4, also the popup connection ID. */
+export const isCeremonyId = (value: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
+
+export interface OAuthReturn {
+  query: string
+  fragment: string
+}
+
+export const oauthState = (ceremonyId: string) => `v${CCDP_VERSION}.${ceremonyId}`
+
+/** Any CCDP version parses, so Callback can reject unbundled ones distinctly from malformed state. */
+export function readOAuthState(state: string): { ccdpVersion: string; ceremonyId: string } | null {
+  const match = /^v([1-9][0-9]*)\.(.+)$/.exec(state)
+  return match && isCeremonyId(match[2]) ? { ccdpVersion: match[1], ceremonyId: match[2] } : null
+}
+
+function fields<K extends string>(fragment: string, keys: readonly K[]): Record<K, string> {
+  const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment
+  if (raw.length > MAX_NAVIGATION_FRAGMENT_CHARS) throw new TypeError('Navigation input too large')
+  // URLSearchParams accepts malformed escapes; reject them, and malformed UTF-8, first.
+  decodeURIComponent(raw.replace(/\+/g, ' '))
+  const p = new URLSearchParams(raw)
+  if (p.size !== keys.length || keys.some((k) => p.getAll(k).length !== 1))
+    throw new TypeError('Invalid navigation fields')
+  return Object.fromEntries(p) as Record<K, string>
+}
+
+export function prefetchFragment(
+  ceremonyId: string,
+  platformId: string,
+  version: number,
+): URLSearchParams {
+  return new URLSearchParams({ ceremonyId, platformId, ceremonyVersion: String(version) })
+}
+
+export function readPrefetch(fragment: string) {
+  const {
+    ceremonyId,
+    platformId,
+    ceremonyVersion: version,
+  } = fields(fragment, ['ceremonyId', 'platformId', 'ceremonyVersion'])
+  if (
+    !isCeremonyId(ceremonyId) ||
+    !isSlug(platformId) ||
+    !/^(0|[1-9][0-9]*)$/.test(version) ||
+    !isUint(Number(version), MAX_CEREMONY_VERSION)
+  )
+    throw new TypeError('Invalid Prefetch input')
+  return { ceremonyId, platformId, platformCeremonyVersion: Number(version) }
+}
+
+export function proverFragment(
+  ceremonyId: string,
+  applicationOrigin: string,
+  input: OAuthReturn,
+): URLSearchParams {
+  return new URLSearchParams({
+    ceremonyId,
+    applicationOrigin,
+    oauthQuery: input.query,
+    oauthFragment: input.fragment,
+  })
+}
+
+export function readProver(fragment: string) {
+  const {
+    ceremonyId,
+    applicationOrigin,
+    oauthQuery: query,
+    oauthFragment: hash,
+  } = fields(fragment, ['ceremonyId', 'applicationOrigin', 'oauthQuery', 'oauthFragment'])
+  if (
+    !isCeremonyId(ceremonyId) ||
+    !isOrigin(applicationOrigin) ||
+    (query !== '' && !query.startsWith('?')) ||
+    (hash !== '' && !hash.startsWith('#'))
+  )
+    throw new TypeError('Invalid Prover input')
+  return { ceremonyId, applicationOrigin, oauthReturn: { query, fragment: hash } }
+}

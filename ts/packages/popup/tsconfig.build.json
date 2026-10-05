@@ -1,4 +1,8 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["src/**/*.test.ts", "src/testing"]
+  "compilerOptions": {
+    "declarationMap": false,
+    "inlineSources": true
+  },
+  "include": ["src/index.ts", "src/worker.ts", "src/testing/index.ts"]
 }

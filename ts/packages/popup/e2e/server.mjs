@@ -46,7 +46,7 @@ const protocol = `
 const html = (body) => `<!doctype html><meta charset="utf-8"><title>popup e2e</title>${body}`
 
 const appPage = html(`
-  <a id="go" href="${ORIGINS.popup}/p" target="libid-popup">open</a>
+  <a id="go" href="${ORIGINS.popup}/p">open</a>
   <script type="module">
     import { PopupConnection, PopupWindow } from '/popup.js'
     ${protocol}
@@ -55,7 +55,7 @@ const appPage = html(`
     window.open = (...args) => (window.__handle = realOpen(...args))
     const anchor = document.getElementById('go')
     anchor.addEventListener('click', (event) => {
-      const popupWindow = PopupWindow.open(anchor.target, 'width=480,height=720')
+      const popupWindow = PopupWindow.fromAnchor(event, 'width=480,height=720')
       const connection = PopupConnection.connect(popupWindow, {
         connectionId: window.__id,
         allowedPopupOrigins: ['${ORIGINS.popup}', '${ORIGINS.popupB}'],
@@ -68,11 +68,10 @@ const appPage = html(`
       window.__conn = connection
       window.__popupWindow = popupWindow
       connection.closed.then((end) => window.__events.push({ type: 'end', ...end }))
-      // The anchor keeps its fragment for the native path; the scripted path
-      // passes fragment fields through the structured argument.
-      const [base, hash = ''] = anchor.href.split('#')
+      // The spec sets the destination; the anchor's own href is a placeholder that carries no
+      // connection, so a blocked activation connects only if navigate points the anchor there.
+      const [base, hash = ''] = window.__destination.split('#')
       void connection.navigate(base, new URLSearchParams(hash)).catch((error) => window.__events.push({ type: 'error', code: error.code ?? error.message }))
-      if (popupWindow.opened) event.preventDefault()
     })
   </script>
 `)
@@ -89,7 +88,7 @@ const popupPage = html(`
     const id = new URLSearchParams(captured.slice(1)).get('c') ?? ''
     window.__isolated = crossOriginIsolated
     // /p-any is the same document deployed for any opener origin. /dip and
-    // /dip-broken require isolation and name their COOP fallback.
+    // /dip-broken require isolation and name their COOP isolation fallback.
     const allowedApplicationOrigins = location.pathname === '/p-any' ? '*' : ['${ORIGINS.appA}']
     const isolationFallbackUrl = location.pathname.startsWith('/dip-broken')
       ? '/dip-broken/fallback'
@@ -134,15 +133,18 @@ const popupPage = html(`
   </script>
 `)
 
-// Non-participating: like a provider page, it eventually sends the user
-// back to a participating document without touching the package.
+// Non-participating: the test controls when the user returns, so even a
+// slow runner can observe this document before leaving it.
 const externalPage = html(`
   <p id="status">external</p>
+  <button id="return" disabled>Return</button>
   <script>
     const params = new URLSearchParams(location.search)
     const next = params.get('next')
     const delay = Number(params.get('delay') ?? '0')
-    if (next) setTimeout(() => location.replace(next), delay)
+    const button = document.getElementById('return')
+    button.onclick = () => location.replace(next)
+    if (next) setTimeout(() => { button.disabled = false }, delay)
   </script>
 `)
 
@@ -182,7 +184,7 @@ function popupHandler(req, res, page = popupPage) {
     case '/dip-broken':
       return send(res, 200, { ...HTML, ...DIP }, page)
     case '/dip-broken/fallback':
-      // COOP without COEP: never isolated, so the fallback must not loop.
+      // COOP without COEP: never isolated, so the isolation fallback must not loop.
       return send(res, 200, { ...HTML, 'Cross-Origin-Opener-Policy': 'same-origin' }, page)
     case '/external-isolated':
       return send(res, 200, { ...HTML, ...ISOLATED }, externalPage)

@@ -1,0 +1,53 @@
+name: CCDP custom image
+
+# A trial image of the CCDP Distribution from any commit, published only as
+# ghcr.io/libid-org/ccdp:custom-<tag> by the same workflow and checks as a
+# main publication; it never pushes the sha tag a release promotes. Run it on
+# the branch to build, or push ccdp-custom/<tag>.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Suffix of the image tag custom-<tag> (letters, digits, ., _, -)
+        type: string
+        required: true
+  push:
+    branches: ["ccdp-custom/**"]
+
+concurrency:
+  group: ccdp-custom-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Image tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      # ccdp-image.yml checks the tag before it builds. The random delimiter
+      # carries the input verbatim, so a newline in it fails that check
+      # instead of writing another output.
+      - id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="custom-${INPUT_TAG:-${BRANCH#ccdp-custom/}}"
+          echo "Image tag: ${tag@Q}"
+          eof="EOF-$(openssl rand -hex 16)"
+          printf 'tag<<%s\n%s\n%s\n' "$eof" "$tag" "$eof" >> "$GITHUB_OUTPUT"
+
+  image:
+    name: CCDP image
+    needs: tag
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ccdp-image.yml
+    with:
+      push: true
+      tag: ${{ needs.tag.outputs.tag }}

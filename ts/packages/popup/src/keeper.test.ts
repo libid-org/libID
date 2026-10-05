@@ -37,6 +37,15 @@ describe('PortKeeper [POPUP-KEEPER-001/004]', () => {
     await expect(scope.pending[0]).resolves.toBeUndefined()
   })
 
+  it('holds a backlog with the port, unread, and returns it with the claim', async () => {
+    const scope = fakeScope()
+    const keeper = new PortKeeper(scope.worker)
+    await keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN, [{ type: 'held' }])
+    expect((await keeper.claim(ID))?.backlog).toEqual([{ type: 'held' }])
+    await keeper.keep(OTHER_ID, new MessageChannel().port1, APP_ORIGIN)
+    expect((await keeper.claim(OTHER_ID))?.backlog).toEqual([])
+  })
+
   it('returns null for an unknown id without touching anything', async () => {
     const scope = fakeScope()
     expect(await new PortKeeper(scope.worker).claim(ID)).toBeNull()
@@ -50,10 +59,17 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
     const keeper = new PortKeeper(scope.worker)
     const first = new MessageChannel()
     const second = new MessageChannel()
+    const departures = [nextMessage(first.port2), nextMessage(second.port2)]
     await keeper.keep(ID, first.port1, APP_ORIGIN)
     await expect(keeper.keep(ID, second.port1, APP_ORIGIN)).rejects.toThrow('keep-failed')
     expect(await keeper.claim(ID)).toBeNull()
     await expect(scope.pending[0]).resolves.toBeUndefined()
+    // Both applications learn their document departed.
+    expect(await Promise.all(departures)).toEqual([
+      { type: 'document-departed' },
+      { type: 'document-departed' },
+    ])
+    for (const channel of [first, second]) channel.port2.close()
   })
 
   it('ignores a client from another origin, which the keeper treats as absent', async () => {
@@ -89,6 +105,7 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
       peerOrigin: APP_ORIGIN,
     }
     expect(decodeKeeperRequest(ok)).toEqual(ok)
+    expect(decodeKeeperRequest({ ...ok, backlog: [1] })).toEqual({ ...ok, backlog: [1] })
     expect(
       decodeKeeperRequest({ type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId: ID })
         ?.type,
@@ -100,6 +117,9 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
       { ...ok, peerOrigin: undefined },
       { ...ok, peerOrigin: 'https://app.example/' },
       { ...ok, peerOrigin: 'null' },
+      { ...ok, backlog: [] },
+      { ...ok, backlog: { length: 1 } },
+      { type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId: ID, backlog: [1] },
       { ...ok, type: CLAIM },
       { ...ok, type: 'other' },
       null,
@@ -145,6 +165,7 @@ describe('expiry [POPUP-KEEPER-003]', () => {
     await kept
     await vi.advanceTimersByTimeAsync(CARRIER_CLAIM_TIMEOUT_MS + 1)
     await expect(scope.pending[0]).resolves.toBeUndefined()
+    channel.port2.close()
     const claim = keeper.claim(ID)
     await vi.advanceTimersByTimeAsync(10)
     expect(await claim).toBeNull()

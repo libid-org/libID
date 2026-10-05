@@ -62,7 +62,9 @@ available on both endpoints. `PopupConnection.close()` is the
 application-facing lifetime operation.
 
 While native-anchor binding is pending, `navigate` performs no browser
-operation and leaves that same activation's default navigation intact. With an
+operation on the popup. During that same activation it points the anchor at
+its destination, so the anchor's default navigation creates the popup there;
+afterwards it changes nothing. With an
 active carrier, the application endpoint sends `Navigate`; without one, it uses
 the exact retained `WindowProxy` only while the handle is non-null and not
 closed. A popup endpoint calling `navigate` acts locally and sends no
@@ -124,14 +126,26 @@ The application settles `closed` once and releases the connection, without
 attempting to close the browser window or interpreting the departure as denial.
 A notification from a retired carrier cannot terminate a successor connection.
 
-A popup sends it on explicit local close or unexpected `pagehide`. A non-cancelling
+A popup sends it on explicit local close or unexpected `pagehide`, and whenever it
+gives up a carrier the application may already hold:
+
+- a restored or handshaken carrier it will not admit, because its origin is outside
+  the allowlist or the endpoint ended meanwhile;
+- an isolation fallback that stays non-isolated;
+- a connected `Navigate` to its own document, which it rejects with `control-rejected`;
+- a claim a worker answered wrongly, over any port another worker returned;
+- a port it fails to hand to the worker, including closure before the worker takes it.
+
+The keeper sends it on both held ports when a duplicate keep rejects them; an
+expired port closes silently, so a later document can still re-establish. A non-cancelling
 `beforeunload` listener keeps WebKit's window-close lifecycle running; it sends
 nothing and never prompts. Both listeners are removed before planned navigation.
 While attached, `beforeunload` may prevent Firefox's back/forward caching; it does
 not change the protocol's document replacement or best-effort mobile guarantees.
 
-Package-owned navigation and isolation fallback suppress it, including when continuity work
-is still pending. A failed send is inert: no acknowledgement, retry or secondary
+Package-owned navigation and the isolation hop suppress it once the worker owns
+the port or the document leaves; only closure before the worker takes the port
+still reports it. A failed send is inert: no acknowledgement, retry or secondary
 failure is possible. `pagehide` can mean close, reload or Back and may be skipped
 by mobile termination. Non-participating provider pages send nothing. Neither a
 COOP-severed handle nor a silent carrier establishes document departure.
@@ -140,16 +154,16 @@ COOP-severed handle nor a silent carrier establishes document departure.
 
 Provider documents cannot send `DocumentDeparted`. The application polls its
 retained handle every 250 ms. Without a carrier, pending authenticated handshake,
-or pending fallback, an unavailable handle terminates the connection with
+or pending fallback carrier, an unavailable handle terminates the connection with
 `popup-unavailable` on the
 first observation. This means closure or opener severance (including COOP), not
 a confirmed physical close or denial. The application never closes the window
 as a side effect of this failure.
 
 A selected carrier suppresses this check, including through package-owned
-isolation. A pending fallback keeps the connection recoverable indefinitely;
-resolution installs its authenticated carrier, rejection removes the remaining
-fallback, and explicit close aborts recovery. Native-anchor launch has no handle
+isolation. A pending fallback carrier keeps the connection recoverable indefinitely;
+resolution installs it, rejection removes that remaining recovery, and explicit
+close aborts recovery. Native-anchor launch has no handle
 to poll until its first authenticated binding. Terminal cleanup stops polling.
 
 ## Security boundary

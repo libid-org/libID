@@ -66,9 +66,11 @@ The carrier neither interprets those values nor persists or recovers them.
   transferred port; the application does not select the port before that echo.
 - An attempt from any window other than the expected peer, or from an origin
   outside the allowlist, is not an attempt on this connection and is ignored
-  without state change; nothing that merely knows the connection ID can end a
-  connection. An attempt from the expected peer which fails the remaining
-  checks rejects the binding and closes every reachable port. The
+  without state change. Before native-anchor binding every window at an allowed
+  origin is a candidate peer, so there a malformed attempt from any of them
+  ends the connection; once a handle is known, only the bound window can. An
+  attempt from the expected peer which fails the remaining checks rejects the
+  binding and closes every reachable port. The
   application's window listener lives for the connection; an accepted
   handshake discards only that attempt's state, and a later handshake from the
   bound source starts a new attempt. The popup removes its own window listener
@@ -97,7 +99,7 @@ interface MessagePortHandshake {
 The returned popup sends the record with its connection ID and no transferable.
 The ID is public correlation, not a capability or caller-level value. The
 application accepts it only from its retained popup source, or binds the
-browser-stamped source once in the native-anchor fallback, and only when the
+browser-stamped source once in native-anchor binding, and only when the
 browser-stamped origin is in its immutable allowed popup-origin set and the
 connection version and connection ID exact-match.
 
@@ -108,13 +110,18 @@ browser-stamped origin in its immutable allowed-origin set, and only when the
 connection version and connection ID match its current binding. It rejects a
 missing or additional port.
 
-After accepting the response, the popup starts the transferred port and sends
-the same `MessagePortHandshake` record over it as the final establishment
-acknowledgement. The application exact-checks that record on its retained port
+After accepting the response, the popup sends the same `MessagePortHandshake`
+record over the transferred port, without starting it, as the final
+establishment acknowledgement. The application exact-checks that record on its retained port
 before resolving its pending operation. This reuses the carrier-local handshake
 shape; it is not a caller message or an additional protocol control. A missing,
 malformed, duplicate, or mismatched acknowledgement closes both reachable
-endpoints and selects no carrier.
+endpoints and selects no carrier. A popup that refuses the response, for an
+application origin outside its allowlist or a malformed record, answers on the
+transferred port with the same record plus `refused: true` before closing it, so
+the application fails with `handshake-rejected` at once. An acknowledgement that
+never comes lapses after the 30-second opener deadline, so the application's
+window check can still see a popup that closed mid-handshake.
 
 The request may use an unrestricted target origin because it contains no
 capability or application value. The response targets the exact observed popup
@@ -130,8 +137,9 @@ records, and `Uint8Array`; this carrier adds no JSON encoding, byte tag,
 normalization, or additional copy. Received `MessageEvent.data` remains
 `unknown` until the connection selects and applies its registered `MessageType`.
 A successful decode returns that same received object rather than allocating a
-replacement. A `DataCloneError` or `messageerror` closes the carrier. A failed
-decode makes the connection close it. None releases a value.
+replacement. A `DataCloneError` closes the carrier. A `messageerror` reaches the
+connection as an undecodable value, and a failed decode makes the connection
+close it. None releases a value.
 
 ## Continuity across navigations
 
@@ -154,8 +162,9 @@ source document          Service Worker          destination document
 The source navigates only after the worker acknowledges ownership. The
 destination claims before loading caller code or using the network. This
 preserves the already authenticated port without repeating its handshake.
-`PortKeeper` never receives an RTC resource, substitute carrier, or caller
-value.
+`PortKeeper` never receives an RTC resource or substitute carrier. Caller
+values reach it only as the port's backlog, described below, which it holds
+unread.
 
 This path is strictly same-origin. The host must make the worker holding the
 port reachable from the destination. By default, keep uses the registration
@@ -208,8 +217,10 @@ selecting a weaker path.
 
 `PortKeeper` is the carrier's package-private continuity component. It
 encapsulates Service Worker communication, temporary ownership, event lifetime,
-the claim deadline, one-use transfer, and cleanup. It neither reads the port nor
-knows what it carries.
+the claim deadline, one-use transfer, and cleanup. It reads neither the port
+nor its backlog. A duplicate keep sends `document-departed` on both ports
+before closing them; an expired port closes silently, so the application keeps
+waiting and a later document can re-establish.
 
 The worker itself is host-owned. The host is the deployment serving the popup
 documents. A Service Worker script must be served from that origin, so the host
@@ -229,15 +240,17 @@ declare function installPortKeeper(): void
 declare class PortKeeper {
   constructor(worker: Pick<ServiceWorker, 'postMessage'>)
 
-  keep(connectionId: string, port: MessagePort, peerOrigin: string): Promise<void>
-  claim(connectionId: string): Promise<{ port: MessagePort; peerOrigin: string } | null>
+  keep(connectionId: string, port: MessagePort, peerOrigin: string, backlog?: unknown[]): Promise<void>
+  claim(
+    connectionId: string,
+  ): Promise<{ port: MessagePort; peerOrigin: string; backlog: unknown[] } | null>
 }
 ```
 
 The constructor fixes the active worker for both operations; the connection
 version is the package constant. `keep` resolves only after the worker owns the exact port, after
 which connection may replace the source document. `claim` atomically returns
-and removes the unchanged port, or returns `null` when no entry exists. A
+and removes the unchanged port with its backlog, or returns `null` when no entry exists. A
 worker that does not answer within the reply deadline is treated as holding
 nothing, so an unrelated worker on the origin never blocks a fresh handshake;
 a malformed answer is a failure. `null`
@@ -249,12 +262,26 @@ before the source document destroys itself and the destination document does
 not yet exist. The Service Worker record and control-message encoding are
 implementation details. Connection version, connection ID, transferable
 count, duplicate ownership, and one-use claim are checked before ownership
-changes. A malformed, mismatched, or duplicate record rejects and closes every
-reachable port. Expiry deletes the entry and closes its port; an expired or
+changes. A record the worker cannot decode, one with another connection
+version included, is not its own: it and its ports pass untouched, as the
+host's traffic does. A keep or claim with the wrong transferable count, or from
+a client on another origin, closes its ports silently. A duplicate keep rejects
+both and first tells each held port's application that its document departed.
+Expiry deletes the entry and closes its port; an expired or
 already-claimed entry is absent and yields `null`, the worker keeps no record
 of it. Worker loss or a failed `keep` acknowledgement prevents navigation with
-live state. No `BroadcastChannel`, cookie, IndexedDB record, request, or URL
+live state; a port the worker never took carries `document-departed` from the
+page before it closes. No `BroadcastChannel`, cookie, IndexedDB record, request, or URL
 carries the port.
+
+A started port cannot be stopped, and an engine may drop values it has already
+taken from the channel when the port is transferred; WebKit does. So from the
+moment the source chooses to leave until the transfer, values the port still
+dispatches are collected in order as its backlog and travel in the keep record.
+The worker returns them with the claim, and the destination delivers them
+before anything still queued in the port, so values the application sends right
+after `Navigate` reach the destination in order. Either record spells the
+backlog only when it is nonempty.
 
 Preservation also serves the isolation fallback: a document that must be
 isolated and is not keeps the port it just selected, before starting it, and
@@ -275,9 +302,10 @@ an already active worker, since only that worker can hold a port.
 The application starts listening before the popup endpoint is ready:
 
 ```ts
+// View: the addEventListener/removeEventListener surface of a Window.
 declare function listenForPopupPorts(
   options: {
-    view: Window
+    view: View
     source: WindowProxy | null // retained handle, or null until native-anchor binding
     onBind: (source: WindowProxy) => void
     allowedPopupOrigins: readonly string[] | '*'
@@ -286,11 +314,12 @@ declare function listenForPopupPorts(
   handlers: {
     onPort: (port: MessagePort, peerOrigin: string) => void
     onFail: () => void // the expected peer sent a malformed record
+    onPending?: (pending: boolean) => void // an accepted handshake awaits its echo
   },
 ): () => void
 
 declare function requestApplicationPort(options: {
-  view: Window
+  view: View
   opener: WindowProxy
   allowedOrigins: readonly string[] | '*'
   connectionId: string
@@ -299,9 +328,10 @@ declare function requestApplicationPort(options: {
 }): Promise<PortCarrier | null> // null when the opener stays silent
 
 declare class PortCarrier implements Carrier {
-  constructor(port: MessagePort, readonly peerOrigin: string)
-  /** Surrenders the port for `PortKeeper.keep`; this carrier is closed afterwards. */
-  detach(): MessagePort
+  // backlog: values a predecessor received after it chose to leave, delivered first
+  constructor(port: MessagePort, readonly peerOrigin: string, backlog?: unknown[])
+  /** Surrenders the port and backlog for `PortKeeper.keep`; this carrier is closed afterwards. */
+  detach(): { port: MessagePort; backlog: unknown[] }
 }
 ```
 
@@ -323,11 +353,11 @@ popup endpoint. The popup validates that response, sends the same handshake
 record over the transferred port, and resolves with that endpoint. A handshake
 attempt from the opener that fails authentication rejects immediately; abort
 rejects; the `OPENER_HANDSHAKE_TIMEOUT_MS` deadline resolves null so the
-endpoint commits its fallback. Every rejection
-removes the window listener and closes every reachable port. The concrete
-error type is private. `PortCarrier` starts the port, forwards unchanged
-structured-clone values, closes idempotently, and `detach` surrenders the
-port for preservation.
+endpoint commits its fallback constructor. Every rejection
+removes the window listener and closes every reachable port, and rejects with
+the public `PopupError`. `PortCarrier` starts the port when the connection
+subscribes, forwards unchanged structured-clone values, closes idempotently,
+and `detach` surrenders the port and its backlog for preservation.
 
 ### Preserved origin binding
 
@@ -337,7 +367,7 @@ the transferred port; claims without an entry contain only `{ port: false }`.
 The worker retains this metadata only for that port's existing bounded lifetime.
 The destination validates its shape and canonical origin, then checks its own
 allowlist before installing the restored carrier. A malformed or mismatching
-binding fails locally and does not select a fallback. Same-origin worker code
+binding fails locally and does not select a fallback carrier. Same-origin worker code
 is already inside the transport's trust boundary.
 
 Application, popup documents, and worker use the same connection protocol

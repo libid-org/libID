@@ -32,6 +32,9 @@ const handshake = (connectionId: string): Handshake => ({
   connectionId,
 })
 
+/** The popup's answer to a response it will not accept, so the application fails at once. */
+const refusal = (connectionId: string) => ({ ...handshake(connectionId), refused: true })
+
 /** Whether an event is addressed to this connection at all. */
 function isAttempt(data: unknown, connectionId: string): data is Record<string, unknown> {
   return isRecord(data) && data.type === HANDSHAKE && data.connectionId === connectionId
@@ -70,16 +73,20 @@ export interface ListenHandlers {
 /**
  * Application side. One window listener for the connection lifetime: each
  * accepted handshake yields one port; per-attempt state is discarded on
- * acceptance, supersession, or stop. An attempt from any window or origin
- * other than the expected peer is not an attempt on this connection and is
- * ignored, so nothing that merely knows the connection ID can end it.
+ * acceptance, supersession, or stop. Once a handle is known, an attempt from
+ * any window or origin other than the expected peer is not an attempt on this
+ * connection and is ignored. Before native-anchor binding any window at an
+ * allowed origin is a candidate peer, so its malformed attempt fails the
+ * connection.
  */
 export function listenForPopupPorts(options: ListenOptions, handlers: ListenHandlers): () => void {
   const { view, allowedPopupOrigins, connectionId } = options
   let source = options.source
   let pending: MessagePort | null = null
+  let lapse: ReturnType<typeof setTimeout> | undefined
 
   const dropPending = (): void => {
+    clearTimeout(lapse)
     if (pending) {
       pending.onmessage = null
       pending.close()
@@ -106,13 +113,18 @@ export function listenForPopupPorts(options: ListenOptions, handlers: ListenHand
     const port = channel.port1
     pending = port
     handlers.onPending?.(true)
+    // A popup closed or navigated mid-handshake never acknowledges; the attempt then lapses
+    // so the window check can see the popup gone.
+    lapse = setTimeout(dropPending, OPENER_HANDSHAKE_TIMEOUT_MS)
     port.onmessage = (ack: MessageEvent): void => {
       if (pending !== port) return
+      // Anything but the exact echo, the popup's refusal included, fails the attempt.
       if (!isExactHandshake(ack.data, connectionId) || ack.ports.length !== 0) {
         dropPending()
         handlers.onFail()
         return
       }
+      clearTimeout(lapse)
       pending = null
       handlers.onPending?.(false)
       port.onmessage = null
@@ -146,7 +158,7 @@ export interface RequestOptions {
 /**
  * Popup side. Sends the handshake to the exact opener and resolves the
  * transferred, acknowledged port, or null when the opener stays silent past
- * the deadline (the caller then commits its fallback). Rejects with
+ * the deadline (the caller then commits its fallback constructor). Rejects with
  * `handshake-rejected` when the opener answers wrongly and `connection-closed`
  * on abort; every rejection closes reachable ports.
  */
@@ -167,6 +179,14 @@ export function requestApplicationPort(options: RequestOptions): Promise<PortCar
         !isExactHandshake(event.data, connectionId) ||
         event.ports.length !== 1
       ) {
+        // Answer a single-port response rather than leave the application waiting.
+        if (event.ports.length === 1) {
+          try {
+            event.ports[0].postMessage(refusal(connectionId))
+          } catch {
+            // A port that cannot carry the refusal only closes.
+          }
+        }
         for (const port of event.ports) port.close()
         finish(new PopupError('handshake-rejected'))
         return
@@ -203,9 +223,14 @@ export class PortCarrier implements Carrier {
   /** Whether handlers were ever installed; assigning them starts the port. */
   private started = false
 
+  /**
+   * `backlog` holds values a predecessor document received after it chose to
+   * leave; they precede everything still queued in the port.
+   */
   constructor(
     port: MessagePort,
     readonly peerOrigin: string,
+    private backlog: unknown[] = [],
   ) {
     this.port = port
   }
@@ -226,8 +251,14 @@ export class PortCarrier implements Carrier {
     if (!port) return () => {}
     this.started = true
     port.onmessage = (event: MessageEvent): void => handler(event.data)
-    port.onmessageerror = (): void => this.close()
+    // A value that cannot be deserialized reaches routing as one that cannot be decoded.
+    port.onmessageerror = (): void => handler(undefined)
     port.start()
+    // A microtask still precedes every task that dispatches the port's own values. Values leave
+    // the backlog one at a time, so a handler that hands the port on hands the rest on with it.
+    queueMicrotask(() => {
+      while (this.port === port && this.backlog.length) handler(this.backlog.shift())
+    })
     return () => {
       if (this.port === port) {
         port.onmessage = null
@@ -237,29 +268,33 @@ export class PortCarrier implements Carrier {
   }
 
   close(): void {
-    this.take()?.close()
-  }
-
-  /** Surrenders the port for preservation; this carrier is closed afterwards. */
-  detach(): MessagePort {
-    const port = this.take()
-    if (!port) throw new PopupError('send-unavailable')
-    return port
-  }
-
-  /**
-   * Gives up the port. Handlers are cleared only if they were installed:
-   * assigning `onmessage`, even to null, starts the port and would dispatch
-   * queued values into the void before a transfer.
-   */
-  private take(): MessagePort | null {
     const port = this.port
-    if (!port) return null
+    if (!port) return
     this.port = null
+    // Assigning handlers, even null, would start a port that never was.
     if (this.started) {
       port.onmessage = null
       port.onmessageerror = null
     }
-    return port
+    port.close()
+  }
+
+  /**
+   * Surrenders the port and its backlog for preservation; this carrier is
+   * closed afterwards. Nothing stops a started port, and an engine may drop
+   * values it has already taken from the channel when the port is
+   * transferred, so until the transfer whatever it still dispatches here
+   * joins the backlog.
+   */
+  detach(): { port: MessagePort; backlog: unknown[] } {
+    const port = this.port
+    if (!port) throw new PopupError('send-unavailable')
+    this.port = null
+    const { backlog } = this
+    if (this.started) {
+      port.onmessage = (event: MessageEvent): void => void backlog.push(event.data)
+      port.onmessageerror = (): void => void backlog.push(undefined)
+    }
+    return { port, backlog }
   }
 }
