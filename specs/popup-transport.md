@@ -388,14 +388,17 @@ origins, and the fallback authentication boundary of ASM-POPUP-06 when used.
   destination while that activation still dispatches; otherwise it MUST
   reject.
 - REQ-POPUP-CONTROL-04A:
-  Navigation away, for a Non-participating destination: the Application
-  Endpoint MUST navigate its retained handle through Direct Control without
-  sending the destination over any Carrier, MUST retire the current Carrier
-  without attempting Continuity, and MUST remain ready to authenticate the
-  next Participating Document. It MUST reject once the handle is absent or
-  reports closed, and MUST perform no browser operation on the Popup while
-  native-anchor binding is pending; it MAY point the activating anchor at the
-  destination while that activation still dispatches. A Popup Endpoint navigating away MUST release its
+  Navigation away, for a Non-participating destination: while its retained
+  handle is non-null and does not report closed, the Application Endpoint
+  MUST navigate that handle through Direct Control without sending the
+  destination over any Carrier, MUST retire the current Carrier without
+  attempting Continuity, and MUST remain ready to authenticate the next
+  Participating Document. While native-anchor binding is pending and no
+  handle exists, the Application Endpoint MUST perform no browser operation
+  on the Popup and MAY point the activating anchor at the destination while
+  that activation still dispatches; navigation away then succeeds locally.
+  The Application Endpoint MUST reject navigation away once the handle
+  reports closed. A Popup Endpoint navigating away MUST release its
   Carrier and replace its document without attempting Continuity. The
   destination of navigation away is private to the endpoint that performs
   it: no Control carries it, so it never reaches a Carrier or its signaling,
@@ -646,9 +649,11 @@ this specification.
   Controls in the wrong direction fail the connection; malformed destinations
   fail before any browser operation; navigation uses the Carrier when
   selected and Direct Control otherwise; navigation away sends nothing over
-  the Carrier, keeps nothing, rejects without Direct Control, and the next
-  Participating Document authenticates afresh; closure works directly with a
-  usable handle and over the Carrier after Opener Isolation, and is idempotent.
+  the Carrier, keeps nothing, rejects once the handle reports closed,
+  performs no browser operation while native-anchor binding is pending, and
+  the next Participating Document authenticates afresh; closure works
+  directly with a usable handle and over the Carrier after Opener Isolation,
+  and is idempotent.
 
   The Carried Protocol cannot send or register `document-departed`. Explicit
   popup-local close and an observed unexpected departure attempt the
@@ -775,13 +780,13 @@ from; those documents keep the mechanics.
 | REQ-POPUP-ID-01 to ID-04 | connection.md, Connection ID |
 | REQ-POPUP-ALLOW-01, ALLOW-02 | connection.md, API (`allowedPopupOrigins`, `allowedApplicationOrigins`) |
 | REQ-POPUP-ALLOW-03 to ALLOW-05 | message-port.md, Failure and security invariants; Authentication |
-| REQ-POPUP-ALLOW-06 | connection.md, Popup creation and native-anchor fallback |
-| REQ-POPUP-MSG-01 to MSG-07 | connection.md, `send` and `on` rules; message-port.md, Message delivery |
+| REQ-POPUP-ALLOW-06 | connection.md, Popup creation and native-anchor binding |
+| REQ-POPUP-MSG-01 to MSG-07 | connection.md, API (`send` and `on`); message-port.md, Message delivery |
 | REQ-POPUP-DELIVER-01 to DELIVER-06 | connection.md, Failure and security rules; message-port.md, invariants |
 | REQ-POPUP-LIFE-01, LIFE-02 | connection.md, Selection |
-| REQ-POPUP-CONTROL-01 to CONTROL-07 | control.md, Records; Execution; Security boundary |
-| REQ-POPUP-LIFE-03 to LIFE-06 | connection.md, navigate rules; Continuity across navigations |
-| REQ-POPUP-CONT-01 to CONT-08 | connection.md, Continuity across navigations and isolation fallback; message-port.md, Continuity across navigations |
+| REQ-POPUP-CONTROL-01 to CONTROL-08 | control.md, Records; Execution; Document departure; Security boundary |
+| REQ-POPUP-LIFE-03 to LIFE-06 | connection.md, API (`navigate` and `navigateAway`); Continuity across navigations |
+| REQ-POPUP-CONT-01 to CONT-08 | connection.md, Continuity across navigations; API (`isolationFallbackUrl`); message-port.md, Continuity across navigations |
 | REQ-POPUP-FAIL-01 to FAIL-03 | connection.md, Failure and security rules; METRICS.md, Privacy and failure handling |
 
 ## 15. References
