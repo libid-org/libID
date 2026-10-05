@@ -8,11 +8,10 @@ import {
   PLATFORM_GITHUB_KEY,
   PLATFORM_GOOGLE_KEY,
   PLATFORM_X_KEY,
-  type Rules,
   rulesFor,
 } from '@libid/contracts/identity'
 
-export { HandleError, type Rules } from '@libid/contracts/identity'
+export { HandleError } from '@libid/contracts/identity'
 
 /** The production deployment's Parent Name (ENS integration spec §2). */
 const PARENT_NAME = 'handles.link'
@@ -30,7 +29,10 @@ export interface NameOptions {
   /**
    * A chain label, such as `base`. A name with one is answered only for that
    * chain; without one, for whichever chain the wallet asks about. The labels a
-   * gateway knows are deployment data, so this only checks the label's shape.
+   * gateway knows are deployment data, so this only checks the label's shape
+   * and that it is not a platform key. ENS asks the nearest name with a
+   * resolver, so a chain label that names a subname with a deployment of its
+   * own, such as `testnet`, is answered by that deployment instead.
    */
   chain?: string
   /**
@@ -38,12 +40,6 @@ export interface NameOptions {
    * Defaults to `handles.link`.
    */
   parent?: string
-  /**
-   * The handle rules to normalize with. Defaults to the rules
-   * `@libid/contracts` was released with (`rulesFor`); pass the chain's
-   * current ones, read with `rulesOf`, when its owner may have changed them.
-   */
-  rules?: Rules
 }
 
 /**
@@ -51,23 +47,23 @@ export interface NameOptions {
  * name. A handle with no name stays reachable through the registry and by its
  * holder's address.
  *
- * `handle` is taken as a user typed it and normalized with the registry's
- * rules first, so `@Some_User` and `some_user` give one name. Text that is not
+ * `handle` is taken as a user typed it and normalized first with the handle
+ * rules `@libid/contracts` was released with, which the gateway applies on
+ * every chain, so `@Some_User` and `some_user` give one name. Text that is not
  * a handle on the platform at all throws the `HandleError` of
  * `@libid/contracts`.
  */
 export function ensName(
   platform: Platform,
   handle: string,
-  options: NameOptions = {},
+  options?: NameOptions | null,
 ): string | null {
   if (!PLATFORMS.includes(platform)) throw new Error(`Not a platform: ${JSON.stringify(platform)}`)
   if (typeof handle !== 'string') throw new TypeError('The handle must be a string')
-  const chain = options.chain === undefined ? [] : [chainLabel(options.chain)]
-  const parent = options.parent === undefined ? PARENT_NAME : parentName(options.parent)
-  const rules = options.rules ?? rulesFor(platform)
-  if (rules === null) throw new Error(`No handle rules for platform ${platform}`)
-  const labels = handleLabels(platform, normalize(handle, rules))
+  const parent = options?.parent === undefined ? PARENT_NAME : parentName(options.parent)
+  const chain = options?.chain === undefined ? [] : [chainLabel(options.chain)]
+  // Every Platform has released rules.
+  const labels = handleLabels(platform, normalize(handle, rulesFor(platform)!))
   if (labels === null) return null
   return [...labels, platform, ...chain, parent].join('.')
 }
@@ -91,11 +87,11 @@ function isLabel(label: unknown): label is string {
  */
 function handleLabels(platform: Platform, handle: string): string[] | null {
   switch (platform) {
-    case 'x':
+    case PLATFORM_X_KEY:
       return xLabels(handle)
-    case 'github':
+    case PLATFORM_GITHUB_KEY:
       return isLabel(handle) ? [handle] : null
-    case 'google':
+    case PLATFORM_GOOGLE_KEY:
       return googleLabels(handle)
   }
 }

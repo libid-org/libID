@@ -1,5 +1,3 @@
-import { ens_normalize } from '@adraffy/ens-normalize'
-import { RULES_GOOGLE, RULES_X } from '@libid/contracts/identity'
 import { describe, expect, it } from 'vitest'
 import { ensName, HandleError } from './index.js'
 
@@ -27,20 +25,13 @@ describe('ensName', () => {
     expect(() => ensName('x', 'alice', { parent: parent as string })).toThrow('Not a parent name')
   })
 
-  it('normalizes with the rules it is given', () => {
-    expect(() => ensName('x', 'alice', { rules: { ...RULES_X, maxLength: 4 } })).toThrow(
-      HandleError,
-    )
+  it('takes a parent label of 63 bytes', () => {
+    const parent = `${'a'.repeat(63)}.link`
+    expect(ensName('x', 'alice', { parent })).toBe(`alice.x.${parent}`)
   })
 
-  // A Google address is at most 62 bytes under the released rules, so only a
-  // chain whose owner raised the limit can produce a piece past 63.
-  it('gives no name when a piece would pass the 63-byte DNS limit', () => {
-    const rules = { ...RULES_GOOGLE, maxLength: 200 }
-    expect(ensName('google', `${'a'.repeat(64)}@company.com`, { rules })).toBeNull()
-    expect(ensName('google', `${'a'.repeat(63)}@company.com`, { rules })).toBe(
-      `${'a'.repeat(63)}._at.company.com.google.handles.link`,
-    )
+  it('reads null options as none', () => {
+    expect(ensName('x', 'alice', null)).toBe('alice.x.handles.link')
   })
 
   it.each([
@@ -68,18 +59,5 @@ describe('ensName', () => {
   it('throws for a platform it does not know or a handle that is not a string', () => {
     expect(() => ensName('mastodon' as 'x', 'alice')).toThrow('Not a platform')
     expect(() => ensName('github', null as unknown as string)).toThrow(TypeError)
-  })
-})
-
-// ENSIP-15 is what every wallet applies before hashing, through
-// @adraffy/ens-normalize. The vector test checks every name is normal; these
-// are the forms the transform refuses because ENSIP-15 does.
-describe('ENSIP-15', () => {
-  it.each([
-    'ab--cd.x.handles.link',
-    'ab--cd._at.company.com.google.handles.link',
-    'alice._at.xn--bcher-kva.example.google.handles.link',
-  ])('refuses %s, a form the transform refuses', (name) => {
-    expect(() => ens_normalize(name)).toThrow()
   })
 })

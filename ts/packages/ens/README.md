@@ -14,8 +14,9 @@ ensName('google', 'alice@company.com')  // 'alice._at.company.com.google.handles
 ensName('x', 'alice', { chain: 'base' }) // 'alice.x.base.handles.link'
 ```
 
-`ensName` normalizes the handle with the registry's rules from
-`@libid/contracts` first, so it takes a handle as a user typed it. It returns
+`ensName` normalizes the handle first with the handle rules
+`@libid/contracts` was released with, which the gateway applies on every
+chain, so it takes a handle as a user typed it. It returns
 `null` when a handle has no name, and throws `HandleError` for text that is
 not a handle on that platform. `HandleError` is re-exported from
 `@libid/ens`, so `instanceof` works without importing `@libid/contracts`.
@@ -42,7 +43,8 @@ These handles have no name:
 
 - an X handle whose third and fourth characters are both `_`, which ENS
   reserves (`ab__cd` would be `ab--cd`);
-- a Gmail address with `+`, `-` or `_` in the local part;
+- a Gmail address with `+`, `-` or `_` in the local part, or an empty piece
+  (`.alice@`, `alice.@`, `a..b@`);
 - any other Google address with `_` or `+`, an empty piece, `_at` as a piece,
   or a piece whose third and fourth characters are both `-` (ENSIP-15 reserves
   them, so `xn--` domains have no name);
@@ -51,14 +53,8 @@ These handles have no name:
 ## Options
 
 ```ts
-import { platformId, rulesOf } from '@libid/contracts/identity'
-
 ensName('x', 'alice', { chain: 'base' })                  // 'alice.x.base.handles.link'
 ensName('x', 'alice', { parent: 'testnet.handles.link' }) // 'alice.x.testnet.handles.link'
-
-// The chain's current rules, read from the IdentityRegistry with a viem client.
-const rules = await rulesOf(reader, platformId('x'))
-ensName('x', 'alice', { rules })
 ```
 
 - `chain` narrows a name to one chain. Without one, the wallet's chain
@@ -66,9 +62,13 @@ ensName('x', 'alice', { rules })
   only checks the label's shape and that it is not a platform key.
 - `parent` is the name the gateway answers under. It defaults to
   `handles.link`.
-- `rules` are the handle rules to normalize with. They default to the rules
-  `@libid/contracts` was released with. A chain's owner can change them, so
-  pass the ones `rulesOf` reads from the chain when that matters.
+
+ENS asks the nearest name that has a resolver. A chain label that names a
+subname with a deployment of its own is answered by that deployment, so
+`ensName('x', 'alice', { chain: 'testnet' })` and
+`ensName('x', 'alice', { parent: 'testnet.handles.link' })` give the same
+name. A deployment's chain labels must not name such a subname; `ensName`
+cannot see which subnames have one.
 
 A chain label or parent name that is not a lowercase ASCII label of 1 to 63
 bytes, or has `--` at its third and fourth characters, throws.
@@ -77,5 +77,7 @@ The rules are those of the [ENS integration spec](https://github.com/libid-org/l
 
 [`vectors/names.json`](https://github.com/libid-org/libID/blob/main/ts/packages/ens/vectors/names.json)
 in the repository lists names with their handles, handles with no name, and
-names that read back as no handle. The tests here run it in both directions;
-the gateway's inverse should check against the same file.
+names that read back as no handle. The tests here run it forward through
+`ensName` and back through this package's own reading of the spec. The
+gateway's inverse does not read this file yet; it should check against the
+same file.
