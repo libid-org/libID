@@ -227,7 +227,8 @@ such table is ineligible.
 The Consumer stores every binding under two keys. An identity's **identity
 key** is derived from its identity platform and the keccak256 digest of its
 canonical `userId`; its **handle key** is derived from its identity platform
-and the keccak256 digest of its normalized handle (§2.1a). Each key depends
+and the platform's handle digest of its normalized handle (§2.1a,
+REQ-PLAT-08M). Each key depends
 on the value only through that inner digest, so a Consumer that receives
 the digest derives the same key as one that receives the bytes. The
 Consumer records for each key its **owner**, the Transaction Author that
@@ -245,6 +246,17 @@ Author **holds** a handle on a platform while it owns that handle's key.
   where only the digest is known. The EVM Consumer's construction is
   `keccak256(abi.encode(tag, platformId, digest))` with one fixed tag for
   each kind of key.
+- REQ-PLAT-08M (upholds SP-BIND-01, SP-PRIV-01):
+  A handle digest is the 32-byte `keccak256` of the normalized handle's
+  bytes, except on Google, where it is
+  `SHA256(UTF8("libid.google-handle") || email)` over the normalized
+  `email` bytes. Every role that derives a Google handle key, the Proving
+  Circuit and the Consumer included, MUST use that construction. Necessity:
+  the Google circuit already hashes the `sub` with SHA-256 for REQ-PLAT-05A,
+  so a second SHA-256 costs far fewer constraints than a keccak256 would,
+  and the tag keeps the digest apart from a plain `SHA256` of the address
+  that another system may publish. X and GitHub expose their handles as
+  bytes, so the Consumer hashes them itself, as before.
 - REQ-PLAT-08I (upholds SP-BIND-01):
   On writing the binding of an accepted Submission, which common
   REQ-COMMON-25A permits only for strictly newer evidence, the Consumer MUST
@@ -294,7 +306,7 @@ A reader that mirrors names from the events of REQ-PLAT-08F applies the
 same test; the stored string alone is not a name.
 
 A digest profile is a Platform Profile whose Proving Circuit exposes the
-handle as a keccak256 digest rather than bytes, beside a canonical `userId`
+handle as a digest (REQ-PLAT-08M) rather than bytes, beside a canonical `userId`
 that is itself a digest of the platform identifier; Google is one (§3.3). The Consumer knows a platform's profile is one from
 its own configuration of that platform (REQ-PLAT-08L). The Consumer keys
 every such identity on the digests, so an identity is resolvable by whoever
@@ -327,8 +339,8 @@ REQ-PLAT-08K; publication is state.
   canonical `userId` and the handle digest the Platform Verifier returns, in
   every Submission. Where a Submission carries the plaintext handle, the
   Consumer MUST normalize it under §2.1a. The Consumer MUST reject such a
-  Submission unless `keccak256` of the normalized handle equals the handle
-  digest. The Consumer MUST reject a Submission that asks to publish a name
+  Submission unless the REQ-PLAT-08M digest of the normalized handle equals
+  the handle digest. The Consumer MUST reject a Submission that asks to publish a name
   and carries no handle. Necessity: the plaintext handle arrives unverified
   and only the digest comparison ties it to the proof, and a request to
   publish with no handle asks for a name the Consumer has nothing to store
@@ -561,7 +573,7 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   | Authorization Digest | signed `nonce`, decoded as exactly 32 bytes |
   | client-identifier digest | `SHA256` of the signed `aud` |
   | canonical `userId` digest | signed `sub`, hashed per REQ-PLAT-05A |
-  | handle digest | `keccak256` of the signed `email` after the normalization of §2.1a (REQ-PLAT-16C) |
+  | handle digest | REQ-PLAT-08M digest of the signed `email` after the normalization of §2.1a (REQ-PLAT-16C) |
   | evidence timestamp | signed `exp`; used for both `metadataObservedAt` and `proofValidUntil` |
   | RSA modulus | exact `n` that verified the JWS; `e = 65537` is profile-fixed |
 
@@ -1488,10 +1500,11 @@ Platform Verifier, Notary Service, Consumer.
   identifier. A token whose `sub` is empty or carries a byte outside `0x20`
   through `0x7e` fails the Proving Circuit, and no public input carries the
   `sub`.
-- TEST-PLAT-06A (exercises REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-16D):
-  `Alice@Gmail.com` and `alice@gmail.com` prove the same handle digest, and
-  it equals `keccak256` of the normalized handle the Consumer derives from
-  the plaintext. An `email` with a space, two `@`, an empty local part, a
+- TEST-PLAT-06A (exercises REQ-PLAT-08M, REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-16D):
+  `Alice@Gmail.com` and `alice@gmail.com` prove the same handle digest,
+  `0x5ecf20af6a3cb20cb8e5e2c6e7a7c3ae5aa37239c008643be631d93498ef23e1`, the
+  REQ-PLAT-08M digest of the normalized handle the Consumer derives from the
+  plaintext. An `email` with a space, two `@`, an empty local part, a
   byte outside the normalization's alphabet, or bytes past its signed length
   cannot satisfy the circuit; neither can a `sub` holding `\` (as `12\/3`
   does), a 32-byte `sub`, or a 63-byte `email`. The public inputs carry no
@@ -1768,7 +1781,7 @@ Google's `sub` values are 21-digit decimal strings in practice, too few to
 resist a well-resourced search.
 
 Google is the launch digest profile (§2.1b): its `email` reaches the chain
-only as a keccak256 digest unless a transaction carries it, and the Consumer
+only as its REQ-PLAT-08M digest unless a transaction carries it, and the Consumer
 keys the binding on that digest and the `userId`.
 What this hides is stated in
 [common §12](ceremony-common.md#12-security-considerations) together with

@@ -126,7 +126,7 @@ Platform Profile: The immutable, independently versioned definition of one
    profile (platform §2.1a, §2.1b).
 
 Digest profile: A Platform Profile whose Proving Circuit exposes the handle
-   as a keccak256 digest rather than as bytes, beside a canonical `userId`
+   as a digest rather than as bytes (platform REQ-PLAT-08M), beside a canonical `userId`
    that is itself a digest of the platform's identifier. Its Platform
    Verifier returns the handle digest (REQ-COMMON-05E), and a Submission may
    carry the plaintext handle beside it but never the identifier the
