@@ -107,10 +107,11 @@ REQ-COMMON-15A.
   For a digest profile, the Canonical Runtime (its Application, which builds
   the Submission) MUST place the delivered handle in the Submission as its
   plaintext handle only when the user asks to disclose it. The Canonical
-  Runtime MUST NOT place the `sub` in any Submission. Necessity: the Prover delivers the handle with every proof
-  and builds no Submission, so the choice of sending it falls to the role
-  that does; SP-PRIV-01 bounds the chain only for a Submission built this
-  way.
+  Runtime MUST NOT place the `sub` in any Submission. Necessity: the Prover
+  delivers the handle with every proof and builds no Submission, so the
+  choice of sending it falls to the role that does. SP-PRIV-01 permits any
+  handle a transaction carries, so this rule, not a Consumer check, keeps a
+  Submission from carrying a handle the user did not choose to show.
 
 This is a data-source invariant, not a browser-flow requirement. It defines
 the identity fields returned to callers and used by any composition-owned UI;

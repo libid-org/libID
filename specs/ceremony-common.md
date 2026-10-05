@@ -269,14 +269,7 @@ Attestation Count: The number of entries in the closed attestation list a
 ## 4. Security properties
 
 The properties below survive a malicious application operator under their
-cited assumptions, except SP-PRIV-01. A Google ID Token reaches the Prover
-documents the CCDP Distribution supplies, and its email reaches the
-Application in the ceremony result, so either operator holds the handle in
-plaintext and can send it anywhere, the chain included. Against such an
-operator SP-PRIV-01 still bounds the Consumer, the Proof Verifier, and the
-Platform Verifier, which put no plaintext on chain that a transaction did
-not carry; against an honest Application and Distribution it bounds
-everyone who reads the chain. They assume an unmodified Canonical Runtime, the selected
+cited assumptions. They assume an unmodified Canonical Runtime, the selected
 verifier artifact, the Consumer, and verifier configuration. Compromise of the
 applicable
 identity-platform signing root, notary key, Platform Verifier, verifier governance,
@@ -293,6 +286,16 @@ checks. Neither endpoint verifies generated proofs or notary signatures
 cryptographically. Well-formed forgeries can survive browser consistency checks
 but still fail the applicable downstream proof, digest-binding, trusted signing-key, or
 notary-signature check before an authoritative effect.
+
+SP-PRIV-01 bounds what the chain's artifacts yield, not who learns the
+handle. A Google ID Token, with its email and `sub`, passes through the
+OAuth Bridge's Callback and reaches the Prover documents the CCDP
+Distribution supplies, and the email reaches the Application in the
+ceremony result. Each of those operators can send the handle anywhere, and
+a transaction that carries it is one the property permits. A modified
+Prover could also leak the witness through the proof bytes, so the property
+rests on the unmodified Canonical Runtime this section assumes
+(ASM-BROWSER-01, ASM-ZK-01).
 
 - SP-BIND-01:
   Evidence produced by a ceremony discharges only for the Authorized
@@ -1650,20 +1653,20 @@ authenticate the presenter. The bearer, commitment openings, and transcript
 bytes outside a profile's revealed ranges are withheld from published
 evidence.
 
-SP-PRIV-01 is a statement about the chain's artifacts, not about the
-identity, and it does not survive a malicious Application or CCDP
-Distribution (§4). The ID Token, and the email and `sub` in it, reach the
-Prover documents the CCDP Distribution supplies, and the email reaches the
-Application in the ceremony result, so whether a Submission carries the
-handle is the Application's choice, made for the user; an operator that
+SP-PRIV-01 is a statement about the chain's artifacts, not about who
+learns the identity (§4). The ID Token, and the email and `sub` in it, pass
+through the OAuth Bridge's Callback and reach the Prover documents the CCDP
+Distribution supplies, and the email reaches the Application in the
+ceremony result, so whether a Submission carries the handle is the
+Application's choice, made for the user (platform REQ-PLAT-03A); an operator that
 wants the address public can send it, and no Consumer check can tell that
 from the user's wish. What the property does bound is the chain: the
 Consumer, the Proof Verifier, and the Platform Verifier emit and store
 nothing a transaction did not carry, and a transaction that carries a handle publishes it when it is sent,
 since a Submission or disclosure call the Consumer refuses still leaves its
-calldata on chain. The proof bytes hide the witness only because the Prover
-proves in the zero-knowledge mode with fresh randomness (ASM-ZK-01,
-REQ-COMMON-45A). The keys an undisclosed identity is stored under are
+calldata on chain. The proof bytes hide the witness only because an
+unmodified Prover proves in the zero-knowledge mode with fresh randomness
+(ASM-BROWSER-01, ASM-ZK-01, REQ-COMMON-45A). The keys an undisclosed identity is stored under are
 unsalted digests of its normalized handle and its account identifier, so that
 whoever already knows an address can resolve it; by the same arithmetic,
 whoever suspects an address, or holds the `sub` from another relying party,
@@ -1673,6 +1676,7 @@ was observed, and it says nothing about the query a resolver receives off
 chain: a resolver that logs the handles it is asked for holds what the chain
 does not. A salted commitment would refuse the guess and the honest resolver
 alike; this protocol does not offer one.
+
 For a PKCE profile, the raw `authorizationNonce` is withheld until the token
 exchange completes, per REQ-COMMON-14. The Submission publishes it afterwards
 as the same nonce already required to recompute the Authorization Digest,
