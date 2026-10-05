@@ -256,9 +256,16 @@ export class PortCarrier implements Carrier {
     port.start()
     // A microtask still precedes every task that dispatches the port's own values. Values leave
     // the backlog one at a time, so a handler that hands the port on hands the rest on with it.
-    queueMicrotask(() => {
-      while (this.port === port && this.backlog.length) handler(this.backlog.shift())
-    })
+    // A handler's exception is the caller's: the rest drains in a fresh microtask, still ahead
+    // of the port, while the exception propagates.
+    const drain = (): void => {
+      try {
+        while (this.port === port && this.backlog.length) handler(this.backlog.shift())
+      } finally {
+        if (this.port === port && this.backlog.length) queueMicrotask(drain)
+      }
+    }
+    queueMicrotask(drain)
     return () => {
       if (this.port === port) {
         port.onmessage = null

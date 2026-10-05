@@ -354,6 +354,44 @@ describe('PortCarrier [POPUP-PORT-002]', () => {
     carrier.close()
   })
 
+  it('delivers the rest of its backlog in order when a handler throws [POPUP-API-003]', async () => {
+    const channel = new MessageChannel()
+    channel.port2.postMessage({ type: 'queued' })
+    const backlog = [{ type: 'fails' }, { type: 'held' }, { type: 'fails' }]
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN, backlog)
+    const failure = new Error('handler failure')
+    const received: unknown[] = []
+    const thrown: unknown[] = []
+    // The test runs the microtasks itself to catch what the event loop would report.
+    const microtasks: Array<() => void> = []
+    vi.stubGlobal('queueMicrotask', (task: () => void) => void microtasks.push(task))
+    try {
+      carrier.on((value) => {
+        received.push(value)
+        if ((value as { type: string }).type === 'fails') throw failure
+      })
+      for (let task = microtasks.shift(); task; task = microtasks.shift()) {
+        try {
+          task()
+        } catch (error) {
+          thrown.push(error)
+        }
+      }
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    await tick()
+    expect(received).toEqual([
+      { type: 'fails' },
+      { type: 'held' },
+      { type: 'fails' },
+      { type: 'queued' },
+    ])
+    expect(thrown).toHaveLength(2)
+    for (const error of thrown) expect(error).toBe(failure)
+    carrier.close()
+  })
+
   it('hands the undelivered backlog on when a delivered value makes the document leave [POPUP-CONNECTION-003]', async () => {
     const channel = new MessageChannel()
     channel.port2.postMessage({ type: 'queued' })
