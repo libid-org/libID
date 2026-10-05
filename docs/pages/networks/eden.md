@@ -9,10 +9,12 @@ sidebar:
 | --- | --- |
 | Chain id | `3735928814` |
 | RPC | `https://ev-reth-eden-testnet.binarybuilders.services:8545` |
-| `IdentityRegistry` | `0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366` |
-| `HandleEscrow` | `0xf7e3ad279f913ffe2ef74614e3046c15cbdabb9a` |
+| `IdentityRegistry` | `0x25f29c8c765db2f27d1e2b23987a7b0655c7d640` |
+| `HandleEscrow` | `0x57355e1d1bcf61fec9b2e5cad60dcccdddc4d8e5` |
 
-Eden runs libID-contracts v0.15.0, the version these docs describe. GitHub,
+Eden is a testnet: its contracts have the testnet
+[addresses](/docs/reference/addresses/), the same as Sepolia's. It runs
+libID-contracts v0.17.0, the version these docs describe. GitHub,
 X and Google accept bindings there. No identity is bound on this registry
 yet, so lookups return `null` until someone binds one. Use the
 [local chain](/docs/guides/local-chain/) for known test data.
@@ -21,8 +23,8 @@ To run a guide against Eden, set:
 
 ```sh
 export RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545
-export IDENTITY_REGISTRY=0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366
-export HANDLE_ESCROW=0xf7e3ad279f913ffe2ef74614e3046c15cbdabb9a
+export IDENTITY_REGISTRY=0x25f29c8c765db2f27d1e2b23987a7b0655c7d640
+export HANDLE_ESCROW=0x57355e1d1bcf61fec9b2e5cad60dcccdddc4d8e5
 ```
 
 Eden's chain id is larger than `2^31`, so ENS libraries such as viem cannot

@@ -1,29 +1,36 @@
 ---
 title: Addresses
-description: libID contract addresses. They are the same on every network.
+description: libID contract addresses, one set for production and one for testnets.
 sidebar:
   order: 3
 ---
 
-libID deploys every contract through one factory with CREATE3. An address
-depends only on the contract's name, so each contract has the same address
-on every network where it is deployed. These addresses never change:
-contract updates are upgrades at the same address.
+libID deploys every contract through a factory with CREATE3. An address
+depends only on the contract's name and the factory, and each environment
+has its own factory. So a contract has one address on every production
+network and another on every testnet. Within an environment these addresses
+never change: contract updates are upgrades at the same address.
 
-| Contract | Address |
-| --- | --- |
-| `IdentityRegistry` | `0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366` |
-| `HandleEscrow` | `0xf7e3ad279f913ffe2ef74614e3046c15cbdabb9a` |
-| `CeremonyProofVerifier` | `0x76bdc18f21c2db0ff796c7cc50348528b2899275` |
-| `NotaryService` | `0xbb5871167b0128939cab6850877981421e8dcbf5` |
-| GitHub platform verifier | `0xac878389da7a1b58826182da0d8b4cae5e6e4178` |
-| X platform verifier | `0xcfc880f62f2744dc000687edf47a98b585d9eb35` |
-| Google platform verifier | `0xf3d537022362d187715b28bc547f8b2532e6d0cf` |
-| `GoogleJwtRoots` | `0xb7a2ce28e71dbb9c877d2b5a48de33b5f0e6838d` |
-| `LibidFactory` | `0xa92244c3f4462aad08bd1a33c3940b9b936321ad` |
+| Contract | Production | Testnet |
+| --- | --- | --- |
+| `IdentityRegistry` | `0xbefd300aff7d4a67fb381afe8b3596793d3e9a83` | `0x25f29c8c765db2f27d1e2b23987a7b0655c7d640` |
+| `HandleEscrow` | `0x17a244e23ef1f12071298a1862194fea3d00bbf7` | `0x57355e1d1bcf61fec9b2e5cad60dcccdddc4d8e5` |
+| `CeremonyProofVerifier` | `0x36e6d6cf465cb9f0615ceb0fc37ef30927dac66e` | `0xa795b14a2e09daf273bc6971058b0462c7d6be42` |
+| `NotaryService` | `0x2feee7c87bec78853afc223135735d4786e75177` | `0xa773ec5e7500d1c87827ab1b899bbd992c1b5931` |
+| GitHub platform verifier | `0xdd7d34f2302bc2ccac36bdcec5fdafe0ca91f888` | `0xb5fdf35eedf7c849f3d1e41675d8b8a41487e248` |
+| X platform verifier | `0x61d79debf1b7e512ae8b305ba76c6f82f4609142` | `0x9f655c2fe778260d90f3202d97da0a46510aa3d0` |
+| Google platform verifier | `0x727f4a1c9040a94ca27f74667c70d1c2951a0b5a` | `0x5cfb807545e0e2ce4d7dac7d97ab0583e3fbe1c6` |
+| `GoogleJwtRoots` | `0x1f3d9b49efde0c12ed2ffeab67165ebe0c97517a` | `0x8a14a5dda7662f88a5448b9b8b2ca9f1d5742904` |
+| `LibidFactory` | `0xb7432c991be3167689d5e80c9e2bf1ff5cccd2e0` | `0x9dbf2b5f96cb31a48cca4e25d2c8348be414ebc8` |
 
-The same address on a network does not mean the same version. Check
-[Networks](/docs/networks/eden/) for what each network runs.
+Production is [Ethereum mainnet](/docs/networks/ethereum/). The testnets are
+[Sepolia](/docs/networks/sepolia/) and [Eden testnet](/docs/networks/eden/).
+The same address on two networks does not mean the same version. Check each
+network's page for what it runs.
+
+The [local chain](/docs/guides/local-chain/) is an environment of its own,
+deployed by anvil's first account, so its contracts land at other addresses
+again. Its guide lists them.
 
 These addresses come from
 [chain-configurations](https://github.com/libid-org/chain-configurations/tree/main/networks),

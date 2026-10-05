@@ -6,8 +6,8 @@ sidebar:
 ---
 
 `IdentityRegistry` stores which holder has which identity. It is an
-upgradeable proxy at the same address on every network. See
-[Addresses](/docs/reference/addresses/).
+upgradeable proxy with one address on every production network and another
+on every testnet. See [Addresses](/docs/reference/addresses/).
 
 Terms used below:
 

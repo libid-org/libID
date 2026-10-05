@@ -100,10 +100,15 @@ cast call $IDENTITY_REGISTRY 'resolveHandle(bytes32,string)(address)' \
 
 ## On a public network
 
-Set `RPC_URL` to the network's RPC, and `IDENTITY_REGISTRY` to
-`0x0531b83b010a6b0c24c2c2c1a6beecc90cc71366`, the address `IdentityRegistry` has
-on every public network. See [Networks](/docs/networks/eden/) for what runs
-where.
+Set `RPC_URL` to the network's RPC, and `IDENTITY_REGISTRY` to the address
+`IdentityRegistry` has there:
+
+| Networks | `IDENTITY_REGISTRY` |
+| --- | --- |
+| Ethereum mainnet | `0xbefd300aff7d4a67fb381afe8b3596793d3e9a83` |
+| Sepolia, Eden testnet | `0x25f29c8c765db2f27d1e2b23987a7b0655c7d640` |
+
+See [Addresses](/docs/reference/addresses/) for the other contracts.
 
 ## Next steps
 
