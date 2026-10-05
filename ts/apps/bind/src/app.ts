@@ -21,7 +21,15 @@ import {
   type WalletClient,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { BRIDGE, CHAIN_ID, NOTARY, type Platform, REGISTRY, RPC_URL } from '../local.ts'
+import {
+  BRIDGE,
+  CHAIN_ID,
+  NOTARY,
+  type Platform,
+  REGISTRY,
+  RPC_URL,
+  VERIFIER_VERSION,
+} from '../local.ts'
 import {
   authorizedTransactionData,
   encodeGooglePayload,
@@ -96,20 +104,25 @@ function payloadOf(result: Accepted, operationDomain: Uint8Array, transactionDat
       )
 }
 
+/** The wallet and holder a ceremony started with; its transaction data names this holder. */
+interface Signer {
+  wallet: WalletClient
+  holder: Address
+}
+
 async function submit(
   platform: Platform,
+  { wallet, holder }: Signer,
   result: Accepted,
   transactionData: Uint8Array,
   operationDomain: Uint8Array,
 ) {
-  if (!wallet || !holder) throw new Error('Wallet disconnected')
   show('proof-received', `${result.identity.userName} (${result.identity.userId})`)
   const id = platformId(platform)
-  const version = result.oauthProof.platformCeremonyVersion
-  const value = await registry.read.quoteBind([id, version])
+  const value = await registry.read.quoteBind([id, VERIFIER_VERSION])
   const payload = payloadOf(result, operationDomain, transactionData)
   status('Submitting the binding…')
-  const { request } = await registry.simulate.bind([id, version, payload, true], {
+  const { request } = await registry.simulate.bind([id, VERIFIER_VERSION, payload, true], {
     account: holder,
     value,
   })
@@ -152,13 +165,14 @@ function launch(
   event: MouseEvent,
   operationDomain: Uint8Array,
 ) {
-  if (!holder) {
+  if (!wallet || !holder) {
     event.preventDefault()
     return
   }
+  const signer: Signer = { wallet, holder }
   // Window creation and the run's start stay synchronous with the click.
   const connection = client.connect(PopupWindow.fromAnchor(event))
-  const transactionData = authorizedTransactionData(holder)
+  const transactionData = authorizedTransactionData(signer.holder)
   let ceremony: Ceremony<Platform>
   try {
     ceremony = client.new(connection, platform, ledger, operationDomain, transactionData)
@@ -182,14 +196,17 @@ function launch(
       connection.close()
       if (result.status !== 'accepted')
         throw new Error(`${names[platform]} denied the authorization.`)
-      await submit(platform, result, transactionData, operationDomain)
+      await submit(platform, signer, result, transactionData, operationDomain)
     })
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'The binding failed.'
       status(message)
       show('outcome', `failed: ${message}`)
     })
-    .finally(off)
+    .finally(() => {
+      connection.close()
+      off()
+    })
 }
 
 async function initialize() {
@@ -215,6 +232,8 @@ async function initialize() {
   status('Connect a wallet to start.')
 }
 
-void initialize().catch(() =>
-  status('Could not load the Bridge configuration. Is the stack running?'),
+void initialize().catch((error: unknown) =>
+  status(
+    `Could not start: ${error instanceof Error ? error.message : String(error)}. Is the stack running?`,
+  ),
 )
