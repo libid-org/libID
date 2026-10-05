@@ -125,12 +125,16 @@ Platform Profile: The immutable, independently versioned definition of one
    platform, its handle normalization and whether its profile is a digest
    profile (platform §2.1a, §2.1b).
 
+Account identifier: The authenticated value a Platform Profile derives the
+   canonical `userId` from: Google's signed `sub`, and the X and GitHub
+   identifiers, which are their `userId` unchanged (platform §2.1).
+
 Digest profile: A Platform Profile whose Proving Circuit exposes the handle
-   as a digest rather than as bytes (platform REQ-PLAT-08M), beside a canonical `userId`
-   that is itself a digest of the platform's identifier. Its Platform
-   Verifier returns the handle digest (REQ-COMMON-05E), and a Submission may
-   carry the plaintext handle beside it but never the identifier the
-   `userId` digests (platform §2.1b). Google is the launch digest profile.
+   as a digest rather than as bytes (platform REQ-PLAT-08M), beside a
+   canonical `userId` that is itself a digest of the account identifier. Its
+   Platform Verifier returns the handle digest (REQ-COMMON-05E), and a
+   Submission may carry the plaintext handle beside it but never the account
+   identifier (platform §2.1b). Google is the launch digest profile.
 
 Proving Circuit: The zero-knowledge circuit whose proof a Platform Verifier
    checks. It proves only what cannot be read from authenticated evidence.
@@ -268,10 +272,10 @@ cited assumptions, except SP-PRIV-01. A Google ID Token reaches the Prover
 documents the CCDP Distribution supplies, and its email reaches the
 Application in the ceremony result, so either operator holds the handle in
 plaintext and can send it anywhere, the chain included. Against such an
-operator SP-PRIV-01 still bounds the Consumer and the Proof Verifier, which
-put no plaintext on chain that a transaction did not carry; against an
-honest Application and Distribution it bounds everyone who reads the
-chain. They assume an unmodified Canonical Runtime, the selected
+operator SP-PRIV-01 still bounds the Consumer, the Proof Verifier, and the
+Platform Verifier, which put no plaintext on chain that a transaction did
+not carry; against an honest Application and Distribution it bounds
+everyone who reads the chain. They assume an unmodified Canonical Runtime, the selected
 verifier artifact, the Consumer, and verifier configuration. Compromise of the
 applicable
 identity-platform signing root, notary key, Platform Verifier, verifier governance,
@@ -331,11 +335,11 @@ notary-signature check before an authoritative effect.
   one authoritative effect. Depends on ASM-CHAIN-01, ASM-CHAIN-02. Evidence:
   checked invariant in the Consumer.
 - SP-PRIV-01:
-  For a digest profile, the Consumer and the Proof Verifier put an
-  identity's handle on the Consumer Chain in plaintext only from an
-  accepted Submission or disclosure call that carried it, and the platform
-  identifier its `userId` digests never. No chain artifact, whether
-  calldata, proof bytes, event, or storage, yields a handle or that
+  For a digest profile, the Consumer, the Proof Verifier, and the Platform
+  Verifier emit or store an identity's handle in plaintext on the Consumer
+  Chain only from an accepted Submission or disclosure call that carried
+  it, and its account identifier never. No chain artifact, whether
+  calldata, proof bytes, event, or storage, yields a handle or account
   identifier that no transaction carried, except by hashing a candidate and
   comparing it with the identity's keys or `userId`. Depends
   on ASM-HASH-01, ASM-PROOF-01, ASM-ZK-01, ASM-BROWSER-01. Evidence: conformance tests (supporting, not proving)
@@ -1628,11 +1632,12 @@ leaves a profile with no attestation unaffected.
 
 The client identifier is published deliberately: a binding exists to be
 read, and the client is discoverable from the identity platform. The handle
-and the platform user identifier are published where a Platform Profile
-exposes them as bytes, X and GitHub at launch, whose handles are public on
-the platform itself. A digest profile, Google at launch, puts neither on
-chain in plaintext unless a transaction carries it (SP-PRIV-01). Its
-canonical `userId` is a digest of Google's `sub`
+and the canonical `userId` are published where a Platform Profile exposes
+them as bytes, X and GitHub at launch, whose handles are public on the
+platform itself. A digest profile, Google at launch, publishes its
+canonical `userId`, puts its handle on chain in plaintext only from a
+transaction that carries it, and its account identifier never
+(SP-PRIV-01). Its canonical `userId` is a digest of Google's `sub`
 ([platform profiles §2.1](platform-ceremonies.md#21-canonical-platform-user-identifiers)),
 because Google shows a `sub` only to the applications a user signs in to;
 the `sub` is never sent, and the handle is sent only where the Application
@@ -1652,13 +1657,13 @@ Application in the ceremony result, so whether a Submission carries the
 handle is the Application's choice, made for the user; an operator that
 wants the address public can send it, and no Consumer check can tell that
 from the user's wish. What the property does bound is the chain: the
-Consumer and the Proof Verifier emit and store nothing a transaction did not
-carry, and a transaction that carries a handle publishes it when it is sent,
+Consumer, the Proof Verifier, and the Platform Verifier emit and store
+nothing a transaction did not carry, and a transaction that carries a handle publishes it when it is sent,
 since a Submission or disclosure call the Consumer refuses still leaves its
 calldata on chain. The proof bytes hide the witness only because the Prover
 proves in the zero-knowledge mode with fresh randomness (ASM-ZK-01,
 REQ-COMMON-45A). The keys an undisclosed identity is stored under are
-unsalted digests of its normalized handle and its user identifier, so that
+unsalted digests of its normalized handle and its account identifier, so that
 whoever already knows an address can resolve it; by the same arithmetic,
 whoever suspects an address, or holds the `sub` from another relying party,
 confirms the binding by hashing it (ASM-HASH-01). The property does not hide

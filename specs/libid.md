@@ -97,7 +97,7 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
 | Application operator | selects a Bridge and operation; starts or withholds work; receives a Google email in plaintext | frontend availability and declared ceremony inputs; for a digest profile, sending the handle only when the user asks, on which SP-PRIV-01 rests | identity fields, proof target, or proof validity |
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
-| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges | correct code and asset supply under ASM-CCDP-01 | authority to change ledger verification rules |
+| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges; its Prover holds a Google ID Token, with the email and `sub` | correct code and asset supply under ASM-CCDP-01; for a digest profile, a Prover that sends the token nowhere and proves in the zero-knowledge mode with fresh randomness, on which SP-PRIV-01 rests | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots, and the Supported Version Set | correct authority lifecycle | user consent |
@@ -154,9 +154,13 @@ rejection by recording every Authorization Digest it accepts before applying
 an effect (REQ-COMMON-03, REQ-COMMON-03A). For a profile that exposes identity
 digests, Google at launch, the Consumer keys the binding on the digests and
 puts the handle on chain only from a transaction that carried it, and the
-user identifier never (SP-PRIV-01); it does not prevent confirmation of a
-guessed identity by hashing, nor an application operator, who receives the
-email, from sending the handle itself. The Canonical Runtime
+account identifier its `userId` digests, Google's `sub`, never; the
+`userId` digest itself is public (SP-PRIV-01). It does not prevent
+confirmation of a guessed identity by hashing, nor an application operator,
+who receives the email, from sending the handle itself. It rests on the
+CCDP Distribution as well: the Prover it supplies holds the ID Token, and
+the proof bytes hide the email and `sub` only because that Prover proves in
+the zero-knowledge mode with fresh randomness (REQ-COMMON-45A). The Canonical Runtime
 locally enforces the selected OAuth client and redirect profile. The protocol
 assumes the named identity-platform parser,
 PKCE, delivery, notary, browser, verifier-soundness, and chain behaviors. It

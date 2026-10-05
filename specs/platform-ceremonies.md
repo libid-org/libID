@@ -248,7 +248,7 @@ Author **holds** a handle on a platform while it owns that handle's key.
 
 - REQ-PLAT-08H (upholds SP-BIND-01):
   The Consumer MUST derive identity keys and handle keys with two
-  injective functions of the platform identifier and the inner digest, fixed
+  injective functions of the identity platform and the inner digest, fixed
   by its protocol, under which no identity key equals any handle key. The
   Consumer MUST NOT key a binding on anything else. Necessity: a handle that
   reads as a number and a `userId` that is that number must not share a key,
@@ -316,13 +316,14 @@ A reader that mirrors names from the events of REQ-PLAT-08F applies the
 same test; the stored string alone is not a name.
 
 A digest profile is a Platform Profile whose Proving Circuit exposes the
-handle as a digest (REQ-PLAT-08M) rather than bytes, beside a canonical `userId`
-that is itself a digest of the platform identifier; Google is one (§3.3). The Consumer knows a platform's profile is one from
+handle as a digest (REQ-PLAT-08M) rather than bytes, beside a canonical
+`userId` that is itself a digest of the platform's account identifier
+(common §2); Google is one (§3.3). The Consumer knows a platform's profile is one from
 its own configuration of that platform (REQ-PLAT-08L). The Consumer keys
 every such identity on the digests, so an identity is resolvable by whoever
 knows its handle or `userId` whether or not either was ever sent in
 plaintext. What a digest profile adds is the choice of sending the handle.
-The identifier its `userId` digests, Google's `sub`, is never sent: nothing
+The account identifier its `userId` digests, Google's `sub`, is never sent: nothing
 the Consumer or a reader does needs it, and it is the one value that also
 names the account at every other relying party. A Submission or disclosure call **carries** a handle when
 its plaintext handle field is present and nonempty; an empty field carries
@@ -616,6 +617,7 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   to the Consumer unchanged and unchecked, as the unverified handle of
   REQ-COMMON-05E. An empty `email` field carries no handle (§2.1b). The
   Google Submission Payload MUST carry no plaintext `sub`. The Platform
+  Verifier MUST NOT emit or store the `email`. The Platform
   Verifier MUST NOT derive a normalized handle or a key from the `email`;
   the check that it hashes to the handle digest is the Consumer's under
   REQ-PLAT-08D, because it needs the normalization of §2.1a. Necessity: one
