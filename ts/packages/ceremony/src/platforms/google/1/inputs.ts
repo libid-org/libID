@@ -3,8 +3,8 @@ import {
   RSA_EXPONENT_BASE64URL,
   RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
+import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { b64urlDecode, isRecord } from '../../../primitives.js'
-import { AUTHORIZATION_DIGEST_BYTES } from '../../authorization.js'
 import type { ParsedGoogleIdToken } from './token.js'
 import { userIdOf } from './validation.js'
 

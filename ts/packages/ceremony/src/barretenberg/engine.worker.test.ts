@@ -1,8 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { posted, stubWorkerScope } from '../testing/workers.js'
 
 const mocks = vi.hoisted(() => ({
@@ -25,10 +22,14 @@ vi.mock('@noir-lang/noir_js', () => ({
   },
 }))
 
-vi.mock('@aztec/bb.js', () => ({
+vi.mock('@aztec-foundation/bb.js', () => ({
   BackendType: { Wasm: 'Wasm' },
   Barretenberg: { new: mocks.create },
 }))
+
+beforeEach(() => {
+  vi.stubGlobal('navigator', { hardwareConcurrency: 4 })
+})
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -49,29 +50,16 @@ const preload = {
 
 const witness = () => ({ witness: gzipSync(Uint8Array.of(4, 5, 6)) })
 
-const bbMain = readFileSync(
-  join(
-    dirname(createRequire(import.meta.url).resolve('@aztec/bb.js')),
-    '../browser/barretenberg_wasm/barretenberg_wasm_main/index.js',
-  ),
-  'utf8',
-)
-
-/** The thread-pool clause the installed bb.js logs at initialization, in its exact format. */
-function bbRuntimeLog(threads: number, shared: boolean): string {
-  if (!/`threads: \$\{threads\}; shared memory: \$\{shared\}`/.test(bbMain))
-    throw new Error('The installed bb.js no longer logs its thread pool this way')
-  return `threads: ${threads}; shared memory: ${shared}`
-}
-
 /**
- * Boot the proof worker and deliver its preload. `runtime` is what bb logs about its thread pool
- * (nothing when null); `isolated` is the scope's cross-origin isolation.
+ * Boot the proof worker and deliver its preload. `isolated` is the scope's cross-origin
+ * isolation; `threads` the requested proof threads.
  */
 async function worker(
   key: Response | Promise<Response> = new Response(Uint8Array.of(11, 12)),
-  { isolated = true, runtime = bbRuntimeLog(4, true) as string | null } = {},
+  // `threads` absent sends the preload's request; present, even undefined, replaces it.
+  { isolated = true, ...requested }: { isolated?: boolean; threads?: number } = {},
 ) {
+  const threads = 'threads' in requested ? requested.threads : preload.threads
   const request = vi.fn(async (url: string) =>
     url.endsWith('/vk')
       ? key
@@ -83,9 +71,8 @@ async function worker(
   )
   const scope = stubWorkerScope({ crossOriginIsolated: isolated })
   vi.stubGlobal('fetch', request)
-  mocks.create.mockImplementation(async ({ logger }) => {
+  mocks.create.mockImplementation(async () => {
     await mocks.initialize()
-    if (runtime !== null) logger(runtime)
     return { circuitProve: mocks.prove, destroy: mocks.destroy }
   })
   mocks.execute.mockResolvedValue(witness())
@@ -95,7 +82,7 @@ async function worker(
     publicInputs: [new Uint8Array(32), new Uint8Array(32).fill(255)],
   })
   await import('./engine.worker.js')
-  scope.deliver(preload)
+  scope.deliver({ ...preload, threads })
   const { postMessage } = scope
   return {
     send: scope.deliver,
@@ -138,7 +125,6 @@ it('uses the released VK with exact ZK Keccak settings and preserves proof encod
   expect(w.postMessage.mock.calls.find(([m]) => m.type === 'result')![0].result).toEqual({
     proof: Uint8Array.from([...new Uint8Array(32).fill(7), ...new Uint8Array(32).fill(8)]),
     publicInputs: [`0x${'00'.repeat(32)}`, `0x${'ff'.repeat(32)}`],
-    runtime: { effectiveThreads: 4, sharedMemory: true },
   })
   expect(mocks.destroy).toHaveBeenCalledOnce()
 })
@@ -241,25 +227,43 @@ it.each(['cross-origin isolation', 'shared memory'])(
 )
 
 it.each([
-  ['one thread', bbRuntimeLog(1, true)],
-  ['no shared memory', bbRuntimeLog(4, false)],
-  ['no thread pool', null],
+  { threads: 1, hardwareConcurrency: 4 },
+  { threads: 4, hardwareConcurrency: 1 },
+  { threads: 4, hardwareConcurrency: undefined },
+  { threads: Number.NaN, hardwareConcurrency: 4 },
 ])(
-  'fails and destroys a backend reporting %s instead of multithreaded execution [LIBID-PROVER-015] [LIBID-OAUTH-010]',
-  async (_, runtime) => {
-    const w = await worker(undefined, { runtime })
+  'rejects $threads threads with worker hardware concurrency $hardwareConcurrency before preload [LIBID-PROVER-015] [LIBID-OAUTH-010]',
+  async ({ threads, hardwareConcurrency }) => {
+    vi.stubGlobal('navigator', { hardwareConcurrency })
+    const w = await worker(undefined, { threads })
     await expect.poll(() => w.has('error')).toBe(true)
     expect(w.errors()).toEqual([
       {
         type: 'error',
-        event: 'proof-backend-initialization',
+        event: 'zk-proof-preparation',
         message: 'Multithreaded backend unavailable',
       },
     ])
-    await expect.poll(() => w.finished('proof-circuit-load')).toBe(true)
-    expect(mocks.destroy).toHaveBeenCalledOnce()
-    expect(w.has('backend-ready')).toBe(false)
-    expect(mocks.prove).not.toHaveBeenCalled()
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(w.request).not.toHaveBeenCalled()
+  },
+)
+
+it.each([
+  { threads: 4, hardwareConcurrency: 2, capped: 2 },
+  { threads: 8, hardwareConcurrency: 16, capped: 4 },
+  // Production sends no request; the worker's default of four is capped the same way.
+  { threads: undefined, hardwareConcurrency: 2, capped: 2 },
+  { threads: undefined, hardwareConcurrency: 16, capped: 4 },
+])(
+  'caps $threads requested bb threads at $capped with hardware concurrency $hardwareConcurrency [LIBID-PROVER-015]',
+  async ({ threads, hardwareConcurrency, capped }) => {
+    vi.stubGlobal('navigator', { hardwareConcurrency })
+    const w = await worker(undefined, { threads })
+    await expect.poll(() => w.has('backend-ready')).toBe(true)
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ threads: capped }),
+    )
   },
 )
 

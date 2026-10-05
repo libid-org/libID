@@ -42,7 +42,7 @@ transact.
 ## In this repository
 
 Besides the protocol specifications under [`specs/`](specs/), this repo
-carries the browser packages, their development app and the integration harness:
+carries the project website, the browser packages and their development app:
 
 - [`site/`](site/) — the static project website and Cloudflare deployment
   configuration. Starlight serves the docs at `lib.id/docs/`,
@@ -58,25 +58,18 @@ carries the browser packages, their development app and the integration harness:
   `LedgerId` contract an application passes to a ceremony.
 - [`ts/apps/dev`](ts/apps/dev) — **`@libid/dev`**, the shared local services and
   browser app for manual ceremony testing.
-- [`ts/packages/claim`](ts/packages/claim) and [`ts/apps/demo`](ts/apps/demo) —
-  the earlier browser claim library for the OAuth handle-claim flows, and its demo.
-- [`harness/`](harness) — the integration harness: a docker-compose stack
-  (anvil + deterministic contract deploy + released notary and
-  libID-bridge-rs images from before the rename) plus asset staging and one
-  `boot.sh` for a real, manual end-to-end claim. See
-  [`harness/README.md`](harness/README.md).
 
 ## Repositories
 
 - [`libID`](https://github.com/libid-org/libID) — protocol specifications,
-  project overview, the browser packages, and the integration harness.
+  project overview, the browser packages, and their development app.
 - [`libID-rs`](https://github.com/libid-org/libID-rs) — Rust application
   backends and zero-knowledge proof tooling.
 - [`libID-contracts`](https://github.com/libid-org/libID-contracts) — Solidity
   contracts for EVM-compatible chains.
 - [`libID-circuits`](https://github.com/libid-org/libID-circuits) — the Noir
   circuits; releases ship the compiled circuits + verification keys the
-  claim flows load.
+  ceremonies load.
 - [`notary`](https://github.com/libid-org/notary) — the notary service
   (MPC-TLS / ProxyMode verifier + attestation signer).
 - [`libID-bridge-rs`](https://github.com/libid-org/libID-bridge-rs) — the

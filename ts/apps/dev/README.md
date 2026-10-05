@@ -58,7 +58,7 @@ It rebuilds the packages and static distribution, then recreates only CCDP.
 Bridge, notary and the app stay running; no Docker images are built. Refresh
 the app and start a fresh ceremony to use updated Prover/Prefetch code.
 The Bridge caches Callback
-([refresh rules](https://github.com/libid-org/libID/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/oauth-bridge.md#callback-document)),
+([refresh rules](https://github.com/libid-org/libID/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/oauth-bridge.md#callback-document)),
 so restart `pnpm dev` after Callback changes. Also restart after changing service
 configuration or dependency images. Bridge runs from its released container image.
 
@@ -89,8 +89,11 @@ pnpm --filter @libid/dev... build
 pnpm --filter @libid/dev test:e2e
 ```
 
-The browser tests use port 4692 and cover frontend behavior with intercepted
-responses. Real OAuth and proving checks are documented in the
+The browser tests use port 4692 and intercepted responses for smoke coverage of
+launch/close, outcomes, concurrent runs and a representative timing display.
+Protocol validation and event ordering belong to the ceremony and popup suites;
+the dev suite does not exhaustively test timing arithmetic, sorting or delayed
+delivery, or retest native disclosure controls. Real OAuth and proving checks are documented in the
 [ceremony qualification guide](../../packages/ceremony/docs/qualification.md).
 
 Run history shows core operation durations from their occurrence timestamps, plus

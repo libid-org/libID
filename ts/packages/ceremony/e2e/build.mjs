@@ -57,5 +57,5 @@ await buildHarness(
 // Served in place of the released TLSN SDK module, so it cannot import harness chunks.
 await buildHarness(
   { entry: join(packageDir, 'e2e/tlsn.fixture.ts'), fileName: () => 'tlsn-fixture.js' },
-  { emptyOutDir: false, rollupOptions: { output: { inlineDynamicImports: true } } },
+  { emptyOutDir: false, rolldownOptions: { output: { codeSplitting: false } } },
 )

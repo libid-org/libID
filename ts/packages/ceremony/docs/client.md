@@ -32,20 +32,12 @@ async function bindGoogleAction(
   const client = await createCCDPClient({ oauthBridge: bridgeOrigin })
 
   anchor.addEventListener('click', (event) => {
-    const id = crypto.randomUUID()
-    const target = `ceremony-${id}`
-    // Keep window creation synchronous with the user's activation.
-    const popup = PopupWindow.open(target)
-    const connection = client.connect(popup, {
-      connectionId: id,
-    })
+    // Keep window creation and the run's start synchronous with the user's activation.
+    const connection = client.connect(PopupWindow.fromAnchor(event))
     try {
       const ceremony = client.new(
-        connection, id, 'google', ledger, operationDomain, transactionData,
+        connection, 'google', ledger, operationDomain, transactionData,
       )
-      anchor.target = target
-      anchor.href = ceremony.launchUrl
-      if (popup.opened) event.preventDefault() // Otherwise let the real anchor launch.
       const off = ceremony.onStage((update) => {
         status.textContent = update.status === 'active'
           ? CeremonyStage.message(update.stage, 'Google')
@@ -75,30 +67,35 @@ async function bindGoogleAction(
 
 The [development app](../../../apps/dev/src/app.ts) shows platform buttons,
 concurrent runs, independent Close controls and timing history. Each live run
-needs its own target, connection and fresh lowercase UUIDv4. Use the same UUID
-for popup's `connectionId` and `client.new`'s ceremony ID; `new` rejects a different ID on a
-connection from `client.connect`. Reserve no CCDP message
+needs its own popup and connection. `client.connect` gives each connection a fresh
+`connectionId`, and `client.new` runs the ceremony under it. Reserve no CCDP message
 handlers yourself on that connection.
 
-`connect` accepts popup's `ConnectOptions` except `allowedPopupOrigins`; the client
-supplies that allowlist from its frozen Bridge configuration. Fallback and
+`connect` accepts popup's `ConnectOptions` except `allowedPopupOrigins` and
+`connectionId`; the client supplies the allowlist from its frozen Bridge configuration
+and generates the ID. Fallback and
 diagnostic options pass through to the popup package. It adds no message handlers
 or navigation. The returned connection supports other application protocols;
-`client.new()` also continues to accept independently constructed connections.
-The Bridge and the CCDP are both admitted popup origins, but only CCDP documents
-advance a run: Prefetch and Prover readiness from any other origin fails it, so
-the Bridge's Callback never receives the code verifier or client credential.
+`client.new()` also accepts independently constructed connections, such as one that
+admits an application's own pages before and after the ceremony. Their creator generates
+a fresh `connectionId`, and `client.new` runs only a canonical UUIDv4.
+The Bridge and the CCDP are both admitted popup origins. Prefetch/Prover gates,
+proof delivery, denial, fallback observations, and proving operations require the
+CCDP origin; `authorization.finished` requires the Bridge origin. When both share
+an origin, normal protocol state still determines which occurrences are valid.
+The code verifier is sent only after CCDP-origin Prover readiness.
 
-`new(connection, id, platformId, ledger, operationDomain, transactionData, version?)`
+`new(connection, platformId, ledger, operationDomain, transactionData, version?)`
 is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`
 and `ledger.notaryAddress()` once and derives fresh authorization material from
 the hash and byte inputs before returning, without retaining those buffers.
-Invalid selection, ledger values or inputs fail before OAuth. A client cannot reuse a live ID; a connection cannot run two
+Invalid selection, ledger values or inputs fail before OAuth. A client cannot reuse a live connection ID; a connection cannot run two
 ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
 [client.ts](../src/ccdp/client/client.ts) and [ceremony.ts](../src/ccdp/client/ceremony.ts).
 
-`launchUrl` is the complete Prefetch URL for a native anchor.
-`proveUserIdentity()` starts the run once and owns subsequent protocol navigation.
+`proveUserIdentity()` starts the run once and owns its protocol navigation. Called
+during the anchor's activation, its first navigation also points a blocked
+`fromAnchor` popup's anchor at Prefetch; `launchUrl` is that same Prefetch URL.
 Raw OAuth returns stay inside Callback and Prover; the application receives
 neither them nor bearer credentials or private witnesses.
 

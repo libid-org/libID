@@ -11,8 +11,8 @@ Each pin lives in its declaration; change it there.
 
 | Input | Version | Declared in |
 |---|---|---|
-| Circuits | v0.5.0 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
-| Noir / bb.js | 1.0.0-beta.25 / 5.2.0 | [package.json](../package.json); EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts) |
+| Circuits | v0.6.0 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
+| Noir / bb.js | 1.0.0-rc.3 / 6.0.0-rc.2 | [package.json](../package.json); EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts) |
 | Notary browser/runtime | v0.4.0, with the TLSN and MPZ revisions of that release | [notary.assets.ts](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml) |
 | Development Bridge | v0.5.0, one OAuth client per platform and no version list | [compose.yaml](../../../apps/dev/compose.yaml) |
 | SWS | 3.0.0-beta.1 | [ccdp.Dockerfile](../ccdp.Dockerfile) |
@@ -37,9 +37,11 @@ fails at authorization with its own message, before any key fetch or proving.
 CI runs workspace type/unit checks, distribution/native-loader tests and browser
 coverage across Chromium, Firefox and WebKit. HTTP and mobile-emulated projects
 retain interaction and policy coverage; full proofs and matched-notary runtime
-qualification run per desktop engine. All runtime tests, which run through the
-real notary against the X and GitHub APIs, retry once, and they are the only tests that retry. Independent
-workspace/engine CI jobs run in parallel. Each engine generates the Google,
+qualification run per desktop engine. The `@live` runtime tests and the reveal stall
+test's setup sends, which run through the real notary against the X and GitHub APIs,
+retry once inside the test unless a deadline was missed; nothing else retries. Independent
+workspace/engine CI jobs run in parallel; a pull request runs only the workspaces
+its changes can affect, and every push to `main` runs them all. Each engine generates the Google,
 X and GitHub ceremony proofs plus one real-notary coexistence proof. A configured
 test is not evidence that the current revision passed it.
 

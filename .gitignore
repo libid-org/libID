@@ -4,17 +4,9 @@ ts/packages/*/node_modules/
 ts/apps/*/node_modules/
 ts/packages/*/dist/
 ts/apps/*/dist/
-ts/apps/demo/.env.local
-
-# Demo static assets — staged by @libid/claim-full's libid-claim-assets
-# bin (pnpm --filter @libid/claim-demo stage-assets), never committed.
-ts/apps/demo/public/
-
-# Local-development secrets (OAuth client id/secret for the harness).
+# Local development environment files
 .env
-
-# Harness runtime output
-harness/.env
+.env.local
 
 # @libid/popup e2e bundles and Playwright output
 ts/packages/popup/e2e/dist/
@@ -36,3 +28,9 @@ ts/apps/dev/playwright-report/
 
 # Updating the checkout does not move developers' untracked old credentials.
 ts/packages/ceremony/dev/.env*
+
+# npm package staging and copies of the repository licenses
+ts/.cache/
+ts/packages/*/LICENSE-MIT
+ts/packages/*/LICENSE-APACHE
+ts/packages/*/NOTICE

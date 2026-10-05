@@ -3,7 +3,7 @@
 The [notary module](../src/notary/) adapts the pinned TLSNotary WASM Proxy API.
 Platform code owns exact requests, response parsing and disclosure selection;
 the adapter owns sessions, transcript bounds, final-frame delivery and correlation.
-The [platform specification](https://github.com/libid-org/libid/blob/49ad6653c11e9f1fe2f0680d1f70754aefb9878f/specs/platform-ceremonies.md)
+The [platform specification](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/platform-ceremonies.md)
 owns authoritative request/evidence rules.
 
 ## Session lifecycle
@@ -95,9 +95,10 @@ and derives authoritative identity and proof inputs from them.
 directions and UTF-8-decodes a response body only after removing chunked framing.
 Each caller keeps its own field policy: [transcript.ts](../src/notary/transcript.ts)
 selects JSON fields from raw bytes, and the X/GitHub
-[exchange machinery](../src/barretenberg/circuits/bearer-link/exchange.ts) owns the token and
-identity request checks. It consumes the fixed
-layouts each platform's `provider.ts` declares. JSON whitespace and header
+[token](../src/notary/oauth/token.ts) and [identity](../src/notary/oauth/identity.ts)
+requests own their checks. They consume the fixed
+layouts each platform's `provider.ts` declares, plus the platform's identity grammar and
+the input and bearer rules `platforms/notarized` supplies. JSON whitespace and header
 order do not establish identity: selectors work from actual wire offsets, and numeric GitHub IDs are
 preserved losslessly. Additional headers are admitted subject to the layout's
 required fields and forbidden-header rules; duplicate required headers and
@@ -109,7 +110,7 @@ ASM-PROV-06. Delivered IDs come from selected transcript bytes, never rounded JS
 numbers. Byte selectors still reject duplicate disclosure delimiters.
 
 Both X and GitHub obtain token and identity through browser Proxy sessions.
-GitHub's [token selector](../src/platforms/github/1/exchange.ts) checks the complete
+GitHub's [token selector](../src/platforms/github/1/token.ts) checks the complete
 request against the frozen canonical form before using the returned bearer.
 GitHub's identity request uses a fixed, generic User-Agent without browser or OS details. Exact header values and forbidden
 names are owned by code and the specification, not copied here.

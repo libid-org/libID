@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import { profileKey } from '../src/assets/keys.ts'
-import type { PlatformVersions } from '../src/ccdp/client/versions.ts'
+import { CCDP_VERSION, profileKey } from '../src/assets/keys.ts'
+import type { DistributionVersions, PlatformVersions } from '../src/ccdp/client/versions.ts'
 import { importSource } from './bundle.ts'
 import { packageDir } from './sources.ts'
 
@@ -27,7 +27,7 @@ export function publishableVersions(
   catalog: PlatformVersions,
   prover: Iterable<string>,
   assets: Iterable<string>,
-): PlatformVersions {
+): DistributionVersions {
   const sources = {
     catalog: new Set(versionPairs(catalog)),
     'platform provers': new Set(prover),
@@ -43,7 +43,7 @@ export function publishableVersions(
     )
   if (differences.length)
     throw new Error(`Platform ceremony versions differ: ${differences.join('; ')}`)
-  return catalog
+  return { ccdpVersions: [CCDP_VERSION], platforms: catalog }
 }
 
 /** The platform catalog's versions, held to the grammar the client reads `versions.json` under. */

@@ -59,7 +59,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
 
   it(
     tagged(
-      'fetches its published signing key once, without credentials or redirects, and opens no notary connection',
+      'fetches its published signing key once, without credentials or redirects, through the HTTP cache, and opens no notary connection',
       tags,
     ),
     async () => {
@@ -67,7 +67,12 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       await (await proverOf(platformId)).prove(staged.context)
       expect(staged.keys).toHaveBeenCalledOnce()
       expect(new URL(staged.keys.mock.calls[0][0]).protocol).toBe('https:')
-      expect(staged.keys.mock.calls[0][1]).toMatchObject({ credentials: 'omit', redirect: 'error' })
+      expect(staged.keys.mock.calls[0][1]).toMatchObject({
+        credentials: 'omit',
+        redirect: 'error',
+        // The key set honours Google's Cache-Control rather than refetching every run.
+        cache: 'default',
+      })
       // The supplied notary address never opens a notary connection for this prover.
       expect(notarization).not.toHaveBeenCalled()
     },

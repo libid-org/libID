@@ -1,3 +1,0 @@
-# Release/build output staged by scripts/fetch-assets.mjs — ships in the
-# npm tarball (see `files` in package.json), never in git.
-/assets/

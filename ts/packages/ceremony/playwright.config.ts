@@ -19,7 +19,8 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
     // The CRS comes from the harness cache (e2e/crs.mjs), not Aztec's CDN.
     proxy: { server: `http://127.0.0.1:${crsProxy}`, bypass: 'localhost,127.0.0.1' },
-    trace: 'off',
+    // Kept only for failures, which CI uploads.
+    trace: 'retain-on-failure',
     video: 'off',
     screenshot: 'off',
   },

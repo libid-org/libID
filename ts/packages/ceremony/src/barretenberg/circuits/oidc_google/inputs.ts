@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { concatBytes } from '@noble/hashes/utils.js'
-import { AUTHORIZATION_DIGEST_BYTES } from '../../../platforms/authorization.js'
+import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { fieldHex } from '../../parameters.js'
 import {
   BARRETT_OVERFLOW_BITS,
@@ -93,7 +93,7 @@ function findOffset(payload: Uint8Array, pattern: string): number {
   return offset
 }
 
-/** Build the exact libid-circuits v0.5.0 `oidc_google` circuit inputs. */
+/** Build the exact libid-circuits v0.6.0 `oidc_google` circuit inputs. */
 export function buildOidcGoogleInputs(
   token: OidcGoogleToken,
   modulus: Uint8Array,

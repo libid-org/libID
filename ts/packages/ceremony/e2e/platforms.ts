@@ -15,7 +15,7 @@ export interface BrowserPlatform {
   authorizationIssuer?: string
   /** Whether the authorization request carries an S256 PKCE challenge. */
   pkce: boolean
-  /** `jwt`: the signed Google v1 fixture token; `tlsn`: bearer-link with a fixture TLSN SDK/peer. */
+  /** `jwt`: the signed Google v1 fixture token; `tlsn`: the notarized flow with a fixture TLSN SDK/peer. */
   evidence: 'jwt' | 'tlsn'
   /** One real-notary runtime test per entry; `alongsideProving` also proves in that runtime. */
   notary: readonly { sessions: number; alongsideProving?: true }[]

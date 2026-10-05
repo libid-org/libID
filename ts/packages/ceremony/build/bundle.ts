@@ -114,6 +114,34 @@ function workerImports(): Plugin {
   }
 }
 
+/** The module group a module belongs to; unassigned modules follow the platforms importing them. */
+function chunkGroup(id: string): 'shared' | 'proof-engine' | 'notary' | undefined {
+  // Classify by package path: the checkout's own path may contain `/src/`.
+  const path = relative(packageDir, id)
+  // The catalog reads these data-only constants in every profile; left unassigned,
+  // they would follow the first group importing them, such as the notary's.
+  if (id.includes('/node_modules/@libid/contracts/')) return 'shared'
+  // Circuits follow the platforms that import them, as platform modules do.
+  if (path.startsWith('src/barretenberg/circuits/')) return
+  if (path.startsWith('src/barretenberg/')) return 'proof-engine'
+  // The catalog validates attestations and token inputs with these data-only
+  // modules; only the notary runtime stays in a chunk that a profile without it skips.
+  if (
+    path.startsWith('src/notary/') &&
+    !/^src\/notary\/(decode|limits|protocol|oauth\/(events|validation))\.ts$/.test(path)
+  )
+    return 'notary'
+  // Platform modules, the prover table among them, stay out of the shared
+  // chunk: on a chunk every prover imports, the table would put every
+  // prover in every profile's set.
+  if (
+    path.startsWith('src/') &&
+    !path.startsWith('src/platforms/') &&
+    path !== 'src/ccdp/documents/prover.ts'
+  )
+    return 'shared'
+}
+
 export async function bundle(
   entry: string,
   data: ResolvedAssets,
@@ -123,6 +151,7 @@ export async function bundle(
     fragment = false,
     groupModules = true,
     manifest,
+    rootWorkerUrl,
   }: {
     /** One inlined chunk without module groups or imports. */
     selfContained?: boolean
@@ -131,6 +160,8 @@ export async function bundle(
     fragment?: boolean
     groupModules?: boolean
     manifest?: AssetManifest
+    /** Content-addressed Worker URL, supplied only when bundling Prefetch. */
+    rootWorkerUrl?: string
   } = {},
 ) {
   const graph = new Map<string, BundleNode>()
@@ -148,7 +179,6 @@ export async function bundle(
             dependencies: [
               ...item.imports,
               ...item.dynamicImports,
-              ...item.referencedFiles,
               ...(item.viteMetadata?.importedAssets ?? []),
             ],
           })
@@ -163,6 +193,14 @@ export async function bundle(
       `import {${invoke}} from ${JSON.stringify(join(packageDir, entry))};${start}`,
     ),
     assetPlugin(data, manifest),
+    ...(rootWorkerUrl
+      ? [
+          virtualModule(
+            'ceremony-worker',
+            `export const rootWorkerUrl=${JSON.stringify(rootWorkerUrl)};`,
+          ),
+        ]
+      : []),
     absoluteImports(),
     record(worker),
   ]
@@ -182,7 +220,7 @@ export async function bundle(
     worker: {
       format: 'es',
       plugins: () => plugins(true),
-      rollupOptions: { output },
+      rolldownOptions: { output },
     },
     build: {
       write: false,
@@ -190,38 +228,39 @@ export async function bundle(
       target: 'es2022',
       assetsInlineLimit: 0,
       modulePreload: false,
-      rollupOptions: {
+      rolldownOptions: {
         input: invoke ? 'virtual:ceremony-entry' : join(packageDir, entry),
         preserveEntrySignatures: 'strict',
         output: {
           ...output,
-          inlineDynamicImports: selfContained,
-          manualChunks:
-            selfContained || !groupModules
-              ? undefined
-              : (id) => {
-                  // Classify by package path: the checkout's own path may contain `/src/`.
-                  const path = relative(packageDir, id)
-                  // Circuits follow the platforms that import them, as platform modules do.
-                  if (path.startsWith('src/barretenberg/circuits/')) return
-                  if (path.startsWith('src/barretenberg/')) return 'proof-engine'
-                  // The catalog validates attestations with the decoder and its constants;
-                  // only the notary runtime stays in a chunk that a profile without it skips.
-                  if (
-                    path.startsWith('src/notary/') &&
-                    !/^src\/notary\/(decode|limits|protocol)\.ts$/.test(path)
-                  )
-                    return 'notary'
-                  // Platform modules, the prover table among them, stay out of the shared
-                  // chunk: on a chunk every prover imports, the table would put every
-                  // prover in every profile's set.
-                  if (
-                    path.startsWith('src/') &&
-                    !path.startsWith('src/platforms/') &&
-                    path !== 'src/ccdp/documents/prover.ts'
-                  )
-                    return 'shared'
+          ...(selfContained
+            ? { codeSplitting: false }
+            : groupModules && {
+                codeSplitting: {
+                  // Explicit groups win over capture as dependencies, as Rollup's manualChunks
+                  // did: a higher priority captures first, and each takes its own module set.
+                  groups: [
+                    {
+                      name: 'shared',
+                      test: (id: string) => chunkGroup(id) === 'shared',
+                      priority: 3,
+                    },
+                    {
+                      name: 'proof-engine',
+                      test: (id: string) => chunkGroup(id) === 'proof-engine',
+                      priority: 2,
+                    },
+                    {
+                      name: 'notary',
+                      test: (id: string) => chunkGroup(id) === 'notary',
+                      priority: 1,
+                    },
+                    // What only the entry imports would otherwise be inlined with it into the
+                    // uncached document; one cacheable chunk keeps the entry a facade.
+                    { name: 'document', tags: ['$initial'], priority: 0 },
+                  ],
                 },
+              }),
         },
       },
     },

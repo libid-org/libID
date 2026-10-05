@@ -113,4 +113,10 @@ class CallbackDocument extends CeremonyDocument {
       this.fail(error)
     }
   }
+
+  /** Drop the captured return on failures too; the composition retains its connection. */
+  protected override cleanup(): void {
+    this.#oauthReturn = null
+    super.cleanup()
+  }
 }

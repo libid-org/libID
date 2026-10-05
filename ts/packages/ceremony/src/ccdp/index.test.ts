@@ -27,7 +27,7 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
         platformId: 'google',
         platformCeremonyVersion: 1,
         clientId: 'client',
-        redirectUri: 'https://bridge.test/callback',
+        redirectUri: 'https://bridge.test/auth/callback',
         codeVerifier: null,
         notaryAddress: null,
       },
@@ -82,6 +82,29 @@ describe('CCDP v1 [LIBID-MOD-016] [LIBID-OAUTH-022] [TEST-CCDP-05]', () => {
         expect(() => ProveIdentity.decode({ ...base, [field]: value })).toThrow()
     }
   }
+  it('requires the fixed callback path on every ProveIdentity [TEST-CCDP-05]', () => {
+    checkField(
+      'redirectUri',
+      [
+        'https://bridge.test/auth/callback',
+        'https://bridge.test:8443/auth/callback',
+        'https://[::1]/auth/callback',
+        'http://localhost:4682/auth/callback',
+        'http://127.0.0.1:4682/auth/callback',
+      ],
+      [
+        'https://bridge.test',
+        'https://bridge.test/',
+        'https://bridge.test/callback',
+        'https://bridge.test/arbitrary/path',
+        'https://bridge.test/auth/callback/',
+        'https://bridge.test/auth/%63allback',
+        'https://bridge.test/auth/../auth/callback',
+        'https://bridge.test/auth/callback?x=1',
+        'https://bridge.test/auth/callback#x',
+      ],
+    )
+  })
   it('validates nullable notary routing independently of platform [LIBID-OAUTH-021]', () => {
     checkField(
       'notaryAddress',
@@ -170,7 +193,7 @@ it('rejects the retired delivery message and embedded-identity shape [LIBID-OAUT
 
 it('admits explicit loopback HTTP without widening public URL validation [LIBID-OAUTH-021]', () => {
   for (const suffix of ['?', '#', '?x=1', '#x']) {
-    const redirectUri = `https://bridge.test/callback${suffix}`
+    const redirectUri = `https://bridge.test/auth/callback${suffix}`
     expect(isRedirectUri(redirectUri)).toBe(false)
     expect(() =>
       ProveIdentity.decode({

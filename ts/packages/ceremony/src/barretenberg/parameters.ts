@@ -1,4 +1,4 @@
-/** bb.js 5.2.0 settings for verifierTarget: 'evm' (ZK-Honk/Keccak), shared with build checks. */
+/** bb.js 6.0.0-rc.2 settings for verifierTarget: 'evm' (ZK-Honk/Keccak), shared with build checks. */
 export const PROVING_SETTINGS = {
   ipaAccumulation: false,
   oracleHashType: 'keccak',

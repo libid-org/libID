@@ -22,10 +22,6 @@ updates:
       - dependency-type: "all"
     patterns: ["*"]
     multi-ecosystem-group: "dependencies"
-  - package-ecosystem: "docker-compose"
-    directory: "/harness"
-    patterns: ["*"]
-    multi-ecosystem-group: "dependencies"
   - package-ecosystem: "github-actions"
     directory: "/"
     patterns: ["*"]

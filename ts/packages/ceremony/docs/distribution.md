@@ -2,7 +2,7 @@
 
 The build emits a static CCDP artifact; Static Web Server (SWS) serves it.
 Resource and response requirements belong to the
-[Distribution specification](https://github.com/libid-org/libid/blob/aaed5c1e70aa8e66954ffdb0992c4b74720d8407/specs/ccdp-distribution.md).
+[Distribution specification](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/ccdp-distribution.md).
 The host needs no ceremony server, request-time compilation or asset downloads.
 
 ## Build and serve
@@ -33,7 +33,7 @@ dist-artifacts/
 │   ├── ccdp/v1/prefetch.html
 │   ├── ccdp/v1/prover.html
 │   ├── ccdp/v1/prover-fallback.html
-│   ├── ccdp/v1/worker.js
+│   ├── ccdp/worker.<sha256>.js
 │   ├── ccdp/assets/...
 │   └── 404.html
 ├── sws.toml
@@ -51,10 +51,17 @@ Unknown routes return 404 with no SPA fallback and an explicit error policy
 [Native server behavior](#native-server-behavior)): absent cache headers would
 leave a 404 heuristically cacheable.
 
+The Worker is built before Prefetch and named by the full lowercase SHA-256 of
+its final uncompressed script, including its resource graph. Prefetch embeds that
+exact URL. The Worker response is immutable; unrelated document changes do not
+change it. Its one registration remains at root scope across replacements.
+
 ## Version catalog
 
 `/ccdp/versions.json` publishes the bundled platform ceremony versions, for example
-`{"google":[1],"x":[1],"github":[1]}`. Each list is nonempty, duplicate-free,
+`{"ccdpVersions":[1],"platforms":{"google":[1],"x":[1],"github":[1]}}`.
+CCDP versions are positive safe integers; client creation requires this package's
+CCDP version in that list. The platform lists are nonempty, duplicate-free,
 ascending and limited to unsigned 16-bit versions. The build derives the record
 in [catalog](../src/platforms/index.ts) order and fails by pair name unless the
 emitted [platform provers](../src/platforms/provers.ts) and asset profiles name
@@ -237,8 +244,8 @@ binary. [CI](../../../../.github/workflows/ci.yml) uses it as follows:
 | [Custom workflow](../../../../.github/workflows/ccdp-custom.yml), or `ccdp-custom/<tag>` branch | Publish `:custom-<tag>` only. |
 | GitHub Release `ccdp-v<version>`, such as `ccdp-v1` or `ccdp-v1.2.0` | [Promote](../../../../.github/workflows/release.yml) the commit's sha image to `:<version>` and, for a version without `-`, `:latest`. |
 
-CCDP versions are their own; a `v<version>` release publishes only the npm
-packages. Release promotion requires the tagged commit to be on `main` and the
+CCDP versions are independent of the [npm package releases](../../../RELEASING.md).
+Image promotion requires the tagged commit to be on `main` and the
 source image's revision and version labels to name it as a `main` publication,
 and it preserves the digest; it never rebuilds. If the sha image is missing, re-run
 that commit's `ccdp-publish` job, then re-publish the release. Image digests appear
@@ -270,7 +277,7 @@ wins over the older `Last-Modified`
 A CDN in front of SWS works with the responses as they are; configure it to:
 
 - honor origin `Cache-Control`: cache the `immutable` assets as long as it likes,
-  and revalidate the `no-cache` documents, `worker.js` and `versions.json` on every
+  and revalidate the `no-cache` documents and `versions.json` on every
   use;
 - forward every response header unchanged, in particular
   `Document-Isolation-Policy`, `Cross-Origin-Opener-Policy`,

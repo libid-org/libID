@@ -113,7 +113,10 @@ export function socketIo(socket: WebSocket): Io {
       if (socket.readyState !== WebSocket.OPEN) {
         throw new Error('Notary WebSocket is not open')
       }
-      socket.send(data)
+      // WebSocket.send rejects views of shared memory, so copy only those.
+      socket.send(
+        data.buffer instanceof ArrayBuffer ? (data as Uint8Array<ArrayBuffer>) : data.slice(),
+      )
       return Promise.resolve()
     },
     close() {

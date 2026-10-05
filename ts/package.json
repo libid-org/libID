@@ -2,7 +2,7 @@
   "name": "@libid/ts",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.30.3",
+  "packageManager": "pnpm@10.34.6",
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
@@ -13,10 +13,11 @@
     "dev": "pnpm --filter @libid/dev dev",
     "dev:services": "pnpm --filter @libid/dev dev:services",
     "dev:ccdp": "pnpm --filter @libid/dev dev:ccdp",
-    "dev:app": "pnpm --filter @libid/dev dev:app"
+    "dev:app": "pnpm --filter @libid/dev dev:app",
+    "test:packages": "node scripts/check-packages.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.8",
+    "@biomejs/biome": "^2.5.15",
     "oxlint": "^1.86.0"
   },
   "pnpm": {
