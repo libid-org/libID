@@ -121,8 +121,7 @@ used in the resulting Submission.
   decimal values of about 21 digits; an account whose `sub` exceeded 31 bytes
   could not prove under `("google", 1)`. Necessity: identity compatibility
   across implementations. The quotation mark would close the signed string
-  under common REQ-COMMON-19B, and 31 bytes is the `sub` capacity of
-  REQ-PLAT-76.
+  under common REQ-COMMON-19B.
 - REQ-PLAT-05:
   The Implementation MUST NOT trim or case-convert a Google `sub`. Necessity:
   identity compatibility.
@@ -336,26 +335,6 @@ an untrusted modulus can satisfy the circuit but fails REQ-PLAT-23 downstream.
 Algorithm-confusion attacks require a verifier that dispatches on the header
 `alg`; none exists here.
 
-- REQ-PLAT-76:
-  The Proving Circuit for `("google", 1)` MUST admit each token part up to
-  the capacity below. The Proving Circuit MUST fail a token with any part
-  beyond it.
-  Necessity: a circuit takes fixed-width inputs, so the Platform Ceremony
-  Version fixes which tokens can be proven, and every implementation of it
-  must admit the same ones.
-
-  | Token part | Capacity |
-  |---|---|
-  | signing input that REQ-PLAT-16 hashes | 1280 bytes |
-  | decoded payload JSON | 768 bytes |
-  | `aud` | 128 bytes |
-  | `sub` | 31 bytes, per REQ-PLAT-04 |
-  | `email` | 62 bytes |
-  | `exp` | 12 decimal digits, per REQ-PLAT-21 |
-  | RSA modulus `n` | 2048 bits, per REQ-PLAT-16 |
-
-  A Google client identifier is therefore at most 128 bytes, narrower than the
-  512-byte `ProveIdentity.clientId` [wire limit](ccdp.md#wire-limits).
 - REQ-PLAT-16A (upholds SP-CLIENT-01):
   The Proving Circuit MUST expose the exact RSA modulus used for REQ-PLAT-16
   as a public proof input. Its internal field or limb representation belongs to
@@ -414,8 +393,7 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   `nonce`, and `email` under common REQ-COMMON-19 and REQ-COMMON-19B. The
   Proving Circuit MUST check `exp` as a canonical unsigned JSON integer of at
   most 12 decimal digits, and `email_verified` as the exact unquoted JSON
-  boolean `true`, under common REQ-COMMON-19D. The 12-digit bound is the
-  profile's integer type for `exp` and covers every time before the year 33000.
+  boolean `true`, under common REQ-COMMON-19D.
   Duplicate-free top-level structure is the issuer's behavior under
   ASM-PROV-06; the circuit performs no search and no duplicate scan.
 - REQ-PLAT-22 (upholds SP-FRESH-01):
@@ -432,6 +410,25 @@ The signing key is fetched from Google's JWKS endpoint as witness input.
   modulus to the trusted set before Google signs with it in production.
   Necessity: Google rotates signing keys on the order of weekly, so every
   Google ceremony fails closed while an active modulus is untrusted.
+- REQ-PLAT-76:
+  The Proving Circuit for `("google", 1)` MUST admit each token part up to
+  the capacity below. The Proving Circuit MUST fail a token with any part
+  beyond it.
+  Necessity: a circuit takes fixed-width inputs, so the Platform Ceremony
+  Version fixes which tokens can be proven, and every implementation of it
+  must admit the same ones.
+
+  | Token part | Capacity |
+  |---|---|
+  | signing input that REQ-PLAT-16 hashes | 1280 bytes |
+  | decoded payload JSON | 768 bytes |
+  | `aud` | 128 bytes |
+  | `sub` | 31 bytes, per REQ-PLAT-04 |
+  | `email` | 62 bytes |
+  | `exp` | 12 decimal digits, per REQ-PLAT-21 |
+
+  A Google client identifier is therefore at most 128 bytes, narrower than the
+  512-byte `ProveIdentity.clientId` [wire limit](ccdp.md#wire-limits).
 
 ## 4. Browser TLSNotary launch transport
 
@@ -464,12 +461,10 @@ Launch fixes X's `/2/oauth2/token` and `/2/users/me` sessions and GitHub's
   mixed-transport, additional
   authoritative, and malformed fields. The Prover MUST treat a `code` as
   malformed unless, decoded once as `application/x-www-form-urlencoded`, it
-  is 1 to 1024 bytes, each in `0x21` through `0x7e`; the bound keeps its
-  serialization inside the token session's bounded sent transcript. The
-  single accepted `code` is the code consumed at redirect ingress that
-  REQ-PLAT-29 and REQ-PLAT-46 compare against. GitHub's required `iss` under
-  REQ-PLAT-34A is a profile field, not an additional authoritative field to
-  reject.
+  is 1 to 1024 bytes, each in `0x21` through `0x7e`. The single accepted
+  `code` is the code consumed at redirect ingress that REQ-PLAT-29 and
+  REQ-PLAT-46 compare against. GitHub's required `iss` under REQ-PLAT-34A is
+  a profile field, not an additional authoritative field to reject.
 - REQ-PLAT-28A (upholds SP-DELIVERY-01):
   The Prover MUST match the redirect's `state` to its bound live ceremony and
   accept that return only once before starting the token request. No
@@ -533,8 +528,7 @@ REQ-COMMON-07A.
   byte for byte, under common REQ-COMMON-07.
 - REQ-PLAT-30 (upholds SP-BIND-01):
   The Proving Circuit MUST constrain the opened bearer range to nonempty
-  printable ASCII of at most 128 bytes; a longer bearer cannot be proven
-  under `("x", 1)`. The carriage-return and line-feed
+  printable ASCII of at most 128 bytes. The carriage-return and line-feed
   exclusion of common REQ-COMMON-37 applies to this range, because the
   identity session sends it inside a header. Necessity: the range is opened
   to link two attestations, so it needs a bound and a charset; the circuit
@@ -942,8 +936,7 @@ forbidden by REQ-PLAT-56A.
   representation of one fact.
 - REQ-PLAT-36 (upholds SP-BIND-01):
   The Proving Circuit MUST constrain the opened bearer range to nonempty
-  printable ASCII of at most 128 bytes; a longer bearer cannot be proven
-  under `("github", 1)`. The Proving Circuit MUST verify no
+  printable ASCII of at most 128 bytes. The Proving Circuit MUST verify no
   other property of the exchange response. The carriage-return and
   line-feed exclusion of common REQ-COMMON-37 applies to this range,
   because the `/user` session sends it inside a header. Necessity:
