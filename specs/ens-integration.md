@@ -146,7 +146,7 @@ alice._at.company.com.google.handles.link
   A name MUST be DNS wire format: labels of 1 to 63 bytes, each valid UTF-8,
   ended by the root label with no bytes after it. A label containing an
   uppercase letter or a byte at or below `0x20` is not a name any handle
-  produces; the Gateway answers it under REQ-ENS-GW-05.
+  produces; the Gateway answers an `addr` call for it under REQ-ENS-GW-05.
 
 ## 6. Handle labels
 
@@ -292,7 +292,7 @@ produce unchanged.
   a non-EVM address, so that absence is known.
 - REQ-ENS-GW-05 (upholds SP-ENS-05):
   Once a chain is selected, a name the Gateway cannot parse, Handle Labels
-  the inverse of REQ-ENS-LABEL-05 refuses, and a Chain Label not naming the
+  the inverse in REQ-ENS-LABEL-05 refuses, and a Chain Label not naming the
   selected chain MUST each get a Signed Null.
 - REQ-ENS-GW-06 (upholds SP-ENS-03):
   Before applying the handle rules or reading a holder, the Gateway MUST
@@ -391,8 +391,7 @@ produce unchanged.
   Forward and inverse vectors for each platform round-trip; `a__b` maps to
   `a--b` and `ab__cd` is refused; a Gmail local part with `+`, `-` or `_` is
   refused; `a.b@c.com` and `a@b.c.com` give different names;
-  `ab--x@company.com` and `alice@xn--bcher-kva.example` have no name; a
-  handle giving a 64-byte label has no name.
+  `ab--x@company.com` and `alice@xn--bcher-kva.example` have no name.
 - TEST-ENS-02 (exercises REQ-ENS-RES-03, REQ-ENS-GW-08):
   One digest vector reproduces in the Handle Resolver and the Gateway; the
   callback rejects an expired answer, one past the ceiling, an untrusted
@@ -484,7 +483,7 @@ produce unchanged.
 | REQ-ENS-RES-01 to RES-04 | `libid-contracts` `solidity/contracts/ens/HandleResolver.sol` |
 | REQ-ENS-RES-05 | `libid-contracts` `scripts/setup-ens-resolver.sh` refuses a URL without both placeholders; the contract does not check |
 | REQ-ENS-NAME-01 to NAME-04 | `usernames-indexer` `crates/usernames-core/src/ens.rs` |
-| REQ-ENS-LABEL-01 to LABEL-04 | `libID` `ts/packages/ens` (`@libid/ens`, libID PR #109, unmerged): the forward transform for the Parent Name `handles.link` only; it does not yet refuse a Workspace label with `--` at the third and fourth characters |
+| REQ-ENS-LABEL-01 to LABEL-04 | `libID` `ts/packages/ens` (`@libid/ens`, libID PR #109, unmerged): the forward transform for the Parent Name `handles.link` only; it does not refuse a Workspace label with `--` at the third and fourth characters |
 | REQ-ENS-LABEL-05 | `usernames-indexer` `crates/usernames-core/src/ens.rs`, `crates/usernames-core/src/nodes.rs`: the MUST; the SHOULD is not implemented (§11) |
 | REQ-ENS-GW-01 to GW-11 | `usernames-indexer` `bin/usernames-api/src/ens.rs`, `crates/usernames-core/src/ens.rs`; the TTL ceiling of REQ-ENS-GW-08 in `bin/usernames-api/src/lib.rs` |
 | REQ-ENS-KEY-01 | not met by the current deployment (§11) |
