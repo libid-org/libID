@@ -226,7 +226,7 @@ re-proving would not supersede it until Block Time caught up.
 
 Google's signed `exp` alone supplies the accepted one-hour validity value
 and, less its allowance, the ordering value. A Google proof also requires its
-signing modulus to remain in the Platform Verifier's active set. The Authorization Digest carries no expiration.
+signing modulus to stay trusted by the Google Key List (§3.4). The Authorization Digest carries no expiration.
 `metadataObservedAt` is the monotone metadata watermark of common
 REQ-COMMON-25A. Older evidence cannot regress stored metadata and does not
 block an otherwise valid authority operation.

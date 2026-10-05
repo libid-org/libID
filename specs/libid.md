@@ -101,8 +101,9 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Notary operator | operates the attestation key and observes X/GitHub sessions and Google signing-key readings | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots other than Google's signing moduli, and the Supported Version Set | correct authority lifecycle | user consent |
 
-The principal trust roots are Google's active signing moduli, the active
-notary keys, the selected proof-verifier artifacts, the Proof Verifier
+The principal trust roots are Google's active signing moduli, the Google Key
+List that admits them, the active notary keys, the selected proof-verifier
+artifacts, the Proof Verifier
 that dispatches to them, the Platform Verifiers it selects, Verifier governance,
 and Consumer Chain consensus. The Proof Verifier is the most concentrated of
 these: every Consumer takes its accept-or-reject decision, operation domain,
@@ -114,8 +115,8 @@ stops future acceptance after the change takes effect; it does not undo bindings
 or sessions already committed. Loss of an application deployment is a liveness
 failure. Compromise of the Canonical Runtime build or its supply chain defeats
 local client and operation construction. Compromise of a platform signing root,
-notary key, or selected Platform Verifier can mint future evidence for the
-affected profiles. A notary key also authenticates the readings that admit
+notary key, Google Key List, or selected Platform Verifier can mint future
+evidence for the affected profiles. A notary key also authenticates the readings that admit
 Google's signing moduli
 ([platform profiles §3.4](platform-ceremonies.md#34-signing-key-lifecycle)),
 so its compromise reaches Google as well as X and GitHub. Compromise of
