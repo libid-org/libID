@@ -95,6 +95,7 @@ writeFileSync(
 export * from '@libid/popup'
 export { fakeConnection } from '@libid/popup/testing'
 export type { LedgerId } from '@libid/ledger'
+export { ensName, HandleError, type NameOptions, type Platform, type Rules } from '@libid/ens'
 `,
 )
 writeFileSync(
