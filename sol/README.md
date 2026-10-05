@@ -41,8 +41,8 @@ import {LibIDTestnet as LibID} from "libid/LibIDTestnet.sol";
 | `LibID` | Ethereum mainnet | `0xbefD300aFf7D4A67fb381Afe8B3596793D3E9a83` | `0x17a244e23ef1f12071298A1862194FeA3D00bbf7` |
 | `LibIDTestnet` | Sepolia, Eden testnet | `0x25F29C8C765db2f27d1e2b23987A7b0655C7D640` | `0x57355e1D1Bcf61FeC9b2E5CaD60DccCDdDC4d8e5` |
 
-On a local chain, deploy libID with chain-configurations' `local-dev.toml`;
-it lands at other addresses, so test against your own deployment there.
+A local chain has no contract at these addresses. Use `LibIDTestBase` in
+your tests, as below.
 
 ## Install
 
@@ -54,6 +54,53 @@ echo 'libid/=lib/libid/sol/src/' >> remappings.txt
 ```
 
 It needs Solidity 0.8.20 or later.
+
+## Testing your contract
+
+`LibIDTestBase` is a base for Foundry tests. It puts the real IdentityRegistry
+and HandleEscrow at the addresses LibID has built in, and binds handles
+without a ceremony:
+
+```solidity
+import {LibID} from "libid/LibID.sol";
+import {LibIDTestBase} from "libid/test/LibIDTestBase.sol";
+
+contract GuestbookTest is LibIDTestBase {
+    function test_theHolderSigns() public {
+        deployLibID(); // or deployLibIDTestnet() for LibIDTestnet
+        address alice = makeAddr("alice");
+        bindHandle(alice, LibID.GITHUB, "1001", "octocat");
+        // ...
+    }
+}
+```
+
+`bindHandle` also takes the proof's `observedAt`, to test proof ages. The
+platform verifiers are stand-ins that check nothing; everything else is the
+real code.
+
+Unlike `LibID.sol`, the base imports the libID contracts. They come from
+the `lib/libID-contracts` submodule of this repository and its own
+submodules; if `lib/libid/sol/lib/libID-contracts` is empty, run
+`git submodule update --init --recursive` in `lib/libid`. The base needs
+Solidity 0.8.24 or later and these lines in `remappings.txt`:
+
+```text
+libid-contracts/=lib/libid/sol/lib/libID-contracts/solidity/contracts/
+@openzeppelin/contracts/=lib/libid/sol/lib/libID-contracts/solidity/lib/openzeppelin-contracts/contracts/
+@openzeppelin/contracts-upgradeable/=lib/libid/sol/lib/libID-contracts/solidity/lib/openzeppelin-contracts-upgradeable/contracts/
+```
+
+The libID contracts compile only through IR. To keep your own contracts on
+the legacy pipeline, add to `foundry.toml`:
+
+```toml
+optimizer = true
+additional_compiler_profiles = [{ name = "libid", via_ir = true }]
+compilation_restrictions = [{ paths = "lib/libid/sol/lib/libID-contracts/**", via_ir = true }]
+```
+
+Your contracts never import the base, so none of this reaches them.
 
 ## Functions
 
@@ -138,8 +185,8 @@ SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
 `./script/testnet.sh`. CI fails when the two differ in anything but the names
 and addresses.
 
-The tests deploy the real libID contracts, pinned in `lib/libID-contracts`, at
-the addresses LibID has built in, and bind handles with the dates the real
+The tests use `LibIDTestBase`: they deploy the real libID contracts, pinned
+in `lib/libID-contracts`, at the addresses LibID has built in, and bind handles with the dates the real
 verifiers give, at both ends of their acceptance windows. One test checks
 both libraries' addresses against their environment's factory and the CREATE3
 derivation of the canonical names. The fork tests check `LibID` against

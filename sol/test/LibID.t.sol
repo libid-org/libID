@@ -2,12 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {CeremonyProfile} from "libid-contracts/ceremony/CeremonyProfile.sol";
-import {CeremonyProofVerifier} from "libid-contracts/ceremony/CeremonyProofVerifier.sol";
-import {IPlatformVerifier} from "libid-contracts/ceremony/IPlatformVerifier.sol";
-import {IProofVerifier} from "libid-contracts/ceremony/IProofVerifier.sol";
 import {HandleEscrow} from "libid-contracts/escrow/HandleEscrow.sol";
 import {FeeToken, NoReturnToken, TestERC20, one} from "libid-contracts/escrow/test/EscrowMocks.sol";
 import {Create3} from "libid-contracts/factory/Create3.sol";
@@ -16,10 +12,10 @@ import {HandleVectors} from "libid-contracts/identity/HandleVectors.sol";
 import {IdentityNodes} from "libid-contracts/identity/IdentityNodes.sol";
 import {IdentityRegistry} from "libid-contracts/identity/IdentityRegistry.sol";
 import {IIdentityRegistry} from "libid-contracts/identity/IIdentityRegistry.sol";
-import {StubPlatformVerifier} from "libid-contracts/identity/test/StubPlatformVerifier.sol";
 
 import {LibID} from "../src/LibID.sol";
 import {LibIDTestnet} from "../src/LibIDTestnet.sol";
+import {LibIDTestBase} from "../src/test/LibIDTestBase.sol";
 
 /// @notice A contract that uses LibID, as an integrator's would.
 contract Consumer {
@@ -156,51 +152,29 @@ contract RejectsEther {
     }
 }
 
-contract LibIDTest is Test {
+contract LibIDTest is LibIDTestBase {
     /// The factories every canonical address derives from, one per environment.
     address constant FACTORY = 0xb7432C991Be3167689d5e80c9E2bf1ff5cCCd2E0;
     address constant TESTNET_FACTORY = 0x9dBF2b5F96cb31A48cCa4e25D2c8348Be414ebC8;
-    bytes32 constant IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
     /// A Google ID token lives an hour; its `exp` is the evidence time.
     uint64 constant GOOGLE_TOKEN_LIFETIME = 1 hours;
 
-    address internal owner = makeAddr("owner");
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
     address internal sender = makeAddr("sender");
 
     IdentityRegistry internal registry = IdentityRegistry(LibID.REGISTRY);
     HandleEscrow internal escrow = HandleEscrow(LibID.ESCROW);
-    StubPlatformVerifier internal github;
-    StubPlatformVerifier internal google;
     Consumer internal consumer;
-    uint256 internal nonce;
 
     function setUp() public {
         vm.warp(1_800_000_000);
 
-        // The real contracts, behind proxies at their canonical addresses.
-        _proxyAt(LibID.REGISTRY, address(new IdentityRegistry()));
-        registry.initialize(owner);
-        _proxyAt(LibID.ESCROW, address(new HandleEscrow()));
-
-        CeremonyProofVerifier proofs = CeremonyProofVerifier(
-            address(
-                new ERC1967Proxy(
-                    address(new CeremonyProofVerifier()), abi.encodeCall(CeremonyProofVerifier.initialize, (owner))
-                )
-            )
-        );
-        github = new StubPlatformVerifier(LibID.GITHUB, 0);
-        google = new StubPlatformVerifier(LibID.GOOGLE, 0);
-        vm.startPrank(owner);
-        registry.setProofVerifier(IProofVerifier(address(proofs)));
-        registry.setPlatform(LibID.GITHUB, HandleVectors.rulesFor(LibID.GITHUB));
-        registry.setPlatform(LibID.GOOGLE, HandleVectors.rulesFor(LibID.GOOGLE));
-        proofs.setVerifier(LibID.GITHUB, 1, IPlatformVerifier(address(github)));
-        proofs.setVerifier(LibID.GOOGLE, 1, IPlatformVerifier(address(google)));
-        vm.stopPrank();
-        escrow.initialize(owner, IIdentityRegistry(LibID.REGISTRY));
+        // The real contracts at their canonical addresses. X is left out, to
+        // test a platform that is not set up.
+        deployLibIDAt(LibID.REGISTRY, LibID.ESCROW);
+        addLibIDPlatform(LibID.GITHUB);
+        addLibIDPlatform(LibID.GOOGLE);
 
         consumer = new Consumer();
         vm.deal(address(consumer), 10 ether);
@@ -244,7 +218,7 @@ contract LibIDTest is Test {
     /// Rules but no verifier yet is not set up either: the age-checking reads
     /// must say so, as `resolve` does, not answer "nobody holds it".
     function test_aPlatformWithRulesButNoVerifierIsNotSetUp() public {
-        vm.prank(owner);
+        vm.prank(libidOwner);
         registry.setPlatform(LibID.X, HandleVectors.rulesFor(LibID.X));
         bytes memory unknown = abi.encodeWithSelector(IIdentityRegistry.UnknownPlatform.selector, LibID.X);
         vm.expectRevert(unknown);
@@ -322,7 +296,8 @@ contract LibIDTest is Test {
     /// The verifiers accept a GitHub session up to an hour old, so a proof
     /// can be 65 minutes old the moment it is bound.
     function test_aGitHubProofBoundLateIsAlreadyOverAnHourOld() public {
-        _bindAfter(alice, "1001", "octocat", 59 minutes, true);
+        _tick();
+        _bindSignedAt(alice, "1001", "octocat", uint64(vm.getBlockTimestamp()) - 59 minutes, true);
         assertFalse(consumer.isHolder(alice, LibID.GITHUB, "octocat", 1 hours));
         assertTrue(consumer.isHolder(alice, LibID.GITHUB, "octocat", 65 minutes));
     }
@@ -330,7 +305,8 @@ contract LibIDTest is Test {
     /// The Google verifier accepts a token until it expires, so a proof can be
     /// nearly 2 hours old the moment it is bound.
     function test_aGoogleProofBoundLateIsAlreadyNearlyTwoHoursOld() public {
-        _bindGoogleIssued(alice, "0xabc", "alice@gmail.com", 59 minutes);
+        _tick();
+        _bindGoogleExpiring(alice, "0xabc", "alice@gmail.com", uint64(vm.getBlockTimestamp()) + 1 minutes);
         assertFalse(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 110 minutes));
         assertTrue(consumer.isHolder(alice, LibID.GOOGLE, "alice@gmail.com", 2 hours));
     }
@@ -556,7 +532,7 @@ contract LibIDTest is Test {
         bytes32 node = consumer.pay(LibID.GITHUB, "carol-long-handle", 1 ether, address(consumer));
         HandleNormalizer.Rules memory narrow = HandleVectors.rulesFor(LibID.GITHUB);
         narrow.maxLength = 10;
-        vm.prank(owner);
+        vm.prank(libidOwner);
         registry.setPlatform(LibID.GITHUB, narrow);
 
         address recipient = makeAddr("recipient");
@@ -650,30 +626,34 @@ contract LibIDTest is Test {
         (, observedAt) = registry.handleBinding(IdentityNodes.handleNode(platformId, handle));
     }
 
-    /// Puts an ERC-1967 proxy for `implementation` at `at`, with empty storage.
-    function _proxyAt(address at, address implementation) internal {
-        ERC1967Proxy template = new ERC1967Proxy(implementation, "");
-        vm.etch(at, address(template).code);
-        vm.store(at, IMPLEMENTATION_SLOT, bytes32(uint256(uint160(implementation))));
-    }
-
-    /// Binds a GitHub handle from a session notarized in this block.
-    function _bind(address who, string memory id, string memory handle, bool publish) internal {
-        _bindAfter(who, id, handle, 0, publish);
-    }
-
-    /// Binds a GitHub handle as the verifier dates it: the notary signed the
-    /// session `sessionAge` ago, which the verifier accepts for up to its proof
-    /// lifetime, and `observedAt` is that time less GitHub's allowance. Moves
-    /// the clock a second first, so each proof is newer than the last.
-    function _bindAfter(address who, string memory id, string memory handle, uint64 sessionAge, bool publish) internal {
-        require(sessionAge < CeremonyProfile.PROOF_LIFETIME_SECONDS_GITHUB, "the verifier would refuse it");
+    /// Moves the clock a second, so each proof is newer than the last.
+    function _tick() internal {
         vm.warp(vm.getBlockTimestamp() + 1);
-        uint64 createdAt = uint64(vm.getBlockTimestamp()) - sessionAge;
-        _bindWith(
-            github,
-            LibID.GITHUB,
+    }
+
+    /// Binds a GitHub handle from a session the notary signed in this block.
+    function _bind(address who, string memory id, string memory handle, bool publish) internal {
+        _tick();
+        _bindSignedAt(who, id, handle, uint64(vm.getBlockTimestamp()), publish);
+    }
+
+    /// Binds a GitHub handle as the GitHub verifier dates a session the notary
+    /// signed at `createdAt`. The verifier accepts `createdAt` up to its skew
+    /// and its allowance ahead of the block, until its proof lifetime has
+    /// passed, and sets `observedAt` to `createdAt` less the allowance.
+    function _bindSignedAt(address who, string memory id, string memory handle, uint64 createdAt, bool publish)
+        internal
+    {
+        uint64 blockTime = uint64(vm.getBlockTimestamp());
+        require(
+            createdAt <= blockTime + CeremonyProfile.MAX_FUTURE_ATTESTATION_SKEW_SECONDS_GITHUB
+                && createdAt <= blockTime + CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GITHUB
+                && blockTime < createdAt + CeremonyProfile.PROOF_LIFETIME_SECONDS_GITHUB,
+            "the verifier would refuse it"
+        );
+        bindHandle(
             who,
+            LibID.GITHUB,
             id,
             handle,
             createdAt - CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GITHUB,
@@ -681,50 +661,25 @@ contract LibIDTest is Test {
         );
     }
 
-    /// Binds a Google handle from a token issued in this block.
+    /// Binds a Google handle from a token Google issued in this block.
     function _bindGoogle(address who, string memory id, string memory handle) internal {
-        _bindGoogleIssued(who, id, handle, 0);
+        _tick();
+        _bindGoogleExpiring(who, id, handle, uint64(vm.getBlockTimestamp()) + GOOGLE_TOKEN_LIFETIME);
     }
 
-    /// Binds a Google handle as the verifier dates it: the token was issued
-    /// `issuedAgo` and expires an hour after issue, which the verifier accepts
-    /// until then, and `observedAt` is its `exp` less Google's allowance.
-    function _bindGoogleIssued(address who, string memory id, string memory handle, uint64 issuedAgo) internal {
-        require(issuedAgo < GOOGLE_TOKEN_LIFETIME, "the verifier would refuse it");
-        vm.warp(vm.getBlockTimestamp() + 1);
-        uint64 exp = uint64(vm.getBlockTimestamp()) - issuedAgo + GOOGLE_TOKEN_LIFETIME;
-        _bindWith(
-            google,
-            LibID.GOOGLE,
-            who,
-            id,
-            handle,
-            exp - CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GOOGLE,
-            true
+    /// Binds a Google handle as the Google verifier dates a token that expires
+    /// at `exp`. The verifier accepts the token until it expires, if `exp` is
+    /// no more than its allowance ahead of the block, and sets `observedAt` to
+    /// `exp` less the allowance.
+    function _bindGoogleExpiring(address who, string memory id, string memory handle, uint64 exp) internal {
+        uint64 blockTime = uint64(vm.getBlockTimestamp());
+        require(
+            blockTime < exp && exp <= blockTime + CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GOOGLE,
+            "the verifier would refuse it"
         );
-    }
-
-    function _bindWith(
-        StubPlatformVerifier verifier,
-        bytes32 platformId,
-        address who,
-        string memory id,
-        string memory handle,
-        uint64 observedAt,
-        bool publish
-    ) internal {
-        verifier.set(id, handle);
-        verifier.setObservedAt(observedAt);
-        bytes memory payload = abi.encode(
-            StubPlatformVerifier.StubPayload({
-                ceremonyVersion: 1,
-                operationDomain: keccak256("libid.claim-identity"),
-                authorizationNonce: bytes32(++nonce),
-                transactionData: abi.encode(who, uint256(0), address(0))
-            })
+        bindHandle(
+            who, LibID.GOOGLE, id, handle, exp - CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GOOGLE, true
         );
-        vm.prank(who);
-        registry.bind(platformId, 1, payload, publish);
     }
 }
 
