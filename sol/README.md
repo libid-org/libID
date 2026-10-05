@@ -119,6 +119,9 @@ settings (`out/Guestbook.sol/Guestbook.json`), and the IR one your tests run
 (`Guestbook.libid.json`). To test the build you deploy, set `via_ir = true`
 for the whole project instead.
 
+`integrator/` in this directory is such a project; `./script/integrator.sh`
+builds and tests it.
+
 ## Functions
 
 | Function | Returns |

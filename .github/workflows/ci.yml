@@ -163,6 +163,11 @@ jobs:
           LIBID_REQUIRE_FORK: "true"
         run: forge test -vv --match-contract 'ForkTest$'
 
+      # The README's setup for LibIDTestBase, in a project of its own on the
+      # oldest compiler the base supports.
+      - name: Integrator project
+        run: ./script/integrator.sh
+
   # ---------------------------------------------------------------------------
   # Ceremony coverage badge: on pushes to main, publish the unit-test line
   # coverage the TypeScript job measured as a shields.io endpoint on the orphan
