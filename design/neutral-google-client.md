@@ -169,13 +169,14 @@ browser does not control, so the ceremony stops there. Injected wallets
 work on any top-level origin; embedded and smart-account wallets need their
 own connection flow on the Distribution origin, and that is the cost.
 
-This screen is also the enforcement point the second review of
-`private-gmail-handle.md` found missing. There, a disclosure choice in the
-Authorized Transaction Data was rejected because no trusted screen showed
-it and the runtime could not read it. Under a neutral client the runtime
-owns a screen, shows the choice, and holds the email until the user says
-yes, so a user-authorized disclosure becomes enforceable. This note does not
-reintroduce it; it records that the option would reopen.
+This screen is also an enforcement point for the disclosure choice.
+`private-gmail-handle.md` rejects a disclosure choice in the Authorized
+Transaction Data because no trusted screen shows it and the runtime cannot
+read it. Under a neutral client the runtime owns a screen, shows the
+choice, and holds the email until the user says yes, so a user-authorized
+disclosure becomes enforceable. This note leaves the choice where
+REQ-PLAT-03A puts it and records only that the option would allow moving
+it.
 
 ## What the application can still do
 

@@ -3,9 +3,11 @@
 **Status: design proposal, with its specification written.** Nothing here
 is built. This note is the rationale; the normative text is on this branch,
 and "Spec changes" below maps it. Where the two differ, the specification
-holds. The gate counts and proving times below were measured at nargo
-1.0.0-beta.25 and bb 5.2.0; libid-circuits v0.6.0 builds with nargo
-1.0.0-rc.3 and bb 6.0.0-rc.2, and nothing was measured there.
+holds. Contract references are to `libid-contracts` `origin/main` at
+`0a6c5d3`, whose Consumer is `IdentityRegistry`. The gate counts and
+proving times below were measured at nargo 1.0.0-beta.25 and bb 5.2.0;
+libid-circuits v0.6.0 builds with nargo 1.0.0-rc.3 and bb 6.0.0-rc.2, and
+nothing was measured there.
 
 ## The thing that must work
 
@@ -24,26 +26,29 @@ shares, is named at the end under what we deliberately do not do.
 
 ## Who learns the email today
 
-A Google binding publishes the address in three places on chain and two off
-it.
+A Google binding publishes the address in four places on chain and two off
+it. Its `userId` is already a digest: `SHA256("libid.google-user-id" ||
+sub)` (REQ-PLAT-05A), which the verifier returns as `0x` and 64 hex digits
+(`GooglePlatformVerifier.sol:251`).
 
 | Where | What carries it | Reader |
 |---|---|---|
-| Claim calldata | `email_packed`, two field elements of raw bytes at public-input slots 35 and 36 | anyone with an archive node or an explorer |
-| `IdentityBound` log | `string handle`, the normalized email, next to `string userId` | any log reader, every indexer |
-| Contract storage | `published[owner][platformId]`, the plaintext, when the user asked to publish | `reverseOf`, `primaryOf`, wallets |
+| `bind` calldata | `email_packed`, two field elements of raw bytes at public-input offsets 36 and 37 of 57 (`OFF_EMAIL`, `PUBLIC_INPUTS`, `GooglePlatformVerifier.sol:54,58`) | anyone with an archive node or an explorer |
+| `IdentityBound` log | `string handle`, the normalized email, next to `string id`, the `userId` digest | any log reader, every indexer |
+| Contract storage, always | `handlePreimages[handleNode]`, the first handle string bound at that node (`IdentityRegistry.sol:731`) | `identitiesOf`, wallets |
+| Contract storage, on request | `published[holder][platformId]`, when `bind` is called with `publish` | `publishedHandleOf`, wallets |
 | usernames-indexer | `names.handles.handle TEXT`, with prefix and trigram indexes built for substring search; `/v1/search`, `/v1/resolve/*` | any API client, and the operator's access logs |
 | ENS | `alice.google.handles.link` is the address with `@gmail.com` folded into the platform label | any wallet |
 
-The spec sanctions all of it: "the handle, the platform user identifier, and
-the client identifier are published deliberately … the protocol treats none
-of them as confidential" (`ceremony-common.md` §12). `unpublish` clears only
+The specification on `main` sanctions all of it for the handle: the handle
+and the client identifier are published deliberately, and only Google's
+`sub` is the exception (`ceremony-common.md` §12). `unpublish` clears only
 the storage string and says why: the log line "is already public and always
-will be" (`IdentityNames.sol:678-686`).
+will be" (`IdentityRegistry.sol:761-779`).
 
 The storage keys are already hashes. `handleNode` is
 `keccak256(abi.encode(HANDLE_NODE_V1, platformId, keccak256(normalizedHandle)))`
-(`IdentityNodes.sol:37-41`), and every lookup, on chain and in the indexer,
+(`IdentityNodes.sol:39-46`), and every lookup, on chain and in the indexer,
 goes through that node. The plaintext exists on chain only to be read back.
 That is the whole opening: the system already resolves by hash; it just also
 publishes the preimage.
@@ -53,16 +58,16 @@ publishes the preimage.
 It stops passive collection: nobody scrapes Gmail addresses out of calldata,
 logs, an explorer, or a substring search. It does not stop:
 
-- **Confirmation by guessing.** The hash is an unsalted keccak of a
+- **Confirmation by guessing.** The hash is an unsalted digest of a
   lowercase string with little entropy. Anyone can test a list of addresses
   against every `handleNode` on chain, offline, at hash speed. This is the
   price of resolving by exact address and it cannot be paid down without a
   salt.
 - **Confirmation of a known `sub`.** Google's stable account id is one number
   per account, the same at every relying party the person ever signed in to
-  with Google, so it is hidden with the handle, by decision. What remains is
-  the same test as for the address: a relying party that holds the `sub`
-  can hash it and confirm the binding.
+  with Google, so it is hidden as the `userId` digest and never sent, not
+  even with the handle. What remains is the same test as for the address: a
+  relying party that holds the `sub` can hash it and confirm the binding.
 - **ENS forward names.** `alice.google.handles.link` resolves for a private
   binding as for a public one, by decision: the name is the address, and a
   wallet that resolves it has confirmed it.
@@ -82,22 +87,22 @@ it costs, and a verdict. The recommended combination follows.
 ### What the circuit exposes for the email
 
 **Keep the raw bytes as a public input and stop publishing in the contract.**
-Rejected. The email would still sit in the transaction's calldata at slots
-35 and 36 of `publicInputs`, where `GooglePlatformVerifier` reads it today
-(`GooglePlatformVerifier.sol:237`). A contract that declines to emit what
+Rejected. The email would still sit in the transaction's calldata at offsets
+36 and 37 of `publicInputs`, where `GooglePlatformVerifier` reads it
+(`GooglePlatformVerifier.sol:254`). A contract that declines to emit what
 every explorer can decode from the call protects nothing.
 
 **Replace `email_packed` with a hash of the normalized email.** The circuit
 publishes `handle_hash: pub [Field; 2]`, the 32-byte digest packed sixteen
-bytes per field, exactly as it already publishes `audience_hash`
-(`oidc-google/src/main.nr:259-267`). The chain then does for the email
-what the verifier does for the audience today: the payload carries the
-plaintext, the digest is recomputed and compared
-(`GooglePlatformVerifier.sol:206-210`, REQ-PLAT-19A), here by the Consumer,
+bytes per field, exactly as it already publishes `audience_hash` and
+`user_id_hash` (v0.6.0 `oidc-google/src/main.nr:129,132`). The chain then
+does for the email what the verifier does for the audience: the payload
+carries the plaintext, the digest is recomputed and compared
+(`GooglePlatformVerifier.sol:226`, REQ-PLAT-19A), here by the Consumer,
 which owns normalization. In private mode the payload carries no plaintext,
-and the node is derived from the hash alone. The digest takes the two slots
-the email's bytes held, so the email alone moves no offset; the `sub`
-digest below adds the one slot that does. A new
+and the node is derived from the hash alone. The digest takes the two
+offsets the email's bytes hold, so no offset moves and the count stays at
+57. A new
 verification key and a regenerated `OidcGoogleHonkVerifier.sol` follow
 regardless, as they do for any circuit change. **Recommended.**
 
@@ -124,20 +129,21 @@ bytes itself, so the hash must be over bytes that are already normalized.
 Three ways to get there.
 
 **Normalize in the circuit, mirroring the Consumer's rules.** After the
-checks the circuit already makes on the email bytes (`main.nr:125-147`:
+checks the circuit already makes on the email bytes (v0.6.0
+`main.nr:159-187`:
 prefix match, byte equality with the payload, no interior quote, zero padding
 past the length, closing quote, structural byte after it), it folds `A-Z` to
 `a-z`, refuses any byte outside the email alphabet `HandleNormalizer._allowed`
 admits, refuses a space rather than trimming it (Google never emits one, and
 REQ-PLAT-08A forbids trimming), requires exactly one `@` with a nonempty side
-on each end as `_hasEmailShape` does (`HandleNormalizer.sol:100-148`), and
+on each end as `_hasEmailShape` does (`HandleNormalizer.sol:100-151`), and
 hashes exactly `email_len` bytes of the folded buffer, never the 62-byte
 padded one, so the digest equals the REQ-PLAT-08M digest the contract
 computes from the normalized handle in public mode. This freezes the Google rules of
 `handles.json` into the circuit: a rules edit without a circuit release makes
-every public claim fail the equality check, which is the enforced form of the
-invariant `IdentityNames.sol:106-112` states in prose, that the key a handle
-hashes to cannot vary by version. **Recommended.** It amends REQ-PLAT-08A for
+every public claim fail the equality check, which is the enforced form of
+REQ-PLAT-08L's invariant that every ceremony version of a platform shares
+its normalization and handle-digest construction. **Recommended.** It amends REQ-PLAT-08A for
 the one profile that exposes a digest instead of bytes.
 
 **Hash the raw bytes under a new node tag.** Rejected. `Alice@gmail.com` and
@@ -156,7 +162,7 @@ The choice decides whether Google's `handleNode` stays what it is today.
 The specification takes the tagged SHA-256 (REQ-PLAT-08M).
 
 **keccak256 of the normalized bytes.** Not taken. The digest would be the
-inner hash of `handleNode` exactly (`IdentityNodes.sol:39-41`), so the
+inner hash of `handleNode` exactly (`IdentityNodes.sol:39-46`), so the
 contract, the indexer's node arithmetic (`usernames-core/src/nodes.rs`),
 the TypeScript resolver and the ENS gateway would keep their derivation
 untouched. It costs a keccak library in the circuit and the most gates of
@@ -173,15 +179,19 @@ keccak256 one, so `IdentityNodes`, the indexer's `nodes.rs`, the
 TypeScript node helpers and the gateway all grow that case, and every
 Google node changes. The specification makes it a profile constant the
 Consumer configures beside the normalization and freezes with it
-(REQ-PLAT-08L, REQ-PLAT-08G). One network does deploy `IdentityNames` and
-the Google verifier, eden-testnet (`chain-configurations`
+(REQ-PLAT-08L, REQ-PLAT-08G). The escrow follows: `HandleEscrow.deposit`
+takes a `handleHash` that `IdentityRegistry.handleHashOf` computes as
+keccak256 of the normalized handle (`IdentityRegistry.sol:835-841`,
+`HandleEscrow.sol:169-178`), so for Google both must use the tagged
+SHA-256, or a deposit funds a node no binding reaches. One network does
+deploy the registry and the Google verifier, eden-testnet (`chain-configurations`
 `networks/eden-testnet.toml:66,74`), but nothing is released, so its
 Google bindings are test data redeployed with the new statement rather
 than a namespace to migrate.
 
 **Poseidon.** Cheapest in a circuit and no precedent anywhere in libID's
-Solidity, Rust or TypeScript. The contract would compute Poseidon in `_write`
-and `resolveHandle`, and so would the gateway. Not for this design.
+Solidity, Rust or TypeScript. The contract would compute Poseidon in `_write`,
+`handleHashOf` and `resolveHandle`, and so would the gateway. Not for this design.
 
 Measured on a scratch copy of the circuit at nargo 1.0.0-beta.25 and bb
 5.2.0, with the fold-and-shape loop included in both variants (`nargo
@@ -189,7 +199,7 @@ compile`, then `bb gates --oracle_hash keccak`):
 
 | Circuit | ACIR opcodes | Honk gates | Delta |
 |---|---|---|---|
-| today | 44,612 | 179,443 | |
+| baseline | 44,612 | 179,443 | |
 | fold + SHA-256 | 49,918 | 192,254 | +7.1% |
 | fold + keccak256 (library v0.1.3) | 49,911 | 203,878 | +13.6% |
 
@@ -200,51 +210,48 @@ keccak256, at the price of the per-platform inner hash described above.
 
 ### The account id, `sub`
 
-The specification on main already hides the `sub`: the canonical `userId`
-is `SHA256(UTF8("libid.google-user-id") || sub)` (REQ-PLAT-05A), and
-libid-circuits v0.6.0 exposes it as `user_id_hash` with a 31-byte `sub`
-buffer (`oidc-google/src/main.nr:14,51-60,132`). This note first proposed
-keccak256 over the `sub` as `sub_hash`; the analysis below, of what moves
-into the circuit once the verifier sees only a digest, holds for either
-hash. What this design still adds is the backslash refusal: v0.6.0
-refuses only a quote (`main.nr:78-79`).
+REQ-PLAT-05A already hides the `sub`: the canonical `userId` is
+`SHA256(UTF8("libid.google-user-id") || sub)`, which libid-circuits v0.6.0
+exposes as `user_id_hash` with a 31-byte `sub` buffer
+(`oidc-google/src/main.nr:14,51-60,132`). The verifier returns it as the
+`userId` string, `0x` and 64 lowercase hex digits
+(`GooglePlatformVerifier.sol:251`); `idNode` is the keccak256 node of that
+string (`IdentityNodes.sol:31-33`), and `IdentityBound` carries it as
+`id`. This design changes none of that, and a Submission never carries the
+`sub` itself.
 
-At the time of measurement the circuit checked the `sub` bytes against
-the payload, refused an interior quote and pinned the padding to zero
-(`main.nr:177-192`), and left emptiness to the verifier, which rejects an empty `userId` after unpacking
-(`GooglePlatformVerifier.sol:234`). A verifier that receives a digest can
-inspect nothing, so the circuit takes over the whole of the id's validation,
-which REQ-PLAT-04 already states for every implementation: `sub_len` at
-least 1; every byte within `sub_len` in `0x20` through `0x7e`, so no control
-byte, no non-ASCII byte and no quote; no backslash, which v0.6.0 accepts
-and REQ-PLAT-04 refuses, because every JSON escape
-begins with one and an escaped `sub` would digest its escaped form; the
-padding zero; and the
-digest over exactly `sub_len` bytes. `SUB_MAX` is 31, the profile's bound
-in REQ-PLAT-04, a Google `sub` being 21 digits, and a `sub` longer than it
-fails to prove rather than truncating. That Google issues no longer `sub`
-is part of ASM-PROV-05, a liveness dependency: an account outside it could
-not be bound, and none would be misbound. Raising the bound costs a second
-SHA-256 block, since the tag and 31 bytes fill one. A 32-byte digest needs two field elements where the packed id
-needed one, so the public-input count becomes 57 and the offsets after slot
-34 move by one. Measured the same way as above, the two digests together
-cost:
+A verifier that receives a digest can inspect nothing, so the circuit owns
+the whole of the id's validation, which REQ-PLAT-04 states for every
+implementation: `sub_len` at least 1; every byte within `sub_len` in `0x20`
+through `0x7e`, so no control byte, no non-ASCII byte and no quote; no
+backslash, because every JSON escape begins with one and an escaped `sub`
+would digest its escaped form; the padding zero; and the digest over
+exactly `sub_len` bytes. v0.6.0 refuses a quote but not a backslash
+(`main.nr:78-79`), so the release this design needs adds that refusal.
+`SUB_MAX` is 31, the profile's bound in REQ-PLAT-04, a Google `sub` being
+21 digits, and a `sub` longer than it fails to prove rather than
+truncating. That Google issues no longer `sub` is part of ASM-PROV-05, a
+liveness dependency: an account outside it could not be bound, and none
+would be misbound. Raising the bound costs a second SHA-256 block, since
+the tag and 31 bytes fill one.
+
+Measured the same way as above, with keccak256 for both digests, against
+the baseline of "Measured proving time":
 
 | Circuit | ACIR opcodes | Honk gates | Delta |
 |---|---|---|---|
 | fold + keccak256 of the email, keccak256 of `sub` | 50,375 | 223,582 | +24.6% |
 
-A quarter more proving work than the circuit of that time, against a
-wallet that no longer joins with every relying party's user table. Both
-digests are SHA-256 in the specification, and that build was not
-measured.
+The specification uses SHA-256 for both digests, and that build has not
+been measured.
 
 ### Measured proving time
 
 Three builds of the circuit, each proving a valid witness: an RSA-2048 key
 generated for the run signs a Google-shaped ID token, since the circuit
-takes the modulus as a public input. **Today** is `oidc-google` unchanged.
-**Public-only** is today with the `sub` digest of the previous section and
+takes the modulus as a public input. **Baseline** is `oidc-google` at
+`e59b804`, which exposes the `sub` and the email as bytes.
+**Public-only** is the baseline with a `sub` digest and
 the email still published as bytes, which is what a second, public circuit
 would be. **One circuit** adds the email's fold, shape checks and keccak256
 to it, which is this design. Every proof verified. The digest the one
@@ -253,7 +260,7 @@ independent check of the fold.
 
 | Circuit | ACIR opcodes | Honk gates | Public inputs |
 |---|---|---|---|
-| today | 44,612 | 179,443 | 56 |
+| baseline | 44,612 | 179,443 | 56 |
 | public-only | 45,567 | 200,011 | 57 |
 | one circuit | 50,518 | 223,663 | 57 |
 
@@ -266,12 +273,12 @@ Median proving time, in seconds, witness generation excluded:
 
 | Circuit | bb.js WASM, 1 thread | 4 threads | 8 threads | native `bb` |
 |---|---|---|---|---|
-| today | 14.13 | 5.64 | 5.81 | 1.69 |
+| baseline | 14.13 | 5.64 | 5.81 | 1.69 |
 | public-only | 16.12 | 6.26 | 6.91 | 1.90 |
 | one circuit | 17.70 | 7.27 | 7.84 | 2.15 |
 
 Four threads is what the proof worker uses on a machine with four or more.
-There, one circuit proves in 7.3 s, 1.6 s more than today, and a
+There, one circuit proves in 7.3 s, 1.6 s more than the baseline, and a
 public-only circuit would save 1.0 s of it on a public claim, about 14%.
 Witness generation (`noir_js` execute) takes 0.4 s for each. Peak memory
 of the native prover is 293, 324 and 369 MB. Eight threads is no faster
@@ -291,65 +298,71 @@ proving cost itself rather than a user's wait.
 
 **The presence of the handle in the payload.** `GoogleProof` gains one
 optional field, `bytes email`, beside `clientIdentifier`
-(`GooglePlatformVerifier.sol:76-84`); empty means private. It never gains
-a `userId` field: the `sub` is never sent, since nothing on chain or in the
-indexer reads it as text (`resolveId` and `resolvePair` hash what the
-caller supplies), and it is the one value that also names the account at
-every other relying party. The verifier passes the email bytes through,
-marked unverified, and returns the two digests the proof bound as new
-`VerifiedClaim.userIdHash` and `handleHash`; it checks nothing about the
+(`GooglePlatformVerifier.sol:84-92`); empty means private. It never gains
+a `sub` field: the `sub` is never sent, since nothing on chain or in the
+indexer reads it as text (`resolveId` and `resolveHandleAndId` hash the
+`userId` string the caller supplies), and it is the one value that also
+names the account at every other relying party. The verifier keeps
+returning the `userId` digest as the hex `userId` string, passes the email
+bytes through, marked unverified, and returns the handle digest the proof
+bound as a new `VerifiedClaim.handleHash`; it checks nothing about the
 bytes, because the check needs the handle normalized and normalization is
-the Consumer's (REQ-PLAT-08B). `IdentityNames._write` is the one place the
-equality holds: it derives both nodes from the digests in both modes; when
-the email is present it normalizes it, requires its REQ-PLAT-08M digest,
-`SHA256("libid.google-handle" || normalized)`, to equal `handleHash`, and
-only then stores or
-emits the handle, normalized. `publishName` without the email reverts. X
-and GitHub verifiers return zero digests and keep the plaintext path they
-have. **Recommended:** one optional payload field, no change to the
-signature of `claim` or to any claim's Authorized Transaction Data. It
+the Consumer's (REQ-PLAT-08B). `IdentityRegistry._write` is the one place
+the equality holds: it derives the handle node from the digest in both
+modes; when the email is present it normalizes it, requires its
+REQ-PLAT-08M digest, `SHA256("libid.google-handle" || normalized)`, to
+equal `handleHash`, and only then stores or emits the handle, normalized.
+`bind(..., publish: true)` without the email reverts. X and GitHub
+verifiers return no handle digest and keep the plaintext path they have.
+**Recommended:** one optional payload field, no change to the signature of
+`bind` or to any binding's Authorized Transaction Data. It
 keeps REQ-PLAT-08B honest in the form that matters: the Consumer still
 derives the key from a proof-bound value and still refuses a
 caller-supplied key; the email is accepted only because the proof binds
 its digest.
 
 Whoever assembles the transaction decides whether it carries the email,
-and that is the application. The ID Token lands on the application's
-redirect page and the SDK hands it to the application's page, so an
-application operator holds the email and the `sub` whatever any field
-says. The privacy this design buys is therefore against readers of the
-chain, not against a malicious application, and the spec says so
-(SP-PRIV-01 and §4 of `ceremony-common.md`). The rule that a Submission
-carries the email only when the user asks binds the Application, which
-builds the Submission (REQ-PLAT-03A); the CCDP Prover only delivers the
-proof and the identity, and must prove in the zero-knowledge mode with
-fresh randomness (REQ-COMMON-45A).
+and that is the application. The ID Token lands in the OAuth Bridge's
+Callback and reaches the CCDP Prover on the Distribution origin; the
+Prover delivers the proof, the raw email as `userName` and the `userId`
+digest to the Application, never the token or the `sub`. The Application
+operator therefore holds the email, and the Bridge and Distribution
+operators can read the whole token, whatever any field says. The privacy
+this design buys is against readers of the chain: SP-PRIV-01 bounds what
+the chain yields, and a transaction any of those operators sends with the
+email is one it permits (§4 of `ceremony-common.md`). The rule that a
+Submission carries the email only when the user asks binds the
+Application, which builds the Submission (REQ-PLAT-03A); the Prover must
+prove in the zero-knowledge mode with fresh randomness (REQ-COMMON-45A).
 
-**The choice in the claim's Authorized Transaction Data.** Rejected. It
+**The choice in the binding's Authorized Transaction Data.** Rejected. It
 would commit a `disclose` flag in the Authorization Digest like the fee,
 but no trusted screen shows it to the user, the Canonical Runtime cannot
 decode Authorized Transaction Data to honour it, and the token has
 already reached the application; a field that enforces nothing only
-changes every X and GitHub claim's encoding.
+changes every X and GitHub binding's encoding.
 
-**An explicit flag on `claim`.** Rejected. Two sources of truth for one
-fact, and nothing to do when they disagree.
+**A `disclose` flag on `bind`.** Rejected. Two sources of truth for one
+fact, the email's presence, and nothing to do when they disagree.
 
 **A mode bit as a circuit public input.** Rejected. It bakes the disclosure
 choice into the proof, costs an input, and stops the user from changing
 their mind between proving and submitting.
 
-The event gains `bool disclosed` and keeps `string handle`, empty when
-private, and leaves `string userId` empty for Google always. `disclosed`
+`IdentityBound` gains `bool disclosed` and keeps `string handle`, empty
+when private, and `string id`, which for Google is the `userId` digest in
+hex and is carried in every event. `disclosed`
 is a fact about the event: this event carries the handle. It says nothing
 about earlier events, and it cannot, because a handle once emitted is
 public for good. An empty string is unambiguous, since the normalizer
 rejects an empty handle, but the bool is what an indexer reads without
 parsing. A separate indexed `handleHash` would duplicate `handleNode`.
-The event's `published` says whether this claim wrote the wallet's name,
-which a private claim never does; `publish` emits `IdentityPublished` and
-`unpublish` emits `NameUnpublished`, so an indexer can mirror the stored
-name from the log.
+The event's `published` says whether this binding wrote the wallet's
+name, which a private binding never does; `publish` emits
+`IdentityPublished` and `unpublish` emits `HandleUnpublished`, so an
+indexer can mirror the stored name from the log. `_list` writes no
+`handlePreimages` entry for an undisclosed handle, so `identitiesOf`
+returns no handle string for it; a later disclosure fills it.
 
 ### Default, and moving between modes
 
@@ -361,10 +374,11 @@ rationale intact and is recorded here only as the alternative not taken.
 by construction, their circuits reveal transcript bytes the notary attested,
 and §12's reasoning holds for them. The zero `handleHash` leaves the door
 open. The name rules below are every platform's, since the slot is shared:
-on X and GitHub too, a claim of a wallet's second account stops replacing
-the first account's name.
+on X and GitHub too, a binding of a wallet's second account stops
+replacing the first account's name, which `_write` does today when any
+publication exists (`IdentityRegistry.sol:697`).
 
-**Private to public, later.** By decision a call, not a new claim, and the
+**Private to public, later.** By decision a call, not a new binding, and the
 contract already has its inverse, `unpublish`, so the call is
 `publish(platformId, string handle)`: normalize the handle, derive its
 node, require that the caller holds it (below), set `published`, emit
@@ -376,52 +390,55 @@ chain.
 
 A wallet **holds** a handle while it owns the handle's node, and that one
 test decides both `publish` and what reads as a name. Ownership means
-holding because of retirement: when an account claims again under another
-handle, the old node's owner is cleared and `HandleRetired` emitted
-(`IdentityNames.sol:660-667`), unless another account has proved that
+holding because of retirement: when an account binds again under another
+handle, the old node's holder is cleared, its watermark kept, and
+`HandleRetired` emitted (`IdentityRegistry.sol:752-759`), unless another account has proved that
 handle in the meantime, in which case the node is that account's. So a
 retired handle has no owner, and `publish` refuses it however well the
 caller knows its preimage. A handle one of the wallet's accounts took from
 another of them is owned by the wallet, and `publish` accepts it: the
 wallet holds it through the second account. The two-way pairing check
-(`idOfHandle[handleNode]` naming an `idNode` whose `handleOfId` is that
-node, and the wallet owning both) gives the same answer in every state the
+(`idNodeByHandle[handleNode]` naming an `idNode` whose `handleNodeById`
+is that node, and the wallet owning both) gives the same answer in every state the
 contract can reach, because `_write` sets both owners and both pairings
 together and retirement clears the only owner a moved pairing leaves
 behind; the owner check is the simpler statement of it, and it is exactly
-the test `primaryOf` already makes (`:787-792`).
+the test `publishedHandleOf` already makes (`:916-924`).
 
 **The name, per platform, like an ENS primary name.** A wallet may hold
 several accounts of one platform. It has one name there,
 `published[wallet][platformId]`, the handle it chose to show, and the
-stored string counts only while the wallet holds it: `primaryOf` answers
+stored string counts only while the wallet holds it: `publishedHandleOf` answers
 the stored handle, re-normalized under the current rules, only while its
 node's owner is the wallet, and answers nothing otherwise. That is ENS's
 rule for primary names, forward-resolve before trusting the reverse
 record, made by the contract so no reader can skip it. Nothing therefore
 has to clear a name when its handle moves: a rename that retires the
 handle, another account proving it, or a rules change each make
-`primaryOf` go empty on their own, and an indexer mirroring
+`publishedHandleOf` go empty on their own, and an indexer mirroring
 `names.published` applies the same test. The slot is written only by
 
-- a claim that carries the handle and asks to publish it;
-- a claim that carries the handle for the account whose handle is the
-  current name (`idOfHandle[node(name)] == idNode`), so a rename of the
+- a binding that carries the handle and asks to publish it;
+- a binding that carries the handle for the account whose handle is the
+  current name (`idNodeByHandle[node(name)] == idNode`), so a rename of the
   named account refreshes the name rather than leaving the old string;
 - `publish`, and cleared only by `unpublish`.
 
-A claim for another account of the same wallet never touches the slot, and
-a private claim carries no handle to store and never touches it either.
+Both binding paths apply only when the binding is written, that is, when
+its evidence is newer than both nodes' watermarks. A binding for another
+account of the same wallet never touches the slot, and a private binding
+carries no handle to store and never touches it either.
 After a private rename the old string stays stored and reads as no name,
 since the retired node has no owner; the wallet publishes the new handle
 when it chooses, which is the disclosure step.
 
 Two facts therefore live apart. **Disclosure** is history: once an
-accepted claim or `publish` has carried a handle, the handle is known and
-stays known, whatever private claim or `unpublish` follows. A refused
+accepted binding or `publish` has carried a handle, the handle is known
+and stays known, whatever private binding or `unpublish` follows. A refused
 transaction discloses nothing on record, but its calldata is public all
-the same; no event marks it. **Publication** is state: whether `primaryOf`
-answers the handle now. The sequence private claim, `publish`, private
+the same; no event marks it. **Publication** is state: whether
+`publishedHandleOf` answers the handle now. The sequence private binding,
+`publish`, private
 refresh of the same handle ends with the handle known, the name
 published, and the last event saying `disclosed: false`, all three true at
 once.
@@ -432,24 +449,25 @@ storage string; the same sentence covers the event.
 
 ### Downstream
 
-**usernames-indexer.** `names.handles.handle` becomes nullable, and
-`names.ids.user_id` is null for every Google identity; `names.published`
+**usernames-indexer.** `names.handles.handle` becomes nullable;
+`names.ids.user_id` keeps the `userId` string the event carries, the hex
+digest for Google; `names.published`
 stays plaintext, since only a disclosed handle can be published. `resolve_handle` currently selects `WHERE h.handle = $3`
 (`handle_lookup`, `usernames-core/src/db.rs:1186-1199`) and moves to the node: fold the query,
 normalize, derive `handleNode` with the function the indexer already has
 (`nodes.rs`), select by node. `/v1/search` excludes private bindings by
 construction, since there is no text to match. The recompute check that
 compares a re-derived node with the emitted topic (`db.rs:791-798`) skips the
-handle and the id when the event carries none; `/v1/resolve/id` moves to
-the node the same way. The indexer keeps the two facts apart as the
+handle when the event carries none; `/v1/resolve/id` keeps selecting by
+the `userId` string, which a caller holding a `sub` computes. The indexer keeps the two facts apart as the
 contract does: `IdentityPublished` fills a `names.handles` row whose
 plaintext was null and sets `names.published`; a later private event never
 nulls a plaintext row. `names.published` mirrors the stored slot from the
-events, which say whether a claim wrote it, and a response reports it as
+events, which say whether a binding wrote it, and a response reports it as
 published only while the wallet owns the handle's node, the test
-`primaryOf` makes. Responses carry `disclosed`, meaning an accepted event carried this
+`publishedHandleOf` makes. Responses carry `disclosed`, meaning an accepted event carried this
 handle, and `published`, the current state; an undisclosed identity
-returns `handle: null`, and a Google identity `userId: null`. `disclosed:
+returns `handle: null` beside its `userId`. `disclosed:
 false` does not promise the handle never reached the chain: a refused
 transaction's calldata is not an event. The resolve routes keep the plaintext in the path,
 by decision; a `GET /v1/resolve/node/{platform}/{handleNode}` where the
@@ -465,6 +483,16 @@ store's `resolve_handle`), and that lookup selects by the handle string
 resolves private bindings once `resolve_handle` selects by node, the same
 change the resolve route needs above, and not before; the rollout ships
 the two together.
+
+**Escrow.** `HandleEscrow.deposit(platformId, handleHash, ...)` pays to
+the node of a `handleHash` its caller supplies, and
+`IdentityRegistry.handleHashOf` computes that hash as keccak256 of the
+normalized handle for every platform (`IdentityRegistry.sol:835-841`,
+`HandleEscrow.sol:169-178`). For Google it must return the tagged
+SHA-256 of REQ-PLAT-08M, and every client that computes `handleHash`
+itself, the TypeScript helpers and the Rust bindings included, must use
+the platform's construction; otherwise a deposit to a Google handle funds
+a node no binding reaches, recoverable only by refund.
 
 **TypeScript claim SDK.** The Google proof type carries `email` as a required
 string; it becomes optional, absent for private, and the proof type carries
@@ -490,28 +518,32 @@ Written, on this branch. The map, for a reader coming from the specs:
   and a Consumer that keys on digests and normalizes every handle it
   receives. §2.1b defines, for every platform, the identity key and handle
   key and what holding a handle means (REQ-PLAT-08H, 08I: keys from the
-  inner digests only, and retirement), and the per-platform name
-  (REQ-PLAT-08J, 08K: written only by a claim whose binding the Consumer
-  writes, which carries the handle and asks to publish or renames the
-  named account, by the disclosure call, or cleared by withdrawal; read
-  only while the wallet holds it), with TEST-PLAT-20B. It defines what
-  "carries" means on every platform (an X or GitHub claim always carries
-  its revealed handle, a digest-profile claim when its field is nonempty)
+  inner digests only, a write only for evidence newer than both keys'
+  watermarks, and retirement that keeps the watermark), and the
+  per-platform name (REQ-PLAT-08J, 08K: written only by a binding the
+  Consumer writes, which carries the handle and asks to publish or renames
+  the named account, a path skipped when the stored name no longer
+  normalizes, by the disclosure call, or cleared by withdrawal; read only
+  while the wallet holds it), with TEST-PLAT-20B. It defines what
+  "carries" means on every platform (an X or GitHub binding always carries
+  its revealed handle, a digest-profile one when its field is nonempty)
   and places the publish request in the Consumer's call, outside the
   Submission Payload and the Authorized Transaction Data, as `bind`'s
   `publish` argument is. REQ-PLAT-08M fixes each profile's handle-digest
   construction: keccak256 for a profile that exposes bytes, and for Google
   `SHA256("libid.google-handle" || email)`. For a digest profile it defines
   the profile, the Consumer's configured record of it and of its
-  handle-digest construction (08L), that its account identifier, the
+  handle-digest construction, shared by every ceremony version of the
+  platform, with verified handle bytes told apart from the unverified
+  carried handle (08L), that its account identifier, the
   `sub`, is never sent, disclosure (history) and publication (state), and
   holds REQ-PLAT-08D (keys from the digests, a handle accepted
   only when it hashes to its digest), 08E (the disclosure call on the handle
   alone, accepted only when the caller holds it, and what a refusal does
   not protect), 08F (the event's flags, the normalized handle where one was
-  carried, never the `sub`), 08G (the published handle table and the
-  handle-digest construction, fixed once a digest platform has bound
-  anything) and TEST-PLAT-20A. §7 requires a new profile to say whether it
+  carried, never the `sub`), 08G (the digest-profile flag, and the
+  published handle table and the handle-digest construction, fixed once
+  the platform has bound anything) and TEST-PLAT-20A. §7 requires a new profile to say whether it
   is a digest profile, and its construction if so.
   REQ-PLAT-03 and TEST-PLAT-17 name the ID Token as a digest profile's
   local source, with the delivered handle raw; REQ-PLAT-03A gives the
@@ -530,8 +562,11 @@ Written, on this branch. The map, for a reader coming from the specs:
   Google `sub` shape as a liveness clause; ASM-HASH-01, ASM-ZK-01 (the
   zero-knowledge proving mode), SP-PRIV-01 (the Consumer, the Proof
   Verifier and the Platform Verifier emit or store only what a transaction
-  carried, and no account identifier), with §4 stating that it does not
-  survive a malicious application operator or CCDP Distribution; REQ-COMMON-05E returns the digests, and
+  carried, and no account identifier), with §4 stating that it bounds the
+  chain's artifacts, not who learns the handle (the Application, the OAuth
+  Bridge and the CCDP Distribution all can), and rests on an unmodified
+  Prover; ASM-PROOF-01 lets an unreleased ceremony version be edited in
+  place; REQ-COMMON-05E returns the digests, and
   the handle marked unverified, where a profile exposes digests;
   REQ-COMMON-45 and 45A have governance select zero-knowledge artifacts and
   the Canonical Runtime (its Prover) prove in that mode with fresh
@@ -543,10 +578,14 @@ Written, on this branch. The map, for a reader coming from the specs:
   from, Google's `sub`;
   §12 replaces "published deliberately" for the handle and user identifier
   with what a digest profile keeps off the chain and its limits.
-- `libid.md`: sentences among the enforceable guarantees, and the
-  application operator's and CCDP Distribution's rows in the trust table:
-  the first decides whether a Google handle is sent, the second's Prover
-  holds the ID Token and must prove in the zero-knowledge mode.
+- `libid.md`: sentences among the enforceable guarantees, including what
+  the Google circuit proves, and the Application, OAuth Bridge and CCDP
+  Distribution rows in the trust table: the Application decides whether a
+  Google handle is sent, the Bridge's Callback captures the ID Token, and
+  the Distribution's Prover holds it and must prove in the zero-knowledge
+  mode.
+- `ccdp.md`: normalization is the Consumer's and, for a digest profile,
+  also the Proving Circuit's.
 
 ## The recommendation
 
@@ -562,7 +601,8 @@ the audience, and where the payload change is one optional field.
 It does not protect against confirmation of a suspected address or account
 id by whoever already holds it, the query plaintext in the indexer's access
 logs, the visibility of the binding itself, or an application operator,
-which receives the ID Token and can send the address itself.
+which receives the email, or a Bridge or Distribution operator, which can
+read the ID Token, sending the address itself.
 
 ## What to implement, in order
 
@@ -579,38 +619,45 @@ which receives the ID Token and can send the address itself.
    empty local part and a garbage tail each fail to prove, as does a `sub`
    holding a backslash.
 3. **Contracts** (`libid-contracts`): the Google verifier regenerated, `bytes
-   email` in the payload, `userIdHash` and `handleHash` in `VerifiedClaim`,
-   the equality check and the hash-derived nodes in `_write`; `_write`
-   storing the name only for a claim carrying the handle that asks to
-   publish or whose account's handle is the current name
-   (`idOfHandle[node(name)] == idNode`), and only when it writes the
-   binding, never for a private claim, a claim of another account, or
-   evidence not newer than the binding; `disclosed` in the event;
+   email` in the payload, `handleHash` in `VerifiedClaim` beside the
+   `userId` digest string it already carries, the equality check and the
+   hash-derived handle node in `_write`; `_write` storing the name only
+   for a binding carrying the handle that asks to publish or whose
+   account's handle is the current name
+   (`idNodeByHandle[node(name)] == idNode`), and only when it writes the
+   binding, never for a private binding, a binding of another account, or
+   evidence not newer than both nodes; no `handlePreimages` entry for an
+   undisclosed handle; `disclosed` in the event; `handleHashOf` and every
+   client that computes a `handleHash` for `HandleEscrow.deposit` using the
+   platform's construction;
    `publish(platformId, handle)` accepted only when the caller owns the
    handle's node; a per-platform digest-profile flag and handle-digest
    construction beside the rules in `setPlatform`, the flag checked
-   against every verifier result; `setPlatform` refusing a Google rules or
-   construction change once Google has bound anything; the
+   against every verifier result; `setPlatform` refusing a change to the
+   flag once the platform has bound anything, and to Google's rules or
+   construction; the
    circuit pin. Done when
-   the same account claimed public and then private lands on the same two
+   the same account bound public and then private lands on the same two
    nodes; when a private transaction, made with recognizable test values,
    carries no plaintext email or account id in its decoded calldata or its
-   decoded events, the payload fields being empty and the event strings
-   empty, rather than a byte search over proof bytes that can contain
+   decoded events, the payload's email field and the event's handle string
+   being empty, rather than a byte search over proof bytes that can contain
    anything; when no transaction, private or not, carries the `sub`; and
-   when `publishName` without the email, and a `publish` of a handle the
-   caller does not own, both revert; and when a wallet holding two accounts
-   of one platform keeps the first account's name through any claim of the
-   second.
-4. **Indexer, SDK, demo**: nullable handle and id, node-keyed resolve for
-   both, the ENS gateway on the node-keyed lookup, `IdentityPublished`
+   when `bind(..., publish: true)` without the email, and a `publish` of a
+   handle the caller does not own, both revert; when a wallet holding two
+   accounts of one platform keeps the first account's name through any
+   binding of the second; and when a deposit to a Google handle reaches
+   the account that binds it.
+4. **Indexer, SDK, demo**: nullable handle, node-keyed handle resolve,
+   the ENS gateway on the node-keyed lookup, `IdentityPublished`
    filling the handle row and the publication state, optional `email` and
    no `sub`, the three-way choice. Done when resolve and the gateway find a
    private binding by exact address or account id, search never returns
-   it, `reverseOf` and `primaryOf` are empty for it, and the sequence private claim,
+   it, `publishedHandleOf` is empty and `identitiesOf` returns no handle
+   for it, and the sequence private binding,
    `publish`, private refresh of the same handle reads back as known,
    published, last event undisclosed. The node-keyed lookups are proven against the
-   chain, not against a hand-computed hash: one test claims on a local
+   chain, not against a hand-computed hash: one test binds on a local
    chain and checks the nodes the indexer recomputes against the
    `IdentityBound` event the contract emitted, the check `db.rs:791-798`
    already makes on every event.
@@ -626,8 +673,9 @@ which receives the ID Token and can send the address itself.
 - **Changing X and GitHub.** Their handles are public where they live.
 - **Per-chain variants.** The node is chain-independent today and stays so.
 - **Hiding the address from the application.** Out of reach while the
-  application owns the Google client: the ID Token lands where it controls,
-  and it can ask Google for the email directly. `neutral-google-client.md`
+  Application receives the email in the ceremony result and the Google
+  client belongs to its deployment, whose owner can ask Google for the
+  email directly. `neutral-google-client.md`
   checks whether one libID-operated client, with a confirmation screen the
   runtime owns, could close that gap, and what it would cost.
 
@@ -638,16 +686,16 @@ name is the address and a wallet that resolves it has confirmed it, and with
 it that confirming a suspected address by hashing it is accepted; `sub` is
 hidden with the handle and never sent, not even when the handle is;
 private to public is a `publish` call on the handle alone, not a new
-claim; the resolve routes keep the plaintext in the
+binding; the resolve routes keep the plaintext in the
 request line, the indexer's operator being trusted with what people resolve;
 `publish` accepts a handle only while the wallet holds it, so it refuses
-one retired by a later claim of the same account, as set out under
+one retired by a later binding of the same account, as set out under
 "Default, and moving between modes"; a wallet may hold several accounts of
-one platform and has one name there, which no claim of another account
-and no private claim writes, and which reads as a name only while the
-wallet holds it; the application chooses whether a
-claim carries the email, and the privacy is against readers of the chain,
-not against a malicious application; the email and the `sub` are both
+one platform and has one name there, which no binding of another account
+and no private binding writes, and which reads as a name only while the
+wallet holds it; the application chooses whether a binding carries the
+email, and the privacy is against readers of the chain, not against an
+operator that handles the email; the email and the `sub` are both
 hidden with a tagged SHA-256; Google's handle rules and handle-digest
 construction are fixed once Google has bound anything; and the proof is made in the
 zero-knowledge mode with fresh randomness, which the privacy rests on as
@@ -669,25 +717,22 @@ the node-keyed lookups; the test above keeps it that way.
 
 ## Sources
 
-Line numbers are against each repository's `origin/main` on 2026-09-22
-unless a revision is named; spec references are against `libid`
-`origin/main` at `002c201`.
+Spec references are to this branch. `libid-contracts` lines are against
+`origin/main` at `0a6c5d3` (2026-10-05); the indexer, deployer and the
+measured circuit builds are against the revisions named below, as of
+2026-09-22.
 
-- `specs/platform-ceremonies.md`: REQ-PLAT-08A/08B/08C and TEST-PLAT-20
-  (134-166), REQ-PLAT-16B (298-313), REQ-PLAT-19A (322-328), REQ-PLAT-20.
-- `specs/ceremony-common.md`: REQ-COMMON-05E (553-561), §12 privacy
-  statement (1497-1500).
-- `libid-circuits/circuits/oidc-google/src/main.nr`: public inputs (87-97),
-  email checks (125-147), audience hash (259-267), email packing (290-307);
-  `circuits/bearer-link/src/main.nr:51-70` (`verify_hash_commit`);
-  `toolchain.env`.
 - `libid-contracts/solidity/contracts/ceremony/GooglePlatformVerifier.sol`:
-  offsets (43-50), `GoogleProof` (76-84), audience check (206-210), handle
-  (237); `ceremony/ICeremony.sol:66-84` (`VerifiedClaim`);
-  `identity/IdentityNames.sol`: invariant (106-112), event (267-277),
-  `_write` (600-640), `unpublish` (678-686); `identity/IdentityNodes.sol`
-  (25-41); `identity/HandleNormalizer.sol` (100-148);
-  `identity/handles.json` (google, 52-73).
+  offsets and input count (51-58), `GoogleProof` (84-92), audience check
+  (226), `userId` (251), handle (254); `ceremony/ICeremony.sol:75-84`
+  (`VerifiedClaim`); `identity/IdentityRegistry.sol`: `IdentityBound`
+  (326-336), `_write` (643-705), `_list` (715-732), `_retirePreviousHandle`
+  (752-759), `unpublish` (761-779), `handleHashOf` (835-841),
+  `publishedHandleOf` (916-924); `identity/IdentityNodes.sol` (25-46);
+  `identity/HandleNormalizer.sol`; `identity/handles.json`;
+  `escrow/HandleEscrow.sol` (`deposit`, 169-178).
+- `libid-circuits` `circuits/bearer-link/src/main.nr:51-70`
+  (`verify_hash_commit`).
 - `usernames-indexer` at `origin/main` `bec6765`, `crates/usernames-core`:
   `migrations/001_schema.sql` (47, 73, 83-91), `src/db.rs` (791-798,
   1091-1100, 1133, 1186-1199), `src/api/mod.rs` (79-84), `src/ens.rs`
