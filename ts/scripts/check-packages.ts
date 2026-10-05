@@ -69,33 +69,35 @@ writeFileSync(
     },
   }),
 )
-execFileSync(
-  'npm',
-  [
-    'install',
-    '--ignore-scripts',
-    '--no-audit',
-    '--no-fund',
-    '--package-lock=false',
-    '--cache',
-    join(output, 'npm-cache'),
-  ],
-  {
-    cwd: consumer,
-    stdio: 'inherit',
-    // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
-    env: Object.fromEntries(
-      Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
-    ),
-  },
-)
+const npmInstall = (cwd: string) =>
+  execFileSync(
+    'npm',
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--package-lock=false',
+      '--cache',
+      join(output, 'npm-cache'),
+    ],
+    {
+      cwd,
+      stdio: 'inherit',
+      // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
+      ),
+    },
+  )
+npmInstall(consumer)
 writeFileSync(
   join(consumer, 'client.ts'),
   `export * from '@libid/ceremony'
 export * from '@libid/popup'
 export { fakeConnection } from '@libid/popup/testing'
 export type { LedgerId } from '@libid/ledger'
-export { ensName, HandleError, type NameOptions, type Platform, type Rules } from '@libid/ens'
+export { ensName, HandleError, type NameOptions, type Platform } from '@libid/ens'
 `,
 )
 writeFileSync(
@@ -139,4 +141,32 @@ for (const name of packages) {
   const manifest = readFileSync(join(consumer, 'node_modules/@libid', name, 'package.json'), 'utf8')
   assert.doesNotMatch(manifest, /workspace:|catalog:/)
 }
+// Ens requires viem as a peer, so the consumer above has it. An app without ens must not:
+// ledger, popup and ceremony load with no viem installed.
+const viemFree = fileURLToPath(
+  new URL('../../.ceremony-local/npm-consumer-viem-free', import.meta.url),
+)
+rmSync(viemFree, { recursive: true, force: true })
+mkdirSync(viemFree, { recursive: true })
+writeFileSync(
+  join(viemFree, 'package.json'),
+  JSON.stringify({
+    private: true,
+    type: 'module',
+    dependencies: Object.fromEntries(
+      Object.entries(dependencies).filter(([name]) => name !== '@libid/ens'),
+    ),
+  }),
+)
+npmInstall(viemFree)
+assert(!existsSync(join(viemFree, 'node_modules/viem')), 'an app without ens installs viem')
+execFileSync(
+  'node',
+  [
+    '--input-type=module',
+    '-e',
+    "await import('@libid/ceremony'); await import('@libid/popup'); await import('@libid/popup/worker'); await import('@libid/popup/testing')",
+  ],
+  { cwd: viemFree, stdio: 'inherit' },
+)
 console.log(`Checked tarballs: ${output}`)
