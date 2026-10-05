@@ -1,13 +1,14 @@
 # npm packages
 
-`@libid/popup`, `@libid/ledger` and `@libid/ceremony` are independently versioned
+`@libid/popup`, `@libid/ledger`, `@libid/ceremony` and `@libid/ens` are independently versioned
 ESM packages with TypeScript declarations. Their initial package versions are
 `0.1.0`; publication is a separate maintainer action.
 
 Popup exports its main API, `/worker` and `/testing`. Ceremony exports its
 application client API; it requires the app's compatible popup installation as a
 peer so both use the same popup classes. Ledger is a regular dependency because
-ceremony's declarations use `LedgerId`.
+ceremony's declarations use `LedgerId`. Ens depends on `@libid/contracts` for
+handle normalization and takes viem as a peer, as `@libid/contracts` does.
 
 The npm packages contain only the public entry graphs, source maps with embedded
 sources, README and repository license/notice files. Source, tests and CCDP
