@@ -95,7 +95,6 @@ The libID contracts compile only through IR. To keep your own contracts on
 the legacy pipeline, add to `foundry.toml`:
 
 ```toml
-optimizer = true
 additional_compiler_profiles = [{ name = "libid", via_ir = true }]
 compilation_restrictions = [{ paths = "lib/libid/sol/lib/libID-contracts/**", via_ir = true }]
 ```
