@@ -1,5 +1,6 @@
 // The local stack's addresses and ports, for the stack, the app and the tests.
-// compose.yaml, keeper.toml and bridge-config.toml repeat what they need.
+// compose.yaml, keeper.toml and bridge-config.toml repeat what they need, and
+// stack.ts refuses to start when a copy differs.
 
 /** anvil, published on the host. */
 export const RPC_URL = 'http://127.0.0.1:4688'

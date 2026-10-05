@@ -29,7 +29,9 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 15 * 60_000,
     gracefulShutdown: { signal: 'SIGTERM', timeout: 120_000 },
-    stdout: 'pipe',
+    // CI keeps the stack's output off the public job log: the stack writes
+    // it to LIBID_STACK_LOGS, which is scanned before upload.
+    stdout: process.env.CI ? 'ignore' : 'pipe',
   },
   use: {
     ...devices['Desktop Chrome'],
