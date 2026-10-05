@@ -20,9 +20,9 @@ concurrency:
 jobs:
   # ---------------------------------------------------------------------------
   # Changes: which browser workspaces a pull request can affect, and whether it
-  # can affect the CCDP image, so their jobs skip otherwise. Pushes to main run
-  # everything: a release promotes each main commit's own image. Plain git over
-  # the PR's range, as in DCO.
+  # can affect the CCDP image or the Solidity library, so their jobs skip
+  # otherwise. Pushes to main run everything: a release promotes each main
+  # commit's own image. Plain git over the PR's range, as in DCO.
   # ---------------------------------------------------------------------------
   changes:
     name: Changes
@@ -31,6 +31,7 @@ jobs:
     outputs:
       workspaces: ${{ steps.paths.outputs.workspaces }}
       image: ${{ steps.paths.outputs.image }}
+      sol: ${{ steps.paths.outputs.sol }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,8 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo 'workspaces=["popup","ceremony","dev"]' >> "$GITHUB_OUTPUT"
-            echo "image=true" >> "$GITHUB_OUTPUT"
+            { echo 'workspaces=["popup","ceremony","dev"]'; echo "image=true"; echo "sol=true"; } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
@@ -62,9 +62,12 @@ jobs:
           if changed "$ceremony|^ts/apps/dev/"; then workspaces+=(dev); fi
           image=false
           if changed "$ceremony"; then image=true; fi
+          # The Solidity library builds on none of the TypeScript setup.
+          sol=false
+          if grep -qE '^(sol/|\.gitmodules$|\.github/workflows/ci\.yml$)' <<<"$files"; then sol=true; fi
           json=$(jq -cn '$ARGS.positional' --args "${workspaces[@]}")
-          echo "Browser workspaces: $json; CCDP image: $image"
-          { echo "workspaces=$json"; echo "image=$image"; } >> "$GITHUB_OUTPUT"
+          echo "Browser workspaces: $json; CCDP image: $image; Solidity: $sol"
+          { echo "workspaces=$json"; echo "image=$image"; echo "sol=$sol"; } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # TypeScript: build, tests, complete source/test/build-script type checking,
@@ -114,6 +117,8 @@ jobs:
   # ---------------------------------------------------------------------------
   sol:
     name: Solidity
+    needs: [changes]
+    if: needs.changes.outputs.sol == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
