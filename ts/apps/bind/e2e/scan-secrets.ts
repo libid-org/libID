@@ -3,12 +3,9 @@
 // are the arguments; directories are searched. Nothing secret is printed.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { savedSession } from './session.ts'
+import { googleSession, xSession } from './session.ts'
 
-const sessions = [
-  savedSession('X_TEST_ALICE', ['auth_token']),
-  savedSession('GOOGLE_TEST_ALICE', ['SID', '__Secure-1PSID', '__Secure-3PSID']),
-]
+const sessions = [xSession(), googleSession()]
 const secrets = [
   process.env.GH_TEST_ALICE_PASSWORD,
   process.env.GH_TEST_ALICE_TOTP_SECRET,

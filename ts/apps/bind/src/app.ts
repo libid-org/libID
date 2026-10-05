@@ -59,11 +59,19 @@ const show = (id: string, text: string) => {
   field(id).textContent = text
 }
 const status = (text: string) => show('status', text)
+const messageOf = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback
+/** End the run with `message` as its outcome. */
+const fail = (message: string) => {
+  status(message)
+  show('outcome', `failed: ${message}`)
+}
 const connectButton = document.querySelector<HTMLButtonElement>('#connect')!
 
 const names: Record<Platform, string> = { github: 'GitHub', x: 'X', google: 'Google' }
+const platforms = Object.keys(names) as Platform[]
 const anchors = Object.fromEntries(
-  (Object.keys(names) as Platform[]).map((platform) => [
+  platforms.map((platform) => [
     platform,
     document.querySelector<HTMLAnchorElement>(`#bind-${platform}`)!,
   ]),
@@ -186,9 +194,7 @@ function launch(
   } catch (error) {
     event.preventDefault()
     connection.close()
-    const message = error instanceof Error ? error.message : 'Unable to start the ceremony.'
-    status(message)
-    show('outcome', `failed: ${message}`)
+    fail(messageOf(error, 'Unable to start the ceremony.'))
     return
   }
   const off = ceremony.onStage((update) => {
@@ -207,11 +213,7 @@ function launch(
         throw new Error(`${names[platform]} denied the authorization.`)
       await submit(platform, signer, result, transactionData, operationDomain)
     })
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : 'The binding failed.'
-      status(message)
-      show('outcome', `failed: ${message}`)
-    })
+    .catch((error: unknown) => fail(messageOf(error, 'The binding failed.')))
     .finally(() => {
       connection.close()
       off()
@@ -220,9 +222,7 @@ function launch(
 
 async function initialize() {
   const client = await createCCDPClient({ oauthBridge: BRIDGE })
-  const enabled = (Object.keys(names) as Platform[]).filter((platform) =>
-    client.enabledPlatforms.includes(platform),
-  )
+  const enabled = platforms.filter((platform) => client.enabledPlatforms.includes(platform))
   const operationDomain = hexToBytes(await registry.read.OPERATION_DOMAIN())
   connectButton.addEventListener('click', () => {
     connect().then(
@@ -230,8 +230,7 @@ async function initialize() {
         for (const platform of enabled) anchors[platform].setAttribute('aria-disabled', 'false')
         status('Ready. Choose a platform to bind.')
       },
-      (error: unknown) =>
-        status(error instanceof Error ? error.message : 'Could not connect a wallet.'),
+      (error: unknown) => status(messageOf(error, 'Could not connect a wallet.')),
     )
   })
   for (const platform of enabled)

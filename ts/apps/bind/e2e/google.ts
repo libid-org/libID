@@ -1,16 +1,5 @@
 import type { Page } from '@playwright/test'
-import { clickMarked, drivePopup } from './popup.ts'
-import { savedSession } from './session.ts'
-
-/**
- * The saved Google session, from GOOGLE_TEST_ALICE_COOKIES or
- * GOOGLE_TEST_ALICE_COOKIES_FILE. Renew it with `cargo run --bin ceremony --
- * export google` in libid-server-rs' ceremony-tests, which lives on its
- * feat/live-ceremony-tests branch (libid-server-rs PR #12): Google refuses a
- * sign-in in an automated browser, but honours a session made elsewhere.
- */
-export const googleSession = () =>
-  savedSession('GOOGLE_TEST_ALICE', ['SID', '__Secure-1PSID', '__Secure-3PSID'])
+import { clickFound, drivePopup } from './popup.ts'
 
 /** Pages that no automation gets past: the session or the OAuth client needs a person. */
 const REFUSED: [string, string][] = [
@@ -28,16 +17,12 @@ const REFUSED: [string, string][] = [
 const LOGIN_VISIBLE = `[...document.querySelectorAll('input[type=password],input[type=email],input[name=identifier]')]
   .some(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden')`
 
-/** The account row for `email`, else a Continue or Allow button, marked for a real click. */
-const markNext = (email: string) => `(() => {
-  document.querySelectorAll('[data-libid-click]').forEach(e => e.removeAttribute('data-libid-click'));
+/** The account row for `email`, else a Continue or Allow button. */
+const findNext = (email: string) => `(() => {
   const usable = e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
   const account = [...document.querySelectorAll('[data-identifier]')].find(e => usable(e) && e.getAttribute('data-identifier').toLowerCase() === ${JSON.stringify(email.toLowerCase())});
   const consent = [...document.querySelectorAll('button,[role=button],input[type=submit]')].find(e => usable(e) && /^(continue|allow)$/i.test((e.innerText || e.value || '').trim()));
-  const next = account || consent;
-  if (!next) return false;
-  next.setAttribute('data-libid-click', '1');
-  return true;
+  return account || consent;
 })()`
 
 /**
@@ -60,7 +45,7 @@ export async function authorizeOnGoogle(popup: Page, email: string) {
         throw new Error(
           'Google asked to sign in: the saved session has expired. Renew it with `ceremony export google` (libid-server-rs, branch feat/live-ceremony-tests).',
         )
-      if (Date.now() - clickedAt > 3_000 && (await clickMarked(popup, markNext(email))))
+      if (Date.now() - clickedAt > 3_000 && (await clickFound(popup, findNext(email))))
         clickedAt = Date.now()
     },
   })

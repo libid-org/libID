@@ -39,10 +39,21 @@ interface Progress {
   errored: number
 }
 
+/** Count one more `what` under `counter`; wait `step` times the count, failing on the fourth. */
+async function backOff(
+  progress: Progress,
+  counter: 'rateLimited' | 'errored',
+  step: number,
+  what: string,
+  pause: Pause,
+) {
+  const count = ++progress[counter]
+  if (count > 3) throw new Error(`${what} three times`)
+  await pause(step * count, `${what} ${count} times`)
+}
+
 async function onErrorPage(popup: Page, progress: Progress, pause: Pause) {
-  progress.errored += 1
-  if (progress.errored > 3) throw new Error('GitHub answered its error page three times')
-  await pause(10_000 * progress.errored, `GitHub answered its error page ${progress.errored} times`)
+  await backOff(progress, 'errored', 10_000, 'GitHub answered its error page', pause)
   // Reopening the request keeps the popup on github.com until GitHub redirects.
   if (progress.start) await popup.goto(progress.start).catch(() => {})
   progress.filled = false
@@ -57,12 +68,7 @@ async function onLogin(
   pause: Pause,
 ) {
   if (text.includes('too many requests') || text.includes('rate limit')) {
-    progress.rateLimited += 1
-    if (progress.rateLimited > 3) throw new Error('GitHub rate-limited the login three times')
-    await pause(
-      30_000 * progress.rateLimited,
-      `GitHub rate-limited the login ${progress.rateLimited} times`,
-    )
+    await backOff(progress, 'rateLimited', 30_000, 'GitHub rate-limited the login', pause)
     await popup.reload().catch(() => {})
     progress.filled = false
     return

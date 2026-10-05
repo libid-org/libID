@@ -45,16 +45,30 @@ export function savedSession(prefix: string, required: string[]): Stored[] | und
   return cookies
 }
 
-const sameSite = (value: string | null | undefined): 'Strict' | 'Lax' | 'None' | undefined => {
-  const lower = value?.toLowerCase()
-  return lower === 'strict'
-    ? 'Strict'
-    : lower === 'lax'
-      ? 'Lax'
-      : lower === 'none' || lower === 'no_restriction'
-        ? 'None'
-        : undefined
-}
+/**
+ * The saved X session, from X_TEST_ALICE_COOKIES or X_TEST_ALICE_COOKIES_FILE.
+ * Renew it with `cargo run --bin ceremony -- export x` in libid-server-rs'
+ * ceremony-tests, which lives on its feat/live-ceremony-tests branch
+ * (libid-server-rs PR #12).
+ */
+export const xSession = () => savedSession('X_TEST_ALICE', ['auth_token'])
+
+/**
+ * The saved Google session, from GOOGLE_TEST_ALICE_COOKIES or
+ * GOOGLE_TEST_ALICE_COOKIES_FILE. Renew it with `cargo run --bin ceremony --
+ * export google` in libid-server-rs' ceremony-tests, which lives on its
+ * feat/live-ceremony-tests branch (libid-server-rs PR #12): Google refuses a
+ * sign-in in an automated browser, but honours a session made elsewhere.
+ */
+export const googleSession = () =>
+  savedSession('GOOGLE_TEST_ALICE', ['SID', '__Secure-1PSID', '__Secure-3PSID'])
+
+const SAME_SITE = new Map<string, 'Strict' | 'Lax' | 'None'>([
+  ['strict', 'Strict'],
+  ['lax', 'Lax'],
+  ['none', 'None'],
+  ['no_restriction', 'None'],
+])
 
 /** Put saved cookies in the browser context, on their own domain or each of `domainsOf`'s. */
 export async function restoreSession(
@@ -71,7 +85,7 @@ export async function restoreSession(
         path: cookie.path || '/',
         secure: cookie.secure ?? true,
         httpOnly: cookie.http_only ?? cookie.httpOnly ?? false,
-        sameSite: sameSite(cookie.same_site ?? cookie.sameSite),
+        sameSite: SAME_SITE.get((cookie.same_site ?? cookie.sameSite ?? '').toLowerCase()),
         expires: cookie.expires && cookie.expires > 0 ? cookie.expires : -1,
       })),
     ),

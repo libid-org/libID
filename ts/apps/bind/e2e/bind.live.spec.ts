@@ -1,12 +1,12 @@
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
 import { RPC_URL } from '../local.ts'
 import { authorizeOnGitHub, githubAccount } from './github.ts'
-import { authorizeOnGoogle, googleSession } from './google.ts'
+import { authorizeOnGoogle } from './google.ts'
 import { isLive, liveSecret } from './live.ts'
 import { presentAsPerson } from './person.ts'
-import { restoreSession } from './session.ts'
+import { googleSession, restoreSession, xSession } from './session.ts'
 import { injectWallet } from './wallet.ts'
-import { authorizeOnX, restoreXSession, xSession } from './x.ts'
+import { authorizeOnX, restoreXSession } from './x.ts'
 
 /** anvil account #2: unlocked by anvil, funded, and not one the deploy uses. */
 const HOLDER = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'

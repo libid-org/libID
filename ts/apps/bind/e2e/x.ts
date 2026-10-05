@@ -1,14 +1,6 @@
 import type { BrowserContext, Page } from '@playwright/test'
-import { clickMarked, drivePopup } from './popup.ts'
-import { restoreSession, type Stored, savedSession } from './session.ts'
-
-/**
- * The saved X session, from X_TEST_ALICE_COOKIES or X_TEST_ALICE_COOKIES_FILE.
- * Renew it with `cargo run --bin ceremony -- export x` in libid-server-rs'
- * ceremony-tests, which lives on its feat/live-ceremony-tests branch
- * (libid-server-rs PR #12).
- */
-export const xSession = () => savedSession('X_TEST_ALICE', ['auth_token'])
+import { clickFound, drivePopup } from './popup.ts'
+import { restoreSession, type Stored } from './session.ts'
 
 /** Put the saved session on both hosts X answers on, as the Rust suite does. */
 export const restoreXSession = (context: BrowserContext, cookies: Stored[]) =>
@@ -29,15 +21,10 @@ const ACCEPT_COOKIES = `(() => {
   return false;
 })()`
 
-/** The visible, enabled consent control marked for a real click; X serves more than one consent page. */
-const MARK_CONSENT = `(() => {
-  document.querySelectorAll('[data-libid-click]').forEach(e => e.removeAttribute('data-libid-click'));
-  const button = [...document.querySelectorAll("[data-testid='OAuth_Consent_Button'],button,[role=button],input[type=submit],a")].find(e =>
-    (e.getAttribute('data-testid') === 'OAuth_Consent_Button' || /^(authorize app)$/i.test((e.innerText || e.value || '').trim())) &&
-    !e.disabled && e.getAttribute('aria-disabled') !== 'true' && e.getClientRects().length > 0);
-  if (button) { button.setAttribute('data-libid-click', '1'); return true; }
-  return false;
-})()`
+/** The visible, enabled consent control; X serves more than one consent page. */
+const FIND_CONSENT = `[...document.querySelectorAll("[data-testid='OAuth_Consent_Button'],button,[role=button],input[type=submit],a")].find(e =>
+  (e.getAttribute('data-testid') === 'OAuth_Consent_Button' || /^(authorize app)$/i.test((e.innerText || e.value || '').trim())) &&
+  !e.disabled && e.getAttribute('aria-disabled') !== 'true' && e.getClientRects().length > 0)`
 
 const onX = (url: URL) =>
   url.hostname === 'x.com' || url.hostname === 'twitter.com' || url.hostname.endsWith('.x.com')
@@ -66,7 +53,7 @@ export async function authorizeOnX(popup: Page) {
       } else if (url.pathname.startsWith('/i/oauth2/authorize')) {
         challengedAt = undefined
         await popup.evaluate(ACCEPT_COOKIES).catch(() => {})
-        if (Date.now() - consentedAt > 10_000 && (await clickMarked(popup, MARK_CONSENT)))
+        if (Date.now() - consentedAt > 10_000 && (await clickFound(popup, FIND_CONSENT)))
           consentedAt = Date.now()
       }
     },
