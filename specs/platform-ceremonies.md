@@ -757,7 +757,7 @@ REQ-COMMON-18A requires.
   | Public input | Meaning |
   |---|---|
   | token bearer commitment | the commitment the Platform Verifier matches against the verified token attestation |
-  | identity bearer commitment | the commitment the Platform Verifier matches against the verified `/users/me` attestation |
+  | identity bearer commitment | the commitment the Platform Verifier matches against the verified `/2/users/me` attestation |
 
   The Proving Circuit MUST keep the bearer private. The Proving Circuit MUST
   NOT add an Authorization Digest, client identifier, timestamp, endpoint,

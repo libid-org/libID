@@ -71,10 +71,12 @@ same Platform Ceremony Version. The selected Platform Verifier obtains
 attestation authenticity from the Notary Service once for each attestation
 that profile carries. Google carries none, so its path reaches no Notary
 Service and pays no fee; X and GitHub carry two each. The result travels
-back as an accept-or-reject decision plus the authenticated operation domain,
-Authorized Transaction Data, and client identifier, and the Consumer decides
-what that transaction means. [Common §5.1](ceremony-common.md#51-verification-path)
-owns this path.
+back as an accept-or-reject decision plus the verified fields: the recomputed
+Authorization Digest, the authenticated operation domain and Authorized
+Transaction Data, the Platform Ceremony Version, the client identifier, the
+canonical `userId`, the raw handle bytes, and `metadataObservedAt`. The
+Consumer decides what that transaction means.
+[Common §5.1](ceremony-common.md#51-verification-path) owns this path.
 
 The Application, OAuth Bridge, and CCDP Distribution may have different operators.
 The Application controls its frontend and selects its ceremony configuration;
