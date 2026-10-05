@@ -130,8 +130,10 @@ alice._at.company.com.google.handles.link
 
 - REQ-ENS-NAME-01 (upholds SP-ENS-04):
   Platform Labels and Chain Labels MUST be disjoint sets. A Chain Label MUST
-  match `[a-z0-9-]+`. Necessity: the parse below tells the two apart only by
-  membership.
+  match `[a-z0-9-]+`, be at most 63 bytes, and not have `-` as both its third
+  and fourth characters. Necessity: the parse below tells the two apart only
+  by membership, and a Chain Label outside DNS or ENSIP-15 is one no client
+  sends.
 - REQ-ENS-NAME-02 (upholds SP-ENS-04):
   A name MUST be parsed right to left. After the Parent Name's labels, the
   last label is the Platform Label if it is one; otherwise it is the Chain Label and the
@@ -164,14 +166,19 @@ produce unchanged.
 
 - REQ-ENS-LABEL-01 (X):
   The Handle Labels of an X handle are one label: the handle with every `_`
-  replaced by `-`. The transform MUST refuse a handle whose third and fourth
-  characters are both `_`. Necessity: X issues no `-`, so the substitution
-  reverses exactly; the refusal is ENSIP-15's `/^..--/` rule and nothing
-  more.
+  replaced by `-`. The transform MUST refuse a handle containing `-`, and a
+  handle whose third and fourth characters are both `_`. Necessity: the
+  substitution reverses exactly only while no handle holds `-`. X issues
+  none, but a chain's rules can be widened to admit it, and the refusal keeps
+  every name reversible then; the second refusal is ENSIP-15's `/^..--/`
+  rule.
 - REQ-ENS-LABEL-02 (GitHub):
   The Handle Labels of a GitHub handle are one label: the handle unchanged.
-  Necessity: GitHub's rules admit neither `_` nor a doubled `-`, so no
-  ENSIP-15 rule can fire.
+  The transform MUST refuse a handle containing `_`, and a handle whose
+  third and fourth characters are both `-`. Necessity: GitHub issues
+  neither, so no ENSIP-15 rule fires on a GitHub handle; a chain's rules can
+  be widened to admit them, and the refusals keep every name within ENSIP-15
+  then.
 - REQ-ENS-LABEL-03 (Gmail):
   For a Google handle whose domain is `gmail.com`, the Handle Labels are the
   local part split at every `.`. The transform MUST refuse a local part not
@@ -390,7 +397,8 @@ produce unchanged.
 - TEST-ENS-01 (exercises REQ-ENS-LABEL-01 to -05):
   Forward and inverse vectors for each platform round-trip; `a__b` maps to
   `a--b` and `ab__cd` is refused; a Gmail local part with `+`, `-` or `_` is
-  refused; `a.b@c.com` and `a@b.c.com` give different names;
+  refused; the X handle `a-b`, and the GitHub handles `a_b` and `ab--c`,
+  have no name; `a.b@c.com` and `a@b.c.com` give different names;
   `ab--x@company.com` and `alice@xn--bcher-kva.example` have no name.
 - TEST-ENS-02 (exercises REQ-ENS-RES-03, REQ-ENS-GW-08):
   One digest vector reproduces in the Handle Resolver and the Gateway; the
@@ -482,7 +490,7 @@ produce unchanged.
 |---|---|
 | REQ-ENS-RES-01 to RES-04 | `libid-contracts` `solidity/contracts/ens/HandleResolver.sol` |
 | REQ-ENS-RES-05 | `libid-contracts` `scripts/setup-ens-resolver.sh` refuses a URL without both placeholders; the contract does not check |
-| REQ-ENS-NAME-01 to NAME-04 | `usernames-indexer` `crates/usernames-core/src/ens.rs` |
+| REQ-ENS-NAME-01 to NAME-04 | `usernames-indexer` `crates/usernames-core/src/ens.rs`; its `ChainName::parse` accepts a Chain Label longer than 63 bytes or with `--` at the third and fourth characters, which REQ-ENS-NAME-01 refuses |
 | REQ-ENS-LABEL-01 to LABEL-04 | `libID` `ts/packages/ens` (`@libid/ens`, libID PR #109, unmerged): the forward transform for the Parent Name `handles.link` only; it does not refuse a Workspace label with `--` at the third and fourth characters |
 | REQ-ENS-LABEL-05 | `usernames-indexer` `crates/usernames-core/src/ens.rs`, `crates/usernames-core/src/nodes.rs`: the MUST; the SHOULD is not implemented (§11) |
 | REQ-ENS-GW-01 to GW-11 | `usernames-indexer` `bin/usernames-api/src/ens.rs`, `crates/usernames-core/src/ens.rs`; the TTL ceiling of REQ-ENS-GW-08 in `bin/usernames-api/src/lib.rs` |
