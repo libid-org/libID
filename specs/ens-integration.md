@@ -309,10 +309,6 @@ label's third and fourth characters must not both be `-`.
   rejects its answer; a Signer key answers anything; the DNS credentials take
   the whole namespace. Held together, the least guarded one decides all
   three.
-- REQ-ENS-KEY-02 (upholds SP-ENS-01):
-  A Signer MUST NOT be trusted by Handle Resolvers at one address on two
-  chains. Necessity: the digest does not cover a chain ID, so such an answer
-  verifies on both.
 
 ## 10. Conformance
 
@@ -344,6 +340,12 @@ label's third and fourth characters must not both be `-`.
   routing payments that is the whole risk. Removing the Signer is one owner
   transaction; answers already signed stay valid until they expire, at most
   an hour.
+- The digest covers no chain ID, so one Signer may serve Handle Resolvers on
+  several chains. An answer signed for a resolver address then also verifies
+  on a resolver at the same address on another chain that trusts the same
+  Signer, until it expires. That replay returns the answer the Gateway gave,
+  which is wrong only where the two resolvers' Gateways read different
+  Indexed Stores.
 - A user has no onchain claim to the name. It resolves while the Gateway
   runs and the Parent Name points at the Handle Resolver. The binding in the
   `IdentityRegistry` survives either, and is readable without them.
