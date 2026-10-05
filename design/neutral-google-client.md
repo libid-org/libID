@@ -63,7 +63,7 @@ directly.
 
 One Google OAuth client, registered and operated by libID, whose only
 redirect URI is on the Distribution origin. The token lands in the
-Canonical Runtime there; the runtime verifies it, proves the digest
+Prover there; the runtime verifies it, proves the digest
 statement, and returns to the application the proof, the two digests and,
 only if the user chose it on the runtime's own screen, the email. The
 application never holds the token and owns no Google client that could
@@ -266,11 +266,14 @@ Listed, not written; each is a requirement change for its own PR.
   reported by the runtime. The Consumer cannot check that value, so either
   it is committed where the proof binds it, which changes the Authorization
   Digest's fields, or it is recorded as unauthenticated.
-- **REQ-PLAT-03.** Unchanged in substance: the runtime still derives local
-  fields from the verified token; what changes is who receives them.
+- **REQ-PLAT-03 and REQ-PLAT-03A.** REQ-PLAT-03 is unchanged in substance:
+  the Prover still derives local fields from the verified token; what
+  changes is who receives them. The disclosure choice of REQ-PLAT-03A moves
+  from the Application to the runtime's confirmation screen, since the
+  Application receives the email only on the user's yes.
 - **The result.** The runtime returns the proof, the digests and, on the
-  user's yes, the email; never `userId` in plaintext, which the digest
-  profile already stops sending.
+  user's yes, the email; never the `sub`, which the digest profile already
+  stops sending.
 - **SDK and Distribution.** A ceremony entry page and a Google callback on
   the Distribution origin, the confirmation screen, first-party ceremony
   state keyed by `state`, and a return navigation; the application side

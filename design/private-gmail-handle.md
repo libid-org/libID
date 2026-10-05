@@ -2,7 +2,10 @@
 
 **Status: design proposal, with its specification written.** Nothing here
 is built. This note is the rationale; the normative text is on this branch,
-and "Spec changes" below maps it.
+and "Spec changes" below maps it. Where the two differ, the specification
+holds. The gate counts and proving times below were measured at nargo
+1.0.0-beta.25 and bb 5.2.0; libid-circuits v0.6.0 builds with nargo
+1.0.0-rc.3 and bb 6.0.0-rc.2, and nothing was measured there.
 
 ## The thing that must work
 
@@ -107,7 +110,7 @@ the "detached second representation of a claim" REQ-PLAT-16B forbids.
 normalizers that must agree byte for byte or the same address lands on two
 nodes. The plaintext-in-payload option gives the user the same choice with
 one artifact. A public-only circuit would still hash the `sub`, so what it
-saves is the email's fold and keccak: about one second of browser proving
+saves is the email's fold and hash: about one second of browser proving
 out of seven (see "Measured proving time"). In exchange, a disagreement
 between the contract's normalizer and the circuit's would split one address
 across two nodes with nothing to notice it, where the one circuit refuses
@@ -129,8 +132,8 @@ admits, refuses a space rather than trimming it (Google never emits one, and
 REQ-PLAT-08A forbids trimming), requires exactly one `@` with a nonempty side
 on each end as `_hasEmailShape` does (`HandleNormalizer.sol:100-148`), and
 hashes exactly `email_len` bytes of the folded buffer, never the 62-byte
-padded one, so the digest equals `keccak256(bytes(normalizedHandle))` as the
-contract computes it in public mode. This freezes the Google rules of
+padded one, so the digest equals the REQ-PLAT-08M digest the contract
+computes from the normalized handle in public mode. This freezes the Google rules of
 `handles.json` into the circuit: a rules edit without a circuit release makes
 every public claim fail the equality check, which is the enforced form of the
 invariant `IdentityNames.sol:106-112` states in prose, that the key a handle
@@ -150,35 +153,39 @@ uppercase letter splits the namespace silently.
 ### Which hash
 
 The choice decides whether Google's `handleNode` stays what it is today.
+The specification takes the tagged SHA-256 (REQ-PLAT-08M).
 
-**keccak256 of the normalized bytes.** The digest is the inner hash of
-`handleNode` exactly (`IdentityNodes.sol:39-41`), so the node of a private
-claim, a public claim and an ENS lookup is one value.
-The contract, the indexer's node arithmetic (`usernames-core/src/nodes.rs`),
-the TypeScript resolver and the ENS gateway keep their derivation untouched.
-The pinned Noir (`toolchain.env`: nargo 1.0.0-beta.25, bb 5.2.0) has no
-keccak in its standard library; the `noir-lang/keccak256` library at v0.1.3
-compiles under it (v0.1.1, the version vendored locally today, does not: it
-names a `keccakf1600` the pinned standard library no longer has).
+**keccak256 of the normalized bytes.** Not taken. The digest would be the
+inner hash of `handleNode` exactly (`IdentityNodes.sol:39-41`), so the
+contract, the indexer's node arithmetic (`usernames-core/src/nodes.rs`),
+the TypeScript resolver and the ENS gateway would keep their derivation
+untouched. It costs a keccak library in the circuit and the most gates of
+the options measured below.
 
-**SHA-256 of the normalized bytes.** Already in the circuit's dependencies
-and cheaper. But the node's inner hash would then be SHA-256 for Google and
-keccak for everything else, so `IdentityNodes`, the indexer's `nodes.rs`, the
-TypeScript node helpers and the gateway all grow a per-platform case, and
-every Google node changes. One network does deploy `IdentityNames` and the
-Google verifier, eden-testnet (`chain-configurations`
+**SHA-256 of the normalized bytes, tagged.** Taken:
+`SHA256(UTF8("libid.google-handle") || email)`. SHA-256 is already in the
+circuit, which hashes the signing input and, under REQ-PLAT-05A, the
+`sub` with the same construction and the tag `libid.google-user-id`; the
+tag keeps the digest apart from a plain SHA-256 of the address another
+system may publish. The cost is a per-platform inner hash: Google's node
+is derived from a SHA-256 digest and every other platform's from a
+keccak256 one, so `IdentityNodes`, the indexer's `nodes.rs`, the
+TypeScript node helpers and the gateway all grow that case, and every
+Google node changes. The specification makes it a profile constant the
+Consumer configures beside the normalization and freezes with it
+(REQ-PLAT-08L, REQ-PLAT-08G). One network does deploy `IdentityNames` and
+the Google verifier, eden-testnet (`chain-configurations`
 `networks/eden-testnet.toml:66,74`), but nothing is released, so its
-Google bindings are test data redeployed with the new statement rather than
-a namespace to migrate; the case would still be permanent code and
-permanent audit surface.
+Google bindings are test data redeployed with the new statement rather
+than a namespace to migrate.
 
 **Poseidon.** Cheapest in a circuit and no precedent anywhere in libID's
 Solidity, Rust or TypeScript. The contract would compute Poseidon in `_write`
 and `resolveHandle`, and so would the gateway. Not for this design.
 
-Measured on a scratch copy of the circuit at the pinned toolchain, with the
-fold-and-shape loop included in both variants (`nargo compile`, then
-`bb gates --oracle_hash keccak`):
+Measured on a scratch copy of the circuit at nargo 1.0.0-beta.25 and bb
+5.2.0, with the fold-and-shape loop included in both variants (`nargo
+compile`, then `bb gates --oracle_hash keccak`):
 
 | Circuit | ACIR opcodes | Honk gates | Delta |
 |---|---|---|---|
@@ -186,30 +193,31 @@ fold-and-shape loop included in both variants (`nargo compile`, then
 | fold + SHA-256 | 49,918 | 192,254 | +7.1% |
 | fold + keccak256 (library v0.1.3) | 49,911 | 203,878 | +13.6% |
 
-Proving time is measured in "Measured proving time" below. The
-recommendation is keccak256: a seventh more proving work in the browser
-against no change to any node, any reader, or any invariant. SHA-256 is the
-fallback if the browser prover's time budget cannot take it, and then the
-per-platform inner hash is written into the spec as a Google exception.
+Proving time is measured in "Measured proving time" below, for keccak256
+builds only. The specification takes SHA-256 for the email: it reuses the
+hash the `sub` digest already needs and measured fewer gates than
+keccak256, at the price of the per-platform inner hash described above.
 
 ### The account id, `sub`
 
-The same treatment, with the validation moving where the bytes are:
-`sub_hash: pub [Field; 2]` replaces `sub_packed`, keccak256 over the signed
-`sub` bytes exactly as signed, since the spec keeps the id case-sensitive and
-untransformed (`platform-ceremonies.md` §2.1: "its exact 1–31
-case-sensitive ASCII bytes"), so the digest is the inner hash of `idNode`
-(`IdentityNodes.sol:32-34`) and that node does not change either.
+The specification on main already hides the `sub`: the canonical `userId`
+is `SHA256(UTF8("libid.google-user-id") || sub)` (REQ-PLAT-05A), and
+libid-circuits v0.6.0 exposes it as `user_id_hash` with a 31-byte `sub`
+buffer (`oidc-google/src/main.nr:14,51-60,132`). This note first proposed
+keccak256 over the `sub` as `sub_hash`; the analysis below, of what moves
+into the circuit once the verifier sees only a digest, holds for either
+hash. What this design still adds is the backslash refusal: v0.6.0
+refuses only a quote (`main.nr:78-79`).
 
-Today the circuit checks the `sub` bytes against the payload, refuses an
-interior quote and pins the padding to zero (`main.nr:177-192`), and leaves
-emptiness to the verifier, which rejects an empty `userId` after unpacking
+At the time of measurement the circuit checked the `sub` bytes against
+the payload, refused an interior quote and pinned the padding to zero
+(`main.nr:177-192`), and left emptiness to the verifier, which rejects an empty `userId` after unpacking
 (`GooglePlatformVerifier.sol:234`). A verifier that receives a digest can
 inspect nothing, so the circuit takes over the whole of the id's validation,
 which REQ-PLAT-04 already states for every implementation: `sub_len` at
 least 1; every byte within `sub_len` in `0x20` through `0x7e`, so no control
-byte, no non-ASCII byte and, as today, no quote; no backslash, which today's
-circuit accepts and REQ-PLAT-04 now refuses, because every JSON escape
+byte, no non-ASCII byte and no quote; no backslash, which v0.6.0 accepts
+and REQ-PLAT-04 refuses, because every JSON escape
 begins with one and an escaped `sub` would digest its escaped form; the
 padding zero; and the
 digest over exactly `sub_len` bytes. `SUB_MAX` is 31, the profile's bound
@@ -217,7 +225,7 @@ in REQ-PLAT-04, a Google `sub` being 21 digits, and a `sub` longer than it
 fails to prove rather than truncating. That Google issues no longer `sub`
 is part of ASM-PROV-05, a liveness dependency: an account outside it could
 not be bound, and none would be misbound. Raising the bound costs a second
-keccak block. A 32-byte digest needs two field elements where the packed id
+SHA-256 block, since the tag and 31 bytes fill one. A 32-byte digest needs two field elements where the packed id
 needed one, so the public-input count becomes 57 and the offsets after slot
 34 move by one. Measured the same way as above, the two digests together
 cost:
@@ -226,8 +234,10 @@ cost:
 |---|---|---|---|
 | fold + keccak256 of the email, keccak256 of `sub` | 50,375 | 223,582 | +24.6% |
 
-A quarter more proving work than today, against a wallet that no longer
-joins with every relying party's user table.
+A quarter more proving work than the circuit of that time, against a
+wallet that no longer joins with every relying party's user table. Both
+digests are SHA-256 in the specification, and that build was not
+measured.
 
 ### Measured proving time
 
@@ -267,7 +277,8 @@ Witness generation (`noir_js` execute) takes 0.4 s for each. Peak memory
 of the native prover is 293, 324 and 369 MB. Eight threads is no faster
 than four on this four-core machine.
 
-Method: bb.js 5.2.0 and `noir_js` 1.0.0-beta.25 in Node 22 with the proof
+All three builds use keccak256 for both digests. Method: bb.js 5.2.0 and
+`noir_js` 1.0.0-beta.25 in Node 22 with the proof
 worker's settings (`BackendType.Wasm`, `srsSize` 2^18, keccak oracle, ZK,
 a verification key supplied, as the worker supplies the released one), one fresh backend per proof,
 three proofs per cell and seven at four threads; native `bb prove -t evm`
@@ -290,8 +301,9 @@ marked unverified, and returns the two digests the proof bound as new
 bytes, because the check needs the handle normalized and normalization is
 the Consumer's (REQ-PLAT-08B). `IdentityNames._write` is the one place the
 equality holds: it derives both nodes from the digests in both modes; when
-the email is present it normalizes it, requires
-`keccak256(bytes(normalized)) == handleHash`, and only then stores or
+the email is present it normalizes it, requires its REQ-PLAT-08M digest,
+`SHA256("libid.google-handle" || normalized)`, to equal `handleHash`, and
+only then stores or
 emits the handle, normalized. `publishName` without the email reverts. X
 and GitHub verifiers return zero digests and keep the plaintext path they
 have. **Recommended:** one optional payload field, no change to the
@@ -307,7 +319,11 @@ redirect page and the SDK hands it to the application's page, so an
 application operator holds the email and the `sub` whatever any field
 says. The privacy this design buys is therefore against readers of the
 chain, not against a malicious application, and the spec says so
-(SP-PRIV-01 and §4 of `ceremony-common.md`).
+(SP-PRIV-01 and §4 of `ceremony-common.md`). The rule that a Submission
+carries the email only when the user asks binds the Application, which
+builds the Submission (REQ-PLAT-03A); the CCDP Prover only delivers the
+proof and the identity, and must prove in the zero-knowledge mode with
+fresh randomness (REQ-COMMON-45A).
 
 **The choice in the claim's Authorized Transaction Data.** Rejected. It
 would commit a `disclose` flag in the Authorization Digest like the fee,
@@ -456,10 +472,10 @@ no `sub` at all. Client-side normalization
 must produce the bytes the circuit hashes, and `handle.ts` already
 reproduces the shared vector table, so the only new obligation is that the
 circuit input builder feeds the circuit the raw bytes and expects the digest
-of the folded ones. The local result keeps returning the normalized email
-and the `sub` to the application, which holds the token anyway; the
-prover must run in the zero-knowledge mode with fresh randomness
-(REQ-COMMON-45A), which today depends on `prove.worker.ts` setting
+of the folded ones. The local result keeps returning the raw signed email
+as `userName` and the `userId` digest to the application, which holds the
+token anyway; the prover must run in the zero-knowledge mode with fresh
+randomness (REQ-COMMON-45A), which today depends on `prove.worker.ts` setting
 `verifierTarget: 'evm'` and is written down as a requirement instead.
 
 **Demo.** The "publish the handle on chain" checkbox becomes a three-way
@@ -475,49 +491,67 @@ Written, on this branch. The map, for a reader coming from the specs:
   receives. §2.1b defines, for every platform, the identity key and handle
   key and what holding a handle means (REQ-PLAT-08H, 08I: keys from the
   inner digests only, and retirement), and the per-platform name
-  (REQ-PLAT-08J, 08K: written only by a claim carrying the handle that asks
-  to publish or renames the named account, by the disclosure call, or
-  cleared by withdrawal; read only while the wallet holds it), with
-  TEST-PLAT-20B. For a digest profile it defines the profile, the Consumer's
-  configured record of it (08L), that its `userId` is never sent, what
-  "carries" means (a nonempty field), disclosure (history) and publication
-  (state), and holds REQ-PLAT-08D (keys from the digests, a handle accepted
+  (REQ-PLAT-08J, 08K: written only by a claim whose binding the Consumer
+  writes, which carries the handle and asks to publish or renames the
+  named account, by the disclosure call, or cleared by withdrawal; read
+  only while the wallet holds it), with TEST-PLAT-20B. It defines what
+  "carries" means on every platform (an X or GitHub claim always carries
+  its revealed handle, a digest-profile claim when its field is nonempty)
+  and places the publish request in the Consumer's call, outside the
+  Submission Payload and the Authorized Transaction Data, as `bind`'s
+  `publish` argument is. REQ-PLAT-08M fixes each profile's handle-digest
+  construction: keccak256 for a profile that exposes bytes, and for Google
+  `SHA256("libid.google-handle" || email)`. For a digest profile it defines
+  the profile, the Consumer's configured record of it and of its
+  handle-digest construction (08L), that its account identifier, the
+  `sub`, is never sent, disclosure (history) and publication (state), and
+  holds REQ-PLAT-08D (keys from the digests, a handle accepted
   only when it hashes to its digest), 08E (the disclosure call on the handle
   alone, accepted only when the caller holds it, and what a refusal does
   not protect), 08F (the event's flags, the normalized handle where one was
-  carried, never the `sub`), 08G (the published handle table, fixed once a
-  digest platform has bound anything) and TEST-PLAT-20A. §7 requires a new
-  profile to say whether it is a digest profile.
+  carried, never the `sub`), 08G (the published handle table and the
+  handle-digest construction, fixed once a digest platform has bound
+  anything) and TEST-PLAT-20A. §7 requires a new profile to say whether it
+  is a digest profile, and its construction if so.
   REQ-PLAT-03 and TEST-PLAT-17 name the ID Token as a digest profile's
-  local source; REQ-PLAT-04 and the §2.1 table bound a Google `sub` at 31
+  local source, with the delivered handle raw; REQ-PLAT-03A gives the
+  disclosure choice to the Application, which builds the Submission, since
+  the CCDP Prover builds none; REQ-PLAT-04 and the §2.1 table bound a Google `sub` at 31
   bytes and refuse a backslash, both checked on the signed bytes; REQ-PLAT-16B lists the two digests as
-  public inputs; 16C has the verifier return them, pass the email through
-  unchecked, and carry no `sub`; 16D moves the `sub` and `email` validation
-  into the circuit and states the 31- and 62-byte buffers; TEST-PLAT-06A
+  public inputs; 16C moves the `sub` and `email` validation into the
+  circuit and states the 31- and 62-byte buffers; 16D has the verifier
+  return the digests, pass the email through unchecked, store and emit no
+  email, and carry no `sub`; §3.3 states that version 1 is implementable
+  only once a libid-circuits release enforces it; TEST-PLAT-06A
   exercises the three; §9 states what the digests protect and what they do
   not. The Google profile stays Platform Ceremony Version 1: nothing is
   released, so its statement is edited in place.
 - `ceremony-common.md`: the digest profile as a term; ASM-PROV-05 gains the
   Google `sub` shape as a liveness clause; ASM-HASH-01, ASM-ZK-01 (the
-  zero-knowledge proving mode), SP-PRIV-01 (the Consumer puts on chain only what a transaction
-  carried, and no `sub`), with §4 stating that it does not survive a
-  malicious application operator; REQ-COMMON-05E returns the digests, and
+  zero-knowledge proving mode), SP-PRIV-01 (the Consumer, the Proof
+  Verifier and the Platform Verifier emit or store only what a transaction
+  carried, and no account identifier), with §4 stating that it does not
+  survive a malicious application operator or CCDP Distribution; REQ-COMMON-05E returns the digests, and
   the handle marked unverified, where a profile exposes digests;
   REQ-COMMON-45 and 45A have governance select zero-knowledge artifacts and
-  the Canonical Runtime prove in that mode with fresh randomness from a
-  cryptographically secure source; REQ-COMMON-19E treats a digest profile's
+  the Canonical Runtime (its Prover) prove in that mode with fresh
+  randomness from a cryptographically secure source, which TEST-COMMON-22A
+  checks; REQ-COMMON-19E treats a digest profile's
   plaintext handle as a comparison, not an extraction, and lets the
   Canonical Runtime read the signed token the Submission's proof digests;
+  the account identifier is the term for the value a `userId` is derived
+  from, Google's `sub`;
   §12 replaces "published deliberately" for the handle and user identifier
   with what a digest profile keeps off the chain and its limits.
-- `libid.md`: one sentence among the enforceable guarantees, and the
-  application operator's row in the trust table, which now includes
-  whether a Google handle is sent.
+- `libid.md`: sentences among the enforceable guarantees, and the
+  application operator's and CCDP Distribution's rows in the trust table:
+  the first decides whether a Google handle is sent, the second's Prover
+  holds the ID Token and must prove in the zero-knowledge mode.
 
 ## The recommendation
 
-Hash in the circuit, normalize in the circuit, keccak256 over the email and
-over `sub`, the mode set by the presence of the email in the payload and
+Hash in the circuit, normalize in the circuit, the tagged SHA-256 over the
+email and over `sub`, the mode set by the presence of the email in the payload and
 the `sub` never sent, private by default for Google alone, `publish` to go public later, ENS forward names
 resolving for private bindings as for public ones, and the resolve routes as
 they are. This is the one combination where neither the email nor the
@@ -536,9 +570,11 @@ which receives the ID Token and can send the address itself.
    that the trim rows do not apply to the circuit, which refuses a space
    instead. Done when a reader can follow the new property to its
    requirements and its test.
-2. **Circuit** (`libid-circuits`): the fold-and-shape loop, the keccak
-   library, `handle_hash` in place of `email_packed` and `sub_hash` in place
-   of `sub_packed`, a gate count in the commit. Done when `Alice@Gmail.com`
+2. **Circuit** (`libid-circuits`): the fold-and-shape loop, `handle_hash`,
+   the tagged SHA-256 of the normalized email, in place of `email_packed`,
+   the backslash refusal beside the quote refusal on the `sub` that
+   `user_id_hash` digests, a gate count in the commit, and a release whose
+   artifacts the ceremony can pin. Done when `Alice@Gmail.com`
    and `alice@gmail.com` prove the same digest, and a space, two `@`, an
    empty local part and a garbage tail each fail to prove, as does a `sub`
    holding a backslash.
@@ -547,12 +583,14 @@ which receives the ID Token and can send the address itself.
    the equality check and the hash-derived nodes in `_write`; `_write`
    storing the name only for a claim carrying the handle that asks to
    publish or whose account's handle is the current name
-   (`idOfHandle[node(name)] == idNode`), never for a private claim or a
-   claim of another account; `disclosed` in the event;
+   (`idOfHandle[node(name)] == idNode`), and only when it writes the
+   binding, never for a private claim, a claim of another account, or
+   evidence not newer than the binding; `disclosed` in the event;
    `publish(platformId, handle)` accepted only when the caller owns the
-   handle's node; a per-platform digest-profile flag beside the rules in
-   `setPlatform`, checked against every verifier result; `setPlatform`
-   refusing a Google rules change once Google has bound anything; the
+   handle's node; a per-platform digest-profile flag and handle-digest
+   construction beside the rules in `setPlatform`, the flag checked
+   against every verifier result; `setPlatform` refusing a Google rules or
+   construction change once Google has bound anything; the
    circuit pin. Done when
    the same account claimed public and then private lands on the same two
    nodes; when a private transaction, made with recognizable test values,
@@ -609,12 +647,18 @@ one platform and has one name there, which no claim of another account
 and no private claim writes, and which reads as a name only while the
 wallet holds it; the application chooses whether a
 claim carries the email, and the privacy is against readers of the chain,
-not against a malicious application; Google's handle rules
-are fixed once Google has bound anything; and the proof is made in the
+not against a malicious application; the email and the `sub` are both
+hidden with a tagged SHA-256; Google's handle rules and handle-digest
+construction are fixed once Google has bound anything; and the proof is made in the
 zero-knowledge mode with fresh randomness, which the privacy rests on as
 much as on the hash.
 
-Nothing in this note is left open.
+One thing is open: no published libid-circuits release enforces the
+Google version 1 statement. v0.6.0 exposes the email bytes as
+`email_packed`, normalizes nothing, and admits a backslash in the `sub`
+(`oidc-google/src/main.nr:78-79,133`), so the profile is implementable
+only once a release that enforces REQ-PLAT-16B and REQ-PLAT-16C publishes
+its artifacts (platform §3.3).
 
 The indexer and the deployer derive nodes and platform ids from the same
 generated table the contract's constants come from (`libid-identity`
@@ -650,6 +694,9 @@ unless a revision is named; spec references are against `libid`
   (500-542), `src/nodes.rs` (241-243, 302-320); `bin/usernames-api/src/ens.rs`
   (416). `chain-configurations` at `origin/main` `f15832a`:
   `bin/libid-deploy/src/platforms.rs` (174-206).
+- `libid-circuits` `v0.6.0`, `circuits/oidc-google/src/main.nr`:
+  `SUB_MAX` (14), `user_id_digest` (51-60), the `sub` byte check (78-79),
+  public inputs (127-135).
 - Gate counts: `nargo info` and `bb gates` on scratch copies of the circuit
   at nargo 1.0.0-beta.25 and bb 5.2.0, with `noir-lang/keccak256` v0.1.3.
 - Proving times: `libid-circuits` `origin/main` `e59b804`, the three builds
