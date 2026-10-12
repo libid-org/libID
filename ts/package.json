@@ -19,10 +19,5 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "oxlint": "^1.86.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }
