@@ -2,6 +2,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
 import specMarkdown from './src/spec-markdown.mjs';
+import { tagline } from './src/tagline.mjs';
 
 export default defineConfig({
   site: 'https://lib.id',
@@ -9,7 +10,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'libID',
-      description: 'Every social account is already a multichain identity.',
+      description: tagline,
       favicon: '/favicon.svg',
       head: [
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://lib.id/og.png' } },

@@ -1,6 +1,5 @@
 ---
 title: Introduction
-description: Every social account is already a multichain identity.
 ---
 
 Every social account is already a multichain identity.
