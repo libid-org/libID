@@ -7,7 +7,7 @@ The host needs no ceremony server, request-time compilation or asset downloads.
 
 ## Build and serve
 
-From the repository root, with Node 24+, pnpm and Docker:
+From the repository root, with Node 26+, pnpm and Docker:
 
 ```sh
 pnpm -C ts install --frozen-lockfile
