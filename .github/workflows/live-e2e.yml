@@ -1,0 +1,112 @@
+name: Live end-to-end
+
+# Binds a real platform identity from the browser UI to a mined transaction:
+# real OAuth sign-in, real notary, in-browser proving, the real libID contracts
+# on a local anvil with Google's keys rotated in by the keeper, and the
+# indexer. Not a required check: it depends on the platforms, their test
+# accounts and the network.
+#
+# Every third-party action is pinned by commit SHA, with the tag in a comment.
+
+on:
+  pull_request:
+    paths:
+      - "ts/**"
+      - ".github/workflows/live-e2e.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * *"
+
+# One run per pull request, a newer push replacing an older run; scheduled
+# and dispatched runs queue in a group of their own. Runs of different groups
+# overlap on the platforms' test accounts, which hold concurrent sign-ins:
+# each run binds on its own chain, and a rate-limited login backs off.
+concurrency:
+  group: live-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  bind:
+    name: GitHub and X bindings (live)
+    # A pull request from a fork or from Dependabot gets no secrets, so it
+    # does not run.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    # The test step's budget plus setup, the secret scan and the upload.
+    timeout-minutes: 55
+    env:
+      # A missing secret fails the run instead of skipping the test.
+      LIBID_REQUIRE_LIVE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ts
+
+      - name: Install Chromium
+        run: pnpm -C ts --filter @libid/bind exec playwright install --with-deps chromium
+
+      # Google is left out: it challenges a saved session arriving from a
+      # runner's address ("Verify it's you"), which no automation passes. Its
+      # test still runs locally, and the stack rotates no Google keys here.
+      # Its own timeout, so a run that hangs still reaches the steps below:
+      # the stack's 15-minute start, two tests of 12 minutes, and 2 minutes
+      # to stop the stack (playwright.live.config.ts), with room to spare.
+      - name: Bind GitHub and X identities end to end
+        id: test
+        timeout-minutes: 45
+        env:
+          LIBID_LIVE_PLATFORMS: github,x
+          LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
+          GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
+          GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
+          GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
+          X_TEST_ALICE_USERNAME: ${{ secrets.X_TEST_ALICE_USERNAME }}
+          # The saved X session, base64 of `ceremony export x` from
+          # libid-server-rs' ceremony-tests (branch feat/live-ceremony-tests,
+          # libid-server-rs PR #12).
+          X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
+        run: pnpm -C ts/apps/bind test:live
+
+      # The artifact is public. Screenshots, Playwright's error notes and the
+      # stack's log go up only when the scan finds none of the test accounts'
+      # secrets in them. The scan reads bytes, not pixels: a screenshot shows
+      # what the page showed, and the pages driven never display the password,
+      # the TOTP secret or a session cookie. The job log carries none of the
+      # stack's output (playwright.live.config.ts).
+      # A timed-out test step counts too; a cancelled run uploads nothing.
+      - name: Check the failure output for secrets
+        id: scan
+        if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
+        env:
+          # A session that is not configured is nothing to look for.
+          LIBID_REQUIRE_LIVE: ""
+          GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
+          GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
+          X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
+        # A stack the test step left running stops first, so nothing writes to
+        # the log after it is scanned; what goes up is the copy scanned.
+        run: |
+          docker compose ls -q --all --filter name=libid-bind |
+            xargs -r -I{} docker compose -p {} down --volumes
+          if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
+          node ts/apps/bind/e2e/scan-secrets.ts ts/apps/bind/test-results "$RUNNER_TEMP/stack-scanned.log"
+
+      - name: Keep the screenshots and container logs
+        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: live-e2e
+          path: |
+            ts/apps/bind/test-results/**/*.png
+            ts/apps/bind/test-results/**/*.md
+            ${{ runner.temp }}/stack-scanned.log
+          retention-days: 14
+          if-no-files-found: ignore

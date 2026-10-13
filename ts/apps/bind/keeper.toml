@@ -1,0 +1,10 @@
+# The keeper's one rotation on the local chain, run by stack.ts after deploy.
+notary_url = "tcp://notary:7047"
+# anvil account #3: funded, and not one the deploy or the tests use. A public
+# test key.
+signer = "7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"
+
+[[networks]]
+name = "local"
+rpc_url = "http://anvil:8545"
+google_jwt_roots = "0xb7a2ce28e71dbb9c877d2b5a48de33b5f0e6838d"

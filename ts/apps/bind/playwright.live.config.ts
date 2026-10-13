@@ -1,0 +1,48 @@
+import { readFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { parseEnv } from 'node:util'
+import { defineConfig, devices } from '@playwright/test'
+import { APP_ORIGIN } from './local.ts'
+
+// Test secrets from a dotenv file when LIBID_TEST_ENV_FILE names one; values
+// already in the environment win. Nothing is printed.
+const envFile = process.env.LIBID_TEST_ENV_FILE
+if (envFile) {
+  process.env.LIBID_TEST_ENV_DIR ??= dirname(envFile)
+  for (const [name, value] of Object.entries(parseEnv(readFileSync(envFile, 'utf8'))))
+    process.env[name] ??= value
+}
+
+/** Live: real platforms, real notary, real chain. */
+export default defineConfig({
+  testDir: 'e2e',
+  testMatch: '*.live.spec.ts',
+  workers: 1,
+  // Each test: the popup driver's 3 minutes and the page's 8-minute outcome wait.
+  timeout: 12 * 60_000,
+  reporter: [['list']],
+  // One command: start the stack and the app, test, then stop both. A stack
+  // already running locally is reused.
+  webServer: {
+    command: 'pnpm dev',
+    url: APP_ORIGIN,
+    reuseExistingServer: !process.env.CI,
+    timeout: 15 * 60_000,
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 120_000 },
+    // CI keeps the stack's output off the public job log: the stack writes
+    // it to LIBID_STACK_LOGS, which is scanned before upload.
+    stdout: process.env.CI ? 'ignore' : 'pipe',
+  },
+  use: {
+    ...devices['Desktop Chrome'],
+    baseURL: APP_ORIGIN,
+    headless: !process.env.HEADED,
+    // Automation X and Google can see makes them challenge; see e2e/person.ts.
+    launchOptions: { args: ['--disable-blink-features=AutomationControlled'] },
+    // A trace records every fill and cookie, the test accounts' password and
+    // sessions included, so CI keeps screenshots only.
+    trace: process.env.CI ? 'off' : 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: process.env.CI ? 'off' : 'retain-on-failure',
+  },
+})
