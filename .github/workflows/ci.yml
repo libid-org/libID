@@ -31,6 +31,7 @@ jobs:
     outputs:
       workspaces: ${{ steps.paths.outputs.workspaces }}
       image: ${{ steps.paths.outputs.image }}
+      site: ${{ steps.paths.outputs.site }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,6 +49,7 @@ jobs:
           if [ "$EVENT_NAME" != "pull_request" ]; then
             echo 'workspaces=["popup","ceremony","dev"]' >> "$GITHUB_OUTPUT"
             echo "image=true" >> "$GITHUB_OUTPUT"
+            echo "site=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
@@ -62,9 +64,12 @@ jobs:
           if changed "$ceremony|^ts/apps/dev/"; then workspaces+=(dev); fi
           image=false
           if changed "$ceremony"; then image=true; fi
+          # The site, the docs and specs it renders through symlinks, and CI itself.
+          site=false
+          if grep -qE '^(site/|docs/pages/|specs/|\.github/workflows/ci\.yml)' <<<"$files"; then site=true; fi
           json=$(jq -cn '$ARGS.positional' --args "${workspaces[@]}")
-          echo "Browser workspaces: $json; CCDP image: $image"
-          { echo "workspaces=$json"; echo "image=$image"; } >> "$GITHUB_OUTPUT"
+          echo "Browser workspaces: $json; CCDP image: $image; site: $site"
+          { echo "workspaces=$json"; echo "image=$image"; echo "site=$site"; } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # TypeScript: build, tests, complete source/test/build-script type checking,
@@ -191,6 +196,41 @@ jobs:
   # event's commit range — no marketplace action, so there is nothing to pin
   # and nothing to compromise.
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Site: Workers Builds only builds main, so build the site and run its checks
+  # on pull requests that can affect it, before a broken build reaches production.
+  # ---------------------------------------------------------------------------
+  site:
+    name: Site
+    needs: [changes]
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # pnpm before setup-node: `cache: pnpm` shells out to pnpm.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.25.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26 # Workers Builds' NODE_VERSION (site/README.md).
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm -C site install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -C site build
+
+      - name: Test
+        run: pnpm -C site test
+
   dco:
     name: DCO
     runs-on: ubuntu-latest
