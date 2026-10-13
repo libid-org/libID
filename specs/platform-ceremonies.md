@@ -68,8 +68,14 @@ REQ-COMMON-15A.
   or Notary Service deployment. Before accepting that platform and version
   pair, the Verifier Governance Process MUST select a conforming Platform
   Verifier artifact and, for a TLSNotary profile, a compatible Notary Service.
-  Necessity: chain artifacts implement the versioned ceremony boundary; they
-  do not define it.
+  A version identifies its statement within one set of canonical Platform
+  Verifier addresses. Within that set, a changed statement MUST take a new
+  version. A new set of canonical addresses MAY restate an existing version
+  with a different statement; the previous set is then retired. The
+  restated statement MUST NOT accept a proof or Submission Payload made for
+  the previous one, since the digest binds no Platform Verifier address
+  (common §12). Necessity: chain artifacts implement the versioned ceremony
+  boundary; they do not define it.
 - REQ-PLAT-01B:
   The Canonical Runtime MUST identify a profile with the exact
   `(identityPlatform, platformCeremonyVersion)` pair its platform section

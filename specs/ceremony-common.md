@@ -52,7 +52,10 @@ Platform Ceremony Version: The unsigned 16-bit `platformCeremonyVersion`
    construction, OAuth construction, platform-specific proof statement, and
    protocol parameter values. The digest binds it, so it is the same number on
    every Consumer Chain. It identifies no Platform Verifier implementation and
-   is not a routing key.
+   is not a routing key. It identifies its statement within one set of
+   canonical Platform Verifier addresses. A new set of canonical addresses
+   may restate a version; the previous set is then retired (platform
+   REQ-PLAT-01A).
 
 Verifier Version: The unsigned 16-bit key under which a Consumer Chain's
    Verifier Governance Process registers one Platform Verifier for one
@@ -230,8 +233,8 @@ Attestation Count: The number of entries in the closed attestation list a
   A proof accepted under the verifier artifact selected for its platform and
   version pair satisfies that Platform Profile's complete proof statement.
   Verifier governance MAY replace an artifact only with one that enforces the
-  same statement; changing the statement requires a new Platform Ceremony
-  Version.
+  same statement. Within one set of canonical Platform Verifier addresses,
+  changing the statement requires a new Platform Ceremony Version.
 - ASM-BROWSER-01:
   The Canonical Runtime executes unmodified, and the user agent enforces the
   same-origin policy over authorization responses.
@@ -380,7 +383,7 @@ platform-specific proof statement, and its protocol parameter values. It is
 the only version the digest binds.
 The Verifier Version a Consumer Chain routes on is not in the digest, so a
 proof made for one ceremony version is acceptable at every Platform Verifier
-implementing it.
+implementing it under the same canonical addresses.
 
 - REQ-COMMON-01B (upholds SP-BIND-01):
   The Proof Verifier MUST reject a Submission whose identity platform and
@@ -1588,7 +1591,12 @@ Replay within one Consumer deployment is prevented by `authorizationNonce`
 and REQ-COMMON-03. Replay across Consumer Chains whose Chain Profiles use
 distinct canonical identifier bytes is prevented by the Chain ID in the
 digest; a profile collision forfeits that separation. Replay across Platform Ceremony Versions is prevented by
-`platformCeremonyVersion`. The digest does not bind the Verifier Version, so
+`platformCeremonyVersion`. A version restated under new canonical Platform
+Verifier addresses (platform REQ-PLAT-01A) has the same number, and the
+digest binds no Platform Verifier address, so neither separates the two.
+Their statements do: the two have different verification keys and payload
+encodings. A proof made for one does not verify under the other's circuits,
+and its payload does not decode as the other's. The digest does not bind the Verifier Version, so
 a proof is acceptable at every Verifier Version implementing its ceremony
 version; REQ-COMMON-03 prevents replay among them. The digest does not prevent cross-deployment replay
 because it binds no Consumer identifier. Every Consumer transaction
