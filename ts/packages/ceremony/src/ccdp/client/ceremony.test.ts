@@ -571,9 +571,9 @@ function checkCreationTypes(client: CCDPClient) {
       const platform: 'google' = result.identity.platformId
       const proof: Uint8Array = result.oauthProof.proof.identityProof
       // @ts-expect-error Retained operation inputs are not returned in OAuthProof.
-      result.oauthProof.transactionData
+      result.oauthProof.transactionData // oxlint-disable-line no-unused-expressions -- type-level assertion
       // @ts-expect-error Identity is not embedded in the platform proof.
-      result.oauthProof.proof.identity
+      result.oauthProof.proof.identity // oxlint-disable-line no-unused-expressions -- type-level assertion
       return { platform, proof }
     })
 }

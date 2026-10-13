@@ -34,5 +34,7 @@ export function reportFailure(
   }
   try {
     console.error('[ceremony] failure report unavailable')
-  } catch {}
+  } catch {
+    /* Logging is best-effort too. */
+  }
 }

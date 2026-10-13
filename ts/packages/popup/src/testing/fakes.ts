@@ -144,7 +144,9 @@ export function fakePair(popupOrigin = POPUP_ORIGIN, applicationOrigin = APP_ORI
     return proxy
   }
   // Each proxy stamps the *sender's* identity as `source`.
+  // oxlint-disable-next-line prefer-const -- the two proxies reference each other
   let appProxy!: FakeProxy
+  // oxlint-disable-next-line prefer-const -- the two proxies reference each other
   let popupProxy!: FakeProxy
   const popupOriginNow = () => state.popupOrigin
   popupProxy = makeProxy(
