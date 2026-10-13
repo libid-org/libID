@@ -1,7 +1,7 @@
 ---
 import ThemeProvider from '../components/ThemeProvider.astro';
 import { palettes } from '../palette.mjs';
-import { tagline, taglineLines } from '../tagline.mjs';
+import { tagline } from '../tagline.mjs';
 import libronFont from '../assets/libron/Libron-Regular.woff2?url';
 import '../styles/home.css';
 ---
@@ -37,7 +37,7 @@ import '../styles/home.css';
     </button>
     <main>
       <h1 class="wordmark">libID</h1>
-      <p class="description">{taglineLines[0]}<br class="wide-break"> {taglineLines[1]}</p>
+      <p class="description">{tagline}</p>
       <nav aria-label="Explore libID">
         <a href="/docs/">Docs</a>
         <a href="/specs/">Specs</a>

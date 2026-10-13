@@ -26,7 +26,7 @@ h1 { margin: 0; font-size: clamp(2.5rem, 8vw, 4rem); font-weight: 400; }
 }
 
 .description {
-  max-width: 38rem;
+  max-width: 24em;
   margin: 1.8rem auto 0;
   color: var(--muted);
   font-size: clamp(1rem, 1.8vw, 1.125rem);
@@ -84,6 +84,5 @@ nav a:hover, nav a:focus-visible { text-decoration-color: currentColor; }
 .theme-toggle[aria-pressed="true"] { color: var(--text); }
 
 @media (max-width: 480px) {
-  .wide-break { display: none; }
   .theme-toggle { top: 1rem; right: 1rem; }
 }
