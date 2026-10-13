@@ -88,9 +88,10 @@ REQ-COMMON-15A.
   Platform Profile's canonical sources in the evidence it returns.
   Those fields are not an authority decision; only the Consumer's
   acceptance of the resulting Submission is. For X and GitHub, the Prover
-  MUST parse the exact revealed identity-response bytes that the
-  Platform Verifier extracts, using the same canonical extraction rules.
-  The delivered handle remains raw; a local normalized display value follows
+  MUST read the identity fields from the exact identity-response bytes its
+  attestation commits at the ranges the Platform Verifier frames, which are
+  the bytes the proof opens.
+  The delivered handle remains raw; a local folded display value follows
   REQ-PLAT-08C and does not replace it. The Prover MUST take `metadataObservedAt`
   from the profile's evidence-time source in §2.2, not from a detached identity value.
   The Prover MUST reject a caller-supplied or detached value used as an
@@ -734,11 +735,12 @@ REQ-PLAT-56A does not forbid.
 
 ### 5.3 Identity request
 
-`GET https://api.x.com/2/users/me` with no query. The request carries these
-four headers, in any order, and may carry others: `authorization: Bearer
-<access_token>`, `accept: application/json`, `host: api.x.com`, and
-`connection: close`. The Platform Verifier compares the request line and the
-`authorization` line, refuses the names common REQ-COMMON-39B forbids, and
+`GET https://api.x.com/2/users/me` with no query and no body. The request
+carries these four headers, in any order, and may carry others:
+`authorization: Bearer <access_token>`, `accept: application/json`,
+`host: api.x.com`, and `connection: close`. The Platform Verifier compares
+the request line, the `authorization` line, and the `host` line under common
+REQ-COMMON-39D, refuses the names common REQ-COMMON-39B forbids, and
 compares no other header.
 
 Per common §9, the identity session reveals exactly these request ranges;
@@ -754,42 +756,51 @@ The two ranges account for the request's signed transcript length exactly,
 with no gap and no overlap, per common REQ-COMMON-35 and REQ-COMMON-36, so
 the request leaves no byte undisclosed and uncommitted.
 
-The response direction reveals exactly these ranges; every other response
+The response direction reveals only the anchors around the two identity
+values. Each value is its own committed range, and every other response
 byte stays behind a range commitment of the pinned attestation format:
 
 | Range | Revealed | Why |
 |---|---|---|
-| `"id":"`, the `data.id` value, and its closing quote | yes | the Platform Verifier extracts the canonical `userId` from these bytes per REQ-PLAT-31 |
-| `"username":"`, the `data.username` value, and its closing quote | yes | the Platform Verifier extracts the raw handle bytes from these bytes per REQ-PLAT-31 |
+| `"id":"` and, after the value, its closing quote | yes | anchor the committed `id` range per REQ-PLAT-31 |
+| the `data.id` value | committed | its own range commitment, opened only in circuit (REQ-PLAT-32D) |
+| `"username":"` and, after the value, its closing quote | yes | anchor the committed `username` range per REQ-PLAT-31 |
+| the `data.username` value | committed | its own range commitment, opened only in circuit (REQ-PLAT-32D) |
 | everything else | no | status line, headers, display name, and every other response field |
 
-Each revealed range carries its own full delimiter, so the value the Platform Verifier
-reads is that field's value rather than a substring of a neighboring
-one. Every committed range of this direction is bounded by a revealed
-delimiter on each side that faces one, and by the signed transcript boundary
-of common REQ-COMMON-36 at the two ends, which is the anchoring common
-REQ-COMMON-18A requires.
+Every committed range of this direction is bounded by a revealed delimiter
+on each side that faces one, and by the signed transcript boundary of common
+REQ-COMMON-36 at the two ends, which is the anchoring common REQ-COMMON-18A
+requires.
 
 - REQ-PLAT-59 (upholds SP-BIND-01):
   The Implementation MUST reveal the full `"id":"` and `"username":"`
-  delimiters, their values, and their closing quotes in the `/2/users/me`
-  response. The Implementation MUST redact every other response byte behind
-  a range commitment. Necessity: REQ-PLAT-31 reads both fields out of
-  revealed response bytes, and a session revealing no response range at all
-  leaves it nothing to read.
+  delimiters and their closing quotes in the `/2/users/me` response, and
+  MUST commit each value, exactly the bytes between its delimiter and its
+  closing quote, as its own range. The Implementation MUST redact every
+  other response byte behind a range commitment. Necessity: the anchors are
+  what tell the Platform Verifier which commitments hold the identity, and a
+  revealed value would put the id and handle on the Consumer Chain.
 - REQ-PLAT-31 (upholds SP-BIND-01):
-  The Platform Verifier MUST extract `id` and `username` from the revealed
-  response bytes by their full `"field":"` delimiters, rejecting a transcript
-  in which either delimiter matches at more than one position, per common
-  REQ-COMMON-19A. Necessity: the response carries account-holder-influenced
-  text, such as the display name, that can embed a lookalike field.
+  The Platform Verifier MUST find the `id` commitment and the `username`
+  commitment by their anchors: for each field, the one range commitment
+  that starts where a revealed range ending with the full `"field":"`
+  delimiter ends, and that is followed by a revealed `"`. The Platform
+  Verifier MUST reject a transcript in which either delimiter matches at
+  more than one position of the revealed bytes, per common REQ-COMMON-19A,
+  or in which no commitment, or more than one, is so framed. The Platform
+  Verifier MUST pass those two commitments to the proof as REQ-PLAT-32B
+  fixes. Necessity: the response carries account-holder-influenced text,
+  such as the display name, that can embed a lookalike field. A second copy
+  of a delimiter hidden inside a committed range is invisible to that scan;
+  ASM-PROV-06 is what excludes it.
 - REQ-PLAT-31A (upholds SP-BIND-01):
-  The Prover MUST derive the X `userId` and raw handle from
-  those same revealed `id` and `username` bytes, by the same algorithm
-  REQ-PLAT-31 fixes. That derivation is the repeat common REQ-COMMON-19E
-  permits, and the extraction of REQ-PLAT-31 is the authoritative one. The
-  Proving Circuit MUST NOT expose a second independently supplied
-  representation of either identity field.
+  The Prover MUST derive the X `userId` and raw handle from the bytes of
+  the `id` and `username` commitments REQ-PLAT-31 frames, which are the
+  bytes it opens in the proof. The Proving Circuit's opening is the
+  authoritative extraction under common REQ-COMMON-19E; the Prover's is the
+  repeat it permits. The Proving Circuit MUST NOT expose a second
+  independently supplied representation of either identity field.
 - REQ-PLAT-32 (upholds SP-EXCHANGE-01):
   The Proving Circuit MUST assert that one private bearer value opens the
   bearer commitment of the token attestation and the `Authorization` bearer
@@ -1155,15 +1166,15 @@ notary authenticity, and bearer-link verification remain required.
 
 ### 6.5 Identity request
 
-`GET https://api.github.com/user` with no query. The request carries these
-six headers, in any order, and may carry others:
+`GET https://api.github.com/user` with no query and no body. The request
+carries these six headers, in any order, and may carry others:
 `authorization: Bearer <access_token>`, `accept: application/vnd.github+json`,
 `x-github-api-version: 2022-11-28`, `host: api.github.com`,
 `connection: close`, and a `user-agent` of the Canonical Runtime's choosing,
 which GitHub requires of every API request and answers `403` without. The
-Platform Verifier compares the request line and the `authorization` line,
-refuses the names common REQ-COMMON-39B forbids, and compares no other
-header.
+Platform Verifier compares the request line, the `authorization` line, and
+the `host` line under common REQ-COMMON-39D, refuses the names common
+REQ-COMMON-39B forbids, and compares no other header.
 
 Per common §9, the identity session reveals exactly these request ranges;
 the bearer value is the only committed request range, and every other
@@ -1178,51 +1189,57 @@ The two ranges account for the request's signed transcript length exactly,
 with no gap and no overlap, per common REQ-COMMON-35 and REQ-COMMON-36, so
 the request leaves no byte undisclosed and uncommitted.
 
-The response direction reveals exactly these ranges; every other response
+The response direction reveals only the anchors around the two identity
+values. Each value is its own committed range, and every other response
 byte stays behind a range commitment of the pinned attestation format:
 
 | Range | Revealed | Why |
 |---|---|---|
-| `"id":`, the `id` integer token, and the structural byte after it, which is `,` or `}` | yes | the Platform Verifier extracts the canonical `userId` from these bytes per REQ-PLAT-51 |
-| `"login":"`, the `login` value, and its closing quote | yes | the Platform Verifier extracts the raw handle bytes from these bytes per REQ-PLAT-51 |
+| `"id":` and, after the digits, the structural byte that ends them, `,` or `}` | yes | anchor the committed `id` range and prove it is the whole number per REQ-PLAT-51 |
+| the `id` integer token's digits | committed | its own range commitment, opened only in circuit (REQ-PLAT-52C) |
+| `"login":"` and, after the value, its closing quote | yes | anchor the committed `login` range per REQ-PLAT-51 |
+| the `login` value | committed | its own range commitment, opened only in circuit (REQ-PLAT-52C) |
 | everything else | no | status line, headers, and every other response field |
 
-Each revealed range carries its own full delimiter, so the value the Platform Verifier
-reads is that field's value rather than a substring of a neighboring
-one. Every committed range of this direction is bounded by a revealed
-delimiter on each side that faces one, and by the signed transcript boundary
-of common REQ-COMMON-36 at the two ends, which is the anchoring common
-REQ-COMMON-18A requires.
+Every committed range of this direction is bounded by a revealed delimiter
+on each side that faces one, and by the signed transcript boundary of common
+REQ-COMMON-36 at the two ends, which is the anchoring common REQ-COMMON-18A
+requires.
 
 - REQ-PLAT-60 (upholds SP-BIND-01):
-  The Implementation MUST reveal the full `"id":` delimiter, its integer
-  token, and the structural byte after it, together with the full
-  `"login":"` delimiter, its value, and its closing quote, in the `/user`
-  response. The Implementation MUST keep the JSON whitespace GitHub puts
-  inside either member in the revealed range, per common REQ-COMMON-19F. The
-  Implementation MUST redact every other response byte behind a range
-  commitment. Necessity: REQ-PLAT-51 reads both fields out of
-  revealed response bytes, and a session revealing no response range at all
-  leaves it nothing to read.
+  The Implementation MUST reveal the full `"id":` delimiter and the
+  structural byte after the integer token, together with the full
+  `"login":"` delimiter and its closing quote, in the `/user` response. The
+  Implementation MUST commit the `id` digits and the `login` value each as
+  its own range. The Implementation MUST keep the JSON whitespace GitHub puts
+  inside either member in a revealed range, per common REQ-COMMON-19F, and
+  out of the committed value. The Implementation MUST redact every other
+  response byte behind a range commitment. Necessity: the anchors are what
+  tell the Platform Verifier which commitments hold the identity, and a
+  revealed value would put the id and handle on the Consumer Chain.
 - REQ-PLAT-51 (upholds SP-BIND-01):
-  The Platform Verifier MUST extract `id` and `login` from the revealed
-  response bytes by their full field delimiters, rejecting a transcript in
-  which either delimiter matches at more than one position, per common
-  REQ-COMMON-19A. The Platform Verifier MUST reject a noncanonical `id`
-  encoding. The GitHub profile fixes the structural byte following the
-  `id` integer token, which common REQ-COMMON-19D leaves to the profile, as
-  `,` or `}` and no other byte, judged after the removal common
-  REQ-COMMON-19F fixes. The Platform Verifier MUST reject any other
-  following byte. Necessity: the terminator is what proves the revealed digits
-  are the whole number rather than a prefix of a longer one, and JSON member
-  order does not guarantee which of the two closes it.
+  The Platform Verifier MUST find the `id` commitment and the `login`
+  commitment by their anchors, as REQ-PLAT-31 does: the one commitment that
+  starts where a revealed range ending with the full delimiter ends, and
+  that is followed, for `login`, by a revealed `"`, and for `id`, by a
+  revealed range starting at the commitment's end whose first byte after
+  the removal common REQ-COMMON-19F fixes is `,` or `}`. The GitHub profile
+  fixes that structural byte, which common REQ-COMMON-19D leaves to the
+  profile, as `,` or `}` and no other byte. The Platform Verifier MUST
+  reject a transcript in which either delimiter matches at more than one
+  position of the revealed bytes, per common REQ-COMMON-19A, or in which no
+  commitment, or more than one, is so framed. The canonical encoding of the
+  `id` digits is the Proving Circuit's to check under REQ-PLAT-06.
+  Necessity: the terminator is what proves the committed digits are the
+  whole number rather than a prefix of a longer one, and JSON member order
+  does not guarantee which of the two closes it.
 - REQ-PLAT-51A (upholds SP-BIND-01):
-  The Prover MUST derive the GitHub `userId` and raw handle
-  from those same revealed `id` and `login` bytes, by the same algorithm
-  REQ-PLAT-51 fixes. That derivation is the repeat common REQ-COMMON-19E
-  permits, and the extraction of REQ-PLAT-51 is the authoritative one. The
-  Proving Circuit MUST NOT expose a second independently supplied
-  representation of either identity field.
+  The Prover MUST derive the GitHub `userId` and raw handle from the bytes
+  of the `id` and `login` commitments REQ-PLAT-51 frames, which are the
+  bytes it opens in the proof. The Proving Circuit's opening is the
+  authoritative extraction under common REQ-COMMON-19E; the Prover's is the
+  repeat it permits. The Proving Circuit MUST NOT expose a second
+  independently supplied representation of either identity field.
 - REQ-PLAT-52 (upholds SP-EXCHANGE-01):
   The Proving Circuit MUST assert that one private bearer value opens the
   bearer commitment of the token-exchange attestation and the
@@ -1480,14 +1497,16 @@ Platform Verifier, Notary Service, Consumer.
   and semantic public inputs across two chains using different conforming
   verifier artifacts. A destination chain does not support the pair without a
   conforming artifact or, for a TLSNotary profile, a compatible Notary Service.
-  No local identity field originates outside proof public inputs and the exact
-  revealed attestation bytes carried by its Submission. Only the Consumer's
+  No local identity field originates outside proof public inputs, the
+  signed ID Token whose claims a Google proof reads, and the attestation
+  bytes, revealed or committed, of its Submission. Only the Consumer's
   acceptance of that exact Submission makes the claim authoritative.
 - TEST-PLAT-17A (exercises REQ-PLAT-03, REQ-PLAT-31A, REQ-PLAT-51A):
   Pair authenticated X or GitHub identity-response bytes for account B with a
   detached `userId`, handle, or metadata value for account A offered as an
-  extraction input. Prover rejects that alternative source; without it, Prover
-  and the Platform Verifier both derive account B byte for byte. Prover may
+  extraction input. Prover rejects that alternative source; without it, the
+  Prover derives account B byte for byte from the committed ranges, and the
+  proof's nodes are account B's. Prover may
   deliver its derived identity separately through CCDP, and Application accepts
   its valid structure without repeating evidence extraction. The delivered
   `userName` preserves the raw handle even when display normalization would
@@ -1515,13 +1534,17 @@ Platform Verifier, Notary Service, Consumer.
   missing, mismatched, or other-session opening fails. The opening remains
   browser witness material and is absent from Submissions and published
   artifacts. There is no Bridge response whose fields supply it.
-- TEST-PLAT-22 (exercises REQ-PLAT-57, REQ-PLAT-58, REQ-PLAT-59, REQ-PLAT-60):
+- TEST-PLAT-22 (exercises REQ-PLAT-31, REQ-PLAT-51, REQ-PLAT-57, REQ-PLAT-58, REQ-PLAT-59, REQ-PLAT-60):
   An X token attestation and a GitHub token-exchange attestation whose
   committed bearer range is not framed by the revealed `"access_token":"`
   delimiter and closing quote are each rejected, including one committing a
-  `refresh_token` value instead; and an X `/2/users/me` or GitHub `/user`
-  attestation revealing no `id`, `username`, or `login` range, or revealing
-  a value without its full delimiter, is rejected.
+  `refresh_token` value instead. An X `/2/users/me` or GitHub `/user`
+  attestation is rejected when no commitment is framed by the `id`,
+  `username`, or `login` anchors, when two are, when an anchor is revealed
+  twice, or when a GitHub `id` commitment is followed by a byte other than
+  `,` or `}`; an anchor revealed with JSON whitespace around its colon still
+  frames its commitment; and an attestation revealing the id or handle value
+  carries no framed commitment for it and is rejected.
 
 ## 9. Security Considerations
 

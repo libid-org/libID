@@ -912,7 +912,9 @@ anchored by the delimiters its Platform Profile fixes (REQ-COMMON-18A).
 Uniqueness of a field inside an authenticated response is ASM-PROV-06 rather
 than a scan the Proving Circuit performs; the only duplicate scan in the
 protocol is the one REQ-COMMON-19A gives the Platform Verifier over bytes it
-can read.
+can read. A copy of a delimiter inside a committed range is not among those
+bytes, so where a profile frames a committed value by revealed anchors, its
+uniqueness rests on ASM-PROV-06 alone.
 
 Disclosure and verification are two separate layers. The Platform Profile
 fixes a minimal set of revealed ranges; every other byte stays behind a range
@@ -965,7 +967,8 @@ exposes a minimal set of public inputs, which never includes a credential.
   revealed byte on one side and the signed length is what closes it.
 
 Tiling accounts for the ranges a layout lists; it cannot see bytes the
-layout never mentions. The three rules that follow govern one case only: a
+layout never mentions. The rules that follow, through REQ-COMMON-39D, govern
+one case only: a
 notarized request that commits a credential carried in an HTTP
 `Authorization` header. At launch that is the identity session of each
 TLSNotary profile, and nothing else — X's `/2/users/me` request and GitHub's
@@ -1046,6 +1049,26 @@ which the following identity-header rules could apply.
   header's value, and a request with one honest `authorization` header
   cannot commit a range positioned somewhere else. Two fixed comparisons
   at known offsets replace a derived one.
+- REQ-COMMON-39C (upholds SP-EXCHANGE-01):
+  For that same identity-session request, the Platform Verifier MUST
+  require the request direction to carry exactly one HTTP request with no
+  body: exactly one head end (`\r\n\r\n`) across the concatenation of its
+  revealed ranges, no revealed byte after it, and the last revealed range
+  ending at the signed transcript length of REQ-COMMON-36. Necessity: the
+  header rules above read the revealed bytes as one request's head; a second
+  request after the first, or a body, would be bytes the platform parses
+  that no rule here reads, and a header in it could carry the credential the
+  platform honours instead of the committed one.
+- REQ-COMMON-39D (upholds SP-EXCHANGE-01):
+  For that same identity-session request, the Platform Verifier MUST require
+  exactly one header line whose name, normalized as REQ-COMMON-39B
+  normalizes, is `host`, and whose value, once the optional whitespace
+  around it is removed, is exactly the authority the Platform Profile pins
+  for that session. Necessity: the authority reaches the Platform Verifier
+  as the TLS server identity the notary authenticated (REQ-COMMON-21); a
+  `host` naming another authority asks a shared front end for a different
+  backend than the one the profile pins, and a second `host` is a second
+  answer to which one.
 - REQ-COMMON-19 (upholds SP-EXCHANGE-01):
   The Proving Circuit extracting a JSON string field MUST receive the field's
   offset as a private input supplied by the prover; the circuit performs no
@@ -1448,7 +1471,7 @@ the constructions that role implements.
   submitters; the current fee is readable before the Submission is submitted; and a
   verification whose native value differs from the current fee is
   rejected.
-- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-39A, REQ-COMMON-39B, REQ-COMMON-40):
+- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-39A, REQ-COMMON-39B, REQ-COMMON-39C, REQ-COMMON-39D, REQ-COMMON-40):
   An identity attestation whose ranges do not sum to the signed request
   transcript length, or whose ranges leave a gap or an overlap, is
   rejected; an attestation carrying no signed total transcript length for
@@ -1468,7 +1491,12 @@ the constructions that role implements.
   another letter case, with `_` for `-`, or padded before the colon -- is
   rejected; and revealed request bytes carrying a bare line feed, a bare
   carriage return, or a line beginning with a space or a horizontal tab are
-  rejected. Every case above runs on
+  rejected. A request direction carrying a second head end, a body, or a
+  revealed byte after its head, or whose last revealed range ends before the
+  signed length, is rejected; a request with no `host`, two, or one naming
+  another authority, in any letter case, is rejected; and a `host` whose
+  name differs only in letter case or padding before the colon, or whose
+  value has spaces around it, passes. Every case above runs on
   an identity-session attestation. GitHub token requests instead pass the
   complete-disclosure and form checks in TEST-PLAT-12 and TEST-PLAT-14;
   the identity-header needle and bearer framing rules do not apply to them.
