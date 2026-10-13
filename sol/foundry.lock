@@ -1,0 +1,8 @@
+{
+  "lib/forge-std": {
+    "rev": "f3dae6e6ee381f25eb6a246f7da9b85c91a68219"
+  },
+  "lib/libID-contracts": {
+    "rev": "6538c48f82ab3773c789e76599579a5ec37c6264"
+  }
+}
