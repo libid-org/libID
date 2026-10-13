@@ -249,6 +249,142 @@ generated from it. A profile that publishes no such table is ineligible.
   reaches the same node, while text the rules refuse folds to a node no
   proof binds.
 
+### 2.1b Bindings, disclosure, and names
+
+A claim puts no plaintext user id, handle, or email on the Consumer Chain
+unless it discloses the handle. The Submission Payload of every profile has
+one optional handle field and no field for an id. An empty handle field
+discloses nothing.
+
+- REQ-PLAT-03A:
+  The Canonical Runtime (its Application, which builds the Submission) MUST
+  place the delivered handle in the Submission's handle field only when the
+  user asks to disclose it. The Canonical Runtime MUST NOT place an account
+  identifier in any Submission. Necessity: the Prover delivers the handle
+  with every proof and builds no Submission, so the choice of sending it
+  falls to the role that does, and no Consumer check can tell a handle the
+  user chose to show from one an operator sent.
+- REQ-PLAT-08D (upholds SP-BIND-01):
+  Where the handle field is nonempty, the Platform Verifier MUST fold it
+  under REQ-PLAT-05B, MUST reject the Submission unless the node of the
+  folded handle under the platform's handle tag equals the handle node the
+  proof is verified against, and MUST return the folded handle with its other
+  verified fields (common REQ-COMMON-05E). Where the field is empty, it
+  MUST return no handle. The Platform Verifier MUST NOT emit or store the
+  handle. Necessity: the field arrives beside the proof, not in it, so only
+  the node comparison ties it to the account. The comparison may run before
+  the proof is verified; the verification is what makes the node
+  authentic, and with it the canonical form, so the chain needs no rule set
+  to check the text.
+
+The Consumer stores every binding under its two nodes. For each node it
+records the **owner**, the Transaction Author that last bound it, and the
+**watermark**, the `metadataObservedAt` of the binding that last wrote it
+(common REQ-COMMON-25A). It also records two pairings: each id node's
+current handle node, and each handle node's current id node. A Transaction
+Author **holds** a handle on a platform while it owns that handle's node.
+
+- REQ-PLAT-08H (upholds SP-BIND-01):
+  The Consumer MUST key a binding on the id node and the handle node
+  themselves. The Consumer MUST NOT key a binding on a plaintext value or
+  store the account identifier. Necessity: the tags of REQ-PLAT-05C already
+  keep every platform's ids and handles apart, and a key that depended on
+  more than the node could not be found from a node computed off chain.
+- REQ-PLAT-08I (upholds SP-BIND-01, SP-FRESH-01):
+  The Consumer MUST reject a Submission whose `metadataObservedAt` is not
+  strictly newer than both the id node's watermark and the handle node's
+  watermark. On accepting one, the Consumer MUST make the Transaction Author
+  the owner of both nodes, set both watermarks to that
+  `metadataObservedAt`, and pair the nodes in both directions. When it pairs
+  an id node with a handle node other than its previous one, the Consumer
+  MUST clear the owner of the previous handle node if that node's current id
+  node is still this one, and MUST keep that node's watermark. The Consumer
+  MUST NOT change an owner, a watermark, or a pairing on any other path.
+  Necessity: an account that proves a new handle has stopped holding the old
+  one, and leaving its owner in place would route to the renamed account
+  whatever is sent to that handle; a handle another account has since proved
+  is that account's, and is left alone. The handle node's own watermark keeps
+  evidence older than another account's proof of the handle from taking it
+  back, and a retired node keeps its watermark so that evidence older than
+  the binding that retired it cannot claim it either.
+
+A Transaction Author's **name** on a platform is the one handle the
+Consumer stores for that author and platform to display, the analogue of an
+ENS primary name kept per platform. An author holding several identities of
+one platform still has one name there. A handle is **disclosed** once a
+Submission or disclosure call the Consumer accepted has carried it;
+disclosure is history and nothing undoes it. A handle is **published**
+while it is its author's name; publication is state.
+
+- REQ-PLAT-08J (upholds SP-BIND-01):
+  The Consumer MUST change a Transaction Author's name on a platform only
+  through the paths this rule lists. On accepting a Submission that
+  discloses a handle, the Consumer MUST store the folded handle the Platform
+  Verifier returned as the author's name. On accepting a disclosure call
+  (REQ-PLAT-08E), it MUST store that call's folded handle as the caller's
+  name. On a withdrawal call, it MUST clear the caller's name on that
+  platform. Whenever a handle node's owner changes from one author to
+  another, or REQ-PLAT-08I clears it, the Consumer MUST clear the previous
+  owner's name on that platform if that name folds to that node. A
+  Submission that discloses nothing MUST leave the name unchanged.
+  Necessity: a name is the handle an author chose to show; a claim of
+  another of its identities must not replace that choice, and a name left
+  in place after its handle moved would show a handle its author no longer
+  holds.
+- REQ-PLAT-08K (upholds SP-BIND-01):
+  The Consumer MUST store a name folded. The Consumer MUST answer a read of
+  an author's name with the stored handle only while the author owns the
+  node of that stored string under the platform's handle tag, and MUST
+  answer that the author has no name otherwise. Necessity: the clearing of REQ-PLAT-08J follows owner
+  changes the Consumer makes, and the test at read time keeps the answer
+  right on every path regardless.
+- REQ-PLAT-08E (upholds SP-BIND-01):
+  The Consumer MUST offer a disclosure call that takes a platform and a
+  handle. The Consumer MUST fold the handle under REQ-PLAT-05B, hash it
+  under the platform's handle tag, and accept the call only when the caller
+  holds that node. The Consumer MUST NOT require a new proof or the account
+  identifier for a disclosure. The Consumer MUST also offer a withdrawal
+  call that clears the caller's own name on a platform. Necessity: the
+  handle's preimage is the evidence and ownership of its node the
+  authority. A handle a later claim of the same account renamed away from
+  has lost its owner to retirement (REQ-PLAT-08I), so the one test refuses
+  it. A refused call protects the display, not the handle: its calldata is
+  public whether or not the Consumer accepts it.
+- REQ-PLAT-08F (upholds SP-BIND-01):
+  The Consumer MUST put no plaintext handle, id, or account identifier in
+  the event of a binding, and MUST put the nodes there. The Consumer MUST
+  emit an event carrying the folded handle for every name it stores, and an
+  event for every name it clears. Necessity: an event that carried a
+  handle is public for good, and a reader mirrors names only if the events
+  say when one was stored or cleared.
+
+- TEST-PLAT-20A (exercises REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08H):
+  On each platform, a Submission without a handle, made with recognizable
+  test values, carries no id, handle, email, or `sub` bytes in its payload,
+  its events, or any storage it writes, including a value split across two
+  storage words. The same account submitted with
+  and without its handle lands on the same two nodes. A Submission is
+  rejected when its handle does not fold to the proof's handle node, and a
+  disclosed handle in another letter case is stored folded. A disclosure
+  call is rejected from a caller that does not hold the handle and for a
+  handle retired by a later claim of the same account, and accepted, without
+  a proof, for a held handle given in any letter case. The Application
+  places the handle in a Submission only when the user asks to disclose it,
+  and no Submission has a field for an id.
+- TEST-PLAT-20B (exercises REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
+  An identity that proves a new handle leaves its old handle without an
+  owner, unless another identity proved that handle meanwhile, which keeps
+  it; a retired node keeps its watermark, so evidence older than it binds
+  nothing. Evidence not strictly newer than either node's watermark is
+  rejected. For a wallet holding identities A and B of one platform with
+  A's handle as its name, a claim of B without a handle leaves the name; a
+  claim of B disclosing B's handle replaces it. A rename of A withdraws A's
+  name; another wallet proving A's handle withdraws it; a wallet moving an
+  identity to another wallet withdraws the old wallet's name for that
+  handle. The name reads as none whenever its author no longer holds the
+  handle. A withdrawal clears the name and emits an event only when there
+  was a name.
+
 ### 2.2 Metadata ordering and validity ceilings
 
 Proof validity and mutable-metadata ordering use the authenticated times below.

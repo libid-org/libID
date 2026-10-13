@@ -69,9 +69,10 @@ Submission Payload: The opaque byte string a Consumer passes through the Proof
    fixes its encoding and reads it. For every profile it carries the Platform
    Ceremony Version it was built for, the operation domain, the Authorization
    Nonce, the Authorized Transaction Data, the proof, the platform's
-   attestations in the notary's own format, and any further value the
-   Platform Profile requires the caller to supply. It carries no Chain ID and
-   no Verifier Version.
+   attestations in the notary's own format, an optional handle to disclose
+   (platform §2.1b), and any further value the Platform Profile requires the
+   caller to supply. It carries no Chain ID, no Verifier Version, and no
+   account identifier.
 
 Consumer Chain: The chain whose canonical state transition consumes a libID
    proof.
@@ -586,7 +587,8 @@ an identity session — so one Submission on either path pays two fees.
   Digest it recomputed, the operation domain and Authorized Transaction Data
   it decoded, the Platform Ceremony Version it implements, the client
   identifier, the id node and handle node of platform REQ-PLAT-05A and
-  REQ-PLAT-05B, and `metadataObservedAt`. Necessity: an authenticated
+  REQ-PLAT-05B, the disclosed handle, folded, where the Submission carries
+  one under platform REQ-PLAT-08D, and `metadataObservedAt`. Necessity: an authenticated
   identity and observation time are what the ceremony exists to produce; the digest is the
   Consumer's replay nullifier, which it cannot recompute without reading the
   payload. The Consumer trusts these fields as it trusts the Platform Verifier
