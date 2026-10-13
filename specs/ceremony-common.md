@@ -128,7 +128,8 @@ Account identifier: The authenticated value a Platform Profile derives an
    identifiers (platform §2.1).
 
 Proving Circuit: The zero-knowledge circuit whose proof a Platform Verifier
-   checks. It proves only what cannot be read from authenticated evidence.
+   checks. It proves only what cannot be read from authenticated evidence,
+   which includes every identity value the evidence keeps hidden.
 
 Redirect Runtime: The immutable browser component served at a registered
    redirect URI, which receives an authorization response, authenticates the
@@ -584,9 +585,9 @@ an identity session — so one Submission on either path pays two fees.
   The Platform Verifier MUST return its verified fields: the Authorization
   Digest it recomputed, the operation domain and Authorized Transaction Data
   it decoded, the Platform Ceremony Version it implements, the client
-  identifier, the canonical `userId`, the raw handle bytes, and
-  `metadataObservedAt`. Necessity: an authenticated `userId`, handle, and
-  observation time are what the ceremony exists to produce; the digest is the
+  identifier, the id node and handle node of platform REQ-PLAT-05A and
+  REQ-PLAT-05B, and `metadataObservedAt`. Necessity: an authenticated
+  identity and observation time are what the ceremony exists to produce; the digest is the
   Consumer's replay nullifier, which it cannot recompute without reading the
   payload. The Consumer trusts these fields as it trusts the Platform Verifier
   the Verifier Governance Process installed.

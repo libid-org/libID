@@ -159,10 +159,13 @@ Authorization Digest public input on Google, recomputing the revealed
 `code_verifier` on X and GitHub (REQ-COMMON-02A, REQ-COMMON-15A) — verifies
 the proof under the artifact selected for the submitted platform and version
 (REQ-COMMON-45), and enforces authenticated freshness. Proof-field provenance
-is the signed ID Token on Google and the revealed attestation bytes on X and
-GitHub; the Proving Circuit proves only what cannot be read from that
-evidence, which is Google's signature relation and, on X and GitHub, that one
-hidden bearer opens both sessions' commitments. The Consumer enforces replay
+is the signed ID Token on Google and the attestation bytes on X and GitHub;
+the Proving Circuit proves only what cannot be read from that evidence. On
+Google that is the signature relation and the claims it reads; on X and
+GitHub, that one hidden bearer opens both sessions' commitments. On every
+platform the circuit also checks the hidden id and handle against the
+platform's rules and outputs their tagged SHA-256 nodes, which are the keys
+the Consumer binds. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
 an effect (REQ-COMMON-03, REQ-COMMON-03A). The Canonical Runtime
 locally enforces the selected OAuth client and redirect profile. The protocol

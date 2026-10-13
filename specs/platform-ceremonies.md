@@ -561,7 +561,7 @@ REQ-COMMON-07A.
   byte for byte, under common REQ-COMMON-07.
 - REQ-PLAT-30 (upholds SP-BIND-01):
   The Proving Circuit MUST constrain the opened bearer range to nonempty
-  printable ASCII of at most 4096 bytes. The carriage-return and line-feed
+  printable ASCII of at most 128 bytes. The carriage-return and line-feed
   exclusion of common REQ-COMMON-37 applies to this range, because the
   identity session sends it inside a header. Necessity: the range is opened
   to link two attestations, so it needs a bound and a charset; the circuit
@@ -805,33 +805,53 @@ REQ-COMMON-18A requires.
   tell that they open to one bearer, which is the reason a circuit exists at
   all.
 
-- REQ-PLAT-32B (upholds SP-EXCHANGE-01):
-  The Proving Circuit MUST expose exactly these two X public inputs:
+- REQ-PLAT-32D (upholds SP-BIND-01):
+  The Proving Circuit MUST open the id commitment and the handle commitment
+  of the `/2/users/me` attestation to the raw `id` and `username` values,
+  check them under §2.1a, and prove the id node and handle node of
+  REQ-PLAT-05A and REQ-PLAT-05B over exactly those opened bytes, folding
+  the handle from the same witness that opened its commitment. The Proving
+  Circuit MUST compile in X's tags and rules. Necessity: the values stay
+  committed (§5.3), so the circuit is the only role that sees them; and a
+  circuit that took its tags or rules as inputs would let one platform's
+  proof key another platform's identity.
+- REQ-PLAT-32B (upholds SP-EXCHANGE-01, SP-BIND-01):
+  The Proving Circuit MUST expose exactly these twelve X public inputs, each
+  32-byte value as two field elements holding its high and low 16 bytes,
+  big-endian, high first:
 
-  | Public input | Meaning |
-  |---|---|
-  | token bearer commitment | the commitment the Platform Verifier matches against the verified token attestation |
-  | identity bearer commitment | the commitment the Platform Verifier matches against the verified `/users/me` attestation |
+  | Index | Public input | Meaning |
+  |---|---|---|
+  | 0-1 | token bearer commitment | the commitment the Platform Verifier matches against the verified token attestation |
+  | 2-3 | identity bearer commitment | the bearer commitment the Platform Verifier matches against the verified `/users/me` attestation |
+  | 4-5 | id commitment | the `id` commitment the Platform Verifier frames in that attestation's response |
+  | 6-7 | handle commitment | the `username` commitment the Platform Verifier frames in that response |
+  | 8-9 | id node | REQ-PLAT-05A over the opened `id` |
+  | 10-11 | handle node | REQ-PLAT-05B over the opened `username` |
 
-  The Proving Circuit MUST keep the bearer private. The Proving Circuit MUST
-  NOT add an Authorization Digest, client identifier, timestamp, endpoint,
-  `userId`, or handle public input.
-- REQ-PLAT-32C (upholds SP-EXCHANGE-01):
-  The Platform Verifier MUST require each bearer commitment public input to
-  equal the
-  corresponding commitment in the attestation it verified. Necessity: without
-  this the circuit could prove a link between two attestations other than the
-  ones submitted.
+  The Proving Circuit MUST keep the bearer, the id, and the handle private.
+  The Proving Circuit MUST NOT add an Authorization Digest, client
+  identifier, timestamp, or endpoint public input.
+- REQ-PLAT-32C (upholds SP-EXCHANGE-01, SP-BIND-01):
+  The Platform Verifier MUST take the two nodes from the Submission
+  Payload, MUST verify the proof against public inputs it builds from the
+  four commitments in the attestations it verified and those two nodes, and
+  MUST return the nodes only from a proof that verifies. Necessity: built
+  from the attestations, the inputs leave the circuit no way to prove a link
+  between two attestations other than the ones submitted, or nodes of
+  values other than the ones the platform sent; a node the payload names
+  wrongly is a proof that does not verify.
 
-The circuit proves exactly one thing: one hidden bearer opens both
-attestations' blinded commitments. Everything else is checked where it can be
-seen — the Platform Verifier binds the Authorization Digest by recomputing
-the verifier under common REQ-COMMON-15A, reads the client identifier,
-evidence timestamp, request method, path, and identity fields from revealed
-attestation bytes, and takes each session's authority from the TLS server
-identity that session's attestation authenticates. The circuit carries no
-copy of any of them, because a fact that can be checked in the open does not
-belong in a proof.
+The circuit proves two things: one hidden bearer opens both attestations'
+bearer commitments, and the committed id and handle, under X's rules, hash
+to the two nodes. Everything else is checked where it can be seen — the
+Platform Verifier binds the Authorization Digest by recomputing the verifier
+under common REQ-COMMON-15A, reads the client identifier, evidence timestamp,
+request method, and path from revealed attestation bytes, frames the id and
+handle commitments by their revealed anchors, and takes each session's
+authority from the TLS server identity that session's attestation
+authenticates. The circuit carries no copy of any of them, because a fact
+that can be checked in the open does not belong in a proof.
 
 - REQ-PLAT-33 (upholds SP-FRESH-01):
   The Canonical Runtime MUST complete the request direction of X's first
@@ -860,8 +880,10 @@ includes single-page applications and recommends PKCE. The profile removes
 server-side token-exchange custody; browser and service specifications own the
 configuration and delivery of these public inputs.
 
-As on X, the evidence is two attestations and one hidden bearer linking them.
-The bearer-link circuit and its two commitment public inputs are unchanged.
+As on X, the evidence is two attestations and one hidden bearer linking
+them, and the circuit opens the committed id and handle. GitHub has its own
+bearer-link circuit, with X's relation and public-input layout and GitHub's
+tags and rules.
 The Platform Verifier binds the revealed `code_verifier` to the Authorization
 Digest under common REQ-COMMON-15A; the circuit does not perform that binding.
 
@@ -954,8 +976,8 @@ forbidden by REQ-PLAT-56A.
 - REQ-PLAT-35A (upholds SP-CLIENT-01):
   The Proving Circuit MUST NOT expose `client_secret`, or any value derived
   from it, as a public proof input. Necessity: the complete request already
-  reveals it; the circuit's only semantic public inputs remain the bearer
-  commitments, not duplicated request fields.
+  reveals it; the circuit's public inputs are commitments and nodes, not
+  duplicated request fields.
 - REQ-PLAT-35B (upholds SP-CLIENT-01):
   The Implementation MUST reveal the `client_id` range of the exchange request
   in the notarized session.
@@ -967,7 +989,7 @@ forbidden by REQ-PLAT-56A.
   representation of one fact.
 - REQ-PLAT-36 (upholds SP-BIND-01):
   The Proving Circuit MUST constrain the opened bearer range to nonempty
-  printable ASCII of at most 4096 bytes. The Proving Circuit MUST verify no
+  printable ASCII of at most 128 bytes. The Proving Circuit MUST verify no
   other property of the exchange response. The carriage-return and
   line-feed exclusion of common REQ-COMMON-37 applies to this range,
   because the `/user` session sends it inside a header. Necessity:
@@ -1208,25 +1230,30 @@ REQ-COMMON-18A requires.
   compare the method and path revealed in each attestation, and
   the authority each attestation authenticates, with the GitHub profile.
 
-- REQ-PLAT-52A (upholds SP-EXCHANGE-01):
-  The Proving Circuit MUST expose exactly these two GitHub public inputs:
-
-  | Public input | Meaning |
-  |---|---|
-  | token-exchange bearer commitment | the commitment the Platform Verifier matches against the verified token-exchange attestation |
-  | identity bearer commitment | the commitment the Platform Verifier matches against the verified `/user` attestation |
-
-  The Proving Circuit MUST NOT add an Authorization Digest, client identifier,
-  timestamp, endpoint, `userId`, or handle public input. Necessity: the digest
-  is bound by the Platform Verifier under common REQ-COMMON-15A, and the rest
-  are revealed bytes it reads directly, so a circuit copy would be a second
+- REQ-PLAT-52C (upholds SP-BIND-01):
+  The Proving Circuit MUST open the id commitment and the handle commitment
+  of the `/user` attestation to the raw `id` digits and `login` value, and
+  prove their nodes as REQ-PLAT-32D does, with GitHub's tags and rules
+  compiled in.
+- REQ-PLAT-52A (upholds SP-EXCHANGE-01, SP-BIND-01):
+  The Proving Circuit MUST expose exactly the twelve public inputs of
+  REQ-PLAT-32B, in its order and encoding, with the token-exchange
+  attestation in place of X's token attestation, the `/user` attestation in
+  place of `/users/me`, and `login` in place of `username`. The Proving
+  Circuit MUST NOT add an Authorization Digest, client identifier,
+  timestamp, or endpoint public input. Necessity: the digest is bound by the
+  Platform Verifier under common REQ-COMMON-15A, and the rest are revealed
+  bytes it reads directly, so a circuit copy would be a second
   representation of a fact that already has one.
-- REQ-PLAT-52B (upholds SP-EXCHANGE-01):
-  The Platform Verifier MUST require each bearer commitment public input to
-  equal the
-  corresponding commitment in the attestation it verified. Necessity: without
-  this the circuit could prove a link between two attestations other than the
-  ones submitted.
+- REQ-PLAT-52B (upholds SP-EXCHANGE-01, SP-BIND-01):
+  The Platform Verifier MUST take the two nodes from the Submission
+  Payload, MUST verify the proof against public inputs it builds from the
+  four commitments in the attestations it verified and those two nodes, and
+  MUST return the nodes only from a proof that verifies. Necessity: built
+  from the attestations, the inputs leave the circuit no way to prove a link
+  between two attestations other than the ones submitted, or nodes of
+  values other than the ones the platform sent; a node the payload names
+  wrongly is a proof that does not verify.
 
 Changing the pinned API version requires a new Platform Ceremony Version; it
 is not mutable configuration. The granted scope is no proof property at all:
@@ -1364,12 +1391,14 @@ Platform Verifier, Notary Service, Consumer.
   or `redirect_uri` whose canonical escapes decode to bytes that are not UTF-8
   passes the form check, which the Implementation never emits, and fails those
   comparisons.
-- TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52):
-  An opened bearer range that is empty, over 4096 bytes, or outside printable
-  ASCII fails to prove; a revealed identity response missing `id` or the
-  handle field is rejected; and a proof whose two attestations commit
-  different bearers is rejected. No proof statement covers `token_type` or the
-  granted scope.
+- TEST-PLAT-10 (exercises REQ-PLAT-30, REQ-PLAT-31, REQ-PLAT-32, REQ-PLAT-32D, REQ-PLAT-36, REQ-PLAT-51, REQ-PLAT-52, REQ-PLAT-52C):
+  An opened bearer range that is empty, over 128 bytes, or outside printable
+  ASCII fails to prove; an identity response with no framed `id` or handle
+  commitment is rejected; a proof whose two attestations commit different
+  bearers is rejected; an opened id or handle the rules refuse fails to
+  prove; and an id node or handle node that is not the node of the opened
+  value fails to prove, including one off by one in its low half. No proof
+  statement covers `token_type` or the granted scope.
 - TEST-PLAT-11 (exercises REQ-PLAT-33):
   The complete request direction of X's first notarized session reaches X
   before the authorization-code deadline in the success case; delaying its
@@ -1425,16 +1454,20 @@ Platform Verifier, Notary Service, Consumer.
   all checked correlations has no local cryptographic rejection, but fails
   trusted-notary verification downstream. Application structural acceptance
   does not establish signature authenticity.
-- TEST-PLAT-15A (exercises REQ-PLAT-52, REQ-PLAT-52A, REQ-PLAT-52B):
-  A GitHub proof whose bearer commitment public input differs from the
-  commitment in either submitted attestation is rejected; substituting one
-  attestation for another from a different ceremony is rejected; and the
-  proof carries no bearer, code, verifier, redirect URI, or added identity,
-  time, client, or endpoint public input.
-- TEST-PLAT-15B (exercises REQ-PLAT-32B, REQ-PLAT-32C):
-  An X proof whose bearer commitment public input differs from the commitment
-  in the submitted attestation is rejected, and a proof carrying a client
-  identifier, timestamp, endpoint, `userId`, or handle public input is
+- TEST-PLAT-15A (exercises REQ-PLAT-52, REQ-PLAT-52A, REQ-PLAT-52B, REQ-PLAT-52C):
+  A GitHub proof whose bearer, id, or handle commitment public input differs
+  from the commitment in either submitted attestation is rejected;
+  substituting one attestation for another from a different ceremony is
+  rejected; swapping the id node and the handle node, or giving another
+  identity's nodes, is rejected; and the proof carries no bearer, code,
+  verifier, redirect URI, id, handle, time, client, or endpoint public input.
+  An X proof submitted to the GitHub Platform Verifier is rejected.
+- TEST-PLAT-15B (exercises REQ-PLAT-32B, REQ-PLAT-32C, REQ-PLAT-32D):
+  An X proof whose bearer, id, or handle commitment public input differs
+  from the commitment in the submitted attestation is rejected; a proof
+  whose nodes are another identity's, or swapped, is rejected; a proof
+  carrying a client identifier, timestamp, or endpoint public input is
+  rejected; and a GitHub proof submitted to the X Platform Verifier is
   rejected.
 - TEST-PLAT-16 (exercises REQ-PLAT-53):
   A ceremony whose exchange response was lost restarts from authorization.
