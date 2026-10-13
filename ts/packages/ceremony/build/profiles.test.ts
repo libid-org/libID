@@ -84,7 +84,7 @@ test('pins every response profile security policy [CSP-001/002/003/009/015]', ()
   // Prefetch and Callback keep the opener: they must not sever the application's handle.
   assert.deepEqual(isolation('prefetch'), [null, 'unsafe-none', null])
   assert.deepEqual(isolation('callback'), [null, 'unsafe-none', null])
-  // WASM only where it compiles; no spawning from leaves.
+  // WASM only where it compiles; no spawning from leaves or the root Service Worker.
   for (const profile of [
     'prover',
     'proverFallback',
@@ -95,7 +95,10 @@ test('pins every response profile security policy [CSP-001/002/003/009/015]', ()
     assert.ok(csp(profile).get('script-src')!.includes("'wasm-unsafe-eval'"), profile)
   for (const profile of ['prefetch', 'callback', 'worker'] as const)
     assert.ok(!csp(profile).get('script-src')!.includes("'wasm-unsafe-eval'"), profile)
-  assert.deepEqual(csp('leafWorker').get('worker-src'), ["'none'"])
+  for (const profile of ['worker', 'leafWorker'] as const)
+    assert.deepEqual(csp(profile).get('worker-src'), ["'none'"], profile)
+  // Prefetch registers the root Service Worker.
+  assert.deepEqual(csp('prefetch').get('worker-src'), ["'self'"])
   for (const profile of ['notaryWorker', 'proofWorker'] as const) {
     assert.deepEqual(csp(profile).get('worker-src'), ["'self'", 'blob:'], profile)
     assert.equal(headers(profile).get('cross-origin-embedder-policy'), 'require-corp', profile)
