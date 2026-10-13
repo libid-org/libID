@@ -109,26 +109,53 @@ used in the resulting Submission.
 
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
-| Google | signed ID-Token `sub` | the REQ-PLAT-05A digest of its exact 1–255 case-sensitive ASCII bytes | normalized email |
-| X | `/2/users/me.data.id` JSON string | canonical nonzero unsigned 64-bit decimal | normalized `username` |
-| GitHub | `/user.id` JSON integer token | canonical nonzero unsigned 64-bit decimal | normalized `login` |
+| Google | signed ID-Token `sub` | `0x` and the lowercase hexadecimal of its id node | signed `email` |
+| X | `/2/users/me.data.id` JSON string | canonical nonzero unsigned 64-bit decimal | `username` |
+| GitHub | `/user.id` JSON integer token | canonical nonzero unsigned 64-bit decimal | `login` |
+
+The account identifier is the authenticated value in the second column:
+Google's `sub`, and the X and GitHub identifiers, which are their `userId`
+unchanged.
 
 - REQ-PLAT-04:
-  The Implementation MUST accept a Google `sub` of bytes `0x20` through `0x7e`
-  only. The Implementation MUST reject empty, control, non-ASCII, and
-  over-255-byte values. Necessity: identity compatibility across
-  implementations.
+  The Implementation MUST accept a Google `sub` of 1 to 31 bytes from `0x20`
+  through `0x7e`, holding neither `"` nor `\`. The Implementation MUST apply
+  these checks to the `sub` bytes as they appear in the signed payload,
+  before any JSON unescaping. Necessity: 31 bytes is the Proving Circuit's
+  `sub` buffer, and a signed value holding a backslash is one whose JSON
+  encoding escapes a byte, which an implementation that decodes the escape
+  and one that reads the signed bytes would key apart.
 - REQ-PLAT-05:
   The Implementation MUST NOT trim or case-convert a Google `sub`. Necessity:
   identity compatibility.
-- REQ-PLAT-05A:
-  The Implementation MUST derive the Google `userId` as `0x` followed by the
-  64 lowercase hexadecimal digits of
-  `SHA256(UTF8("libid.google-user-id") || sub)`, over the exact signed `sub`
-  bytes. Necessity: Google shows a `sub` only to the applications a user signs
-  in to, so the Consumer Chain records this digest in its place, and every
-  role must derive the same one. The tag separates the digest from a plain
-  `SHA256(sub)` another system may publish.
+- REQ-PLAT-05A (upholds SP-BIND-01):
+  The Implementation MUST derive an identity's id node as
+  `SHA256(tag || id)`, where `id` is the account identifier's exact bytes
+  and `tag` is the platform's user-id tag below. An id is never folded or
+  otherwise transformed. Necessity: the id node is the key the Consumer
+  binds the identity under, so every role must derive the same one, and the
+  account identifier never reaches the Consumer Chain.
+- REQ-PLAT-05B (upholds SP-BIND-01):
+  The Implementation MUST derive an identity's handle node as
+  `SHA256(tag || fold(handle))`, where `handle` is the handle's exact
+  authenticated bytes, `fold` maps `A`-`Z` to `a`-`z` and changes no other
+  byte, and `tag` is the platform's handle tag below. Necessity: one handle
+  in two letter cases is one account on every launch platform, so it must
+  have one key.
+- REQ-PLAT-05C (upholds SP-BIND-01):
+  The tags are these raw ASCII strings, hashed with no separator and no
+  length prefix before the value:
+
+  | Identity platform | User-id tag | Handle tag |
+  |---|---|---|
+  | Google | `libid.google.user-id` | `libid.google.handle` |
+  | X | `libid.x.user-id` | `libid.x.handle` |
+  | GitHub | `libid.github.user-id` | `libid.github.handle` |
+
+  Necessity: a distinct tag for each platform and kind keeps two platforms,
+  and an id and a handle of one platform, from ever sharing a node, and
+  separates a node from a plain `SHA256` of the value another system may
+  publish.
 - REQ-PLAT-06:
   The Implementation MUST require an X or GitHub identifier to match
   `^[1-9][0-9]{0,19}$` with a numeric value at most `2^64 - 1`. Necessity:
@@ -143,53 +170,83 @@ used in the resulting Submission.
   identifier, a leading zero, a sign, a fraction, an exponent, and any
   normalization of a Google `sub`. Necessity: identity compatibility.
 
-Conformance vectors:
+The Proving Circuit enforces REQ-PLAT-04 and REQ-PLAT-06 on the account
+identifier it hashes; the Platform Verifier never sees that identifier.
 
-| Platform | Authenticated input | `userId` |
-|---|---|---|
-| Google | `sub: "123456789012345678901"` | `0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560` |
-| X | `"id":"2244994945"` | `2244994945` |
-| GitHub | `"id":1` | `1` |
+Conformance vectors, each node computed independently with SHA-256:
+
+| Platform | Authenticated input | `userId` | Id node |
+|---|---|---|---|
+| Google | `sub: "110169484474386276334"` | the id node | `0x620866cfb4d2776a32cd94d8e8b55577526af86115ebf125d4ca1ca7bf07737e` |
+| X | `"id":"2244994945"` | `2244994945` | `0x68291869976ffad2abf3e933ec9ab2623395ff8b3b9242e655e1da3ef43d4f94` |
+| GitHub | `"id":583231` | `583231` | `0x475902b27989feb395b9b0cd3156aa573a9676c13155b8e7e3ddaf3e77181847` |
+
+| Platform | Authenticated handle | Folded | Handle node |
+|---|---|---|---|
+| Google | `A.B+tag@Example.COM` | `a.b+tag@example.com` | `0x40169b5cc6400158aeef2a13b73a14fc36e5e1df8595572b8fe282a269f26dd4` |
+| X | `Alice_1` | `alice_1` | `0xe09c4f5bfbbc723bc35701ea9d718a1c5edb29b1ed5bb0cb0fabb3c43d8136af` |
+| GitHub | `OctoCat` | `octocat` | `0x381fb9d7d3b01214e58b94202ea10f78e169adef68bcc20d40c130deca6dfe74` |
 
 Email, audience, client identifier, X username, and GitHub login never
 replace the immutable `userId`.
 
-### 2.1a Handle normalization
+### 2.1a Handle rules and folding
 
-Proof layers work with raw bytes; normalization is a consumption-time
-derivation, layered strictly:
+The Proving Circuit owns the step from the raw authenticated values to their
+nodes. It opens the raw id and handle, checks each against the platform's
+rules, folds the handle, and outputs both nodes. The rules refuse a value;
+they never trim, strip, or repair one.
 
 - REQ-PLAT-08A (upholds SP-BIND-01):
-  The Proving Circuit and the Notary Service MUST NOT case-fold, trim, or
-  otherwise transform identity bytes. The Consumer MUST receive the handle as
-  the raw authenticated bytes of its platform source.
+  The Notary Service MUST NOT case-fold, trim, or otherwise transform
+  identity bytes. The Proving Circuit MUST reject an id or a handle its
+  platform's rules refuse. The Proving Circuit MUST hash the id unchanged and
+  the handle folded under REQ-PLAT-05B, and MUST apply no other transform.
 - REQ-PLAT-08B (upholds SP-BIND-01):
-  The Consumer MUST derive the normalized handle from the
-  proof-verified raw bytes on its own write path. The Consumer MUST
-  NOT accept a caller-supplied normalized handle or pre-hashed handle key.
-  Necessity: the handle arrives inside a proof; a caller supplying the
-  derived key could name any handle it liked.
+  The Consumer MUST key a binding only on the id node and handle node the
+  Platform Verifier returns from a verified proof. The Consumer MUST NOT
+  accept a caller-supplied node. Where a handle arrives as text, the
+  Platform Verifier or the Consumer that reads it MUST fold it under
+  REQ-PLAT-05B and accept it only for the node it hashes to under the
+  platform's handle tag. They MUST NOT apply a character-set or shape rule
+  to that text. Necessity: the
+  node arrives inside a proof, so a caller supplying it could name any
+  identity it liked; and node equality already proves the text is the
+  canonical form the circuit admitted, so a second rule set on the chain is
+  a second copy that can only drift.
 - REQ-PLAT-08C:
-  A browser-side normalization exists only for display and local checks. No
-  proof statement or Consumer behavior may rely on it. Necessity: a check
-  running in software the prover chooses whether to run is not a defense.
+  A browser-side check of the rules exists only for display and local
+  checks. No proof statement or Consumer behavior may rely on it. Necessity:
+  a check running in software the prover chooses whether to run is not a
+  defense.
 
-Normalization applies these per-platform criteria: ASCII-only input with
-disallowed bytes rejected; lowercasing; Google validates the value as an
-email address and keeps its `@`; X and GitHub strip one leading `@`;
-underscore is allowed on X and not on GitHub; hyphen is allowed on GitHub and
-not on X, and never leading, trailing, or doubled; a per-platform maximum
-length; an empty result is rejected. The exact byte-level algorithm is fixed
-by the shared cross-language handle vector table this profile publishes
-alongside the specification, which every implementation reproduces; that
-table, not this prose, is the precision anchor. A profile that publishes no
-such table is ineligible.
+The rules are, per platform:
 
-- TEST-PLAT-20 (exercises REQ-PLAT-08A, REQ-PLAT-08B, REQ-PLAT-08C):
-  Every implementation reproduces the shared handle vector table byte for
-  byte; a caller-supplied normalized handle or pre-hashed key is rejected;
-  and identity bytes transformed before derivation by the Consumer
-  fail conformance.
+- every platform: ASCII only; empty refused; a per-platform maximum length;
+  `A`-`Z` folded to `a`-`z`; no byte trimmed, so a leading or trailing space
+  or tab is refused;
+- X: letters, digits, and `_`, at most 15 bytes; `@` refused, not stripped;
+- GitHub: letters, digits, and `-`, at most 39 bytes; a `-` never first,
+  last, or next to another `-`; `@` refused, not stripped;
+- Google: the email address as signed, at most 62 bytes; letters, digits,
+  and `.`, `+`, `-`, `_`, `@`; exactly one `@`, neither first nor last; no
+  dot removed, no `+` suffix stripped, no domain rewritten.
+
+Ids follow REQ-PLAT-04 and REQ-PLAT-06 and are never folded. The exact
+byte-level algorithm is fixed by the shared cross-language handle vector
+table this profile publishes alongside the specification, which every
+implementation reproduces; that table, not this prose, is the precision
+anchor. The launch table is libID-contracts'
+`solidity/contracts/handles/handles.json`; the circuits compile a copy
+generated from it. A profile that publishes no such table is ineligible.
+
+- TEST-PLAT-20 (exercises REQ-PLAT-05A, REQ-PLAT-05B, REQ-PLAT-05C, REQ-PLAT-08A, REQ-PLAT-08B, REQ-PLAT-08C):
+  Every implementation reproduces the shared vector table byte for byte,
+  including every node in it; a value a refusing row names fails to prove,
+  including one with a leading `@`, a space, or a tab; a caller-supplied
+  node is rejected; and a handle given as text in another letter case
+  reaches the same node, while text the rules refuse folds to a node no
+  proof binds.
 
 ### 2.2 Metadata ordering and validity ceilings
 
@@ -1206,9 +1263,12 @@ Platform Verifier, Notary Service, Consumer.
   The §3.1 nonce vector reproduces exactly. A proof bound to another token
   nonce is rejected downstream when verified against this authorization's
   recomputed digest, independently of the browser result-consistency checks.
-- TEST-PLAT-02 (exercises REQ-PLAT-04, REQ-PLAT-05, REQ-PLAT-05A, REQ-PLAT-06, REQ-PLAT-07, REQ-PLAT-08):
-  The §2.1 identifier vectors reproduce, the Google one as its digest, and
-  each listed malformed identifier is rejected.
+- TEST-PLAT-02 (exercises REQ-PLAT-04, REQ-PLAT-05, REQ-PLAT-05A, REQ-PLAT-05B, REQ-PLAT-05C, REQ-PLAT-06, REQ-PLAT-07, REQ-PLAT-08):
+  The §2.1 id and handle node vectors reproduce, and each listed malformed
+  identifier fails to prove: an X or GitHub id `0`, one with a leading zero,
+  and `18446744073709551616`, while `18446744073709551615` proves; and a
+  Google `sub` of 32 bytes or holding `"`, `\`, or a tab, while one with a
+  leading `0` proves unchanged.
 - TEST-PLAT-03 (exercises REQ-PLAT-11, REQ-PLAT-12):
   A Google authorization request not using the exact direct-ID-token fragment
   profile is rejected. A nonempty query, mixed query/fragment response, or

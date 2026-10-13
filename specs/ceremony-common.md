@@ -123,6 +123,10 @@ Platform Profile: The immutable, independently versioned definition of one
    same profile, but its implementation and deployment are ledger-specific.
    The Consumer holds none of the profile constants.
 
+Account identifier: The authenticated value a Platform Profile derives an
+   identity's id node from: Google's signed `sub`, and the X and GitHub
+   identifiers (platform §2.1).
+
 Proving Circuit: The zero-knowledge circuit whose proof a Platform Verifier
    checks. It proves only what cannot be read from authenticated evidence.
 
