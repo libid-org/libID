@@ -2,7 +2,7 @@
   "name": "@libid/ts",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.34.6",
+  "packageManager": "pnpm@11.25.0",
   "engines": {
     "node": ">=26.0.0"
   },
