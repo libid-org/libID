@@ -11,6 +11,11 @@ export default defineConfig({
       title: 'libID',
       description: 'Every social account is already a multichain identity.',
       favicon: '/favicon.svg',
+      head: [
+        { tag: 'meta', attrs: { property: 'og:image', content: 'https://lib.id/og.png' } },
+        { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+        { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+      ],
       customCss: ['./src/styles/custom.css'],
       routeMiddleware: './src/route-data.ts',
       sidebar: [
