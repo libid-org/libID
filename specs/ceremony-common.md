@@ -235,6 +235,18 @@ Attestation Count: The number of entries in the closed attestation list a
 - ASM-BROWSER-01:
   The Canonical Runtime executes unmodified, and the user agent enforces the
   same-origin policy over authorization responses.
+- ASM-HASH-01:
+  SHA-256 is preimage resistant: given a node, no party recovers its value
+  except by hashing candidates under the public tag and comparing. A node
+  is not a secret: a low-entropy value, such as a handle, an email
+  address, or a sequential id, is recovered by hashing guesses, and this
+  assumption gives no protection against that.
+- ASM-ZK-01:
+  The proof system is zero-knowledge in its zero-knowledge proving mode: a
+  proof made in that mode with fresh prover randomness reveals nothing of
+  the witness beyond its public inputs. No verifier can tell what
+  randomness a proof was made with, so this holds only for proofs the
+  Canonical Runtime makes as REQ-COMMON-45A requires.
 
 ## 4. Security properties
 
@@ -298,6 +310,25 @@ notary-signature check before an authoritative effect.
   Within one Consumer deployment, one ceremony authorizes at most
   one authoritative effect. Depends on ASM-CHAIN-01, ASM-CHAIN-02. Evidence:
   checked invariant in the Consumer.
+- SP-PRIV-01:
+  The Consumer, the Proof Verifier, and the Platform Verifier emit or store
+  an identity's handle in plaintext on the Consumer Chain only from an
+  accepted Submission or disclosure call that carried it, and its id and
+  account identifier never. No chain artifact, whether calldata, proof
+  bytes, attestation bytes, event, or storage, yields a handle or id that
+  no transaction carried, except by hashing a candidate under the public
+  tag and comparing it with the identity's nodes. "Private" therefore means
+  not disclosed, not unguessable. Depends on ASM-HASH-01, ASM-PROOF-01,
+  ASM-ZK-01, ASM-BROWSER-01. Evidence: conformance tests
+  (supporting, not proving) plus the preimage resistance of SHA-256.
+
+SP-PRIV-01 bounds what the chain's artifacts yield, not who learns the
+identity. The Prover documents the CCDP Distribution supplies hold the
+evidence, and the Application receives the handle in the ceremony result;
+each can send it anywhere, and a transaction that carries it is one the
+property permits. A modified Prover could also leak the witness through the
+proof bytes, so the property rests on the unmodified Canonical Runtime
+(ASM-BROWSER-01, ASM-ZK-01).
 
 ## 5. Authorization digest
 
@@ -607,6 +638,15 @@ an identity session — so one Submission on either path pays two fees.
   role performed the acceptance; with no rule placing that work anywhere, no
   role is obliged to run it, and every public input the surrounding rules
   compare is then a number the caller wrote down.
+- REQ-COMMON-45A (upholds SP-PRIV-01):
+  The Canonical Runtime (its Prover) MUST make every proof in the proof
+  system's zero-knowledge proving mode, drawing that proof's prover
+  randomness freshly from a cryptographically secure random source. The
+  Verifier Governance Process MUST select only verifier artifacts that
+  accept only proofs made in that mode. Necessity: the proof bytes sit in
+  calldata beside the public inputs, and whether they reveal the hidden
+  identity values is decided when they are made; the verifier accepts a
+  proof whatever randomness it was made with.
 - REQ-COMMON-46 (upholds SP-BIND-01):
   The Proof Verifier MUST pass the Submission Payload and the native value to
   the Platform Verifier it selected without decoding either. The Platform
@@ -1527,6 +1567,10 @@ the constructions that role implements.
   Version is rejected; a proof verifying only under another platform's or
   another ceremony version's artifact is rejected; and a caller-supplied artifact, verifying key, or precomputed
   verification result changes no decision.
+- TEST-COMMON-22A (exercises REQ-COMMON-45A):
+  The Canonical Runtime makes every proof in the zero-knowledge proving
+  mode, two proofs it makes of one witness differ, and a proof of the right
+  statement made outside that mode is rejected.
 - TEST-COMMON-23 (exercises REQ-COMMON-02, REQ-COMMON-46):
   The Platform Verifier recomputes the digest from the operation domain,
   nonce and transaction data it decoded, the ceremony version it implements,
@@ -1538,7 +1582,7 @@ the constructions that role implements.
 ## 12. Security Considerations
 
 This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01,
-SP-FRESH-01, and SP-REPLAY-01 under the assumptions of §3.
+SP-FRESH-01, SP-REPLAY-01, and SP-PRIV-01 under the assumptions of §3.
 
 Replay within one Consumer deployment is prevented by `authorizationNonce`
 and REQ-COMMON-03. Replay across Consumer Chains whose Chain Profiles use
@@ -1583,13 +1627,36 @@ liveness dependency only: they cannot forge evidence, but an unbounded fee
 stops every ceremony for the platforms whose profiles carry attestations, and
 leaves a profile with no attestation unaffected.
 
-The handle, the platform user identifier, and the client identifier are
-published deliberately. A binding exists to be read, and each of these values
-is already discoverable from the identity platform, so the protocol treats
-none of them as confidential. Google's `sub` is the exception: Google shows it
-only to the applications a user signs in to, so its Platform Profile publishes
-a digest of it as the user identifier
-([platform profiles §2.1](platform-ceremonies.md#21-canonical-platform-user-identifiers)).
+The client identifier is published deliberately: a binding exists to be
+read, and the client is discoverable from the identity platform. The id and
+the handle are not published. A binding puts their nodes on the Consumer
+Chain ([platform profiles §2.1](platform-ceremonies.md#21-canonical-platform-user-identifiers)),
+and the handle appears in plaintext only once a transaction discloses it
+(SP-PRIV-01). That is privacy by not disclosing, not secrecy:
+
+- The tags are public, so anyone can hash a guessed handle, email address,
+  or id and look it up (ASM-HASH-01). Whoever already knows an account can
+  resolve it; that is what a node is for.
+- GitHub ids are sequential, so a GitHub id node is in effect public:
+  hashing every id up to the current maximum takes about a minute. X ids
+  and Google `sub` values are larger but not secret, and every application
+  a user signs in to with Google knows that user's `sub`.
+- The X and GitHub attestations carry the length of every committed range,
+  so the lengths of the id and the handle are public.
+- A disclosure is permanent. Withdrawing a name clears the Consumer's
+  state, but the transaction that carried the handle stays in history, and
+  a refused transaction's calldata is public too.
+- A duplicate identity field hidden behind a commitment cannot be detected,
+  so which account a binding names rests on ASM-PROV-06. That is a limit
+  on soundness, not on privacy.
+- A binding's existence, platform, Transaction Author, and observation time
+  are public; only the values are not.
+- Any other transaction that names a handle as text, such as a payment
+  addressed by handle rather than by node, discloses it as surely as a
+  disclosure call.
+- Off-chain readers see what they are asked: a resolver, an RPC provider,
+  or an ENS gateway given a handle in plaintext learns it.
+
 GitHub's application credential is also public,
 including in its revealed token request; knowing it does not authenticate the
 presenter. The bearer, commitment openings, and transcript bytes outside a

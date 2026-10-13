@@ -256,7 +256,7 @@ unless it discloses the handle. The Submission Payload of every profile has
 one optional handle field and no field for an id. An empty handle field
 discloses nothing.
 
-- REQ-PLAT-03A:
+- REQ-PLAT-03A (upholds SP-PRIV-01):
   The Canonical Runtime (its Application, which builds the Submission) MUST
   place the delivered handle in the Submission's handle field only when the
   user asks to disclose it. The Canonical Runtime MUST NOT place an account
@@ -264,7 +264,7 @@ discloses nothing.
   with every proof and builds no Submission, so the choice of sending it
   falls to the role that does, and no Consumer check can tell a handle the
   user chose to show from one an operator sent.
-- REQ-PLAT-08D (upholds SP-BIND-01):
+- REQ-PLAT-08D (upholds SP-BIND-01, SP-PRIV-01):
   Where the handle field is nonempty, the Platform Verifier MUST fold it
   under REQ-PLAT-05B, MUST reject the Submission unless the node of the
   folded handle under the platform's handle tag equals the handle node the
@@ -284,7 +284,7 @@ records the **owner**, the Transaction Author that last bound it, and the
 current handle node, and each handle node's current id node. A Transaction
 Author **holds** a handle on a platform while it owns that handle's node.
 
-- REQ-PLAT-08H (upholds SP-BIND-01):
+- REQ-PLAT-08H (upholds SP-BIND-01, SP-PRIV-01):
   The Consumer MUST key a binding on the id node and the handle node
   themselves. The Consumer MUST NOT key a binding on a plaintext value or
   store the account identifier. Necessity: the tags of REQ-PLAT-05C already
@@ -350,7 +350,7 @@ while it is its author's name; publication is state.
   has lost its owner to retirement (REQ-PLAT-08I), so the one test refuses
   it. A refused call protects the display, not the handle: its calldata is
   public whether or not the Consumer accepts it.
-- REQ-PLAT-08F (upholds SP-BIND-01):
+- REQ-PLAT-08F (upholds SP-BIND-01, SP-PRIV-01):
   The Consumer MUST put no plaintext handle, id, or account identifier in
   the event of a binding, and MUST put the nodes there. The Consumer MUST
   emit an event carrying the folded handle for every name it stores, and an
@@ -558,7 +558,7 @@ digest as 32 one-byte elements (0-31), then each 32-byte digest or node as
 32-33, the id node at 34-35 and the handle node at 36-37, then `exp` at 38
 and the modulus as 18 limbs at 39-56.
 
-- REQ-PLAT-16C (upholds SP-BIND-01):
+- REQ-PLAT-16C (upholds SP-BIND-01, SP-PRIV-01):
   The Proving Circuit MUST NOT expose the signed `sub` or the signed `email`
   in any public input. The Proving Circuit MUST reject a `sub` that
   REQ-PLAT-04 rejects, and MUST hash exactly the signed `sub` bytes under
@@ -928,7 +928,7 @@ on each side that faces one, and by the signed transcript boundary of common
 REQ-COMMON-36 at the two ends, which is the anchoring common REQ-COMMON-18A
 requires.
 
-- REQ-PLAT-59 (upholds SP-BIND-01):
+- REQ-PLAT-59 (upholds SP-BIND-01, SP-PRIV-01):
   The Implementation MUST reveal the full `"id":"` and `"username":"`
   delimiters and their closing quotes in the `/2/users/me` response, and
   MUST commit each value, exactly the bytes between its delimiter and its
@@ -1361,7 +1361,7 @@ on each side that faces one, and by the signed transcript boundary of common
 REQ-COMMON-36 at the two ends, which is the anchoring common REQ-COMMON-18A
 requires.
 
-- REQ-PLAT-60 (upholds SP-BIND-01):
+- REQ-PLAT-60 (upholds SP-BIND-01, SP-PRIV-01):
   The Implementation MUST reveal the full `"id":` delimiter and the
   structural byte after the integer token, together with the full
   `"login":"` delimiter and its closing quote, in the `/user` response. The
@@ -1717,8 +1717,8 @@ distinction between local consistency and circuit/downstream verification;
 TEST-PLAT-04 and TEST-PLAT-15 distinguish those later rejections from early
 browser rejection. No ledger verification guarantee is weakened.
 
-This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01, and
-SP-FRESH-01 for the launch platforms, under the assumptions of
+This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01,
+SP-FRESH-01, and SP-PRIV-01 for the launch platforms, under the assumptions of
 [common §3](ceremony-common.md#3-assumptions).
 
 Google is the only platform whose evidence is a bearer artifact: an ID Token
@@ -1784,13 +1784,25 @@ Google's JWKS rotation makes the trusted modulus set a liveness dependency
 (REQ-PLAT-24): ledger verification rejects proofs while Google signs with an
 untrusted modulus, even if browser proof generation completes.
 
-A Google binding publishes the REQ-PLAT-05A digest, never the `sub`. The
-digest keeps the `sub` from readers of the Consumer Chain, not from a party
-that already holds it: every application a user signs in to with Google
-knows that user's `sub` and can recompute the digest to find the binding.
-Google's `sub` values are 21-digit decimal strings in practice, too few to
-resist a well-resourced search. The handle is the account's email address
-and stays public, so a Google binding is not anonymous.
+A binding on any platform publishes its id node and handle node, never the
+id, the handle, or Google's `sub`; the handle reaches the chain only when a
+transaction discloses it (§2.1b). Common §12 states what that does and does
+not hide. On Google the nodes keep the `sub` and the email from readers of
+the Consumer Chain, not from a party that already holds them: every
+application a user signs in to with Google knows that user's `sub` and can
+recompute the id node, and Google's `sub` values are 21-digit decimal
+strings in practice, too few to resist a well-resourced search. An email
+address is a guessable handle like any other.
+
+The rules of §2.1a run inside the Proving Circuits, so they are part of
+each profile's proof statement. A Consumer holds only nodes for an
+undisclosed binding and cannot re-key it, so changing a platform's rules,
+tags, or fold takes a new Platform Ceremony Version and new circuits.
+
+A stored name is not evidence. The Consumer answers a name only while its
+author holds the handle (REQ-PLAT-08K); a reader that mirrors names from
+events and displays the stored string without that test can show a handle
+its author no longer holds.
 
 ## 10. References
 
