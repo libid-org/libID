@@ -364,7 +364,9 @@ Google nonce         = sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU
   validated identity fields, token expiry, and signing modulus under
   REQ-PLAT-16B, using the same artifact encoding. This checks result consistency,
   not the proof's cryptographic validity or the modulus's trusted-set membership.
-  It requires neither the ID Token nor a new `ProveIdentity` field.
+  It requires neither the ID Token nor a new `ProveIdentity` field. The
+  projection takes the id node from the delivered `userId` and the handle
+  node from the delivered `userName`, folded and hashed under REQ-PLAT-05B.
 - REQ-PLAT-15:
   The Prover MUST reject a Google response carrying `code` or
   `access_token`. Necessity: neither artifact belongs to this
@@ -406,19 +408,36 @@ Algorithm-confusion attacks require a verifier that dispatches on the header
   |---|---|
   | Authorization Digest | signed `nonce`, decoded as exactly 32 bytes |
   | client-identifier digest | `SHA256` of the signed `aud` |
-  | canonical `userId` digest | signed `sub`, hashed per REQ-PLAT-05A |
-  | raw `email` bytes | signed `email`; the Consumer derives the normalized handle |
+  | id node | signed `sub`, hashed per REQ-PLAT-05A |
+  | handle node | signed `email`, checked and folded per REQ-PLAT-16D and hashed per REQ-PLAT-05B |
   | evidence timestamp | signed `exp`; used for both `metadataObservedAt` and `proofValidUntil` |
   | RSA modulus | exact `n` that verified the JWS; `e = 65537` is profile-fixed |
 
   The Proving Circuit MUST NOT expose a detached second representation of a
-  claim. Proofs are over raw bytes; normalization, such as lowercasing the
-  handle, is the Consumer's decision at consumption time.
-- REQ-PLAT-16C:
-  The Proving Circuit MUST NOT expose the signed `sub` in any public input.
-  The Proving Circuit MUST reject a `sub` that REQ-PLAT-04 rejects.
-  Necessity: REQ-PLAT-05A keeps the `sub` off the Consumer Chain, which leaves
-  the Proving Circuit the only role that sees its bytes.
+  claim.
+
+The launch `oidc-google` artifact encodes these as 57 field elements: the
+digest as 32 one-byte elements (0-31), then each 32-byte digest or node as
+`[high, low]` 16-byte big-endian halves, the client-identifier digest at
+32-33, the id node at 34-35 and the handle node at 36-37, then `exp` at 38
+and the modulus as 18 limbs at 39-56.
+
+- REQ-PLAT-16C (upholds SP-BIND-01):
+  The Proving Circuit MUST NOT expose the signed `sub` or the signed `email`
+  in any public input. The Proving Circuit MUST reject a `sub` that
+  REQ-PLAT-04 rejects, and MUST hash exactly the signed `sub` bytes under
+  REQ-PLAT-05A. Necessity: the `sub` and the `email` stay off the Consumer
+  Chain, which leaves the Proving Circuit the only role that sees their
+  bytes.
+- REQ-PLAT-16D (upholds SP-BIND-01):
+  The Proving Circuit MUST admit an `email` only when the Google rules of
+  §2.1a admit it, MUST fold it under REQ-PLAT-05B, and MUST hash exactly
+  the folded bytes. The Proving Circuit MUST fail to prove, rather than
+  truncate, a `sub` longer than 31 bytes or an `email` longer than 62
+  bytes. Necessity: neither value holds an escaped byte, since every JSON
+  escape begins with `\`, which the `sub` rule refuses and the `email`
+  alphabet does not contain, and the alphabet's lack of `"` keeps the
+  `email` the circuit reads inside its own JSON string.
 - REQ-PLAT-17 (upholds SP-BIND-01):
   The Proving Circuit MUST prove the signed `iss` equals
   `https://accounts.google.com`.
@@ -1337,7 +1356,7 @@ Platform Verifier, Notary Service, Consumer.
   A Google response carrying an authorization code or access token is rejected,
   and the deployment contains no Google exchange route or client secret.
   Verification: inspection of emitted artifacts.
-- TEST-PLAT-06 (exercises REQ-COMMON-19D, REQ-PLAT-16, REQ-PLAT-16A, REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-17, REQ-PLAT-19, REQ-PLAT-19A, REQ-PLAT-20, REQ-PLAT-21, REQ-PLAT-23):
+- TEST-PLAT-06 (exercises REQ-COMMON-19D, REQ-PLAT-16, REQ-PLAT-16A, REQ-PLAT-16B, REQ-PLAT-16C, REQ-PLAT-16D, REQ-PLAT-17, REQ-PLAT-19, REQ-PLAT-19A, REQ-PLAT-20, REQ-PLAT-21, REQ-PLAT-23):
   The browser Prover rejects an audience differing from its frozen client.
   A token with a foreign issuer, `email_verified: false`, a
   quoted or non-boolean `email_verified`, a quoted, negative, fractional,
@@ -1350,9 +1369,13 @@ Platform Verifier, Notary Service, Consumer.
   circuit verification but is rejected by the Platform Verifier. A submission
   whose supplied `aud` bytes do not hash to the audience public input is
   rejected, and an accepted one returns those exact bytes as the client
-  identifier. A token whose `sub` is empty or carries a byte outside `0x20`
-  through `0x7e` fails the Proving Circuit, and no public input carries the
-  `sub`.
+  identifier. A token whose `sub` is empty, longer than 31 bytes, or
+  carries `"`, `\`, or a byte outside `0x20` through `0x7e` fails the
+  Proving Circuit, as does an `email` with a space, two `@`, an `@` at
+  either end, a byte outside the Google alphabet, or more than 62 bytes.
+  `A.B+tag@Example.COM` and `a.b+tag@example.com` prove the same handle
+  node, the §2.1 vector, and no public input carries a `sub` or `email`
+  byte.
 - TEST-PLAT-07 (exercises REQ-PLAT-22, REQ-PLAT-09, REQ-PLAT-09A):
   A proof at or after `proofValidUntil`, and a token-attestation creation time
   more than its profile's `maxFutureAttestationSkew` ahead of Block Time, are
