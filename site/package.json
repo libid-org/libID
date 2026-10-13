@@ -13,11 +13,11 @@
     "deploy:preview": "wrangler preview"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "7.3.1",
+    "@astrojs/markdown-remark": "7.3.2",
     "@astrojs/starlight": "0.42.5",
-    "astro": "7.3.5"
+    "astro": "7.3.6"
   },
   "devDependencies": {
-    "wrangler": "4.147.0"
+    "wrangler": "4.148.0"
   }
 }
