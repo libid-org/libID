@@ -1443,7 +1443,10 @@ proof.
 
 The Platform Profile for a new platform MUST define a stable platform
 identifier and immutable
-user-ID namespace; canonical handle normalization and authenticated
+user-ID namespace; its user-id and handle tags under REQ-PLAT-05C, distinct
+from every other platform's; its id and handle rules, published in the
+shared vector table and compiled into its Proving Circuit (§2.1a); how the
+id and handle reach that circuit without being revealed; authenticated
 observation ordering; client portability or a bounded client family; exact
 authorization and redirect transport; every authenticated request and
 response field with its provenance; how the Authorization Digest is carried
@@ -1668,7 +1671,7 @@ Platform Verifier, Notary Service, Consumer.
   proof's nodes are account B's. Prover may
   deliver its derived identity separately through CCDP, and Application accepts
   its valid structure without repeating evidence extraction. The delivered
-  `userName` preserves the raw handle even when display normalization would
+  `userName` preserves the raw handle even when display folding would
   change its spelling. Replacing the proof,
   attestation, platform, or version after deriving the local identity fields
   discards them and requires rederivation from the replacement Submission.
@@ -1763,7 +1766,9 @@ checks and the Transaction Author rule in
 [common §12](ceremony-common.md#12-security-considerations).
 Proxy notarization exposes session traffic to the notary; the protocol does
 not promise bearer confidentiality from that notary. The bearer remains
-hidden from the published proof by the two commitments and link circuit.
+hidden from the published proof by the two commitments and link circuit,
+and the id and handle by their own commitments and the nodes the circuit
+outputs in their place.
 
 The notary key is a trust root for X and GitHub evidence. Its compromise
 mints fresh evidence until the key is removed, and does not revoke authority
