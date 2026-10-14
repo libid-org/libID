@@ -117,8 +117,8 @@ used in the resulting Submission.
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
 | Google | signed ID-Token `sub` | `0x` and the lowercase hexadecimal of its id node | signed `email` |
-| X | `/2/users/me.data.id` JSON string | canonical nonzero unsigned 64-bit decimal | `username` |
-| GitHub | `/user.id` JSON integer token | canonical nonzero unsigned 64-bit decimal | `login` |
+| X | `/2/users/me.data.id` JSON string | decimal digits, as sent | `username` |
+| GitHub | `/user.id` JSON integer token | decimal digits, as sent | `login` |
 
 The account identifier is the authenticated value in the second column:
 Google's `sub`, and the X and GitHub identifiers, which are their `userId`
@@ -164,9 +164,11 @@ unchanged.
   separates a node from a plain `SHA256` of the value another system may
   publish.
 - REQ-PLAT-06:
-  The Implementation MUST require an X or GitHub identifier to match
-  `^[1-9][0-9]{0,19}$` with a numeric value at most `2^64 - 1`. Necessity:
-  identity compatibility.
+  The Implementation MUST require an X or GitHub identifier to be 1 to 20
+  ASCII digits, exactly as the platform sent them. Necessity: the digits
+  are what keep a committed id from running past the number into the
+  member after it; whether the number is one the platform issues is the
+  platform's to keep.
 - REQ-PLAT-07:
   The Implementation MUST copy the GitHub raw JSON number token's decimal bytes
   as the string. The Implementation MUST NOT parse it through a floating-point
@@ -174,7 +176,7 @@ unchanged.
   compatibility.
 - REQ-PLAT-08:
   The Implementation MUST reject a quoted GitHub identifier, a numeric X
-  identifier, a leading zero, a sign, a fraction, an exponent, and any
+  identifier, a sign, a fraction, an exponent, and any
   normalization of a Google `sub`. Necessity: identity compatibility.
 
 The Proving Circuit enforces REQ-PLAT-04 and REQ-PLAT-06 on the account
@@ -197,18 +199,23 @@ Conformance vectors, each node computed independently with SHA-256:
 Email, audience, client identifier, X username, and GitHub login never
 replace the immutable `userId`.
 
-### 2.1a Handle rules and folding
+### 2.1a The token check and folding
 
 The Proving Circuit owns the step from the raw authenticated values to their
-nodes. It opens the raw id and handle, checks each against the platform's
-rules, folds the handle, and outputs both nodes. The rules refuse a value;
-they never trim, strip, or repair one.
+nodes. It opens the raw id and handle, checks that each is exactly the JSON
+token the platform sent, folds the handle, and outputs both nodes. The check
+refuses a value; it never trims, strips, or repairs one. The platform's own
+format (a handle's alphabet and length, an id's grammar) is the platform's
+to keep, and no role repeats it.
 
 - REQ-PLAT-08A (upholds SP-BIND-01):
   The Notary Service MUST NOT case-fold, trim, or otherwise transform
-  identity bytes. The Proving Circuit MUST reject an id or a handle its
-  platform's rules refuse. The Proving Circuit MUST hash the id unchanged and
-  the handle folded under REQ-PLAT-05B, and MUST apply no other transform.
+  identity bytes. The Proving Circuit MUST reject an id or a handle that is
+  not one whole JSON token as sent, per the check below. The Proving Circuit
+  MUST hash the id unchanged and the handle folded under REQ-PLAT-05B, and
+  MUST apply no other transform. Necessity: a commitment is framed only by
+  revealed anchors, so a prover chooses where it ends; a value that stopped
+  at a later quote, or past the digits, would give one account many nodes.
 - REQ-PLAT-08B (upholds SP-BIND-01):
   The Consumer MUST key a binding only on the id node and handle node the
   Platform Verifier returns from a verified proof. The Consumer MUST NOT
@@ -222,38 +229,37 @@ they never trim, strip, or repair one.
   canonical form the circuit admitted, so a second rule set on the chain is
   a second copy that can only drift.
 - REQ-PLAT-08C:
-  A browser-side check of the rules exists only for display and local
-  checks. No proof statement or Consumer behavior may rely on it. Necessity:
-  a check running in software the prover chooses whether to run is not a
-  defense.
+  A browser-side check exists only for display and local checks. No proof
+  statement or Consumer behavior may rely on it. Necessity: a check running
+  in software the prover chooses whether to run is not a defense.
 
-The rules are, per platform:
+The check is:
 
-- every platform: ASCII only; empty refused; a per-platform maximum length;
-  `A`-`Z` folded to `a`-`z`; no byte trimmed, so a leading or trailing space
-  or tab is refused;
-- X: letters, digits, and `_`, at most 15 bytes; `@` refused, not stripped;
-- GitHub: letters, digits, and `-`, at most 39 bytes; a `-` never first,
-  last, or next to another `-`; `@` refused, not stripped;
-- Google: the email address as signed, at most 62 bytes; letters, digits,
-  and `.`, `+`, `-`, `_`, `@`; exactly one `@`, neither first nor last; no
-  dot removed, no `+` suffix stripped, no domain rewritten.
+- a handle, and a Google `sub`: 1 or more bytes from `0x20` through `0x7e`,
+  holding neither `"` nor `\`, at most the circuit's buffer; nothing
+  trimmed, so a space or an `@` is part of the value as sent;
+- an X or GitHub id: decimal digits under REQ-PLAT-06;
+- a handle is then folded under REQ-PLAT-05B; an id never is.
 
-Ids follow REQ-PLAT-04 and REQ-PLAT-06 and are never folded. The exact
-byte-level algorithm is fixed by the shared cross-language handle vector
-table this profile publishes alongside the specification, which every
-implementation reproduces; that table, not this prose, is the precision
-anchor. The launch table is libID-contracts'
-`solidity/contracts/handles/handles.json`; the circuits compile a copy
-generated from it. A profile that publishes no such table is ineligible.
+The buffers are X and GitHub handles 39 bytes, Google addresses 62 bytes,
+X and GitHub ids 20 digits, and a Google `sub` 31 bytes. A longer value fails
+to prove; it is never truncated.
+
+Each platform's tags and buffers are its `keys` in libID-contracts'
+`solidity/contracts/ceremony/profiles.json`, and the shared cross-language
+vector table is its `solidity/contracts/handles/handles.json`. Every
+implementation reproduces the table; it, not this prose, is the precision
+anchor, and the circuits compile a copy generated from both files. A profile
+that publishes no such table is ineligible.
 
 - TEST-PLAT-20 (exercises REQ-PLAT-05A, REQ-PLAT-05B, REQ-PLAT-05C, REQ-PLAT-08A, REQ-PLAT-08B, REQ-PLAT-08C):
   Every implementation reproduces the shared vector table byte for byte,
   including every node in it; a value a refusing row names fails to prove,
-  including one with a leading `@`, a space, or a tab; a caller-supplied
-  node is rejected; and a handle given as text in another letter case
-  reaches the same node, while text the rules refuse folds to a node no
-  proof binds.
+  including one holding `"`, `\`, a tab or a NUL, or longer than its
+  buffer, while a handle with a leading `@` or a space proves as sent; a
+  caller-supplied node is rejected; and a handle given as text in another
+  letter case reaches the same node, while text no circuit hashes folds to
+  a node no proof binds.
 
 ### 2.1b Bindings, disclosure, and names
 
@@ -572,14 +578,13 @@ and the modulus as 18 limbs at 39-56.
   Chain, which leaves the Proving Circuit the only role that sees their
   bytes.
 - REQ-PLAT-16D (upholds SP-BIND-01):
-  The Proving Circuit MUST admit an `email` only when the Google rules of
-  §2.1a admit it, MUST fold it under REQ-PLAT-05B, and MUST hash exactly
-  the folded bytes. The Proving Circuit MUST fail to prove, rather than
+  The Proving Circuit MUST admit an `email` only when the check of §2.1a
+  admits it, MUST fold it under REQ-PLAT-05B, and MUST hash exactly the
+  folded bytes. The Proving Circuit MUST fail to prove, rather than
   truncate, a `sub` longer than 31 bytes or an `email` longer than 62
   bytes. Necessity: neither value holds an escaped byte, since every JSON
-  escape begins with `\`, which the `sub` rule refuses and the `email`
-  alphabet does not contain, and the alphabet's lack of `"` keeps the
-  `email` the circuit reads inside its own JSON string.
+  escape begins with `\`, which the check refuses, and the absence of `"`
+  keeps the `email` the circuit reads inside its own JSON string.
 - REQ-PLAT-17 (upholds SP-BIND-01):
   The Proving Circuit MUST prove the signed `iss` equals
   `https://accounts.google.com`.
@@ -982,15 +987,17 @@ requires.
   of the `/2/users/me` attestation to the raw `id` and `username` values,
   check them under §2.1a, and prove the id node and handle node of
   REQ-PLAT-05A and REQ-PLAT-05B over exactly those opened bytes, folding
-  the handle from the same witness that opened its commitment. The Proving
-  Circuit MUST compile in X's tags and rules. Necessity: the values stay
-  committed (§5.3), so the circuit is the only role that sees them; and a
-  circuit that took its tags or rules as inputs would let one platform's
-  proof key another platform's identity.
+  the handle from the same witness that opened its commitment. X and GitHub
+  prove under one bearer-link circuit, which hashes under the two tags its
+  public inputs carry. Necessity: the values stay committed (§5.3), so the
+  circuit is the only role that sees them; and the Platform Verifier, not
+  the prover, supplies the tags (REQ-PLAT-32C), so a proof made under one
+  platform's tags fails under another's.
 - REQ-PLAT-32B (upholds SP-EXCHANGE-01, SP-BIND-01):
-  The Proving Circuit MUST expose exactly these twelve X public inputs, each
+  The Proving Circuit MUST expose exactly these sixteen public inputs, each
   32-byte value as two field elements holding its high and low 16 bytes,
-  big-endian, high first:
+  big-endian, high first, and each tag as one field element holding its
+  bytes from the top of 31 bytes, zero after, followed by its length:
 
   | Index | Public input | Meaning |
   |---|---|---|
@@ -1000,6 +1007,8 @@ requires.
   | 6-7 | handle commitment | the `username` commitment the Platform Verifier frames in that response |
   | 8-9 | id node | REQ-PLAT-05A over the opened `id` |
   | 10-11 | handle node | REQ-PLAT-05B over the opened `username` |
+  | 12-13 | user-id tag, its length | X's user-id tag of REQ-PLAT-05C |
+  | 14-15 | handle tag, its length | X's handle tag of REQ-PLAT-05C |
 
   The Proving Circuit MUST keep the bearer, the id, and the handle private.
   The Proving Circuit MUST NOT add an Authorization Digest, client
@@ -1007,16 +1016,17 @@ requires.
 - REQ-PLAT-32C (upholds SP-EXCHANGE-01, SP-BIND-01):
   The Platform Verifier MUST take the two nodes from the Submission
   Payload, MUST verify the proof against public inputs it builds from the
-  four commitments in the attestations it verified and those two nodes, and
-  MUST return the nodes only from a proof that verifies. Necessity: built
-  from the attestations, the inputs leave the circuit no way to prove a link
-  between two attestations other than the ones submitted, or nodes of
-  values other than the ones the platform sent; a node the payload names
-  wrongly is a proof that does not verify.
+  four commitments in the attestations it verified, those two nodes, and
+  its own platform's two tags, and MUST return the nodes only from a proof
+  that verifies. Necessity: built from the attestations and the verifier's
+  platform, the inputs leave the circuit no way to prove a link between two
+  attestations other than the ones submitted, nodes of values other than
+  the ones the platform sent, or nodes under another platform's tags; a
+  node the payload names wrongly is a proof that does not verify.
 
 The circuit proves two things: one hidden bearer opens both attestations'
-bearer commitments, and the committed id and handle, under X's rules, hash
-to the two nodes. Everything else is checked where it can be seen — the
+bearer commitments, and the committed id and handle, each one whole JSON
+token, hash to the two nodes under X's tags. Everything else is checked where it can be seen — the
 Platform Verifier binds the Authorization Digest by recomputing the verifier
 under common REQ-COMMON-15A, reads the client identifier, evidence timestamp,
 request method, and path from revealed attestation bytes, frames the id and
@@ -1053,9 +1063,8 @@ server-side token-exchange custody; browser and service specifications own the
 configuration and delivery of these public inputs.
 
 As on X, the evidence is two attestations and one hidden bearer linking
-them, and the circuit opens the committed id and handle. GitHub has its own
-bearer-link circuit, with X's relation and public-input layout and GitHub's
-tags and rules.
+them, and the circuit opens the committed id and handle. GitHub proves under
+X's bearer-link circuit, with GitHub's tags as its tag inputs.
 The Platform Verifier binds the revealed `code_verifier` to the Authorization
 Digest under common REQ-COMMON-15A; the circuit does not perform that binding.
 
@@ -1389,8 +1398,8 @@ requires.
   profile, as `,` or `}` and no other byte. The Platform Verifier MUST
   reject a transcript in which either delimiter matches at more than one
   position of the revealed bytes, per common REQ-COMMON-19A, or in which no
-  commitment, or more than one, is so framed. The canonical encoding of the
-  `id` digits is the Proving Circuit's to check under REQ-PLAT-06.
+  commitment, or more than one, is so framed. That the committed `id` bytes
+  are digits is the Proving Circuit's to check under REQ-PLAT-06.
   Necessity: the terminator is what proves the committed digits are the
   whole number rather than a prefix of a longer one, and JSON member order
   does not guarantee which of the two closes it.
@@ -1411,27 +1420,21 @@ requires.
 - REQ-PLAT-52C (upholds SP-BIND-01):
   The Proving Circuit MUST open the id commitment and the handle commitment
   of the `/user` attestation to the raw `id` digits and `login` value, and
-  prove their nodes as REQ-PLAT-32D does, with GitHub's tags and rules
-  compiled in.
+  prove their nodes as REQ-PLAT-32D does, under GitHub's tags.
 - REQ-PLAT-52A (upholds SP-EXCHANGE-01, SP-BIND-01):
-  The Proving Circuit MUST expose exactly the twelve public inputs of
+  The Proving Circuit MUST expose exactly the sixteen public inputs of
   REQ-PLAT-32B, in its order and encoding, with the token-exchange
   attestation in place of X's token attestation, the `/user` attestation in
-  place of `/users/me`, and `login` in place of `username`. The Proving
+  place of `/users/me`, `login` in place of `username`, and GitHub's tags in
+  place of X's. The Proving
   Circuit MUST NOT add an Authorization Digest, client identifier,
   timestamp, or endpoint public input. Necessity: the digest is bound by the
   Platform Verifier under common REQ-COMMON-15A, and the rest are revealed
   bytes it reads directly, so a circuit copy would be a second
   representation of a fact that already has one.
 - REQ-PLAT-52B (upholds SP-EXCHANGE-01, SP-BIND-01):
-  The Platform Verifier MUST take the two nodes from the Submission
-  Payload, MUST verify the proof against public inputs it builds from the
-  four commitments in the attestations it verified and those two nodes, and
-  MUST return the nodes only from a proof that verifies. Necessity: built
-  from the attestations, the inputs leave the circuit no way to prove a link
-  between two attestations other than the ones submitted, or nodes of
-  values other than the ones the platform sent; a node the payload names
-  wrongly is a proof that does not verify.
+  The Platform Verifier MUST build the public inputs as REQ-PLAT-32C does,
+  with GitHub's tags. Necessity: as REQ-PLAT-32C.
 
 Changing the pinned API version requires a new Platform Ceremony Version; it
 is not mutable configuration. The granted scope is no proof property at all:
@@ -1450,8 +1453,8 @@ proof.
 The Platform Profile for a new platform MUST define a stable platform
 identifier and immutable
 user-ID namespace; its user-id and handle tags under REQ-PLAT-05C, distinct
-from every other platform's; its id and handle rules, published in the
-shared vector table and compiled into its Proving Circuit (§2.1a); how the
+from every other platform's, and its circuit's buffers, as its profile's
+`keys`, with vectors in the shared table (§2.1a); how the
 id and handle reach that circuit without being revealed; authenticated
 observation ordering; client portability or a bounded client family; exact
 authorization and redirect transport; every authenticated request and
@@ -1473,8 +1476,8 @@ Platform Verifier, Notary Service, Consumer.
   recomputed digest, independently of the browser result-consistency checks.
 - TEST-PLAT-02 (exercises REQ-PLAT-04, REQ-PLAT-05, REQ-PLAT-05A, REQ-PLAT-05B, REQ-PLAT-05C, REQ-PLAT-06, REQ-PLAT-07, REQ-PLAT-08):
   The §2.1 id and handle node vectors reproduce, and each listed malformed
-  identifier fails to prove: an X or GitHub id `0`, one with a leading zero,
-  and `18446744073709551616`, while `18446744073709551615` proves; and a
+  identifier fails to prove: an X or GitHub id holding a non-digit, a space
+  before it, or more than 20 digits, while `0123` proves as sent; and a
   Google `sub` of 32 bytes or holding `"`, `\`, or a tab, while one with a
   leading `0` proves unchanged.
 - TEST-PLAT-03 (exercises REQ-PLAT-11, REQ-PLAT-12):
@@ -1580,8 +1583,9 @@ Platform Verifier, Notary Service, Consumer.
   An opened bearer range that is empty, over 128 bytes, or outside printable
   ASCII fails to prove; an identity response with no framed `id` or handle
   commitment is rejected; a proof whose two attestations commit different
-  bearers is rejected; an opened id or handle the rules refuse fails to
-  prove; and an id node or handle node that is not the node of the opened
+  bearers is rejected; an opened id or handle that is not one JSON token
+  fails to prove; a proof under the other launch platform's tags is
+  rejected; and an id node or handle node that is not the node of the opened
   value fails to prove, including one off by one in its low half. No proof
   statement covers `token_type` or the granted scope.
 - TEST-PLAT-11 (exercises REQ-PLAT-33):
@@ -1805,10 +1809,11 @@ recompute the id node, and Google's `sub` values are 21-digit decimal
 strings in practice, too few to resist a well-resourced search. An email
 address is a guessable handle like any other.
 
-The rules of §2.1a run inside the Proving Circuits, so they are part of
-each profile's proof statement. A Consumer holds only nodes for an
-undisclosed binding and cannot re-key it, so changing a platform's rules,
-tags, or fold takes a new Platform Ceremony Version and new circuits.
+The check and fold of §2.1a run inside the Proving Circuits, so they are
+part of each profile's proof statement. A Consumer holds only nodes for an
+undisclosed binding and cannot re-key it, so changing the check, the fold, a
+buffer, or a platform's tags takes a new Platform Ceremony Version and new
+circuits.
 
 A stored name is not evidence. The Consumer answers a name only while its
 author holds the handle (REQ-PLAT-08K); a reader that mirrors names from

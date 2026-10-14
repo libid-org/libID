@@ -163,8 +163,8 @@ is the signed ID Token on Google and the attestation bytes on X and GitHub;
 the Proving Circuit proves only what cannot be read from that evidence. On
 Google that is the signature relation and the claims it reads; on X and
 GitHub, that one hidden bearer opens both sessions' commitments. On every
-platform the circuit also checks the hidden id and handle against the
-platform's rules and outputs their tagged SHA-256 nodes, which are the keys
+platform the circuit also checks that the hidden id and handle are the
+tokens the platform sent and outputs their tagged SHA-256 nodes, which are the keys
 the Consumer binds. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
 an effect (REQ-COMMON-03, REQ-COMMON-03A). The Consumer keys the binding on
