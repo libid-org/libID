@@ -1,7 +1,7 @@
 {
   "name": "@libid/ledger",
   "version": "0.1.0",
-  "description": "Shared ledger identity and notary routing contract.",
+  "description": "Ledger identities, notary routing, and the supported ledger catalog.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
     "type": "git",
@@ -19,10 +19,15 @@
   "scripts": {
     "build": "node ../../scripts/build-package.ts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "prepack": "pnpm build"
   },
+  "dependencies": {
+    "@noble/hashes": "^2.4.0"
+  },
   "devDependencies": {
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "files": [
     "dist",
