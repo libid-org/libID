@@ -1,4 +1,4 @@
-# libID
+# [libID](https://lib.id)
 
 ![Rust — Ferris the crab](docs/assets/rust-badge.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-363636?style=flat-square&logo=typescript&logoColor=white)
@@ -32,13 +32,6 @@ already use.
 | [libID-bridge-rs](https://github.com/libid-org/libID-bridge-rs) | OAuth bridge for identity ceremonies. |
 | [notary](https://github.com/libid-org/notary) | TLSNotary-based HTTPS proving client and server. |
 
-See the [repository map](docs/repositories.md) for the full directory and package layout.
-
 ## Explore
 
-- [Design philosophy](docs/design-philosophy.md) — the principles behind the protocols and software.
-- [Protocol specifications](specs/libid.md) — the behavior and guarantees implementations share.
-- [Development app](ts/apps/dev/README.md) — explore and test libID primitives locally.
-- [Contributing](CONTRIBUTING.md) — project status and contribution terms.
-
-[Website](https://lib.id) · [Documentation](https://lib.id/docs/)
+[Docs](https://lib.id/docs/) · [Specs](specs/libid.md)
