@@ -2,6 +2,7 @@
 
 ![Rust — Ferris the crab](docs/assets/rust-badge.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Solidity](https://img.shields.io/badge/Solidity-363636?logo=solidity&logoColor=white)
 
 **Primitives for better economic rails over familiar social spaces.**
 
@@ -16,6 +17,10 @@ already use.
 | [Cross-site communication](ts/packages/popup/README.md)<br>`@libid/popup` | Run interactive protocols between websites while keeping each site's memory and persistent states isolated. | 🟢 |
 | [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove custody of OAuth social accounts with ~10s proof generation, keeping private inputs in the browser.<br>**Currently supported platforms:** Google, X, and GitHub. | 🟢 |
 | [Ledger interactions](ts/packages/ledger/README.md)<br>`@libid/ledger` | Streamline ledger interactions through a common runtime API with heterogeneous chain drivers. | 🚧 |
+| Key vault<br>`@libid/vault` | Store private keys securely in the browser using IndexedDB. | 🗓️ |
+| Browser wallet<br>`@libid/wallet` | Run a wallet entirely in the browser, independent of ledger choice, with pluggable cryptography and no extensions. | 🗓️ |
+| React ceremony components<br>`@libid/ceremonies-react` | Reusable React components for `@libid/ceremony`. | 🗓️ |
+| React wallet components<br>`@libid/wallet-react` | Reusable React components for `@libid/wallet`. | 🗓️ |
 
 ## Repositories
 
