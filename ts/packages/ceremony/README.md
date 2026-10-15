@@ -8,9 +8,7 @@ An identity ceremony lets a user authorize an application operation through
 an account they already have. It is the proving step behind using social
 identities in payments, wallets, and other applications.
 
-**Current integrations:** Google, X, and GitHub, with EVM-compatible chains
-as the initial ledger targets. **Release qualification is incomplete**; see
-[evidence and remaining gates](docs/qualification.md).
+**Supported platforms:** Google, X, and GitHub.
 
 Browser proof generation has been measured at ~10s, excluding OAuth sign-in
 and authorization; timings vary by device and platform. Private proving inputs
@@ -25,11 +23,10 @@ platform's profile, alongside its proof and any attestations.
 3. The application receives the result and submits it to the destination
    ledger, whose verifier checks the proof and any attestations.
 
-Users need no browser extension or separate application. The package handles
-the OAuth flow, proving, and popup UI; the application owns the popup's
-lifetime, wallet interactions, and transaction submission. An `accepted`
-result has passed structural checks; final cryptographic verification
-belongs to the ledger.
+The package handles the OAuth flow, proving, and popup UI; the application
+owns the popup's lifetime, wallet interactions, and transaction submission.
+An `accepted` result has passed structural checks; final cryptographic
+verification belongs to the ledger.
 
 The outcome resembles the Fiat-Shamir transformation: an interactive
 exchange yields evidence that others can verify independently. OAuth still
@@ -67,6 +64,7 @@ See [npm releases](../../RELEASING.md) for packaging and publication.
 - [Notarization](docs/notarization.md): session lifecycle and evidence handling.
 - [Assets](docs/assets.md): prefetch, Service Worker ownership and caches.
 - [Measurements](docs/metrics.md): event accounting and telemetry boundaries.
+- [Qualification](docs/qualification.md): evidence and release checks.
 - [Requirement index](docs/test-plan.md) and [traceability](docs/traceability.md):
   stable test IDs, existing coverage and outstanding properties.
 

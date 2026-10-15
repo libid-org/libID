@@ -5,8 +5,7 @@ site's memory and persistent states isolated.
 
 Use this primitive when an application needs to talk to another site in a
 popup or browser tab: identity proving, an in-browser wallet, state
-synchronization, or multiparty computation. It works independently of
-libID's identity ceremonies and requires no browser extension.
+synchronization, or multiparty computation.
 
 ## How it works
 
@@ -23,8 +22,7 @@ how to verify it.
 
 Connection continuity is best effort: applications must handle failures and
 possible message loss when a carrier changes. Opener-independent connections
-need a caller-supplied fallback; the [WebRTC carrier](docs/webrtc.md) is
-specified but not implemented yet.
+need a caller-supplied fallback.
 
 ## API
 

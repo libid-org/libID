@@ -15,7 +15,7 @@ already use.
 | Primitive | What it does | Status |
 | --- | --- | --- |
 | [Cross-site communication](ts/packages/popup/README.md)<br>`@libid/popup` | Run interactive protocols between websites while keeping each site's memory and persistent states isolated. | 🟢 |
-| [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove custody of OAuth social accounts with ~10s proof generation, keeping private inputs in the browser.<br>**Currently supported platforms:** Google, X, and GitHub. | 🟢 |
+| [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove custody of OAuth social accounts with ~10s proof generation, keeping private inputs in the browser.<br>**Supported platforms:** Google, X, and GitHub. | 🟢 |
 | [Ledger interactions](ts/packages/ledger/README.md)<br>`@libid/ledger` | Streamline ledger interactions through a common runtime API with heterogeneous chain drivers. | 🚧 |
 | Key vault<br>`@libid/vault` | Store private keys securely in the browser using IndexedDB. | 🗓️ |
 | Browser wallet<br>`@libid/wallet` | Run a wallet entirely in the browser, independent of ledger choice, with pluggable cryptography and no extensions. | 🗓️ |

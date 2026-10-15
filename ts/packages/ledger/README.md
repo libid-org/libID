@@ -8,10 +8,6 @@ with each driver handling the details of its chain. Identity
 ceremonies are one use: they need to identify a destination ledger and locate
 its notary service.
 
-**Current status:** the broader runtime API is in development. The package
-currently defines the ledger identity and notary routing interface; no
-production ledger definitions are implemented yet.
-
 ## What it provides
 
 - `hash()` identifies the ledger according to its Chain Profile.
@@ -19,7 +15,7 @@ production ledger definitions are implemented yet.
   TLS evidence; the ledger verifier determines which signing keys to trust.
 
 The [identity guide](docs/identity.md) covers the interface, development
-fixtures, and requirements for adding a ledger definition. For now, wallet
+fixtures, and requirements for adding a ledger definition. Wallet
 operations and transaction submission belong to the application.
 
 ## Fixtures
