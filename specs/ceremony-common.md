@@ -125,7 +125,9 @@ Platform Profile: The immutable, independently versioned definition of one
    profile whose Attestation Count is zero defines neither of those two. Every
    Platform Verifier registered for that platform and version MUST enforce the
    same profile, but its implementation and deployment are ledger-specific.
-   The Consumer holds none of the profile constants.
+   Of the profile constants, the Consumer holds only each platform's handle
+   tag and the fold of platform REQ-PLAT-05B, with which it hashes handle
+   text for disclosure and name reads.
 
 Account identifier: The authenticated value a Platform Profile derives an
    identity's id node from: Google's signed `sub`, and the X and GitHub
@@ -563,7 +565,9 @@ and each Consumer Chain's Platform Verifier enforces that profile and fixes
 the encoding of its own Submission Payload. Verifier governance owns the
 mutable verifier artifact, Notary Service, trust roots, fees, and the
 Verifier Version each verifier is registered under. The Consumer holds none
-of those constants.
+of those constants, except each platform's handle tag and the fold of
+platform REQ-PLAT-05B, with which it hashes handle text for disclosure and
+name reads (platform REQ-PLAT-08B, REQ-PLAT-08E, REQ-PLAT-08K).
 
 Two versions travel this path, deliberately unrelated. The Platform Ceremony
 Version is inside the payload and the digest, fixed by the Canonical Runtime
@@ -1110,33 +1114,46 @@ which the following identity-header rules could apply.
   exactly one header line whose name, normalized as REQ-COMMON-39B
   normalizes, is `host`, and whose value, once the optional whitespace
   around it is removed, is exactly the authority the Platform Profile pins
-  for that session. Necessity: the authority reaches the Platform Verifier
-  as the TLS server identity the notary authenticated (REQ-COMMON-21); a
+  for that session. The Platform Verifier MUST compare that value over the
+  raw revealed bytes, not the bytes REQ-COMMON-39 normalizes, so a value in
+  another letter case is rejected. Necessity: the authority reaches the
+  Platform Verifier as the TLS server identity the notary authenticated (REQ-COMMON-21); a
   `host` naming another authority asks a shared front end for a different
   backend than the one the profile pins, and a second `host` is a second
-  answer to which one.
+  answer to which one. The Canonical Runtime sends the authority as pinned,
+  so comparing that one spelling refuses no request it makes.
 - REQ-COMMON-19 (upholds SP-EXCHANGE-01):
-  The Proving Circuit extracting a JSON string field MUST receive the field's
-  offset as a private input supplied by the prover; the circuit performs no
-  search. The Proving Circuit MUST assert the full `"field":"` delimiter at
-  that offset, the value bytes, the closing quote, and the following structural
-  byte fixed by the profile.
+  The Proving Circuit extracting a JSON string field from a document it
+  holds whole, such as Google's signed ID Token payload, MUST receive the
+  field's offset as a private input supplied by the prover; the circuit
+  performs no search. The Proving Circuit MUST assert the full `"field":"`
+  delimiter at that offset, the value bytes, the closing quote, and the
+  following structural byte fixed by the profile. A Proving Circuit that
+  opens a committed value instead, as the bearer-link circuit opens the X
+  and GitHub id and handle (platform REQ-PLAT-32D, REQ-PLAT-52C), asserts no
+  delimiter: the Platform Verifier frames that commitment by its revealed
+  anchors, and the circuit checks the opened value under platform §2.1a.
 - REQ-COMMON-19B (upholds SP-EXCHANGE-01):
-  The Proving Circuit MUST constrain the extracted value's charset to exclude
-  the closing delimiter. The Proving Circuit MUST assert the whole match lies
-  inside the authenticated payload length, not in prover-controlled padding.
+  The Proving Circuit extracting a field under REQ-COMMON-19 MUST constrain
+  the extracted value's charset to exclude the closing delimiter. The
+  Proving Circuit MUST assert the whole match lies inside the authenticated
+  payload length, not in prover-controlled padding.
   Necessity: without the charset bound a longer witnessed value extends the
   match into the neighboring field; without the bounds check a pattern can be
   planted in zero-padding.
 - REQ-COMMON-19D (upholds SP-BIND-01, SP-FRESH-01):
-  The Proving Circuit extracting an unsigned JSON integer MUST assert the exact
+  The Proving Circuit extracting an unsigned JSON integer from a document it
+  holds whole, such as Google's `exp`, MUST assert the exact
   `"field":` delimiter, a canonical `0|[1-9][0-9]*` decimal value bounded by
   the profile's integer type, and the following structural byte fixed by the
   profile. The Proving Circuit checking a JSON boolean MUST assert the exact
   `"field":true` or `"field":false` literal required by the profile and its
   following structural byte. The Proving Circuit MUST keep both matches inside
   the authenticated payload length and reject quoted, signed, fractional,
-  exponent, leading-zero, padded, or wrong-type alternatives.
+  exponent, leading-zero, padded, or wrong-type alternatives. A committed X
+  or GitHub id is not extracted under this rule: the bearer-link circuit
+  checks it as the digits the platform sent under platform REQ-PLAT-06, so
+  `0123` proves.
 - REQ-COMMON-19E (upholds SP-BIND-01):
   The Platform Profile MUST fix, for each field it requires, the authenticated
   bytes that field is read from and the one algorithm that reads them. The
@@ -1188,10 +1205,16 @@ which the following identity-header rules could apply.
   MUST first remove each maximal run of JSON whitespace bytes (`0x20`,
   `0x09`, `0x0a`, `0x0d`) whose immediately preceding or immediately
   following byte is a structural byte (`:`, `,`, `{`, `}`, `[`, `]`), and no
-  other byte. The Platform Verifier MUST match the field's delimiter, read
-  its value, and judge its terminator inside one revealed range, over the
-  bytes that removal leaves of that range. The Platform Verifier MUST count
-  the delimiter's positions under REQ-COMMON-19A over the concatenation of
+  other byte. For a value it reads from revealed bytes, the Platform
+  Verifier MUST match the field's delimiter, read the value, and judge its
+  terminator inside one revealed range, over the bytes that removal leaves
+  of that range. A committed value is not read: the Platform Verifier
+  locates its commitment by the anchors and terminator the Platform Profile
+  names (platform REQ-PLAT-31, REQ-PLAT-51), the delimiter ending the
+  revealed range before the commitment and the terminator in the revealed
+  range after it, each judged over the bytes the removal leaves of its own
+  range; GitHub's `,` or `}` after the `id` digits is one such terminator.
+  The Platform Verifier MUST count the delimiter's positions under REQ-COMMON-19A over the concatenation of
   every revealed range of that direction, in transcript order, after the same
   removal, so that a delimiter a range boundary splits is still counted. The
   Platform Verifier MUST NOT read a value from that concatenation. The
@@ -1201,7 +1224,8 @@ which the following identity-header rules could apply.
   specification spells, such as `"login":"` or `"access_token":"`, names the
   member that removal leaves, not the bytes a platform must serve. The
   Proving Circuit is outside this rule: REQ-COMMON-19 and REQ-COMMON-19D fix
-  what it asserts at the offset the prover supplies. Necessity: a platform
+  what it asserts in a document it holds whole, and platform §2.1a what it
+  checks in a value it opens. Necessity: a platform
   may pretty-print the response it serves for the media type a profile pins,
   and GitHub does for `/user`. Removing a run only where a structural byte
   bounds it leaves every reader one exact template and makes a member in any
@@ -1454,7 +1478,9 @@ the constructions that role implements.
   field spelled with whitespace is rejected as a duplicate; a byte JSON does
   not call whitespace, such as `0x0b`, in any of those positions is rejected;
   an integer with whitespace between its digits is rejected; a member whose
-  whitespace an HTTP chunk boundary splits is not built as a layout; a field
+  whitespace an HTTP chunk boundary splits is not built as a layout; a
+  committed GitHub `id` whose `,` or `}` sits in the revealed range after
+  its commitment is located; a revealed field
   assembled from two revealed ranges, the member's opening in one and its
   value's tail in another, is rejected as absent, however the ranges are
   ordered; a second copy of the delimiter cut in two by a range boundary is
@@ -1542,7 +1568,9 @@ the constructions that role implements.
   signed length, is rejected; a request with no `host`, two, or one naming
   another authority, in any letter case, is rejected; and a `host` whose
   name differs only in letter case or padding before the colon, or whose
-  value has spaces around it, passes. Every case above runs on
+  value has spaces around it, passes, while one whose value differs from the
+  pinned authority only in letter case, such as `API.X.COM`, is rejected.
+  Every case above runs on
   an identity-session attestation. GitHub token requests instead pass the
   complete-disclosure and form checks in TEST-PLAT-12 and TEST-PLAT-14;
   the identity-header needle and bearer framing rules do not apply to them.
@@ -1595,9 +1623,13 @@ digest; a profile collision forfeits that separation. Replay across Platform Cer
 `platformCeremonyVersion`. A version restated under new canonical Platform
 Verifier addresses (platform REQ-PLAT-01A) has the same number, and the
 digest binds no Platform Verifier address, so neither separates the two.
-Their statements do: the two have different verification keys, so a proof
-made for one does not verify under the other's. A payload may still decode
-under the other's encoding; the proof check refuses it. The digest does not bind the Verifier Version, so
+Platform REQ-PLAT-01A does: the restated statement must not accept a proof or
+Submission Payload made for the previous one. The current restatement meets
+that with different verification keys, so a proof made for one does not
+verify under the other's. A payload may still decode under the other's
+encoding; the proof check refuses it. A restatement that changed only
+Platform Verifier rules would keep the circuit and its verification key,
+and would have to meet REQ-PLAT-01A another way. The digest does not bind the Verifier Version, so
 a proof is acceptable at every Verifier Version implementing its ceremony
 version; REQ-COMMON-03 prevents replay among them. The digest does not prevent cross-deployment replay
 because it binds no Consumer identifier. Every Consumer transaction
