@@ -1,5 +1,7 @@
 # @libid/ledger
 
+[![Coverage](https://img.shields.io/badge/coverage-N%2FA-lightgrey)](#checks)
+
 Streamline ledger interactions through a common runtime API with heterogeneous
 chain drivers.
 

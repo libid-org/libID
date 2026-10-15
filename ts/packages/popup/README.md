@@ -1,5 +1,7 @@
 # @libid/popup
 
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Flibid-org%2FlibID%2Fbadges%2Fpopup-coverage.json)](TEST_PLAN.md)
+
 Let two websites run an interactive protocol together while keeping each
 site's memory and persistent states isolated.
 
