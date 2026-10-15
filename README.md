@@ -1,6 +1,6 @@
 # libID
 
-![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
+![Rust — Ferris the crab](docs/assets/rust-badge.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 
 **Primitives for better economic rails over familiar social spaces.**
@@ -18,9 +18,11 @@ this to proofs of social activity.
 
 | Primitive | What it does | Status |
 | --- | --- | --- |
-| [Cross-site communication](ts/packages/popup/README.md)<br>`@libid/popup` | Run interactive protocols between websites while keeping each site's state isolated. | 🟢 |
-| [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove control of a social account in the browser and return evidence a ledger can verify. | 🟢 |
-| [Ledger interactions](ts/packages/ledger/README.md)<br>`@libid/ledger` | Streamline ledger interactions through a common runtime API that is agnostic to the underlying chain. | 🚧 |
+| [Cross-site communication](ts/packages/popup/README.md)<br>`@libid/popup` | Run interactive protocols between websites while keeping each site's memory and persistent states isolated. | 🟢 |
+| [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove custody of OAuth social accounts with ~10s proof generation, keeping private inputs in the browser. | 🟢 |
+| [Ledger interactions](ts/packages/ledger/README.md)<br>`@libid/ledger` | Streamline ledger interactions through a common runtime API with heterogeneous chain drivers. | 🚧 |
+
+**Currently supported platforms:** Google, X, and GitHub.
 
 ## Repositories
 

@@ -1,7 +1,7 @@
 # @libid/popup
 
-Let two websites run an interactive protocol together while keeping their
-state separate.
+Let two websites run an interactive protocol together while keeping each
+site's memory and persistent states isolated.
 
 Use this primitive when an application needs to talk to another site in a
 popup or browser tab: identity proving, an in-browser wallet, state

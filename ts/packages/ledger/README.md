@@ -1,10 +1,10 @@
 # @libid/ledger
 
-Streamline ledger interactions through a common runtime API that is agnostic
-to the underlying chain.
+Streamline ledger interactions through a common runtime API with heterogeneous
+chain drivers.
 
 The goal is to let applications work with different ledgers through one API,
-with each implementation handling the details of its chain. Identity
+with each driver handling the details of its chain. Identity
 ceremonies are one use: they need to identify a destination ledger and locate
 its notary service.
 
