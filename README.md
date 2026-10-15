@@ -1,7 +1,7 @@
 # libID
 
-[![project libID](docs/assets/project-badge.svg)](https://lib.id)
-[![🪾 made by GroundedSystems](https://img.shields.io/badge/%F0%9F%AA%BE%20made%20by-GroundedSystems-000000?style=flat-square&labelColor=000000)](https://grndd.systems)
+[![project libID](https://img.shields.io/badge/project-libID-b57614?style=flat-square&labelColor=363636)](https://lib.id)
+[![🪾 made by GroundedSystems](https://img.shields.io/badge/%F0%9F%AA%BE%20made%20by-GroundedSystems-000000?style=flat-square&labelColor=363636)](https://grndd.systems)
 
 ![Rust — Ferris the crab](docs/assets/rust-badge.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-363636?style=flat-square&logo=typescript&logoColor=white)
