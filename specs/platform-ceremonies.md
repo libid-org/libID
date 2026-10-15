@@ -330,6 +330,16 @@ Author **holds** a handle on a platform while it owns that handle's node.
   back, and a retired node keeps its watermark, the time of the last binding
   that wrote it, so that evidence no newer than that binding cannot claim
   it either.
+- REQ-PLAT-08O (upholds SP-BIND-01):
+  A Consumer that answers whether a handle and an id still go together MUST
+  answer yes only when the handle node has an owner and its current paired
+  id node is that id node. An id node it has never paired, or a handle node
+  without an owner, MUST be answered no. The answer is advice to the caller
+  and MUST NOT refuse a transaction. Necessity: a caller holding a handle and
+  an id learned at one moment asks whether the same account still holds that
+  handle before it pays or links it; two identities of one wallet can pass a
+  handle between them, and comparing owners would answer yes to a pair the
+  chain no longer holds.
 
 A Transaction Author's **name** on a platform is the one handle the
 Consumer stores for that author and platform to display, the analogue of an
@@ -408,6 +418,14 @@ while it is its author's name; publication is state.
   handle. The name reads as none whenever its author no longer holds the
   handle. A withdrawal clears the name and emits an event only when there
   was a name.
+- TEST-PLAT-20D (exercises REQ-PLAT-08O):
+  After an identity proves a handle, the pair of that handle and its id node
+  is answered yes. When identity A of a wallet renames and identity B of the
+  same wallet then proves A's old handle, the pair with A's id node is
+  answered no and the pair with B's is answered yes. An identity that binds
+  the same handle from another wallet keeps its pair. An id node never
+  bound, and a handle with no owner, are answered no; none of these answers
+  refuses a transaction.
 
 ### 2.2 Metadata ordering and validity ceilings
 
