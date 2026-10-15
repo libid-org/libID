@@ -1,11 +1,24 @@
 # @libid/ledger
 
-Shared `LedgerId` contract for application code: `hash()` and `notaryAddress()`.
-See the [identity contract](docs/identity.md).
+Give an identity ceremony a destination ledger and a route to its notary.
 
-**No real ledger definitions are implemented yet.** Adding one requires its
-canonical Chain Profile hash vectors and notary-address checks. Ceremony stays
-chain agnostic; Prover has no ledger dependency.
+The same social account can be used with different networks. This primitive
+lets an application identify the intended ledger so a ceremony can bind the
+user's authorization to that destination without depending on a particular
+chain's client library.
+
+**Current status:** the package defines the shared interface; no production
+ledger definitions are implemented yet.
+
+## What it provides
+
+- `hash()` identifies the ledger according to its Chain Profile.
+- `notaryAddress()` locates the notary service used by ceremonies that need
+  TLS evidence; the ledger verifier determines which signing keys to trust.
+
+The [identity guide](docs/identity.md) covers the interface, development
+fixtures, and requirements for adding a ledger definition. Wallet operations
+and transaction submission belong to the application.
 
 ## Fixtures
 
