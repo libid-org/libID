@@ -1,8 +1,8 @@
 # libID
 
 ![Rust — Ferris the crab](docs/assets/rust-badge.svg)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
-![Solidity](https://img.shields.io/badge/Solidity-363636?logo=solidity&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-363636?style=flat-square&logo=typescript&logoColor=white)
+![Solidity](https://img.shields.io/badge/Solidity-363636?style=flat-square&logo=solidity&logoColor=white)
 
 **Primitives for better economic rails over familiar social spaces.**
 
