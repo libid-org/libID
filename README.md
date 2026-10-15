@@ -7,9 +7,9 @@
 **Primitives for new economies built around familiar social identities.**
 
 libID lets applications verify control of existing social accounts and use
-them as entry points to onchain payments, ownership, and verifiable incentives
-without requiring people to create new identities or leave the platforms
-they're used to.
+them as entry points to payments, ownership, and verifiable incentives across
+blockchains without requiring people to create new identities or leave the
+platforms they're used to.
 
 ## Primitives
 
