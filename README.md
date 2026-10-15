@@ -4,7 +4,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-363636?style=flat-square&logo=typescript&logoColor=white)
 ![Solidity](https://img.shields.io/badge/Solidity-363636?style=flat-square&logo=solidity&logoColor=white)
 
-**Primitives for better economic rails over familiar social spaces.**
+**Primitives for new economies built around familiar social identities.**
 
 libID connects social identities to verifiable ledgers so applications can
 bring payments and other economic interactions to the platforms people

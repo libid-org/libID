@@ -1,1 +1,1 @@
-export const tagline = 'Every social account is already a multichain identity';
+export const tagline = 'Primitives for new economies built around familiar social identities.';
