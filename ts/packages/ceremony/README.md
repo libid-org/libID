@@ -2,7 +2,7 @@
 
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Flibid-org%2FlibID%2Fbadges%2Fceremony-coverage.json)](docs/testing.md)
 
-Prove custody of an OAuth social account with portable evidence a ledger can verify.
+Prove control of an OAuth social account with portable evidence a ledger can verify.
 
 An identity ceremony lets a user authorize an application operation through
 an account they already have. It is the proving step behind using social
