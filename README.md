@@ -5,8 +5,9 @@
 
 **Primitives for better economic rails over familiar social spaces.**
 
-libID provides composable protocols and libraries for payments and other
-economic interactions across the social platforms people already use.
+libID connects social identities to verifiable ledgers so applications can
+bring payments and other economic interactions to the platforms people
+already use.
 
 ## Primitives
 
