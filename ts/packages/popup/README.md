@@ -26,20 +26,23 @@ Connection continuity is best effort: applications must handle failures and
 possible message loss when a carrier changes. Opener-independent connections
 need a caller-supplied fallback.
 
-## API
+## Use and develop
 
-The [API guide](docs/api.md) covers opening a popup, connecting both sides,
-exchanging messages, navigation, failure handling, and worker setup.
-
-## Design
-
+- [API guide](docs/api.md) — popup creation, connections, messages, navigation, failures, and workers.
 - [Connection](docs/connection.md) — origin policy, authentication, and lifecycle.
 - [MessagePort](docs/message-port.md) and [WebRTC](docs/webrtc.md) — communication carriers and continuity.
 - [Popup control](docs/control.md) — navigation and closure.
 - [Metrics and diagnostics](METRICS.md) — local observability.
+- [Test plan](TEST_PLAN.md) — coverage and manual checks.
 
-## Testing
+Run from this package:
 
-From this package, `pnpm test` runs the unit suite over real `MessageChannel`
-ports; `pnpm test:e2e` runs the Playwright browser matrix.
-The [test plan](TEST_PLAN.md) records coverage and deferred or manual checks.
+```sh
+pnpm build
+pnpm typecheck
+pnpm test
+pnpm test:coverage
+pnpm test:e2e
+```
+
+Unit tests use real `MessageChannel` ports; browser tests run the Playwright matrix.
