@@ -19,10 +19,8 @@ this to proofs of social activity.
 | Primitive | What it does | Status |
 | --- | --- | --- |
 | [Cross-site communication](ts/packages/popup/README.md)<br>`@libid/popup` | Run interactive protocols between websites while keeping each site's memory and persistent states isolated. | 🟢 |
-| [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove custody of OAuth social accounts with ~10s proof generation, keeping private inputs in the browser. | 🟢 |
+| [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove custody of OAuth social accounts with ~10s proof generation, keeping private inputs in the browser.<br>**Currently supported platforms:** Google, X, and GitHub. | 🟢 |
 | [Ledger interactions](ts/packages/ledger/README.md)<br>`@libid/ledger` | Streamline ledger interactions through a common runtime API with heterogeneous chain drivers. | 🚧 |
-
-**Currently supported platforms:** Google, X, and GitHub.
 
 ## Repositories
 
