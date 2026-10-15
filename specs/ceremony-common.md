@@ -1594,9 +1594,9 @@ digest; a profile collision forfeits that separation. Replay across Platform Cer
 `platformCeremonyVersion`. A version restated under new canonical Platform
 Verifier addresses (platform REQ-PLAT-01A) has the same number, and the
 digest binds no Platform Verifier address, so neither separates the two.
-Their statements do: the two have different verification keys and payload
-encodings. A proof made for one does not verify under the other's circuits,
-and its payload does not decode as the other's. The digest does not bind the Verifier Version, so
+Their statements do: the two have different verification keys, so a proof
+made for one does not verify under the other's. A payload may still decode
+under the other's encoding; the proof check refuses it. The digest does not bind the Verifier Version, so
 a proof is acceptable at every Verifier Version implementing its ceremony
 version; REQ-COMMON-03 prevents replay among them. The digest does not prevent cross-deployment replay
 because it binds no Consumer identifier. Every Consumer transaction

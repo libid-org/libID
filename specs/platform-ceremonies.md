@@ -1519,8 +1519,9 @@ Platform Verifier, Notary Service, Consumer.
   rejected, and an accepted one returns those exact bytes as the client
   identifier. A token whose `sub` is empty, longer than 31 bytes, or
   carries `"`, `\`, or a byte outside `0x20` through `0x7e` fails the
-  Proving Circuit, as does an `email` with a space, two `@`, an `@` at
-  either end, a byte outside the Google alphabet, or more than 62 bytes.
+  Proving Circuit, as does an `email` that carries `"` or `\` or is
+  longer than 62 bytes. An `email` with a space or an `@` anywhere proves
+  as sent.
   `A.B+tag@Example.COM` and `a.b+tag@example.com` prove the same handle
   node, the §2.1 vector, and no public input carries a `sub` or `email`
   byte.
