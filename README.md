@@ -30,7 +30,7 @@ already use.
 | [libID-contracts](https://github.com/libid-org/libID-contracts) | Smart contracts for EVM chains. |
 | [libID-circuits](https://github.com/libid-org/libID-circuits) | Zero-knowledge circuits and verification keys. |
 | [libID-bridge-rs](https://github.com/libid-org/libID-bridge-rs) | OAuth bridge for identity ceremonies. |
-| [notary](https://github.com/libid-org/notary) | Notarized evidence of interactions with social platforms. |
+| [notary](https://github.com/libid-org/notary) | TLSNotary-based HTTPS proving client and server. |
 
 See the [repository map](docs/repositories.md) for the full directory and package layout.
 

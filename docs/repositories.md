@@ -31,8 +31,8 @@ carries the project website, the browser packages and their development app:
 - [`libID-circuits`](https://github.com/libid-org/libID-circuits) — the Noir
   circuits; releases ship the compiled circuits + verification keys the
   ceremonies load.
-- [`notary`](https://github.com/libid-org/notary) — the notary service
-  (MPC-TLS / ProxyMode verifier + attestation signer).
+- [`notary`](https://github.com/libid-org/notary) — TLSNotary-based HTTPS proving
+  client and server.
 - [`libID-bridge-rs`](https://github.com/libid-org/libID-bridge-rs) — the
   deployable OAuth bridge that publishes ceremony configuration and serves
   the callback document; proving and notarization run in the browser.
