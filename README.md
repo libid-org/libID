@@ -22,12 +22,23 @@ this to proofs of social activity.
 | [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove control of a social account in the browser and return evidence a ledger can verify. | 🟢 |
 | [Ledger interactions](ts/packages/ledger/README.md)<br>`@libid/ledger` | Streamline ledger interactions through a common runtime API that is agnostic to the underlying chain. | 🚧 |
 
+## Repositories
+
+| Repository | Purpose |
+| --- | --- |
+| [libID-rs](https://github.com/libid-org/libID-rs) | Rust backends and proof tooling. |
+| [libID-contracts](https://github.com/libid-org/libID-contracts) | Smart contracts for EVM chains. |
+| [libID-circuits](https://github.com/libid-org/libID-circuits) | Zero-knowledge circuits and verification keys. |
+| [libID-bridge-rs](https://github.com/libid-org/libID-bridge-rs) | OAuth bridge for identity ceremonies. |
+| [notary](https://github.com/libid-org/notary) | Notarized evidence of interactions with social platforms. |
+
+See the [repository map](docs/repositories.md) for the full directory and package layout.
+
 ## Explore
 
 - [Design philosophy](docs/design-philosophy.md) — the principles behind the protocols and software.
 - [Protocol specifications](specs/libid.md) — the behavior and guarantees implementations share.
 - [Development app](ts/apps/dev/README.md) — explore and test libID primitives locally.
-- [Repository map](docs/repositories.md) — packages, services, contracts, and tooling.
 - [Contributing](CONTRIBUTING.md) — project status and contribution terms.
 
 [Website](https://lib.id) · [Documentation](https://lib.id/docs/)
