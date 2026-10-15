@@ -1,4 +1,7 @@
-# [libID](https://lib.id)
+# libID
+
+[![project libID](https://img.shields.io/badge/project-libID-363636?style=flat-square&labelColor=363636)](https://lib.id)
+![🪾 made by GroundedSystems](https://img.shields.io/badge/%F0%9F%AA%BE%20made%20by-GroundedSystems-363636?style=flat-square&labelColor=363636)
 
 ![Rust — Ferris the crab](docs/assets/rust-badge.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-363636?style=flat-square&logo=typescript&logoColor=white)
