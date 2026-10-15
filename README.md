@@ -18,15 +18,15 @@ this to proofs of social activity.
 
 | Primitive | What it does | Status |
 | --- | --- | --- |
-| [Cross-site communication](ts/packages/popup/README.md)<br>`@libid/popup` | Run interactive protocols between websites while keeping each site's state isolated. | 🟢 Implemented |
-| [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove control of a social account in the browser and return evidence a ledger can verify. | 🟢 Implemented |
-| [Ledger interactions](ts/packages/ledger/README.md)<br>`@libid/ledger` | Streamline ledger interactions through a common runtime API that is agnostic to the underlying chain. | 🚧 In development |
+| [Cross-site communication](ts/packages/popup/README.md)<br>`@libid/popup` | Run interactive protocols between websites while keeping each site's state isolated. | 🟢 |
+| [Identity ceremonies](ts/packages/ceremony/README.md)<br>`@libid/ceremony` | Prove control of a social account in the browser and return evidence a ledger can verify. | 🟢 |
+| [Ledger interactions](ts/packages/ledger/README.md)<br>`@libid/ledger` | Streamline ledger interactions through a common runtime API that is agnostic to the underlying chain. | 🚧 |
 
 ## Explore
 
 - [Design philosophy](docs/design-philosophy.md) — the principles behind the protocols and software.
 - [Protocol specifications](specs/libid.md) — the behavior and guarantees implementations share.
-- [Development app](ts/apps/dev/README.md) — run identity flows locally.
+- [Development app](ts/apps/dev/README.md) — explore and test libID primitives locally.
 - [Repository map](docs/repositories.md) — packages, services, contracts, and tooling.
 - [Contributing](CONTRIBUTING.md) — project status and contribution terms.
 

@@ -18,7 +18,7 @@ carries the project website, the browser packages and their development app:
 - [`ts/packages/ledger`](../ts/packages/ledger) — **`@libid/ledger`**, the
   `LedgerId` contract an application passes to a ceremony.
 - [`ts/apps/dev`](../ts/apps/dev) — **`@libid/dev`**, the shared local services and
-  browser app for manual ceremony testing.
+  browser app for exploring and testing primitives together.
 
 ## Repositories
 

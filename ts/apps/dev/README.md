@@ -1,7 +1,9 @@
 # @libid/dev
 
-Local application for testing real ceremonies with the OAuth Bridge, notary and
-CCDP distribution. It uses a synthetic ledger fixture and submits no transactions.
+Local application for exploring and testing libID primitives together.
+
+It currently focuses on identity ceremonies with the OAuth Bridge, notary and
+CCDP distribution, using a synthetic ledger fixture without submitting transactions.
 
 ## Run
 
