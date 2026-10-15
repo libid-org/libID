@@ -72,10 +72,10 @@ Submission Payload: The opaque byte string a Consumer passes through the Proof
    fixes its encoding and reads it. For every profile it carries the Platform
    Ceremony Version it was built for, the operation domain, the Authorization
    Nonce, the Authorized Transaction Data, the proof, the platform's
-   attestations in the notary's own format, an optional handle to disclose
-   (platform §2.1b), and any further value the Platform Profile requires the
-   caller to supply. It carries no Chain ID, no Verifier Version, and no
-   account identifier.
+   attestations in the notary's own format, and any further value the
+   Platform Profile requires the caller to supply. It carries no Chain ID,
+   no Verifier Version, no handle, and no account identifier; a handle to
+   disclose travels beside it in the Consumer's bind call (platform §2.1b).
 
 Consumer Chain: The chain whose canonical state transition consumes a libID
    proof.
@@ -316,7 +316,7 @@ notary-signature check before an authoritative effect.
 - SP-PRIV-01:
   The Consumer, the Proof Verifier, and the Platform Verifier emit or store
   an identity's handle in plaintext on the Consumer Chain only from an
-  accepted Submission or disclosure call that carried it, and its id and
+  accepted bind call or disclosure call that carried it, and its id and
   account identifier never. No chain artifact, whether calldata, proof
   bytes, attestation bytes, event, or storage, yields a handle or id that
   no transaction carried, except by hashing a candidate under the public
@@ -621,8 +621,9 @@ an identity session — so one Submission on either path pays two fees.
   Digest it recomputed, the operation domain and Authorized Transaction Data
   it decoded, the Platform Ceremony Version it implements, the client
   identifier, the id node and handle node of platform REQ-PLAT-05A and
-  REQ-PLAT-05B, the disclosed handle, folded, where the Submission carries
-  one under platform REQ-PLAT-08D, and `metadataObservedAt`. Necessity: an authenticated
+  REQ-PLAT-05B, and `metadataObservedAt`. It returns no handle; the
+  Consumer checks a disclosed handle against the handle node under platform
+  REQ-PLAT-08D. Necessity: an authenticated
   identity and observation time are what the ceremony exists to produce; the digest is the
   Consumer's replay nullifier, which it cannot recompute without reading the
   payload. The Consumer trusts these fields as it trusts the Platform Verifier

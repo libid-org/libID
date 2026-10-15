@@ -220,10 +220,9 @@ to keep, and no role repeats it.
   The Consumer MUST key a binding only on the id node and handle node the
   Platform Verifier returns from a verified proof. The Consumer MUST NOT
   accept a caller-supplied node. Where a handle arrives as text, the
-  Platform Verifier or the Consumer that reads it MUST fold it under
-  REQ-PLAT-05B and accept it only for the node it hashes to under the
-  platform's handle tag. They MUST NOT apply a character-set or shape rule
-  to that text. Necessity: the
+  Consumer MUST fold it under REQ-PLAT-05B and accept it only for the node
+  it hashes to under the platform's handle tag. It MUST NOT apply a
+  character-set or shape rule to that text. Necessity: the
   node arrives inside a proof, so a caller supplying it could name any
   identity it liked; and node equality already proves the text is the
   canonical form the circuit admitted, so a second rule set on the chain is
@@ -264,30 +263,34 @@ that publishes no such table is ineligible.
 ### 2.1b Bindings, disclosure, and names
 
 A claim puts no plaintext user id, handle, or email on the Consumer Chain
-unless it discloses the handle. The Submission Payload of every profile has
-one optional handle field and no field for an id. An empty handle field
-discloses nothing.
+unless it discloses the handle. The Consumer's bind call takes the
+Submission and, beside it, one optional handle:
+`bind(platformId, version, payload, string handle)`. The Submission Payload
+has no field for a handle or an id. An empty handle discloses nothing and
+keeps the bind private.
 
 - REQ-PLAT-03A (upholds SP-PRIV-01):
-  The Canonical Runtime (its Application, which builds the Submission) MUST
-  place the delivered handle in the Submission's handle field only when the
-  user asks to disclose it. The Canonical Runtime MUST NOT place an account
-  identifier in any Submission. Necessity: the Prover delivers the handle
-  with every proof and builds no Submission, so the choice of sending it
-  falls to the role that does, and no Consumer check can tell a handle the
-  user chose to show from one an operator sent.
+  The Canonical Runtime (its Application, which builds the bind call) MUST
+  pass the delivered handle to the bind call only when the user asks to
+  disclose it, and MUST pass an empty handle otherwise. The Canonical
+  Runtime MUST NOT place an account identifier in any bind call. Necessity:
+  the Prover delivers the handle with every proof and builds no bind call,
+  so the choice of sending it falls to the role that does, and no Consumer
+  check can tell a handle the user chose to show from one an operator sent.
 - REQ-PLAT-08D (upholds SP-BIND-01, SP-PRIV-01):
-  Where the handle field is nonempty, the Platform Verifier MUST fold it
-  under REQ-PLAT-05B, MUST reject the Submission unless the node of the
-  folded handle under the platform's handle tag equals the handle node the
-  proof is verified against, and MUST return the folded handle with its other
-  verified fields (common REQ-COMMON-05E). Where the field is empty, it
-  MUST return no handle. The Platform Verifier MUST NOT emit or store the
-  handle. Necessity: the field arrives beside the proof, not in it, so only
-  the node comparison ties it to the account. The comparison may run before
-  the proof is verified; the verification is what makes the node
-  authentic, and with it the canonical form, so the chain needs no rule set
-  to check the text.
+  Where the bind call's handle is nonempty, the Consumer MUST fold it under
+  REQ-PLAT-05B and hash it under the platform's handle tag, exactly as for
+  a disclosure call (REQ-PLAT-08E), and MUST reject the bind call unless
+  that node equals the handle node the Platform Verifier returned
+  (common REQ-COMMON-05E). Where the handle is empty, the bind call
+  discloses nothing. The Platform Verifier never receives the handle.
+  Necessity: the handle arrives beside the proof, not in it, so only the
+  node comparison ties it to the account; the verification is what makes
+  the node authentic, and with it the canonical form, so the chain needs no
+  rule set to check the text. The Consumer already folds and hashes handle
+  text for disclosure calls, so one rule serves both. A rejected bind
+  protects the display, not the handle: its calldata is public whether or
+  not the Consumer accepts it.
 
 The Consumer stores every binding under its two nodes. For each node it
 records the **owner**, the Transaction Author that last bound it, and the
@@ -324,21 +327,21 @@ A Transaction Author's **name** on a platform is the one handle the
 Consumer stores for that author and platform to display, the analogue of an
 ENS primary name kept per platform. An author holding several identities of
 one platform still has one name there. A handle is **disclosed** once a
-Submission or disclosure call the Consumer accepted has carried it;
+bind call or disclosure call the Consumer accepted has carried it;
 disclosure is history and nothing undoes it. A handle is **published**
 while it is its author's name; publication is state.
 
 - REQ-PLAT-08J (upholds SP-BIND-01):
   The Consumer MUST change a Transaction Author's name on a platform only
-  through the paths this rule lists. On accepting a Submission that
-  discloses a handle, the Consumer MUST store the folded handle the Platform
-  Verifier returned as the author's name. On accepting a disclosure call
+  through the paths this rule lists. On accepting a bind call that
+  discloses a handle, the Consumer MUST store the handle it folded under
+  REQ-PLAT-08D as the author's name. On accepting a disclosure call
   (REQ-PLAT-08E), it MUST store that call's folded handle as the caller's
   name. On a withdrawal call, it MUST clear the caller's name on that
   platform. Whenever a handle node's owner changes from one author to
   another, or REQ-PLAT-08I clears it, the Consumer MUST clear the previous
-  owner's name on that platform if that name folds to that node. A
-  Submission that discloses nothing MUST leave the name unchanged.
+  owner's name on that platform if that name folds to that node. A bind
+  call that discloses nothing MUST leave the name unchanged.
   Necessity: a name is the handle an author chose to show; a claim of
   another of its identities must not replace that choice, and a name left
   in place after its handle moved would show a handle its author no longer
@@ -371,18 +374,19 @@ while it is its author's name; publication is state.
   say when one was stored or cleared.
 
 - TEST-PLAT-20A (exercises REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08H):
-  On each platform, a Submission without a handle, made with recognizable
-  test values, carries no id, handle, email, or `sub` bytes in its payload,
-  its events, or any storage it writes, including a value split across two
-  storage words. The same account submitted with
-  and without its handle lands on the same two nodes. A Submission is
-  rejected when its handle does not fold to the proof's handle node, and a
-  disclosed handle in another letter case is stored folded. A disclosure
+  On each platform, a bind call without a handle, made with recognizable
+  test values, carries no id, handle, email, or `sub` bytes in its
+  calldata, its events, or any storage it writes, including a value split
+  across two storage words. The same account bound with
+  and without its handle lands on the same two nodes. The Consumer rejects
+  a bind call whose handle does not fold to the handle node the Platform
+  Verifier returned, the Platform Verifier's result carries no handle, and
+  a disclosed handle in another letter case is stored folded. A disclosure
   call is rejected from a caller that does not hold the handle and for a
   handle retired by a later claim of the same account, and accepted, without
   a proof, for a held handle given in any letter case. The Application
-  places the handle in a Submission only when the user asks to disclose it,
-  and no Submission has a field for an id.
+  passes the handle to the bind call only when the user asks to disclose
+  it, and no Submission Payload has a field for a handle or an id.
 - TEST-PLAT-20B (exercises REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
   An identity that proves a new handle leaves its old handle without an
   owner, unless another identity proved that handle meanwhile, which keeps

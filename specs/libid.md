@@ -101,7 +101,7 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
-| Application operator | selects a Bridge and operation; starts or withholds work; receives the handle in plaintext and decides whether a Submission discloses it | frontend availability and declared ceremony inputs | identity fields, proof target, or proof validity |
+| Application operator | selects a Bridge and operation; starts or withholds work; receives the handle in plaintext and decides whether its bind call discloses it | frontend availability and declared ceremony inputs | identity fields, proof target, or proof validity |
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
 | CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges; its Prover holds the identity evidence | correct code and asset supply under ASM-CCDP-01; a Prover that proves in the zero-knowledge mode with fresh randomness, on which SP-PRIV-01 rests | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
