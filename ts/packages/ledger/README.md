@@ -1,14 +1,16 @@
 # @libid/ledger
 
-Give an identity ceremony a destination ledger and a route to its notary.
+Streamline ledger interactions through a common runtime API that is agnostic
+to the underlying chain.
 
-The same social account can be used with different networks. This primitive
-lets an application identify the intended ledger so a ceremony can bind the
-user's authorization to that destination without depending on a particular
-chain's client library.
+The goal is to let applications work with different ledgers through one API,
+with each implementation handling the details of its chain. Identity
+ceremonies are one use: they need to identify a destination ledger and locate
+its notary service.
 
-**Current status:** the package defines the shared interface; no production
-ledger definitions are implemented yet.
+**Current status:** the broader runtime API is in development. The package
+currently defines the ledger identity and notary routing interface; no
+production ledger definitions are implemented yet.
 
 ## What it provides
 
@@ -17,8 +19,8 @@ ledger definitions are implemented yet.
   TLS evidence; the ledger verifier determines which signing keys to trust.
 
 The [identity guide](docs/identity.md) covers the interface, development
-fixtures, and requirements for adding a ledger definition. Wallet operations
-and transaction submission belong to the application.
+fixtures, and requirements for adding a ledger definition. For now, wallet
+operations and transaction submission belong to the application.
 
 ## Fixtures
 
