@@ -5,14 +5,8 @@
 
 **Primitives for better economic rails over familiar social spaces.**
 
-libID connects social identities to verifiable ledgers so applications can
-bring payments and other economic interactions to the platforms people
-already use.
-
-Identity bridging is the starting point: a familiar handle can stand in for
-an onchain address. The goal is to let people transact with anyone on a
-supported platform, even before the recipient connects a wallet, and extend
-this to proofs of social activity.
+libID provides composable protocols and libraries for payments and other
+economic interactions across the social platforms people already use.
 
 ## Primitives
 
