@@ -103,9 +103,9 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
-| Application operator | selects a Bridge and operation; starts or withholds work | frontend availability and declared ceremony inputs | identity fields, proof target, or proof validity |
+| Application operator | selects a Bridge and operation; starts or withholds work; receives the handle in plaintext and builds the bind call | frontend availability, declared ceremony inputs, and passing the handle to the bind call only when the user asks (platform REQ-PLAT-03A) | identity fields, proof target, or proof validity |
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
-| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges | correct code and asset supply under ASM-CCDP-01 | authority to change ledger verification rules |
+| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges; its Prover holds the identity evidence | correct code and asset supply under ASM-CCDP-01; a Prover that proves in the zero-knowledge mode with fresh randomness, on which SP-PRIV-01 rests | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots, and the Supported Version Set | correct authority lifecycle | user consent |
@@ -161,12 +161,20 @@ Authorization Digest public input on Google, recomputing the revealed
 `code_verifier` on X and GitHub (REQ-COMMON-02A, REQ-COMMON-15A) — verifies
 the proof under the artifact selected for the submitted platform and version
 (REQ-COMMON-45), and enforces authenticated freshness. Proof-field provenance
-is the signed ID Token on Google and the revealed attestation bytes on X and
-GitHub; the Proving Circuit proves only what cannot be read from that
-evidence, which is Google's signature relation and, on X and GitHub, that one
-hidden bearer opens both sessions' commitments. The Consumer enforces replay
+is the signed ID Token on Google and the attestation bytes on X and GitHub;
+the Proving Circuit proves only what cannot be read from that evidence. On
+Google that is the signature relation and the claims it reads; on X and
+GitHub, that one hidden bearer opens both sessions' commitments. On every
+platform the circuit also checks that the hidden id and handle are the
+tokens the platform sent and outputs their tagged SHA-256 nodes, which are the keys
+the Consumer binds. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
-an effect (REQ-COMMON-03, REQ-COMMON-03A). The Canonical Runtime
+an effect (REQ-COMMON-03, REQ-COMMON-03A). The Consumer keys the binding on
+the nodes and puts the handle on chain only from a transaction that
+discloses it, and the id never (SP-PRIV-01). It does not prevent
+confirmation of a guessed identity by hashing, nor an application or
+Distribution operator, each of which handles the plaintext, from sending
+the handle itself. The Canonical Runtime
 locally enforces the selected OAuth client and redirect profile. The protocol
 assumes the named identity-platform parser,
 PKCE, delivery, notary, browser, verifier-soundness, and chain behaviors. It
