@@ -7,7 +7,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-363636?style=flat-square&logo=typescript&logoColor=white)
 ![Solidity](https://img.shields.io/badge/Solidity-363636?style=flat-square&logo=solidity&logoColor=white)
 
-**Primitives and protocol for new economies built around familiar social identities.**
+**Primitives and protocols for new economies built around familiar social identities.**
 
 libID lets applications verify control of existing social accounts and use
 them as entry points to payments, ownership, and programmable incentives
