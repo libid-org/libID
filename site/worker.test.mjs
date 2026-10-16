@@ -63,7 +63,7 @@ try {
     body: rumBody,
   }));
   assert.equal(rumResponse, upstreamResponse);
-  assert.equal(lastRequest.url, 'https://cloudflareinsights.com/cdn-cgi/rum');
+  assert.equal(lastRequest.url, 'https://lib.id/cdn-cgi/rum');
   assert.equal(lastRequest.redirect, 'manual');
   assert.deepEqual(Object.fromEntries(lastRequest.headers), {
     'content-type': 'application/json',
@@ -71,6 +71,7 @@ try {
     referer: 'https://lib.id/',
     'user-agent': 'Browser test agent',
     'x-forwarded-for': '2001:db8::42',
+    'x-real-ip': '2001:db8::42',
   });
   assert.equal(await new Response(lastRequest.body).text(), rumBody);
 

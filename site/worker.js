@@ -37,6 +37,7 @@ export default {
     const ip = request.headers.get('CF-Connecting-IP');
     if (ip) headers.set('X-Forwarded-For', ip);
     if (cloudflare) {
+      if (ip) headers.set('X-Real-IP', ip);
       // Cloudflare validates the site origin; page URLs stay in the beacon payload.
       headers.set('Origin', url.origin);
       headers.set('Referer', `${url.origin}/`);
@@ -44,7 +45,7 @@ export default {
 
     try {
       return await fetch(cloudflare
-        ? 'https://cloudflareinsights.com/cdn-cgi/rum'
+        ? new URL('/cdn-cgi/rum', url).href
         : 'https://plausible.io/api/event', {
         method: 'POST',
         headers,
