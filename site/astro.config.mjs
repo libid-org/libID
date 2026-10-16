@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
@@ -14,7 +13,6 @@ export default defineConfig({
       description,
       favicon: '/favicon.svg',
       head: [
-        { tag: 'script', content: readFileSync(new URL('./src/analytics.js', import.meta.url), 'utf8') },
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://lib.id/og.png' } },
         { tag: 'meta', attrs: { property: 'og:image:type', content: 'image/png' } },
         { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
@@ -28,6 +26,7 @@ export default defineConfig({
         { label: 'Specs', items: [{ autogenerate: { directory: 'specs' } }] },
       ],
       components: {
+        Head: './src/components/Head.astro',
         Sidebar: './src/components/Sidebar.astro',
         ThemeProvider: './src/components/ThemeProvider.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',

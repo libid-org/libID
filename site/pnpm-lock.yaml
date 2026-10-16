@@ -14,6 +14,9 @@ importers:
       '@astrojs/starlight':
         specifier: 0.42.5
         version: 0.42.5(@astrojs/markdown-remark@7.3.2(supports-color@10.2.2))(astro@7.3.6(@astrojs/markdown-remark@7.3.2(supports-color@10.2.2))(@types/node@24.19.1)(yaml@2.9.1))(supports-color@10.2.2)
+      '@plausible-analytics/tracker':
+        specifier: 0.4.6
+        version: 0.4.6
       astro:
         specifier: 7.3.6
         version: 7.3.6(@astrojs/markdown-remark@7.3.2(supports-color@10.2.2))(@types/node@24.19.1)(yaml@2.9.1)
@@ -989,6 +992,9 @@ packages:
     resolution: {integrity: sha512-Fa2Iyw7kaDRzGMfNYNUXNW2zbL5FQVDgSOcbDHdzBrDEdpqOqg8TcZ68F22ol6NJ9IGzvUdmeyZypLW5dyhqsg==}
     cpu: [x64]
     os: [win32]
+
+  '@plausible-analytics/tracker@0.4.6':
+    resolution: {integrity: sha512-nbu6xGgSP6jeYuoVklZBzucUnIpo75tVu3Kr+R0EDycVKaMC/jF5Q/YCaM/8gR4fPZ1IDcXt6FdBJFZ1uZwEPA==}
 
   '@poppinss/colors@4.1.6':
     resolution: {integrity: sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg==}
@@ -3197,6 +3203,8 @@ snapshots:
 
   '@pagefind/windows-x64@1.5.2':
     optional: true
+
+  '@plausible-analytics/tracker@0.4.6': {}
 
   '@poppinss/colors@4.1.6':
     dependencies:

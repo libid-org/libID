@@ -15,14 +15,15 @@ pnpm -C site dev
 ```
 
 Run `pnpm -C site build`, then `pnpm -C site preview` to test search.
-Run `pnpm -C site test` for theme, spec-link, and analytics checks.
+Run `pnpm -C site test` for theme and spec-link checks.
 
 ## Analytics
 
 Plausible tracks pageviews on the homepage, docs, and specs for the `lib.id`
-site in Plausible Cloud. The shared loader in `src/analytics.js` uses Plausible's
-domain-based snippet and runs only on `lib.id` and `www.lib.id`; local and
-preview hosts do not load it. No API key is required.
+site in Plausible Cloud. Astro bundles the pinned `@plausible-analytics/tracker`
+dependency through `src/analytics.js`. Tracking is enabled only on `lib.id`
+and `www.lib.id`; local and preview hosts do not send events. No API key is
+required.
 
 After deployment, finish adding `lib.id` in Plausible and run its installation
 check. [Plausible's troubleshooting guide](https://plausible.io/docs/troubleshoot-integration)

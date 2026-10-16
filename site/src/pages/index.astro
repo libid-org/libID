@@ -2,7 +2,6 @@
 import ThemeProvider from '../components/ThemeProvider.astro';
 import { palettes } from '../palette.mjs';
 import { description, tagline } from '../tagline.mjs';
-import analyticsScript from '../analytics.js?raw';
 import libronFont from '../../../brand/libron/Libron-Regular.woff2?url';
 import '../styles/home.css';
 ---
@@ -28,7 +27,7 @@ import '../styles/home.css';
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preload" href={libronFont} as="font" type="font/woff2" crossorigin>
     <ThemeProvider />
-    <script is:inline set:html={analyticsScript}></script>
+    <script src="../analytics.js"></script>
   </head>
   <body>
     <button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false" hidden>
