@@ -5,6 +5,8 @@
 Streamline ledger interactions through a common runtime API with heterogeneous
 chain drivers.
 
+**Specification:** [Chain profiles](https://lib.id/specs/chain-profiles/).
+
 The goal is to let applications work with different ledgers through one API,
 with each driver handling the details of its chain. Identity
 ceremonies are one use: they need to identify a destination ledger and locate

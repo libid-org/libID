@@ -5,6 +5,8 @@
 Let two websites run an interactive protocol together while keeping each
 site's memory and persistent states isolated.
 
+**Specification:** [Popup transport](https://lib.id/specs/popup-transport/).
+
 Use this primitive when an application needs to talk to another site in a
 popup or browser tab: identity proving, an in-browser wallet, state
 synchronization, or multiparty computation.
