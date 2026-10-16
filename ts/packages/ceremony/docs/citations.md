@@ -183,7 +183,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-DIST-07 | [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/cache.test.ts](../src/assets/cache.test.ts), [src/assets/rootWorker.test.ts](../src/assets/rootWorker.test.ts) |
 | TEST-DIST-08 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
 | TEST-PLAT-01 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
-| TEST-PLAT-02 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts) |
+| TEST-PLAT-02 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts), [src/platforms/validation.test.ts](../src/platforms/validation.test.ts) |
 | TEST-PLAT-03 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-05 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-06 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts) |
