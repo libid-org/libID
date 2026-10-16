@@ -234,12 +234,14 @@ The buffers are X and GitHub handles 39 bytes, Google addresses 62 bytes,
 X and GitHub ids 20 digits, and a Google `sub` 31 bytes. A longer value fails
 to prove; it is never truncated.
 
-Each platform's tags and buffers are its `keys` in libID-contracts'
-`solidity/contracts/ceremony/profiles.json`, and the shared cross-language
-vector table is its `solidity/contracts/handles/handles.json`. Every
-implementation reproduces the table; it, not this prose, is the precision
-anchor, and the circuits compile a copy generated from both files. A profile
-that publishes no such table is ineligible.
+The circuits own the platform table. Each platform's tags, buffers and id
+shape are its entry in libID-circuits' `lib/identity/platforms.json`, and
+the shared cross-language vector table is its `lib/identity/handles.json`.
+Every circuits release ships both files beside its verifiers; the circuits
+compile their constants from them, and libID-contracts generates its
+profile tags and its Rust and TypeScript tables from the shipped copies.
+Every implementation reproduces the vector table; it, not this prose, is
+the precision anchor. A profile that publishes no such table is ineligible.
 
 - TEST-PLAT-20 (exercises REQ-PLAT-05A, REQ-PLAT-05B, REQ-PLAT-05C, REQ-PLAT-08A, REQ-PLAT-08B, REQ-PLAT-08C):
   Every implementation reproduces the shared vector table byte for byte,
@@ -1476,8 +1478,8 @@ The Platform Profile for a new platform MUST define a stable platform
 identifier and immutable
 user-ID namespace; its user-id and handle tags under REQ-PLAT-05C, none a
 prefix of any other tag and no other tag a prefix of them, and its
-circuit's buffers, as its profile's `keys`, with vectors in the shared
-table (§2.1a); how the id and handle reach that circuit without being revealed; authenticated
+circuit's buffers, as its entry in the circuits' platform table, with
+vectors in the shared table (§2.1a); how the id and handle reach that circuit without being revealed; authenticated
 observation ordering; client portability or a bounded client family; exact
 authorization and redirect transport; every authenticated request and
 response field with its provenance; how the Authorization Digest is carried
