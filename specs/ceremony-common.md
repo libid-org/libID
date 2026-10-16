@@ -566,8 +566,8 @@ the encoding of its own Submission Payload. Verifier governance owns the
 mutable verifier artifact, Notary Service, trust roots, fees, and the
 Verifier Version each verifier is registered under. The Consumer holds none
 of those constants, except each platform's handle tag and the fold of
-platform REQ-PLAT-05B, with which it hashes handle text for disclosure and
-name reads (platform REQ-PLAT-08B, REQ-PLAT-08E, REQ-PLAT-08K).
+platform REQ-PLAT-05B, with which it hashes a disclosed handle (platform
+REQ-PLAT-08B, REQ-PLAT-08D, REQ-PLAT-08E).
 
 Two versions travel this path, deliberately unrelated. The Platform Ceremony
 Version is inside the payload and the digest, fixed by the Canonical Runtime
