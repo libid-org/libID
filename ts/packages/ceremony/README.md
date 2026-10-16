@@ -2,8 +2,8 @@
 
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Flibid-org%2FlibID%2Fbadges%2Fceremony-coverage.json)](docs/testing.md)
 
-Prove control of OAuth/OIDC social accounts in the user's browser, keeping
-private proving inputs on their device.
+Prove control of OAuth/OIDC social accounts in the user's browser, processing
+their identity data locally and sharing only the fields required for verification.
 
 **Specification:** [Identity ceremonies](https://lib.id/specs/#identity-ceremonies).
 
@@ -11,13 +11,13 @@ An identity ceremony lets a user authorize an application operation through
 an account they already have. It is the proving step behind using social
 identities in payments, wallets, and other applications.
 
-**Supported platforms:** Google, X, and GitHub. The goal is to extend to *any*
+**Supported platforms:** Google, X, and GitHub. Extend to *any*
 OAuth/OIDC platform with a few prompts; see [Adding a platform](docs/provers.md#adding-a-platform).
 
 Browser proof generation has been measured at ~10s, excluding OAuth sign-in
-and authorization; timings vary by device and platform. Private proving inputs
-stay in the browser. The result discloses the identity fields required by the
-platform's profile, alongside its proof and any attestations.
+and authorization; timings vary by device and platform. The result shares the
+user's email address or username and a platform-specific account identifier,
+alongside its proof and any attestations.
 
 ## How it works
 
