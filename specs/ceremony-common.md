@@ -100,8 +100,9 @@ Block Time: The Consumer Chain's consensus-provided integer Unix time in
    seconds, bounded by an unsigned 64-bit integer.
 
 Chain Profile: The normative mapping from one Consumer Chain to its Chain ID,
-   Transaction Author authentication, Block Time, and Authorized Transaction
-   Data encoding.
+   Transaction Author authentication, Block Time, Authorized Transaction Data
+   encoding, native value-transfer path, fee unit, and the mechanism by which
+   a rejected call leaves no value transferred and no state changed.
 
 Submission: The complete input a Consumer passes to the Proof Verifier for
    one verification: the identity platform, the Verifier Version, the native
@@ -130,6 +131,11 @@ Redirect Runtime: The immutable browser component served at a registered
    redirect URI, which receives an authorization response, authenticates the
    Application, and privately carries that response to Prover as defined by
    CCDP. It does not deliver the raw response to the Application.
+
+Deployment: The party that holds the OAuth client registrations and their
+   redirect URIs with each Identity Platform, the deployment allowlist, and
+   the choice of which Identity Platforms new ceremonies may use. The
+   [OAuth Bridge](oauth-bridge.md) operator is the Deployment.
 
 Verifier Governance Process: The authority over the verification path: the
    Proof Verifier's Supported Version Set and the Verifier Version each entry
@@ -1300,8 +1306,9 @@ Service.
 
 ## 11. Conformance
 
-Roles: Canonical Runtime, Redirect Runtime, Proving Circuit, Proof Verifier,
-Platform Verifier, Notary Service, Consumer. The
+Roles: Canonical Runtime (including Prover), Redirect Runtime, Proving
+Circuit, Proof Verifier, Platform Verifier, Notary Service, Consumer,
+Deployment, Verifier Governance Process. The
 Implementation claiming a role MUST pass the vectors covering
 the constructions that role implements.
 
@@ -1502,8 +1509,8 @@ the constructions that role implements.
 
 ## 12. Security Considerations
 
-This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01,
-SP-FRESH-01, and SP-REPLAY-01 under the assumptions of §3.
+This document enforces SP-BIND-01, SP-CLIENT-01, SP-DELIVERY-01,
+SP-EXCHANGE-01, SP-FRESH-01, and SP-REPLAY-01 under the assumptions of §3.
 
 Replay within one Consumer deployment is prevented by `authorizationNonce`
 and REQ-COMMON-03. Replay across Consumer Chains whose Chain Profiles use
@@ -1572,6 +1579,19 @@ owned by the [platform profiles](platform-ceremonies.md).
 
 ## 13. References
 
-Normative: [RFC6749], [RFC7636], [RFC7519], [OIDC].
+Normative: [RFC6749], [RFC7636], [RFC7519], [OIDC], [WHATWG-URL],
+[FIPS180-4], [Keccak].
+
+SHA-256, written `SHA256` in constructions, is the hash [FIPS180-4] defines.
+`keccak256` is Keccak-256 as Ethereum uses it, with the original padding of
+the [Keccak] submission. It is not FIPS 202 SHA3-256, which pads differently
+and gives different digests. The `application/x-www-form-urlencoded`
+serializer is the one [WHATWG-URL] defines.
 
 Informative: [RFC9700].
+
+[WHATWG-URL]: https://url.spec.whatwg.org/#concept-urlencoded-serializer
+
+[FIPS180-4]: https://doi.org/10.6028/NIST.FIPS.180-4
+
+[Keccak]: https://keccak.team/files/Keccak-submission-3.pdf
