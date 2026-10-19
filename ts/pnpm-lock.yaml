@@ -67,8 +67,8 @@ importers:
   packages/ceremony:
     dependencies:
       '@libid/contracts':
-        specifier: 0.17.0
-        version: 0.17.0
+        specifier: 0.18.0
+        version: 0.18.0
       '@libid/ledger':
         specifier: workspace:^
         version: link:../ledger
@@ -400,8 +400,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@libid/contracts@0.17.0':
-    resolution: {integrity: sha512-fgfuDXjv4d1UVKjB+QfuMY2Ora0QjJrKPL+ZpML8GMNHglfAUPYAd05RABpMtOoSshrkXsSa5EL3Ic6lEJWJGw==}
+  '@libid/contracts@0.18.0':
+    resolution: {integrity: sha512-8MqQEJyR+j+kOUxidCojMjFA+brFu8b8SmoyqaV+btiATKl3XQGAGZVDrCmbDS3byvuDRdlkwhoUqeyDlZlyMw==}
     peerDependencies:
       viem: ^2.48.11
     peerDependenciesMeta:
@@ -1361,7 +1361,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@libid/contracts@0.17.0': {}
+  '@libid/contracts@0.18.0': {}
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
     optional: true
