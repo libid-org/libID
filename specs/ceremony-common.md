@@ -125,8 +125,9 @@ Platform Profile: The immutable, independently versioned definition of one
    profile whose Attestation Count is zero defines neither of those two. Every
    Platform Verifier registered for that platform and version MUST enforce the
    same profile, but its implementation and deployment are ledger-specific.
-   Of the profile constants, the Consumer holds only each platform's handle
-   tag and the fold of platform REQ-PLAT-05B, with which it hashes handle
+   Of the profile constants, the Consumer holds only the set of platforms
+   the profiles name, each platform's handle tag and the fold of platform
+   REQ-PLAT-05B, with which it refuses an unknown platform and hashes handle
    text for disclosure and name reads.
 
 Account identifier: The authenticated value a Platform Profile derives an
@@ -565,8 +566,9 @@ and each Consumer Chain's Platform Verifier enforces that profile and fixes
 the encoding of its own Submission Payload. Verifier governance owns the
 mutable verifier artifact, Notary Service, trust roots, fees, and the
 Verifier Version each verifier is registered under. The Consumer holds none
-of those constants, except each platform's handle tag and the fold of
-platform REQ-PLAT-05B, with which it hashes a disclosed handle (platform
+of those constants, except the set of platforms the profiles name, each
+platform's handle tag and the fold of platform REQ-PLAT-05B, with which it
+refuses an unknown platform and hashes a disclosed handle (platform
 REQ-PLAT-08B, REQ-PLAT-08D, REQ-PLAT-08E).
 
 Two versions travel this path, deliberately unrelated. The Platform Ceremony
