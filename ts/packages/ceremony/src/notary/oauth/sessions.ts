@@ -92,8 +92,6 @@ export async function notarizeOAuth(options: {
       id: { value: userId, range: idRange },
       handle: { value: userName, range: handleRange },
       attestation: identityRevealed.attestation,
-      userId,
-      userName,
     },
   }
 }

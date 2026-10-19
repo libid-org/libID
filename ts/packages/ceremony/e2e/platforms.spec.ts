@@ -1,6 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
+import { launch as profileOf } from '@libid/contracts/ceremony'
 import type { APIRequestContext, BrowserContext, Page } from '@playwright/test'
-import { platformTable } from '../src/identity.js'
+import { handleNode, idNode, platformTable } from '../src/identity.js'
 import { decodeAttestedData } from '../src/notary/decode.js'
 import {
   deriveAuthorizationDigest,
@@ -10,8 +11,7 @@ import {
 import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { type: 'json' }
 import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
-import { identityNodes, type OAuthProof, type PlatformId } from '../src/platforms/index.js'
-import type { Identity } from '../src/platforms/validation.js'
+import type { PlatformId } from '../src/platforms/index.js'
 import { testnet } from '../src/testing/ledgers.ts'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'
 import { type BrowserPlatform, browserPlatforms, platformIds } from './platforms.js'
@@ -123,10 +123,9 @@ const evidence = {
           expect(found).toHaveLength(1)
           return found[0].hash
         }
+        // The profile names the members; the platform table names the tags.
+        const { idField, handleField } = profileOf(platform)!.identity!
         const { userIdTag, handleTag } = platformTable(platform)
-        const fields = { x: ['id', 'username'], github: ['id', 'login'] }[
-          platform as 'x' | 'github'
-        ]
         const halves = (value: Uint8Array) =>
           [value.subarray(0, 16), value.subarray(16)].map(
             (half) => `0x${Buffer.from(half).toString('hex').padStart(64, '0')}`,
@@ -135,18 +134,13 @@ const evidence = {
           `0x${Buffer.from(text).toString('hex').padEnd(62, '0').padStart(64, '0')}`,
           `0x${text.length.toString(16).padStart(64, '0')}`,
         ]
-        const accepted = { identity: result.identity as Identity<'x'>, status: 'accepted' as const }
-        const { idNode, handleNode } = identityNodes({
-          ...accepted,
-          oauthProof: { platformCeremonyVersion: 1 } as OAuthProof<'x'>,
-        })
         const publicInputs = [
           bearer[0].hash,
           identity.sent.commitments[0].hash,
-          framed(new RegExp(`"${fields[0]}"\\s*:\\s*"?$`)),
-          framed(new RegExp(`"${fields[1]}"\\s*:\\s*"$`)),
-          idNode,
-          handleNode,
+          framed(new RegExp(`"${idField}"\\s*:\\s*"?$`)),
+          framed(new RegExp(`"${handleField}"\\s*:\\s*"$`)),
+          idNode(platform, result.identity.userId),
+          handleNode(platform, result.identity.userName),
         ]
           .flatMap(halves)
           .concat(tag(userIdTag), tag(handleTag))

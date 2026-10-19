@@ -51,9 +51,13 @@ export async function proveNotarized<P extends PlatformId>(
       proof,
       final,
     ])
-    const { userId, userName } = identity
     return {
-      identity: { platformId, oauthClientId: clientId, userId, userName },
+      identity: {
+        platformId,
+        oauthClientId: clientId,
+        userId: identity.id.value,
+        userName: identity.handle.value,
+      },
       proof: { bearerLinkProof, tokenAttestation, identityAttestation },
     }
   } finally {
