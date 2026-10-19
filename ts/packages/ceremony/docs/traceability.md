@@ -202,7 +202,7 @@ and [Platforms](https://github.com/libid-org/libID/blob/66096eb1d31ea7007c2749ab
 | TEST-COMMON-14 | LIBID-OAUTH-017, LIBID-BROWSER-004; actual-popup rejection of a changed origin and authenticated handoff. Two admitted application origins completing independently plus an injected forwarding target remain untested together. |
 | TEST-COMMON-12/18/19 | LIBID-PROVER-009/010; [Google invalid-expiry vectors](../src/platforms/conformance/oidc.test.ts), timestamp decoding, range coverage, openings and independent fixture blinders. Evidence-source substitution and ledger time/signature checks remain external. |
 | TEST-COMMON-20/22 | LIBID-PROVER-001/002/003/004/021; [Google, X and GitHub](../e2e/platforms.spec.ts) browser proofs with released-key verification and changed-public-input rejection. Bearer flows reconstruct digest/PKCE from the returned nonce and frozen transaction and check the revealed verifier. Artifact registry selection, different-version/key substitution and complete altered-submission rejection remain verifier gates. |
-| TEST-PLAT-02 | LIBID-MOD-019 and profile identity tests; malformed identifiers, exact bytes and the [Google userId digest vectors](../src/platforms/google/1/inputs.test.ts). Chain hash/identifier derivation remains external. |
+| TEST-PLAT-02 | LIBID-MOD-019 and profile identity tests; malformed identifiers, exact bytes and the [id and handle node vectors](../src/platforms/nodes.test.ts). Chain hash/identifier derivation remains external. |
 | TEST-PLAT-03/04/05/06 | LIBID-OAUTH-006/007, LIBID-PROVER-002; Google return/circuit input vectors and real fixture proof. Not every malformed claim is run through the actual circuit. |
 | TEST-PLAT-09/09A/09B/09C | LIBID-PROVER-003/009; X transcript vectors, full token-request reveal and hidden bearer ranges. Verifier layout rejection matrix remains external. |
 | TEST-PLAT-10 | LIBID-PROVER-003/004/009; [bearer input limits](../src/barretenberg/circuits/bearer-link/inputs.test.ts) and selected identity fields. Negative values are rejected before proving; they are not all executed through the circuit. The released circuit's 128-byte width does not meet the profile's 4096-byte maximum. |
@@ -212,6 +212,7 @@ and [Platforms](https://github.com/libid-org/libID/blob/66096eb1d31ea7007c2749ab
 | TEST-PLAT-15A/15B/21/22 | LIBID-PROVER-003/004/009/021; openings, commitment/public-input order, original attestations and disclosure vectors. Full verifier substitution/layout conformance remains external. |
 | TEST-PLAT-16/18 | LIBID-OAUTH-007/015/019, LIBID-BROWSER-020/021/022; no replay/recovery and strict code-return grammar. Actual reload/restart matrix remains open. |
 | TEST-PLAT-17/17A | LIBID-ASSET-004/005, LIBID-MOD-019/020, LIBID-PROVER-021; closed catalog and identity extracted from synthetic transcript fixtures. Multi-chain/verifier authority is external. |
+| TEST-PLAT-20 | The [node tests](../src/platforms/nodes.test.ts) run the platform-ceremonies §2.1 vectors and the token check; the platform table and its full vector table come from `@libid/contracts`, which runs them. Circuit refusal and caller-supplied-node rejection are circuit and Consumer tests. |
 
 Outside this package: TEST-COMMON-02/02A/03/13/16/17/21/23 belong to
 Consumer, runtime or ledger verification; TEST-COMMON-15 is production OAuth

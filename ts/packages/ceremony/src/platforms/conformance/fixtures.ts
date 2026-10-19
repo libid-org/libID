@@ -516,7 +516,7 @@ export const fixtures = {
           jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), email_verified: false } }),
         rejectedAt: 'authorization',
       },
-      // Only the userId hash leaves the circuit, which rejects these; the runtime refuses them first.
+      // Only the id node leaves the circuit, which rejects these; the runtime refuses them first.
       'an empty sub': subject('', 'invalid Google ID token'),
       'a quote in the sub [REQ-PLAT-16C]': subject('a"b'),
       'a control byte in the sub [REQ-PLAT-16C]': subject('a\x1fb'),
