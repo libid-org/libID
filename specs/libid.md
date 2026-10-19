@@ -8,6 +8,8 @@ sidebar:
 
 # libID protocol specification
 
+> Readable by humans, optimized for agents.
+
 Status: proposed normative libID protocol specification.
 
 This is the required entrypoint for the libID protocol specification. The

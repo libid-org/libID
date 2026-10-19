@@ -2,7 +2,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
 import specMarkdown from './src/spec-markdown.mjs';
-import { tagline } from './src/tagline.mjs';
+import { description } from './src/tagline.mjs';
 
 export default defineConfig({
   site: 'https://lib.id',
@@ -10,7 +10,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'libID',
-      description: tagline,
+      description,
       favicon: '/favicon.svg',
       head: [
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://lib.id/og.png' } },
@@ -26,6 +26,7 @@ export default defineConfig({
         { label: 'Specs', items: [{ autogenerate: { directory: 'specs' } }] },
       ],
       components: {
+        Head: './src/components/Head.astro',
         Sidebar: './src/components/Sidebar.astro',
         ThemeProvider: './src/components/ThemeProvider.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',

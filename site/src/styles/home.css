@@ -56,12 +56,6 @@ nav a {
 
 nav a:hover, nav a:focus-visible { text-decoration-color: currentColor; }
 
-.construction-note {
-  margin: 1.5rem 0 0;
-  color: var(--muted);
-  font-size: 0.875rem;
-}
-
 :focus-visible { outline: 2px solid var(--text); outline-offset: 6px; }
 
 .theme-toggle {

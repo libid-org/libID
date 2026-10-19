@@ -1,7 +1,7 @@
 ---
 import ThemeProvider from '../components/ThemeProvider.astro';
 import { palettes } from '../palette.mjs';
-import { tagline } from '../tagline.mjs';
+import { description, tagline } from '../tagline.mjs';
 import libronFont from '../../../brand/libron/Libron-Regular.woff2?url';
 import '../styles/home.css';
 ---
@@ -11,13 +11,13 @@ import '../styles/home.css';
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>libID — Identity, bridged.</title>
-    <meta name="description" content={tagline}>
+    <title>libID — {tagline}</title>
+    <meta name="description" content={description}>
     <meta name="theme-color" content={palettes.dark.background}>
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://lib.id/">
-    <meta property="og:title" content="libID — Identity, bridged.">
-    <meta property="og:description" content={tagline}>
+    <meta property="og:title" content={`libID — ${tagline}`}>
+    <meta property="og:description" content={description}>
     <meta property="og:image" content="https://lib.id/og.png">
     <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1200">
@@ -27,6 +27,7 @@ import '../styles/home.css';
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preload" href={libronFont} as="font" type="font/woff2" crossorigin>
     <ThemeProvider />
+    <script src="../page.js"></script>
   </head>
   <body>
     <button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false" hidden>
@@ -42,7 +43,6 @@ import '../styles/home.css';
         <a href="/docs/">Docs</a>
         <a href="/specs/">Specs</a>
       </nav>
-      <p class="construction-note"><span aria-hidden="true">🚧</span> Under construction</p>
     </main>
   </body>
 </html>

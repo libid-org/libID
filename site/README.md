@@ -55,8 +55,6 @@ Preview command, and environment versions above to each existing preview too.
 as the Preview name and updates its isolated deployment. For a local preview
 deployment, build the site first, then run `pnpm -C site run deploy:preview`.
 
-Only `dist/` is deployed.
-
 All website text uses self-hosted
 [Libron v0.31](https://github.com/nicoverbruggen/libron/releases/tag/v0.31),
 with its license in `../brand/libron/LICENSE`, published as `/fonts/libron/LICENSE`.
