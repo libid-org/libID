@@ -7,6 +7,7 @@ import {
   buildBearerLinkInputs,
   isBearerLinkPublicInputs,
 } from './inputs.js'
+import { MAX_HANDLE_BYTES, MAX_ID_BYTES } from './parameters.js'
 
 const encoder = new TextEncoder()
 
@@ -68,5 +69,12 @@ describe('bearer_link public inputs [REQ-PLAT-32B]', () => {
     expect(() =>
       buildBearerLinkInputs(PLATFORM_GITHUB, witness('gho_tok', '1'.repeat(21), 'octocat')),
     ).toThrow()
+  })
+
+  it('has the id and handle buffers of every platform it proves', () => {
+    for (const platform of [PLATFORM_X, PLATFORM_GITHUB]) {
+      expect(platform.idRules.maxLength).toBe(MAX_ID_BYTES)
+      expect(platform.rules.maxLength).toBe(MAX_HANDLE_BYTES)
+    }
   })
 })

@@ -2,13 +2,7 @@ import type { Platform } from '@libid/contracts/platforms'
 import { handleNode, idNode } from '../../../identity.js'
 import type { HashOpening } from '../../../notary/notarize.js'
 import { bytesToBigInt, fieldHex, halves } from '../../parameters.js'
-import {
-  MAX_BEARER_BYTES,
-  MAX_HANDLE_BYTES,
-  MAX_ID_BYTES,
-  MAX_TAG_BYTES,
-  PUBLIC_INPUT_COUNT,
-} from './parameters.js'
+import { MAX_BEARER_BYTES, MAX_HANDLE_BYTES, MAX_ID_BYTES, MAX_TAG_BYTES } from './parameters.js'
 
 const encoder = new TextEncoder()
 
@@ -114,9 +108,5 @@ export function isBearerLinkPublicInputs(
   inputs: ReturnType<typeof buildBearerLinkInputs>,
 ): boolean {
   const expected = bearerLinkPublicInputs(inputs)
-  return (
-    expected.length === PUBLIC_INPUT_COUNT &&
-    value.length === PUBLIC_INPUT_COUNT &&
-    value.every((v, i) => v === expected[i])
-  )
+  return value.length === expected.length && value.every((v, i) => v === expected[i])
 }
