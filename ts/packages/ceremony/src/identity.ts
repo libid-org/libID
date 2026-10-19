@@ -1,17 +1,16 @@
-// The token check and node keys of platform-ceremonies §2.1 and §2.1a. Tags, buffers and id
-// shapes come from the platform table libID-circuits ships, as @libid/contracts generates it.
+// The token check and node keys of platform-ceremonies §2.1 and §2.1a, from @libid/contracts:
+// its platform table carries the tags, buffers and id shapes libID-circuits ships.
 import {
   checkId,
   HandleError,
+  handleNode as handleNodeHex,
   IdError,
+  idNode as idNodeHex,
   normalize,
   type Platform,
   platform,
 } from '@libid/contracts/platforms'
-import { sha256 } from '@noble/hashes/sha2.js'
-import { concatBytes } from '@noble/hashes/utils.js'
-
-const encoder = new TextEncoder()
+import { hexToBytes } from '@noble/hashes/utils.js'
 
 /** A binding's two keys: the id node and the handle node, 32 bytes each. */
 export interface IdentityNodes {
@@ -48,14 +47,12 @@ export function isAccountId(key: string, value: string): boolean {
   }
 }
 
-/** REQ-PLAT-05A: `SHA256(user-id tag || id)`, the id unchanged. Throws for an id no circuit hashes. */
+/** REQ-PLAT-05A: `SHA256(user-id tag || id)`, the id unchanged, as bytes. Throws for an id no circuit hashes. */
 export function idNode(key: string, id: string): Uint8Array {
-  checkId(key, id)
-  return sha256(concatBytes(encoder.encode(platformTable(key).userIdTag), encoder.encode(id)))
+  return hexToBytes(idNodeHex(key, id).slice(2))
 }
 
-/** REQ-PLAT-05B: `SHA256(handle tag || fold(handle))`. Throws for a handle no circuit hashes. */
+/** REQ-PLAT-05B: `SHA256(handle tag || fold(handle))`, as bytes. Throws for a handle no circuit hashes. */
 export function handleNode(key: string, handle: string): Uint8Array {
-  const { handleTag, rules } = platformTable(key)
-  return sha256(concatBytes(encoder.encode(handleTag), encoder.encode(normalize(handle, rules))))
+  return hexToBytes(handleNodeHex(key, handle).slice(2))
 }

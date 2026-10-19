@@ -45,7 +45,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@libid/contracts": "0.18.0",
+    "@libid/contracts": "0.18.1",
     "@libid/ledger": "workspace:^",
     "@noble/hashes": "^2.4.0"
   },
