@@ -1,3 +1,4 @@
+import { PLATFORM_GOOGLE_KEY } from '@libid/contracts/platforms'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js'
 import { buildOidcGooglePublicInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
@@ -40,7 +41,7 @@ export function identityNodes(identity: Identity<'google'>): IdentityNodes {
     throw new Error('Google userId must be 0x and 64 lowercase hex digits')
   return {
     idNode: hexToBytes(identity.userId.slice(2)),
-    handleNode: handleNode('google', identity.userName),
+    handleNode: handleNode(PLATFORM_GOOGLE_KEY, identity.userName),
   }
 }
 
@@ -72,11 +73,11 @@ export function validateProof(
 }
 
 export const validateIdentity: (value: unknown) => Identity<'google'> = identityValidator(
-  'google',
+  PLATFORM_GOOGLE_KEY,
   {
     oauthClientId: isClientId,
     userId: isUserId,
-    userName: (s) => isHandle('google', s),
+    userName: (s) => isHandle(PLATFORM_GOOGLE_KEY, s),
   },
 )
 

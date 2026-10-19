@@ -1,3 +1,4 @@
+import { PLATFORM_GOOGLE_KEY } from '@libid/contracts/platforms'
 import type { OidcGoogleToken } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
@@ -46,7 +47,9 @@ function googleClaims(p: Record<string, unknown> | null): OidcGoogleToken['claim
  * for `sub` and `email`. buildOidcGoogleInputs bounds the payload and signing input.
  */
 const fitsCircuit = ({ aud, sub, email }: OidcGoogleToken['claims']) =>
-  isAudience(aud, MAX_AUD_BYTES) && isAccountId('google', sub) && isHandle('google', email)
+  isAudience(aud, MAX_AUD_BYTES) &&
+  isAccountId(PLATFORM_GOOGLE_KEY, sub) &&
+  isHandle(PLATFORM_GOOGLE_KEY, email)
 
 /** Parse the fixed RS256 token layout; any failure is an authorization error. */
 function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
