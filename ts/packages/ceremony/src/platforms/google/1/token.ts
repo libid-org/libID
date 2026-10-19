@@ -1,14 +1,11 @@
 import type { OidcGoogleToken } from '../../../barretenberg/circuits/oidc_google/inputs.js'
-import {
-  MAX_AUD_BYTES,
-  MAX_EMAIL_BYTES,
-  MAX_SUB_BYTES,
-} from '../../../barretenberg/circuits/oidc_google/parameters.js'
+import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
 import { b64urlDecode, isRecord, isUint } from '../../../primitives.js'
 import { fetchPublicJson } from '../../../response.js'
+import { isAccountId, isHandle } from '../../nodes.js'
 import { provider } from './provider.js'
-import { isCircuitText } from './validation.js'
+import { isAudience } from './validation.js'
 
 /** The token bytes and claims the fixed oidc_google circuit consumes, plus the signing key's `kid`. */
 export interface ParsedGoogleIdToken extends OidcGoogleToken {
@@ -45,13 +42,11 @@ function googleClaims(p: Record<string, unknown> | null): OidcGoogleToken['claim
 }
 
 /**
- * The released circuit's claim widths and characters. buildOidcGoogleInputs bounds the payload
- * and signing input.
+ * The released circuit's claim widths and characters: the platform table's id and handle checks
+ * for `sub` and `email`. buildOidcGoogleInputs bounds the payload and signing input.
  */
 const fitsCircuit = ({ aud, sub, email }: OidcGoogleToken['claims']) =>
-  isCircuitText(aud, MAX_AUD_BYTES) &&
-  isCircuitText(sub, MAX_SUB_BYTES) &&
-  isCircuitText(email, MAX_EMAIL_BYTES)
+  isAudience(aud, MAX_AUD_BYTES) && isAccountId('google', sub) && isHandle('google', email)
 
 /** Parse the fixed RS256 token layout; any failure is an authorization error. */
 function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {

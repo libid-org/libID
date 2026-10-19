@@ -5,13 +5,14 @@ import { notarizeOAuth } from '../../notary/oauth/sessions.js'
 import type { TokenRequest } from '../../notary/oauth/token.js'
 import type { ProverContext } from '../context.js'
 import type { PlatformId } from '../index.js'
+import { platformTable } from '../nodes.js'
 import type { Identity } from '../validation.js'
 import type { NotarizedProofV1 } from './validation.js'
 
 /**
  * Prove a platform identity from its PKCE code flow: start the circuit backend, notarize the
- * platform's token and identity requests, and, last, prove the bearer link from their
- * openings while the final attestations arrive.
+ * platform's token and identity requests, and, last, prove the bearer link and the identity's
+ * nodes from their openings while the final attestations arrive.
  */
 export async function proveNotarized<P extends PlatformId>(
   context: ProverContext<P> & { codeVerifier: string },
@@ -45,7 +46,9 @@ export async function proveNotarized<P extends PlatformId>(
       observe,
     })
     const final = observe(Promise.all([token.attestation, identity.attestation]))
-    const proof = observe(circuit.prove(bearer, token, identity, signal))
+    const proof = observe(
+      circuit.prove(platformTable(platformId), bearer, token, identity, signal),
+    )
     const [bearerLinkProof, [tokenAttestation, identityAttestation]] = await Promise.all([
       proof,
       final,

@@ -12,13 +12,6 @@ export interface Identity<P extends string = PlatformId> {
   userName: string
 }
 
-/** An X or GitHub user ID: 1 to 20 decimal digits, as the platform sent them (REQ-PLAT-06). */
-const MAX_USER_ID_DIGITS = 20
-export const decimalUserId = {
-  maxBytes: MAX_USER_ID_DIGITS,
-  valid: (value: string): boolean => /^[0-9]{1,20}$/.test(value),
-}
-
 export const isProofBytes = (v: unknown): v is Uint8Array =>
   v instanceof Uint8Array && v.length > 0 && v.length <= MAX_PROOF_BYTES
 

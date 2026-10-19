@@ -6,7 +6,9 @@ export type { CeremonyEvent, CeremonyStatus, OperationEvent, StageEvent } from '
 export type { NotaryAttestation } from './notary/protocol.js'
 export {
   type Identity,
+  type IdentityNodes,
   type IdentityResult,
+  identityNodes,
   type OAuthProof,
   type PlatformId,
   type SupportedCeremonyVersion,

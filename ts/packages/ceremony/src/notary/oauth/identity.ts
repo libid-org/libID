@@ -1,6 +1,8 @@
 // The attested identity request that spends the token's bearer (ceremony-common §9): its
-// exact bytes, the hidden bearer, and the user ID and name its response reveals.
+// exact bytes, the hidden bearer, and the user ID and name its response commits between
+// revealed anchors.
 import { FORBIDDEN_REQUEST_HEADERS } from '@libid/contracts/ceremony'
+import { isAccountId, isHandle, platformTable } from '../../platforms/nodes.js'
 import { latin1, parseHead } from '../http.js'
 import type { ByteRange, ExactHttpRequest, Transcript } from '../protocol.js'
 import {
@@ -10,7 +12,6 @@ import {
   quotedRange,
   requestFieldName,
 } from '../transcript.js'
-import type { Bounded } from './validation.js'
 
 const encoder = new TextEncoder()
 
@@ -20,20 +21,36 @@ const FORBIDDEN_HEADERS = new Set(
 )
 
 /**
- * A platform's fixed identity request and its user grammar. Raw transcript bytes remain the
- * authority for disclosure ranges.
+ * A platform's fixed identity request and the members its response names the user in. The
+ * platform table checks the id and handle. Raw transcript bytes remain the authority for
+ * disclosure ranges.
  */
 export interface IdentityLayout {
   url: string
   headers: Record<string, string>
-  userId: Bounded & { field: string; quoted: boolean }
-  userName: Bounded & { field: string }
+  /** The platform table key whose id and handle checks apply. */
+  platform: string
+  userId: { field: string; quoted: boolean }
+  userName: { field: string }
   /** Cross-check the parsed response against the exact selected identity bytes. */
   isResponse(body: Record<string, unknown>, selected: { userId: string; userName: string }): boolean
 }
 
+/** A member's value range and the two revealed anchors around it (REQ-PLAT-31, REQ-PLAT-51). */
+function anchored(member: ByteRange, valueStart: number, value: Uint8Array) {
+  const valueEnd = valueStart + value.length
+  return {
+    value: { start: valueStart, end: valueEnd },
+    anchors: [
+      { start: member.start, end: valueStart },
+      { start: valueEnd, end: member.end },
+    ],
+  }
+}
+
 export function identityRequest(layout: IdentityLayout) {
   const url = new URL(layout.url)
+  const table = platformTable(layout.platform)
   function build(bearer: string): ExactHttpRequest {
     // The header carries the bearer verbatim, one byte per character.
     if (!/^[\x21-\x7e]+$/.test(bearer)) throw new Error('Invalid bearer')
@@ -52,7 +69,11 @@ export function identityRequest(layout: IdentityLayout) {
     }
   }
 
-  /** Read exact ID bytes (including numeric IDs above JS precision), never a rounded JSON number. */
+  /**
+   * Read exact ID bytes (including numeric IDs above JS precision), never a rounded JSON number.
+   * The response reveals only each member's anchors; the id and the handle are each committed
+   * whole, as the values the circuit opens (REQ-PLAT-59).
+   */
   function select(transcript: Transcript, bearer: string) {
     const bearerRange = identityBearerRange(
       transcript.sent,
@@ -63,21 +84,25 @@ export function identityRequest(layout: IdentityLayout) {
     const id = layout.userId.quoted
       ? quotedRange(transcript.received, layout.userId.field)
       : numericRange(transcript.received, layout.userId.field)
-    const userId = decodePrintable(id.value, 'identity id', layout.userId.maxBytes)
-    if (!layout.userId.valid(userId)) throw new Error('Invalid identity id')
+    const userId = decodePrintable(id.value, 'identity id', table.idRules.maxLength)
+    if (!isAccountId(layout.platform, userId)) throw new Error('Invalid identity id')
     const name = quotedRange(transcript.received, layout.userName.field)
-    const userName = decodePrintable(name.value, 'identity name', layout.userName.maxBytes)
-    if (!layout.userName.valid(userName)) throw new Error('Invalid identity name')
+    const userName = decodePrintable(name.value, 'identity name', table.rules.maxLength)
+    if (!isHandle(layout.platform, userName)) throw new Error('Invalid identity name')
+    const idMember = anchored(id.range, id.valueStart, id.value)
+    const nameMember = anchored(name.range, name.valueStart, name.value)
     return {
       userId,
       userName,
       bearerRange,
+      idRange: idMember.value,
+      handleRange: nameMember.value,
       ranges: {
         sent: [
           { start: 0, end: bearerRange.start },
           { start: bearerRange.end, end: transcript.sent.length },
         ],
-        received: [id.range, name.range].sort((a, b) => a.start - b.start),
+        received: [...idMember.anchors, ...nameMember.anchors].sort((a, b) => a.start - b.start),
       },
     }
   }

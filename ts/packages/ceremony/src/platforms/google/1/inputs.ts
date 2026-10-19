@@ -5,6 +5,7 @@ import {
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { b64urlDecode, isRecord } from '../../../primitives.js'
+import { handleNode, idNode } from '../../nodes.js'
 import type { ParsedGoogleIdToken } from './token.js'
 import { userIdOf } from './validation.js'
 
@@ -32,13 +33,14 @@ export function prepareGoogleInputs(token: ParsedGoogleIdToken, jwk: unknown) {
   }
 
   const { aud, sub, email, exp } = token.claims
+  const nodes = { idNode: idNode('google', sub), handleNode: handleNode('google', email) }
   return {
-    inputs: buildOidcGoogleInputs(token, modulus, authorizationDigest),
+    inputs: buildOidcGoogleInputs(token, modulus, authorizationDigest, nodes),
     authorizationDigest,
     identity: {
       platformId: 'google' as const,
       oauthClientId: aud,
-      userId: userIdOf(sub),
+      userId: userIdOf(nodes.idNode),
       userName: email,
     },
     proofFields: { tokenExpiresAt: exp, signingKeyModulus: modulus },

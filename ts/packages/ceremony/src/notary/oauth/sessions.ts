@@ -78,7 +78,7 @@ export async function notarizeOAuth(options: {
     reveal(identity.session, identity.selected.ranges, 'identity-attestation'),
   )
   const [tokenRevealed, identityRevealed] = await Promise.all([tokenOpened, identityOpened])
-  const { userId, userName } = identity.selected
+  const { userId, userName, bearerRange, idRange, handleRange } = identity.selected
   return {
     bearer,
     token: {
@@ -88,7 +88,9 @@ export async function notarizeOAuth(options: {
     },
     identity: {
       openings: identityRevealed.openings,
-      range: identity.selected.bearerRange,
+      range: bearerRange,
+      id: { value: userId, range: idRange },
+      handle: { value: userName, range: handleRange },
       attestation: identityRevealed.attestation,
       userId,
       userName,
