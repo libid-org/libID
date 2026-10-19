@@ -1,11 +1,11 @@
 import { BearerLinkCircuit } from '../../barretenberg/circuits/bearer-link/circuit.js'
 import { CeremonyError } from '../../errors.js'
+import { platformTable } from '../../identity.js'
 import type { IdentityRequest } from '../../notary/oauth/identity.js'
 import { notarizeOAuth } from '../../notary/oauth/sessions.js'
 import type { TokenRequest } from '../../notary/oauth/token.js'
 import type { ProverContext } from '../context.js'
 import type { PlatformId } from '../index.js'
-import { platformTable } from '../nodes.js'
 import type { Identity } from '../validation.js'
 import type { NotarizedProofV1 } from './validation.js'
 

@@ -1,5 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
 import type { APIRequestContext, BrowserContext, Page } from '@playwright/test'
+import { platformTable } from '../src/identity.js'
 import { decodeAttestedData } from '../src/notary/decode.js'
 import {
   deriveAuthorizationDigest,
@@ -10,7 +11,6 @@ import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { ty
 import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
 import { identityNodes, type OAuthProof, type PlatformId } from '../src/platforms/index.js'
-import { platformTable } from '../src/platforms/nodes.js'
 import type { Identity } from '../src/platforms/validation.js'
 import { testnet } from '../src/testing/ledgers.ts'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'

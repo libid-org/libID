@@ -1,9 +1,9 @@
 import type { OidcGoogleToken } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
+import { isAccountId, isHandle } from '../../../identity.js'
 import { b64urlDecode, isRecord, isUint } from '../../../primitives.js'
 import { fetchPublicJson } from '../../../response.js'
-import { isAccountId, isHandle } from '../../nodes.js'
 import { provider } from './provider.js'
 import { isAudience } from './validation.js'
 

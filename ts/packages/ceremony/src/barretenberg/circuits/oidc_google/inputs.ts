@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
-import type { IdentityNodes } from '../../../platforms/nodes.js'
+import type { IdentityNodes } from '../../../identity.js'
 import { bytesToBigInt, fieldHex, halves } from '../../parameters.js'
 import {
   BARRETT_OVERFLOW_BITS,

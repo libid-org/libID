@@ -2,7 +2,7 @@
 // exact bytes, the hidden bearer, and the user ID and name its response commits between
 // revealed anchors.
 import { FORBIDDEN_REQUEST_HEADERS } from '@libid/contracts/ceremony'
-import { isAccountId, isHandle, platformTable } from '../../platforms/nodes.js'
+import { isAccountId, isHandle, platformTable } from '../../identity.js'
 import { latin1, parseHead } from '../http.js'
 import type { ByteRange, ExactHttpRequest, Transcript } from '../protocol.js'
 import {

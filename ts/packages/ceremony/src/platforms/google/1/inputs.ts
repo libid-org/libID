@@ -4,8 +4,8 @@ import {
   RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
+import { handleNode, idNode } from '../../../identity.js'
 import { b64urlDecode, isRecord } from '../../../primitives.js'
-import { handleNode, idNode } from '../../nodes.js'
 import type { ParsedGoogleIdToken } from './token.js'
 import { userIdOf } from './validation.js'
 

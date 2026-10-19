@@ -1,10 +1,10 @@
 import { MAX_CLIENT_ID_BYTES } from '../../ccdp/limits.js'
+import { handleNode, type IdentityNodes, idNode, isAccountId, isHandle } from '../../identity.js'
 import { decodeAttestedData } from '../../notary/decode.js'
 import { isFormClientId } from '../../notary/oauth/validation.js'
 import type { NotaryAttestation } from '../../notary/protocol.js'
 import { isNotaryAttestation } from '../../notary/protocol.js'
 import { isText, recordValidator } from '../../primitives.js'
-import { handleNode, type IdentityNodes, idNode, isAccountId, isHandle } from '../nodes.js'
 import { type Identity, identityValidator, isProofBytes } from '../validation.js'
 
 export interface NotarizedProofV1 {

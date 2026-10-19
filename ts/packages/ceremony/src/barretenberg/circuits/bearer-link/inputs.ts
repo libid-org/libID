@@ -1,6 +1,6 @@
 import type { Platform } from '@libid/contracts/platforms'
+import { handleNode, idNode } from '../../../identity.js'
 import type { HashOpening } from '../../../notary/notarize.js'
-import { handleNode, idNode } from '../../../platforms/nodes.js'
 import { bytesToBigInt, fieldHex, halves } from '../../parameters.js'
 import {
   MAX_BEARER_BYTES,

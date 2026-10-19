@@ -6,8 +6,8 @@ import {
   RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../../../barretenberg/parameters.js'
+import { handleNode, type IdentityNodes, isHandle } from '../../../identity.js'
 import { isFixedBytes, isUint, recordValidator } from '../../../primitives.js'
-import { handleNode, type IdentityNodes, isHandle } from '../../nodes.js'
 import { type Identity, identityValidator, isProofBytes } from '../../validation.js'
 
 export interface GoogleProofV1 {

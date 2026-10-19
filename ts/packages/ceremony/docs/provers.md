@@ -90,7 +90,7 @@ X and GitHub share the notarized flow: the [token](../src/notary/oauth/token.ts)
 Each platform's `provider.ts` owns endpoints, request fields and identity headers;
 its `token.ts` and `identity.ts` build the two requests. The identity response
 reveals only the anchors around the id and the handle and commits each value; the
-circuit opens both and outputs their nodes. [nodes.ts](../src/platforms/nodes.ts)
+circuit opens both and outputs their nodes. [identity.ts](../src/identity.ts)
 applies the platform table's id and handle checks and derives the nodes.
 The token request checks its own form inputs, client ID and code, with
 [notary/oauth/validation.ts](../src/notary/oauth/validation.ts); both sessions' four

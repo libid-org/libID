@@ -1,6 +1,6 @@
 import { bytesToHex } from '@noble/hashes/utils.js'
 import { describe, expect, it } from 'vitest'
-import { handleNode, idNode, isAccountId, isHandle } from './nodes.js'
+import { handleNode, idNode, isAccountId, isHandle } from './identity.js'
 
 const hex = (bytes: Uint8Array) => `0x${bytesToHex(bytes)}`
 

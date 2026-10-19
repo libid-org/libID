@@ -1,18 +1,18 @@
 import type { IdentityProof } from '../ccdp/index.js'
 import type { CoreEvent } from '../events.js'
+import type { IdentityNodes } from '../identity.js'
 import * as githubUrl from './github/1/url.js'
 import * as github from './github/1/validation.js'
 import * as googleEvents from './google/1/events.js'
 import * as googleUrl from './google/1/url.js'
 import * as google from './google/1/validation.js'
-import type { IdentityNodes } from './nodes.js'
 import * as notarizedEvents from './notarized/events.js'
 import type { ReturnRules } from './oauthReturn.js'
 import type { Identity } from './validation.js'
 import * as xUrl from './x/1/url.js'
 import * as x from './x/1/validation.js'
 
-export type { IdentityNodes } from './nodes.js'
+export type { IdentityNodes } from '../identity.js'
 export type { Identity } from './validation.js'
 
 /** Validate each version's proof before deriving its retention metadata. */

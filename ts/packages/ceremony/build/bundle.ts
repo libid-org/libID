@@ -121,8 +121,6 @@ function chunkGroup(id: string): 'shared' | 'proof-engine' | 'notary' | undefine
   // The catalog reads these data-only constants in every profile; left unassigned,
   // they would follow the first group importing them, such as the notary's.
   if (id.includes('/node_modules/@libid/contracts/')) return 'shared'
-  // The identity checks and node keys that the catalog and every prover read.
-  if (path === 'src/platforms/nodes.ts') return 'shared'
   // Circuits follow the platforms that import them, as platform modules do.
   if (path.startsWith('src/barretenberg/circuits/')) return
   if (path.startsWith('src/barretenberg/')) return 'proof-engine'
