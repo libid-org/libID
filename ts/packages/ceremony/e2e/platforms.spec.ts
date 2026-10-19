@@ -220,7 +220,7 @@ const evidence = {
         expect(result.identity).toEqual({
           platformId: platform,
           oauthClientId: browserPlatforms[platform].clientId,
-          userId: '0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560',
+          userId: '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
           userName: 'holder@example.com',
         })
         const proof: GoogleProofV1 = {
