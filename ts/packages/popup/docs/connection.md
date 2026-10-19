@@ -549,10 +549,11 @@ does not wait for the port and can lose the reply; the popup initiates that
 departure instead. After the application sends `Navigate`, ordinary messages
 it sends cannot reach the departing document: when the port is preserved,
 they wait in it and reach the destination once it accepts, provided the
-destination registered their handlers before yielding. When the carrier is
-retired instead, including a same-origin nontransferable carrier, they are
-lost until the destination authenticates. Send what the destination needs only
-after it announces itself.
+destination registered their handlers before yielding, but Firefox and WebKit
+can lose one that arrives as the port is transferred (message-port.md). When
+the carrier is retired instead, including a same-origin nontransferable
+carrier, they are lost until the destination authenticates. Send what the
+destination needs only after it announces itself.
 
 `navigate` and `navigateAway` take a fragment-free canonical URL satisfying
 the origin scheme/host policy above and,

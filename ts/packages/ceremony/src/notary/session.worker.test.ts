@@ -133,7 +133,7 @@ it('correlates plain-array SDK openings, then verifies the final frame before de
     class extends Socket {
       constructor() {
         super()
-        socket = this
+        socket = this // oxlint-disable-line typescript/no-this-alias -- capture the instance under test
       }
     },
   )
@@ -389,7 +389,7 @@ async function preparing() {
       constructor() {
         super()
         this.readyState = Socket.CONNECTING
-        socket = this
+        socket = this // oxlint-disable-line typescript/no-this-alias -- capture the instance under test
       }
     },
   )

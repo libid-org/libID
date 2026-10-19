@@ -1,5 +1,6 @@
 ---
 import { palettes } from '../palette.mjs';
+import themeScript from '../theme.js?raw';
 
 const css = Object.entries(palettes).map(([theme, colors]) => {
   const selector = theme === 'dark' ? ':root' : ':root[data-theme="light"]';
@@ -9,4 +10,4 @@ const css = Object.entries(palettes).map(([theme, colors]) => {
 ---
 
 <style is:inline set:html={css}></style>
-<script is:inline src="/theme.js"></script>
+<script is:inline set:html={themeScript}></script>

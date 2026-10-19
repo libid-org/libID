@@ -8,6 +8,8 @@ sidebar:
 
 # libID protocol specification
 
+> Readable by humans, optimized for agents.
+
 Status: proposed normative libID protocol specification.
 
 This is the required entrypoint for the libID protocol specification. The
@@ -44,6 +46,14 @@ specifications.
 These chapters are normative browser/service boundaries. TypeScript APIs, build
 tooling, UI projections, dependency pins, and qualification evidence belong to
 the implementation documentation, not this specification.
+
+## Names
+
+- [ENS integration](ens-integration.md) defines how a binding is read as an
+  ENS name under the Parent Name, a deployment parameter that is
+  `handles.link` in production: the name grammar, the handle-to-label
+  transform, the Handle Resolver contract, and the Gateway that signs its
+  answers.
 
 ## System model and specification ownership
 
@@ -93,18 +103,24 @@ authenticates the Transaction Author and supplies its Chain ID and Block Time.
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
-| Application operator | selects a Bridge and operation; starts or withholds work | frontend availability and declared ceremony inputs | identity fields, proof target, or proof validity |
+| Application operator | selects a Bridge and operation; starts or withholds work; receives the handle in plaintext and builds the bind call | frontend availability, declared ceremony inputs, and passing the handle to the bind call only when the user asks (platform REQ-PLAT-03A) | identity fields, proof target, or proof validity |
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
-| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges | correct code and asset supply under ASM-CCDP-01 | authority to change ledger verification rules |
+| CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges; its Prover holds the identity evidence | correct code and asset supply under ASM-CCDP-01; a Prover that proves in the zero-knowledge mode with fresh randomness, on which SP-PRIV-01 rests | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
 | Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
 | Verifier governance administrator | activates verifier artifacts, trust roots, and the Supported Version Set | correct authority lifecycle | user consent |
+| ENS Gateway operator | holds the ENS Signer keys; reads the Indexed Store and signs ENS answers | answers that report the Indexed Store, and refusals where it cannot know | bindings, proofs, or anything a Consumer accepts |
+| Handle Resolver and Parent Name owner | sets the Parent Name's resolver, the Handle Resolver's URL list, and its Signers | pointing ENS names at honest Gateways and Signers | bindings or proofs |
+| DNS registrar account and DNSSEC key holder | controls `handles.link` in DNS and, through DNSSEC proofs, its owner in ENS | keeping the Parent Name with its owner | bindings or proofs |
 
 The principal trust roots are Google's active signing moduli, the active
 X/GitHub notary keys, the selected proof-verifier artifacts, the Proof Verifier
 that dispatches to them, the Platform Verifiers it selects, Verifier governance,
-and Consumer Chain consensus. The Proof Verifier is the most concentrated of
-these: every Consumer takes its accept-or-reject decision, operation domain,
+and Consumer Chain consensus. For ENS names only, the ENS Signer keys, the
+Handle Resolver and Parent Name owner key, and the DNS registrar account and
+DNSSEC keys are trust roots as well: none of them reaches a binding, but each
+decides where funds sent to a name go. The Proof Verifier is the most
+concentrated of these: every Consumer takes its accept-or-reject decision, operation domain,
 and Authorized Transaction Data from that one component, so its compromise
 authorizes arbitrary transactions at every Consumer at once. A compromised
 Platform Verifier does the same for one platform and version, because it is the
@@ -127,6 +143,7 @@ root and verifier.
 | Public ceremony configuration and callback ingress | [OAuth Bridge](oauth-bridge.md) |
 | Static response policies, aggregate Callback artifact, immutable asset publication | [CCDP Distribution](ccdp-distribution.md) |
 | Package APIs, UI projections, build tooling, and qualification evidence | implementation documentation (non-normative) |
+| ENS names, the handle-to-label transform, the Handle Resolver, and the Gateway | [ENS integration](ens-integration.md) |
 | Transaction dispatch and author authentication | Consumer protocol |
 | Verification dispatch, replay recording, trust roots, and version governance | [Common ceremony rules](ceremony-common.md) |
 
@@ -144,12 +161,20 @@ Authorization Digest public input on Google, recomputing the revealed
 `code_verifier` on X and GitHub (REQ-COMMON-02A, REQ-COMMON-15A) — verifies
 the proof under the artifact selected for the submitted platform and version
 (REQ-COMMON-45), and enforces authenticated freshness. Proof-field provenance
-is the signed ID Token on Google and the revealed attestation bytes on X and
-GitHub; the Proving Circuit proves only what cannot be read from that
-evidence, which is Google's signature relation and, on X and GitHub, that one
-hidden bearer opens both sessions' commitments. The Consumer enforces replay
+is the signed ID Token on Google and the attestation bytes on X and GitHub;
+the Proving Circuit proves only what cannot be read from that evidence. On
+Google that is the signature relation and the claims it reads; on X and
+GitHub, that one hidden bearer opens both sessions' commitments. On every
+platform the circuit also checks that the hidden id and handle are the
+tokens the platform sent and outputs their tagged SHA-256 nodes, which are the keys
+the Consumer binds. The Consumer enforces replay
 rejection by recording every Authorization Digest it accepts before applying
-an effect (REQ-COMMON-03, REQ-COMMON-03A). The Canonical Runtime
+an effect (REQ-COMMON-03, REQ-COMMON-03A). The Consumer keys the binding on
+the nodes and puts the handle on chain only from a transaction that
+discloses it, and the id never (SP-PRIV-01). It does not prevent
+confirmation of a guessed identity by hashing, nor an application or
+Distribution operator, each of which handles the plaintext, from sending
+the handle itself. The Canonical Runtime
 locally enforces the selected OAuth client and redirect profile. The protocol
 assumes the named identity-platform parser,
 PKCE, delivery, notary, browser, verifier-soundness, and chain behaviors. It

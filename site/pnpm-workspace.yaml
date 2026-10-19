@@ -1,4 +1,10 @@
-onlyBuiltDependencies:
-  - esbuild
-  - sharp
-  - workerd
+# pnpm 11 runs install scripts only for packages listed here.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
+# Supply-chain policy shared with ts/ and the grndd-systems repos.
+minimumReleaseAge: 10080
+minimumReleaseAgeIgnoreMissingTime: false
+trustLockfile: false
+strictDepBuilds: true

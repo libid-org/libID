@@ -16,7 +16,7 @@ for the separately deployed CCDP, not dependencies installed by client apps.
 
 ## Check a package before release
 
-From the repository root, using Node 24 and pnpm:
+From the repository root, using Node 26 and pnpm:
 
 ```sh
 pnpm -C ts install --frozen-lockfile

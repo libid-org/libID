@@ -15,6 +15,7 @@ import { sameRecord, swapInto } from './output.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { emittedProfile, responseHeaders } from './profiles.ts'
 import { artifactsDir, hash, outputDirectory } from './sources.ts'
+import { callbackStyles, documentStyles } from './styles.ts'
 import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
@@ -37,8 +38,12 @@ const body = (item: Rollup.OutputChunk | Rollup.OutputAsset) =>
 /** Inline code cannot end its script element early. */
 const inlineScript = (code: string) => code.replace(/<\/script/gi, '<\\/script')
 
-const page = (title: string, content: string) =>
-  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body>${content}</body></html>`
+/** A document's first paint, before its script runs; mirrors `view` and `eventView` in ui.ts. */
+const shell = (label: string) =>
+  `<main id="libid-root"><div class="libid-logo" aria-label="${messages.brand}">${messages.brand}</div><p role="status">${label}</p><progress aria-label="${messages.progress}"></progress></main>`
+
+const page = (title: string, content: string, styles = documentStyles) =>
+  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${styles}</style><body>${content}</body></html>`
 
 /**
  * Each profile's declared assets and its platform entry's emitted closure, then the allowlist.
@@ -113,11 +118,12 @@ class PublicTree {
   /** A document inlining the fragment capture and its module entry. */
   document(path: string, code: string, profile: ResponseProfile) {
     const scripts = [captureFragment(path), code].map(inlineScript)
+    const label = profile === 'prefetch' ? messages.preparation : messages.proofPreparation
     this.put(
       path,
       page(
         messages.brand,
-        `<main id="libid-root"></main><script>${scripts[0]}</script><script type="module">${scripts[1]}</script>`,
+        `${shell(label)}<script>${scripts[0]}</script><script type="module">${scripts[1]}</script>`,
       ),
       responseHeaders(profile, { ...this.options, inline: scripts }),
     )
@@ -185,7 +191,8 @@ async function buildDistribution() {
       CALLBACK_PATH,
       page(
         messages.brand,
-        `<main id="libid-root"></main><script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script>`,
+        `${shell(messages.proofPreparation)}<script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script>`,
+        callbackStyles,
       ),
       responseHeaders('callback', { ...options, inline: [code] }),
     )
@@ -212,10 +219,17 @@ async function buildDistribution() {
     else tree.put(`/${item.fileName}`, body(item), 'asset')
   }
   // The page every 404 serves; requested directly it declares the same error policy.
-  tree.put('/404.html', page(messages.notFoundTitle, `<p>${messages.notFound}</p>`), {
-    'Content-Type': 'text/html; charset=utf-8',
-    ...errorHeaders,
-  })
+  tree.put(
+    '/404.html',
+    page(
+      messages.notFoundTitle,
+      `<main id="libid-root"><div class="libid-logo">${messages.brand}</div><p>${messages.notFound}</p></main>`,
+    ),
+    {
+      'Content-Type': 'text/html; charset=utf-8',
+      ...errorHeaders,
+    },
+  )
   return { records, manifest, graph: prover.graph }
 }
 

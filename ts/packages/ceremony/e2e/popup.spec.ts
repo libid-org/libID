@@ -1,4 +1,5 @@
 // Actual popup and Callback flows, and the Prover UI they drive.
+import palette from '../../../../brand/palette.json' with { type: 'json' }
 import { prepareCallback } from './callback.js'
 import {
   describePopup,
@@ -88,6 +89,45 @@ for (const wildcard of [false, true])
       expect(errors).toEqual([])
       expect(callbackScripts).toEqual([])
     })
+
+/** A `#rrggbb` palette color as computed styles report it. */
+const rgb = (hex: string) =>
+  `rgb(${hex
+    .match(/\w\w/g)!
+    .map((pair) => parseInt(pair, 16))
+    .join(', ')})`
+
+test('popup branding stays readable in both system themes and a narrow window', async ({
+  app,
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  for (const colorScheme of ['dark', 'light'] as const) {
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' })
+    await page.goto(`${app}/ui`)
+    await page.evaluate(() => document.fonts.ready)
+    const appearance = await page.evaluate(() => ({
+      fontLoaded: [...document.fonts].some(
+        (font) => font.family.includes('Libron') && font.status === 'loaded',
+      ),
+      font: getComputedStyle(document.body).fontFamily,
+      background: getComputedStyle(document.body).backgroundColor,
+      text: getComputedStyle(document.body).color,
+      overflow: document.documentElement.scrollWidth > innerWidth,
+      externalFonts: performance
+        .getEntriesByType('resource')
+        .some((entry) => /\.woff2?/.test(entry.name)),
+    }))
+    expect(appearance.fontLoaded).toBe(true)
+    expect(appearance.font).toContain('Libron')
+    expect(appearance.background).toBe(rgb(palette[colorScheme].background))
+    expect(appearance.text).toBe(rgb(palette[colorScheme].text))
+    expect(appearance.overflow).toBe(false)
+    expect(appearance.externalFonts).toBe(false)
+    await expect(page.getByRole('status').first()).toBeVisible()
+    await expect(page.getByRole('progressbar')).toBeVisible()
+  }
+})
 
 test('popup progress follows operation events independently of stage labels [LIBID-PROVER-011] [LIBID-BROWSER-024] [LIBID-BROWSER-025] [LIBID-BROWSER-017]', async ({
   app,

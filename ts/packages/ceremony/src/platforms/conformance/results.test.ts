@@ -116,7 +116,7 @@ function checkResultTypes(result: IdentityResult) {
   }
   if (result.status === 'accepted' && result.identity.platformId === 'google') {
     // @ts-expect-error A nested discriminator does not narrow its sibling.
-    result.oauthProof.proof.identityProof
+    result.oauthProof.proof.identityProof // oxlint-disable-line no-unused-expressions -- type-level assertion
   }
   const googleProof = {} as OAuthProof<'google'>
   // @ts-expect-error Platform and proof must correspond.

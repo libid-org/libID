@@ -2,6 +2,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
 import specMarkdown from './src/spec-markdown.mjs';
+import { description } from './src/tagline.mjs';
 
 export default defineConfig({
   site: 'https://lib.id',
@@ -9,8 +10,15 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'libID',
-      description: 'Every social account is already a multichain identity.',
+      description,
       favicon: '/favicon.svg',
+      head: [
+        { tag: 'meta', attrs: { property: 'og:image', content: 'https://lib.id/og.png' } },
+        { tag: 'meta', attrs: { property: 'og:image:type', content: 'image/png' } },
+        { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+        { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+        { tag: 'meta', attrs: { property: 'og:image:alt', content: 'The libID wordmark on a dark background.' } },
+      ],
       customCss: ['./src/styles/custom.css'],
       routeMiddleware: './src/route-data.ts',
       sidebar: [
@@ -18,6 +26,7 @@ export default defineConfig({
         { label: 'Specs', items: [{ autogenerate: { directory: 'specs' } }] },
       ],
       components: {
+        Head: './src/components/Head.astro',
         Sidebar: './src/components/Sidebar.astro',
         ThemeProvider: './src/components/ThemeProvider.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',

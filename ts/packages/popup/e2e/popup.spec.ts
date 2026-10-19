@@ -293,53 +293,6 @@ test('[POPUP-CONTROL-002] [POPUP-CONNECTION-003] [POPUP-KEEPER-003] one port sur
   expect(appDiag).not.toContain('fallback-unavailable')
 })
 
-/** Navigate, then call `then` on the connection in the same task. */
-const navigateThen = (page: Page, url: string, then: 'ping' | 'close') =>
-  page.evaluate(
-    ([[base, hash], then]) => {
-      const conn = (
-        window as unknown as {
-          __conn: {
-            navigate(u: string, f: URLSearchParams): Promise<void>
-            send(v: unknown): void
-            close(): Promise<void>
-          }
-        }
-      ).__conn
-      void conn.navigate(base, new URLSearchParams(hash))
-      if (then === 'ping') conn.send({ type: 'ping', n: 5 })
-      else void conn.close()
-    },
-    [split(url), then] as const,
-  )
-
-test('[POPUP-CONNECTION-003] a value sent right after navigate waits in the kept port for the destination', async ({
-  page,
-}) => {
-  const { id, popup } = await open(page)
-  await expectPong(page, 0)
-  await popup.evaluate(() => navigator.serviceWorker.ready)
-  await nextDocument(popup, () => navigateThen(page, `${POPUP}/isolated#c=${id}`, 'ping'))
-  expect(await expectPong(page, 5)).toMatchObject({ path: '/isolated', isolated: true })
-})
-
-test('[POPUP-CONTROL-003] a close right after navigate reaches the destination through the kept port', async ({
-  page,
-}) => {
-  const { id, popup } = await open(page)
-  await expectPong(page, 0)
-  await popup.evaluate(() => navigator.serviceWorker.ready)
-  // Sever the handle first, so the close must travel over the port as ClosePopup.
-  await nextDocument(popup, () => navigate(page, `${POPUP}/isolated#c=${id}`))
-  await expect(popup.locator('#status')).toHaveText('connected')
-  expect(
-    await page.evaluate(() => (window as unknown as { __handle: Window }).__handle.closed),
-  ).toBe(true)
-  const closed = popup.waitForEvent('close', { timeout: 15_000 })
-  await navigateThen(page, `${POPUP}/p#c=${id}`, 'close')
-  await closed
-})
-
 test('[POPUP-CONTROL-003] [POPUP-CONTROL-004] close reaches a severed popup over the port', async ({
   page,
 }) => {
@@ -354,6 +307,26 @@ test('[POPUP-CONTROL-003] [POPUP-CONTROL-004] close reaches a severed popup over
   )
   await closed
   expect(await diag(page)).toContain('connection-closed')
+})
+
+test('[POPUP-CONTROL-003] [POPUP-KEEPER-003] a close while the worker keeps the port reaches the next document', async ({
+  page,
+}) => {
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  await nextDocument(popup, () => navigate(page, `${POPUP}/isolated#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  const next = encodeURIComponent(`${POPUP}/p#c=${id}`)
+  // Severed, then non-participating: the close waits in the port the worker keeps.
+  await nextDocument(popup, () => navigate(page, `${POPUP}/external?next=${next}`))
+  await expect(popup.locator('#status')).toHaveText('external')
+  await page.evaluate(() =>
+    (window as unknown as { __conn: { close(): Promise<void> } }).__conn.close(),
+  )
+  const closed = popup.waitForEvent('close', { timeout: 10_000 })
+  await popup.getByRole('button', { name: 'Return' }).click()
+  await closed
 })
 
 test('[POPUP-CONTROL-003] close uses the live handle directly', async ({ page }) => {
@@ -404,6 +377,22 @@ test('[POPUP-KEEPER-003] [POPUP-CONNECTION-003] a long non-participating hop exp
   await ping(page, 5)
   expect(await expectPong(page, 5)).toMatchObject({ path: '/p' })
   expect((await diag(page)).filter((c) => c === 'carrier-message-port')).toHaveLength(2)
+})
+
+test('[POPUP-KEEPER-003] a stalled hop navigates again and keeps its port past the deadline', async ({
+  page,
+}) => {
+  test.slow()
+  const { id, popup } = await open(page)
+  await expectPong(page, 0)
+  await popup.evaluate(() => navigator.serviceWorker.ready)
+  // The first two requests never answer, so the destination commits only on the
+  // second retry, after the claim deadline has passed since the keep.
+  await nextDocument(popup, () => navigate(page, `${POPUP}/isolated?stall=${id}&hangs=2#c=${id}`))
+  await expect(popup.locator('#status')).toHaveText('connected')
+  expect(await diag(popup)).toEqual(['carrier-restored'])
+  await ping(page, 9)
+  expect(await expectPong(page, 9)).toMatchObject({ path: '/isolated', isolated: true })
 })
 
 test('[POPUP-KEEPER-005] an explicit root scope keeps and claims through the root registration', async ({

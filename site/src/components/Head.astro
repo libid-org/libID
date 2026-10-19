@@ -1,0 +1,10 @@
+---
+import DefaultHead from '@astrojs/starlight/components/Head.astro';
+
+const { id } = Astro.locals.starlightRoute.entry;
+const is404 = id === '404' || id.endsWith('/404');
+---
+
+<DefaultHead />
+{is404 && <meta name="page-status" content="404" />}
+<script src="../page.js"></script>

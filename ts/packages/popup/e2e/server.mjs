@@ -165,8 +165,18 @@ const DIP = {
   'Document-Isolation-Policy': 'isolate-and-require-corp',
 }
 
+// A navigation the engine never commits, as WebKit can leave one that switches
+// browsing context group: the first `hangs` requests with a `stall` token get no response.
+const stalls = new Map()
+
 function popupHandler(req, res, page = popupPage) {
   const url = new URL(req.url, 'https://popup.invalid')
+  const stall = url.searchParams.get('stall')
+  if (stall !== null) {
+    const seen = (stalls.get(stall) ?? 0) + 1
+    stalls.set(stall, seen)
+    if (seen <= Number(url.searchParams.get('hangs') ?? '1')) return
+  }
   switch (url.pathname) {
     case '/health':
       return send(res, 200, {}, 'ok')

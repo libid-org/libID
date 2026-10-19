@@ -144,7 +144,9 @@ export function fakePair(popupOrigin = POPUP_ORIGIN, applicationOrigin = APP_ORI
     return proxy
   }
   // Each proxy stamps the *sender's* identity as `source`.
+  // oxlint-disable-next-line prefer-const -- the two proxies reference each other
   let appProxy!: FakeProxy
+  // oxlint-disable-next-line prefer-const -- the two proxies reference each other
   let popupProxy!: FakeProxy
   const popupOriginNow = () => state.popupOrigin
   popupProxy = makeProxy(
@@ -198,6 +200,8 @@ export interface FakeScope {
   pending: Promise<unknown>[]
   /** The host's own traffic through the same worker. */
   postRaw(message: unknown, ports: MessagePort[]): void
+  /** Whether the posting document is still present; it leaves at once by default. */
+  present: boolean
 }
 
 /** The real worker handler on a fake ServiceWorkerGlobalScope. */
@@ -209,12 +213,13 @@ export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
     addEventListener: (type: string, handler: (event: unknown) => void) => {
       handlers.set(type, handler)
     },
+    clients: { get: async (id: string) => (fake.present ? { id } : undefined) },
   } as unknown as ServiceWorkerGlobalScope)
   const deliver = (url: string, data: unknown, ports: readonly MessagePort[]): void =>
     handlers.get('message')?.({
       data,
       ports,
-      source: { url },
+      source: { url, id: url },
       waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
     })
   // A real transfer, as to a Service Worker: the sender's ports are neutered at once.
@@ -228,12 +233,14 @@ export function fakeScope(origin = POPUP_ORIGIN): FakeScope {
       channel.port1.postMessage(message, transfer)
     },
   })
-  return {
+  const fake: FakeScope = {
     worker: post(`${origin}/p`),
     foreignWorker: post('https://evil.example/p'),
     pending,
     postRaw: (message, ports) => setTimeout(() => deliver(`${origin}/p`, message, ports), 0),
+    present: false,
   }
+  return fake
 }
 
 export const registrationWith =

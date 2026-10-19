@@ -1,4 +1,4 @@
-import { parseCsp, scriptHash } from '../build/profiles.ts'
+import { cspHash, parseCsp } from '../build/profiles.ts'
 import { documentHeaders } from '../src/assets/headers.ts'
 
 /** The deployment inputs Callback reads, inserted in its positional order. */
@@ -27,7 +27,7 @@ export function prepareCallback(
     !html.includes(slot) ||
     scripts.length !== 2 ||
     !code ||
-    parseCsp(policy).get('script-src')?.join(' ') !== scriptHash(code) ||
+    parseCsp(policy).get('script-src')?.join(' ') !== cspHash(code) ||
     new URL(ccdpOrigin).origin !== ccdpOrigin ||
     !(
       ccdpOrigin.startsWith('https://') ||

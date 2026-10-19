@@ -48,17 +48,19 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
     }),
   )
   const run = startPrefetch(fragment())
-  // The registration overlaps the handshake; the dispatch waits for authenticated readiness.
-  expect(registerRootWorker).toHaveBeenCalledOnce()
-  activated()
+  // The registration waits for authenticated readiness, after the connection's lookup.
   await new Promise((resolve) => setTimeout(resolve))
-  expect(dispatchPrefetch).not.toHaveBeenCalled()
+  expect(registerRootWorker).not.toHaveBeenCalled()
   expect(connection.sent).toEqual([])
   elapsed = 2025
   connection.settle()
+  await vi.waitFor(() => expect(registerRootWorker).toHaveBeenCalledOnce())
+  expect(dispatchPrefetch).not.toHaveBeenCalled()
+  elapsed = 2100
+  activated()
   await vi.waitFor(() => expect(dispatchPrefetch).toHaveBeenCalledOnce())
   expect(connection.sent).toEqual([])
-  elapsed = 2055
+  elapsed = 2130
   dispatched()
   await run
   expect(connection.sent).toEqual([
@@ -66,12 +68,12 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
       type: 'event',
       event: 'prefetch-dispatch',
       phase: 'finished',
-      timestamp: performance.timeOrigin + 2055,
+      timestamp: performance.timeOrigin + 2130,
       instrumentation: {
         attributes: {
           'document-startup-ms': 25,
           'connection-ms': 2000,
-          'worker-ready-ms': 0,
+          'worker-ready-ms': 75,
           'dispatch-ms': 30,
         },
       },
