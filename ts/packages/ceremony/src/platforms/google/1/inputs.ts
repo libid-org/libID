@@ -39,7 +39,7 @@ export function prepareGoogleInputs(token: ParsedGoogleIdToken, jwk: unknown) {
     idNode: idNode(PLATFORM_GOOGLE_KEY, sub),
     handleNode: handleNode(PLATFORM_GOOGLE_KEY, email),
   }
-  const identity: Identity<typeof PLATFORM_GOOGLE_KEY> = {
+  const identity: Identity<'google'> = {
     platformId: PLATFORM_GOOGLE_KEY,
     oauthClientId: aud,
     userId: userIdOf(nodes.idNode),
