@@ -9,7 +9,9 @@ import {
 import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { type: 'json' }
 import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
-import type { PlatformId } from '../src/platforms/index.js'
+import { identityNodes, type OAuthProof, type PlatformId } from '../src/platforms/index.js'
+import { platformTable } from '../src/platforms/nodes.js'
+import type { Identity } from '../src/platforms/validation.js'
 import { testnet } from '../src/testing/ledgers.ts'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'
 import { type BrowserPlatform, browserPlatforms, platformIds } from './platforms.js'
@@ -112,9 +114,42 @@ const evidence = {
         )
         expect(bearer).toHaveLength(1)
         expect(identity.sent.commitments).toHaveLength(1)
-        const publicInputs = [...bearer[0].hash, ...identity.sent.commitments[0].hash].map(
-          (byte) => `0x${byte.toString(16).padStart(64, '0')}`,
-        )
+        // The id and handle commitments each start where a revealed anchor ends.
+        const framed = (anchor: RegExp) => {
+          const ends = identity.received.revealed
+            .filter((range) => anchor.test(new TextDecoder().decode(range.bytes)))
+            .map((range) => range.start + range.bytes.length)
+          const found = identity.received.commitments.filter((c) => ends.includes(c.start))
+          expect(found).toHaveLength(1)
+          return found[0].hash
+        }
+        const { userIdTag, handleTag } = platformTable(platform)
+        const fields = { x: ['id', 'username'], github: ['id', 'login'] }[
+          platform as 'x' | 'github'
+        ]
+        const halves = (value: Uint8Array) =>
+          [value.subarray(0, 16), value.subarray(16)].map(
+            (half) => `0x${Buffer.from(half).toString('hex').padStart(64, '0')}`,
+          )
+        const tag = (text: string) => [
+          `0x${Buffer.from(text).toString('hex').padEnd(62, '0').padStart(64, '0')}`,
+          `0x${text.length.toString(16).padStart(64, '0')}`,
+        ]
+        const accepted = { identity: result.identity as Identity<'x'>, status: 'accepted' as const }
+        const { idNode, handleNode } = identityNodes({
+          ...accepted,
+          oauthProof: { platformCeremonyVersion: 1 } as OAuthProof<'x'>,
+        })
+        const publicInputs = [
+          bearer[0].hash,
+          identity.sent.commitments[0].hash,
+          framed(new RegExp(`"${fields[0]}"\\s*:\\s*"?$`)),
+          framed(new RegExp(`"${fields[1]}"\\s*:\\s*"$`)),
+          idNode,
+          handleNode,
+        ]
+          .flatMap(halves)
+          .concat(tag(userIdTag), tag(handleTag))
         await verifyBrowserProof('bearer_link', { proof: result.proof, publicInputs })
       }
     },

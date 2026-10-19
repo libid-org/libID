@@ -136,7 +136,7 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
     )
     const identityOf = (body: string, sent = identitySent) =>
       requests.identity.select({ sent: utf8(sent), received: httpResponse(body) }, evidence.bearer)
-    const members = (body: string) => revealed(httpResponse(body), identityOf(body).ranges.received)
+    const anchors = (body: string) => revealed(httpResponse(body), identityOf(body).ranges.received)
 
     it('selects exactly the identity its validators admit from the identity response', () => {
       const sent = requestHead(requests.identity.build(evidence.bearer))
@@ -434,19 +434,27 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
 
     describe('identity response', () => {
       it.each([
-        ['its fixture', evidence.identityBody, evidence.identityMembers],
-        ['the reordered', evidence.reorderedIdentityBody, evidence.reorderedIdentityMembers],
+        ['its fixture', evidence.identityBody, evidence.identityAnchors],
+        ['the reordered', evidence.reorderedIdentityBody, evidence.reorderedIdentityAnchors],
       ])(
-        tagged('discloses exactly the two identity members of %s response', identityTags),
+        tagged(
+          'reveals only the identity anchors of %s response and commits each value whole [REQ-PLAT-59]',
+          identityTags,
+        ),
         (_name, body, expected) => {
           const selected = identityOf(body)
           expect(selected).toMatchObject({ userId: identity.userId, userName: identity.userName })
-          expect(members(body)).toEqual(expected)
-          const plan = planNotarization(
-            { sent: utf8(identitySent), received: httpResponse(body) },
-            selected.ranges,
-          )
+          expect(anchors(body)).toEqual(expected)
+          const received = httpResponse(body)
+          const plan = planNotarization({ sent: utf8(identitySent), received }, selected.ranges)
           expect(plan.commit.sent).toEqual([{ ...selected.bearerRange, algorithm: 'SHA256' }])
+          for (const [range, value] of [
+            [selected.idRange, identity.userId],
+            [selected.handleRange, identity.userName],
+          ] as const) {
+            expect(plan.commit.received).toContainEqual({ ...range, algorithm: 'SHA256' })
+            expect(text(received.slice(range.start, range.end))).toBe(value)
+          }
         },
       )
 
@@ -461,8 +469,8 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
             userId: identity.userId,
             userName: identity.userName,
           })
-          expect(members(body)).toEqual(
-            evidence.identityMembers.map((member) => spaced(member, space)),
+          expect(anchors(body)).toEqual(
+            evidence.identityAnchors.map((anchor) => spaced(anchor, space)),
           )
         },
       )
@@ -488,15 +496,18 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
         ),
         () => {
           const body = evidence.identityBody
-          for (const member of evidence.identityMembers) {
-            const name = member.match(/^"(\w+)"/)![1]
+          const names = evidence.identityAnchors.flatMap(
+            (anchor) => anchor.match(/^"(\w+)"/)?.[1] ?? [],
+          )
+          expect(names).toHaveLength(2)
+          for (const name of names) {
             expect(
               () => identityOf(body.replace(`"${name}"`, `"${name}" : "other", "${name}"`)),
               name,
             ).toThrow(/duplicated/)
-            // Cut inside the member's value, and right after its colon.
-            const at = body.indexOf(member)
-            for (const end of [at + member.length - 2, at + member.indexOf(':') + 1])
+            // Cut right after the member's colon, and inside its value.
+            const colon = body.indexOf(':', body.indexOf(`"${name}"`))
+            for (const end of [colon + 1, colon + 4])
               expect(() => identityOf(body.slice(0, end)), name).toThrow()
           }
         },
@@ -549,7 +560,7 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
   describe('composition', () => {
     it(
       tagged(
-        'sends the code and the bearer only in notarized requests and never discloses the bearer [LIBID-MOD-013] [LIBID-OAUTH-015]',
+        'sends the code and the bearer only in notarized requests and never discloses the bearer, id or handle [LIBID-MOD-013] [LIBID-OAUTH-015] [REQ-PLAT-59]',
         tags,
       ),
       async () => {
@@ -575,7 +586,13 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
             ...ranges.sent.map((r) => transcripts[index].sent.slice(r.start, r.end)),
             ...ranges.received.map((r) => transcripts[index].received.slice(r.start, r.end)),
           ]
-          expect(disclosed.map(text).join('')).not.toContain(evidence.bearer)
+          // Neither the bearer nor the id or handle reaches an attestation (REQ-PLAT-59).
+          for (const secret of [
+            evidence.bearer,
+            fixture.identity.userId,
+            fixture.identity.userName,
+          ])
+            expect(disclosed.map(text).join('')).not.toContain(secret)
         }
       },
     )

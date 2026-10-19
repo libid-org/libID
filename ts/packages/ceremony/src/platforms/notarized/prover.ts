@@ -46,9 +46,7 @@ export async function proveNotarized<P extends PlatformId>(
       observe,
     })
     const final = observe(Promise.all([token.attestation, identity.attestation]))
-    const proof = observe(
-      circuit.prove(platformTable(platformId), bearer, token, identity, signal),
-    )
+    const proof = observe(circuit.prove(platformTable(platformId), bearer, token, identity, signal))
     const [bearerLinkProof, [tokenAttestation, identityAttestation]] = await Promise.all([
       proof,
       final,

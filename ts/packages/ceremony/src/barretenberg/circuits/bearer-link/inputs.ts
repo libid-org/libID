@@ -38,7 +38,8 @@ export interface BearerLinkWitness {
 /** `value` zero-padded to its circuit buffer. */
 function padded(value: string, buffer: number, name: string): number[] {
   const bytes = encoder.encode(value)
-  if (bytes.length > buffer) throw new Error(`The ${name} exceeds its ${buffer}-byte circuit buffer`)
+  if (bytes.length > buffer)
+    throw new Error(`The ${name} exceeds its ${buffer}-byte circuit buffer`)
   const out = new Uint8Array(buffer)
   out.set(bytes)
   return Array.from(out)
@@ -47,7 +48,8 @@ function padded(value: string, buffer: number, name: string): number[] {
 /** A tag as one public field: its bytes from the top of 31 bytes, zero after. */
 function packedTag(tag: string): bigint {
   const bytes = encoder.encode(tag)
-  if (bytes.length === 0 || bytes.length > MAX_TAG_BYTES) throw new Error('Tag does not fit a field')
+  if (bytes.length === 0 || bytes.length > MAX_TAG_BYTES)
+    throw new Error('Tag does not fit a field')
   const out = new Uint8Array(MAX_TAG_BYTES)
   out.set(bytes)
   return bytesToBigInt(out)

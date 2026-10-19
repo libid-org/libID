@@ -59,6 +59,8 @@ interface Entry<P extends PlatformId> {
   returnRules: ReturnRules
   /** The identity the evidence names; `oauthClientId` is the configured client. */
   identity: Identity<P>
+  /** The id node and handle node of `identity`, computed independently of the adapter. */
+  nodes: { idNode: string; handleNode: string }
   /** Every identity field at its maximum accepted length. */
   longest: Identity<P>
   /** Platform-specific encodings each identity field rejects, beyond the shared cases. */
@@ -97,17 +99,19 @@ export interface NotarizedFixture<P extends PlatformId> extends Entry<P> {
   identityRequest: { url: string; headers: Record<string, string> }
   /** Normative test IDs the token and identity transcript sections tag for this platform. */
   transcriptTests: { token: string; identity: string }
+  /** The platform's user-id and handle tags (REQ-PLAT-05C), spelled out from the specification. */
+  tags: { userId: string; handle: string }
   evidence: {
     bearer: string
     /** Token endpoint body carrying `bearer`. */
     tokenBody: string
     /** Identity endpoint body naming `identity`. */
     identityBody: string
-    /** The exact identity members `identityBody` discloses, in body order. */
-    identityMembers: readonly string[]
-    /** The same identity with its members in another order, and the exact members it discloses. */
+    /** The exact anchors `identityBody` reveals around the committed values, in body order. */
+    identityAnchors: readonly string[]
+    /** The same identity with its members in another order, and the exact anchors it reveals. */
     reorderedIdentityBody: string
-    reorderedIdentityMembers: readonly string[]
+    reorderedIdentityAnchors: readonly string[]
     /** The same identity values outside the platform's response shape. */
     misshapenIdentityBody: string
   }
@@ -187,8 +191,7 @@ export const googleV1 = {
 }
 
 // Generated once by running googleV1 through the official libid-circuits
-// v0.5.0 oidc_google ACIR and bb.js 5.2.0, not by this adapter; v0.6.0 with
-// bb.js 6.0.0-rc.2 yields the same values.
+// v0.7.1 oidc_google ACIR and bb 6.0.0-rc.2, not by this adapter.
 export const googlePublicInputs = [
   '0x00000000000000000000000000000000000000000000000000000000000000b3',
   '0x0000000000000000000000000000000000000000000000000000000000000018',
@@ -224,10 +227,10 @@ export const googlePublicInputs = [
   '0x00000000000000000000000000000000000000000000000000000000000000f5',
   '0x000000000000000000000000000000002f36be056956af2b8464eba0d8b9c613',
   '0x00000000000000000000000000000000f8c22af17a2f81cb1421e176333e62ab',
-  '0x0000000000000000000000000000000020078023c9d4bf6bffc2580ec3644607',
-  '0x000000000000000000000000000000005d10c8453cecbe4f1cb3d326b2b35560',
-  '0x00686f6c646572406578616d706c652e636f6d00000000000000000000000000',
-  '0x0000000000000000000000000000000000000000000000000000000000000000',
+  '0x00000000000000000000000000000000a83e66b34468315fb68c3098b3c521b7',
+  '0x0000000000000000000000000000000049aafb1db3390cb53ec03a8db139f2c7',
+  '0x0000000000000000000000000000000078f9907c27a505b9cbd3c0a293d36004',
+  '0x00000000000000000000000000000000909f7834d50c6c211265f853d1be2bc9',
   '0x0000000000000000000000000000000000000000000000000000000066d17750',
   '0x0000000000000000000000000000000000cd715c0efe8683fd563164874536bd',
   '0x000000000000000000000000000000000011eec56f0c610cb4d2bd31204e1121',
@@ -302,6 +305,9 @@ const formSerializationChanges = ['a+b', 'a b', 'a%2Fb']
 
 const decimalIdViolations = ['-1', '1.5', '1e3', '1 2', '"1"', 'x1']
 
+/** Handles the token check refuses beyond the shared cases (§2.1a). */
+const handleViolations = ['a\\b', 'a\tb']
+
 const attestation = (byte: number) => ({
   attestedData: LIBID_RS_ATTESTED_DATA.slice(),
   signature: new Uint8Array(65).fill(byte),
@@ -365,9 +371,13 @@ export const fixtures = {
     identity: {
       platformId: 'google',
       oauthClientId: googleClaims.aud,
-      // The platform-ceremonies §2.1 userId of the token's `sub`.
-      userId: '0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560',
+      // The platform-ceremonies §2.1 userId of the token's `sub`: its id node.
+      userId: '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
       userName: googleClaims.email,
+    },
+    nodes: {
+      idNode: '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
+      handleNode: '0x78f9907c27a505b9cbd3c0a293d36004909f7834d50c6c211265f853d1be2bc9',
     },
     longest: {
       platformId: 'google',
@@ -386,7 +396,7 @@ export const fixtures = {
         'a'.repeat(66),
         `0x${'a'.repeat(63)}`,
       ],
-      userName: [],
+      userName: ['a\\b@example.com'],
     },
     admittedClientIds: ['a+b'],
     proof: {
@@ -568,16 +578,20 @@ export const fixtures = {
       rejected: ['id_token', 'access_token', 'refresh_token', 'iss'],
     },
     identity: { platformId: 'x', oauthClientId: 'client', userId, userName: 'alice' },
+    nodes: {
+      idNode: '0x1e10f4e9e35c4206ec33c151acfad43a7e2c4934e2fa293895a7a98cae5af4ad',
+      handleNode: '0x0bed64615b5776d2567a82467d7be0e266e02803910d694a72703ee2a4cc911a',
+    },
     longest: {
       platformId: 'x',
       oauthClientId: 'a'.repeat(512),
       userId: '18446744073709551615',
-      userName: 'a'.repeat(15),
+      userName: 'a'.repeat(39),
     },
     rejectedIdentity: {
       oauthClientId: formSerializationChanges,
       userId: decimalIdViolations,
-      userName: ['a-b', 'a.b'],
+      userName: handleViolations,
     },
     admittedClientIds: [],
     proof: notarizedProof(),
@@ -602,6 +616,7 @@ export const fixtures = {
     returns: codeReturns(),
     prover: () => import('../x/1/prover.js'),
     requests: { token: xToken, identity: xIdentity },
+    tags: { userId: 'libid.x.user-id', handle: 'libid.x.handle' },
     tokenRequest: {
       url: 'https://api.x.com/2/oauth2/token',
       form: (input) => [
@@ -625,9 +640,9 @@ export const fixtures = {
       bearer,
       tokenBody: `{ "access_token" : "${bearer}", "token_type": "bearer" }`,
       identityBody: `{ "data": { "username": "alice", "id": "${userId}" } }`,
-      identityMembers: ['"username": "alice"', `"id": "${userId}"`],
+      identityAnchors: ['"username": "', '"', '"id": "', '"'],
       reorderedIdentityBody: `{ "data": { "id": "${userId}", "username": "alice" } }`,
-      reorderedIdentityMembers: [`"id": "${userId}"`, '"username": "alice"'],
+      reorderedIdentityAnchors: ['"id": "', '"', '"username": "', '"'],
       misshapenIdentityBody: `{ "login": "alice", "other": { "id": "${userId}", "username": "alice" } }`,
     },
   },
@@ -641,6 +656,10 @@ export const fixtures = {
       authorizationIssuer: 'https://github.com/login/oauth',
     },
     identity: { platformId: 'github', oauthClientId: 'client', userId, userName: 'alice' },
+    nodes: {
+      idNode: '0xece2b9dfbe2af83f140db2e365068198e82936121690e46a12cc31746775c6c7',
+      handleNode: '0xd66ff0131d29d89b9fd4d2126290081d0c79c41186f3d719b83dd36061b68f0e',
+    },
     longest: {
       platformId: 'github',
       oauthClientId: 'a'.repeat(512),
@@ -650,7 +669,7 @@ export const fixtures = {
     rejectedIdentity: {
       oauthClientId: formSerializationChanges,
       userId: decimalIdViolations,
-      userName: ['a_b', 'a--b', '-a', 'a-'],
+      userName: handleViolations,
     },
     admittedClientIds: [],
     proof: notarizedProof(),
@@ -678,6 +697,7 @@ export const fixtures = {
     ),
     prover: () => import('../github/1/prover.js'),
     requests: { token: githubToken, identity: githubIdentity },
+    tags: { userId: 'libid.github.user-id', handle: 'libid.github.handle' },
     tokenRequest: {
       url: 'https://github.com/login/oauth/access_token',
       form: (input) => [
@@ -704,10 +724,10 @@ export const fixtures = {
       bearer,
       tokenBody: `{ "access_token" : "${bearer}", "token_type": "bearer" }`,
       identityBody: `{ "login" : "alice", "id" : ${userId} , "unused": true }`,
-      // A numeric ID discloses its whitespace and the delimiter that ends it: a comma or a brace.
-      identityMembers: ['"login" : "alice"', `"id" : ${userId} ,`],
+      // A numeric ID's closing anchor is its whitespace and the delimiter that ends it: a comma or a brace.
+      identityAnchors: ['"login" : "', '"', '"id" : ', ' ,'],
       reorderedIdentityBody: `{ "unused": true, "login" : "alice", "id" : ${userId} }`,
-      reorderedIdentityMembers: ['"login" : "alice"', `"id" : ${userId} }`],
+      reorderedIdentityAnchors: ['"login" : "', '"', '"id" : ', ' }'],
       misshapenIdentityBody: `{ "login": "alice", "other": { "id": ${userId}, "username": "alice" } }`,
     },
   },

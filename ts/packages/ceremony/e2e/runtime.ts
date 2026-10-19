@@ -1,3 +1,4 @@
+import { PLATFORM_GITHUB } from '@libid/contracts/platforms'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { assetUrl } from '../src/assets/index.js'
 import {
@@ -42,16 +43,20 @@ Object.assign(window, {
   NotaryRuntime,
   async proveBearerFixture() {
     const bearer = `AAAA${'x'.repeat(96)}`
-    const opening = (start: number) => {
+    const opening = (value: string, start: number) => {
       const blinder = Uint8Array.from({ length: 16 }, (_, i) => i + start)
       return {
-        start: 0,
-        end: 100,
         blinder,
-        hash: sha256(Uint8Array.from([...new TextEncoder().encode(bearer), ...blinder])),
+        hash: sha256(Uint8Array.from([...new TextEncoder().encode(value), ...blinder])),
       }
     }
-    const inputs = buildBearerLinkInputs(bearer, opening(0), opening(16))
+    const inputs = buildBearerLinkInputs(PLATFORM_GITHUB, {
+      bearer,
+      token: opening(bearer, 0),
+      identity: opening(bearer, 16),
+      id: { value: '583231', opening: opening('583231', 32) },
+      handle: { value: 'octocat', opening: opening('octocat', 48) },
+    })
     const engine = new ProofEngine({
       circuitUrl: assetUrl(circuit),
       verificationKeyUrl: assetUrl(verificationKey),
