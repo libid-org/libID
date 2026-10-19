@@ -12,12 +12,16 @@ export type ResponseProfile =
 
 import { createHash } from 'node:crypto'
 import * as shared from '../src/assets/headers.ts'
+import { documentStyles } from './styles.ts'
 
 /** Hex characters of the policy directory under `/ccdp/assets/` that bundled code lives in. */
 const POLICY_HASH_HEX_CHARS = 12
 
-export const scriptHash = (code: string) =>
+export const cspHash = (code: string) =>
   `'sha256-${createHash('sha256').update(code).digest('base64')}'`
+
+/** CCDP serves its own documents with their artifact, so their stylesheet is pinned by hash. */
+export const documentStyleSources = `style-src ${cspHash(documentStyles)}; font-src data:`
 
 /** Directive name (lowercase) to its sources; a repeated directive is rejected, not ignored. */
 export function parseCsp(policy: string): Map<string, string[]> {
@@ -57,10 +61,12 @@ export function responseHeaders(
     ...(html ? shared.documentHeaders : shared.javascript),
     ...(immutable ? shared.immutable : revalidated),
   }
+  // Bridges compose Callback's policy: styles stay unpinned, so UI changes need no new hash, and
+  // no font source is admitted.
   if (profile === 'callback')
     return {
       ...headers,
-      'Content-Security-Policy': `${base}; script-src ${inline.map(scriptHash).join(' ')}; style-src 'unsafe-inline'`,
+      'Content-Security-Policy': `${base}; script-src ${inline.map(cspHash).join(' ')}; style-src 'unsafe-inline'`,
     }
   // The Application reads the version list cross-origin; the wildcard needs no Vary.
   if (profile === 'versions')
@@ -88,7 +94,7 @@ function executableCsp(
 ): string {
   const execution =
     profile === 'prover' || profile === 'proverFallback' || isolatedWorkers.includes(profile)
-  const scripts = `'self' ${inline.map(scriptHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}`
+  const scripts = `'self' ${inline.map(cspHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}`
   const workers = profile === 'leafWorker' ? "'none'" : `'self'${execution ? ' blob:' : ''}`
   const connects =
     profile === 'proofWorker' || profile === 'leafWorker'
@@ -97,7 +103,7 @@ function executableCsp(
         ? `${shared.csp.fetch} ${shared.csp.websocket}`
         : `'self' ${externalOrigins.join(' ')}`
   const connectBlob = profile === 'notaryWorker' ? ' blob:' : ''
-  const styles = documents.includes(profile) ? "; style-src 'unsafe-inline'" : ''
+  const styles = documents.includes(profile) ? `; ${documentStyleSources}` : ''
   return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects}${connectBlob}${styles}`
 }
 

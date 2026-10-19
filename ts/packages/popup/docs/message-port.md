@@ -186,9 +186,13 @@ its bounded interval. The same logical connection may use it repeatedly. After
 the worker acknowledges preservation, the source starts navigation immediately
 and the destination calls `PopupConnection.accept` before any other network
 use; the claim is its first step, so the deadline includes document load and
-package import. It never holds a port while an unrelated document, user
-interaction, or intentional background wait owns the popup; a later
-participating document establishes a replacement carrier.
+package import. The deadline counts from when the keeping document was last
+present, which the worker checks every `PRESENCE_CHECK_MS = 1_000`: a source
+whose navigation stalls stays, replaces itself again (see
+[Control](control.md)), and keeps its port until the destination claims it. It
+never holds a port while an unrelated document, user interaction, or
+intentional background wait owns the popup; a later participating document
+establishes a replacement carrier.
 
 The `keep` handler uses `event.waitUntil()` to keep its message event active
 until the port is claimed or its short deadline expires. Its acknowledgement
@@ -279,9 +283,11 @@ taken from the channel when the port is transferred; WebKit does. So from the
 moment the source chooses to leave until the transfer, values the port still
 dispatches are collected in order as its backlog and travel in the keep record.
 The worker returns them with the claim, and the destination delivers them
-before anything still queued in the port, so values the application sends right
-after `Navigate` reach the destination in order. Either record spells the
-backlog only when it is nonempty.
+before anything still queued in the port. A value the engine has taken but not
+yet dispatched at the transfer escapes the backlog: Firefox dispatches it to the
+departing document afterwards and WebKit drops it, so a value the application
+sends right after `Navigate` can be lost. Either record spells the backlog only
+when it is nonempty.
 
 Preservation also serves the isolation fallback: a document that must be
 isolated and is not keeps the port it just selected, before starting it, and

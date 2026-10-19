@@ -38,16 +38,14 @@ class PrefetchDocument extends CeremonyDocument {
         allowedApplicationOrigins: '*',
       })
       this.connection = connection
-      // The registration needs no connection, so it overlaps the handshake.
-      const registering = Object.hasOwn(requestsByProfile, profile)
-        ? registerRootWorker(rootWorkerUrl)
-        : undefined
-      registering?.catch(() => {})
       await connection.ready
       // Reported once connected, so the Application learns why instead of waiting.
-      if (!registering) throw new Error(messages.unsupportedProfile)
+      if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
       const connected = performance.now()
-      const worker = await registering
+      // Registered only now, after the connection's registration lookup: Firefox can build this
+      // document's registration from a lookup answered before the new Worker installs, and if
+      // that Worker's claim arrives first, the Worker stays redundant here though active.
+      const worker = await registerRootWorker(rootWorkerUrl)
       const workerReady = performance.now()
       await dispatchPrefetch(worker, profile)
       const dispatched = performance.now()

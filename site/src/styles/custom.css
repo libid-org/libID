@@ -1,13 +1,7 @@
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
+@import './fonts.css';
 
 :root {
-  --sl-font: 'JetBrains Mono', monospace;
+  --sl-font: 'Libron', Georgia, serif;
   --sl-font-mono: var(--sl-font);
   --sl-color-white: var(--text);
   --sl-color-gray-1: var(--text);
@@ -23,7 +17,30 @@
   --sl-color-accent-high: var(--accent);
 }
 
-.site-title { color: var(--logo); }
+.main-pane {
+  --sl-color-bg: color-mix(in srgb, var(--surface) 85%, var(--border));
+  --sl-color-text: color-mix(in srgb, var(--text) 40%, white);
+  --sl-color-white: var(--sl-color-text);
+  --sl-color-text-accent: color-mix(in srgb, var(--accent) 60%, var(--text));
+  --sl-color-bg-inline-code: var(--background);
+  min-height: calc(100svh - var(--sl-nav-height) - var(--sl-mobile-toc-height));
+  background-color: var(--sl-color-bg);
+  color: var(--sl-color-text);
+}
+
+:root[data-theme='light'] .main-pane {
+  --sl-color-bg: var(--background);
+  --sl-color-text: color-mix(in srgb, var(--text) 80%, black);
+  --sl-color-text-accent: var(--accent);
+  --sl-color-bg-inline-code: var(--surface);
+}
+
+.sl-markdown-content { font-size: 1.125rem; }
+
+.site-title {
+  color: var(--logo);
+  font-weight: 400;
+}
 
 .social-icons a { color: var(--text); }
 .social-icons a:hover,

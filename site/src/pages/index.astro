@@ -1,5 +1,9 @@
 ---
 import ThemeProvider from '../components/ThemeProvider.astro';
+import { palettes } from '../palette.mjs';
+import { description, tagline } from '../tagline.mjs';
+import libronFont from '../../../brand/libron/Libron-Regular.woff2?url';
+import '../styles/home.css';
 ---
 
 <!doctype html>
@@ -7,12 +11,23 @@ import ThemeProvider from '../components/ThemeProvider.astro';
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>libID — Identity, bridged.</title>
-    <meta name="description" content="Every social account is already a multichain identity">
+    <title>libID — {tagline}</title>
+    <meta name="description" content={description}>
+    <meta name="theme-color" content={palettes.dark.background}>
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://lib.id/">
+    <meta property="og:title" content={`libID — ${tagline}`}>
+    <meta property="og:description" content={description}>
+    <meta property="og:image" content="https://lib.id/og.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The libID wordmark on a dark background.">
+    <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <link rel="preload" href="/fonts/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="preload" href={libronFont} as="font" type="font/woff2" crossorigin>
     <ThemeProvider />
+    <script src="../page.js"></script>
   </head>
   <body>
     <button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false" hidden>
@@ -23,7 +38,7 @@ import ThemeProvider from '../components/ThemeProvider.astro';
     </button>
     <main>
       <h1 class="wordmark">libID</h1>
-      <p class="description">Every social account is already<br class="wide-break"> a multichain identity</p>
+      <p class="description">{tagline}</p>
       <nav aria-label="Explore libID">
         <a href="/docs/">Docs</a>
         <a href="/specs/">Specs</a>

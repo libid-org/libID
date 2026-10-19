@@ -468,8 +468,9 @@ interface IdentityProof {
 `identity` is a separate, exact-shaped record of prover-extracted strings:
 platform identifier, OAuth client identifier, user identifier, and `userName`.
 `userName` is the profile's raw handle string (the signed email for Google),
-not a normalized handle or display label; normalization remains a separate
-consumption-time derivation under platform REQ-PLAT-08A through REQ-PLAT-08C.
+not a folded handle or display label. The rules and the fold belong to the
+Proving Circuit, which outputs the handle node, under platform REQ-PLAT-08A
+through REQ-PLAT-08C.
 The selected platform validator checks their
 encodings and the platform/client binding to `ProveIdentity`.
 `proof` is the exact value defined by that platform ceremony version, without

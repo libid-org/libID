@@ -1,0 +1,119 @@
+/* Keep typography, wordmark and spacing aligned with site/src/styles/home.css. */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1.5rem;
+  background:
+    radial-gradient(ellipse at 50% 42%, var(--surface), transparent 70%), var(--background);
+  color: var(--text);
+  font:
+    400 1.125rem / 1.7 "Libron",
+    Georgia,
+    serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#libid-root {
+  width: 100%;
+  max-width: 26rem;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.libid-logo {
+  margin-bottom: 2rem;
+  color: var(--logo);
+  font-size: clamp(3rem, 15vw, 5rem);
+  line-height: 1.15;
+}
+
+#libid-root p {
+  margin: 1rem 0;
+}
+
+.libid-hint {
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+progress {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  margin-top: 1.5rem;
+  border: 0;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: var(--border);
+  color: var(--accent);
+  accent-color: var(--accent);
+  appearance: none;
+}
+
+/* Unknown progress: a segment sweeps the track instead of each engine's own rendering. */
+progress:not([value]) {
+  background: linear-gradient(var(--accent), var(--accent)) no-repeat var(--border);
+  background-size: 30% 100%;
+  animation: libid-sweep 1.5s ease-in-out infinite;
+}
+
+progress:not([value])::-webkit-progress-bar {
+  background: transparent;
+}
+
+progress:not([value])::-moz-progress-bar {
+  background: transparent;
+}
+
+@keyframes libid-sweep {
+  from {
+    background-position: -50% 0;
+  }
+
+  to {
+    background-position: 150% 0;
+  }
+}
+
+progress::-webkit-progress-bar {
+  background: var(--border);
+}
+
+progress::-webkit-progress-value {
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+progress::-moz-progress-bar {
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+progress[value="1"]::-webkit-progress-value {
+  transition: none;
+}
+
+progress[value="1"]::-moz-progress-bar {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  progress:not([value]) {
+    animation: none;
+    background-position: 50% 0;
+  }
+
+  progress::-webkit-progress-value {
+    transition: none;
+  }
+
+  progress::-moz-progress-bar {
+    transition: none;
+  }
+}

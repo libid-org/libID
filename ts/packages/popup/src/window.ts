@@ -71,6 +71,9 @@ function openWindow(name: string, features: string): OpenedWindow {
   return new OpenedWindow(handle, window)
 }
 
+/** Until a replaced document first navigates again; WebKit fails a stalled load at about 2.7 s. */
+export const RENAVIGATE_MS = 3_000
+
 /** A fresh window name: random, so a page reload never reuses an earlier popup by name. */
 const windowName = () => `popup-${crypto.randomUUID()}`
 
@@ -220,6 +223,19 @@ export class CurrentWindow extends PopupWindow {
 
   override get opened(): boolean {
     return true
+  }
+
+  /**
+   * Replaces this document, then again while it is still here, at doubling
+   * intervals from `RENAVIGATE_MS`. WebKit can leave a navigation that switches
+   * browsing context group uncommitted for good, and a fresh one usually gets
+   * through (https://bugs.webkit.org/show_bug.cgi?id=327297). A navigation that is
+   * only slow restarts a few times at most and keeps its port: the worker holds
+   * it while this document is present.
+   */
+  replace(url: string, delay = RENAVIGATE_MS): void {
+    this.view.location.replace(url)
+    setTimeout(() => this.replace(url, delay * 2), delay)
   }
 
   /** Whether this document is cross-origin isolated, by any policy. */

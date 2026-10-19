@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { activeRegistration } from './keeper.js'
 import { fakePair, noRegistration } from './testing/fakes.js'
-import { CurrentWindow, OpenedWindow, PopupWindow } from './window.js'
+import { CurrentWindow, OpenedWindow, PopupWindow, RENAVIGATE_MS } from './window.js'
 
 const ORIGIN = 'https://popup.example'
 const DOCUMENT = `${ORIGIN}/prover/x`
@@ -329,6 +329,24 @@ describe('PopupWindow', () => {
       expect((PopupWindow.current() as CurrentWindow).fragment).toBe('')
     } finally {
       vi.unstubAllGlobals()
+    }
+  })
+
+  it('navigates again at doubling intervals while the document stays [POPUP-KEEPER-003]', async () => {
+    vi.useFakeTimers()
+    try {
+      const replaced: string[] = []
+      const view = { location: { replace: (url: string) => void replaced.push(url) } }
+      new CurrentWindow(view as unknown as Window, noRegistration).replace('/next')
+      expect(replaced).toEqual(['/next'])
+      await vi.advanceTimersByTimeAsync(RENAVIGATE_MS - 1)
+      expect(replaced).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(replaced).toHaveLength(2)
+      await vi.advanceTimersByTimeAsync(2 * RENAVIGATE_MS)
+      expect(replaced).toEqual(['/next', '/next', '/next'])
+    } finally {
+      vi.useRealTimers()
     }
   })
 })

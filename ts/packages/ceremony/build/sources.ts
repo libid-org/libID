@@ -42,6 +42,29 @@ const PIN = /^sha256:[0-9a-f]{64}$/
 
 const pinOf = (bytes: Uint8Array) => `sha256:${hash(bytes)}`
 
+/** Attempts per download: a release CDN occasionally fails one request. */
+const DOWNLOAD_ATTEMPTS = 4
+
+/** Download `source`, retrying network, server and rate-limit failures; no attempt is timed. */
+async function download(source: string): Promise<Buffer> {
+  for (let attempt = 1; ; attempt++) {
+    let failure: string
+    let retryable = true
+    try {
+      const response = await fetch(source)
+      if (response.ok) return Buffer.from(await response.arrayBuffer())
+      failure = `HTTP ${response.status}`
+      // Other client errors will not change on another attempt.
+      retryable = response.status >= 500 || response.status === 429
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error)
+    }
+    if (!retryable || attempt === DOWNLOAD_ATTEMPTS)
+      throw new Error(`Release download failed: ${source} (${failure})`)
+    await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** (attempt - 1)))
+  }
+}
+
 /**
  * Read an HTTPS source through the download cache, or a path relative to this package. An
  * HTTPS source must carry a pin and match it; a cached copy that does not is downloaded again.
@@ -60,9 +83,7 @@ export async function readSource(source: string, sha256?: string): Promise<Buffe
     const cached = readFileSync(path)
     if (pinOf(cached) === sha256) return cached
   }
-  const response = await fetch(source)
-  if (!response.ok) throw new Error(`Release download failed: ${source}`)
-  const bytes = checked(Buffer.from(await response.arrayBuffer()))
+  const bytes = checked(await download(source))
   mkdirSync(join(cache, 'downloads'), { recursive: true })
   writeFileSync(path, bytes)
   return bytes

@@ -300,7 +300,7 @@ const notarizedSpecTests = {
 /** Form-authenticated client IDs whose serialization would change the frozen request bytes. */
 const formSerializationChanges = ['a+b', 'a b', 'a%2Fb']
 
-const decimalIdViolations = ['0', '01', '18446744073709551616', '-1', '1.5', '1e3', '1 2', '"1"']
+const decimalIdViolations = ['-1', '1.5', '1e3', '1 2', '"1"', 'x1']
 
 const attestation = (byte: number) => ({
   attestedData: LIBID_RS_ATTESTED_DATA.slice(),

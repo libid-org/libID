@@ -2,20 +2,53 @@
 
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Flibid-org%2FlibID%2Fbadges%2Fceremony-coverage.json)](docs/testing.md)
 
-Browser identity ceremonies for Google, X and GitHub over a caller-supplied
-`@libid/popup` connection. The application owns popup lifetime, ledger operations
-and submission; ceremony owns OAuth orchestration, proving and popup UI.
+Prove control of *any* OAuth/OIDC social account in the user's browser, with
+their identity data never leaving their device.
 
-An accepted result has passed structural checks. The ledger verifier remains
-authoritative for proof and attestation validity. **Release qualification is
-incomplete**; see [evidence and remaining gates](docs/qualification.md).
+**Specification:** [Identity ceremonies](https://lib.id/specs/#identity-ceremonies).
+
+An identity ceremony lets a user authorize an application operation through
+an account they already have. It is the proving step behind using social
+identities in payments, wallets, and other applications.
+
+**Supported platforms:** Google, X, and GitHub. Extend to more
+OAuth/OIDC platforms with a few prompts; see [Adding a platform](docs/provers.md#adding-a-platform).
+
+Browser proof generation has been measured at ~10s, excluding OAuth sign-in
+and authorization; timings vary by device and platform.
+
+## How it works
+
+1. The user authorizes the operation through the platform's OAuth flow.
+2. Their browser generates a zero-knowledge proof using a signed identity
+   token or notarized TLS evidence, depending on the platform.
+3. The application receives the result and submits it to the destination
+   ledger, whose verifier checks the proof and any attestations.
+
+The package handles the OAuth flow, proving, and popup UI; the application
+owns the popup's lifetime, wallet interactions, and transaction submission.
+An `accepted` result has passed structural checks; final cryptographic
+verification belongs to the ledger.
+
+The outcome resembles the Fiat-Shamir transformation: an interactive
+exchange yields evidence that others can verify independently. OAuth still
+runs interactively; libID combines zero-knowledge proofs with platform-signed
+identity tokens or notarized TLS transcripts to make the result verifiable
+without another interaction with the platform.
+
+Google, X, and GitHub cover different OAuth/OIDC models: Google's ceremony
+uses a signed identity token, while X and GitHub use notarized token and
+account responses. Their respective
+[ceremony profiles](../../../specs/platform-ceremonies.md) describe the
+evidence and trust assumptions. Further platforms need their own profiles
+and proving artifacts.
+
+## Use and develop
 
 **Distribution:** the npm package contains the application client and requires
 `@libid/popup` as a peer. Proving runs in the separately deployed CCDP container
 (see [Build and deployment](docs/distribution.md)).
 See [npm releases](../../RELEASING.md) for packaging and publication.
-
-## Use and develop
 
 - [Client guide](docs/client.md): launch, platform/version discovery, results,
   events, errors and closure.
@@ -33,6 +66,7 @@ See [npm releases](../../RELEASING.md) for packaging and publication.
 - [Notarization](docs/notarization.md): session lifecycle and evidence handling.
 - [Assets](docs/assets.md): prefetch, Service Worker ownership and caches.
 - [Measurements](docs/metrics.md): event accounting and telemetry boundaries.
+- [Qualification](docs/qualification.md): evidence and release checks.
 - [Requirement index](docs/test-plan.md) and [traceability](docs/traceability.md):
   stable test IDs, existing coverage and outstanding properties.
 

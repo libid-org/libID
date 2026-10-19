@@ -1,6 +1,6 @@
 # Testing
 
-Use Node 24+, pnpm and the frozen workspace lockfile. All commands below run
+Use Node 26+, pnpm and the frozen workspace lockfile. All commands below run
 from the repository root. [Qualification](qualification.md) records evidence and
 release gaps; [traceability](traceability.md) maps the stable
 [test requirements](test-plan.md) to assertions and remaining properties.

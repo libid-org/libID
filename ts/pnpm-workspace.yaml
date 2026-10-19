@@ -5,9 +5,30 @@ packages:
 # Tool versions shared across packages, referenced as `catalog:`.
 catalog:
   # Alpha until a stable release bundles libsoup ≥3.6.6 (microsoft/playwright#42803).
-  '@playwright/test': 1.64.0-alpha-2026-09-29
-  '@types/node': ^24.19.1
+  '@playwright/test': 1.64.0
+  '@types/node': ^26.6.5
   '@vitest/coverage-v8': ^5.0.3
   typescript: ^7.0.2
-  vite: ^8.3.2
+  vite: ^8.3.4
   vitest: ^5.0.3
+
+# Supply-chain policy shared with the grndd-systems sites: only install releases
+# at least 7 days old, re-verify the lockfile, and allow install scripts per package.
+minimumReleaseAge: 10080
+# Exact versions already locked when the age gate was added (2026-10-13); every
+# other release still waits 7 days. Drop entries once they are older than that.
+minimumReleaseAgeExclude:
+  - "@aztec-foundation/bb.js@6.0.0-rc.6"
+  - "@playwright/test@1.64.0"
+  - "@types/node@26.6.5"
+  - "playwright@1.64.0"
+  - "playwright-core@1.64.0"
+  - "smol-toml@1.9.1"
+  - "vite@8.3.4"
+minimumReleaseAgeIgnoreMissingTime: false
+trustLockfile: false
+strictDepBuilds: true
+allowBuilds:
+  esbuild: true
+  # Optional native accelerator for msgpackr (via bb.js); the JS fallback is used.
+  msgpackr-extract: false
