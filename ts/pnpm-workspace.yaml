@@ -15,8 +15,10 @@ catalog:
 # Supply-chain policy shared with the grndd-systems sites: only install releases
 # at least 7 days old, re-verify the lockfile, and allow install scripts per package.
 minimumReleaseAge: 10080
-# Exact versions already locked when the age gate was added (2026-10-13); every
-# other release still waits 7 days. Drop entries once they are older than that.
+# Exact versions that may install before they are 7 days old: those already
+# locked when the age gate was added (2026-10-13), and libID's own releases
+# pinned on the day they ship. Every other release still waits 7 days. Drop an
+# entry once its version is older than that.
 minimumReleaseAgeExclude:
   - "@aztec-foundation/bb.js@6.0.0-rc.6"
   - "@playwright/test@1.64.0"
@@ -25,7 +27,6 @@ minimumReleaseAgeExclude:
   - "playwright-core@1.64.0"
   - "smol-toml@1.9.1"
   - "vite@8.3.4"
-  # libID's own contracts release, pinned on the day it ships.
   - "@libid/contracts@0.18.0"
 minimumReleaseAgeIgnoreMissingTime: false
 trustLockfile: false
