@@ -68,8 +68,10 @@ const evidence = {
           if (result?.status !== 'accepted' || !('bearerLinkProof' in result.oauthProof.proof))
             throw new Error('Missing bearer proof')
           const proof = result.oauthProof.proof
+          const { idNode, handleNode, ...identity } = result.identity
           return {
-            identity: result.identity,
+            identity,
+            nodes: [Array.from(idNode), Array.from(handleNode)],
             nonce: Array.from(result.oauthProof.authorizationNonce),
             authorizationDigest: Array.from(result.oauthProof.authorizationDigest),
             proof: Array.from(proof.bearerLinkProof),
@@ -83,6 +85,11 @@ const evidence = {
           userId: '9007199254740993',
           userName: 'alice',
         })
+        const nodes = [
+          idNode(platform, result.identity.userId),
+          handleNode(platform, result.identity.userName),
+        ]
+        expect(result.nodes).toEqual(nodes.map((node) => Array.from(node)))
         const token = decodeAttestedData(Uint8Array.from(result.token))
         const identity = decodeAttestedData(Uint8Array.from(result.identityAttestation))
         expect(token.sent.commitments).toEqual([])
@@ -139,8 +146,7 @@ const evidence = {
           identity.sent.commitments[0].hash,
           framed(new RegExp(`"${idField}"\\s*:\\s*"?$`)),
           framed(new RegExp(`"${handleField}"\\s*:\\s*"$`)),
-          idNode(platform, result.identity.userId),
-          handleNode(platform, result.identity.userName),
+          ...nodes,
         ]
           .flatMap(halves)
           .concat(tag(userIdTag), tag(handleTag))
@@ -203,8 +209,10 @@ const evidence = {
           )
             throw new Error('Missing Google proof')
           const proof = result.oauthProof.proof
+          const { idNode, handleNode, ...identity } = result.identity
           return {
-            identity: result.identity,
+            identity,
+            nodes: [Array.from(idNode), Array.from(handleNode)],
             authorizationDigest: Array.from(result.oauthProof.authorizationDigest),
             ...proof,
             identityProof: Array.from(proof.identityProof),
@@ -214,9 +222,15 @@ const evidence = {
         expect(result.identity).toEqual({
           platformId: platform,
           oauthClientId: browserPlatforms[platform].clientId,
-          userId: '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
+          userId: '123456789012345678901',
           userName: 'holder@example.com',
         })
+        expect(result.nodes).toEqual(
+          [
+            idNode(platform, result.identity.userId),
+            handleNode(platform, result.identity.userName),
+          ].map((node) => Array.from(node)),
+        )
         const proof: GoogleProofV1 = {
           tokenExpiresAt: result.tokenExpiresAt,
           publicInputs: result.publicInputs,

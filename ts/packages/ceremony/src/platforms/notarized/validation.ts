@@ -1,5 +1,5 @@
 import { MAX_CLIENT_ID_BYTES } from '../../ccdp/limits.js'
-import { handleNode, type IdentityNodes, idNode, isAccountId, isHandle } from '../../identity.js'
+import { isAccountId, isHandle } from '../../identity.js'
 import { decodeAttestedData } from '../../notary/decode.js'
 import { isFormClientId } from '../../notary/oauth/validation.js'
 import type { NotaryAttestation } from '../../notary/protocol.js'
@@ -18,7 +18,6 @@ interface NotarizedValidation<P extends string> {
   validateIdentity(value: unknown): Identity<P>
   validateProof(value: unknown): NotarizedProofV1
   proofExpiresAt(proof: NotarizedProofV1): number
-  identityNodes(identity: Identity<P>): IdentityNodes
 }
 
 /**
@@ -45,11 +44,6 @@ export function notarizedValidation<P extends string>(
       oauthClientId: isClientId,
       userId: (value) => isAccountId(platform, value),
       userName: (value) => isHandle(platform, value),
-    }),
-    // The proof opens the id and the handle the identity delivers (REQ-PLAT-31A).
-    identityNodes: ({ userId, userName }) => ({
-      idNode: idNode(platform, userId),
-      handleNode: handleNode(platform, userName),
     }),
     validateProof: recordValidator<NotarizedProofV1>(`Invalid ${platform} proof`, {
       bearerLinkProof: isProofBytes,

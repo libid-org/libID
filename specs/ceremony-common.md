@@ -330,7 +330,7 @@ notary-signature check before an authoritative effect.
 
 SP-PRIV-01 bounds what the chain's artifacts yield, not who learns the
 identity. The Prover documents the CCDP Distribution supplies hold the
-evidence, and the Application receives the handle in the ceremony result;
+evidence, and the Application receives the id and the handle in the ceremony result;
 each can send it anywhere, and a transaction that carries it is one the
 property permits. A modified Prover could also leak the witness through the
 proof bytes, so the property rests on the unmodified Canonical Runtime

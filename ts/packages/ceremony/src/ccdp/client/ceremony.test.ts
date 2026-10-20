@@ -4,6 +4,7 @@ import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { describe, expect, it, type Mock, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
 import type { CeremonyEvent } from '../../events.js'
+import { identityNodes } from '../../identity.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import { deriveAuthorizationDigest, deriveCodeChallenge } from '../../platforms/authorization.js'
 import { buildGooglePublicInputs } from '../../platforms/google/1/validation.js'
@@ -138,7 +139,7 @@ const registered = (connection: FakeConnection) =>
 const identity = {
   platformId: 'google' as const,
   oauthClientId: 'client',
-  userId: `0x${'1'.repeat(64)}`,
+  userId: '123456789012345678901',
   userName: 'a@b.c',
 }
 
@@ -180,7 +181,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     c.receive({ type: 'identity-proof', identity, proof: proofFor(c) })
     const result = await pending
     if (result.status !== 'accepted') throw new Error('Expected accepted')
-    expect(result.identity).toBe(identity)
+    expect(result.identity).toEqual({ ...identity, ...identityNodes(identity) })
     expect(Object.keys(result.oauthProof)).toEqual([
       'platformCeremonyVersion',
       'authorizationNonce',
@@ -489,7 +490,7 @@ it.each(supportedPlatforms)(
 it.each([
   { ...identity, platformId: 'x' },
   { ...identity, oauthClientId: 'other-client' },
-  { ...identity, userId: '123456789012345678901' },
+  { ...identity, userId: '1'.repeat(32) },
 ])('rejects a profile or client identity mismatch [LIBID-OAUTH-022]', async (identity) => {
   const { connection, ceremony } = await setup()
   const result = ceremony.proveUserIdentity()

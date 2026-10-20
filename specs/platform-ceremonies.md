@@ -116,14 +116,13 @@ used in the resulting Submission.
 
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
-| Google | signed ID-Token `sub` | `0x` and the lowercase hexadecimal of its id node | signed `email` |
+| Google | signed ID-Token `sub` | the `sub`, as signed | signed `email` |
 | X | `/2/users/me.data.id` JSON string | decimal digits, as sent | `username` |
 | GitHub | `/user.id` JSON integer token | decimal digits, as sent | `login` |
 
 An identity's **id**, or account identifier, is the authenticated value in
-the second column: Google's `sub`, and the X and GitHub identifiers. On X
-and GitHub, `userId` is the id unchanged; on Google, `userId` is the id
-node.
+the second column: Google's `sub`, and the X and GitHub identifiers.
+`userId` is the id unchanged.
 
 - REQ-PLAT-05A (upholds SP-BIND-01):
   The Implementation MUST derive an identity's id node as
@@ -176,7 +175,7 @@ Conformance vectors, each node computed independently with SHA-256:
 
 | Platform | Authenticated input | `userId` | Id node |
 |---|---|---|---|
-| Google | `sub: "110169484474386276334"` | the id node | `0x620866cfb4d2776a32cd94d8e8b55577526af86115ebf125d4ca1ca7bf07737e` |
+| Google | `sub: "110169484474386276334"` | `110169484474386276334` | `0x620866cfb4d2776a32cd94d8e8b55577526af86115ebf125d4ca1ca7bf07737e` |
 | X | `"id":"2244994945"` | `2244994945` | `0x68291869976ffad2abf3e933ec9ab2623395ff8b3b9242e655e1da3ef43d4f94` |
 | GitHub | `"id":583231` | `583231` | `0x475902b27989feb395b9b0cd3156aa573a9676c13155b8e7e3ddaf3e77181847` |
 
@@ -531,8 +530,9 @@ Google nonce         = sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU
   REQ-PLAT-16B, using the same artifact encoding. This checks result consistency,
   not the proof's cryptographic validity or the modulus's trusted-set membership.
   It requires neither the ID Token nor a new `ProveIdentity` field. The
-  projection takes the id node from the delivered `userId` and the handle
-  node from the delivered `userName`, folded and hashed under REQ-PLAT-05B.
+  projection takes the id node of the delivered `userId`, hashed under
+  REQ-PLAT-05A, and the handle node of the delivered `userName`, folded and
+  hashed under REQ-PLAT-05B.
 - REQ-PLAT-15:
   The Prover MUST reject a Google response carrying `code` or
   `access_token`. Necessity: neither artifact belongs to this

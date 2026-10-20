@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../testing/index.js'
 import { AUTHORIZATION_NONCE_BYTES } from '../authorization.js'
 import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from '../index.js'
-import { assembleResult, ceremonyFor, identityNodes, supportedPlatforms } from '../index.js'
+import { assembleResult, ceremonyFor, supportedPlatforms } from '../index.js'
 import { overLength, recordViolations, sharedTextRejections, tagged } from './stages.js'
 
 vi.mock('../../assets/index.js', async (original) =>
@@ -40,7 +40,11 @@ describe.each(supportedPlatforms)('%s result validators', (platformId) => {
     const result = assembleResult(platformId, 1, message, fixture.config.clientId, nonce, digest)
     expect(result).toEqual({
       status: 'accepted',
-      identity: fixture.identity,
+      identity: {
+        ...fixture.identity,
+        idNode: expect.any(Uint8Array),
+        handleNode: expect.any(Uint8Array),
+      },
       oauthProof: {
         platformCeremonyVersion: 1,
         authorizationNonce: nonce,
@@ -52,10 +56,9 @@ describe.each(supportedPlatforms)('%s result validators', (platformId) => {
     if (result.status === 'accepted') {
       expect(result.oauthProof.authorizationNonce).not.toBe(nonce)
       expect(result.oauthProof.authorizationDigest).not.toBe(digest)
-      const nodes = identityNodes(result)
       expect({
-        idNode: `0x${bytesToHex(nodes.idNode)}`,
-        handleNode: `0x${bytesToHex(nodes.handleNode)}`,
+        idNode: `0x${bytesToHex(result.identity.idNode)}`,
+        handleNode: `0x${bytesToHex(result.identity.handleNode)}`,
       }).toEqual(fixture.nodes)
     }
     expect(() => assembleResult(platformId, 1, message, 'other-client', nonce, digest)).toThrow(
@@ -128,7 +131,14 @@ function checkResultTypes(result: IdentityResult) {
   // @ts-expect-error Platform and proof must correspond.
   const invalid: IdentityResult = {
     status: 'accepted',
-    identity: { platformId: 'x', oauthClientId: 'c', userId: '1', userName: 'a' },
+    identity: {
+      platformId: 'x',
+      oauthClientId: 'c',
+      userId: '1',
+      userName: 'a',
+      idNode: new Uint8Array(32),
+      handleNode: new Uint8Array(32),
+    },
     oauthProof: googleProof,
   }
   // @ts-expect-error Unsupported version.

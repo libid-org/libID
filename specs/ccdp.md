@@ -467,7 +467,8 @@ interface IdentityProof {
 
 `identity` is a separate, exact-shaped record of prover-extracted strings:
 platform identifier, OAuth client identifier, user identifier, and `userName`.
-`userName` is the profile's raw handle string (the signed email for Google),
+`userId` is the profile's raw id (the signed `sub` for Google), and `userName`
+its raw handle string (the signed email for Google),
 not a folded handle or display label. The rules and the fold belong to the
 Proving Circuit, which outputs the handle node, under platform REQ-PLAT-08A
 through REQ-PLAT-08C.

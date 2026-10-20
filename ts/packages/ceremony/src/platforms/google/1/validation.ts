@@ -1,5 +1,4 @@
 import { PLATFORM_GOOGLE_KEY } from '@libid/contracts/platforms'
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js'
 import { buildOidcGooglePublicInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
   MAX_AUD_BYTES,
@@ -7,7 +6,7 @@ import {
   RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../../../barretenberg/parameters.js'
-import { handleNode, type IdentityNodes, isHandle } from '../../../identity.js'
+import { identityNodes, isAccountId, isHandle } from '../../../identity.js'
 import { isFixedBytes, isUint, recordValidator } from '../../../primitives.js'
 import { type Identity, identityValidator, isProofBytes } from '../../validation.js'
 
@@ -28,22 +27,6 @@ export const isAudience = (value: unknown, max: number): value is string =>
 
 /** Client identifier constraints for this platform: exactly what a signed `aud` can hold. */
 export const isClientId = (value: unknown): value is string => isAudience(value, MAX_AUD_BYTES)
-
-/** Platform-ceremonies §2.1 spelling: `0x` and the 64 lowercase hexadecimal digits of the id node. */
-export const isUserId = (value: string): boolean => /^0x[0-9a-f]{64}$/.test(value)
-
-/** The Google userId of an id node; the `sub` itself is never delivered. */
-export const userIdOf = (node: Uint8Array): string => `0x${bytesToHex(node)}`
-
-/** The id node a Google userId spells, and the handle node of its signed email. */
-export function identityNodes(identity: Identity<'google'>): IdentityNodes {
-  if (!isUserId(identity.userId))
-    throw new Error('Google userId must be 0x and 64 lowercase hex digits')
-  return {
-    idNode: hexToBytes(identity.userId.slice(2)),
-    handleNode: handleNode(PLATFORM_GOOGLE_KEY, identity.userName),
-  }
-}
 
 const proofShape = recordValidator<GoogleProofV1>('Invalid Google proof', {
   identityProof: isProofBytes,
@@ -76,7 +59,7 @@ export const validateIdentity: (value: unknown) => Identity<'google'> = identity
   PLATFORM_GOOGLE_KEY,
   {
     oauthClientId: isClientId,
-    userId: isUserId,
+    userId: (s) => isAccountId(PLATFORM_GOOGLE_KEY, s),
     userName: (s) => isHandle(PLATFORM_GOOGLE_KEY, s),
   },
 )

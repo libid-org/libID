@@ -1,6 +1,6 @@
 import type { IdentityProof } from '../ccdp/index.js'
 import type { CoreEvent } from '../events.js'
-import type { IdentityNodes } from '../identity.js'
+import { type IdentityNodes, identityNodes } from '../identity.js'
 import * as githubUrl from './github/1/url.js'
 import * as github from './github/1/validation.js'
 import * as googleEvents from './google/1/events.js'
@@ -20,14 +20,12 @@ const resultAdapter = <I, P>(validation: {
   validateIdentity(value: unknown): I
   validateProof(value: unknown, identity: I, authorizationDigest: Uint8Array): P
   proofExpiresAt(proof: P): number
-  identityNodes(identity: I): IdentityNodes
 }) => ({
   acceptResult(identityValue: unknown, proofValue: unknown, authorizationDigest: Uint8Array) {
     const identity = validation.validateIdentity(identityValue)
     const proof = validation.validateProof(proofValue, identity, authorizationDigest)
     return { identity, proof, expiresAt: validation.proofExpiresAt(proof) }
   },
-  identityNodes: validation.identityNodes,
 })
 
 /** One platform ceremony version: its authorization request, return rules, events and result adapter. */
@@ -50,8 +48,6 @@ export interface PlatformCeremonyVersion {
     proof: unknown,
     authorizationDigest: Uint8Array,
   ): { identity: Identity<string>; proof: unknown; expiresAt: number }
-  /** The id node and handle node the version's proof binds for an identity it accepted. */
-  identityNodes(identity: Identity<string>): IdentityNodes
 }
 
 /** A platform's OAuth registration rules and ceremony versions. */
@@ -127,7 +123,14 @@ export type OAuthProof<P extends PlatformId = PlatformId> = {
 }[P]
 
 export type IdentityResult<P extends PlatformId = PlatformId> =
-  | { [K in P]: { status: 'accepted'; identity: Identity<K>; oauthProof: OAuthProof<K> } }[P]
+  | {
+      [K in P]: {
+        status: 'accepted'
+        /** The delivered identity and the nodes of its id and handle: the keys its binding is stored under. */
+        identity: Identity<K> & IdentityNodes
+        oauthProof: OAuthProof<K>
+      }
+    }[P]
   | { status: 'denied' }
 
 export function assembleResult<P extends PlatformId>(
@@ -146,7 +149,7 @@ export function assembleResult<P extends PlatformId>(
   if (identity.oauthClientId !== clientId) throw new TypeError('OAuth client ID mismatch')
   return {
     status: 'accepted',
-    identity,
+    identity: { ...identity, ...identityNodes(identity) },
     oauthProof: {
       platformCeremonyVersion: version,
       authorizationNonce: authorizationNonce.slice(),
@@ -155,21 +158,6 @@ export function assembleResult<P extends PlatformId>(
       expiresAt,
     },
   } as IdentityResult<P>
-}
-
-/**
- * The keys an accepted result binds: its id node and handle node (platform-ceremonies §2.1). An X
- * or GitHub bind payload carries both; a Google payload carries them in its public inputs.
- */
-export function identityNodes(
-  result: Extract<IdentityResult, { status: 'accepted' }>,
-): IdentityNodes {
-  const { identity, oauthProof } = result
-  const ceremony: PlatformCeremonyVersion = ceremonyFor(
-    identity.platformId,
-    oauthProof.platformCeremonyVersion,
-  )
-  return ceremony.identityNodes(identity)
 }
 
 /** The catalog's versions of `platform` that `available` names, in ascending order. */

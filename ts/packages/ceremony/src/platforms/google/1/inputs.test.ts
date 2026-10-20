@@ -105,9 +105,7 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifie
       '0x78f9907c27a505b9cbd3c0a293d36004',
       '0x909f7834d50c6c211265f853d1be2bc9',
     ])
-    expect(identity.userId).toBe(
-      '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
-    )
+    expect(identity.userId).toBe('123456789012345678901')
     expect(inputs.authorization_digest).toEqual(Array.from(digest))
     expect(recompose(inputs.signature)).toBe(
       BigInt(`0x${Buffer.from(signature, 'base64url').toString('hex')}`),

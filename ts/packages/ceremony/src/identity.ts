@@ -56,3 +56,15 @@ export function idNode(key: string, id: string): Uint8Array {
 export function handleNode(key: string, handle: string): Uint8Array {
   return hexToBytes(handleNodeHex(key, handle).slice(2))
 }
+
+/** The nodes of an identity's id and handle, under its platform's tags. */
+export function identityNodes(identity: {
+  platformId: string
+  userId: string
+  userName: string
+}): IdentityNodes {
+  return {
+    idNode: idNode(identity.platformId, identity.userId),
+    handleNode: handleNode(identity.platformId, identity.userName),
+  }
+}

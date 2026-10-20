@@ -371,8 +371,7 @@ export const fixtures = {
     identity: {
       platformId: 'google',
       oauthClientId: googleClaims.aud,
-      // The platform-ceremonies §2.1 userId of the token's `sub`: its id node.
-      userId: '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
+      userId: googleClaims.sub,
       userName: googleClaims.email,
     },
     nodes: {
@@ -382,20 +381,13 @@ export const fixtures = {
     longest: {
       platformId: 'google',
       oauthClientId: 'a'.repeat(128),
-      userId: `0x${'f'.repeat(64)}`,
+      userId: 'a'.repeat(31),
       userName: `${'a'.repeat(50)}@example.com`,
     },
-    // Circuit text excludes exactly the shared quote, control and non-ASCII cases. A userId is
-    // only the lowercase digest spelling, never the `sub` itself.
+    // Circuit text excludes exactly the shared quote, control and non-ASCII cases.
     rejectedIdentity: {
       oauthClientId: [],
-      userId: [
-        googleClaims.sub,
-        `0x${'A'.repeat(64)}`,
-        `0X${'a'.repeat(64)}`,
-        'a'.repeat(66),
-        `0x${'a'.repeat(63)}`,
-      ],
+      userId: handleViolations,
       userName: ['a\\b@example.com'],
     },
     admittedClientIds: ['a+b'],
@@ -546,7 +538,7 @@ export const fixtures = {
         proof,
       }),
       'user ID': ({ identity, proof }) => ({
-        identity: { ...identity, userId: flipped(identity.userId) },
+        identity: { ...identity, userId: `${identity.userId}0` },
         proof,
       }),
       email: ({ identity, proof }) => ({

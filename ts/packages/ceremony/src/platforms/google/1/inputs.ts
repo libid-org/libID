@@ -5,11 +5,10 @@ import {
   RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
-import { handleNode, idNode } from '../../../identity.js'
+import { identityNodes } from '../../../identity.js'
 import { b64urlDecode, isRecord } from '../../../primitives.js'
 import type { Identity } from '../../validation.js'
 import type { ParsedGoogleIdToken } from './token.js'
-import { userIdOf } from './validation.js'
 
 /** Adapt a parsed platform token and the JWK selected by its `kid` to the circuit ABI and delivery. */
 export function prepareGoogleInputs(token: ParsedGoogleIdToken, jwk: unknown) {
@@ -35,18 +34,14 @@ export function prepareGoogleInputs(token: ParsedGoogleIdToken, jwk: unknown) {
   }
 
   const { aud, sub, email, exp } = token.claims
-  const nodes = {
-    idNode: idNode(PLATFORM_GOOGLE_KEY, sub),
-    handleNode: handleNode(PLATFORM_GOOGLE_KEY, email),
-  }
   const identity: Identity<'google'> = {
     platformId: PLATFORM_GOOGLE_KEY,
     oauthClientId: aud,
-    userId: userIdOf(nodes.idNode),
+    userId: sub,
     userName: email,
   }
   return {
-    inputs: buildOidcGoogleInputs(token, modulus, authorizationDigest, nodes),
+    inputs: buildOidcGoogleInputs(token, modulus, authorizationDigest, identityNodes(identity)),
     authorizationDigest,
     identity,
     proofFields: { tokenExpiresAt: exp, signingKeyModulus: modulus },
