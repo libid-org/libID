@@ -18,19 +18,22 @@ project is not published yet. Until it is, you can:
 
 The code in the guides reads `RPC_URL`, `IDENTITY_REGISTRY` and
 `HANDLE_ESCROW`, and the events guide reads `FROM_BLOCK`. Point them at
-Ethereum mainnet:
+the Eden testnet:
 
 ```sh
-export RPC_URL=https://ethereum-rpc.publicnode.com
-export IDENTITY_REGISTRY=0xbefd300aff7d4a67fb381afe8b3596793d3e9a83
-export HANDLE_ESCROW=0x17a244e23ef1f12071298a1862194fea3d00bbf7
-export FROM_BLOCK=26122774
+export RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545
+export IDENTITY_REGISTRY=0x4e750fb0e1e529d7a57647c0001db96c5ffb6fa1
+export HANDLE_ESCROW=0xc7c13a7715858e60d628f867048e0f67fc683dd6
+export FROM_BLOCK=289169815
 ```
 
-See [Networks](/docs/networks/ethereum/) for the others. The guides' test
-handles and addresses are not bound there, so you get `null` or an empty
-list where a guide shows output. Use a handle or an address that has bound
-an identity instead.
+The guides' test handles and addresses are not bound there, so you get
+`null` or an empty list where a guide shows output. Use a handle or an
+address that has bound an identity instead.
+
+Sepolia has the same contract addresses; see [Sepolia](/docs/networks/sepolia/).
+Ethereum mainnet still runs the previous contracts, which the guides do not
+match. The current contracts are not deployed there yet.
 
 ## Deploy the stack to anvil
 
@@ -64,8 +67,8 @@ variables:
 
 ```sh
 export RPC_URL=http://127.0.0.1:8545
-export IDENTITY_REGISTRY=0x105b32e3daa9fda3572e89992c73b85a8a1065b3
-export HANDLE_ESCROW=0xcd1fb9627c011cce322dabfcbcb4a09f66b26432
+export IDENTITY_REGISTRY=0x31874a585aab1f98121f14f4b2af68a93eaaa9a5
+export HANDLE_ESCROW=0x520996cdbccfffd952a5134dab146b6fac7b103c
 export PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 export CAROL_KEY=0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
 ```

@@ -5,14 +5,14 @@ sidebar:
   order: 4
 ---
 
-`HandleEscrow` lets you send ETH or tokens to a handle such as `@carol` on
+`HandleEscrow` lets you send ETH or tokens to a handle such as `carol` on
 GitHub. If Carol has already proved the handle, she gets the funds right away.
 If not, the escrow holds them. Then one of two things happens: Carol proves
 the handle and claims the funds, or the sender takes them back first.
 
 ```mermaid
 flowchart TD
-  D["Sender deposits to @carol"] --> Q["Is @carol bound?"]
+  D["Sender deposits to carol"] --> Q["Is carol bound?"]
   Q -- yes --> F["Carol is paid at once"]
   Q -- no --> H["The escrow holds the funds"]
   H -- "Carol binds, then claims" --> C["Carol is paid"]
@@ -35,11 +35,10 @@ Create `sender.mjs`. Start with the setup:
 ```js
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { handleEscrowAbi, handleHash, handleNode, platformId, rulesOf } from '@libid/contracts';
+import { handleEscrowAbi, handleNode, platformId } from '@libid/contracts';
 
 const transport = http(process.env.RPC_URL);
 const client = createPublicClient({ transport });
-const registry = { client, address: process.env.IDENTITY_REGISTRY };
 const escrow = { address: process.env.HANDLE_ESCROW, abi: handleEscrowAbi };
 
 const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
@@ -49,21 +48,21 @@ const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 ### Hash the handle
 
-The escrow takes the handle as a hash. Compute it on your side, so the
-handle itself is never sent to the RPC:
+The escrow takes the handle as a node, a SHA-256 hash of the handle.
+Compute it on your side, so the handle itself is never sent to the RPC:
 
 ```js
 const sender = createWalletClient({ account: privateKeyToAccount(process.env.PRIVATE_KEY), transport });
 
-const rules = await rulesOf(registry, platformId('github'));
-const hash = handleHash('carol', rules);
-const node = handleNode(platformId('github'), hash);
+const node = handleNode('github', 'carol');
 ```
 
-`rulesOf` reads how the platform writes handles. GitHub and X both ignore
-case and drop a leading `@`; they differ in which characters they allow. `handleHash` applies those rules and hashes
-the result. It throws if the text can never be a handle on that platform.
-`handleNode` is the key the escrow keeps the funds under.
+`handleNode` takes the platform key, not its id. It folds A-Z to a-z and
+hashes the result. Nothing else changes: it does not trim spaces or drop a
+leading `@`, so `@carol` is a different node from `carol`, and nobody can
+prove it. It throws `HandleError` if the text can never be a handle, for
+example if it is empty or too long. The node is the key the escrow keeps
+the funds under.
 
 ### Send
 
@@ -72,7 +71,7 @@ async function send(amount) {
   const tx = await sender.writeContract({
     ...escrow,
     functionName: 'deposit',
-    args: [platformId('github'), hash, NATIVE, amount, sender.account.address],
+    args: [platformId('github'), node, NATIVE, amount, sender.account.address],
     value: amount,
   });
   await client.waitForTransactionReceipt({ hash: tx });
@@ -81,7 +80,7 @@ async function send(amount) {
 await send(10n ** 16n); // 0.01 ETH
 ```
 
-The arguments are the platform, the handle hash, the token, the amount, and
+The arguments are the platform, the handle node, the token, the amount, and
 the address that may take the funds back. For ETH, `value` must equal
 `amount`.
 
@@ -145,7 +144,7 @@ Create `carol.mjs`, starting with the same setup as `sender.mjs`, then:
 
 ```js
 const carol = createWalletClient({ account: privateKeyToAccount(process.env.CAROL_KEY), transport });
-const node = handleNode(platformId('github'), handleHash('carol', await rulesOf(registry, platformId('github'))));
+const node = handleNode('github', 'carol');
 
 const tx = await carol.writeContract({
   ...escrow,
@@ -173,12 +172,39 @@ To send an ERC-20 token, approve the escrow first, then pass the token's
 address instead of `NATIVE` and leave out `value`.
 
 Tokens that charge a fee when they send, and tokens whose balances change on
-their own, do not work with the escrow.
+their own, do not work with the escrow. A token address with no code reverts
+with `BadToken`.
+
+## Send by handle text
+
+`depositToHandle` takes the handle as text instead of a node. Use it in
+place of `deposit`:
+
+```js
+await sender.writeContract({
+  ...escrow,
+  functionName: 'depositToHandle',
+  args: [platformId('github'), 'carol', NATIVE, amount, sender.account.address],
+  value: amount,
+});
+```
+
+It credits the same node, so Carol claims both kinds the same way. It also
+emits `DepositedToHandle` with the handle folded. The handle is then public in
+the calldata and the logs. It folds A-Z like `handleNode` and checks nothing
+else, so `@carol` still lands on a node nobody can claim.
 
 ## Things to know
 
-- A wrong hash sends funds to a slot nobody can claim. Only the refund
+- A wrong node sends funds to a slot nobody can claim. Only the refund
   address can get them back.
+- Code written for libID-contracts v0.17 passed a `keccak256` hash of the
+  handle as the second argument of `deposit`. The function kept its
+  signature, so that call still goes through, and the funds go to a node
+  nobody can claim.
+- `handleNode` used to take a platform id and a hash. Now it takes a
+  platform key and the handle. `handleNode(platformId('github'), 'carol')`
+  still type-checks, and throws at run time.
 - A handle can change holders. Before you send, you can show when the
   current holder proved it. See [Resolve a handle](/docs/guides/resolve-handle/).
 - The refund address should be your user. If a contract sends on a user's

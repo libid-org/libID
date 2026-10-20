@@ -36,7 +36,9 @@ The id stays the same through every step; the handle moves.
 ## Ids stay
 
 An id is fixed for the life of the platform account. If you need to remember
-a person, remember their id: store it, count it, or key a mapping by it. The
+a person, remember their id node: store it, count it, or key a mapping by it.
+`identitiesOf` and the `IdentityBound` event give it, and `idNode` in the
+TypeScript package computes it from an id. The
 [airdrop example](/docs/guides/gate-contract/#an-airdrop-once-per-identity)
 does this.
 
@@ -60,13 +62,18 @@ identity that did. libID only knows what someone has proved.
 | You want to | Use |
 | --- | --- |
 | Let a user type a handle to pay | `resolveHandle` |
-| Show who an address is | `publishedHandleOf`, or `identitiesOf` for every identity |
-| Remember a person across renames | the id: `resolveId` |
-| Check a handle still leads to the person you paid before | `resolveHandleAndId` with the saved id |
+| Show who an address is | `publishedHandleOf`, or `identitiesOf` for every identity's nodes |
+| Remember a person across renames | the id node: `resolveId` |
+| Check a handle still leads to the person you paid before | `resolveHandleAndId` with the saved id node |
 | Pay someone who has not joined yet | the handle, through `HandleEscrow` |
 
 ## One holder, many identities
 
 A holder can prove any number of identities, on the same platform or on
 different ones. Each identity has one holder at a time. `identitiesOf` lists
-them.
+them by their nodes.
+
+`resolveHandleAndId` asks whether the given id is the identity that last
+proved the handle, not whether the two have the same holder. If one holder's
+two identities pass a handle between them, the earlier identity's id no
+longer agrees.

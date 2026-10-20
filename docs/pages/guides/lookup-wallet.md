@@ -45,20 +45,24 @@ const count = await identityCount(registry, holder);
 const identities = await identitiesOf(registry, holder, 0n, 10n);
 
 for (const identity of identities) {
-  console.log(identity.platformId, identity.id, identity.handle, identity.handleCurrent);
+  console.log(identity.platformId, identity.idNode, identity.handleNode, identity.handleCurrent);
 }
 ```
 
 Each identity has:
 
 - `platformId`: the platform, as `platformId('github')` computes it.
-- `id`: the id the platform issued. It never changes. For Google it is
-  `SHA256("libid.google-user-id" || sub)` as `0x` and 64 lowercase hex
-  digits, so Google's own id never reaches the chain. See
-  [Platforms and nodes](/docs/concepts/platforms-and-nodes/#ids-and-handles).
-- `handle`: the handle this identity proved most recently.
+- `idNode`: the node of the id the platform issued, a SHA-256 hash of the
+  id. It never changes.
+- `handleNode`: the node of the handle this identity proved most recently.
 - `handleCurrent`: `false` if another identity has since proved the same
   handle. Do not route payments by a handle when this is `false`.
+
+The list has nodes, not the id or the handle as text. See
+[Platforms and nodes](/docs/concepts/platforms-and-nodes/#nodes). To show a
+handle, use `publishedHandleOf`. To check whether an identity proved a handle
+you already know, compare its `handleNode` with
+`handleNode('github', 'octocat')` from `@libid/contracts`.
 
 The arguments after the holder are where the page starts and how many
 identities to return. To read a long list, move the start forward:

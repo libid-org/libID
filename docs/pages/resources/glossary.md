@@ -7,18 +7,19 @@ sidebar:
 
 - **Binding**: the record that an identity, and its handle, are bound to a
   holder.
+- **Disclosure**: putting a handle's text on chain, with `bind`, `publish`,
+  or any call that takes the handle as text. It cannot be undone.
+- **Folding**: lowercasing `A` to `Z` in a handle before it is hashed.
+  Nothing else changes, so `@octocat` and `octocat` are different handles.
 - **Handle**: the name an identity uses on its platform: a GitHub login, an X
   username, or a Google email address. It can change.
 - **`handleNode`, `idNode`**: the `bytes32` keys a handle and an id are stored
   under. See [Platforms and nodes](/docs/concepts/platforms-and-nodes/).
 - **Holder**: the address an identity is bound to.
 - **Id**: the id a platform gives an account. It never changes. For Google,
-  libID stores `SHA256("libid.google-user-id" || sub)`, as `0x` and 64
-  lowercase hex digits.
+  it is the `sub` claim of the sign-in token. libID stores only its node.
 - **Identity**: a platform account proved to a holder. It has an id and a
   handle.
-- **Normalization**: the rules that turn the different ways of writing a
-  handle into one form, such as lowercasing and removing a leading `@`.
 - **Notary**: the service that signs records of a user's sessions with GitHub
   and X.
 - **`observedAt`**: when the platform confirmed a binding, in Unix seconds.

@@ -14,6 +14,7 @@ The examples use the setup from the [Quickstart](/docs/get-started/quickstart/):
 ```js
 import { createPublicClient, http } from 'viem';
 import {
+  handleNode,
   identityCount,
   identitiesOf,
   identityRegistryAbi,
@@ -35,25 +36,24 @@ const holder = await resolveHandle(registry, github, 'octocat');
 
 You get the holder that proved the handle most recently, or `null`.
 
-You can pass whatever a user typed. The contract normalizes the handle first,
-so `@Octocat` finds `octocat`. Text that can never be a handle on that
-platform, such as `oct cat`, also returns `null`.
+Only A-Z are folded to a-z, so `Octocat` finds `octocat`. Nothing else
+changes: `@octocat` and `octocat` are different handles. Nobody can prove
+`@octocat` or `oct cat`, so they return `null`. If your users type a leading
+`@` or spaces, remove them yourself.
 
-If the platform id is wrong, the call reverts with `UnknownPlatform`. A typo
-in the platform key shows up as an error, not as an empty result.
+`resolveHandle` hashes the handle locally and sends only the hash to the RPC.
+
+If the platform id is not GitHub, X or Google, the call reverts with
+`UnknownPlatform`. A typo in the platform key shows up as an error, not as an
+empty result.
 
 ## See when it was proved
 
 A binding records the time the platform confirmed it. Read it with
-`handleNodeOf` and `handleBinding`:
+`handleNode` and `handleBinding`:
 
 ```js
-const node = await client.readContract({
-  address: registry.address,
-  abi: identityRegistryAbi,
-  functionName: 'handleNodeOf',
-  args: [github, 'octocat'],
-});
+const node = handleNode('github', 'octocat');
 
 const [current, observedAt] = await client.readContract({
   address: registry.address,
@@ -65,9 +65,10 @@ const [current, observedAt] = await client.readContract({
 console.log(current, new Date(Number(observedAt) * 1000));
 ```
 
-`handleNodeOf` turns a platform and a handle into the `bytes32` key the
-contract stores it under. `handleBinding` returns the holder of that key and
-`observedAt`, a Unix time in seconds.
+`handleNode` turns a platform key and a handle into the `bytes32` key the
+contract stores it under. It throws `HandleError` for text that can never be
+a handle. `handleBinding` returns the holder of that key and `observedAt`, a
+Unix time in seconds.
 
 The age of the proof is the time since then:
 
@@ -90,42 +91,42 @@ A handle can move to a different account on the platform. Someone who paid
 
 The contract cannot tell you this on its own. Your app has to remember who
 held the handle before. When a user first pays or saves a handle, store the
-id of the identity behind it:
+id node of the identity behind it:
 
 ```js
-async function idOf(holder, platform, handle) {
+async function idNodeOf(holder, platformKey, handle) {
   if (!holder) return null;
+  const node = handleNode(platformKey, handle);
   const count = await identityCount(registry, holder);
   for (let from = 0n; from < count; from += 10n) {
     for (const i of await identitiesOf(registry, holder, from, 10n)) {
-      if (i.platformId === platform && i.handle === handle && i.handleCurrent) return i.id;
+      if (i.handleNode === node && i.handleCurrent) return i.idNode;
     }
   }
   return null;
 }
 
-const savedId = await idOf(holder, github, 'octocat'); // keep this with the contact
+const savedIdNode = await idNodeOf(holder, 'github', 'octocat'); // keep this with the contact
 ```
 
-`idOf` reads the holder's identities a page at a time and returns the id of
-the one that holds the handle now. It returns `null` if nobody holds the
-handle. Pass the handle in its
-normalized form, the way `IdentityBound` reports it: lowercase, without `@`.
+`idNodeOf` reads the holder's identities a page at a time and returns the id
+node of the one that holds the handle now. It returns `null` if nobody holds
+the handle. The list has nodes, not handle text, so it compares the handle's
+node.
 
-Next time, pass the saved id to `resolveHandleAndId`:
+Next time, pass the saved id node to `resolveHandleAndId`:
 
 ```js
-if (savedId) {
-  const { holder: now, idAgrees } = await resolveHandleAndId(registry, github, 'octocat', savedId);
+if (savedIdNode) {
+  const { holder: now, idAgrees } = await resolveHandleAndId(registry, github, 'octocat', savedIdNode);
   if (!idAgrees) {
     console.log('@octocat now belongs to a different account.');
   }
 }
 ```
 
-`resolveHandleAndId` compares holders, not identities. `idAgrees` is `true`
-when the handle and the saved id resolve to the same holder, and that holder
-is not zero. So:
+`idAgrees` is `true` when the identity behind the saved id node is the one
+that last proved the handle, and the handle has a holder. So:
 
 | What happened since you saved the id | `holder` | `idAgrees` |
 | --- | --- | --- |
@@ -133,12 +134,12 @@ is not zero. So:
 | The identity moved to a new address | the new address | `true` |
 | Another identity, at another address, took the handle | the new address | `false` |
 | The identity switched to a new handle, and nobody holds this one | zero | `false` |
-| Another identity at the same address took the handle | the same address | `true` |
+| Another identity at the same address took the handle | the same address | `false` |
 
-The last row is the one it cannot see: the payment still goes to the same
-address, but through a different identity.
+In the last row the payment still goes to the same address, but through a
+different identity.
 
-Only use this with an id you saved earlier. An id you read just now always
+Only use this with an id node you saved earlier. One you read just now always
 agrees, so the check tells you nothing. If your app has nothing saved, show
 `observedAt` from the section above instead.
 

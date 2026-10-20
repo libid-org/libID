@@ -12,11 +12,11 @@ wallet and no tokens.
 ## Set up
 
 You need [Node.js](https://nodejs.org) 22.12 or later, and a network that runs
-libID. Set `RPC_URL` and `IDENTITY_REGISTRY` for it. For Ethereum mainnet:
+libID. Set `RPC_URL` and `IDENTITY_REGISTRY` for it. For Sepolia:
 
 ```sh
-export RPC_URL=https://ethereum-rpc.publicnode.com
-export IDENTITY_REGISTRY=0xbefd300aff7d4a67fb381afe8b3596793d3e9a83
+export RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+export IDENTITY_REGISTRY=0x4e750fb0e1e529d7a57647c0001db96c5ffb6fa1
 ```
 
 The other networks are listed under [Networks](/docs/networks/ethereum/).
@@ -64,8 +64,8 @@ console.log(holder);
 ```
 
 `resolveHandle` returns the address that proved it holds the handle, or `null`
-if nobody has. Handles are matched the way the platform matches them, so
-`octocat`, `Octocat` and `@octocat` are the same GitHub handle.
+if nobody has. Only A to Z are folded to lowercase, so `Octocat` finds
+`octocat`. `@octocat` is different text, and nobody holds it.
 
 ## Find the handle of a holder
 

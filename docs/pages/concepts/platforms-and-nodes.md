@@ -20,78 +20,80 @@ An identity, a platform account proved to a holder, has two things:
 
 | | GitHub | X | Google |
 | --- | --- | --- | --- |
-| Id | the numeric user id | the numeric user id | a digest of the account's `sub`, see below |
+| Id | the numeric user id | the numeric user id | the `sub` claim of its sign-in token |
 | Handle | the login, like `octocat` | the username, like `jack` | the email address |
 
 The id never changes. The handle can: users rename themselves, and platforms
 give old handles to new users.
 
-A Google id is not Google's own id. It is this digest, written as `0x` and
-64 lowercase hex digits:
-
-```
-SHA256("libid.google-user-id" || sub)
-```
-
-`sub` is the exact `sub` claim from Google's sign-in token, not trimmed or
-lowercased, and `||` joins the two byte strings. From a shell:
-
-```sh
-printf '%s%s' libid.google-user-id "$SUB" | sha256sum | sed 's/^/0x/; s/ .*//'
-```
-
-For `SUB=123456789012345678901` it prints
-`0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560`.
-The real `sub` never reaches the chain.
-
 ## Nodes
 
-The contracts do not store strings as keys. They hash each id and each
-handle into a `bytes32` key called a node:
+The contracts do not store ids or handles as keys. They hash each id and
+each handle into a `bytes32` key called a node:
 
-```solidity
-idNode     = keccak256(abi.encode(keccak256("libid.identity.id-node.v1"),     platformId, keccak256(id)))
-handleNode = keccak256(abi.encode(keccak256("libid.identity.handle-node.v1"), platformId, keccak256(handle)))
+```
+node = SHA256(tag || value)
 ```
 
-The platform is part of the node, so `alice` on X and `alice` on GitHub are
-different nodes.
+`||` joins the two byte strings. The value is the id as the platform sent it,
+or the handle with `A` to `Z` lowercased. The tag names the platform and
+the kind of value:
 
-You rarely compute nodes yourself. `IdentityRegistry.handleNodeOf(platformId, handle)`
-returns a handle's node. The TypeScript package computes it locally in two
-steps:
+| Platform | Id tag | Handle tag |
+| --- | --- | --- |
+| GitHub | `libid.github.user-id` | `libid.github.handle` |
+| X | `libid.x.user-id` | `libid.x.handle` |
+| Google | `libid.google.user-id` | `libid.google.handle` |
 
-```js
-const rules = await rulesOf(registry, platformId('github'));
-const node = handleNode(platformId('github'), handleHash('@Octocat', rules));
+The platform is part of the tag, so `alice` on X and `alice` on GitHub are
+different nodes. From a shell:
+
+```sh
+printf '%s%s' libid.github.handle octocat | sha256sum | sed 's/^/0x/; s/ .*//'
 ```
 
-`handleHash` normalizes the handle with the platform's rules and hashes it.
-`handleNode` takes that hash, not the handle.
+It prints
+`0x381fb9d7d3b01214e58b94202ea10f78e169adef68bcc20d40c130deca6dfe74`.
 
-## Normalization
+The proving circuit computes both nodes from what the platform sent. The
+proof carries the nodes, and the id and handle stay off chain. A handle
+reaches the chain only if its holder discloses it; see
+[Published handles](/docs/concepts/published-handles/).
 
-Before a handle is hashed, it is normalized, so that the different ways of
-writing one handle reach the same node:
+A node hides a value only from someone who cannot guess it. The tags are
+public, so anyone can hash a guessed handle or id and look it up. See
+[What becomes public](/docs/concepts/trust/#what-becomes-public).
 
-- Spaces at the start and end are removed. Other whitespace is refused.
-- On GitHub and X, one leading `@` is then removed.
-- `A` to `Z` are lowercased.
-- Letters and digits are allowed everywhere. Beyond those, GitHub allows `-`,
-  X allows `_`, and Google allows `.`, `+`, `-`, `_` and one `@`. Anything
-  else, including any non-ASCII byte, is refused.
-- On GitHub, a `-` can never be first, last, or next to another `-`.
-- A Google address needs exactly one `@`, with something on each side.
-  Nothing else about its shape is checked, so `-a@example.com` and
-  `a--b@example.com` are accepted.
-- Handles longer than 15 characters on X, 39 on GitHub, or 62 for Google are
-  refused. The length is counted after the spaces and the `@` are removed.
+You rarely compute nodes yourself. The TypeScript package does it locally:
 
-So `@Octocat`, `octocat` and `OCTOCAT` are the same GitHub handle. Text that
-breaks these rules is not a handle: `resolveHandle` returns the zero address
-for it, and `handleNodeOf` reverts with `UnusableHandle`.
+```ts
+import { handleNode, idNode } from '@libid/contracts/platforms';
 
-The exact rules are in a shared table of test vectors; see
-[handle normalization](/specs/platform-ceremonies/#21a-handle-normalization)
-in the spec. `IdentityRegistry.rulesOf(platformId)` returns the rules a network
-uses.
+handleNode('github', 'OctoCat'); // 0x381fb9d7…6dfe74
+idNode('github', '583231');      // 0x475902b2…181847
+```
+
+Both take the platform key, not `platformId`.
+`IdentityRegistry.handleNodeOf(platformId, handle)` returns the same handle
+node, but sends the handle to your RPC provider.
+
+## Folding
+
+Before a handle is hashed, `A` to `Z` are lowercased. Nothing else changes:
+no spaces are trimmed and no `@` is removed. So `Octocat` and `octocat` are
+the same GitHub handle, but `@octocat` is a different node, which no GitHub
+account can prove. `resolveHandle` returns the zero address for it.
+
+The circuit only proves a handle exactly as the platform sent it. It refuses
+an empty handle, a byte outside printable ASCII, `"` and `\`, and handles
+longer than 39 bytes on GitHub and X or 62 for Google. The contracts do not
+check these rules again: text the circuit refuses has no binding, so it
+resolves to nobody.
+
+`handleNode` in the TypeScript package applies the same checks and throws
+`HandleError` for text the circuit refuses. `foldedHandleNode` only folds, as
+the contracts do.
+
+The exact rules are in
+[the token check and folding](/specs/platform-ceremonies/#21a-the-token-check-and-folding)
+in the spec.

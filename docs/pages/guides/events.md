@@ -13,7 +13,7 @@ The examples use this setup:
 
 ```js
 import { createPublicClient, http } from 'viem';
-import { handleEscrowAbi, identityRegistryAbi, platformId } from '@libid/contracts';
+import { handleEscrowAbi, handleNode, identityRegistryAbi } from '@libid/contracts';
 
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
 const IDENTITY_REGISTRY = process.env.IDENTITY_REGISTRY;
@@ -33,7 +33,7 @@ async function readEvents(filter) {
 
 `FROM_BLOCK` is the block the contracts were deployed in. Nothing happened
 before it, so do not read earlier blocks. Each network's page gives it; see
-[Ethereum](/docs/networks/ethereum/). On a local chain, leave it unset to
+[Eden](/docs/networks/eden/). On a local chain, leave it unset to
 start from block 0.
 
 Most RPC providers limit how many blocks one request can cover, so
@@ -51,7 +51,7 @@ const bound = await readEvents({
 });
 
 for (const { args } of bound) {
-  console.log(args.holder, args.handle, args.id);
+  console.log(args.holder, args.platformId, args.handleNode, args.idNode);
 }
 ```
 
@@ -61,11 +61,13 @@ for (const { args } of bound) {
 | --- | --- |
 | `holder` | The address that proved the identity. |
 | `platformId` | The platform. |
-| `id` | The identity's id. It never changes. |
-| `handle` | The handle, normalized: `Alice-Dev` on GitHub is stored as `alice-dev`. |
-| `idNode`, `handleNode` | The keys the id and the handle are stored under. |
+| `idNode`, `handleNode` | The keys the id and the handle are stored under, SHA-256 hashes of each. |
 | `observedAt` | When the platform confirmed the identity, in Unix seconds. |
-| `published` | Whether the handle is now the holder's published handle. |
+| `ceremonyVersion` | The ceremony version the proof used. |
+
+The event has no id or handle as text. If the holder shows the handle as its
+name, the registry emits `HandlePublished` with it, in the same transaction
+or later.
 
 `holder`, `idNode` and `handleNode` are indexed, so you can filter by them:
 
@@ -82,8 +84,11 @@ const forWallet = await readEvents({
 
 - `HandleRetired`: a handle stopped pointing at its holder, because the same
   identity proved a new handle.
+- `HandlePublished`: a holder shows a handle as its name on a platform.
+  `handle` is the text, with A-Z folded to a-z.
 - `HandleUnpublished`: a holder stopped showing its published handle on a
-  platform.
+  platform. The registry also emits it when the holder loses the handle its
+  name shows, to another identity or by retiring it.
 
 ## Watch for new bindings
 
@@ -93,7 +98,7 @@ const unwatch = client.watchContractEvent({
   abi: identityRegistryAbi,
   eventName: 'IdentityBound',
   onLogs: (logs) => {
-    for (const { args } of logs) console.log('bound', args.handle, args.holder);
+    for (const { args } of logs) console.log('bound', args.handleNode, args.holder);
   },
 });
 ```
@@ -105,6 +110,8 @@ Call `unwatch()` to stop.
 `HandleEscrow` emits:
 
 - `Deposited`: funds are held for a handle nobody owns yet.
+- `DepositedToHandle`: a deposit named the handle as text. It comes with a
+  `Deposited` or a `Forwarded`, and carries the handle with A-Z folded.
 - `Forwarded`: the handle had a holder, who was paid right away.
 - `Claimed`: the holder took what was held.
 - `Refunded`: a deposit's `refundTo` address took it back.
@@ -112,12 +119,7 @@ Call `unwatch()` to stop.
 For example, to list the deposits ever made to one handle:
 
 ```js
-const carolNode = await client.readContract({
-  address: IDENTITY_REGISTRY,
-  abi: identityRegistryAbi,
-  functionName: 'handleNodeOf',
-  args: [platformId('github'), 'carol'],
-});
+const carolNode = handleNode('github', 'carol');
 
 const deposits = await readEvents({
   address: process.env.HANDLE_ESCROW,
@@ -150,15 +152,15 @@ If you store events in your own database, follow these rules:
   that changed. viem marks a removed log with `removed: true`.
 - Apply events in order: by block number, then log index.
 - On `IdentityBound`, set the holder of `handleNode` and of `idNode` to
-  `holder`. If `published` is `true`, set `holder`'s published handle on
-  `platformId` to `handle`. If it is `false`, leave the published handle
-  as it is.
+  `holder`.
+- On `HandlePublished`, set `holder`'s published handle on `platformId` to
+  `handle`.
 - On `HandleRetired`, mark `handleNode` as held by nobody. An identity emits it
   when it proves a new handle. If you skip it, your index keeps routing the
   old handle to that holder.
 - On `HandleUnpublished`, clear the holder's published handle on that
   platform.
-- When you show a published handle, check that your index still has its
-  `handleNode` held by the same holder. If someone else has proved the
-  handle since, or it was retired, show nothing. No event clears the
-  published handle in that case. `publishedHandleOf` makes the same check.
+- When a holder loses the handle its published name shows, the registry
+  emits `HandleUnpublished`. `HandlePublished` and `HandleUnpublished` are
+  enough to keep the published handle right. `publishedHandleOf` also checks that the holder still holds
+  the handle.

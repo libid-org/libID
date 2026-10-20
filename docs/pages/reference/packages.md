@@ -11,14 +11,21 @@ sidebar:
 npm install @libid/contracts viem
 ```
 
-These docs describe version 0.17.0, which matches libID-contracts v0.17.0.
+These docs describe version 0.18.1, which matches libID-contracts v0.18.1.
 The package works with [viem](https://viem.sh). It has:
 
 - ABIs: `identityRegistryAbi`, `handleEscrowAbi`, and the other contracts.
+  `bindErrorsAbi` has every error a `bind` can revert with.
 - Reading helpers: `resolveHandle`, `resolveId`, `resolveHandleAndId`,
-  `publishedHandleOf`, `identityCount`, `identitiesOf`, `rulesOf`.
-- Keys: `platformId`, `handleHash`, `handleNode`.
-- Handle rules: `normalize`, `RULES_GITHUB`, `RULES_X`, `RULES_GOOGLE`.
+  `publishedHandleOf`, `identityCount`, `identitiesOf`.
+- Keys: `platformId`, `handleNode`, `idNode`, `foldedHandleNode`.
+- Handle and id rules: `normalize`, `checkId`, `RULES_GITHUB`, `RULES_X`,
+  `RULES_GOOGLE`.
+- Call builders: `calls`, one per state-changing function.
+- Bind payloads: `encodeTlsNotaryProof`, `encodeGoogleProof`.
+
+`handleNode`, `idNode`, `foldedHandleNode` and the rules are also in
+`@libid/contracts/platforms`, which loads without viem.
 
 The reading helpers take a reader, `{ client, address }`, where `client` is a
 viem public client and `address` is `IdentityRegistry`. They return `null` where
@@ -33,5 +40,14 @@ Source and README:
 cargo add libid-contracts
 ```
 
-Bindings for the contracts, built on [alloy](https://alloy.rs). See
+Bindings for the contracts, built on [alloy](https://alloy.rs) 2. See
 [docs.rs/libid-contracts](https://docs.rs/libid-contracts).
+
+## Rust: `libid-identity`
+
+```sh
+cargo add libid-identity --features node
+```
+
+Handle and id rules, and with the `node` feature the nodes a binding is
+stored under. See [docs.rs/libid-identity](https://docs.rs/libid-identity).

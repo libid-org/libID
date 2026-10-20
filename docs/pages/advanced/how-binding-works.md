@@ -26,7 +26,9 @@ flowchart TD
 The parties marked trusted must behave: the platform says who owns the
 account, the notary signs only true records, and the verifiers and their
 owners check proofs correctly. What the last box stores is public on chain:
-the holder, the id and the handle.
+the holder and the nodes of the id and the handle. The handle text is
+stored only if the holder discloses it; see
+[Published handles](/docs/concepts/published-handles/).
 
 The Google path has no notary in the sign-in itself, because Google signs
 its tokens. The notary still matters for Google: the contracts learn
@@ -50,16 +52,24 @@ notary signature there lets a fake key bind any Google account. See
      using TLSNotary: getting the access token, and asking who the user is. A
      notary signs both records. A zero-knowledge proof shows the two sessions
      used the same token.
+
+   On every platform the proof also checks that the id and the handle are
+   exactly what the platform sent, and outputs their nodes. The proof sent to
+   the chain contains the nodes, not the id or the handle.
 4. The user's wallet sends `bind` to `IdentityRegistry` with the proof, paying
-   `quoteBind` plus any service fee.
+   `quoteBind` plus any service fee. If the user chose to publish the handle,
+   the app passes it to `bind`. Otherwise it calls `bindPrivately`, or `bind`
+   with an empty handle.
 5. The contracts check it. `IdentityRegistry` hands the proof to the proof
    verifier, which picks the verifier for that platform and version. The
    verifier checks the proof, the notary signatures or Google's key, and the
    time limits, and
-   returns the id, handle and `observedAt`.
+   returns the id node, the handle node and `observedAt`.
 6. `IdentityRegistry` writes the binding if the proof is for the calling
    address, has not been used, and is newer than what is stored. It emits
-   `IdentityBound`.
+   `IdentityBound` with the two nodes. If `bind` was given a handle, it must
+   hash to the proved handle node; the registry then stores it as the
+   published handle and emits `HandlePublished`.
 
 ## What it costs
 

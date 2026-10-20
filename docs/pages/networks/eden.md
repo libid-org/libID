@@ -18,9 +18,9 @@ To run a guide against Eden, set:
 
 ```sh
 export RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545
-export IDENTITY_REGISTRY=0x25f29c8c765db2f27d1e2b23987a7b0655c7d640
-export HANDLE_ESCROW=0x57355e1d1bcf61fec9b2e5cad60dcccdddc4d8e5
-export FROM_BLOCK=276480017
+export IDENTITY_REGISTRY=0x4e750fb0e1e529d7a57647c0001db96c5ffb6fa1
+export HANDLE_ESCROW=0xc7c13a7715858e60d628f867048e0f67fc683dd6
+export FROM_BLOCK=289169815
 ```
 
 `FROM_BLOCK` is the block `IdentityRegistry` was deployed in. The

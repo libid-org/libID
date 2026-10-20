@@ -18,7 +18,7 @@ Declare the functions you need from `IdentityRegistry`:
 interface IIdentityRegistry {
     function handleNodeOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
     function handleBinding(bytes32 handleNode) external view returns (address holder, uint64 observedAt);
-    function resolveId(bytes32 platformId, string calldata id) external view returns (address);
+    function resolveId(bytes32 idNode) external view returns (address);
 }
 ```
 
@@ -57,9 +57,11 @@ contract Guestbook {
 }
 ```
 
-`handleNodeOf` normalizes the handle and returns the key it is stored under.
-`handleBinding` returns the holder and the time the platform confirmed it. `handleNodeOf`
-reverts with `UnusableHandle` if the text can never be a GitHub handle.
+`handleNodeOf` folds A-Z to a-z, hashes the handle, and returns the key it is
+stored under. `handleBinding` returns the holder and the time the platform
+confirmed it. `handleNodeOf` checks nothing else. `@alice-dev` is a different
+node from `alice-dev`, one nobody holds, so signing as `@alice-dev` reverts
+with `NotYourHandle`.
 
 Handles can be renamed and reused on GitHub. `MAX_AGE` limits how long ago
 the holder last proved it. Pick a value that fits what the call is worth.
@@ -77,7 +79,7 @@ address. The id never changes, so use it instead of the handle:
 ```solidity
 contract Airdrop {
     IIdentityRegistry public immutable registry;
-    bytes32 constant GITHUB = keccak256("github");
+    bytes constant GITHUB_ID_TAG = "libid.github.user-id";
     uint256 constant AMOUNT = 0.01 ether;
 
     mapping(bytes32 => bool) public claimed;
@@ -91,11 +93,10 @@ contract Airdrop {
     }
 
     function claim(string calldata id) external {
-        if (registry.resolveId(GITHUB, id) != msg.sender) revert NotYourIdentity();
-
-        bytes32 identity = keccak256(bytes(id));
-        if (claimed[identity]) revert AlreadyClaimed();
-        claimed[identity] = true;
+        bytes32 idNode = sha256(bytes.concat(GITHUB_ID_TAG, bytes(id)));
+        if (registry.resolveId(idNode) != msg.sender) revert NotYourIdentity();
+        if (claimed[idNode]) revert AlreadyClaimed();
+        claimed[idNode] = true;
 
         (bool ok, ) = msg.sender.call{value: AMOUNT}("");
         if (!ok) revert PayoutFailed();
@@ -109,9 +110,12 @@ contract Airdrop {
 that calls back into `claim` finds it already claimed. It sends with `call`,
 not `transfer`, so a smart wallet such as a Safe can receive the payment.
 
-`resolveId` returns the holder of the identity with that id, or the zero
-address. Your app can find a user's id with
-[`identitiesOf`](/docs/guides/lookup-wallet/).
+The registry keeps an id as its node, `SHA256(tag || id)`, where the tag
+names the platform. `claim` computes the GitHub id node and asks
+`resolveId` for its holder. `resolveId` returns that holder, or the zero
+address. `idNode('github', id)` in `@libid/contracts` computes the same
+node. A user's GitHub id is public; your app can read it from the GitHub
+API.
 
 ## Try it
 

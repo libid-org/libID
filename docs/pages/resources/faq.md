@@ -34,7 +34,7 @@ handle go to them until the real owner proves the account again. See
 ## What if a handle is given to someone else?
 
 Once the new holder proves it, it points to their address. Apps that saved
-the old identity's id can notice with `resolveHandleAndId`. See
+the old identity's id node can notice with `resolveHandleAndId`. See
 [Resolve a handle](/docs/guides/resolve-handle/#notice-a-new-holder).
 
 ## Does libID stop one person from having many accounts?
@@ -44,5 +44,12 @@ only one.
 
 ## Is my email public if I bind Google?
 
-Yes. The handle of a Google account is its email address, and a binding
-publishes it on chain.
+Not unless it is disclosed. The handle of a Google account is its email
+address. A binding puts only its node, a SHA-256 hash, on chain. The address
+is on chain if you publish it, with `bind` or `publish`, or if someone pays
+it by its text, with `HandleEscrow.depositToHandle`. Once on chain, it stays in
+the chain's history for good, even after `unpublish`.
+
+A node does not keep the address secret. Anyone who guesses it can hash it
+and find your binding. See
+[What becomes public](/docs/concepts/trust/#what-becomes-public).

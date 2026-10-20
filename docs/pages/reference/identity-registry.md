@@ -32,31 +32,43 @@ The full source is
 function resolveHandle(bytes32 platformId, string handle) view returns (address)
 ```
 
-The holder that last proved the handle, or the zero address. The handle is
-normalized first, so you can pass what a user typed. Text that can never be a
-handle returns the zero address. Reverts `UnknownPlatform` if the platform is
-not set up.
+The holder that last proved the handle, or the zero address. Only A to Z
+are folded to lowercase; nothing else changes, so `@octocat` is not
+`octocat`. Text that can never be a handle returns the zero address.
+Reverts `UnknownPlatform` if the platform is not GitHub, X or Google.
 
 ### resolveId
 
 ```solidity
-function resolveId(bytes32 platformId, string id) view returns (address)
+function resolveId(bytes32 idNode) view returns (address)
 ```
 
-The holder of the identity with this id, or the zero address. Reverts
-`UnknownPlatform` if the platform is not set up.
+The holder of the identity with this id node, or the zero address. The
+TypeScript package computes the node with `idNode`.
 
 ### resolveHandleAndId
 
 ```solidity
-function resolveHandleAndId(bytes32 platformId, string handle, string id)
+function resolveHandleAndId(bytes32 platformId, string handle, bytes32 idNode)
     view returns (address holder, bool idAgrees)
 ```
 
-`holder` is what `resolveHandle` returns. `idAgrees` is `true` when
-`resolveId(platformId, id)` returns the same, non-zero holder. Use it with an
-id you saved earlier; see
+`holder` is what `resolveHandle` returns. `idAgrees` is `true` when someone
+holds the handle and `idNode` is the identity that last proved it. A handle
+that moved between two identities of the same holder disagrees with the
+earlier one. Use it with an id node you saved earlier; see
 [Resolve a handle](/docs/guides/resolve-handle/#notice-a-new-holder).
+
+### resolveHandleNodeAndId
+
+```solidity
+function resolveHandleNodeAndId(bytes32 platformId, bytes32 handleNode, bytes32 idNode)
+    view returns (address holder, bool idAgrees)
+```
+
+`resolveHandleAndId` with the handle's node instead of its text, so the
+handle does not reach your RPC provider. A node of another platform returns
+`(0, false)`.
 
 ### handleBinding
 
@@ -103,64 +115,31 @@ function identitiesOf(address holder, uint256 from, uint256 limit)
 
 struct Identity {
     bytes32 platformId;
-    string id;
-    string handle;
+    bytes32 idNode;
+    bytes32 handleNode;
     bool handleCurrent;
 }
 ```
 
 A page of the holder's identities, from index `from`, at most `limit` long.
-`handle` is the handle the identity proved most recently. `handleCurrent` is
-`false` once another identity has proved that handle. The order is not fixed
-and can change when an identity moves to another holder. Each identity costs
-about six storage reads, so keep `limit` small when you call this from a
+`handleNode` is the node of the handle the identity proved most recently.
+`handleCurrent` is `false` once another identity has proved that handle. The
+order is not fixed and can change when an identity moves to another holder. Each identity costs
+about four storage reads, so keep `limit` small when you call this from a
 contract.
 
-## Handles and rules
+## Handles
 
 ### handleNodeOf
 
 ```solidity
-function handleNodeOf(bytes32 platformId, string handle) view returns (bytes32)
+function handleNodeOf(bytes32 platformId, string handle) pure returns (bytes32 handleNode)
 ```
 
-The `handleNode` of a handle, after normalizing it. Reverts `UnknownPlatform`
-or `UnusableHandle`.
-
-### handleHashOf
-
-```solidity
-function handleHashOf(bytes32 platformId, string handle) view returns (bytes32)
-```
-
-`keccak256` of the normalized handle. This is the hash `HandleEscrow.deposit`
-takes. Reverts like `handleNodeOf`. Calling it over RPC sends the handle to
-your RPC provider; the TypeScript package computes it locally.
-
-### handleNodeOfHash
-
-```solidity
-function handleNodeOfHash(bytes32 platformId, bytes32 handleHash) pure returns (bytes32)
-```
-
-The `handleNode` for a handle hash. It does not check that the hash came from
-a real handle.
-
-### rulesOf
-
-```solidity
-function rulesOf(bytes32 platformId) view returns (Rules memory)
-
-struct Rules {
-    uint16 maxLength;
-    bool stripLeadingAt;
-    bool isEmail;
-    bool allowUnderscore;
-    bool allowHyphen;
-}
-```
-
-How the platform normalizes handles. Reverts `UnknownPlatform`.
+The `handleNode` of a handle: A to Z folded to lowercase, then hashed under
+the platform's tag. It does not check that the text could be a handle.
+Reverts `UnknownPlatform`. Calling it over RPC sends the handle to your RPC
+provider; the TypeScript package computes it locally.
 
 ### acceptsBindings
 
@@ -168,7 +147,17 @@ How the platform normalizes handles. Reverts `UnknownPlatform`.
 function acceptsBindings(bytes32 platformId) view returns (bool)
 ```
 
-Whether `bind` can bind an identity on the platform right now.
+Whether `bind` can bind an identity on the platform right now. Reverts
+`UnknownPlatform` if the platform is not GitHub, X or Google.
+
+### nodeKeyed
+
+```solidity
+function nodeKeyed() pure returns (bool)
+```
+
+Always `true`: the registry stores bindings under SHA-256 nodes.
+`HandleEscrow` checks it when it is set up.
 
 ## Binding
 
@@ -179,13 +168,23 @@ does not build this call by hand; the libID sign-in flow does. See
 ### bind
 
 ```solidity
-function bind(bytes32 platformId, uint16 verifierVersion, bytes payload, bool publish) payable
+function bind(bytes32 platformId, uint16 verifierVersion, bytes payload, string handle) payable
 ```
 
 Verifies the proof and binds the identity and its handle to the caller.
-`publish` makes the handle the caller's published handle on that platform.
+`handle` becomes the caller's published handle on that platform. It must
+fold and hash to the handle node the proof bound, or the call reverts
+`HandleNotProved`. An empty `handle` publishes nothing.
 Send `quoteBind(platformId, verifierVersion)` as `msg.value`, plus any service
 fee the proof names.
+
+### bindPrivately
+
+```solidity
+function bindPrivately(bytes32 platformId, uint16 verifierVersion, bytes payload) payable
+```
+
+`bind` with no handle to publish. The registry stores only the nodes.
 
 ### quoteBind
 
@@ -196,6 +195,15 @@ function quoteBind(bytes32 platformId, uint16 verifierVersion) view returns (uin
 What verifying a proof costs, in wei. It does not include a service fee an
 app may charge.
 
+### publish
+
+```solidity
+function publish(bytes32 platformId, string handle)
+```
+
+Makes `handle` the caller's published handle on the platform. Its node must
+be one the caller holds, or the call reverts `NotYourHandle`.
+
 ### unpublish
 
 ```solidity
@@ -203,7 +211,7 @@ function unpublish(bytes32 platformId)
 ```
 
 Stops showing the caller's published handle on the platform. The binding
-stays. Past `IdentityBound` events still contain the handle.
+stays. Past `HandlePublished` events still contain the handle.
 
 ### digestSpent
 
@@ -221,16 +229,20 @@ event IdentityBound(
     bytes32 indexed idNode,
     bytes32 indexed handleNode,
     bytes32 platformId,
-    string id,
-    string handle,
     uint64 observedAt,
-    bool published,
     uint16 ceremonyVersion
 );
 ```
 
-A holder proved an identity. `handle` is normalized. `published` says whether
-the handle is now the holder's published handle.
+A holder proved an identity. It carries only the nodes.
+
+```solidity
+event HandlePublished(
+    address indexed holder, bytes32 indexed platformId, bytes32 indexed handleNode, string handle
+);
+```
+
+A holder published a handle, with `bind` or `publish`. `handle` is folded.
 
 ```solidity
 event HandleRetired(bytes32 indexed platformId, bytes32 indexed handleNode, address indexed holder);
@@ -242,18 +254,20 @@ An identity proved a new handle, so its old handle stopped resolving.
 event HandleUnpublished(address indexed holder, bytes32 indexed platformId);
 ```
 
-A holder stopped showing its published handle on a platform.
+A holder's published handle on a platform was withdrawn: by `unpublish`, or
+because the holder no longer holds that handle.
 
 Other events are for operators: `CeremonyBound` and `BindFeePaid` (emitted
-by `bind`), `PlatformConfigured`, `ProofVerifierConfigured`, and the standard
+by `bind`), `ProofVerifierConfigured`, and the standard
 ownership and upgrade events.
 
 ## Errors you may see
 
 | Error | When |
 | --- | --- |
-| `UnknownPlatform(bytes32 platformId)` | The platform is not set up on this network. |
-| `UnusableHandle(uint8 problem)` | The text can never be a handle. `problem` is 1 empty, 2 too long, 3 bad character, 4 bad shape. |
+| `UnknownPlatform(bytes32 platformId)` | The platform is not GitHub, X or Google. |
+| `HandleNotProved(bytes32 disclosed, bytes32 proved)` | The handle passed to `bind` is not the one the proof bound. |
+| `NotYourHandle(bytes32 handleNode)` | `publish` was given a handle the caller does not hold. |
 | `StaleProof(uint64 observedAt, uint64 known)` | A newer proof already exists for this identity or handle. |
 | `NotProofTarget(address proved, address caller)` | The proof was made for a different holder. |
 | `DigestAlreadySpent(bytes32 digest)` | The proof was already used. |
@@ -262,6 +276,6 @@ ownership and upgrade events.
 
 ## Admin functions
 
-The owner of the contract can call `setPlatform`, `setProofVerifier`,
-`upgradeToAndCall` and the ownership functions. See
+The owner of the contract can call `setProofVerifier`, `upgradeToAndCall`
+and the ownership functions. See
 [What a binding proves](/docs/concepts/trust/) for what this means for you.

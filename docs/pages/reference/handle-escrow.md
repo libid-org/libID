@@ -31,13 +31,13 @@ Each token is held as one pool. These tokens do not work:
 ### deposit
 
 ```solidity
-function deposit(bytes32 platformId, bytes32 handleHash, address token, uint256 amount, address refundTo)
+function deposit(bytes32 platformId, bytes32 handleNode, address token, uint256 amount, address refundTo)
     payable
 ```
 
-Pays `amount` of `token` to a handle. `handleHash` is `keccak256` of the
-normalized handle (`IdentityRegistry.handleHashOf`, or `handleHash` in the
-TypeScript package).
+Pays `amount` of `token` to a handle. `handleNode` is the handle's node
+(`IdentityRegistry.handleNodeOf`, or `handleNode` in the TypeScript package).
+The handle itself is not sent.
 
 - If someone holds the handle, they are paid now and `Forwarded` is emitted.
 - Otherwise the funds are held and `Deposited` is emitted. Until the holder
@@ -46,8 +46,19 @@ TypeScript package).
 For ETH, `msg.value` must equal `amount`. For a token, approve the escrow
 first and send no ETH.
 
-The escrow cannot check the hash. A wrong hash holds the funds where nobody
+The escrow cannot check the node. A wrong node holds the funds where nobody
 can claim them; only `refundTo` can get them back.
+
+### depositToHandle
+
+```solidity
+function depositToHandle(bytes32 platformId, string handle, address token, uint256 amount, address refundTo)
+    payable
+```
+
+Same as `deposit`, but takes the handle as text. The escrow computes the node
+with `IdentityRegistry.handleNodeOf` and emits `DepositedToHandle` with the
+folded handle. The handle is public in the calldata and in the log.
 
 ### claim
 
@@ -105,12 +116,13 @@ is deployed. No function changes it, but an upgrade can; see
 ```solidity
 event Deposited(
     bytes32 indexed handleNode, address indexed token, address indexed refundTo,
-    address depositor, bytes32 platformId, uint256 round, uint256 amount
+    address depositor, uint256 round, uint256 amount
 );
 event Forwarded(
     bytes32 indexed handleNode, address indexed token, address indexed depositor,
-    address holder, bytes32 platformId, uint256 amount, uint256 received
+    address holder, uint256 amount, uint256 received
 );
+event DepositedToHandle(bytes32 indexed handleNode, bytes32 indexed platformId, string handle);
 event Claimed(
     bytes32 indexed handleNode, address indexed token, address indexed claimer,
     address recipient, uint256 round, uint256 released, uint256 received
@@ -130,8 +142,10 @@ round.
 books, and `received` is what the recipient gained. They differ only for
 tokens that take a fee.
 
-`Claimed` and `Refunded` do not include the platform. Join them with
-`Deposited` on `handleNode`.
+`DepositedToHandle` follows the `Deposited` or `Forwarded` of a
+`depositToHandle`. It is the only escrow event with the platform or the
+handle. For a node paid with `deposit`, find the platform in the registry's
+`IdentityBound` once someone binds the handle.
 
 ## Errors
 
@@ -140,8 +154,10 @@ tokens that take a fee.
 | `ZeroAmount()` | `amount` is zero, or nothing arrived. |
 | `ValueMismatch(uint256 expected, uint256 provided)` | `msg.value` does not match. |
 | `BadRefundTo(address refundTo)` | `refundTo` is zero or the escrow. |
+| `BadToken(address token)` | `token` is not `NATIVE` and has no code. |
 | `PayingYourself(address holder)` | You hold the handle you are paying. |
 | `PlatformAcceptsNoBindings(bytes32 platformId)` | Nobody holds the handle and the platform accepts no new proofs, so the funds could never be claimed. |
+| `UnknownPlatform(bytes32 platformId)` | Raised by `IdentityRegistry`: the platform is not GitHub, X or Google. `deposit` raises it only when nobody holds the node; `depositToHandle` always does. |
 | `NotTheHolder(address holder, address caller)` | `claim` was called by someone other than the holder. |
 | `NothingHeld(bytes32 handleNode)` | `claim` found nothing in any listed token. |
 | `NothingToRefund(bytes32 handleNode, address token, address refundTo)` | No deposit in this round named the caller as `refundTo`. |

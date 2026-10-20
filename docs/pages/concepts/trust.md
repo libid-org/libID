@@ -27,10 +27,27 @@ cannot bind another.
 
 ## What becomes public
 
-Binding an identity publishes, on chain and forever, the holder, the platform,
-the id and the handle. For Google, the handle is the email address.
-The Google id is a digest of Google's internal id, which stays private. See
+Binding an identity puts on chain, forever, the holder, the platform,
+`observedAt`, and two nodes: hashes of the id and of the handle. The id is
+never on chain. The handle is on chain only if a transaction discloses it:
+a `bind` with the handle, a `publish`, or any other call that takes the
+handle as text, such as a payment to a handle. For Google, the handle is the
+email address. See
 [Platforms and nodes](/docs/concepts/platforms-and-nodes/#ids-and-handles).
+
+A handle or id that was never disclosed is still not secret:
+
+- A node is a SHA-256 of a public tag and the value, with no salt. Anyone
+  who guesses a handle, an email address or an id can hash it and look it up.
+- GitHub ids are sequential, so every GitHub id node is in effect public.
+  X ids and Google `sub` values are longer, but not secret: every app a user
+  signs in to with Google knows that user's `sub`.
+- A GitHub or X binding shows the byte lengths of the id and the handle.
+- Every use of a node links to every other use of it.
+- The app that runs the sign-in sees the id and the handle, and builds the
+  `bind` call. It decides whether the handle is disclosed.
+- A disclosure cannot be taken back. `unpublish` clears the published handle,
+  but the transaction that carried it stays in the chain's history.
 
 ## Whom you trust
 
@@ -91,3 +108,7 @@ already written.
 The contracts have not been audited. They are upgradeable. On each network
 one key owns all of them, and on Ethereum mainnet the same key owns
 `handles.link` in ENS. See [Security](/docs/resources/security/#admin-keys).
+
+Ethereum mainnet still runs the previous contract version, v0.17.0, which
+stores every handle as text, and the id too for GitHub and X. These docs
+describe v0.18, which runs on Sepolia and the Eden testnet.
