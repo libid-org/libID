@@ -57,6 +57,7 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       'acceptResult',
       'buildAuthorizationUrl',
       'events',
+      'identityNodes',
       'pkce',
       'progressWeights',
       'returnRules',

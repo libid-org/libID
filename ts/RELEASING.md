@@ -70,30 +70,34 @@ automatic npm provenance; they need no `NPM_TOKEN`. See
 
 ## Subsequent releases
 
-1. Bump the affected package's `version` in a PR. Update ceremony's popup peer
-   range when compatibility changes, and refresh `ts/pnpm-lock.yaml` with pnpm.
-   Workspace dependency ranges become registry versions during `pnpm pack`.
-2. Merge and wait for successful main CI. Publish newly required ledger/popup
-   versions before a ceremony version that depends on them.
-3. Create a GitHub Release at that tested commit with the tag
-   `<package>-v<version>`, such as `popup-v0.1.1`, where `<package>` is the
-   directory under `ts/packages`.
+1. Bump the `version` of every changed package in one PR. Update ceremony's
+   popup peer range when compatibility changes, and refresh `ts/pnpm-lock.yaml`
+   with pnpm. Workspace dependency ranges become registry versions during
+   `pnpm pack`.
+2. Merge and wait for successful main CI.
+3. Create one GitHub Release at that tested commit with the tag
+   `packages-v<YYYY.MM.DD>`, such as `packages-v2026.10.20`. Another release on
+   the same day appends `.<n>`, such as `packages-v2026.10.20.2`.
 
-The release workflow verifies the package version, main ancestry and successful
-CI, builds the tarballs, runs the consumer check, and checks that the package's
-`@libid/*` dependencies are already on npm. A separate job in the `npm-release`
-environment then publishes that same checked tarball. Stable releases use
-`latest`; a prerelease version or GitHub prerelease uses `next`. A retry after successful publication cannot replace an npm version;
-inspect the registry before retrying a failed release.
+The release workflow verifies main ancestry and successful CI, builds the
+tarballs and runs the consumer check. It then plans, in the order of
+`ts/scripts/packages.ts`, every package whose version is not on npm, and checks
+that each planned package's `@libid/*` dependencies are on npm or planned before
+it. It fails when no version is new. A separate job in the `npm-release`
+environment then publishes those same checked tarballs in that order. Stable
+versions use `latest`; a prerelease version or GitHub prerelease uses `next`.
+Versions already on npm are skipped, so re-running a partly published release
+publishes the rest.
 
 ## Adding a package
 
-Every package under `ts/packages` that is not `private` is releasable by its
-directory name; the workflow needs no change. In `ts/scripts/check-packages.ts`,
-add it to `packages` after its workspace dependencies, and add its public imports
-to the consumer. The check fails while a public package is missing from that
-list. Then publish its first version and configure its trusted publisher as
-under [First publication](#first-publication).
+Every package under `ts/packages` that is not `private` takes part in every
+package release; the workflow needs no change. In `ts/scripts/packages.ts`, add
+it to `packages` after its workspace dependencies, and in
+`ts/scripts/check-packages.ts` add its public imports to the consumer. The check
+fails while a public package is missing from that list. Then publish its first
+version and configure its trusted publisher as under
+[First publication](#first-publication); until then, package releases fail.
 
 ## Versions
 

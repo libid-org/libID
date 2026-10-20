@@ -1,5 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
+import { launch as profileOf } from '@libid/contracts/ceremony'
 import type { APIRequestContext, BrowserContext, Page } from '@playwright/test'
+import { handleNode, idNode, platformTable } from '../src/identity.js'
 import { decodeAttestedData } from '../src/notary/decode.js'
 import {
   deriveAuthorizationDigest,
@@ -112,9 +114,36 @@ const evidence = {
         )
         expect(bearer).toHaveLength(1)
         expect(identity.sent.commitments).toHaveLength(1)
-        const publicInputs = [...bearer[0].hash, ...identity.sent.commitments[0].hash].map(
-          (byte) => `0x${byte.toString(16).padStart(64, '0')}`,
-        )
+        // The id and handle commitments each start where a revealed anchor ends.
+        const framed = (anchor: RegExp) => {
+          const ends = identity.received.revealed
+            .filter((range) => anchor.test(new TextDecoder().decode(range.bytes)))
+            .map((range) => range.start + range.bytes.length)
+          const found = identity.received.commitments.filter((c) => ends.includes(c.start))
+          expect(found).toHaveLength(1)
+          return found[0].hash
+        }
+        // The profile names the members; the platform table names the tags.
+        const { idField, handleField } = profileOf(platform)!.identity!
+        const { userIdTag, handleTag } = platformTable(platform)
+        const halves = (value: Uint8Array) =>
+          [value.subarray(0, 16), value.subarray(16)].map(
+            (half) => `0x${Buffer.from(half).toString('hex').padStart(64, '0')}`,
+          )
+        const tag = (text: string) => [
+          `0x${Buffer.from(text).toString('hex').padEnd(62, '0').padStart(64, '0')}`,
+          `0x${text.length.toString(16).padStart(64, '0')}`,
+        ]
+        const publicInputs = [
+          bearer[0].hash,
+          identity.sent.commitments[0].hash,
+          framed(new RegExp(`"${idField}"\\s*:\\s*"?$`)),
+          framed(new RegExp(`"${handleField}"\\s*:\\s*"$`)),
+          idNode(platform, result.identity.userId),
+          handleNode(platform, result.identity.userName),
+        ]
+          .flatMap(halves)
+          .concat(tag(userIdTag), tag(handleTag))
         await verifyBrowserProof('bearer_link', { proof: result.proof, publicInputs })
       }
     },
@@ -185,7 +214,7 @@ const evidence = {
         expect(result.identity).toEqual({
           platformId: platform,
           oauthClientId: browserPlatforms[platform].clientId,
-          userId: '0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560',
+          userId: '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
           userName: 'holder@example.com',
         })
         const proof: GoogleProofV1 = {

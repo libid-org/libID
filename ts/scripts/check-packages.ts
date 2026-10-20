@@ -4,13 +4,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { packages } from './packages.ts'
 
 const workspace = fileURLToPath(new URL('..', import.meta.url))
 const output = join(workspace, '.cache/npm')
 rmSync(output, { recursive: true, force: true })
 mkdirSync(output, { recursive: true })
-// Dependencies first: packing builds each package against its dependencies' declarations.
-const packages = ['ledger', 'popup', 'ceremony']
 // Every package that is not private is releasable, so each must be checked here. A directory
 // without a manifest is not a package.
 const releasable = readdirSync(join(workspace, 'packages')).filter((name) => {

@@ -1,4 +1,5 @@
 import { MAX_CLIENT_ID_BYTES } from '../../ccdp/limits.js'
+import { handleNode, type IdentityNodes, idNode, isAccountId, isHandle } from '../../identity.js'
 import { decodeAttestedData } from '../../notary/decode.js'
 import { isFormClientId } from '../../notary/oauth/validation.js'
 import type { NotaryAttestation } from '../../notary/protocol.js'
@@ -17,15 +18,15 @@ interface NotarizedValidation<P extends string> {
   validateIdentity(value: unknown): Identity<P>
   validateProof(value: unknown): NotarizedProofV1
   proofExpiresAt(proof: NotarizedProofV1): number
+  identityNodes(identity: Identity<P>): IdentityNodes
 }
 
 /**
- * Form client IDs, the platform's user grammar, and the bearer-link proof. `P` stays a string:
- * the catalog derives `PlatformId` from these validators.
+ * Form client IDs, the platform table's id and handle checks, and the bearer-link proof. `P`
+ * stays a string: the catalog derives `PlatformId` from these validators.
  */
 export function notarizedValidation<P extends string>(
   platform: P,
-  valid: Record<'userId' | 'userName', (value: string) => boolean>,
   proofLifetimeSeconds: number,
 ): NotarizedValidation<P> {
   const isClientId = (value: unknown): value is string =>
@@ -42,8 +43,13 @@ export function notarizedValidation<P extends string>(
     },
     validateIdentity: identityValidator(platform, {
       oauthClientId: isClientId,
-      userId: valid.userId,
-      userName: valid.userName,
+      userId: (value) => isAccountId(platform, value),
+      userName: (value) => isHandle(platform, value),
+    }),
+    // The proof opens the id and the handle the identity delivers (REQ-PLAT-31A).
+    identityNodes: ({ userId, userName }) => ({
+      idNode: idNode(platform, userId),
+      handleNode: handleNode(platform, userName),
     }),
     validateProof: recordValidator<NotarizedProofV1>(`Invalid ${platform} proof`, {
       bearerLinkProof: isProofBytes,

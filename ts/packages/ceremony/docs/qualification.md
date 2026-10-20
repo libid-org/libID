@@ -11,9 +11,9 @@ Each pin lives in its declaration; change it there.
 
 | Input | Version | Declared in |
 |---|---|---|
-| Circuits | v0.6.0 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
+| Circuits | v0.7.1 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
 | Noir / bb.js | 1.0.0-rc.3 / 6.0.0-rc.2 | [package.json](../package.json); EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts) |
-| Notary browser/runtime | v0.4.0, with the TLSN and MPZ revisions of that release | [notary.assets.ts](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml) |
+| Notary browser/runtime | v0.5.0, with the TLSN revision of that release | [notary.assets.ts](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml) |
 | Development Bridge | v0.5.0, one OAuth client per platform and no version list | [compose.yaml](../../../apps/dev/compose.yaml) |
 | SWS | 3.0.0-beta.1 | [ccdp.Dockerfile](../ccdp.Dockerfile) |
 
@@ -25,8 +25,8 @@ The released `bearer_link` circuit accepts bearers of at most 128 bytes. The
 X and GitHub specifications allow up to 4096 bytes; both implementations enforce
 the circuit's narrower limit on the token response, where they also reject the
 whitespace an HTTP bearer cannot carry. The released `oidc_google` circuit
-accepts a Google `sub` of at most 31 bytes, an email of at most 62 bytes and an
-audience of at most 128 bytes, all printable ASCII without `"`; Google's
+accepts a Google `sub` of at most 31 bytes and an email of at most 62 bytes,
+printable ASCII without `"` or `\`, and an audience of at most 128 bytes without `"`; Google's
 specification allows a `sub` of up to 255 bytes. A token outside those limits
 fails at authorization with its own message, before any key fetch or proving.
 [Specifications](../README.md#specifications) own proof and protocol requirements;
@@ -51,7 +51,7 @@ test is not evidence that the current revision passed it.
 | Distribution/native-loader/SWS checks | Emitted policies, compression/ranges, immutable URLs and actual loader requests, including the running image and pinned native binary in CI. Live CDN availability is separate; local runs need the [explicit inputs](testing.md#distribution-checks). |
 | Actual-popup browser flows | Private Callback handoff, exact Application origin, readiness, denial/failure, concurrency, root Worker control and progress across desktop engines and emulation. |
 | Google and bearer-link fixture proofs | Actual isolated browser workers generate proofs verified in Node against released keys, including altered-public-input rejection. Controlled Google token/time/JWKS inputs do not establish live consent or JWKS CORS; every engine substitutes the fixture JWKS at the page boundary, because WebKit's page fetch bypasses Playwright routing. |
-| X/GitHub browser ceremony fixtures | Actual emitted Callback/Prover, Popup connection, session worker and Client execute success and changed-final-attestation rejection. Real bearer-link proofs verify against commitments extracted from delivered fixture attestations and the released key; digest/PKCE matches the frozen request. OAuth and the TLSN SDK/peer are substituted, and notary signatures are synthetic. This does not qualify real TLSN or authenticated provider evidence. |
+| X/GitHub browser ceremony fixtures | Actual emitted Callback/Prover, Popup connection, session worker and Client execute success and changed-final-attestation rejection. Real bearer-link proofs verify against the released key with public inputs built from the delivered fixture attestations' bearer, id and handle commitments, the identity's nodes and the platform's tags; digest/PKCE matches the frozen request. OAuth and the TLSN SDK/peer are substituted, and notary signatures are synthetic. This does not qualify real TLSN or authenticated provider evidence. |
 | Real matched-notary runtime tests | One/two X sessions and both GitHub endpoints run through the pinned notary in direct peer mode. The GitHub pair runs alongside a separately verified fixture proof and asserts real shared-memory proving with multiple threads. Unauthenticated requests and deliberately invalid credentials establish runtime/channel execution and authority correlation, not authenticated token/identity evidence. The separate fixture proof is not bound to these attestations. |
 | Development app checks | Independent concurrent rows, closure, timings, fallback display and immediate success/denial closure, using intercepted responses. |
 | Bridge integration checks | Public configuration/credential forwarding, origin admission, response headers, Callback insertion and simulated Google/GitHub denial round trips through the e2e Bridge stand-in ([server.mjs](../e2e/server.mjs), which serves the record) and emitted CCDP, whose `versions.json` the client reads; no released Bridge image runs in these tests. Provider returns are intercepted; live success and verifier acceptance are listed under remaining qualification. Production refresh behavior remains a separate gate. |

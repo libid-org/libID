@@ -1,7 +1,12 @@
 import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
 import { afterEach, expect, vi } from 'vitest'
 import { type Asset, assetUrl } from '../../assets/index.js'
-import { MAX_BEARER_BYTES } from '../../barretenberg/circuits/bearer-link/parameters.js'
+import {
+  MAX_BEARER_BYTES,
+  MAX_HANDLE_BYTES,
+  MAX_ID_BYTES,
+} from '../../barretenberg/circuits/bearer-link/parameters.js'
 import type { ProofEngineOptions, RawProof } from '../../barretenberg/engine.js'
 import { type OAuthReturn, oauthState } from '../../ccdp/navigation.js'
 import type { OperationEvent } from '../../events.js'
@@ -338,25 +343,76 @@ export function fakeNotarization(
   return { attestations, transcripts, selected, gates, log }
 }
 
-/** The proof engine checks the witness it receives. */
-export function fakeBearerProof(bearer: string, outcome: NotarizedOutcome) {
-  const hashes = [1, 2].map((byte) =>
-    sha256(concat(utf8(bearer), new Uint8Array(BLINDER_BYTES).fill(byte))),
-  )
+/** A 32-byte value as the circuit's `[high, low]` 16-byte halves. */
+const halves = (value: Uint8Array) =>
+  [value.subarray(0, 16), value.subarray(16)].map((half) => `0x${bytesToHex(half)}`)
+
+/** `value` zero-padded to `length` bytes. */
+const padded = (value: string, length: number) => [
+  ...utf8(value),
+  ...new Uint8Array(length - utf8(value).length),
+]
+
+/** A tag as one field: its bytes from the top of 31, then zeros. */
+const packedTag = (tag: string) => `0x${bytesToHex(utf8(tag)).padEnd(62, '0')}`
+
+/** A field as the circuit inputs spell it: unpadded hexadecimal. */
+const hexOf = (value: bigint) => `0x${value.toString(16)}`
+
+const field = (value: string) => `0x${BigInt(value).toString(16).padStart(64, '0')}`
+
+/** The proof engine checks the witness it receives: the session openings and the identity's nodes. */
+export function fakeBearerProof(platformId: NotarizedPlatform, outcome: NotarizedOutcome) {
+  const { evidence, identity, tags } = fixtures[platformId]
+  const { bearer } = evidence
+  const commit = (value: string, byte: number) =>
+    sha256(concat(utf8(value), new Uint8Array(BLINDER_BYTES).fill(byte)))
+  const node = (tag: string, value: string) => sha256(concat(utf8(tag), utf8(value)))
+  const commitments = [
+    commit(bearer, 1),
+    commit(bearer, 2),
+    commit(identity.userId, 2),
+    commit(identity.userName, 2),
+  ]
+  // The fixture handles are lowercase, so folding leaves them unchanged.
+  const nodes = [node(tags.userId, identity.userId), node(tags.handle, identity.userName)]
+  const tagFields = [
+    packedTag(tags.userId),
+    String(tags.userId.length),
+    packedTag(tags.handle),
+    String(tags.handle.length),
+  ]
   generate.mockImplementation(async (inputs): Promise<RawProof> => {
     expect(inputs).toEqual({
-      bearer: [...utf8(bearer), ...new Uint8Array(MAX_BEARER_BYTES - bearer.length)],
+      bearer: padded(bearer, MAX_BEARER_BYTES),
       bearer_len: String(bearer.length),
       blinder_token: Array(16).fill(1),
       blinder_identity: Array(16).fill(2),
-      token_commitment: [...hashes[0]],
-      identity_commitment: [...hashes[1]],
+      id: padded(identity.userId, MAX_ID_BYTES),
+      id_len: String(identity.userId.length),
+      blinder_id: Array(16).fill(2),
+      handle: padded(identity.userName, MAX_HANDLE_BYTES),
+      handle_len: String(identity.userName.length),
+      blinder_handle: Array(16).fill(2),
+      token_commitment: halves(commitments[0]).map(BigInt).map(hexOf),
+      identity_commitment: halves(commitments[1]).map(BigInt).map(hexOf),
+      id_commitment: halves(commitments[2]).map(BigInt).map(hexOf),
+      handle_commitment: halves(commitments[3]).map(BigInt).map(hexOf),
+      id_node: halves(nodes[0]).map(BigInt).map(hexOf),
+      handle_node: halves(nodes[1]).map(BigInt).map(hexOf),
+      id_tag: hexOf(BigInt(tagFields[0])),
+      id_tag_len: tagFields[1],
+      handle_tag: hexOf(BigInt(tagFields[2])),
+      handle_tag_len: tagFields[3],
     })
-    const ordered = outcome === 'public-input-order' ? [...hashes].reverse() : hashes
+    const ordered =
+      outcome === 'public-input-order'
+        ? [commitments[1], commitments[0], ...commitments.slice(2)]
+        : commitments
     return {
       proof: new Uint8Array([1]),
       publicInputs: changedEngineInputs(
-        ordered.flatMap((hash) => [...hash].map((n) => `0x${n.toString(16).padStart(64, '0')}`)),
+        [...ordered, ...nodes].flatMap(halves).concat(tagFields).map(field),
         outcome,
       ),
     }
@@ -375,7 +431,7 @@ export function stageNotarized(
   const fixture = fixtures[platformId]
   if (outcome === 'shifted-range') shiftIdentitySelection(fixture.requests.identity)
   const notarized = fakeNotarization(platformId, outcome, held)
-  fakeBearerProof(fixture.evidence.bearer, outcome)
+  fakeBearerProof(platformId, outcome)
   return {
     ...runContext(platformId, outcome, change),
     notarized,

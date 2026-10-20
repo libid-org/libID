@@ -20,9 +20,9 @@ binding in the `IdentityRegistry` of a Consumer Chain; nothing is registered,
 minted, or stored per name, and nothing here writes to any `IdentityRegistry`.
 The authoritative record is the binding. An ENS name is a way to read it.
 
-It does not own the binding itself, handle normalization (`HandleNormalizer`,
-under the platform's rules), the indexer that mirrors each chain, the DNS
-zone's operation, or wallet behavior before the Gateway is called.
+It does not own the binding itself, the handle check and fold
+([platform](platform-ceremonies.md) §2.1a), the indexer that mirrors each
+chain, the DNS zone's operation, or wallet behavior before the Gateway is called.
 
 ## 2. Terminology
 
@@ -103,12 +103,14 @@ Refusal: An unsigned HTTP error. It asserts nothing about any binding.
   index, and a Coin Type two of its indexed chains share, each get a
   Refusal, never a Signed Null. With the selected chain's index too far
   behind, every answer that reads a handle gets a Refusal: its holder, its
-  absence, and a handle the rules refuse. The Signed Nulls of REQ-ENS-GW-05
-  and the signed empty result depend only on the name, the Coin Type and the
-  Chain Labels, and are signed however stale the index (REQ-ENS-GW-11).
-  Depends on the Gateway's handle rules admitting every handle an indexed
-  chain binds (§11), on REQ-ENS-GW-13, and, for chains indexed by
-  different Gateways, on REQ-ENS-GW-14.
+  absence, and a handle the handle check refuses. The Signed Nulls of
+  REQ-ENS-GW-05 and the signed empty result depend only on the name, the
+  Coin Type and the Chain Labels, and are signed however stale the index
+  (REQ-ENS-GW-11). Depends on the Gateway's handle check admitting every
+  handle an indexed chain binds, which holds while it applies the check,
+  buffers and tags of the circuits each indexed chain accepts (§11), on
+  REQ-ENS-GW-13, and, for chains indexed by different Gateways, on
+  REQ-ENS-GW-14.
 - SP-ENS-04:
   No two handles reach one name, and a name carries its handle: the Gateway
   reads a name with no mapping table.
@@ -167,8 +169,8 @@ alice._at.company.com.google.handles.link
 
 ## 6. Handle labels
 
-The transform takes the handle `HandleNormalizer` produced under the
-platform's rules, never raw input. It returns Handle Labels or refuses. A
+The transform takes a handle folded under [platform](platform-ceremonies.md)
+REQ-PLAT-05B, never raw input. It returns Handle Labels or refuses. A
 refused handle has no name; its binding stays readable through the
 `IdentityRegistry` and by address.
 
@@ -184,16 +186,17 @@ produce unchanged.
   replaced by `-`. The transform MUST refuse a handle containing `-`, and a
   handle whose third and fourth characters are both `_`. Necessity: the
   substitution reverses exactly only while no handle holds `-`. X issues
-  none, but a chain's rules can be widened to admit it, and the refusal keeps
-  every name reversible then; the second refusal is ENSIP-15's `/^..--/`
+  none, but the circuits' token check admits it, and the refusal keeps
+  every name reversible should X issue one; the second refusal is
+  ENSIP-15's `/^..--/`
   rule.
 - REQ-ENS-LABEL-02 (GitHub):
   The Handle Labels of a GitHub handle are one label: the handle unchanged.
   The transform MUST refuse a handle containing `_`, and a handle whose
   third and fourth characters are both `-`. Necessity: GitHub issues
-  neither, so no ENSIP-15 rule fires on a GitHub handle; a chain's rules can
-  be widened to admit them, and the refusals keep every name within ENSIP-15
-  then.
+  neither, so no ENSIP-15 rule fires on a GitHub handle; the circuits' token
+  check admits them, and the refusals keep every name within ENSIP-15
+  should GitHub issue one.
 - REQ-ENS-LABEL-03 (Gmail):
   For a Google handle whose domain is `gmail.com`, the Handle Labels are the
   local part split at every `.`. The transform MUST refuse a local part not
@@ -213,9 +216,13 @@ produce unchanged.
   `/^..--/`, so no client could send such a name.
 - REQ-ENS-LABEL-05 (upholds SP-ENS-04):
   The Gateway MUST read Handle Labels by the exact inverse of
-  REQ-ENS-LABEL-01 to -04, run the result through the platform's handle
-  rules built into the Gateway, which are the same for every chain, and
-  answer a Signed Null when either step fails. It SHOULD answer a Signed Null
+  REQ-ENS-LABEL-01 to -04, fold the result's `A`-`Z` to `a`-`z`, apply the
+  token check the circuits apply to a handle
+  ([platform](platform-ceremonies.md) §2.1a) with that platform's buffer,
+  and hash it under the platform's handle tag (platform REQ-PLAT-05B,
+  REQ-PLAT-05C). This is the **handle check**; it is built into the Gateway
+  and the same for every chain. The Gateway MUST answer a Signed Null when
+  the inverse or the handle check fails. It SHOULD answer a Signed Null
   for labels outside the transform's image, such as an X or Workspace label
   with `--` at the third and fourth characters, or `_at` followed by
   `gmail.com`.
@@ -320,7 +327,7 @@ produce unchanged.
   the inverse in REQ-ENS-LABEL-05 refuses, and a Chain Label not naming the
   selected chain MUST each get a Signed Null.
 - REQ-ENS-GW-06 (upholds SP-ENS-03):
-  Before applying the handle rules or reading a holder, the Gateway MUST
+  Before applying the handle check or reading a holder, the Gateway MUST
   return a Refusal (HTTP 503) when the selected chain's index is more than
   the deployment's maximum lag behind, or its indexer report has expired or
   is unknown. Necessity: a stale index
@@ -396,7 +403,7 @@ produce unchanged.
      Signed Null for a non-EVM Coin Type.
   6. The Signed Nulls of REQ-ENS-GW-05.
   7. Staleness (REQ-ENS-GW-06): a Refusal.
-  8. The handle rules of REQ-ENS-LABEL-05: a Signed Null.
+  8. The handle check of REQ-ENS-LABEL-05: a Signed Null.
   9. The holder (REQ-ENS-GW-07).
 
   Necessity: a chain the Gateway does not serve keeps its Refusal, so the
@@ -409,7 +416,8 @@ produce unchanged.
   REQ-ENS-GW-05 are signed while the selected chain's index is stale or its
   report has expired or is unknown. Those answers depend on the name, the
   Coin Type and the Chain Labels the Indexed Store holds when asked, never on
-  a binding. A handle the rules refuse, and every holder, is answered only
+  a binding. A handle the handle check refuses, and every holder, is
+  answered only
   from an index that passes REQ-ENS-GW-06.
 
 ## 9. Keys
@@ -532,17 +540,17 @@ produce unchanged.
 - One Signer may serve Handle Resolvers on several chains. The digest covers
   no chain ID, but it covers the resolver's address, and REQ-ENS-KEY-02 keeps
   those apart, so an answer verifies only at the resolver it was signed for.
-- The Gateway applies the handle rules it was built with to every chain. A
-  chain whose `IdentityRegistry` admits a platform's handles under wider
-  rules than those can hold a binding the Gateway's rules refuse; that
-  binding's name gets a Signed Null although the binding exists. A change to
-  a platform's rules on any indexed chain needs a Gateway built with the
-  same rules before such bindings resolve.
+- The Gateway applies the handle check it was built with to every chain. A
+  chain whose Platform Verifier accepts a circuit with a wider check or a
+  longer buffer than that can hold a binding the Gateway's check refuses;
+  that binding's name gets a Signed Null although the binding exists. A
+  change to a circuit's check, buffers or tags on any indexed chain needs a
+  Gateway built with the same before such bindings resolve.
 - The Gateway does not implement REQ-ENS-LABEL-05's SHOULD. It reads
   `alice._at.gmail.com.google.handles.link` as `alice@gmail.com`, so every
   Gmail handle has a second name that resolves to the same binding, and
   that form takes a local part outside the Gmail alphabet of
-  REQ-ENS-LABEL-03, such as one with `-`, on to the handle rules and the
+  REQ-ENS-LABEL-03, such as one with `-`, on to the handle check and the
   lookup. It likewise reads an X or Workspace label with `--` at the third
   and fourth characters, which no ENSIP-15 client sends. Each such name
   resolves to the binding of the handle the Gateway reads from it.

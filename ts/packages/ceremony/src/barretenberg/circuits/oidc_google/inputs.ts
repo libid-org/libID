@@ -1,11 +1,9 @@
 import { sha256 } from '@noble/hashes/sha2.js'
-import { concatBytes } from '@noble/hashes/utils.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
-import { fieldHex } from '../../parameters.js'
+import type { IdentityNodes } from '../../../identity.js'
+import { bytesToBigInt, fieldHex, halves } from '../../parameters.js'
 import {
   BARRETT_OVERFLOW_BITS,
-  FIELD_PACK_BYTES,
-  HASH_FIELD_BYTES,
   ISSUER,
   LIMB_BITS,
   MAX_AUD_BYTES,
@@ -15,7 +13,6 @@ import {
   MAX_SUB_BYTES,
   NUM_LIMBS,
   RSA_MODULUS_BITS,
-  USER_ID_TAG,
 } from './parameters.js'
 
 /** Token bytes and claim values consumed by the fixed oidc_google circuit. */
@@ -28,13 +25,6 @@ export interface OidcGoogleToken {
 }
 
 const encoder = new TextEncoder()
-
-/** Interpret the circuit's byte arrays as unsigned big-endian integers. */
-function bytesToBigInt(bytes: Uint8Array): bigint {
-  let value = 0n
-  for (const byte of bytes) value = (value << 8n) | BigInt(byte)
-  return value
-}
 
 /** Split an RSA integer into the ABI's least-significant-first limbs. */
 function limbs(value: bigint): bigint[] {
@@ -53,27 +43,8 @@ function pad(bytes: Uint8Array, length: number): Uint8Array {
   return result
 }
 
-/** Pack padded bytes into big-endian FIELD_PACK_BYTES-byte field elements. */
-function pack31(bytes: Uint8Array): bigint[] {
-  return Array.from({ length: Math.ceil(bytes.length / FIELD_PACK_BYTES) }, (_, index) =>
-    bytesToBigInt(bytes.subarray(index * FIELD_PACK_BYTES, (index + 1) * FIELD_PACK_BYTES)),
-  )
-}
-
-/** A SHA-256 hash as two big-endian 128-bit halves. */
-function hashFields(hash: Uint8Array): bigint[] {
-  return [
-    bytesToBigInt(hash.subarray(0, HASH_FIELD_BYTES)),
-    bytesToBigInt(hash.subarray(HASH_FIELD_BYTES)),
-  ]
-}
-
 /** The audience's SHA-256 as two big-endian 128-bit halves. */
-const audienceHash = (audience: Uint8Array): bigint[] => hashFields(sha256(audience))
-
-/** The Google userId's hash (REQ-PLAT-05A): SHA-256 of the tag and the exact signed `sub` bytes. */
-export const userIdHash = (sub: Uint8Array): Uint8Array =>
-  sha256(concatBytes(encoder.encode(USER_ID_TAG), sub))
+const audienceHash = (audience: Uint8Array): bigint[] => halves(sha256(audience))
 
 const hex = (value: bigint) => `0x${value.toString(16)}`
 
@@ -93,11 +64,15 @@ function findOffset(payload: Uint8Array, pattern: string): number {
   return offset
 }
 
-/** Build the exact libid-circuits v0.6.0 `oidc_google` circuit inputs. */
+/**
+ * Build the exact libid-circuits v0.7.1 `oidc_google` circuit inputs. `nodes` are the token's
+ * id node and handle node, which the circuit recomputes from the signed `sub` and `email`.
+ */
 export function buildOidcGoogleInputs(
   token: OidcGoogleToken,
   modulus: Uint8Array,
   authorizationDigest: Uint8Array,
+  nodes: IdentityNodes,
 ) {
   const signingInput = encoder.encode(`${token.headerB64}.${token.payloadB64}`)
   if (signingInput.length > MAX_SIGNING_INPUT_BYTES)
@@ -109,7 +84,6 @@ export function buildOidcGoogleInputs(
   const emailBytes = encoder.encode(email)
   const subBytes = encoder.encode(sub)
   const audienceBytes = encoder.encode(aud)
-  const paddedEmail = pad(emailBytes, MAX_EMAIL_BYTES)
   const expString = String(exp)
   const offset = (claim: string) => String(findOffset(token.payload, claim))
   const modulusInteger = bytesToBigInt(modulus)
@@ -128,7 +102,7 @@ export function buildOidcGoogleInputs(
     exp_len: String(expString.length),
     iss_offset: offset(`"iss":"${ISSUER}"`),
     aud_offset: offset(`"aud":"${aud}"`),
-    email_bytes: Array.from(paddedEmail),
+    email_bytes: Array.from(pad(emailBytes, MAX_EMAIL_BYTES)),
     email_len: String(emailBytes.length),
     sub_bytes: Array.from(pad(subBytes, MAX_SUB_BYTES)),
     sub_len: String(subBytes.length),
@@ -140,29 +114,29 @@ export function buildOidcGoogleInputs(
     ).map(hex),
     authorization_digest: Array.from(authorizationDigest),
     audience_hash: audienceHash(audienceBytes).map(hex),
-    user_id_hash: hashFields(userIdHash(subBytes)).map(hex),
-    email_packed: pack31(paddedEmail).map(hex),
+    id_node: halves(nodes.idNode).map(hex),
+    handle_node: halves(nodes.handleNode).map(hex),
     exp: expString,
     modulus: limbs(modulusInteger).map(hex),
   }
 }
 
-/** The exact 57 public fields, in circuit order, for the values a proof binds. */
-export function buildOidcGooglePublicInputs(values: {
-  authorizationDigest: Uint8Array
-  audience: string
-  userIdHash: Uint8Array
-  email: string
-  expiresAt: number
-  modulus: Uint8Array
-}): string[] {
+/** The exact 57 public fields, in circuit order, for the values a proof binds (REQ-PLAT-16B). */
+export function buildOidcGooglePublicInputs(
+  values: IdentityNodes & {
+    authorizationDigest: Uint8Array
+    audience: string
+    expiresAt: number
+    modulus: Uint8Array
+  },
+): string[] {
   if (values.authorizationDigest.length !== AUTHORIZATION_DIGEST_BYTES)
     throw new Error(`authorizationDigest must be exactly ${AUTHORIZATION_DIGEST_BYTES} bytes`)
   return [
     ...Array.from(values.authorizationDigest, fieldHex),
     ...audienceHash(encoder.encode(values.audience)).map(fieldHex),
-    ...hashFields(values.userIdHash).map(fieldHex),
-    ...pack31(pad(encoder.encode(values.email), MAX_EMAIL_BYTES)).map(fieldHex),
+    ...halves(values.idNode).map(fieldHex),
+    ...halves(values.handleNode).map(fieldHex),
     fieldHex(values.expiresAt),
     ...limbs(bytesToBigInt(values.modulus)).map(fieldHex),
   ]

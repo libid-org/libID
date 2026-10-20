@@ -1,6 +1,8 @@
-import { COMMITMENT_BYTES } from '../../../notary/protocol.js'
-
-/** Fixed bearer_link ABI in libid-circuits v0.6.0. */
+/** Fixed bearer_link ABI in libid-circuits v0.7.1; changes require a matching circuit/key release. */
 export const MAX_BEARER_BYTES = 128
-// One public field per byte of each of the token and identity commitments.
-export const PUBLIC_INPUT_COUNT = 2 * COMMITMENT_BYTES
+/** The id buffer, shared by X and GitHub. */
+export const MAX_ID_BYTES = 20
+/** The handle buffer, shared by X and GitHub. */
+export const MAX_HANDLE_BYTES = 39
+/** A tag is one public field: its bytes from the top of 31 bytes, zero after. */
+export const MAX_TAG_BYTES = 31

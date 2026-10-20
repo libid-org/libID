@@ -49,8 +49,8 @@ must use the recomputed operation digest and trusted Google signing key.
 JSON uses native parsing; authoritative field uniqueness is the provider guarantee
 in ASM-PROV-06. Circuit inputs still reference the original signed bytes.
 Delivery includes the proof, its 57 public inputs, expiry and modulus, beside the
-exact signed audience and email and the REQ-PLAT-05A digest of the signed subject
-as identity fields. Prover compares the
+exact signed audience and email and the id node of the signed subject as identity
+fields. The circuit outputs the id node and the handle node of the folded email. Prover compares the
 backend's public inputs to the values it derived for the circuit inputs. Client then independently
 rebuilds them with its retained authorization digest and the validated result,
 rejecting any mismatch before announcing completion. These comparisons do not
@@ -79,17 +79,19 @@ siblings rather than leaving work or a promise rejection behind.
 
 GitHub's [token request](../src/platforms/github/1/token.ts) includes the
 public application credential frozen from Bridge configuration and forwarded in
-`ProveIdentity`. The complete request is revealed; the response bearer and both
-commitment openings remain private. Both platforms exchange the code through
+`ProveIdentity`. The complete request is revealed; the response bearer and every
+commitment opening remain private. Both platforms exchange the code through
 browser TLSNotary Proxy sessions, without a Bridge token endpoint or ordinary
 browser HTTP exchange. The [public-client profile](https://github.com/libid-org/libid/blob/66096eb1d31ea7007c2749ab1e26d15da5714f4d/specs/platform-ceremonies.md)
 owns GitHub's request layout; deployed verifiers must accept it.
 
 X and GitHub share the notarized flow: the [token](../src/notary/oauth/token.ts) and
 [identity](../src/notary/oauth/identity.ts) requests, then the `bearer_link` circuit.
-Each platform's `provider.ts` owns endpoints, request fields and identity headers, its
-`validation.ts` the user grammar; its `token.ts` and `identity.ts` build the two requests,
-the identity request with the decimal user ID grammar from [platforms/validation.ts](../src/platforms/validation.ts).
+Each platform's `provider.ts` owns endpoints, request fields and identity headers;
+its `token.ts` and `identity.ts` build the two requests. The identity response
+reveals only the anchors around the id and the handle and commits each value; the
+circuit opens both and outputs their nodes. [identity.ts](../src/identity.ts)
+applies the platform table's id and handle checks and derives the nodes.
 The token request checks its own form inputs, client ID and code, with
 [notary/oauth/validation.ts](../src/notary/oauth/validation.ts); both sessions' four
 [operations](../src/notary/oauth/events.ts) live beside them. The coordinator's

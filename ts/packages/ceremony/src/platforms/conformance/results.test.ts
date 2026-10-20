@@ -1,8 +1,9 @@
+import { bytesToHex } from '@noble/hashes/utils.js'
 import { describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../testing/index.js'
 import { AUTHORIZATION_NONCE_BYTES } from '../authorization.js'
 import type { IdentityResult, OAuthProof, ProofByPlatformVersion } from '../index.js'
-import { assembleResult, ceremonyFor, supportedPlatforms } from '../index.js'
+import { assembleResult, ceremonyFor, identityNodes, supportedPlatforms } from '../index.js'
 import { overLength, recordViolations, sharedTextRejections, tagged } from './stages.js'
 
 vi.mock('../../assets/index.js', async (original) =>
@@ -23,7 +24,7 @@ describe.each(supportedPlatforms)('%s result validators', (platformId) => {
     validation.validateProof(value, fixture.identity, fixture.digest)
   const { acceptResult } = ceremonyFor(platformId, 1)
 
-  it('accepts the fixture identity and proof and assembles them as separate result fields [LIBID-MOD-019]', () => {
+  it('accepts the fixture identity and proof, assembles them as separate result fields and names their nodes [LIBID-MOD-019]', () => {
     expect(validateIdentity(fixture.identity)).toBe(fixture.identity)
     expect(validateIdentity(fixture.longest)).toBe(fixture.longest)
     expect(validateProof(fixture.proof)).toBe(fixture.proof)
@@ -51,6 +52,11 @@ describe.each(supportedPlatforms)('%s result validators', (platformId) => {
     if (result.status === 'accepted') {
       expect(result.oauthProof.authorizationNonce).not.toBe(nonce)
       expect(result.oauthProof.authorizationDigest).not.toBe(digest)
+      const nodes = identityNodes(result)
+      expect({
+        idNode: `0x${bytesToHex(nodes.idNode)}`,
+        handleNode: `0x${bytesToHex(nodes.handleNode)}`,
+      }).toEqual(fixture.nodes)
     }
     expect(() => assembleResult(platformId, 1, message, 'other-client', nonce, digest)).toThrow(
       'OAuth client ID mismatch',

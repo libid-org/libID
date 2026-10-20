@@ -1,5 +1,6 @@
 import type { IdentityProof } from '../ccdp/index.js'
 import type { CoreEvent } from '../events.js'
+import type { IdentityNodes } from '../identity.js'
 import * as githubUrl from './github/1/url.js'
 import * as github from './github/1/validation.js'
 import * as googleEvents from './google/1/events.js'
@@ -11,6 +12,7 @@ import type { Identity } from './validation.js'
 import * as xUrl from './x/1/url.js'
 import * as x from './x/1/validation.js'
 
+export type { IdentityNodes } from '../identity.js'
 export type { Identity } from './validation.js'
 
 /** Validate each version's proof before deriving its retention metadata. */
@@ -18,12 +20,14 @@ const resultAdapter = <I, P>(validation: {
   validateIdentity(value: unknown): I
   validateProof(value: unknown, identity: I, authorizationDigest: Uint8Array): P
   proofExpiresAt(proof: P): number
+  identityNodes(identity: I): IdentityNodes
 }) => ({
   acceptResult(identityValue: unknown, proofValue: unknown, authorizationDigest: Uint8Array) {
     const identity = validation.validateIdentity(identityValue)
     const proof = validation.validateProof(proofValue, identity, authorizationDigest)
     return { identity, proof, expiresAt: validation.proofExpiresAt(proof) }
   },
+  identityNodes: validation.identityNodes,
 })
 
 /** One platform ceremony version: its authorization request, return rules, events and result adapter. */
@@ -46,6 +50,8 @@ export interface PlatformCeremonyVersion {
     proof: unknown,
     authorizationDigest: Uint8Array,
   ): { identity: Identity<string>; proof: unknown; expiresAt: number }
+  /** The id node and handle node the version's proof binds for an identity it accepted. */
+  identityNodes(identity: Identity<string>): IdentityNodes
 }
 
 /** A platform's OAuth registration rules and ceremony versions. */
@@ -149,6 +155,21 @@ export function assembleResult<P extends PlatformId>(
       expiresAt,
     },
   } as IdentityResult<P>
+}
+
+/**
+ * The keys an accepted result binds: its id node and handle node (platform-ceremonies §2.1). An X
+ * or GitHub bind payload carries both; a Google payload carries them in its public inputs.
+ */
+export function identityNodes(
+  result: Extract<IdentityResult, { status: 'accepted' }>,
+): IdentityNodes {
+  const { identity, oauthProof } = result
+  const ceremony: PlatformCeremonyVersion = ceremonyFor(
+    identity.platformId,
+    oauthProof.platformCeremonyVersion,
+  )
+  return ceremony.identityNodes(identity)
 }
 
 /** The catalog's versions of `platform` that `available` names, in ascending order. */

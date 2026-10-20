@@ -8,7 +8,7 @@ import {
 } from '../../../testing/index.js'
 import { prepareGoogleInputs } from './inputs.js'
 import { acceptGoogleIdToken } from './token.js'
-import { buildGooglePublicInputs, userIdOf, validateProof } from './validation.js'
+import { buildGooglePublicInputs, validateProof } from './validation.js'
 
 const digest = fixture.authorizationDigest
 
@@ -36,8 +36,8 @@ const ABI_KEYS: Array<keyof ReturnType<typeof buildOidcGoogleInputs>> = [
   'redc',
   'authorization_digest',
   'audience_hash',
-  'user_id_hash',
-  'email_packed',
+  'id_node',
+  'handle_node',
   'exp',
   'modulus',
 ]
@@ -96,10 +96,18 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifie
       ...Buffer.from('123456789012345678901'),
       ...Array(10).fill(0),
     ])
-    expect(inputs.user_id_hash).toEqual([
-      '0x20078023c9d4bf6bffc2580ec3644607',
-      '0x5d10c8453cecbe4f1cb3d326b2b35560',
+    // SHA-256 of `libid.google.user-id` then the sub, and of `libid.google.handle` then the email.
+    expect(inputs.id_node).toEqual([
+      '0xa83e66b34468315fb68c3098b3c521b7',
+      '0x49aafb1db3390cb53ec03a8db139f2c7',
     ])
+    expect(inputs.handle_node).toEqual([
+      '0x78f9907c27a505b9cbd3c0a293d36004',
+      '0x909f7834d50c6c211265f853d1be2bc9',
+    ])
+    expect(identity.userId).toBe(
+      '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
+    )
     expect(inputs.authorization_digest).toEqual(Array.from(digest))
     expect(recompose(inputs.signature)).toBe(
       BigInt(`0x${Buffer.from(signature, 'base64url').toString('hex')}`),
@@ -119,17 +127,5 @@ describe('[LIBID-PROVER-002] [TEST-PLAT-06] Google v1 circuit inputs and verifie
         'Google public input mismatch',
       )
     }
-  })
-})
-
-describe('[TEST-PLAT-02] Google userId', () => {
-  // The platform-ceremonies §2.1 vector, then the ones libid-circuits checks its digest against.
-  it.each([
-    ['123456789012345678901', '0x20078023c9d4bf6bffc2580ec36446075d10c8453cecbe4f1cb3d326b2b35560'],
-    ['100000000000000000001', '0x121c75456ead3d5fa8f601dbd629bddb84dcdb4934b2a6b6d2e46b5661c6d35b'],
-    ['1', '0xe5192d7e50d10d86d247e162e594fe359699d43cd78d36900994c5517d636029'],
-    [`!${'~'.repeat(30)}`, '0x6c55fe01d503ec6a122a30adcdad519ee185576e6432dfbdeef65a6e3907dd04'],
-  ])('derives the userId of sub %s', (sub, userId) => {
-    expect(userIdOf(sub)).toBe(userId)
   })
 })

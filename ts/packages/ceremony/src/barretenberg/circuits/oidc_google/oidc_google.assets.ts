@@ -1,9 +1,9 @@
 import * as assets from '../../../assets/index.js'
 
 const release = assets.archive(
-  'https://github.com/libid-org/libid-circuits/releases/download/v0.6.0/libid-circuits-0.6.0-oidc-google.tar.gz',
-  'circuits/v0.6.0/oidc-google',
-  'sha256:0ca014b0834273d3bfc50d1dac94d46d51e009d620aba4cc8c45529aefa483ee',
+  'https://github.com/libid-org/libid-circuits/releases/download/v0.7.1/libid-circuits-0.7.1-oidc-google.tar.gz',
+  'circuits/v0.7.1/oidc-google',
+  'sha256:7d48f20170daa0be1fc68216f31a4fe828f23dc293c8de9fd6fe8412898d134a',
 )
 
 export const circuit = release.member('oidc_google.json', {
