@@ -7,8 +7,7 @@ sidebar:
 
 Your contract can ask `IdentityRegistry` who holds an identity, and allow a
 call only from that holder. This guide builds two small contracts: a guestbook
-that only GitHub users can sign, and an airdrop that pays each GitHub identity
-once.
+that only GitHub users can sign, and an airdrop that pays each identity once.
 
 ## The interface
 
@@ -79,7 +78,6 @@ address. The id never changes, so use it instead of the handle:
 ```solidity
 contract Airdrop {
     IIdentityRegistry public immutable registry;
-    bytes constant GITHUB_ID_TAG = "libid.github.user-id";
     uint256 constant AMOUNT = 0.01 ether;
 
     mapping(bytes32 => bool) public claimed;
@@ -92,8 +90,7 @@ contract Airdrop {
         registry = registry_;
     }
 
-    function claim(string calldata id) external {
-        bytes32 idNode = sha256(bytes.concat(GITHUB_ID_TAG, bytes(id)));
+    function claim(bytes32 idNode) external {
         if (registry.resolveId(idNode) != msg.sender) revert NotYourIdentity();
         if (claimed[idNode]) revert AlreadyClaimed();
         claimed[idNode] = true;
@@ -111,11 +108,12 @@ that calls back into `claim` finds it already claimed. It sends with `call`,
 not `transfer`, so a smart wallet such as a Safe can receive the payment.
 
 The registry keeps an id as its node, `SHA256(tag || id)`, where the tag
-names the platform. `claim` computes the GitHub id node and asks
-`resolveId` for its holder. `resolveId` returns that holder, or the zero
-address. `idNode('github', id)` in `@libid/contracts` computes the same
-node. A user's GitHub id is public; your app can read it from the GitHub
-API.
+names the platform, so `claim` takes the node. `resolveId` returns its
+holder, or the zero address. Your app gets the node from
+`idNode('github', id)` in `@libid/contracts`, or from the holder's
+`identitiesOf` or `IdentityBound` events. Any platform's identity can claim;
+to pay GitHub identities only, check the platform off chain or keep a list of
+the nodes you accept.
 
 ## Try it
 

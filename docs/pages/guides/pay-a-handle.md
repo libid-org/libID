@@ -198,13 +198,6 @@ else, so `@carol` still lands on a node nobody can claim.
 
 - A wrong node sends funds to a slot nobody can claim. Only the refund
   address can get them back.
-- Code written for libID-contracts v0.17 passed a `keccak256` hash of the
-  handle as the second argument of `deposit`. The function kept its
-  signature, so that call still goes through, and the funds go to a node
-  nobody can claim.
-- `handleNode` used to take a platform id and a hash. Now it takes a
-  platform key and the handle. `handleNode(platformId('github'), 'carol')`
-  still type-checks, and throws at run time.
 - A handle can change holders. Before you send, you can show when the
   current holder proved it. See [Resolve a handle](/docs/guides/resolve-handle/).
 - The refund address should be your user. If a contract sends on a user's
