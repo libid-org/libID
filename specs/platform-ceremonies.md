@@ -414,6 +414,58 @@ while it is its author's name; publication is state.
   bound, and a handle with no owner, are answered no; none of these answers
   refuses a transaction.
 
+### 2.1c The bind operation
+
+The bind call of §2.1b is one transaction kind of the Consumer, under the
+operation domain `keccak256(UTF8("libid.bind-identity"))`. Its Authorized
+Transaction Data is the target alone: the address the identity is bound
+to, in the Chain Profile's encoding, which on an EVM chain is
+`abi.encode(address)`, exactly 32 bytes ([chain profiles](chain-profiles.md) §3.3). The Authorization
+Digest commits no chain (common REQ-COMMON-01C), so one ceremony's
+Submission is acceptable on every Consumer Chain whose Consumer accepts this
+operation domain, once at each (common REQ-COMMON-03A). Beside the arguments
+of §2.1b, the bind call takes a service fee as two arguments, an amount and a
+receiver. Neither is in the Authorized Transaction Data, and no proof commits
+them.
+
+- REQ-PLAT-08P (upholds SP-BIND-01, SP-REPLAY-01):
+  The Consumer MUST accept a bind call only under the operation domain
+  `keccak256(UTF8("libid.bind-identity"))`. The Consumer MUST reject
+  Authorized Transaction Data that is not exactly one target in the Chain
+  Profile's encoding. The Consumer MUST reject a bind call whose
+  Transaction Author is not that target.
+  Necessity: the target is the one value the user authorized, and requiring
+  the Transaction Author to be the target leaves a proof usable only by the
+  wallet it names. On another Consumer Chain the proof gives that wallet
+  nothing a second ceremony would not, so the bind call carries no chain
+  identifier and one ceremony binds on every chain.
+- REQ-PLAT-08Q (upholds SP-BIND-01):
+  The Consumer MUST reject a bind call whose fee amount is zero while its fee
+  receiver is set, or whose fee amount is nonzero while its fee receiver is
+  the zero address. The Consumer MUST reject a bind call whose native value
+  differs from the quotation of common REQ-COMMON-06E plus the fee amount.
+  On accepting a bind call with a nonzero fee amount, the Consumer MUST
+  transfer exactly that amount to the fee receiver. The Consumer MUST reject
+  the bind call when that transfer fails. The Consumer MUST emit an event
+  naming the Authorization Digest, the fee receiver, and the amount for every
+  fee it transfers. Necessity: the proof authorizes a binding, not a price,
+  so the fee stays outside the digest and the Transaction Author agrees to
+  it by authoring the call. Exact value needs no refund path, and one
+  spelling of a free bind call leaves no fee addressed to nobody.
+
+- TEST-PLAT-20E (exercises REQ-PLAT-08P, REQ-PLAT-08Q):
+  A bind call under another operation domain is rejected. Authorized
+  Transaction Data that is not exactly one encoded target, including a
+  target followed by a chain identifier, is rejected, and so is a bind call
+  whose Transaction Author is not the target. One Submission is accepted by
+  the Consumers of two Consumer Chains, once at each, and a second bind call
+  of it on either is rejected. A fee amount without a receiver, and a
+  receiver without an amount, are rejected. A native value one unit above or
+  below the quotation plus the fee amount is rejected. An accepted bind call
+  with a fee delivers exactly the amount to the receiver and emits the fee
+  event; a receiver that refuses the value rejects the bind call; and a bind
+  call without a fee moves exactly the quotation.
+
 ### 2.2 Metadata ordering and validity ceilings
 
 Proof validity and mutable-metadata ordering use the authenticated times below.
@@ -1803,6 +1855,10 @@ notary signature; the Consumer Chain's Notary Service remains authoritative.
 A proof built outside the Canonical Runtime still faces those downstream
 checks and the Transaction Author rule in
 [common §12](ceremony-common.md#12-security-considerations).
+The service fee of §2.1c is outside the proof: whoever builds the bind call
+names the amount and the receiver, and the Transaction Author accepts them by
+authoring the call. A proof carries no price, so the same Submission can be
+bound under any fee.
 Proxy notarization exposes session traffic to the notary; the protocol does
 not promise bearer confidentiality from that notary. The bearer remains
 hidden from the published proof by the two commitments and link circuit,
