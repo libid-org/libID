@@ -22,8 +22,9 @@ specifications.
   invariants shared by every identity platform.
 - [Identity-platform ceremonies](platform-ceremonies.md) define the launch
   profiles for Google, X, and GitHub.
-- [Chain profiles](chain-profiles.md) define what those constructions commit
-  on one destination chain.
+- [Chain profiles](chain-profiles.md) define how one destination chain
+  authenticates the Transaction Author, supplies Block Time, and encodes
+  Authorized Transaction Data.
 
 ## Browser transport
 
@@ -98,7 +99,7 @@ controls the authenticated account response. The notary authenticates X/GitHub
 transcripts and their creation times. Verifier governance selects the
 Supported Version Set, accepted verifier artifacts, and trust roots. Each
 Platform Profile fixes its protocol parameters. The Consumer Chain
-authenticates the Transaction Author and supplies its Chain ID and Block Time.
+authenticates the Transaction Author and supplies Block Time.
 
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
@@ -136,7 +137,7 @@ root and verifier.
 | Subject | Single normative owner |
 |---|---|
 | Authorization Digest, PKCE, extraction, client binding, evidence time | [Common ceremony rules](ceremony-common.md) |
-| Chain ID, Transaction Author, Block Time, and transaction-data encoding | [Chain profiles](chain-profiles.md), with the Consumer's protocol fixing each transaction kind's arguments |
+| Transaction Author, Block Time, and transaction-data encoding | [Chain profiles](chain-profiles.md), with the Consumer's protocol fixing each transaction kind's arguments |
 | Platform endpoints, fields, trust roots, and proof projections | [Identity-platform ceremonies](platform-ceremonies.md) |
 | Popup origin allowlists, message model, delivery, navigation, closure, and continuity guarantees | [Popup transport](popup-transport.md) |
 | Ceremony documents, routes, private fragments, messages, events, and phase transitions | [CCDP](ccdp.md) |

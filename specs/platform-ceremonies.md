@@ -504,8 +504,8 @@ Conformance vector, for the Authorization Digest of
 [common §5](ceremony-common.md#5-authorization-digest):
 
 ```text
-authorizationDigest = 0xb318fb559e16a179b853ed2853576cda16032d93b0839bb81a55135d334c0af5
-Google nonce         = sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU
+authorizationDigest = 0x24083f6c849372d1fa0a95615a7b2b6a888edef92e9fa2bebd520b2f536e9350
+Google nonce         = JAg_bISTctH6CpVhWnsraoiO3vkun6K-vVILL1Nuk1A
 ```
 
 ### 3.2 Browser token validation
