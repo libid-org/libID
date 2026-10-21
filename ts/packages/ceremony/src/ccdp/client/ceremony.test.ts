@@ -21,7 +21,6 @@ import {
   CEREMONY_ID,
   ccdpClient,
   fixtures,
-  mainnet,
   platformConfig,
   testnet,
 } from '../../testing/index.js'
@@ -113,7 +112,6 @@ const expectedNonce = (
 ) =>
   b64urlEncode(
     deriveAuthorizationDigest({
-      chainId: testnet.hash(),
       operationDomain: new Uint8Array(32),
       transactionData,
       platformCeremonyVersion,
@@ -192,7 +190,6 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     expect(result.oauthProof.expiresAt).toBe(42)
     expect(result.oauthProof.authorizationDigest).toEqual(
       deriveAuthorizationDigest({
-        chainId: testnet.hash(),
         operationDomain: new Uint8Array(32),
         transactionData: new Uint8Array([1, 2]),
         platformCeremonyVersion: 1,
@@ -352,26 +349,19 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
 })
 
 it.each(supportedPlatforms)(
-  'snapshots ledger hash and routing once for %s [LIBID-MOD-014/015] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
+  'snapshots ledger routing once for %s [LIBID-MOD-014/015] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
   async (platformId) => {
     const oidc = fixtures[platformId].proverKind === 'oidc'
-    const hash = testnet.hash()
     const domain = new Uint8Array(32)
     const data = new Uint8Array([1, 2])
     const ledger = {
-      hash: vi.fn(() => hash),
       notaryAddress: vi.fn(() => 'https://local-notary.test:8443'),
     }
     const connection = spiedConnection()
     const ceremony = (await clientFor(platformId)).new(connection, platformId, ledger, domain, data)
-    expect(ledger.hash).toHaveBeenCalledOnce()
     expect(ledger.notaryAddress).toHaveBeenCalledOnce()
-    hash.fill(9)
     domain.fill(9)
     data.fill(9)
-    ledger.hash.mockImplementation(() => {
-      throw new Error('must not reread')
-    })
     ledger.notaryAddress.mockImplementation(() => {
       throw new Error('must not reread')
     })
@@ -417,7 +407,6 @@ it.each(supportedPlatforms)(
     const result = await pending
     if (result.status !== 'accepted') throw new Error('Expected proof')
     const expectedDigest = deriveAuthorizationDigest({
-      chainId: testnet.hash(),
       operationDomain: new Uint8Array(32),
       transactionData: new Uint8Array([1, 2]),
       platformCeremonyVersion: 1,
@@ -428,20 +417,10 @@ it.each(supportedPlatforms)(
   },
 )
 
-it('rejects missing, throwing or malformed hash methods before OAuth [LIBID-MOD-014] [LIBID-OAUTH-003]', async () => {
+it('rejects a missing ledger before OAuth [LIBID-MOD-014] [LIBID-OAUTH-003]', async () => {
   const connection = spiedConnection()
   const client = await ccdpClient(wireConfig)
-  for (const ledger of [
-    null,
-    {},
-    { hash: 1 },
-    ...[null, [], new Uint8Array(31), new Uint8Array(33)].map((hash) => ({ hash: () => hash })),
-    {
-      hash: () => {
-        throw new Error('hash failure')
-      },
-    },
-  ])
+  for (const ledger of [null, undefined, 1, {}])
     expect(() =>
       client.new(connection, 'google', ledger as LedgerId, new Uint8Array(32), new Uint8Array()),
     ).toThrow()
@@ -477,7 +456,7 @@ it.each(supportedPlatforms)(
         client.new(
           connection,
           platformId,
-          { hash: mainnet.hash, notaryAddress: method } as LedgerId,
+          { notaryAddress: method } as LedgerId,
           new Uint8Array(32),
           new Uint8Array(),
         ),
@@ -899,7 +878,7 @@ it('discovers compatible versions and honors explicit selection [LIBID-MOD-015] 
 
 it('rejects unavailable explicit versions before reading ledger or reserving the run [LIBID-MOD-015] [LIBID-ASSET-004] [LIBID-OAUTH-024]', async () => {
   const client = await ccdpClient(wireConfig)
-  const ledger = { ...testnet, hash: vi.fn(testnet.hash) }
+  const ledger = { notaryAddress: vi.fn(testnet.notaryAddress) }
   const c = spiedConnection()
   for (const version of [0, 2, 99, -1, 1.5, NaN, null, '1']) {
     expect(() =>
@@ -914,7 +893,7 @@ it('rejects unavailable explicit versions before reading ledger or reserving the
       ),
     ).toThrow('Unsupported ceremony version')
   }
-  expect(ledger.hash).not.toHaveBeenCalled()
+  expect(ledger.notaryAddress).not.toHaveBeenCalled()
   expect(registered(c)).toEqual([])
   client.new(c, 'google', ledger, new Uint8Array(32), new Uint8Array(), 1)
   await c.close()

@@ -78,8 +78,8 @@ test is not evidence that the current revision passed it.
   isolation policies; complete cold/partial/warm/update/restart/quota fault coverage.
 - Negative real-proof SRS-floor tests. Build-time gate/capacity checks do not
   establish runtime capacity qualification.
-- Production ledger definitions and Chain Profile vectors. Tests use synthetic
-  `LedgerId` fixtures and supply no ledger decoder in Prover.
+- Production ledger definitions. Tests use synthetic `LedgerId` fixtures and
+  supply no ledger decoder in Prover.
 - Complete request/download/joiner accounting, identity-credential-wait extension
   and telemetry export. Missing measurements are not synthesized as zero.
 

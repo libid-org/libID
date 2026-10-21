@@ -12,7 +12,6 @@ import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { ty
 import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
 import type { PlatformId } from '../src/platforms/index.js'
-import { testnet } from '../src/testing/ledgers.ts'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'
 import { type BrowserPlatform, browserPlatforms, platformIds } from './platforms.js'
 import { verifyBrowserProof } from './verify.js'
@@ -100,7 +99,6 @@ const evidence = {
         const digest = deriveAuthorizationDigest({
           operationDomain: new Uint8Array(32),
           platformCeremonyVersion: 1,
-          chainId: testnet.hash(),
           authorizationNonce: nonce,
           transactionData: new Uint8Array([1]),
         })

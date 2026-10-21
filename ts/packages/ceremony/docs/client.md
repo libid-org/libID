@@ -86,9 +86,11 @@ an origin, normal protocol state still determines which occurrences are valid.
 The code verifier is sent only after CCDP-origin Prover readiness.
 
 `new(connection, platformId, ledger, operationDomain, transactionData, version?)`
-is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`
-and `ledger.notaryAddress()` once and derives fresh authorization material from
-the hash and byte inputs before returning, without retaining those buffers.
+is synchronous and snapshots its inputs before OAuth. It reads
+`ledger.notaryAddress()` once and derives fresh authorization material from the
+byte inputs before returning, without retaining those buffers. The digest commits
+no chain, so one ceremony's proof serves every ledger whose Consumer accepts its
+operation domain.
 Invalid selection, ledger values or inputs fail before OAuth. A client cannot reuse a live connection ID; a connection cannot run two
 ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
 [client.ts](../src/ccdp/client/client.ts) and [ceremony.ts](../src/ccdp/client/ceremony.ts).
@@ -180,7 +182,7 @@ containing separate `identity` and `oauthProof` values:
   GitHub's login. Both are as the platform sent them, without normalization.
 - `oauthProof`: selected `platformCeremonyVersion`, fresh `authorizationNonce`,
   client-derived `authorizationDigest` (32 bytes), platform-specific `proof` and
-  `expiresAt` in Unix seconds. The retained digest binds the original ledger hash,
+  `expiresAt` in Unix seconds. The retained digest binds the original
   operation domain, transaction bytes, ceremony version and nonce; it must equal
   the resulting claim's `CeremonyBound.authorizationDigest`. It is copied from the
   live ceremony, never supplied by Prover.

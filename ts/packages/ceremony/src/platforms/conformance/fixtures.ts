@@ -181,7 +181,7 @@ const googleFixture = JSON.parse(
   readFileSync(new URL('../google/1/google-v1.fixture.json', import.meta.url), 'utf8'),
 ) as { idToken: string; jwk: Record<string, string>; authorizationDigest: string }
 
-/** The Google v1 RS256 token, its signing JWK and the §5 digest its nonce carries. */
+/** The Google v1 RS256 token, its signing JWK and the Authorization Digest its nonce carries. */
 export const googleV1 = {
   idToken: googleFixture.idToken,
   jwk: googleFixture.jwk,
