@@ -31,9 +31,9 @@ Transaction Data a ceremony committed.
 - REQ-CHAIN-01 (upholds SP-BIND-01):
   A Chain Profile MUST answer all three duties for exactly one family of
   Consumer Chains, and MUST leave none of them to an implementation.
-  Necessity: the Application encoding Authorized Transaction Data and the
-  Consumer decoding it work independently, so an answer left open is two
-  answers, and they disagree only as a transaction the Consumer rejects.
+  Necessity: the Application and the Consumer apply these answers
+  independently, so an answer left open is two answers that disagree only
+  as a transaction the Consumer rejects.
 
 ## 3. The EVM Chain Profile
 
@@ -71,9 +71,10 @@ chain identifier, a block timestamp, and an immediate caller to the Consumer.
   decoder that rejects trailing bytes and any other argument shape
   (REQ-COMMON-01F).
 
-A Consumer that commits a chain identifier under REQ-COMMON-01C commits the
-EIP-155 chain identifier and compares it with the one its execution
-environment reports.
+- REQ-CHAIN-07A (upholds SP-BIND-01):
+  Where it commits a chain identifier under REQ-COMMON-01C, the Consumer
+  MUST commit the EIP-155 chain identifier and compare it with the one its
+  execution environment reports.
 
 ## 4. Conformance tests
 
@@ -87,3 +88,7 @@ environment reports.
 - TEST-CHAIN-05 (exercises REQ-CHAIN-07):
   Authorized Transaction Data carrying trailing bytes past its argument tuple
   is rejected.
+- TEST-CHAIN-06 (exercises REQ-CHAIN-07A):
+  A Consumer that commits a chain identifier accepts Authorized Transaction
+  Data naming the EIP-155 chain identifier its execution environment reports
+  and rejects data naming another.

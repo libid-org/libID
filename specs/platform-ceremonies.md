@@ -416,17 +416,11 @@ while it is its author's name; publication is state.
 
 ### 2.1c The bind operation
 
-The bind call of §2.1b is one transaction kind of the Consumer, under the
-operation domain `keccak256(UTF8("libid.bind-identity"))`. Its Authorized
-Transaction Data is the target alone: the address the identity is bound
-to, in the Chain Profile's encoding, which on an EVM chain is
-`abi.encode(address)`, exactly 32 bytes ([chain profiles](chain-profiles.md) §3.3). The Authorization
-Digest commits no chain (common REQ-COMMON-01C), so one ceremony's
-Submission is acceptable on every Consumer Chain whose Consumer accepts this
-operation domain, once at each (common REQ-COMMON-03A). Beside the arguments
-of §2.1b, the bind call takes a service fee as two arguments, an amount and a
-receiver. Neither is in the Authorized Transaction Data, and no proof commits
-them.
+The bind call is the Consumer's transaction kind under operation domain
+`keccak256(UTF8("libid.bind-identity"))`. Its Authorized Transaction Data
+is the target address alone; on EVM, `abi.encode(address)`, 32 bytes
+([chain profiles](chain-profiles.md) §3.3). It also takes the service fee
+amount and receiver of §2.1b, which no proof commits.
 
 - REQ-PLAT-08P (upholds SP-BIND-01, SP-REPLAY-01):
   The Consumer MUST accept a bind call only under the operation domain
@@ -436,12 +430,10 @@ them.
   Transaction Author is not that target.
   Necessity: the target is the one value the user authorized, and requiring
   the Transaction Author to be the target leaves a proof usable only by the
-  wallet it names. On another Consumer Chain the proof gives that wallet
-  nothing a second ceremony would not, so the bind call carries no chain
-  identifier and one ceremony binds on every chain.
+  wallet it names.
 - REQ-PLAT-08Q (upholds SP-BIND-01):
   The Consumer MUST reject a bind call whose fee amount is zero while its fee
-  receiver is set, or whose fee amount is nonzero while its fee receiver is
+  receiver is nonzero, or whose fee amount is nonzero while its fee receiver is
   the zero address. The Consumer MUST reject a bind call whose native value
   differs from the quotation of common REQ-COMMON-06E plus the fee amount.
   On accepting a bind call with a nonzero fee amount, the Consumer MUST
@@ -450,8 +442,9 @@ them.
   naming the Authorization Digest, the fee receiver, and the amount for every
   fee it transfers. Necessity: the proof authorizes a binding, not a price,
   so the fee stays outside the digest and the Transaction Author agrees to
-  it by authoring the call. Exact value needs no refund path, and one
-  spelling of a free bind call leaves no fee addressed to nobody.
+  it by authoring the call. Exact value needs no refund path, and
+  `(0, zero address)` as the only free form leaves no fee without a
+  receiver.
 
 - TEST-PLAT-20E (exercises REQ-PLAT-08P, REQ-PLAT-08Q):
   A bind call under another operation domain is rejected. Authorized
@@ -1855,10 +1848,9 @@ notary signature; the Consumer Chain's Notary Service remains authoritative.
 A proof built outside the Canonical Runtime still faces those downstream
 checks and the Transaction Author rule in
 [common §12](ceremony-common.md#12-security-considerations).
-The service fee of §2.1c is outside the proof: whoever builds the bind call
-names the amount and the receiver, and the Transaction Author accepts them by
-authoring the call. A proof carries no price, so the same Submission can be
-bound under any fee.
+The Application names the bind call's service fee amount and receiver. No
+proof bounds them; the Transaction Author's review of the call is the only
+check.
 Proxy notarization exposes session traffic to the notary; the protocol does
 not promise bearer confidentiality from that notary. The bearer remains
 hidden from the published proof by the two commitments and link circuit,

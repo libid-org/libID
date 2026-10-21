@@ -305,9 +305,8 @@ notary-signature check before an authoritative effect.
   ASM-CHAIN-01, ASM-NOTARY-01, ASM-PROV-05, ASM-PROOF-01. Evidence: checked
   invariant in the Platform Verifier.
 - SP-REPLAY-01:
-  Within one Consumer deployment, one ceremony authorizes at most
-  one authoritative effect. A Consumer on another Consumer Chain is another
-  deployment. Depends on ASM-CHAIN-01. Evidence: checked invariant in the
+  Within one Consumer on one Consumer Chain, one ceremony authorizes at most
+  one authoritative effect. Depends on ASM-CHAIN-01. Evidence: checked invariant in the
   Consumer.
 - SP-PRIV-01:
   The Consumer, the Proof Verifier, and the Platform Verifier emit or store
@@ -391,11 +390,6 @@ implementing it under the same canonical addresses.
   which preserves the complete boundary does not bump it; which Verifier
   Version it is registered under is the Verifier Governance Process's
   decision.
-
-The digest commits no Consumer Chain identity. One ceremony's evidence is
-therefore acceptable on every Consumer Chain whose Consumer accepts its
-operation domain, and each such Consumer spends its digest once under
-REQ-COMMON-03.
 
 - REQ-COMMON-01C (upholds SP-BIND-01, SP-REPLAY-01):
   The Canonical Runtime MUST NOT take a Consumer Chain identity as a ceremony
@@ -1506,8 +1500,8 @@ the constructions that role implements.
   Ceremony Version other than the one the selected verifier implements is
   rejected before any fee moves; a payload naming an operation domain other
   than the one the ceremony committed fails digest recomputation; a Consumer
-  receiving a domain it does not own rejects the result; the Proof Verifier forwards the payload byte for byte
-  and returns the result unchanged; a rejected verification returns no
+  receiving a domain it does not own rejects the result; the Proof Verifier
+  forwards the payload byte for byte and returns the result unchanged; a rejected verification returns no
   transaction data;
   an accepted verification returns the client identifier; the quotation covers the whole path and quotes one
   Notary Fee for each attestation the selected profile requires; a profile
@@ -1598,10 +1592,8 @@ SP-FRESH-01, SP-REPLAY-01, and SP-PRIV-01 under the assumptions of §3.
 Replay within one Consumer deployment is prevented by `authorizationNonce`
 and REQ-COMMON-03. The digest binds no Consumer Chain, so each Consumer that
 accepts its operation domain, on any Consumer Chain, spends it once. A
-Consumer whose transaction kinds require the Transaction Author to be the
-subject of the Authorized Transaction Data gives a proof's holder nothing on
-another chain that a second ceremony would not. A Consumer whose effect is
-chain-specific commits and checks its chain under REQ-COMMON-01C. Replay across Platform Ceremony Versions is prevented by
+Consumer whose effect is chain-specific commits and checks its chain under
+REQ-COMMON-01C. Replay across Platform Ceremony Versions is prevented by
 `platformCeremonyVersion`. A version restated under new canonical Platform
 Verifier addresses (platform REQ-PLAT-01A) has the same number, and the
 digest binds no Platform Verifier address, so neither separates the two.
