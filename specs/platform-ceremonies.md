@@ -329,54 +329,64 @@ Author **holds** a handle on a platform while it owns that handle's node.
   handle between them, and comparing owners would answer yes to a pair the
   chain no longer holds.
 
-A Transaction Author's **name** on a platform is the one handle the
-Consumer stores for that author and platform to display, the analogue of an
-ENS primary name kept per platform. An author holding several identities of
-one platform still has one name there. A handle is **disclosed** once a
-bind call or disclosure call the Consumer accepted has carried it;
-disclosure is history and nothing undoes it. A handle is **published**
-while it is its author's name; publication is state.
+A Transaction Author's **name** is the one handle the Consumer stores for
+that author to display, together with the platform the handle is on: the
+analogue of an ENS primary name. An author has at most one name across all
+platforms, however many identities it holds on one platform or on several.
+A handle is **disclosed** once a bind call or disclosure call the Consumer
+accepted has carried it; disclosure is history and nothing undoes it. A
+handle is **published** while it is its author's name; publication is
+state.
 
 - REQ-PLAT-08J (upholds SP-BIND-01):
-  The Consumer MUST change a Transaction Author's name on a platform only
-  through the paths this rule lists. On accepting a bind call that
-  discloses a handle, the Consumer MUST store the handle it folded under
-  REQ-PLAT-08D as the author's name. On accepting a disclosure call
-  (REQ-PLAT-08E), it MUST store that call's folded handle as the caller's
-  name. On a withdrawal call, it MUST clear the caller's name on that
-  platform. Whenever a handle node's owner changes from one author to
-  another, or REQ-PLAT-08I clears it, the Consumer MUST clear the previous
-  owner's name on that platform if that name folds to that node. A bind
-  call that discloses nothing MUST leave the name unchanged.
-  Necessity: a name is the handle an author chose to show; a claim of
-  another of its identities must not replace that choice, and a name left
-  in place after its handle moved would show a handle its author no longer
-  holds.
+  The Consumer MUST change a Transaction Author's name only through the
+  paths this rule lists. On accepting a bind call that discloses a handle,
+  the Consumer MUST store the handle it folded under REQ-PLAT-08D, with the
+  bind call's platform, as the author's name. On accepting a disclosure
+  call (REQ-PLAT-08E), it MUST store that call's folded handle and platform
+  as the caller's name. A stored name replaces the name the author had on
+  any platform. On a withdrawal call, the Consumer MUST clear the caller's name,
+  whatever its platform. Whenever a handle node's owner changes from one
+  author to another, or REQ-PLAT-08I clears it, the Consumer MUST clear the
+  previous owner's name if that name is on the node's platform and folds to
+  that node. A name on another platform stays. The Consumer MUST leave the
+  name unchanged on a bind call that discloses nothing, on any platform.
+  Necessity: a name is the one handle an author chose to show, as an ENS
+  primary name is the one name an address shows; a claim of another of its
+  identities must not replace that choice, a name left in place after its
+  handle moved would show a handle its author no longer holds, and losing a
+  handle on one platform says nothing about a handle held on another.
 - REQ-PLAT-08K (upholds SP-BIND-01):
-  The Consumer MUST store a name folded. The Consumer MUST answer a read of
-  an author's name with the stored handle, and that the author has no name
-  when none is stored. Necessity: REQ-PLAT-08J clears a name on every owner
-  change, so a stored name is one its author holds, and a reader that
-  mirrors the events of REQ-PLAT-08F answers the same.
+  The Consumer MUST store a name folded, with its platform. The Consumer
+  MUST answer a read of an author's name with the stored platform and
+  handle while the author holds that handle on that platform. The Consumer
+  MUST answer that the author has no name when none is stored or the author
+  no longer holds the stored handle. Necessity: the platform selects the
+  handle tag a reader hashes the name under, and REQ-PLAT-08J clears a name
+  on every owner change, so a reader that mirrors the events of
+  REQ-PLAT-08F answers the same as the read.
 - REQ-PLAT-08E (upholds SP-BIND-01):
   The Consumer MUST offer a disclosure call that takes a platform and a
   handle. The Consumer MUST fold the handle under REQ-PLAT-05B, hash it
   under the platform's handle tag, and accept the call only when the caller
   holds that node. The Consumer MUST NOT require a new proof or the account
   identifier for a disclosure. The Consumer MUST also offer a withdrawal
-  call that clears the caller's own name on a platform. Necessity: the
-  handle's preimage is the evidence and ownership of its node the
+  call that takes no platform and clears the caller's own name. Necessity:
+  the handle's preimage is the evidence and ownership of its node the
   authority. A handle a later claim of the same account renamed away from
   has lost its owner to retirement (REQ-PLAT-08I), so the one test refuses
-  it. A refused call protects the display, not the handle: its calldata is
-  public whether or not the Consumer accepts it.
+  it. An author has one name, so a withdrawal needs no platform. A refused
+  call protects the display, not the handle: its calldata is public whether
+  or not the Consumer accepts it.
 - REQ-PLAT-08F (upholds SP-BIND-01, SP-PRIV-01):
   The Consumer MUST put no plaintext handle in the event of a binding, and
-  MUST put the nodes there. The Consumer MUST
-  emit an event carrying the folded handle for every name it stores, and an
-  event for every name it clears. Necessity: an event that carried a
-  handle is public for good, and a reader mirrors names only if the events
-  say when one was stored or cleared.
+  MUST put the nodes there. The Consumer MUST emit an event carrying the
+  author, the platform, the handle node, and the folded handle for every
+  name it stores. The Consumer MUST emit an event carrying the author for
+  every name it clears. A stored name replaces the earlier one without a
+  clearing event. Necessity: an event that carried a handle is public for
+  good, and a reader mirrors names only if the events say when one was
+  stored or cleared; an author has one name, so the author alone keys it.
 
 - TEST-PLAT-20A (exercises REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08H):
   On each platform, a bind call without a handle, made with recognizable
@@ -392,7 +402,7 @@ while it is its author's name; publication is state.
   a proof, for a held handle given in any letter case. The Application
   passes the handle to the bind call only when the user asks to disclose
   it, and no Submission Payload has a field for a handle or an id.
-- TEST-PLAT-20B (exercises REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
+- TEST-PLAT-20B (exercises REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
   An identity that proves a new handle leaves its old handle without an
   owner, unless another identity proved that handle meanwhile, which keeps
   it; a retired node keeps its watermark, so evidence older than it binds
@@ -402,9 +412,15 @@ while it is its author's name; publication is state.
   claim of B disclosing B's handle replaces it. A rename of A withdraws A's
   name; another wallet proving A's handle withdraws it; a wallet moving an
   identity to another wallet withdraws the old wallet's name for that
-  handle. The name reads as none whenever its author no longer holds the
-  handle. A withdrawal clears the name and emits an event only when there
-  was a name.
+  handle. For a wallet whose name is its handle on platform P, a bind call
+  on platform Q that discloses its Q handle, and a disclosure call of that
+  Q handle, each replace the name with the Q handle and platform Q and emit
+  no clearing event; a bind call on Q that discloses nothing leaves the
+  name. For a wallet whose name is on Q, a rename of its identity on P,
+  and another wallet proving its P handle, leave the name. The name reads
+  with its platform, and as none whenever its author no longer holds the
+  handle. A withdrawal clears the name on whichever platform it is, and
+  emits an event only when there was a name.
 - TEST-PLAT-20D (exercises REQ-PLAT-08O):
   After an identity proves a handle, the pair of that handle and its id node
   is answered yes. When identity A of a wallet renames and identity B of the
@@ -1848,7 +1864,7 @@ A stored name is not evidence. The Consumer clears a name whenever its
 author stops holding the handle (REQ-PLAT-08J), and emits an event for each
 clearing (REQ-PLAT-08F), so a reader that mirrors names from events shows
 what the Consumer answers. An event that stores a name replaces the
-author's earlier name on that platform; no clearing event precedes it.
+author's earlier name on any platform; no clearing event precedes it.
 
 ## 10. References
 
