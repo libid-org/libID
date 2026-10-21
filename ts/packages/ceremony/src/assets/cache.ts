@@ -77,12 +77,20 @@ async function fetchedBody(
   return { bytes, headers }
 }
 
+/** Where a load's bytes come from: stored bytes, or a network retrieval (possibly joined). */
+export type AssetSource = 'cache' | 'network'
+
+interface PendingLoad {
+  dispatched: Promise<AssetSource>
+  response: Promise<Response>
+  complete: Promise<void>
+  /** A cache lookup, a network retrieval, then a settled response while persistence finishes. */
+  stage: () => 'lookup' | 'retrieving' | 'settled'
+}
+
 /** Single-flight delivery of immutable bytes. Storage failure falls back to the same fetch. */
 export class AssetCache {
-  private readonly pending = new Map<
-    string,
-    { dispatched: Promise<void>; response: Promise<Response>; complete: Promise<void> }
-  >()
+  private readonly pending = new Map<string, PendingLoad>()
 
   constructor(private readonly origin: string) {}
 
@@ -107,16 +115,44 @@ export class AssetCache {
   }
 
   /**
+   * Settle the running network retrievals of `specs`. `pending` counts them; `missing` counts
+   * specs neither loading nor stored, such as a retrieval lost with a stopped worker.
+   */
+  async remaining(specs: Iterable<AssetRequest>): Promise<{ pending: number; missing: number }> {
+    const all = Array.from(specs)
+    const retrieving = all
+      .map((spec) => this.pending.get(requestKey(spec)))
+      .filter((load) => load?.stage() === 'retrieving')
+    const idle = all.filter((spec) => !this.pending.has(requestKey(spec)))
+    const missing = await this.unstored(idle)
+    await Promise.all(retrieving.map((load) => load!.response.catch(() => {})))
+    return { pending: retrieving.length, missing }
+  }
+
+  /** How many `specs` Cache Storage lacks; inaccessible storage lacks all of them. */
+  private async unstored(specs: AssetRequest[]): Promise<number> {
+    try {
+      const cache = await caches.open(CACHE)
+      const hits = await Promise.all(specs.map((spec) => cache.match(this.storageKey(spec))))
+      return hits.filter((hit) => !hit).length
+    } catch {
+      return specs.length
+    }
+  }
+
+  /**
    * Join one URL/range fetch, with an independently consumable response for each caller.
-   * `dispatched` acknowledges a cache hit or fetch invocation, allowing OAuth navigation.
+   * `dispatched` acknowledges a cache hit or fetch invocation, allowing OAuth navigation, and
+   * names the source; a joiner shares the first caller's, or `cache` once its bytes arrived.
    * `response` validates the body before delivery; `complete` keeps the worker and pending
    * entry alive through best-effort cache persistence, without delaying delivery.
    */
   load(spec: AssetRequest) {
     const key = requestKey(spec)
     const existing = this.pending.get(key)
-    if (existing) return { ...existing, response: existing.response.then((r) => r.clone()) }
-    const dispatched = Promise.withResolvers<void>()
+    if (existing) return this.share(existing)
+    const dispatched = Promise.withResolvers<AssetSource>()
+    let stage: ReturnType<PendingLoad['stage']> = 'lookup'
     let writing = Promise.resolve()
     const response = (async () => {
       const cacheKey = this.storageKey(spec)
@@ -124,7 +160,10 @@ export class AssetCache {
       try {
         cache = await caches.open(CACHE)
         const hit = await cachedResponse(cache, cacheKey, spec)
-        if (hit) return hit
+        if (hit) {
+          dispatched.resolve('cache')
+          return hit
+        }
       } catch {
         /* Storage denial does not disable fetching. */
       }
@@ -135,21 +174,38 @@ export class AssetCache {
         headers: spec.range ? { Range: spec.range } : {},
         cache: 'force-cache',
       })
-      dispatched.resolve()
+      stage = 'retrieving'
+      dispatched.resolve('network')
       const { bytes, headers } = await fetchedBody(await fetching, spec)
       const stored = new Response(bytes, { headers })
       // A valid response remains usable when storage is full.
       if (cache) writing = cache.put(cacheKey, stored.clone()).catch(() => {})
       return spec.range ? new Response(bytes, { status: 206, headers }) : stored
-    })().finally(dispatched.resolve)
+    })().finally(() => {
+      stage = 'settled'
+      dispatched.resolve('network')
+    })
     const complete = response
       .catch(() => {})
       .then(() => writing)
       .finally(() => {
         this.pending.delete(key)
       })
-    const started = dispatched.promise
-    this.pending.set(key, { dispatched: started, response, complete })
-    return { dispatched: started, response: response.then((r) => r.clone()), complete }
+    const load: PendingLoad = {
+      dispatched: dispatched.promise,
+      response,
+      complete,
+      stage: () => stage,
+    }
+    this.pending.set(key, load)
+    return this.share(load)
+  }
+
+  private share({ dispatched, response, complete, stage }: PendingLoad) {
+    return {
+      dispatched: stage() === 'settled' ? Promise.resolve<AssetSource>('cache') : dispatched,
+      response: response.then((r) => r.clone()),
+      complete,
+    }
   }
 }

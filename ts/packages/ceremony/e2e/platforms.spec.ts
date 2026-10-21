@@ -270,7 +270,7 @@ for (const platform of platformIds) {
   })
 
   for (const corrupt of [false, true])
-    test(`${platform} browser ceremony with ${source}: ${corrupt ? `${corruption} ${requirements.corrupted}` : `accepts independently verified proof ${requirements.accepted}`} @proof`, async ({
+    test(`${platform} browser ceremony with ${source}: ${corrupt ? `${corruption} ${requirements.corrupted}` : `accepts independently verified proof ${requirements.accepted} [LIBID-BROWSER-029]`} @proof`, async ({
       bridge,
       page,
       context,
@@ -296,7 +296,32 @@ for (const platform of platformIds) {
       expect(events.filter((event) => event.status !== 'active')).toHaveLength(1)
       expect(events.at(-1)?.status).toBe(corrupt ? 'failed' : 'completed')
       await expectIsolatedProver(popup)
-      if (!corrupt) return verify(page)
+      if (!corrupt) {
+        // Prefetch counts every profile request; Prover reports still-running downloads once.
+        const attributes = (name: string, phase?: string) =>
+          events.flatMap((event) =>
+            event.status === 'active' && event.event === name && event.phase === phase
+              ? [event.instrumentation?.attributes]
+              : [],
+          )
+        const [prefetched] = attributes('prefetch-dispatch', 'finished')
+        expect(prefetched).toMatchObject({
+          'assets-cached': expect.any(Number),
+          'assets-fetched': expect.any(Number),
+        })
+        expect(Number(prefetched?.['assets-cached']) + Number(prefetched?.['assets-fetched'])).toBe(
+          artifactRequests(`${platform}/1`).length,
+        )
+        const downloads = attributes('asset-download')
+        expect(downloads).toEqual([
+          expect.objectContaining({ pending: expect.any(Number), missing: expect.any(Number) }),
+        ])
+        // The wait is reported exactly when no retrieval was lost.
+        expect(typeof downloads[0]?.['remaining-ms']).toBe(
+          downloads[0]?.missing === 0 ? 'number' : 'undefined',
+        )
+        return verify(page)
+      }
       expect(events.at(-1)).toMatchObject({ message: expect.stringContaining(failure.message) })
       expect(failure.events).toContain(await page.evaluate(() => window.failureEvent))
       expect(

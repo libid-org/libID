@@ -44,7 +44,8 @@ phase-less core event.
 
 ### Prefetch breakdown
 
-`prefetch-dispatch.finished` carries four durations in `instrumentation.attributes`:
+`prefetch-dispatch.finished` carries four durations and two counts in
+`instrumentation.attributes`:
 
 - `document-startup-ms`: navigation start to Prefetch entry execution, including
   document/module loading and evaluation; not the browser's `load` event.
@@ -53,12 +54,17 @@ phase-less core event.
   registration, which starts at readiness.
 - `dispatch-ms`: request to Worker dispatch acknowledgement, including cache lookups
   and any cached CRS body reads currently needed before acknowledgement.
+- `assets-cached` and `assets-fetched`: the profile's requests served from Cache Storage,
+  and those fetched or joined to a running fetch. Any fetched request marks a cold or
+  partly cold start. A fetch can still be answered by the HTTP cache, so this is not a
+  download count.
 
 These consecutive intervals use the Prefetch document's monotonic clock. They
 exclude Application work before navigation, and do not measure asset download
 completion or proving initialization. The dev app displays them in the existing
-Prefetch operation's collapsed details. They identify the wait's location without
-claiming whether it came from disk, worker startup or network activity.
+Prefetch operation's collapsed details. The durations identify the wait's location
+without claiming whether it came from disk, worker startup or network activity; the
+counts say only which requests Cache Storage served.
 
 ## Resource accounting
 
@@ -70,8 +76,22 @@ remain unavailable.
 
 A native fetch call may reuse HTTP cache, so counting calls does not establish
 network traffic or transferred bytes. Use observed transfer data where the
-browser and resource policy expose it. The current feed does not claim complete
-coverage; [traceability](traceability.md) retains those gaps.
+browser and resource policy expose it.
+
+The feed reports the Prefetch counts above and one phase-less Prover observation,
+`asset-download`. Once proving begins, the Prover asks the root worker about the
+profile's retrievals and emits it when the running ones settle:
+
+- `pending`: retrievals still running, and `remaining-ms`, how long they ran on (`0`
+  when none were). Proving overlaps them, so it bounds rather than measures the wait
+  they caused.
+- `missing`: requests neither running nor stored, such as retrievals lost with a stopped
+  worker. WebKit stops a worker's fetches while no CCDP document is open, as during
+  OAuth. The Prover fetches these itself, untimed, so `remaining-ms` is absent.
+
+The observation is absent, meaning unavailable, when the document ends first or no
+worker answers. Joiner counts, transferred bytes and per-resource latency are not
+reported; [traceability](traceability.md) retains those gaps.
 
 ## Export boundary
 

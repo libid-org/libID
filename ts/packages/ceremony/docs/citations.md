@@ -82,6 +82,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-BROWSER-022 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-BROWSER-024 | [e2e/popup.spec.ts](../e2e/popup.spec.ts), [src/ccdp/documents/progress.test.ts](../src/ccdp/documents/progress.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-BROWSER-025 | [e2e/popup.spec.ts](../e2e/popup.spec.ts) |
+| LIBID-BROWSER-029 | [e2e/platforms.spec.ts](../e2e/platforms.spec.ts), [src/assets/cache.test.ts](../src/assets/cache.test.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts), [src/assets/rootWorker.test.ts](../src/assets/rootWorker.test.ts), [src/ccdp/documents/prefetch.test.ts](../src/ccdp/documents/prefetch.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-BROWSER-030 | [apps/dev/src/app.spec.ts](../../../apps/dev/src/app.spec.ts), [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-MOD-002 | [e2e/assets.spec.ts](../e2e/assets.spec.ts) |
 | LIBID-MOD-003 | [build/distribution.test.ts](../build/distribution.test.ts) |

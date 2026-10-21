@@ -47,7 +47,7 @@ class PrefetchDocument extends CeremonyDocument {
       // that Worker's claim arrives first, the Worker stays redundant here though active.
       const worker = await registerRootWorker(rootWorkerUrl)
       const workerReady = performance.now()
-      await dispatchPrefetch(worker, profile)
+      const assets = await dispatchPrefetch(worker, profile)
       const dispatched = performance.now()
       const event = {
         event: 'prefetch-dispatch',
@@ -60,6 +60,8 @@ class PrefetchDocument extends CeremonyDocument {
             'connection-ms': connected - started,
             'worker-ready-ms': workerReady - connected,
             'dispatch-ms': dispatched - workerReady,
+            // Requests served from Cache Storage, and those fetched or joined to a fetch.
+            ...(assets && { 'assets-cached': assets.cached, 'assets-fetched': assets.fetched }),
           },
         },
       } as const

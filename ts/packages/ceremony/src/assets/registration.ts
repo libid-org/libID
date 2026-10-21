@@ -66,13 +66,24 @@ export async function registerRootWorker(url: string): Promise<ServiceWorker> {
   return worker
 }
 
-/** Dispatch directly to the selected Worker, including while it waits behind an older active one. */
-export async function dispatchPrefetch(worker: ServiceWorker, profile: string): Promise<void> {
+const isCount = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Number(value) >= 0
+
+/**
+ * Dispatch directly to the selected Worker, including while it waits behind an older active one.
+ * Resolves with how many requests were stored and fetched, when the Worker reports both.
+ */
+export async function dispatchPrefetch(
+  worker: ServiceWorker,
+  profile: string,
+): Promise<{ cached: number; fetched: number } | undefined> {
+  let counts: { cached: number; fetched: number } | undefined
   await within('Asset dispatch timed out', (done, signal) => {
     const channel = new MessageChannel()
     signal.addEventListener('abort', () => channel.port1.close())
     channel.port1.onmessage = (event) => {
-      const { dispatched } = event.data ?? {}
+      const { dispatched, cached, fetched } = event.data ?? {}
+      if (isCount(cached) && isCount(fetched)) counts = { cached, fetched }
       if (dispatched === true) done()
       else if (dispatched === false) done(new Error('Asset profile not served'))
       else done(new Error('Invalid dispatch acknowledgement'))
@@ -84,6 +95,30 @@ export async function dispatchPrefetch(worker: ServiceWorker, profile: string): 
       done(new Error('Asset dispatch failed'))
     }
   })
+  return counts
+}
+
+/**
+ * The profile's retrievals still running, once they settle, and those neither running nor
+ * stored. No deadline: downloads take what they take. A Worker that never answers leaves this
+ * pending.
+ */
+export function remainingDownloads(profile: string): Promise<{ pending: number; missing: number }> {
+  const { promise, resolve, reject } = Promise.withResolvers<{ pending: number; missing: number }>()
+  const worker = navigator.serviceWorker.controller
+  if (!worker) {
+    reject(new Error('Missing controlling Service Worker'))
+    return promise
+  }
+  const channel = new MessageChannel()
+  channel.port1.onmessage = ({ data }) => {
+    channel.port1.close()
+    if (isCount(data?.pending) && isCount(data?.missing))
+      resolve({ pending: data.pending, missing: data.missing })
+    else reject(new Error('Invalid download report'))
+  }
+  worker.postMessage({ type: 'ceremony-downloads', profile }, [channel.port2])
+  return promise
 }
 
 /** Newly isolated documents can initially be uncontrolled; claim before execution fetches. */
