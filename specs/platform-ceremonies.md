@@ -394,7 +394,7 @@ state.
   The Consumer MUST put no plaintext handle in the event of a binding, and
   MUST put the nodes there. The Consumer, like every other libid contract
   that accepts handle text, MUST emit one shared reveal event, carrying the
-  caller, the platform, the handle node, and the folded handle, for every
+  platform, the handle node, and the folded handle and no address, for every
   accepted call that carries handle text. The Consumer MUST put handle text
   in no other event. On the Consumer those calls are a bind call with a
   handle, a publishing call, and a reveal call. The Consumer MUST emit a
@@ -426,8 +426,9 @@ state.
   reveal call of a held handle emits the reveal event and writes no
   storage. A bind call with the primary flag and a publishing call each
   emit the reveal event before the name event, and only the reveal event
-  carries handle text. Every other libid contract that accepts handle text
-  emits the same reveal event with its caller. The Application passes the
+  carries handle text, and it carries no address. Every other libid
+  contract that accepts handle text emits the same reveal event. The
+  Application passes the
   handle to the bind call only when the user asks to disclose it, sets the
   primary flag only when the user asks to make it its name, and no
   Submission Payload has a field for a handle or an id.
