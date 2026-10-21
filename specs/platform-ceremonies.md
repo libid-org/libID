@@ -256,10 +256,13 @@ the precision anchor. A profile that publishes no such table is ineligible.
 
 A claim puts no plaintext user id, handle, or email on the Consumer Chain
 unless it discloses the handle. The Consumer's bind call takes the
-Submission and, beside it, one optional handle and a primary flag:
-`bind(platformId, version, payload, string handle, bool primary)`. The
-Submission Payload has no field for a handle or an id. An empty handle
-discloses nothing and keeps the bind private. A nonempty handle is
+Submission and, beside it, one optional handle, a primary flag, and the
+service fee:
+`bind(platformId, version, payload, string handle, bool primary, uint256 feeAmount, address feeReceiver)`.
+`bindPrivately(platformId, version, payload, feeAmount, feeReceiver)` is
+that call with an empty handle and no primary flag. The fee rules are in
+§2.1c. The Submission Payload has no field for a handle or an id. An empty
+handle discloses nothing and keeps the bind private. A nonempty handle is
 disclosed, and with the primary flag it also becomes the author's name.
 
 - REQ-PLAT-03A (upholds SP-PRIV-01):
