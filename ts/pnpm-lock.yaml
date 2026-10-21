@@ -70,8 +70,8 @@ importers:
   packages/ceremony:
     dependencies:
       '@libid/contracts':
-        specifier: 0.18.1
-        version: 0.18.1
+        specifier: 0.19.0
+        version: 0.19.0
       '@libid/ledger':
         specifier: workspace:^
         version: link:../ledger
@@ -403,8 +403,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@libid/contracts@0.18.1':
-    resolution: {integrity: sha512-3IUoQw8rKcD8r/ntBQbIyhtpkPBajd5C0mzyuW/eCAGeR9g3sAqXrOSxD0sOznJnp0dNouZ/aE6VXvUEudc/rg==}
+  '@libid/contracts@0.19.0':
+    resolution: {integrity: sha512-kl2X8QOMjohHJbCAdfIgrRMTQm27HGKs/kEgQIUv0Kd0mVbehlFZ9a2ovaD3qzrTk+KlwM1UKI3TJ5J2JxDWAw==}
     peerDependencies:
       viem: ^2.48.11
     peerDependenciesMeta:
@@ -1369,7 +1369,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@libid/contracts@0.18.1':
+  '@libid/contracts@0.19.0':
     dependencies:
       '@noble/hashes': 2.4.0
 
