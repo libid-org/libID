@@ -3,10 +3,11 @@
 // (its cookies' and, for a storage state, its origins' localStorage values),
 // each also URL-encoded and JSON-escaped. A session that does not decode is
 // still looked for as set. Paths are the arguments; a missing file is
-// skipped. Nothing secret is printed.
+// skipped. Under CI, finding no secret to look for fails. Nothing secret is
+// printed.
 import { existsSync, readFileSync } from 'node:fs'
 import { exportText } from './session.ts'
-import { githubSecrets, googleSession, type SavedSession, xSession } from './settings.ts'
+import { githubSecrets, googleSession, type SavedSession, tooling, xSession } from './settings.ts'
 
 /** The `value` strings of `items`, where it is a list. */
 const values = (items: unknown) =>
@@ -57,6 +58,12 @@ const secrets = [
       .flatMap(forms),
   ),
 ]
+
+// Under CI a scan with nothing to look for would pass anything: the step lacks its secrets.
+if (tooling().ci && !secrets.length) {
+  console.error("No test secret to look for: give this step the job's secrets (see live-e2e.yml)")
+  process.exit(1)
+}
 
 const leaking = process.argv
   .slice(2)

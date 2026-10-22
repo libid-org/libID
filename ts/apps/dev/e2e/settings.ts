@@ -194,6 +194,16 @@ export const githubAccount = (get: Lookup = environment) =>
     totpSecret: get('GH_TEST_ALICE_TOTP_SECRET')!,
   }))
 
+/** The variables whose values the failure-output scan looks for. */
+export const SCANNED = [
+  'GH_TEST_ALICE_PASSWORD',
+  'GH_TEST_ALICE_TOTP_SECRET',
+  'X_TEST_ALICE_COOKIES',
+  'X_TEST_ALICE_COOKIES_FILE',
+  'GOOGLE_TEST_ALICE_COOKIES',
+  'GOOGLE_TEST_ALICE_COOKIES_FILE',
+] as const
+
 /** The GitHub account's secrets that are set, for the failure-output scan. */
 export const githubSecrets = (get: Lookup = environment) =>
   [get('GH_TEST_ALICE_PASSWORD'), get('GH_TEST_ALICE_TOTP_SECRET')].filter(

@@ -14,7 +14,7 @@ import {
   STACK_STOP,
   TEST,
 } from './budgets.ts'
-import { missing, type Need, PLATFORM_SECTIONS, VARIABLES } from './settings.ts'
+import { missing, type Need, PLATFORM_SECTIONS, SCANNED, VARIABLES } from './settings.ts'
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8')
 const workflow = read('../../../../.github/workflows/live-e2e.yml')
@@ -36,21 +36,24 @@ function envEntry(line: string): [string, string] | undefined {
 const referenced = (text: string) =>
   new Set([...text.matchAll(/\b(?:secrets|vars)\.([A-Za-z0-9_]+)/g)].map((match) => match[1]!))
 
-/** The lines of job `name`'s test step (`id: test`). */
-function testStep(name: string): string[] {
+/** The lines of job `name`'s step holding the line `marker`. */
+function step(name: string, marker: string): string[] {
   const lines = workflow.split('\njobs:\n')[1]!.split('\n')
   const start = lines.indexOf(`  ${name}:`)
   assert.notEqual(start, -1, `the workflow has a job ${name}`)
   const end = lines.findIndex((line, index) => index > start && /^ {2}[a-z][\w-]*:$/.test(line))
   const job = lines.slice(start, end === -1 ? undefined : end)
-  const id = job.indexOf('        id: test')
-  assert.notEqual(id, -1, `job ${name} has a step with id test`)
+  const at = job.findIndex((line) => line.trim() === marker)
+  assert.notEqual(at, -1, `job ${name} has a step with ${marker}`)
   const isStep = (line: string) => line.startsWith('      - ')
-  let first = id
+  let first = at
   while (first > 0 && !isStep(job[first]!)) first--
-  const next = job.findIndex((line, index) => index > id && isStep(line))
+  const next = job.findIndex((line, index) => index > at && isStep(line))
   return job.slice(first, next === -1 ? undefined : next)
 }
+
+/** The lines of job `name`'s test step (`id: test`). */
+const testStep = (name: string) => step(name, 'id: test')
 
 test('every secret the workflow reads is a setting, passed under its own name', () => {
   for (const name of [...workflow.matchAll(/\bsecrets\.([A-Za-z0-9_]+)/g)].map((m) => m[1]!))
@@ -94,6 +97,17 @@ test("each job's test step is given what every platform it can select requires",
       PLATFORM_SECTIONS[platform].flatMap((section) => missing(section, lookup)),
     )
     assert.deepEqual(absent, [], `job ${name}'s test step is not given ${absent.join(', ')}`)
+  }
+})
+
+test("each job's failure-output step is given every scanned secret its test step is", () => {
+  for (const name of JOBS) {
+    const tested = new Set(entriesOf(testStep(name)).map(([key]) => key))
+    const output = new Set(
+      entriesOf(step(name, 'uses: ./.github/actions/live-e2e-output')).map(([key]) => key),
+    )
+    const absent = SCANNED.filter((secret) => tested.has(secret) && !output.has(secret))
+    assert.deepEqual(absent, [], `job ${name}'s failure-output step lacks ${absent.join(', ')}`)
   }
 })
 
