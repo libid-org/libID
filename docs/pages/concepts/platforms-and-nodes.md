@@ -58,7 +58,7 @@ It prints
 The proving circuit computes both nodes from what the platform sent. The
 proof carries the nodes, and the id and handle stay off chain. A handle
 reaches the chain only if its holder discloses it; see
-[Published handles](/docs/concepts/published-handles/).
+[Primary handle](/docs/concepts/primary-handle/).
 
 A node hides a value only from someone who cannot guess it. The tags are
 public, so anyone can hash a guessed handle or id and look it up. See

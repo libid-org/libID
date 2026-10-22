@@ -29,8 +29,9 @@ cast call 0xbefd300aff7d4a67fb381afe8b3596793d3e9a83 'owner()(address)' \
   --rpc-url https://ethereum-rpc.publicnode.com
 ```
 
-The address above is mainnet's `IdentityRegistry`. Mainnet still runs the
-previous contract version, v0.17.0; Sepolia and the Eden testnet run v0.18.
+The address above is mainnet's `IdentityRegistry`, which runs
+libID-contracts v0.17.0. Sepolia and the Eden testnet run v0.19.0; see
+[Network status](/docs/reference/addresses/#network-status).
 
 See [What a binding proves](/docs/concepts/trust/#whom-you-trust) for what
 the owner of a contract can do.

@@ -57,7 +57,7 @@ function depositToHandle(bytes32 platformId, string handle, address token, uint2
 ```
 
 Same as `deposit`, but takes the handle as text. The escrow computes the node
-with `IdentityRegistry.handleNodeOf` and emits `DepositedToHandle` with the
+with `IdentityRegistry.handleNodeOf` and emits `HandleRevealed` with the
 folded handle. The handle is public in the calldata and in the log.
 
 ### claim
@@ -122,7 +122,7 @@ event Forwarded(
     bytes32 indexed handleNode, address indexed token, address indexed depositor,
     address holder, uint256 amount, uint256 received
 );
-event DepositedToHandle(bytes32 indexed handleNode, bytes32 indexed platformId, string handle);
+event HandleRevealed(bytes32 indexed platformId, bytes32 indexed handleNode, string handle);
 event Claimed(
     bytes32 indexed handleNode, address indexed token, address indexed claimer,
     address recipient, uint256 round, uint256 released, uint256 received
@@ -142,9 +142,9 @@ round.
 books, and `received` is what the recipient gained. They differ only for
 tokens that take a fee.
 
-`DepositedToHandle` follows the `Deposited` or `Forwarded` of a
-`depositToHandle`. It is the only escrow event with the platform or the
-handle. For a node paid with `deposit`, find the platform in the registry's
+`HandleRevealed` follows the `Deposited` or `Forwarded` of a
+`depositToHandle`. It is the same event `IdentityRegistry` emits for handle
+text, and the only escrow event with the platform or the handle. For a node paid with `deposit`, find the platform in the registry's
 `IdentityBound` once someone binds the handle.
 
 ## Errors

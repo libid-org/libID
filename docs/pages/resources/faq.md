@@ -46,9 +46,9 @@ only one.
 
 Not unless it is disclosed. The handle of a Google account is its email
 address. A binding puts only its node, a SHA-256 hash, on chain. The address
-is on chain if you publish it, with `bind` or `publish`, or if someone pays
-it by its text, with `HandleEscrow.depositToHandle`. Once on chain, it stays in
-the chain's history for good, even after `unpublish`.
+is on chain if you disclose it, with `bind`, `publish` or `reveal`, or if
+someone pays it by its text, with `HandleEscrow.depositToHandle`. Once on
+chain, it stays in the chain's history for good, even after `unpublish`.
 
 A node does not keep the address secret. Anyone who guesses it can hash it
 and find your binding. See

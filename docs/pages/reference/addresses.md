@@ -1,6 +1,6 @@
 ---
 title: Addresses
-description: libID contract addresses on the testnets and on a local chain.
+description: libID contract addresses, which networks run which version, and the local stacks.
 sidebar:
   order: 3
 ---
@@ -9,36 +9,39 @@ libID deploys every contract through a factory with CREATE3. An address
 depends only on the contract's name and the factory, and each environment
 has its own factory. So a contract has one address on every testnet and
 another on every production network. Upgrades keep a contract at the same
-address. v0.18 is a new deployment, with new addresses.
+address.
 
 | Contract | Testnet |
 | --- | --- |
-| `IdentityRegistry` | `0x4e750fb0e1e529d7a57647c0001db96c5ffb6fa1` |
-| `HandleEscrow` | `0xc7c13a7715858e60d628f867048e0f67fc683dd6` |
-| `CeremonyProofVerifier` | `0x00ad3331317e6c1b9599472bec9bba321bd38137` |
+| `IdentityRegistry` | `0x58ac0cd5ec19c850a75d6183b3c3b2de692fb20d` |
+| `HandleEscrow` | `0xf3f81c31c889ddf1ec83b91b3dfed601c04f5e50` |
+| `CeremonyProofVerifier` | `0x6e4585c4f1ac48a20f49bb61163c466dc4f35004` |
 | `NotaryService` | `0xfcf39134654e3542b956ee6e315ca650e6ba3b8c` |
-| GitHub platform verifier | `0x0e957083ea529d1eeb6e49e7742e94a7173380a8` |
-| X platform verifier | `0x4b395ca8dd2642bd65ddd9b1da518ff8cb7a9c84` |
-| Google platform verifier | `0x141d728ce8d21d5eeda2be5a4a93cd62e174b55b` |
+| GitHub platform verifier | `0x13cdf6d5666a42e0eb586809f46ce10e469d11f7` |
+| X platform verifier | `0x655be95a91a26b4ade476a8992ee25c98bb774a6` |
+| Google platform verifier | `0x355143c93a645ae914b1315eb1b580072207e0f2` |
 | `GoogleJwtRoots` | `0x4d9c43d4cf161452b7f66415fa492f4fc42ea583` |
 | `LibidFactory` | `0x5294f6c0f1f086f70c9b510ba7990085d5976281` |
 
-The testnets are [Sepolia](/docs/networks/sepolia/) and
-[Eden testnet](/docs/networks/eden/). Both run libID-contracts v0.18.1, the
-version these docs describe. The same address on two networks does not by
+Most apps only need `IdentityRegistry`. Your code talks to the others only if it
+builds proofs itself.
+
+## Network status
+
+| Network | libID-contracts | Addresses |
+| --- | --- | --- |
+| [Sepolia](/docs/networks/sepolia/) | v0.19.0 | testnet, above |
+| [Eden testnet](/docs/networks/eden/) | v0.19.0 | testnet, above |
+| [Ethereum mainnet](/docs/networks/ethereum/) | v0.17.0; v0.19.0 pending | not listed |
+
+These docs describe v0.19.0. The same address on two networks does not by
 itself mean the same version: an upgrade on one network does not change the
 other.
-
-Production is [Ethereum mainnet](/docs/networks/ethereum/). v0.18 is not
-deployed there yet, so this page lists no production addresses.
 
 These addresses come from
 [chain-configurations](https://github.com/libid-org/chain-configurations/tree/main/networks),
 where `libid-deploy plan --print-addresses` generates them. If this page and
 that repository disagree, trust the repository.
-
-Most apps only need `IdentityRegistry`. Your code talks to the others only if it
-builds proofs itself.
 
 ## Local stacks
 
@@ -51,13 +54,13 @@ account as the deployer. On a fresh anvil:
 
 | Contract | Address |
 | --- | --- |
-| `IdentityRegistry` | `0x31874a585aab1f98121f14f4b2af68a93eaaa9a5` |
-| `HandleEscrow` | `0x520996cdbccfffd952a5134dab146b6fac7b103c` |
-| `CeremonyProofVerifier` | `0x7eb419023544487e5b4a61d6db043a8e29c4df4e` |
+| `IdentityRegistry` | `0x155090a3a2dded2fbdf385bac8cffeb3a51a18ae` |
+| `HandleEscrow` | `0x1297ddf98efc4d72ce4c5799e057dd61052cfe29` |
+| `CeremonyProofVerifier` | `0x145307aaf8dc22fb850aae44aea19628df20e9f6` |
 | `NotaryService` | `0x278e8ba43e16e1d757fe77590edb759d85860483` |
-| GitHub platform verifier | `0x4dfff81322459ca460e3ddede2b8dcb33bf10745` |
-| X platform verifier | `0xcced9e8428f4043d00d4d5dfc293d864bb2bc204` |
-| Google platform verifier | `0x5de9d5f806d872315bfdfde5b5eb8f97ebcb743d` |
+| GitHub platform verifier | `0x1aafd47fb1e7c68a1c9afc19d06ccccd958cc4d6` |
+| X platform verifier | `0x37be0160c6e2e2e089010d178c7be3ee27602628` |
+| Google platform verifier | `0xfcb24d6491120569c91370dd8fa5441adb1d94ee` |
 | `GoogleJwtRoots` | `0x6d5bc82c9a8a6a05a9319c9e9d5fc43ff80552ac` |
 | `LibidFactory` | `0x13089b18e7fdcdedde55f6b85451561a8b725825` |
 
@@ -69,6 +72,6 @@ your code uses land at:
 | Contract | Address |
 | --- | --- |
 | `IdentityRegistry` | `0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512` |
-| `HandleEscrow` | `0x0B306BF915C4d645ff596e518fAf3F9669b97016` |
+| `HandleEscrow` | `0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0` |
 
 That project is not published yet.

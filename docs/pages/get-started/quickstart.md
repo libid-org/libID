@@ -6,7 +6,7 @@ sidebar:
 ---
 
 In this guide you will find the address that holds a GitHub handle, and then
-the GitHub handle that address publishes. You only read from the chain, so you need no
+the handle that address shows as its name. You only read from the chain, so you need no
 wallet and no tokens.
 
 ## Set up
@@ -16,7 +16,7 @@ libID. Set `RPC_URL` and `IDENTITY_REGISTRY` for it. For Sepolia:
 
 ```sh
 export RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
-export IDENTITY_REGISTRY=0x4e750fb0e1e529d7a57647c0001db96c5ffb6fa1
+export IDENTITY_REGISTRY=0x58ac0cd5ec19c850a75d6183b3c3b2de692fb20d
 ```
 
 The other networks are listed under [Networks](/docs/networks/ethereum/).
@@ -41,7 +41,7 @@ Create `index.mjs`:
 
 ```js
 import { createPublicClient, http } from 'viem';
-import { platformId, resolveHandle, publishedHandleOf } from '@libid/contracts';
+import { platformId, primaryHandleOf, resolveHandle } from '@libid/contracts';
 
 const registry = {
   client: createPublicClient({ transport: http(process.env.RPC_URL) }),
@@ -73,14 +73,15 @@ Now go the other way:
 
 ```js
 if (holder) {
-  const handle = await publishedHandleOf(registry, holder, github);
-  console.log(handle);
+  const primary = await primaryHandleOf(registry, holder);
+  console.log(primary?.handle);
 }
 ```
 
-`publishedHandleOf` returns the handle the holder published on that platform.
-It returns `null` if the holder has not published one, or if the handle now
-belongs to someone else.
+`primaryHandleOf` returns the one handle the holder chose as its name, and
+its `platformId`. A holder has at most one, on any platform. It returns
+`null` if the holder has not chosen one, or if the handle now belongs to
+someone else.
 
 ## Run it
 

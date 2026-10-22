@@ -55,8 +55,8 @@ a copy of every binding on every chain the gateway serves. The gateway
 answers from that copy, not from the chain. Its URL is
 `https://names.handles.link/ens/{sender}/{data}.json`.
 
-The only chain it serves today is Ethereum mainnet, which still runs the
-previous contract version, v0.17.0.
+The only chain it serves today is Ethereum mainnet, which runs
+libID-contracts v0.17.0.
 
 The copy runs a few blocks behind the chain. If it falls too far behind, the
 gateway does not answer for that chain, and the client gets no address.

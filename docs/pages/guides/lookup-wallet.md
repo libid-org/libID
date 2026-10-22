@@ -6,14 +6,14 @@ sidebar:
 ---
 
 A wallet can hold several identities, on one platform or on many. This guide
-shows how to get the one handle a wallet publishes, and how to list all of
-its identities.
+shows how to get the one handle a wallet shows as its name, and how to list
+all of its identities.
 
 The examples use this setup:
 
 ```js
 import { createPublicClient, http } from 'viem';
-import { identityCount, identitiesOf, platformId, publishedHandleOf } from '@libid/contracts';
+import { identityCount, identitiesOf, platformId, primaryHandleOf } from '@libid/contracts';
 
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
 const registry = { client, address: process.env.IDENTITY_REGISTRY };
@@ -23,17 +23,18 @@ const holder = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
 ## Show a handle
 
-To show a wallet by its handle in your app, use `publishedHandleOf`:
+To show a wallet by its handle in your app, use `primaryHandleOf`:
 
 ```js
-const handle = await publishedHandleOf(registry, holder, platformId('github'));
-console.log(handle ?? holder);
+const primary = await primaryHandleOf(registry, holder);
+console.log(primary?.handle ?? holder);
 ```
 
-Each holder publishes at most one handle per platform. `publishedHandleOf`
-returns it, or `null` if the holder has not published one. It also returns
-`null` if the handle now belongs to someone else, so you never show a handle
-the holder has lost.
+Each holder has at most one primary handle, on any platform.
+`primaryHandleOf` returns it with its `platformId`, or `null` if the holder
+has not chosen one. It also returns `null` if the handle now belongs to
+someone else, so you never show a handle the holder has lost. See
+[Primary handle](/docs/concepts/primary-handle/).
 
 ## List every identity
 
@@ -60,7 +61,7 @@ Each identity has:
 
 The list has nodes, not the id or the handle as text. See
 [Platforms and nodes](/docs/concepts/platforms-and-nodes/#nodes). To show a
-handle, use `publishedHandleOf`. To check whether an identity proved a handle
+handle, use `primaryHandleOf`. To check whether an identity proved a handle
 you already know, compare its `handleNode` with
 `handleNode('github', 'octocat')` from `@libid/contracts`.
 

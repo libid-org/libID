@@ -18,9 +18,8 @@ they point wherever `IdentityRegistry` says the handle points.
 Names resolve for bindings on Ethereum mainnet. The gateway does not answer
 for any other chain yet.
 
-Ethereum mainnet still runs the previous contract version, v0.17.0. The
-networks that run v0.18, Sepolia and the Eden testnet, have no working names
-yet.
+Ethereum mainnet runs libID-contracts v0.17.0. The networks that run
+v0.19.0, Sepolia and the Eden testnet, have no working names yet.
 
 | Where | State |
 | --- | --- |
@@ -85,6 +84,6 @@ The gateway's status lists the labels each chain answers to.
 
 Only addresses. Text records and avatars come back empty, and an address
 has no reverse name. To show a handle for an address, use
-[`publishedHandleOf`](/docs/guides/lookup-wallet/#show-a-handle). To list every
+[`primaryHandleOf`](/docs/guides/lookup-wallet/#show-a-handle). To list every
 identity a wallet has, use [`identitiesOf`](/docs/guides/lookup-wallet/#list-every-identity).
 It returns nodes, not handles.

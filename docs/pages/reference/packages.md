@@ -11,13 +11,13 @@ sidebar:
 npm install @libid/contracts viem
 ```
 
-These docs describe version 0.18.1, which matches libID-contracts v0.18.1.
+These docs describe version 0.19.0, which matches libID-contracts v0.19.0.
 The package works with [viem](https://viem.sh). It has:
 
 - ABIs: `identityRegistryAbi`, `handleEscrowAbi`, and the other contracts.
   `bindErrorsAbi` has every error a `bind` can revert with.
 - Reading helpers: `resolveHandle`, `resolveId`, `resolveHandleAndId`,
-  `publishedHandleOf`, `identityCount`, `identitiesOf`.
+  `primaryHandleOf`, `identityCount`, `identitiesOf`.
 - Keys: `platformId`, `handleNode`, `idNode`, `foldedHandleNode`.
 - Handle and id rules: `normalize`, `checkId`, `RULES_GITHUB`, `RULES_X`,
   `RULES_GOOGLE`.
@@ -42,6 +42,10 @@ cargo add libid-contracts
 
 Bindings for the contracts, built on [alloy](https://alloy.rs) 2. See
 [docs.rs/libid-contracts](https://docs.rs/libid-contracts).
+
+For your tests, the `testing` feature adds `StubPlatformVerifier`, a
+platform verifier that accepts any binding without a proof. Enable it in
+`[dev-dependencies]` only.
 
 ## Rust: `libid-identity`
 

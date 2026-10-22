@@ -10,7 +10,7 @@ sidebar:
 | Chain id | `3735928814` |
 | RPC | `https://ev-reth-eden-testnet.binarybuilders.services:8545` |
 
-Eden is a testnet: its contracts have the testnet
+Eden is a testnet. It runs libID-contracts v0.19.0, at the testnet
 [addresses](/docs/reference/addresses/), the same as Sepolia's. GitHub, X
 and Google accept bindings there.
 
@@ -18,9 +18,9 @@ To run a guide against Eden, set:
 
 ```sh
 export RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545
-export IDENTITY_REGISTRY=0x4e750fb0e1e529d7a57647c0001db96c5ffb6fa1
-export HANDLE_ESCROW=0xc7c13a7715858e60d628f867048e0f67fc683dd6
-export FROM_BLOCK=289169815
+export IDENTITY_REGISTRY=0x58ac0cd5ec19c850a75d6183b3c3b2de692fb20d
+export HANDLE_ESCROW=0xf3f81c31c889ddf1ec83b91b3dfed601c04f5e50
+export FROM_BLOCK=291663483
 ```
 
 `FROM_BLOCK` is the block `IdentityRegistry` was deployed in. The

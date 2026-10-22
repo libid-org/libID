@@ -30,8 +30,8 @@ cannot bind another.
 Binding an identity puts on chain, forever, the holder, the platform,
 `observedAt`, and two nodes: hashes of the id and of the handle. The id is
 never on chain. The handle is on chain only if a transaction discloses it:
-a `bind` with the handle, a `publish`, or any other call that takes the
-handle as text, such as a payment to a handle. For Google, the handle is the
+a `bind` with the handle, a `publish` or a `reveal`, or a payment to the
+handle by its text with `HandleEscrow.depositToHandle`. For Google, the handle is the
 email address. See
 [Platforms and nodes](/docs/concepts/platforms-and-nodes/#ids-and-handles).
 
@@ -46,8 +46,9 @@ A handle or id that was never disclosed is still not secret:
 - Every use of a node links to every other use of it.
 - The app that runs the sign-in sees the id and the handle, and builds the
   `bind` call. It decides whether the handle is disclosed.
-- A disclosure cannot be taken back. `unpublish` clears the published handle,
-  but the transaction that carried it stays in the chain's history.
+- A disclosure cannot be taken back. `unpublish` clears only the primary
+  handle. The `HandleRevealed` log and the transaction that carried the
+  handle stay in the chain's history.
 
 ## Whom you trust
 
@@ -109,6 +110,7 @@ The contracts have not been audited. They are upgradeable. On each network
 one key owns all of them, and on Ethereum mainnet the same key owns
 `handles.link` in ENS. See [Security](/docs/resources/security/#admin-keys).
 
-Ethereum mainnet still runs the previous contract version, v0.17.0, which
-stores every handle as text, and the id too for GitHub and X. These docs
-describe v0.18, which runs on Sepolia and the Eden testnet.
+These docs describe libID-contracts v0.19.0, which runs on Sepolia and the
+Eden testnet. Ethereum mainnet still runs v0.17.0, which stores every handle
+as text, and the id too for GitHub and X. See
+[Addresses](/docs/reference/addresses/#network-status).

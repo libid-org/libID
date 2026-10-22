@@ -90,14 +90,15 @@ The holder of the identity and the time of its latest proof.
 
 ## Identities of a holder
 
-### publishedHandleOf
+### primaryHandleOf
 
 ```solidity
-function publishedHandleOf(address holder, bytes32 platformId) view returns (string)
+function primaryHandleOf(address holder) view returns (bytes32 platformId, string handle)
 ```
 
-The handle the holder chose to show on the platform. Empty if it chose none,
-or if the handle now resolves to a different holder.
+The one handle the holder chose to show as its name, and the platform it is
+on. `(0, "")` if it chose none, or if it no longer holds that handle. See
+[Primary handle](/docs/concepts/primary-handle/).
 
 ### identityCount
 
@@ -168,23 +169,38 @@ does not build this call by hand; the libID sign-in flow does. See
 ### bind
 
 ```solidity
-function bind(bytes32 platformId, uint16 verifierVersion, bytes payload, string handle) payable
+function bind(
+    bytes32 platformId,
+    uint16 verifierVersion,
+    bytes payload,
+    string handle,
+    bool primary,
+    uint256 feeAmount,
+    address feeReceiver
+) payable
 ```
 
 Verifies the proof and binds the identity and its handle to the caller.
-`handle` becomes the caller's published handle on that platform. It must
-fold and hash to the handle node the proof bound, or the call reverts
-`HandleNotProved`. An empty `handle` publishes nothing.
-Send `quoteBind(platformId, verifierVersion)` as `msg.value`, plus any service
-fee the proof names.
+
+A nonempty `handle` is disclosed: it must fold and hash to the handle node
+the proof bound, or the call reverts `HandleNotProved`, and it is logged in
+`HandleRevealed`. With `primary` set, it also becomes the caller's primary
+handle. An empty `handle` discloses nothing; `primary` with an empty handle
+reverts `PrimaryWithoutHandle`.
+
+`feeAmount` is a service fee that goes to `feeReceiver`. A bind with no fee
+passes `(0, address(0))`. Send `quoteBind(platformId, verifierVersion)` plus
+`feeAmount` as `msg.value`, exactly.
 
 ### bindPrivately
 
 ```solidity
-function bindPrivately(bytes32 platformId, uint16 verifierVersion, bytes payload) payable
+function bindPrivately(
+    bytes32 platformId, uint16 verifierVersion, bytes payload, uint256 feeAmount, address feeReceiver
+) payable
 ```
 
-`bind` with no handle to publish. The registry stores only the nodes.
+`bind` with an empty handle. The registry stores only the nodes.
 
 ### quoteBind
 
@@ -192,8 +208,8 @@ function bindPrivately(bytes32 platformId, uint16 verifierVersion, bytes payload
 function quoteBind(bytes32 platformId, uint16 verifierVersion) view returns (uint256)
 ```
 
-What verifying a proof costs, in wei. It does not include a service fee an
-app may charge.
+What verifying a proof costs, in wei. It does not include the service fee
+passed to `bind`.
 
 ### publish
 
@@ -201,17 +217,27 @@ app may charge.
 function publish(bytes32 platformId, string handle)
 ```
 
-Makes `handle` the caller's published handle on the platform. Its node must
-be one the caller holds, or the call reverts `NotYourHandle`.
+Makes `handle` the caller's primary handle, replacing the one it had on any
+platform. Its node must be one the caller holds, or the call reverts
+`NotYourHandle`. Emits `HandleRevealed`, then `HandlePublished`.
+
+### reveal
+
+```solidity
+function reveal(bytes32 platformId, string handle)
+```
+
+Shows a handle the caller holds in `HandleRevealed`, without making it the
+primary handle. It changes no state. Reverts `NotYourHandle` like `publish`.
 
 ### unpublish
 
 ```solidity
-function unpublish(bytes32 platformId)
+function unpublish()
 ```
 
-Stops showing the caller's published handle on the platform. The binding
-stays. Past `HandlePublished` events still contain the handle.
+Removes the caller's primary handle, whatever its platform. The bindings
+stay, and so do past `HandleRevealed` logs with the handle's text.
 
 ### digestSpent
 
@@ -219,7 +245,9 @@ stays. Past `HandlePublished` events still contain the handle.
 function digestSpent(bytes32 digest) view returns (bool)
 ```
 
-Whether a proof with this authorization digest was already used.
+Whether a proof with this authorization digest was already used here. The
+digest names no chain, so the same proof can bind once on each chain that
+runs the verifier.
 
 ## Events
 
@@ -237,12 +265,20 @@ event IdentityBound(
 A holder proved an identity. It carries only the nodes.
 
 ```solidity
-event HandlePublished(
-    address indexed holder, bytes32 indexed platformId, bytes32 indexed handleNode, string handle
-);
+event HandleRevealed(bytes32 indexed platformId, bytes32 indexed handleNode, string handle);
 ```
 
-A holder published a handle, with `bind` or `publish`. `handle` is folded.
+A call put a handle's text on chain: `bind` with a handle, `publish` or
+`reveal`. `handle` is folded. It is the only registry event with handle
+text. `HandleEscrow` emits the same event.
+
+```solidity
+event HandlePublished(address indexed holder, bytes32 indexed platformId, bytes32 indexed handleNode);
+```
+
+A holder made a handle its primary handle, with `bind` and `primary`, or
+`publish`. It replaces any earlier one without a `HandleUnpublished`. The
+text is in the `HandleRevealed` just before it.
 
 ```solidity
 event HandleRetired(bytes32 indexed platformId, bytes32 indexed handleNode, address indexed holder);
@@ -251,11 +287,11 @@ event HandleRetired(bytes32 indexed platformId, bytes32 indexed handleNode, addr
 An identity proved a new handle, so its old handle stopped resolving.
 
 ```solidity
-event HandleUnpublished(address indexed holder, bytes32 indexed platformId);
+event HandleUnpublished(address indexed holder);
 ```
 
-A holder's published handle on a platform was withdrawn: by `unpublish`, or
-because the holder no longer holds that handle.
+A holder's primary handle was removed: by `unpublish`, or because the holder
+no longer holds that handle.
 
 Other events are for operators: `CeremonyBound` and `BindFeePaid` (emitted
 by `bind`), `ProofVerifierConfigured`, and the standard
@@ -267,12 +303,15 @@ ownership and upgrade events.
 | --- | --- |
 | `UnknownPlatform(bytes32 platformId)` | The platform is not GitHub, X or Google. |
 | `HandleNotProved(bytes32 disclosed, bytes32 proved)` | The handle passed to `bind` is not the one the proof bound. |
-| `NotYourHandle(bytes32 handleNode)` | `publish` was given a handle the caller does not hold. |
+| `PrimaryWithoutHandle()` | `bind` was given `primary` with an empty handle. |
+| `NotYourHandle(bytes32 handleNode)` | `publish` or `reveal` was given a handle the caller does not hold. |
 | `StaleProof(uint64 observedAt, uint64 known)` | A newer proof already exists for this identity or handle. |
 | `NotProofTarget(address proved, address caller)` | The proof was made for a different holder. |
 | `DigestAlreadySpent(bytes32 digest)` | The proof was already used. |
 | `WrongBindValue(uint256 required, uint256 provided)` | `msg.value` is less than `quoteBind`. |
-| `WrongFeeValue(uint256 required, uint256 provided)` | The extra value does not match the service fee in the proof. |
+| `WrongFeeValue(uint256 required, uint256 provided)` | The value above `quoteBind` is not `feeAmount`. |
+| `NoncanonicalFee(uint256 amount, address receiver)` | Only one of `feeAmount` and `feeReceiver` is zero. |
+| `FeeTransferFailed(address receiver, uint256 amount)` | `feeReceiver` refused the fee. |
 
 ## Admin functions
 

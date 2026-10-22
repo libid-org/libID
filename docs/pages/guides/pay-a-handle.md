@@ -178,19 +178,23 @@ with `BadToken`.
 ## Send by handle text
 
 `depositToHandle` takes the handle as text instead of a node. Use it in
-place of `deposit`:
+place of `deposit`. After the same setup as `sender.mjs`:
 
 ```js
-await sender.writeContract({
+const sender = createWalletClient({ account: privateKeyToAccount(process.env.PRIVATE_KEY), transport });
+const amount = 10n ** 16n;
+
+const hash = await sender.writeContract({
   ...escrow,
   functionName: 'depositToHandle',
   args: [platformId('github'), 'carol', NATIVE, amount, sender.account.address],
   value: amount,
 });
+await client.waitForTransactionReceipt({ hash });
 ```
 
 It credits the same node, so Carol claims both kinds the same way. It also
-emits `DepositedToHandle` with the handle folded. The handle is then public in
+emits `HandleRevealed` with the handle folded. The handle is then public in
 the calldata and the logs. It folds A-Z like `handleNode` and checks nothing
 else, so `@carol` still lands on a node nobody can claim.
 

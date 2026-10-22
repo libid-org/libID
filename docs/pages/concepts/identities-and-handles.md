@@ -62,7 +62,7 @@ identity that did. libID only knows what someone has proved.
 | You want to | Use |
 | --- | --- |
 | Let a user type a handle to pay | `resolveHandle` |
-| Show who an address is | `publishedHandleOf`, or `identitiesOf` for every identity's nodes |
+| Show who an address is | `primaryHandleOf`, or `identitiesOf` for every identity's nodes |
 | Remember a person across renames | the id node: `resolveId` |
 | Check a handle still leads to the person you paid before | `resolveHandleAndId` with the saved id node |
 | Pay someone who has not joined yet | the handle, through `HandleEscrow` |

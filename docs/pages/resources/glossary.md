@@ -8,7 +8,8 @@ sidebar:
 - **Binding**: the record that an identity, and its handle, are bound to a
   holder.
 - **Disclosure**: putting a handle's text on chain, with `bind`, `publish`,
-  or any call that takes the handle as text. It cannot be undone.
+  `reveal` or `HandleEscrow.depositToHandle`. Each emits `HandleRevealed`.
+  It cannot be undone.
 - **Folding**: lowercasing `A` to `Z` in a handle before it is hashed.
   Nothing else changes, so `@octocat` and `octocat` are different handles.
 - **Handle**: the name an identity uses on its platform: a GitHub login, an X
@@ -28,9 +29,9 @@ sidebar:
   settings. Never the holder of an identity.
 - **Platform**: GitHub, X or Google. Its key is `github`, `x` or `google`.
 - **`platformId`**: `keccak256` of the platform key.
+- **Primary handle**: the one handle a holder chose to show as its name, on
+  any platform. See [Primary handle](/docs/concepts/primary-handle/).
 - **Proof**: the evidence a holder sends to `bind`: platform data plus a
   zero-knowledge proof.
-- **Published handle**: the one handle a holder chose to show on a platform.
-  See [Published handles](/docs/concepts/published-handles/).
 - **Round**: in `HandleEscrow`, the deposits of one token to one handle made
   between two claims of that token.

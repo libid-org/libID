@@ -28,7 +28,7 @@ account, the notary signs only true records, and the verifiers and their
 owners check proofs correctly. What the last box stores is public on chain:
 the holder and the nodes of the id and the handle. The handle text is
 stored only if the holder discloses it; see
-[Published handles](/docs/concepts/published-handles/).
+[Primary handle](/docs/concepts/primary-handle/).
 
 The Google path has no notary in the sign-in itself, because Google signs
 its tokens. The notary still matters for Google: the contracts learn
@@ -39,9 +39,9 @@ notary signature there lets a fake key bind any Google account. See
 
 ## The steps
 
-1. The app asks for a binding. It names the holder's address and any
-   service fee. These are hashed into an authorization digest, which the proof will be tied
-   to.
+1. The app asks for a binding. It names the holder's address, which is
+   hashed with a random nonce into an authorization digest. The proof will
+   be tied to that digest. The digest names no chain.
 2. The user signs in to the platform in a popup, with the normal OAuth
    sign-in. The digest goes into the sign-in request, so the platform's answer
    is tied to this one binding.
@@ -57,8 +57,9 @@ notary signature there lets a fake key bind any Google account. See
    exactly what the platform sent, and outputs their nodes. The proof sent to
    the chain contains the nodes, not the id or the handle.
 4. The user's wallet sends `bind` to `IdentityRegistry` with the proof, paying
-   `quoteBind` plus any service fee. If the user chose to publish the handle,
-   the app passes it to `bind`. Otherwise it calls `bindPrivately`, or `bind`
+   `quoteBind` plus any service fee. If the user chose to disclose the
+   handle, the app passes it to `bind`, and sets `primary` if the user chose
+   it as the wallet's name. Otherwise it calls `bindPrivately`, or `bind`
    with an empty handle.
 5. The contracts check it. `IdentityRegistry` hands the proof to the proof
    verifier, which picks the verifier for that platform and version. The
@@ -66,16 +67,19 @@ notary signature there lets a fake key bind any Google account. See
    time limits, and
    returns the id node, the handle node and `observedAt`.
 6. `IdentityRegistry` writes the binding if the proof is for the calling
-   address, has not been used, and is newer than what is stored. It emits
+   address, has not been used on this chain, and is newer than what is stored. It emits
    `IdentityBound` with the two nodes. If `bind` was given a handle, it must
-   hash to the proved handle node; the registry then stores it as the
-   published handle and emits `HandlePublished`.
+   hash to the proved handle node; the registry emits `HandleRevealed` with
+   it. With `primary`, it also stores it as the wallet's primary handle and
+   emits `HandlePublished`.
 
 ## What it costs
 
 - `quoteBind(platformId, version)` returns the verification fee. It is zero
   for Google. For GitHub and X it is two notary fees, one per recorded session.
-- The app may add a service fee. The user approves it as part of the digest.
+- The app may add a service fee: `feeAmount` and `feeReceiver` in the `bind`
+  call. The proof does not cover it. The user agrees to it by sending the
+  transaction.
 - Gas. Most of it goes to verifying the zero-knowledge proof.
 
 ## Where to read more

@@ -65,9 +65,9 @@ for (const { args } of bound) {
 | `observedAt` | When the platform confirmed the identity, in Unix seconds. |
 | `ceremonyVersion` | The ceremony version the proof used. |
 
-The event has no id or handle as text. If the holder shows the handle as its
-name, the registry emits `HandlePublished` with it, in the same transaction
-or later.
+The event has no id or handle as text. If the holder discloses the handle,
+the registry emits `HandleRevealed` with it, in the same transaction or
+later.
 
 `holder`, `idNode` and `handleNode` are indexed, so you can filter by them:
 
@@ -84,11 +84,15 @@ const forWallet = await readEvents({
 
 - `HandleRetired`: a handle stopped pointing at its holder, because the same
   identity proved a new handle.
-- `HandlePublished`: a holder shows a handle as its name on a platform.
-  `handle` is the text, with A-Z folded to a-z.
-- `HandleUnpublished`: a holder stopped showing its published handle on a
-  platform. The registry also emits it when the holder loses the handle its
-  name shows, to another identity or by retiring it.
+- `HandleRevealed`: a handle's text went on chain, with A-Z folded to a-z.
+  It has the platform and the handle node, and no address. `bind` with a
+  handle, `publish` and `reveal` emit it.
+- `HandlePublished`: a holder made a handle its primary handle. It has the
+  holder, the platform and the handle node, not the text. It replaces the
+  holder's earlier primary handle, on any platform.
+- `HandleUnpublished`: a holder's primary handle was removed, by `unpublish`
+  or because the holder lost that handle, to another identity or by
+  retiring it.
 
 ## Watch for new bindings
 
@@ -110,8 +114,9 @@ Call `unwatch()` to stop.
 `HandleEscrow` emits:
 
 - `Deposited`: funds are held for a handle nobody owns yet.
-- `DepositedToHandle`: a deposit named the handle as text. It comes with a
-  `Deposited` or a `Forwarded`, and carries the handle with A-Z folded.
+- `HandleRevealed`: a `depositToHandle` named the handle as text. It is the
+  same event the registry emits, and comes with a `Deposited` or a
+  `Forwarded`.
 - `Forwarded`: the handle had a holder, who was paid right away.
 - `Claimed`: the holder took what was held.
 - `Refunded`: a deposit's `refundTo` address took it back.
@@ -153,14 +158,16 @@ If you store events in your own database, follow these rules:
 - Apply events in order: by block number, then log index.
 - On `IdentityBound`, set the holder of `handleNode` and of `idNode` to
   `holder`.
-- On `HandlePublished`, set `holder`'s published handle on `platformId` to
-  `handle`.
+- On `HandleRevealed`, from the registry or the escrow, save `handle` as
+  the text of `handleNode`. This is the only event with handle text.
+- On `HandlePublished`, set `holder`'s primary handle to `handleNode` on
+  `platformId`, replacing any earlier one. Take the text from
+  `HandleRevealed`.
 - On `HandleRetired`, mark `handleNode` as held by nobody. An identity emits it
   when it proves a new handle. If you skip it, your index keeps routing the
   old handle to that holder.
-- On `HandleUnpublished`, clear the holder's published handle on that
-  platform.
-- When a holder loses the handle its published name shows, the registry
+- On `HandleUnpublished`, clear the holder's primary handle.
+- When a holder loses the handle its primary handle shows, the registry
   emits `HandleUnpublished`. `HandlePublished` and `HandleUnpublished` are
-  enough to keep the published handle right. `publishedHandleOf` also checks that the holder still holds
-  the handle.
+  enough to keep the primary handle right. `primaryHandleOf` also checks
+  that the holder still holds the handle.
