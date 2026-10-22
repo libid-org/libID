@@ -38,8 +38,15 @@ export function savedSession(prefix: string, required: string[]): Stored[] | und
     liveSecret(`${prefix}_COOKIES`)
     return undefined
   }
-  const parsed = JSON.parse(json) as Stored[] | { cookies: Stored[] }
-  const cookies = Array.isArray(parsed) ? parsed : parsed.cookies
+  let cookies: Stored[] | undefined
+  try {
+    const parsed = JSON.parse(json) as Stored[] | { cookies?: Stored[] }
+    cookies = Array.isArray(parsed) ? parsed : parsed.cookies
+  } catch {
+    // The parser's message would quote the value.
+  }
+  if (!Array.isArray(cookies))
+    throw new Error(`The saved ${prefix} session is not a JSON cookie list or { cookies }`)
   if (!cookies.some((cookie) => required.includes(cookie.name)))
     throw new Error(`The saved ${prefix} session has none of ${required.join(', ')}`)
   return cookies

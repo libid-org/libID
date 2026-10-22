@@ -17,6 +17,9 @@ export function githubAccount(): GitHubAccount | undefined {
   return username && password && totpSecret ? { username, password, totpSecret } : undefined
 }
 
+/** The longest a fill or click may take; a navigation gets twice that. */
+const STEP_TIMEOUT = 5_000
+
 function totp(secret: string): string {
   const normalized = secret.replace(/\s/g, '').toUpperCase()
   return new OTPAuth.TOTP({
@@ -57,7 +60,8 @@ async function backOff(
 async function onErrorPage(popup: Page, progress: Progress, pause: Pause) {
   await backOff(progress, 'errored', 10_000, 'GitHub answered its error page', pause)
   // Reopening the request keeps the popup on github.com until GitHub redirects.
-  if (progress.start) await popup.goto(progress.start).catch(() => {})
+  if (progress.start)
+    await popup.goto(progress.start, { timeout: STEP_TIMEOUT * 2 }).catch(() => {})
   progress.filled = false
   progress.totpStep = undefined
 }
@@ -71,21 +75,32 @@ async function onLogin(
 ) {
   if (text.includes('too many requests') || text.includes('rate limit')) {
     await backOff(progress, 'rateLimited', 30_000, 'GitHub rate-limited the login', pause)
-    await popup.reload().catch(() => {})
+    await popup.reload({ timeout: STEP_TIMEOUT * 2 }).catch(() => {})
     progress.filled = false
     return
   }
+  if (text.includes('incorrect username or password'))
+    throw new Error('GitHub refused the username or password: check GH_TEST_ALICE_*')
   if (progress.filled || !(await popup.locator('#login_field').count())) return
-  await popup.fill('#login_field', account.username)
-  await popup.fill('#password', account.password)
-  await popup.click('input[type=submit][name=commit]')
+  // A step that fails is tried again on the next poll, inside drivePopup's budget.
+  try {
+    await popup.fill('#login_field', account.username, { timeout: STEP_TIMEOUT })
+    await popup.fill('#password', account.password, { timeout: STEP_TIMEOUT })
+    await popup.click('input[type=submit][name=commit]', { timeout: STEP_TIMEOUT })
+  } catch {
+    return
+  }
   progress.filled = true
 }
 
 async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
   const step = Math.floor(Date.now() / 30_000)
   if (progress.totpStep === step || !(await popup.locator('#app_totp').count())) return
-  await popup.fill('#app_totp', totp(account.totpSecret))
+  try {
+    await popup.fill('#app_totp', totp(account.totpSecret), { timeout: STEP_TIMEOUT })
+  } catch {
+    return
+  }
   // GitHub submits the code on its own once six digits are in.
   await popup
     .locator('button[type=submit]')
@@ -139,7 +154,9 @@ async function onGitHubPage(
     return onLogin(popup, account, progress, text, pause)
   if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress)
   if (path.startsWith('/sessions/two-factor')) {
-    await popup.goto('https://github.com/sessions/two-factor/app').catch(() => {})
+    await popup
+      .goto('https://github.com/sessions/two-factor/app', { timeout: STEP_TIMEOUT * 2 })
+      .catch(() => {})
     return
   }
   if (path === '/login/oauth/authorize') return onAuthorize(popup, progress, text)

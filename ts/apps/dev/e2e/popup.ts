@@ -16,8 +16,8 @@ export interface Driver {
   /** Whether `url` is one of the platform's own pages. */
   onHost: (url: URL) => boolean
   /**
-   * Act on one of the platform's pages; `text` is its body, lowercased, with
-   * typographic apostrophes as plain ones.
+   * Act on one of the platform's pages; `text` is its visible text, whitespace
+   * collapsed, lowercased, with typographic apostrophes as plain ones.
    */
   step: (url: URL, text: string, pause: Pause) => Promise<void>
 }
@@ -57,14 +57,11 @@ export async function drivePopup(popup: Page, driver: Driver) {
       if (url?.protocol === 'chrome-error:')
         throw new Error(`The popup could not load a page during the ${driver.name} authorization`)
       if (url && driver.onHost(url)) {
-        const text = (
-          (await popup
-            .locator('body')
-            .textContent()
-            .catch(() => '')) ?? ''
-        )
-          .toLowerCase()
-          .replaceAll('’', "'")
+        const visible = await popup
+          .locator('body')
+          .innerText({ timeout: 2_000 })
+          .catch(() => '')
+        const text = visible.split(/\s+/).join(' ').trim().toLowerCase().replaceAll('’', "'")
         await driver.step(url, text, pause)
       }
       await sleep(250)
