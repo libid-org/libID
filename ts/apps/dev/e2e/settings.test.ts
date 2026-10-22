@@ -9,11 +9,8 @@ import { missing, type Need, PLATFORM_SECTIONS, VARIABLES } from './settings.ts'
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8')
 const workflow = read('../../../../.github/workflows/live-e2e.yml')
 
-/** The jobs that run live tests, and the platforms each proves. */
-const JOBS: [string, PlatformId[]][] = [
-  ['ceremony', ['github', 'x']],
-  ['google-ssm', ['google']],
-]
+/** The jobs that run live tests. */
+const JOBS = ['ceremony', 'google-ssm']
 
 const isSetting = (name: string) => VARIABLES.some(([setting]) => setting === name)
 /** A name of the kind the settings own. */
@@ -59,8 +56,19 @@ test('every secret the workflow reads is a setting, passed under its own name', 
 })
 
 test("each job's test step is given what its platforms require", () => {
-  for (const [name, platforms] of JOBS) {
-    const given = new Set(testStep(name).flatMap((line) => envEntry(line)?.[0] ?? []))
+  for (const name of JOBS) {
+    const entries = testStep(name).flatMap((line) => {
+      const entry = envEntry(line)
+      return entry ? [entry] : []
+    })
+    // The step's platforms: a list, or the variable's default after `||`.
+    const selection = entries.find(([key]) => key === 'LIBID_LIVE_PLATFORMS')?.[1]
+    assert.ok(selection, `job ${name}'s test step sets LIBID_LIVE_PLATFORMS`)
+    const listed = /\|\|\s*'([^']*)'/.exec(selection)?.[1] ?? selection
+    const platforms = listed.split(',').map((platform) => platform.trim()) as PlatformId[]
+    for (const platform of platforms)
+      assert.ok(platform in PLATFORM_SECTIONS, `job ${name} selects unknown ${platform}`)
+    const given = new Set(entries.map(([key]) => key))
     const lookup = (variable: string) => (given.has(variable) ? 'set' : undefined)
     const absent = platforms.flatMap((platform) =>
       PLATFORM_SECTIONS[platform].flatMap((section) => missing(section, lookup)),

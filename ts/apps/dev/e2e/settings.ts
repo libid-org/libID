@@ -35,6 +35,9 @@ export const VARIABLES: readonly (readonly [name: string, section: Section, need
   ['LIBID_TEST_PROXY', 'tooling', 'optional'],
   // Read by services.ts, in the stack's own process.
   ['LIBID_STACK_LOGS', 'tooling', 'optional'],
+  ['HEADED', 'tooling', 'optional'],
+  // Set by CI services, such as GitHub Actions.
+  ['CI', 'tooling', 'optional'],
 ]
 
 /** The sections each platform's live test reads; the type keeps every platform listed. */
@@ -84,6 +87,10 @@ export interface Tooling {
   /** A missing setting fails the run instead of skipping its test. */
   requireLive: boolean
   proxy?: string
+  /** Show the browser. */
+  headed: boolean
+  /** A CI run: no traces or videos, the stack's output kept off the job log. */
+  ci: boolean
 }
 
 export function tooling(get: Lookup = environment): Tooling {
@@ -99,6 +106,8 @@ export function tooling(get: Lookup = environment): Tooling {
     platforms: (names as PlatformId[] | undefined) ?? PLATFORMS,
     requireLive: get('LIBID_REQUIRE_LIVE') !== undefined,
     proxy: get('LIBID_TEST_PROXY'),
+    headed: get('HEADED') !== undefined,
+    ci: get('CI') !== undefined,
   }
 }
 

@@ -139,3 +139,5 @@ neither suite reads are reported as likely typos.
 | `LIBID_REQUIRE_LIVE` | tooling | optional | Set: a missing variable or an empty platform list fails instead of skipping. |
 | `LIBID_TEST_PROXY` | tooling | optional | A proxy for the browser's traffic, loopback aside. |
 | `LIBID_STACK_LOGS` | tooling | optional | A file for the services' output, containers included, instead of the terminal. |
+| `HEADED` | tooling | optional | Set: show the browser. |
+| `CI` | tooling | optional | Set by CI: no traces or videos, and the services' output kept off the job log. |

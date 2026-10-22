@@ -13,7 +13,7 @@ if (file) {
     console.warn(`${file}: no live test reads ${typos.join(', ')}; check the spelling.`)
 }
 if (runner) checkSettings()
-const { proxy } = tooling()
+const { proxy, headed, ci } = tooling()
 
 /** Live: real platforms, real notary, real Bridge; no chain. */
 export default defineConfig({
@@ -35,12 +35,12 @@ export default defineConfig({
     gracefulShutdown: { signal: 'SIGTERM', timeout: 120_000 },
     // CI keeps the services' output off the public job log: services.ts
     // writes it to LIBID_STACK_LOGS, which is scanned before upload.
-    stdout: process.env.CI ? 'ignore' : 'pipe',
+    stdout: ci ? 'ignore' : 'pipe',
   },
   use: {
     ...devices['Desktop Chrome'],
     baseURL: APP_ORIGIN,
-    headless: !process.env.HEADED,
+    headless: !headed,
     // A hang ends on the action that hangs, not on the test's timeout.
     actionTimeout: 30_000,
     navigationTimeout: 60_000,
@@ -51,8 +51,8 @@ export default defineConfig({
     ...(proxy && { proxy: { server: proxy, bypass: 'localhost,127.0.0.1,[::1]' } }),
     // A trace records every fill and cookie, the test accounts' password and
     // sessions included, so CI keeps screenshots only.
-    trace: process.env.CI ? 'off' : 'retain-on-failure',
+    trace: ci ? 'off' : 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: process.env.CI ? 'off' : 'retain-on-failure',
+    video: ci ? 'off' : 'retain-on-failure',
   },
 })
