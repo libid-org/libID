@@ -63,6 +63,8 @@ const RUST_SUITE_ONLY = [
 export type Lookup = (name: string) => string | undefined
 
 const environment: Lookup = (name) => process.env[name] || undefined
+/** Whether `name` is absent from the environment, as opposed to set empty. */
+const unsetInEnvironment = (name: string) => process.env[name] === undefined
 
 /** Where pnpm was invoked: what a relative path in a setting is relative to. */
 const invoked = (get: Lookup) => get('INIT_CWD') ?? process.cwd()
@@ -85,7 +87,7 @@ export function loadEnvFile(file: string): string[] {
 }
 
 export interface Tooling {
-  /** LIBID_LIVE_PLATFORMS, trimmed and checked, or every supported platform. */
+  /** LIBID_LIVE_PLATFORMS, trimmed and checked, or every platform when it is unset. */
   platforms: readonly PlatformId[]
   /** A missing setting fails the run instead of skipping its test. */
   requireLive: boolean
@@ -99,8 +101,9 @@ export interface Tooling {
 /** A switch: on for `1` or `true`, in any case; off for anything else. */
 const flag = (get: Lookup, name: string) => /^(1|true)$/i.test(get(name) ?? '')
 
-export function tooling(get: Lookup = environment): Tooling {
-  const listed = get('LIBID_LIVE_PLATFORMS')
+export function tooling(get: Lookup = environment, unset = unsetInEnvironment): Tooling {
+  // Set but empty selects no platform; only an unset variable means all.
+  const listed = get('LIBID_LIVE_PLATFORMS') ?? (unset('LIBID_LIVE_PLATFORMS') ? undefined : '')
   const names = listed
     ?.split(',')
     .map((name) => name.trim())
