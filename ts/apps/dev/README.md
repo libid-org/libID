@@ -116,13 +116,26 @@ and refuses to start beside another stack on the same ports.
 LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live
 ```
 
-| Variable | Use |
-|---|---|
-| `LIBID_TEST_ENV_FILE` | A dotenv file with the variables below, relative to where you run pnpm. |
-| `GH_TEST_ALICE_USERNAME`, `GH_TEST_ALICE_PASSWORD`, `GH_TEST_ALICE_TOTP_SECRET` | The GitHub test account and its authenticator secret. |
-| `X_TEST_ALICE_USERNAME`, `X_TEST_ALICE_COOKIES` or `X_TEST_ALICE_COOKIES_FILE` | The X handle and a saved session (base64 JSON, or a path relative to the env file). |
-| `GOOGLE_TEST_ALICE_EMAIL`, `GOOGLE_TEST_ALICE_COOKIES` or `GOOGLE_TEST_ALICE_COOKIES_FILE` | The Google account and a saved session, as for X. |
-| `LIBID_LIVE_PLATFORMS` | Comma-separated platforms to prove, such as `github,x`; all three by default. |
-| `LIBID_REQUIRE_LIVE` | Set: a missing secret or an empty platform list fails instead of skipping. |
-| `LIBID_TEST_PROXY` | A proxy for the browser's traffic, loopback aside. |
-| `LIBID_STACK_LOGS` | A file for the services' output, containers included, instead of the terminal. |
+The variables, read through [e2e/settings.ts](e2e/settings.ts), carry the
+names libid-server-rs' ceremony-tests uses, so one `.env.test` serves both
+suites. With `LIBID_REQUIRE_LIVE`, the run checks every selected platform's
+variables at once and names each one absent; without it, a test lacking its
+variables is skipped. Keys in the env file that look like settings but that
+neither suite reads are reported as likely typos.
+
+| Variable | Section | Need | Use |
+|---|---|---|---|
+| `GH_TEST_ALICE_USERNAME` | github-account | required | The GitHub test account. |
+| `GH_TEST_ALICE_PASSWORD` | github-account | required | Its password. |
+| `GH_TEST_ALICE_TOTP_SECRET` | github-account | required | The base32 key of its authenticator app. |
+| `X_TEST_ALICE_USERNAME` | x-account | required | The X test account's handle. |
+| `X_TEST_ALICE_COOKIES` | x-session | required | Its saved session, base64 of the JSON cookie list. |
+| `X_TEST_ALICE_COOKIES_FILE` | x-session | instead of `X_TEST_ALICE_COOKIES` | A path to that JSON, relative to the env file. |
+| `GOOGLE_TEST_ALICE_EMAIL` | google-account | required | The Google test account. |
+| `GOOGLE_TEST_ALICE_COOKIES` | google-session | required | Its saved session, as for X. |
+| `GOOGLE_TEST_ALICE_COOKIES_FILE` | google-session | instead of `GOOGLE_TEST_ALICE_COOKIES` | A path to that JSON, as for X. |
+| `LIBID_TEST_ENV_FILE` | tooling | optional | A dotenv file with the variables above, relative to where you run pnpm; exported values win. |
+| `LIBID_LIVE_PLATFORMS` | tooling | optional | Comma-separated platforms to prove, such as `github,x`; all three by default. |
+| `LIBID_REQUIRE_LIVE` | tooling | optional | Set: a missing variable or an empty platform list fails instead of skipping. |
+| `LIBID_TEST_PROXY` | tooling | optional | A proxy for the browser's traffic, loopback aside. |
+| `LIBID_STACK_LOGS` | tooling | optional | A file for the services' output, containers included, instead of the terminal. |
