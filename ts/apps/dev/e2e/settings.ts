@@ -3,7 +3,7 @@
 // are those of libid-server-rs' ceremony-tests (src/settings.rs), which reads
 // the same .env.test. An empty value is an absent one.
 import { readFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { parseEnv } from 'node:util'
 import type { PlatformId } from '@libid/ceremony'
 
@@ -64,10 +64,13 @@ export type Lookup = (name: string) => string | undefined
 
 const environment: Lookup = (name) => process.env[name] || undefined
 
+/** Where pnpm was invoked: what a relative path in a setting is relative to. */
+const invoked = (get: Lookup) => get('INIT_CWD') ?? process.cwd()
+
 /** The settings file LIBID_TEST_ENV_FILE names, relative to where pnpm was invoked. */
 export function envFile(get: Lookup = environment): string | undefined {
   const file = get('LIBID_TEST_ENV_FILE')
-  return file && resolve(get('INIT_CWD') ?? process.cwd(), file)
+  return file && resolve(invoked(get), file)
 }
 
 /**
@@ -93,6 +96,9 @@ export interface Tooling {
   ci: boolean
 }
 
+/** A switch: on for `1` or `true`, in any case; off for anything else. */
+const flag = (get: Lookup, name: string) => /^(1|true)$/i.test(get(name) ?? '')
+
 export function tooling(get: Lookup = environment): Tooling {
   const listed = get('LIBID_LIVE_PLATFORMS')
   const names = listed
@@ -104,10 +110,10 @@ export function tooling(get: Lookup = environment): Tooling {
     throw new Error(`LIBID_LIVE_PLATFORMS names ${unknown.join(', ')}; use ${PLATFORMS.join(', ')}`)
   return {
     platforms: (names as PlatformId[] | undefined) ?? PLATFORMS,
-    requireLive: get('LIBID_REQUIRE_LIVE') !== undefined,
+    requireLive: flag(get, 'LIBID_REQUIRE_LIVE'),
     proxy: get('LIBID_TEST_PROXY'),
-    headed: get('HEADED') !== undefined,
-    ci: get('CI') !== undefined,
+    headed: flag(get, 'HEADED'),
+    ci: flag(get, 'CI'),
   }
 }
 
@@ -195,9 +201,9 @@ function savedSession(prefix: string, get: Lookup): SavedSession | undefined {
   if (encoded) return { encoded }
   const file = get(`${prefix}_COOKIES_FILE`)
   if (!file) return undefined
-  // A relative path is the settings file's neighbour.
-  const directory = envFile(get)
-  return { path: isAbsolute(file) || !directory ? file : join(dirname(directory), file) }
+  // A relative path is the settings file's neighbour, else relative to where pnpm was invoked.
+  const settingsFile = envFile(get)
+  return { path: resolve(settingsFile ? dirname(settingsFile) : invoked(get), file) }
 }
 
 export const xSession = (get: Lookup = environment) => savedSession('X_TEST_ALICE', get)
