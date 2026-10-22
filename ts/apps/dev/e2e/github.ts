@@ -1,21 +1,7 @@
 import type { Page } from '@playwright/test'
 import * as OTPAuth from 'otpauth'
-import { liveSecret } from './live.ts'
 import { drivePopup, type Pause } from './popup.ts'
-
-export interface GitHubAccount {
-  username: string
-  password: string
-  totpSecret: string
-}
-
-/** The test account, from GH_TEST_ALICE_*; undefined when any is missing (see liveSecret). */
-export function githubAccount(): GitHubAccount | undefined {
-  const username = liveSecret('GH_TEST_ALICE_USERNAME')
-  const password = liveSecret('GH_TEST_ALICE_PASSWORD')
-  const totpSecret = liveSecret('GH_TEST_ALICE_TOTP_SECRET')
-  return username && password && totpSecret ? { username, password, totpSecret } : undefined
-}
+import type { GitHubAccount } from './settings.ts'
 
 /** The longest a fill or click may take; a navigation gets twice that. */
 const STEP_TIMEOUT = 5_000

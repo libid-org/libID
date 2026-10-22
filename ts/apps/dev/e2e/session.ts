@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
 import type { BrowserContext } from '@playwright/test'
-import { liveSecret } from './live.ts'
+import * as settings from './settings.ts'
+import type { SavedSession } from './settings.ts'
 
 /** One cookie as libid-server-rs' `ceremony export` saves it; both key casings occur. */
 export interface Stored {
@@ -18,26 +18,20 @@ export interface Stored {
 }
 
 /**
- * A saved platform session, from `<PREFIX>_COOKIES` (base64 JSON) or
- * `<PREFIX>_COOKIES_FILE` (a path, relative to the env file's directory);
- * undefined when neither is set. `required` names cookies of which at least
- * one must be present for the export to hold a session.
+ * The cookies of a saved session setting, or undefined when it is not set.
+ * `required` names cookies of which at least one must be present for the
+ * export to hold a session.
  */
-export function savedSession(prefix: string, required: string[]): Stored[] | undefined {
-  const encoded = process.env[`${prefix}_COOKIES`]
-  const file = process.env[`${prefix}_COOKIES_FILE`]
-  let json: string
-  if (encoded) json = Buffer.from(encoded.trim(), 'base64').toString('utf8')
-  else if (file)
-    json = readFileSync(
-      isAbsolute(file) ? file : join(process.env.LIBID_TEST_ENV_DIR ?? '.', file),
-      'utf8',
-    )
-  else {
-    // Neither is set: fails under LIBID_REQUIRE_LIVE, skips otherwise.
-    liveSecret(`${prefix}_COOKIES`)
-    return undefined
-  }
+function cookiesOf(
+  saved: SavedSession | undefined,
+  label: string,
+  required: string[],
+): Stored[] | undefined {
+  if (!saved) return undefined
+  const json =
+    'encoded' in saved
+      ? Buffer.from(saved.encoded.trim(), 'base64').toString('utf8')
+      : readFileSync(saved.path, 'utf8')
   let cookies: Stored[] | undefined
   try {
     const parsed = JSON.parse(json) as Stored[] | { cookies?: Stored[] }
@@ -46,9 +40,9 @@ export function savedSession(prefix: string, required: string[]): Stored[] | und
     // The parser's message would quote the value.
   }
   if (!Array.isArray(cookies))
-    throw new Error(`The saved ${prefix} session is not a JSON cookie list or { cookies }`)
+    throw new Error(`The saved ${label} session is not a JSON cookie list or { cookies }`)
   if (!cookies.some((cookie) => required.includes(cookie.name)))
-    throw new Error(`The saved ${prefix} session has none of ${required.join(', ')}`)
+    throw new Error(`The saved ${label} session has none of ${required.join(', ')}`)
   return cookies
 }
 
@@ -58,7 +52,7 @@ export function savedSession(prefix: string, required: string[]): Stored[] | und
  * ceremony-tests, which lives on its feat/live-ceremony-tests branch
  * (libid-server-rs PR #12).
  */
-export const xSession = () => savedSession('X_TEST_ALICE', ['auth_token'])
+export const xSession = () => cookiesOf(settings.xSession(), 'X_TEST_ALICE', ['auth_token'])
 
 /**
  * The saved Google session, from GOOGLE_TEST_ALICE_COOKIES or
@@ -68,7 +62,11 @@ export const xSession = () => savedSession('X_TEST_ALICE', ['auth_token'])
  * sign-in in an automated browser, but honours a session made elsewhere.
  */
 export const googleSession = () =>
-  savedSession('GOOGLE_TEST_ALICE', ['SID', '__Secure-1PSID', '__Secure-3PSID'])
+  cookiesOf(settings.googleSession(), 'GOOGLE_TEST_ALICE', [
+    'SID',
+    '__Secure-1PSID',
+    '__Secure-3PSID',
+  ])
 
 const SAME_SITE = new Map<string, 'Strict' | 'Lax' | 'None'>([
   ['strict', 'Strict'],

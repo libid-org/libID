@@ -3,11 +3,11 @@
 // arguments; a missing file is skipped. Nothing secret is printed.
 import { existsSync, readFileSync } from 'node:fs'
 import { googleSession, xSession } from './session.ts'
+import { githubSecrets } from './settings.ts'
 
 const sessions = [xSession(), googleSession()]
 const secrets = [
-  process.env.GH_TEST_ALICE_PASSWORD,
-  process.env.GH_TEST_ALICE_TOTP_SECRET,
+  ...githubSecrets(),
   ...sessions.flatMap((cookies) => cookies?.map((cookie) => cookie.value) ?? []),
 ].filter((secret): secret is string => !!secret && secret.length >= 8)
 

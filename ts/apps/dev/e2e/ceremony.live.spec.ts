@@ -1,10 +1,17 @@
 import type { PlatformId } from '@libid/ceremony'
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
-import { authorizeOnGitHub, githubAccount } from './github.ts'
+import { authorizeOnGitHub } from './github.ts'
 import { authorizeOnGoogle } from './google.ts'
-import { isLive, liveSecret } from './live.ts'
 import { presentAsPerson } from './person.ts'
 import { googleSession, restoreSession, xSession } from './session.ts'
+import {
+  githubAccount,
+  googleAccount,
+  isLive,
+  missing,
+  type Section,
+  xAccount,
+} from './settings.ts'
 import { authorizeOnX, restoreXSession } from './x.ts'
 
 /** Proving in the browser, after the platform returns the popup. */
@@ -90,10 +97,14 @@ async function proveThroughTheUi(
   expect(outcome.expiresAt).toBeGreaterThan(Date.now() / 1000)
 }
 
+/** Why `section`'s test is skipped: the variables it lacks. */
+const lacking = (...sections: Section[]) =>
+  `${sections.flatMap((s) => missing(s)).join(', ')} not set`
+
 test('a GitHub identity is proved in the browser', async ({ page, context }) => {
   test.skip(!isLive('github'), 'GitHub is not in LIBID_LIVE_PLATFORMS')
   const account = githubAccount()
-  test.skip(!account, 'GH_TEST_ALICE_USERNAME, _PASSWORD and _TOTP_SECRET are not set')
+  test.skip(!account, lacking('github-account'))
   await proveThroughTheUi(page, context, 'GitHub', account!.username, (popup) =>
     authorizeOnGitHub(popup, account!),
   )
@@ -102,23 +113,21 @@ test('a GitHub identity is proved in the browser', async ({ page, context }) => 
 test('an X identity is proved in the browser', async ({ page, context }) => {
   test.skip(!isLive('x'), 'X is not in LIBID_LIVE_PLATFORMS')
   const session = xSession()
-  test.skip(!session, 'X_TEST_ALICE_COOKIES or X_TEST_ALICE_COOKIES_FILE is not set')
-  const username = liveSecret('X_TEST_ALICE_USERNAME')
-  test.skip(!username, 'X_TEST_ALICE_USERNAME is not set')
+  const account = xAccount()
+  test.skip(!session || !account, lacking('x-account', 'x-session'))
   await presentAsPerson(context)
   await restoreXSession(context, session!)
-  await proveThroughTheUi(page, context, 'X', username!, (popup) => authorizeOnX(popup))
+  await proveThroughTheUi(page, context, 'X', account!.username, (popup) => authorizeOnX(popup))
 })
 
 test('a Google identity is proved in the browser', async ({ page, context }) => {
   test.skip(!isLive('google'), 'Google is not in LIBID_LIVE_PLATFORMS')
   const session = googleSession()
-  test.skip(!session, 'GOOGLE_TEST_ALICE_COOKIES or GOOGLE_TEST_ALICE_COOKIES_FILE is not set')
-  const email = liveSecret('GOOGLE_TEST_ALICE_EMAIL')
-  test.skip(!email, 'GOOGLE_TEST_ALICE_EMAIL is not set')
+  const account = googleAccount()
+  test.skip(!session || !account, lacking('google-account', 'google-session'))
   await presentAsPerson(context)
   await restoreSession(context, session!)
-  await proveThroughTheUi(page, context, 'Google', email!, (popup) =>
-    authorizeOnGoogle(popup, email!),
+  await proveThroughTheUi(page, context, 'Google', account!.email, (popup) =>
+    authorizeOnGoogle(popup, account!.email),
   )
 })
