@@ -10,13 +10,14 @@ import {
 import type { LedgerId } from '@libid/ledger'
 import { PopupWindow } from '@libid/popup'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { BRIDGE } from '../local.ts'
 
 declare global {
   interface Window {
     results: Map<string, IdentityResult | { status: 'failed' | 'closed' }>
   }
 }
-const oauthBridge = 'http://localhost:4682'
+const oauthBridge = BRIDGE
 /** A synthetic ledger routed to the local notary. */
 const ledger: LedgerId = {
   notaryAddress: () => 'http://localhost:4687',

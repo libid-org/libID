@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 
+import { APP_ORIGIN, BRIDGE } from './local.ts'
 const root = fileURLToPath(new URL('.', import.meta.url))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
@@ -75,11 +76,15 @@ if (process.argv.includes('--app')) {
     console.info('Waiting for Bridge readiness before starting the frontend…')
     while (!stopping) {
       try {
-        const response = await fetch('http://127.0.0.1:4682/api/v1/ceremony/config', {
-          headers: { Origin: 'http://localhost:4691' },
-          redirect: 'error',
-          signal: AbortSignal.timeout(1000),
-        })
+        // Docker publishes on 127.0.0.1 only.
+        const response = await fetch(
+          new URL('/api/v1/ceremony/config', BRIDGE.replace('localhost', '127.0.0.1')),
+          {
+            headers: { Origin: APP_ORIGIN },
+            redirect: 'error',
+            signal: AbortSignal.timeout(1000),
+          },
+        )
         await response.body?.cancel()
         if (response.status === 200) break
       } catch {

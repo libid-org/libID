@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { parseEnv } from 'node:util'
 import { defineConfig, devices } from '@playwright/test'
+import { APP_ORIGIN } from './local.ts'
 
 // Test secrets from a dotenv file when LIBID_TEST_ENV_FILE names one; values
 // already in the environment win. Nothing is printed.
@@ -11,9 +12,6 @@ if (envFile) {
   for (const [name, value] of Object.entries(parseEnv(readFileSync(envFile, 'utf8'))))
     process.env[name] ??= value
 }
-
-/** dev's application and services (services.ts, vite.config.ts). */
-const APP_ORIGIN = 'http://localhost:4691'
 
 /** Live: real platforms, real notary, real Bridge; no chain. */
 export default defineConfig({

@@ -1,10 +1,11 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Page, Request } from '@playwright/test'
+import { BRIDGE } from '../local.ts'
 
 const BUDGET_MS = 180_000
 
 /** Where every platform returns the popup: the local Bridge's OAuth callback. */
-const CALLBACK = new URL('http://localhost:4682/auth/callback')
+const CALLBACK = new URL('/auth/callback', BRIDGE)
 
 /** Wait `ms` inside the driver's budget; reject with `reason` if the wait would pass it. */
 export type Pause = (ms: number, reason: string) => Promise<void>
