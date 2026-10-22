@@ -84,34 +84,16 @@ jobs:
       # of the test accounts' secrets in it. Screenshots go up unscanned: the
       # pages driven never display the password, the TOTP secret or a session
       # cookie. A timed-out test step counts too; a cancelled run uploads nothing.
-      - name: Check the stack log for secrets
-        id: scan
+      - name: Keep the failure output
         if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
+        uses: ./.github/actions/live-e2e-output
+        with:
+          name: live-e2e
         env:
-          # A session that is not configured is nothing to look for.
-          LIBID_REQUIRE_LIVE: ""
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
           GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
           GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        # A stack the test step left running stops first, so nothing writes to
-        # the log after it is scanned; what goes up is the copy scanned.
-        run: |
-          docker compose ls -q --all --filter name=libid-dev |
-            xargs -r -I{} docker compose -p {} down --volumes
-          if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
-          node ts/apps/dev/e2e/scan-secrets.ts "$RUNNER_TEMP/stack-scanned.log"
-
-      - name: Keep the screenshots and container logs
-        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: live-e2e
-          path: |
-            ts/apps/dev/test-results/**/*.png
-            ${{ runner.temp }}/stack-scanned.log
-          retention-days: 14
-          if-no-files-found: ignore
 
   google-ssm:
     name: Google ceremony through an SSM-reached proxy (live)
@@ -125,7 +107,8 @@ jobs:
       (github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The test step's budget plus setup, the proxy, the secret scan and the upload.
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
@@ -151,11 +134,10 @@ jobs:
       - name: Reach the Google proxy over SSM
         env:
           INSTANCE: ${{ vars.LIBID_GOOGLE_PROXY_INSTANCE }}
+        # The runner image ships session-manager-plugin.
         run: |
-          if ! command -v session-manager-plugin >/dev/null; then
-            curl -fsSLo "$RUNNER_TEMP/smp.deb" https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb
-            sudo dpkg -i "$RUNNER_TEMP/smp.deb"
-          fi
+          command -v session-manager-plugin >/dev/null ||
+            { echo "::error::session-manager-plugin is not on this runner image"; exit 1; }
           aws ssm start-session --target "$INSTANCE" \
             --document-name AWS-StartPortForwardingSession \
             --parameters portNumber=3128,localPortNumber=3128 >"$RUNNER_TEMP/port-forward.log" 2>&1 &
@@ -165,9 +147,12 @@ jobs:
           done
           echo "Google sees ${ip:?the proxy did not answer; see $RUNNER_TEMP/port-forward.log}"
 
+      # Its own timeout, so a run that hangs still reaches the step below: the
+      # stack's 10-minute start, one test of 12 minutes, and 2 minutes to stop
+      # the stack (playwright.live.config.ts), with room to spare.
       - name: Prove a Google identity end to end
         id: test
-        timeout-minutes: 20
+        timeout-minutes: 30
         env:
           LIBID_LIVE_PLATFORMS: google
           LIBID_TEST_PROXY: http://127.0.0.1:3128
@@ -176,26 +161,11 @@ jobs:
           GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/dev test:live
 
-      # As in the ceremony job: the log goes up only when the scan finds no secret.
-      - name: Check the stack log for secrets
-        id: scan
+      # As in the ceremony job.
+      - name: Keep the failure output
         if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
-        env:
-          LIBID_REQUIRE_LIVE: ""
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        run: |
-          docker compose ls -q --all --filter name=libid-dev |
-            xargs -r -I{} docker compose -p {} down --volumes
-          if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
-          node ts/apps/dev/e2e/scan-secrets.ts "$RUNNER_TEMP/stack-scanned.log"
-
-      - name: Keep the screenshots and container logs
-        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/live-e2e-output
         with:
           name: live-e2e-google-ssm
-          path: |
-            ts/apps/dev/test-results/**/*.png
-            ${{ runner.temp }}/stack-scanned.log
-          retention-days: 14
-          if-no-files-found: ignore
+        env:
+          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
