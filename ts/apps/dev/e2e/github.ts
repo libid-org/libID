@@ -35,6 +35,8 @@ interface Progress {
   totpStep?: number
   /** When the authorize button was last clicked; it is not clicked again within 5 s. */
   authorizedAt: number
+  /** When the 2FA checkup was last skipped; it is not skipped again within 5 s. */
+  skippedCheckupAt: number
   rateLimited: number
   errored: number
 }
@@ -105,6 +107,15 @@ async function onAuthorize(popup: Page, progress: Progress, text: string) {
     )
 }
 
+async function onTwoFactorCheckup(popup: Page, progress: Progress) {
+  if (Date.now() - progress.skippedCheckupAt < 5_000) return
+  progress.skippedCheckupAt = Date.now()
+  await popup
+    .getByText('skip 2FA verification')
+    .click({ timeout: 5_000 })
+    .catch(() => {})
+}
+
 /** Act on one GitHub page. */
 async function onGitHubPage(
   popup: Page,
@@ -121,6 +132,9 @@ async function onGitHubPage(
     text.includes('something went wrong')
   )
     return onErrorPage(popup, progress, pause)
+  // GitHub's periodic 2FA checkup, served in place of the page asked for.
+  if (text.includes('verify your two-factor authentication'))
+    return onTwoFactorCheckup(popup, progress)
   if (path === '/login' || path === '/session')
     return onLogin(popup, account, progress, text, pause)
   if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress)
@@ -137,11 +151,17 @@ async function onGitHubPage(
  * Sign in and authorize on GitHub in `popup`, until GitHub redirects it to
  * Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/github.rs:
  * fill the login form once, answer the authenticator step once per 30-second
- * code, approve the OAuth app, back off on rate-limit pages, and start the
+ * code, skip the 2FA checkup, approve the OAuth app, back off on rate-limit pages, and start the
  * authorization over on GitHub's error page.
  */
 export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
-  const progress: Progress = { filled: false, authorizedAt: 0, rateLimited: 0, errored: 0 }
+  const progress: Progress = {
+    filled: false,
+    authorizedAt: 0,
+    skippedCheckupAt: 0,
+    rateLimited: 0,
+    errored: 0,
+  }
   await drivePopup(popup, {
     name: 'GitHub',
     onHost: (url) => url.hostname === 'github.com',
