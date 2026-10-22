@@ -37,8 +37,8 @@ Edit configuration directly where it is used:
 
 - [compose.yaml](compose.yaml): services.
 - [bridge-config.toml](bridge-config.toml): Bridge configuration and development OAuth credentials.
-- [local.ts](local.ts): the app origin (frontend port) and Bridge URL.
-- [src/app.ts](src/app.ts): the local ledger/notary fixture; Bridge configuration selects CCDP.
+- [local.ts](local.ts): the app origin (frontend port), and the Bridge and notary URLs; the table above repeats them, and `pnpm --filter @libid/dev test` checks it.
+- [src/app.ts](src/app.ts): the local ledger fixture; Bridge configuration selects CCDP.
 
 The setup includes shared development OAuth credentials and a public development
 notary signing key; no environment file is needed. Bridge publishes the GitHub
@@ -120,7 +120,9 @@ The variables, read through [e2e/settings.ts](e2e/settings.ts), carry the
 names libid-server-rs' ceremony-tests uses, so one `.env.test` serves both
 suites. With `LIBID_REQUIRE_LIVE`, the run checks every selected platform's
 variables at once and names each one absent; without it, a test lacking its
-variables is skipped. Keys in the env file that look like settings but that
+variables is skipped. A switch is on for `1` or `true`, in any case. A relative
+`*_COOKIES_FILE` path is relative to the env file, or, without one, to where
+you run pnpm. Keys in the env file that look like settings but that
 neither suite reads are reported as likely typos.
 
 | Variable | Section | Need | Use |
@@ -136,8 +138,8 @@ neither suite reads are reported as likely typos.
 | `GOOGLE_TEST_ALICE_COOKIES_FILE` | google-session | instead of `GOOGLE_TEST_ALICE_COOKIES` | A path to that JSON, as for X. |
 | `LIBID_TEST_ENV_FILE` | tooling | optional | A dotenv file with the variables above, relative to where you run pnpm; exported values win. |
 | `LIBID_LIVE_PLATFORMS` | tooling | optional | Comma-separated platforms to prove, such as `github,x`; all three by default. |
-| `LIBID_REQUIRE_LIVE` | tooling | optional | Set: a missing variable or an empty platform list fails instead of skipping. |
+| `LIBID_REQUIRE_LIVE` | tooling | optional | `1` or `true`: a missing variable or an empty platform list fails instead of skipping. |
 | `LIBID_TEST_PROXY` | tooling | optional | A proxy for the browser's traffic, loopback aside. |
 | `LIBID_STACK_LOGS` | tooling | optional | A file for the services' output, containers included, instead of the terminal. |
-| `HEADED` | tooling | optional | Set: show the browser. |
-| `CI` | tooling | optional | Set by CI: no traces or videos, and the services' output kept off the job log. |
+| `HEADED` | tooling | optional | `1` or `true`: show the browser. |
+| `CI` | tooling | optional | `1` or `true`, as CI services set it: no traces or videos, and the services' output kept off the job log. |
