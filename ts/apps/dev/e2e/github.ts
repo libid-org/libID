@@ -8,14 +8,20 @@ const STEP_TIMEOUT = 5_000
 /** How long a submitted login form may still show before it counts as refused. */
 const LOGIN_SETTLE = 15_000
 
-function totp(secret: string): string {
+/** Codes the TOTP step submits before a refusal fails the run. */
+const TOTP_ATTEMPTS = 2
+
+/** The TOTP code for the base32 `secret`, spaces and case aside, at `time` (ms). */
+export function totp(secret: string, time = Date.now()): string {
   let key: OTPAuth.Secret
   try {
     key = OTPAuth.Secret.fromBase32(secret.replace(/\s/g, '').toUpperCase())
   } catch {
     throw new Error('GH_TEST_ALICE_TOTP_SECRET is not a base32 key')
   }
-  return new OTPAuth.TOTP({ secret: key, algorithm: 'SHA1', digits: 6, period: 30 }).generate()
+  return new OTPAuth.TOTP({ secret: key, algorithm: 'SHA1', digits: 6, period: 30 }).generate({
+    timestamp: time,
+  })
 }
 
 /** What the login has done so far; each handler reads and updates it. */
@@ -24,7 +30,9 @@ interface Progress {
   start?: string
   /** When the login form was last submitted. */
   filledAt?: number
+  /** The 30-second step whose code was last submitted, and how many were. */
   totpStep?: number
+  totpAttempts: number
   /** When the authorize button was last clicked; it is not clicked again within 5 s. */
   authorizedAt: number
   /** When the 2FA checkup was last skipped; it is not skipped again within 5 s. */
@@ -94,9 +102,14 @@ async function onLogin(
   progress.filledAt = Date.now()
 }
 
-async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
+async function onTotp(popup: Page, account: GitHubAccount, progress: Progress, text: string) {
   const step = Math.floor(Date.now() / 30_000)
   if (progress.totpStep === step || !(await popup.locator('#app_totp').count())) return
+  // The code form again, in a later step, after a submitted code: GitHub refused it.
+  if (progress.totpAttempts >= TOTP_ATTEMPTS)
+    throw new Error(
+      `GitHub refused ${TOTP_ATTEMPTS} TOTP codes${text.includes('two-factor authentication failed') ? ' (two-factor authentication failed)' : ''}: check GH_TEST_ALICE_TOTP_SECRET and this host's clock`,
+    )
   const code = totp(account.totpSecret)
   try {
     await popup.fill('#app_totp', code, { timeout: STEP_TIMEOUT })
@@ -109,6 +122,7 @@ async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
     .click({ timeout: 2_000 })
     .catch(() => {})
   progress.totpStep = step
+  progress.totpAttempts++
 }
 
 async function onAuthorize(popup: Page, progress: Progress, text: string) {
@@ -154,7 +168,7 @@ async function onGitHubPage(
     return onTwoFactorCheckup(popup, progress)
   if (path === '/login' || path === '/session')
     return onLogin(popup, account, progress, text, pause)
-  if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress)
+  if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress, text)
   if (path.startsWith('/sessions/two-factor')) {
     await popup
       .goto('https://github.com/sessions/two-factor/app', { timeout: STEP_TIMEOUT * 2 })
@@ -177,6 +191,7 @@ export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
   const progress: Progress = {
     authorizedAt: 0,
     skippedCheckupAt: 0,
+    totpAttempts: 0,
     rateLimited: 0,
     errored: 0,
   }
