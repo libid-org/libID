@@ -100,7 +100,11 @@ export async function drivePopup(popup: Page, driver: Driver) {
 
 /** Evaluate `expression` in `popup`, or `fallback` when it fails or takes over 5 s. */
 export function evaluateWithin<T>(popup: Page, expression: string, fallback: T): Promise<T> {
-  return Promise.race([popup.evaluate<T>(expression).catch(() => fallback), sleep(5_000, fallback)])
+  const timer = new AbortController()
+  return Promise.race([
+    popup.evaluate<T>(expression).catch(() => fallback),
+    sleep(5_000, fallback, { signal: timer.signal }).catch(() => fallback),
+  ]).finally(() => timer.abort())
 }
 
 /**
