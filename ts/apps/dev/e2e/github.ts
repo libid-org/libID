@@ -5,22 +5,25 @@ import type { GitHubAccount } from './settings.ts'
 
 /** The longest a fill or click may take; a navigation gets twice that. */
 const STEP_TIMEOUT = 5_000
+/** How long a submitted login form may still show before it counts as refused. */
+const LOGIN_SETTLE = 15_000
 
 function totp(secret: string): string {
-  const normalized = secret.replace(/\s/g, '').toUpperCase()
-  return new OTPAuth.TOTP({
-    secret: OTPAuth.Secret.fromBase32(normalized),
-    algorithm: 'SHA1',
-    digits: 6,
-    period: 30,
-  }).generate()
+  let key: OTPAuth.Secret
+  try {
+    key = OTPAuth.Secret.fromBase32(secret.replace(/\s/g, '').toUpperCase())
+  } catch {
+    throw new Error('GH_TEST_ALICE_TOTP_SECRET is not a base32 key')
+  }
+  return new OTPAuth.TOTP({ secret: key, algorithm: 'SHA1', digits: 6, period: 30 }).generate()
 }
 
 /** What the login has done so far; each handler reads and updates it. */
 interface Progress {
   /** The first GitHub page of the run: the authorization request, which a restart reopens. */
   start?: string
-  filled: boolean
+  /** When the login form was last submitted. */
+  filledAt?: number
   totpStep?: number
   /** When the authorize button was last clicked; it is not clicked again within 5 s. */
   authorizedAt: number
@@ -48,7 +51,7 @@ async function onErrorPage(popup: Page, progress: Progress, pause: Pause) {
   // Reopening the request keeps the popup on github.com until GitHub redirects.
   if (progress.start)
     await popup.goto(progress.start, { timeout: STEP_TIMEOUT * 2 }).catch(() => {})
-  progress.filled = false
+  progress.filledAt = undefined
   progress.totpStep = undefined
 }
 
@@ -62,12 +65,24 @@ async function onLogin(
   if (text.includes('too many requests') || text.includes('rate limit')) {
     await backOff(progress, 'rateLimited', 30_000, 'GitHub rate-limited the login', pause)
     await popup.reload({ timeout: STEP_TIMEOUT * 2 }).catch(() => {})
-    progress.filled = false
+    progress.filledAt = undefined
     return
   }
   if (text.includes('incorrect username or password'))
     throw new Error('GitHub refused the username or password: check GH_TEST_ALICE_*')
-  if (progress.filled || !(await popup.locator('#login_field').count())) return
+  if (!(await popup.locator('#login_field').count())) return
+  // The form still showing well after a submit is GitHub refusing the sign-in.
+  if (progress.filledAt !== undefined) {
+    if (Date.now() - progress.filledAt < LOGIN_SETTLE) return
+    const flash = await popup
+      .locator('.flash-error, .flash-warn, #js-flash-container')
+      .first()
+      .innerText({ timeout: 1_000 })
+      .catch(() => '')
+    throw new Error(
+      `GitHub showed the login form again after sign-in: ${flash.split(/\s+/).join(' ').trim().slice(0, 200) || 'no message'}`,
+    )
+  }
   // A step that fails is tried again on the next poll, inside drivePopup's budget.
   try {
     await popup.fill('#login_field', account.username, { timeout: STEP_TIMEOUT })
@@ -76,14 +91,15 @@ async function onLogin(
   } catch {
     return
   }
-  progress.filled = true
+  progress.filledAt = Date.now()
 }
 
 async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
   const step = Math.floor(Date.now() / 30_000)
   if (progress.totpStep === step || !(await popup.locator('#app_totp').count())) return
+  const code = totp(account.totpSecret)
   try {
-    await popup.fill('#app_totp', totp(account.totpSecret), { timeout: STEP_TIMEOUT })
+    await popup.fill('#app_totp', code, { timeout: STEP_TIMEOUT })
   } catch {
     return
   }
@@ -159,7 +175,6 @@ async function onGitHubPage(
  */
 export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
   const progress: Progress = {
-    filled: false,
     authorizedAt: 0,
     skippedCheckupAt: 0,
     rateLimited: 0,
