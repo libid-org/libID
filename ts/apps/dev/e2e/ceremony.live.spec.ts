@@ -22,6 +22,13 @@ type Name = 'GitHub' | 'X' | 'Google'
 
 const platformOf: Record<Name, PlatformId> = { GitHub: 'github', X: 'x', Google: 'google' }
 
+/** The proof each platform's result carries: GitHub's and X's bearer link, Google's ZK proof. */
+const proofField: Record<Name, string> = {
+  GitHub: 'bearerLinkProof',
+  X: 'bearerLinkProof',
+  Google: 'identityProof',
+}
+
 /** What the test reads of a run's entry in window.results. */
 interface Outcome {
   status: string
@@ -30,7 +37,8 @@ interface Outcome {
   userName?: string
   idNodeBytes?: number
   handleNodeBytes?: number
-  proofPresent?: boolean
+  /** The byte length of each Uint8Array field of the proof, by name. */
+  proofBytes?: Record<string, number>
   ceremonyVersion?: string
   expiresAt?: number
 }
@@ -76,8 +84,10 @@ async function proveThroughTheUi(
       userName: identity.userName,
       idNodeBytes: identity.idNode.length,
       handleNodeBytes: identity.handleNode.length,
-      proofPresent: Object.values(oauthProof.proof).some(
-        (value) => value instanceof Uint8Array && value.length > 0,
+      proofBytes: Object.fromEntries(
+        Object.entries(oauthProof.proof).flatMap(([field, value]) =>
+          value instanceof Uint8Array ? [[field, value.length]] : [],
+        ),
       ),
       ceremonyVersion: String(oauthProof.platformCeremonyVersion),
       expiresAt: oauthProof.expiresAt,
@@ -97,7 +107,7 @@ async function proveThroughTheUi(
   expect(outcome.userName?.toLowerCase()).toBe(expectedUser.toLowerCase())
   expect(outcome.idNodeBytes).toBe(32)
   expect(outcome.handleNodeBytes).toBe(32)
-  expect(outcome.proofPresent).toBe(true)
+  expect(outcome.proofBytes?.[proofField[name]]).toBeGreaterThan(0)
   expect(outcome.ceremonyVersion).toMatch(/^[1-9]\d*$/)
   expect(outcome.expiresAt).toBeGreaterThan(Date.now() / 1000)
 }

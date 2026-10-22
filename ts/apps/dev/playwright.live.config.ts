@@ -20,8 +20,10 @@ export default defineConfig({
   testDir: 'e2e',
   testMatch: '*.live.spec.ts',
   workers: 1,
-  // Each test: the popup driver's 3 minutes and the page's 8-minute outcome wait.
-  timeout: 12 * 60_000,
+  // Each test's own budgets: the page load (60 s), the app's Ready (60 s),
+  // the click that opens the popup (30 s), the popup driver (180 s) and the
+  // outcome wait (8 min): 13.5 minutes, with margin.
+  timeout: 15 * 60_000,
   reporter: [['list']],
   // One command: start the services and the app, test, then stop both. The
   // run never reuses a running stack: services.ts refuses taken ports.
