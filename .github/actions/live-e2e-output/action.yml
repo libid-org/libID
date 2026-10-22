@@ -20,9 +20,6 @@ runs:
     # in it fails this step, and nothing goes up.
     - name: Check the stack log for secrets
       shell: bash
-      env:
-        # A session that is not configured is nothing to look for.
-        LIBID_REQUIRE_LIVE: ""
       run: |
         docker compose ls -q --all --filter name=libid-dev |
           xargs -r -I{} docker compose -p {} down --volumes
@@ -30,7 +27,7 @@ runs:
         node ts/apps/dev/e2e/scan-secrets.ts "$RUNNER_TEMP/stack-scanned.log"
 
     - name: Keep the screenshots and the stack log
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: ${{ inputs.name }}
         path: |
