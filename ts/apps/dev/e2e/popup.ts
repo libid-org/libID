@@ -27,6 +27,27 @@ const isCallback = (url: string) => {
   return parsed?.origin === CALLBACK.origin && parsed.pathname === CALLBACK.pathname
 }
 
+const returns = new WeakMap<Page, { returned: boolean }>()
+
+/**
+ * Watch `popup` for its return to Bridge's callback, from now on. Call it as
+ * the popup appears (in the `page` event's predicate): a platform that needs
+ * no consent redirects at once. A request, not a committed page, counts: the
+ * callback may redirect on at once.
+ */
+export function watchReturn(popup: Page): { returned: boolean } {
+  let watch = returns.get(popup)
+  if (!watch) {
+    const state = { returned: isCallback(popup.url()) }
+    popup.on('request', (request: Request) => {
+      if (request.isNavigationRequest() && isCallback(request.url())) state.returned = true
+    })
+    returns.set(popup, state)
+    watch = state
+  }
+  return watch
+}
+
 /**
  * Drive `popup` through a platform's pages until the platform sends it to
  * Bridge's callback, after which Callback and Prover take over. Leaving the
@@ -35,12 +56,8 @@ const isCallback = (url: string) => {
  */
 export async function drivePopup(popup: Page, driver: Driver) {
   const deadline = Date.now() + BUDGET_MS
-  // A request, not a committed page: the callback may redirect on at once.
-  let returned = false
-  const onRequest = (request: Request) => {
-    if (request.isNavigationRequest() && isCallback(request.url())) returned = true
-  }
-  popup.on('request', onRequest)
+  const watch = watchReturn(popup)
+  const returned = () => watch.returned || (!popup.isClosed() && isCallback(popup.url()))
   const pause: Pause = async (ms, reason) => {
     if (Date.now() + ms > deadline)
       throw new Error(
@@ -48,28 +65,24 @@ export async function drivePopup(popup: Page, driver: Driver) {
       )
     await sleep(ms)
   }
-  try {
-    while (Date.now() < deadline) {
-      if (returned) return
-      if (popup.isClosed())
-        throw new Error(`The popup closed before ${driver.name} returned it to Bridge`)
-      const url = URL.parse(popup.url())
-      if (url?.protocol === 'chrome-error:')
-        throw new Error(`The popup could not load a page during the ${driver.name} authorization`)
-      if (url && driver.onHost(url)) {
-        const visible = await popup
-          .locator('body')
-          .innerText({ timeout: 2_000 })
-          .catch(() => '')
-        const text = visible.split(/\s+/).join(' ').trim().toLowerCase().replaceAll('’', "'")
-        await driver.step(url, text, pause)
-      }
-      await sleep(250)
+  while (Date.now() < deadline) {
+    if (returned()) return
+    if (popup.isClosed())
+      throw new Error(`The popup closed before ${driver.name} returned it to Bridge`)
+    const url = URL.parse(popup.url())
+    if (url?.protocol === 'chrome-error:')
+      throw new Error(`The popup could not load a page during the ${driver.name} authorization`)
+    if (url && driver.onHost(url)) {
+      const visible = await popup
+        .locator('body')
+        .innerText({ timeout: 2_000 })
+        .catch(() => '')
+      const text = visible.split(/\s+/).join(' ').trim().toLowerCase().replaceAll('’', "'")
+      await driver.step(url, text, pause)
     }
-  } finally {
-    popup.off('request', onRequest)
+    await sleep(250)
   }
-  if (returned) return
+  if (returned()) return
   throw new Error(
     `No ${driver.name} authorization in ${BUDGET_MS / 1000} s; stopped on ${popup.url()}`,
   )

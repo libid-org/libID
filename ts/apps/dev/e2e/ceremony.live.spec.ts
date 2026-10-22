@@ -3,6 +3,7 @@ import { type BrowserContext, expect, type Page, test } from '@playwright/test'
 import { authorizeOnGitHub } from './github.ts'
 import { authorizeOnGoogle } from './google.ts'
 import { presentAsPerson } from './person.ts'
+import { watchReturn } from './popup.ts'
 import { googleSession, restoreSession, xSession } from './session.ts'
 import {
   githubAccount,
@@ -48,9 +49,13 @@ async function proveThroughTheUi(
   authorize: (popup: Page) => Promise<void>,
 ) {
   await page.goto('/')
-  await expect(page.locator('#status')).toHaveText('Ready. Click a platform to start a ceremony.')
+  // A cold app loads the Bridge configuration and CCDP's version list first.
+  await expect(page.locator('#status')).toHaveText('Ready. Click a platform to start a ceremony.', {
+    timeout: 60_000,
+  })
   const [popup] = await Promise.all([
-    context.waitForEvent('page'),
+    // Watched from the moment it appears: a platform may return it at once.
+    context.waitForEvent('page', { predicate: (popup) => Boolean(watchReturn(popup)) }),
     page.getByRole('button', { name, exact: true }).click(),
   ])
   const id = await page.locator('#history tr').first().getAttribute('data-ceremony-id')
