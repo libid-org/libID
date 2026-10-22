@@ -3,10 +3,15 @@ import type { BrowserContext } from '@playwright/test'
 import * as settings from './settings.ts'
 import type { SavedSession } from './settings.ts'
 
-/** One cookie as libid-server-rs' `ceremony export` saves it; both key casings occur. */
+/**
+ * One cookie as libid-server-rs' `ceremony export` saves it (ceremony-tests
+ * src/browser/cookies.rs): snake_case or camelCase keys, `expirationDate` for
+ * `expires`, and a partition key as CDP's object or its top-level site alone.
+ */
 export interface Stored {
   name: string
   value: string
+  /** With a leading dot for a domain cookie; the host alone for a host-only one. */
   domain: string
   path?: string
   secure?: boolean | null
@@ -15,7 +20,22 @@ export interface Stored {
   same_site?: string | null
   sameSite?: string | null
   expires?: number
+  expirationDate?: number
+  partition_key?: PartitionKey | string | null
+  partitionKey?: PartitionKey | string | null
 }
+
+interface PartitionKey {
+  topLevelSite?: string
+  top_level_site?: string
+  hasCrossSiteAncestor?: boolean
+}
+
+/** The JSON text of a saved session setting. */
+export const exportText = (saved: SavedSession) =>
+  'encoded' in saved
+    ? Buffer.from(saved.encoded.trim(), 'base64').toString('utf8')
+    : readFileSync(saved.path, 'utf8')
 
 /**
  * The cookies of a saved session setting, or undefined when it is not set.
@@ -28,10 +48,7 @@ function cookiesOf(
   required: string[],
 ): Stored[] | undefined {
   if (!saved) return undefined
-  const json =
-    'encoded' in saved
-      ? Buffer.from(saved.encoded.trim(), 'base64').toString('utf8')
-      : readFileSync(saved.path, 'utf8')
+  const json = exportText(saved)
   let cookies: Stored[] | undefined
   try {
     const parsed = JSON.parse(json) as Stored[] | { cookies?: Stored[] }
@@ -75,24 +92,49 @@ const SAME_SITE = new Map<string, 'Strict' | 'Lax' | 'None'>([
   ['no_restriction', 'None'],
 ])
 
+type CookieParam = Parameters<BrowserContext['addCookies']>[0][number]
+
+/**
+ * The cookies to set for a saved session, as the Rust suite sets them: a
+ * domain cookie on its domain, a host-only or `__Host-` one by `url` alone,
+ * each in its partition; an expired one is left out. `domainsOf` gives the
+ * domains each cookie goes on.
+ */
+export function cookieParams(
+  cookies: Stored[],
+  domainsOf: (domain: string) => string[] = (domain) => [domain],
+  now = Date.now() / 1000,
+): CookieParam[] {
+  return cookies.flatMap((cookie) => {
+    const expires = cookie.expires ?? cookie.expirationDate ?? 0
+    if (expires > 0 && expires < now) return []
+    const key = cookie.partition_key ?? cookie.partitionKey
+    const partitionKey = typeof key === 'string' ? key : (key?.topLevelSite ?? key?.top_level_site)
+    return domainsOf(cookie.domain).map((domain): CookieParam => {
+      const path = cookie.path || '/'
+      // Playwright takes a url's path up to its last slash.
+      const placed = domain.startsWith('.')
+        ? { domain, path }
+        : { url: `https://${domain}${path.endsWith('/') ? path : `${path}/`}` }
+      return {
+        name: cookie.name,
+        value: cookie.value,
+        ...placed,
+        secure: cookie.secure ?? true,
+        httpOnly: cookie.http_only ?? cookie.httpOnly ?? false,
+        sameSite: SAME_SITE.get((cookie.same_site ?? cookie.sameSite ?? '').toLowerCase()),
+        expires: expires > 0 ? expires : -1,
+        ...(partitionKey && { partitionKey }),
+      }
+    })
+  })
+}
+
 /** Put saved cookies in the browser context, on their own domain or each of `domainsOf`'s. */
 export async function restoreSession(
   context: BrowserContext,
   cookies: Stored[],
-  domainsOf: (domain: string) => string[] = (domain) => [domain],
+  domainsOf?: (domain: string) => string[],
 ) {
-  await context.addCookies(
-    cookies.flatMap((cookie) =>
-      domainsOf(cookie.domain).map((domain) => ({
-        name: cookie.name,
-        value: cookie.value,
-        domain,
-        path: cookie.path || '/',
-        secure: cookie.secure ?? true,
-        httpOnly: cookie.http_only ?? cookie.httpOnly ?? false,
-        sameSite: SAME_SITE.get((cookie.same_site ?? cookie.sameSite ?? '').toLowerCase()),
-        expires: cookie.expires && cookie.expires > 0 ? cookie.expires : -1,
-      })),
-    ),
-  )
+  await context.addCookies(cookieParams(cookies, domainsOf))
 }
