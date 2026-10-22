@@ -1,13 +1,29 @@
-import type { PlatformId } from '@libid/ceremony'
+import { type PlatformId, supportedPlatforms } from '@libid/ceremony'
 
 /**
- * Whether this run proves `platform`: LIBID_LIVE_PLATFORMS, comma-separated,
- * or all three. A platform left out is skipped on purpose, and reported as skipped.
+ * The platforms this run proves: LIBID_LIVE_PLATFORMS, comma-separated, or
+ * every supported one. An unknown name is an error, and so is an empty
+ * selection under LIBID_REQUIRE_LIVE.
  */
-export function isLive(platform: PlatformId): boolean {
-  const listed = process.env.LIBID_LIVE_PLATFORMS?.split(',').map((name) => name.trim())
-  return (listed ?? ['github', 'x', 'google']).includes(platform)
+function livePlatforms(): readonly PlatformId[] {
+  const listed = process.env.LIBID_LIVE_PLATFORMS
+  if (listed === undefined) return supportedPlatforms
+  const names = listed
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
+  const unknown = names.filter((name) => !supportedPlatforms.includes(name as PlatformId))
+  if (unknown.length)
+    throw new Error(
+      `LIBID_LIVE_PLATFORMS names ${unknown.join(', ')}; use ${supportedPlatforms.join(', ')}`,
+    )
+  if (!names.length && process.env.LIBID_REQUIRE_LIVE)
+    throw new Error('LIBID_REQUIRE_LIVE is set but LIBID_LIVE_PLATFORMS selects no platform')
+  return names as PlatformId[]
 }
+
+/** Whether this run proves `platform`; one left out is skipped, and reported as skipped. */
+export const isLive = (platform: PlatformId) => livePlatforms().includes(platform)
 
 /**
  * A test secret from the environment, or undefined, which skips the test

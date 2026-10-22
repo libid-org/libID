@@ -23,12 +23,15 @@ interface Outcome {
   idNodeBytes?: number
   handleNodeBytes?: number
   proofPresent?: boolean
+  ceremonyVersion?: string
+  expiresAt?: number
 }
 
 /**
  * Start the platform's ceremony from its anchor, let `authorize` drive the
  * popup through the platform, then check the run's result: accepted, the
- * proved account with its id and handle nodes, and a non-empty proof.
+ * proved account with its id and handle nodes, the ceremony version, and a
+ * non-empty, unexpired proof.
  */
 async function proveThroughTheUi(
   page: Page,
@@ -64,6 +67,8 @@ async function proveThroughTheUi(
       proofPresent: Object.values(oauthProof.proof).some(
         (value) => value instanceof Uint8Array && value.length > 0,
       ),
+      ceremonyVersion: String(oauthProof.platformCeremonyVersion),
+      expiresAt: oauthProof.expiresAt,
     }
   }, id!)
   // A failed run's row says why.
@@ -72,7 +77,8 @@ async function proveThroughTheUi(
     .textContent()
   expect(outcome.status, message ?? undefined).toBe('accepted')
   expect(outcome.platformId).toBe(platformOf[name])
-  // The account id as the platform sent it: GitHub's and X's are decimal.
+  // The account id as the platform sent it: GitHub's and X's are decimal, and
+  // @libid/contracts' id rules admit any string bytes for Google's `sub`.
   if (name === 'Google') expect(outcome.userId).not.toMatch(/^0x/)
   else expect(outcome.userId).toMatch(/^\d+$/)
   expect(outcome.userId).toBeTruthy()
@@ -80,6 +86,8 @@ async function proveThroughTheUi(
   expect(outcome.idNodeBytes).toBe(32)
   expect(outcome.handleNodeBytes).toBe(32)
   expect(outcome.proofPresent).toBe(true)
+  expect(outcome.ceremonyVersion).toMatch(/^[1-9]\d*$/)
+  expect(outcome.expiresAt).toBeGreaterThan(Date.now() / 1000)
 }
 
 test('a GitHub identity is proved in the browser', async ({ page, context }) => {

@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { parseEnv } from 'node:util'
 import { defineConfig, devices } from '@playwright/test'
 import { APP_ORIGIN } from './local.ts'
 
-// Test secrets from a dotenv file when LIBID_TEST_ENV_FILE names one; values
-// already in the environment win. Nothing is printed.
-const envFile = process.env.LIBID_TEST_ENV_FILE
+// Test secrets from a dotenv file when LIBID_TEST_ENV_FILE names one, relative
+// to where pnpm was invoked; values already in the environment win. Nothing is
+// printed.
+const envFile =
+  process.env.LIBID_TEST_ENV_FILE &&
+  resolve(process.env.INIT_CWD ?? process.cwd(), process.env.LIBID_TEST_ENV_FILE)
 if (envFile) {
   process.env.LIBID_TEST_ENV_DIR ??= dirname(envFile)
   for (const [name, value] of Object.entries(parseEnv(readFileSync(envFile, 'utf8'))))
