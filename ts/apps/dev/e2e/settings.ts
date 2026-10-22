@@ -2,7 +2,9 @@
 // the section needs it, in VARIABLES; one typed reader per section. The names
 // are those of libid-server-rs' ceremony-tests (src/settings.rs), which reads
 // the same .env.test. An empty value is an absent one.
+import { readFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { parseEnv } from 'node:util'
 import type { PlatformId } from '@libid/ceremony'
 
 /** Whether a section needs a variable; `insteadOf` stands in for that required one. */
@@ -63,6 +65,17 @@ const environment: Lookup = (name) => process.env[name] || undefined
 export function envFile(get: Lookup = environment): string | undefined {
   const file = get('LIBID_TEST_ENV_FILE')
   return file && resolve(get('INIT_CWD') ?? process.cwd(), file)
+}
+
+/**
+ * Read the settings file into the environment: a value already set wins, and
+ * an empty one counts as absent. Returns the file's keys.
+ */
+export function loadEnvFile(file: string): string[] {
+  const values = parseEnv(readFileSync(file, 'utf8'))
+  for (const [name, value] of Object.entries(values))
+    if (environment(name) === undefined) process.env[name] = value
+  return Object.keys(values)
 }
 
 export interface Tooling {

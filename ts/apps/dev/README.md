@@ -109,8 +109,8 @@ without fallback. Direct runs have no fallback row.
 ## Live tests
 
 The live suite proves real GitHub, X and Google accounts from this app's UI,
-with the services above. It starts `pnpm dev`, or reuses one already running,
-and refuses to start beside another stack on the same ports.
+with the services above. It starts its own `pnpm dev` and stops it after, so
+the ports above and the app's must be free: stop a running `pnpm dev` first.
 
 ```sh
 LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live

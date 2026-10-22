@@ -20,17 +20,23 @@ const stdio =
 /** Whether something on this host accepts connections on `port`. */
 const listening = (port: number) =>
   new Promise<boolean>((resolve) => {
-    const socket = connect(port, '127.0.0.1')
+    const socket = connect({ port, host: '127.0.0.1', timeout: 1000 })
     socket.once('connect', () => {
       socket.destroy()
       resolve(true)
+    })
+    socket.once('timeout', () => {
+      socket.destroy()
+      resolve(false)
     })
     socket.once('error', () => resolve(false))
   })
 // Refuse to start beside another stack on compose.yaml's ports: readiness could pass against it.
 if (!process.argv.includes('--ccdp')) {
   let ports: number[]
+  let own: string
   try {
+    own = execFileSync('docker', [...composeArgs, 'ps', '-q'], { encoding: 'utf8' }).trim()
     const config = JSON.parse(
       execFileSync('docker', [...composeArgs, 'config', '--format', 'json'], { encoding: 'utf8' }),
     ) as { services: Record<string, { ports?: { published: string }[] }> }
@@ -43,6 +49,12 @@ if (!process.argv.includes('--ccdp')) {
   }
   const open = await Promise.all(ports.map(listening))
   const taken = ports.filter((_, index) => open[index])
+  if (taken.length && own) {
+    console.error(
+      `This checkout's stack already runs (Compose project ${project}): stop that \`pnpm dev\`, or run \`docker compose -p ${project} down\`.`,
+    )
+    process.exit(1)
+  }
   if (taken.length) {
     console.error(
       `Already in use on 127.0.0.1: port ${taken.join(', ')}. Stop what holds it (see docker ps) and retry.`,
