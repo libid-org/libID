@@ -29,6 +29,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Where services.ts writes the stack's output; the failure-output action
+  # scans and uploads it.
+  LIBID_STACK_LOGS: /tmp/libid-live-stack.log
+
 jobs:
   ceremony:
     name: Live ceremonies
@@ -40,7 +45,7 @@ jobs:
       github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     # The test step's budget plus setup, the secret scan and the upload.
-    timeout-minutes: 65
+    timeout-minutes: 75
     env:
       # A missing secret fails the run instead of skipping the test.
       LIBID_REQUIRE_LIVE: "1"
@@ -59,15 +64,14 @@ jobs:
       # session arriving from a runner's address ("Verify it's you"), which no
       # automation passes. The google-ssm job runs it through a proxy.
       # Its own timeout, so a run that hangs still reaches the step below: the
-      # stack's 10-minute start, up to three tests of 12 minutes (all the
+      # stack's 10-minute start, up to three tests of 15 minutes (all the
       # variable can select), and 2 minutes to stop the stack
-      # (playwright.live.config.ts): 48 minutes, with room to spare.
+      # (playwright.live.config.ts): 57 minutes, with room to spare.
       - name: Prove identities end to end
         id: test
-        timeout-minutes: 55
+        timeout-minutes: 65
         env:
           LIBID_LIVE_PLATFORMS: ${{ vars.LIBID_LIVE_PLATFORMS || 'github,x' }}
-          LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
           GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
           GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
@@ -112,7 +116,7 @@ jobs:
       github.actor != 'dependabot[bot]'))
     runs-on: ubuntu-latest
     # The test step's budget plus setup, the proxy, the secret scan and the upload.
-    timeout-minutes: 45
+    timeout-minutes: 50
     permissions:
       contents: read
       id-token: write
@@ -152,15 +156,14 @@ jobs:
           echo "Google sees ${ip:?the proxy did not answer; see $RUNNER_TEMP/port-forward.log}"
 
       # Its own timeout, so a run that hangs still reaches the step below: the
-      # stack's 10-minute start, one test of 12 minutes, and 2 minutes to stop
-      # the stack (playwright.live.config.ts): 24 minutes, with room to spare.
+      # stack's 10-minute start, one test of 15 minutes, and 2 minutes to stop
+      # the stack (playwright.live.config.ts): 27 minutes, with room to spare.
       - name: Prove a Google identity end to end
         id: test
-        timeout-minutes: 30
+        timeout-minutes: 35
         env:
           LIBID_LIVE_PLATFORMS: google
           LIBID_TEST_PROXY: http://127.0.0.1:3128
-          LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
           GOOGLE_TEST_ALICE_EMAIL: ${{ secrets.GOOGLE_TEST_ALICE_EMAIL }}
           GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/dev test:live

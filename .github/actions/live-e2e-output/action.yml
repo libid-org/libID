@@ -1,8 +1,9 @@
 name: Keep the live end-to-end failure output
 description: >-
-  Stop any dev stack left running, scan its log for the test accounts'
-  secrets, then upload the PNG screenshots and the scanned log. The caller
-  passes the secrets to look for as env and runs this only on failure.
+  Stop any dev stack left running, scan its log (LIBID_STACK_LOGS) for the
+  test accounts' secrets, then upload the PNG screenshots and the scanned
+  log. The caller passes the secrets to look for as env and runs this only
+  on failure.
 
 # Every third-party action is pinned by commit SHA, with the tag in a
 # comment, so a moved tag cannot change what executes.
@@ -23,7 +24,7 @@ runs:
       run: |
         docker compose ls -q --all --filter name=libid-dev |
           xargs -r -I{} docker compose -p {} down --volumes
-        if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
+        if [ -f "$LIBID_STACK_LOGS" ]; then cp "$LIBID_STACK_LOGS" "$RUNNER_TEMP/stack-scanned.log"; fi
         node ts/apps/dev/e2e/scan-secrets.ts "$RUNNER_TEMP/stack-scanned.log"
 
     - name: Keep the screenshots and the stack log
