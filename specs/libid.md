@@ -22,8 +22,9 @@ specifications.
   invariants shared by every identity platform.
 - [Identity-platform ceremonies](platform-ceremonies.md) define the launch
   profiles for Google, X, and GitHub.
-- [Chain profiles](chain-profiles.md) define what those constructions commit
-  on one destination chain.
+- [Chain profiles](chain-profiles.md) define how one destination chain
+  authenticates the Transaction Author, supplies Block Time, and encodes
+  Authorized Transaction Data.
 
 ## Browser transport
 
@@ -98,12 +99,12 @@ controls the authenticated account response. The notary authenticates X/GitHub
 transcripts and their creation times. Verifier governance selects the
 Supported Version Set, accepted verifier artifacts, and trust roots. Each
 Platform Profile fixes its protocol parameters. The Consumer Chain
-authenticates the Transaction Author and supplies its Chain ID and Block Time.
+authenticates the Transaction Author and supplies Block Time.
 
 | Principal | Knows and can | Trusted for | Not trusted for |
 |---|---|---|---|
 | User | chooses an account and authorizes an operation | human intent | parsing or cryptographic verification |
-| Application operator | selects a Bridge and operation; starts or withholds work; receives the handle in plaintext and builds the bind call | frontend availability, declared ceremony inputs, and passing the handle to the bind call only when the user asks (platform REQ-PLAT-03A) | identity fields, proof target, or proof validity |
+| Application operator | selects a Bridge and operation; starts or withholds work; receives the handle in plaintext and builds the bind call and names its service fee amount and receiver | frontend availability, declared ceremony inputs, and passing the handle to the bind call only when the user asks (platform REQ-PLAT-03A) | identity fields, proof target, or proof validity |
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
 | CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges; its Prover holds the identity evidence | correct code and asset supply under ASM-CCDP-01; a Prover that proves in the zero-knowledge mode with fresh randomness, on which SP-PRIV-01 rests | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
@@ -136,7 +137,7 @@ root and verifier.
 | Subject | Single normative owner |
 |---|---|
 | Authorization Digest, PKCE, extraction, client binding, evidence time | [Common ceremony rules](ceremony-common.md) |
-| Chain ID, Transaction Author, Block Time, and transaction-data encoding | [Chain profiles](chain-profiles.md), with the Consumer's protocol fixing each transaction kind's arguments |
+| Transaction Author, Block Time, and transaction-data encoding | [Chain profiles](chain-profiles.md), with the Consumer's protocol fixing each transaction kind's arguments |
 | Platform endpoints, fields, trust roots, and proof projections | [Identity-platform ceremonies](platform-ceremonies.md) |
 | Popup origin allowlists, message model, delivery, navigation, closure, and continuity guarantees | [Popup transport](popup-transport.md) |
 | Ceremony documents, routes, private fragments, messages, events, and phase transitions | [CCDP](ccdp.md) |

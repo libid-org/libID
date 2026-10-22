@@ -8,7 +8,6 @@ export {
   type Identity,
   type IdentityNodes,
   type IdentityResult,
-  identityNodes,
   type OAuthProof,
   type PlatformId,
   type SupportedCeremonyVersion,

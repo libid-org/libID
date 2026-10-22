@@ -12,7 +12,6 @@ import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { ty
 import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
 import type { PlatformId } from '../src/platforms/index.js'
-import { testnet } from '../src/testing/ledgers.ts'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'
 import { type BrowserPlatform, browserPlatforms, platformIds } from './platforms.js'
 import { verifyBrowserProof } from './verify.js'
@@ -68,8 +67,10 @@ const evidence = {
           if (result?.status !== 'accepted' || !('bearerLinkProof' in result.oauthProof.proof))
             throw new Error('Missing bearer proof')
           const proof = result.oauthProof.proof
+          const { idNode, handleNode, ...identity } = result.identity
           return {
-            identity: result.identity,
+            identity,
+            nodes: [Array.from(idNode), Array.from(handleNode)],
             nonce: Array.from(result.oauthProof.authorizationNonce),
             authorizationDigest: Array.from(result.oauthProof.authorizationDigest),
             proof: Array.from(proof.bearerLinkProof),
@@ -83,6 +84,11 @@ const evidence = {
           userId: '9007199254740993',
           userName: 'alice',
         })
+        const nodes = [
+          idNode(platform, result.identity.userId),
+          handleNode(platform, result.identity.userName),
+        ]
+        expect(result.nodes).toEqual(nodes.map((node) => Array.from(node)))
         const token = decodeAttestedData(Uint8Array.from(result.token))
         const identity = decodeAttestedData(Uint8Array.from(result.identityAttestation))
         expect(token.sent.commitments).toEqual([])
@@ -93,7 +99,6 @@ const evidence = {
         const digest = deriveAuthorizationDigest({
           operationDomain: new Uint8Array(32),
           platformCeremonyVersion: 1,
-          chainId: testnet.hash(),
           authorizationNonce: nonce,
           transactionData: new Uint8Array([1]),
         })
@@ -139,8 +144,7 @@ const evidence = {
           identity.sent.commitments[0].hash,
           framed(new RegExp(`"${idField}"\\s*:\\s*"?$`)),
           framed(new RegExp(`"${handleField}"\\s*:\\s*"$`)),
-          idNode(platform, result.identity.userId),
-          handleNode(platform, result.identity.userName),
+          ...nodes,
         ]
           .flatMap(halves)
           .concat(tag(userIdTag), tag(handleTag))
@@ -203,8 +207,10 @@ const evidence = {
           )
             throw new Error('Missing Google proof')
           const proof = result.oauthProof.proof
+          const { idNode, handleNode, ...identity } = result.identity
           return {
-            identity: result.identity,
+            identity,
+            nodes: [Array.from(idNode), Array.from(handleNode)],
             authorizationDigest: Array.from(result.oauthProof.authorizationDigest),
             ...proof,
             identityProof: Array.from(proof.identityProof),
@@ -214,9 +220,15 @@ const evidence = {
         expect(result.identity).toEqual({
           platformId: platform,
           oauthClientId: browserPlatforms[platform].clientId,
-          userId: '0xa83e66b34468315fb68c3098b3c521b749aafb1db3390cb53ec03a8db139f2c7',
+          userId: '123456789012345678901',
           userName: 'holder@example.com',
         })
+        expect(result.nodes).toEqual(
+          [
+            idNode(platform, result.identity.userId),
+            handleNode(platform, result.identity.userName),
+          ].map((node) => Array.from(node)),
+        )
         const proof: GoogleProofV1 = {
           tokenExpiresAt: result.tokenExpiresAt,
           publicInputs: result.publicInputs,
@@ -256,7 +268,7 @@ for (const platform of platformIds) {
   })
 
   for (const corrupt of [false, true])
-    test(`${platform} browser ceremony with ${source}: ${corrupt ? `${corruption} ${requirements.corrupted}` : `accepts independently verified proof ${requirements.accepted}`} @proof`, async ({
+    test(`${platform} browser ceremony with ${source}: ${corrupt ? `${corruption} ${requirements.corrupted}` : `accepts independently verified proof ${requirements.accepted} [LIBID-BROWSER-029]`} @proof`, async ({
       bridge,
       page,
       context,
@@ -282,7 +294,32 @@ for (const platform of platformIds) {
       expect(events.filter((event) => event.status !== 'active')).toHaveLength(1)
       expect(events.at(-1)?.status).toBe(corrupt ? 'failed' : 'completed')
       await expectIsolatedProver(popup)
-      if (!corrupt) return verify(page)
+      if (!corrupt) {
+        // Prefetch counts every profile request; Prover reports still-running downloads once.
+        const attributes = (name: string, phase?: string) =>
+          events.flatMap((event) =>
+            event.status === 'active' && event.event === name && event.phase === phase
+              ? [event.instrumentation?.attributes]
+              : [],
+          )
+        const [prefetched] = attributes('prefetch-dispatch', 'finished')
+        expect(prefetched).toMatchObject({
+          'assets-cached': expect.any(Number),
+          'assets-fetched': expect.any(Number),
+        })
+        expect(Number(prefetched?.['assets-cached']) + Number(prefetched?.['assets-fetched'])).toBe(
+          artifactRequests(`${platform}/1`).length,
+        )
+        const downloads = attributes('asset-download')
+        expect(downloads).toEqual([
+          expect.objectContaining({ pending: expect.any(Number), missing: expect.any(Number) }),
+        ])
+        // The wait is reported exactly when no retrieval was lost.
+        expect(typeof downloads[0]?.['remaining-ms']).toBe(
+          downloads[0]?.missing === 0 ? 'number' : 'undefined',
+        )
+        return verify(page)
+      }
       expect(events.at(-1)).toMatchObject({ message: expect.stringContaining(failure.message) })
       expect(failure.events).toContain(await page.evaluate(() => window.failureEvent))
       expect(

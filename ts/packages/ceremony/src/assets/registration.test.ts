@@ -1,5 +1,10 @@
 import { afterEach, expect, it, type Mock, vi } from 'vitest'
-import { claimRootWorker, dispatchPrefetch, registerRootWorker } from './registration.js'
+import {
+  claimRootWorker,
+  dispatchPrefetch,
+  registerRootWorker,
+  remainingDownloads,
+} from './registration.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -193,6 +198,21 @@ it.each([
   )
 })
 
+it.each([
+  [
+    { dispatched: true, cached: 3, fetched: 2 },
+    { cached: 3, fetched: 2 },
+  ],
+  [{ dispatched: true }, undefined],
+  [{ dispatched: true, cached: 1, fetched: -1 }, undefined],
+  [{ dispatched: true, cached: 1.5, fetched: 0 }, undefined],
+])(
+  'returns the reported cache counts of %j, or none [LIBID-BROWSER-029]',
+  async (reply, counts) => {
+    expect(await dispatchPrefetch(serviceWorker('activated', reply), 'google/1')).toEqual(counts)
+  },
+)
+
 it('reports a dispatch that cannot be posted', async () => {
   const worker = serviceWorker('activated')
   worker.postMessage.mockImplementation(() => {
@@ -277,4 +297,36 @@ it('rejects a claim that cannot be posted and releases its timer', async () => {
   install(registration(`${ORIGIN}/`, { active }))
   await expect(claimRootWorker()).rejects.toBe(reason)
   expect(vi.getTimerCount()).toBe(0)
+})
+
+it('asks the controlling worker how many downloads were still running, without a deadline [LIBID-BROWSER-029]', async () => {
+  vi.useFakeTimers()
+  const container = install(undefined)
+  const answer = Promise.withResolvers<void>()
+  const worker = serviceWorker('activated')
+  worker.postMessage.mockImplementation(async (_message, [reply]) => {
+    await answer.promise
+    reply.postMessage({ pending: 2, missing: 0 })
+  })
+  container.controller = worker
+  const report = remainingDownloads('google/1')
+  expect(worker.postMessage).toHaveBeenCalledExactlyOnceWith(
+    { type: 'ceremony-downloads', profile: 'google/1' },
+    expect.any(Array),
+  )
+  expect(vi.getTimerCount()).toBe(0)
+  await vi.advanceTimersByTimeAsync(600_000)
+  answer.resolve()
+  expect(await report).toEqual({ pending: 2, missing: 0 })
+})
+
+it.each([
+  [{ pending: -1, missing: 0 }, 'Invalid download report'],
+  [{ pending: 1 }, 'Invalid download report'],
+  [{}, 'Invalid download report'],
+  [undefined, 'Missing controlling Service Worker'],
+])('rejects the download report %j', async (reply, error) => {
+  const container = install(undefined)
+  if (reply) container.controller = serviceWorker('activated', reply)
+  await expect(remainingDownloads('google/1')).rejects.toThrow(error)
 })

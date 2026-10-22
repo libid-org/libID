@@ -31,11 +31,11 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
 })
-it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () => {
+it('permits OAuth only after authenticated worker dispatch, reporting cache counts [CSP-013] [LIBID-BROWSER-029]', async () => {
   let elapsed = 25
   vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
   let activated!: () => void
-  let dispatched!: () => void
+  let dispatched!: (counts: { cached: number; fetched: number }) => void
   connection = fakeConnection({ peerOrigin: 'https://app.test', ready: 'pending' })
   registerRootWorker.mockReturnValueOnce(
     new Promise<void>((resolve) => {
@@ -43,7 +43,7 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
     }),
   )
   dispatchPrefetch.mockReturnValueOnce(
-    new Promise<void>((resolve) => {
+    new Promise((resolve) => {
       dispatched = resolve
     }),
   )
@@ -61,7 +61,7 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
   await vi.waitFor(() => expect(dispatchPrefetch).toHaveBeenCalledOnce())
   expect(connection.sent).toEqual([])
   elapsed = 2130
-  dispatched()
+  dispatched({ cached: 3, fetched: 1 })
   await run
   expect(connection.sent).toEqual([
     {
@@ -75,6 +75,8 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
           'connection-ms': 2000,
           'worker-ready-ms': 75,
           'dispatch-ms': 30,
+          'assets-cached': 3,
+          'assets-fetched': 1,
         },
       },
     },

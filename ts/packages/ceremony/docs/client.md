@@ -86,9 +86,11 @@ an origin, normal protocol state still determines which occurrences are valid.
 The code verifier is sent only after CCDP-origin Prover readiness.
 
 `new(connection, platformId, ledger, operationDomain, transactionData, version?)`
-is synchronous and snapshots its inputs before OAuth. It reads `ledger.hash()`
-and `ledger.notaryAddress()` once and derives fresh authorization material from
-the hash and byte inputs before returning, without retaining those buffers.
+is synchronous and snapshots its inputs before OAuth. It reads
+`ledger.notaryAddress()` once and derives fresh authorization material from the
+byte inputs before returning, without retaining those buffers. The digest commits
+no chain, so one ceremony's proof serves every ledger whose Consumer accepts its
+operation domain.
 Invalid selection, ledger values or inputs fail before OAuth. A client cannot reuse a live connection ID; a connection cannot run two
 ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
 [client.ts](../src/ccdp/client/client.ts) and [ceremony.ts](../src/ccdp/client/ceremony.ts).
@@ -174,13 +176,13 @@ exceptions retain their bounded opaque text for debugging.
 `proveUserIdentity()` resolves either `{ status: 'denied' }` or an accepted result
 containing separate `identity` and `oauthProof` values:
 
-- `identity`: exact platform ID, OAuth client ID, user ID and user name. The name
-  is Google's signed email, X's username or GitHub's login, without normalization.
-  Google's user ID is `0x` and the 64 lowercase hex digits of the id node of its
-  signed `sub`, never the `sub`.
+- `identity`: exact platform ID, OAuth client ID, user ID and user name, plus
+  their `idNode` and `handleNode`. The user ID is Google's signed `sub` or the X
+  or GitHub account ID; the name is Google's signed email, X's username or
+  GitHub's login. Both are as the platform sent them, without normalization.
 - `oauthProof`: selected `platformCeremonyVersion`, fresh `authorizationNonce`,
   client-derived `authorizationDigest` (32 bytes), platform-specific `proof` and
-  `expiresAt` in Unix seconds. The retained digest binds the original ledger hash,
+  `expiresAt` in Unix seconds. The retained digest binds the original
   operation domain, transaction bytes, ceremony version and nonce; it must equal
   the resulting claim's `CeremonyBound.authorizationDigest`. It is copied from the
   live ceremony, never supplied by Prover.
@@ -201,11 +203,11 @@ from the validated identity, retained digest, expiry and modulus and requires an
 exact match in order. X/GitHub contain `bearerLinkProof`, `tokenAttestation` and
 `identityAttestation`. A `NotaryAttestation` preserves original `attestedData`
 and `signature` bytes; decoded records are not exposed in the result.
-`identityNodes(result)` returns an accepted result's id node and handle node,
-32 bytes each: the keys its binding is stored under. An X or GitHub bind payload
+Client derives `idNode` and `handleNode`, 32 bytes each, from the delivered user
+ID and name: the keys the binding is stored under. An X or GitHub bind payload
 carries both beside the attestations and `bearerLinkProof`; a Google payload
 carries them in its public inputs. They are SHA-256 of the platform's tag and the
-id, or the handle folded A–Z to a–z ([platform-ceremonies §2.1](https://github.com/libid-org/libID/blob/main/specs/platform-ceremonies.md#21-canonical-platform-user-identifiers)).
+user ID, or the name folded A–Z to a–z ([platform-ceremonies §2.1](https://github.com/libid-org/libID/blob/main/specs/platform-ceremonies.md#21-canonical-platform-user-identifiers)).
 Use `OAuthProof<'google'>['proof']`, for example, to name a payload type without
 importing private modules. A literal platform argument infers its result type;
 a dynamic `PlatformId` produces the corresponding union.

@@ -116,14 +116,13 @@ used in the resulting Submission.
 
 | Identity platform | Authenticated source | Canonical `userId` | Mutable handle |
 |---|---|---|---|
-| Google | signed ID-Token `sub` | `0x` and the lowercase hexadecimal of its id node | signed `email` |
+| Google | signed ID-Token `sub` | the `sub`, as signed | signed `email` |
 | X | `/2/users/me.data.id` JSON string | decimal digits, as sent | `username` |
 | GitHub | `/user.id` JSON integer token | decimal digits, as sent | `login` |
 
 An identity's **id**, or account identifier, is the authenticated value in
-the second column: Google's `sub`, and the X and GitHub identifiers. On X
-and GitHub, `userId` is the id unchanged; on Google, `userId` is the id
-node.
+the second column: Google's `sub`, and the X and GitHub identifiers.
+`userId` is the id unchanged.
 
 - REQ-PLAT-05A (upholds SP-BIND-01):
   The Implementation MUST derive an identity's id node as
@@ -176,7 +175,7 @@ Conformance vectors, each node computed independently with SHA-256:
 
 | Platform | Authenticated input | `userId` | Id node |
 |---|---|---|---|
-| Google | `sub: "110169484474386276334"` | the id node | `0x620866cfb4d2776a32cd94d8e8b55577526af86115ebf125d4ca1ca7bf07737e` |
+| Google | `sub: "110169484474386276334"` | `110169484474386276334` | `0x620866cfb4d2776a32cd94d8e8b55577526af86115ebf125d4ca1ca7bf07737e` |
 | X | `"id":"2244994945"` | `2244994945` | `0x68291869976ffad2abf3e933ec9ab2623395ff8b3b9242e655e1da3ef43d4f94` |
 | GitHub | `"id":583231` | `583231` | `0x475902b27989feb395b9b0cd3156aa573a9676c13155b8e7e3ddaf3e77181847` |
 
@@ -257,36 +256,45 @@ the precision anchor. A profile that publishes no such table is ineligible.
 
 A claim puts no plaintext user id, handle, or email on the Consumer Chain
 unless it discloses the handle. The Consumer's bind call takes the
-Submission and, beside it, one optional handle:
-`bind(platformId, version, payload, string handle)`. The Submission Payload
-has no field for a handle or an id. An empty handle discloses nothing and
-keeps the bind private.
+Submission and, beside it, one optional handle, a primary flag, and the
+service fee:
+`bind(platformId, version, payload, string handle, bool primary, uint256 feeAmount, address feeReceiver)`.
+`bindPrivately(platformId, version, payload, feeAmount, feeReceiver)` is
+that call with an empty handle and no primary flag. The fee rules are in
+§2.1c. The Submission Payload has no field for a handle or an id. An empty
+handle discloses nothing and keeps the bind private. A nonempty handle is
+disclosed, and with the primary flag it also becomes the author's name.
 
 - REQ-PLAT-03A (upholds SP-PRIV-01):
   The Application MUST pass the delivered handle to the bind call only when
   the user asks to disclose it, and MUST pass an empty handle otherwise.
-  The Application MUST NOT place an account identifier in any bind call.
+  The Application MUST set the primary flag only when the user asks to make
+  that handle its name. The Application MUST NOT place an account
+  identifier in any bind call.
   The rule binds the Application operator, who serves the Application: it
   is the part of the Canonical Runtime that builds the bind call, and an
   operator that serves one breaking this rule is outside ASM-BROWSER-01.
   Necessity: the Prover delivers the handle with every proof and builds no
   bind call, so the choice of sending it falls to the role that does, and
-  no Consumer check can tell a handle the user chose to show from one an
-  operator sent.
+  no Consumer check can tell a handle or a name the user chose to show from
+  one an operator sent.
 - REQ-PLAT-08D (upholds SP-BIND-01, SP-PRIV-01):
   Where the bind call's handle is nonempty, the Consumer MUST fold it under
   REQ-PLAT-05B and hash it under the platform's handle tag, exactly as for
   a disclosure call (REQ-PLAT-08E), and MUST reject the bind call unless
   that node equals the handle node the Platform Verifier returned
   (common REQ-COMMON-05E). Where the handle is empty, the bind call
-  discloses nothing. The Platform Verifier never receives the handle.
+  discloses nothing. The Consumer MUST reject a bind call that sets the
+  primary flag with an empty handle. The Platform Verifier never receives
+  the handle.
   Necessity: the handle arrives beside the proof, not in it, so only the
   node comparison ties it to the account; the verification is what makes
   the node authentic, and with it the canonical form, so the chain needs no
   rule set to check the text. The Consumer already folds and hashes handle
   text for disclosure calls, so one rule serves both. A rejected bind
   protects the display, not the handle: its calldata is public whether or
-  not the Consumer accepts it.
+  not the Consumer accepts it. A primary flag without a handle asks for a
+  name the call does not carry.
 
 The Consumer stores every binding under its two nodes. For each node it
 records the **owner**, the Transaction Author that last bound it, and the
@@ -330,56 +338,80 @@ Author **holds** a handle on a platform while it owns that handle's node.
   handle between them, and comparing owners would answer yes to a pair the
   chain no longer holds.
 
-A Transaction Author's **name** on a platform is the one handle the
-Consumer stores for that author and platform to display, the analogue of an
-ENS primary name kept per platform. An author holding several identities of
-one platform still has one name there. A handle is **disclosed** once a
-bind call or disclosure call the Consumer accepted has carried it;
-disclosure is history and nothing undoes it. A handle is **published**
-while it is its author's name; publication is state.
+A Transaction Author's **name** is the one handle the Consumer stores for
+that author to display, together with the platform the handle is on: the
+analogue of an ENS primary name. An author has at most one name across all
+platforms, however many identities it holds on one platform or on several.
+A handle is **disclosed** once a bind call or disclosure call the Consumer
+accepted has carried it; disclosure is history and nothing undoes it. A
+handle is **published** while it is its author's name; publication is
+state.
 
 - REQ-PLAT-08J (upholds SP-BIND-01):
-  The Consumer MUST change a Transaction Author's name on a platform only
-  through the paths this rule lists. On accepting a bind call that
-  discloses a handle, the Consumer MUST store the handle it folded under
-  REQ-PLAT-08D as the author's name. On accepting a disclosure call
-  (REQ-PLAT-08E), it MUST store that call's folded handle as the caller's
-  name. On a withdrawal call, it MUST clear the caller's name on that
-  platform. Whenever a handle node's owner changes from one author to
-  another, or REQ-PLAT-08I clears it, the Consumer MUST clear the previous
-  owner's name on that platform if that name folds to that node. A bind
-  call that discloses nothing MUST leave the name unchanged.
-  Necessity: a name is the handle an author chose to show; a claim of
-  another of its identities must not replace that choice, and a name left
-  in place after its handle moved would show a handle its author no longer
-  holds.
+  The Consumer MUST change a Transaction Author's name only through the
+  paths this rule lists. On accepting a bind call that discloses a handle
+  with the primary flag set, the Consumer MUST store the handle it folded
+  under REQ-PLAT-08D, with the bind call's platform, as the author's name.
+  On accepting a publishing call (REQ-PLAT-08E), it MUST store that call's
+  folded handle and platform as the caller's name. A stored name replaces
+  the name the author had on any platform. On a withdrawal call, the
+  Consumer MUST clear the caller's name, whatever its platform. Whenever a
+  handle node's owner changes from one author to another, or REQ-PLAT-08I
+  clears it, the Consumer MUST clear the previous owner's name if that name
+  is on the node's platform and folds to that node. A name on another
+  platform stays. The Consumer MUST leave the name unchanged on a bind call
+  without the primary flag, whether or not it discloses a handle, and on a
+  reveal call. Necessity: a name is the one handle an author chose to show,
+  as an ENS primary name is the one name an address shows; a claim of
+  another of its identities, or a handle shown without being chosen, must
+  not replace that choice, a name left in place after its handle moved would
+  show a handle its author no longer holds, and losing a handle on one
+  platform says nothing about a handle held on another.
 - REQ-PLAT-08K (upholds SP-BIND-01):
-  The Consumer MUST store a name folded. The Consumer MUST answer a read of
-  an author's name with the stored handle, and that the author has no name
-  when none is stored. Necessity: REQ-PLAT-08J clears a name on every owner
-  change, so a stored name is one its author holds, and a reader that
-  mirrors the events of REQ-PLAT-08F answers the same.
+  The Consumer MUST store a name folded, with its platform. The Consumer
+  MUST answer a read of an author's name with the stored platform and
+  handle while the author holds that handle on that platform. The Consumer
+  MUST answer that the author has no name when none is stored or the author
+  no longer holds the stored handle. Necessity: the platform selects the
+  handle tag a reader hashes the name under, and REQ-PLAT-08J clears a name
+  on every owner change, so a reader that mirrors the events of
+  REQ-PLAT-08F answers the same as the read.
 - REQ-PLAT-08E (upholds SP-BIND-01):
-  The Consumer MUST offer a disclosure call that takes a platform and a
-  handle. The Consumer MUST fold the handle under REQ-PLAT-05B, hash it
-  under the platform's handle tag, and accept the call only when the caller
-  holds that node. The Consumer MUST NOT require a new proof or the account
-  identifier for a disclosure. The Consumer MUST also offer a withdrawal
-  call that clears the caller's own name on a platform. Necessity: the
+  The Consumer MUST offer two disclosure calls, each taking a platform and
+  a handle: a publishing call, which makes the handle the caller's name
+  (REQ-PLAT-08J), and a reveal call, which shows the handle and changes no
+  state. For either, the Consumer MUST fold the handle under REQ-PLAT-05B,
+  hash it under the platform's handle tag, and accept the call only when
+  the caller holds that node. The Consumer MUST NOT require a new proof or
+  the account identifier for a disclosure. The Consumer MUST NOT write
+  storage on a reveal call. The Consumer MUST also offer a withdrawal call
+  that takes no platform and clears the caller's own name. Necessity: the
   handle's preimage is the evidence and ownership of its node the
   authority. A handle a later claim of the same account renamed away from
   has lost its owner to retirement (REQ-PLAT-08I), so the one test refuses
-  it. A refused call protects the display, not the handle: its calldata is
+  it. A reveal lets an author show a handle it holds without making it its
+  name. An author has one name, so a withdrawal needs no platform. A
+  refused call protects the display, not the handle: its calldata is
   public whether or not the Consumer accepts it.
 - REQ-PLAT-08F (upholds SP-BIND-01, SP-PRIV-01):
   The Consumer MUST put no plaintext handle in the event of a binding, and
-  MUST put the nodes there. The Consumer MUST
-  emit an event carrying the folded handle for every name it stores, and an
-  event for every name it clears. Necessity: an event that carried a
-  handle is public for good, and a reader mirrors names only if the events
-  say when one was stored or cleared.
+  MUST put the nodes there. The Consumer, like every other libid contract
+  that accepts handle text, MUST emit one shared reveal event, carrying the
+  platform, the handle node, and the folded handle and no address, for every
+  accepted call that carries handle text. The Consumer MUST put handle text
+  in no other event. On the Consumer those calls are a bind call with a
+  handle, a publishing call, and a reveal call. The Consumer MUST emit a
+  name event carrying the author, the platform, and the handle node for
+  every name it stores, after that call's reveal event. The Consumer MUST
+  emit an event carrying the author for every name it clears. A stored name
+  replaces the earlier one without a clearing event. Necessity: an event
+  that carried a handle is public for good; one event for all handle text
+  lets a reader build one map from handle node to handle out of every libid
+  contract's logs; and a reader mirrors names only if the events say when
+  one was stored or cleared. An author has one name, so the author alone
+  keys it.
 
-- TEST-PLAT-20A (exercises REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08H):
+- TEST-PLAT-20A (exercises REQ-PLAT-03A, REQ-PLAT-08D, REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08H, REQ-PLAT-08J):
   On each platform, a bind call without a handle, made with recognizable
   test values, carries no id, handle, email, or `sub` bytes in its
   calldata, its events, or any storage it writes, including a value split
@@ -387,25 +419,43 @@ while it is its author's name; publication is state.
   and without its handle lands on the same two nodes. The Consumer rejects
   a bind call whose handle does not fold to the handle node the Platform
   Verifier returned, the Platform Verifier's result carries no handle, and
-  a disclosed handle in another letter case is stored folded. A disclosure
-  call is rejected from a caller that does not hold the handle and for a
-  handle retired by a later claim of the same account, and accepted, without
-  a proof, for a held handle given in any letter case. The Application
-  passes the handle to the bind call only when the user asks to disclose
-  it, and no Submission Payload has a field for a handle or an id.
-- TEST-PLAT-20B (exercises REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
+  a disclosed handle in another letter case is stored folded. A bind call
+  with the primary flag and an empty handle is rejected and writes nothing.
+  A bind call with a handle and without the primary flag emits the reveal
+  event with the folded handle and leaves the name. A publishing call and a
+  reveal call are each rejected from a caller that does not hold the
+  handle and for a handle retired by a later claim of the same account, and
+  accepted, without a proof, for a held handle given in any letter case. A
+  reveal call of a held handle emits the reveal event and writes no
+  storage. A bind call with the primary flag and a publishing call each
+  emit the reveal event before the name event, and only the reveal event
+  carries handle text, and it carries no address. Every other libid
+  contract that accepts handle text emits the same reveal event. The
+  Application passes the
+  handle to the bind call only when the user asks to disclose it, sets the
+  primary flag only when the user asks to make it its name, and no
+  Submission Payload has a field for a handle or an id.
+- TEST-PLAT-20B (exercises REQ-PLAT-08E, REQ-PLAT-08F, REQ-PLAT-08I, REQ-PLAT-08J, REQ-PLAT-08K):
   An identity that proves a new handle leaves its old handle without an
   owner, unless another identity proved that handle meanwhile, which keeps
   it; a retired node keeps its watermark, so evidence older than it binds
   nothing. Evidence not strictly newer than either node's watermark is
-  rejected. For a wallet holding identities A and B of one platform with
-  A's handle as its name, a claim of B without a handle leaves the name; a
-  claim of B disclosing B's handle replaces it. A rename of A withdraws A's
-  name; another wallet proving A's handle withdraws it; a wallet moving an
-  identity to another wallet withdraws the old wallet's name for that
-  handle. The name reads as none whenever its author no longer holds the
-  handle. A withdrawal clears the name and emits an event only when there
-  was a name.
+  rejected. For a wallet holding identities A and B of one platform with A's
+  handle as its name, a claim of B without a handle leaves the name; a claim
+  of B disclosing B's handle with the primary flag replaces it. A rename of
+  A withdraws A's name; another wallet proving A's handle withdraws it; a
+  wallet moving an identity to another wallet withdraws the old wallet's
+  name for that handle. For a wallet whose name is its handle on platform P,
+  a bind call on platform Q that discloses its Q handle with the primary
+  flag, and a publishing call of that Q handle, each replace the name with
+  the Q handle and platform Q and emit no clearing event; a bind call on Q
+  that discloses nothing, one that discloses the Q handle without the
+  primary flag, and a reveal call of the Q handle each leave the name. For a
+  wallet whose name is on Q, a rename of its identity on P, and another
+  wallet proving its P handle, leave the name. The name reads with its
+  platform, and as none whenever its author no longer holds the handle. A
+  withdrawal clears the name on whichever platform it is, and emits an event
+  only when there was a name.
 - TEST-PLAT-20D (exercises REQ-PLAT-08O):
   After an identity proves a handle, the pair of that handle and its id node
   is answered yes. When identity A of a wallet renames and identity B of the
@@ -414,6 +464,51 @@ while it is its author's name; publication is state.
   the same handle from another wallet keeps its pair. An id node never
   bound, and a handle with no owner, are answered no; none of these answers
   refuses a transaction.
+
+### 2.1c The bind operation
+
+The bind call is the Consumer's transaction kind under operation domain
+`keccak256(UTF8("libid.bind-identity"))`. Its Authorized Transaction Data
+is the target address alone; on EVM, `abi.encode(address)`, 32 bytes
+([chain profiles](chain-profiles.md) §3.3). It also takes the service fee
+amount and receiver of §2.1b, which no proof commits.
+
+- REQ-PLAT-08P (upholds SP-BIND-01, SP-REPLAY-01):
+  The Consumer MUST accept a bind call only under the operation domain
+  `keccak256(UTF8("libid.bind-identity"))`. The Consumer MUST reject
+  Authorized Transaction Data that is not exactly one target in the Chain
+  Profile's encoding. The Consumer MUST reject a bind call whose
+  Transaction Author is not that target.
+  Necessity: the target is the one value the user authorized, and requiring
+  the Transaction Author to be the target leaves a proof usable only by the
+  wallet it names.
+- REQ-PLAT-08Q (upholds SP-BIND-01):
+  The Consumer MUST reject a bind call whose fee amount is zero while its fee
+  receiver is nonzero, or whose fee amount is nonzero while its fee receiver is
+  the zero address. The Consumer MUST reject a bind call whose native value
+  differs from the quotation of common REQ-COMMON-06E plus the fee amount.
+  On accepting a bind call with a nonzero fee amount, the Consumer MUST
+  transfer exactly that amount to the fee receiver. The Consumer MUST reject
+  the bind call when that transfer fails. The Consumer MUST emit an event
+  naming the Authorization Digest, the fee receiver, and the amount for every
+  fee it transfers. Necessity: the proof authorizes a binding, not a price,
+  so the fee stays outside the digest and the Transaction Author agrees to
+  it by authoring the call. Exact value needs no refund path, and
+  `(0, zero address)` as the only free form leaves no fee without a
+  receiver.
+
+- TEST-PLAT-20E (exercises REQ-PLAT-08P, REQ-PLAT-08Q):
+  A bind call under another operation domain is rejected. Authorized
+  Transaction Data that is not exactly one encoded target, including a
+  target followed by a chain identifier, is rejected, and so is a bind call
+  whose Transaction Author is not the target. One Submission is accepted by
+  the Consumers of two Consumer Chains, once at each, and a second bind call
+  of it on either is rejected. A fee amount without a receiver, and a
+  receiver without an amount, are rejected. A native value one unit above or
+  below the quotation plus the fee amount is rejected. An accepted bind call
+  with a fee delivers exactly the amount to the receiver and emits the fee
+  event; a receiver that refuses the value rejects the bind call; and a bind
+  call without a fee moves exactly the quotation.
 
 ### 2.2 Metadata ordering and validity ceilings
 
@@ -505,8 +600,8 @@ Conformance vector, for the Authorization Digest of
 [common §5](ceremony-common.md#5-authorization-digest):
 
 ```text
-authorizationDigest = 0xb318fb559e16a179b853ed2853576cda16032d93b0839bb81a55135d334c0af5
-Google nonce         = sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU
+authorizationDigest = 0x24083f6c849372d1fa0a95615a7b2b6a888edef92e9fa2bebd520b2f536e9350
+Google nonce         = JAg_bISTctH6CpVhWnsraoiO3vkun6K-vVILL1Nuk1A
 ```
 
 ### 3.2 Browser token validation
@@ -531,8 +626,9 @@ Google nonce         = sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU
   REQ-PLAT-16B, using the same artifact encoding. This checks result consistency,
   not the proof's cryptographic validity or the modulus's trusted-set membership.
   It requires neither the ID Token nor a new `ProveIdentity` field. The
-  projection takes the id node from the delivered `userId` and the handle
-  node from the delivered `userName`, folded and hashed under REQ-PLAT-05B.
+  projection takes the id node of the delivered `userId`, hashed under
+  REQ-PLAT-05A, and the handle node of the delivered `userName`, folded and
+  hashed under REQ-PLAT-05B.
 - REQ-PLAT-15:
   The Prover MUST reject a Google response carrying `code` or
   `access_token`. Necessity: neither artifact belongs to this
@@ -1803,6 +1899,9 @@ notary signature; the Consumer Chain's Notary Service remains authoritative.
 A proof built outside the Canonical Runtime still faces those downstream
 checks and the Transaction Author rule in
 [common §12](ceremony-common.md#12-security-considerations).
+The Application names the bind call's service fee amount and receiver. No
+proof bounds them; the Transaction Author's review of the call is the only
+check.
 Proxy notarization exposes session traffic to the notary; the protocol does
 not promise bearer confidentiality from that notary. The bearer remains
 hidden from the published proof by the two commitments and link circuit,
@@ -1848,7 +1947,7 @@ A stored name is not evidence. The Consumer clears a name whenever its
 author stops holding the handle (REQ-PLAT-08J), and emits an event for each
 clearing (REQ-PLAT-08F), so a reader that mirrors names from events shows
 what the Consumer answers. An event that stores a name replaces the
-author's earlier name on that platform; no clearing event precedes it.
+author's earlier name on any platform; no clearing event precedes it.
 
 ## 10. References
 
