@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { type BrowserContext, expect, type Locator, type Page } from '@playwright/test'
 import { buildGooglePublicInputs } from '../../../packages/ceremony/src/platforms/google/1/validation.js'
+import { BRIDGE } from '../local.ts'
 
 // Helpers for app.spec.ts: the Bridge and app, the run history, and the popup-side fixtures.
 
@@ -22,7 +23,7 @@ declare global {
   }
 }
 
-export const configUrl = 'http://localhost:4682/api/v1/ceremony/config'
+export const configUrl = new URL('/api/v1/ceremony/config', BRIDGE).href
 // The Bridge selects CCDP, so tests use their own origin, apart from the development one.
 export const ccdp = 'http://localhost:4684'
 export const config = {
