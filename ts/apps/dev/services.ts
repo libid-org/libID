@@ -50,6 +50,7 @@ if (!process.argv.includes('--ccdp')) {
     console.error('Could not run Docker Compose. Install Docker with Compose and start its engine.')
     process.exit(1)
   }
+  // Which service answers on each is checked once the stack is up.
   for (const [name, origin] of Object.entries({ BRIDGE, NOTARY })) {
     const port = Number(new URL(origin).port)
     if (!ports.includes(port)) {
@@ -147,6 +148,26 @@ if (process.argv.includes('--app')) {
         /* Compose may still be pulling or starting the Bridge. */
       }
       await delay(500)
+    }
+    // Readiness above proves BRIDGE is the Bridge; only the notary serves /healthcheck.
+    if (!stopping) {
+      const notary = await fetch(
+        new URL('/healthcheck', NOTARY.replace('localhost', '127.0.0.1')),
+        {
+          signal: AbortSignal.timeout(2000),
+        },
+      )
+        .then(async (response) => {
+          await response.body?.cancel()
+          return response.status
+        })
+        .catch(() => 0)
+      if (notary !== 200) {
+        console.error(
+          `local.ts's NOTARY ${NOTARY} does not answer as the notary (GET /healthcheck).`,
+        )
+        stop(1)
+      }
     }
     if (!stopping) {
       frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })
