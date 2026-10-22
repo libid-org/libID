@@ -96,9 +96,10 @@ type CookieParam = Parameters<BrowserContext['addCookies']>[0][number]
 
 /**
  * The cookies to set for a saved session, as the Rust suite sets them: a
- * domain cookie on its domain, a host-only or `__Host-` one by `url` alone,
- * each in its partition; an expired one is left out. `domainsOf` gives the
- * domains each cookie goes on.
+ * domain cookie (leading dot) on its domain, a `__Host-` one by `url` alone,
+ * another host-only one on its host without a dot, which Chromium keeps
+ * host-only with its exact path; an expired one is left out. `domainsOf`
+ * gives the domains each cookie goes on.
  */
 export function cookieParams(
   cookies: Stored[],
@@ -109,13 +110,14 @@ export function cookieParams(
     const expires = cookie.expires ?? cookie.expirationDate ?? 0
     if (expires > 0 && expires < now) return []
     const key = cookie.partition_key ?? cookie.partitionKey
+    // Playwright takes the partition's top-level site only: an exported
+    // hasCrossSiteAncestor is dropped, and Playwright sets it true.
     const partitionKey = typeof key === 'string' ? key : (key?.topLevelSite ?? key?.top_level_site)
     return domainsOf(cookie.domain).map((domain): CookieParam => {
       const path = cookie.path || '/'
-      // Playwright takes a url's path up to its last slash.
-      const placed = domain.startsWith('.')
-        ? { domain, path }
-        : { url: `https://${domain}${path.endsWith('/') ? path : `${path}/`}` }
+      const placed = cookie.name.startsWith('__Host-')
+        ? { url: `https://${domain}/` }
+        : { domain, path }
       return {
         name: cookie.name,
         value: cookie.value,
