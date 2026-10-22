@@ -96,6 +96,22 @@ the dev suite does not exhaustively test timing arithmetic, sorting or delayed
 delivery, or retest native disclosure controls. Real OAuth and proving checks are documented in the
 [ceremony qualification guide](../../packages/ceremony/docs/qualification.md).
 
+## Live tests
+
+The live suite proves real GitHub, X and Google accounts from this app's UI,
+with the services above. It starts `pnpm dev`, or reuses one already running.
+
+```sh
+LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live
+```
+
+The env file holds the test accounts' secrets (`GH_TEST_ALICE_*`,
+`X_TEST_ALICE_*`, `GOOGLE_TEST_ALICE_*`; see [e2e/](e2e/)). A test without its
+secrets is skipped; `LIBID_REQUIRE_LIVE=1` fails it instead.
+`LIBID_LIVE_PLATFORMS=github,x` picks platforms, `LIBID_TEST_PROXY` routes the
+browser through a proxy, and `LIBID_STACK_LOGS=<file>` sends the services'
+output to a file.
+
 Run history shows core operation durations from their occurrence timestamps, plus
 total ceremony time. The status uses the package’s stage
 projection. Timings freeze at the terminal outcome and clear on page reload;
