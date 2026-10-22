@@ -117,3 +117,20 @@ test("an export keeps the platform's unexpired cookies, as a list or under `cook
   assert.equal(parseExport('{"cookies": 1}', onX, NOW), undefined)
   assert.equal(parseExport('not json', onX, NOW), undefined)
 })
+
+test('an export entry is a cookie only with string name, value and domain', () => {
+  const capitalised = JSON.stringify([
+    { Name: 'auth_token', Value: 'fake', Domain: '.x.com', Path: '/', Secure: true },
+  ])
+  const [cookie] = parseExport(capitalised, onX, NOW) ?? []
+  assert.equal(cookie?.name, 'auth_token')
+  assert.equal(cookie?.domain, '.x.com')
+  assert.equal(cookie?.path, '/')
+  for (const bad of [
+    '[null]',
+    '["auth_token"]',
+    '[{"name":"auth_token","value":"fake"}]',
+    '[{"name":"auth_token","value":1,"domain":".x.com"}]',
+  ])
+    assert.equal(parseExport(bad, onX, NOW), undefined, bad)
+})

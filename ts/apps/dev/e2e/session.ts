@@ -47,10 +47,32 @@ const expiresOf = (cookie: Stored) => cookie.expires ?? cookie.expirationDate ??
 export const onX = (host: string) => host === 'x.com' || host.endsWith('.x.com')
 export const onGoogle = (host: string) => host === 'google.com' || host.endsWith('.google.com')
 
+/** Capitalised spellings an export may use, as cookies.rs' serde aliases accept. */
+const CAPITALISED = {
+  Name: 'name',
+  Value: 'value',
+  Domain: 'domain',
+  Path: 'path',
+  Secure: 'secure',
+}
+
+/** One export entry as a cookie: an object with string name, value and domain; else undefined. */
+function storedOf(entry: unknown): Stored | undefined {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return undefined
+  const cookie: Record<string, unknown> = { ...entry }
+  for (const [spelled, name] of Object.entries(CAPITALISED))
+    if (spelled in cookie && !(name in cookie)) cookie[name] = cookie[spelled]
+  const { name, value, domain } = cookie
+  return typeof name === 'string' && typeof value === 'string' && typeof domain === 'string'
+    ? (cookie as unknown as Stored)
+    : undefined
+}
+
 /**
  * The cookies of an export for the hosts `keep` admits, as the Rust suite's
- * cookies::parse reads them: a list, or one under `cookies`; an expired
- * cookie is left out. Undefined when the text is no such export.
+ * cookies::parse reads them: a list, or one under `cookies`, of entries with
+ * string name, value and domain; an expired cookie is left out. Undefined
+ * when the text is no such export.
  */
 export function parseExport(
   json: string,
@@ -65,7 +87,9 @@ export function parseExport(
     // The parser's message would quote the value.
   }
   if (!Array.isArray(cookies)) return undefined
-  return (cookies as Stored[]).filter((cookie) => {
+  const read = cookies.map(storedOf)
+  if (read.some((cookie) => cookie === undefined)) return undefined
+  return (read as Stored[]).filter((cookie) => {
     const expires = expiresOf(cookie)
     return keep(hostOf(cookie)) && (expires <= 0 || expires >= now)
   })
