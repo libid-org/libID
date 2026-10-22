@@ -3,12 +3,13 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { openSync } from 'node:fs'
+import { connect } from 'node:net'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
-
 import { APP_ORIGIN, BRIDGE } from './local.ts'
+
 const root = fileURLToPath(new URL('.', import.meta.url))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
@@ -16,6 +17,39 @@ const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
 const logs = process.env.LIBID_STACK_LOGS ? openSync(process.env.LIBID_STACK_LOGS, 'w') : undefined
 const stdio =
   logs === undefined ? 'inherit' : (['ignore', logs, logs] as ['ignore', number, number])
+/** Whether something on this host accepts connections on `port`. */
+const listening = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const socket = connect(port, '127.0.0.1')
+    socket.once('connect', () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once('error', () => resolve(false))
+  })
+// Refuse to start beside another stack on compose.yaml's ports: readiness could pass against it.
+if (!process.argv.includes('--ccdp')) {
+  let ports: number[]
+  try {
+    const config = JSON.parse(
+      execFileSync('docker', [...composeArgs, 'config', '--format', 'json'], { encoding: 'utf8' }),
+    ) as { services: Record<string, { ports?: { published: string }[] }> }
+    ports = Object.values(config.services).flatMap((service) =>
+      (service.ports ?? []).map((port) => Number(port.published)),
+    )
+  } catch {
+    console.error('Could not run Docker Compose. Install Docker with Compose and start its engine.')
+    process.exit(1)
+  }
+  const open = await Promise.all(ports.map(listening))
+  const taken = ports.filter((_, index) => open[index])
+  if (taken.length) {
+    console.error(
+      `Already in use on 127.0.0.1: port ${taken.join(', ')}. Stop what holds it (see docker ps) and retry.`,
+    )
+    process.exit(1)
+  }
+}
 // Rebuild the shared distribution; immutable assets reuse the build cache.
 execFileSync(
   'pnpm',
