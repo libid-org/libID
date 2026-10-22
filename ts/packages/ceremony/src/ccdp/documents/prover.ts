@@ -1,6 +1,6 @@
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
-import { route } from '../../assets/keys.js'
-import { claimRootWorker } from '../../assets/registration.js'
+import { profileKey, route } from '../../assets/keys.js'
+import { claimRootWorker, remainingDownloads } from '../../assets/registration.js'
 import { isCoreEvent, now, type OperationEvent } from '../../events.js'
 import { ceremonyFor } from '../../platforms/index.js'
 import { acceptReturn } from '../../platforms/oauthReturn.js'
@@ -93,6 +93,7 @@ class ProverDocument extends CeremonyDocument {
     // Every prover starts from an admitted return, before loading it or using the network.
     const accepted = acceptReturn(prover.platformId, prover.version, request, input)
     if (accepted === null) return this.deny()
+    void this.observeDownloads(profileKey(prover.platformId, prover.version))
     try {
       this.ui.trackProof(ceremonyFor(prover.platformId, prover.version).progressWeights)
     } catch {
@@ -107,6 +108,29 @@ class ProverDocument extends CeremonyDocument {
       emit: (event) => this.emit(event),
     })
     await this.deliver(result)
+  }
+
+  /**
+   * How long Prefetch's downloads ran on after proving began. Proving overlaps them, so this
+   * bounds, not measures, the wait they caused. Retrievals lost before proving, as with a
+   * stopped worker, are `missing`; the Prover fetches them itself, untimed.
+   */
+  private async observeDownloads(profile: string): Promise<void> {
+    const started = performance.now()
+    try {
+      const { pending, missing } = await remainingDownloads(profile)
+      const remaining = pending ? performance.now() - started : 0
+      this.emit({
+        event: 'asset-download',
+        timestamp: now(),
+        instrumentation: {
+          // With anything missing the wait is unknown, never zero.
+          attributes: { pending, missing, ...(missing ? {} : { 'remaining-ms': remaining }) },
+        },
+      })
+    } catch {
+      /* Observation loss cannot alter proving. */
+    }
   }
 
   private deny(): void {

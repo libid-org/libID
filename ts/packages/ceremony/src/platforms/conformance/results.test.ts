@@ -1,3 +1,4 @@
+import { bytesToHex } from '@noble/hashes/utils.js'
 import { describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../testing/index.js'
 import { AUTHORIZATION_NONCE_BYTES } from '../authorization.js'
@@ -23,7 +24,7 @@ describe.each(supportedPlatforms)('%s result validators', (platformId) => {
     validation.validateProof(value, fixture.identity, fixture.digest)
   const { acceptResult } = ceremonyFor(platformId, 1)
 
-  it('accepts the fixture identity and proof and assembles them as separate result fields [LIBID-MOD-019]', () => {
+  it('accepts the fixture identity and proof, assembles them as separate result fields and names their nodes [LIBID-MOD-019]', () => {
     expect(validateIdentity(fixture.identity)).toBe(fixture.identity)
     expect(validateIdentity(fixture.longest)).toBe(fixture.longest)
     expect(validateProof(fixture.proof)).toBe(fixture.proof)
@@ -39,7 +40,11 @@ describe.each(supportedPlatforms)('%s result validators', (platformId) => {
     const result = assembleResult(platformId, 1, message, fixture.config.clientId, nonce, digest)
     expect(result).toEqual({
       status: 'accepted',
-      identity: fixture.identity,
+      identity: {
+        ...fixture.identity,
+        idNode: expect.any(Uint8Array),
+        handleNode: expect.any(Uint8Array),
+      },
       oauthProof: {
         platformCeremonyVersion: 1,
         authorizationNonce: nonce,
@@ -51,6 +56,10 @@ describe.each(supportedPlatforms)('%s result validators', (platformId) => {
     if (result.status === 'accepted') {
       expect(result.oauthProof.authorizationNonce).not.toBe(nonce)
       expect(result.oauthProof.authorizationDigest).not.toBe(digest)
+      expect({
+        idNode: `0x${bytesToHex(result.identity.idNode)}`,
+        handleNode: `0x${bytesToHex(result.identity.handleNode)}`,
+      }).toEqual(fixture.nodes)
     }
     expect(() => assembleResult(platformId, 1, message, 'other-client', nonce, digest)).toThrow(
       'OAuth client ID mismatch',
@@ -122,7 +131,14 @@ function checkResultTypes(result: IdentityResult) {
   // @ts-expect-error Platform and proof must correspond.
   const invalid: IdentityResult = {
     status: 'accepted',
-    identity: { platformId: 'x', oauthClientId: 'c', userId: '1', userName: 'a' },
+    identity: {
+      platformId: 'x',
+      oauthClientId: 'c',
+      userId: '1',
+      userName: 'a',
+      idNode: new Uint8Array(32),
+      handleNode: new Uint8Array(32),
+    },
     oauthProof: googleProof,
   }
   // @ts-expect-error Unsupported version.

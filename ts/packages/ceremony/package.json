@@ -1,6 +1,6 @@
 {
   "name": "@libid/ceremony",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Browser OAuth identity ceremonies over an application-owned popup connection.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
@@ -45,7 +45,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@libid/contracts": "0.17.0",
+    "@libid/contracts": "0.19.0",
     "@libid/ledger": "workspace:^",
     "@noble/hashes": "^2.4.0"
   },

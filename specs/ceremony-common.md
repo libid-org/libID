@@ -52,7 +52,10 @@ Platform Ceremony Version: The unsigned 16-bit `platformCeremonyVersion`
    construction, OAuth construction, platform-specific proof statement, and
    protocol parameter values. The digest binds it, so it is the same number on
    every Consumer Chain. It identifies no Platform Verifier implementation and
-   is not a routing key.
+   is not a routing key. It identifies its statement within one set of
+   canonical Platform Verifier addresses. A new set of canonical addresses
+   may restate a version; the previous set is then retired (platform
+   REQ-PLAT-01A).
 
 Verifier Version: The unsigned 16-bit key under which a Consumer Chain's
    Verifier Governance Process registers one Platform Verifier for one
@@ -70,8 +73,9 @@ Submission Payload: The opaque byte string a Consumer passes through the Proof
    Ceremony Version it was built for, the operation domain, the Authorization
    Nonce, the Authorized Transaction Data, the proof, the platform's
    attestations in the notary's own format, and any further value the
-   Platform Profile requires the caller to supply. It carries no Chain ID and
-   no Verifier Version.
+   Platform Profile requires the caller to supply. It carries no Verifier
+   Version, no handle, and no account identifier; a handle to
+   disclose travels beside it in the Consumer's bind call (platform §2.1b).
 
 Consumer Chain: The chain whose canonical state transition consumes a libID
    proof.
@@ -91,15 +95,10 @@ Transaction Submitter: The principal that delivers a transaction to the
    Consumer Chain. Delivering a transaction alone grants no transaction
    authority.
 
-Chain ID: The 32-byte keccak256 of a Consumer Chain's canonical chain
-   identifier. That identifier takes whatever form the chain gives it — a
-   number, a string, or a hash — and the Chain Profile fixes the exact bytes
-   hashed.
-
 Block Time: The Consumer Chain's consensus-provided integer Unix time in
    seconds, bounded by an unsigned 64-bit integer.
 
-Chain Profile: The normative mapping from one Consumer Chain to its Chain ID,
+Chain Profile: The normative mapping from one Consumer Chain to its
    Transaction Author authentication, Block Time, and Authorized Transaction
    Data encoding.
 
@@ -121,10 +120,18 @@ Platform Profile: The immutable, independently versioned definition of one
    profile whose Attestation Count is zero defines neither of those two. Every
    Platform Verifier registered for that platform and version MUST enforce the
    same profile, but its implementation and deployment are ledger-specific.
-   The Consumer holds none of the profile constants.
+   Of the profile constants, the Consumer holds only the set of platforms
+   the profiles name, each platform's handle tag and the fold of platform
+   REQ-PLAT-05B, with which it refuses an unknown platform and hashes handle
+   text for disclosure and name reads.
+
+Account identifier: The authenticated value a Platform Profile derives an
+   identity's id node from: Google's signed `sub`, and the X and GitHub
+   identifiers (platform §2.1).
 
 Proving Circuit: The zero-knowledge circuit whose proof a Platform Verifier
-   checks. It proves only what cannot be read from authenticated evidence.
+   checks. It proves only what cannot be read from authenticated evidence,
+   which includes every identity value the evidence keeps hidden.
 
 Redirect Runtime: The immutable browser component served at a registered
    redirect URI, which receives an authorization response, authenticates the
@@ -179,10 +186,6 @@ Attestation Count: The number of entries in the closed attestation list a
 - ASM-CHAIN-01:
   The Consumer Chain authenticates the Transaction Author and supplies Block
   Time within tolerance of real time.
-- ASM-CHAIN-02:
-  The Proof Verifier obtains exactly one canonical Chain ID: from its
-  execution environment where the Consumer Chain exposes one, and from
-  immutable deployment configuration where it does not.
 - ASM-PROV-01:
   An Identity Platform delivers an authorization response only to a redirect
   URI registered against the requesting client.
@@ -224,11 +227,23 @@ Attestation Count: The number of entries in the closed attestation list a
   A proof accepted under the verifier artifact selected for its platform and
   version pair satisfies that Platform Profile's complete proof statement.
   Verifier governance MAY replace an artifact only with one that enforces the
-  same statement; changing the statement requires a new Platform Ceremony
-  Version.
+  same statement. Within one set of canonical Platform Verifier addresses,
+  changing the statement requires a new Platform Ceremony Version.
 - ASM-BROWSER-01:
   The Canonical Runtime executes unmodified, and the user agent enforces the
   same-origin policy over authorization responses.
+- ASM-HASH-01:
+  SHA-256 is preimage resistant: given a node, no party recovers its value
+  except by hashing candidates under the public tag and comparing. A node
+  is not a secret: a low-entropy value, such as a handle, an email
+  address, or a sequential id, is recovered by hashing guesses, and this
+  assumption gives no protection against that.
+- ASM-ZK-01:
+  The proof system is zero-knowledge in its zero-knowledge proving mode: a
+  proof made in that mode with fresh prover randomness reveals nothing of
+  the witness beyond its public inputs. No verifier can tell what
+  randomness a proof was made with, so this holds only for proofs the
+  Canonical Runtime makes as REQ-COMMON-45A requires.
 
 ## 4. Security properties
 
@@ -253,7 +268,8 @@ notary-signature check before an authoritative effect.
 
 - SP-BIND-01:
   Evidence produced by a ceremony discharges only for the Authorized
-  Transaction Data committed in its Authorization Digest. Depends on
+  Transaction Data committed in its Authorization Digest, on whichever
+  Consumer Chain it is presented. Depends on
   ASM-PROV-02, ASM-PROV-05, ASM-PROV-06,
   ASM-PROV-07 for a profile that cites it, ASM-NOTARY-01, ASM-PROOF-01,
   ASM-CHAIN-01. Evidence:
@@ -289,9 +305,28 @@ notary-signature check before an authoritative effect.
   ASM-CHAIN-01, ASM-NOTARY-01, ASM-PROV-05, ASM-PROOF-01. Evidence: checked
   invariant in the Platform Verifier.
 - SP-REPLAY-01:
-  Within one Consumer deployment, one ceremony authorizes at most
-  one authoritative effect. Depends on ASM-CHAIN-01, ASM-CHAIN-02. Evidence:
-  checked invariant in the Consumer.
+  Within one Consumer on one Consumer Chain, one ceremony authorizes at most
+  one authoritative effect. Depends on ASM-CHAIN-01. Evidence: checked invariant in the
+  Consumer.
+- SP-PRIV-01:
+  The Consumer, the Proof Verifier, and the Platform Verifier emit or store
+  an identity's handle in plaintext on the Consumer Chain only from an
+  accepted bind call or disclosure call that carried it, and its id and
+  account identifier never. No chain artifact, whether calldata, proof
+  bytes, attestation bytes, event, or storage, yields a handle or id that
+  no transaction carried, except by hashing a candidate under the public
+  tag and comparing it with the identity's nodes. "Private" therefore means
+  not disclosed, not unguessable. Depends on ASM-HASH-01, ASM-PROOF-01,
+  ASM-ZK-01, ASM-BROWSER-01. Evidence: conformance tests
+  (supporting, not proving) plus the preimage resistance of SHA-256.
+
+SP-PRIV-01 bounds what the chain's artifacts yield, not who learns the
+identity. The Prover documents the CCDP Distribution supplies hold the
+evidence, and the Application receives the id and the handle in the ceremony result;
+each can send it anywhere, and a transaction that carries it is one the
+property permits. A modified Prover could also leak the witness through the
+proof bytes, so the property rests on the unmodified Canonical Runtime
+(ASM-BROWSER-01, ASM-ZK-01).
 
 ## 5. Authorization digest
 
@@ -304,7 +339,6 @@ of a string.
 authorizationPreimage =
     operationDomain                          // 32 bytes
     || U16BE(platformCeremonyVersion)        //  2 bytes
-    || chainId                               // 32 bytes
     || authorizationNonce                    // 32 bytes
     || U32BE(BYTE_LENGTH(transactionData))   //  4 bytes
     || transactionData                       // variable
@@ -312,7 +346,7 @@ authorizationPreimage =
 authorizationDigest = keccak256(authorizationPreimage)
 ```
 
-Every field but `transactionData` is fixed width, so the preimage is 102
+Every field but `transactionData` is fixed width, so the preimage is 70
 bytes plus the Authorized Transaction Data.
 
 - REQ-COMMON-01 (upholds SP-BIND-01):
@@ -321,7 +355,7 @@ bytes plus the Authorized Transaction Data.
   MUST encode `platformCeremonyVersion` in exactly two bytes and the
   Authorized Transaction Data byte length in exactly four bytes, rejecting a
   value which does not fit its field. The Canonical Runtime MUST encode
-  `operationDomain`, `chainId`, and `authorizationNonce` as exactly 32 bytes
+  `operationDomain` and `authorizationNonce` as exactly 32 bytes
   each, with no length prefix. Necessity: only `transactionData` varies in
   length, so every other field is at a fixed offset and the preimage cannot
   be reinterpreted by shifting a boundary.
@@ -343,7 +377,7 @@ platform-specific proof statement, and its protocol parameter values. It is
 the only version the digest binds.
 The Verifier Version a Consumer Chain routes on is not in the digest, so a
 proof made for one ceremony version is acceptable at every Platform Verifier
-implementing it.
+implementing it under the same canonical addresses.
 
 - REQ-COMMON-01B (upholds SP-BIND-01):
   The Proof Verifier MUST reject a Submission whose identity platform and
@@ -357,34 +391,22 @@ implementing it.
   Version it is registered under is the Verifier Governance Process's
   decision.
 
-`chainId` identifies the Consumer Chain.
-
 - REQ-COMMON-01C (upholds SP-BIND-01, SP-REPLAY-01):
-  The Chain Profile MUST fix the exact canonical identifier of its Consumer Chain and the exact bytes that identifier contributes. The Chain Profile
-  MUST derive `chainId` as the keccak256 of those bytes, which is 32 bytes
-  wide whatever form the identifier took. Necessity: chains identify themselves
-  incompatibly — a number here, a string there, a genesis hash elsewhere, and
-  some too wide for 64 bits — so the digest commits a hash of the identifier
-  rather than the identifier itself. The Chain Profile author MUST ensure
-  those canonical bytes differ from every other Consumer Chain on which the
-  same operation domains may accept libID Submissions. This specification
-  supplies no global chain-identifier registry; reusing the bytes forfeits
-  cross-chain replay separation. The application composition MUST select the
-  Consumer Chain's Chain Profile and supply its canonical Chain ID to the
-  Canonical Runtime for each ceremony. The Canonical Runtime MUST validate and
-  commit that exact 32-byte value. Selecting a Chain Profile is destination
-  selection, not proof authority: the Platform Verifier MUST independently
-  take the Chain ID of its digest recomputation from its own Consumer Chain
-  environment or immutable deployment configuration. The Platform Verifier
-  MUST NOT take the Chain ID from the Submission Payload, Authorized
-  Transaction Data, or any other caller-controlled input. The Chain Profile
-  MUST expose the digest recomputation as one construction that reads the
-  Chain ID itself and accepts none as an argument. Necessity: an Application can select a
-  destination chain just as it selects the operation and its transaction data,
-  while independent Consumer Chain recomputation makes a proof constructed for
-  any other chain unusable there. Several Consumer Chains expose no
-  intrinsic chain identifier at execution time, so environment-sourcing
-  cannot be required of the browser universally.
+  The Canonical Runtime MUST NOT take a Consumer Chain identity as a ceremony
+  input or commit one in the Authorization Digest. The Platform Verifier MUST
+  recompute the digest without one. Where its authoritative effect must not
+  be reusable on another Consumer Chain, the Consumer MUST commit a chain
+  identifier in its Authorized Transaction Data. The Consumer MUST then
+  reject Authorized Transaction Data whose chain identifier differs from the
+  one it reads from its own execution environment or immutable deployment
+  configuration. The Consumer MUST NOT take that comparison value from the
+  Submission, the Authorized Transaction Data, or any other caller-controlled
+  input. Necessity: a Consumer that requires the Transaction Author to be the
+  subject of its Authorized Transaction Data gives the holder of a proof
+  nothing on a second Consumer Chain that a second ceremony would not, so the
+  common digest stays chain-free and one ceremony serves every chain. An
+  effect that is chain-specific needs the chain in the data the ceremony
+  authorized, compared against a value no caller chooses.
 - REQ-COMMON-01D (upholds SP-BIND-01, SP-FRESH-01):
   The Chain Profile MUST define how the Consumer Chain authenticates the
   Transaction Author and supplies Block Time. The Consumer MUST obtain both
@@ -426,7 +448,7 @@ compare there. Neither method is optional, and no profile uses both.
   The Platform Verifier MUST recompute the Authorization Digest from the
   operation domain, `authorizationNonce`, and Authorized Transaction Data it
   decoded from the Submission Payload, the Platform Ceremony Version it
-  implements, and its observed Chain ID. Necessity: only the Platform
+  implements. Necessity: only the Platform
   Verifier can read the payload. The recomputed digest is a commitment the
   evidence has to match under REQ-COMMON-02A or REQ-COMMON-02B, so a caller
   who changes any input produces a digest no proof opens against.
@@ -472,14 +494,12 @@ appears in the digest.
 
 Conformance vector, for `operationDomain =
 keccak256(UTF8("libid.claim-identity"))`, `platformCeremonyVersion = 1`,
-`chainId = keccak256(UTF8("example:1"))`, `authorizationNonce = 0x5555…5555`,
-and `transactionData = 0x00010203`:
+`authorizationNonce = 0x5555…5555`, and `transactionData = 0x00010203`:
 
 ```text
 operationDomain       = 0xcb29bed0428519ef88a3d670e8203db76e06f41aca3e684e2c63b516c9b93e1b
-chainId               = 0x38064d82f31db40935cc75f2a0d07dcfb448d7c08e7484fc30f5de95484a4066
-authorizationPreimage = 0xcb29bed0428519ef88a3d670e8203db76e06f41aca3e684e2c63b516c9b93e1b000138064d82f31db40935cc75f2a0d07dcfb448d7c08e7484fc30f5de95484a406655555555555555555555555555555555555555555555555555555555555555550000000400010203
-authorizationDigest   = 0xb318fb559e16a179b853ed2853576cda16032d93b0839bb81a55135d334c0af5
+authorizationPreimage = 0xcb29bed0428519ef88a3d670e8203db76e06f41aca3e684e2c63b516c9b93e1b000155555555555555555555555555555555555555555555555555555555555555550000000400010203
+authorizationDigest   = 0x24083f6c849372d1fa0a95615a7b2b6a888edef92e9fa2bebd520b2f536e9350
 ```
 
 Each platform carries the Authorization Digest in the form its authorization
@@ -523,7 +543,10 @@ and each Consumer Chain's Platform Verifier enforces that profile and fixes
 the encoding of its own Submission Payload. Verifier governance owns the
 mutable verifier artifact, Notary Service, trust roots, fees, and the
 Verifier Version each verifier is registered under. The Consumer holds none
-of those constants.
+of those constants, except the set of platforms the profiles name, each
+platform's handle tag and the fold of platform REQ-PLAT-05B, with which it
+refuses an unknown platform and hashes a disclosed handle (platform
+REQ-PLAT-08B, REQ-PLAT-08D, REQ-PLAT-08E).
 
 Two versions travel this path, deliberately unrelated. The Platform Ceremony
 Version is inside the payload and the digest, fixed by the Canonical Runtime
@@ -580,9 +603,11 @@ an identity session — so one Submission on either path pays two fees.
   The Platform Verifier MUST return its verified fields: the Authorization
   Digest it recomputed, the operation domain and Authorized Transaction Data
   it decoded, the Platform Ceremony Version it implements, the client
-  identifier, the canonical `userId`, the raw handle bytes, and
-  `metadataObservedAt`. Necessity: an authenticated `userId`, handle, and
-  observation time are what the ceremony exists to produce; the digest is the
+  identifier, the id node and handle node of platform REQ-PLAT-05A and
+  REQ-PLAT-05B, and `metadataObservedAt`. It returns no handle; the
+  Consumer checks a disclosed handle against the handle node under platform
+  REQ-PLAT-08D. Necessity: an authenticated
+  identity and observation time are what the ceremony exists to produce; the digest is the
   Consumer's replay nullifier, which it cannot recompute without reading the
   payload. The Consumer trusts these fields as it trusts the Platform Verifier
   the Verifier Governance Process installed.
@@ -600,6 +625,15 @@ an identity session — so one Submission on either path pays two fees.
   role performed the acceptance; with no rule placing that work anywhere, no
   role is obliged to run it, and every public input the surrounding rules
   compare is then a number the caller wrote down.
+- REQ-COMMON-45A (upholds SP-PRIV-01):
+  The Canonical Runtime (its Prover) MUST make every proof in the proof
+  system's zero-knowledge proving mode, drawing that proof's prover
+  randomness freshly from a cryptographically secure random source. The
+  Verifier Governance Process MUST select only verifier artifacts that
+  accept only proofs made in that mode. Necessity: the proof bytes sit in
+  calldata beside the public inputs, and whether they reveal the hidden
+  identity values is decided when they are made; the verifier accepts a
+  proof whatever randomness it was made with.
 - REQ-COMMON-46 (upholds SP-BIND-01):
   The Proof Verifier MUST pass the Submission Payload and the native value to
   the Platform Verifier it selected without decoding either. The Platform
@@ -631,15 +665,12 @@ whether that domain is its own.
   transaction semantics belong to the Consumer; the payload's shape belongs to
   the Platform Verifier.
 - REQ-COMMON-06C (upholds SP-BIND-01):
-  The Platform Verifier MUST take the Chain ID of the digest recomputation of
-  REQ-COMMON-02 from the Chain ID it observes under ASM-CHAIN-02. Neither the
-  Proof Verifier nor the Platform Verifier MAY read a Chain ID from the
-  Submission or its payload. The Proof Verifier MUST dispatch on the Verifier
+  The Proof Verifier MUST dispatch on the Verifier
   Version the Submission names. The Platform Verifier MUST reject a payload
   whose Platform Ceremony Version is not the one it implements, before any
-  Notary Fee is delivered. Necessity: the Consumer Chain the evidence was
-  authorized for and the proof statement that verifies it are both bound in
-  the digest, and recomputing that digest is the whole check on either. The
+  Notary Fee is delivered. Necessity: the proof statement that verifies the
+  evidence is bound in the digest, and recomputing that digest is the whole
+  check on it. The
   Verifier Version is not in the digest and is checked against nothing: it
   only selects which registered Platform Verifier answers. Refusing the wrong
   ceremony version by name, first, keeps that refusal from surfacing as a
@@ -801,9 +832,9 @@ Conformance vector, using the Authorization Digest of §5 and
 `authorizationNonce = 0x5555555555555555555555555555555555555555555555555555555555555555`:
 
 ```text
-verifierHash   = 0xe6d7810e5e9ccf853beda170795e4f6cc84127f94416fe8b2cd2b3aa70c8e65a
-code_verifier  = 5teBDl6cz4U77aFweV5PbMhBJ_lEFv6LLNKzqnDI5lo
-code_challenge = c8HLMaJOzc8OUoRYc7AocL5ioAkXVtAOmoGxoSY60IQ
+verifierHash   = 0xaf1d944593a36af91bca1c3c0574982dc2518e27db75515ca25a892bb1c15464
+code_verifier  = rx2URZOjavkbyhw8BXSYLcJRjifbdVFcolqJK7HBVGQ
+code_challenge = L6b8OlTpVUwPgkYcOYwl-iZdsMj1AN4bN_-DTAPNsX0
 ```
 
 ## 8. Client binding
@@ -907,7 +938,9 @@ anchored by the delimiters its Platform Profile fixes (REQ-COMMON-18A).
 Uniqueness of a field inside an authenticated response is ASM-PROV-06 rather
 than a scan the Proving Circuit performs; the only duplicate scan in the
 protocol is the one REQ-COMMON-19A gives the Platform Verifier over bytes it
-can read.
+can read. A copy of a delimiter inside a committed range is not among those
+bytes, so where a profile frames a committed value by revealed anchors, its
+uniqueness rests on ASM-PROV-06 alone.
 
 Disclosure and verification are two separate layers. The Platform Profile
 fixes a minimal set of revealed ranges; every other byte stays behind a range
@@ -960,7 +993,8 @@ exposes a minimal set of public inputs, which never includes a credential.
   revealed byte on one side and the signed length is what closes it.
 
 Tiling accounts for the ranges a layout lists; it cannot see bytes the
-layout never mentions. The three rules that follow govern one case only: a
+layout never mentions. The rules that follow, through REQ-COMMON-39D, govern
+one case only: a
 notarized request that commits a credential carried in an HTTP
 `Authorization` header. At launch that is the identity session of each
 TLSNotary profile, and nothing else — X's `/2/users/me` request and GitHub's
@@ -1041,28 +1075,61 @@ which the following identity-header rules could apply.
   header's value, and a request with one honest `authorization` header
   cannot commit a range positioned somewhere else. Two fixed comparisons
   at known offsets replace a derived one.
+- REQ-COMMON-39C (upholds SP-EXCHANGE-01):
+  For that same identity-session request, the Platform Verifier MUST
+  require the request direction to carry exactly one HTTP request with no
+  body: exactly one head end (`\r\n\r\n`) across the concatenation of its
+  revealed ranges, no revealed byte after it, and the last revealed range
+  ending at the signed transcript length of REQ-COMMON-36. Necessity: the
+  header rules above read the revealed bytes as one request's head; a second
+  request after the first, or a body, would be bytes the platform parses
+  that no rule here reads, and a header in it could carry the credential the
+  platform honours instead of the committed one.
+- REQ-COMMON-39D (upholds SP-EXCHANGE-01):
+  For that same identity-session request, the Platform Verifier MUST require
+  exactly one header line whose name, normalized as REQ-COMMON-39B
+  normalizes, is `host`, and whose value, once the optional whitespace
+  around it is removed, is exactly the authority the Platform Profile pins
+  for that session. The Platform Verifier MUST compare that value over the
+  raw revealed bytes, not the bytes REQ-COMMON-39 normalizes, so a value in
+  another letter case is rejected. Necessity: the authority reaches the
+  Platform Verifier as the TLS server identity the notary authenticated (REQ-COMMON-21); a
+  `host` naming another authority asks a shared front end for a different
+  backend than the one the profile pins, and a second `host` is a second
+  answer to which one. The Canonical Runtime sends the authority as pinned,
+  so comparing that one spelling refuses no request it makes.
 - REQ-COMMON-19 (upholds SP-EXCHANGE-01):
-  The Proving Circuit extracting a JSON string field MUST receive the field's
-  offset as a private input supplied by the prover; the circuit performs no
-  search. The Proving Circuit MUST assert the full `"field":"` delimiter at
-  that offset, the value bytes, the closing quote, and the following structural
-  byte fixed by the profile.
+  The Proving Circuit extracting a JSON string field from a document it
+  holds whole, such as Google's signed ID Token payload, MUST receive the
+  field's offset as a private input supplied by the prover; the circuit
+  performs no search. The Proving Circuit MUST assert the full `"field":"`
+  delimiter at that offset, the value bytes, the closing quote, and the
+  following structural byte fixed by the profile. A Proving Circuit that
+  opens a committed value instead, as the bearer-link circuit opens the X
+  and GitHub id and handle (platform REQ-PLAT-32D, REQ-PLAT-52C), asserts no
+  delimiter: the Platform Verifier frames that commitment by its revealed
+  anchors, and the circuit checks the opened value under platform §2.1a.
 - REQ-COMMON-19B (upholds SP-EXCHANGE-01):
-  The Proving Circuit MUST constrain the extracted value's charset to exclude
-  the closing delimiter. The Proving Circuit MUST assert the whole match lies
-  inside the authenticated payload length, not in prover-controlled padding.
+  The Proving Circuit extracting a field under REQ-COMMON-19 MUST constrain
+  the extracted value's charset to exclude the closing delimiter. The
+  Proving Circuit MUST assert the whole match lies inside the authenticated
+  payload length, not in prover-controlled padding.
   Necessity: without the charset bound a longer witnessed value extends the
   match into the neighboring field; without the bounds check a pattern can be
   planted in zero-padding.
 - REQ-COMMON-19D (upholds SP-BIND-01, SP-FRESH-01):
-  The Proving Circuit extracting an unsigned JSON integer MUST assert the exact
+  The Proving Circuit extracting an unsigned JSON integer from a document it
+  holds whole, such as Google's `exp`, MUST assert the exact
   `"field":` delimiter, a canonical `0|[1-9][0-9]*` decimal value bounded by
   the profile's integer type, and the following structural byte fixed by the
   profile. The Proving Circuit checking a JSON boolean MUST assert the exact
   `"field":true` or `"field":false` literal required by the profile and its
   following structural byte. The Proving Circuit MUST keep both matches inside
   the authenticated payload length and reject quoted, signed, fractional,
-  exponent, leading-zero, padded, or wrong-type alternatives.
+  exponent, leading-zero, padded, or wrong-type alternatives. A committed X
+  or GitHub id is not extracted under this rule: the bearer-link circuit
+  checks it as the digits the platform sent under platform REQ-PLAT-06, so
+  `0123` proves.
 - REQ-COMMON-19E (upholds SP-BIND-01):
   The Platform Profile MUST fix, for each field it requires, the authenticated
   bytes that field is read from and the one algorithm that reads them. The
@@ -1114,10 +1181,16 @@ which the following identity-header rules could apply.
   MUST first remove each maximal run of JSON whitespace bytes (`0x20`,
   `0x09`, `0x0a`, `0x0d`) whose immediately preceding or immediately
   following byte is a structural byte (`:`, `,`, `{`, `}`, `[`, `]`), and no
-  other byte. The Platform Verifier MUST match the field's delimiter, read
-  its value, and judge its terminator inside one revealed range, over the
-  bytes that removal leaves of that range. The Platform Verifier MUST count
-  the delimiter's positions under REQ-COMMON-19A over the concatenation of
+  other byte. For a value it reads from revealed bytes, the Platform
+  Verifier MUST match the field's delimiter, read the value, and judge its
+  terminator inside one revealed range, over the bytes that removal leaves
+  of that range. A committed value is not read: the Platform Verifier
+  locates its commitment by the anchors and terminator the Platform Profile
+  names (platform REQ-PLAT-31, REQ-PLAT-51), the delimiter ending the
+  revealed range before the commitment and the terminator in the revealed
+  range after it, each judged over the bytes the removal leaves of its own
+  range; GitHub's `,` or `}` after the `id` digits is one such terminator.
+  The Platform Verifier MUST count the delimiter's positions under REQ-COMMON-19A over the concatenation of
   every revealed range of that direction, in transcript order, after the same
   removal, so that a delimiter a range boundary splits is still counted. The
   Platform Verifier MUST NOT read a value from that concatenation. The
@@ -1127,7 +1200,8 @@ which the following identity-header rules could apply.
   specification spells, such as `"login":"` or `"access_token":"`, names the
   member that removal leaves, not the bytes a platform must serve. The
   Proving Circuit is outside this rule: REQ-COMMON-19 and REQ-COMMON-19D fix
-  what it asserts at the offset the prover supplies. Necessity: a platform
+  what it asserts in a document it holds whole, and platform §2.1a what it
+  checks in a value it opens. Necessity: a platform
   may pretty-print the response it serves for the media type a profile pins,
   and GitHub does for `/user`. Removing a run only where a structural byte
   bounds it leaves every reader one exact template and makes a member in any
@@ -1312,12 +1386,12 @@ the constructions that role implements.
   Data with trailing bytes, a noncanonical encoding, or an argument shape
   other than the transaction kind's exact format, is rejected.
 - TEST-COMMON-02A (exercises REQ-COMMON-01C, REQ-COMMON-01D, REQ-COMMON-04):
-  A Canonical Runtime accepts the canonical Chain ID selected from either of two
-  Chain Profiles and produces distinct digests; the Proof Verifier accepts the
-  proof for its own Chain Profile and rejects the proof constructed for the
-  other, and neither the Submission nor Authorized Transaction Data can
-  override its Chain ID. Two Chain Profiles which accept the same operation
-  domains are ineligible when they reuse the same canonical identifier bytes;
+  The Canonical Runtime takes no Consumer Chain input, and one Submission
+  recomputes to the same digest on two Consumer Chains. A Consumer that
+  commits a chain identifier in its Authorized Transaction Data accepts data
+  naming its own chain and rejects data naming another, and no value in the
+  Submission or the Authorized Transaction Data changes the identifier it
+  compares against;
   the Consumer rejects a
   caller-substituted Block Time; and a Transaction Submitter that cannot satisfy
   the transaction kind's Transaction Author predicate.
@@ -1380,7 +1454,9 @@ the constructions that role implements.
   field spelled with whitespace is rejected as a duplicate; a byte JSON does
   not call whitespace, such as `0x0b`, in any of those positions is rejected;
   an integer with whitespace between its digits is rejected; a member whose
-  whitespace an HTTP chunk boundary splits is not built as a layout; a field
+  whitespace an HTTP chunk boundary splits is not built as a layout; a
+  committed GitHub `id` whose `,` or `}` sits in the revealed range after
+  its commitment is located; a revealed field
   assembled from two revealed ranges, the member's opening in one and its
   value's tail in another, is rejected as absent, however the ranges are
   ordered; a second copy of the delimiter cut in two by a range boundary is
@@ -1424,11 +1500,8 @@ the constructions that role implements.
   Ceremony Version other than the one the selected verifier implements is
   rejected before any fee moves; a payload naming an operation domain other
   than the one the ceremony committed fails digest recomputation; a Consumer
-  receiving a domain it does not own rejects the result; the recomputation
-  takes its Chain ID from the Platform Verifier's observed environment, so the
-  same Submission presented on another chain fails it and no caller-supplied
-  Chain ID reaches it; the Proof Verifier forwards the payload byte for byte
-  and returns the result unchanged; a rejected verification returns no
+  receiving a domain it does not own rejects the result; the Proof Verifier
+  forwards the payload byte for byte and returns the result unchanged; a rejected verification returns no
   transaction data;
   an accepted verification returns the client identifier; the quotation covers the whole path and quotes one
   Notary Fee for each attestation the selected profile requires; a profile
@@ -1443,7 +1516,7 @@ the constructions that role implements.
   submitters; the current fee is readable before the Submission is submitted; and a
   verification whose native value differs from the current fee is
   rejected.
-- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-39A, REQ-COMMON-39B, REQ-COMMON-40):
+- TEST-COMMON-18 (exercises REQ-COMMON-35, REQ-COMMON-36, REQ-COMMON-39, REQ-COMMON-39A, REQ-COMMON-39B, REQ-COMMON-39C, REQ-COMMON-39D, REQ-COMMON-40):
   An identity attestation whose ranges do not sum to the signed request
   transcript length, or whose ranges leave a gap or an overlap, is
   rejected; an attestation carrying no signed total transcript length for
@@ -1463,7 +1536,14 @@ the constructions that role implements.
   another letter case, with `_` for `-`, or padded before the colon -- is
   rejected; and revealed request bytes carrying a bare line feed, a bare
   carriage return, or a line beginning with a space or a horizontal tab are
-  rejected. Every case above runs on
+  rejected. A request direction carrying a second head end, a body, or a
+  revealed byte after its head, or whose last revealed range ends before the
+  signed length, is rejected; a request with no `host`, two, or one naming
+  another authority, in any letter case, is rejected; and a `host` whose
+  name differs only in letter case or padding before the colon, or whose
+  value has spaces around it, passes, while one whose value differs from the
+  pinned authority only in letter case, such as `API.X.COM`, is rejected.
+  Every case above runs on
   an identity-session attestation. GitHub token requests instead pass the
   complete-disclosure and form checks in TEST-PLAT-12 and TEST-PLAT-14;
   the identity-header needle and bearer framing rules do not apply to them.
@@ -1492,10 +1572,14 @@ the constructions that role implements.
   Version is rejected; a proof verifying only under another platform's or
   another ceremony version's artifact is rejected; and a caller-supplied artifact, verifying key, or precomputed
   verification result changes no decision.
+- TEST-COMMON-22A (exercises REQ-COMMON-45A):
+  The Canonical Runtime makes every proof in the zero-knowledge proving
+  mode, two proofs it makes of one witness differ, and a proof of the right
+  statement made outside that mode is rejected.
 - TEST-COMMON-23 (exercises REQ-COMMON-02, REQ-COMMON-46):
   The Platform Verifier recomputes the digest from the operation domain,
-  nonce and transaction data it decoded, the ceremony version it implements,
-  and its observed Chain ID, and the comparisons of REQ-COMMON-02A and
+  nonce and transaction data it decoded and the ceremony version it
+  implements, and the comparisons of REQ-COMMON-02A and
   REQ-COMMON-15A run against that value; changing any decoded digest input
   in the payload fails the binding check; a digest supplied in or beside the
   payload changes no decision; the Proof Verifier decodes nothing.
@@ -1503,13 +1587,23 @@ the constructions that role implements.
 ## 12. Security Considerations
 
 This document enforces SP-BIND-01, SP-CLIENT-01, SP-EXCHANGE-01,
-SP-FRESH-01, and SP-REPLAY-01 under the assumptions of §3.
+SP-FRESH-01, SP-REPLAY-01, and SP-PRIV-01 under the assumptions of §3.
 
 Replay within one Consumer deployment is prevented by `authorizationNonce`
-and REQ-COMMON-03. Replay across Consumer Chains whose Chain Profiles use
-distinct canonical identifier bytes is prevented by the Chain ID in the
-digest; a profile collision forfeits that separation. Replay across Platform Ceremony Versions is prevented by
-`platformCeremonyVersion`. The digest does not bind the Verifier Version, so
+and REQ-COMMON-03. The digest binds no Consumer Chain, so each Consumer that
+accepts its operation domain, on any Consumer Chain, spends it once. A
+Consumer whose effect is chain-specific commits and checks its chain under
+REQ-COMMON-01C. Replay across Platform Ceremony Versions is prevented by
+`platformCeremonyVersion`. A version restated under new canonical Platform
+Verifier addresses (platform REQ-PLAT-01A) has the same number, and the
+digest binds no Platform Verifier address, so neither separates the two.
+Platform REQ-PLAT-01A does: the restated statement must not accept a proof or
+Submission Payload made for the previous one. The current restatement meets
+that with different verification keys, so a proof made for one does not
+verify under the other's. A payload may still decode under the other's
+encoding; the proof check refuses it. A restatement that changed only
+Platform Verifier rules would keep the circuit and its verification key,
+and would have to meet REQ-PLAT-01A another way. The digest does not bind the Verifier Version, so
 a proof is acceptable at every Verifier Version implementing its ceremony
 version; REQ-COMMON-03 prevents replay among them. The digest does not prevent cross-deployment replay
 because it binds no Consumer identifier. Every Consumer transaction
@@ -1548,13 +1642,36 @@ liveness dependency only: they cannot forge evidence, but an unbounded fee
 stops every ceremony for the platforms whose profiles carry attestations, and
 leaves a profile with no attestation unaffected.
 
-The handle, the platform user identifier, and the client identifier are
-published deliberately. A binding exists to be read, and each of these values
-is already discoverable from the identity platform, so the protocol treats
-none of them as confidential. Google's `sub` is the exception: Google shows it
-only to the applications a user signs in to, so its Platform Profile publishes
-a digest of it as the user identifier
-([platform profiles §2.1](platform-ceremonies.md#21-canonical-platform-user-identifiers)).
+The client identifier is published deliberately: a binding exists to be
+read, and the client is discoverable from the identity platform. The id and
+the handle are not published. A binding puts their nodes on the Consumer
+Chain ([platform profiles §2.1](platform-ceremonies.md#21-canonical-platform-user-identifiers)),
+and the handle appears in plaintext only once a transaction discloses it
+(SP-PRIV-01). That is privacy by not disclosing, not secrecy:
+
+- The tags are public, so anyone can hash a guessed handle, email address,
+  or id and look it up (ASM-HASH-01). Whoever already knows an account can
+  resolve it; that is what a node is for.
+- GitHub ids are sequential, so a GitHub id node is in effect public:
+  hashing every id up to the current maximum takes about a minute. X ids
+  and Google `sub` values are larger but not secret, and every application
+  a user signs in to with Google knows that user's `sub`.
+- The X and GitHub attestations carry the length of every committed range,
+  so the lengths of the id and the handle are public.
+- A disclosure is permanent. Withdrawing a name clears the Consumer's
+  state, but the transaction that carried the handle stays in history, and
+  a refused transaction's calldata is public too.
+- A duplicate identity field hidden behind a commitment cannot be detected,
+  so which account a binding names rests on ASM-PROV-06. That is a limit
+  on soundness, not on privacy.
+- A binding's existence, platform, Transaction Author, and observation time
+  are public; only the values are not.
+- Any other transaction that names a handle as text, such as a payment
+  addressed by handle rather than by node, discloses it as surely as a
+  disclosure call.
+- Off-chain readers see what they are asked: a resolver, an RPC provider,
+  or an ENS gateway given a handle in plaintext learns it.
+
 GitHub's application credential is also public,
 including in its revealed token request; knowing it does not authenticate the
 presenter. The bearer, commitment openings, and transcript bytes outside a
