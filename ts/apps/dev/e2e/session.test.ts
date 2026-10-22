@@ -1,7 +1,7 @@
 // A synthetic `ceremony export` through the mapping restoreSession applies.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { cookieParams, type Stored } from './session.ts'
+import { cookieParams, onGoogle, onX, parseExport, type Stored } from './session.ts'
 
 const NOW = 1_800_000_000
 
@@ -36,7 +36,7 @@ const exported: Stored[] = [
 ]
 
 test('a domain cookie keeps its domain and path; of its partition, the site', () => {
-  const [domain] = cookieParams(exported, undefined, NOW)
+  const [domain] = cookieParams(exported)
   assert.deepEqual(domain, {
     name: 'auth_token',
     value: 'v1',
@@ -54,7 +54,7 @@ test('a domain cookie keeps its domain and path; of its partition, the site', ()
 })
 
 test('a host-only cookie goes on its host, without a dot, with its exact path', () => {
-  const [, hostOnly] = cookieParams(exported, undefined, NOW)
+  const [, hostOnly] = cookieParams(exported)
   assert.deepEqual(hostOnly, {
     name: 'ct0',
     value: 'v2',
@@ -69,20 +69,18 @@ test('a host-only cookie goes on its host, without a dot, with its exact path', 
 })
 
 test('a __Host- cookie is placed by url alone', () => {
-  const [, , host] = cookieParams(exported, undefined, NOW)
+  const [, , host] = cookieParams(exported)
   assert.equal(host?.url, 'https://accounts.google.com/')
   assert.equal(host && ('domain' in host || 'path' in host), false)
   assert.equal(host?.expires, NOW + 60)
   assert.equal(host && 'partitionKey' in host, false)
 })
 
-test('expired cookies are left out; each cookie goes on every domain given', () => {
-  const params = cookieParams(
-    exported,
-    (domain) => [domain, domain.replace('x.com', 'twitter.com')],
-    NOW,
-  )
-  assert.ok(!params.some((param) => param.name === 'old'))
+test('each cookie goes on every domain given', () => {
+  const params = cookieParams(exported.slice(0, 3), (domain) => [
+    domain,
+    domain.replace('x.com', 'twitter.com'),
+  ])
   assert.deepEqual(
     params.map((param) => param.domain ?? param.url),
     [
@@ -94,4 +92,28 @@ test('expired cookies are left out; each cookie goes on every domain given', () 
       'https://accounts.google.com/',
     ],
   )
+})
+
+test("an export keeps the platform's unexpired cookies, as a list or under `cookies`", () => {
+  const list = JSON.stringify(exported)
+  assert.deepEqual(
+    parseExport(list, onX, NOW)?.map((cookie) => cookie.name),
+    ['auth_token', 'ct0'],
+  )
+  assert.deepEqual(
+    parseExport(JSON.stringify({ cookies: exported, origins: [] }), onGoogle, NOW)?.map(
+      (cookie) => cookie.name,
+    ),
+    ['__Host-GAPS'],
+  )
+  const lookalike = JSON.stringify([
+    { name: 'SID', value: 'fake', domain: 'evilgoogle.com' },
+    { name: 'SID', value: 'fake', domain: '.google.com' },
+  ])
+  assert.deepEqual(
+    parseExport(lookalike, onGoogle, NOW)?.map((cookie) => cookie.domain),
+    ['.google.com'],
+  )
+  assert.equal(parseExport('{"cookies": 1}', onX, NOW), undefined)
+  assert.equal(parseExport('not json', onX, NOW), undefined)
 })

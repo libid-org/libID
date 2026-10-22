@@ -37,29 +37,57 @@ export const exportText = (saved: SavedSession) =>
     ? Buffer.from(saved.encoded.trim(), 'base64').toString('utf8')
     : readFileSync(saved.path, 'utf8')
 
+/** A cookie's host, without the leading dot of a domain cookie. */
+const hostOf = (cookie: Stored) => cookie.domain.replace(/^\./, '')
+
+/** A cookie's expiry in Unix seconds; 0 for a session cookie. */
+const expiresOf = (cookie: Stored) => cookie.expires ?? cookie.expirationDate ?? 0
+
+/** Hosts a platform's session cookies live on, as the Rust suite's x_host and google_host admit. */
+export const onX = (host: string) => host === 'x.com' || host.endsWith('.x.com')
+export const onGoogle = (host: string) => host === 'google.com' || host.endsWith('.google.com')
+
 /**
- * The cookies of a saved session setting, or undefined when it is not set.
- * `required` names cookies of which at least one must be present for the
- * export to hold a session.
+ * The cookies of an export for the hosts `keep` admits, as the Rust suite's
+ * cookies::parse reads them: a list, or one under `cookies`; an expired
+ * cookie is left out. Undefined when the text is no such export.
+ */
+export function parseExport(
+  json: string,
+  keep: (host: string) => boolean,
+  now = Date.now() / 1000,
+): Stored[] | undefined {
+  let cookies: unknown
+  try {
+    const parsed = JSON.parse(json) as unknown
+    cookies = Array.isArray(parsed) ? parsed : (parsed as { cookies?: unknown } | null)?.cookies
+  } catch {
+    // The parser's message would quote the value.
+  }
+  if (!Array.isArray(cookies)) return undefined
+  return (cookies as Stored[]).filter((cookie) => {
+    const expires = expiresOf(cookie)
+    return keep(hostOf(cookie)) && (expires <= 0 || expires >= now)
+  })
+}
+
+/**
+ * The platform's cookies of a saved session setting, or undefined when it is
+ * not set. `required` names cookies of which at least one must be present for
+ * the export to hold a session.
  */
 function cookiesOf(
   saved: SavedSession | undefined,
   label: string,
+  keep: (host: string) => boolean,
   required: string[],
 ): Stored[] | undefined {
   if (!saved) return undefined
-  const json = exportText(saved)
-  let cookies: Stored[] | undefined
-  try {
-    const parsed = JSON.parse(json) as Stored[] | { cookies?: Stored[] }
-    cookies = Array.isArray(parsed) ? parsed : parsed.cookies
-  } catch {
-    // The parser's message would quote the value.
-  }
-  if (!Array.isArray(cookies))
+  const cookies = parseExport(exportText(saved), keep)
+  if (!cookies)
     throw new Error(`The saved ${label} session is not a JSON cookie list or { cookies }`)
   if (!cookies.some((cookie) => required.includes(cookie.name)))
-    throw new Error(`The saved ${label} session has none of ${required.join(', ')}`)
+    throw new Error(`The saved ${label} session has none of ${required.join(', ')} unexpired`)
   return cookies
 }
 
@@ -69,7 +97,7 @@ function cookiesOf(
  * ceremony-tests, which lives on its feat/live-ceremony-tests branch
  * (libid-server-rs PR #12).
  */
-export const xSession = () => cookiesOf(settings.xSession(), 'X_TEST_ALICE', ['auth_token'])
+export const xSession = () => cookiesOf(settings.xSession(), 'X_TEST_ALICE', onX, ['auth_token'])
 
 /**
  * The saved Google session, from GOOGLE_TEST_ALICE_COOKIES or
@@ -79,7 +107,7 @@ export const xSession = () => cookiesOf(settings.xSession(), 'X_TEST_ALICE', ['a
  * sign-in in an automated browser, but honours a session made elsewhere.
  */
 export const googleSession = () =>
-  cookiesOf(settings.googleSession(), 'GOOGLE_TEST_ALICE', [
+  cookiesOf(settings.googleSession(), 'GOOGLE_TEST_ALICE', onGoogle, [
     'SID',
     '__Secure-1PSID',
     '__Secure-3PSID',
@@ -98,17 +126,15 @@ type CookieParam = Parameters<BrowserContext['addCookies']>[0][number]
  * The cookies to set for a saved session, as the Rust suite sets them: a
  * domain cookie (leading dot) on its domain, a `__Host-` one by `url` alone,
  * another host-only one on its host without a dot, which Chromium keeps
- * host-only with its exact path; an expired one is left out. `domainsOf`
+ * host-only with its exact path. `domainsOf`
  * gives the domains each cookie goes on.
  */
 export function cookieParams(
   cookies: Stored[],
   domainsOf: (domain: string) => string[] = (domain) => [domain],
-  now = Date.now() / 1000,
 ): CookieParam[] {
   return cookies.flatMap((cookie) => {
-    const expires = cookie.expires ?? cookie.expirationDate ?? 0
-    if (expires > 0 && expires < now) return []
+    const expires = expiresOf(cookie)
     const key = cookie.partition_key ?? cookie.partitionKey
     // Playwright takes the partition's top-level site only: an exported
     // hasCrossSiteAncestor is dropped, and Playwright sets it true.
