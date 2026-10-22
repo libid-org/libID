@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { ACTION, NAVIGATION, STACK_START, STACK_STOP, TEST } from './e2e/budgets.ts'
 import { checkSettings, envFile, loadEnvFile, tooling, unknownKeys } from './e2e/settings.ts'
 import { APP_ORIGIN } from './local.ts'
 
@@ -20,10 +21,8 @@ export default defineConfig({
   testDir: 'e2e',
   testMatch: '*.live.spec.ts',
   workers: 1,
-  // Each test's own budgets: the page load (60 s), the app's Ready (60 s),
-  // the click that opens the popup (30 s), the popup driver (180 s) and the
-  // outcome wait (8 min): 13.5 minutes, with margin.
-  timeout: 15 * 60_000,
+  // Each test's own budgets, summed in e2e/budgets.ts.
+  timeout: TEST,
   reporter: [['list']],
   // One command: start the services and the app, test, then stop both. The
   // run never reuses a running stack: services.ts refuses taken ports.
@@ -31,8 +30,8 @@ export default defineConfig({
     command: 'pnpm dev',
     url: APP_ORIGIN,
     reuseExistingServer: false,
-    timeout: 10 * 60_000,
-    gracefulShutdown: { signal: 'SIGTERM', timeout: 120_000 },
+    timeout: STACK_START,
+    gracefulShutdown: { signal: 'SIGTERM', timeout: STACK_STOP },
     // CI keeps the services' output off the public job log: services.ts
     // writes it to LIBID_STACK_LOGS, which is scanned before upload.
     stdout: ci ? 'ignore' : 'pipe',
@@ -42,8 +41,8 @@ export default defineConfig({
     baseURL: APP_ORIGIN,
     headless: !headed,
     // A hang ends on the action that hangs, not on the test's timeout.
-    actionTimeout: 30_000,
-    navigationTimeout: 60_000,
+    actionTimeout: ACTION,
+    navigationTimeout: NAVIGATION,
     // Automation X and Google can see makes them challenge; see e2e/person.ts.
     launchOptions: { args: ['--disable-blink-features=AutomationControlled'] },
     // LIBID_TEST_PROXY routes the browser's traffic, loopback aside, through a

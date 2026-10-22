@@ -1,8 +1,9 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Page, Request } from '@playwright/test'
 import { BRIDGE } from '../local.ts'
+import { DRIVER } from './budgets.ts'
 
-const BUDGET_MS = 180_000
+const BUDGET_MS = DRIVER
 
 /** Where every platform returns the popup: the local Bridge's OAuth callback. */
 const CALLBACK = new URL('/auth/callback', BRIDGE)

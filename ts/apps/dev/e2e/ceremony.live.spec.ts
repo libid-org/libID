@@ -1,5 +1,6 @@
 import type { PlatformId } from '@libid/ceremony'
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
+import { OUTCOME, READY } from './budgets.ts'
 import { authorizeOnGitHub } from './github.ts'
 import { authorizeOnGoogle } from './google.ts'
 import { presentAsPerson } from './person.ts'
@@ -14,9 +15,6 @@ import {
   xAccount,
 } from './settings.ts'
 import { authorizeOnX, restoreXSession } from './x.ts'
-
-/** Proving in the browser, after the platform returns the popup. */
-const OUTCOME_TIMEOUT = 8 * 60_000
 
 type Name = 'GitHub' | 'X' | 'Google'
 
@@ -59,7 +57,7 @@ async function proveThroughTheUi(
   await page.goto('/')
   // A cold app loads the Bridge configuration and CCDP's version list first.
   await expect(page.locator('#status')).toHaveText('Ready. Click a platform to start a ceremony.', {
-    timeout: 60_000,
+    timeout: READY,
   })
   const [popup] = await Promise.all([
     // Watched from the moment it appears: a platform may return it at once.
@@ -71,7 +69,7 @@ async function proveThroughTheUi(
   await authorize(popup)
 
   await expect
-    .poll(() => page.evaluate((id) => window.results.has(id), id!), { timeout: OUTCOME_TIMEOUT })
+    .poll(() => page.evaluate((id) => window.results.has(id), id!), { timeout: OUTCOME })
     .toBe(true)
   const outcome = await page.evaluate((id): Outcome => {
     const result = window.results.get(id)!

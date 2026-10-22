@@ -4,6 +4,16 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import type { PlatformId } from '@libid/ceremony'
+import {
+  ACTION,
+  DRIVER,
+  NAVIGATION,
+  OUTCOME,
+  READY,
+  STACK_START,
+  STACK_STOP,
+  TEST,
+} from './budgets.ts'
 import { missing, type Need, PLATFORM_SECTIONS, VARIABLES } from './settings.ts'
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8')
@@ -55,25 +65,52 @@ test('every secret the workflow reads is a setting, passed under its own name', 
   }
 })
 
-test("each job's test step is given what its platforms require", () => {
+/**
+ * The platforms job `name`'s test step can prove: every one when the
+ * repository variable may choose, else the ones it lists.
+ */
+function selectable(entries: [string, string][], name: string): PlatformId[] {
+  const selection = entries.find(([key]) => key === 'LIBID_LIVE_PLATFORMS')?.[1]
+  assert.ok(selection, `job ${name}'s test step sets LIBID_LIVE_PLATFORMS`)
+  if (referenced(selection).size) return Object.keys(PLATFORM_SECTIONS) as PlatformId[]
+  const platforms = selection.split(',').map((platform) => platform.trim()) as PlatformId[]
+  for (const platform of platforms)
+    assert.ok(platform in PLATFORM_SECTIONS, `job ${name} selects unknown ${platform}`)
+  return platforms
+}
+
+const entriesOf = (lines: string[]) =>
+  lines.flatMap((line) => {
+    const entry = envEntry(line)
+    return entry ? [entry] : []
+  })
+
+test("each job's test step is given what every platform it can select requires", () => {
   for (const name of JOBS) {
-    const entries = testStep(name).flatMap((line) => {
-      const entry = envEntry(line)
-      return entry ? [entry] : []
-    })
-    // The step's platforms: a list, or the variable's default after `||`.
-    const selection = entries.find(([key]) => key === 'LIBID_LIVE_PLATFORMS')?.[1]
-    assert.ok(selection, `job ${name}'s test step sets LIBID_LIVE_PLATFORMS`)
-    const listed = /\|\|\s*'([^']*)'/.exec(selection)?.[1] ?? selection
-    const platforms = listed.split(',').map((platform) => platform.trim()) as PlatformId[]
-    for (const platform of platforms)
-      assert.ok(platform in PLATFORM_SECTIONS, `job ${name} selects unknown ${platform}`)
+    const entries = entriesOf(testStep(name))
     const given = new Set(entries.map(([key]) => key))
     const lookup = (variable: string) => (given.has(variable) ? 'set' : undefined)
-    const absent = platforms.flatMap((platform) =>
+    const absent = selectable(entries, name).flatMap((platform) =>
       PLATFORM_SECTIONS[platform].flatMap((section) => missing(section, lookup)),
     )
     assert.deepEqual(absent, [], `job ${name}'s test step is not given ${absent.join(', ')}`)
+  }
+})
+
+test('each test step outlasts its worst case: the stack, every platform it can select', () => {
+  const minutes = (ms: number) => ms / 60_000
+  const sum = NAVIGATION + READY + ACTION + DRIVER + OUTCOME
+  assert.ok(
+    TEST >= sum,
+    `the test timeout ${minutes(TEST)} min is under its budgets' ${minutes(sum)}`,
+  )
+  for (const name of JOBS) {
+    const step = testStep(name)
+    const timeout = Number(/^\s+timeout-minutes:\s*(\d+)/m.exec(step.join('\n'))?.[1])
+    const worst = minutes(
+      STACK_START + selectable(entriesOf(step), name).length * TEST + STACK_STOP,
+    )
+    assert.ok(timeout >= worst, `job ${name}'s test step allows ${timeout} min of ${worst}`)
   }
 })
 
