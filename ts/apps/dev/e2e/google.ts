@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { clickFound, drivePopup } from './popup.ts'
+import { clickFound, drivePopup, evaluateWithin } from './popup.ts'
 
 /** Pages that no automation gets past: the session or the OAuth client needs a person. */
 const REFUSED: [string, string][] = [
@@ -41,7 +41,7 @@ export async function authorizeOnGoogle(popup: Page, email: string) {
       if (refused) throw new Error(`${refused[1]} (${url.pathname})`)
       if (url.pathname.includes('/challenge/'))
         throw new Error(`Google asks to verify the account interactively (${url.pathname})`)
-      if (await popup.evaluate(LOGIN_VISIBLE).catch(() => false))
+      if (await evaluateWithin(popup, LOGIN_VISIBLE, false))
         throw new Error(
           'Google asked to sign in: the saved session has expired. Renew it with `ceremony export google` (libid-server-rs, branch feat/live-ceremony-tests).',
         )

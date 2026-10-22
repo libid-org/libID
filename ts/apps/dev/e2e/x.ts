@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from '@playwright/test'
-import { clickFound, drivePopup } from './popup.ts'
+import { clickFound, drivePopup, evaluateWithin } from './popup.ts'
 import { restoreSession, type Stored } from './session.ts'
 
 /** Put the saved session on both hosts X answers on, as the Rust suite does. */
@@ -52,7 +52,7 @@ export async function authorizeOnX(popup: Page) {
         )
       } else if (url.pathname.startsWith('/i/oauth2/authorize')) {
         challengedAt = undefined
-        await popup.evaluate(ACCEPT_COOKIES).catch(() => {})
+        await evaluateWithin(popup, ACCEPT_COOKIES, false)
         if (Date.now() - consentedAt > 10_000 && (await clickFound(popup, FIND_CONSENT)))
           consentedAt = Date.now()
       }

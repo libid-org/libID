@@ -78,7 +78,17 @@ export async function drivePopup(popup: Page, driver: Driver) {
         .innerText({ timeout: 2_000 })
         .catch(() => '')
       const text = visible.split(/\s+/).join(' ').trim().toLowerCase().replaceAll('’', "'")
-      await driver.step(url, text, pause)
+      // A step that outlasts the budget is left behind: the error names the page.
+      const budget = new AbortController()
+      const step = driver.step(url, text, pause)
+      step.catch(() => {})
+      const late = await Promise.race([
+        step.then(() => false),
+        sleep(Math.max(0, deadline - Date.now()), true, { signal: budget.signal }).catch(
+          () => false,
+        ),
+      ]).finally(() => budget.abort())
+      if (late) break
     }
     await sleep(250)
   }
@@ -86,6 +96,11 @@ export async function drivePopup(popup: Page, driver: Driver) {
   throw new Error(
     `No ${driver.name} authorization in ${BUDGET_MS / 1000} s; stopped on ${popup.url()}`,
   )
+}
+
+/** Evaluate `expression` in `popup`, or `fallback` when it fails or takes over 5 s. */
+export function evaluateWithin<T>(popup: Page, expression: string, fallback: T): Promise<T> {
+  return Promise.race([popup.evaluate<T>(expression).catch(() => fallback), sleep(5_000, fallback)])
 }
 
 /**
@@ -100,7 +115,7 @@ export async function clickFound(popup: Page, find: string): Promise<boolean> {
   target.setAttribute('data-libid-click', '1');
   return true;
 })()`
-  if (!(await popup.evaluate(mark).catch(() => false))) return false
+  if (!(await evaluateWithin(popup, mark, false))) return false
   await popup
     .locator('[data-libid-click="1"]')
     .click({ timeout: 5_000 })
