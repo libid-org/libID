@@ -1,6 +1,8 @@
 // Start the real Bridge, notary and emitted CCDP; no OAuth mocks.
+// LIBID_STACK_LOGS names a file that takes every child's output, containers included.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { openSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
@@ -10,13 +12,16 @@ const root = fileURLToPath(new URL('.', import.meta.url))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
+const logs = process.env.LIBID_STACK_LOGS ? openSync(process.env.LIBID_STACK_LOGS, 'w') : undefined
+const stdio =
+  logs === undefined ? 'inherit' : (['ignore', logs, logs] as ['ignore', number, number])
 // Rebuild the shared distribution; immutable assets reuse the build cache.
 execFileSync(
   'pnpm',
   ['--filter', '@libid/ceremony', 'build:ccdp-artifacts', '--out-dir', join(root, '.cache/ccdp')],
   {
     cwd: root,
-    stdio: 'inherit',
+    stdio,
   },
 )
 // Refresh the bind mounts after the build atomically replaces its output directory.
@@ -25,7 +30,7 @@ if (process.argv.includes('--ccdp')) {
     'docker',
     [...composeArgs, 'up', '--wait', '--no-deps', '--no-build', '--force-recreate', 'ccdp'],
     {
-      stdio: 'inherit',
+      stdio,
     },
   )
   process.exit(0)
@@ -46,7 +51,7 @@ function stop(code: number) {
     }
   }
   // Keep this child alive through completion, including after a partial startup.
-  const down = spawn('docker', [...composeArgs, 'down'], { stdio: 'inherit' })
+  const down = spawn('docker', [...composeArgs, 'down'], { stdio })
   down.on('error', () => console.error('Could not stop development containers. Check Docker.'))
   down.on('close', (code) => {
     if (code !== 0) process.exitCode = 1
@@ -55,7 +60,7 @@ function stop(code: number) {
 process.once('SIGINT', () => stop(0))
 process.once('SIGTERM', () => stop(0))
 const compose = spawn('docker', [...composeArgs, 'up', '--abort-on-container-failure'], {
-  stdio: 'inherit',
+  stdio,
   detached: true,
 })
 compose.on('error', () => {

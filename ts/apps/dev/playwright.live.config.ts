@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { parseEnv } from 'node:util'
 import { defineConfig, devices } from '@playwright/test'
-import { APP_ORIGIN } from './local.ts'
 
 // Test secrets from a dotenv file when LIBID_TEST_ENV_FILE names one; values
 // already in the environment win. Nothing is printed.
@@ -13,6 +12,9 @@ if (envFile) {
     process.env[name] ??= value
 }
 
+/** dev's application and services (services.ts, vite.config.ts). */
+const APP_ORIGIN = 'http://localhost:4691'
+
 /** Live: real platforms, real notary, real Bridge; no chain. */
 export default defineConfig({
   testDir: 'e2e',
@@ -21,16 +23,16 @@ export default defineConfig({
   // Each test: the popup driver's 3 minutes and the page's 8-minute outcome wait.
   timeout: 12 * 60_000,
   reporter: [['list']],
-  // One command: start the stack and the app, test, then stop both. A stack
-  // already running locally is reused.
+  // One command: start the services and the app, test, then stop both. A
+  // `pnpm dev` already running locally is reused.
   webServer: {
     command: 'pnpm dev',
     url: APP_ORIGIN,
     reuseExistingServer: !process.env.CI,
     timeout: 10 * 60_000,
     gracefulShutdown: { signal: 'SIGTERM', timeout: 120_000 },
-    // CI keeps the stack's output off the public job log: the stack writes
-    // it to LIBID_STACK_LOGS, which is scanned before upload.
+    // CI keeps the services' output off the public job log: services.ts
+    // writes it to LIBID_STACK_LOGS, which is scanned before upload.
     stdout: process.env.CI ? 'ignore' : 'pipe',
   },
   use: {

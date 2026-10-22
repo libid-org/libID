@@ -1,3 +1,4 @@
+import type { PlatformId } from '@libid/ceremony'
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
 import { authorizeOnGitHub, githubAccount } from './github.ts'
 import { authorizeOnGoogle } from './google.ts'
@@ -11,17 +12,23 @@ const OUTCOME_TIMEOUT = 8 * 60_000
 
 type Name = 'GitHub' | 'X' | 'Google'
 
-const expected: Record<Name, { platform: string; userId: RegExp }> = {
-  GitHub: { platform: 'github', userId: /^\d+$/ },
-  X: { platform: 'x', userId: /^\d+$/ },
-  // The token's `sub`, hashed: no Google account id reaches the page.
-  Google: { platform: 'google', userId: /^0x[0-9a-f]{64}$/ },
+const platformOf: Record<Name, PlatformId> = { GitHub: 'github', X: 'x', Google: 'google' }
+
+/** What the test reads of a run's entry in window.results. */
+interface Outcome {
+  status: string
+  platformId?: string
+  userId?: string
+  userName?: string
+  idNodeBytes?: number
+  handleNodeBytes?: number
+  proofPresent?: boolean
 }
 
 /**
- * Start the platform's ceremony from its link, let `authorize` drive the popup
- * through the platform, then check what the page reports: the proved account,
- * its id's shape, the ceremony and a non-empty, unexpired proof.
+ * Start the platform's ceremony from its anchor, let `authorize` drive the
+ * popup through the platform, then check the run's result: accepted, the
+ * proved account with its id and handle nodes, and a non-empty proof.
  */
 async function proveThroughTheUi(
   page: Page,
@@ -31,26 +38,48 @@ async function proveThroughTheUi(
   authorize: (popup: Page) => Promise<void>,
 ) {
   await page.goto('/')
-  await expect(page.getByTestId('status')).toHaveText('Choose a platform to prove.')
+  await expect(page.locator('#status')).toHaveText('Ready. Click a platform to start a ceremony.')
   const [popup] = await Promise.all([
     context.waitForEvent('page'),
-    page.getByRole('link', { name: `Prove ${name}` }).click(),
+    page.getByRole('button', { name, exact: true }).click(),
   ])
+  const id = await page.locator('#history tr').first().getAttribute('data-ceremony-id')
+  expect(id).toBeTruthy()
   await authorize(popup)
 
-  // The page reports one outcome when the run ends, its own message on failure.
-  const outcome = page.getByTestId('outcome')
-  await expect(outcome).not.toHaveText('—', { timeout: OUTCOME_TIMEOUT })
-  await expect(outcome).toHaveText('proved')
-  await expect(page.getByTestId('user-name')).toHaveText(expectedUser, { ignoreCase: true })
-  await expect(page.getByTestId('user-id')).toHaveText(expected[name].userId)
-  await expect(page.getByTestId('platform')).toHaveText(expected[name].platform)
-  await expect(page.getByTestId('ceremony-version')).toHaveText(/^[1-9]\d*$/)
-  await expect(page.getByTestId('attestations')).not.toHaveText('—')
-  expect(Number(await page.getByTestId('proof-bytes').textContent())).toBeGreaterThan(0)
-  expect(Number(await page.getByTestId('expires-at').textContent())).toBeGreaterThan(
-    Date.now() / 1000,
-  )
+  await expect
+    .poll(() => page.evaluate((id) => window.results.has(id), id!), { timeout: OUTCOME_TIMEOUT })
+    .toBe(true)
+  const outcome = await page.evaluate((id): Outcome => {
+    const result = window.results.get(id)!
+    if (result.status !== 'accepted') return { status: result.status }
+    const { identity, oauthProof } = result
+    return {
+      status: result.status,
+      platformId: identity.platformId,
+      userId: identity.userId,
+      userName: identity.userName,
+      idNodeBytes: identity.idNode.length,
+      handleNodeBytes: identity.handleNode.length,
+      proofPresent: Object.values(oauthProof.proof).some(
+        (value) => value instanceof Uint8Array && value.length > 0,
+      ),
+    }
+  }, id!)
+  // A failed run's row says why.
+  const message = await page
+    .locator(`#history tr[data-ceremony-id="${id}"] .run-status`)
+    .textContent()
+  expect(outcome.status, message ?? undefined).toBe('accepted')
+  expect(outcome.platformId).toBe(platformOf[name])
+  // The account id as the platform sent it: GitHub's and X's are decimal.
+  if (name === 'Google') expect(outcome.userId).not.toMatch(/^0x/)
+  else expect(outcome.userId).toMatch(/^\d+$/)
+  expect(outcome.userId).toBeTruthy()
+  expect(outcome.userName?.toLowerCase()).toBe(expectedUser.toLowerCase())
+  expect(outcome.idNodeBytes).toBe(32)
+  expect(outcome.handleNodeBytes).toBe(32)
+  expect(outcome.proofPresent).toBe(true)
 }
 
 test('a GitHub identity is proved in the browser', async ({ page, context }) => {

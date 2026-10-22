@@ -39,7 +39,7 @@ importers:
         specifier: ^7.8.5
         version: 7.8.5
 
-  apps/ceremony-live:
+  apps/dev:
     dependencies:
       '@libid/ceremony':
         specifier: workspace:^
@@ -63,34 +63,6 @@ importers:
       otpauth:
         specifier: ^9.4.0
         version: 9.5.2
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vite:
-        specifier: 'catalog:'
-        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)
-
-  apps/dev:
-    dependencies:
-      '@libid/ceremony':
-        specifier: workspace:^
-        version: link:../../packages/ceremony
-      '@libid/ledger':
-        specifier: workspace:^
-        version: link:../../packages/ledger
-      '@libid/popup':
-        specifier: workspace:^
-        version: link:../../packages/popup
-      '@noble/hashes':
-        specifier: ^2.4.0
-        version: 2.4.0
-    devDependencies:
-      '@playwright/test':
-        specifier: 'catalog:'
-        version: 1.64.0
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

@@ -12,8 +12,7 @@
       "!**/playwright-report",
       "!**/coverage",
       "!apps/dev/.cache",
-      "!apps/ceremony-live/.cache",
-      "!apps/ceremony-live/e2e/stealth.js",
+      "!apps/dev/e2e/stealth.js",
       "!.cache"
     ]
   },
