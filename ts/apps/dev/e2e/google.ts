@@ -1,5 +1,9 @@
 import type { Page } from '@playwright/test'
 import { clickFound, drivePopup, evaluateWithin } from './popup.ts'
+import { onGoogle } from './session.ts'
+
+/** How long the popup may stay on a Google host other than accounts.google.com. */
+const ELSEWHERE_GRACE = 5_000
 
 /** Pages that no automation gets past: the session or the OAuth client needs a person. */
 const REFUSED: [string, string][] = [
@@ -33,10 +37,21 @@ const findNext = (email: string) => `(() => {
  */
 export async function authorizeOnGoogle(popup: Page, email: string) {
   let clickedAt = 0
+  let elsewhereSince: number | undefined
   await drivePopup(popup, {
     name: 'Google',
-    onHost: (url) => url.hostname === 'accounts.google.com',
+    onHost: (url) => onGoogle(url.hostname),
     step: async (url, text) => {
+      // Another Google host has no handler: fail on one that stays, naming it.
+      if (url.hostname !== 'accounts.google.com') {
+        elsewhereSince ??= Date.now()
+        if (Date.now() - elsewhereSince > ELSEWHERE_GRACE)
+          throw new Error(
+            `Google left the popup on ${url.hostname}${url.pathname}, which no step drives`,
+          )
+        return
+      }
+      elsewhereSince = undefined
       const refused = REFUSED.find(([marker]) => text.includes(marker))
       if (refused) throw new Error(`${refused[1]} (${url.pathname})`)
       if (url.pathname.includes('/challenge/'))
