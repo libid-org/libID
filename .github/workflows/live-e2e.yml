@@ -50,12 +50,12 @@ jobs:
       - uses: ./.github/actions/setup-ts
 
       - name: Install Chromium
-        run: pnpm -C ts --filter @libid/ceremony-live exec playwright install --with-deps chromium
+        run: pnpm -C ts --filter @libid/dev exec playwright install --with-deps chromium
 
       # The platforms are the repository variable LIBID_LIVE_PLATFORMS, else
       # GitHub and X. Google is left out by default: it has challenged a saved
       # session arriving from a runner's address ("Verify it's you"), which no
-      # automation passes. Its test still runs locally.
+      # automation passes. The google-ssm job runs it through a proxy.
       # Its own timeout, so a run that hangs still reaches the steps below:
       # the stack's 10-minute start, two tests of 12 minutes, and 2 minutes
       # to stop the stack (playwright.live.config.ts), with room to spare.
@@ -77,16 +77,14 @@ jobs:
           # The saved Google session: base64 of a Playwright storage state or
           # of `ceremony export google`.
           GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        run: pnpm -C ts/apps/ceremony-live test:live
+        run: pnpm -C ts/apps/dev test:live
 
-      # The artifact is public. Screenshots, Playwright's error notes and the
-      # stack's log go up only when the scan finds none of the test accounts'
-      # secrets in them. The scan reads bytes, not pixels: a screenshot shows
-      # what the page showed, and the pages driven never display the password,
-      # the TOTP secret or a session cookie. The job log carries none of the
-      # stack's output (playwright.live.config.ts).
-      # A timed-out test step counts too; a cancelled run uploads nothing.
-      - name: Check the failure output for secrets
+      # The artifact is public. The stack's log, which the job log does not
+      # carry (playwright.live.config.ts), goes up only when the scan finds none
+      # of the test accounts' secrets in it. Screenshots go up unscanned: the
+      # pages driven never display the password, the TOTP secret or a session
+      # cookie. A timed-out test step counts too; a cancelled run uploads nothing.
+      - name: Check the stack log for secrets
         id: scan
         if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
         env:
@@ -99,10 +97,10 @@ jobs:
         # A stack the test step left running stops first, so nothing writes to
         # the log after it is scanned; what goes up is the copy scanned.
         run: |
-          docker compose ls -q --all --filter name=libid-ceremony-live |
+          docker compose ls -q --all --filter name=libid-dev |
             xargs -r -I{} docker compose -p {} down --volumes
           if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
-          node ts/apps/ceremony-live/e2e/scan-secrets.ts ts/apps/ceremony-live/test-results "$RUNNER_TEMP/stack-scanned.log"
+          node ts/apps/dev/e2e/scan-secrets.ts "$RUNNER_TEMP/stack-scanned.log"
 
       - name: Keep the screenshots and container logs
         if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
@@ -110,91 +108,7 @@ jobs:
         with:
           name: live-e2e
           path: |
-            ts/apps/ceremony-live/test-results/**/*.png
-            ts/apps/ceremony-live/test-results/**/*.md
-            ${{ runner.temp }}/stack-scanned.log
-          retention-days: 14
-          if-no-files-found: ignore
-
-  # Google challenges a saved session arriving from a runner's address, and not
-  # from grndd-testnet's NAT address. This job routes the test browser through
-  # the Squid proxy in that cluster: an OIDC role that only this workflow on
-  # main assumes, allowed to port-forward to the proxy in namespace libid-e2e
-  # (grndd-systems/deployment, terraform/envs/grndd-testnet/libid-live-e2e.tf).
-  google:
-    name: Google ceremony through grndd-testnet (live)
-    # Runs while the repository variable LIBID_GOOGLE_RUNNER is `cluster`, and
-    # only on main: the role trusts nothing else.
-    if: >-
-      vars.LIBID_GOOGLE_RUNNER == 'cluster' &&
-      github.event_name != 'pull_request' &&
-      github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      LIBID_REQUIRE_LIVE: "1"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-ts
-
-      - name: Install Chromium
-        run: pnpm -C ts --filter @libid/ceremony-live exec playwright install --with-deps chromium
-
-      - uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 # v5.0.0
-        with:
-          role-to-assume: arn:aws:iam::849996548040:role/grndd-testnet-libid-live-e2e
-          aws-region: eu-central-1
-
-      # The port-forward runs for the rest of the job; the step fails unless
-      # the proxy answers, and prints the address Google will see.
-      - name: Reach the Google proxy in grndd-testnet
-        run: |
-          aws eks update-kubeconfig --name grndd-testnet --region eu-central-1
-          kubectl -n libid-e2e port-forward svc/google-proxy 3128:3128 >"$RUNNER_TEMP/port-forward.log" 2>&1 &
-          for _ in $(seq 1 30); do
-            ip=$(curl -fs --max-time 5 -x http://127.0.0.1:3128 https://api.ipify.org) && break
-            sleep 2
-          done
-          echo "Google sees ${ip:?the proxy did not answer; see $RUNNER_TEMP/port-forward.log}"
-
-      - name: Prove a Google identity end to end
-        id: test
-        timeout-minutes: 20
-        env:
-          LIBID_LIVE_PLATFORMS: google
-          LIBID_TEST_PROXY: http://127.0.0.1:3128
-          LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
-          GOOGLE_TEST_ALICE_EMAIL: ${{ secrets.GOOGLE_TEST_ALICE_EMAIL }}
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        run: pnpm -C ts/apps/ceremony-live test:live
-
-      # As in the ceremony job: nothing goes up unless the scan finds no secret.
-      - name: Check the failure output for secrets
-        id: scan
-        if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
-        env:
-          LIBID_REQUIRE_LIVE: ""
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        run: |
-          docker compose ls -q --all --filter name=libid-ceremony-live |
-            xargs -r -I{} docker compose -p {} down --volumes
-          if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
-          node ts/apps/ceremony-live/e2e/scan-secrets.ts ts/apps/ceremony-live/test-results "$RUNNER_TEMP/stack-scanned.log"
-
-      - name: Keep the screenshots and container logs
-        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: live-e2e-google
-          path: |
-            ts/apps/ceremony-live/test-results/**/*.png
-            ts/apps/ceremony-live/test-results/**/*.md
+            ts/apps/dev/test-results/**/*.png
             ${{ runner.temp }}/stack-scanned.log
           retention-days: 14
           if-no-files-found: ignore
@@ -225,7 +139,7 @@ jobs:
       - uses: ./.github/actions/setup-ts
 
       - name: Install Chromium
-        run: pnpm -C ts --filter @libid/ceremony-live exec playwright install --with-deps chromium
+        run: pnpm -C ts --filter @libid/dev exec playwright install --with-deps chromium
 
       - uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 # v5.0.0
         with:
@@ -260,20 +174,20 @@ jobs:
           LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
           GOOGLE_TEST_ALICE_EMAIL: ${{ secrets.GOOGLE_TEST_ALICE_EMAIL }}
           GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        run: pnpm -C ts/apps/ceremony-live test:live
+        run: pnpm -C ts/apps/dev test:live
 
-      # As in the ceremony job: nothing goes up unless the scan finds no secret.
-      - name: Check the failure output for secrets
+      # As in the ceremony job: the log goes up only when the scan finds no secret.
+      - name: Check the stack log for secrets
         id: scan
         if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
         env:
           LIBID_REQUIRE_LIVE: ""
           GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
         run: |
-          docker compose ls -q --all --filter name=libid-ceremony-live |
+          docker compose ls -q --all --filter name=libid-dev |
             xargs -r -I{} docker compose -p {} down --volumes
           if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
-          node ts/apps/ceremony-live/e2e/scan-secrets.ts ts/apps/ceremony-live/test-results "$RUNNER_TEMP/stack-scanned.log"
+          node ts/apps/dev/e2e/scan-secrets.ts "$RUNNER_TEMP/stack-scanned.log"
 
       - name: Keep the screenshots and container logs
         if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
@@ -281,72 +195,7 @@ jobs:
         with:
           name: live-e2e-google-ssm
           path: |
-            ts/apps/ceremony-live/test-results/**/*.png
-            ts/apps/ceremony-live/test-results/**/*.md
-            ${{ runner.temp }}/stack-scanned.log
-          retention-days: 14
-          if-no-files-found: ignore
-
-  # The Google ceremony on a self-hosted runner (label libid-google), for a
-  # runner on a machine whose address Google accepts. Opt-in: it runs only
-  # while the repository variable LIBID_GOOGLE_RUNNER is `self-hosted`, since a
-  # job for a missing runner would sit queued. It never runs for a pull
-  # request: only a manual dispatch, which needs write access, or the
-  # schedule, which runs main.
-  google-self-hosted:
-    name: Google ceremony on a self-hosted runner (live)
-    if: >-
-      vars.LIBID_GOOGLE_RUNNER == 'self-hosted' &&
-      (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-    runs-on: [self-hosted, libid-google]
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    env:
-      LIBID_REQUIRE_LIVE: "1"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-ts
-
-      - name: Install Chromium
-        run: pnpm -C ts --filter @libid/ceremony-live exec playwright install --with-deps chromium
-
-      - name: Show the address Google will see
-        run: echo "Google sees $(curl -fs --max-time 10 https://api.ipify.org)"
-
-      - name: Prove a Google identity end to end
-        id: test
-        timeout-minutes: 20
-        env:
-          LIBID_LIVE_PLATFORMS: google
-          LIBID_STACK_LOGS: ${{ runner.temp }}/stack.log
-          GOOGLE_TEST_ALICE_EMAIL: ${{ secrets.GOOGLE_TEST_ALICE_EMAIL }}
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        run: pnpm -C ts/apps/ceremony-live test:live
-
-      - name: Check the failure output for secrets
-        id: scan
-        if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
-        env:
-          LIBID_REQUIRE_LIVE: ""
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
-        run: |
-          docker compose ls -q --all --filter name=libid-ceremony-live |
-            xargs -r -I{} docker compose -p {} down --volumes
-          if [ -f "$RUNNER_TEMP/stack.log" ]; then cp "$RUNNER_TEMP/stack.log" "$RUNNER_TEMP/stack-scanned.log"; fi
-          node ts/apps/ceremony-live/e2e/scan-secrets.ts ts/apps/ceremony-live/test-results "$RUNNER_TEMP/stack-scanned.log"
-
-      - name: Keep the screenshots and container logs
-        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: live-e2e-google-self-hosted
-          path: |
-            ts/apps/ceremony-live/test-results/**/*.png
-            ts/apps/ceremony-live/test-results/**/*.md
+            ts/apps/dev/test-results/**/*.png
             ${{ runner.temp }}/stack-scanned.log
           retention-days: 14
           if-no-files-found: ignore
