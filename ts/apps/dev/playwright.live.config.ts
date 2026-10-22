@@ -14,7 +14,11 @@ if (file) {
     console.warn(`${file}: no live test reads ${typos.join(', ')}; check the spelling.`)
 }
 if (runner) checkSettings()
-const { proxy, headed, ci } = tooling()
+const { proxy, headed, ci, stackLogs } = tooling()
+// The services' output carries what the job log must not: CI writes it to a
+// file it scans before upload.
+if (ci && !stackLogs)
+  throw new Error("CI runs need LIBID_STACK_LOGS: a file for the services' output")
 
 /** Live: real platforms, real notary, real Bridge; no chain. */
 export default defineConfig({
@@ -27,13 +31,17 @@ export default defineConfig({
   // One command: start the services and the app, test, then stop both. The
   // run never reuses a running stack: services.ts refuses taken ports.
   webServer: {
-    command: 'pnpm dev',
+    // exec: Playwright's SIGTERM reaches services.ts, which brings the stack down.
+    command: 'pnpm build:deps && exec node services.ts --app',
+    ...(stackLogs && {
+      env: { ...(process.env as Record<string, string>), LIBID_STACK_LOGS: stackLogs },
+    }),
     url: APP_ORIGIN,
     reuseExistingServer: false,
     timeout: STACK_START,
     gracefulShutdown: { signal: 'SIGTERM', timeout: STACK_STOP },
-    // CI keeps the services' output off the public job log: services.ts
-    // writes it to LIBID_STACK_LOGS, which is scanned before upload.
+    // Under CI the containers' output goes to LIBID_STACK_LOGS; the build's
+    // and services.ts' own messages stay on stderr.
     stdout: ci ? 'ignore' : 'pipe',
   },
   use: {

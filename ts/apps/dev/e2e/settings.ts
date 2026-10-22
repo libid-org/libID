@@ -86,12 +86,21 @@ export function loadEnvFile(file: string): string[] {
   return Object.keys(values)
 }
 
+/** A path a setting names: a relative one is the settings file's neighbour, else relative to where pnpm was invoked. */
+function settingPath(get: Lookup, path: string | undefined): string | undefined {
+  if (!path) return undefined
+  const settingsFile = envFile(get)
+  return resolve(settingsFile ? dirname(settingsFile) : invoked(get), path)
+}
+
 export interface Tooling {
   /** LIBID_LIVE_PLATFORMS, trimmed and checked, or every platform when it is unset. */
   platforms: readonly PlatformId[]
   /** A missing setting fails the run instead of skipping its test. */
   requireLive: boolean
   proxy?: string
+  /** LIBID_STACK_LOGS, resolved as a path setting. */
+  stackLogs?: string
   /** Show the browser. */
   headed: boolean
   /** A CI run: no traces or videos, the stack's output kept off the job log. */
@@ -115,6 +124,7 @@ export function tooling(get: Lookup = environment, unset = unsetInEnvironment): 
     platforms: (names as PlatformId[] | undefined) ?? PLATFORMS,
     requireLive: flag(get, 'LIBID_REQUIRE_LIVE'),
     proxy: get('LIBID_TEST_PROXY'),
+    stackLogs: settingPath(get, get('LIBID_STACK_LOGS')),
     headed: flag(get, 'HEADED'),
     ci: flag(get, 'CI'),
   }
@@ -204,9 +214,7 @@ function savedSession(prefix: string, get: Lookup): SavedSession | undefined {
   if (encoded) return { encoded }
   const file = get(`${prefix}_COOKIES_FILE`)
   if (!file) return undefined
-  // A relative path is the settings file's neighbour, else relative to where pnpm was invoked.
-  const settingsFile = envFile(get)
-  return { path: resolve(settingsFile ? dirname(settingsFile) : invoked(get), file) }
+  return { path: settingPath(get, file)! }
 }
 
 export const xSession = (get: Lookup = environment) => savedSession('X_TEST_ALICE', get)
