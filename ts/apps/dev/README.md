@@ -37,8 +37,8 @@ Edit configuration directly where it is used:
 
 - [compose.yaml](compose.yaml): services.
 - [bridge-config.toml](bridge-config.toml): Bridge configuration and development OAuth credentials.
-- [src/app.ts](src/app.ts): Bridge URL and the local ledger/notary fixture; Bridge configuration selects CCDP.
-- [vite.config.ts](vite.config.ts): frontend port.
+- [local.ts](local.ts): the app origin (frontend port) and Bridge URL.
+- [src/app.ts](src/app.ts): the local ledger/notary fixture; Bridge configuration selects CCDP.
 
 The setup includes shared development OAuth credentials and a public development
 notary signing key; no environment file is needed. Bridge publishes the GitHub
@@ -96,22 +96,6 @@ the dev suite does not exhaustively test timing arithmetic, sorting or delayed
 delivery, or retest native disclosure controls. Real OAuth and proving checks are documented in the
 [ceremony qualification guide](../../packages/ceremony/docs/qualification.md).
 
-## Live tests
-
-The live suite proves real GitHub, X and Google accounts from this app's UI,
-with the services above. It starts `pnpm dev`, or reuses one already running.
-
-```sh
-LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live
-```
-
-The env file holds the test accounts' secrets (`GH_TEST_ALICE_*`,
-`X_TEST_ALICE_*`, `GOOGLE_TEST_ALICE_*`; see [e2e/](e2e/)). A test without its
-secrets is skipped; `LIBID_REQUIRE_LIVE=1` fails it instead.
-`LIBID_LIVE_PLATFORMS=github,x` picks platforms, `LIBID_TEST_PROXY` routes the
-browser through a proxy, and `LIBID_STACK_LOGS=<file>` sends the services'
-output to a file.
-
 Run history shows core operation durations from their occurrence timestamps, plus
 total ceremony time. The status uses the package’s stage
 projection. Timings freeze at the terminal outcome and clear on page reload;
@@ -121,3 +105,24 @@ When isolation fallback occurs, **Prover fallback** shows navigation through Pro
 readiness, using `prover-fallback` and `prover.started` occurrence timestamps. It
 excludes work before navigation and does not measure the difference from a run
 without fallback. Direct runs have no fallback row.
+
+## Live tests
+
+The live suite proves real GitHub, X and Google accounts from this app's UI,
+with the services above. It starts `pnpm dev`, or reuses one already running,
+and refuses to start beside another stack on the same ports.
+
+```sh
+LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live
+```
+
+| Variable | Use |
+|---|---|
+| `LIBID_TEST_ENV_FILE` | A dotenv file with the variables below, relative to where you run pnpm. |
+| `GH_TEST_ALICE_USERNAME`, `GH_TEST_ALICE_PASSWORD`, `GH_TEST_ALICE_TOTP_SECRET` | The GitHub test account and its authenticator secret. |
+| `X_TEST_ALICE_USERNAME`, `X_TEST_ALICE_COOKIES` or `X_TEST_ALICE_COOKIES_FILE` | The X handle and a saved session (base64 JSON, or a path relative to the env file). |
+| `GOOGLE_TEST_ALICE_EMAIL`, `GOOGLE_TEST_ALICE_COOKIES` or `GOOGLE_TEST_ALICE_COOKIES_FILE` | The Google account and a saved session, as for X. |
+| `LIBID_LIVE_PLATFORMS` | Comma-separated platforms to prove, such as `github,x`; all three by default. |
+| `LIBID_REQUIRE_LIVE` | Set: a missing secret or an empty platform list fails instead of skipping. |
+| `LIBID_TEST_PROXY` | A proxy for the browser's traffic, loopback aside. |
+| `LIBID_STACK_LOGS` | A file for the services' output, containers included, instead of the terminal. |
