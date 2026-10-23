@@ -16,13 +16,15 @@ import type {
 
 /**
  * One session's setup once the SDK runtime has loaded; downloading the runtime has no deadline.
- * With the send budget it keeps X's token request well inside X's 30-second code deadline,
- * which the redirect and the Prover's load also spend.
  */
 const PREPARE_TIMEOUT_MS = 10000
 
-/** One send-through-attestation budget; setup has its own and idle bearer waiting is excluded. */
-const REQUEST_TIMEOUT_MS = 10000
+/**
+ * One send-through-attestation budget; setup has its own and idle bearer waiting is excluded.
+ * GitHub's identity request takes up to about 10.6 s on a CI runner, so this leaves room for
+ * slower devices. X's 30-second code deadline, not this budget, bounds X's token request.
+ */
+const REQUEST_TIMEOUT_MS = 30000
 
 /** Correlated provisional openings plus a separate promise for the final attestation. */
 export interface RevealResult {
