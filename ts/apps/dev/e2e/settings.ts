@@ -5,11 +5,14 @@ import { dirname, resolve } from 'node:path'
 import { parseEnv } from 'node:util'
 import type { PlatformId } from '@libid/ceremony'
 
-/** Each platform's variables; `A|B` is either. The type keeps every platform listed. */
-export const PLATFORM_VARIABLES: Record<PlatformId, string[]> = {
-  github: ['GH_TEST_ALICE_USERNAME', 'GH_TEST_ALICE_PASSWORD', 'GH_TEST_ALICE_TOTP_SECRET'],
-  x: ['X_TEST_ALICE_USERNAME', 'X_TEST_ALICE_COOKIES|X_TEST_ALICE_COOKIES_FILE'],
-  google: ['GOOGLE_TEST_ALICE_EMAIL', 'GOOGLE_TEST_ALICE_COOKIES|GOOGLE_TEST_ALICE_COOKIES_FILE'],
+/** Each platform's variables, each set by any one name of its list. */
+const PLATFORM_VARIABLES: Record<PlatformId, string[][]> = {
+  github: [['GH_TEST_ALICE_USERNAME'], ['GH_TEST_ALICE_PASSWORD'], ['GH_TEST_ALICE_TOTP_SECRET']],
+  x: [['X_TEST_ALICE_USERNAME'], ['X_TEST_ALICE_COOKIES', 'X_TEST_ALICE_COOKIES_FILE']],
+  google: [
+    ['GOOGLE_TEST_ALICE_EMAIL'],
+    ['GOOGLE_TEST_ALICE_COOKIES', 'GOOGLE_TEST_ALICE_COOKIES_FILE'],
+  ],
 }
 const PLATFORMS = Object.keys(PLATFORM_VARIABLES) as PlatformId[]
 
@@ -33,39 +36,33 @@ export const settingPath = (path: string) => {
   return resolve(file ? dirname(file) : invoked(), path)
 }
 
-export const requireLive = () => /^(1|true)$/i.test(env('LIBID_REQUIRE_LIVE') ?? '')
-
-/** LIBID_LIVE_PLATFORMS, comma-separated, or every platform when it is unset. */
-export function livePlatforms(): PlatformId[] {
-  const listed = process.env.LIBID_LIVE_PLATFORMS
-  if (listed === undefined) return PLATFORMS
-  const names = listed
-    .split(',')
+/** The platforms LIBID_LIVE_PLATFORMS lists, comma-separated; undefined when it is unset. */
+function listed(): PlatformId[] | undefined {
+  const names = env('LIBID_LIVE_PLATFORMS')
+    ?.split(',')
     .map((name) => name.trim())
-    .filter(Boolean)
-  const unknown = names.filter((name) => !PLATFORMS.includes(name as PlatformId))
+  const unknown = names?.filter((name) => !PLATFORMS.includes(name as PlatformId)) ?? []
   if (unknown.length)
     throw new Error(`LIBID_LIVE_PLATFORMS names ${unknown.join(', ')}; use ${PLATFORMS.join(', ')}`)
-  if (!names.length && requireLive())
-    throw new Error('LIBID_REQUIRE_LIVE is set but LIBID_LIVE_PLATFORMS selects no platform')
-  return names as PlatformId[]
+  return names as PlatformId[] | undefined
 }
 
 /** The variables `platform` lacks. */
 export const missing = (platform: PlatformId) =>
   PLATFORM_VARIABLES[platform]
-    .filter((names) => !names.split('|').some(env))
-    .map((names) => names.replace('|', ' or '))
+    .filter((names) => !names.some(env))
+    .map((names) => names.join(' or '))
 
-/** The selected platforms whose tests run: those with every variable set. */
-export const runnablePlatforms = () => livePlatforms().filter((p) => !missing(p).length)
+/** The platforms whose tests run: the listed ones, else every one with its variables set. */
+export const runnablePlatforms = () =>
+  listed() ?? PLATFORMS.filter((platform) => !missing(platform).length)
 
-/** Under LIBID_REQUIRE_LIVE, fail once, naming every variable a selected platform lacks. */
+/** A listed platform must have its variables: fail once, naming every one absent. */
 export function checkSettings() {
-  const absent = livePlatforms().flatMap((p) =>
+  const absent = (listed() ?? []).flatMap((p) =>
     missing(p).length ? [`${p}: ${missing(p).join(', ')}`] : [],
   )
-  if (requireLive() && absent.length)
+  if (absent.length)
     throw new Error(
       `Missing live test settings (${absent.join('; ')}). Put them in the file LIBID_TEST_ENV_FILE names, or export them.`,
     )

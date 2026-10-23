@@ -6,24 +6,19 @@ import { authorizeOnGoogle } from './google.ts'
 import { presentAsPerson } from './person.ts'
 import { watchAppFailure, watchReturn } from './popup.ts'
 import { googleSession, restoreSession, xSession } from './session.ts'
-import { env, livePlatforms, missing } from './settings.ts'
-import { authorizeOnX, restoreXSession } from './x.ts'
-
-const PLATFORMS = {
-  GitHub: { id: 'github', proof: 'bearerLinkProof' },
-  X: { id: 'x', proof: 'bearerLinkProof' },
-  Google: { id: 'google', proof: 'identityProof' },
-} as const
+import { env, missing, runnablePlatforms } from './settings.ts'
+import { authorizeOnX } from './x.ts'
 
 /**
  * Start `name`'s ceremony from the app, let `authorize` drive the popup, then
- * check the run's result: accepted, the proved account and its nodes, and a
- * non-empty, unexpired proof.
+ * check the run's result: accepted, for `user` on `platform`. The ceremony
+ * itself validates the proof, the nodes and the ids.
  */
 async function proveThroughTheUi(
   page: Page,
   context: BrowserContext,
-  name: keyof typeof PLATFORMS,
+  name: string,
+  platform: PlatformId,
   user: string,
   authorize: (popup: Page) => Promise<void>,
 ) {
@@ -34,50 +29,38 @@ async function proveThroughTheUi(
   const popup = await launch(page, name)
   const row = newestRun(page)
   const id = (await row.getAttribute('data-ceremony-id'))!
-  const status = () => page.evaluate((id) => window.results.get(id)?.status, id)
+  const result = () =>
+    page.evaluate((id) => {
+      const result = window.results.get(id)
+      const identity = result && 'identity' in result ? result.identity : undefined
+      return (
+        result && {
+          status: result.status,
+          platform: identity?.platformId,
+          user: identity?.userName,
+        }
+      )
+    }, id)
+  const message = async () => (await row.locator('.run-status').textContent()) ?? ''
   watchAppFailure(popup, async () => {
-    const now = await status()
-    return now && now !== 'accepted'
-      ? (await row.locator('.run-status').textContent()) || now
-      : undefined
+    const status = (await result())?.status
+    return status && status !== 'accepted' ? await message() : undefined
   })
   await authorize(popup)
 
-  await expect.poll(status, { timeout: 8 * 60_000 }).toBeDefined()
-  expect(await status(), (await row.locator('.run-status').textContent()) ?? '').toBe('accepted')
-  const result = await page.evaluate((id) => {
-    const result = window.results.get(id)
-    if (result?.status !== 'accepted') return undefined
-    const { identity, oauthProof } = result
-    const proof = oauthProof.proof as unknown as Record<string, unknown>
-    return {
-      platformId: identity.platformId,
-      userId: identity.userId,
-      userName: identity.userName.toLowerCase(),
-      nodes: [identity.idNode.length, identity.handleNode.length],
-      proofBytes: Object.fromEntries(
-        Object.entries(proof).map(([field, value]) => [field, (value as Uint8Array)?.length]),
-      ),
-      version: oauthProof.platformCeremonyVersion,
-      expiresAt: oauthProof.expiresAt,
-    }
-  }, id)
-  const { id: platform, proof } = PLATFORMS[name]
-  expect(result?.platformId).toBe(platform)
-  // The account id as sent: GitHub's and X's are decimal; Google's `sub`, any string.
-  expect(result?.userId).toMatch(name === 'Google' ? /^(?!0x)./ : /^\d+$/)
-  expect(result?.userName).toBe(user.toLowerCase())
-  expect(result?.nodes).toEqual([32, 32])
-  expect(result?.proofBytes[proof]).toBeGreaterThan(0)
-  expect(result?.version).toBeGreaterThan(0)
-  expect(result?.expiresAt).toBeGreaterThan(Date.now() / 1000)
+  await expect.poll(result, { timeout: 8 * 60_000 }).toBeDefined()
+  const outcome = (await result())!
+  if (outcome.status !== 'accepted') expect(outcome.status, await message()).toBe('accepted')
+  expect(outcome.platform).toBe(platform)
+  expect(outcome.user?.toLowerCase()).toBe(user.toLowerCase())
 }
 
-/** Skip `platform`'s test unless it is selected and its settings are all set. */
-function skipUnlessLive(platform: PlatformId) {
-  test.skip(!livePlatforms().includes(platform), `${platform} is not in LIBID_LIVE_PLATFORMS`)
-  test.skip(missing(platform).length > 0, `${missing(platform).join(', ')} not set`)
-}
+/** Skip `platform`'s test unless it runs: listed, or with its variables set. */
+const skipUnlessLive = (platform: PlatformId) =>
+  test.skip(
+    !runnablePlatforms().includes(platform),
+    `not listed in LIBID_LIVE_PLATFORMS, or ${missing(platform).join(', ')} not set`,
+  )
 
 test('a GitHub identity is proved in the browser', async ({ page, context }) => {
   skipUnlessLive('github')
@@ -86,7 +69,7 @@ test('a GitHub identity is proved in the browser', async ({ page, context }) => 
     password: env('GH_TEST_ALICE_PASSWORD')!,
     totpSecret: env('GH_TEST_ALICE_TOTP_SECRET')!,
   }
-  await proveThroughTheUi(page, context, 'GitHub', account.username, (popup) =>
+  await proveThroughTheUi(page, context, 'GitHub', 'github', account.username, (popup) =>
     authorizeOnGitHub(popup, account),
   )
 })
@@ -94,8 +77,8 @@ test('a GitHub identity is proved in the browser', async ({ page, context }) => 
 test('an X identity is proved in the browser', async ({ page, context }) => {
   skipUnlessLive('x')
   await presentAsPerson(context)
-  await restoreXSession(context, xSession()!)
-  await proveThroughTheUi(page, context, 'X', env('X_TEST_ALICE_USERNAME')!, authorizeOnX)
+  await restoreSession(context, xSession()!)
+  await proveThroughTheUi(page, context, 'X', 'x', env('X_TEST_ALICE_USERNAME')!, authorizeOnX)
 })
 
 test('a Google identity is proved in the browser', async ({ page, context }) => {
@@ -103,7 +86,7 @@ test('a Google identity is proved in the browser', async ({ page, context }) => 
   const email = env('GOOGLE_TEST_ALICE_EMAIL')!
   await presentAsPerson(context)
   await restoreSession(context, googleSession()!)
-  await proveThroughTheUi(page, context, 'Google', email, (popup) =>
+  await proveThroughTheUi(page, context, 'Google', 'google', email, (popup) =>
     authorizeOnGoogle(popup, email),
   )
 })

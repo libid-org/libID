@@ -4,7 +4,7 @@ import type { BrowserContext } from '@playwright/test'
 import { env, settingPath } from './settings.ts'
 
 /** One cookie as libid-server-rs' `ceremony export` or Playwright saves it; both key casings occur. */
-export interface Stored {
+interface Stored {
   name: string
   value: string
   domain: string
@@ -16,13 +16,13 @@ export interface Stored {
   sameSite?: string | null
   expires?: number
   expirationDate?: number
-  partition_key?: unknown
-  partitionKey?: unknown
+  partition_key?: string | { topLevelSite?: string } | null
+  partitionKey?: string | { topLevelSite?: string } | null
 }
 
 const hostOf = (cookie: Stored) => cookie.domain.replace(/^\./, '')
 export const onX = (host: string) => host === 'x.com' || host.endsWith('.x.com')
-export const onGoogle = (host: string) => host === 'google.com' || host.endsWith('.google.com')
+const onGoogle = (host: string) => host === 'google.com' || host.endsWith('.google.com')
 
 /**
  * The platform's cookies in `<prefix>_COOKIES` (base64 JSON) or `<prefix>_COOKIES_FILE`:
@@ -77,31 +77,25 @@ const SAME_SITE: Record<string, 'Strict' | 'Lax' | 'None'> = {
 
 type CookieParam = Parameters<BrowserContext['addCookies']>[0][number]
 
-/** The cookies to set, on their own domain or each of `domainsOf`'s; a dotless one stays host-only. */
-export function cookieParams(
-  cookies: Stored[],
-  domainsOf: (domain: string) => string[] = (domain) => [domain],
-): CookieParam[] {
-  return cookies.flatMap((cookie) => {
-    const sameSite = SAME_SITE[(cookie.same_site ?? cookie.sameSite ?? '').toLowerCase()]
-    const expires = cookie.expires ?? cookie.expirationDate ?? 0
-    const partitionKey = cookie.partition_key ?? cookie.partitionKey
-    return domainsOf(cookie.domain).map((domain) => ({
-      name: cookie.name,
-      value: cookie.value,
-      domain,
-      path: cookie.path || '/',
-      secure: cookie.secure ?? true,
-      httpOnly: cookie.http_only ?? cookie.httpOnly ?? false,
-      expires: expires > 0 ? expires : -1,
-      ...(sameSite && { sameSite }),
-      ...(typeof partitionKey === 'string' && { partitionKey }),
-    }))
-  })
+/** A cookie as addCookies takes it; a dotless domain stays host-only. */
+export function cookieParam(cookie: Stored): CookieParam {
+  const sameSite = SAME_SITE[(cookie.same_site ?? cookie.sameSite ?? '').toLowerCase()]
+  const expires = cookie.expires ?? cookie.expirationDate ?? 0
+  // The Rust export writes CDP's object; Playwright takes its top-level site.
+  const key = cookie.partition_key ?? cookie.partitionKey
+  const partitionKey = typeof key === 'string' ? key : key?.topLevelSite
+  return {
+    name: cookie.name,
+    value: cookie.value,
+    domain: cookie.domain,
+    path: cookie.path || '/',
+    secure: cookie.secure ?? true,
+    httpOnly: cookie.http_only ?? cookie.httpOnly ?? false,
+    expires: expires > 0 ? expires : -1,
+    ...(sameSite && { sameSite }),
+    ...(partitionKey && { partitionKey }),
+  }
 }
 
-export const restoreSession = (
-  context: BrowserContext,
-  cookies: Stored[],
-  domainsOf?: (domain: string) => string[],
-) => context.addCookies(cookieParams(cookies, domainsOf))
+export const restoreSession = (context: BrowserContext, cookies: Stored[]) =>
+  context.addCookies(cookies.map(cookieParam))
