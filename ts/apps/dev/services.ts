@@ -1,84 +1,56 @@
 // Start the real Bridge, notary and emitted CCDP; no OAuth mocks.
-// LIBID_STACK_LOGS names a file that takes every child's output, containers
-// included, appended; a relative path resolves as paths.ts says.
+// LIBID_STACK_LOGS names a file every child's output, containers included,
+// is appended to; a relative path is relative to where pnpm was invoked.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { openSync } from 'node:fs'
 import { connect } from 'node:net'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
-import { APP_ORIGIN, BRIDGE, NOTARY } from './local.ts'
-import { settingPath } from './paths.ts'
+import { APP_ORIGIN, BRIDGE } from './local.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
-// --project: print this checkout's Compose project, for a cleanup to stop it.
-if (process.argv.includes('--project')) {
-  console.info(project)
-  process.exit(0)
-}
-const logPath = settingPath((name) => process.env[name], process.env.LIBID_STACK_LOGS)
-const logs = logPath ? openSync(logPath, 'a') : undefined
+const logPath = process.env.LIBID_STACK_LOGS
+const logs = logPath ? openSync(resolve(process.env.INIT_CWD ?? root, logPath), 'a') : undefined
 const stdio =
   logs === undefined ? 'inherit' : (['ignore', logs, logs] as ['ignore', number, number])
 /** Whether something on this host accepts connections on `port`. */
 const listening = (port: number) =>
   new Promise<boolean>((resolve) => {
     const socket = connect({ port, host: '127.0.0.1', timeout: 1000 })
-    socket.once('connect', () => {
+    const done = (open: boolean) => {
       socket.destroy()
-      resolve(true)
-    })
-    socket.once('timeout', () => {
-      socket.destroy()
-      resolve(false)
-    })
-    socket.once('error', () => resolve(false))
+      resolve(open)
+    }
+    socket.once('connect', () => done(true))
+    socket.once('timeout', () => done(false))
+    socket.once('error', () => done(false))
   })
-// Refuse to start beside another stack on compose.yaml's ports: readiness could pass against it.
+// Refuse to start beside another stack: readiness could pass against it.
 if (!process.argv.includes('--ccdp')) {
   let ports: number[]
-  let own: string
   try {
-    own = execFileSync('docker', [...composeArgs, 'ps', '-q'], { encoding: 'utf8' }).trim()
     const config = JSON.parse(
       execFileSync('docker', [...composeArgs, 'config', '--format', 'json'], { encoding: 'utf8' }),
     ) as { services: Record<string, { ports?: { published?: string }[] }> }
-    // A range or an unpublished port is no single port to probe.
     ports = Object.values(config.services).flatMap((service) =>
-      (service.ports ?? []).flatMap(({ published }) =>
-        published && /^\d+$/.test(published) ? [Number(published)] : [],
-      ),
+      (service.ports ?? []).map(({ published }) => Number(published)).filter(Boolean),
     )
   } catch {
     console.error('Could not run Docker Compose. Install Docker with Compose and start its engine.')
     process.exit(1)
   }
-  // Which service answers on each is checked once the stack is up.
-  for (const [name, origin] of Object.entries({ BRIDGE, NOTARY })) {
-    const port = Number(new URL(origin).port)
-    if (!ports.includes(port)) {
-      console.error(`local.ts's ${name} port ${port} is not one compose.yaml publishes.`)
-      process.exit(1)
-    }
-  }
-  // The app's own port, when this process serves it.
   if (process.argv.includes('--app')) ports.push(Number(new URL(APP_ORIGIN).port))
   const open = await Promise.all(ports.map(listening))
   const taken = ports.filter((_, index) => open[index])
-  if (taken.length && own) {
-    console.error(
-      `This checkout's stack already runs (Compose project ${project}): stop that \`pnpm dev\`, or run \`docker compose -p ${project} down\`.`,
-    )
-    process.exit(1)
-  }
   if (taken.length) {
     console.error(
-      `Already in use on 127.0.0.1: port ${taken.join(', ')}. Stop what holds it (see docker ps) and retry.`,
+      `Already in use on 127.0.0.1: port ${taken.join(', ')}. Stop what holds it (a running \`pnpm dev\`? see docker ps) and retry.`,
     )
     process.exit(1)
   }
@@ -158,26 +130,6 @@ if (process.argv.includes('--app')) {
         /* Compose may still be pulling or starting the Bridge. */
       }
       await delay(500)
-    }
-    // Readiness above proves BRIDGE is the Bridge; only the notary serves /healthcheck.
-    if (!stopping) {
-      const notary = await fetch(
-        new URL('/healthcheck', NOTARY.replace('localhost', '127.0.0.1')),
-        {
-          signal: AbortSignal.timeout(2000),
-        },
-      )
-        .then(async (response) => {
-          await response.body?.cancel()
-          return response.status
-        })
-        .catch(() => 0)
-      if (notary !== 200) {
-        console.error(
-          `local.ts's NOTARY ${NOTARY} does not answer as the notary (GET /healthcheck).`,
-        )
-        stop(1)
-      }
     }
     if (!stopping) {
       frontend = await createViteServer({ configFile: join(root, 'vite.config.ts') })

@@ -1,57 +1,31 @@
 import type { Page } from '@playwright/test'
 import * as OTPAuth from 'otpauth'
 import { drivePopup, type Pause } from './popup.ts'
-import type { GitHubAccount } from './settings.ts'
 
-/** The longest a fill or click may take; a navigation gets twice that. */
-const STEP_TIMEOUT = 5_000
-/** How long a submitted login form may still show before it counts as refused. */
-const LOGIN_SETTLE = 15_000
-
-/** Codes the TOTP step submits before a refusal fails the run. */
-const TOTP_ATTEMPTS = 2
-/** How long a submitted code's form may still show before it counts as refused. */
-const TOTP_SETTLE = 5_000
+export interface GitHubAccount {
+  username: string
+  password: string
+  /** The base32 key of the account's authenticator app. */
+  totpSecret: string
+}
 
 /** The TOTP code for the base32 `secret`, spaces and case aside, at `time` (ms). */
 export function totp(secret: string, time = Date.now()): string {
-  let key: OTPAuth.Secret
-  try {
-    key = OTPAuth.Secret.fromBase32(secret.replace(/\s/g, '').toUpperCase())
-  } catch {
-    throw new Error('GH_TEST_ALICE_TOTP_SECRET is not a base32 key')
-  }
-  return new OTPAuth.TOTP({ secret: key, algorithm: 'SHA1', digits: 6, period: 30 }).generate({
-    timestamp: time,
-  })
+  return new OTPAuth.TOTP({
+    secret: OTPAuth.Secret.fromBase32(secret.replace(/\s/g, '').toUpperCase()),
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+  }).generate({ timestamp: time })
 }
 
-/** GitHub's flash message on the page, whitespace collapsed, up to 200 characters. */
-async function flashText(popup: Page): Promise<string> {
-  const flash = await popup
-    .locator('.flash-error, .flash-warn, #js-flash-container')
-    .first()
-    .innerText({ timeout: 1_000 })
-    .catch(() => '')
-  return flash.split(/\s+/).join(' ').trim().slice(0, 200)
-}
-
-/** What the login has done so far; each handler reads and updates it. */
+/** What the login has done so far: the request a restart reopens, the login filled, the
+ * step whose code went, the last click (none again within 5 s), and back-off counts. */
 interface Progress {
-  /** The first GitHub page of the run: the authorization request, which a restart reopens. */
   start?: string
-  /** When the login form was last submitted. */
-  filledAt?: number
-  /** The 30-second step whose code was last submitted, and how many were. */
+  filled: boolean
   totpStep?: number
-  totpAttempts: number
-  totpSubmittedAt?: number
-  /** GitHub's message for the last refused code. */
-  totpRefusal?: string
-  /** When the authorize button was last clicked; it is not clicked again within 5 s. */
-  authorizedAt: number
-  /** When the 2FA checkup was last skipped; it is not skipped again within 5 s. */
-  skippedCheckupAt: number
+  clickedAt: number
   rateLimited: number
   errored: number
 }
@@ -69,102 +43,37 @@ async function backOff(
   await pause(step * count, `${what} ${count} times`)
 }
 
-async function onErrorPage(popup: Page, progress: Progress, pause: Pause) {
-  await backOff(progress, 'errored', 10_000, 'GitHub answered its error page', pause)
-  // Reopening the request keeps the popup on github.com until GitHub redirects.
-  if (progress.start)
-    await popup.goto(progress.start, { timeout: STEP_TIMEOUT * 2 }).catch(() => {})
-  progress.filledAt = undefined
-  progress.totpStep = undefined
+/** Click `target` unless a button was clicked in the last 5 s; the page may be leaving. */
+async function clickOnce(progress: Progress, target: ReturnType<Page['locator']>) {
+  if (Date.now() - progress.clickedAt < 5_000) return
+  progress.clickedAt = Date.now()
+  await target.click({ timeout: 5_000 }).catch(() => {})
 }
 
-async function onLogin(
-  popup: Page,
-  account: GitHubAccount,
-  progress: Progress,
-  text: string,
-  pause: Pause,
-) {
-  if (text.includes('too many requests') || text.includes('rate limit')) {
-    await backOff(progress, 'rateLimited', 30_000, 'GitHub rate-limited the login', pause)
-    await popup.reload({ timeout: STEP_TIMEOUT * 2 }).catch(() => {})
-    progress.filledAt = undefined
-    return
-  }
-  if (text.includes('incorrect username or password'))
-    throw new Error('GitHub refused the username or password: check GH_TEST_ALICE_*')
-  if (!(await popup.locator('#login_field').count())) return
-  // The form still showing well after a submit is GitHub refusing the sign-in.
-  if (progress.filledAt !== undefined) {
-    if (Date.now() - progress.filledAt < LOGIN_SETTLE) return
-    const flash = await flashText(popup)
-    throw new Error(`GitHub showed the login form again after sign-in: ${flash || 'no message'}`)
-  }
-  // A step that fails is tried again on the next poll, inside drivePopup's budget.
-  try {
-    await popup.fill('#login_field', account.username, { timeout: STEP_TIMEOUT })
-    await popup.fill('#password', account.password, { timeout: STEP_TIMEOUT })
-    await popup.click('input[type=submit][name=commit]', { timeout: STEP_TIMEOUT })
-  } catch {
-    return
-  }
-  progress.filledAt = Date.now()
+async function onLogin(popup: Page, account: GitHubAccount, progress: Progress) {
+  if (progress.filled || !(await popup.locator('#login_field').count())) return
+  progress.filled = true
+  await popup.fill('#login_field', account.username)
+  await popup.fill('#password', account.password)
+  await popup.click('input[type=submit][name=commit]')
 }
 
+/** One code per 30-second step, submitted once: GitHub submits a full code itself. */
 async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
-  // One clock read for the step and its code.
   const now = Date.now()
   const step = Math.floor(now / 30_000)
-  if (!(await popup.locator('#app_totp').count())) return
-  // A submitted code gets time to land before its form showing counts as a refusal.
-  if (now - (progress.totpSubmittedAt ?? 0) < TOTP_SETTLE || progress.totpStep === step) return
-  // The code form still showing, settled and in a later step: GitHub refused the code.
-  if (progress.totpAttempts >= TOTP_ATTEMPTS)
-    throw new Error(
-      `GitHub refused ${TOTP_ATTEMPTS} TOTP codes${progress.totpRefusal ? ` (${progress.totpRefusal})` : ''}: check GH_TEST_ALICE_TOTP_SECRET and this host's clock`,
-    )
-  const code = totp(account.totpSecret, now)
-  try {
-    await popup.fill('#app_totp', code, { timeout: STEP_TIMEOUT })
-  } catch {
-    return
-  }
-  // GitHub submits the code on its own once six digits are in; the button is
-  // pressed only for a form still there after a moment, so a code goes once.
-  const submitted = await popup
+  if (progress.totpStep === step || !(await popup.locator('#app_totp').count())) return
+  progress.totpStep = step
+  await popup.fill('#app_totp', totp(account.totpSecret, now))
+  const left = await popup
     .waitForURL((url) => url.pathname !== '/sessions/two-factor/app', { timeout: 3_000 })
     .then(() => true)
     .catch(() => false)
-  if (!submitted)
+  if (!left)
     await popup
       .locator('button[type=submit]')
       .click({ timeout: 2_000 })
       .catch(() => {})
-  progress.totpStep = step
-  progress.totpSubmittedAt = Date.now()
-  progress.totpAttempts++
-}
-
-async function onAuthorize(popup: Page, progress: Progress, text: string) {
-  const authorize = popup.locator("button[name='authorize'][value='1']")
-  if (await authorize.count()) {
-    if (Date.now() - progress.authorizedAt < 5_000) return
-    progress.authorizedAt = Date.now()
-    // The page may already be leaving for the redirect; the next poll sees where it went.
-    await authorize.click({ timeout: 5_000 }).catch(() => {})
-  } else if (text.includes('redirect_uri') || text.includes('be careful'))
-    throw new Error(
-      "GitHub refused the authorization request: the app's callback URL does not match",
-    )
-}
-
-async function onTwoFactorCheckup(popup: Page, progress: Progress) {
-  if (Date.now() - progress.skippedCheckupAt < 5_000) return
-  progress.skippedCheckupAt = Date.now()
-  await popup
-    .getByText('skip 2FA verification')
-    .click({ timeout: 5_000 })
-    .catch(() => {})
 }
 
 /** Act on one GitHub page. */
@@ -181,43 +90,42 @@ async function onGitHubPage(
   if (
     text.includes("couldn't respond to your request in time") ||
     text.includes('something went wrong')
-  )
-    return onErrorPage(popup, progress, pause)
-  if (path === '/login' || path === '/session')
-    return onLogin(popup, account, progress, text, pause)
-  if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress)
-  if (path.startsWith('/sessions/two-factor')) {
-    // The code's POST target answering a refusal: keep GitHub's reason first.
-    if (text.includes('failed'))
-      progress.totpRefusal = (await flashText(popup)) || 'two-factor authentication failed'
-    await popup
-      .goto('https://github.com/sessions/two-factor/app', { timeout: STEP_TIMEOUT * 2 })
-      .catch(() => {})
-    return
-  }
-  // GitHub's periodic 2FA checkup, served in place of the page asked for.
-  if (text.includes('verify your two-factor authentication'))
-    return onTwoFactorCheckup(popup, progress)
-  if (path === '/login/oauth/authorize') return onAuthorize(popup, progress, text)
-  if (path.startsWith('/sessions/verified-device'))
+  ) {
+    await backOff(progress, 'errored', 10_000, 'GitHub answered its error page', pause)
+    // Reopening the request keeps the popup on github.com until GitHub redirects.
+    if (progress.start) await popup.goto(progress.start).catch(() => {})
+    progress.filled = false
+    progress.totpStep = undefined
+  } else if (path === '/login' || path === '/session') {
+    if (text.includes('too many requests') || text.includes('rate limit')) {
+      await backOff(progress, 'rateLimited', 30_000, 'GitHub rate-limited the login', pause)
+      await popup.reload().catch(() => {})
+      progress.filled = false
+    } else await onLogin(popup, account, progress)
+  } else if (path === '/sessions/two-factor/app') await onTotp(popup, account, progress)
+  else if (path.startsWith('/sessions/two-factor'))
+    await popup.goto('https://github.com/sessions/two-factor/app').catch(() => {})
+  else if (path.startsWith('/sessions/verified-device'))
     throw new Error('GitHub asked for device verification: the account has no TOTP method')
+  // GitHub's periodic 2FA checkup, served in place of the page asked for.
+  else if (text.includes('verify your two-factor authentication'))
+    await clickOnce(progress, popup.getByText('skip 2FA verification'))
+  else if (path === '/login/oauth/authorize') {
+    const authorize = popup.locator("button[name='authorize'][value='1']")
+    if (await authorize.count()) await clickOnce(progress, authorize)
+    else if (text.includes('redirect_uri') || text.includes('be careful'))
+      throw new Error(
+        "GitHub refused the authorization request: the app's callback URL does not match",
+      )
+  }
 }
 
 /**
  * Sign in and authorize on GitHub in `popup`, until GitHub redirects it to
- * Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/github.rs:
- * fill the login form once, answer the authenticator step once per 30-second
- * code, skip the 2FA checkup, approve the OAuth app, back off on rate-limit pages, and start the
- * authorization over on GitHub's error page.
+ * Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/github.rs.
  */
 export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
-  const progress: Progress = {
-    authorizedAt: 0,
-    skippedCheckupAt: 0,
-    totpAttempts: 0,
-    rateLimited: 0,
-    errored: 0,
-  }
+  const progress: Progress = { filled: false, clickedAt: 0, rateLimited: 0, errored: 0 }
   await drivePopup(popup, {
     name: 'GitHub',
     onHost: (url) => url.hostname === 'github.com',

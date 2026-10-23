@@ -1,9 +1,8 @@
 import { setTimeout as sleep } from 'node:timers/promises'
-import type { Page, Request } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { BRIDGE } from '../local.ts'
-import { DRIVER } from './budgets.ts'
 
-const BUDGET_MS = DRIVER
+const BUDGET_MS = 180_000
 
 /** Where every platform returns the popup: the local Bridge's OAuth callback. */
 const CALLBACK = new URL('/auth/callback', BRIDGE)
@@ -28,49 +27,27 @@ const isCallback = (url: string) => {
   return parsed?.origin === CALLBACK.origin && parsed.pathname === CALLBACK.pathname
 }
 
-const returns = new WeakMap<Page, { returned: boolean }>()
+const returned = new WeakSet<Page>()
 
-/**
- * Watch `popup` for its return to Bridge's callback, from now on. Call it as
- * the popup appears (in the `page` event's predicate): a platform that needs
- * no consent redirects at once. A request, not a committed page, counts: the
- * callback may redirect on at once.
- */
-export function watchReturn(popup: Page): { returned: boolean } {
-  let watch = returns.get(popup)
-  if (!watch) {
-    const state = { returned: isCallback(popup.url()) }
-    popup.on('request', (request: Request) => {
-      if (request.isNavigationRequest() && isCallback(request.url())) state.returned = true
-    })
-    returns.set(popup, state)
-    watch = state
-  }
-  return watch
-}
-
-/** What a step that outlasts the driver's budget resolves to. */
-const LATE: unique symbol = Symbol('late')
+/** Note `popup`'s navigation to Bridge's callback from now on; call it as the popup appears. */
+export const watchReturn = (popup: Page) =>
+  popup.on('request', (request) => {
+    if (request.isNavigationRequest() && isCallback(request.url())) returned.add(popup)
+  })
 
 const failures = new WeakMap<Page, () => Promise<string | undefined>>()
 
-/**
- * Let `drivePopup` stop early when the app's run for `popup` failed: `check`
- * resolves to the app's reason, or undefined while the run goes on.
- */
+/** Let `drivePopup` stop with the app's reason once `check` reports its run failed. */
 export const watchAppFailure = (popup: Page, check: () => Promise<string | undefined>) =>
   failures.set(popup, check)
 
 /**
  * Drive `popup` through a platform's pages until the platform sends it to
- * Bridge's callback, after which Callback and Prover take over. Leaving the
- * platform for anywhere else is not a return: the driver keeps waiting, and
- * fails on its budget naming the page it stopped on.
+ * Bridge's callback; fail on the budget, naming the page it stopped on.
  */
 export async function drivePopup(popup: Page, driver: Driver) {
   const deadline = Date.now() + BUDGET_MS
-  const watch = watchReturn(popup)
-  const returned = () => watch.returned || (!popup.isClosed() && isCallback(popup.url()))
+  const hasReturned = () => returned.has(popup) || (!popup.isClosed() && isCallback(popup.url()))
   const pause: Pause = async (ms, reason) => {
     if (Date.now() + ms > deadline)
       throw new Error(
@@ -78,24 +55,9 @@ export async function drivePopup(popup: Page, driver: Driver) {
       )
     await sleep(ms)
   }
-  /**
-   * `work`'s value, or LATE once the budget runs out first: late work is left
-   * behind, its rejection handled.
-   */
-  const withinBudget = async <T>(work: Promise<T>): Promise<T | typeof LATE> => {
-    work.catch(() => {})
-    const budget = new AbortController()
-    return Promise.race([
-      work,
-      sleep(Math.max(0, deadline - Date.now()), LATE, { signal: budget.signal }).catch(
-        (): typeof LATE => LATE,
-      ),
-    ]).finally(() => budget.abort())
-  }
   while (Date.now() < deadline) {
-    if (returned()) return
-    const failed = await withinBudget(failures.get(popup)?.() ?? Promise.resolve(undefined))
-    if (failed === LATE) break
+    if (hasReturned()) return
+    const failed = await failures.get(popup)?.()
     if (failed)
       throw new Error(`The app's run failed during the ${driver.name} authorization: ${failed}`)
     if (popup.isClosed())
@@ -109,24 +71,14 @@ export async function drivePopup(popup: Page, driver: Driver) {
         .innerText({ timeout: 2_000 })
         .catch(() => '')
       const text = visible.split(/\s+/).join(' ').trim().toLowerCase().replaceAll('’', "'")
-      // A step that outlasts the budget is left behind: the error names the page.
-      if ((await withinBudget(driver.step(url, text, pause))) === LATE) break
+      await driver.step(url, text, pause)
     }
     await sleep(250)
   }
-  if (returned()) return
+  if (hasReturned()) return
   throw new Error(
     `No ${driver.name} authorization in ${BUDGET_MS / 1000} s; stopped on ${popup.url()}`,
   )
-}
-
-/** Evaluate `expression` in `popup`, or `fallback` when it fails or takes over 5 s. */
-export function evaluateWithin<T>(popup: Page, expression: string, fallback: T): Promise<T> {
-  const timer = new AbortController()
-  return Promise.race([
-    popup.evaluate<T>(expression).catch(() => fallback),
-    sleep(5_000, fallback, { signal: timer.signal }).catch(() => fallback),
-  ]).finally(() => timer.abort())
 }
 
 /**
@@ -141,7 +93,7 @@ export async function clickFound(popup: Page, find: string): Promise<boolean> {
   target.setAttribute('data-libid-click', '1');
   return true;
 })()`
-  if (!(await evaluateWithin(popup, mark, false))) return false
+  if (!(await popup.evaluate(mark).catch(() => false))) return false
   await popup
     .locator('[data-libid-click="1"]')
     .click({ timeout: 5_000 })

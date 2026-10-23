@@ -1,70 +1,54 @@
 import { defineConfig, devices } from '@playwright/test'
-import { ACTION, NAVIGATION, STACK_START, STACK_STOP, TEST } from './e2e/budgets.ts'
-import { preflight } from './e2e/preflight.ts'
-import {
-  ACCOUNT_VARIABLES,
-  envFile,
-  loadEnvFile,
-  runnablePlatforms,
-  tooling,
-  unknownKeys,
-} from './e2e/settings.ts'
+import { checkSettings, env, loadEnvFile, runnablePlatforms, settingPath } from './e2e/settings.ts'
 import { APP_ORIGIN } from './local.ts'
 
-// Test secrets from a dotenv file when LIBID_TEST_ENV_FILE names one; values
-// set in the environment win. Nothing is printed. The runner process
-// checks them once; its workers load this file too.
-const runner = process.env.TEST_WORKER_INDEX === undefined
-const file = envFile()
-if (file) {
-  const typos = unknownKeys(loadEnvFile(file))
-  if (runner && typos.length)
-    console.warn(`${file}: no live test reads ${typos.join(', ')}; check the spelling.`)
-}
-if (runner) preflight()
-const { proxy, headed, ci, stackLogs } = tooling()
-// The services' output carries what the job log must not: CI writes it to a
-// file it scans before upload.
-if (ci && !stackLogs)
-  throw new Error("CI runs need LIBID_STACK_LOGS: a file for the services' output")
+// Test secrets from the file LIBID_TEST_ENV_FILE names; exported values win.
+// The runner process checks them once; its workers load this file too.
+loadEnvFile()
+if (process.env.TEST_WORKER_INDEX === undefined) checkSettings()
+const stackLogs = env('LIBID_STACK_LOGS') && settingPath(env('LIBID_STACK_LOGS')!)
+const proxy = env('LIBID_TEST_PROXY')
+const ci = !!env('CI')
+
+/**
+ * The stack's environment: only what the build, Docker and services.ts need.
+ * Playwright merges in its own environment, so every other variable, the test
+ * accounts' secrets among them, is set empty.
+ */
+const KEPT = /^(PATH|HOME|USER|TMPDIR|LANG|CI|PNPM_HOME|XDG_\w+|DOCKER_\w+)$/
+const stackEnv = Object.fromEntries(
+  Object.entries(process.env).map(([name, value]) => [name, KEPT.test(name) ? (value ?? '') : '']),
+)
 
 /** Live: real platforms, real notary, real Bridge; no chain. */
 export default defineConfig({
   testDir: 'e2e',
   testMatch: '*.live.spec.ts',
   workers: 1,
-  // Each test's own budgets, summed in e2e/budgets.ts.
-  timeout: TEST,
+  // A test: page load and Ready (2 min), the popup (1 min), its driver (3 min)
+  // and the outcome (8 min), with margin.
+  timeout: 15 * 60_000,
   reporter: [['list']],
-  // One command: start the services and the app, test, then stop both. The
-  // run never reuses a running stack: services.ts refuses taken ports.
-  // No test that will run: nothing to start.
+  // Start the services and the app only when a test will run, then stop both.
   webServer: runnablePlatforms().length
     ? {
         // exec: Playwright's SIGTERM reaches services.ts, which brings the stack
         // down. With LIBID_STACK_LOGS, the build's output goes there too.
         command: `pnpm build:deps${stackLogs ? ' >>"$LIBID_STACK_LOGS" 2>&1' : ''} && exec node services.ts --app`,
-        // The stack gets none of the test accounts' secrets; the scan stays a backstop.
-        env: {
-          ...(process.env as Record<string, string>),
-          ...Object.fromEntries(ACCOUNT_VARIABLES.map((name) => [name, ''])),
-          ...(stackLogs && { LIBID_STACK_LOGS: stackLogs }),
-        },
+        env: { ...stackEnv, ...(stackLogs && { LIBID_STACK_LOGS: stackLogs }) },
         url: APP_ORIGIN,
         reuseExistingServer: false,
-        timeout: STACK_START,
-        gracefulShutdown: { signal: 'SIGTERM', timeout: STACK_STOP },
-        // Under CI only services.ts' own messages reach the job log.
-        stdout: ci ? 'ignore' : 'pipe',
+        timeout: 10 * 60_000,
+        gracefulShutdown: { signal: 'SIGTERM', timeout: 2 * 60_000 },
       }
     : undefined,
   use: {
     ...devices['Desktop Chrome'],
     baseURL: APP_ORIGIN,
-    headless: !headed,
+    headless: !env('HEADED'),
     // A hang ends on the action that hangs, not on the test's timeout.
-    actionTimeout: ACTION,
-    navigationTimeout: NAVIGATION,
+    actionTimeout: 30_000,
+    navigationTimeout: 60_000,
     // Automation X and Google can see makes them challenge; see e2e/person.ts.
     launchOptions: { args: ['--disable-blink-features=AutomationControlled'] },
     // LIBID_TEST_PROXY routes the browser's traffic, loopback aside, through a
