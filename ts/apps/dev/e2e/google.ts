@@ -33,7 +33,7 @@ export async function authorizeOnGoogle(popup: Page, email: string) {
       const login = popup.locator('input[type=password],input[type=email],input[name=identifier]')
       if (await login.filter({ visible: true }).count())
         throw new Error(
-          'Google asked to sign in: the saved session has expired. Renew it with `ceremony export google` (libid-server-rs).',
+          "Google asked to sign in: the saved session has expired. Renew it by hand through the proxy (README, Google's session).",
         )
       // The account's row, else a Continue or Allow button.
       await click(
