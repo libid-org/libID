@@ -128,21 +128,22 @@ export function parseExport(
 
 /**
  * The platform's cookies of a saved session setting, or undefined when it is
- * not set. `required` names cookies of which at least one must be present for
- * the export to hold a session.
+ * not set. `signedIn` says, as the Rust suite's signed_in does, whether the
+ * cookies hold a session; `needs` names what it looks for.
  */
 function cookiesOf(
   saved: SavedSession | undefined,
   label: string,
   keep: (host: string) => boolean,
-  required: string[],
+  signedIn: (cookie: Stored) => boolean,
+  needs: string,
 ): Stored[] | undefined {
   if (!saved) return undefined
   const cookies = parseExport(exportText(saved), keep)
   if (!cookies)
     throw new Error(`The saved ${label} session is not a JSON cookie list or { cookies }`)
-  if (!cookies.some((cookie) => required.includes(cookie.name)))
-    throw new Error(`The saved ${label} session has none of ${required.join(', ')} unexpired`)
+  if (!cookies.some(signedIn))
+    throw new Error(`The saved ${label} session has no unexpired ${needs}`)
   return cookies
 }
 
@@ -152,7 +153,14 @@ function cookiesOf(
  * ceremony-tests, which lives on its feat/live-ceremony-tests branch
  * (libid-server-rs PR #12).
  */
-export const xSession = () => cookiesOf(settings.xSession(), 'X_TEST_ALICE', onX, ['auth_token'])
+export const xSession = () =>
+  cookiesOf(
+    settings.xSession(),
+    'X_TEST_ALICE',
+    onX,
+    (cookie) => cookie.name === 'auth_token',
+    'auth_token',
+  )
 
 /**
  * The saved Google session, from GOOGLE_TEST_ALICE_COOKIES or
@@ -162,11 +170,16 @@ export const xSession = () => cookiesOf(settings.xSession(), 'X_TEST_ALICE', onX
  * sign-in in an automated browser, but honours a session made elsewhere.
  */
 export const googleSession = () =>
-  cookiesOf(settings.googleSession(), 'GOOGLE_TEST_ALICE', onGoogle, [
-    'SID',
-    '__Secure-1PSID',
-    '__Secure-3PSID',
-  ])
+  cookiesOf(
+    settings.googleSession(),
+    'GOOGLE_TEST_ALICE',
+    onGoogle,
+    // A sign-in accounts.google.com honours (google.rs signed_in).
+    (cookie) =>
+      cookie.domain.endsWith('accounts.google.com') &&
+      (cookie.name === 'LSID' || cookie.name === '__Host-1PLSID'),
+    'LSID or __Host-1PLSID on accounts.google.com',
+  )
 
 const SAME_SITE = new Map<string, 'Strict' | 'Lax' | 'None'>([
   ['strict', 'Strict'],
