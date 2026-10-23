@@ -3,12 +3,17 @@
 // every value it holds (its cookies' and, for a storage state, its origins'
 // localStorage values), each also URL-encoded and JSON-escaped. A session
 // that does not decode is still looked for as set. Paths are the arguments; a
-// missing file is skipped. Exit 2: a secret was found; 3: under CI, there was
-// none to look for. Nothing secret is printed.
+// missing file is skipped. Settings come from the environment and the file
+// LIBID_TEST_ENV_FILE names, as settings.ts reads them. Exit 2: a secret was
+// found; 3: under CI, there was none to look for; 4: a *_COOKIES_FILE could
+// not be read. Nothing secret is printed.
 import { existsSync, readFileSync } from 'node:fs'
 import { settingPath } from '../paths.ts'
 import { exportCookies } from './session.ts'
-import { SCANNED, tooling } from './settings.ts'
+import { envFile, loadEnvFile, SCANNED, tooling } from './settings.ts'
+
+const settingsFile = envFile()
+if (settingsFile) loadEnvFile(settingsFile)
 
 const environment = (name: string) => process.env[name]
 
@@ -45,16 +50,17 @@ function heldValues(text: string): unknown[] {
 function secretsOf(name: string): unknown[] {
   const value = environment(name)
   if (!value) return []
-  let text: string
-  try {
-    if (name.endsWith('_COOKIES_FILE'))
+  if (name.endsWith('_COOKIES_FILE')) {
+    // A session file the scan cannot read could hold anything: fail closed.
+    try {
       return heldValues(readFileSync(settingPath(environment, value)!, 'utf8'))
-    if (!name.endsWith('_COOKIES')) return [value]
-    text = Buffer.from(value.trim(), 'base64').toString('utf8')
-  } catch {
-    return []
+    } catch {
+      console.error(`Cannot read the file ${name} names, so cannot scan for its values`)
+      process.exit(4)
+    }
   }
-  return [value.trim(), ...heldValues(text)]
+  if (!name.endsWith('_COOKIES')) return [value]
+  return [value.trim(), ...heldValues(Buffer.from(value.trim(), 'base64').toString('utf8'))]
 }
 
 /** A secret as written, URL-encoded and JSON-escaped. */

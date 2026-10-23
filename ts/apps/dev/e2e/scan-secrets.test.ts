@@ -11,6 +11,7 @@ import { SCANNED } from './settings.ts'
 const SCRIPT = fileURLToPath(new URL('./scan-secrets.ts', import.meta.url))
 const FOUND = 2
 const NOTHING_TO_LOOK_FOR = 3
+const UNREADABLE = 4
 const directory = mkdtempSync(join(tmpdir(), 'scan-secrets-'))
 after(() => rmSync(directory, { recursive: true, force: true }))
 const base64 = (text: string) => Buffer.from(text).toString('base64')
@@ -89,4 +90,21 @@ test('values under 8 characters are not looked for; a clean log passes', () => {
 test('under CI, a scan with no secret to look for fails', () => {
   assert.equal(scan('clean', { CI: 'true' }), NOTHING_TO_LOOK_FOR)
   assert.equal(scan('clean', {}), 0)
+})
+
+test('a session file the scan cannot read fails it, naming the variable only', () => {
+  const missingFile = join(directory, 'no-such-session.json')
+  const run = spawnSync(process.execPath, [SCRIPT, file('clean')], {
+    env: { PATH: process.env.PATH, X_TEST_ALICE_COOKIES_FILE: missingFile },
+    encoding: 'utf8',
+  })
+  assert.equal(run.status, UNREADABLE)
+  assert.match(run.stderr, /X_TEST_ALICE_COOKIES_FILE/)
+  assert.doesNotMatch(run.stderr, /no-such-session/)
+})
+
+test('settings in the env file are scanned too, its relative paths beside it', () => {
+  const sessionFile = file(cookies('ENVFILE-MARKER-1'))
+  const envFile = file(`X_TEST_ALICE_COOKIES_FILE=${sessionFile.split('/').pop()}\n`)
+  assert.equal(scan('x ENVFILE-MARKER-1 y', { LIBID_TEST_ENV_FILE: envFile }), FOUND)
 })
