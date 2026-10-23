@@ -118,7 +118,8 @@ LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live
 
 The variables carry the names libid-server-rs' ceremony-tests uses, so one
 `.env.test` serves both suites; keep it outside the repository, or name it
-`.env.test`, which git ignores. A test whose variables are missing is skipped.
+`.env.test`, which git ignores. Unless `LIBID_LIVE_PLATFORMS` lists it, a
+platform whose variables are missing is skipped.
 
 | Variable | Platform | What |
 |---|---|---|
@@ -129,10 +130,9 @@ The variables carry the names libid-server-rs' ceremony-tests uses, so one
 | `GOOGLE_TEST_ALICE_EMAIL` | Google | The test account. |
 | `GOOGLE_TEST_ALICE_COOKIES` or `GOOGLE_TEST_ALICE_COOKIES_FILE` | Google | A saved session, as for X (`ceremony export google`). |
 | `LIBID_TEST_ENV_FILE` | — | A dotenv file with the variables above; exported values win. |
-| `LIBID_LIVE_PLATFORMS` | — | Comma-separated platforms to prove, such as `github,x`; all three when unset. |
-| `LIBID_REQUIRE_LIVE` | — | `1` or `true`: a missing variable fails the run instead of skipping. |
+| `LIBID_LIVE_PLATFORMS` | — | Comma-separated platforms to prove, such as `github,x`; each one listed must have its variables. Unset, every platform with its variables runs. |
 | `LIBID_TEST_PROXY` | — | A proxy for the browser's traffic, loopback aside. |
-| `LIBID_STACK_LOGS` | — | A file the build's and the services' output is appended to. |
+| `LIBID_STACK_LOGS` | — | A file all of the stack's output, the build's included, is appended to. |
 | `HEADED` | — | Set: show the browser. |
 
 In CI, [live-e2e.yml](../../../.github/workflows/live-e2e.yml) runs GitHub and X

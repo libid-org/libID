@@ -29,10 +29,8 @@ permissions:
   contents: read
 
 env:
-  # Where services.ts writes the stack's output; a failed job prints its end.
+  # Where the stack's output goes; a failed job prints its end.
   LIBID_STACK_LOGS: /tmp/libid-live-stack.log
-  # A missing secret fails the run instead of skipping the test.
-  LIBID_REQUIRE_LIVE: "1"
 
 jobs:
   ceremony:
@@ -47,8 +45,7 @@ jobs:
     concurrency:
       group: live-e2e-github-x
       cancel-in-progress: false
-    # Test step 45 (stack 10 + two tests of 15 + stop 2 = 42) + setup 15.
-    timeout-minutes: 60
+    timeout-minutes: 60 # test step 45: stack 10 + 2 tests × 15 + stop 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,11 +69,9 @@ jobs:
         run: pnpm -C ts/apps/dev test:live
 
       # The stack gets no secret (playwright.live.config.ts); GitHub masks them anyway.
-      - name: Stop the stack and show its log
+      - name: Show the stack log
         if: ${{ !cancelled() && steps.test.outcome != 'success' }}
-        run: |
-          docker compose ls -q | grep '^libid-dev-' | xargs -r -I{} docker compose -p {} down || true
-          tail -n 300 "$LIBID_STACK_LOGS" || true
+        run: tail -n 300 "$LIBID_STACK_LOGS" || true
 
       - name: Keep the screenshots
         if: ${{ !cancelled() && steps.test.outcome != 'success' }}
@@ -94,16 +89,14 @@ jobs:
     # Runs while LIBID_GOOGLE_RUNNER is `ssm`.
     if: >-
       vars.LIBID_GOOGLE_RUNNER == 'ssm' &&
-      (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' ||
-      (github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'))
     runs-on: ubuntu-latest
     concurrency:
       group: live-e2e-google
       cancel-in-progress: false
-    # Test step 30 (stack 10 + one test of 15 + stop 2 = 27) + setup and proxy 15.
-    timeout-minutes: 45
+    timeout-minutes: 45 # test step 30: stack 10 + 1 test × 15 + stop 2
     permissions:
       contents: read
       id-token: write
@@ -146,11 +139,9 @@ jobs:
           GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/dev test:live
 
-      - name: Stop the stack and show its log
+      - name: Show the stack log
         if: ${{ !cancelled() && steps.test.outcome != 'success' }}
-        run: |
-          docker compose ls -q | grep '^libid-dev-' | xargs -r -I{} docker compose -p {} down || true
-          tail -n 300 "$LIBID_STACK_LOGS" || true
+        run: tail -n 300 "$LIBID_STACK_LOGS" || true
 
       - name: Keep the screenshots
         if: ${{ !cancelled() && steps.test.outcome != 'success' }}
