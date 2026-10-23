@@ -66,6 +66,8 @@ if (!process.argv.includes('--ccdp')) {
       process.exit(1)
     }
   }
+  // The app's own port, when this process serves it.
+  if (process.argv.includes('--app')) ports.push(Number(new URL(APP_ORIGIN).port))
   const open = await Promise.all(ports.map(listening))
   const taken = ports.filter((_, index) => open[index])
   if (taken.length && own) {
