@@ -86,12 +86,10 @@ jobs:
     name: Google ceremony through an SSM-reached proxy (live)
     # Google challenges a session from a runner's address, so the browser goes
     # through an EC2 proxy LIBID_GOOGLE_PROXY_ROLE reaches only by SSM.
-    # Runs while LIBID_GOOGLE_RUNNER is `ssm`.
+    # Runs while LIBID_GOOGLE_RUNNER is `ssm`, on main only: the role trusts
+    # this workflow on main and nothing else.
     if: >-
-      vars.LIBID_GOOGLE_RUNNER == 'ssm' &&
-      (github.event_name != 'pull_request' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      github.actor != 'dependabot[bot]'))
+      vars.LIBID_GOOGLE_RUNNER == 'ssm' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     concurrency:
       group: live-e2e-google
