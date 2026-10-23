@@ -1,23 +1,23 @@
 // Start the real Bridge, notary and emitted CCDP; no OAuth mocks.
 // LIBID_STACK_LOGS names a file that takes every child's output, containers
-// included, appended; a relative path is relative to where pnpm was invoked.
+// included, appended; a relative path resolves as paths.ts says.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { openSync } from 'node:fs'
 import { connect } from 'node:net'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 import { APP_ORIGIN, BRIDGE, NOTARY } from './local.ts'
+import { settingPath } from './paths.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
-const logs = process.env.LIBID_STACK_LOGS
-  ? openSync(resolve(process.env.INIT_CWD ?? process.cwd(), process.env.LIBID_STACK_LOGS), 'a')
-  : undefined
+const logPath = settingPath((name) => process.env[name], process.env.LIBID_STACK_LOGS)
+const logs = logPath ? openSync(logPath, 'a') : undefined
 const stdio =
   logs === undefined ? 'inherit' : (['ignore', logs, logs] as ['ignore', number, number])
 /** Whether something on this host accepts connections on `port`. */

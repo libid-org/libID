@@ -3,9 +3,9 @@
 // are those of libid-server-rs' ceremony-tests (src/settings.rs), which reads
 // the same .env.test. An empty value is an absent one.
 import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
 import { parseEnv } from 'node:util'
 import type { PlatformId } from '@libid/ceremony'
+import { envFile as envFileOf, type Lookup, nonEmpty, settingPath } from '../paths.ts'
 
 /** Whether a section needs a variable; `insteadOf` stands in for that required one. */
 export type Need = 'required' | 'optional' | { insteadOf: string }
@@ -59,39 +59,28 @@ const RUST_SUITE_ONLY = [
   'GOOGLE_TEST_ALICE_PASSWORD',
 ]
 
-/** The value of a name, if it has one. */
-export type Lookup = (name: string) => string | undefined
+export type { Lookup } from '../paths.ts'
 
-const environment: Lookup = (name) => process.env[name] || undefined
-/** Whether `name` is absent from the environment, as opposed to set empty. */
-const unsetInEnvironment = (name: string) => process.env[name] === undefined
+const environment: Lookup = (name) => process.env[name]
 
-/** Where pnpm was invoked: what a relative path in a setting is relative to. */
-const invoked = (get: Lookup) => get('INIT_CWD') ?? process.cwd()
-
-/** The settings file LIBID_TEST_ENV_FILE names, relative to where pnpm was invoked. */
-export function envFile(get: Lookup = environment): string | undefined {
-  const file = get('LIBID_TEST_ENV_FILE')
-  return file && resolve(invoked(get), file)
-}
+/** Exported variables an env file does not override even when set empty. */
+const EMPTY_WINS = ['LIBID_LIVE_PLATFORMS']
 
 /**
- * Read the settings file into the environment: a value already set wins, and
- * an empty one counts as absent. Returns the file's keys.
+ * Read the settings file into the environment: an exported value wins; an
+ * empty one counts as absent, except for EMPTY_WINS. Returns the file's keys.
  */
 export function loadEnvFile(file: string): string[] {
   const values = parseEnv(readFileSync(file, 'utf8'))
-  for (const [name, value] of Object.entries(values))
-    if (environment(name) === undefined) process.env[name] = value
+  for (const [name, value] of Object.entries(values)) {
+    const exported = process.env[name]
+    if (exported === undefined || (exported === '' && !EMPTY_WINS.includes(name)))
+      process.env[name] = value
+  }
   return Object.keys(values)
 }
 
-/** A path a setting names: a relative one is the settings file's neighbour, else relative to where pnpm was invoked. */
-function settingPath(get: Lookup, path: string | undefined): string | undefined {
-  if (!path) return undefined
-  const settingsFile = envFile(get)
-  return resolve(settingsFile ? dirname(settingsFile) : invoked(get), path)
-}
+export const envFile = (get: Lookup = environment) => envFileOf(get)
 
 export interface Tooling {
   /** LIBID_LIVE_PLATFORMS, trimmed and checked, or every platform when it is unset. */
@@ -108,11 +97,11 @@ export interface Tooling {
 }
 
 /** A switch: on for `1` or `true`, in any case; off for anything else. */
-const flag = (get: Lookup, name: string) => /^(1|true)$/i.test(get(name) ?? '')
+const flag = (get: Lookup, name: string) => /^(1|true)$/i.test(nonEmpty(get, name) ?? '')
 
-export function tooling(get: Lookup = environment, unset = unsetInEnvironment): Tooling {
+export function tooling(get: Lookup = environment): Tooling {
   // Set but empty selects no platform; only an unset variable means all.
-  const listed = get('LIBID_LIVE_PLATFORMS') ?? (unset('LIBID_LIVE_PLATFORMS') ? undefined : '')
+  const listed = get('LIBID_LIVE_PLATFORMS')
   const names = listed
     ?.split(',')
     .map((name) => name.trim())
@@ -123,8 +112,8 @@ export function tooling(get: Lookup = environment, unset = unsetInEnvironment): 
   return {
     platforms: (names as PlatformId[] | undefined) ?? PLATFORMS,
     requireLive: flag(get, 'LIBID_REQUIRE_LIVE'),
-    proxy: get('LIBID_TEST_PROXY'),
-    stackLogs: settingPath(get, get('LIBID_STACK_LOGS')),
+    proxy: nonEmpty(get, 'LIBID_TEST_PROXY'),
+    stackLogs: settingPath(get, nonEmpty(get, 'LIBID_STACK_LOGS')),
     headed: flag(get, 'HEADED'),
     ci: flag(get, 'CI'),
   }
@@ -135,13 +124,15 @@ export const isLive = (platform: PlatformId) => tooling().platforms.includes(pla
 
 /** The required variables of `section` that `get` finds absent; `A (or B)` where B stands in. */
 export function missing(section: Section, get: Lookup = environment): string[] {
-  return VARIABLES.filter(([name, of, need]) => of === section && need === 'required' && !get(name))
+  return VARIABLES.filter(
+    ([name, of, need]) => of === section && need === 'required' && !nonEmpty(get, name),
+  )
     .map(([name]) => {
       const standIn = VARIABLES.find(
         ([, , need]) => typeof need === 'object' && need.insteadOf === name,
       )?.[0]
       if (!standIn) return name
-      return get(standIn) ? undefined : `${name} (or ${standIn})`
+      return nonEmpty(get, standIn) ? undefined : `${name} (or ${standIn})`
     })
     .filter((name): name is string => name !== undefined)
 }
@@ -189,9 +180,9 @@ export interface GitHubAccount {
 
 export const githubAccount = (get: Lookup = environment) =>
   read<GitHubAccount>('github-account', get, () => ({
-    username: get('GH_TEST_ALICE_USERNAME')!,
-    password: get('GH_TEST_ALICE_PASSWORD')!,
-    totpSecret: get('GH_TEST_ALICE_TOTP_SECRET')!,
+    username: nonEmpty(get, 'GH_TEST_ALICE_USERNAME')!,
+    password: nonEmpty(get, 'GH_TEST_ALICE_PASSWORD')!,
+    totpSecret: nonEmpty(get, 'GH_TEST_ALICE_TOTP_SECRET')!,
   }))
 
 /** The variables whose values the failure-output scan looks for. */
@@ -211,18 +202,18 @@ export const githubSecrets = (get: Lookup = environment) =>
   )
 
 export const xAccount = (get: Lookup = environment) =>
-  read('x-account', get, () => ({ username: get('X_TEST_ALICE_USERNAME')! }))
+  read('x-account', get, () => ({ username: nonEmpty(get, 'X_TEST_ALICE_USERNAME')! }))
 
 export const googleAccount = (get: Lookup = environment) =>
-  read('google-account', get, () => ({ email: get('GOOGLE_TEST_ALICE_EMAIL')! }))
+  read('google-account', get, () => ({ email: nonEmpty(get, 'GOOGLE_TEST_ALICE_EMAIL')! }))
 
 /** A saved session: base64 of the JSON cookie list, or a path to that JSON. */
 export type SavedSession = { encoded: string } | { path: string }
 
 function savedSession(prefix: string, get: Lookup): SavedSession | undefined {
-  const encoded = get(`${prefix}_COOKIES`)
+  const encoded = nonEmpty(get, `${prefix}_COOKIES`)
   if (encoded) return { encoded }
-  const file = get(`${prefix}_COOKIES_FILE`)
+  const file = nonEmpty(get, `${prefix}_COOKIES_FILE`)
   if (!file) return undefined
   return { path: settingPath(get, file)! }
 }
