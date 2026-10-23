@@ -4,9 +4,11 @@ ts/packages/*/node_modules/
 ts/apps/*/node_modules/
 ts/packages/*/dist/
 ts/apps/*/dist/
-# Local development environment files
+# Local development environment files and test secrets
 .env
 .env.local
+.env.*.local
+*.env.test
 
 # @libid/popup e2e bundles and Playwright output
 ts/packages/popup/e2e/dist/
