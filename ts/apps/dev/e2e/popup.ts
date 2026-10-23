@@ -49,6 +49,9 @@ export function watchReturn(popup: Page): { returned: boolean } {
   return watch
 }
 
+/** What a step that outlasts the driver's budget resolves to. */
+const LATE: unique symbol = Symbol('late')
+
 const failures = new WeakMap<Page, () => Promise<string | undefined>>()
 
 /**
@@ -75,9 +78,24 @@ export async function drivePopup(popup: Page, driver: Driver) {
       )
     await sleep(ms)
   }
+  /**
+   * `work`'s value, or LATE once the budget runs out first: late work is left
+   * behind, its rejection handled.
+   */
+  const withinBudget = async <T>(work: Promise<T>): Promise<T | typeof LATE> => {
+    work.catch(() => {})
+    const budget = new AbortController()
+    return Promise.race([
+      work,
+      sleep(Math.max(0, deadline - Date.now()), LATE, { signal: budget.signal }).catch(
+        (): typeof LATE => LATE,
+      ),
+    ]).finally(() => budget.abort())
+  }
   while (Date.now() < deadline) {
     if (returned()) return
-    const failed = await failures.get(popup)?.()
+    const failed = await withinBudget(failures.get(popup)?.() ?? Promise.resolve(undefined))
+    if (failed === LATE) break
     if (failed)
       throw new Error(`The app's run failed during the ${driver.name} authorization: ${failed}`)
     if (popup.isClosed())
@@ -92,16 +110,7 @@ export async function drivePopup(popup: Page, driver: Driver) {
         .catch(() => '')
       const text = visible.split(/\s+/).join(' ').trim().toLowerCase().replaceAll('’', "'")
       // A step that outlasts the budget is left behind: the error names the page.
-      const budget = new AbortController()
-      const step = driver.step(url, text, pause)
-      step.catch(() => {})
-      const late = await Promise.race([
-        step.then(() => false),
-        sleep(Math.max(0, deadline - Date.now()), true, { signal: budget.signal }).catch(
-          () => false,
-        ),
-      ]).finally(() => budget.abort())
-      if (late) break
+      if ((await withinBudget(driver.step(url, text, pause))) === LATE) break
     }
     await sleep(250)
   }

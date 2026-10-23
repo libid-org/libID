@@ -81,9 +81,9 @@ jobs:
       # session arriving from a runner's address ("Verify it's you"), which no
       # automation passes. The google-ssm job runs it through a proxy.
       # Its own timeout, so a run that hangs still reaches the step below: the
-      # stack's 10-minute start, up to three tests of 15 minutes (all the
+      # stack's 10-minute start, up to three tests of 16 minutes (all the
       # variable can select), and 2 minutes to stop the stack
-      # (playwright.live.config.ts): 57 minutes, with room to spare.
+      # (ts/apps/dev/e2e/budgets.ts): 60 minutes, with room to spare.
       - name: Prove identities end to end
         id: test
         timeout-minutes: 65
@@ -176,8 +176,8 @@ jobs:
           echo "Google sees ${ip:?the proxy did not answer; see $RUNNER_TEMP/port-forward.log}"
 
       # Its own timeout, so a run that hangs still reaches the step below: the
-      # stack's 10-minute start, one test of 15 minutes, and 2 minutes to stop
-      # the stack (playwright.live.config.ts): 27 minutes, with room to spare.
+      # stack's 10-minute start, one test of 16 minutes, and 2 minutes to stop
+      # the stack (ts/apps/dev/e2e/budgets.ts): 28 minutes, with room to spare.
       - name: Prove a Google identity end to end
         id: test
         timeout-minutes: 35

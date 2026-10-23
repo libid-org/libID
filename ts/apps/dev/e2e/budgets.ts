@@ -17,5 +17,17 @@ export const DRIVER = 180_000
 /** Proving in the browser, after the platform returns the popup. */
 export const OUTCOME = 8 * 60_000
 
-/** One test: the budgets above, 13.5 minutes, with margin. */
-export const TEST = 15 * 60_000
+/** The bounded steps one test performs, in order: 15 minutes in all. */
+export const TEST_STEPS = [
+  NAVIGATION, // the app's page load
+  READY,
+  ACTION, // the launch click
+  ACTION, // the popup's appearance
+  ACTION, // the run's id from its row
+  DRIVER,
+  OUTCOME,
+  ACTION, // the row's message
+]
+
+/** One test: its steps, with margin. */
+export const TEST = 16 * 60_000

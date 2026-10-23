@@ -4,16 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import type { PlatformId } from '@libid/ceremony'
-import {
-  ACTION,
-  DRIVER,
-  NAVIGATION,
-  OUTCOME,
-  READY,
-  STACK_START,
-  STACK_STOP,
-  TEST,
-} from './budgets.ts'
+import { STACK_START, STACK_STOP, TEST, TEST_STEPS } from './budgets.ts'
 import { missing, type Need, PLATFORM_SECTIONS, SCANNED, VARIABLES } from './settings.ts'
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8')
@@ -124,9 +115,9 @@ test("each job's failure-output step is given every scanned secret its test step
 
 test('each test step outlasts its worst case, and each job its step and setup', () => {
   const minutes = (ms: number) => ms / 60_000
-  const sum = NAVIGATION + READY + ACTION + DRIVER + OUTCOME
+  const sum = TEST_STEPS.reduce((total, step) => total + step, 0)
   assert.ok(
-    TEST >= sum,
+    TEST > sum,
     `the test timeout ${minutes(TEST)} min is under its budgets' ${minutes(sum)}`,
   )
   for (const name of JOBS) {
