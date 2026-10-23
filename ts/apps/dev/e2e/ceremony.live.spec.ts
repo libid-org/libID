@@ -1,10 +1,11 @@
 import type { PlatformId } from '@libid/ceremony'
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
+import { expectReady, launch, newestRun } from '../src/app.fixtures.ts'
 import { OUTCOME, READY } from './budgets.ts'
 import { authorizeOnGitHub } from './github.ts'
 import { authorizeOnGoogle } from './google.ts'
 import { presentAsPerson } from './person.ts'
-import { watchReturn } from './popup.ts'
+import { watchAppFailure, watchReturn } from './popup.ts'
 import { googleSession, restoreSession, xSession } from './session.ts'
 import {
   githubAccount,
@@ -56,16 +57,19 @@ async function proveThroughTheUi(
 ) {
   await page.goto('/')
   // A cold app loads the Bridge configuration and CCDP's version list first.
-  await expect(page.locator('#status')).toHaveText('Ready. Click a platform to start a ceremony.', {
-    timeout: READY,
-  })
-  const [popup] = await Promise.all([
-    // Watched from the moment it appears: a platform may return it at once.
-    context.waitForEvent('page', { predicate: (popup) => Boolean(watchReturn(popup)) }),
-    page.getByRole('button', { name, exact: true }).click(),
-  ])
-  const id = await page.locator('#history tr').first().getAttribute('data-ceremony-id')
+  await expectReady(page, READY)
+  // Watched from the moment it appears: a platform may return it at once.
+  context.on('page', watchReturn)
+  const popup = await launch(page, name)
+  const row = newestRun(page)
+  const id = await row.getAttribute('data-ceremony-id')
   expect(id).toBeTruthy()
+  // The driver stops with the app's reason once the run fails.
+  watchAppFailure(popup, async () => {
+    const status = await page.evaluate((id) => window.results.get(id)?.status, id!)
+    if (!status || status === 'accepted') return undefined
+    return (await row.locator('.run-status').textContent()) || status
+  })
   await authorize(popup)
 
   await expect
@@ -92,9 +96,7 @@ async function proveThroughTheUi(
     }
   }, id!)
   // A failed run's row says why.
-  const message = await page
-    .locator(`#history tr[data-ceremony-id="${id}"] .run-status`)
-    .textContent()
+  const message = await row.locator('.run-status').textContent()
   expect(outcome.status, message ?? undefined).toBe('accepted')
   expect(outcome.platformId).toBe(platformOf[name])
   // The account id as the platform sent it: GitHub's and X's are decimal, and

@@ -49,6 +49,15 @@ export function watchReturn(popup: Page): { returned: boolean } {
   return watch
 }
 
+const failures = new WeakMap<Page, () => Promise<string | undefined>>()
+
+/**
+ * Let `drivePopup` stop early when the app's run for `popup` failed: `check`
+ * resolves to the app's reason, or undefined while the run goes on.
+ */
+export const watchAppFailure = (popup: Page, check: () => Promise<string | undefined>) =>
+  failures.set(popup, check)
+
 /**
  * Drive `popup` through a platform's pages until the platform sends it to
  * Bridge's callback, after which Callback and Prover take over. Leaving the
@@ -68,6 +77,9 @@ export async function drivePopup(popup: Page, driver: Driver) {
   }
   while (Date.now() < deadline) {
     if (returned()) return
+    const failed = await failures.get(popup)?.()
+    if (failed)
+      throw new Error(`The app's run failed during the ${driver.name} authorization: ${failed}`)
     if (popup.isClosed())
       throw new Error(`The popup closed before ${driver.name} returned it to Bridge`)
     const url = URL.parse(popup.url())

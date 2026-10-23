@@ -77,8 +77,12 @@ export async function openApp(
   await serveBridge(page, platforms)
   await serveVersions(page, versions)
   await page.goto('/')
-  await expect(page.locator('#status')).toContainText('Ready.')
+  await expectReady(page)
 }
+
+/** Waits for the app to report itself ready to launch, up to `timeout` ms. */
+export const expectReady = (page: Page, timeout?: number) =>
+  expect(page.locator('#status')).toContainText('Ready.', { timeout })
 
 export const launchButton = (page: Page, name: string) =>
   page.getByRole('button', { name, exact: true })
