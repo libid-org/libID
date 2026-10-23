@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises'
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { BRIDGE } from '../local.ts'
 
 const BUDGET_MS = 180_000
@@ -10,7 +10,7 @@ const CALLBACK = new URL('/auth/callback', BRIDGE)
 /** Wait `ms` inside the driver's budget; reject with `reason` if the wait would pass it. */
 export type Pause = (ms: number, reason: string) => Promise<void>
 
-export interface Driver {
+interface Driver {
   /** The platform's name, for the timeout message. */
   name: string
   /** Whether `url` is one of the platform's own pages. */
@@ -55,11 +55,15 @@ export async function drivePopup(popup: Page, driver: Driver) {
       )
     await sleep(ms)
   }
+  let checkedAt = 0
   while (Date.now() < deadline) {
     if (hasReturned()) return
-    const failed = await failures.get(popup)?.()
-    if (failed)
-      throw new Error(`The app's run failed during the ${driver.name} authorization: ${failed}`)
+    if (Date.now() - checkedAt > 2_000) {
+      checkedAt = Date.now()
+      const failed = await failures.get(popup)?.()
+      if (failed)
+        throw new Error(`The app's run failed during the ${driver.name} authorization: ${failed}`)
+    }
     if (popup.isClosed())
       throw new Error(`The popup closed before ${driver.name} returned it to Bridge`)
     const url = URL.parse(popup.url())
@@ -81,22 +85,15 @@ export async function drivePopup(popup: Page, driver: Driver) {
   )
 }
 
-/**
- * Evaluate `find`, a page expression for the control to press or nothing,
- * then click that control for real. Returns whether there was one.
- */
-export async function clickFound(popup: Page, find: string): Promise<boolean> {
-  const mark = `(() => {
-  document.querySelectorAll('[data-libid-click]').forEach(e => e.removeAttribute('data-libid-click'));
-  const target = ${find};
-  if (!target) return false;
-  target.setAttribute('data-libid-click', '1');
-  return true;
-})()`
-  if (!(await popup.evaluate(mark).catch(() => false))) return false
-  await popup
-    .locator('[data-libid-click="1"]')
-    .click({ timeout: 5_000 })
-    .catch(() => {})
-  return true
+/** A click on the first visible match of a locator, at most once every 5 s; whether it found one. */
+export function throttledClick() {
+  let clickedAt = 0
+  return async (target: Locator) => {
+    const visible = target.filter({ visible: true }).first()
+    if (Date.now() - clickedAt < 5_000 || !(await visible.count())) return false
+    clickedAt = Date.now()
+    // The page may already be leaving; the next poll sees where it went.
+    await visible.click({ timeout: 5_000 }).catch(() => {})
+    return true
+  }
 }

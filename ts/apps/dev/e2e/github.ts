@@ -1,8 +1,8 @@
 import type { Page } from '@playwright/test'
 import * as OTPAuth from 'otpauth'
-import { drivePopup, type Pause } from './popup.ts'
+import { drivePopup, type Pause, throttledClick } from './popup.ts'
 
-export interface GitHubAccount {
+interface GitHubAccount {
   username: string
   password: string
   /** The base32 key of the account's authenticator app. */
@@ -13,19 +13,16 @@ export interface GitHubAccount {
 export function totp(secret: string, time = Date.now()): string {
   return new OTPAuth.TOTP({
     secret: OTPAuth.Secret.fromBase32(secret.replace(/\s/g, '').toUpperCase()),
-    algorithm: 'SHA1',
-    digits: 6,
-    period: 30,
   }).generate({ timestamp: time })
 }
 
 /** What the login has done so far: the request a restart reopens, the login filled, the
- * step whose code went, the last click (none again within 5 s), and back-off counts. */
+ * step whose code went, the button clicks, and back-off counts. */
 interface Progress {
   start?: string
   filled: boolean
   totpStep?: number
-  clickedAt: number
+  click: ReturnType<typeof throttledClick>
   rateLimited: number
   errored: number
 }
@@ -41,13 +38,6 @@ async function backOff(
   const count = ++progress[counter]
   if (count > 3) throw new Error(`${what} three times`)
   await pause(step * count, `${what} ${count} times`)
-}
-
-/** Click `target` unless a button was clicked in the last 5 s; the page may be leaving. */
-async function clickOnce(progress: Progress, target: ReturnType<Page['locator']>) {
-  if (Date.now() - progress.clickedAt < 5_000) return
-  progress.clickedAt = Date.now()
-  await target.click({ timeout: 5_000 }).catch(() => {})
 }
 
 async function onLogin(popup: Page, account: GitHubAccount, progress: Progress) {
@@ -93,7 +83,7 @@ async function onGitHubPage(
   ) {
     await backOff(progress, 'errored', 10_000, 'GitHub answered its error page', pause)
     // Reopening the request keeps the popup on github.com until GitHub redirects.
-    if (progress.start) await popup.goto(progress.start).catch(() => {})
+    await popup.goto(progress.start).catch(() => {})
     progress.filled = false
     progress.totpStep = undefined
   } else if (path === '/login' || path === '/session') {
@@ -109,11 +99,10 @@ async function onGitHubPage(
     throw new Error('GitHub asked for device verification: the account has no TOTP method')
   // GitHub's periodic 2FA checkup, served in place of the page asked for.
   else if (text.includes('verify your two-factor authentication'))
-    await clickOnce(progress, popup.getByText('skip 2FA verification'))
+    await progress.click(popup.getByText('skip 2FA verification'))
   else if (path === '/login/oauth/authorize') {
-    const authorize = popup.locator("button[name='authorize'][value='1']")
-    if (await authorize.count()) await clickOnce(progress, authorize)
-    else if (text.includes('redirect_uri') || text.includes('be careful'))
+    const authorized = await progress.click(popup.locator("button[name='authorize'][value='1']"))
+    if (!authorized && (text.includes('redirect_uri') || text.includes('be careful')))
       throw new Error(
         "GitHub refused the authorization request: the app's callback URL does not match",
       )
@@ -125,7 +114,12 @@ async function onGitHubPage(
  * Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/github.rs.
  */
 export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
-  const progress: Progress = { filled: false, clickedAt: 0, rateLimited: 0, errored: 0 }
+  const progress: Progress = {
+    filled: false,
+    click: throttledClick(),
+    rateLimited: 0,
+    errored: 0,
+  }
   await drivePopup(popup, {
     name: 'GitHub',
     onHost: (url) => url.hostname === 'github.com',
