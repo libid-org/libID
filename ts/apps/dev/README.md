@@ -37,7 +37,7 @@ Edit configuration directly where it is used:
 
 - [compose.yaml](compose.yaml): services.
 - [bridge-config.toml](bridge-config.toml): Bridge configuration and development OAuth credentials.
-- [local.ts](local.ts): the app origin (frontend port), and the Bridge and notary URLs; the table above repeats them, and `pnpm --filter @libid/dev test` checks it.
+- [local.ts](local.ts): the app origin (frontend port), and the Bridge and notary URLs.
 - [src/app.ts](src/app.ts): the local ledger fixture; Bridge configuration selects CCDP.
 
 The setup includes shared development OAuth credentials and a public development
@@ -108,40 +108,35 @@ without fallback. Direct runs have no fallback row.
 
 ## Live tests
 
-The live suite proves real GitHub, X and Google accounts from this app's UI,
-with the services above. It starts its own `pnpm dev` and stops it after, so
-the ports above and the app's must be free: stop a running `pnpm dev` first.
+The live suite proves real GitHub, X and Google accounts from this app's UI.
+It starts its own `pnpm dev` and stops it after, so the ports above must be
+free.
 
 ```sh
 LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live
 ```
 
-The variables, read through [e2e/settings.ts](e2e/settings.ts), carry the
-names libid-server-rs' ceremony-tests uses, so one `.env.test` serves both
-suites. With `LIBID_REQUIRE_LIVE`, the run checks every selected platform's
-variables at once, then reads each selected platform's saved session and
-TOTP key, before the stack starts; without it, a test lacking its variables
-is skipped. A switch is on for `1` or `true`, in any case. Keep the env file
-outside the repository, or name it `.env.test`, which git ignores. The path
-rule: a relative path in a setting is relative to the env file, or, without
-one, to where you run pnpm. Keys in the env file that look like settings but
-that neither suite reads are reported as likely typos.
+The variables carry the names libid-server-rs' ceremony-tests uses, so one
+`.env.test` serves both suites; keep it outside the repository, or name it
+`.env.test`, which git ignores. A test whose variables are missing is skipped.
 
-| Variable | Section | Need | Use |
-|---|---|---|---|
-| `GH_TEST_ALICE_USERNAME` | github-account | required | The GitHub test account. |
-| `GH_TEST_ALICE_PASSWORD` | github-account | required | Its password. |
-| `GH_TEST_ALICE_TOTP_SECRET` | github-account | required | The base32 key of its authenticator app. |
-| `X_TEST_ALICE_USERNAME` | x-account | required | The X test account's handle. |
-| `X_TEST_ALICE_COOKIES` | x-session | required | Its saved session, base64 of the JSON cookie list. |
-| `X_TEST_ALICE_COOKIES_FILE` | x-session | instead of `X_TEST_ALICE_COOKIES` | A path to that JSON (see the path rule above). |
-| `GOOGLE_TEST_ALICE_EMAIL` | google-account | required | The Google test account. |
-| `GOOGLE_TEST_ALICE_COOKIES` | google-session | required | Its saved session, as for X. |
-| `GOOGLE_TEST_ALICE_COOKIES_FILE` | google-session | instead of `GOOGLE_TEST_ALICE_COOKIES` | A path to that JSON, as for X. |
-| `LIBID_TEST_ENV_FILE` | tooling | optional | A dotenv file with the variables above, relative to where you run pnpm; exported values win, and an exported empty one counts as unset except for `LIBID_LIVE_PLATFORMS`. |
-| `LIBID_LIVE_PLATFORMS` | tooling | optional | Comma-separated platforms to prove, such as `github,x`; all three when unset, none when set empty. In CI the repository variable selects; unset or empty there means `github,x`. |
-| `LIBID_REQUIRE_LIVE` | tooling | optional | `1` or `true`: a missing variable or an empty platform list fails instead of skipping. |
-| `LIBID_TEST_PROXY` | tooling | optional | A proxy for the browser's traffic, loopback aside. |
-| `LIBID_STACK_LOGS` | tooling | optional | A file the build's and the services' output, containers included, is appended to instead of the terminal; a relative path follows the path rule above, in `pnpm dev` too. Required under CI. |
-| `HEADED` | tooling | optional | `1` or `true`: show the browser. |
-| `CI` | tooling | optional | `1` or `true`, as CI services set it: no traces or videos; the build's and the containers' output go only to `LIBID_STACK_LOGS`, and only services.ts' own messages reach the job log. |
+| Variable | Platform | What |
+|---|---|---|
+| `GH_TEST_ALICE_USERNAME`, `GH_TEST_ALICE_PASSWORD` | GitHub | The test account. |
+| `GH_TEST_ALICE_TOTP_SECRET` | GitHub | The base32 key of its authenticator app. |
+| `X_TEST_ALICE_USERNAME` | X | The test account's handle. |
+| `X_TEST_ALICE_COOKIES` or `X_TEST_ALICE_COOKIES_FILE` | X | A saved session: base64 of the JSON cookie list from `ceremony export x`, or a path to that JSON, relative to the env file. |
+| `GOOGLE_TEST_ALICE_EMAIL` | Google | The test account. |
+| `GOOGLE_TEST_ALICE_COOKIES` or `GOOGLE_TEST_ALICE_COOKIES_FILE` | Google | A saved session, as for X (`ceremony export google`). |
+| `LIBID_TEST_ENV_FILE` | — | A dotenv file with the variables above; exported values win. |
+| `LIBID_LIVE_PLATFORMS` | — | Comma-separated platforms to prove, such as `github,x`; all three when unset. |
+| `LIBID_REQUIRE_LIVE` | — | `1` or `true`: a missing variable fails the run instead of skipping. |
+| `LIBID_TEST_PROXY` | — | A proxy for the browser's traffic, loopback aside. |
+| `LIBID_STACK_LOGS` | — | A file the build's and the services' output is appended to. |
+| `HEADED` | — | Set: show the browser. |
+
+In CI, [live-e2e.yml](../../../.github/workflows/live-e2e.yml) runs GitHub and X
+daily in one job, and Google in another through a proxy whose address Google
+accepts. Each job gets only its own platforms' secrets. On a failure it prints
+the end of the stack log to the job log, where GitHub masks the secrets, and
+uploads the screenshots.
