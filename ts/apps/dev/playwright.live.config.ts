@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import { ACTION, NAVIGATION, STACK_START, STACK_STOP, TEST } from './e2e/budgets.ts'
-import { checkSettings, envFile, loadEnvFile, tooling, unknownKeys } from './e2e/settings.ts'
+import { preflight } from './e2e/preflight.ts'
+import { envFile, loadEnvFile, tooling, unknownKeys } from './e2e/settings.ts'
 import { APP_ORIGIN } from './local.ts'
 
 // Test secrets from a dotenv file when LIBID_TEST_ENV_FILE names one; values
@@ -13,8 +14,8 @@ if (file) {
   if (runner && typos.length)
     console.warn(`${file}: no live test reads ${typos.join(', ')}; check the spelling.`)
 }
-if (runner) checkSettings()
-const { proxy, headed, ci, stackLogs } = tooling()
+if (runner) preflight()
+const { proxy, headed, ci, stackLogs, platforms } = tooling()
 // The services' output carries what the job log must not: CI writes it to a
 // file it scans before upload.
 if (ci && !stackLogs)
@@ -30,20 +31,23 @@ export default defineConfig({
   reporter: [['list']],
   // One command: start the services and the app, test, then stop both. The
   // run never reuses a running stack: services.ts refuses taken ports.
-  webServer: {
-    // exec: Playwright's SIGTERM reaches services.ts, which brings the stack down.
-    command: 'pnpm build:deps && exec node services.ts --app',
-    ...(stackLogs && {
-      env: { ...(process.env as Record<string, string>), LIBID_STACK_LOGS: stackLogs },
-    }),
-    url: APP_ORIGIN,
-    reuseExistingServer: false,
-    timeout: STACK_START,
-    gracefulShutdown: { signal: 'SIGTERM', timeout: STACK_STOP },
-    // Under CI the containers' output goes to LIBID_STACK_LOGS; the build's
-    // and services.ts' own messages stay on stderr.
-    stdout: ci ? 'ignore' : 'pipe',
-  },
+  // No platform selected: nothing to start.
+  webServer: platforms.length
+    ? {
+        // exec: Playwright's SIGTERM reaches services.ts, which brings the stack
+        // down. With LIBID_STACK_LOGS, the build's output goes there too.
+        command: `pnpm build:deps${stackLogs ? ' >>"$LIBID_STACK_LOGS" 2>&1' : ''} && exec node services.ts --app`,
+        ...(stackLogs && {
+          env: { ...(process.env as Record<string, string>), LIBID_STACK_LOGS: stackLogs },
+        }),
+        url: APP_ORIGIN,
+        reuseExistingServer: false,
+        timeout: STACK_START,
+        gracefulShutdown: { signal: 'SIGTERM', timeout: STACK_STOP },
+        // Under CI only services.ts' own messages reach the job log.
+        stdout: ci ? 'ignore' : 'pipe',
+      }
+    : undefined,
   use: {
     ...devices['Desktop Chrome'],
     baseURL: APP_ORIGIN,
