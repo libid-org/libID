@@ -16,6 +16,11 @@ const root = fileURLToPath(new URL('.', import.meta.url))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
+// --project: print this checkout's Compose project, for a cleanup to stop it.
+if (process.argv.includes('--project')) {
+  console.info(project)
+  process.exit(0)
+}
 const logPath = settingPath((name) => process.env[name], process.env.LIBID_STACK_LOGS)
 const logs = logPath ? openSync(logPath, 'a') : undefined
 const stdio =

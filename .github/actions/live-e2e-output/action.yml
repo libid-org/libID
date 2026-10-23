@@ -17,13 +17,14 @@ runs:
   using: composite
   steps:
     # A stack the test step left running stops first, so nothing writes to
-    # the log after it is scanned; what goes up is the copy scanned. A secret
-    # in it fails this step, and nothing goes up.
+    # the log after it is scanned; what goes up is the copy scanned. Stopping
+    # it is best effort; a secret in the log, or a scan that cannot run,
+    # fails this step, and nothing goes up.
     - name: Check the stack log for secrets
       shell: bash
       run: |
-        docker compose ls -q --all --filter name=libid-dev |
-          xargs -r -I{} docker compose -p {} down --volumes
+        project=$(node ts/apps/dev/services.ts --project) &&
+          docker compose -p "$project" down --volumes || true
         if [ -f "$LIBID_STACK_LOGS" ]; then cp "$LIBID_STACK_LOGS" "$RUNNER_TEMP/stack-scanned.log"; fi
         node ts/apps/dev/e2e/scan-secrets.ts "$RUNNER_TEMP/stack-scanned.log"
 
