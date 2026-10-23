@@ -19,6 +19,12 @@ import { missing, type Need, PLATFORM_SECTIONS, SCANNED, VARIABLES } from './set
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8')
 const workflow = read('../../../../.github/workflows/live-e2e.yml')
 
+/**
+ * Minutes a job needs beside its test step: checkout, install, the browser
+ * install, any proxy, and the failure-output step.
+ */
+const JOB_ALLOWANCE = 10
+
 /** The jobs that run live tests. */
 const JOBS = ['ceremony', 'google-ssm']
 
@@ -36,13 +42,18 @@ function envEntry(line: string): [string, string] | undefined {
 const referenced = (text: string) =>
   new Set([...text.matchAll(/\b(?:secrets|vars)\.([A-Za-z0-9_]+)/g)].map((match) => match[1]!))
 
-/** The lines of job `name`'s step holding the line `marker`. */
-function step(name: string, marker: string): string[] {
+/** The lines of job `name`. */
+function jobLines(name: string): string[] {
   const lines = workflow.split('\njobs:\n')[1]!.split('\n')
   const start = lines.indexOf(`  ${name}:`)
   assert.notEqual(start, -1, `the workflow has a job ${name}`)
   const end = lines.findIndex((line, index) => index > start && /^ {2}[a-z][\w-]*:$/.test(line))
-  const job = lines.slice(start, end === -1 ? undefined : end)
+  return lines.slice(start, end === -1 ? undefined : end)
+}
+
+/** The lines of job `name`'s step holding the line `marker`. */
+function step(name: string, marker: string): string[] {
+  const job = jobLines(name)
   const at = job.findIndex((line) => line.trim() === marker)
   assert.notEqual(at, -1, `job ${name} has a step with ${marker}`)
   const isStep = (line: string) => line.startsWith('      - ')
@@ -111,7 +122,7 @@ test("each job's failure-output step is given every scanned secret its test step
   }
 })
 
-test('each test step outlasts its worst case: the stack, every platform it can select', () => {
+test('each test step outlasts its worst case, and each job its step and setup', () => {
   const minutes = (ms: number) => ms / 60_000
   const sum = NAVIGATION + READY + ACTION + DRIVER + OUTCOME
   assert.ok(
@@ -125,6 +136,11 @@ test('each test step outlasts its worst case: the stack, every platform it can s
       STACK_START + selectable(entriesOf(step), name).length * TEST + STACK_STOP,
     )
     assert.ok(timeout >= worst, `job ${name}'s test step allows ${timeout} min of ${worst}`)
+    const job = Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(jobLines(name).join('\n'))?.[1])
+    assert.ok(
+      job >= timeout + JOB_ALLOWANCE,
+      `job ${name} allows ${job} min: its test step's ${timeout} and ${JOB_ALLOWANCE} for the rest`,
+    )
   }
 })
 
