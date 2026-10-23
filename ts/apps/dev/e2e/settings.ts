@@ -119,6 +119,17 @@ export function tooling(get: Lookup = environment): Tooling {
   }
 }
 
+/** The selected platforms whose settings are all present: the ones whose test runs. */
+export const runnablePlatforms = (get: Lookup = environment) =>
+  tooling(get).platforms.filter((platform) =>
+    PLATFORM_SECTIONS[platform].every((section) => !missing(section, get).length),
+  )
+
+/** The accounts' and sessions' variables: every one outside the tooling section. */
+export const ACCOUNT_VARIABLES = VARIABLES.filter(([, section]) => section !== 'tooling').map(
+  ([name]) => name,
+)
+
 /** Whether this run proves `platform`; one left out is skipped, and reported as skipped. */
 export const isLive = (platform: PlatformId) => tooling().platforms.includes(platform)
 

@@ -1,7 +1,14 @@
 import { defineConfig, devices } from '@playwright/test'
 import { ACTION, NAVIGATION, STACK_START, STACK_STOP, TEST } from './e2e/budgets.ts'
 import { preflight } from './e2e/preflight.ts'
-import { envFile, loadEnvFile, tooling, unknownKeys } from './e2e/settings.ts'
+import {
+  ACCOUNT_VARIABLES,
+  envFile,
+  loadEnvFile,
+  runnablePlatforms,
+  tooling,
+  unknownKeys,
+} from './e2e/settings.ts'
 import { APP_ORIGIN } from './local.ts'
 
 // Test secrets from a dotenv file when LIBID_TEST_ENV_FILE names one; values
@@ -15,7 +22,7 @@ if (file) {
     console.warn(`${file}: no live test reads ${typos.join(', ')}; check the spelling.`)
 }
 if (runner) preflight()
-const { proxy, headed, ci, stackLogs, platforms } = tooling()
+const { proxy, headed, ci, stackLogs } = tooling()
 // The services' output carries what the job log must not: CI writes it to a
 // file it scans before upload.
 if (ci && !stackLogs)
@@ -31,15 +38,18 @@ export default defineConfig({
   reporter: [['list']],
   // One command: start the services and the app, test, then stop both. The
   // run never reuses a running stack: services.ts refuses taken ports.
-  // No platform selected: nothing to start.
-  webServer: platforms.length
+  // No test that will run: nothing to start.
+  webServer: runnablePlatforms().length
     ? {
         // exec: Playwright's SIGTERM reaches services.ts, which brings the stack
         // down. With LIBID_STACK_LOGS, the build's output goes there too.
         command: `pnpm build:deps${stackLogs ? ' >>"$LIBID_STACK_LOGS" 2>&1' : ''} && exec node services.ts --app`,
-        ...(stackLogs && {
-          env: { ...(process.env as Record<string, string>), LIBID_STACK_LOGS: stackLogs },
-        }),
+        // The stack gets none of the test accounts' secrets; the scan stays a backstop.
+        env: {
+          ...(process.env as Record<string, string>),
+          ...Object.fromEntries(ACCOUNT_VARIABLES.map((name) => [name, ''])),
+          ...(stackLogs && { LIBID_STACK_LOGS: stackLogs }),
+        },
         url: APP_ORIGIN,
         reuseExistingServer: false,
         timeout: STACK_START,
