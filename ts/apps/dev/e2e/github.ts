@@ -10,6 +10,8 @@ const LOGIN_SETTLE = 15_000
 
 /** Codes the TOTP step submits before a refusal fails the run. */
 const TOTP_ATTEMPTS = 2
+/** How long a submitted code's form may still show before it counts as refused. */
+const TOTP_SETTLE = 5_000
 
 /** The TOTP code for the base32 `secret`, spaces and case aside, at `time` (ms). */
 export function totp(secret: string, time = Date.now()): string {
@@ -33,6 +35,7 @@ interface Progress {
   /** The 30-second step whose code was last submitted, and how many were. */
   totpStep?: number
   totpAttempts: number
+  totpSubmittedAt?: number
   /** When the authorize button was last clicked; it is not clicked again within 5 s. */
   authorizedAt: number
   /** When the 2FA checkup was last skipped; it is not skipped again within 5 s. */
@@ -103,14 +106,18 @@ async function onLogin(
 }
 
 async function onTotp(popup: Page, account: GitHubAccount, progress: Progress, text: string) {
-  const step = Math.floor(Date.now() / 30_000)
-  if (progress.totpStep === step || !(await popup.locator('#app_totp').count())) return
-  // The code form again, in a later step, after a submitted code: GitHub refused it.
+  // One clock read for the step and its code.
+  const now = Date.now()
+  const step = Math.floor(now / 30_000)
+  if (!(await popup.locator('#app_totp').count())) return
+  // A submitted code gets time to land before its form showing counts as a refusal.
+  if (now - (progress.totpSubmittedAt ?? 0) < TOTP_SETTLE || progress.totpStep === step) return
+  // The code form still showing, settled and in a later step: GitHub refused the code.
   if (progress.totpAttempts >= TOTP_ATTEMPTS)
     throw new Error(
       `GitHub refused ${TOTP_ATTEMPTS} TOTP codes${text.includes('two-factor authentication failed') ? ' (two-factor authentication failed)' : ''}: check GH_TEST_ALICE_TOTP_SECRET and this host's clock`,
     )
-  const code = totp(account.totpSecret)
+  const code = totp(account.totpSecret, now)
   try {
     await popup.fill('#app_totp', code, { timeout: STEP_TIMEOUT })
   } catch {
@@ -122,6 +129,7 @@ async function onTotp(popup: Page, account: GitHubAccount, progress: Progress, t
     .click({ timeout: 2_000 })
     .catch(() => {})
   progress.totpStep = step
+  progress.totpSubmittedAt = Date.now()
   progress.totpAttempts++
 }
 
@@ -163,9 +171,6 @@ async function onGitHubPage(
     text.includes('something went wrong')
   )
     return onErrorPage(popup, progress, pause)
-  // GitHub's periodic 2FA checkup, served in place of the page asked for.
-  if (text.includes('verify your two-factor authentication'))
-    return onTwoFactorCheckup(popup, progress)
   if (path === '/login' || path === '/session')
     return onLogin(popup, account, progress, text, pause)
   if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress, text)
@@ -175,6 +180,9 @@ async function onGitHubPage(
       .catch(() => {})
     return
   }
+  // GitHub's periodic 2FA checkup, served in place of the page asked for.
+  if (text.includes('verify your two-factor authentication'))
+    return onTwoFactorCheckup(popup, progress)
   if (path === '/login/oauth/authorize') return onAuthorize(popup, progress, text)
   if (path.startsWith('/sessions/verified-device'))
     throw new Error('GitHub asked for device verification: the account has no TOTP method')

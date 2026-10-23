@@ -1,6 +1,6 @@
 import type { BrowserContext, Page } from '@playwright/test'
 import { clickFound, drivePopup, evaluateWithin } from './popup.ts'
-import { restoreSession, type Stored } from './session.ts'
+import { onX, restoreSession, type Stored } from './session.ts'
 
 /** Put the saved session on both hosts X answers on, as the Rust suite does. */
 export const restoreXSession = (context: BrowserContext, cookies: Stored[]) =>
@@ -26,9 +26,6 @@ const FIND_CONSENT = `[...document.querySelectorAll("[data-testid='OAuth_Consent
   (e.getAttribute('data-testid') === 'OAuth_Consent_Button' || /^(authorize app)$/i.test((e.innerText || e.value || '').trim())) &&
   !e.disabled && e.getAttribute('aria-disabled') !== 'true' && e.getClientRects().length > 0)`
 
-const onX = (url: URL) =>
-  url.hostname === 'x.com' || url.hostname === 'twitter.com' || url.hostname.endsWith('.x.com')
-
 /**
  * Approve the OAuth app on X in `popup`, signed in by the saved session, until
  * X returns it to Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/x.rs
@@ -40,7 +37,7 @@ export async function authorizeOnX(popup: Page) {
   let challengedAt: number | undefined
   await drivePopup(popup, {
     name: 'X',
-    onHost: onX,
+    onHost: (url) => onX(url.hostname),
     step: async (url, text) => {
       if (CHALLENGE.some((marker) => text.includes(marker))) {
         challengedAt ??= Date.now()
