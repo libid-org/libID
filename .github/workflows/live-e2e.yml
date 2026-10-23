@@ -9,8 +9,20 @@ name: Live end-to-end
 
 on:
   pull_request:
+    # What a live ceremony runs: the dev app, the packages it bundles and
+    # their build (brand/ styles the ceremony), the workspace setup, and CI.
     paths:
-      - "ts/**"
+      - "ts/apps/dev/**"
+      - "ts/packages/ceremony/**"
+      - "ts/packages/popup/**"
+      - "ts/packages/ledger/**"
+      - "ts/scripts/build-package.ts"
+      - "ts/package.json"
+      - "ts/pnpm-lock.yaml"
+      - "ts/pnpm-workspace.yaml"
+      - "ts/.node-version"
+      - "ts/tsconfig.base.json"
+      - "brand/**"
       - ".github/workflows/live-e2e.yml"
       - ".github/actions/live-e2e-output/**"
       - ".github/actions/setup-ts/**"
@@ -18,10 +30,12 @@ on:
   schedule:
     - cron: "23 3 * * *"
 
-# One run per pull request, a newer push replacing an older run; scheduled
-# and dispatched runs queue in a group of their own. Runs of different groups
-# overlap on the platforms' test accounts, which hold concurrent sign-ins:
-# each run has its own notary and Bridge, and a rate-limited login backs off.
+# One run per pull request, a newer push cancelling its older run;
+# scheduled and dispatched runs share a group and are not cancelled. The
+# jobs that sign in also share one group across every run (live-e2e-accounts),
+# so no two runs use the test accounts at once: two sign-ins could submit
+# the same TOTP code in one 30-second window. GitHub keeps one job pending
+# per group, so a newer pending job replaces an older pending one.
 concurrency:
   group: live-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -44,6 +58,9 @@ jobs:
       (github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
+    concurrency:
+      group: live-e2e-accounts
+      cancel-in-progress: false
     # The test step's budget plus setup, the secret scan and the upload.
     timeout-minutes: 75
     env:
@@ -115,6 +132,9 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'))
     runs-on: ubuntu-latest
+    concurrency:
+      group: live-e2e-accounts
+      cancel-in-progress: false
     # The test step's budget plus setup, the proxy, the secret scan and the upload.
     timeout-minutes: 50
     permissions:
