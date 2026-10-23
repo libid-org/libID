@@ -26,6 +26,9 @@ const FIND_CONSENT = `[...document.querySelectorAll("[data-testid='OAuth_Consent
   (e.getAttribute('data-testid') === 'OAuth_Consent_Button' || /^(authorize app)$/i.test((e.innerText || e.value || '').trim())) &&
   !e.disabled && e.getAttribute('aria-disabled') !== 'true' && e.getClientRects().length > 0)`
 
+/** How long X may hold the account at /account/access, as the Rust suite waits. */
+const ACCOUNT_ACCESS_GRACE = 30_000
+
 /**
  * Approve the OAuth app on X in `popup`, signed in by the saved session, until
  * X returns it to Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/x.rs
@@ -35,6 +38,7 @@ const FIND_CONSENT = `[...document.querySelectorAll("[data-testid='OAuth_Consent
 export async function authorizeOnX(popup: Page) {
   let consentedAt = 0
   let challengedAt: number | undefined
+  let heldSince: number | undefined
   await drivePopup(popup, {
     name: 'X',
     onHost: (url) => onX(url.hostname),
@@ -52,7 +56,15 @@ export async function authorizeOnX(popup: Page) {
         await evaluateWithin(popup, ACCEPT_COOKIES, false)
         if (Date.now() - consentedAt > 10_000 && (await clickFound(popup, FIND_CONSENT)))
           consentedAt = Date.now()
-      }
+      } else if (url.pathname.startsWith('/account/access')) {
+        // X holding the account: locked, or asking a person to verify it.
+        heldSince ??= Date.now()
+        if (Date.now() - heldSince > ACCOUNT_ACCESS_GRACE)
+          throw new Error(
+            'X holds the account at /account/access (locked or asking for verification): clear it in a browser, then renew the saved session',
+          )
+      } else if (text.includes('something went wrong'))
+        throw new Error(`X answered an error page on ${url.pathname}`)
     },
   })
 }
