@@ -1,16 +1,12 @@
 name: Live end-to-end
 
-# Proves a real platform identity from the browser UI through the CCDP
-# ceremony: real OAuth sign-in, the real notary and Bridge, and in-browser
-# proving. No chain. Not a required check: it depends on the platforms, their
-# test accounts and the network.
-#
-# Every third-party action is pinned by commit SHA, with the tag in a comment.
+# Proves real platform identities from the dev app's UI (ts/apps/dev/README.md).
+# Not a required check: it depends on the platforms, their accounts and the
+# network. Third-party actions are pinned by commit SHA, the tag in a comment.
 
 on:
   pull_request:
-    # What a live ceremony runs: the dev app, the packages it bundles and
-    # their build (brand/ styles the ceremony), the workspace setup, and CI.
+    # What a live ceremony runs: the dev app, its packages and their build.
     paths:
       - "ts/apps/dev/**"
       - "ts/packages/ceremony/**"
@@ -24,48 +20,35 @@ on:
       - "ts/tsconfig.base.json"
       - "brand/**"
       - ".github/workflows/live-e2e.yml"
-      - ".github/actions/live-e2e-output/**"
       - ".github/actions/setup-ts/**"
   workflow_dispatch:
   schedule:
     - cron: "23 3 * * *"
 
-# One run per pull request, a newer push cancelling its older run;
-# scheduled and dispatched runs share a group and are not cancelled. The
-# jobs that sign in also share one group across every run (live-e2e-accounts),
-# so no two runs use the test accounts at once: two sign-ins could submit
-# the same TOTP code in one 30-second window. GitHub keeps one job pending
-# per group, so a newer pending job replaces an older pending one.
-concurrency:
-  group: live-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 permissions:
   contents: read
 
 env:
-  # Where services.ts writes the stack's output; the failure-output action
-  # scans and uploads it.
+  # Where services.ts writes the stack's output; a failed job prints its end.
   LIBID_STACK_LOGS: /tmp/libid-live-stack.log
+  # A missing secret fails the run instead of skipping the test.
+  LIBID_REQUIRE_LIVE: "1"
 
 jobs:
   ceremony:
-    name: Live ceremonies
-    # A pull request from a fork or from Dependabot gets no secrets, so it
-    # does not run.
+    name: GitHub and X ceremonies (live)
+    # A pull request from a fork or from Dependabot gets no secrets.
     if: >-
       github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
+    # One run at a time per account: two could submit one TOTP code twice.
     concurrency:
-      group: live-e2e-accounts
+      group: live-e2e-github-x
       cancel-in-progress: false
-    # The test step's budget plus setup, the secret scan and the upload.
-    timeout-minutes: 75
-    env:
-      # A missing secret fails the run instead of skipping the test.
-      LIBID_REQUIRE_LIVE: "1"
+    # Test step 45 (stack 10 + two tests of 15 + stop 2 = 42) + setup 15.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,55 +59,39 @@ jobs:
       - name: Install Chromium
         run: pnpm -C ts --filter @libid/dev exec playwright install --with-deps chromium
 
-      # The platforms are the repository variable LIBID_LIVE_PLATFORMS, else
-      # GitHub and X. Google is left out by default: it has challenged a saved
-      # session arriving from a runner's address ("Verify it's you"), which no
-      # automation passes. The google-ssm job runs it through a proxy.
-      # Its own timeout, so a run that hangs still reaches the step below: the
-      # stack's 10-minute start, up to three tests of 16 minutes (all the
-      # variable can select), and 2 minutes to stop the stack
-      # (ts/apps/dev/e2e/budgets.ts): 60 minutes, with room to spare.
-      - name: Prove identities end to end
+      - name: Prove GitHub and X identities end to end
         id: test
-        timeout-minutes: 65
+        timeout-minutes: 45
         env:
-          LIBID_LIVE_PLATFORMS: ${{ vars.LIBID_LIVE_PLATFORMS || 'github,x' }}
+          LIBID_LIVE_PLATFORMS: github,x
           GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
           GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
           GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
           X_TEST_ALICE_USERNAME: ${{ secrets.X_TEST_ALICE_USERNAME }}
-          # The saved X session, base64 of `ceremony export x` from
-          # libid-server-rs' ceremony-tests (branch feat/live-ceremony-tests,
-          # libid-server-rs PR #12).
           X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
-          GOOGLE_TEST_ALICE_EMAIL: ${{ secrets.GOOGLE_TEST_ALICE_EMAIL }}
-          # The saved Google session: base64 of a Playwright storage state or
-          # of `ceremony export google`.
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/dev test:live
 
-      # The artifact is public. The stack's log, which the job log does not
-      # carry (playwright.live.config.ts), goes up only when the scan finds none
-      # of the test accounts' secrets in it. Screenshots go up unscanned: the
-      # pages driven never display the password, the TOTP secret or a session
-      # cookie. A timed-out test step counts too; a cancelled run uploads nothing.
-      - name: Keep the failure output
-        if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
-        uses: ./.github/actions/live-e2e-output
+      # The stack gets no secret (playwright.live.config.ts); GitHub masks them anyway.
+      - name: Stop the stack and show its log
+        if: ${{ !cancelled() && steps.test.outcome != 'success' }}
+        run: |
+          docker compose ls -q | grep '^libid-dev-' | xargs -r -I{} docker compose -p {} down || true
+          tail -n 300 "$LIBID_STACK_LOGS" || true
+
+      - name: Keep the screenshots
+        if: ${{ !cancelled() && steps.test.outcome != 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: live-e2e
-        env:
-          GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
-          GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
-          X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
+          name: live-e2e-github-x
+          path: ts/apps/dev/test-results/**/*.png
+          retention-days: 7
+          if-no-files-found: ignore
 
   google-ssm:
     name: Google ceremony through an SSM-reached proxy (live)
-    # Runs while the repository variable LIBID_GOOGLE_RUNNER is `ssm`, on a
-    # dispatch or the schedule. The proxy is an EC2 instance with no inbound
-    # port: LIBID_GOOGLE_PROXY_ROLE may only open an SSM port-forward to
-    # LIBID_GOOGLE_PROXY_INSTANCE.
+    # Google challenges a session from a runner's address, so the browser goes
+    # through an EC2 proxy LIBID_GOOGLE_PROXY_ROLE reaches only by SSM.
+    # Runs while LIBID_GOOGLE_RUNNER is `ssm`.
     if: >-
       vars.LIBID_GOOGLE_RUNNER == 'ssm' &&
       (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' ||
@@ -133,15 +100,13 @@ jobs:
       github.actor != 'dependabot[bot]'))
     runs-on: ubuntu-latest
     concurrency:
-      group: live-e2e-accounts
+      group: live-e2e-google
       cancel-in-progress: false
-    # The test step's budget plus setup, the proxy, the secret scan and the upload.
-    timeout-minutes: 50
+    # Test step 30 (stack 10 + one test of 15 + stop 2 = 27) + setup and proxy 15.
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
-    env:
-      LIBID_REQUIRE_LIVE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -157,15 +122,11 @@ jobs:
           role-to-assume: ${{ vars.LIBID_GOOGLE_PROXY_ROLE }}
           aws-region: eu-central-1
 
-      # The port-forward runs for the rest of the job; the step fails unless
-      # the proxy answers, and prints the address Google will see.
+      # The port-forward runs for the rest of the job; the step fails unless the proxy answers.
       - name: Reach the Google proxy over SSM
         env:
           INSTANCE: ${{ vars.LIBID_GOOGLE_PROXY_INSTANCE }}
-        # The runner image ships session-manager-plugin.
         run: |
-          command -v session-manager-plugin >/dev/null ||
-            { echo "::error::session-manager-plugin is not on this runner image"; exit 1; }
           aws ssm start-session --target "$INSTANCE" \
             --document-name AWS-StartPortForwardingSession \
             --parameters portNumber=3128,localPortNumber=3128 >"$RUNNER_TEMP/port-forward.log" 2>&1 &
@@ -175,12 +136,9 @@ jobs:
           done
           echo "Google sees ${ip:?the proxy did not answer; see $RUNNER_TEMP/port-forward.log}"
 
-      # Its own timeout, so a run that hangs still reaches the step below: the
-      # stack's 10-minute start, one test of 16 minutes, and 2 minutes to stop
-      # the stack (ts/apps/dev/e2e/budgets.ts): 28 minutes, with room to spare.
       - name: Prove a Google identity end to end
         id: test
-        timeout-minutes: 35
+        timeout-minutes: 30
         env:
           LIBID_LIVE_PLATFORMS: google
           LIBID_TEST_PROXY: http://127.0.0.1:3128
@@ -188,11 +146,17 @@ jobs:
           GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
         run: pnpm -C ts/apps/dev test:live
 
-      # As in the ceremony job.
-      - name: Keep the failure output
-        if: ${{ !cancelled() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled') }}
-        uses: ./.github/actions/live-e2e-output
+      - name: Stop the stack and show its log
+        if: ${{ !cancelled() && steps.test.outcome != 'success' }}
+        run: |
+          docker compose ls -q | grep '^libid-dev-' | xargs -r -I{} docker compose -p {} down || true
+          tail -n 300 "$LIBID_STACK_LOGS" || true
+
+      - name: Keep the screenshots
+        if: ${{ !cancelled() && steps.test.outcome != 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: live-e2e-google-ssm
-        env:
-          GOOGLE_TEST_ALICE_COOKIES: ${{ secrets.GOOGLE_TEST_ALICE_COOKIES }}
+          name: live-e2e-google
+          path: ts/apps/dev/test-results/**/*.png
+          retention-days: 7
+          if-no-files-found: ignore
