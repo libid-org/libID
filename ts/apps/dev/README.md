@@ -119,12 +119,13 @@ LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live
 The variables, read through [e2e/settings.ts](e2e/settings.ts), carry the
 names libid-server-rs' ceremony-tests uses, so one `.env.test` serves both
 suites. With `LIBID_REQUIRE_LIVE`, the run checks every selected platform's
-variables at once and names each one absent; without it, a test lacking its
-variables is skipped. A switch is on for `1` or `true`, in any case. Keep the env file outside
-the repository, or name it `.env.test`, which git ignores. A relative
-`*_COOKIES_FILE` path is relative to the env file, or, without one, to where
-you run pnpm. Keys in the env file that look like settings but that
-neither suite reads are reported as likely typos.
+variables at once, then reads each selected platform's saved session and
+TOTP key, before the stack starts; without it, a test lacking its variables
+is skipped. A switch is on for `1` or `true`, in any case. Keep the env file
+outside the repository, or name it `.env.test`, which git ignores. The path
+rule: a relative path in a setting is relative to the env file, or, without
+one, to where you run pnpm. Keys in the env file that look like settings but
+that neither suite reads are reported as likely typos.
 
 | Variable | Section | Need | Use |
 |---|---|---|---|
@@ -133,14 +134,14 @@ neither suite reads are reported as likely typos.
 | `GH_TEST_ALICE_TOTP_SECRET` | github-account | required | The base32 key of its authenticator app. |
 | `X_TEST_ALICE_USERNAME` | x-account | required | The X test account's handle. |
 | `X_TEST_ALICE_COOKIES` | x-session | required | Its saved session, base64 of the JSON cookie list. |
-| `X_TEST_ALICE_COOKIES_FILE` | x-session | instead of `X_TEST_ALICE_COOKIES` | A path to that JSON, relative to the env file. |
+| `X_TEST_ALICE_COOKIES_FILE` | x-session | instead of `X_TEST_ALICE_COOKIES` | A path to that JSON (see the path rule above). |
 | `GOOGLE_TEST_ALICE_EMAIL` | google-account | required | The Google test account. |
 | `GOOGLE_TEST_ALICE_COOKIES` | google-session | required | Its saved session, as for X. |
 | `GOOGLE_TEST_ALICE_COOKIES_FILE` | google-session | instead of `GOOGLE_TEST_ALICE_COOKIES` | A path to that JSON, as for X. |
-| `LIBID_TEST_ENV_FILE` | tooling | optional | A dotenv file with the variables above, relative to where you run pnpm; exported values win. |
-| `LIBID_LIVE_PLATFORMS` | tooling | optional | Comma-separated platforms to prove, such as `github,x`; all three when unset, none when set empty. |
+| `LIBID_TEST_ENV_FILE` | tooling | optional | A dotenv file with the variables above, relative to where you run pnpm; exported values win, and an exported empty one counts as unset except for `LIBID_LIVE_PLATFORMS`. |
+| `LIBID_LIVE_PLATFORMS` | tooling | optional | Comma-separated platforms to prove, such as `github,x`; all three when unset, none when set empty. In CI the repository variable selects; unset or empty there means `github,x`. |
 | `LIBID_REQUIRE_LIVE` | tooling | optional | `1` or `true`: a missing variable or an empty platform list fails instead of skipping. |
 | `LIBID_TEST_PROXY` | tooling | optional | A proxy for the browser's traffic, loopback aside. |
-| `LIBID_STACK_LOGS` | tooling | optional | A file the services' output, containers included, is appended to instead of the terminal; a relative path as for `*_COOKIES_FILE`. Required under CI. |
+| `LIBID_STACK_LOGS` | tooling | optional | A file the build's and the services' output, containers included, is appended to instead of the terminal; a relative path follows the path rule above, in `pnpm dev` too. Required under CI. |
 | `HEADED` | tooling | optional | `1` or `true`: show the browser. |
-| `CI` | tooling | optional | `1` or `true`, as CI services set it: no traces or videos; the containers' output goes only to `LIBID_STACK_LOGS`, and only the build's and services.ts' own messages reach the job log. |
+| `CI` | tooling | optional | `1` or `true`, as CI services set it: no traces or videos; the build's and the containers' output go only to `LIBID_STACK_LOGS`, and only services.ts' own messages reach the job log. |
