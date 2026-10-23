@@ -195,12 +195,6 @@ export const SCANNED = [
   'GOOGLE_TEST_ALICE_COOKIES_FILE',
 ] as const
 
-/** The GitHub account's secrets that are set, for the failure-output scan. */
-export const githubSecrets = (get: Lookup = environment) =>
-  [get('GH_TEST_ALICE_PASSWORD'), get('GH_TEST_ALICE_TOTP_SECRET')].filter(
-    (secret): secret is string => secret !== undefined,
-  )
-
 export const xAccount = (get: Lookup = environment) =>
   read('x-account', get, () => ({ username: nonEmpty(get, 'X_TEST_ALICE_USERNAME')! }))
 

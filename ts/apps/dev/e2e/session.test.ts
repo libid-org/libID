@@ -134,3 +134,27 @@ test('an export entry is a cookie only with string name, value and domain', () =
   ])
     assert.equal(parseExport(bad, onX, NOW), undefined, bad)
 })
+
+test('an optional field of the wrong type makes the export unreadable', () => {
+  for (const field of [
+    '"path":1',
+    '"secure":"yes"',
+    '"httpOnly":1',
+    '"sameSite":1',
+    '"expires":"soon"',
+    '"partitionKey":1',
+  ])
+    assert.equal(
+      parseExport(`[{"name":"a","value":"b","domain":".x.com",${field}}]`, onX, NOW),
+      undefined,
+      field,
+    )
+  assert.equal(
+    parseExport(
+      '[{"name":"a","value":"b","domain":".x.com","secure":null,"sameSite":null}]',
+      onX,
+      NOW,
+    )?.length,
+    1,
+  )
+})

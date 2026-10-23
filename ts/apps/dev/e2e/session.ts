@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import type { BrowserContext } from '@playwright/test'
-import * as settings from './settings.ts'
 import type { SavedSession } from './settings.ts'
+import * as settings from './settings.ts'
 
 /**
  * One cookie as libid-server-rs' `ceremony export` saves it (ceremony-tests
@@ -32,7 +32,7 @@ interface PartitionKey {
 }
 
 /** The JSON text of a saved session setting. */
-export const exportText = (saved: SavedSession) =>
+const exportText = (saved: SavedSession) =>
   'encoded' in saved
     ? Buffer.from(saved.encoded.trim(), 'base64').toString('utf8')
     : readFileSync(saved.path, 'utf8')
@@ -56,40 +56,71 @@ const CAPITALISED = {
   Secure: 'secure',
 }
 
-/** One export entry as a cookie: an object with string name, value and domain; else undefined. */
+const isString = (value: unknown) => typeof value === 'string'
+const isBoolean = (value: unknown) => typeof value === 'boolean'
+const orNull = (check: (value: unknown) => boolean) => (value: unknown) =>
+  value === null || check(value)
+
+/** The optional fields' types, as cookies.rs reads them; an absent field is fine. */
+const OPTIONAL: Record<string, (value: unknown) => boolean> = {
+  path: isString,
+  secure: orNull(isBoolean),
+  http_only: isBoolean,
+  httpOnly: isBoolean,
+  same_site: orNull(isString),
+  sameSite: orNull(isString),
+  expires: (value) => typeof value === 'number',
+  expirationDate: (value) => typeof value === 'number',
+  partition_key: orNull((value) => isString(value) || typeof value === 'object'),
+  partitionKey: orNull((value) => isString(value) || typeof value === 'object'),
+}
+
+/**
+ * One export entry as a cookie: an object with string name, value and domain,
+ * its optional fields of their types; else undefined.
+ */
 function storedOf(entry: unknown): Stored | undefined {
   if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return undefined
   const cookie: Record<string, unknown> = { ...entry }
   for (const [spelled, name] of Object.entries(CAPITALISED))
     if (spelled in cookie && !(name in cookie)) cookie[name] = cookie[spelled]
   const { name, value, domain } = cookie
-  return typeof name === 'string' && typeof value === 'string' && typeof domain === 'string'
-    ? (cookie as unknown as Stored)
-    : undefined
+  if (!isString(name) || !isString(value) || !isString(domain)) return undefined
+  for (const [field, valid] of Object.entries(OPTIONAL))
+    if (cookie[field] !== undefined && !valid(cookie[field])) return undefined
+  return cookie as unknown as Stored
+}
+
+/**
+ * Every cookie of a parsed export, as cookies.rs reads them: a list, or one
+ * under `cookies`; undefined when it is no such export or an entry is no
+ * cookie.
+ */
+export function exportCookies(parsed: unknown): Stored[] | undefined {
+  const cookies = Array.isArray(parsed) ? parsed : (parsed as { cookies?: unknown } | null)?.cookies
+  if (!Array.isArray(cookies)) return undefined
+  const read = cookies.map(storedOf)
+  return read.some((cookie) => cookie === undefined) ? undefined : (read as Stored[])
 }
 
 /**
  * The cookies of an export for the hosts `keep` admits, as the Rust suite's
- * cookies::parse reads them: a list, or one under `cookies`, of entries with
- * string name, value and domain; an expired cookie is left out. Undefined
- * when the text is no such export.
+ * cookies::parse reads them (see exportCookies); an expired cookie is left
+ * out. Undefined when the text is no such export.
  */
 export function parseExport(
   json: string,
   keep: (host: string) => boolean,
   now = Date.now() / 1000,
 ): Stored[] | undefined {
-  let cookies: unknown
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(json) as unknown
-    cookies = Array.isArray(parsed) ? parsed : (parsed as { cookies?: unknown } | null)?.cookies
+    parsed = JSON.parse(json)
   } catch {
     // The parser's message would quote the value.
+    return undefined
   }
-  if (!Array.isArray(cookies)) return undefined
-  const read = cookies.map(storedOf)
-  if (read.some((cookie) => cookie === undefined)) return undefined
-  return (read as Stored[]).filter((cookie) => {
+  return exportCookies(parsed)?.filter((cookie) => {
     const expires = expiresOf(cookie)
     return keep(hostOf(cookie)) && (expires <= 0 || expires >= now)
   })
