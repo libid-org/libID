@@ -1,24 +1,17 @@
 // Start the real Bridge, notary and emitted CCDP; no OAuth mocks.
-// LIBID_STACK_LOGS names a file every child's output, containers included,
-// is appended to; a relative path is relative to where pnpm was invoked.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { openSync } from 'node:fs'
 import { connect } from 'node:net'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
-import { APP_ORIGIN, BRIDGE } from './local.ts'
+import { APP_ORIGIN, BRIDGE_CONFIG } from './local.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
-const logPath = process.env.LIBID_STACK_LOGS
-const logs = logPath ? openSync(resolve(process.env.INIT_CWD ?? root, logPath), 'a') : undefined
-const stdio =
-  logs === undefined ? 'inherit' : (['ignore', logs, logs] as ['ignore', number, number])
 /** Whether something on this host accepts connections on `port`. */
 const listening = (port: number) =>
   new Promise<boolean>((resolve) => {
@@ -45,7 +38,6 @@ if (!process.argv.includes('--ccdp')) {
     console.error('Could not run Docker Compose. Install Docker with Compose and start its engine.')
     process.exit(1)
   }
-  if (process.argv.includes('--app')) ports.push(Number(new URL(APP_ORIGIN).port))
   const open = await Promise.all(ports.map(listening))
   const taken = ports.filter((_, index) => open[index])
   if (taken.length) {
@@ -61,7 +53,7 @@ execFileSync(
   ['--filter', '@libid/ceremony', 'build:ccdp-artifacts', '--out-dir', join(root, '.cache/ccdp')],
   {
     cwd: root,
-    stdio,
+    stdio: 'inherit',
   },
 )
 // Refresh the bind mounts after the build atomically replaces its output directory.
@@ -70,7 +62,7 @@ if (process.argv.includes('--ccdp')) {
     'docker',
     [...composeArgs, 'up', '--wait', '--no-deps', '--no-build', '--force-recreate', 'ccdp'],
     {
-      stdio,
+      stdio: 'inherit',
     },
   )
   process.exit(0)
@@ -91,7 +83,7 @@ function stop(code: number) {
     }
   }
   // Keep this child alive through completion, including after a partial startup.
-  const down = spawn('docker', [...composeArgs, 'down'], { stdio })
+  const down = spawn('docker', [...composeArgs, 'down'], { stdio: 'inherit' })
   down.on('error', () => console.error('Could not stop development containers. Check Docker.'))
   down.on('close', (code) => {
     if (code !== 0) process.exitCode = 1
@@ -100,7 +92,7 @@ function stop(code: number) {
 process.once('SIGINT', () => stop(0))
 process.once('SIGTERM', () => stop(0))
 const compose = spawn('docker', [...composeArgs, 'up', '--abort-on-container-failure'], {
-  stdio,
+  stdio: 'inherit',
   detached: true,
 })
 compose.on('error', () => {
@@ -116,14 +108,11 @@ if (process.argv.includes('--app')) {
     while (!stopping) {
       try {
         // Docker publishes on 127.0.0.1 only.
-        const response = await fetch(
-          new URL('/api/v1/ceremony/config', BRIDGE.replace('localhost', '127.0.0.1')),
-          {
-            headers: { Origin: APP_ORIGIN },
-            redirect: 'error',
-            signal: AbortSignal.timeout(1000),
-          },
-        )
+        const response = await fetch(BRIDGE_CONFIG.replace('localhost', '127.0.0.1'), {
+          headers: { Origin: APP_ORIGIN },
+          redirect: 'error',
+          signal: AbortSignal.timeout(1000),
+        })
         await response.body?.cancel()
         if (response.status === 200) break
       } catch {

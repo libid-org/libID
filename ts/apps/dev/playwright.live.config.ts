@@ -33,8 +33,8 @@ export default defineConfig({
   webServer: runnablePlatforms().length
     ? {
         // exec: Playwright's SIGTERM reaches services.ts, which brings the stack
-        // down. With LIBID_STACK_LOGS, the build's output goes there too.
-        command: `pnpm build:deps${stackLogs ? ' >>"$LIBID_STACK_LOGS" 2>&1' : ''} && exec node services.ts --app`,
+        // down. LIBID_STACK_LOGS takes all of its output, the build's included.
+        command: `${stackLogs ? 'exec >>"$LIBID_STACK_LOGS" 2>&1; ' : ''}pnpm build:deps && exec node services.ts --app`,
         env: { ...stackEnv, ...(stackLogs && { LIBID_STACK_LOGS: stackLogs }) },
         url: APP_ORIGIN,
         reuseExistingServer: false,
