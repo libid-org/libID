@@ -26,6 +26,16 @@ export function totp(secret: string, time = Date.now()): string {
   })
 }
 
+/** GitHub's flash message on the page, whitespace collapsed, up to 200 characters. */
+async function flashText(popup: Page): Promise<string> {
+  const flash = await popup
+    .locator('.flash-error, .flash-warn, #js-flash-container')
+    .first()
+    .innerText({ timeout: 1_000 })
+    .catch(() => '')
+  return flash.split(/\s+/).join(' ').trim().slice(0, 200)
+}
+
 /** What the login has done so far; each handler reads and updates it. */
 interface Progress {
   /** The first GitHub page of the run: the authorization request, which a restart reopens. */
@@ -36,6 +46,8 @@ interface Progress {
   totpStep?: number
   totpAttempts: number
   totpSubmittedAt?: number
+  /** GitHub's message for the last refused code. */
+  totpRefusal?: string
   /** When the authorize button was last clicked; it is not clicked again within 5 s. */
   authorizedAt: number
   /** When the 2FA checkup was last skipped; it is not skipped again within 5 s. */
@@ -85,14 +97,8 @@ async function onLogin(
   // The form still showing well after a submit is GitHub refusing the sign-in.
   if (progress.filledAt !== undefined) {
     if (Date.now() - progress.filledAt < LOGIN_SETTLE) return
-    const flash = await popup
-      .locator('.flash-error, .flash-warn, #js-flash-container')
-      .first()
-      .innerText({ timeout: 1_000 })
-      .catch(() => '')
-    throw new Error(
-      `GitHub showed the login form again after sign-in: ${flash.split(/\s+/).join(' ').trim().slice(0, 200) || 'no message'}`,
-    )
+    const flash = await flashText(popup)
+    throw new Error(`GitHub showed the login form again after sign-in: ${flash || 'no message'}`)
   }
   // A step that fails is tried again on the next poll, inside drivePopup's budget.
   try {
@@ -105,7 +111,7 @@ async function onLogin(
   progress.filledAt = Date.now()
 }
 
-async function onTotp(popup: Page, account: GitHubAccount, progress: Progress, text: string) {
+async function onTotp(popup: Page, account: GitHubAccount, progress: Progress) {
   // One clock read for the step and its code.
   const now = Date.now()
   const step = Math.floor(now / 30_000)
@@ -115,7 +121,7 @@ async function onTotp(popup: Page, account: GitHubAccount, progress: Progress, t
   // The code form still showing, settled and in a later step: GitHub refused the code.
   if (progress.totpAttempts >= TOTP_ATTEMPTS)
     throw new Error(
-      `GitHub refused ${TOTP_ATTEMPTS} TOTP codes${text.includes('two-factor authentication failed') ? ' (two-factor authentication failed)' : ''}: check GH_TEST_ALICE_TOTP_SECRET and this host's clock`,
+      `GitHub refused ${TOTP_ATTEMPTS} TOTP codes${progress.totpRefusal ? ` (${progress.totpRefusal})` : ''}: check GH_TEST_ALICE_TOTP_SECRET and this host's clock`,
     )
   const code = totp(account.totpSecret, now)
   try {
@@ -123,11 +129,17 @@ async function onTotp(popup: Page, account: GitHubAccount, progress: Progress, t
   } catch {
     return
   }
-  // GitHub submits the code on its own once six digits are in.
-  await popup
-    .locator('button[type=submit]')
-    .click({ timeout: 2_000 })
-    .catch(() => {})
+  // GitHub submits the code on its own once six digits are in; the button is
+  // pressed only for a form still there after a moment, so a code goes once.
+  const submitted = await popup
+    .waitForURL((url) => url.pathname !== '/sessions/two-factor/app', { timeout: 3_000 })
+    .then(() => true)
+    .catch(() => false)
+  if (!submitted)
+    await popup
+      .locator('button[type=submit]')
+      .click({ timeout: 2_000 })
+      .catch(() => {})
   progress.totpStep = step
   progress.totpSubmittedAt = Date.now()
   progress.totpAttempts++
@@ -173,8 +185,11 @@ async function onGitHubPage(
     return onErrorPage(popup, progress, pause)
   if (path === '/login' || path === '/session')
     return onLogin(popup, account, progress, text, pause)
-  if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress, text)
+  if (path === '/sessions/two-factor/app') return onTotp(popup, account, progress)
   if (path.startsWith('/sessions/two-factor')) {
+    // The code's POST target answering a refusal: keep GitHub's reason first.
+    if (text.includes('failed'))
+      progress.totpRefusal = (await flashText(popup)) || 'two-factor authentication failed'
     await popup
       .goto('https://github.com/sessions/two-factor/app', { timeout: STEP_TIMEOUT * 2 })
       .catch(() => {})
