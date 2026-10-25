@@ -1,0 +1,27 @@
+.agent-link { max-width: 32rem; text-align: left; }
+.agent-link h1 { font-size: clamp(1.75rem, 6vw, 2.5rem); line-height: 1.2; }
+.agent-link h2 { margin: 2rem 0 1rem; font-size: 1.375rem; font-weight: 400; }
+.agent-link h2:focus { outline: none; }
+.agent-link p { color: var(--muted); line-height: 1.7; }
+.agent-link .wallet { display: grid; gap: 0.25rem; color: var(--text); }
+.agent-link code { overflow-wrap: anywhere; font-size: 0.875rem; }
+
+.agent-link .option, .agent-link button {
+  display: block;
+  width: 100%;
+  min-height: 3rem;
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.agent-link a.option:hover, .agent-link button:hover { border-color: var(--text); }
+.agent-link .unavailable { color: var(--muted); }
+.agent-link .notice { color: var(--text); }
+.agent-link .hint { font-size: 0.875rem; }

@@ -1,0 +1,32 @@
+---
+import ThemeProvider from '../../components/ThemeProvider.astro';
+import { palettes } from '../../palette.mjs';
+import libronFont from '../../../../brand/libron/Libron-Regular.woff2?url';
+import '../../styles/home.css';
+import '../../styles/agent-link.css';
+// No analytics here: the fragment carries the agent's session.
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Link your handle to your agent — libID</title>
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content={palettes.dark.background}>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="preload" href={libronFont} as="font" type="font/woff2" crossorigin>
+    <ThemeProvider />
+  </head>
+  <body>
+    <main class="agent-link">
+      <h1>Link your handle to your agent</h1>
+      <section id="flow" aria-label="Linking">
+        <h2 tabindex="-1">Preparing linking…</h2>
+        <noscript><p>Linking needs JavaScript.</p></noscript>
+      </section>
+    </main>
+    <script>import '../../agent-link.ts';</script>
+  </body>
+</html>

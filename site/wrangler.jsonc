@@ -15,11 +15,18 @@
       "previews_enabled": true
     }
   ],
+  "durable_objects": {
+    "bindings": [{ "name": "AGENT_LINKS", "class_name": "AgentLinkHandoff" }]
+  },
+  "migrations": [{ "tag": "agent-link-v1", "new_sqlite_classes": ["AgentLinkHandoff"] }],
+  "ratelimits": [
+    { "name": "AGENT_LINK_RATE_LIMITER", "namespace_id": "2181389", "simple": { "limit": 10, "period": 60 } }
+  ],
   "previews": {},
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/p/event", "/p/client.js", "/p/measure"],
+    "run_worker_first": ["/p/event", "/p/client.js", "/p/measure", "/api/agent-link/*"],
     "not_found_handling": "404-page"
   }
 }

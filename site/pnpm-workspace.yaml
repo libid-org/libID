@@ -5,6 +5,12 @@ allowBuilds:
   workerd: true
 # Supply-chain policy shared with ts/ and the grndd-systems repos.
 minimumReleaseAge: 10080
+# First-party releases the agent link page needs before they age in.
+minimumReleaseAgeExclude:
+  - "@libid/ceremony@0.4.0"
+  - "@libid/contracts@0.19.0"
+  - "@libid/ledger@0.2.0"
+  - "@libid/popup@0.1.1"
 minimumReleaseAgeIgnoreMissingTime: false
 trustLockfile: false
 strictDepBuilds: true

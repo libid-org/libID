@@ -8,15 +8,19 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "test": "node theme.test.mjs && node specs.test.mjs && node worker.test.mjs",
+    "test": "node theme.test.mjs && node specs.test.mjs && node worker.test.mjs && node agent-link.test.mjs",
     "deploy": "wrangler deploy",
     "deploy:preview": "wrangler preview"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "7.3.2",
     "@astrojs/starlight": "0.42.5",
+    "@libid/ceremony": "0.4.0",
+    "@libid/contracts": "0.19.0",
+    "@libid/popup": "0.1.1",
     "@plausible-analytics/tracker": "0.4.6",
-    "astro": "7.3.6"
+    "astro": "7.3.6",
+    "viem": "2.56.8"
   },
   "devDependencies": {
     "wrangler": "4.148.0"

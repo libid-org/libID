@@ -3,6 +3,7 @@
 One static site and Cloudflare Worker: landing page at `/`, Starlight at `/docs/` and `/specs/`.
 Add Markdown/MDX with `title` frontmatter in [`docs/pages/`](../docs/pages/).
 Specs are published directly from [`specs/`](../specs/).
+`/SKILL.md` serves [`skills/link-handle`](../skills/link-handle/SKILL.md); `/link/agent/` launches it and hands the bind call to the agent at `/api/agent-link/<session>`.
 Six UI colors per theme and one shared logo color live in [`../brand/palette.json`](../brand/palette.json), used by the website, favicons and CCDP screens, which also share the Libron font in [`../brand/libron/`](../brand/libron/).
 
 ## Local
