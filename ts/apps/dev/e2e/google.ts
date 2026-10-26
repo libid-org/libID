@@ -16,9 +16,8 @@ const REFUSED: [string, string][] = [
 
 /**
  * Choose the account and consent on Google in `popup`, signed in by the saved
- * session, until Google returns it to Bridge's callback. A port of libid-server-rs'
- * ceremony-tests/src/browser/google.rs without its sign-in: a login page means
- * the saved session has expired.
+ * session, until Google returns it to Bridge's callback. A login page means the
+ * saved session has expired.
  */
 export async function authorizeOnGoogle(popup: Page, email: string) {
   const click = throttledClick()

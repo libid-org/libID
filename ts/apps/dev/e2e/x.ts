@@ -11,8 +11,7 @@ const CHALLENGE = [
 
 /**
  * Approve the OAuth app on X in `popup`, signed in by the saved session, until
- * X returns it to Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/x.rs
- * without its interactive sign-in: a login page means the saved session has
+ * X returns it to Bridge's callback. A login page means the saved session has
  * expired.
  */
 export async function authorizeOnX(popup: Page) {
@@ -29,7 +28,7 @@ export async function authorizeOnX(popup: Page) {
           throw new Error('X security verification did not clear within 90 s')
       } else if (url.pathname.startsWith('/i/flow/login') || url.pathname === '/login') {
         throw new Error(
-          'X asked to sign in: the saved session has expired. Renew it with `ceremony export x` (libid-server-rs).',
+          "X asked to sign in: the saved session has expired. Renew it by hand (README, X's session).",
         )
       } else if (url.pathname.startsWith('/i/oauth2/authorize')) {
         challengedAt = undefined

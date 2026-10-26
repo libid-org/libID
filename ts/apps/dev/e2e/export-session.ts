@@ -1,11 +1,10 @@
-// Saves a Chrome profile's session as the JSON GOOGLE_TEST_ALICE_COOKIES_FILE
-// reads and CI keeps in Secrets Manager. Google refuses sign-in in an automated
-// browser, so a person signs in first, in plain Chrome, through the proxy CI uses:
+// Saves the session of a Chrome profile a person signed in to by hand, as the
+// JSON X_TEST_ALICE_COOKIES_FILE and GOOGLE_TEST_ALICE_COOKIES_FILE read; each
+// test keeps only its platform's cookies. X and Google examine or refuse a
+// sign-in in an automated browser, so the sign-in is in plain Chrome
+// (README, "Saved sessions"). Close that Chrome, then:
 //
-//   google-chrome --user-data-dir=/tmp/google-session --password-store=basic \
-//     --proxy-server=http://127.0.0.1:3128 https://myaccount.google.com/
-//
-// Close that Chrome, then: node e2e/export-session.ts /tmp/google-session out.json
+//   node e2e/export-session.ts <profile-dir> <out.json>
 import { chromium } from '@playwright/test'
 
 const [profile, out] = process.argv.slice(2)

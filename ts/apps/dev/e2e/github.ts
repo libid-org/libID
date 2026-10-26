@@ -111,7 +111,7 @@ async function onGitHubPage(
 
 /**
  * Sign in and authorize on GitHub in `popup`, until GitHub redirects it to
- * Bridge's callback. A port of libid-server-rs' ceremony-tests/src/browser/github.rs.
+ * Bridge's callback.
  */
 export async function authorizeOnGitHub(popup: Page, account: GitHubAccount) {
   const progress: Progress = {

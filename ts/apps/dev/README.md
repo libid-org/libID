@@ -116,9 +116,8 @@ free.
 LIBID_TEST_ENV_FILE=path/to/.env.test pnpm --filter @libid/dev test:live
 ```
 
-The variables carry the names libid-server-rs' ceremony-tests uses, so one
-`.env.test` serves both suites; keep it outside the repository, or name it
-`.env.test`, which git ignores. Unless `LIBID_LIVE_PLATFORMS` lists it, a
+Keep the variables in a file outside the repository, or name it `.env.test`,
+which git ignores. Unless `LIBID_LIVE_PLATFORMS` lists it, a
 platform whose variables are missing is skipped.
 
 | Variable | Platform | What |
@@ -126,7 +125,7 @@ platform whose variables are missing is skipped.
 | `GH_TEST_ALICE_USERNAME`, `GH_TEST_ALICE_PASSWORD` | GitHub | The test account. |
 | `GH_TEST_ALICE_TOTP_SECRET` | GitHub | The base32 key of its authenticator app. |
 | `X_TEST_ALICE_USERNAME` | X | The test account's handle. |
-| `X_TEST_ALICE_COOKIES` or `X_TEST_ALICE_COOKIES_FILE` | X | A saved session: base64 of the JSON cookie list from `ceremony export x`, or a path to that JSON, relative to the env file. |
+| `X_TEST_ALICE_COOKIES` or `X_TEST_ALICE_COOKIES_FILE` | X | A saved session, made by hand: see [X's session](#xs-session). Base64 of the JSON, or a path to it, relative to the env file. |
 | `GOOGLE_TEST_ALICE_EMAIL` | Google | The test account. |
 | `GOOGLE_TEST_ALICE_COOKIES` or `GOOGLE_TEST_ALICE_COOKIES_FILE` | Google | A saved session, made by hand: see [Google's session](#googles-session). |
 | `GOOGLE_TEST_ALICE_COOKIES_OUT` | — | Set: after a pass, the Google test writes the refreshed session to this file. |
@@ -142,7 +141,24 @@ accepts. Each job gets only its own platforms' secrets. On a failure it prints
 the end of the stack log to the job log, where GitHub masks the secrets, and
 uploads the screenshots.
 
-### Google's session
+### Saved sessions
+
+X and Google examine or refuse a sign-in in an automated browser, so the tests
+reuse a session a person signed in to in plain Chrome, exported with
+`e2e/export-session.ts`. Use a fresh profile per platform; the export is a
+credential, so delete it and the profile after storing it.
+
+#### X's session
+
+1. `google-chrome --user-data-dir=/tmp/x-session --password-store=basic https://x.com/login`,
+   sign in to the test account, then close Chrome.
+2. `node e2e/export-session.ts /tmp/x-session x.json`, then
+   `base64 -w0 x.json | gh secret set X_TEST_ALICE_COOKIES`.
+
+X does not tie the session to an address, and it lasts until it is signed out,
+so this is needed again only when the X test reports an expired session.
+
+#### Google's session
 
 Google challenges a saved session used from an address other than the one it
 was signed in from, and refuses sign-in in an automated browser. So the session

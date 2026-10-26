@@ -1,4 +1,4 @@
-// The TOTP code against the reference vector libid-server-rs' github.rs checks.
+// The TOTP code against an RFC 6238 vector (SHA-1, 30 s, 6 digits) computed with Python's hmac.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { totp } from './github.ts'

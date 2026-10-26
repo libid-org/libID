@@ -37,8 +37,7 @@ async function presentPage(context: BrowserContext, page: Page) {
 /**
  * Make every page of `context` read as a person's Chrome: the user agent and
  * its client hints, and the stealth script before any page script. X and
- * Google challenge automation they can see. Ported from libid-server-rs'
- * ceremony-tests/src/browser/person.rs.
+ * Google challenge automation they can see.
  */
 export async function presentAsPerson(context: BrowserContext) {
   await context.addInitScript({ path: fileURLToPath(new URL('./stealth.js', import.meta.url)) })

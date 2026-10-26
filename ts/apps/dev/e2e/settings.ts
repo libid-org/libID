@@ -1,5 +1,5 @@
-// The live tests' settings, under the names libid-server-rs' ceremony-tests
-// reads from the same .env.test. An empty value counts as unset.
+// The live tests' settings, from the environment or LIBID_TEST_ENV_FILE.
+// An empty value counts as unset.
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { parseEnv } from 'node:util'

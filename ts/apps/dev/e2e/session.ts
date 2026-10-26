@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import type { BrowserContext } from '@playwright/test'
 import { env, settingPath } from './settings.ts'
 
-/** One cookie as libid-server-rs' `ceremony export` or Playwright saves it; both key casings occur. */
+/** One saved cookie, in Playwright's casing or the snake_case some exports write. */
 interface Stored {
   name: string
   value: string
