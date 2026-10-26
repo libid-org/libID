@@ -64,8 +64,8 @@ contract Consumer is IConsumer {
         return LibID.resolveId(idNode);
     }
 
-    function publishedHandleOf(address holder, bytes32 platformId) external view returns (string memory) {
-        return LibID.publishedHandleOf(holder, platformId);
+    function primaryHandleOf(address holder) external view returns (bytes32, string memory) {
+        return LibID.primaryHandleOf(holder);
     }
 
     function isHolder(address account, bytes32 platformId, string calldata handle, uint256 maxAge)
@@ -200,10 +200,10 @@ contract LibIDTest is LibIDTestBase {
     /// The constants are the factory's CREATE3 addresses for the canonical
     /// names, computed here independently of the literals in LibID.
     function test_theAddressesAreTheFactoryAddressesOfTheCanonicalNames() public pure {
-        assertEq(LibID.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry"), FACTORY));
-        assertEq(LibID.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow"), FACTORY));
-        assertEq(LibIDTestnet.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry"), TESTNET_FACTORY));
-        assertEq(LibIDTestnet.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow"), TESTNET_FACTORY));
+        assertEq(LibID.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry.2"), FACTORY));
+        assertEq(LibID.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.3"), FACTORY));
+        assertEq(LibIDTestnet.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry.2"), TESTNET_FACTORY));
+        assertEq(LibIDTestnet.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.3"), TESTNET_FACTORY));
     }
 
     function test_thePlatformIdsAreTheContractsOwn() public pure {
@@ -258,7 +258,7 @@ contract LibIDTest is LibIDTestBase {
         (address holder, uint64 observedAt) = consumer.bindingOf(LibID.X, "jack");
         assertEq(holder, address(0));
         assertEq(observedAt, 0);
-        assertEq(consumer.publishedHandleOf(alice, LibID.X), "");
+        _assertPrimary(alice, bytes32(0), "");
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(LibID.NotHolder.selector, address(0), alice));
         consumer.gated(LibID.X, "jack", 1 days);
@@ -294,8 +294,6 @@ contract LibIDTest is LibIDTestBase {
         consumer.isHolder(alice, MASTODON, "jack", 1 days);
         vm.expectRevert(unknown);
         consumer.bindingOf(MASTODON, "jack");
-        vm.expectRevert(unknown);
-        consumer.publishedHandleOf(alice, MASTODON);
         vm.prank(alice);
         vm.expectRevert(unknown);
         consumer.gated(MASTODON, "jack", 1 days);
@@ -391,11 +389,25 @@ contract LibIDTest is LibIDTestBase {
         assertEq(consumer.resolve(LibID.GITHUB, "octocat"), address(0));
     }
 
-    function test_publishedHandleOfIsEmptyOnceTheHandleIsLost() public {
+    function test_primaryHandleOfIsEmptyOnceTheHandleIsLost() public {
         _bind(alice, "1001", "octocat", true);
-        assertEq(consumer.publishedHandleOf(alice, LibID.GITHUB), "octocat");
+        _assertPrimary(alice, LibID.GITHUB, "octocat");
         _bind(bob, "2002", "octocat", false);
-        assertEq(consumer.publishedHandleOf(alice, LibID.GITHUB), "");
+        _assertPrimary(alice, bytes32(0), "");
+    }
+
+    /// One primary handle per holder: a new one on another platform replaces it.
+    function test_primaryHandleOfIsTheLatestPrimaryAcrossPlatforms() public {
+        _bind(alice, "1001", "octocat", true);
+        bindHandle(alice, LibID.GOOGLE, "0xabc", "alice@gmail.com");
+        _assertPrimary(alice, LibID.GOOGLE, "alice@gmail.com");
+        assertEq(consumer.resolve(LibID.GITHUB, "octocat"), alice);
+    }
+
+    function _assertPrimary(address holder, bytes32 platformId, string memory handle) private view {
+        (bytes32 platform, string memory name) = consumer.primaryHandleOf(holder);
+        assertEq(platform, platformId);
+        assertEq(name, handle);
     }
 
     // ─── Gating ─────────────────────────────────────────────────────
@@ -715,7 +727,7 @@ contract LibIDTest is LibIDTestBase {
         vm.expectRevert(unavailable);
         consumer.resolveId(idNode);
         vm.expectRevert(unavailable);
-        consumer.publishedHandleOf(alice, LibID.GITHUB);
+        consumer.primaryHandleOf(alice);
         vm.expectRevert(unavailable);
         consumer.isHolder(alice, LibID.GITHUB, "octocat", 1 days);
         vm.prank(alice);
@@ -741,16 +753,16 @@ contract LibIDTest is LibIDTestBase {
     }
 
     /// Binds a GitHub handle from a session the notary signed in this block.
-    function _bind(address who, string memory id, string memory handle, bool publish) internal {
+    function _bind(address who, string memory id, string memory handle, bool primary) internal {
         _tick();
-        _bindSignedAt(who, id, handle, uint64(vm.getBlockTimestamp()), publish);
+        _bindSignedAt(who, id, handle, uint64(vm.getBlockTimestamp()), primary);
     }
 
     /// Binds a GitHub handle as the GitHub verifier dates a session the notary
     /// signed at `createdAt`. The verifier accepts `createdAt` up to its skew
     /// and its allowance ahead of the block, until its proof lifetime has
     /// passed, and sets `observedAt` to `createdAt` less the allowance.
-    function _bindSignedAt(address who, string memory id, string memory handle, uint64 createdAt, bool publish)
+    function _bindSignedAt(address who, string memory id, string memory handle, uint64 createdAt, bool primary)
         internal
     {
         uint64 blockTime = uint64(vm.getBlockTimestamp());
@@ -766,7 +778,7 @@ contract LibIDTest is LibIDTestBase {
             id,
             handle,
             createdAt - CeremonyProfile.FUTURE_OBSERVATION_ALLOWANCE_SECONDS_GITHUB,
-            publish
+            primary
         );
     }
 
@@ -834,7 +846,9 @@ contract LibIDTestBaseTest is LibIDTestBase {
         assertEq(LibID.resolve(LibID.GITHUB, "OctoCat"), alice);
         assertEq(LibID.resolve(LibID.X, "Jack"), alice);
         assertEq(LibID.resolve(LibID.GOOGLE, "Alice@Gmail.com"), alice);
-        assertEq(LibID.publishedHandleOf(alice, LibID.GITHUB), "octocat");
+        (bytes32 platform, string memory name) = LibID.primaryHandleOf(alice);
+        assertEq(platform, LibID.GOOGLE);
+        assertEq(name, "alice@gmail.com");
     }
 
     function test_deployLibIDTestnetUsesTheTestnetAddresses() public {
@@ -871,7 +885,9 @@ contract LibIDTestBaseTest is LibIDTestBase {
         (address holder, uint64 observedAt) = LibID.bindingOf(LibID.GITHUB, "octocat");
         assertEq(holder, alice);
         assertEq(observedAt, 1_700_000_000);
-        assertEq(LibID.publishedHandleOf(alice, LibID.GITHUB), "");
+        (bytes32 platform, string memory name) = LibID.primaryHandleOf(alice);
+        assertEq(platform, bytes32(0));
+        assertEq(name, "");
     }
 
     /// A second call uses what the first deployed.

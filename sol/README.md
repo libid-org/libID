@@ -21,8 +21,9 @@ contract Guestbook {
 ```
 
 The libID contracts have the same address on every chain of one environment,
-so LibID has them built in. Within an environment these addresses never
-change: contract updates are upgrades at the same address. Every function is
+so LibID has them built in. They follow chain-configurations' deployments
+and change when libID-contracts ships as a new deployment; rebuild against
+the LibID that names the deployment you use. Every function is
 `internal`: it compiles into your contract, and there is nothing to deploy or
 link. `LibID.sol` imports nothing.
 
@@ -38,10 +39,10 @@ import {LibIDTestnet as LibID} from "libid/LibIDTestnet.sol";
 
 | Library | Chains | IdentityRegistry | HandleEscrow |
 |---|---|---|---|
-| `LibID` | Ethereum mainnet | `0xfecfc075ee28b85C86902ba3CCe62c4264fA81b7` | `0xe88c1f6AF33a80625930FB1dd3C43b5cA1Fb9518` |
-| `LibIDTestnet` | Sepolia, Eden testnet | `0x4e750FB0E1e529D7a57647C0001dB96C5FFb6FA1` | `0xC7C13a7715858e60d628F867048E0F67fC683dd6` |
+| `LibID` | Ethereum mainnet | `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` | `0xD38474F12d887a1d97ac7A62cF0B3C17E4d2c100` |
+| `LibIDTestnet` | Sepolia, Eden testnet | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` | `0xF3f81C31C889DdF1ec83B91b3DFED601C04F5E50` |
 
-These are the libID-contracts v0.18 addresses. They are not deployed on
+These are the libID-contracts v0.19 addresses. They are not deployed on
 Ethereum mainnet yet: there, `isAvailable()` and `isEscrowAvailable()` are
 false and every other call reverts `LibIDUnavailable`. `isAvailable` checks only that the registry
 address has code.
@@ -83,14 +84,15 @@ contract GuestbookTest is LibIDTestBase {
 }
 ```
 
-- `bindHandle(holder, platformId, id, handle)` binds and publishes the handle
-  as a proof made now would: it reads 5 minutes old on GitHub and X and an
+- `bindHandle(holder, platformId, id, handle)` binds the handle as the
+  holder's primary handle, its one name across platforms, as a proof made now
+  would: it reads 5 minutes old on GitHub and X and an
   hour old on Google, as with the notary's or Google's clock on the block's.
   It moves the clock forward a second first, so binds in one block do not
   refuse each other as stale.
-- `bindHandle(holder, platformId, id, handle, observedAt, publish)` takes the
+- `bindHandle(holder, platformId, id, handle, observedAt, primary)` takes the
   proof time, to test proof ages. It does not move the clock. Without
-  `publish`, the bind discloses no handle.
+  `primary`, the bind is private: it discloses no handle.
 - Both bind the nodes a circuit would output for `id` and `handle`.
   `libidIdNode(platformId, id)` gives the id node, for `resolveId`.
 - Where libID is already deployed, as on a fork, `deployLibID` uses that
@@ -139,7 +141,7 @@ builds and tests it.
 | `resolve(platformId, handle, maxAge)` | the same, or zero if the latest proof is older than `maxAge` seconds |
 | `bindingOf(platformId, handle)` | the holder and the `observedAt` of the latest proof, to apply your own rules |
 | `resolveId(idNode)` | the holder of the identity with that id node, or zero |
-| `publishedHandleOf(holder, platformId)` | the handle the holder publishes, or `""` |
+| `primaryHandleOf(holder)` | the holder's primary handle and its platform, or zero and `""` |
 | `isHolder(account, platformId, handle, maxAge)` | whether `account` holds the handle with a fresh enough proof |
 | `requireHolder(platformId, handle, maxAge)` | reverts `NotHolder` or `ProofTooOld` unless `msg.sender` holds it |
 | `pay(platformId, handle, amount, refundTo)` | sends ETH from your contract to the handle; returns the escrow node |

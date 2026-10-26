@@ -100,7 +100,7 @@ abstract contract LibIDTestBase is Test {
         libidProofs.setVerifier(platformId, LIBID_STAND_IN_VERSION, IPlatformVerifier(address(verifier)));
     }
 
-    /// @notice Bind a handle to `holder` and publish it, as a proof made now
+    /// @notice Bind a handle to `holder` as its primary handle, as a proof made now
     ///         with the notary's or Google's clock on the block's would:
     ///         `observedAt` is 5 minutes ago on GitHub and X, and an hour ago
     ///         on Google. Moves the clock a second first, so each such proof
@@ -115,7 +115,9 @@ abstract contract LibIDTestBase is Test {
     }
 
     /// @notice Bind a handle to `holder` as a proof with this `observedAt`
-    ///         would, publishing it if `publish` is set. The nodes are the
+    ///         would. With `primary`, the handle is disclosed and becomes the
+    ///         holder's one name, replacing any other; without it, the binding
+    ///         is private. The nodes are the
     ///         ones a circuit outputs: `libidIdNode(platformId, id)` and the
     ///         registry's `handleNodeOf(platformId, handle)`.
     /// @dev The registry refuses a proof no newer than the last one of the
@@ -126,7 +128,7 @@ abstract contract LibIDTestBase is Test {
         string memory id,
         string memory handle,
         uint64 observedAt,
-        bool publish
+        bool primary
     ) internal libidKeepsCallers {
         StubPlatformVerifier verifier = libidVerifiers[platformId];
         require(address(verifier) != address(0), "LibIDTestBase: platform not added");
@@ -138,12 +140,12 @@ abstract contract LibIDTestBase is Test {
                 ceremonyVersion: CeremonyProfile.LAUNCH_VERSION,
                 operationDomain: libidRegistry.OPERATION_DOMAIN(),
                 authorizationNonce: bytes32(++libidNonce),
-                transactionData: abi.encode(holder, uint256(0), address(0))
+                transactionData: abi.encode(holder)
             })
         );
         vm.prank(holder);
-        if (publish) libidRegistry.bind(platformId, LIBID_STAND_IN_VERSION, payload, handle);
-        else libidRegistry.bindPrivately(platformId, LIBID_STAND_IN_VERSION, payload);
+        if (primary) libidRegistry.bind(platformId, LIBID_STAND_IN_VERSION, payload, handle, true, 0, address(0));
+        else libidRegistry.bindPrivately(platformId, LIBID_STAND_IN_VERSION, payload, 0, address(0));
     }
 
     /// @notice An id's node, `SHA256("libid.<platform>.user-id" || id)`: what

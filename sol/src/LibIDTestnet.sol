@@ -7,7 +7,8 @@ pragma solidity ^0.8.20;
 ///         it, or pay a handle through the escrow.
 ///
 /// @dev The contracts sit at the same address on every chain of one
-///      environment, so the addresses are constants. `LibID` has the
+///      environment, so the addresses are constants. They name one
+///      libID-contracts deployment (v0.19), from chain-configurations. `LibID` has the
 ///      production addresses, those of Ethereum mainnet. `LibIDTestnet` has
 ///      the testnet addresses, those of Sepolia and Eden, and is generated
 ///      from `LibID` with nothing else changed: import it as `LibID` to build
@@ -33,9 +34,9 @@ pragma solidity ^0.8.20;
 ///      and update your own state before paying.
 library LibIDTestnet {
     /// @notice The IdentityRegistry: which address holds which identity.
-    address internal constant REGISTRY = 0x4e750FB0E1e529D7a57647C0001dB96C5FFb6FA1;
+    address internal constant REGISTRY = 0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D;
     /// @notice The HandleEscrow: value sent to a handle before anyone holds it.
-    address internal constant ESCROW = 0xC7C13a7715858e60d628F867048E0F67fC683dd6;
+    address internal constant ESCROW = 0xF3f81C31C889DdF1ec83B91b3DFED601C04F5E50;
 
     /// @notice Platform ids: `keccak256` of the platform key.
     bytes32 internal constant GITHUB = keccak256("github");
@@ -110,10 +111,11 @@ library LibIDTestnet {
         return _registry().resolveId(idNode);
     }
 
-    /// @notice The handle `holder` publishes on a platform, or an empty string.
-    /// @dev Empty also when the published handle now belongs to someone else.
-    function publishedHandleOf(address holder, bytes32 platformId) internal view returns (string memory) {
-        return _registry().publishedHandleOf(holder, platformId);
+    /// @notice The handle `holder` chose as its name, and its platform: one per
+    ///         holder, across platforms. Zero and empty if there is none.
+    /// @dev Zero and empty also when that handle now belongs to someone else.
+    function primaryHandleOf(address holder) internal view returns (bytes32 platformId, string memory handle) {
+        return _registry().primaryHandleOf(holder);
     }
 
     // ─── Gating ─────────────────────────────────────────────────────
@@ -265,7 +267,7 @@ library LibIDTestnet {
 interface ILibIDTestnetRegistry {
     function resolveHandle(bytes32 platformId, string calldata handle) external view returns (address);
     function resolveId(bytes32 idNode) external view returns (address);
-    function publishedHandleOf(address holder, bytes32 platformId) external view returns (string memory);
+    function primaryHandleOf(address holder) external view returns (bytes32 platformId, string memory handle);
     function handleNodeOf(bytes32 platformId, string calldata handle) external view returns (bytes32);
     function handleBinding(bytes32 handleNode) external view returns (address holder, uint64 observedAt);
 }
