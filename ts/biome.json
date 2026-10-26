@@ -12,6 +12,7 @@
       "!**/playwright-report",
       "!**/coverage",
       "!apps/dev/.cache",
+      "!apps/dev/e2e/stealth.js",
       "!.cache"
     ]
   },
