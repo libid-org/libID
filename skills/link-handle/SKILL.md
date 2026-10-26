@@ -50,10 +50,11 @@ Send it with: "Open this link and sign in with the account you want to link to m
 wallet." On their own computer, you can also `open` or `xdg-open` it. Keep `SESSION`
 between you and your human: whoever holds it can hand you a transaction.
 
-If your human explicitly asks you to sign in for them, open the link in your own
-browser and let a password manager such as 1Password or Bitwarden fill the login;
-never read or type their password or codes yourself. Keep that browser open until
-step 4 finishes: the proof is made in it.
+If you have a browser and a password manager such as 1Password or Bitwarden, ask
+your human whether you should sign in for them. Only if they agree, open the link in
+your own browser and let the password manager fill the login; never read or type
+their password or codes yourself. Keep that browser open until step 4 finishes: the
+proof is made in it.
 
 ## 4. Wait for the transaction
 
