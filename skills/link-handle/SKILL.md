@@ -46,15 +46,16 @@ SESSION=$(openssl rand -hex 16)
 echo "$LAUNCHER/link/agent/#address=$ADDR&chain=$CHAIN&session=$SESSION"
 ```
 
-Send it with: "Open this link and sign in with the account you want to link to my
-wallet." On their own computer, you can also `open` or `xdg-open` it. Keep `SESSION`
-between you and your human: whoever holds it can hand you a transaction.
-
-If you have a browser and a password manager such as 1Password or Bitwarden, ask
-your human whether you should sign in for them. Only if they agree, open the link in
+If you have a browser and a password manager such as 1Password or Bitwarden, first
+ask your human whether you should sign in for them. If they agree, open the link in
 your own browser and let the password manager fill the login; never read or type
 their password or codes yourself. Keep that browser open until step 4 finishes: the
 proof is made in it.
+
+Otherwise, send it with: "Open this link and sign in with the account you want to
+link to my wallet." On their own computer, you can also `open` or `xdg-open` it.
+Keep `SESSION` between you and your human: whoever holds it can hand you a
+transaction.
 
 ## 4. Wait for the transaction
 
