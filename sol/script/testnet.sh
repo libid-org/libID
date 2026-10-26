@@ -6,10 +6,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# The testnet environment's canonical addresses, from chain-configurations'
-# networks/sepolia.toml and networks/eden-testnet.toml.
+# The testnet environment's canonical addresses: the registry from
+# chain-configurations' networks/sepolia.toml and networks/eden-testnet.toml,
+# the escrow the factory address of libid.HandleEscrow.4.
 registry=0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D
-escrow=0xF3f81C31C889DdF1ec83B91b3DFED601C04F5E50
+escrow=0xE7eb0c675B757C12B1312dF652242b863624Bfab
 
 # Written beside the target and moved over it only once complete, so a failed
 # run leaves the old file in place.

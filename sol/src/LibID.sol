@@ -7,11 +7,12 @@ pragma solidity ^0.8.20;
 ///
 /// @dev The contracts sit at the same address on every chain of one
 ///      environment, so the addresses are constants. They name one
-///      libID-contracts deployment (v0.19), from chain-configurations. `LibID` has the
-///      production addresses, those of Ethereum mainnet. `LibIDTestnet` has
-///      the testnet addresses, those of Sepolia and Eden, and is generated
-///      from `LibID` with nothing else changed: import it as `LibID` to build
-///      for a testnet. Every function is `internal`: it is
+///      libID-contracts deployment: the v0.19 IdentityRegistry, and the
+///      HandleEscrow with refund dates under `libid.HandleEscrow.4`. `LibID`
+///      has the production addresses, those of Ethereum mainnet.
+///      `LibIDTestnet` has the testnet addresses, those of Sepolia and Eden,
+///      and is generated from `LibID` with nothing else changed: import it as
+///      `LibID` to build for a testnet. Every function is `internal`: it is
 ///      compiled into the calling contract, and there is nothing to deploy or
 ///      link. Where a contract has no code, the functions that need it
 ///      revert `LibIDUnavailable`: check `isAvailable` before reading or
@@ -35,7 +36,7 @@ library LibID {
     /// @notice The IdentityRegistry: which address holds which identity.
     address internal constant REGISTRY = 0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA;
     /// @notice The HandleEscrow: value sent to a handle before anyone holds it.
-    address internal constant ESCROW = 0xD38474F12d887a1d97ac7A62cF0B3C17E4d2c100;
+    address internal constant ESCROW = 0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5;
 
     /// @notice Platform ids: `keccak256` of the platform key.
     bytes32 internal constant GITHUB = keccak256("github");
@@ -153,27 +154,26 @@ library LibID {
     /// @dev If someone holds the handle, the escrow sends them the ETH in the
     ///      same call: their code runs, and if it reverts so does this call.
     ///      Otherwise the escrow holds the funds until the handle is proved and
-    ///      claimed, and `refundTo` can take them back until then.
+    ///      claimed. The deposit is this contract's: only this contract can
+    ///      `refund` it, from the escrow's `REFUND_GRACE` (30 days) after its
+    ///      last payment to that handle in that token. Each payment moves the
+    ///      date for the whole amount. A contract paying for its users must
+    ///      track their shares itself.
     ///
     ///      Nothing checks that the platform could issue the text. Text it
     ///      never issues, such as a GitHub handle with a leading at-sign,
-    ///      escrows at a node nobody can claim, and only `refundTo` can take
-    ///      it back.
+    ///      escrows at a node nobody can claim, and only `refund` gets it back.
     ///
     ///      Reverts `LibIDUnavailable` unless `isEscrowAvailable`. The escrow
-    ///      reverts `ZeroAmount` when nothing would arrive, `BadRefundTo` when
-    ///      `refundTo` is zero or the escrow, `PayingYourself` when this
-    ///      contract holds the handle, and `PlatformAcceptsNoBindings` when
-    ///      nobody holds it and the platform takes no new proofs.
+    ///      reverts `ZeroAmount` when nothing would arrive, `PayingYourself`
+    ///      when this contract holds the handle, and `PlatformAcceptsNoBindings`
+    ///      when nobody holds it and the platform takes no new proofs.
     /// @return handleNode The registry's node for the handle, where the escrow
     ///         keeps the funds. Keep it to `refund`: an upgrade of the
     ///         registry can stop the handle text from reaching this node.
-    function pay(bytes32 platformId, string memory handle, uint256 amount, address refundTo)
-        internal
-        returns (bytes32 handleNode)
-    {
+    function pay(bytes32 platformId, string memory handle, uint256 amount) internal returns (bytes32 handleNode) {
         handleNode = _escrowNode(platformId, handle);
-        ILibIDEscrow(ESCROW).deposit{value: amount}(platformId, handleNode, NATIVE, amount, refundTo);
+        ILibIDEscrow(ESCROW).deposit{value: amount}(platformId, handleNode, NATIVE, amount);
     }
 
     /// @notice Send `amount` of an ERC-20 token held by this contract to a
@@ -183,23 +183,32 @@ library LibID {
     ///      sender on top of the amount (its claims and refunds revert), a
     ///      rebasing token, and a token that can block the escrow. Reverts as
     ///      `pay` does, and `ApproveFailed` when the token refuses the approval.
-    function payToken(bytes32 platformId, string memory handle, address token, uint256 amount, address refundTo)
+    function payToken(bytes32 platformId, string memory handle, address token, uint256 amount)
         internal
         returns (bytes32 handleNode)
     {
         handleNode = _escrowNode(platformId, handle);
         _forceApprove(token, amount);
-        ILibIDEscrow(ESCROW).deposit(platformId, handleNode, token, amount, refundTo);
+        ILibIDEscrow(ESCROW).deposit(platformId, handleNode, token, amount);
     }
 
     /// @notice Take back this contract's escrowed deposits at `handleNode`, in
     ///         one token, and send them to `recipient`.
-    /// @dev `handleNode` is what `pay` or `payToken` returned. Works only for
-    ///      deposits that named this contract as `refundTo`, and only until
-    ///      the handle's holder claims them; otherwise the escrow reverts
-    ///      `NothingToRefund`.
+    /// @dev `handleNode` is what `pay` or `payToken` returned. The escrow
+    ///      reverts `RefundLocked` before the date `contribution` gives, and
+    ///      `NothingToRefund` once the handle's holder has claimed the deposits.
     function refund(bytes32 handleNode, address token, address recipient) internal {
         _escrow().refund(handleNode, token, recipient);
+    }
+
+    /// @notice What this contract has escrowed at `handleNode` in one token,
+    ///         and when `refund` opens for it. Zero once the holder claims it.
+    function contribution(bytes32 handleNode, address token)
+        internal
+        view
+        returns (uint256 amount, uint64 refundableAt)
+    {
+        return _escrow().contribution(handleNode, token, address(this));
     }
 
     // ─── Internals ──────────────────────────────────────────────────
@@ -274,8 +283,10 @@ interface ILibIDRegistry {
 /// @dev The HandleEscrow calls LibID makes.
 interface ILibIDEscrow {
     function registry() external view returns (address);
-    function deposit(bytes32 platformId, bytes32 handleNode, address token, uint256 amount, address refundTo)
-        external
-        payable;
+    function deposit(bytes32 platformId, bytes32 handleNode, address token, uint256 amount) external payable;
     function refund(bytes32 handleNode, address token, address recipient) external;
+    function contribution(bytes32 handleNode, address token, address sender)
+        external
+        view
+        returns (uint256 amount, uint64 refundableAt);
 }

@@ -29,13 +29,12 @@ interface IConsumer {
         external
         view
         returns (bool);
-    function pay(bytes32 platformId, string calldata handle, uint256 amount, address refundTo)
-        external
-        returns (bytes32);
-    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount, address refundTo)
+    function pay(bytes32 platformId, string calldata handle, uint256 amount) external returns (bytes32);
+    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount)
         external
         returns (bytes32);
     function refund(bytes32 handleNode, address token, address recipient) external;
+    function contribution(bytes32 handleNode, address token) external view returns (uint256, uint64);
 }
 
 /// @notice A contract that uses LibID, as an integrator's would.
@@ -81,22 +80,23 @@ contract Consumer is IConsumer {
         return true;
     }
 
-    function pay(bytes32 platformId, string calldata handle, uint256 amount, address refundTo)
-        external
-        returns (bytes32)
-    {
-        return LibID.pay(platformId, handle, amount, refundTo);
+    function pay(bytes32 platformId, string calldata handle, uint256 amount) external returns (bytes32) {
+        return LibID.pay(platformId, handle, amount);
     }
 
-    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount, address refundTo)
+    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount)
         external
         returns (bytes32)
     {
-        return LibID.payToken(platformId, handle, token, amount, refundTo);
+        return LibID.payToken(platformId, handle, token, amount);
     }
 
     function refund(bytes32 handleNode, address token, address recipient) external {
         LibID.refund(handleNode, token, recipient);
+    }
+
+    function contribution(bytes32 handleNode, address token) external view returns (uint256, uint64) {
+        return LibID.contribution(handleNode, token);
     }
 
     receive() external payable {}
@@ -178,7 +178,6 @@ contract LibIDTest is LibIDTestBase {
 
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
-    address internal sender = makeAddr("sender");
 
     Consumer internal consumer;
 
@@ -201,9 +200,9 @@ contract LibIDTest is LibIDTestBase {
     /// names, computed here independently of the literals in LibID.
     function test_theAddressesAreTheFactoryAddressesOfTheCanonicalNames() public pure {
         assertEq(LibID.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry.2"), FACTORY));
-        assertEq(LibID.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.3"), FACTORY));
+        assertEq(LibID.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.4"), FACTORY));
         assertEq(LibIDTestnet.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry.2"), TESTNET_FACTORY));
-        assertEq(LibIDTestnet.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.3"), TESTNET_FACTORY));
+        assertEq(LibIDTestnet.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.4"), TESTNET_FACTORY));
     }
 
     function test_thePlatformIdsAreTheContractsOwn() public pure {
@@ -263,7 +262,7 @@ contract LibIDTest is LibIDTestBase {
         vm.expectRevert(abi.encodeWithSelector(LibID.NotHolder.selector, address(0), alice));
         consumer.gated(LibID.X, "jack", 1 days);
         vm.expectRevert(abi.encodeWithSelector(HandleEscrow.PlatformAcceptsNoBindings.selector, LibID.X));
-        consumer.pay(LibID.X, "jack", 1 ether, sender);
+        consumer.pay(LibID.X, "jack", 1 ether);
     }
 
     function test_bindingOfTellsTheCasesApart() public {
@@ -298,7 +297,7 @@ contract LibIDTest is LibIDTestBase {
         vm.expectRevert(unknown);
         consumer.gated(MASTODON, "jack", 1 days);
         vm.expectRevert(unknown);
-        consumer.pay(MASTODON, "jack", 1 ether, sender);
+        consumer.pay(MASTODON, "jack", 1 ether);
     }
 
     function test_resolveWithAMaxAgeDropsOldProofs() public {
@@ -459,7 +458,7 @@ contract LibIDTest is LibIDTestBase {
 
     function test_payReachesTheHolderAtOnce() public {
         _bind(alice, "1001", "octocat", true);
-        bytes32 node = consumer.pay(LibID.GITHUB, "Octocat", 1 ether, sender);
+        bytes32 node = consumer.pay(LibID.GITHUB, "Octocat", 1 ether);
         assertEq(node, libidRegistry.handleNodeOf(LibID.GITHUB, "octocat"));
         assertEq(alice.balance, 1 ether);
     }
@@ -471,17 +470,17 @@ contract LibIDTest is LibIDTestBase {
         vm.mockCall(
             LibID.REGISTRY, abi.encodeCall(IIdentityRegistry.handleNodeOf, (LibID.GITHUB, "carol")), abi.encode(node)
         );
-        assertEq(consumer.pay(LibID.GITHUB, "carol", 1 ether, sender), node);
+        assertEq(consumer.pay(LibID.GITHUB, "carol", 1 ether), node);
         assertEq(libidEscrow.escrowed(node, LibID.NATIVE), 1 ether);
 
         TestERC20 token = new TestERC20();
         token.mint(address(consumer), 100);
-        assertEq(consumer.payToken(LibID.GITHUB, "carol", address(token), 40, sender), node);
+        assertEq(consumer.payToken(LibID.GITHUB, "carol", address(token), 40), node);
         assertEq(libidEscrow.escrowed(node, address(token)), 40);
     }
 
     function test_payToAnUnheldHandleWaitsForItsHolder() public {
-        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether, sender);
+        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether);
         assertEq(libidEscrow.escrowed(node, LibID.NATIVE), 1 ether);
 
         address carol = makeAddr("carol");
@@ -492,14 +491,15 @@ contract LibIDTest is LibIDTestBase {
     }
 
     /// Nothing refuses text GitHub never issues: it escrows at a node nobody
-    /// can claim, and only `refundTo` takes it back.
+    /// can claim, and only the paying contract takes it back.
     function test_aPaymentToTextThatIsNoHandleIsOnlyRefundable() public {
-        bytes32 node = consumer.pay(LibID.GITHUB, "@carol", 1 ether, address(consumer));
+        bytes32 node = consumer.pay(LibID.GITHUB, "@carol", 1 ether);
         assertEq(node, libidRegistry.handleNodeOf(LibID.GITHUB, "@carol"));
         assertTrue(node != libidRegistry.handleNodeOf(LibID.GITHUB, "carol"));
         assertEq(libidEscrow.escrowed(node, LibID.NATIVE), 1 ether);
 
         address recipient = makeAddr("recipient");
+        _passRefundGrace();
         consumer.refund(node, LibID.NATIVE, recipient);
         assertEq(recipient.balance, 1 ether);
     }
@@ -510,14 +510,14 @@ contract LibIDTest is LibIDTestBase {
         address holder = address(new RejectEther());
         _bind(holder, "4004", "refuser", true);
         vm.expectRevert(abi.encodeWithSelector(HandleEscrow.NativeTransferFailed.selector, holder, 1 ether));
-        consumer.pay(LibID.GITHUB, "refuser", 1 ether, sender);
+        consumer.pay(LibID.GITHUB, "refuser", 1 ether);
     }
 
     function test_payTokenApprovesAndDeposits() public {
         TestERC20 token = new TestERC20();
         token.mint(address(consumer), 100);
         _bind(alice, "1001", "octocat", true);
-        consumer.payToken(LibID.GITHUB, "octocat", address(token), 40, sender);
+        consumer.payToken(LibID.GITHUB, "octocat", address(token), 40);
         assertEq(token.balanceOf(alice), 40);
         assertEq(token.allowance(address(consumer), LibID.ESCROW), 0);
     }
@@ -525,14 +525,14 @@ contract LibIDTest is LibIDTestBase {
     function test_payTokenWorksWithATokenThatReturnsNothing() public {
         NoReturnToken token = new NoReturnToken();
         token.mint(address(consumer), 100);
-        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25);
         assertEq(libidEscrow.escrowed(node, address(token)), 25);
     }
 
     function test_payTokenWorksWithATokenThatRefusesAZeroApproval() public {
         NoZeroApproveToken token = new NoZeroApproveToken();
         token.mint(address(consumer), 100);
-        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25);
         assertEq(libidEscrow.escrowed(node, address(token)), 25);
     }
 
@@ -540,7 +540,7 @@ contract LibIDTest is LibIDTestBase {
         StrictApproveToken token = new StrictApproveToken();
         token.mint(address(consumer), 100);
         token.setAllowance(address(consumer), LibID.ESCROW, 7);
-        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25);
         assertEq(libidEscrow.escrowed(node, address(token)), 25);
         assertEq(token.allowance(address(consumer), LibID.ESCROW), 0);
     }
@@ -550,7 +550,7 @@ contract LibIDTest is LibIDTestBase {
     function test_payTokenWorksWithATokenThatTakesAFeeFromTheAmount() public {
         FeeToken token = new FeeToken();
         token.mint(address(consumer), 1000);
-        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, sender);
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000);
         assertEq(libidEscrow.escrowed(node, address(token)), 990);
 
         address carol = makeAddr("carol");
@@ -563,7 +563,7 @@ contract LibIDTest is LibIDTestBase {
     function test_payTokenAcceptsATrueFollowedByMoreWords() public {
         LongApproveToken token = new LongApproveToken();
         token.mint(address(consumer), 100);
-        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25);
         assertEq(libidEscrow.escrowed(node, address(token)), 25);
     }
 
@@ -578,31 +578,32 @@ contract LibIDTest is LibIDTestBase {
         uint256 approveCost = start - gasleft();
 
         start = gasleft();
-        consumer.payToken(LibID.GITHUB, "carol", address(token), 25, sender);
+        consumer.payToken(LibID.GITHUB, "carol", address(token), 25);
         assertLt(start - gasleft(), approveCost + 400_000);
     }
 
     function test_payTokenRefusesAnAddressWithoutCode() public {
         address notAToken = makeAddr("notAToken");
         vm.expectRevert(abi.encodeWithSelector(LibID.ApproveFailed.selector, notAToken));
-        consumer.payToken(LibID.GITHUB, "carol", notAToken, 25, sender);
+        consumer.payToken(LibID.GITHUB, "carol", notAToken, 25);
     }
 
     function test_payTokenRefusesAnApproveAnswerThatIsNotTrue() public {
         address dirty = address(new DirtyApproveToken());
         vm.expectRevert(abi.encodeWithSelector(LibID.ApproveFailed.selector, dirty));
-        consumer.payToken(LibID.GITHUB, "carol", dirty, 25, sender);
+        consumer.payToken(LibID.GITHUB, "carol", dirty, 25);
 
         address short = address(new ShortApproveToken());
         vm.expectRevert(abi.encodeWithSelector(LibID.ApproveFailed.selector, short));
-        consumer.payToken(LibID.GITHUB, "carol", short, 25, sender);
+        consumer.payToken(LibID.GITHUB, "carol", short, 25);
     }
 
     // ─── Refunding ──────────────────────────────────────────────────
 
     function test_aContractTakesBackWhatItEscrowed() public {
         address recipient = makeAddr("recipient");
-        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether, address(consumer));
+        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether);
+        _passRefundGrace();
         consumer.refund(node, LibID.NATIVE, recipient);
         assertEq(recipient.balance, 1 ether);
     }
@@ -611,7 +612,8 @@ contract LibIDTest is LibIDTestBase {
         TestERC20 token = new TestERC20();
         token.mint(address(consumer), 100);
         address recipient = makeAddr("recipient");
-        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 40, address(consumer));
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 40);
+        _passRefundGrace();
         consumer.refund(node, address(token), recipient);
         assertEq(token.balanceOf(recipient), 40);
         assertEq(token.balanceOf(address(consumer)), 60);
@@ -624,8 +626,9 @@ contract LibIDTest is LibIDTestBase {
         FeeToken token = new FeeToken();
         token.mint(address(consumer), 1000);
         address recipient = makeAddr("recipient");
-        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, address(consumer));
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000);
         assertEq(libidEscrow.escrowed(node, address(token)), 990);
+        _passRefundGrace();
         consumer.refund(node, address(token), recipient);
         assertEq(token.balanceOf(recipient), 990);
         assertEq(libidEscrow.escrowed(node, address(token)), 0);
@@ -637,8 +640,9 @@ contract LibIDTest is LibIDTestBase {
         PayoutFeeToken token = new PayoutFeeToken();
         token.mint(address(consumer), 1000);
         address recipient = makeAddr("recipient");
-        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000, address(consumer));
+        bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 1000);
         assertEq(libidEscrow.escrowed(node, address(token)), 1000);
+        _passRefundGrace();
         consumer.refund(node, address(token), recipient);
         assertEq(token.balanceOf(recipient), 990);
         assertEq(libidEscrow.escrowed(node, address(token)), 0);
@@ -646,7 +650,7 @@ contract LibIDTest is LibIDTestBase {
     }
 
     function test_refundAfterTheHolderClaimedReverts() public {
-        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether, address(consumer));
+        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether);
         address carol = makeAddr("carol");
         _bind(carol, "3003", "carol", true);
         vm.prank(carol);
@@ -656,6 +660,36 @@ contract LibIDTest is LibIDTestBase {
             abi.encodeWithSelector(HandleEscrow.NothingToRefund.selector, node, LibID.NATIVE, address(consumer))
         );
         consumer.refund(node, LibID.NATIVE, makeAddr("recipient"));
+    }
+
+    /// A refund opens `REFUND_GRACE` after the contract's last payment to the
+    /// handle, as `contribution` reports, and each payment moves the date.
+    function test_aRefundOpensAtTheDateContributionGives() public {
+        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether);
+        vm.warp(block.timestamp + 1 days);
+        consumer.pay(LibID.GITHUB, "carol", 1 ether);
+        (uint256 amount, uint64 refundableAt) = consumer.contribution(node, LibID.NATIVE);
+        assertEq(amount, 2 ether);
+        assertEq(refundableAt, block.timestamp + libidEscrow.REFUND_GRACE());
+
+        address recipient = makeAddr("recipient");
+        vm.warp(refundableAt - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                HandleEscrow.RefundLocked.selector, node, LibID.NATIVE, address(consumer), refundableAt
+            )
+        );
+        consumer.refund(node, LibID.NATIVE, recipient);
+
+        vm.warp(refundableAt);
+        consumer.refund(node, LibID.NATIVE, recipient);
+        assertEq(recipient.balance, 2 ether);
+        (amount,) = consumer.contribution(node, LibID.NATIVE);
+        assertEq(amount, 0);
+    }
+
+    function _passRefundGrace() private {
+        vm.warp(block.timestamp + libidEscrow.REFUND_GRACE());
     }
 
     // ─── Availability ───────────────────────────────────────────────
@@ -677,30 +711,31 @@ contract LibIDTest is LibIDTestBase {
 
         bytes memory unavailable = abi.encodeWithSelector(LibID.LibIDUnavailable.selector);
         vm.expectRevert(unavailable);
-        consumer.pay(LibID.GITHUB, "octocat", 1 ether, sender);
+        consumer.pay(LibID.GITHUB, "octocat", 1 ether);
         vm.expectRevert(unavailable);
-        consumer.payToken(LibID.GITHUB, "octocat", address(1), 1, sender);
+        consumer.payToken(LibID.GITHUB, "octocat", address(1), 1);
         vm.expectRevert(unavailable);
-        consumer.refund(bytes32(0), LibID.NATIVE, sender);
+        consumer.refund(bytes32(0), LibID.NATIVE, bob);
     }
 
     /// An escrow that resolves through another registry is not this one's:
     /// it would book a payment at that registry's node, so paying reverts.
     /// What was escrowed before can still be refunded.
     function test_anEscrowBoundToAnotherRegistryIsNotAvailable() public {
-        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether, address(consumer));
+        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether);
         vm.mockCall(LibID.ESCROW, abi.encodeWithSignature("registry()"), abi.encode(address(0xbeef)));
         assertFalse(consumer.isEscrowAvailable());
 
         bytes memory unavailable = abi.encodeWithSelector(LibID.LibIDUnavailable.selector);
         vm.expectRevert(unavailable);
-        consumer.pay(LibID.GITHUB, "carol", 1 ether, sender);
+        consumer.pay(LibID.GITHUB, "carol", 1 ether);
         TestERC20 token = new TestERC20();
         token.mint(address(consumer), 100);
         vm.expectRevert(unavailable);
-        consumer.payToken(LibID.GITHUB, "carol", address(token), 40, sender);
+        consumer.payToken(LibID.GITHUB, "carol", address(token), 40);
 
         address recipient = makeAddr("recipient");
+        _passRefundGrace();
         consumer.refund(node, LibID.NATIVE, recipient);
         assertEq(recipient.balance, 1 ether);
     }
@@ -734,11 +769,11 @@ contract LibIDTest is LibIDTestBase {
         vm.expectRevert(unavailable);
         consumer.gated(LibID.GITHUB, "octocat", 1 days);
         vm.expectRevert(unavailable);
-        consumer.pay(LibID.GITHUB, "octocat", 1 ether, sender);
+        consumer.pay(LibID.GITHUB, "octocat", 1 ether);
         vm.expectRevert(unavailable);
-        consumer.payToken(LibID.GITHUB, "octocat", address(1), 1, sender);
+        consumer.payToken(LibID.GITHUB, "octocat", address(1), 1);
         vm.expectRevert(unavailable);
-        consumer.refund(bytes32(0), LibID.NATIVE, sender);
+        consumer.refund(bytes32(0), LibID.NATIVE, bob);
     }
 
     // ─── Helpers ────────────────────────────────────────────────────
@@ -952,22 +987,23 @@ contract TestnetConsumer is IConsumer {
         return LibIDTestnet.isHolder(account, platformId, handle, maxAge);
     }
 
-    function pay(bytes32 platformId, string calldata handle, uint256 amount, address refundTo)
-        external
-        returns (bytes32)
-    {
-        return LibIDTestnet.pay(platformId, handle, amount, refundTo);
+    function pay(bytes32 platformId, string calldata handle, uint256 amount) external returns (bytes32) {
+        return LibIDTestnet.pay(platformId, handle, amount);
     }
 
-    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount, address refundTo)
+    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount)
         external
         returns (bytes32)
     {
-        return LibIDTestnet.payToken(platformId, handle, token, amount, refundTo);
+        return LibIDTestnet.payToken(platformId, handle, token, amount);
     }
 
     function refund(bytes32 handleNode, address token, address recipient) external {
         LibIDTestnet.refund(handleNode, token, recipient);
+    }
+
+    function contribution(bytes32 handleNode, address token) external view returns (uint256, uint64) {
+        return LibIDTestnet.contribution(handleNode, token);
     }
 
     receive() external payable {}
@@ -977,7 +1013,8 @@ contract TestnetConsumer is IConsumer {
 /// the RPC URL in `rpcVariable`. Skipped when that is empty, unless
 /// LIBID_REQUIRE_FORK is set, as CI sets it: then a missing RPC fails. Where
 /// the chain has no code at the library's addresses, only
-/// `test_isAvailableOnlyWhereDeployed` runs; the rest are skipped.
+/// `test_isAvailableOnlyWhereDeployed` runs; where it has the registry but
+/// not the escrow, the tests that pay are skipped.
 abstract contract ForkTest is LibIDTestBase {
     IConsumer internal consumer;
     IdentityRegistry internal registry;
@@ -1008,24 +1045,32 @@ abstract contract ForkTest is LibIDTestBase {
         escrow = HandleEscrow(escrow_);
     }
 
-    /// Skips a test that needs libID where the chain has none yet.
+    /// Skips a test that needs the registry where the chain has none yet.
     modifier deployed() {
         if (address(registry).code.length == 0) vm.skip(true, "libID is not deployed on this chain yet");
         _;
     }
 
-    /// Where nothing is deployed, the library says so and reverts
-    /// `LibIDUnavailable`.
+    /// Skips a test that needs both contracts where the chain lacks one.
+    modifier escrowDeployed() {
+        if (address(registry).code.length == 0 || address(escrow).code.length == 0) {
+            vm.skip(true, "the libID escrow is not deployed on this chain yet");
+        }
+        _;
+    }
+
+    /// The library reports what is deployed, and reverts `LibIDUnavailable`
+    /// where nothing is.
     function test_isAvailableOnlyWhereDeployed() public {
         bool live = address(registry).code.length != 0;
         assertEq(consumer.isAvailable(), live);
+        assertEq(consumer.isEscrowAvailable(), live && address(escrow).code.length != 0);
         if (live) return;
-        assertFalse(consumer.isEscrowAvailable());
         vm.expectRevert(abi.encodeWithSelector(LibID.LibIDUnavailable.selector));
         consumer.resolve(LibID.GITHUB, "octocat");
     }
 
-    function test_theEmbeddedAddressesRunLibID() public deployed {
+    function test_theEmbeddedAddressesRunLibID() public escrowDeployed {
         assertTrue(consumer.isAvailable());
         assertTrue(consumer.isEscrowAvailable());
         assertEq(address(escrow.registry()), address(registry));
@@ -1038,7 +1083,7 @@ abstract contract ForkTest is LibIDTestBase {
 
     /// Escrows ETH and a token for a handle nobody holds, at the node the
     /// live registry gives, and takes both back.
-    function test_aPaymentToAnUnheldHandleIsEscrowedAndRefunded() public deployed {
+    function test_aPaymentToAnUnheldHandleIsEscrowedAndRefunded() public escrowDeployed {
         string memory handle = _unheldHandle();
         bytes32 expected = registry.handleNodeOf(LibID.GITHUB, handle);
         address recipient = makeAddr(string.concat(handle, " recipient"));
@@ -1046,25 +1091,29 @@ abstract contract ForkTest is LibIDTestBase {
         uint256 before = recipient.balance;
         vm.deal(address(consumer), 1 ether);
 
-        bytes32 node = consumer.pay(LibID.GITHUB, handle, 1 ether, address(consumer));
+        bytes32 node = consumer.pay(LibID.GITHUB, handle, 1 ether);
         assertEq(node, expected);
         assertEq(escrow.escrowed(node, LibID.NATIVE), 1 ether);
-        assertEq(escrow.refundable(node, LibID.NATIVE, address(consumer)), 1 ether);
+        (uint256 amount, uint64 refundableAt) = consumer.contribution(node, LibID.NATIVE);
+        assertEq(amount, 1 ether);
+        vm.warp(refundableAt);
         consumer.refund(node, LibID.NATIVE, recipient);
         assertEq(recipient.balance - before, 1 ether);
         assertEq(escrow.escrowed(node, LibID.NATIVE), 0);
 
         TestERC20 token = new TestERC20();
         token.mint(address(consumer), 100);
-        assertEq(consumer.payToken(LibID.GITHUB, handle, address(token), 40, address(consumer)), expected);
+        assertEq(consumer.payToken(LibID.GITHUB, handle, address(token), 40), expected);
         assertEq(escrow.escrowed(node, address(token)), 40);
+        (, refundableAt) = consumer.contribution(node, address(token));
+        vm.warp(refundableAt);
         consumer.refund(node, address(token), recipient);
         assertEq(token.balanceOf(recipient), 40);
         assertEq(escrow.escrowed(node, address(token)), 0);
     }
 
     /// `LibIDTestBase` uses the live deployment and binds through it.
-    function test_theTestBaseBindsOnTheLiveDeployment() public deployed {
+    function test_theTestBaseBindsOnTheLiveDeployment() public escrowDeployed {
         deployLive();
         assertEq(address(libidRegistry), address(registry));
         assertEq(address(libidEscrow), address(escrow));
@@ -1084,7 +1133,7 @@ abstract contract ForkTest is LibIDTestBase {
 
         vm.deal(address(consumer), 1 ether);
         uint256 before = alice.balance;
-        consumer.pay(LibID.GITHUB, handle, 1 ether, address(consumer));
+        consumer.pay(LibID.GITHUB, handle, 1 ether);
         assertEq(alice.balance - before, 1 ether);
     }
 

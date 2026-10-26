@@ -39,12 +39,15 @@ import {LibIDTestnet as LibID} from "libid/LibIDTestnet.sol";
 
 | Library | Chains | IdentityRegistry | HandleEscrow |
 |---|---|---|---|
-| `LibID` | Ethereum mainnet | `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` | `0xD38474F12d887a1d97ac7A62cF0B3C17E4d2c100` |
-| `LibIDTestnet` | Sepolia, Eden testnet | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` | `0xF3f81C31C889DdF1ec83B91b3DFED601C04F5E50` |
+| `LibID` | Ethereum mainnet | `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` | `0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5` |
+| `LibIDTestnet` | Sepolia, Eden testnet | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` | `0xE7eb0c675B757C12B1312dF652242b863624Bfab` |
 
-These are the libID-contracts v0.19 addresses. They are not deployed on
-Ethereum mainnet yet: there, `isAvailable()` and `isEscrowAvailable()` are
-false and every other call reverts `LibIDUnavailable`. `isAvailable` checks only that the registry
+The registry is libID-contracts v0.19's. The escrow is the one with refund
+dates, under the canonical name `libid.HandleEscrow.4`, and is not deployed
+yet on any chain: until it is, `isEscrowAvailable()` is false and the payment
+functions revert `LibIDUnavailable`. Nothing is deployed on Ethereum mainnet
+yet: there, `isAvailable()` is false too and every other call reverts
+`LibIDUnavailable`. `isAvailable` checks only that the registry
 address has code.
 
 A local chain has no contract at these addresses. Use `LibIDTestBase` in
@@ -144,9 +147,10 @@ builds and tests it.
 | `primaryHandleOf(holder)` | the holder's primary handle and its platform, or zero and `""` |
 | `isHolder(account, platformId, handle, maxAge)` | whether `account` holds the handle with a fresh enough proof |
 | `requireHolder(platformId, handle, maxAge)` | reverts `NotHolder` or `ProofTooOld` unless `msg.sender` holds it |
-| `pay(platformId, handle, amount, refundTo)` | sends ETH from your contract to the handle; returns the escrow node |
-| `payToken(platformId, handle, token, amount, refundTo)` | the same for an ERC-20 your contract holds |
-| `refund(handleNode, token, recipient)` | takes back what your contract escrowed at that node, before it is claimed |
+| `pay(platformId, handle, amount)` | sends ETH from your contract to the handle; returns the escrow node |
+| `payToken(platformId, handle, token, amount)` | the same for an ERC-20 your contract holds |
+| `refund(handleNode, token, recipient)` | takes back what your contract escrowed at that node, from its refund date until it is claimed |
+| `contribution(handleNode, token)` | what your contract has escrowed at that node, and its refund date |
 | `isAvailable()` | whether this chain has the IdentityRegistry, for reads and gates |
 | `isEscrowAvailable()` | whether it also has the HandleEscrow, bound to that registry, for payments |
 
@@ -190,17 +194,24 @@ range rejects some honest holders. A
 ## Payments
 
 `pay` and `payToken` pay the holder at once if the handle has one. Otherwise
-the escrow holds the funds until someone proves the handle and claims them,
-and `refundTo` can take them back until then.
+the escrow holds the funds until someone proves the handle and claims them.
 
-- Set `refundTo` to your user, so they can call `HandleEscrow.refund`
-  themselves. If you set it to your contract, keep the node `pay` returns and
-  offer a way to call `LibID.refund` with it. Do not recompute the node from
-  the handle later: an upgrade of the registry can make that text reach a
-  different node.
+- The escrowed funds are your contract's, not your user's. The escrow keys a
+  deposit by its sender, and the sender is your contract. Only your contract
+  can call `LibID.refund`, and only from the refund date until the holder
+  claims.
+- The refund date is 30 days (the escrow's `REFUND_GRACE`) after your
+  contract's last payment to that handle in that token. Each payment moves it
+  for the whole amount your contract has there, including other users'
+  shares. `contribution` returns the amount and the date.
+- If your contract pays for its users, record each user's share and the node
+  `pay` returns, and offer a way to refund it. Without that, a payment to a
+  wrong or never-claimed handle stays locked in your contract's name. Do not
+  recompute the node from the handle later: an upgrade of the registry can
+  make that text reach a different node.
 - Nothing checks that the platform could issue the handle. Text it never
   issues, such as `@octocat` on GitHub, is escrowed at a node nobody can
-  claim. Only `refundTo` gets it back.
+  claim. Only your contract gets it back, from the refund date.
 - Payments call out. When the handle has a holder, the escrow sends ETH
   straight to it with all remaining gas: the holder's code runs, and can
   revert the payment or burn the gas. A token runs its own code too. Guard the
@@ -232,9 +243,10 @@ verifiers give, at both ends of their acceptance windows. One test checks
 both libraries' addresses against their environment's factory and the CREATE3
 derivation of the canonical names. The fork tests run `LibID` against
 Ethereum mainnet and `LibIDTestnet` against Sepolia and Eden testnet, on
-local forks: they read, and pay a handle nobody holds and refund it. Where a
-chain has no code at the addresses, as mainnet has none yet, they check only
-that the library reports it unavailable, and skip the rest. Each is
+local forks: they read, and pay a handle nobody holds and refund it after its
+refund date. Where a chain has no code at the addresses, as mainnet has none
+yet, they check only that the library reports it unavailable, and skip the
+rest. Where it has the registry but not the escrow, they skip the payments. Each is
 skipped without its RPC URL (`ETH_RPC_URL`, `SEPOLIA_RPC_URL`,
 `EDEN_RPC_URL`), unless `LIBID_REQUIRE_FORK=true`, which CI sets: then a
 missing URL fails.
