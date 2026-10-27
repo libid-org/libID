@@ -49,10 +49,10 @@ export interface NameOptions {
  * name. A handle with no name stays reachable through the registry and by its
  * holder's address.
  *
- * `handle` is taken as a user typed it and normalized first with the handle
- * rules `@libid/contracts` was released with, which the gateway applies on
- * every chain, so `@Some_User` and `some_user` give one name. Text that is not
- * a handle on the platform at all throws the `HandleError` of
+ * `handle` is normalized first with the handle rules `@libid/contracts` was
+ * released with, which the gateway applies on every chain: `Some_User` and
+ * `some_user` give one name. Nothing is trimmed or stripped, so `@some_user`
+ * has no name. Text no circuit hashes throws the `HandleError` of
  * `@libid/contracts`.
  */
 export function ensName(

@@ -1,16 +1,27 @@
+import { normalize as ensNormalize } from 'viem/ens'
 import { describe, expect, it } from 'vitest'
 import { ensName, HandleError } from './index.js'
 
 describe('ensName', () => {
-  // The normalized forms are in vectors/names.json; these are raw inputs.
+  // The normalized forms are in vectors/names.json; these fold A-Z first.
   it.each([
-    ['github', '@OctoCat', 'octocat.github.handles.link'],
-    ['x', '@Some_Handle', 'some-handle.x.handles.link'],
-    ['x', '  alice ', 'alice.x.handles.link'],
+    ['github', 'OctoCat', 'octocat.github.handles.link'],
+    ['x', 'Some_Handle', 'some-handle.x.handles.link'],
     ['google', 'Alice.Smith@Gmail.com', 'alice.smith.google.handles.link'],
     ['google', 'Alice@Company.com', 'alice._at.company.com.google.handles.link'],
-  ] as const)('normalizes %s %j first: %s', (platform, handle, name) => {
+  ] as const)('folds %s %j first: %s', (platform, handle, name) => {
     expect(ensName(platform, handle)).toBe(name)
+  })
+
+  // The contracts' rules fold A-Z and strip nothing; `@` and spaces are not
+  // ENSIP-15 label characters, so such text has no name.
+  it.each([
+    ['github', '@OctoCat'],
+    ['x', '@Some_Handle'],
+    ['x', '  alice '],
+  ] as const)('gives %s %j no name', (platform, handle) => {
+    expect(() => ensNormalize(handle.toLowerCase())).toThrow('disallowed character')
+    expect(ensName(platform, handle)).toBeNull()
   })
 
   it.each([
@@ -52,8 +63,15 @@ describe('ensName', () => {
     expect(ensName('x', 'alice', { chain })).toBe(`alice.x.${chain}.handles.link`)
   })
 
-  it('throws for text that is not a handle', () => {
-    expect(() => ensName('github', 'not a handle')).toThrow(HandleError)
+  it.each([
+    ['github', '', 'Empty'],
+    ['x', 'ali"ce', 'BadCharacter'],
+    ['x', 'ali\\ce', 'BadCharacter'],
+    ['x', 'alicé', 'BadCharacter'],
+    ['github', 'a'.repeat(40), 'TooLong'],
+  ] as const)('throws HandleError for %s %j: %s', (platform, handle, kind) => {
+    expect(() => ensName(platform, handle)).toThrow(HandleError)
+    expect(() => ensName(platform, handle)).toThrow(expect.objectContaining({ kind }))
   })
 
   it('throws for a platform it does not know or a handle that is not a string', () => {

@@ -9,6 +9,7 @@
       "name": "octocat.github.handles.link"
     },
     { "platform": "github", "handle": "a-b-c", "chain": null, "name": "a-b-c.github.handles.link" },
+    { "platform": "github", "handle": "a--b", "chain": null, "name": "a--b.github.handles.link" },
     { "platform": "x", "handle": "alice", "chain": null, "name": "alice.x.handles.link" },
     {
       "platform": "x",
@@ -89,6 +90,13 @@
       "handle": "ab__cd",
       "why": "`--` at the third and fourth characters (ENSIP-15)"
     },
+    { "platform": "x", "handle": "a-b", "why": "an X handle with `-` would not read back" },
+    { "platform": "github", "handle": "a_b", "why": "`_` is not a GitHub label character" },
+    {
+      "platform": "github",
+      "handle": "ab--c",
+      "why": "`--` at the third and fourth characters (ENSIP-15)"
+    },
     { "platform": "google", "handle": "alice+tag@gmail.com", "why": "Gmail issues no `+`" },
     { "platform": "google", "handle": "alice_b@gmail.com", "why": "Gmail issues no `_`" },
     { "platform": "google", "handle": ".alice@gmail.com", "why": "Gmail issues no empty piece" },
@@ -135,7 +143,6 @@
     { "name": "a.b.x.handles.link", "why": "an X handle is one label" },
     { "name": "a.b.github.handles.link", "why": "a GitHub handle is one label" },
     { "name": "alice_b.x.handles.link", "why": "`_` is not a label character" },
-    { "name": "a--b.github.handles.link", "why": "GitHub's rules refuse a doubled `-`" },
     { "name": "alice-b.google.handles.link", "why": "Gmail issues no `-`" },
     { "name": "_at.company.com.google.handles.link", "why": "an empty local part" },
     { "name": "alice._at.google.handles.link", "why": "an empty domain" },

@@ -8,7 +8,7 @@ the labels and answers with its holder.
 import { ensName } from '@libid/ens'
 
 ensName('github', 'octocat')            // 'octocat.github.handles.link'
-ensName('x', '@Some_Handle')            // 'some-handle.x.handles.link'
+ensName('x', 'Some_Handle')             // 'some-handle.x.handles.link'
 ensName('google', 'alice@gmail.com')    // 'alice.google.handles.link'
 ensName('google', 'alice@company.com')  // 'alice._at.company.com.google.handles.link'
 ensName('x', 'alice', { chain: 'base' }) // 'alice.x.base.handles.link'
@@ -16,9 +16,10 @@ ensName('x', 'alice', { chain: 'base' }) // 'alice.x.base.handles.link'
 
 `ensName` normalizes the handle first with the handle rules
 `@libid/contracts` was released with, which the gateway applies on every
-chain, so it takes a handle as a user typed it. It returns
-`null` when a handle has no name, and throws `HandleError` for text that is
-not a handle on that platform. `HandleError` is re-exported from
+chain. They fold `A`-`Z` and strip nothing: `Some_Handle` gives the name of
+`some_handle`, but `@some_handle` and ` some_handle` have none. It returns
+`null` when a handle has no name, and throws `HandleError` for text no
+circuit hashes, as `@libid/contracts` defines it. `HandleError` is re-exported from
 `@libid/ens`, so `instanceof` works without importing `@libid/contracts`.
 
 ## Install
@@ -38,8 +39,10 @@ npm install @libid/ens
 
 These handles have no name:
 
-- an X handle whose third and fourth characters are both `_`, which ENS
-  reserves (`ab__cd` would be `ab--cd`);
+- a handle with a character no label holds, such as `@` or a space;
+- an X handle with `-`, or whose third and fourth characters are both `_`,
+  which ENS reserves (`ab__cd` would be `ab--cd`);
+- a GitHub handle with `_`, or whose third and fourth characters are both `-`;
 - a Gmail address with `+`, `-` or `_` in the local part, or an empty piece
   (`.alice@`, `alice.@`, `a..b@`);
 - any other Google address with `_` or `+`, an empty piece, `_at` as a piece,
