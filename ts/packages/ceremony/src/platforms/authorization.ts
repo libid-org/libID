@@ -9,13 +9,11 @@ import { b64urlDecode, b64urlEncode } from '../primitives.js'
 
 /** ceremony-common §5: digest/hash widths, fresh nonce and unsigned wire fields. */
 export const OPERATION_DOMAIN_BYTES = keccak_256.outputLen
-export const CHAIN_ID_BYTES = keccak_256.outputLen
 export const AUTHORIZATION_NONCE_BYTES = 32
 export const MAX_TRANSACTION_DATA_BYTES = 0xffffffff
 
 const VERSION_OFFSET = OPERATION_DOMAIN_BYTES
-const CHAIN_ID_OFFSET = VERSION_OFFSET + Uint16Array.BYTES_PER_ELEMENT
-const NONCE_OFFSET = CHAIN_ID_OFFSET + CHAIN_ID_BYTES
+const NONCE_OFFSET = VERSION_OFFSET + Uint16Array.BYTES_PER_ELEMENT
 const TRANSACTION_LENGTH_OFFSET = NONCE_OFFSET + AUTHORIZATION_NONCE_BYTES
 const TRANSACTION_OFFSET = TRANSACTION_LENGTH_OFFSET + Uint32Array.BYTES_PER_ELEMENT
 
@@ -30,8 +28,6 @@ export interface AuthorizationInput {
   /** `keccak256(UTF8(domainString))` — exactly 32 bytes, supplied by the composition. */
   operationDomain: Uint8Array
   platformCeremonyVersion: number
-  /** `keccak256` of the Chain Profile's canonical identifier bytes — exactly 32 bytes. */
-  chainId: Uint8Array
   /** Fresh 32 cryptographically secure random bytes per ceremony. */
   authorizationNonce: Uint8Array
   /** Opaque canonical bytes; the U32BE length field bounds it. */
@@ -44,7 +40,7 @@ function exact(bytes: Uint8Array, width: number, name: string): Uint8Array {
 }
 
 /**
- * `keccak256(operationDomain || U16BE(version) || chainId || nonce ||
+ * `keccak256(operationDomain || U16BE(version) || nonce ||
  * U32BE(len(transactionData)) || transactionData)` — every field width
  * checked, values that do not fit their field rejected (REQ-COMMON-01).
  */
@@ -60,7 +56,6 @@ export function deriveAuthorizationDigest(input: AuthorizationInput): Uint8Array
   const view = new DataView(preimage.buffer)
   preimage.set(exact(input.operationDomain, OPERATION_DOMAIN_BYTES, 'operationDomain'), 0)
   view.setUint16(VERSION_OFFSET, version)
-  preimage.set(exact(input.chainId, CHAIN_ID_BYTES, 'chainId'), CHAIN_ID_OFFSET)
   preimage.set(
     exact(input.authorizationNonce, AUTHORIZATION_NONCE_BYTES, 'authorizationNonce'),
     NONCE_OFFSET,

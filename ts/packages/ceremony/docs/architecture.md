@@ -23,6 +23,7 @@ and assembles `OAuthProof`. Neither performs final cryptographic verification in
 | [notary](../src/notary/session.ts) | TLSNotary sessions, HTTP/transcript helpers, canonical decoding and evidence correlation. [notary/oauth](../src/notary/oauth/sessions.ts) holds the attested [token](../src/notary/oauth/token.ts) and [identity](../src/notary/oauth/identity.ts) requests: their exact bytes, input rules, disclosure selection, operations and two-session run. |
 | [assets](../src/assets/index.ts) | Resource declarations and resolution, root Worker registration, byte caches and pending fetches. |
 | [build](../build/distribution.ts) | Compile the dependency graph and emit static files, response policies and the bundled version set. |
+| [identity](../src/identity.ts) | The token check every platform applies to an id and a handle, and their nodes, from the platform table `@libid/contracts` generates. |
 | [events](../src/events.ts), [errors](../src/errors.ts) | Shared operation feed, stage projection and bounded failure text. |
 
 The one public entrypoint, `@libid/ceremony`, exports the client, its

@@ -9,12 +9,10 @@ chain drivers.
 
 The goal is to let applications work with different ledgers through one API,
 with each driver handling the details of its chain. Identity
-ceremonies are one use: they need to identify a destination ledger and locate
-its notary service.
+ceremonies are one use: they need to locate a ledger's notary service.
 
 ## How it works
 
-- `hash()` identifies the ledger according to its Chain Profile.
 - `notaryAddress()` locates the notary service used by ceremonies that need
   TLS evidence; the ledger verifier determines which signing keys to trust.
 
@@ -33,5 +31,4 @@ pnpm typecheck
 
 Tests and applications define their own synthetic `LedgerId`s; ceremony's tests
 use [`src/testing/ledgers.ts`](../ceremony/src/testing/ledgers.ts). A synthetic
-identity establishes no real ledger conformance, and a local fixture can change
-the notary address without changing its hash.
+ledger establishes no real ledger conformance.

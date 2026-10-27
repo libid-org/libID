@@ -5,7 +5,7 @@ packages:
 # Tool versions shared across packages, referenced as `catalog:`.
 catalog:
   # One copy shared by ceremony and ens, so HandleError is one class.
-  '@libid/contracts': 0.17.0
+  '@libid/contracts': 0.19.0
   # Alpha until a stable release bundles libsoup ≥3.6.6 (microsoft/playwright#42803).
   '@playwright/test': 1.64.0
   '@types/node': ^26.6.5
@@ -17,9 +17,12 @@ catalog:
 # Supply-chain policy shared with the grndd-systems sites: only install releases
 # at least 7 days old, re-verify the lockfile, and allow install scripts per package.
 minimumReleaseAge: 10080
-# Exact versions already locked when the age gate was added (2026-10-13); every
-# other release still waits 7 days. Drop entries once they are older than that.
 minimumReleaseAgeExclude:
+  # libID's own packages, published by the libid-org release workflows; the age gate
+  # guards third-party releases.
+  - "@libid/*"
+  # Third-party versions already locked when the age gate was added
+  # (2026-10-13). Drop an entry once its version is older than 7 days.
   - "@aztec-foundation/bb.js@6.0.0-rc.6"
   - "@playwright/test@1.64.0"
   - "@types/node@26.6.5"

@@ -4,6 +4,7 @@ import { posted, stubWorkerScope } from '../testing/workers.js'
 import { encodeAttestation, frameJson, opening } from './fixtures/attestation.js'
 import { MAX_FRAME_BYTES } from './limits.js'
 import { planNotarization } from './notarize.js'
+import type { Io } from './tlsn.js'
 
 class Socket extends EventTarget {
   static OPEN = 1
@@ -95,82 +96,102 @@ it.each([
   },
 )
 
-it('correlates plain-array SDK openings, then verifies the final frame before delivery', async () => {
-  const transcript = { sent: utf8('GET /2/users/me'), received: httpResponse('{}') }
-  const reveals = {
-    sent: [{ start: 0, end: 3 }],
-    received: [
-      { start: 0, end: 8 },
-      { start: 12, end: 14 },
-    ],
-  }
-  const plan = planNotarization(transcript, reveals)
-  const raw = {
-    sent: plan.commit.sent.map((range) => opening(transcript.sent, range, 1)),
-    recv: plan.commit.received.map((range, i) => opening(transcript.received, range, 2 + i)),
-  }
-  const attestedData = encodeAttestation(transcript, plan, {
-    sent: raw.sent.map((o) => o.hash),
-    received: raw.recv.map((o) => o.hash),
-  })
-  const frame = frameJson({ attested_data: [...attestedData], notary_signature: Array(65).fill(9) })
-  let socket!: Socket
-  vi.stubGlobal('tlsnReveal', {
-    transcript: { sent: transcript.sent, recv: transcript.received },
-    // The SDK hands back plain arrays in its own order.
-    reveal: () => ({
-      sent: raw.sent.map((o) => ({ hash: [...o.hash], blinder: [...o.blinder] })),
-      recv: raw.recv.map((o) => ({ hash: [...o.hash], blinder: [...o.blinder] })).reverse(),
-    }),
-    finish() {
-      socket.dispatchEvent(new MessageEvent('message', { data: frame.slice(0, 9).buffer }))
-      socket.dispatchEvent(new MessageEvent('message', { data: frame.slice(9).buffer }))
-      socket.close()
-    },
-  })
-  const { prepare } = await loadWorker(
-    `export default async()=>{};export async function initialize(){};export class Prover {async setup(){}async send_request(){}transcript(){return globalThis.tlsnReveal.transcript}async reveal(){return globalThis.tlsnReveal.reveal()}async finish(){globalThis.tlsnReveal.finish()}free(){}}`,
-    class extends Socket {
-      constructor() {
-        super()
-        socket = this // oxlint-disable-line typescript/no-this-alias -- capture the instance under test
-      }
-    },
-  )
-  const port = replyPort()
-  prepare(port)
-  await expect.poll(() => port.replied('prepared')).toBe(true)
-  port.send({ type: 'send', request })
-  await expect.poll(() => port.replied('sent')).toBe(true)
-  port.send({ type: 'reveal', reveals })
-  await expect.poll(() => port.close.mock.calls.length).toBe(1)
-  expect(port.postMessage.mock.calls.map(([m]) => m.type)).toEqual([
-    'initialized',
-    'prepared',
-    'sent',
-    'revealed',
-    'attestation',
-  ])
-  const [, , , [revealed], [final]] = port.postMessage.mock.calls
-  expect(revealed.openings).toEqual([
-    { direction: 'sent', start: 3, end: 15, ...raw.sent[0] },
-    { direction: 'received', start: 8, end: 12, ...raw.recv[0] },
-    { direction: 'received', start: 14, end: 21, ...raw.recv[1] },
-  ])
-  expect(final).toEqual({
-    type: 'attestation',
-    attestation: { attestedData, signature: new Uint8Array(65).fill(9) },
-    attributes: {
-      'sent-bytes': transcript.sent.length,
-      'received-bytes': transcript.received.length,
-      'response-header-bytes': 19,
-      'response-body-bytes': 2,
-      'committed-sent-bytes': 12,
-      'committed-received-bytes': 11,
-      'commitment-count': 3,
-    },
-  })
-})
+it.each([
+  [
+    'from the socket',
+    (socket: Socket, _io: Io, frame: Uint8Array) =>
+      socket.dispatchEvent(new MessageEvent('message', { data: frame.slice(0, 9).buffer })),
+  ],
+  [
+    'handed back by the SDK after over-reading',
+    (_socket: Socket, io: Io, frame: Uint8Array) => io.unread(frame.slice(0, 9)),
+  ],
+])(
+  'correlates plain-array SDK openings, then verifies the final frame before delivery, its head %s',
+  async (_, deliverHead) => {
+    const transcript = { sent: utf8('GET /2/users/me'), received: httpResponse('{}') }
+    const reveals = {
+      sent: [{ start: 0, end: 3 }],
+      received: [
+        { start: 0, end: 8 },
+        { start: 12, end: 14 },
+      ],
+    }
+    const plan = planNotarization(transcript, reveals)
+    const raw = {
+      sent: plan.commit.sent.map((range) => opening(transcript.sent, range, 1)),
+      recv: plan.commit.received.map((range, i) => opening(transcript.received, range, 2 + i)),
+    }
+    const attestedData = encodeAttestation(transcript, plan, {
+      sent: raw.sent.map((o) => o.hash),
+      received: raw.recv.map((o) => o.hash),
+    })
+    const frame = frameJson({
+      attested_data: [...attestedData],
+      notary_signature: Array(65).fill(9),
+    })
+    let socket!: Socket
+    let sdkIo!: Io
+    vi.stubGlobal('tlsnReveal', {
+      transcript: { sent: transcript.sent, recv: transcript.received },
+      // The SDK hands back plain arrays in its own order.
+      reveal: () => ({
+        sent: raw.sent.map((o) => ({ hash: [...o.hash], blinder: [...o.blinder] })),
+        recv: raw.recv.map((o) => ({ hash: [...o.hash], blinder: [...o.blinder] })).reverse(),
+      }),
+      finish() {
+        deliverHead(socket, sdkIo, frame)
+        socket.dispatchEvent(new MessageEvent('message', { data: frame.slice(9).buffer }))
+        socket.close()
+      },
+      setup(io: Io) {
+        sdkIo = io
+      },
+    })
+    const { prepare } = await loadWorker(
+      `export default async()=>{};export async function initialize(){};export class Prover {async setup(io){globalThis.tlsnReveal.setup(io)}async send_request(){}transcript(){return globalThis.tlsnReveal.transcript}async reveal(){return globalThis.tlsnReveal.reveal()}async finish(){globalThis.tlsnReveal.finish()}free(){}}`,
+      class extends Socket {
+        constructor() {
+          super()
+          socket = this // oxlint-disable-line typescript/no-this-alias -- capture the instance under test
+        }
+      },
+    )
+    const port = replyPort()
+    prepare(port)
+    await expect.poll(() => port.replied('prepared')).toBe(true)
+    port.send({ type: 'send', request })
+    await expect.poll(() => port.replied('sent')).toBe(true)
+    port.send({ type: 'reveal', reveals })
+    await expect.poll(() => port.close.mock.calls.length).toBe(1)
+    expect(port.postMessage.mock.calls.map(([m]) => m.type)).toEqual([
+      'initialized',
+      'prepared',
+      'sent',
+      'revealed',
+      'attestation',
+    ])
+    const [, , , [revealed], [final]] = port.postMessage.mock.calls
+    expect(revealed.openings).toEqual([
+      { direction: 'sent', start: 3, end: 15, ...raw.sent[0] },
+      { direction: 'received', start: 8, end: 12, ...raw.recv[0] },
+      { direction: 'received', start: 14, end: 21, ...raw.recv[1] },
+    ])
+    expect(final).toEqual({
+      type: 'attestation',
+      attestation: { attestedData, signature: new Uint8Array(65).fill(9) },
+      attributes: {
+        'sent-bytes': transcript.sent.length,
+        'received-bytes': transcript.received.length,
+        'response-header-bytes': 19,
+        'response-body-bytes': 2,
+        'committed-sent-bytes': 12,
+        'committed-received-bytes': 11,
+        'commitment-count': 3,
+      },
+    })
+  },
+)
 
 it('initializes one WASM pool and overlaps setup while keeping per-session transcripts', async () => {
   const setup = Promise.withResolvers<void>()

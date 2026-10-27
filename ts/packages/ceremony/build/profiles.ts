@@ -95,7 +95,12 @@ function executableCsp(
   const execution =
     profile === 'prover' || profile === 'proverFallback' || isolatedWorkers.includes(profile)
   const scripts = `'self' ${inline.map(cspHash).join(' ')}${execution ? " 'wasm-unsafe-eval'" : ''}`
-  const workers = profile === 'leafWorker' ? "'none'" : `'self'${execution ? ' blob:' : ''}`
+  // The root Service Worker and leaf workers spawn none.
+  // Prefetch keeps 'self' to register the root Service Worker.
+  const workers =
+    profile === 'worker' || profile === 'leafWorker'
+      ? "'none'"
+      : `'self'${execution ? ' blob:' : ''}`
   const connects =
     profile === 'proofWorker' || profile === 'leafWorker'
       ? `${shared.csp.fetch} blob:`
