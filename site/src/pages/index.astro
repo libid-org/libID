@@ -4,6 +4,7 @@ import { palettes } from '../palette.mjs';
 import { description, tagline } from '../tagline.mjs';
 import libronFont from '../../../brand/libron/Libron-Regular.woff2?url';
 import '../styles/home.css';
+import StructuredData from '../components/StructuredData.astro';
 ---
 
 <!doctype html>
@@ -13,6 +14,7 @@ import '../styles/home.css';
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>libID — {tagline}</title>
     <meta name="description" content={description}>
+    <link rel="canonical" href="https://lib.id/">
     <meta name="theme-color" content={palettes.dark.background}>
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://lib.id/">
@@ -24,6 +26,8 @@ import '../styles/home.css';
     <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="The libID wordmark on a dark background.">
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image:alt" content="The libID wordmark on a dark background.">
+    <StructuredData />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preload" href={libronFont} as="font" type="font/woff2" crossorigin>
     <ThemeProvider />

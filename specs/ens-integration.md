@@ -1,5 +1,6 @@
 ---
 title: ENS integration
+description: libID specification for reading identity bindings as ENS names, including handle-to-label transforms, the Handle Resolver, and offchain gateway lookups.
 sidebar:
   order: 5
 ---

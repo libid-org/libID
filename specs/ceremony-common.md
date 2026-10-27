@@ -1,5 +1,6 @@
 ---
 title: Common ceremony rules
+description: Shared libID identity ceremony constructions and invariants, including authorization digests, proof bindings, serialization, and consumer acceptance.
 sidebar:
   order: 2
 ---

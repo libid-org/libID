@@ -1,5 +1,6 @@
 ---
 title: Ceremony Cross-Document Protocol (CCDP)
+description: libID specification for ceremony browser documents, routes, private navigation inputs, messages, events, and phases over popup transport.
 ---
 
 # Ceremony Cross-Document Protocol (CCDP)
