@@ -13,30 +13,55 @@ address.
 
 | Contract | Testnet |
 | --- | --- |
-| `IdentityRegistry` | `0x58ac0cd5ec19c850a75d6183b3c3b2de692fb20d` |
-| `HandleEscrow` | `0xf3f81c31c889ddf1ec83b91b3dfed601c04f5e50` |
-| `CeremonyProofVerifier` | `0x6e4585c4f1ac48a20f49bb61163c466dc4f35004` |
-| `NotaryService` | `0xfcf39134654e3542b956ee6e315ca650e6ba3b8c` |
-| GitHub platform verifier | `0x13cdf6d5666a42e0eb586809f46ce10e469d11f7` |
-| X platform verifier | `0x655be95a91a26b4ade476a8992ee25c98bb774a6` |
-| Google platform verifier | `0x355143c93a645ae914b1315eb1b580072207e0f2` |
-| `GoogleJwtRoots` | `0x4d9c43d4cf161452b7f66415fa492f4fc42ea583` |
-| `LibidFactory` | `0x5294f6c0f1f086f70c9b510ba7990085d5976281` |
+| `IdentityRegistry` | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` |
+| `HandleEscrow` | `0xE7eb0c675B757C12B1312dF652242b863624Bfab` |
+| `CeremonyProofVerifier` | `0x6E4585c4f1aC48a20f49bB61163C466DC4f35004` |
+| `NotaryService` | `0xfCf39134654e3542B956Ee6E315cA650E6bA3b8C` |
+| GitHub platform verifier | `0x13Cdf6d5666A42E0Eb586809F46ce10E469D11f7` |
+| X platform verifier | `0x655Be95A91A26B4ADe476A8992Ee25C98BB774a6` |
+| Google platform verifier | `0x355143c93A645ae914b1315eB1B580072207e0f2` |
+| `GoogleJwtRoots` | `0x4D9C43D4CF161452b7F66415FA492f4fc42eA583` |
+| `LibidFactory` | `0x5294f6c0f1F086f70c9b510Ba7990085D5976281` |
 
 Most apps only need `IdentityRegistry`. Your code talks to the others only if it
 builds proofs itself.
 
 ## Network status
 
-| Network | libID-contracts | Addresses |
-| --- | --- | --- |
-| [Sepolia](/docs/networks/sepolia/) | v0.19.0 | testnet, above |
-| [Eden testnet](/docs/networks/eden/) | v0.19.0 | testnet, above |
-| [Ethereum mainnet](/docs/networks/ethereum/) | v0.17.0; v0.19.0 pending | not listed |
+These docs describe libID-contracts v0.21.0.
 
-These docs describe v0.19.0. The same address on two networks does not by
-itself mean the same version: an upgrade on one network does not change the
-other.
+| Network | `IdentityRegistry` | `HandleEscrow` v0.21.0 |
+| --- | --- | --- |
+| [Sepolia](/docs/networks/sepolia/) | deployed, testnet address above | no code yet |
+| [Eden testnet](/docs/networks/eden/) | deployed, testnet address above | no code yet |
+| [Ethereum mainnet](/docs/networks/ethereum/) | v0.17.0, at another address | no code yet |
+
+On Sepolia and Eden, every contract in the table above except
+`HandleEscrow` is deployed and runs the v0.21.0 code.
+
+The v0.21.0 `HandleEscrow` is a new contract, not an upgrade, so it has a
+new address. Until it has code, the escrow guides run only on a
+[local chain](/docs/guides/local-chain/). Check before you send:
+
+```sh
+cast code 0xE7eb0c675B757C12B1312dF652242b863624Bfab --rpc-url $RPC_URL
+```
+
+`0x` means no code. A call to an address with no code succeeds, and the
+funds you send with it are lost.
+
+The v0.19.0 escrow still runs on both testnets, at
+`0xF3f81C31C889DdF1ec83B91b3DFED601C04F5E50`. Its `deposit` takes a
+`refundTo` address. These docs do not describe it.
+
+Ethereum mainnet will get its own addresses. chain-configurations declares
+`IdentityRegistry` at `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` and
+`HandleEscrow` at `0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5`. Neither has
+code yet.
+
+The same address on two networks does not by itself mean the same version:
+an upgrade on one network does not change the other. The addresses are not
+final. They follow each deployment.
 
 These addresses come from
 [chain-configurations](https://github.com/libid-org/chain-configurations/tree/main/networks),
@@ -54,15 +79,15 @@ account as the deployer. On a fresh anvil:
 
 | Contract | Address |
 | --- | --- |
-| `IdentityRegistry` | `0x155090a3a2dded2fbdf385bac8cffeb3a51a18ae` |
-| `HandleEscrow` | `0x1297ddf98efc4d72ce4c5799e057dd61052cfe29` |
-| `CeremonyProofVerifier` | `0x145307aaf8dc22fb850aae44aea19628df20e9f6` |
-| `NotaryService` | `0x278e8ba43e16e1d757fe77590edb759d85860483` |
-| GitHub platform verifier | `0x1aafd47fb1e7c68a1c9afc19d06ccccd958cc4d6` |
-| X platform verifier | `0x37be0160c6e2e2e089010d178c7be3ee27602628` |
-| Google platform verifier | `0xfcb24d6491120569c91370dd8fa5441adb1d94ee` |
-| `GoogleJwtRoots` | `0x6d5bc82c9a8a6a05a9319c9e9d5fc43ff80552ac` |
-| `LibidFactory` | `0x13089b18e7fdcdedde55f6b85451561a8b725825` |
+| `IdentityRegistry` | `0x155090A3A2dded2FbdF385bAC8cfFEb3a51A18ae` |
+| `HandleEscrow` | `0xEd2E993A615d8D6b28000034ac58fB6389fe038e` |
+| `CeremonyProofVerifier` | `0x145307aAf8DC22FB850Aae44aeA19628df20E9f6` |
+| `NotaryService` | `0x278e8BA43e16e1D757FE77590EdB759d85860483` |
+| GitHub platform verifier | `0x1AaFD47fb1E7c68a1c9AFC19d06cCcCD958cC4D6` |
+| X platform verifier | `0x37bE0160c6E2E2e089010D178c7be3EE27602628` |
+| Google platform verifier | `0xFCB24d6491120569c91370dd8Fa5441ADB1D94ee` |
+| `GoogleJwtRoots` | `0x6D5BC82C9a8a6A05a9319c9e9D5FC43fF80552ac` |
+| `LibidFactory` | `0x13089b18e7fDcdeDDe55F6B85451561a8B725825` |
 
 The local-chain project the guides' output comes from is different. It
 deploys `IdentityRegistry`, a `CeremonyProofVerifier` with test verifiers,

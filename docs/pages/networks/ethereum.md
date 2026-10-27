@@ -10,7 +10,7 @@ sidebar:
 | Chain id | `1` |
 
 Ethereum mainnet is libID's production network. It runs libID-contracts
-v0.17.0. v0.19.0, the version these docs describe, is not deployed there
+v0.17.0. v0.21.0, the version these docs describe, is not deployed there
 yet. This page will list its addresses once it is.
 
 Until then, run the guides against [Sepolia](/docs/networks/sepolia/) or

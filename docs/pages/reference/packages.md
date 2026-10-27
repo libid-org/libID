@@ -11,7 +11,7 @@ sidebar:
 npm install @libid/contracts viem
 ```
 
-These docs describe version 0.19.0, which matches libID-contracts v0.19.0.
+These docs describe version 0.21.0, which matches libID-contracts v0.21.0.
 The package works with [viem](https://viem.sh). It has:
 
 - ABIs: `identityRegistryAbi`, `handleEscrowAbi`, and the other contracts.

@@ -22,14 +22,16 @@ the Eden testnet:
 
 ```sh
 export RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545
-export IDENTITY_REGISTRY=0x58ac0cd5ec19c850a75d6183b3c3b2de692fb20d
-export HANDLE_ESCROW=0xf3f81c31c889ddf1ec83b91b3dfed601c04f5e50
+export IDENTITY_REGISTRY=0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D
+export HANDLE_ESCROW=0xE7eb0c675B757C12B1312dF652242b863624Bfab
 export FROM_BLOCK=291663483
 ```
 
 The guides' test handles and addresses are not bound there, so you get
 `null` or an empty list where a guide shows output. Use a handle or an
-address that has bound an identity instead.
+address that has bound an identity instead. `HANDLE_ESCROW` has no code
+there yet, so do not send to it; see
+[Network status](/docs/reference/addresses/#network-status).
 
 Sepolia has the same contract addresses; see [Sepolia](/docs/networks/sepolia/).
 Ethereum mainnet runs an older version, which the guides do not match. See
@@ -39,7 +41,7 @@ Ethereum mainnet runs an older version, which the guides do not match. See
 
 [chain-configurations](https://github.com/libid-org/chain-configurations)
 has a network file for anvil, `local-dev.toml`, and the `libid-deploy` tool
-that applies it. No `libid-deploy` release ships v0.19.0 yet, so build it
+that applies it. No `libid-deploy` release ships v0.21.0 yet, so build it
 from the repository with [Rust](https://rustup.rs):
 
 ```sh
@@ -72,8 +74,8 @@ variables:
 
 ```sh
 export RPC_URL=http://127.0.0.1:8545
-export IDENTITY_REGISTRY=0x155090a3a2dded2fbdf385bac8cffeb3a51a18ae
-export HANDLE_ESCROW=0x1297ddf98efc4d72ce4c5799e057dd61052cfe29
+export IDENTITY_REGISTRY=0x155090A3A2dded2FbdF385bAC8cfFEb3a51A18ae
+export HANDLE_ESCROW=0xEd2E993A615d8D6b28000034ac58fB6389fe038e
 export PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 export CAROL_KEY=0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
 ```

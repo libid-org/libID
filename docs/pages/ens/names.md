@@ -19,7 +19,7 @@ Names resolve for bindings on Ethereum mainnet. The gateway does not answer
 for any other chain yet.
 
 Ethereum mainnet runs libID-contracts v0.17.0. The networks that run
-v0.19.0, Sepolia and the Eden testnet, have no working names yet.
+v0.21.0, Sepolia and the Eden testnet, have no working names yet.
 
 | Where | State |
 | --- | --- |

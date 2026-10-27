@@ -30,7 +30,7 @@ cast call 0xbefd300aff7d4a67fb381afe8b3596793d3e9a83 'owner()(address)' \
 ```
 
 The address above is mainnet's `IdentityRegistry`, which runs
-libID-contracts v0.17.0. Sepolia and the Eden testnet run v0.19.0; see
+libID-contracts v0.17.0. Sepolia and the Eden testnet run v0.21.0, except `HandleEscrow`; see
 [Network status](/docs/reference/addresses/#network-status).
 
 See [What a binding proves](/docs/concepts/trust/#whom-you-trust) for what

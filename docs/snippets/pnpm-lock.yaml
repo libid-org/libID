@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@libid/contracts':
-        specifier: 0.19.0
-        version: 0.19.0(viem@2.57.1)
+        specifier: 0.21.0
+        version: 0.21.0(viem@2.57.1)
       viem:
         specifier: 2.57.1
         version: 2.57.1
@@ -20,8 +20,8 @@ packages:
   '@adraffy/ens-normalize@1.11.1':
     resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
 
-  '@libid/contracts@0.19.0':
-    resolution: {integrity: sha512-kl2X8QOMjohHJbCAdfIgrRMTQm27HGKs/kEgQIUv0Kd0mVbehlFZ9a2ovaD3qzrTk+KlwM1UKI3TJ5J2JxDWAw==}
+  '@libid/contracts@0.21.0':
+    resolution: {integrity: sha512-Q753fSlvFah27wX3Avo8EVoxyK8yTskQ3e9NFVKE0dVX/HaUbkH51Y1GD2tx9M1SeqQC5SIxzuScYnWmw9wfjA==}
     peerDependencies:
       viem: ^2.48.11
     peerDependenciesMeta:
@@ -100,7 +100,7 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
 
-  '@libid/contracts@0.19.0(viem@2.57.1)':
+  '@libid/contracts@0.21.0(viem@2.57.1)':
     dependencies:
       '@noble/hashes': 1.8.0
     optionalDependencies:

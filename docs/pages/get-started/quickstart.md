@@ -16,7 +16,7 @@ libID. Set `RPC_URL` and `IDENTITY_REGISTRY` for it. For Sepolia:
 
 ```sh
 export RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
-export IDENTITY_REGISTRY=0x58ac0cd5ec19c850a75d6183b3c3b2de692fb20d
+export IDENTITY_REGISTRY=0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D
 ```
 
 The other networks are listed under [Networks](/docs/networks/ethereum/).

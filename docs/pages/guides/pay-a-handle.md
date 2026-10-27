@@ -8,7 +8,8 @@ sidebar:
 `HandleEscrow` lets you send ETH or tokens to a handle such as `carol` on
 GitHub. If Carol has already proved the handle, she gets the funds right away.
 If not, the escrow holds them. Then one of two things happens: Carol proves
-the handle and claims the funds, or the sender takes them back first.
+the handle and claims the funds, or, after 30 days, the sender takes them
+back first.
 
 ```mermaid
 flowchart TD
@@ -16,7 +17,7 @@ flowchart TD
   Q -- yes --> F["Carol is paid at once"]
   Q -- no --> H["The escrow holds the funds"]
   H -- "Carol binds, then claims" --> C["Carol is paid"]
-  H -- "refundTo refunds first" --> R["refundTo is paid back"]
+  H -- "30 days on, the sender refunds first" --> R["The sender is paid back"]
 ```
 
 A paid deposit emits `Forwarded`, a held one `Deposited`. Held funds end one
@@ -71,7 +72,7 @@ async function send(amount) {
   const tx = await sender.writeContract({
     ...escrow,
     functionName: 'deposit',
-    args: [platformId('github'), node, NATIVE, amount, sender.account.address],
+    args: [platformId('github'), node, NATIVE, amount],
     value: amount,
   });
   await client.waitForTransactionReceipt({ hash: tx });
@@ -80,9 +81,9 @@ async function send(amount) {
 await send(10n ** 16n); // 0.01 ETH
 ```
 
-The arguments are the platform, the handle node, the token, the amount, and
-the address that may take the funds back. For ETH, `value` must equal
-`amount`.
+The arguments are the platform, the handle node, the token and the amount.
+For ETH, `value` must equal `amount`. The deposit belongs to the address
+that sends it.
 
 If someone already owns the handle, the escrow pays them in the same
 transaction and emits `Forwarded`. Otherwise it keeps the funds and emits
@@ -94,14 +95,42 @@ them.
 ```js
 const held = await client.readContract({ ...escrow, functionName: 'escrowed', args: [node, NATIVE] });
 console.log('held for carol:', held);
+
+const [mine, refundableAt] = await client.readContract({
+  ...escrow,
+  functionName: 'contribution',
+  args: [node, NATIVE, sender.account.address],
+});
+console.log('mine:', mine, 'refundable from:', new Date(Number(refundableAt) * 1000));
 ```
 
-### Take it back
+`contribution` returns what this sender has deposited for the handle in one
+token, and when it can take it back.
 
-Until Carol claims, the `refundTo` address of a deposit can take it back.
-The sender named itself as `refundTo`, so it can call `refund`:
+Run it:
+
+```sh
+node sender.mjs
+```
+
+## Take it back
+
+The sender can refund its deposit 30 days after its last deposit to that
+handle and token. Each new deposit moves the date for everything the sender
+has there. Before the date, `refund` reverts `RefundLocked`.
+
+On anvil you can skip the wait. Move the clock forward 30 days:
+
+```sh
+cast rpc evm_increaseTime 2592000 --rpc-url $RPC_URL && cast rpc evm_mine --rpc-url $RPC_URL
+```
+
+Create `refund.mjs`, starting with the same setup as `sender.mjs`, then:
 
 ```js
+const sender = createWalletClient({ account: privateKeyToAccount(process.env.PRIVATE_KEY), transport });
+const node = handleNode('github', 'carol');
+
 const tx = await sender.writeContract({
   ...escrow,
   functionName: 'refund',
@@ -110,20 +139,25 @@ const tx = await sender.writeContract({
 await client.waitForTransactionReceipt({ hash: tx });
 ```
 
-The last argument is where the funds go. `refundable(node, token, address)`
-tells you how much a refund would return.
+The last argument is where the funds go. Only the sender can call `refund`.
 
-A refund and a claim are alternatives: whichever comes first gets the funds.
-So that Carol has something to claim in the next step, send again:
+Once the date has come, a refund and a claim race: whichever comes first
+gets the funds. So that Carol has something to claim in the next step,
+deposit again:
 
 ```js
-await send(10n ** 16n);
+const amount = 10n ** 16n;
+const again = await sender.writeContract({
+  ...escrow,
+  functionName: 'deposit',
+  args: [platformId('github'), node, NATIVE, amount],
+  value: amount,
+});
+await client.waitForTransactionReceipt({ hash: again });
 ```
 
-Run it:
-
 ```sh
-node sender.mjs
+node refund.mjs
 ```
 
 ## Carol proves her handle
@@ -187,7 +221,7 @@ const amount = 10n ** 16n;
 const hash = await sender.writeContract({
   ...escrow,
   functionName: 'depositToHandle',
-  args: [platformId('github'), 'carol', NATIVE, amount, sender.account.address],
+  args: [platformId('github'), 'carol', NATIVE, amount],
   value: amount,
 });
 await client.waitForTransactionReceipt({ hash });
@@ -200,9 +234,11 @@ else, so `@carol` still lands on a node nobody can claim.
 
 ## Things to know
 
-- A wrong node sends funds to a slot nobody can claim. Only the refund
-  address can get them back.
+- A wrong node sends funds to a slot nobody can claim. Only the sender can
+  get them back, 30 days after its last deposit there.
 - A handle can change holders. Before you send, you can show when the
   current holder proved it. See [Resolve a handle](/docs/guides/resolve-handle/).
-- The refund address should be your user. If a contract sends on a user's
-  behalf and names itself, the user cannot get the funds back.
+- A deposit belongs to the address that sends it. If your contract, a
+  router or Multicall3 sends on a user's behalf, the deposit belongs to that
+  contract, not the user. See
+  [Refunds](/docs/reference/handle-escrow/#refunds).

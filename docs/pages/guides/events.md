@@ -113,13 +113,14 @@ Call `unwatch()` to stop.
 
 `HandleEscrow` emits:
 
-- `Deposited`: funds are held for a handle nobody owns yet.
+- `Deposited`: funds are held for a handle nobody owns yet. It names the
+  `sender` and the `refundableAt` of the sender's whole contribution.
 - `HandleRevealed`: a `depositToHandle` named the handle as text. It is the
   same event the registry emits, and comes with a `Deposited` or a
   `Forwarded`.
 - `Forwarded`: the handle had a holder, who was paid right away.
 - `Claimed`: the holder took what was held.
-- `Refunded`: a deposit's `refundTo` address took it back.
+- `Refunded`: a sender took its deposits back.
 
 For example, to list the deposits ever made to one handle:
 

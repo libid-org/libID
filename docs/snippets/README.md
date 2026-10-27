@@ -1,10 +1,10 @@
 # Docs snippets check
 
 Runs the code in the guides, unchanged, against a fresh local chain. It
-pins `@libid/contracts` 0.19.0, the version the pages describe.
+pins `@libid/contracts` 0.21.0, the version the pages describe.
 
 The chain it needs is the examples local-chain project (`./start.sh`,
-`local.env`, `./bind.sh`), deploying libID-contracts v0.19.0. That project
+`local.env`, `./bind.sh`), deploying libID-contracts v0.21.0. That project
 is not published yet, so this check runs only where you have a copy of it,
 and it is not part of CI.
 
