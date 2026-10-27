@@ -7,8 +7,8 @@ pragma solidity ^0.8.20;
 ///
 /// @dev The contracts sit at the same address on every chain of one
 ///      environment, so the addresses are constants. They name one
-///      libID-contracts deployment: the v0.19 IdentityRegistry, and the
-///      HandleEscrow with refund dates under `libid.HandleEscrow.4`. `LibID`
+///      libID-contracts deployment, from chain-configurations: the v0.19
+///      IdentityRegistry and the v0.21 HandleEscrow. `LibID`
 ///      has the production addresses, those of Ethereum mainnet.
 ///      `LibIDTestnet` has the testnet addresses, those of Sepolia and Eden,
 ///      and is generated from `LibID` with nothing else changed: import it as

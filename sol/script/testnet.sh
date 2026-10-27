@@ -6,9 +6,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# The testnet environment's canonical addresses: the registry from
-# chain-configurations' networks/sepolia.toml and networks/eden-testnet.toml,
-# the escrow the factory address of libid.HandleEscrow.4.
+# The testnet environment's canonical addresses, from chain-configurations'
+# networks/sepolia.toml and networks/eden-testnet.toml.
 registry=0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D
 escrow=0xE7eb0c675B757C12B1312dF652242b863624Bfab
 
