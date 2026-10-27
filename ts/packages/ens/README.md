@@ -24,11 +24,8 @@ not a handle on that platform. `HandleError` is re-exported from
 ## Install
 
 ```sh
-npm install @libid/ens viem
+npm install @libid/ens
 ```
-
-viem is a peer dependency. `@libid/contracts/identity`, where the
-normalization lives, imports viem when it loads, so `@libid/ens` does too.
 
 ## Rules
 

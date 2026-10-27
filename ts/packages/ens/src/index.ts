@@ -9,9 +9,9 @@ import {
   PLATFORM_GOOGLE_KEY,
   PLATFORM_X_KEY,
   rulesFor,
-} from '@libid/contracts/identity'
+} from '@libid/contracts/platforms'
 
-export { HandleError } from '@libid/contracts/identity'
+export { HandleError } from '@libid/contracts/platforms'
 
 /** The production deployment's Parent Name (ENS integration spec §2). */
 const PARENT_NAME = 'handles.link'

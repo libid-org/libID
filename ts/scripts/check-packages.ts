@@ -54,57 +54,51 @@ const consumer = fileURLToPath(new URL('../../.ceremony-local/npm-consumer', imp
 rmSync(consumer, { recursive: true, force: true })
 mkdirSync(consumer, { recursive: true })
 const require = createRequire(new URL('../packages/ceremony/package.json', import.meta.url))
-const install = (dependencies: Record<string, string>) => {
-  writeFileSync(
-    join(consumer, 'package.json'),
-    JSON.stringify({
-      private: true,
-      type: 'module',
-      dependencies,
-      devDependencies: {
-        typescript: require('typescript/package.json').version,
-        // Applications still on TypeScript 5 read the declarations TypeScript 7 emits.
-        'typescript-5': 'npm:typescript@^5',
-        vite: require('vite/package.json').version,
-      },
-    }),
-  )
-  execFileSync(
-    'npm',
-    [
-      'install',
-      '--ignore-scripts',
-      '--no-audit',
-      '--no-fund',
-      '--package-lock=false',
-      '--cache',
-      join(output, 'npm-cache'),
-    ],
-    {
-      cwd: consumer,
-      stdio: 'inherit',
-      // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
-      env: Object.fromEntries(
-        Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
-      ),
+writeFileSync(
+  join(consumer, 'package.json'),
+  JSON.stringify({
+    private: true,
+    type: 'module',
+    dependencies,
+    devDependencies: {
+      typescript: require('typescript/package.json').version,
+      // Applications still on TypeScript 5 read the declarations TypeScript 7 emits.
+      'typescript-5': 'npm:typescript@^5',
+      vite: require('vite/package.json').version,
     },
-  )
-}
-// Ens requires viem as a peer. An app without ens must not: ledger, popup and ceremony load
-// with no viem installed.
-const { '@libid/ens': _, ...withoutEns } = dependencies
-install(withoutEns)
-assert(!existsSync(join(consumer, 'node_modules/viem')), 'an app without ens installs viem')
+  }),
+)
+execFileSync(
+  'npm',
+  [
+    'install',
+    '--ignore-scripts',
+    '--no-audit',
+    '--no-fund',
+    '--package-lock=false',
+    '--cache',
+    join(output, 'npm-cache'),
+  ],
+  {
+    cwd: consumer,
+    stdio: 'inherit',
+    // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
+    env: Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
+    ),
+  },
+)
+// No package needs viem: each loads without it.
+assert(!existsSync(join(consumer, 'node_modules/viem')), 'a package installs viem')
 execFileSync(
   'node',
   [
     '--input-type=module',
     '-e',
-    "await import('@libid/ceremony'); await import('@libid/popup'); await import('@libid/popup/worker'); await import('@libid/popup/testing')",
+    "for (const entry of ['@libid/ceremony', '@libid/popup', '@libid/popup/worker', '@libid/popup/testing', '@libid/ens']) await import(entry)",
   ],
   { cwd: consumer, stdio: 'inherit' },
 )
-install(dependencies)
 writeFileSync(
   join(consumer, 'client.ts'),
   `export * from '@libid/ceremony'

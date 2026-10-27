@@ -8,7 +8,7 @@ import {
   PLATFORM_GOOGLE_KEY,
   PLATFORM_X_KEY,
   rulesFor,
-} from '@libid/contracts/identity'
+} from '@libid/contracts/platforms'
 import { normalize as ensNormalize } from 'viem/ens'
 import { describe, expect, it } from 'vitest'
 import { ensName, type Platform } from './index.js'
