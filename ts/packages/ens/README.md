@@ -73,9 +73,9 @@ cannot see which subnames have one.
 A chain label or parent name that is not a lowercase ASCII label of 1 to 63
 bytes, or has `--` at its third and fourth characters, throws.
 
-The rules are those of the [ENS integration spec](https://github.com/libid-org/libID/blob/4d778353dc8a03414231253504629f35da539635/specs/ens-integration.md), §5 and §6.
+The rules are those of the [ENS integration spec](https://github.com/libid-org/libID/blob/main/specs/ens-integration.md), §5 and §6.
 
-[`vectors/names.json`](https://github.com/libid-org/libID/blob/f79fbf8e9f7d79587f96954b27867e54d668fc3d/ts/packages/ens/vectors/names.json)
+[`vectors/names.json`](https://github.com/libid-org/libID/blob/main/ts/packages/ens/vectors/names.json)
 in the repository lists names with their handles, handles with no name, and
 names that read back as no handle. The tests here run it forward through
 `ensName` and back through this package's own reading of the spec. The

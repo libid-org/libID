@@ -1,6 +1,6 @@
 // The ENS name of a libID handle, as §5 and §6 of the ENS integration spec
 // define it:
-// https://github.com/libid-org/libID/blob/4d778353dc8a03414231253504629f35da539635/specs/ens-integration.md
+// https://github.com/libid-org/libID/blob/main/specs/ens-integration.md
 // A name is derived from the handle alone: nothing is registered, and the
 // gateway reads the handle back out of the labels.
 import {
