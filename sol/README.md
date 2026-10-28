@@ -40,15 +40,13 @@ import {LibIDTestnet as LibID} from "libid/LibIDTestnet.sol";
 | Library | Chains | IdentityRegistry | HandleEscrow |
 |---|---|---|---|
 | `LibID` | Ethereum mainnet | `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` | `0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5` |
-| `LibIDTestnet` | Sepolia, Eden testnet | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` | `0xE7eb0c675B757C12B1312dF652242b863624Bfab` |
+| `LibIDTestnet` | Sepolia, Arbitrum Sepolia, Eden testnet | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` | `0xE7eb0c675B757C12B1312dF652242b863624Bfab` |
 
 They are chain-configurations' addresses: libID-contracts v0.19's
-IdentityRegistry and v0.21's HandleEscrow. The escrow is not deployed yet on
-any chain: until it is, `isEscrowAvailable()` is false and the payment
-functions revert `LibIDUnavailable`. Nothing is deployed on Ethereum mainnet
-yet: there, `isAvailable()` is false too and every other call reverts
-`LibIDUnavailable`. `isAvailable` checks only that the registry
-address has code.
+IdentityRegistry and v0.21's HandleEscrow, deployed on every chain in the
+table. On any other chain, `isAvailable()` and `isEscrowAvailable()` are
+false and the calls revert `LibIDUnavailable`. `isAvailable` checks only
+that the registry address has code.
 
 A local chain has no contract at these addresses. Use `LibIDTestBase` in
 your tests, as below.

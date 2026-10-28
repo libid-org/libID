@@ -10,16 +10,15 @@ pragma solidity ^0.8.20;
 ///      libID-contracts deployment, from chain-configurations: the v0.19
 ///      IdentityRegistry and the v0.21 HandleEscrow. `LibID`
 ///      has the production addresses, those of Ethereum mainnet.
-///      `LibIDTestnet` has the testnet addresses, those of Sepolia and Eden,
-///      and is generated from `LibID` with nothing else changed: import it as
-///      `LibID` to build for a testnet. Every function is `internal`: it is
-///      compiled into the calling contract, and there is nothing to deploy or
-///      link. Where a contract has no code, the functions that need it
-///      revert `LibIDUnavailable`: check `isAvailable` before reading or
-///      gating, and `isEscrowAvailable` before paying. `LibID`'s addresses
-///      have no code on Ethereum mainnet yet, so `LibID` reads as unavailable
-///      there. A platform other than GitHub, X and Google makes every read
-///      and gate revert `UnknownPlatform`.
+///      `LibIDTestnet` has the testnet addresses, those of Sepolia, Arbitrum
+///      Sepolia and Eden, and is generated from `LibID` with nothing else
+///      changed: import it as `LibID` to build for a testnet. Every function
+///      is `internal`: it is compiled into the calling contract, and there is
+///      nothing to deploy or link. Where a contract has no code, the
+///      functions that need it revert `LibIDUnavailable`: check
+///      `isAvailable` before reading or gating, and `isEscrowAvailable`
+///      before paying. A platform other than GitHub, X and Google makes every
+///      read and gate revert `UnknownPlatform`.
 ///
 ///      A handle is looked up as typed, with only A-Z folded to a-z. A
 ///      leading at-sign or a space makes another handle, which nobody holds.
