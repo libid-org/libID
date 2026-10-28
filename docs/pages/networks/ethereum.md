@@ -15,7 +15,7 @@ v0.21.0, at the mainnet [addresses](/docs/reference/addresses/).
 To run a guide against mainnet, set:
 
 ```sh
-export RPC_URL=https://ethereum-rpc.publicnode.com
+export RPC_URL=https://mainnet.gateway.tenderly.co
 export IDENTITY_REGISTRY=0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA
 export HANDLE_ESCROW=0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5
 export FROM_BLOCK=26287671

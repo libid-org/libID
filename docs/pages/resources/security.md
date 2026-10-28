@@ -22,7 +22,7 @@ change which proofs are accepted. On every network, one key owns all of them:
 On mainnet that key owns `IdentityRegistry`, `HandleEscrow`,
 `CeremonyProofVerifier`, `NotaryService`, the three platform verifiers,
 `GoogleJwtRoots` and `LibidFactory`. It also owns the `handles.link` name in
-ENS and its resolver, `HandleResolver`. Check it yourself:
+ENS, and so chooses its resolver. Check it yourself:
 
 ```sh
 cast call 0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA 'owner()(address)' \

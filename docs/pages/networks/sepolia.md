@@ -27,8 +27,8 @@ export FROM_BLOCK=11963763
 logs that old; this one keeps them.
 
 The guides use the GitHub handle `testyakly`, bound there to
-`0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c`. That address also holds a
-private X identity and a private Google identity.
+`0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c`. That address also holds two
+private identities on other platforms.
 
 Names resolve as `<handle>.<platform>.testnet.handles.link` through ENS on
 Sepolia; see [ENS names](/docs/ens/names/#testnets).
