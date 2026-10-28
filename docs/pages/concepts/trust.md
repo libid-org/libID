@@ -111,5 +111,5 @@ one key owns all of them, and on Ethereum mainnet the same key owns
 `handles.link` in ENS. See [Security](/docs/resources/security/#admin-keys).
 
 These docs describe libID-contracts v0.21.0, which runs on Ethereum
-mainnet, Sepolia and the Eden testnet. See
+mainnet, Sepolia, Arbitrum Sepolia and the Eden testnet. See
 [Addresses](/docs/reference/addresses/).

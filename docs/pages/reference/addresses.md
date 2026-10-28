@@ -23,8 +23,9 @@ address.
 | `GoogleJwtRoots` | `0x4D9C43D4CF161452b7F66415FA492f4fc42eA583` | `0xA2C959B2940bdB8f97Af52401c1603000A3aa46b` |
 | `LibidFactory` | `0x5294f6c0f1F086f70c9b510Ba7990085D5976281` | `0x4aB4177683b8C3f40C487f9e765f77F0c5f5A023` |
 
-The testnets are [Sepolia](/docs/networks/sepolia/) and the
-[Eden testnet](/docs/networks/eden/). All three networks run
+The testnets are [Sepolia](/docs/networks/sepolia/),
+[Arbitrum Sepolia](/docs/networks/arbitrum-sepolia/) and the
+[Eden testnet](/docs/networks/eden/). All four networks run
 libID-contracts v0.21.0, the version these docs describe.
 
 Most apps only need `IdentityRegistry`, and `HandleEscrow` to send funds to
