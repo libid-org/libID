@@ -1,0 +1,19 @@
+# libID
+
+> Primitives and protocols for new economies built around familiar social identities.
+
+libID is an open protocol and software project for verifying control of existing
+social accounts and using those identities in applications on verifiable ledgers.
+The specifications describe identity ceremonies, browser transport, and services.
+Read each specification's status and assumptions before treating it as implemented.
+
+## Main materials
+
+- [Home](https://lib.id/): Project overview.
+- [Documentation](https://lib.id/docs/): Introduction; currently under construction.
+- [Protocol specification](https://lib.id/specs/): Required entry point and links to the normative chapters.
+- [Common ceremony rules](https://lib.id/specs/ceremony-common/): Shared identity-ceremony constructions and invariants.
+- [Identity-platform ceremonies](https://lib.id/specs/platform-ceremonies/): Google, X, and GitHub ceremony profiles.
+- [Browser transport](https://lib.id/specs/popup-transport/): Connections between applications and popup documents.
+- [Source code](https://github.com/libid-org/libID): Code, specifications, licenses, and links to related repositories.
+- [handles.link](https://handles.link/): Separate application using libID.

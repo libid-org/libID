@@ -1,5 +1,6 @@
 ---
 title: libID protocol specification
+description: Entry point to the proposed libID protocol specification, covering identity ceremonies, browser transport, services, chain profiles, and ENS integration.
 slug: specs
 sidebar:
   label: Protocol overview

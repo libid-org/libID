@@ -1,5 +1,6 @@
 ---
 title: Identity-platform ceremonies
+description: libID ceremony profiles for Google, X, and GitHub, defining authenticated identity fields, OAuth flows, evidence, proof validity, and failure behavior.
 sidebar:
   order: 3
 ---
