@@ -9,7 +9,8 @@ A wallet can hold several identities, on one platform or on many. This guide
 shows how to get the one handle a wallet shows as its name, and how to list
 all of its identities.
 
-The examples use this setup:
+The examples use this setup. The holder is the address behind `testyakly` on
+[Sepolia](/docs/networks/sepolia/):
 
 ```js
 import { createPublicClient, http } from 'viem';
@@ -18,7 +19,7 @@ import { identityCount, identitiesOf, platformId, primaryHandleOf } from '@libid
 const client = createPublicClient({ transport: http(process.env.RPC_URL) });
 const registry = { client, address: process.env.IDENTITY_REGISTRY };
 
-const holder = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+const holder = '0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c';
 ```
 
 ## Show a handle
@@ -63,7 +64,7 @@ The list has nodes, not the id or the handle as text. See
 [Platforms and nodes](/docs/concepts/platforms-and-nodes/#nodes). To show a
 handle, use `primaryHandleOf`. To check whether an identity proved a handle
 you already know, compare its `handleNode` with
-`handleNode('github', 'octocat')` from `@libid/contracts`.
+`handleNode('github', 'testyakly')` from `@libid/contracts`.
 
 The arguments after the holder are where the page starts and how many
 identities to return. To read a long list, move the start forward:

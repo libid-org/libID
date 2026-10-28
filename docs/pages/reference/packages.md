@@ -34,6 +34,23 @@ the contract returns a zero address or an empty string.
 Source and README:
 [ts/packages/contracts](https://github.com/libid-org/libID-contracts/tree/main/ts/packages/contracts).
 
+## TypeScript: `@libid/ceremony`
+
+```sh
+npm install @libid/ceremony @libid/popup
+```
+
+The libID ceremony: it signs the user in to GitHub, X or Google in a popup,
+builds the proof in their browser, and hands your app the result to submit
+with `bind`. These docs describe version 0.4.1. `@libid/popup` is a peer
+dependency.
+
+See its
+[README](https://github.com/libid-org/libID/tree/main/ts/packages/ceremony)
+and [client guide](https://github.com/libid-org/libID/blob/main/ts/packages/ceremony/docs/client.md),
+and [How binding works](/docs/advanced/how-binding-works/) for what the proof
+contains.
+
 ## Rust: `libid-contracts`
 
 ```sh

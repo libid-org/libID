@@ -25,18 +25,19 @@ On mainnet that key owns `IdentityRegistry`, `HandleEscrow`,
 ENS and its resolver, `HandleResolver`. Check it yourself:
 
 ```sh
-cast call 0xbefd300aff7d4a67fb381afe8b3596793d3e9a83 'owner()(address)' \
+cast call 0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA 'owner()(address)' \
   --rpc-url https://ethereum-rpc.publicnode.com
 ```
 
-The address above is mainnet's `IdentityRegistry`, which runs
-libID-contracts v0.17.0. Sepolia and the Eden testnet run v0.21.0, except `HandleEscrow`; see
-[Network status](/docs/reference/addresses/#network-status).
+The address above is mainnet's `IdentityRegistry`. See
+[Addresses](/docs/reference/addresses/) for the others.
 
 See [What a binding proves](/docs/concepts/trust/#whom-you-trust) for what
 the owner of a contract can do.
 
 ## Reporting a problem
 
-Please do not open a public issue for a security problem. Contact the
-maintainers of [libid-org](https://github.com/libid-org) privately.
+Please do not open a public issue for a security problem. Email
+[security@lib.id](mailto:security@lib.id). See
+[SECURITY.md](https://github.com/libid-org/libID/blob/main/SECURITY.md) for
+what to include.

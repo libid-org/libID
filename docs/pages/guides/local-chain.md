@@ -1,41 +1,58 @@
 ---
 title: Test on a local chain
-description: Run libID on anvil, and what the guides' test data is.
+description: Run the guides on a fork of Sepolia, or deploy libID to anvil.
 sidebar:
   order: 6
 ---
 
-The guides were written against a local-chain project: `IdentityRegistry`
-and `HandleEscrow` on [anvil](https://getfoundry.sh), with test verifiers
-that accept any binding without a proof, and a few test handles bound. That
-project is not published yet. Until it is, you can:
+The guides run against [Sepolia](/docs/networks/sepolia/). To try the parts
+that send transactions without spending anything, run them on a local fork
+of Sepolia. Or deploy your own libID stack to anvil.
 
-- run the read-only code against a public network, or
-- deploy the full libID stack to anvil with `libid-deploy`. It starts with
-  nothing bound.
+## Fork Sepolia
 
-## Read from a public network
+[anvil](https://getfoundry.sh) can fork a network: it reads Sepolia's state
+on demand and keeps your transactions local. The libID contracts, and the
+handles bound on Sepolia, such as `testyakly`, are all there.
 
-The code in the guides reads `RPC_URL`, `IDENTITY_REGISTRY` and
-`HANDLE_ESCROW`, and the events guide reads `FROM_BLOCK`. Point them at
-the Eden testnet:
+Start it in its own terminal:
 
 ```sh
-export RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545
-export IDENTITY_REGISTRY=0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D
-export HANDLE_ESCROW=0xE7eb0c675B757C12B1312dF652242b863624Bfab
-export FROM_BLOCK=291663483
+anvil --fork-url https://sepolia.gateway.tenderly.co
 ```
 
-The guides' test handles and addresses are not bound there, so you get
-`null` or an empty list where a guide shows output. Use a handle or an
-address that has bound an identity instead. `HANDLE_ESCROW` has no code
-there yet, so do not send to it; see
-[Network status](/docs/reference/addresses/#network-status).
+Then point the guides at it. The contract addresses are Sepolia's:
 
-Sepolia has the same contract addresses; see [Sepolia](/docs/networks/sepolia/).
-Ethereum mainnet runs an older version, which the guides do not match. See
-[Network status](/docs/reference/addresses/#network-status).
+```sh
+export RPC_URL=http://127.0.0.1:8545
+export IDENTITY_REGISTRY=0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D
+export HANDLE_ESCROW=0xE7eb0c675B757C12B1312dF652242b863624Bfab
+export FROM_BLOCK=11963763
+export PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+```
+
+`PRIVATE_KEY` is one of anvil's public test keys, funded on the fork. Never
+use it on a real network.
+
+On a fork you can also move the clock, for example past the escrow's 30-day
+refund wait:
+
+```sh
+cast rpc evm_increaseTime 2592000 --rpc-url $RPC_URL && cast rpc evm_mine --rpc-url $RPC_URL
+```
+
+You cannot bind a new handle on a fork without a real proof. To act as an
+address that already holds one, such as the holder of `testyakly`, let anvil
+send for it without its key:
+
+```sh
+cast rpc anvil_impersonateAccount 0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c --rpc-url $RPC_URL
+```
+
+Then send with `cast send --unlocked --from 0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c`.
+
+Pass `--fork-block-number` to start from a fixed block, so that every run
+sees the same state. The docs' own check does this.
 
 ## Deploy the stack to anvil
 
@@ -77,36 +94,10 @@ export RPC_URL=http://127.0.0.1:8545
 export IDENTITY_REGISTRY=0x155090A3A2dded2FbdF385bAC8cfFEb3a51A18ae
 export HANDLE_ESCROW=0xEd2E993A615d8D6b28000034ac58fB6389fe038e
 export PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
-export CAROL_KEY=0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
 ```
 
 The keys are anvil's public test keys. Never use them on a real network.
 
 Nothing is bound on this stack, and a binding needs a real proof. So the
 lookups return `null`, and you can deploy contracts and send to the escrow,
-but not bind a handle or claim from it.
-
-## The guides' test data
-
-Where a guide shows output, it comes from the local-chain project. It sets
-`RPC_URL`, `IDENTITY_REGISTRY`, `HANDLE_ESCROW`, `PRIVATE_KEY` and
-`CAROL_KEY` as above, with its own registry and escrow
-[addresses](/docs/reference/addresses/#local-stacks), and binds:
-
-| Handle | Id | Holder | Primary handle |
-| --- | --- | --- | --- |
-| GitHub `octocat` | `583231` | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | yes |
-| GitHub `alice-dev` | `1001` | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` | yes |
-| X `alice_x` | `2244994945` | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` | no, revealed only |
-
-`PRIVATE_KEY`'s address holds `alice-dev` and `alice_x`. A wallet has one
-primary handle, so its name is `alice-dev`.
-
-It also has `./bind.sh`, which binds a handle without a proof:
-
-```sh
-./bind.sh github 777 carol $CAROL_KEY
-```
-
-The arguments are the platform, the id, the handle, and the key of the
-holder to bind it to. The handle becomes that holder's primary handle.
+but not bind a handle or claim from it. For bound handles, use a fork.

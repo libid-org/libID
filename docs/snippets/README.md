@@ -1,22 +1,30 @@
 # Docs snippets check
 
-Runs the code in the guides, unchanged, against a fresh local chain. It
-pins `@libid/contracts` 0.21.0, the version the pages describe.
+Runs the code in the guides, unchanged, against a fork of Sepolia. It pins
+`@libid/contracts` 0.21.0, the version the pages describe. CI runs it on
+every change to `docs/pages` or `docs/snippets`.
 
-The chain it needs is the examples local-chain project (`./start.sh`,
-`local.env`, `./bind.sh`), deploying libID-contracts v0.21.0. That project
-is not published yet, so this check runs only where you have a copy of it,
-and it is not part of CI.
+Each page gets a fresh `anvil` fork at a fixed block, `FORK_BLOCK` in
+`check.mjs`. The guides' data, such as the GitHub handle `testyakly`, is
+bound on Sepolia at that block, so the output the pages show stays the same.
+Transactions use anvil's funded test keys and stay on the fork.
 
-1. Start a fresh `anvil`.
-2. In the local-chain directory, run `./start.sh && source local.env`.
-3. From the root of this repository, in the same shell:
+You need Node.js 22.12 or later and [Foundry](https://getfoundry.sh)
+(`anvil`, `forge`, `cast`). From the root of this repository:
 
 ```sh
 pnpm -C docs/snippets install --frozen-lockfile
-LOCAL_CHAIN=/path/to/local-chain pnpm -C docs/snippets check
+pnpm -C docs/snippets check
 ```
 
-Use a fresh anvil each time: the escrow guide binds `carol`, and a second run
-would find her already bound. Add a page to `PAGES` in `check.mjs` when its
-code should run.
+`FORK_URL` picks the Sepolia RPC; the default is
+`https://sepolia.gateway.tenderly.co`. It must serve state and logs at old
+blocks; many free RPCs do not. `FORK_PORT` picks anvil's port, 8645 by
+default.
+
+A block right after `<!-- check: skip, <reason> -->` is not run. The check
+prints each skip with its reason. Add a page to `PAGES` in `check.mjs` when
+its code should run.
+
+When a guide needs newer chain state, move `FORK_BLOCK` forward and update
+the output the pages show.

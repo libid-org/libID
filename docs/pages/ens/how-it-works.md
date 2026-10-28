@@ -7,7 +7,11 @@ sidebar:
 
 `handles.link` is a DNS name imported into ENS on Ethereum mainnet. Its
 resolver is `HandleResolver`, one contract that answers for every name under
-it. No name is stored anywhere.
+it. No name is stored anywhere. Testnet names work the same way, through
+`testnet.handles.link` in ENS on Sepolia and the testnet gateway.
+
+The exact rules for the resolver, the gateway and its answers are in the
+[ENS integration spec](/specs/ens-integration/).
 
 ## Resolving a name
 
@@ -29,8 +33,7 @@ sequenceDiagram
 ```
 
 The wallet names the chain it will send on, here Ethereum mainnet, and gets
-the holder on that chain only. Today the gateway serves Ethereum mainnet
-only; see [Status](/docs/ens/names/#status). `Resolver` is `HandleResolver`,
+the holder on that chain only. `Resolver` is `HandleResolver`,
 set on `handles.link` in ENS on Ethereum. The signed answer is valid for 5
 minutes.
 
@@ -53,10 +56,11 @@ The gateway is part of the libID [indexer](https://github.com/libid-org/username
 The indexer follows `IdentityBound` and the other registry events and keeps
 a copy of every binding on every chain the gateway serves. The gateway
 answers from that copy, not from the chain. Its URL is
-`https://names.handles.link/ens/{sender}/{data}.json`.
+`https://names.handles.link/ens/{sender}/{data}.json`, and the testnet
+gateway's is `https://testnet.names.handles.link/ens/{sender}/{data}.json`.
 
-The only chain it serves today is Ethereum mainnet, which runs
-libID-contracts v0.17.0.
+The chains it serves are listed by its status endpoint; see
+[Which chains are served](/docs/ens/names/#which-chains-are-served).
 
 The copy runs a few blocks behind the chain. If it falls too far behind, the
 gateway does not answer for that chain, and the client gets no address.

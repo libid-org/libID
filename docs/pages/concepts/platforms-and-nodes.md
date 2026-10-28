@@ -82,7 +82,8 @@ node, but sends the handle to your RPC provider.
 Before a handle is hashed, `A` to `Z` are lowercased. Nothing else changes:
 no spaces are trimmed and no `@` is removed. So `Octocat` and `octocat` are
 the same GitHub handle, but `@octocat` is a different node, which no GitHub
-account can prove. `resolveHandle` returns the zero address for it.
+account can prove. `IdentityRegistry.resolveHandle` returns the zero
+address for it, and `resolveHandle` from `@libid/contracts` returns `null`.
 
 The circuit only proves a handle exactly as the platform sent it. It refuses
 an empty handle, a byte outside printable ASCII, `"` and `\`, and handles

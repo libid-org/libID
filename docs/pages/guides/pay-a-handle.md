@@ -23,11 +23,12 @@ flowchart TD
 A paid deposit emits `Forwarded`, a held one `Deposited`. Held funds end one
 of two ways, `Claimed` or `Refunded`, whichever comes first.
 
-In this guide you play both people: a sender, with `PRIVATE_KEY`, and Carol,
-with `CAROL_KEY`. Set them, and `HANDLE_ESCROW`, as
-[Test on a local chain](/docs/guides/local-chain/) shows. Binding Carol's
-handle without a real proof needs the local-chain project, which is not
-published yet. On other networks, Carol binds with the libID sign-in flow.
+In this guide you are the sender. Set `RPC_URL` and `HANDLE_ESCROW` for
+[Sepolia](/docs/networks/sepolia/), and `PRIVATE_KEY` to a key with
+Sepolia ETH. To try it without spending anything, and to skip the 30-day
+wait, run it on a [fork of Sepolia](/docs/guides/local-chain/) instead.
+Nobody holds the GitHub handle `carol` on Sepolia, so the escrow keeps what
+you send her.
 
 ## The sender's script
 
@@ -85,10 +86,9 @@ The arguments are the platform, the handle node, the token and the amount.
 For ETH, `value` must equal `amount`. The deposit belongs to the address
 that sends it.
 
-If someone already owns the handle, the escrow pays them in the same
-transaction and emits `Forwarded`. Otherwise it keeps the funds and emits
-`Deposited`. Nobody owns `carol` on the local chain yet, so the escrow keeps
-them.
+If the handle has a holder, the escrow pays them in the same transaction and
+emits `Forwarded`. Otherwise it keeps the funds and emits `Deposited`.
+Nobody holds `carol`, so the escrow keeps them.
 
 ### Check what is held
 
@@ -119,7 +119,8 @@ The sender can refund its deposit 30 days after its last deposit to that
 handle and token. Each new deposit moves the date for everything the sender
 has there. Before the date, `refund` reverts `RefundLocked`.
 
-On anvil you can skip the wait. Move the clock forward 30 days:
+On Sepolia you wait. On a fork you can skip the wait: move the clock
+forward 30 days.
 
 ```sh
 cast rpc evm_increaseTime 2592000 --rpc-url $RPC_URL && cast rpc evm_mine --rpc-url $RPC_URL
@@ -160,22 +161,16 @@ await client.waitForTransactionReceipt({ hash: again });
 node refund.mjs
 ```
 
-## Carol proves her handle
+## Carol claims
 
-In a real app, Carol proves `carol` on GitHub with the libID sign-in flow,
-which binds the handle to her address. See
-[How binding works](/docs/advanced/how-binding-works/). On the
-[local chain](/docs/guides/local-chain/#the-guides-test-data), bind it from
-the `local-chain` directory:
+Carol proves `carol` on GitHub with the
+[libID ceremony](/docs/reference/packages/#typescript-libidceremony), which
+binds the handle to her address. See
+[How binding works](/docs/advanced/how-binding-works/). Then she claims what
+is held, with her own key in `CAROL_KEY`. Create `carol.mjs`, starting with
+the same setup as `sender.mjs`, then:
 
-```sh
-./bind.sh github 777 carol $CAROL_KEY
-```
-
-## Carol's script
-
-Create `carol.mjs`, starting with the same setup as `sender.mjs`, then:
-
+<!-- check: skip, needs a key that holds carol -->
 ```js
 const carol = createWalletClient({ account: privateKeyToAccount(process.env.CAROL_KEY), transport });
 const node = handleNode('github', 'carol');
@@ -190,15 +185,47 @@ await client.waitForTransactionReceipt({ hash: tx });
 console.log('left for carol:', await client.readContract({ ...escrow, functionName: 'escrowed', args: [node, NATIVE] }));
 ```
 
-`claim` must come from the holder of the handle. The second argument
-lists the tokens to claim; tokens with nothing held are skipped. The third is
-where the funds go.
-
 ```sh
 node carol.mjs
 ```
 
+`claim` must come from the holder of the handle, and reverts for anyone
+else. The second argument lists the tokens to claim; tokens with nothing
+held are skipped. The third is where the funds go.
+
 After a claim, the sender can no longer refund the deposits Carol took.
+
+## Send to a bound handle
+
+`testyakly` is bound on Sepolia, so a deposit to it is paid at once, and
+nothing is held. Create `forward.mjs`, starting with the same setup as
+`sender.mjs`, then:
+
+```js
+const sender = createWalletClient({ account: privateKeyToAccount(process.env.PRIVATE_KEY), transport });
+const amount = 10n ** 15n;
+
+const before = await client.getBalance({ address: '0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c' });
+const sent = await sender.writeContract({
+  ...escrow,
+  functionName: 'deposit',
+  args: [platformId('github'), handleNode('github', 'testyakly'), NATIVE, amount],
+  value: amount,
+});
+await client.waitForTransactionReceipt({ hash: sent });
+const after = await client.getBalance({ address: '0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c' });
+console.log('paid to testyakly:', after - before);
+```
+
+```sh
+node forward.mjs
+```
+
+You will see:
+
+```
+paid to testyakly: 1000000000000000
+```
 
 ## Send tokens
 
@@ -212,7 +239,8 @@ with `BadToken`.
 ## Send by handle text
 
 `depositToHandle` takes the handle as text instead of a node. Use it in
-place of `deposit`. After the same setup as `sender.mjs`:
+place of `deposit`. Create `by-text.mjs`, starting with the same setup as
+`sender.mjs`, then:
 
 ```js
 const sender = createWalletClient({ account: privateKeyToAccount(process.env.PRIVATE_KEY), transport });
@@ -227,7 +255,12 @@ const hash = await sender.writeContract({
 await client.waitForTransactionReceipt({ hash });
 ```
 
-It credits the same node, so Carol claims both kinds the same way. It also
+```sh
+node by-text.mjs
+```
+
+It credits the same node as `handleNode('github', 'carol')`, so Carol claims
+both kinds the same way. It also
 emits `HandleRevealed` with the handle folded. The handle is then public in
 the calldata and the logs. It folds A-Z like `handleNode` and checks nothing
 else, so `@carol` still lands on a node nobody can claim.

@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-Most apps never do this themselves: the libID sign-in flow does it for the
+Most apps never do this themselves: the [libID ceremony](/docs/reference/packages/#typescript-libidceremony) does it for the
 user. This page explains what happens, so you know what a binding rests on.
 The full rules are in the [specification](/specs/).
 

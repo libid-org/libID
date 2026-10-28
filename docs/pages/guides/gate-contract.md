@@ -22,7 +22,7 @@ interface IIdentityRegistry {
 ```
 
 The contracts below take the `IdentityRegistry` address in their constructor, so
-the same code works on the local chain and on a public network.
+the same code works on every network.
 
 ## A guestbook for GitHub users
 
@@ -58,8 +58,8 @@ contract Guestbook {
 
 `handleNodeOf` folds A-Z to a-z, hashes the handle, and returns the key it is
 stored under. `handleBinding` returns the holder and the time the platform
-confirmed it. `handleNodeOf` checks nothing else. `@alice-dev` is a different
-node from `alice-dev`, one nobody holds, so signing as `@alice-dev` reverts
+confirmed it. `handleNodeOf` checks nothing else. `@testyakly` is a different
+node from `testyakly`, one nobody holds, so signing as `@testyakly` reverts
 with `NotYourHandle`.
 
 Handles can be renamed and reused on GitHub. `MAX_AGE` limits how long ago
@@ -119,10 +119,11 @@ the nodes you accept.
 
 Put the interface and both contracts in `src/Gate.sol` of a
 [Foundry](https://getfoundry.sh) project, with
-`pragma solidity ^0.8.24;` at the top. Set `RPC_URL`,
-`IDENTITY_REGISTRY` and `PRIVATE_KEY` as
-[Test on a local chain](/docs/guides/local-chain/) shows, then deploy the
-guestbook:
+`pragma solidity ^0.8.24;` at the top. Set `RPC_URL` and
+`IDENTITY_REGISTRY` for [Sepolia](/docs/networks/sepolia/), and
+`PRIVATE_KEY` to a key with Sepolia ETH. Or run all of it on a
+[fork of Sepolia](/docs/guides/local-chain/), where anvil's keys have ETH.
+Then deploy the guestbook:
 
 ```sh
 GUESTBOOK=$(forge create src/Gate.sol:Guestbook --broadcast \
@@ -130,14 +131,18 @@ GUESTBOOK=$(forge create src/Gate.sol:Guestbook --broadcast \
   --constructor-args $IDENTITY_REGISTRY | awk '/Deployed to/ {print $3}')
 ```
 
-On the [local chain](/docs/guides/local-chain/#the-guides-test-data),
-`PRIVATE_KEY`'s address holds the GitHub handle `alice-dev`, so it can sign.
-Elsewhere, use a handle your address has bound:
+On Sepolia, `0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c` holds the GitHub
+handle `testyakly`. Without its key you can still see what `sign` does for
+it, because `cast call` runs the call without sending it:
 
 ```sh
-cast send $GUESTBOOK 'sign(string,string)' alice-dev 'hello' \
-  --rpc-url $RPC_URL --private-key $PRIVATE_KEY
+cast call $GUESTBOOK 'sign(string,string)' testyakly 'hello' \
+  --from 0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c --rpc-url $RPC_URL
 ```
 
-Signing as `octocat` from the same address reverts with `NotYourHandle`,
-because another address holds `octocat`.
+It succeeds. The same call from any other address reverts with
+`NotYourHandle`. Once `testyakly` was proved more than 90 days ago, it
+reverts with `ProofTooOld`.
+
+To sign for real, send it with `cast send` from an address that has bound a
+GitHub handle, and pass that handle.

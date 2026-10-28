@@ -31,14 +31,14 @@ const github = platformId('github');
 ## Find the holder
 
 ```js
-const holder = await resolveHandle(registry, github, 'octocat');
+const holder = await resolveHandle(registry, github, 'testyakly');
 ```
 
 You get the holder that proved the handle most recently, or `null`.
 
-Only A-Z are folded to a-z, so `Octocat` finds `octocat`. Nothing else
-changes: `@octocat` and `octocat` are different handles. Nobody can prove
-`@octocat` or `oct cat`, so they return `null`. If your users type a leading
+Only A-Z are folded to a-z, so `TestYakly` finds `testyakly`. Nothing else
+changes: `@testyakly` and `testyakly` are different handles. Nobody can prove
+`@testyakly` or `test yakly`, so they return `null`. If your users type a leading
 `@` or spaces, remove them yourself.
 
 `resolveHandle` hashes the handle locally and sends only the hash to the RPC.
@@ -53,7 +53,7 @@ A binding records the time the platform confirmed it. Read it with
 `handleNode` and `handleBinding`:
 
 ```js
-const node = handleNode('github', 'octocat');
+const node = handleNode('github', 'testyakly');
 
 const [current, observedAt] = await client.readContract({
   address: registry.address,
@@ -87,7 +87,7 @@ comfortable with.
 ## Notice a new holder
 
 A handle can move to a different account on the platform. Someone who paid
-`@octocat` last month may now be paying a stranger.
+`@testyakly` last month may now be paying a stranger.
 
 The contract cannot tell you this on its own. Your app has to remember who
 held the handle before. When a user first pays or saves a handle, store the
@@ -106,7 +106,7 @@ async function idNodeOf(holder, platformKey, handle) {
   return null;
 }
 
-const savedIdNode = await idNodeOf(holder, 'github', 'octocat'); // keep this with the contact
+const savedIdNode = await idNodeOf(holder, 'github', 'testyakly'); // keep this with the contact
 ```
 
 `idNodeOf` reads the holder's identities a page at a time and returns the id
@@ -118,9 +118,9 @@ Next time, pass the saved id node to `resolveHandleAndId`:
 
 ```js
 if (savedIdNode) {
-  const { holder: now, idAgrees } = await resolveHandleAndId(registry, github, 'octocat', savedIdNode);
+  const { holder: now, idAgrees } = await resolveHandleAndId(registry, github, 'testyakly', savedIdNode);
   if (!idAgrees) {
-    console.log('@octocat now belongs to a different account.');
+    console.log('@testyakly now belongs to a different account.');
   }
 }
 ```
@@ -145,7 +145,7 @@ agrees, so the check tells you nothing. If your app has nothing saved, show
 
 What to do with `false` depends on what the user asked for:
 
-- "Pay whoever holds @octocat now." The payment is right. Tell the user the
+- "Pay whoever holds @testyakly now." The payment is right. Tell the user the
   handle changed holder, and send.
 - "Pay the person I paid last time." The handle no longer leads to them.
   Stop and ask the user before sending.

@@ -15,13 +15,12 @@ You need [Node.js](https://nodejs.org) 22.12 or later, and a network that runs
 libID. Set `RPC_URL` and `IDENTITY_REGISTRY` for it. For Sepolia:
 
 ```sh
-export RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+export RPC_URL=https://sepolia.gateway.tenderly.co
 export IDENTITY_REGISTRY=0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D
 ```
 
 The other networks are listed under [Networks](/docs/networks/ethereum/).
-The output below comes from a [local chain](/docs/guides/local-chain/#the-guides-test-data)
-where `octocat` is bound.
+The guides use the GitHub handle `testyakly`, which is bound on Sepolia.
 
 Create a project and install [viem](https://viem.sh) and the libID contracts
 package:
@@ -59,13 +58,13 @@ string `github`. The other platforms are `'x'` and `'google'`.
 Add this to `index.mjs`:
 
 ```js
-const holder = await resolveHandle(registry, github, 'octocat');
+const holder = await resolveHandle(registry, github, 'testyakly');
 console.log(holder);
 ```
 
 `resolveHandle` returns the address that proved it holds the handle, or `null`
-if nobody has. Only A to Z are folded to lowercase, so `Octocat` finds
-`octocat`. `@octocat` is different text, and nobody holds it.
+if nobody has. Only A to Z are folded to lowercase, so `TestYakly` finds
+`testyakly`. `@testyakly` is different text, and nobody holds it.
 
 ## Find the handle of a holder
 
@@ -89,14 +88,15 @@ someone else.
 node index.mjs
 ```
 
-If nobody has bound `octocat` on your network, it prints `null`. Try a
-handle that someone has bound. On the local chain, where `octocat` is bound,
-you will see:
+On Sepolia you will see:
 
 ```
-0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
-octocat
+0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c
+testyakly
 ```
+
+On another network, nobody may hold `testyakly`, and it prints `null`. Try a
+handle that someone has bound there.
 
 ## Without code
 
@@ -104,7 +104,7 @@ You can make the same call with [Foundry](https://getfoundry.sh)'s `cast`:
 
 ```sh
 cast call $IDENTITY_REGISTRY 'resolveHandle(bytes32,string)(address)' \
-  $(cast keccak github) octocat --rpc-url $RPC_URL
+  $(cast keccak github) testyakly --rpc-url $RPC_URL
 ```
 
 See [Addresses](/docs/reference/addresses/) for every contract on every

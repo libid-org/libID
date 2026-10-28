@@ -9,8 +9,9 @@ Runnable projects will live in
 [libid-org/examples](https://github.com/libid-org/examples). The first one, an
 app that pays GitHub and X handles through `HandleEscrow`, is in progress.
 
-Until then, each guide has code you can run. See
-[Test on a local chain](/docs/guides/local-chain/) for where to run it:
+Until then, each guide has code you can run against
+[Sepolia](/docs/networks/sepolia/), or a
+[fork of it](/docs/guides/local-chain/):
 
 - [Look up a wallet](/docs/guides/lookup-wallet/)
 - [Resolve a handle](/docs/guides/resolve-handle/)

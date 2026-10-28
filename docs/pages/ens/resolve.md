@@ -10,8 +10,8 @@ support wildcard names ([ENSIP-10](https://docs.ens.domains/ensip/10)) and
 offchain lookups ([ERC-3668](https://eips.ethereum.org/EIPS/eip-3668)). viem
 and ethers v6 support both.
 
-The gateway answers for Ethereum mainnet only; see
-[Status](/docs/ens/names/#status).
+Check which chains the gateways serve under
+[Which chains are served](/docs/ens/names/#which-chains-are-served).
 
 ## With viem
 
@@ -35,6 +35,31 @@ mainnet. It is `null` if nobody holds the handle there.
 
 `toCoinType(1)` is `60`, the coin type ENS uses for Ethereum, so leaving out
 `coinType` gives the same answer.
+
+## Testnets
+
+Testnet names live in ENS on Sepolia, so connect to Sepolia:
+
+```js
+import { createPublicClient, http, toCoinType } from 'viem';
+import { sepolia } from 'viem/chains';
+
+const client = createPublicClient({ chain: sepolia, transport: http() });
+
+const onSepolia = await client.getEnsAddress({
+  name: 'testyakly.github.testnet.handles.link',
+  coinType: toCoinType(sepolia.id),
+});
+
+const onEden = await client.getEnsAddress({
+  name: 'testyakly.github.testnet.handles.link',
+  coinType: 3735928814n,
+});
+```
+
+Both give `0xb2c7c8ea84932a0dadf8f6f0550cfc89a345540c`, which holds
+`testyakly` on both chains. `toCoinType(3735928814)` throws, so the Eden
+coin type is written out; see [Testnets](/docs/ens/names/#testnets).
 
 ## In a wallet
 

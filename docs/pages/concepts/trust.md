@@ -110,8 +110,6 @@ The contracts have not been audited. They are upgradeable. On each network
 one key owns all of them, and on Ethereum mainnet the same key owns
 `handles.link` in ENS. See [Security](/docs/resources/security/#admin-keys).
 
-These docs describe libID-contracts v0.21.0, which runs on Sepolia and the
-Eden testnet, except `HandleEscrow`, which is not deployed yet. Ethereum
-mainnet still runs v0.17.0, which stores every handle
-as text, and the id too for GitHub and X. See
-[Addresses](/docs/reference/addresses/#network-status).
+These docs describe libID-contracts v0.21.0, which runs on Ethereum
+mainnet, Sepolia and the Eden testnet. See
+[Addresses](/docs/reference/addresses/).

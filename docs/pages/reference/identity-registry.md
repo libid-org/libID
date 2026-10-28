@@ -163,7 +163,8 @@ Always `true`: the registry stores bindings under SHA-256 nodes.
 ## Binding
 
 A holder binds an identity by calling `bind` with a proof. Your app normally
-does not build this call by hand; the libID sign-in flow does. See
+does not build the proof by hand; the [libID ceremony](/docs/reference/packages/#typescript-libidceremony) does, and your app
+sends it. See
 [How binding works](/docs/advanced/how-binding-works/).
 
 ### bind

@@ -13,26 +13,8 @@ about libID.
 Nobody registers these names. They exist as soon as the handle is proved, and
 they point wherever `IdentityRegistry` says the handle points.
 
-## Status
-
-Names resolve for bindings on Ethereum mainnet. The gateway does not answer
-for any other chain yet.
-
-Ethereum mainnet runs libID-contracts v0.17.0. The networks that run
-v0.21.0, Sepolia and the Eden testnet, have no working names yet.
-
-| Where | State |
-| --- | --- |
-| ENS on Ethereum mainnet | `handles.link` resolver is `HandleResolver`, `0xc09bF842BAD6350a1600277a11D954c6891974CE` |
-| Gateway | `https://names.handles.link/ens/{sender}/{data}.json`, serving Ethereum mainnet only |
-| ENS on Sepolia | resolver `0x84ba4D9CBAaB51180d02D9635CD9FDd0735350f3`, pointing at the same gateway, which does not serve Sepolia, so Sepolia names do not resolve |
-| Names for Eden | not served; viem also cannot compute a coin type for Eden's chain id |
-
-To see which chains the gateway serves right now:
-
-```sh
-curl https://names.handles.link/ens/status
-```
+The rules are in the [ENS integration spec](/specs/ens-integration/). This
+page covers what you need to use the names.
 
 ## Name shape
 
@@ -49,36 +31,62 @@ The platform is `github`, `x` or `google`. Some examples:
 | X `@some_handle` | `some-handle.x.handles.link` |
 | Gmail `alice.smith@gmail.com` | `alice.smith.google.handles.link` |
 
-Names are always lowercase.
-
-On X, each `_` becomes `-`, because X handles cannot contain `-`.
-
-For Gmail, the part before `@` becomes the name, and `gmail.com` is left out.
-A Google Workspace address keeps its domain after an `_at` label:
-`alice@company.com` becomes `alice._at.company.com.google.handles.link`. An
-address with `_` or `+` in it has no ENS name.
+Names are always lowercase. On X, each `_` becomes `-`. For Gmail, the part
+before `@` becomes the name. Some handles have no name, for example an email
+address with `_` or `+` in it. The full rules, Google Workspace addresses
+included, are in [Handle labels](/specs/ens-integration/#6-handle-labels).
 
 ## Which chain
 
 A handle can be proved on several chains, and each chain has its own
 `IdentityRegistry`. The name gives the address on the chain the sender asks
-about, and no address on a chain where the handle has no binding.
+about, by its [ENSIP-11](https://docs.ens.domains/ensip/11) coin type, and no
+address on a chain where the handle has no binding. A client that asks
+without naming a chain gets the answer for the chain whose ENS it asked:
+Ethereum mainnet for `handles.link`.
 
 This only protects the sender if the wallet asks about the chain it will send
-on. Wallets that follow [ENSIP-11](https://docs.ens.domains/ensip/11) do,
-MetaMask among them. A client that asks without naming a chain gets the answer
-for Ethereum mainnet. If it then sends on another chain, the funds go to the
-Ethereum holder's address on that chain, who may be a different person or
-nobody.
+on. If it asks without naming a chain and then sends on another one, the
+funds go to the mainnet holder's address on that chain, who may be a
+different person or nobody.
 
-Add a chain label to make a name work on one chain only:
+A chain label makes a name work on one chain only:
 
 ```
 octocat.github.ethereum.handles.link
 ```
 
 This name gives an address only when the sender asks for Ethereum mainnet.
-The gateway's status lists the labels each chain answers to.
+
+## Testnets
+
+Testnet bindings have their own names under `testnet.handles.link`, resolved
+through ENS on Sepolia:
+
+```
+<handle>.<platform>.testnet.handles.link
+<handle>.<platform>.<chain>.testnet.handles.link
+```
+
+For example, `testyakly.github.testnet.handles.link` gives the holder of
+`testyakly` on Sepolia. The chain labels are `sepolia` and `eden`.
+
+Eden's chain id, `3735928814`, is larger than `2^31`, so viem's `toCoinType`
+refuses it. Pass the coin type by hand. For Eden it is the chain id itself,
+because `0x80000000 | 3735928814` is `3735928814`. See
+[Resolve with ENS](/docs/ens/resolve/#testnets).
+
+## Which chains are served
+
+Each gateway lists the chains it answers for, and the chain labels of each:
+
+```sh
+curl https://names.handles.link/ens/status
+curl https://testnet.names.handles.link/ens/status
+```
+
+A chain marked `stale` falls too far behind, and gets no answer until it
+catches up.
 
 ## What resolves
 

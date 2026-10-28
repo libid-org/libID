@@ -11,7 +11,7 @@ lists each party, from the [specification](/specs/#system-model-and-specificatio
 | Party | Trusted for | If it misbehaves |
 | --- | --- | --- |
 | The user | choosing the account and approving the binding | nothing beyond their own account |
-| The app | running the sign-in flow and its configuration, and disclosing the handle, or making it the primary handle, only when the user asks | can refuse to work, disclose a handle the user wanted kept private, or set it as the primary handle, but cannot change the account, the wallet, or the proof's time limits |
+| The app | running the [libID ceremony](/docs/reference/packages/#typescript-libidceremony) and its configuration, and disclosing the handle, or making it the primary handle, only when the user asks | can refuse to work, disclose a handle the user wanted kept private, or set it as the primary handle, but cannot change the account, the wallet, or the proof's time limits |
 | The platform (GitHub, X, Google) | saying who owns an account | can bind any account on that platform |
 | The notary | signing true records of the user's GitHub and X sessions, and of Google's key list | can bind any GitHub or X account, and, by sending a false key list to `GoogleJwtRoots.rotate`, any Google account |
 | Google's signing keys | signing true sign-in tokens | a stolen key can bind any Google account |

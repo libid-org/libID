@@ -16,7 +16,7 @@ evidence, moved back by a fixed allowance for each platform:
 | Platform | `observedAt` is | A proof bound a moment ago reads |
 | --- | --- | --- |
 | GitHub, X | the time the notary signed the user's session, minus 5 minutes | 0 to 65 minutes old |
-| Google | the expiry in Google's sign-in token, minus 2 hours | 1 to 2 hours old |
+| Google | the expiry in Google's sign-in token, minus 2 hours | 1 to 2 hours old, for Google's 1-hour tokens |
 
 The allowance puts every platform on one scale and keeps `observedAt` from
 ever being ahead of the block. The ranges come from how old the evidence may

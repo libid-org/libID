@@ -8,15 +8,14 @@ sidebar:
 ## Where can I test today?
 
 On [Sepolia](/docs/networks/sepolia/) or the
-[Eden testnet](/docs/networks/eden/), which run the current contracts, or on
-anvil with the full stack; see
-[Test on a local chain](/docs/guides/local-chain/). The local-chain project
-with known test data is not published yet.
+[Eden testnet](/docs/networks/eden/), which run the current contracts. The
+guides use Sepolia. To send transactions without spending anything, fork
+Sepolia with anvil; see [Test on a local chain](/docs/guides/local-chain/).
 
 ## How does a user create a binding?
 
-With the libID sign-in flow, which signs them in to the platform, builds a
-proof, and sends `bind` from their wallet. See
+Your app runs the [libID ceremony](/docs/reference/packages/#typescript-libidceremony). It signs them in to the platform and builds a
+proof, and your app sends `bind` from their wallet. See
 [How binding works](/docs/advanced/how-binding-works/).
 
 ## What does it cost?

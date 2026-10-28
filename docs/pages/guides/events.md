@@ -32,9 +32,9 @@ async function readEvents(filter) {
 ```
 
 `FROM_BLOCK` is the block the contracts were deployed in. Nothing happened
-before it, so do not read earlier blocks. Each network's page gives it; see
-[Eden](/docs/networks/eden/). On a local chain, leave it unset to
-start from block 0.
+before it, so do not read earlier blocks. Each network's page gives it; on
+[Sepolia](/docs/networks/sepolia/) it is `11963763`. On a fresh anvil, leave
+it unset to start from block 0.
 
 Most RPC providers limit how many blocks one request can cover, so
 `readEvents` reads in ranges. Free public RPCs may also refuse log requests
@@ -76,8 +76,15 @@ const forWallet = await readEvents({
   address: IDENTITY_REGISTRY,
   abi: identityRegistryAbi,
   eventName: 'IdentityBound',
-  args: { holder: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
+  args: { holder: '0xB2C7C8eA84932a0dADf8F6f0550cFc89A345540c' },
 });
+console.log(forWallet.length, 'bindings');
+```
+
+On Sepolia, when these docs were written, you will see:
+
+```
+3 bindings
 ```
 
 ## Other IdentityRegistry events
@@ -93,6 +100,11 @@ const forWallet = await readEvents({
 - `HandleUnpublished`: a holder's primary handle was removed, by `unpublish`
   or because the holder lost that handle, to another identity or by
   retiring it.
+- `CeremonyBound`: emitted by every `bind`, with the ceremony's
+  authorization digest, the holder, the platform and the client that ran
+  the ceremony. It is for operators tracing bindings to a client.
+- `BindFeePaid`: a `bind` paid the service fee its caller named, to
+  `receiver`.
 
 ## Watch for new bindings
 
@@ -113,7 +125,7 @@ Call `unwatch()` to stop.
 
 `HandleEscrow` emits:
 
-- `Deposited`: funds are held for a handle nobody owns yet. It names the
+- `Deposited`: funds are held for a handle nobody holds yet. It names the
   `sender` and the `refundableAt` of the sender's whole contribution.
 - `HandleRevealed`: a `depositToHandle` named the handle as text. It is the
   same event the registry emits, and comes with a `Deposited` or a
