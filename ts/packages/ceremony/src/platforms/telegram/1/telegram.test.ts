@@ -69,8 +69,8 @@ describe('telegram/1 return', () => {
 
 describe('telegram/1 code swap through the Bridge', () => {
   afterEach(() => vi.unstubAllGlobals())
-  const swap = () =>
-    swapCode(bridge, { code: 'abc', codeVerifier, redirectUri }, new AbortController().signal)
+  const signal = new AbortController().signal
+  const swap = () => swapCode(bridge, { code: 'abc', codeVerifier, redirectUri }, signal)
 
   it('posts the code, verifier and exact redirect URI and returns the ID token', async () => {
     const fetch = vi.fn(async () => Response.json({ id_token: 'h.p.s', token_type: 'Bearer' }))
@@ -83,7 +83,10 @@ describe('telegram/1 code swap through the Bridge', () => {
       method: 'POST',
       mode: 'cors',
       credentials: 'omit',
+      cache: 'no-store',
       redirect: 'error',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
     })
     expect(JSON.parse(String(init.body))).toEqual({
       code: 'abc',
@@ -97,6 +100,8 @@ describe('telegram/1 code swap through the Bridge', () => {
     ['an error beside a token', () => Response.json({ error: 'x', id_token: 'h.p.s' })],
     ['no ID token', () => Response.json({ access_token: 'a' })],
     ['an empty ID token', () => Response.json({ id_token: '' })],
+    ['a non-string ID token', () => Response.json({ id_token: 1 })],
+    ['a body over 64 KiB', () => Response.json({ id_token: 'h'.repeat(64 * 1024) })],
     ['a non-JSON body', () => new Response('<html>')],
     ['an HTTP failure', () => Response.json({ id_token: 'h.p.s' }, { status: 500 })],
   ])('rejects %s', async (_name, answer) => {
@@ -156,6 +161,9 @@ describe('telegram/1 ID token acceptance', () => {
     return `${input}.${sign('RSA-SHA256', Buffer.from(input), privateKey).toString('base64url')}`
   }
   const accept = (token: string) => acceptTelegramIdToken(token, clientId, digest)
+  const [h, p, s] = mint().split('.')
+  const raw = Buffer.from(JSON.stringify(claims).replace('synthetic', 'X'))
+  raw[raw.indexOf('X')] = 0xff
 
   beforeEach(() => vi.useFakeTimers({ now: now * 1000 }))
   afterEach(() => vi.useRealTimers())
@@ -175,6 +183,7 @@ describe('telegram/1 ID token acceptance', () => {
     ['alg HS256', mint({}, { alg: 'HS256' })],
     ['alg none', mint({}, { alg: 'none' })],
     ['no kid', mint({}, { kid: undefined })],
+    ['an empty kid', mint({}, { kid: '' })],
     ['another issuer', mint({ iss: 'https://oauth.telegram.org/' })],
     ['another audience', mint({ aud: '1234567891' })],
     ['an audience array', mint({ aud: [clientId] })],
@@ -190,6 +199,8 @@ describe('telegram/1 ID token acceptance', () => {
     ['no id', mint({ id: undefined })],
     ['two segments', mint().split('.').slice(0, 2).join('.')],
     ['an empty signature', `${mint().split('.').slice(0, 2).join('.')}.`],
+    ['a non-base64url signature', `${h}.${p}.${s.slice(1)}+`],
+    ['a non-UTF-8 payload', `${h}.${raw.toString('base64url')}.${s}`],
     ['a non-JSON payload', `${b64({ alg: 'RS256', kid: 'k1' })}.bm90IGpzb24.c2ln`],
   ])('rejects %s', (_name, token) => {
     expect(() => accept(token)).toThrow(expect.objectContaining({ event: 'authorization' }))
