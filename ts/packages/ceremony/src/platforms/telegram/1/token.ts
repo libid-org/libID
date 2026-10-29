@@ -1,6 +1,6 @@
 import { CeremonyError } from '../../../errors.js'
-import { b64urlDecode, b64urlEncode, isRecord, isUint } from '../../../primitives.js'
-import { fetchPublicJson } from '../../../response.js'
+import { b64urlDecode, b64urlEncode, isUint } from '../../../primitives.js'
+import { fetchSigningKey as fetchKey, jsonObject as json } from '../../oidc.js'
 import { provider } from './provider.js'
 
 /** The accepted token's signing key ID and the identity it carries. */
@@ -9,20 +9,8 @@ export interface TelegramIdToken {
   claims: { id: string; preferred_username: string }
 }
 
-const MAX_JWKS_BYTES = 128 * 1024
 const MAX_FUTURE_IAT_SECONDS = 300
 const MAX_AGE_SECONDS = 3600
-
-const text = new TextDecoder('utf-8', { fatal: true })
-
-function json(bytes: Uint8Array | null): Record<string, unknown> | null {
-  try {
-    const value: unknown = bytes && JSON.parse(text.decode(bytes))
-    return isRecord(value) ? value : null
-  } catch {
-    return null
-  }
-}
 
 const invalid = (message = 'Invalid Telegram ID token') =>
   new CeremonyError('authorization', message)
@@ -57,21 +45,5 @@ export function acceptTelegramIdToken(
 }
 
 /** Select the one key carrying `kid` from Telegram's key set, served by the Bridge. */
-export async function fetchSigningKey(
-  bridge: string,
-  kid: string,
-  signal: AbortSignal,
-): Promise<unknown> {
-  signal.throwIfAborted()
-  const body = await fetchPublicJson(
-    `${bridge}${provider.jwksPath}`,
-    MAX_JWKS_BYTES,
-    'Signing key request failed',
-    signal,
-    'default',
-  )
-  if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')
-  const keys = body.keys.filter((k) => isRecord(k) && k.kid === kid)
-  if (keys.length !== 1) throw new Error('Signing key is not unique')
-  return keys[0]
-}
+export const fetchSigningKey = (bridge: string, kid: string, signal: AbortSignal) =>
+  fetchKey(`${bridge}${provider.jwksPath}`, kid, signal)

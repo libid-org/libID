@@ -3,28 +3,14 @@ import type { OidcGoogleToken } from '../../../barretenberg/circuits/oidc_google
 import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
 import { isAccountId, isHandle } from '../../../identity.js'
-import { b64urlDecode, isRecord, isUint } from '../../../primitives.js'
-import { fetchPublicJson } from '../../../response.js'
+import { b64urlDecode, isUint } from '../../../primitives.js'
+import { fetchSigningKey as fetchKey, jsonObject as json } from '../../oidc.js'
 import { provider } from './provider.js'
 import { isAudience } from './validation.js'
 
 /** The token bytes and claims the fixed oidc_google circuit consumes, plus the signing key's `kid`. */
 export interface ParsedGoogleIdToken extends OidcGoogleToken {
   kid: string
-}
-
-/** Bound a public JWKS response independently of the circuit's token dimensions. */
-const MAX_JWKS_BYTES = 128 * 1024
-
-const text = new TextDecoder('utf-8', { fatal: true })
-
-function json(bytes: Uint8Array): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(text.decode(bytes))
-    return isRecord(value) ? value : null
-  } catch {
-    return null
-  }
 }
 
 const isClaim = (value: unknown): value is string => typeof value === 'string' && value !== ''
@@ -80,19 +66,5 @@ export function acceptGoogleIdToken(idToken: string, clientId: string): ParsedGo
 }
 
 /** Select the one published signing key carrying the token's `kid`. */
-export async function fetchSigningKey(kid: string, signal: AbortSignal): Promise<unknown> {
-  // A run closed before this point starts no key request.
-  signal.throwIfAborted()
-  // The key set follows Google's own Cache-Control, so repeat ceremonies reuse it.
-  const body = await fetchPublicJson(
-    provider.jwksUrl,
-    MAX_JWKS_BYTES,
-    'Signing key request failed',
-    signal,
-    'default',
-  )
-  if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')
-  const keys = body.keys.filter((k) => isRecord(k) && k.kid === kid)
-  if (keys.length !== 1) throw new Error('Signing key is not unique')
-  return keys[0]
-}
+export const fetchSigningKey = (kid: string, signal: AbortSignal) =>
+  fetchKey(provider.jwksUrl, kid, signal)
