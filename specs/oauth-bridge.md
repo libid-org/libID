@@ -38,7 +38,8 @@ Bridge-assisted OAuth is a platform-profile choice, not prohibited by CCDP.
 Another platform or later ceremony version can define a Bridge service together
 with its HTTP contract, credential custody, and trust/evidence requirements.
 The route surface below requires no such service for the browser-exchange
-profiles; it does not preclude one where a profile requires it.
+profiles; it does not preclude one where a profile requires it. The
+[Telegram profile](#telegram-profile) is Bridge-assisted.
 
 The bridge and Distribution may be cross-site and independently operated;
 both are code-supply-chain trust boundaries. The Distribution requires no
@@ -58,7 +59,7 @@ One bridge deployment has these inputs. Every origin follows the
 |---|---|
 | `allowedAppOrigins` | Nonempty, duplicate-free set of canonical application origins, [origin patterns](popup-transport.md#6-origin-allowlists-and-binding), and `*` |
 | CCDP origin | One canonical origin selected by the operator; defaults to `https://lib.id` when omitted |
-| Platform profiles | For each enabled platform, one public OAuth client ID and a public `clientCredential` exactly when the platform's ceremony sends one; no version list |
+| Platform profiles | For each enabled platform, one public OAuth client ID and a public `clientCredential` exactly when the platform's ceremony sends one; no version list. Telegram also takes a confidential client secret that only the Bridge holds |
 | Callback inputs | One unversioned list `[allowedOrigins, ccdpOrigin]` derived from the values above, following the [artifact contract](ccdp-distribution.md#configuration-insertion); no separate input configuration or CCDP version list |
 
 Every enabled platform's OAuth registration uses `/auth/callback` on the
@@ -142,6 +143,8 @@ For the profiles covered here, the bridge's ceremony route surface is:
 |---|---|---|---|---|
 | `GET` | `/api/v1/ceremony/config` | always | public platform and CCDP configuration | `Origin` admitted by `allowedOrigins`; absent `Origin` accepted only by the same-origin rule below |
 | `GET` | `/auth/callback` | always | complete OAuth Callback document | none at HTTP ingress; callback authenticates its popup connection after clearing its input |
+| `POST` | `/api/v1/ceremony/telegram/token` | Telegram configured | [Telegram](#telegram-profile) code exchange | as configuration GET |
+| `GET` | `/api/v1/ceremony/telegram/jwks` | Telegram configured | Telegram signing keys | as configuration GET |
 
 Top-level navigation may omit `Origin`, and an OAuth-platform callback may
 identify the platform rather than the application. `Referer` is never an
@@ -149,15 +152,16 @@ authority input. The callback document is therefore public and
 request-invariant; its browser protocol authenticates the application after it
 loads.
 
-For these profiles, no separate Callback script, prover, proving-asset,
-preparation, continuation, polling, status, result, cancellation, token-exchange,
-notarization, browser TLS bridge, or proof-recovery route exists on the OAuth
-bridge. Unsupported methods fail without route work, except that the Bridge may
-answer CORS preflight `OPTIONS` requests on the configuration route.
+Apart from the Bridge-assisted routes above, no separate Callback script,
+prover, proving-asset, preparation, continuation, polling, status, result,
+cancellation, token-exchange, notarization, browser TLS bridge, or
+proof-recovery route exists on the OAuth bridge. Unsupported methods fail without route work, except that the Bridge may
+answer CORS preflight `OPTIONS` requests on the configuration and Telegram
+routes.
 Operational endpoints such as health and metrics, and CORS preflight handling,
 are outside this ceremony contract and perform no ceremony route work.
-Except for the OAuth-platform-mandated callback query, bridge routes accept
-no query or request body.
+Except for the OAuth-platform-mandated callback query and the Telegram token
+request body, bridge routes accept no query or request body.
 
 The `v1` in `/api/v1/ceremony/...` versions the bridge's JSON API.
 `/auth/callback` is a browser protocol document; its embedded code
@@ -199,6 +203,8 @@ The response rules are:
   GitHub requires it and uses it as `client_secret`. A missing, unexpected,
   null, empty, or wrongly typed credential is invalid. The selected platform
   owns any additional constraints.
+- The Telegram entry carries only `clientId`. Its client secret is
+  confidential and never appears in the record.
 - Unknown fields and malformed URLs are invalid. A platform absent from the
   client's closed local catalog is ignored; known entries remain
   exact-validated before use.
@@ -248,6 +254,34 @@ refresh does not replace it in a live ceremony.
 CCDP browser [resources](ccdp.md#documents-and-routes)
 never fetch bridge configuration; server-side Callback artifact retrieval is
 separate.
+
+## Telegram profile
+
+- REQ-BRIDGE-07: Where Telegram is configured, the Bridge MUST serve the two
+  routes below as specified, and MUST NOT serve them otherwise.
+
+Telegram's token endpoint requires a confidential client secret. The Bridge
+holds it and exchanges the code for the browser. The browser still checks the
+ID token itself. Origin admission and CORS headers follow the configuration
+route.
+
+`POST /api/v1/ceremony/telegram/token` takes a JSON body with exactly three
+strings: `code`, `codeVerifier`, and `redirectUri`. Any other body fails
+without contacting Telegram. The Bridge forwards them to Telegram's token
+endpoint as `grant_type=authorization_code` with HTTP Basic client
+authentication. It returns Telegram's status, body, and `Content-Encoding`
+unchanged. Telegram reports token errors with HTTP 200 and an `error` field;
+the browser rejects them. A timeout, unreachable endpoint, redirect, or
+oversized response returns `502` with no Telegram body.
+
+`GET /api/v1/ceremony/telegram/jwks` returns Telegram's key set as
+`application/json`, unparsed. The Bridge caches it for at most one hour. It
+caches and serves only a `200` JSON response with a non-empty body. Otherwise
+it returns `502`.
+
+The token response contains the user's Telegram identity. The Bridge stores
+and logs none of it, and none of the request. It may log Telegram's `error`
+code.
 
 ## Callback document
 
@@ -303,8 +337,11 @@ authentication or confidentiality of the configuration. The public
 `clientCredential` carries no user authority and is not an application
 authentication boundary. Platform ceremony rules own the consequences of
 publishing it and the downstream checks; renaming the field does not hide it.
-For these profiles, the Bridge receives no notary address and opens no token or
-notary connection.
+The Bridge receives no notary address. For browser-exchange profiles it opens
+no token connection. For Telegram it holds a confidential client secret, sees
+the user's identity in the token response, and relays Telegram's signing keys.
+A compromised Bridge can leak that secret or those identities, or substitute
+keys. The Telegram platform ceremony owns the checks that bound this.
 Callback query redaction remains necessary because OAuth codes, unlike public
 application credentials, are transient user-ceremony inputs.
 
@@ -362,3 +399,10 @@ cryptographic soundness.
 - TEST-BRIDGE-05: Withdrawn.
 - TEST-BRIDGE-06 (exercises REQ-BRIDGE-06):
   Compatible bundled Callback updates need no Bridge rebuild; unsupported browser versions fail locally and do not change the Bridge API version.
+- TEST-BRIDGE-07 (exercises REQ-BRIDGE-07):
+  Without Telegram configured, both routes are absent. With it, `/config`'s
+  Telegram entry has only `clientId`; the token route sends Basic
+  authentication and passes Telegram's status, body and `Content-Encoding`
+  through; a timeout, redirect or oversized answer returns `502`; the key set
+  is cached at most one hour and an empty or non-JSON answer is not cached.
+  Logs hold no code, verifier, token or identity.
