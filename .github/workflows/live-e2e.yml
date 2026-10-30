@@ -1,0 +1,170 @@
+name: Live end-to-end
+
+# Proves real platform identities from the dev app's UI (ts/apps/dev/README.md).
+# Not a required check: it depends on the platforms, their accounts and the
+# network. Third-party actions are pinned by commit SHA, the tag in a comment.
+
+on:
+  pull_request:
+    # What a live ceremony runs: the dev app, its packages and their build.
+    paths:
+      - "ts/apps/dev/**"
+      - "ts/packages/ceremony/**"
+      - "ts/packages/popup/**"
+      - "ts/packages/ledger/**"
+      - "ts/scripts/build-package.ts"
+      - "ts/package.json"
+      - "ts/pnpm-lock.yaml"
+      - "ts/pnpm-workspace.yaml"
+      - "ts/.node-version"
+      - "ts/tsconfig.base.json"
+      - "brand/**"
+      - ".github/workflows/live-e2e.yml"
+      - ".github/actions/setup-ts/**"
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * *"
+
+permissions:
+  contents: read
+
+env:
+  # Where the stack's output goes; a failed job prints its end.
+  LIBID_STACK_LOGS: /tmp/libid-live-stack.log
+
+jobs:
+  ceremony:
+    name: GitHub and X ceremonies (live)
+    # A pull request from a fork or from Dependabot gets no secrets.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    # One run at a time per account: two could submit one TOTP code twice.
+    concurrency:
+      group: live-e2e-github-x
+      cancel-in-progress: false
+    timeout-minutes: 60 # test step 45: stack 10 + 2 tests × 15 + stop 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ts
+
+      - name: Install Chromium
+        run: pnpm -C ts --filter @libid/dev exec playwright install --with-deps chromium
+
+      - name: Prove GitHub and X identities end to end
+        id: test
+        timeout-minutes: 45
+        env:
+          LIBID_LIVE_PLATFORMS: github,x
+          GH_TEST_ALICE_USERNAME: ${{ secrets.GH_TEST_ALICE_USERNAME }}
+          GH_TEST_ALICE_PASSWORD: ${{ secrets.GH_TEST_ALICE_PASSWORD }}
+          GH_TEST_ALICE_TOTP_SECRET: ${{ secrets.GH_TEST_ALICE_TOTP_SECRET }}
+          X_TEST_ALICE_USERNAME: ${{ secrets.X_TEST_ALICE_USERNAME }}
+          X_TEST_ALICE_COOKIES: ${{ secrets.X_TEST_ALICE_COOKIES }}
+        run: pnpm -C ts/apps/dev test:live
+
+      # The stack gets no secret (playwright.live.config.ts); GitHub masks them anyway.
+      - name: Show the stack log
+        if: ${{ !cancelled() && steps.test.outcome != 'success' }}
+        run: tail -n 300 "$LIBID_STACK_LOGS" || true
+
+      - name: Keep the screenshots
+        if: ${{ !cancelled() && steps.test.outcome != 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: live-e2e-github-x
+          path: ts/apps/dev/test-results/**/*.png
+          retention-days: 7
+          if-no-files-found: ignore
+
+  google-ssm:
+    name: Google ceremony through an SSM-reached proxy (live)
+    # Google challenges a session from a runner's address, so the browser goes
+    # through an EC2 proxy LIBID_GOOGLE_PROXY_ROLE reaches only by SSM. The
+    # same role reads and writes the session in GOOGLE_SESSION_SECRET.
+    # Runs while LIBID_GOOGLE_RUNNER is `ssm`, on main only: the role trusts
+    # this workflow on main and nothing else.
+    if: >-
+      vars.LIBID_GOOGLE_RUNNER == 'ssm' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: live-e2e-google
+      cancel-in-progress: false
+    timeout-minutes: 45 # test step 30: stack 10 + 1 test × 15 + stop 2
+    env:
+      GOOGLE_SESSION_SECRET: libid-live-e2e/google-test-alice-session
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ts
+
+      - name: Install Chromium
+        run: pnpm -C ts --filter @libid/dev exec playwright install --with-deps chromium
+
+      - uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 # v5.0.0
+        with:
+          role-to-assume: ${{ vars.LIBID_GOOGLE_PROXY_ROLE }}
+          aws-region: eu-central-1
+
+      # The port-forward runs for the rest of the job; the step fails unless the proxy answers.
+      - name: Reach the Google proxy over SSM
+        env:
+          INSTANCE: ${{ vars.LIBID_GOOGLE_PROXY_INSTANCE }}
+        run: |
+          aws ssm start-session --target "$INSTANCE" \
+            --document-name AWS-StartPortForwardingSession \
+            --parameters portNumber=3128,localPortNumber=3128 >"$RUNNER_TEMP/port-forward.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            ip=$(curl -fs --max-time 5 -x http://127.0.0.1:3128 https://api.ipify.org) && break
+            sleep 2
+          done
+          echo "Google sees ${ip:?the proxy did not answer; see $RUNNER_TEMP/port-forward.log}"
+
+      # The session lives in the proxy's account: a passing run stores it back
+      # refreshed, so it outlives the cookies it was signed in with.
+      - name: Fetch the Google session
+        run: |
+          umask 077
+          aws secretsmanager get-secret-value --secret-id "$GOOGLE_SESSION_SECRET" \
+            --query SecretString --output text >"$RUNNER_TEMP/google-session.json"
+          jq -r '.cookies[].value' "$RUNNER_TEMP/google-session.json" | sed 's/^/::add-mask::/'
+
+      - name: Prove a Google identity end to end
+        id: test
+        timeout-minutes: 30
+        env:
+          LIBID_LIVE_PLATFORMS: google
+          LIBID_TEST_PROXY: http://127.0.0.1:3128
+          GOOGLE_TEST_ALICE_EMAIL: ${{ secrets.GOOGLE_TEST_ALICE_EMAIL }}
+          GOOGLE_TEST_ALICE_COOKIES_FILE: ${{ runner.temp }}/google-session.json
+          GOOGLE_TEST_ALICE_COOKIES_OUT: ${{ runner.temp }}/google-session.out.json
+        run: pnpm -C ts/apps/dev test:live
+
+      - name: Store the refreshed Google session
+        if: ${{ steps.test.outcome == 'success' }}
+        run: |
+          aws secretsmanager put-secret-value --secret-id "$GOOGLE_SESSION_SECRET" \
+            --secret-string "file://$RUNNER_TEMP/google-session.out.json" --query VersionId
+
+      - name: Show the stack log
+        if: ${{ !cancelled() && steps.test.outcome != 'success' }}
+        run: tail -n 300 "$LIBID_STACK_LOGS" || true
+
+      - name: Keep the screenshots
+        if: ${{ !cancelled() && steps.test.outcome != 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: live-e2e-google
+          path: ts/apps/dev/test-results/**/*.png
+          retention-days: 7
+          if-no-files-found: ignore
