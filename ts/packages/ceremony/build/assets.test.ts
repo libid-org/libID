@@ -82,7 +82,7 @@ test('external declarations retain exact URL/range and derive size without downl
       externalRequest({ source: 'https://cdn.test/x', isExternal: true, range: 'bytes=9-3' }),
     )
     const catalog = await loadAssetCatalog()
-    assert.deepEqual(Object.keys(catalog.assetsByPlatform), ['google', 'x', 'github'])
+    assert.deepEqual(Object.keys(catalog.assetsByPlatform), ['google', 'x', 'github', 'telegram'])
   } finally {
     globalThis.fetch = fetch
   }

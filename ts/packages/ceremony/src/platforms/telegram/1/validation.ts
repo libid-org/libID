@@ -63,7 +63,21 @@ export const validateIdentity: (value: unknown) => Identity<'telegram'> = identi
   },
 )
 
-/** Compare every circuit field in order; oidc_telegram shares oidc_google's layout, `iat` in the time field. */
+/** The circuit's public fields: oidc_google's layout, with `iat` in the time field. */
+export const buildTelegramPublicInputs = (
+  authorizationDigest: Uint8Array,
+  identity: Identity<'telegram'>,
+  proof: Pick<TelegramProofV1, 'tokenIssuedAt' | 'signingKeyModulus'>,
+): string[] =>
+  buildOidcGooglePublicInputs({
+    authorizationDigest,
+    audience: identity.oauthClientId,
+    ...identityNodes(identity),
+    expiresAt: proof.tokenIssuedAt,
+    modulus: proof.signingKeyModulus,
+  })
+
+/** Compare every circuit field in order; canonical hex makes string equality byte equality. */
 export function isTelegramPublicInputs(
   value: unknown,
   authorizationDigest: Uint8Array,
@@ -71,12 +85,6 @@ export function isTelegramPublicInputs(
   proof: Pick<TelegramProofV1, 'tokenIssuedAt' | 'signingKeyModulus'>,
 ): value is string[] {
   if (!Array.isArray(value)) return false
-  const expected = buildOidcGooglePublicInputs({
-    authorizationDigest,
-    audience: identity.oauthClientId,
-    ...identityNodes(identity),
-    expiresAt: proof.tokenIssuedAt,
-    modulus: proof.signingKeyModulus,
-  })
+  const expected = buildTelegramPublicInputs(authorizationDigest, identity, proof)
   return value.length === expected.length && expected.every((item, index) => item === value[index])
 }

@@ -83,6 +83,8 @@ interface Entry<P extends PlatformId> {
   rejectedProof: { [K in keyof Proof<P>]-?: readonly unknown[] }
   /** Weighted operations the prover adds to the proof engine's own. */
   operations: readonly string[]
+  /** The token arrives from a `token-fetch`, and the proof engine starts only once it is accepted. */
+  engineAfterTokenFetch?: true
   /** Normative platform test IDs, as title tags, that each conformance section covers here. */
   specTests: { identity: string; returns: string; issuer: string; prover: string }
   returns(state: string): ReturnSamples
@@ -815,6 +817,7 @@ export const fixtures = {
       publicInputs: publicInputViolations(telegramPublicInputs),
     },
     operations: ['token-fetch', 'signing-key-fetch'],
+    engineAfterTokenFetch: true,
     specTests: {
       identity: '[REQ-PLAT-66]',
       returns: '',

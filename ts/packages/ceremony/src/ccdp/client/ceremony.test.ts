@@ -15,6 +15,7 @@ import {
   type SupportedCeremonyVersion,
   supportedPlatforms,
 } from '../../platforms/index.js'
+import { buildTelegramPublicInputs } from '../../platforms/telegram/1/validation.js'
 import { b64urlDecode, b64urlEncode } from '../../primitives.js'
 import {
   BRIDGE,
@@ -141,14 +142,28 @@ const identity = {
   userName: 'a@b.c',
 }
 
-function proofFor(connection: FakeConnection, claimed: Identity<'google'> = identity) {
+/** The digest the last authorization request carried as its nonce. */
+function navigatedDigest(connection: FakeConnection) {
   const url = connection.navigations.filter((navigation) => navigation.away).at(-1)?.url
-  const digest = url ? b64urlDecode(new URL(url).searchParams.get('nonce')!)! : new Uint8Array(32)
+  return url ? b64urlDecode(new URL(url).searchParams.get('nonce')!)! : new Uint8Array(32)
+}
+
+function proofFor(connection: FakeConnection, claimed: Identity<'google'> = identity) {
+  const digest = navigatedDigest(connection)
   const fields = { tokenExpiresAt: 42, signingKeyModulus: new Uint8Array(256) }
   return {
     identityProof: new Uint8Array([1]),
     ...fields,
     publicInputs: buildGooglePublicInputs(digest, claimed, fields),
+  }
+}
+
+function telegramProofFor(connection: FakeConnection, claimed: Identity<'telegram'>) {
+  const fields = { tokenIssuedAt: 42, signingKeyModulus: new Uint8Array(256) }
+  return {
+    identityProof: new Uint8Array([1]),
+    ...fields,
+    publicInputs: buildTelegramPublicInputs(navigatedDigest(connection), claimed, fields),
   }
 }
 
@@ -351,7 +366,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
 it.each(supportedPlatforms)(
   'snapshots ledger routing once for %s [LIBID-MOD-014/015] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
   async (platformId) => {
-    const oidc = fixtures[platformId].proverKind === 'oidc'
+    const { pkce, digestBinding } = platforms[platformId].versions[1]
     const domain = new Uint8Array(32)
     const data = new Uint8Array([1, 2])
     const ledger = {
@@ -376,7 +391,7 @@ it.each(supportedPlatforms)(
     connection.receive({ type: 'event', event: 'prover', phase: 'started', timestamp: 3 })
     const message = connection.send.mock.calls[0][0]
     expect(message.notaryAddress).toBe('https://local-notary.test:8443')
-    if (oidc) {
+    if (!pkce) {
       expect(message.codeVerifier).toBeNull()
       expect(authorization.searchParams.has('code_challenge')).toBe(false)
     } else {
@@ -398,11 +413,13 @@ it.each(supportedPlatforms)(
       proof:
         claimed.platformId === 'google'
           ? proofFor(connection, claimed)
-          : {
-              bearerLinkProof: new Uint8Array([1]),
-              tokenAttestation: attestation,
-              identityAttestation: attestation,
-            },
+          : claimed.platformId === 'telegram'
+            ? telegramProofFor(connection, claimed)
+            : {
+                bearerLinkProof: new Uint8Array([1]),
+                tokenAttestation: attestation,
+                identityAttestation: attestation,
+              },
     })
     const result = await pending
     if (result.status !== 'accepted') throw new Error('Expected proof')
@@ -413,7 +430,8 @@ it.each(supportedPlatforms)(
       authorizationNonce: result.oauthProof.authorizationNonce,
     })
     expect(result.oauthProof.authorizationDigest).toEqual(expectedDigest)
-    if (oidc) expect(authorization.searchParams.get('nonce')).toBe(b64urlEncode(expectedDigest))
+    if (digestBinding === 'nonce')
+      expect(authorization.searchParams.get('nonce')).toBe(b64urlEncode(expectedDigest))
   },
 )
 
