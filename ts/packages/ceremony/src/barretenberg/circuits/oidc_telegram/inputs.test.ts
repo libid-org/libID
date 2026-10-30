@@ -1,0 +1,125 @@
+import { createSign, generateKeyPairSync } from 'node:crypto'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { parse } from 'smol-toml'
+import { describe, expect, it } from 'vitest'
+import { buildOidcTelegramInputs } from './inputs.js'
+import { MAX_SIGNING_INPUT_BYTES, PUBLIC_INPUT_COUNT } from './parameters.js'
+
+// Vectors come from libid-circuits' scripts/telegram-fixture-witness.py (hashlib, not this
+// builder), read from a libid-circuits checkout: LIBID_CIRCUITS_DIR, else a sibling of this repo.
+const circuits =
+  process.env.LIBID_CIRCUITS_DIR ??
+  fileURLToPath(new URL('../../../../../../../../libid-circuits', import.meta.url))
+const vectors = join(circuits, 'circuits/oidc-telegram')
+const missing = !existsSync(join(vectors, 'Prover.toml'))
+if (missing) console.warn(`Skipping oidc-telegram vectors: no ${vectors}; set LIBID_CIRCUITS_DIR`)
+
+// `fn main` of circuits/oidc-telegram/src/main.nr, in order.
+const ABI_KEYS = [
+  ...['signing_input', 'signing_input_len', 'header_b64_len'],
+  ...['iss_window', 'iss_offset', 'aud_window', 'aud_offset', 'audience_len'],
+  ...['iat_window', 'iat_offset', 'iat_len', 'id_window', 'id_offset', 'id_len'],
+  ...['username_window', 'username_offset', 'username_len', 'nonce_window', 'nonce_offset'],
+  ...['signature', 'redc', 'authorization_digest', 'audience_hash', 'id_node', 'handle_node'],
+  ...['iat', 'modulus'],
+]
+
+const recompose = (limbs: unknown[]) =>
+  limbs.reduce<bigint>((value, limb, i) => value | (BigInt(String(limb)) << (120n * BigInt(i))), 0n)
+const bytesOf = (value: bigint, length: number) =>
+  Uint8Array.from(Buffer.from(value.toString(16).padStart(length * 2, '0'), 'hex'))
+/** One spelling for numbers, decimal strings and 0x fields, so only values are compared. */
+const canonical = (value: unknown): unknown =>
+  Array.isArray(value) ? value.map(canonical) : BigInt(String(value))
+
+describe('oidc_telegram circuit inputs', () => {
+  it.skipIf(missing).each(['Prover.toml', 'Prover-max.toml', 'Prover-reordered.toml'])(
+    'rebuilds %s field by field from the token it was signed for',
+    (file) => {
+      const toml = parse(readFileSync(join(vectors, file), 'utf8')) as Record<string, unknown[]>
+      const signingInput = Buffer.from(
+        (toml.signing_input as number[]).slice(0, Number(toml.signing_input_len)),
+      ).toString()
+      const signature = bytesOf(recompose(toml.signature), 256)
+      const idToken = `${signingInput}.${Buffer.from(signature).toString('base64url')}`
+      const modulus = bytesOf(recompose(toml.modulus), 256)
+      const digest = Uint8Array.from(toml.authorization_digest as number[])
+
+      const inputs = buildOidcTelegramInputs(idToken, modulus, digest)
+      expect(Object.keys(inputs)).toEqual(ABI_KEYS)
+      expect(Object.keys(toml).sort()).toEqual([...ABI_KEYS].sort())
+      for (const key of ABI_KEYS)
+        expect(canonical(inputs[key as keyof typeof inputs]), key).toEqual(canonical(toml[key]))
+    },
+  )
+
+  it('fixes the signing-input buffer and the public input count', () => {
+    expect(MAX_SIGNING_INPUT_BYTES).toBe(2688)
+    // Digest bytes, audience hash, id node, handle node, iat and 18 modulus limbs.
+    expect(PUBLIC_INPUT_COUNT).toBe(32 + 2 + 2 + 2 + 1 + 18)
+  })
+})
+
+describe('oidc_telegram circuit input refusals', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  const modulus = Uint8Array.from(
+    Buffer.from(publicKey.export({ format: 'jwk' }).n as string, 'base64url'),
+  )
+  const digest = Uint8Array.from({ length: 32 }, (_, i) => i * 7 + 1)
+  const nonce = Buffer.from(digest).toString('base64url')
+  const escaped = (length: number) => '\\u00e9'.repeat(length)
+
+  /** A Telegram-shaped RS256 token over `claims`, slashes escaped as Telegram sends them. */
+  function sign(claims: Record<string, unknown>, extra = ''): string {
+    const part = (json: string) => Buffer.from(json).toString('base64url')
+    const header = part('{"alg":"RS256","kid":"oidc-1","typ":"JWT"}')
+    const body = `${JSON.stringify(claims).replaceAll('/', '\\/').slice(0, -1)}${extra}}`
+    const input = `${header}.${part(body)}`
+    const signature = createSign('RSA-SHA256').update(input).sign(privateKey)
+    return `${input}.${signature.toString('base64url')}`
+  }
+  const claims = (change: Record<string, unknown> = {}) => ({
+    aud: '7000000001',
+    iat: 1893452400,
+    iss: 'https://oauth.telegram.org',
+    preferred_username: 'Brynn_QX',
+    id: '7051836294',
+    nonce,
+    ...change,
+  })
+  const build =
+    (token: string, d = digest) =>
+    () =>
+      buildOidcTelegramInputs(token, modulus, d)
+
+  it('builds a worst-case token: escaped 64-char names, 32-byte username, 20-digit id', () => {
+    const extra = `,"name":"${escaped(64)}","given_name":"${escaped(64)}"`
+    const token = sign(claims({ preferred_username: 'A'.repeat(32), id: '9'.repeat(20) }), extra)
+    const inputs = buildOidcTelegramInputs(token, modulus, digest)
+    expect(inputs.username_len).toBe('32')
+    expect(inputs.id_len).toBe('20')
+    expect(Number(inputs.signing_input_len)).toBeLessThanOrEqual(MAX_SIGNING_INPUT_BYTES)
+    expect(inputs.signing_input).toHaveLength(MAX_SIGNING_INPUT_BYTES)
+  })
+
+  it.each([
+    ['a signing input past 2688 bytes', sign(claims(), `,"name":"${escaped(400)}"`)],
+    ['no preferred_username', sign(claims({ preferred_username: undefined }))],
+    ['a 33-byte username', sign(claims({ preferred_username: 'a'.repeat(33) }))],
+    ['a username with a quote', sign(claims({ preferred_username: 'al"ice' }))],
+    ['a username with a backslash', sign(claims({ preferred_username: 'al\\ice' }))],
+    ['a 21-digit id', sign(claims({ id: '1'.repeat(21) }))],
+    ['a non-numeric id', sign(claims({ id: '50000x0001' }))],
+    ['a 42-char nonce', sign(claims({ nonce: nonce.slice(0, 42) }))],
+    ['a padded nonce', sign(claims({ nonce: `${nonce}=` }))],
+  ])('refuses %s', (_, token) => {
+    expect(build(token)).toThrow()
+  })
+
+  it("refuses a well-formed nonce that is not this digest's base64url", () => {
+    const other = Uint8Array.from(digest, (byte) => byte ^ 1)
+    expect(build(sign(claims()), other)).toThrow()
+  })
+})
