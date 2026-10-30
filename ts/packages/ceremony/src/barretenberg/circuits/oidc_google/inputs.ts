@@ -65,7 +65,7 @@ function findOffset(payload: Uint8Array, pattern: string): number {
 }
 
 /**
- * Build the exact libid-circuits v0.7.1 `oidc_google` circuit inputs. `nodes` are the token's
+ * Build the exact libid-circuits v0.8.0 `oidc_google` circuit inputs. `nodes` are the token's
  * id node and handle node, which the circuit recomputes from the signed `sub` and `email`.
  */
 export function buildOidcGoogleInputs(
