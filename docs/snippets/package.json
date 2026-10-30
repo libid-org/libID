@@ -1,0 +1,14 @@
+{
+  "name": "@libid/docs-snippets",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "check": "node check.mjs"
+  },
+  "dependencies": {
+    "@libid/contracts": "0.21.0",
+    "viem": "2.57.1"
+  }
+}
