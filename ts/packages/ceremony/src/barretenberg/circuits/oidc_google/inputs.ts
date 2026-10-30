@@ -26,8 +26,12 @@ export interface OidcGoogleToken {
 
 const encoder = new TextEncoder()
 
+/** Barrett reduction parameter for an RSA modulus, as the ABI's limbs. */
+export const redc = (modulus: bigint): bigint[] =>
+  limbs((1n << (2n * BigInt(RSA_MODULUS_BITS) + BARRETT_OVERFLOW_BITS)) / modulus)
+
 /** Split an RSA integer into the ABI's least-significant-first limbs. */
-function limbs(value: bigint): bigint[] {
+export function limbs(value: bigint): bigint[] {
   const mask = (1n << LIMB_BITS) - 1n
   return Array.from(
     { length: NUM_LIMBS },
@@ -36,7 +40,7 @@ function limbs(value: bigint): bigint[] {
 }
 
 /** Zero-pad a value to its fixed circuit width. */
-function pad(bytes: Uint8Array, length: number): Uint8Array {
+export function pad(bytes: Uint8Array, length: number): Uint8Array {
   if (bytes.length > length) throw new Error(`Value exceeds circuit limit ${length}`)
   const result = new Uint8Array(length)
   result.set(bytes)
@@ -46,10 +50,10 @@ function pad(bytes: Uint8Array, length: number): Uint8Array {
 /** The audience's SHA-256 as two big-endian 128-bit halves. */
 const audienceHash = (audience: Uint8Array): bigint[] => halves(sha256(audience))
 
-const hex = (value: bigint) => `0x${value.toString(16)}`
+export const hex = (value: bigint) => `0x${value.toString(16)}`
 
 /** The first occurrence of a signed claim, which must follow the opening brace and end a member. */
-function findOffset(payload: Uint8Array, pattern: string): number {
+export function findOffset(payload: Uint8Array, pattern: string): number {
   const needle = encoder.encode(pattern)
   const offset = payload.findIndex((_, start) =>
     needle.every((byte, index) => payload[start + index] === byte),
@@ -109,9 +113,7 @@ export function buildOidcGoogleInputs(
     audience_bytes: Array.from(pad(audienceBytes, MAX_AUD_BYTES)),
     audience_len: String(audienceBytes.length),
     signature: limbs(bytesToBigInt(token.signature)).map(hex),
-    redc: limbs(
-      (1n << (2n * BigInt(RSA_MODULUS_BITS) + BARRETT_OVERFLOW_BITS)) / modulusInteger,
-    ).map(hex),
+    redc: redc(modulusInteger).map(hex),
     authorization_digest: Array.from(authorizationDigest),
     audience_hash: audienceHash(audienceBytes).map(hex),
     id_node: halves(nodes.idNode).map(hex),
