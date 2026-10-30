@@ -1,0 +1,6 @@
+libid/=lib/libid/sol/src/
+lib/libid/:libid-contracts/=lib/libid/sol/lib/libID-contracts/solidity/contracts/
+lib/libid/:@openzeppelin/contracts/=lib/libid/sol/lib/libID-contracts/solidity/lib/openzeppelin-contracts/contracts/
+lib/libid/:@openzeppelin/contracts-upgradeable/=lib/libid/sol/lib/libID-contracts/solidity/lib/openzeppelin-contracts-upgradeable/contracts/
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+forge-std/=lib/forge-std/src/
