@@ -1,20 +1,13 @@
 import { createSign, generateKeyPairSync } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
 import { describe, expect, it } from 'vitest'
 import { buildOidcTelegramInputs } from './inputs.js'
 import { MAX_SIGNING_INPUT_BYTES, PUBLIC_INPUT_COUNT } from './parameters.js'
 
-// Vectors come from libid-circuits' scripts/telegram-fixture-witness.py (hashlib, not this
-// builder), read from a libid-circuits checkout: LIBID_CIRCUITS_DIR, else a sibling of this repo.
-const circuits =
-  process.env.LIBID_CIRCUITS_DIR ??
-  fileURLToPath(new URL('../../../../../../../../libid-circuits', import.meta.url))
-const vectors = join(circuits, 'circuits/oidc-telegram')
-const missing = !existsSync(join(vectors, 'Prover.toml'))
-if (missing) console.warn(`Skipping oidc-telegram vectors: no ${vectors}; set LIBID_CIRCUITS_DIR`)
+// Vectors from libid-circuits' scripts/telegram-fixture-witness.py (hashlib, not this builder),
+// copied into vectors/ at the libid-circuits commit each file's first line names.
+const vectors = new URL('./vectors/', import.meta.url)
 
 // `fn main` of circuits/oidc-telegram/src/main.nr, in order.
 const ABI_KEYS = [
@@ -35,10 +28,10 @@ const canonical = (value: unknown): unknown =>
   Array.isArray(value) ? value.map(canonical) : BigInt(String(value))
 
 describe('oidc_telegram circuit inputs', () => {
-  it.skipIf(missing).each(['Prover.toml', 'Prover-max.toml', 'Prover-reordered.toml'])(
+  it.each(['Prover.toml', 'Prover-max.toml', 'Prover-reordered.toml'])(
     'rebuilds %s field by field from the token it was signed for',
     (file) => {
-      const toml = parse(readFileSync(join(vectors, file), 'utf8')) as Record<string, unknown[]>
+      const toml = parse(readFileSync(new URL(file, vectors), 'utf8')) as Record<string, unknown[]>
       const signingInput = Buffer.from(
         (toml.signing_input as number[]).slice(0, Number(toml.signing_input_len)),
       ).toString()
