@@ -3,8 +3,9 @@ import { pkceAuthorizationUrlBuilder } from '../../authorization.js'
 import type { ReturnRules } from '../../oauthReturn.js'
 import { provider } from './provider.js'
 
-/** Telegram carries the digest as the OIDC nonce and the code exchange its PKCE verifier. */
+/** The digest is bound by the OIDC nonce; PKCE only protects the code at the Bridge swap. */
 export const pkce = true
+export const digestBinding = 'nonce'
 
 /** Query code return; a token in the redirect breaks the rules. */
 export const returnRules: ReturnRules = {
@@ -18,6 +19,5 @@ export const returnRules: ReturnRules = {
 export const buildAuthorizationUrl = pkceAuthorizationUrlBuilder(
   provider.authorizationEndpoint,
   provider.authorizationScope,
-  [['response_type', 'code']],
-  true,
+  { leading: [['response_type', 'code']], nonce: true },
 )

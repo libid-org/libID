@@ -95,8 +95,7 @@ export function deriveCodeChallenge(codeVerifier: string): string {
 export function pkceAuthorizationUrlBuilder(
   endpoint: string,
   scope: string,
-  leading: [string, string][] = [],
-  nonce = false,
+  { leading = [], nonce = false }: { leading?: [string, string][]; nonce?: boolean } = {},
 ) {
   return (input: {
     clientId: string

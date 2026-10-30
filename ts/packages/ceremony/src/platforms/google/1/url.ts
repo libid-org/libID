@@ -5,6 +5,7 @@ import { provider } from './provider.js'
 
 /** Google carries the digest as the OIDC nonce; no PKCE (ceremony-common §5 table). */
 export const pkce = false
+export const digestBinding = 'nonce'
 
 /** Fragment-only ID-token return; a code or access token breaks Google v1's return rules. */
 export const returnRules: ReturnRules = {

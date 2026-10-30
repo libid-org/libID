@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseOAuthReturn } from '../../oauthReturn.js'
 import { swapCode } from './swap.js'
 import { acceptTelegramIdToken, fetchSigningKey } from './token.js'
-import { buildAuthorizationUrl, pkce, returnRules } from './url.js'
+import { buildAuthorizationUrl, digestBinding, pkce, returnRules } from './url.js'
 
 const bridge = 'https://bridge.test'
 const redirectUri = new URL('/auth/callback', bridge).href
@@ -21,7 +21,7 @@ describe('telegram/1 authorization request', () => {
   const input = { clientId, redirectUri, state: 'st', authorizationDigest: digest, codeChallenge }
 
   it('carries the digest as the nonce and the S256 challenge, in the spec order', () => {
-    expect(pkce).toBe(true)
+    expect([pkce, digestBinding]).toEqual([true, 'nonce'])
     expect(createHash('sha256').update(codeVerifier).digest('base64url')).toBe(codeChallenge)
     const url = new URL(buildAuthorizationUrl(input))
     expect(`${url.origin}${url.pathname}`).toBe('https://oauth.telegram.org/auth')

@@ -56,13 +56,14 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
     expect(Object.keys(ceremony).sort()).toEqual([
       'acceptResult',
       'buildAuthorizationUrl',
+      'digestBinding',
       'events',
       'pkce',
       'progressWeights',
       'returnRules',
     ])
-    // Code exchange binds the digest through PKCE; an implicit ID token carries it as the nonce.
-    expect(ceremony.pkce).toBe(fixture.proverKind === 'notarized')
+    // A notarized exchange reveals the PKCE verifier; an OIDC token signs the digest as its nonce.
+    expect(ceremony.digestBinding).toBe(fixture.proverKind === 'notarized' ? 'verifier' : 'nonce')
   })
 
   it('requests exactly its authorization endpoint and fields, in order, with the digest binding [TEST-PLAT-12]', () => {

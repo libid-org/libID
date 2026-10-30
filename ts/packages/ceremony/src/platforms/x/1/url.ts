@@ -4,6 +4,7 @@ import type { ReturnRules } from '../../oauthReturn.js'
 import { provider } from './provider.js'
 
 export const pkce = true
+export const digestBinding = 'verifier'
 
 /** Query code return; X defines no issuer field. */
 export const returnRules: ReturnRules = {
@@ -17,5 +18,5 @@ export const returnRules: ReturnRules = {
 export const buildAuthorizationUrl = pkceAuthorizationUrlBuilder(
   provider.authorizationEndpoint,
   provider.authorizationScope,
-  [['response_type', 'code']],
+  { leading: [['response_type', 'code']] },
 )
