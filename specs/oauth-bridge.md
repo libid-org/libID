@@ -25,14 +25,17 @@ capitals, as shown here.
 The OAuth bridge owns:
 
 - OAuth application registrations and their public client configuration;
-- the public ceremony configuration; and
-- callback ingress, response policy, and deployment inputs.
+- the public ceremony configuration;
+- callback ingress, response policy, and deployment inputs; and
+- the Telegram token relay and Telegram's confidential client secret.
 
 For Callback, the bridge is a configuration-inserting, cached proxy to the
 [CCDP Distribution](ccdp-distribution.md#callback-artifact). It neither
 implements the document nor builds its browser code. It serves no other
 CCDP resources. The browser-exchange profiles covered here require no Bridge
-ceremony state, token exchange, or notarization.
+ceremony state, token exchange, or notarization. Telegram's profile adds a
+token relay: the Bridge swaps the code with its secret, so it sees the user's
+Telegram identity. It still keeps no ceremony state and notarizes nothing.
 
 Bridge-assisted OAuth is a platform-profile choice, not prohibited by CCDP.
 Another platform or later ceremony version can define a Bridge service together
@@ -157,7 +160,7 @@ prover, proving-asset, preparation, continuation, polling, status, result,
 cancellation, token-exchange, notarization, browser TLS bridge, or
 proof-recovery route exists on the OAuth bridge. Unsupported methods fail without route work, except that the Bridge may
 answer CORS preflight `OPTIONS` requests on the configuration and Telegram
-routes.
+routes. The token route's preflight grants the `content-type` request header.
 Operational endpoints such as health and metrics, and CORS preflight handling,
 are outside this ceremony contract and perform no ceremony route work.
 Except for the OAuth-platform-mandated callback query and the Telegram token
@@ -266,18 +269,19 @@ ID token itself. Origin admission and CORS headers follow the configuration
 route.
 
 `POST /api/v1/ceremony/telegram/token` takes a JSON body with exactly three
-strings: `code`, `codeVerifier`, and `redirectUri`. Any other body fails
-without contacting Telegram. The Bridge forwards them to Telegram's token
+strings: `code`, `codeVerifier`, and `redirectUri`. `code` and `redirectUri`
+are at most 512 bytes each. Any other body fails without contacting Telegram. The Bridge forwards them to Telegram's token
 endpoint as `grant_type=authorization_code` with HTTP Basic client
 authentication. It returns Telegram's status, body, and `Content-Encoding`
 unchanged. Telegram reports token errors with HTTP 200 and an `error` field;
 the browser rejects them. A timeout, unreachable endpoint, redirect, or
 oversized response returns `502` with no Telegram body.
 
-`GET /api/v1/ceremony/telegram/jwks` returns Telegram's key set as
-`application/json`, unparsed. The Bridge caches it for at most one hour. It
-caches and serves only a `200` JSON response with a non-empty body. Otherwise
-it returns `502`.
+`GET /api/v1/ceremony/telegram/jwks` returns Telegram's key set unparsed,
+with its `Content-Type` and `Content-Encoding`. The Bridge caches it for at
+most one hour, and only when Telegram answers `200` with a non-empty JSON body.
+Any other `200` is passed through uncached. Another status, a timeout, an
+unreachable endpoint, a redirect, or an oversized response returns `502`.
 
 The token response contains the user's Telegram identity. The Bridge stores
 and logs none of it, and none of the request. It may log Telegram's `error`
@@ -337,8 +341,8 @@ authentication or confidentiality of the configuration. The public
 `clientCredential` carries no user authority and is not an application
 authentication boundary. Platform ceremony rules own the consequences of
 publishing it and the downstream checks; renaming the field does not hide it.
-The Bridge receives no notary address. For browser-exchange profiles it opens
-no token connection. For Telegram it holds a confidential client secret, sees
+The Bridge receives no notary address and opens no notary connection for any
+profile. For browser-exchange profiles it opens no token connection. For Telegram it holds a confidential client secret, sees
 the user's identity in the token response, and relays Telegram's signing keys.
 A compromised Bridge can leak that secret or those identities, or substitute
 keys. The Telegram platform ceremony owns the checks that bound this.
@@ -403,6 +407,8 @@ cryptographic soundness.
   Without Telegram configured, both routes are absent. With it, `/config`'s
   Telegram entry has only `clientId`; the token route sends Basic
   authentication and passes Telegram's status, body and `Content-Encoding`
-  through; a timeout, redirect or oversized answer returns `502`; the key set
-  is cached at most one hour and an empty or non-JSON answer is not cached.
+  through; a `code` or `redirectUri` over 512 bytes fails without contacting
+  Telegram; the token route's preflight grants `content-type`; a timeout,
+  redirect or oversized answer returns `502`; the key set is cached at most one
+  hour, and a `200` that is empty or not JSON is passed through uncached.
   Logs hold no code, verifier, token or identity.

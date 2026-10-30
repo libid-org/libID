@@ -432,18 +432,23 @@ bytes.
   noncanonical encodings, and any other argument shape.
 
 Each Platform Profile binds that recomputed digest to its evidence by one of
-two methods, chosen by what the platform's authorization can carry:
+two methods, chosen by what the platform's authorization can carry. The
+binding method is what the Platform Verifier compares:
 
 | Identity platform | Where the Authorization Digest is bound | Who compares it |
 |---|---|---|
 | Google | Authorization Digest public proof input, carried by the signed OIDC `nonce` | the Platform Verifier, against the digest recomputed under REQ-COMMON-02 |
 | X | revealed `code_verifier` of the notarized token request | the Platform Verifier, by recomputing that verifier under REQ-COMMON-15A |
 | GitHub | revealed `code_verifier` of the notarized token exchange | the Platform Verifier, by recomputing that verifier under REQ-COMMON-15A |
+| Telegram | Authorization Digest public proof input, carried by the signed OIDC `nonce` | the Platform Verifier, against the digest recomputed under REQ-COMMON-02 |
+
+Telegram also sends PKCE. It only protects the code at the Bridge swap. No
+verifier compares its `code_verifier`, so Telegram uses the nonce method only.
 
 The X and GitHub circuits expose no Authorization Digest public input, so a
 requirement to compare one is unsatisfiable on those paths; Google carries no
-`code_verifier`, so the recomputation of REQ-COMMON-15A has nothing to
-compare there. Neither method is optional, and no profile uses both.
+`code_verifier`, and Telegram's is never revealed to a verifier, so the
+recomputation of REQ-COMMON-15A has nothing to compare there. Neither method is optional, and no profile uses both.
 
 - REQ-COMMON-02 (upholds SP-BIND-01):
   The Platform Verifier MUST recompute the Authorization Digest from the
@@ -458,13 +463,15 @@ compare there. Neither method is optional, and no profile uses both.
   input, the Platform Verifier MUST reject a proof whose Authorization Digest
   public input differs from the digest recomputed under REQ-COMMON-02.
 - REQ-COMMON-02B (upholds SP-BIND-01):
-  Where a Platform Profile carries the Authorization Digest through the PKCE
-  construction of §7 instead, the Platform Verifier MUST bind that digest by
+  Where a Platform Profile binds the Authorization Digest by the revealed
+  `code_verifier` of §7 instead, the Platform Verifier MUST bind that digest by
   the verifier recomputation of REQ-COMMON-15A. The Proving Circuit of such a
   profile MUST NOT expose an Authorization Digest public input.
 - REQ-COMMON-02C (upholds SP-BIND-01):
   The Platform Profile MUST bind the Authorization Digest by exactly one of
   the two methods of the table above, never by both and never by neither.
+  A PKCE exchange whose `code_verifier` no verifier compares is not a binding
+  method.
   Necessity: the two methods are complete alternatives, so a profile using
   neither carries evidence nothing has tied to the transaction it was
   authorized for.
@@ -790,6 +797,9 @@ label=A+B&redirect_uri=https%3A%2F%2Fredirect.example%2Foauth%2Fredirect&state=_
 ## 7. PKCE construction
 
 X and GitHub bind the Authorization Digest through S256 PKCE.
+Telegram uses the same construction only to protect its code at the Bridge
+swap. Its verifier is never revealed, so REQ-COMMON-15 and REQ-COMMON-15A do
+not apply to it.
 
 ```text
 verifierHash   = SHA256(authorizationDigest || authorizationNonce)
