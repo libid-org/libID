@@ -62,6 +62,12 @@ describe('telegram/1 return', () => {
     ['?code=abc&code=abd&state=st', '', null],
     ['?code=abc&id_token=x.y.z&state=st', '', null],
     ['?code=abc', '', null],
+    [
+      `?code=${'c'.repeat(512)}&state=st`,
+      '',
+      { outcome: 'accepted', state: 'st', credential: 'c'.repeat(512) },
+    ],
+    [`?code=${'c'.repeat(513)}&state=st`, '', null],
   ])('reads %s%s', (query, fragment, expected) => {
     expect(ret(query, fragment)).toEqual(expected)
   })
@@ -70,7 +76,8 @@ describe('telegram/1 return', () => {
 describe('telegram/1 code swap through the Bridge', () => {
   afterEach(() => vi.unstubAllGlobals())
   const signal = new AbortController().signal
-  const swap = () => swapCode(bridge, { code: 'abc', codeVerifier, redirectUri }, signal)
+  const swap = (change = {}) =>
+    swapCode({ code: 'abc', codeVerifier, redirectUri, ...change }, signal)
 
   it('posts the code, verifier and exact redirect URI and returns the ID token', async () => {
     const fetch = vi.fn(async () => Response.json({ id_token: 'h.p.s', token_type: 'Bearer' }))
@@ -108,6 +115,21 @@ describe('telegram/1 code swap through the Bridge', () => {
     vi.stubGlobal('fetch', async () => answer())
     await expect(swap()).rejects.toThrow()
   })
+
+  it.each([
+    ['a code over 512 bytes', { code: 'c'.repeat(513) }],
+    [
+      'a redirect URI over 512 bytes',
+      { redirectUri: `https://${'b'.repeat(60).concat('.').repeat(8)}test/auth/callback` },
+    ],
+    ['another redirect path', { redirectUri: 'https://bridge.test/callback' }],
+    ['a malformed verifier', { codeVerifier: codeVerifier.slice(1) }],
+  ])('sends no request with %s', async (_name, change) => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    await expect(swap(change)).rejects.toThrow()
+    expect(fetch).not.toHaveBeenCalled()
+  })
 })
 
 describe('telegram/1 signing key through the Bridge', () => {
@@ -117,7 +139,7 @@ describe('telegram/1 signing key through the Bridge', () => {
   it('fetches the Bridge key set without credentials or redirects and picks the kid', async () => {
     const fetch = vi.fn(async () => Response.json({ keys: [key('a'), key('b')] }))
     vi.stubGlobal('fetch', fetch)
-    await expect(fetchSigningKey(bridge, 'b', new AbortController().signal)).resolves.toEqual(
+    await expect(fetchSigningKey(redirectUri, 'b', new AbortController().signal)).resolves.toEqual(
       key('b'),
     )
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
@@ -131,13 +153,13 @@ describe('telegram/1 signing key through the Bridge', () => {
     ['no key array', { keys: key('b') }],
   ])('rejects %s', async (_name, body) => {
     vi.stubGlobal('fetch', async () => Response.json(body))
-    await expect(fetchSigningKey(bridge, 'b', new AbortController().signal)).rejects.toThrow()
+    await expect(fetchSigningKey(redirectUri, 'b', new AbortController().signal)).rejects.toThrow()
   })
 
   it('starts no request once aborted', async () => {
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
-    await expect(fetchSigningKey(bridge, 'b', AbortSignal.abort())).rejects.toThrow()
+    await expect(fetchSigningKey(redirectUri, 'b', AbortSignal.abort())).rejects.toThrow()
     expect(fetch).not.toHaveBeenCalled()
   })
 })

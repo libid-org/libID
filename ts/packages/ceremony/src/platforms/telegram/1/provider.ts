@@ -5,4 +5,6 @@ export const provider = {
   issuer: 'https://oauth.telegram.org',
   tokenPath: '/api/v1/ceremony/telegram/token',
   jwksPath: '/api/v1/ceremony/telegram/jwks',
+  /** The Bridge's byte bound on the swapped code and redirect URI. */
+  maxSwapFieldBytes: 512,
 } as const

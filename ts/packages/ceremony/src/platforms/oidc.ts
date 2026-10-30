@@ -24,7 +24,7 @@ export async function fetchSigningKey(
 ): Promise<unknown> {
   // A run closed before this point starts no key request.
   signal.throwIfAborted()
-  // The key set follows the server's Cache-Control, so repeat ceremonies reuse it.
+  // The HTTP cache applies the server's Cache-Control: Google's keys are reused, the Bridge's are not.
   const body = await fetchPublicJson(
     url,
     MAX_JWKS_BYTES,

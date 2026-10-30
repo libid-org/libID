@@ -39,11 +39,12 @@ export function acceptTelegramIdToken(
     !/^[0-9]+$/.test(p.id)
   )
     throw invalid()
+  // TODO: check id and handle with isAccountId/isHandle once @libid/contracts has Telegram.
   if (typeof p.preferred_username !== 'string' || p.preferred_username === '')
     throw invalid('Set a Telegram username, then try again')
   return { kid: header.kid, claims: { id: p.id, preferred_username: p.preferred_username } }
 }
 
-/** Select the one key carrying `kid` from Telegram's key set, served by the Bridge. */
-export const fetchSigningKey = (bridge: string, kid: string, signal: AbortSignal) =>
-  fetchKey(`${bridge}${provider.jwksPath}`, kid, signal)
+/** Select the one key carrying `kid` from Telegram's key set, served beside the Bridge callback. */
+export const fetchSigningKey = (redirectUri: string, kid: string, signal: AbortSignal) =>
+  fetchKey(new URL(provider.jwksPath, redirectUri).href, kid, signal)

@@ -1,17 +1,26 @@
+import { isRedirectUri } from '../../../ccdp/index.js'
 import { CeremonyError } from '../../../errors.js'
-import { isRecord } from '../../../primitives.js'
+import { isRecord, isText } from '../../../primitives.js'
 import { readJson } from '../../../response.js'
+import { isPkceValue } from '../../authorization.js'
 import { provider } from './provider.js'
 
 const MAX_TOKEN_RESPONSE_BYTES = 64 * 1024
 
 /** Swap the code for an ID token through the Bridge, which adds Telegram's client secret. */
 export async function swapCode(
-  bridge: string,
   input: { code: string; codeVerifier: string; redirectUri: string },
   signal: AbortSignal,
 ): Promise<string> {
-  const response = await fetch(`${bridge}${provider.tokenPath}`, {
+  const { code, codeVerifier, redirectUri } = input
+  if (
+    !isText(code, provider.maxSwapFieldBytes) ||
+    !isPkceValue(codeVerifier) ||
+    !isRedirectUri(redirectUri) ||
+    !isText(redirectUri, provider.maxSwapFieldBytes)
+  )
+    throw new Error('Invalid token request')
+  const response = await fetch(new URL(provider.tokenPath, redirectUri), {
     method: 'POST',
     mode: 'cors',
     credentials: 'omit',
