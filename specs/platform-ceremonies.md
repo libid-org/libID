@@ -1611,8 +1611,9 @@ The return is a query carrying `code`, at most 512 bytes, and `state`. An
   - `nonce` is `BASE64URL_NOPAD(authorizationDigest)`;
   - `iat` is an integer with `iat ≤ now + 5 min` and `now ≤ iat + 1 h`.
 - REQ-PLAT-65 (upholds SP-BIND-01):
-  `observedAt` MUST be `iat`. `exp` is not used. Necessity: Telegram's
-  tokens live 30 seconds, too short for proving.
+  `observedAt` MUST be `iat`, capped at Block Time. `exp` is not used.
+  Necessity: Telegram's tokens live 30 seconds, too short for proving, and an
+  `iat` inside the skew must not outrank a later binding.
 - REQ-PLAT-66:
   The token MUST carry `preferred_username`. Version 1 refuses an account
   without one and tells the user to set a username.
