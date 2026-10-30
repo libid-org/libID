@@ -38,12 +38,14 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       const staged = stageOidc(platformId, 'accepted', {
         idToken: change.idToken?.(fixture.evidence.idToken),
         jwk: change.jwk?.(fixture.evidence.jwk),
+        swap: change.swap,
       })
       await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject({
         event: change.rejectedAt,
         ...(change.message === undefined ? {} : { message: change.message }),
       })
       if (change.rejectedAt === 'authorization') expectNoProvingWork(staged.keys)
+      if (change.rejectedAt === 'token-fetch') expect(staged.keys).not.toHaveBeenCalled()
       expect(generate).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
     },
@@ -75,6 +77,28 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       })
       // The supplied notary address never opens a notary connection for this prover.
       expect(notarization).not.toHaveBeenCalled()
+    },
+  )
+
+  const { bridge } = fixture.evidence as { bridge?: { tokenUrl: string; keysUrl: string } }
+  it.runIf(bridge)(
+    tagged(
+      'swaps its code once through the Bridge, then reads the key set the Bridge relays',
+      tags,
+    ),
+    async () => {
+      const staged = stageOidc(platformId, 'accepted')
+      const { request, codeVerifier, credential } = staged.context
+      await (await proverOf(platformId)).prove(staged.context)
+      expect(staged.swap).toHaveBeenCalledOnce()
+      const [url, init] = staged.swap.mock.calls[0]
+      expect(String(url)).toBe(bridge!.tokenUrl)
+      expect(JSON.parse(String(init!.body))).toEqual({
+        code: credential,
+        codeVerifier,
+        redirectUri: request.redirectUri,
+      })
+      expect(String(staged.keys.mock.calls[0][0])).toBe(bridge!.keysUrl)
     },
   )
 

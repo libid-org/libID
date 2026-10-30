@@ -11,6 +11,7 @@ import { identity as githubIdentity } from '../github/1/identity.js'
 import { token as githubToken } from '../github/1/token.js'
 import * as githubValidation from '../github/1/validation.js'
 import * as googleValidation from '../google/1/validation.js'
+import * as telegramValidation from '../telegram/1/validation.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
 import type { ReturnRules } from '../oauthReturn.js'
 import type { ProverModule } from '../provers.js'
@@ -131,6 +132,8 @@ export interface OidcFixture<P extends PlatformId> extends Entry<P> {
     digestInput: string
     /** The published key with only the members the prover requires. */
     minimalJwk: Record<string, string>
+    /** Bridge routes of a code flow: the code swap answers the ID token, and the key set is relayed. */
+    bridge?: { tokenUrl: string; keysUrl: string }
   }
   /** Well-formed changes that bind the claim to another authorization, identity or signing key. */
   rejectedBinding: Record<string, (claim: Claim<P>) => Claim<P>>
@@ -142,8 +145,10 @@ export interface OidcFixture<P extends PlatformId> extends Entry<P> {
 export interface EvidenceChange {
   idToken?: (idToken: string) => string
   jwk?: (jwk: Record<string, string>) => Record<string, string>
+  /** The Bridge's answer to a code swap, in place of the ID token. */
+  swap?: () => Response
   /** `authorization` rejects before any key fetch or engine start. */
-  rejectedAt: 'authorization' | 'signing-key-fetch' | 'circuit-inputs'
+  rejectedAt: 'token-fetch' | 'authorization' | 'signing-key-fetch' | 'circuit-inputs'
   /** The refusal's text, where the prover names its cause. */
   message?: string
 }
@@ -256,6 +261,41 @@ const googleClaims = jwtPart(googleV1.idToken, 1) as { aud: string; sub: string;
 
 const googleModulus = b64urlDecode(googleV1.jwk.n)!
 
+const telegramFixture = JSON.parse(
+  readFileSync(new URL('../telegram/1/telegram-v1.fixture.json', import.meta.url), 'utf8'),
+) as { idToken: string; jwk: Record<string, string>; authorizationDigest: string }
+
+// The real oidc_telegram proof the contracts' TelegramPlatformVerifier test accepts; its `source`
+// names the circuit commit and bb version. Fields: digest 0-31, audience 32-33, id node 34-35,
+// handle node 36-37, iat 38, modulus 39-56.
+export const telegramPublicInputs: readonly string[] = JSON.parse(
+  readFileSync(new URL('../telegram/1/telegram-v1.proof.json', import.meta.url), 'utf8'),
+).public_inputs
+
+/** The synthetic Telegram v1 token, its key and the digest its nonce carries. */
+export const telegramV1 = {
+  idToken: telegramFixture.idToken,
+  jwk: telegramFixture.jwk,
+  authorizationDigest: Uint8Array.from(
+    telegramFixture.authorizationDigest.match(/../g)!.map((byte) => Number.parseInt(byte, 16)),
+  ),
+}
+
+const telegramIat = 1893452400
+
+const telegramModulus = b64urlDecode(telegramV1.jwk.n)!
+
+/** A Telegram token claiming `change`, refused before the key fetch. */
+const telegramClaims = (change: Record<string, unknown>, message?: string): EvidenceChange => ({
+  idToken: (idToken) => jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), ...change } }),
+  rejectedAt: 'authorization',
+  ...(message === undefined ? {} : { message }),
+})
+
+/** `fields` with the field at `index` changed in its low bit. */
+const flippedAt = (fields: readonly string[], index: number) =>
+  fields.map((field, i) => (i === index ? flipped(field) : field))
+
 /** A token whose claim JSON is rewritten as text, keeping its header and signature. */
 const payloadText = (idToken: string, change: (json: string) => string) =>
   jwtWith(idToken, { payload: change(decoder.decode(b64urlDecode(idToken.split('.')[1])!)) })
@@ -279,6 +319,24 @@ const subject = (sub: string, message = circuitRefusal): EvidenceChange => ({
 
 /** `field` with its low bit flipped: still canonical, but a different value. */
 const flipped = (field: string) => `0x${(BigInt(field) ^ 1n).toString(16).padStart(64, '0')}`
+
+/** Wrong count, holes or noncanonical field encodings; binding is `rejectedBinding`. */
+const publicInputViolations = (fields: readonly string[]) => [
+  [],
+  fields.slice(1),
+  [...fields, fields[0]],
+  new Array(fields.length),
+  ...[
+    0,
+    null,
+    '0x00',
+    '00'.repeat(32),
+    `0X${'00'.repeat(32)}`,
+    `0x${'AA'.repeat(32)}`,
+    `0x${'gg'.repeat(32)}`,
+    `${fields[0]}\n`,
+  ].map((field) => [field, ...fields.slice(1)]),
+]
 
 /** One byte past the delivered proof bound. */
 const oversizedProof = new Uint8Array(4 * 1024 * 1024 + 1)
@@ -404,23 +462,7 @@ export const fixtures = {
       identityProof: [new Uint8Array(), oversizedProof],
       tokenExpiresAt: [-1, 1.5, Number.MAX_SAFE_INTEGER + 1],
       signingKeyModulus: [googleModulus.slice(1), new Uint8Array(257)],
-      // Wrong count, holes or noncanonical field encodings; binding is `rejectedBinding`.
-      publicInputs: [
-        [],
-        googlePublicInputs.slice(1),
-        [...googlePublicInputs, googlePublicInputs[0]],
-        new Array(57),
-        ...[
-          0,
-          null,
-          '0x00',
-          '00'.repeat(32),
-          `0X${'00'.repeat(32)}`,
-          `0x${'AA'.repeat(32)}`,
-          `0x${'gg'.repeat(32)}`,
-          `${googlePublicInputs[0]}\n`,
-        ].map((field) => [field, ...googlePublicInputs.slice(1)]),
-      ],
+      publicInputs: publicInputViolations(googlePublicInputs),
     },
     operations: ['signing-key-fetch'],
     specTests: {
@@ -721,6 +763,169 @@ export const fixtures = {
       reorderedIdentityBody: `{ "unused": true, "login" : "alice", "id" : ${userId} }`,
       reorderedIdentityAnchors: ['"login" : "', '"', '"id" : ', ' }'],
       misshapenIdentityBody: `{ "login": "alice", "other": { "id": ${userId}, "username": "alice" } }`,
+    },
+  },
+  telegram: {
+    proverKind: 'oidc',
+    // The bot id; Telegram's token secret stays in the Bridge, so no public credential.
+    config: { clientId: '7000000001' },
+    returnRules: {
+      transport: 'query',
+      credentialField: 'code',
+      rejected: ['id_token', 'access_token', 'refresh_token'],
+    },
+    // The handle as signed; only its node is folded.
+    identity: {
+      platformId: 'telegram',
+      oauthClientId: '7000000001',
+      userId: '7051836294',
+      userName: 'Brynn_QX',
+    },
+    // SHA-256 of each tag and value, by Python's hashlib; they equal public inputs 34-37.
+    nodes: {
+      idNode: '0x9ff44e615ff14505c3a406e9931e2442ad4f56f3fb5b12e91c143fa6384a3a4c',
+      handleNode: '0xf6416e7788cea1d8d9d7ada243b2f998a33296b61db647298ce61722c04c925b',
+    },
+    longest: {
+      platformId: 'telegram',
+      oauthClientId: '9'.repeat(20),
+      userId: '18446744073709551615',
+      userName: 'a'.repeat(32),
+    },
+    rejectedIdentity: {
+      oauthClientId: [],
+      userId: decimalIdViolations,
+      userName: handleViolations,
+    },
+    admittedClientIds: [],
+    proof: {
+      identityProof: new Uint8Array([1]),
+      tokenIssuedAt: telegramIat,
+      signingKeyModulus: telegramModulus,
+      publicInputs: telegramPublicInputs,
+    },
+    digest: telegramV1.authorizationDigest,
+    // iat + 1 h (REQ-PLAT-64); the 30 s exp is not used.
+    expiresAt: 1893456000,
+    validation: telegramValidation,
+    rejectedProof: {
+      identityProof: [new Uint8Array(), oversizedProof],
+      tokenIssuedAt: [-1, 1.5, Number.MAX_SAFE_INTEGER + 1],
+      signingKeyModulus: [telegramModulus.slice(1), new Uint8Array(257)],
+      publicInputs: publicInputViolations(telegramPublicInputs),
+    },
+    operations: ['token-fetch', 'signing-key-fetch'],
+    specTests: {
+      identity: '[REQ-PLAT-66]',
+      returns: '',
+      issuer: '',
+      prover: '[REQ-PLAT-64]',
+    },
+    authorizationRequest: {
+      url: 'https://oauth.telegram.org/auth',
+      fields: (input) => [
+        ['response_type', 'code'],
+        ['client_id', input.clientId],
+        ['redirect_uri', input.redirectUri],
+        ['scope', 'openid profile'],
+        ['state', input.state],
+        ['nonce', b64urlEncode(input.authorizationDigest)],
+        ['code_challenge', String(input.codeChallenge)],
+        ['code_challenge_method', 'S256'],
+      ],
+    },
+    returns: codeReturns(),
+    prover: () => import('../telegram/1/prover.js'),
+    evidence: {
+      ...telegramV1,
+      publicInputs: telegramPublicInputs,
+      digestInput: 'authorization_digest',
+      minimalJwk: {
+        kid: telegramV1.jwk.kid,
+        kty: telegramV1.jwk.kty,
+        e: telegramV1.jwk.e,
+        n: telegramV1.jwk.n,
+      },
+      bridge: {
+        tokenUrl: 'https://bridge.test/api/v1/ceremony/telegram/token',
+        keysUrl: 'https://bridge.test/api/v1/ceremony/telegram/jwks',
+      },
+    },
+    rejectedEvidence: {
+      'a Bridge error answered with 200': {
+        swap: () => Response.json({ error: 'invalid_grant' }),
+        rejectedAt: 'token-fetch',
+      },
+      'a Bridge HTTP failure': {
+        swap: () => new Response(null, { status: 502 }),
+        rejectedAt: 'token-fetch',
+      },
+      'a Bridge network failure': {
+        swap: () => {
+          throw new TypeError('Failed to fetch')
+        },
+        rejectedAt: 'token-fetch',
+      },
+      'a non-RS256 algorithm [REQ-PLAT-64]': {
+        idToken: (idToken) =>
+          jwtWith(idToken, { header: { ...jwtPart(idToken, 0), alg: 'HS256' } }),
+        rejectedAt: 'authorization',
+      },
+      'a nonce of another authorization [REQ-PLAT-64]': telegramClaims({
+        nonce: b64urlEncode(telegramV1.authorizationDigest.map((byte, i) => (i ? byte : byte ^ 1))),
+      }),
+      'another issuer [REQ-PLAT-64]': telegramClaims({ iss: 'https://oauth.telegram.org/' }),
+      'another audience [REQ-PLAT-64]': telegramClaims({ aud: '7000000002' }),
+      'an iat over 5 minutes ahead [REQ-PLAT-64]': telegramClaims({ iat: telegramIat + 301 }),
+      'no username [REQ-PLAT-66]': telegramClaims(
+        { preferred_username: undefined },
+        'Set a Telegram username, then try again',
+      ),
+      // The identity table's rules, checked before the key fetch.
+      'a 33-byte username': telegramClaims({ preferred_username: 'a'.repeat(33) }),
+      'a backslash in the username': telegramClaims({ preferred_username: 'a\\b' }),
+      'a 21-digit id': telegramClaims({ id: '1'.repeat(21) }),
+      'a short signature': {
+        idToken: (idToken) => jwtWith(idToken, { signature: new Uint8Array(255) }),
+        rejectedAt: 'circuit-inputs',
+      },
+      'a non-65537 exponent': { jwk: (jwk) => ({ ...jwk, e: 'Aw' }), rejectedAt: 'circuit-inputs' },
+    },
+    rejectedBinding: {
+      'authorization digest': ({ identity, proof }) => ({
+        identity,
+        proof: { ...proof, publicInputs: flippedAt(proof.publicInputs, 0) },
+      }),
+      audience: ({ identity, proof }) => ({
+        identity: { ...identity, oauthClientId: '7000000002' },
+        proof,
+      }),
+      'user ID': ({ identity, proof }) => ({
+        identity: { ...identity, userId: `${identity.userId}0` },
+        proof,
+      }),
+      handle: ({ identity, proof }) => ({ identity: { ...identity, userName: 'Bob_TG' }, proof }),
+      'handle node': ({ identity, proof }) => ({
+        identity,
+        proof: { ...proof, publicInputs: flippedAt(proof.publicInputs, 36) },
+      }),
+      'iat [REQ-PLAT-65]': ({ identity, proof }) => ({
+        identity,
+        proof: { ...proof, tokenIssuedAt: proof.tokenIssuedAt + 1 },
+      }),
+      'iat field': ({ identity, proof }) => ({
+        identity,
+        proof: { ...proof, publicInputs: flippedAt(proof.publicInputs, 38) },
+      }),
+      'signing-key modulus': ({ identity, proof }) => ({
+        identity,
+        proof: { ...proof, publicInputs: flippedAt(proof.publicInputs, 39) },
+      }),
+      'public-input order': ({ identity, proof }) => {
+        const publicInputs = [...proof.publicInputs]
+        ;[publicInputs[34], publicInputs[35]] = [publicInputs[35], publicInputs[34]]
+        return { identity, proof: { ...proof, publicInputs } }
+      },
     },
   },
 } satisfies { [P in PlatformId]: PlatformFixture<P> }

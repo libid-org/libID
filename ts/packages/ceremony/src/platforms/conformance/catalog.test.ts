@@ -37,6 +37,19 @@ it('covers exactly the catalog platforms', () => {
   expect([...notarizedPlatforms, ...oidcPlatforms].sort()).toEqual([...supportedPlatforms].sort())
 })
 
+it('ships telegram/1 the oidc_telegram circuit and key of the libid-circuits v0.9.0 release, pinned by sha256', () => {
+  const assets: readonly Asset[] = assetsByPlatform.telegram[1]
+  const release =
+    'https://github.com/libid-org/libid-circuits/releases/download/v0.9.0/libid-circuits-0.9.0-oidc-telegram.tar.gz'
+  const pinned = assets.filter((asset) => asset.source === release)
+  expect(pinned.map((asset) => !asset.isExternal && asset.member).sort()).toEqual([
+    'oidc_telegram.json',
+    'vk',
+  ])
+  for (const asset of pinned)
+    expect(!asset.isExternal && asset.sha256).toMatch(/^sha256:[0-9a-f]{64}$/)
+})
+
 describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
   const fixture = fixtures[platformId]
   const platform = platforms[platformId]

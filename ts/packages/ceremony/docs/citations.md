@@ -154,6 +154,9 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | REQ-PLAT-56C | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | REQ-PLAT-59 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | REQ-PLAT-60 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| REQ-PLAT-64 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| REQ-PLAT-65 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| REQ-PLAT-66 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-BRIDGE-03 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts), [src/platforms/conformance/catalog.test.ts](../src/platforms/conformance/catalog.test.ts) |
 | TEST-BRIDGE-04 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | TEST-CCDP-01 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |

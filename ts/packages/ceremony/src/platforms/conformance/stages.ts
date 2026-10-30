@@ -481,18 +481,22 @@ export function publishKeys(published: object[]) {
   return keys
 }
 
-/** Stage `outcome`; `change` replaces the signed token or the published fixture key. */
+/**
+ * Stage `outcome`; `change` replaces the signed token, the published fixture key or the Bridge's
+ * swap answer. A code flow's token arrives from the Bridge swap (POST), its keys by GET.
+ */
 export function stageOidc(
   platformId: OidcPlatform,
   outcome: OidcOutcome,
-  change: { idToken?: string; jwk?: Record<string, string> } = {},
+  change: { idToken?: string; jwk?: Record<string, string>; swap?: () => Response } = {},
 ) {
   const fixture = fixtures[platformId]
   const { authorizationDigest, publicInputs } = fixture.evidence
+  const bridge = 'bridge' in fixture.evidence ? fixture.evidence.bridge : undefined
   const { idToken = fixture.evidence.idToken, jwk = fixture.evidence.jwk } = change
-  const { iat, exp } = jwtPart(fixture.evidence.idToken, 1) as { iat: number; exp: number }
+  const { iat } = jwtPart(fixture.evidence.idToken, 1) as { iat: number }
   vi.useFakeTimers({ toFake: ['Date'] })
-  vi.setSystemTime((outcome === 'expired' ? exp : iat) * 1000)
+  vi.setSystemTime((outcome === 'expired' ? fixture.expiresAt : iat) * 1000)
   const keys = publishKeys(
     outcome === 'duplicate-key'
       ? [jwk, jwk]
@@ -500,9 +504,17 @@ export function stageOidc(
         ? []
         : [previousKey, jwk],
   )
+  const swap = vi.fn(async (_url: string, init?: RequestInit) => {
+    init?.signal?.throwIfAborted()
+    return change.swap?.() ?? Response.json({ id_token: oidcToken(idToken, outcome) })
+  })
+  if (bridge)
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) =>
+      (init?.method === 'POST' ? swap : keys)(url, init),
+    )
   const { config } = fixture
   const run = runContext(platformId, outcome, {
-    credential: oidcToken(idToken, outcome),
+    ...(bridge ? {} : { credential: oidcToken(idToken, outcome) }),
     request: outcome === 'audience-mismatch' ? { clientId: `other-${config.clientId}` } : {},
   })
   generate.mockImplementation(async (inputs): Promise<RawProof> => {
@@ -519,9 +531,11 @@ export function stageOidc(
   return {
     ...run,
     keys,
+    swap,
     proof: () => fixture.proof,
     untouched: () => {
       expect(keys).not.toHaveBeenCalled()
+      expect(swap).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
     },
   }
