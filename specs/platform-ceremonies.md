@@ -1608,7 +1608,9 @@ The return is a query carrying `code`, at most 512 bytes, and `state`. An
   The Prover MUST accept only an RS256 ID token with a non-empty `kid`, where:
   - `iss` is exactly `https://oauth.telegram.org`;
   - `aud` is a string equal to the configured client id;
-  - `nonce` is `BASE64URL_NOPAD(authorizationDigest)`;
+  - `nonce` is 43 base64url characters encoding 32 bytes. The Prover never
+    holds the digest: the Platform Verifier and the Client compare the nonce
+    with it;
   - `iat` is an integer with `iat ≤ now + 5 min` and `now < iat + 1 h`.
 - REQ-PLAT-65 (upholds SP-BIND-01):
   `observedAt` MUST be `iat − 300`: the signed `iat` less the five-minute
