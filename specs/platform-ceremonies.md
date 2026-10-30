@@ -1620,7 +1620,7 @@ The return is a query carrying `code`, at most 512 bytes, and `state`. An
 | Field | Source | Rule |
 |---|---|---|
 | id | signed `id` | decimal digits, at most 20 |
-| handle | signed `preferred_username` | 5–32 of `[A-Za-z0-9_]`, folded under REQ-PLAT-05B |
+| handle | signed `preferred_username` | the identity table's rule: not empty, at most 32 bytes, no quote or backslash, A–Z folded under REQ-PLAT-05B |
 
 `sub` is not the account id and is not used. The circuit and the Platform
 Verifier own their checks of these fields. Its tags, circuit buffers,
