@@ -1,9 +1,9 @@
 import { archive, headers } from '../../../assets/index.js'
 
 const release = archive(
-  'https://github.com/libid-org/libid-circuits/releases/download/v0.7.1/libid-circuits-0.7.1-bearer-link.tar.gz',
-  'circuits/v0.7.1/bearer-link',
-  'sha256:5818cbe534806303d2fbe2eabc6e6d9fd210529a007b899d67bbf9a1318a48cb',
+  'https://github.com/libid-org/libid-circuits/releases/download/v0.8.0/libid-circuits-0.8.0-bearer-link.tar.gz',
+  'circuits/v0.8.0/bearer-link',
+  'sha256:2957ac0018b8384ca945e08b31c793b4054a03cad04d658a1ddb30ef0eadfb6d',
 )
 
 export const circuit = release.member('bearer_link.json', {

@@ -1,7 +1,7 @@
 import { PLATFORM_GOOGLE } from '@libid/contracts/platforms'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 
-/** Fixed oidc_google ABI in libid-circuits v0.7.1; changes require a matching circuit/key release. */
+/** Fixed oidc_google ABI in libid-circuits v0.8.0; changes require a matching circuit/key release. */
 export const ISSUER = 'https://accounts.google.com'
 /** The `email` and `sub` buffers: Google's platform table entry. */
 export const MAX_EMAIL_BYTES = PLATFORM_GOOGLE.rules.maxLength
