@@ -1609,9 +1609,10 @@ The return is a query carrying `code`, at most 512 bytes, and `state`. An
   - `iss` is exactly `https://oauth.telegram.org`;
   - `aud` is a string equal to the configured client id;
   - `nonce` is `BASE64URL_NOPAD(authorizationDigest)`;
-  - `iat` is an integer with `iat ≤ now + 5 min` and `now ≤ iat + 1 h`.
+  - `iat` is an integer with `iat ≤ now + 5 min` and `now < iat + 1 h`.
 - REQ-PLAT-65 (upholds SP-BIND-01):
-  `observedAt` MUST be `iat`, capped at Block Time. `exp` is not used.
+  `observedAt` MUST be `iat − 300`: the signed `iat` less the five-minute
+  skew, on the scale X and GitHub report. `exp` is not used.
   Necessity: Telegram's tokens live 30 seconds, too short for proving, and an
   `iat` inside the skew must not outrank a later binding.
 - REQ-PLAT-66:
