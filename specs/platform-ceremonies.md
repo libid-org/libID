@@ -1,6 +1,6 @@
 ---
 title: Identity-platform ceremonies
-description: libID ceremony profiles for Google, X, and GitHub, defining authenticated identity fields, OAuth flows, evidence, proof validity, and failure behavior.
+description: libID ceremony profiles for Google, X, GitHub, and Telegram, defining authenticated identity fields, OAuth flows, evidence, proof validity, and failure behavior.
 sidebar:
   order: 3
 ---
@@ -1568,6 +1568,64 @@ proof.
   The Canonical Runtime MUST start a fresh ceremony when GitHub consumed the
   code but usable evidence was lost. Necessity: browser token exchange remains
   a single-use, non-recoverable step; no Bridge result or replay exists.
+
+## 6a. Telegram ceremony
+
+```text
+identityPlatform = "telegram"
+platformCeremonyVersion = 1
+```
+
+Telegram uses OIDC with an authorization code. Its token endpoint needs a
+confidential client secret, so the [OAuth Bridge](oauth-bridge.md#telegram-profile)
+swaps the code. The evidence is the signed ID token. The Prover checks it
+with Telegram's keys, which the Bridge relays.
+
+The digest is bound by the OIDC `nonce` (common REQ-COMMON-02A). PKCE only
+protects the code at the swap; no verifier compares it.
+
+### 6a.1 Authorization request
+
+`GET https://oauth.telegram.org/auth`:
+
+| Order | Field | Exact value |
+|---|---|---|
+| 1 | `response_type` | `code` |
+| 2 | `client_id` | configured client identifier (the bot id) |
+| 3 | `redirect_uri` | immutable redirect URI |
+| 4 | `scope` | `openid profile` |
+| 5 | `state` | immutable one-use OAuth state |
+| 6 | `nonce` | `BASE64URL_NOPAD(authorizationDigest)` |
+| 7 | `code_challenge` | PKCE challenge per common §7 |
+| 8 | `code_challenge_method` | `S256` |
+
+The return is a query carrying `code`, at most 512 bytes, and `state`. An
+`id_token`, `access_token`, or `refresh_token` in it is refused.
+
+### 6a.2 Token rules
+
+- REQ-PLAT-64 (upholds SP-BIND-01, SP-CLIENT-01):
+  The Prover MUST accept only an RS256 ID token with a non-empty `kid`, where:
+  - `iss` is exactly `https://oauth.telegram.org`;
+  - `aud` is a string equal to the configured client id;
+  - `nonce` is `BASE64URL_NOPAD(authorizationDigest)`;
+  - `iat` is an integer with `iat ≤ now + 5 min` and `now ≤ iat + 1 h`.
+- REQ-PLAT-65 (upholds SP-BIND-01):
+  `observedAt` MUST be `iat`. `exp` is not used. Necessity: Telegram's
+  tokens live 30 seconds, too short for proving.
+- REQ-PLAT-66:
+  The token MUST carry `preferred_username`. Version 1 refuses an account
+  without one and tells the user to set a username.
+
+| Field | Source | Rule |
+|---|---|---|
+| id | signed `id` | decimal digits, at most 20 |
+| handle | signed `preferred_username` | 5–32 of `[A-Za-z0-9_]`, folded under REQ-PLAT-05B |
+
+`sub` is not the account id and is not used. The circuit and the Platform
+Verifier own their checks of these fields. Its tags, circuit buffers,
+trust-root lifecycle, and conformance vectors follow the circuit's Telegram
+entry under §7.
 
 ## 7. Adding an identity platform
 
