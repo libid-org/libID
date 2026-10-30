@@ -1,4 +1,8 @@
-import { isRecord } from '../primitives.js'
+import {
+  RSA_EXPONENT_BASE64URL,
+  RSA_MODULUS_BYTES,
+} from '../barretenberg/circuits/oidc_google/parameters.js'
+import { b64urlDecode, isRecord } from '../primitives.js'
 import { fetchPublicJson } from '../response.js'
 
 /** Bound a public JWKS response independently of any circuit's token dimensions. */
@@ -36,4 +40,15 @@ export async function fetchSigningKey(
   const keys = body.keys.filter((k) => isRecord(k) && k.kid === kid)
   if (keys.length !== 1) throw new Error('Signing key is not unique')
   return keys[0]
+}
+
+/** The RSA-2048, e = 65537 modulus of `jwk`, checked against a 256-byte `signature`. */
+export function rs256Modulus(jwk: unknown, signature: Uint8Array | null): Uint8Array {
+  if (!isRecord(jwk) || jwk.kty !== 'RSA' || jwk.e !== RSA_EXPONENT_BASE64URL)
+    throw new Error('JWK is not an RS256 signing key')
+  const modulus = typeof jwk.n === 'string' ? b64urlDecode(jwk.n) : null
+  if (modulus?.length !== RSA_MODULUS_BYTES || (modulus[0] & 0x80) === 0)
+    throw new Error('Signing key must be RSA-2048')
+  if (signature?.length !== RSA_MODULUS_BYTES) throw new Error('Signature must be 256 bytes')
+  return modulus
 }

@@ -11,10 +11,10 @@ import { identity as githubIdentity } from '../github/1/identity.js'
 import { token as githubToken } from '../github/1/token.js'
 import * as githubValidation from '../github/1/validation.js'
 import * as googleValidation from '../google/1/validation.js'
-import * as telegramValidation from '../telegram/1/validation.js'
 import type { PlatformId, ProofByPlatformVersion, platforms } from '../index.js'
 import type { ReturnRules } from '../oauthReturn.js'
 import type { ProverModule } from '../provers.js'
+import * as telegramValidation from '../telegram/1/validation.js'
 import type { Identity } from '../validation.js'
 import { identity as xIdentity } from '../x/1/identity.js'
 import { token as xToken } from '../x/1/token.js'
@@ -871,9 +871,6 @@ export const fixtures = {
           jwtWith(idToken, { header: { ...jwtPart(idToken, 0), alg: 'HS256' } }),
         rejectedAt: 'authorization',
       },
-      'a nonce of another authorization [REQ-PLAT-64]': telegramClaims({
-        nonce: b64urlEncode(telegramV1.authorizationDigest.map((byte, i) => (i ? byte : byte ^ 1))),
-      }),
       'another issuer [REQ-PLAT-64]': telegramClaims({ iss: 'https://oauth.telegram.org/' }),
       'another audience [REQ-PLAT-64]': telegramClaims({ aud: '7000000002' }),
       'an iat over 5 minutes ahead [REQ-PLAT-64]': telegramClaims({ iat: telegramIat + 301 }),

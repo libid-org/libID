@@ -182,7 +182,7 @@ describe('telegram/1 ID token acceptance', () => {
     const input = `${b64({ alg: 'RS256', kid: 'k1', ...header })}.${b64({ ...claims, ...change })}`
     return `${input}.${sign('RSA-SHA256', Buffer.from(input), privateKey).toString('base64url')}`
   }
-  const accept = (token: string) => acceptTelegramIdToken(token, clientId, digest)
+  const accept = (token: string) => acceptTelegramIdToken(token, clientId)
   const [h, p, s] = mint().split('.')
   const raw = Buffer.from(JSON.stringify(claims).replace('synthetic', 'X'))
   raw[raw.indexOf('X')] = 0xff
@@ -193,7 +193,7 @@ describe('telegram/1 ID token acceptance', () => {
   it.each([
     ['a fresh token', {}],
     ['iat exactly 5 minutes ahead', { iat: now + 300 }],
-    ['iat exactly 1 hour old', { iat: now - 3600 }],
+    ['iat 1 second short of 1 hour old', { iat: now - 3599 }],
   ])('accepts %s', (_name, change) => {
     expect(accept(mint(change))).toMatchObject({
       kid: 'k1',
@@ -209,9 +209,10 @@ describe('telegram/1 ID token acceptance', () => {
     ['another issuer', mint({ iss: 'https://oauth.telegram.org/' })],
     ['another audience', mint({ aud: '1234567891' })],
     ['an audience array', mint({ aud: [clientId] })],
-    ["another session's nonce", mint({ nonce: `B${nonce.slice(1)}` })],
+    ['a 31-byte nonce', mint({ nonce: nonce.slice(0, 42) })],
     ['no nonce', mint({ nonce: undefined })],
     ['iat over 5 minutes ahead', mint({ iat: now + 301 })],
+    ['iat exactly 1 hour old', mint({ iat: now - 3600 })],
     ['iat over 1 hour old', mint({ iat: now - 3601 })],
     ['no iat', mint({ iat: undefined })],
     ['a numeric id', mint({ id: 424242 })],

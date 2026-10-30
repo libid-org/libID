@@ -20,6 +20,8 @@ export async function swapCode(
     !isText(redirectUri, provider.maxSwapFieldBytes)
   )
     throw new Error('Invalid token request')
+  // A run closed before this point starts no swap.
+  signal.throwIfAborted()
   const response = await fetch(new URL(provider.tokenPath, redirectUri), {
     method: 'POST',
     mode: 'cors',
