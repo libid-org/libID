@@ -7,7 +7,7 @@ import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { CeremonyError } from '../../../errors.js'
 import { isAccountId, isHandle } from '../../../identity.js'
 import { b64urlDecode, isUint } from '../../../primitives.js'
-import { fetchSigningKey as fetchKey, jsonObject as json } from '../../oidc.js'
+import { fetchSigningKey as fetchKey, jsonObject as json, rs256Kid } from '../../oidc.js'
 import { provider } from './provider.js'
 
 /** The accepted token, its signing key ID, the digest its nonce carries and its identity claims. */
@@ -35,8 +35,8 @@ export function acceptTelegramIdToken(idToken: string, clientId: string): Telegr
   const segments = idToken.split('.')
   if (segments.length !== 3 || segments.includes('') || !b64urlDecode(segments[2])) throw invalid()
   const [header, p] = segments.slice(0, 2).map((s) => json(b64urlDecode(s)))
-  if (header?.alg !== 'RS256' || typeof header.kid !== 'string' || header.kid === '' || !p)
-    throw invalid()
+  const kid = rs256Kid(header)
+  if (!kid || !p) throw invalid()
   const digest = typeof p.nonce === 'string' ? b64urlDecode(p.nonce) : null
   if (
     p.iss !== provider.issuer ||
@@ -52,7 +52,7 @@ export function acceptTelegramIdToken(idToken: string, clientId: string): Telegr
     throw invalid('Set a Telegram username, then try again')
   if (!isHandle(PLATFORM_TELEGRAM_KEY, preferred_username)) throw invalid()
   return {
-    kid: header.kid,
+    kid,
     authorizationDigest: digest,
     claims: { aud: clientId, iat, id, preferred_username },
   }

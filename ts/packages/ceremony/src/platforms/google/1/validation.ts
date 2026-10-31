@@ -1,92 +1,26 @@
 import { PLATFORM_GOOGLE_KEY } from '@libid/contracts/platforms'
-import { buildOidcGooglePublicInputs } from '../../../barretenberg/circuits/oidc_google/inputs.js'
 import {
   MAX_AUD_BYTES,
   PUBLIC_INPUT_COUNT,
-  RSA_MODULUS_BYTES,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
-import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../../../barretenberg/parameters.js'
-import { identityNodes, isAccountId, isHandle } from '../../../identity.js'
-import { isFixedBytes, isUint, recordValidator } from '../../../primitives.js'
-import { type Identity, identityValidator, isProofBytes } from '../../validation.js'
+import { type OidcProof, oidcValidation } from '../../oidcValidation.js'
+import type { Identity } from '../../validation.js'
 
-export interface GoogleProofV1 {
-  identityProof: Uint8Array
-  /** Exact circuit fields: 57 lowercase, 0x-prefixed, 32-byte hex values. */
-  publicInputs: readonly string[]
-  tokenExpiresAt: number
-  signingKeyModulus: Uint8Array
-}
+export type GoogleProofV1 = OidcProof<'tokenExpiresAt'>
 
 /** Google's signed JWT exp alone determines proof expiry. */
 export const proofExpiresAt = (proof: GoogleProofV1): number => proof.tokenExpiresAt
 
-/** A signed `aud` the circuit binds: printable ASCII without quotes, so length is the byte length. */
-export const isAudience = (value: unknown, max: number): value is string =>
-  typeof value === 'string' && value.length <= max && /^[\x20-\x21\x23-\x7e]+$/.test(value)
-
-/** Client identifier constraints for this platform: exactly what a signed `aud` can hold. */
-export const isClientId = (value: unknown): value is string => isAudience(value, MAX_AUD_BYTES)
-
-const proofShape = recordValidator<GoogleProofV1>('Invalid Google proof', {
-  identityProof: isProofBytes,
-  publicInputs: (value) =>
-    Array.isArray(value) &&
-    value.length === PUBLIC_INPUT_COUNT &&
-    Array.from(value).every(
-      (field) =>
-        typeof field === 'string' &&
-        field.length === FIELD_HEX_CHARS &&
-        FIELD_HEX_PATTERN.test(field),
-    ),
-  tokenExpiresAt: (value) => isUint(value, Number.MAX_SAFE_INTEGER),
-  signingKeyModulus: (value) => isFixedBytes(value, RSA_MODULUS_BYTES),
+const google = oidcValidation({
+  platform: PLATFORM_GOOGLE_KEY,
+  name: 'Google',
+  timeField: 'tokenExpiresAt',
+  publicInputCount: PUBLIC_INPUT_COUNT,
+  maxAudBytes: MAX_AUD_BYTES,
 })
 
-/** Check the payload and bind its public inputs to the client's validated identity and digest. */
-export function validateProof(
-  value: unknown,
-  identity: Identity<'google'>,
-  authorizationDigest: Uint8Array,
-): GoogleProofV1 {
-  const proof = proofShape(value)
-  if (!isGooglePublicInputs(proof.publicInputs, authorizationDigest, identity, proof))
-    throw new Error('Google public input mismatch')
-  return proof
-}
-
-export const validateIdentity: (value: unknown) => Identity<'google'> = identityValidator(
-  PLATFORM_GOOGLE_KEY,
-  {
-    oauthClientId: isClientId,
-    userId: (s) => isAccountId(PLATFORM_GOOGLE_KEY, s),
-    userName: (s) => isHandle(PLATFORM_GOOGLE_KEY, s),
-  },
-)
-
-/** Flatten validated Google v1 identity/proof values into the circuit's public fields. */
-export function buildGooglePublicInputs(
-  authorizationDigest: Uint8Array,
-  identity: Identity<'google'>,
-  proof: Pick<GoogleProofV1, 'tokenExpiresAt' | 'signingKeyModulus'>,
-): string[] {
-  return buildOidcGooglePublicInputs({
-    authorizationDigest,
-    audience: identity.oauthClientId,
-    ...identityNodes(identity),
-    expiresAt: proof.tokenExpiresAt,
-    modulus: proof.signingKeyModulus,
-  })
-}
-
-/** Compare every circuit field in order; canonical hex makes string equality byte equality. */
-export function isGooglePublicInputs(
-  value: unknown,
-  authorizationDigest: Uint8Array,
-  identity: Identity<'google'>,
-  proof: Pick<GoogleProofV1, 'tokenExpiresAt' | 'signingKeyModulus'>,
-): value is string[] {
-  if (!Array.isArray(value)) return false
-  const expected = buildGooglePublicInputs(authorizationDigest, identity, proof)
-  return value.length === expected.length && expected.every((item, index) => item === value[index])
-}
+export const isClientId: (value: unknown) => value is string = google.isClientId
+export const validateProof: typeof google.validateProof = google.validateProof
+export const validateIdentity: (value: unknown) => Identity<'google'> = google.validateIdentity
+export const buildGooglePublicInputs: typeof google.buildPublicInputs = google.buildPublicInputs
+export const isGooglePublicInputs: typeof google.isPublicInputs = google.isPublicInputs

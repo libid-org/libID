@@ -20,6 +20,10 @@ export function jsonObject(bytes: Uint8Array | null): Record<string, unknown> | 
   }
 }
 
+/** The `kid` of an RS256 JWT header, or null. */
+export const rs256Kid = (header: Record<string, unknown> | null): string | null =>
+  header?.alg === 'RS256' && typeof header.kid === 'string' && header.kid !== '' ? header.kid : null
+
 /** Select the one key carrying `kid` from the key set at `url`. */
 export async function fetchSigningKey(
   url: string,

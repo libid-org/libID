@@ -4,9 +4,9 @@ import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_google/parame
 import { CeremonyError } from '../../../errors.js'
 import { isAccountId, isHandle } from '../../../identity.js'
 import { b64urlDecode, isUint } from '../../../primitives.js'
-import { fetchSigningKey as fetchKey, jsonObject as json } from '../../oidc.js'
+import { fetchSigningKey as fetchKey, jsonObject as json, rs256Kid } from '../../oidc.js'
+import { isAudience } from '../../oidcValidation.js'
 import { provider } from './provider.js'
-import { isAudience } from './validation.js'
 
 /** The token bytes and claims the fixed oidc_google circuit consumes, plus the signing key's `kid`. */
 export interface ParsedGoogleIdToken extends OidcGoogleToken {
@@ -46,15 +46,14 @@ function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
   const claims = payload && googleClaims(json(payload))
   if (!header || !payload || !signature || !claims)
     throw new CeremonyError('authorization', 'invalid Google ID token')
-  const fields = json(header)
-  if (fields?.alg !== 'RS256' || typeof fields.kid !== 'string' || fields.kid === '')
-    throw new CeremonyError('authorization', 'invalid Google ID token header')
+  const kid = rs256Kid(json(header))
+  if (!kid) throw new CeremonyError('authorization', 'invalid Google ID token header')
   if (!fitsCircuit(claims))
     throw new CeremonyError(
       'authorization',
       'Google account identifiers exceed the lengths or characters the circuit supports',
     )
-  return { kid: fields.kid, headerB64, payload, payloadB64, signature, claims }
+  return { kid, headerB64, payload, payloadB64, signature, claims }
 }
 
 /** Accept a token only for this ceremony's client and before its signed expiry. */
