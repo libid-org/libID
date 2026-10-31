@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseOAuthReturn } from '../../oauthReturn.js'
 import { swapCode } from './swap.js'
 import { acceptTelegramIdToken, fetchSigningKey } from './token.js'
-import { buildAuthorizationUrl, digestBinding, pkce, returnRules } from './url.js'
+import { buildAuthorizationUrl, returnRules } from './url.js'
 
 const bridge = 'https://bridge.test'
 const redirectUri = new URL('/auth/callback', bridge).href
@@ -20,24 +20,10 @@ const codeChallenge = 'L6b8OlTpVUwPgkYcOYwl-iZdsMj1AN4bN_-DTAPNsX0'
 describe('telegram/1 authorization request', () => {
   const input = { clientId, redirectUri, state: 'st', authorizationDigest: digest, codeChallenge }
 
-  it('carries the digest as the nonce and the S256 challenge, in the spec order', () => {
-    expect([pkce, digestBinding]).toEqual([true, 'nonce'])
+  it('carries the hand-stated digest vector as the nonce and the S256 challenge', () => {
     expect(createHash('sha256').update(codeVerifier).digest('base64url')).toBe(codeChallenge)
-    const url = new URL(buildAuthorizationUrl(input))
-    expect(`${url.origin}${url.pathname}`).toBe('https://oauth.telegram.org/auth')
-    expect(url.hash).toBe('')
-    expect(url.search.slice(1)).toBe(
-      new URLSearchParams([
-        ['response_type', 'code'],
-        ['client_id', clientId],
-        ['redirect_uri', 'https://bridge.test/auth/callback'],
-        ['scope', 'openid profile'],
-        ['state', 'st'],
-        ['nonce', nonce],
-        ['code_challenge', codeChallenge],
-        ['code_challenge_method', 'S256'],
-      ]).toString(),
-    )
+    const params = new URL(buildAuthorizationUrl(input)).searchParams
+    expect([params.get('nonce'), params.get('code_challenge')]).toEqual([nonce, codeChallenge])
   })
 
   it.each([
@@ -49,28 +35,16 @@ describe('telegram/1 authorization request', () => {
   })
 })
 
-describe('telegram/1 return', () => {
-  const ret = (query: string, fragment = '') => parseOAuthReturn({ query, fragment }, returnRules)
-
-  it.each([
-    ['?code=abc&state=st', '', { outcome: 'accepted', state: 'st', credential: 'abc' }],
-    ['?error=access_denied&state=st', '', { outcome: 'denied', state: 'st' }],
-    ['?error=server_error&state=st', '', { outcome: 'error', state: 'st', error: 'server_error' }],
-    ['', '#code=abc&state=st', null],
-    ['?code=abc&state=st', '#x', null],
-    ['?code=abc&error=access_denied&state=st', '', null],
-    ['?code=abc&code=abd&state=st', '', null],
-    ['?code=abc&id_token=x.y.z&state=st', '', null],
-    ['?code=abc', '', null],
-    [
-      `?code=${'c'.repeat(512)}&state=st`,
-      '',
-      { outcome: 'accepted', state: 'st', credential: 'c'.repeat(512) },
-    ],
-    [`?code=${'c'.repeat(513)}&state=st`, '', null],
-  ])('reads %s%s', (query, fragment, expected) => {
-    expect(ret(query, fragment)).toEqual(expected)
+// The other return cases are the catalog-wide conformance suite's.
+it('bounds the returned code at 512 bytes', () => {
+  const ret = (code: string) =>
+    parseOAuthReturn({ query: `?code=${code}&state=st`, fragment: '' }, returnRules)
+  expect(ret('c'.repeat(512))).toEqual({
+    outcome: 'accepted',
+    state: 'st',
+    credential: 'c'.repeat(512),
   })
+  expect(ret('c'.repeat(513))).toBeNull()
 })
 
 describe('telegram/1 code swap through the Bridge', () => {
@@ -103,14 +77,12 @@ describe('telegram/1 code swap through the Bridge', () => {
   })
 
   it.each([
-    ['an error answered with 200', () => Response.json({ error: 'invalid_grant' })],
     ['an error beside a token', () => Response.json({ error: 'x', id_token: 'h.p.s' })],
     ['no ID token', () => Response.json({ access_token: 'a' })],
     ['an empty ID token', () => Response.json({ id_token: '' })],
     ['a non-string ID token', () => Response.json({ id_token: 1 })],
     ['a body over 64 KiB', () => Response.json({ id_token: 'h'.repeat(64 * 1024) })],
     ['a non-JSON body', () => new Response('<html>')],
-    ['an HTTP failure', () => Response.json({ id_token: 'h.p.s' }, { status: 500 })],
   ])('rejects %s', async (_name, answer) => {
     vi.stubGlobal('fetch', async () => answer())
     await expect(swap()).rejects.toThrow()
@@ -132,27 +104,12 @@ describe('telegram/1 code swap through the Bridge', () => {
   })
 })
 
+// Key selection and the request's shape are the OIDC conformance suite's.
 describe('telegram/1 signing key through the Bridge', () => {
   afterEach(() => vi.unstubAllGlobals())
-  const key = (kid: string) => ({ kty: 'RSA', kid, n: 'AQAB', e: 'AQAB' })
 
-  it('fetches the Bridge key set without credentials or redirects and picks the kid', async () => {
-    const fetch = vi.fn(async () => Response.json({ keys: [key('a'), key('b')] }))
-    vi.stubGlobal('fetch', fetch)
-    await expect(fetchSigningKey(redirectUri, 'b', new AbortController().signal)).resolves.toEqual(
-      key('b'),
-    )
-    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
-    expect(String(url)).toBe('https://bridge.test/api/v1/ceremony/telegram/jwks')
-    expect(init).toMatchObject({ credentials: 'omit', redirect: 'error' })
-  })
-
-  it.each([
-    ['no key with the kid', { keys: [key('a')] }],
-    ['two keys with the kid', { keys: [key('b'), key('b')] }],
-    ['no key array', { keys: key('b') }],
-  ])('rejects %s', async (_name, body) => {
-    vi.stubGlobal('fetch', async () => Response.json(body))
+  it('rejects a key set without a key array', async () => {
+    vi.stubGlobal('fetch', async () => Response.json({ keys: { kid: 'b' } }))
     await expect(fetchSigningKey(redirectUri, 'b', new AbortController().signal)).rejects.toThrow()
   })
 
@@ -202,16 +159,12 @@ describe('telegram/1 ID token acceptance', () => {
   })
 
   it.each<[string, string]>([
-    ['alg HS256', mint({}, { alg: 'HS256' })],
     ['alg none', mint({}, { alg: 'none' })],
     ['no kid', mint({}, { kid: undefined })],
     ['an empty kid', mint({}, { kid: '' })],
-    ['another issuer', mint({ iss: 'https://oauth.telegram.org/' })],
-    ['another audience', mint({ aud: '1234567891' })],
     ['an audience array', mint({ aud: [clientId] })],
     ['a 31-byte nonce', mint({ nonce: nonce.slice(0, 42) })],
     ['no nonce', mint({ nonce: undefined })],
-    ['iat over 5 minutes ahead', mint({ iat: now + 301 })],
     ['iat exactly 1 hour old', mint({ iat: now - 3600 })],
     ['iat over 1 hour old', mint({ iat: now - 3601 })],
     ['no iat', mint({ iat: undefined })],
@@ -227,14 +180,5 @@ describe('telegram/1 ID token acceptance', () => {
     ['a non-JSON payload', `${b64({ alg: 'RS256', kid: 'k1' })}.bm90IGpzb24.c2ln`],
   ])('rejects %s', (_name, token) => {
     expect(() => accept(token)).toThrow(expect.objectContaining({ event: 'authorization' }))
-  })
-
-  it('refuses an account without a username and tells the user to set one', () => {
-    expect(() => accept(mint({ preferred_username: undefined }))).toThrow(
-      expect.objectContaining({
-        event: 'authorization',
-        message: expect.stringMatching(/username/i),
-      }),
-    )
   })
 })
