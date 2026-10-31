@@ -165,6 +165,11 @@ describe('telegram/1 ID token acceptance', () => {
     ['an audience array', mint({ aud: [clientId] })],
     ['a 31-byte nonce', mint({ nonce: nonce.slice(0, 42) })],
     ['no nonce', mint({ nonce: undefined })],
+    ['a canonical 31-byte nonce', mint({ nonce: digest.subarray(1).toString('base64url') })],
+    [
+      'a 33-byte nonce',
+      mint({ nonce: Buffer.concat([digest, digest]).subarray(0, 33).toString('base64url') }),
+    ],
     ['iat exactly 1 hour old', mint({ iat: now - 3600 })],
     ['iat over 1 hour old', mint({ iat: now - 3601 })],
     ['no iat', mint({ iat: undefined })],
@@ -180,5 +185,9 @@ describe('telegram/1 ID token acceptance', () => {
     ['a non-JSON payload', `${b64({ alg: 'RS256', kid: 'k1' })}.bm90IGpzb24.c2ln`],
   ])('rejects %s', (_name, token) => {
     expect(() => accept(token)).toThrow(expect.objectContaining({ event: 'authorization' }))
+  })
+
+  it.each([[''], [undefined]])('asks for a username when preferred_username is %j', (name) => {
+    expect(() => accept(mint({ preferred_username: name }))).toThrow('Set a Telegram username')
   })
 })

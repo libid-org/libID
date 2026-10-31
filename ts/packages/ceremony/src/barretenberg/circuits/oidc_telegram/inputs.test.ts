@@ -107,6 +107,8 @@ describe('oidc_telegram circuit input refusals', () => {
     ['a non-numeric id', sign(claims({ id: '50000x0001' }))],
     ['a 42-char nonce', sign(claims({ nonce: nonce.slice(0, 42) }))],
     ['a padded nonce', sign(claims({ nonce: `${nonce}=` }))],
+    ['a 21-byte aud', sign(claims({ aud: '7'.repeat(21) }))],
+    ['an empty aud', sign(claims({ aud: '' }))],
   ])('refuses %s', (_, token) => {
     expect(build(token)).toThrow()
   })
@@ -114,5 +116,11 @@ describe('oidc_telegram circuit input refusals', () => {
   it("refuses a well-formed nonce that is not this digest's base64url", () => {
     const other = Uint8Array.from(digest, (byte) => byte ^ 1)
     expect(build(sign(claims()), other)).toThrow()
+  })
+
+  it('refuses a 31-byte digest even when the nonce encodes it', () => {
+    const short = digest.subarray(1)
+    const token = sign(claims({ nonce: Buffer.from(short).toString('base64url') }))
+    expect(build(token, short)).toThrow('authorization digest is not 32 bytes')
   })
 })
