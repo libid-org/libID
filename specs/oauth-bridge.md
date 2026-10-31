@@ -277,8 +277,9 @@ the browser rejects them. A timeout, unreachable endpoint, redirect, or
 oversized response returns `502` with no Telegram body.
 
 `GET /api/v1/ceremony/telegram/jwks` returns Telegram's key set unparsed,
-with its `Content-Type` and `Content-Encoding`. The Bridge caches it for at
-most one hour, and only when Telegram answers `200` with a non-empty JSON body.
+with its `Content-Type` and `Content-Encoding`, under `Cache-Control:
+no-store` so browsers do not reuse it. The Bridge caches it for at most one
+hour, and only when Telegram answers `200` with a non-empty JSON body.
 Any other `200` is passed through uncached. Another status, a timeout, an
 unreachable endpoint, a redirect, or an oversized response returns `502`.
 
@@ -409,5 +410,6 @@ cryptographic soundness.
   through; a `code` or `redirectUri` over 512 bytes fails without contacting
   Telegram; the token route's preflight grants `content-type`; a timeout,
   redirect or oversized answer returns `502`; the key set is cached at most one
-  hour, and a `200` that is empty or not JSON is passed through uncached.
+  hour, and a `200` that is empty or not JSON is passed through uncached; the
+  key-set response carries `Cache-Control: no-store`.
   Logs hold no code, verifier, token or identity.
