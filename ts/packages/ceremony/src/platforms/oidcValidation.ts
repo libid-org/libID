@@ -90,6 +90,6 @@ export function oidcValidation<P extends string, T extends string>(options: {
       oauthClientId: isClientId,
       userId: (s) => isAccountId(platform, s),
       userName: (s) => isHandle(platform, s),
-    }) as (value: unknown) => Identity<P>,
+    }),
   }
 }
