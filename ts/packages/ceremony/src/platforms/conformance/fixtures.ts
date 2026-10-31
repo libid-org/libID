@@ -892,7 +892,7 @@ export const fixtures = {
       }),
       handle: ({ identity, proof }) => ({ identity: { ...identity, userName: 'Bob_TG' }, proof }),
       'handle node': flippedInput(36),
-      'iat [REQ-PLAT-65]': ({ identity, proof }) => ({
+      iat: ({ identity, proof }) => ({
         identity,
         proof: { ...proof, tokenIssuedAt: proof.tokenIssuedAt + 1 },
       }),
