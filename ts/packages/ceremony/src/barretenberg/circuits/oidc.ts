@@ -10,6 +10,10 @@ export const RSA_MODULUS_BITS = RSA_MODULUS_BYTES * 8
 export const LIMB_BITS = 120n
 export const NUM_LIMBS = Math.ceil(RSA_MODULUS_BITS / Number(LIMB_BITS))
 export const BARRETT_OVERFLOW_BITS = 6n
+/** The audience hash, id node and handle node each take two 128-bit public fields. */
+const HASH_FIELDS = 2
+/** Digest bytes, the audience hash, both nodes, the signed time and RSA modulus limbs (REQ-PLAT-16B). */
+export const OIDC_PUBLIC_INPUT_COUNT = AUTHORIZATION_DIGEST_BYTES + 3 * HASH_FIELDS + 1 + NUM_LIMBS
 
 const encoder = new TextEncoder()
 

@@ -1,5 +1,4 @@
-import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
-import { NUM_LIMBS } from '../oidc.js'
+import { OIDC_PUBLIC_INPUT_COUNT } from '../oidc.js'
 
 /** Fixed oidc_telegram ABI of libid-circuits' circuits/oidc-telegram/src/main.nr. */
 export const MAX_SIGNING_INPUT_BYTES = 2688
@@ -19,8 +18,4 @@ export const WINDOWS = {
   nonce: 57,
 } as const
 
-/** The audience hash, id node and handle node each take two 128-bit public fields. */
-const HASH_FIELDS = 2
-
-/** Digest bytes, the audience hash, both nodes, iat and RSA modulus limbs. */
-export const PUBLIC_INPUT_COUNT = AUTHORIZATION_DIGEST_BYTES + 3 * HASH_FIELDS + 1 + NUM_LIMBS
+export const PUBLIC_INPUT_COUNT = OIDC_PUBLIC_INPUT_COUNT
