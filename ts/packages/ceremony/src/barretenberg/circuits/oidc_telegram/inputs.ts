@@ -1,5 +1,4 @@
-import { PLATFORM_TELEGRAM_KEY } from '@libid/contracts/platforms'
-import { identityNodes } from '../../../identity.js'
+import type { IdentityNodes } from '../../../identity.js'
 import { bytesToBigInt, halves } from '../../parameters.js'
 import { audienceHash, findOffset, hex, limbs, pad, redc } from '../oidc.js'
 import {
@@ -14,8 +13,8 @@ const encoder = new TextEncoder()
 
 const invalid = (what: string) => new Error(`Telegram ID token: ${what}`)
 
-/** An RS256 ID token split once, with the claims oidc_telegram reveals and the nonce's digest. */
-export interface ParsedTelegramIdToken {
+/** Token bytes, claim values and nonce digest consumed by the fixed oidc_telegram circuit. */
+export interface OidcTelegramToken {
   headerB64: string
   payloadB64: string
   payload: Uint8Array
@@ -26,9 +25,13 @@ export interface ParsedTelegramIdToken {
 
 /**
  * Build the libid-circuits `oidc_telegram` inputs for an accepted `token` signed under
- * `modulus`; only the circuit's own bounds are checked here.
+ * `modulus`, with its id and handle `nodes`; only the circuit's own bounds are checked here.
  */
-export function buildOidcTelegramInputs(token: ParsedTelegramIdToken, modulus: Uint8Array) {
+export function buildOidcTelegramInputs(
+  token: OidcTelegramToken,
+  modulus: Uint8Array,
+  nodes: IdentityNodes,
+) {
   const { headerB64, payloadB64, payload, signature, authorizationDigest } = token
   const { aud, iat, id, preferred_username, nonce } = token.claims
   const signingInput = encoder.encode(`${headerB64}.${payloadB64}`)
@@ -36,12 +39,6 @@ export function buildOidcTelegramInputs(token: ParsedTelegramIdToken, modulus: U
   const audience = encoder.encode(aud)
   if (audience.length === 0 || audience.length > MAX_AUD_BYTES) throw invalid('bad aud')
   if (String(iat).length > MAX_IAT_DIGITS) throw invalid('bad iat')
-  // Throws for an id or username the circuit refuses.
-  const nodes = identityNodes({
-    platformId: PLATFORM_TELEGRAM_KEY,
-    userId: id,
-    userName: preferred_username,
-  })
 
   /** The claim's offset and its window: whole payload groups from the one holding it. */
   const at = (claim: string, width: number) => {

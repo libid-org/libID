@@ -430,8 +430,9 @@ it.each(supportedPlatforms)(
       authorizationNonce: result.oauthProof.authorizationNonce,
     })
     expect(result.oauthProof.authorizationDigest).toEqual(expectedDigest)
-    if (digestBinding === 'nonce')
-      expect(authorization.searchParams.get('nonce')).toBe(b64urlEncode(expectedDigest))
+    expect(authorization.searchParams.get('nonce')).toBe(
+      digestBinding === 'nonce' ? b64urlEncode(expectedDigest) : null,
+    )
   },
 )
 

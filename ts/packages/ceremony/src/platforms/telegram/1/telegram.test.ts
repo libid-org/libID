@@ -1,9 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { jwtPart, telegramV1 } from '../../conformance/fixtures.js'
-import { parseOAuthReturn } from '../../oauthReturn.js'
 import { swapCode } from './swap.js'
 import { acceptTelegramIdToken, fetchSigningKey } from './token.js'
-import { returnRules } from './url.js'
 import { proofExpiresAt, type TelegramProofV1 } from './validation.js'
 
 const redirectUri = 'https://bridge.test/auth/callback'
@@ -25,19 +23,7 @@ it.each([
   else expect(accept).toThrow(expect.objectContaining({ event: 'authorization' }))
 })
 
-it('bounds the returned code at 512 bytes', () => {
-  const ret = (n: number) =>
-    parseOAuthReturn({ query: `?code=${'c'.repeat(n)}&state=st`, fragment: '' }, returnRules)
-  expect(ret(512)).toMatchObject({ credential: 'c'.repeat(512) })
-  expect(ret(513)).toBeNull()
-})
-
 it.each([
-  ['a code over 512 bytes', { code: 'c'.repeat(513) }],
-  [
-    'a redirect URI over 512 bytes',
-    { redirectUri: `https://${'b.'.repeat(250)}test/auth/callback` },
-  ],
   ['another redirect path', { redirectUri: 'https://bridge.test/callback' }],
   ['a malformed verifier', { codeVerifier: 'A'.repeat(42) }],
 ])('sends no swap with %s', async (_name, change) => {

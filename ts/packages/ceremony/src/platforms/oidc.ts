@@ -21,21 +21,21 @@ export function jsonObject(bytes: Uint8Array | null): Record<string, unknown> | 
 export const rs256Kid = (header: Record<string, unknown> | null): string | null =>
   header?.alg === 'RS256' && typeof header.kid === 'string' && header.kid !== '' ? header.kid : null
 
-/** Select the one key carrying `kid` from the key set at `url`. */
+/** Select the one key carrying `kid` from the key set at `url`, read under `cache`. */
 export async function fetchSigningKey(
   url: string,
   kid: string,
   signal: AbortSignal,
+  cache: RequestCache = 'default',
 ): Promise<unknown> {
   // A run closed before this point starts no key request.
   signal.throwIfAborted()
-  // The HTTP cache applies the server's Cache-Control: Google's keys are reused; the Bridge sends no-store.
   const body = await fetchPublicJson(
     url,
     MAX_JWKS_BYTES,
     'Signing key request failed',
     signal,
-    'default',
+    cache,
   )
   if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')
   const keys = body.keys.filter((k) => isRecord(k) && k.kid === kid)

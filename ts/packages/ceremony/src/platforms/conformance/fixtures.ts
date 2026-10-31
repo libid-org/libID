@@ -149,7 +149,7 @@ export interface EvidenceChange {
   jwk?: (jwk: Record<string, string>) => Record<string, string>
   /** The Bridge's answer to a code swap, in place of the ID token. */
   swap?: () => Response | Promise<Response>
-  /** `authorization` rejects before any key fetch or engine start. */
+  /** `token-swap` and `authorization` reject before any key fetch, and before the engine starts unless `engineBeforeToken`. */
   rejectedAt: 'token-swap' | 'authorization' | 'signing-key-fetch' | 'circuit-inputs'
   /** The refusal's text, where the prover names its cause. */
   message?: string
@@ -803,11 +803,12 @@ export const fixtures = {
       userName: 'a'.repeat(32),
     },
     rejectedIdentity: {
-      oauthClientId: decimalIdViolations,
+      oauthClientId: [],
       userId: decimalIdViolations,
       userName: handleViolations,
     },
-    admittedClientIds: [],
+    // The Bridge, not the client, requires a numeric bot id.
+    admittedClientIds: ['x1'],
     proof: {
       identityProof: new Uint8Array([1]),
       tokenIssuedAt: telegramIat,

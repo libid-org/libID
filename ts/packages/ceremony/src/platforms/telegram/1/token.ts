@@ -3,7 +3,7 @@ import {
   PROOF_LIFETIME_SECONDS_TELEGRAM,
 } from '@libid/contracts/ceremony'
 import { PLATFORM_TELEGRAM_KEY } from '@libid/contracts/platforms'
-import type { ParsedTelegramIdToken } from '../../../barretenberg/circuits/oidc_telegram/inputs.js'
+import type { OidcTelegramToken } from '../../../barretenberg/circuits/oidc_telegram/inputs.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { CeremonyError } from '../../../errors.js'
 import { isAccountId, isHandle } from '../../../identity.js'
@@ -12,7 +12,7 @@ import { fetchSigningKey as fetchKey, jsonObject as json, rs256Kid } from '../..
 import { provider } from './provider.js'
 
 /** The accepted token and its signing key ID. */
-export interface TelegramIdToken extends ParsedTelegramIdToken {
+export interface ParsedTelegramIdToken extends OidcTelegramToken {
   kid: string
 }
 
@@ -30,7 +30,7 @@ const invalid = (message = 'Invalid Telegram ID token') =>
   new CeremonyError('authorization', message)
 
 /** Accept an RS256 token for this client with a fresh `iat` and a 32-byte digest as its nonce. */
-export function acceptTelegramIdToken(idToken: string, clientId: string): TelegramIdToken {
+export function acceptTelegramIdToken(idToken: string, clientId: string): ParsedTelegramIdToken {
   const segments = idToken.split('.')
   if (segments.length !== 3 || segments.includes('')) throw invalid()
   const [headerB64, payloadB64, signatureB64] = segments
@@ -65,6 +65,6 @@ export function acceptTelegramIdToken(idToken: string, clientId: string): Telegr
   }
 }
 
-/** Select the one key carrying `kid` from Telegram's key set, served beside the Bridge callback. */
+/** Select the one key carrying `kid` from Telegram's key set, served uncached beside the Bridge callback. */
 export const fetchSigningKey = (redirectUri: string, kid: string, signal: AbortSignal) =>
-  fetchKey(new URL(provider.jwksPath, redirectUri).href, kid, signal)
+  fetchKey(new URL(provider.jwksPath, redirectUri).href, kid, signal, 'no-store')

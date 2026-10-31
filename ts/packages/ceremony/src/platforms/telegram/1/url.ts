@@ -1,5 +1,4 @@
 import { isAuthorizationCode } from '../../../notary/oauth/validation.js'
-import { isText } from '../../../primitives.js'
 import { pkceAuthorizationUrlBuilder } from '../../authorization.js'
 import type { ReturnRules } from '../../oauthReturn.js'
 import { provider } from './provider.js'
@@ -12,7 +11,7 @@ export const digestBinding = 'nonce'
 export const returnRules: ReturnRules = {
   transport: 'query',
   credentialField: 'code',
-  isCredential: (code) => isAuthorizationCode(code) && isText(code, provider.maxSwapFieldBytes),
+  isCredential: isAuthorizationCode,
   rejected: ['id_token', 'access_token', 'refresh_token'],
 }
 

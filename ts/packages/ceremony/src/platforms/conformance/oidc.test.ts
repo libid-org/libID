@@ -44,13 +44,14 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
         event: change.rejectedAt,
         ...(change.message === undefined ? {} : { message: change.message }),
       })
-      if (change.rejectedAt === 'authorization')
+      if (change.rejectedAt === 'authorization' || change.rejectedAt === 'token-swap')
         expectNoProvingWork(staged.keys, 'engineBeforeToken' in fixture)
-      if (change.rejectedAt === 'token-swap') expect(staged.keys).not.toHaveBeenCalled()
       expect(generate).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
     },
   )
+
+  const { bridge } = fixture.evidence as { bridge?: { tokenUrl: string; keysUrl: string } }
 
   it(tagged('accepts its published signing key without optional members', tags), async () => {
     const staged = stageOidc(platformId, 'accepted', { jwk: fixture.evidence.minimalJwk })
@@ -62,7 +63,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
 
   it(
     tagged(
-      'fetches its published signing key once, without credentials or redirects, through the HTTP cache, and opens no notary connection',
+      'fetches its published signing key once, without credentials or redirects, cached unless Bridge-served, and opens no notary connection',
       tags,
     ),
     async () => {
@@ -73,15 +74,14 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       expect(staged.keys.mock.calls[0][1]).toMatchObject({
         credentials: 'omit',
         redirect: 'error',
-        // The key set honours Google's Cache-Control rather than refetching every run.
-        cache: 'default',
+        // Google's key set honours its Cache-Control; the Bridge's is read fresh every run.
+        cache: bridge ? 'no-store' : 'default',
       })
       // The supplied notary address never opens a notary connection for this prover.
       expect(notarization).not.toHaveBeenCalled()
     },
   )
 
-  const { bridge } = fixture.evidence as { bridge?: { tokenUrl: string; keysUrl: string } }
   it.runIf(bridge)(
     tagged('swaps its code once through the Bridge, then reads its key set', tags),
     async () => {

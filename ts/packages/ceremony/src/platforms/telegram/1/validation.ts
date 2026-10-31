@@ -24,8 +24,6 @@ const telegram = oidcValidation({
   timeField: 'tokenIssuedAt',
   publicInputCount: PUBLIC_INPUT_COUNT,
   maxAudBytes: MAX_AUD_BYTES,
-  // The Bridge's startup rule for Telegram's client id.
-  clientIdPattern: /^[0-9]+$/,
 })
 
 export const isClientId: (value: unknown) => value is string = telegram.isClientId

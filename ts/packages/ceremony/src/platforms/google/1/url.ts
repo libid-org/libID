@@ -36,7 +36,7 @@ export function buildAuthorizationUrl(input: {
     ['redirect_uri', input.redirectUri],
     ['scope', provider.authorizationScope],
     ['state', input.state],
-    ['nonce', b64urlEncode(input.authorizationDigest)],
   ])
+  if (digestBinding === 'nonce') query.append('nonce', b64urlEncode(input.authorizationDigest))
   return `${provider.authorizationEndpoint}?${query}`
 }

@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
+import { PLATFORM_TELEGRAM_KEY } from '@libid/contracts/platforms'
 import { parse } from 'smol-toml'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { identityNodes } from '../../../identity.js'
 import { jwtPart, jwtWith, telegramV1 } from '../../../platforms/conformance/fixtures.js'
 import { acceptTelegramIdToken } from '../../../platforms/telegram/1/token.js'
 import { b64urlDecode } from '../../../primitives.js'
@@ -33,8 +35,12 @@ const header = telegramV1.idToken.indexOf('.')
 const fill =
   ((2688 - header) * 3) / 4 - JSON.stringify({ ...jwtPart(telegramV1.idToken, 1), name: '' }).length
 
-const inputsOf = (idToken: string, modulus: Uint8Array, client = aud) =>
-  buildOidcTelegramInputs(acceptTelegramIdToken(idToken, client), modulus)
+function inputsOf(idToken: string, modulus: Uint8Array, client = aud) {
+  const token = acceptTelegramIdToken(idToken, client)
+  const { id: userId, preferred_username: userName } = token.claims
+  const nodes = identityNodes({ platformId: PLATFORM_TELEGRAM_KEY, userId, userName })
+  return buildOidcTelegramInputs(token, modulus, nodes)
+}
 
 it.each(['Prover.toml', 'Prover-max.toml', 'Prover-reordered.toml'])(
   'rebuilds %s field by field from the token it was signed for',

@@ -1,6 +1,6 @@
 import { isRedirectUri } from '../../../ccdp/index.js'
 import { CeremonyError } from '../../../errors.js'
-import { isRecord, isText } from '../../../primitives.js'
+import { isRecord } from '../../../primitives.js'
 import { readJson } from '../../../response.js'
 import { isPkceValue } from '../../authorization.js'
 import { provider } from './provider.js'
@@ -12,13 +12,8 @@ export async function swapCode(
   input: { code: string; codeVerifier: string; redirectUri: string },
   signal: AbortSignal,
 ): Promise<string> {
-  const { code, codeVerifier, redirectUri } = input
-  if (
-    !isText(code, provider.maxSwapFieldBytes) ||
-    !isPkceValue(codeVerifier) ||
-    !isRedirectUri(redirectUri) ||
-    !isText(redirectUri, provider.maxSwapFieldBytes)
-  )
+  const { codeVerifier, redirectUri } = input
+  if (!isPkceValue(codeVerifier) || !isRedirectUri(redirectUri))
     throw new Error('Invalid token request')
   // A run closed before this point starts no swap.
   signal.throwIfAborted()
