@@ -211,3 +211,4 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-PLAT-20 | [src/identity.test.ts](../src/identity.test.ts) |
 | TEST-PLAT-21 | [src/notary/notarize.test.ts](../src/notary/notarize.test.ts), [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-22 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| TEST-PLAT-23 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |

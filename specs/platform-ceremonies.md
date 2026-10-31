@@ -1599,8 +1599,13 @@ protects the code at the swap; no verifier compares it.
 | 7 | `code_challenge` | PKCE challenge per common §7 |
 | 8 | `code_challenge_method` | `S256` |
 
-The return is a query carrying `code`, at most 512 bytes, and `state`. An
-`id_token`, `access_token`, or `refresh_token` in it is refused.
+- REQ-PLAT-67 (upholds SP-DELIVERY-01):
+  The Prover MUST accept the Telegram return only as a query carrying one
+  `code` of at most 512 bytes and one `state` matching its live ceremony. An
+  `error` of `access_denied` is a denial and any other `error` a failure. A
+  nonempty fragment, a duplicated field, both `code` and `error`, or an
+  `id_token`, `access_token`, or `refresh_token` is refused before the swap.
+  An `iss` field is provider metadata and changes nothing.
 
 ### 6a.2 Token rules
 
@@ -1905,6 +1910,13 @@ Platform Verifier, Notary Service, Consumer.
   `,` or `}`; an anchor revealed with JSON whitespace around its colon still
   frames its commitment; and an attestation revealing the id or handle value
   carries no framed commitment for it and is rejected.
+- TEST-PLAT-23 (exercises REQ-PLAT-67):
+  A Telegram return in the fragment, with a duplicated `state` or `code`,
+  both `code` and `error`, a `code` over 512 bytes, another ceremony's
+  `state`, or an `id_token`, `access_token`, or `refresh_token` is refused
+  before any Bridge request; `access_denied` resolves as a denial; an added
+  `iss` leaves the outcome unchanged.
+
 
 ## 9. Security Considerations
 

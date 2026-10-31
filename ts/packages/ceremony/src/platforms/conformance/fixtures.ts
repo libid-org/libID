@@ -816,8 +816,8 @@ export const fixtures = {
     operations: ['token-swap', 'signing-key-fetch'],
     specTests: {
       identity: '[REQ-PLAT-66]',
-      returns: '',
-      issuer: '',
+      returns: '[TEST-PLAT-23]',
+      issuer: '[TEST-PLAT-23]',
       prover: '[REQ-PLAT-64]',
     },
     authorizationRequest: {
