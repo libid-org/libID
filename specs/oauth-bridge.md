@@ -33,16 +33,15 @@ For Callback, the bridge is a configuration-inserting, cached proxy to the
 [CCDP Distribution](ccdp-distribution.md#callback-artifact). It neither
 implements the document nor builds its browser code. It serves no other
 CCDP resources. The browser-exchange profiles covered here require no Bridge
-ceremony state, token exchange, or notarization. Telegram's profile adds a
-token relay: the Bridge swaps the code with its secret, so it sees the user's
+ceremony state, token exchange, or notarization. [Telegram's profile](#telegram-profile)
+adds a token relay: the Bridge swaps the code with its secret, so it sees the user's
 Telegram identity. It still keeps no ceremony state and notarizes nothing.
 
 Bridge-assisted OAuth is a platform-profile choice, not prohibited by CCDP.
 Another platform or later ceremony version can define a Bridge service together
 with its HTTP contract, credential custody, and trust/evidence requirements.
 The route surface below requires no such service for the browser-exchange
-profiles; it does not preclude one where a profile requires it. The
-[Telegram profile](#telegram-profile) is Bridge-assisted.
+profiles; it does not preclude one where a profile requires it.
 
 The bridge and Distribution may be cross-site and independently operated;
 both are code-supply-chain trust boundaries. The Distribution requires no

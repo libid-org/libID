@@ -442,9 +442,6 @@ binding method is what the Platform Verifier compares:
 | GitHub | revealed `code_verifier` of the notarized token exchange | the Platform Verifier, by recomputing that verifier under REQ-COMMON-15A |
 | Telegram | Authorization Digest public proof input, carried by the signed OIDC `nonce` | the Platform Verifier, against the digest recomputed under REQ-COMMON-02 |
 
-Telegram also sends PKCE. It only protects the code at the Bridge swap. No
-verifier compares its `code_verifier`, so Telegram uses the nonce method only.
-
 The X and GitHub circuits expose no Authorization Digest public input, so a
 requirement to compare one is unsatisfiable on those paths; Google carries no
 `code_verifier`, and Telegram's is never revealed to a verifier, so the
