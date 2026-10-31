@@ -184,18 +184,22 @@ export function jwtWith(
   ].join('.')
 }
 
-const googleFixture = JSON.parse(
-  readFileSync(new URL('../google/1/google-v1.fixture.json', import.meta.url), 'utf8'),
-) as { idToken: string; jwk: Record<string, string>; authorizationDigest: string }
-
-/** The Google v1 RS256 token, its signing JWK and the Authorization Digest its nonce carries. */
-export const googleV1 = {
-  idToken: googleFixture.idToken,
-  jwk: googleFixture.jwk,
-  authorizationDigest: Uint8Array.from(
-    googleFixture.authorizationDigest.match(/../g)!.map((byte) => Number.parseInt(byte, 16)),
-  ),
+/** An RS256 token, its signing JWK and the Authorization Digest its nonce carries. */
+function oidcFixture(path: string) {
+  const { idToken, jwk, authorizationDigest } = JSON.parse(
+    readFileSync(new URL(path, import.meta.url), 'utf8'),
+  ) as { idToken: string; jwk: Record<string, string>; authorizationDigest: string }
+  return {
+    idToken,
+    jwk,
+    authorizationDigest: Uint8Array.from(Buffer.from(authorizationDigest, 'hex')),
+  }
 }
+
+/** RS256 needs only the key ID, type, exponent and modulus. */
+const minimalJwk = ({ kid, kty, e, n }: Record<string, string>) => ({ kid, kty, e, n })
+
+export const googleV1 = oidcFixture('../google/1/google-v1.fixture.json')
 
 // Generated once by running googleV1 through the official libid-circuits
 // v0.7.1 oidc_google ACIR and bb 6.0.0-rc.2, not by this adapter.
@@ -263,10 +267,6 @@ const googleClaims = jwtPart(googleV1.idToken, 1) as { aud: string; sub: string;
 
 const googleModulus = b64urlDecode(googleV1.jwk.n)!
 
-const telegramFixture = JSON.parse(
-  readFileSync(new URL('../telegram/1/telegram-v1.fixture.json', import.meta.url), 'utf8'),
-) as { idToken: string; jwk: Record<string, string>; authorizationDigest: string }
-
 // The real oidc_telegram proof the contracts' TelegramPlatformVerifier test accepts; its `source`
 // names the circuit commit and bb version. Fields: digest 0-31, audience 32-33, id node 34-35,
 // handle node 36-37, iat 38, modulus 39-56.
@@ -274,14 +274,7 @@ export const telegramPublicInputs: readonly string[] = JSON.parse(
   readFileSync(new URL('../telegram/1/telegram-v1.proof.json', import.meta.url), 'utf8'),
 ).public_inputs
 
-/** The synthetic Telegram v1 token, its key and the digest its nonce carries. */
-export const telegramV1 = {
-  idToken: telegramFixture.idToken,
-  jwk: telegramFixture.jwk,
-  authorizationDigest: Uint8Array.from(
-    telegramFixture.authorizationDigest.match(/../g)!.map((byte) => Number.parseInt(byte, 16)),
-  ),
-}
+export const telegramV1 = oidcFixture('../telegram/1/telegram-v1.fixture.json')
 
 const telegramIat = 1893452400
 
@@ -294,9 +287,29 @@ const telegramClaims = (change: Record<string, unknown>, message?: string): Evid
   ...(message === undefined ? {} : { message }),
 })
 
-/** `fields` with the field at `index` changed in its low bit. */
-const flippedAt = (fields: readonly string[], index: number) =>
-  fields.map((field, i) => (i === index ? flipped(field) : field))
+/** A claim whose public inputs are rewritten by `change`. */
+const withInputs =
+  (change: (fields: string[]) => string[]) =>
+  <I, F extends { publicInputs: readonly string[] }>({
+    identity,
+    proof,
+  }: {
+    identity: I
+    proof: F
+  }) => ({
+    identity,
+    proof: { ...proof, publicInputs: change([...proof.publicInputs]) },
+  })
+
+/** The public input at `index` with its low bit flipped. */
+const flippedInput = (index: number) =>
+  withInputs((fields) => fields.map((f, i) => (i === index ? flipped(f) : f)))
+
+/** The id node's two halves, public inputs 34 and 35, swapped. */
+const swappedIdNode = withInputs(([...f]) => {
+  ;[f[34], f[35]] = [f[35], f[34]]
+  return f
+})
 
 /** A token whose claim JSON is rewritten as text, keeping its header and signature. */
 const payloadText = (idToken: string, change: (json: string) => string) =>
@@ -501,13 +514,7 @@ export const fixtures = {
       ...googleV1,
       publicInputs: googlePublicInputs,
       digestInput: 'authorization_digest',
-      // RS256 needs only the key ID, type, exponent and modulus.
-      minimalJwk: {
-        kid: googleV1.jwk.kid,
-        kty: googleV1.jwk.kty,
-        e: googleV1.jwk.e,
-        n: googleV1.jwk.n,
-      },
+      minimalJwk: minimalJwk(googleV1.jwk),
     },
     rejectedEvidence: {
       'a non-RS256 algorithm': {
@@ -570,13 +577,7 @@ export const fixtures = {
       },
     },
     rejectedBinding: {
-      'authorization digest': ({ identity, proof }) => ({
-        identity,
-        proof: {
-          ...proof,
-          publicInputs: [flipped(proof.publicInputs[0]), ...proof.publicInputs.slice(1)],
-        },
-      }),
+      'authorization digest': flippedInput(0),
       audience: ({ identity, proof }) => ({
         identity: { ...identity, oauthClientId: 'other' },
         proof,
@@ -598,11 +599,7 @@ export const fixtures = {
         signingKeyModulus[0] ^= 1
         return { identity, proof: { ...proof, signingKeyModulus } }
       },
-      'public-input order': ({ identity, proof }) => {
-        const publicInputs = [...proof.publicInputs]
-        ;[publicInputs[34], publicInputs[35]] = [publicInputs[35], publicInputs[34]]
-        return { identity, proof: { ...proof, publicInputs } }
-      },
+      'public-input order': swappedIdNode,
     },
   },
   x: {
@@ -843,12 +840,7 @@ export const fixtures = {
       ...telegramV1,
       publicInputs: telegramPublicInputs,
       digestInput: 'authorization_digest',
-      minimalJwk: {
-        kid: telegramV1.jwk.kid,
-        kty: telegramV1.jwk.kty,
-        e: telegramV1.jwk.e,
-        n: telegramV1.jwk.n,
-      },
+      minimalJwk: minimalJwk(telegramV1.jwk),
       bridge: {
         tokenUrl: 'https://bridge.test/api/v1/ceremony/telegram/token',
         keysUrl: 'https://bridge.test/api/v1/ceremony/telegram/jwks',
@@ -892,10 +884,7 @@ export const fixtures = {
       'a non-65537 exponent': { jwk: (jwk) => ({ ...jwk, e: 'Aw' }), rejectedAt: 'circuit-inputs' },
     },
     rejectedBinding: {
-      'authorization digest': ({ identity, proof }) => ({
-        identity,
-        proof: { ...proof, publicInputs: flippedAt(proof.publicInputs, 0) },
-      }),
+      'authorization digest': flippedInput(0),
       audience: ({ identity, proof }) => ({
         identity: { ...identity, oauthClientId: '7000000002' },
         proof,
@@ -905,27 +894,14 @@ export const fixtures = {
         proof,
       }),
       handle: ({ identity, proof }) => ({ identity: { ...identity, userName: 'Bob_TG' }, proof }),
-      'handle node': ({ identity, proof }) => ({
-        identity,
-        proof: { ...proof, publicInputs: flippedAt(proof.publicInputs, 36) },
-      }),
+      'handle node': flippedInput(36),
       'iat [REQ-PLAT-65]': ({ identity, proof }) => ({
         identity,
         proof: { ...proof, tokenIssuedAt: proof.tokenIssuedAt + 1 },
       }),
-      'iat field': ({ identity, proof }) => ({
-        identity,
-        proof: { ...proof, publicInputs: flippedAt(proof.publicInputs, 38) },
-      }),
-      'signing-key modulus': ({ identity, proof }) => ({
-        identity,
-        proof: { ...proof, publicInputs: flippedAt(proof.publicInputs, 39) },
-      }),
-      'public-input order': ({ identity, proof }) => {
-        const publicInputs = [...proof.publicInputs]
-        ;[publicInputs[34], publicInputs[35]] = [publicInputs[35], publicInputs[34]]
-        return { identity, proof: { ...proof, publicInputs } }
-      },
+      'iat field': flippedInput(38),
+      'signing-key modulus': flippedInput(39),
+      'public-input order': swappedIdNode,
     },
   },
 } satisfies { [P in PlatformId]: PlatformFixture<P> }
