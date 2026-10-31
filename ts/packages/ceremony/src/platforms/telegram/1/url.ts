@@ -20,5 +20,5 @@ export const returnRules: ReturnRules = {
 export const buildAuthorizationUrl = pkceAuthorizationUrlBuilder(
   provider.authorizationEndpoint,
   provider.authorizationScope,
-  { leading: [['response_type', 'code']], nonce: true },
+  { leading: [['response_type', 'code']], nonce: digestBinding === 'nonce' },
 )
