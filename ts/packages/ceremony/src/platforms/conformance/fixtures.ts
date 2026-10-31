@@ -790,7 +790,7 @@ export const fixtures = {
       userName: 'a'.repeat(32),
     },
     rejectedIdentity: {
-      oauthClientId: [],
+      oauthClientId: decimalIdViolations,
       userId: decimalIdViolations,
       userName: handleViolations,
     },

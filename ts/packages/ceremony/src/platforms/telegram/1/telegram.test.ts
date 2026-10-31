@@ -4,6 +4,7 @@ import { parseOAuthReturn } from '../../oauthReturn.js'
 import { swapCode } from './swap.js'
 import { acceptTelegramIdToken, fetchSigningKey } from './token.js'
 import { buildAuthorizationUrl, returnRules } from './url.js'
+import { proofExpiresAt, type TelegramProofV1 } from './validation.js'
 
 const bridge = 'https://bridge.test'
 const redirectUri = new URL('/auth/callback', bridge).href
@@ -190,4 +191,10 @@ describe('telegram/1 ID token acceptance', () => {
   it.each([[''], [undefined]])('asks for a username when preferred_username is %j', (name) => {
     expect(() => accept(mint({ preferred_username: name }))).toThrow('Set a Telegram username')
   })
+})
+
+it('refuses a proof expiry past the safe integer range', () => {
+  const at = (tokenIssuedAt: number) => () => proofExpiresAt({ tokenIssuedAt } as TelegramProofV1)
+  expect(at(Number.MAX_SAFE_INTEGER - 3600)()).toBe(Number.MAX_SAFE_INTEGER)
+  expect(at(Number.MAX_SAFE_INTEGER - 3599)).toThrow('Proof expiry exceeds safe integer range')
 })

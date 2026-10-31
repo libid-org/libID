@@ -64,7 +64,7 @@ export function buildOidcPublicInputs(
   values: IdentityNodes & {
     authorizationDigest: Uint8Array
     audience: string
-    expiresAt: number
+    signedTime: number
     modulus: Uint8Array
   },
 ): string[] {
@@ -75,7 +75,7 @@ export function buildOidcPublicInputs(
     ...audienceHash(encoder.encode(values.audience)).map(fieldHex),
     ...halves(values.idNode).map(fieldHex),
     ...halves(values.handleNode).map(fieldHex),
-    fieldHex(values.expiresAt),
+    fieldHex(values.signedTime),
     ...limbs(bytesToBigInt(values.modulus)).map(fieldHex),
   ]
 }

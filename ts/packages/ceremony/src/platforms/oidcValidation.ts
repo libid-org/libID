@@ -23,13 +23,16 @@ export function oidcValidation<P extends string, T extends string>(options: {
   timeField: T
   publicInputCount: number
   maxAudBytes: number
+  /** A platform's own client-id rule, beyond what a signed `aud` can hold. */
+  clientIdPattern?: RegExp
 }) {
-  const { platform, name, timeField, publicInputCount, maxAudBytes } = options
+  const { platform, name, timeField, publicInputCount, maxAudBytes, clientIdPattern } = options
   type Proof = OidcProof<T>
   type Bound = Pick<Proof, T | 'signingKeyModulus'>
 
-  /** Client identifier constraints: exactly what a signed `aud` can hold. */
-  const isClientId = (value: unknown): value is string => isAudience(value, maxAudBytes)
+  /** Client identifier constraints: what a signed `aud` can hold and the platform's own rule. */
+  const isClientId = (value: unknown): value is string =>
+    isAudience(value, maxAudBytes) && (clientIdPattern?.test(value) ?? true)
 
   const proofShape = recordValidator<Proof>(`Invalid ${name} proof`, {
     identityProof: isProofBytes,
@@ -56,7 +59,7 @@ export function oidcValidation<P extends string, T extends string>(options: {
       authorizationDigest,
       audience: identity.oauthClientId,
       ...identityNodes(identity),
-      expiresAt: (proof as Record<T, number>)[timeField],
+      signedTime: (proof as Record<T, number>)[timeField],
       modulus: proof.signingKeyModulus,
     })
 

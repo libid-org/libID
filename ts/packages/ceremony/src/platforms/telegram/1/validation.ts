@@ -11,8 +11,12 @@ import type { Identity } from '../../validation.js'
 export type TelegramProofV1 = OidcProof<'tokenIssuedAt'>
 
 /** The signed `iat` plus the profile's lifetime; `exp` is not used. */
-export const proofExpiresAt = (proof: TelegramProofV1): number =>
-  proof.tokenIssuedAt + PROOF_LIFETIME_SECONDS_TELEGRAM
+export function proofExpiresAt(proof: TelegramProofV1): number {
+  const expiresAt = proof.tokenIssuedAt + PROOF_LIFETIME_SECONDS_TELEGRAM
+  if (!Number.isSafeInteger(expiresAt))
+    throw new RangeError('Proof expiry exceeds safe integer range')
+  return expiresAt
+}
 
 const telegram = oidcValidation({
   platform: PLATFORM_TELEGRAM_KEY,
@@ -20,6 +24,8 @@ const telegram = oidcValidation({
   timeField: 'tokenIssuedAt',
   publicInputCount: PUBLIC_INPUT_COUNT,
   maxAudBytes: MAX_AUD_BYTES,
+  // The Bridge's startup rule for Telegram's client id.
+  clientIdPattern: /^[0-9]+$/,
 })
 
 export const isClientId: (value: unknown) => value is string = telegram.isClientId
