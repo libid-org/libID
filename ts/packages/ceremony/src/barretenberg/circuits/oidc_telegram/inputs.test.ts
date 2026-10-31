@@ -1,7 +1,8 @@
 import { createSign, generateKeyPairSync } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { acceptTelegramIdToken } from '../../../platforms/telegram/1/token.js'
 import { buildOidcTelegramInputs } from './inputs.js'
 import { MAX_SIGNING_INPUT_BYTES, PUBLIC_INPUT_COUNT } from './parameters.js'
 
@@ -27,6 +28,16 @@ const bytesOf = (value: bigint, length: number) =>
 const canonical = (value: unknown): unknown =>
   Array.isArray(value) ? value.map(canonical) : BigInt(String(value))
 
+// Every vector and synthetic token is issued at this time to client 7000000001.
+const iat = 1893452400
+const clientId = '7000000001'
+beforeEach(() => vi.useFakeTimers({ now: iat * 1000 }))
+afterEach(() => vi.useRealTimers())
+
+/** The production parse of `idToken`, then the circuit inputs. */
+const inputsOf = (idToken: string, modulus: Uint8Array, client = clientId) =>
+  buildOidcTelegramInputs(acceptTelegramIdToken(idToken, client), modulus)
+
 describe('oidc_telegram circuit inputs', () => {
   it.each(['Prover.toml', 'Prover-max.toml', 'Prover-reordered.toml'])(
     'rebuilds %s field by field from the token it was signed for',
@@ -38,9 +49,8 @@ describe('oidc_telegram circuit inputs', () => {
       const signature = bytesOf(recompose(toml.signature), 256)
       const idToken = `${signingInput}.${Buffer.from(signature).toString('base64url')}`
       const modulus = bytesOf(recompose(toml.modulus), 256)
-      const digest = Uint8Array.from(toml.authorization_digest as number[])
 
-      const inputs = buildOidcTelegramInputs(idToken, modulus, digest)
+      const inputs = inputsOf(idToken, modulus)
       expect(Object.keys(inputs)).toEqual(ABI_KEYS)
       expect(Object.keys(toml).sort()).toEqual([...ABI_KEYS].sort())
       for (const key of ABI_KEYS)
@@ -74,23 +84,20 @@ describe('oidc_telegram circuit input refusals', () => {
     return `${input}.${signature.toString('base64url')}`
   }
   const claims = (change: Record<string, unknown> = {}) => ({
-    aud: '7000000001',
-    iat: 1893452400,
+    aud: clientId,
+    iat,
     iss: 'https://oauth.telegram.org',
     preferred_username: 'Brynn_QX',
     id: '7051836294',
     nonce,
     ...change,
   })
-  const build =
-    (token: string, d = digest) =>
-    () =>
-      buildOidcTelegramInputs(token, modulus, d)
+  const build = (token: string, client?: string) => () => inputsOf(token, modulus, client)
 
   it('builds a worst-case token: escaped 64-char names, 32-byte username, 20-digit id', () => {
     const extra = `,"name":"${escaped(64)}","given_name":"${escaped(64)}"`
     const token = sign(claims({ preferred_username: 'A'.repeat(32), id: '9'.repeat(20) }), extra)
-    const inputs = buildOidcTelegramInputs(token, modulus, digest)
+    const inputs = inputsOf(token, modulus)
     expect(inputs.username_len).toBe('32')
     expect(inputs.id_len).toBe('20')
     expect(Number(inputs.signing_input_len)).toBeLessThanOrEqual(MAX_SIGNING_INPUT_BYTES)
@@ -107,20 +114,19 @@ describe('oidc_telegram circuit input refusals', () => {
     ['a non-numeric id', sign(claims({ id: '50000x0001' }))],
     ['a 42-char nonce', sign(claims({ nonce: nonce.slice(0, 42) }))],
     ['a padded nonce', sign(claims({ nonce: `${nonce}=` }))],
-    ['a 21-byte aud', sign(claims({ aud: '7'.repeat(21) }))],
-    ['an empty aud', sign(claims({ aud: '' }))],
   ])('refuses %s', (_, token) => {
     expect(build(token)).toThrow()
   })
 
-  it("refuses a well-formed nonce that is not this digest's base64url", () => {
-    const other = Uint8Array.from(digest, (byte) => byte ^ 1)
-    expect(build(sign(claims()), other)).toThrow()
+  it.each([
+    ['a 21-byte aud', '7'.repeat(21)],
+    ['an empty aud', ''],
+  ])('refuses %s its client accepted', (_, aud) => {
+    expect(build(sign(claims({ aud })), aud)).toThrow('Telegram ID token: bad aud')
   })
 
   it('refuses a 31-byte digest even when the nonce encodes it', () => {
     const short = digest.subarray(1)
-    const token = sign(claims({ nonce: Buffer.from(short).toString('base64url') }))
-    expect(build(token, short)).toThrow('authorization digest is not 32 bytes')
+    expect(build(sign(claims({ nonce: Buffer.from(short).toString('base64url') })))).toThrow()
   })
 })

@@ -3,6 +3,7 @@ import {
   PROOF_LIFETIME_SECONDS_TELEGRAM,
 } from '@libid/contracts/ceremony'
 import { PLATFORM_TELEGRAM_KEY } from '@libid/contracts/platforms'
+import type { ParsedTelegramIdToken } from '../../../barretenberg/circuits/oidc_telegram/inputs.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { CeremonyError } from '../../../errors.js'
 import { isAccountId, isHandle } from '../../../identity.js'
@@ -10,11 +11,9 @@ import { b64urlDecode, isUint } from '../../../primitives.js'
 import { fetchSigningKey as fetchKey, jsonObject as json, rs256Kid } from '../../oidc.js'
 import { provider } from './provider.js'
 
-/** The accepted token, its signing key ID, the digest its nonce carries and its identity claims. */
-export interface TelegramIdToken {
+/** The accepted token and its signing key ID. */
+export interface TelegramIdToken extends ParsedTelegramIdToken {
   kid: string
-  authorizationDigest: Uint8Array
-  claims: { aud: string; iat: number; id: string; preferred_username: string }
 }
 
 /** Shared rule: `iat ≤ now + skew` and `now < iat + lifetime`. */
@@ -33,11 +32,15 @@ const invalid = (message = 'Invalid Telegram ID token') =>
 /** Accept an RS256 token for this client with a fresh `iat` and a 32-byte digest as its nonce. */
 export function acceptTelegramIdToken(idToken: string, clientId: string): TelegramIdToken {
   const segments = idToken.split('.')
-  if (segments.length !== 3 || segments.includes('') || !b64urlDecode(segments[2])) throw invalid()
-  const [header, p] = segments.slice(0, 2).map((s) => json(b64urlDecode(s)))
-  const kid = rs256Kid(header)
-  if (!kid || !p) throw invalid()
-  const digest = typeof p.nonce === 'string' ? b64urlDecode(p.nonce) : null
+  if (segments.length !== 3 || segments.includes('')) throw invalid()
+  const [headerB64, payloadB64, signatureB64] = segments
+  const payload = b64urlDecode(payloadB64)
+  const signature = b64urlDecode(signatureB64)
+  const p = json(payload)
+  const kid = rs256Kid(json(b64urlDecode(headerB64)))
+  if (!kid || !p || !payload || !signature) throw invalid()
+  const nonce = typeof p.nonce === 'string' ? p.nonce : ''
+  const digest = b64urlDecode(nonce)
   if (
     p.iss !== provider.issuer ||
     p.aud !== clientId ||
@@ -53,8 +56,12 @@ export function acceptTelegramIdToken(idToken: string, clientId: string): Telegr
   if (!isHandle(PLATFORM_TELEGRAM_KEY, preferred_username)) throw invalid()
   return {
     kid,
+    headerB64,
+    payloadB64,
+    payload,
+    signature,
+    claims: { aud: clientId, iat, id, preferred_username, nonce },
     authorizationDigest: digest,
-    claims: { aud: clientId, iat, id, preferred_username },
   }
 }
 

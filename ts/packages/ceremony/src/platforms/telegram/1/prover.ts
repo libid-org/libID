@@ -7,7 +7,6 @@ import {
 } from '../../../barretenberg/circuits/oidc_telegram/oidc_telegram.assets.js'
 import { ProofEngine } from '../../../barretenberg/engine.js'
 import { operation } from '../../../events.js'
-import { b64urlDecode } from '../../../primitives.js'
 import type { ProverContext } from '../../context.js'
 import { rs256Modulus } from '../../oidc.js'
 import type { Identity } from '../../validation.js'
@@ -39,11 +38,8 @@ export async function prove(context: ProverContext<'telegram'>) {
       fetchSigningKey(redirectUri, token.kid, signal),
     )
     const { inputs, modulus } = await operation(emit, 'circuit-inputs', () => {
-      const modulus = rs256Modulus(key, b64urlDecode(idToken.split('.')[2]))
-      return {
-        inputs: buildOidcTelegramInputs(idToken, modulus, token.authorizationDigest),
-        modulus,
-      }
+      const modulus = rs256Modulus(key, token.signature)
+      return { inputs: buildOidcTelegramInputs(token, modulus), modulus }
     })
     const raw = await engine.prove(inputs, signal)
     const proof = {
