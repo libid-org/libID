@@ -1,7 +1,4 @@
-import {
-  RSA_EXPONENT_BASE64URL,
-  RSA_MODULUS_BYTES,
-} from '../barretenberg/circuits/oidc_google/parameters.js'
+import { RSA_EXPONENT_BASE64URL, RSA_MODULUS_BYTES } from '../barretenberg/circuits/oidc.js'
 import { b64urlDecode, isRecord } from '../primitives.js'
 import { fetchPublicJson } from '../response.js'
 

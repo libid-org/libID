@@ -1,11 +1,10 @@
-import { buildOidcGooglePublicInputs } from '../barretenberg/circuits/oidc_google/inputs.js'
-import { RSA_MODULUS_BYTES } from '../barretenberg/circuits/oidc_google/parameters.js'
+import { buildOidcPublicInputs, RSA_MODULUS_BYTES } from '../barretenberg/circuits/oidc.js'
 import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../barretenberg/parameters.js'
 import { identityNodes, isAccountId, isHandle } from '../identity.js'
 import { isFixedBytes, isUint, type Predicates, recordValidator } from '../primitives.js'
 import { type Identity, identityValidator, isProofBytes } from './validation.js'
 
-/** A proof in oidc_google's public-input layout; `T` names the signed time it binds. */
+/** A proof in the OIDC circuits' public-input layout; `T` names the signed time it binds. */
 export type OidcProof<T extends string> = {
   identityProof: Uint8Array
   /** Exact circuit fields: lowercase, 0x-prefixed, 32-byte hex values. */
@@ -17,7 +16,7 @@ export type OidcProof<T extends string> = {
 export const isAudience = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length <= max && /^[\x20-\x21\x23-\x7e]+$/.test(value)
 
-/** Identity and proof checks for one platform's oidc_google-layout circuit. */
+/** Identity and proof checks for one platform's OIDC circuit. */
 export function oidcValidation<P extends string, T extends string>(options: {
   platform: P
   name: string
@@ -53,7 +52,7 @@ export function oidcValidation<P extends string, T extends string>(options: {
     identity: Identity<P>,
     proof: Bound,
   ): string[] =>
-    buildOidcGooglePublicInputs({
+    buildOidcPublicInputs({
       authorizationDigest,
       audience: identity.oauthClientId,
       ...identityNodes(identity),

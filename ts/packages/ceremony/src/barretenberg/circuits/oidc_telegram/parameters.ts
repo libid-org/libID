@@ -1,5 +1,5 @@
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
-import { NUM_LIMBS } from '../oidc_google/parameters.js'
+import { NUM_LIMBS } from '../oidc.js'
 
 /** Fixed oidc_telegram ABI of libid-circuits' circuits/oidc-telegram/src/main.nr. */
 export const MAX_SIGNING_INPUT_BYTES = 2688

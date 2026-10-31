@@ -1,10 +1,9 @@
 import { PLATFORM_TELEGRAM_KEY } from '@libid/contracts/platforms'
-import { sha256 } from '@noble/hashes/sha2.js'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 import { identityNodes } from '../../../identity.js'
 import { b64urlDecode, b64urlEncode, isRecord, isUint } from '../../../primitives.js'
 import { bytesToBigInt, halves } from '../../parameters.js'
-import { findOffset, hex, limbs, pad, redc } from '../oidc_google/inputs.js'
+import { audienceHash, findOffset, hex, limbs, pad, redc } from '../oidc.js'
 import {
   ISSUER_CLAIM,
   MAX_AUD_BYTES,
@@ -107,7 +106,7 @@ export function buildOidcTelegramInputs(
     signature: limbs(bytesToBigInt(signature)).map(hex),
     redc: redc(modulusInteger).map(hex),
     authorization_digest: Array.from(authorizationDigest),
-    audience_hash: halves(sha256(audience)).map(hex),
+    audience_hash: audienceHash(audience).map(hex),
     id_node: halves(nodes.idNode).map(hex),
     handle_node: halves(nodes.handleNode).map(hex),
     iat: String(iat),
