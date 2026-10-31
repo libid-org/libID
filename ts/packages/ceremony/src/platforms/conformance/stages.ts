@@ -39,7 +39,7 @@ import type { ReturnRules } from '../oauthReturn.js'
 import { assetsByPlatform, circuits } from '../platforms.assets.js'
 import type { ProverModule } from '../provers.js'
 import type { PlatformFixture } from './fixtures.js'
-import { engine, generate, notarization, prepare } from './mocks.js'
+import { destroy, engine, generate, notarization, prepare } from './mocks.js'
 
 /** A PKCE value of the specification's exact 43 base64url characters (REQ-COMMON-12). */
 export const PKCE_VALUE = 'A'.repeat(43)
@@ -70,12 +70,12 @@ export function thrown(run: () => unknown): unknown {
   throw new Error('Expected a failure')
 }
 
-/** Nothing past return admission ran: no network, notary session or proof engine. */
+/** Nothing past evidence acceptance ran: no `fetch`, notary session or proof; any engine is destroyed. */
 export function expectNoProvingWork(fetch: unknown = globalThis.fetch) {
   expect(fetch).not.toHaveBeenCalled()
   expect(notarization).not.toHaveBeenCalled()
   expect(prepare).not.toHaveBeenCalled()
-  expect(engine).not.toHaveBeenCalled()
+  expect(destroy).toHaveBeenCalledTimes(engine.mock.calls.length)
   expect(generate).not.toHaveBeenCalled()
 }
 

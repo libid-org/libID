@@ -18,23 +18,23 @@ import { isTelegramPublicInputs } from './validation.js'
 export async function prove(context: ProverContext<'telegram'>) {
   const { signal, emit, request, codeVerifier } = context
   const { redirectUri } = request
-  const idToken = await operation(emit, 'token-swap', () =>
-    swapCode({ code: context.credential, codeVerifier, redirectUri }, signal),
-  )
-  const token = acceptTelegramIdToken(idToken, request.clientId)
-  const { aud, iat, id, preferred_username } = token.claims
-  const identity: Identity<'telegram'> = {
-    platformId: PLATFORM_TELEGRAM_KEY,
-    oauthClientId: aud,
-    userId: id,
-    userName: preferred_username,
-  }
   const engine = new ProofEngine({
     circuitUrl: assetUrl(circuit),
     verificationKeyUrl: assetUrl(verificationKey),
     emit,
   })
   try {
+    const idToken = await operation(emit, 'token-swap', () =>
+      swapCode({ code: context.credential, codeVerifier, redirectUri }, signal),
+    )
+    const token = acceptTelegramIdToken(idToken, request.clientId)
+    const { aud, iat, id, preferred_username } = token.claims
+    const identity: Identity<'telegram'> = {
+      platformId: PLATFORM_TELEGRAM_KEY,
+      oauthClientId: aud,
+      userId: id,
+      userName: preferred_username,
+    }
     const key = await operation(emit, 'signing-key-fetch', () =>
       fetchSigningKey(redirectUri, token.kid, signal),
     )

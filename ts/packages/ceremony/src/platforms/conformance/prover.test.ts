@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fixtures } from '../../testing/index.js'
 import { AUTHORIZATION_NONCE_BYTES } from '../authorization.js'
 import { assembleResult, supportedPlatforms } from '../index.js'
-import { destroy, engine, generate } from './mocks.js'
+import { destroy, generate } from './mocks.js'
 import {
   type EngineInputChange,
   engineInputChanges,
@@ -96,7 +96,6 @@ describe.each(supportedPlatforms)('%s prove() contract', (platformId) => {
     await expect(pending).rejects.toThrow('Closed during startup')
     staged.untouched()
     expect(generate).not.toHaveBeenCalled()
-    if ('engineAfterTokenFetch' in fixture) expect(engine).not.toHaveBeenCalled()
-    else expect(destroy).toHaveBeenCalledOnce()
+    expect(destroy).toHaveBeenCalledOnce()
   })
 })
