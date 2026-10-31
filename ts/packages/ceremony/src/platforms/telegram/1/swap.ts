@@ -32,10 +32,10 @@ export async function swapCode(
     body: JSON.stringify(input),
     signal,
   })
-  if (!response.ok) throw new CeremonyError('token-fetch', 'Telegram token request failed')
+  if (!response.ok) throw new CeremonyError('token-swap', 'Telegram token request failed')
   // Telegram answers token errors with HTTP 200 and an `error` field.
   const body = await readJson(response, MAX_TOKEN_RESPONSE_BYTES)
   if (!isRecord(body) || 'error' in body || typeof body.id_token !== 'string' || !body.id_token)
-    throw new CeremonyError('token-fetch', 'Telegram returned no ID token')
+    throw new CeremonyError('token-swap', 'Telegram returned no ID token')
   return body.id_token
 }

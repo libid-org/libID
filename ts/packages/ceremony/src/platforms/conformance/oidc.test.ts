@@ -45,7 +45,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
         ...(change.message === undefined ? {} : { message: change.message }),
       })
       if (change.rejectedAt === 'authorization') expectNoProvingWork(staged.keys)
-      if (change.rejectedAt === 'token-fetch') expect(staged.keys).not.toHaveBeenCalled()
+      if (change.rejectedAt === 'token-swap') expect(staged.keys).not.toHaveBeenCalled()
       expect(generate).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
     },

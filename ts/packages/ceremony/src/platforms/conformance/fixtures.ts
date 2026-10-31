@@ -83,7 +83,7 @@ interface Entry<P extends PlatformId> {
   rejectedProof: { [K in keyof Proof<P>]-?: readonly unknown[] }
   /** Weighted operations the prover adds to the proof engine's own. */
   operations: readonly string[]
-  /** The token arrives from a `token-fetch`, and the proof engine starts only once it is accepted. */
+  /** The token arrives from a `token-swap`, and the proof engine starts only once it is accepted. */
   engineAfterTokenFetch?: true
   /** Normative platform test IDs, as title tags, that each conformance section covers here. */
   specTests: { identity: string; returns: string; issuer: string; prover: string }
@@ -150,7 +150,7 @@ export interface EvidenceChange {
   /** The Bridge's answer to a code swap, in place of the ID token. */
   swap?: () => Response
   /** `authorization` rejects before any key fetch or engine start. */
-  rejectedAt: 'token-fetch' | 'authorization' | 'signing-key-fetch' | 'circuit-inputs'
+  rejectedAt: 'token-swap' | 'authorization' | 'signing-key-fetch' | 'circuit-inputs'
   /** The refusal's text, where the prover names its cause. */
   message?: string
 }
@@ -813,7 +813,7 @@ export const fixtures = {
       signingKeyModulus: [telegramModulus.slice(1), new Uint8Array(257)],
       publicInputs: publicInputViolations(telegramPublicInputs),
     },
-    operations: ['token-fetch', 'signing-key-fetch'],
+    operations: ['token-swap', 'signing-key-fetch'],
     engineAfterTokenFetch: true,
     specTests: {
       identity: '[REQ-PLAT-66]',
@@ -849,17 +849,17 @@ export const fixtures = {
     rejectedEvidence: {
       'a Bridge error answered with 200': {
         swap: () => Response.json({ error: 'invalid_grant' }),
-        rejectedAt: 'token-fetch',
+        rejectedAt: 'token-swap',
       },
       'a Bridge HTTP failure': {
         swap: () => new Response(null, { status: 502 }),
-        rejectedAt: 'token-fetch',
+        rejectedAt: 'token-swap',
       },
       'a Bridge network failure': {
         swap: () => {
           throw new TypeError('Failed to fetch')
         },
-        rejectedAt: 'token-fetch',
+        rejectedAt: 'token-swap',
       },
       'a non-RS256 algorithm [REQ-PLAT-64]': {
         idToken: (idToken) =>

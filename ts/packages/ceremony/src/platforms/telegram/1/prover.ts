@@ -18,7 +18,7 @@ import { isTelegramPublicInputs } from './validation.js'
 export async function prove(context: ProverContext<'telegram'>) {
   const { signal, emit, request, codeVerifier } = context
   const { redirectUri } = request
-  const idToken = await operation(emit, 'token-fetch', () =>
+  const idToken = await operation(emit, 'token-swap', () =>
     swapCode({ code: context.credential, codeVerifier, redirectUri }, signal),
   )
   const token = acceptTelegramIdToken(idToken, request.clientId)
