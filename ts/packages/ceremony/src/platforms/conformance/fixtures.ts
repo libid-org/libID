@@ -139,6 +139,8 @@ export interface OidcFixture<P extends PlatformId> extends Entry<P> {
   rejectedBinding: Record<string, (claim: Claim<P>) => Claim<P>>
   /** Token or published-key rewrites the prover rejects before proving; tags follow the name. */
   rejectedEvidence: Record<string, EvidenceChange>
+  /** The engine starts before the token arrives from the Bridge, so a refused token destroys it. */
+  engineBeforeToken?: true
 }
 
 /** A rewrite of the signed token, the published signing key, or both, and the operation that rejects it. */
@@ -843,6 +845,7 @@ export const fixtures = {
         keysUrl: 'https://bridge.test/api/v1/ceremony/telegram/jwks',
       },
     },
+    engineBeforeToken: true,
     rejectedEvidence: {
       'a Bridge error answered with 200': {
         swap: () => Response.json({ error: 'invalid_grant' }),

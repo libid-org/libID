@@ -70,12 +70,16 @@ export function thrown(run: () => unknown): unknown {
   throw new Error('Expected a failure')
 }
 
-/** Nothing past evidence acceptance ran: no `fetch`, notary session or proof; any engine is destroyed. */
-export function expectNoProvingWork(fetch: unknown = globalThis.fetch) {
+/**
+ * Nothing past evidence acceptance ran: no `fetch`, notary session or proof. An engine started
+ * before the evidence arrived is destroyed; otherwise none started.
+ */
+export function expectNoProvingWork(fetch: unknown = globalThis.fetch, engineStarted = false) {
   expect(fetch).not.toHaveBeenCalled()
   expect(notarization).not.toHaveBeenCalled()
   expect(prepare).not.toHaveBeenCalled()
-  expect(destroy).toHaveBeenCalledTimes(engine.mock.calls.length)
+  expect(engine).toHaveBeenCalledTimes(engineStarted ? 1 : 0)
+  expect(destroy).toHaveBeenCalledTimes(engineStarted ? 1 : 0)
   expect(generate).not.toHaveBeenCalled()
 }
 

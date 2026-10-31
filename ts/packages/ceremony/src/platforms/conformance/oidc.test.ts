@@ -44,7 +44,8 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
         event: change.rejectedAt,
         ...(change.message === undefined ? {} : { message: change.message }),
       })
-      if (change.rejectedAt === 'authorization') expectNoProvingWork(staged.keys)
+      if (change.rejectedAt === 'authorization')
+        expectNoProvingWork(staged.keys, 'engineBeforeToken' in fixture)
       if (change.rejectedAt === 'token-swap') expect(staged.keys).not.toHaveBeenCalled()
       expect(generate).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
@@ -109,7 +110,8 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject(
         oidcFailures[outcome],
       )
-      if (beforeProving.includes(outcome)) expectNoProvingWork(staged.keys)
+      if (beforeProving.includes(outcome))
+        expectNoProvingWork(staged.keys, 'engineBeforeToken' in fixture)
       else expect(destroy).toHaveBeenCalledOnce()
       expect(generate).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
