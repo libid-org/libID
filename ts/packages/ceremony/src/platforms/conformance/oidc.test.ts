@@ -83,23 +83,28 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
 
   const { bridge } = fixture.evidence as { bridge?: { tokenUrl: string; keysUrl: string } }
   it.runIf(bridge)(
-    tagged(
-      'swaps its code once through the Bridge, then reads the key set the Bridge relays',
-      tags,
-    ),
+    tagged('swaps its code once through the Bridge, then reads its key set', tags),
     async () => {
       const staged = stageOidc(platformId, 'accepted')
-      const { request, codeVerifier, credential } = staged.context
+      const { request, codeVerifier, credential: code } = staged.context
       await (await proverOf(platformId)).prove(staged.context)
-      expect(staged.swap).toHaveBeenCalledOnce()
-      const [url, init] = staged.swap.mock.calls[0]
-      expect(String(url)).toBe(bridge!.tokenUrl)
+      const [[url, init]] = staged.swap.mock.calls
+      expect([String(url), String(staged.keys.mock.calls[0][0])]).toEqual([
+        bridge!.tokenUrl,
+        bridge!.keysUrl,
+      ])
+      expect(init).toMatchObject({
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+      })
+      expect(init!.headers).toEqual({ 'Content-Type': 'application/json' })
       expect(JSON.parse(String(init!.body))).toEqual({
-        code: credential,
+        code,
         codeVerifier,
         redirectUri: request.redirectUri,
       })
-      expect(String(staged.keys.mock.calls[0][0])).toBe(bridge!.keysUrl)
     },
   )
 

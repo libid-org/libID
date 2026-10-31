@@ -148,7 +148,7 @@ export interface EvidenceChange {
   idToken?: (idToken: string) => string
   jwk?: (jwk: Record<string, string>) => Record<string, string>
   /** The Bridge's answer to a code swap, in place of the ID token. */
-  swap?: () => Response
+  swap?: () => Response | Promise<Response>
   /** `authorization` rejects before any key fetch or engine start. */
   rejectedAt: 'token-swap' | 'authorization' | 'signing-key-fetch' | 'circuit-inputs'
   /** The refusal's text, where the prover names its cause. */
@@ -278,27 +278,65 @@ export const telegramV1 = oidcFixture('../telegram/1/telegram-v1.fixture.json')
 
 const telegramIat = 1893452400
 
+const noUsername = 'Set a Telegram username, then try again'
+
 const telegramModulus = b64urlDecode(telegramV1.jwk.n)!
 
-/** A Telegram token claiming `change`, refused before the key fetch. */
-const telegramClaims = (change: Record<string, unknown>, message?: string): EvidenceChange => ({
-  idToken: (idToken) => jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), ...change } }),
+/** A token rewritten by `change`, refused before the key fetch. */
+const rewrite = (change: (idToken: string) => string, message?: string): EvidenceChange => ({
+  idToken: change,
   rejectedAt: 'authorization',
   ...(message === undefined ? {} : { message }),
 })
 
+/** A token claiming `change`, refused before the key fetch. */
+const claiming = (change: Record<string, unknown>, message?: string) =>
+  rewrite((t) => jwtWith(t, { payload: { ...jwtPart(t, 1), ...change } }), message)
+
+/** A token with segment `index` replaced by `value`. */
+const segment = (index: number, value: string) =>
+  rewrite((t) => Object.assign(t.split('.'), { [index]: value }).join('.'))
+
+/** A Bridge swap answered by `answer`. */
+const swapAnswer = (answer: () => Response | Promise<Response>): EvidenceChange => ({
+  swap: answer,
+  rejectedAt: 'token-swap',
+})
+
+/** A Bridge swap answered with `body` as JSON. */
+const swapBody = (body: unknown) => swapAnswer(() => Response.json(body))
+
+/** RS256 token and key rewrites every OIDC prover refuses. */
+const rs256Evidence: Record<string, EvidenceChange> = {
+  'a non-RS256 algorithm': rewrite((t) =>
+    jwtWith(t, { header: { ...jwtPart(t, 0), alg: 'HS256' } }),
+  ),
+  'a missing key ID': rewrite((t) => jwtWith(t, { header: { alg: 'RS256' } })),
+  'a short signature': {
+    idToken: (idToken) => jwtWith(idToken, { signature: new Uint8Array(255) }),
+    rejectedAt: 'circuit-inputs',
+  },
+  'a non-65537 exponent': { jwk: (jwk) => ({ ...jwk, e: 'Aw' }), rejectedAt: 'circuit-inputs' },
+  'a short modulus': {
+    jwk: (jwk) => ({ ...jwk, n: b64urlEncode(new Uint8Array(255).fill(0xff)) }),
+    rejectedAt: 'circuit-inputs',
+  },
+}
+
 /** A claim whose public inputs are rewritten by `change`. */
 const withInputs =
   (change: (fields: string[]) => string[]) =>
-  <I, F extends { publicInputs: readonly string[] }>({
-    identity,
-    proof,
-  }: {
-    identity: I
-    proof: F
-  }) => ({
-    identity,
-    proof: { ...proof, publicInputs: change([...proof.publicInputs]) },
+  <C extends { proof: { publicInputs: readonly string[] } }>(claim: C): C => ({
+    ...claim,
+    proof: { ...claim.proof, publicInputs: change([...claim.proof.publicInputs]) },
+  })
+
+/** A claim whose identity is rewritten by `change`. */
+const withIdentity =
+  (change: (identity: { userId: string }) => object) =>
+  <C extends { identity: { userId: string } }>(claim: C): C => ({
+    ...claim,
+    identity: { ...claim.identity, ...change(claim.identity) },
   })
 
 /** The public input at `index` with its low bit flipped. */
@@ -316,21 +354,14 @@ const payloadText = (idToken: string, change: (json: string) => string) =>
   jwtWith(idToken, { payload: change(decoder.decode(b64urlDecode(idToken.split('.')[1])!)) })
 
 /** A token claiming `exp` as given. */
-const expiry = (exp: unknown): EvidenceChange => ({
-  idToken: (idToken) => jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), exp } }),
-  rejectedAt: 'authorization',
-})
+const expiry = (exp: unknown) => claiming({ exp })
 
 /** How the runtime refuses identifiers the circuit cannot hold, before the key fetch. */
 const circuitRefusal =
   'Google account identifiers exceed the lengths or characters the circuit supports'
 
 /** A token claiming `sub` as given, refused with `message`. */
-const subject = (sub: string, message = circuitRefusal): EvidenceChange => ({
-  idToken: (idToken) => jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), sub } }),
-  rejectedAt: 'authorization',
-  message,
-})
+const subject = (sub: string, message = circuitRefusal) => claiming({ sub }, message)
 
 /** `field` with its low bit flipped: still canonical, but a different value. */
 const flipped = (field: string) => `0x${(BigInt(field) ^ 1n).toString(16).padStart(64, '0')}`
@@ -355,6 +386,31 @@ const publicInputViolations = (fields: readonly string[]) => [
 
 /** One byte past the delivered proof bound. */
 const oversizedProof = new Uint8Array(4 * 1024 * 1024 + 1)
+
+/** Out-of-bound OIDC proof fields, beside the signed time field's. */
+const oidcRejectedProof = (modulus: Uint8Array, publicInputs: readonly string[]) => ({
+  identityProof: [new Uint8Array(), oversizedProof],
+  signingKeyModulus: [modulus.slice(1), new Uint8Array(257)],
+  publicInputs: publicInputViolations(publicInputs),
+})
+
+const unsafeTimes = [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]
+
+/** Another authorization, client, account, handle or key, or the id node's halves reordered. */
+const oidcBinding = (oauthClientId: string, userName: string) => ({
+  'authorization digest': flippedInput(0),
+  audience: withIdentity(() => ({ oauthClientId })),
+  'user ID': withIdentity(({ userId }) => ({ userId: `${userId}0` })),
+  handle: withIdentity(() => ({ userName })),
+  'signing-key modulus': <C extends { proof: { signingKeyModulus: Uint8Array } }>(claim: C): C => ({
+    ...claim,
+    proof: {
+      ...claim.proof,
+      signingKeyModulus: claim.proof.signingKeyModulus.map((b, i) => (i ? b : b ^ 1)),
+    },
+  }),
+  'public-input order': swappedIdNode,
+})
 
 const bearer = 'fixture_BEARER-123'
 
@@ -432,6 +488,21 @@ const codeReturns =
     },
   })
 
+/** A code-flow request with S256 PKCE and, where `nonce`, the digest as its nonce. */
+const codeRequest = (url: string, scope: string, nonce = false) => ({
+  url,
+  fields: (input: AuthorizationRequestInput): [string, string][] => [
+    ['response_type', 'code'],
+    ['client_id', input.clientId],
+    ['redirect_uri', input.redirectUri],
+    ['scope', scope],
+    ['state', input.state],
+    ...(nonce ? [['nonce', b64urlEncode(input.authorizationDigest)] as [string, string]] : []),
+    ['code_challenge', String(input.codeChallenge)],
+    ['code_challenge_method', 'S256'],
+  ],
+})
+
 export const fixtures = {
   google: {
     proverKind: 'oidc',
@@ -474,10 +545,8 @@ export const fixtures = {
     expiresAt: jwtPart(googleV1.idToken, 1).exp as number,
     validation: googleValidation,
     rejectedProof: {
-      identityProof: [new Uint8Array(), oversizedProof],
-      tokenExpiresAt: [-1, 1.5, Number.MAX_SAFE_INTEGER + 1],
-      signingKeyModulus: [googleModulus.slice(1), new Uint8Array(257)],
-      publicInputs: publicInputViolations(googlePublicInputs),
+      ...oidcRejectedProof(googleModulus, googlePublicInputs),
+      tokenExpiresAt: unsafeTimes,
     },
     operations: ['signing-key-fetch'],
     specTests: {
@@ -517,32 +586,12 @@ export const fixtures = {
       minimalJwk: minimalJwk(googleV1.jwk),
     },
     rejectedEvidence: {
-      'a non-RS256 algorithm': {
-        idToken: (idToken) =>
-          jwtWith(idToken, { header: { ...jwtPart(idToken, 0), alg: 'ES256' } }),
-        rejectedAt: 'authorization',
-      },
-      'a missing key ID': {
-        idToken: (idToken) => jwtWith(idToken, { header: { alg: 'RS256' } }),
-        rejectedAt: 'authorization',
-      },
-      'an email beyond the circuit width': {
-        idToken: (idToken) =>
-          jwtWith(idToken, {
-            payload: { ...jwtPart(idToken, 1), email: `${'a'.repeat(53)}@gmail.com` },
-          }),
-        rejectedAt: 'authorization',
-        message: circuitRefusal,
-      },
-      'a nonce of the wrong width': {
-        idToken: (idToken) =>
-          jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), nonce: 'AA' } }),
-        rejectedAt: 'circuit-inputs',
-      },
-      'a short signature': {
-        idToken: (idToken) => jwtWith(idToken, { signature: new Uint8Array(255) }),
-        rejectedAt: 'circuit-inputs',
-      },
+      ...rs256Evidence,
+      'an email beyond the circuit width': claiming(
+        { email: `${'a'.repeat(53)}@gmail.com` },
+        circuitRefusal,
+      ),
+      'a nonce of the wrong width': { ...claiming({ nonce: 'AA' }), rejectedAt: 'circuit-inputs' },
       'a noncanonical claim spelling': {
         idToken: (idToken) =>
           payloadText(idToken, (json) => json.replace('"email":"', '"email": "')),
@@ -554,11 +603,7 @@ export const fixtures = {
         rejectedAt: 'circuit-inputs',
       },
       // The circuit discloses the email as the user name, so an unverified one never proves.
-      'an unverified email': {
-        idToken: (idToken) =>
-          jwtWith(idToken, { payload: { ...jwtPart(idToken, 1), email_verified: false } }),
-        rejectedAt: 'authorization',
-      },
+      'an unverified email': claiming({ email_verified: false }),
       // Only the id node leaves the circuit, which rejects these; the runtime refuses them first.
       'an empty sub': subject('', 'invalid Google ID token'),
       'a quote in the sub [REQ-PLAT-16C]': subject('a"b'),
@@ -570,36 +615,13 @@ export const fixtures = {
       'a negative expiry [TEST-COMMON-12]': expiry(-1),
       'an unrepresentable expiry [TEST-COMMON-12]': expiry(2 ** 64),
       'a string expiry [TEST-COMMON-12]': expiry('1725001000'),
-      'a non-65537 exponent': { jwk: (jwk) => ({ ...jwk, e: 'Aw' }), rejectedAt: 'circuit-inputs' },
-      'a short modulus': {
-        jwk: (jwk) => ({ ...jwk, n: b64urlEncode(new Uint8Array(255).fill(0xff)) }),
-        rejectedAt: 'circuit-inputs',
-      },
     },
     rejectedBinding: {
-      'authorization digest': flippedInput(0),
-      audience: ({ identity, proof }) => ({
-        identity: { ...identity, oauthClientId: 'other' },
-        proof,
-      }),
-      'user ID': ({ identity, proof }) => ({
-        identity: { ...identity, userId: `${identity.userId}0` },
-        proof,
-      }),
-      email: ({ identity, proof }) => ({
-        identity: { ...identity, userName: 'b@example.com' },
-        proof,
-      }),
+      ...oidcBinding('other', 'b@example.com'),
       'token expiry': ({ identity, proof }) => ({
         identity,
         proof: { ...proof, tokenExpiresAt: proof.tokenExpiresAt + 1 },
       }),
-      'signing-key modulus': ({ identity, proof }) => {
-        const signingKeyModulus = proof.signingKeyModulus.slice()
-        signingKeyModulus[0] ^= 1
-        return { identity, proof: { ...proof, signingKeyModulus } }
-      },
-      'public-input order': swappedIdNode,
     },
   },
   x: {
@@ -634,18 +656,7 @@ export const fixtures = {
     rejectedProof: notarizedRejectedProof,
     operations: notarizedOperations,
     specTests: { ...notarizedSpecTests, issuer: '[TEST-PLAT-18]' },
-    authorizationRequest: {
-      url: 'https://x.com/i/oauth2/authorize',
-      fields: (input) => [
-        ['response_type', 'code'],
-        ['client_id', input.clientId],
-        ['redirect_uri', input.redirectUri],
-        ['scope', 'tweet.read users.read'],
-        ['state', input.state],
-        ['code_challenge', String(input.codeChallenge)],
-        ['code_challenge_method', 'S256'],
-      ],
-    },
+    authorizationRequest: codeRequest('https://x.com/i/oauth2/authorize', 'tweet.read users.read'),
     returns: codeReturns(),
     prover: () => import('../x/1/prover.js'),
     requests: { token: xToken, identity: xIdentity },
@@ -808,10 +819,8 @@ export const fixtures = {
     expiresAt: 1893456000,
     validation: telegramValidation,
     rejectedProof: {
-      identityProof: [new Uint8Array(), oversizedProof],
-      tokenIssuedAt: [-1, 1.5, Number.MAX_SAFE_INTEGER + 1],
-      signingKeyModulus: [telegramModulus.slice(1), new Uint8Array(257)],
-      publicInputs: publicInputViolations(telegramPublicInputs),
+      ...oidcRejectedProof(telegramModulus, telegramPublicInputs),
+      tokenIssuedAt: unsafeTimes,
     },
     operations: ['token-swap', 'signing-key-fetch'],
     specTests: {
@@ -820,19 +829,7 @@ export const fixtures = {
       issuer: '[TEST-PLAT-23]',
       prover: '[REQ-PLAT-64]',
     },
-    authorizationRequest: {
-      url: 'https://oauth.telegram.org/auth',
-      fields: (input) => [
-        ['response_type', 'code'],
-        ['client_id', input.clientId],
-        ['redirect_uri', input.redirectUri],
-        ['scope', 'openid profile'],
-        ['state', input.state],
-        ['nonce', b64urlEncode(input.authorizationDigest)],
-        ['code_challenge', String(input.codeChallenge)],
-        ['code_challenge_method', 'S256'],
-      ],
-    },
+    authorizationRequest: codeRequest('https://oauth.telegram.org/auth', 'openid profile', true),
     returns: codeReturns(),
     prover: () => import('../telegram/1/prover.js'),
     evidence: {
@@ -847,61 +844,56 @@ export const fixtures = {
     },
     engineBeforeToken: true,
     rejectedEvidence: {
-      'a Bridge error answered with 200': {
-        swap: () => Response.json({ error: 'invalid_grant' }),
-        rejectedAt: 'token-swap',
-      },
-      'a Bridge HTTP failure': {
-        swap: () => new Response(null, { status: 502 }),
-        rejectedAt: 'token-swap',
-      },
-      'a Bridge network failure': {
-        swap: () => {
-          throw new TypeError('Failed to fetch')
-        },
-        rejectedAt: 'token-swap',
-      },
-      'a non-RS256 algorithm [REQ-PLAT-64]': {
-        idToken: (idToken) =>
-          jwtWith(idToken, { header: { ...jwtPart(idToken, 0), alg: 'HS256' } }),
-        rejectedAt: 'authorization',
-      },
-      'another issuer [REQ-PLAT-64]': telegramClaims({ iss: 'https://oauth.telegram.org/' }),
-      'another audience [REQ-PLAT-64]': telegramClaims({ aud: '7000000002' }),
-      'an iat over 5 minutes ahead [REQ-PLAT-64]': telegramClaims({ iat: telegramIat + 301 }),
-      'no username [REQ-PLAT-66]': telegramClaims(
-        { preferred_username: undefined },
-        'Set a Telegram username, then try again',
+      'a Bridge error answered with 200': swapBody({ error: 'invalid_grant' }),
+      'a Bridge error beside a token': swapBody({ error: 'x', id_token: 'h.p.s' }),
+      'a Bridge answer without an ID token': swapBody({ access_token: 'a' }),
+      'an empty ID token': swapBody({ id_token: '' }),
+      'a non-string ID token': swapBody({ id_token: 1 }),
+      'a Bridge answer over 64 KiB': swapBody({ id_token: 'h'.repeat(65536) }),
+      'a non-JSON Bridge answer': swapAnswer(() => new Response('<html>')),
+      'a Bridge HTTP failure': swapAnswer(() => new Response(null, { status: 502 })),
+      'a Bridge network failure': swapAnswer(() =>
+        Promise.reject(new TypeError('Failed to fetch')),
       ),
+      ...rs256Evidence,
+      'an empty key ID [REQ-PLAT-64]': rewrite((t) =>
+        jwtWith(t, { header: { alg: 'RS256', kid: '' } }),
+      ),
+      'two segments': rewrite((t) => t.split('.').slice(0, 2).join('.')),
+      'an empty signature': segment(2, ''),
+      'a non-base64url signature': segment(2, 'a+b'),
+      'a non-UTF-8 payload': segment(1, b64urlEncode(Uint8Array.of(0xff))),
+      'a non-JSON payload': segment(1, 'bm90IGpzb24'),
+      'another issuer [REQ-PLAT-64]': claiming({ iss: 'https://oauth.telegram.org/' }),
+      'another audience [REQ-PLAT-64]': claiming({ aud: '7000000002' }),
+      'an audience array': claiming({ aud: ['7000000001'] }),
+      'an iat over 5 minutes ahead [REQ-PLAT-64]': claiming({ iat: telegramIat + 301 }),
+      'no iat': claiming({ iat: undefined }),
+      'no nonce': claiming({ nonce: undefined }),
+      'a 31-byte nonce': claiming({ nonce: b64urlEncode(telegramV1.authorizationDigest.slice(1)) }),
+      'a 33-byte nonce': claiming({ nonce: b64urlEncode(new Uint8Array(33)) }),
+      'a padded nonce': claiming({ nonce: `${b64urlEncode(telegramV1.authorizationDigest)}=` }),
+      'no username [REQ-PLAT-66]': claiming({ preferred_username: undefined }, noUsername),
+      'an empty username [REQ-PLAT-66]': claiming({ preferred_username: '' }, noUsername),
       // The identity table's rules, checked before the key fetch.
-      'a 33-byte username': telegramClaims({ preferred_username: 'a'.repeat(33) }),
-      'a backslash in the username': telegramClaims({ preferred_username: 'a\\b' }),
-      'a 21-digit id': telegramClaims({ id: '1'.repeat(21) }),
-      'a short signature': {
-        idToken: (idToken) => jwtWith(idToken, { signature: new Uint8Array(255) }),
-        rejectedAt: 'circuit-inputs',
-      },
-      'a non-65537 exponent': { jwk: (jwk) => ({ ...jwk, e: 'Aw' }), rejectedAt: 'circuit-inputs' },
+      'a 33-byte username': claiming({ preferred_username: 'a'.repeat(33) }),
+      'a backslash in the username': claiming({ preferred_username: 'a\\b' }),
+      'a quote in the username': claiming({ preferred_username: 'a"b' }),
+      'no id': claiming({ id: undefined }),
+      'a numeric id': claiming({ id: 7051836294 }),
+      ...Object.fromEntries(
+        ['', '-1', '42a', '1'.repeat(21)].map((id) => [`id ${id}`, claiming({ id })]),
+      ),
     },
     rejectedBinding: {
-      'authorization digest': flippedInput(0),
-      audience: ({ identity, proof }) => ({
-        identity: { ...identity, oauthClientId: '7000000002' },
-        proof,
-      }),
-      'user ID': ({ identity, proof }) => ({
-        identity: { ...identity, userId: `${identity.userId}0` },
-        proof,
-      }),
-      handle: ({ identity, proof }) => ({ identity: { ...identity, userName: 'Bob_TG' }, proof }),
-      'handle node': flippedInput(36),
+      ...oidcBinding('7000000002', 'Bob_TG'),
       iat: ({ identity, proof }) => ({
         identity,
         proof: { ...proof, tokenIssuedAt: proof.tokenIssuedAt + 1 },
       }),
+      'handle node': flippedInput(36),
       'iat field': flippedInput(38),
-      'signing-key modulus': flippedInput(39),
-      'public-input order': swappedIdNode,
+      'modulus field': flippedInput(39),
     },
   },
 } satisfies { [P in PlatformId]: PlatformFixture<P> }

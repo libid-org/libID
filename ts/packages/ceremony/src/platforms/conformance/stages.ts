@@ -38,7 +38,7 @@ import type { PlatformId } from '../index.js'
 import type { ReturnRules } from '../oauthReturn.js'
 import { assetsByPlatform, circuits } from '../platforms.assets.js'
 import type { ProverModule } from '../provers.js'
-import type { PlatformFixture } from './fixtures.js'
+import type { EvidenceChange, PlatformFixture } from './fixtures.js'
 import { destroy, engine, generate, notarization, prepare } from './mocks.js'
 
 /** A PKCE value of the specification's exact 43 base64url characters (REQ-COMMON-12). */
@@ -492,7 +492,7 @@ export function publishKeys(published: object[]) {
 export function stageOidc(
   platformId: OidcPlatform,
   outcome: OidcOutcome,
-  change: { idToken?: string; jwk?: Record<string, string>; swap?: () => Response } = {},
+  change: { idToken?: string; jwk?: Record<string, string>; swap?: EvidenceChange['swap'] } = {},
 ) {
   const fixture = fixtures[platformId]
   const { authorizationDigest, publicInputs } = fixture.evidence
