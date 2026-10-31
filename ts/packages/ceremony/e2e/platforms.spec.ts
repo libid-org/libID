@@ -11,7 +11,7 @@ import {
 import fixture from '../src/platforms/google/1/google-v1.fixture.json' with { type: 'json' }
 import type { GoogleProofV1 } from '../src/platforms/google/1/validation.js'
 import { buildGooglePublicInputs } from '../src/platforms/google/1/validation.js'
-import type { PlatformId } from '../src/platforms/index.js'
+import type { IdentityResult, PlatformId } from '../src/platforms/index.js'
 import { artifactRequests, expect, expectIsolatedProver, type Fixtures, test } from './fixtures.js'
 import { type BrowserPlatform, browserPlatforms, platformIds } from './platforms.js'
 import { verifyBrowserProof } from './verify.js'
@@ -200,12 +200,11 @@ const evidence = {
       return async (page) => {
         const result = await page.evaluate(() => {
           const result = window.result
-          if (
-            result?.status !== 'accepted' ||
-            result.identity.platformId !== 'google' ||
-            !('signingKeyModulus' in result.oauthProof.proof)
-          )
-            throw new Error('Missing Google proof')
+          const isGoogle = (
+            value: typeof result,
+          ): value is Extract<IdentityResult<'google'>, { status: 'accepted' }> =>
+            value?.status === 'accepted' && value.identity.platformId === 'google'
+          if (!isGoogle(result)) throw new Error('Missing Google proof')
           const proof = result.oauthProof.proof
           const { idNode, handleNode, ...identity } = result.identity
           return {
@@ -245,11 +244,10 @@ const evidence = {
       }
     },
   },
-} satisfies Record<BrowserPlatform['evidence'], Evidence>
+} satisfies Record<Exclude<BrowserPlatform['evidence'], 'live'>, Evidence>
 
 for (const platform of platformIds) {
-  const { source, corruption, requirements, failure, arrange } =
-    evidence[browserPlatforms[platform].evidence]
+  const kind = browserPlatforms[platform].evidence
 
   test(`${platform} bound denial crosses the actual popup and private Callback [TEST-CCDP-07]`, async ({
     page,
@@ -262,11 +260,20 @@ for (const platform of platformIds) {
     await expectIsolatedProver(popup)
     expect(
       await page.evaluate(() =>
-        window.events.some((event) => 'event' in event && event.event === 'token-fetch'),
+        window.events.some(
+          (event) =>
+            'event' in event && (event.event === 'token-fetch' || event.event === 'token-swap'),
+        ),
       ),
     ).toBe(false)
   })
 
+  if (kind === 'live') {
+    // No fixture stands in for real consent and the Bridge's confidential code swap.
+    test.skip(`${platform} browser ceremony: live qualification only`, () => {})
+    continue
+  }
+  const { source, corruption, requirements, failure, arrange } = evidence[kind]
   for (const corrupt of [false, true])
     test(`${platform} browser ceremony with ${source}: ${corrupt ? `${corruption} ${requirements.corrupted}` : `accepts independently verified proof ${requirements.accepted} [LIBID-BROWSER-029]`} @proof`, async ({
       bridge,
