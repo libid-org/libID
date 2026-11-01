@@ -345,7 +345,9 @@ The Bridge receives no notary address and opens no notary connection for any
 profile. For browser-exchange profiles it opens no token connection. For Telegram it holds a confidential client secret, sees
 the user's identity in the token response, and relays Telegram's signing keys.
 A compromised Bridge can leak that secret or those identities, or substitute
-keys. The Telegram platform ceremony owns the checks that bound this.
+keys. Only the Platform Verifier's trusted Telegram signing keys bound key
+substitution: a proof under another key fails there. The browser does not
+check the key.
 Callback query redaction remains necessary because OAuth codes, unlike public
 application credentials, are transient user-ceremony inputs.
 
