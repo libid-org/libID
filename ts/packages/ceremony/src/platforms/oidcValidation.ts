@@ -1,50 +1,57 @@
 import { buildOidcPublicInputs, RSA_MODULUS_BYTES } from '../barretenberg/circuits/oidc.js'
 import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../barretenberg/parameters.js'
 import { identityNodes, isAccountId, isHandle } from '../identity.js'
-import { isFixedBytes, isUint, type Predicates, recordValidator } from '../primitives.js'
+import { isFixedBytes, isUint, type Predicates } from '../primitives.js'
 import { type Identity, identityValidator, isProofBytes } from './validation.js'
 
-/** A proof in the OIDC circuits' public-input layout; `T` names the signed time it binds. */
-export type OidcProof<T extends string> = {
+/** A proof in the OIDC circuits' public-input layout, less the signed time each platform names. */
+export interface OidcProofFields {
   identityProof: Uint8Array
   /** Exact circuit fields: lowercase, 0x-prefixed, 32-byte hex values. */
   publicInputs: readonly string[]
   signingKeyModulus: Uint8Array
-} & { [K in T]: number }
+}
+
+/** Shape checks of the shared proof fields, for `publicInputCount` circuit fields. */
+export const oidcProofFields = (publicInputCount: number): Predicates<OidcProofFields> => ({
+  identityProof: isProofBytes,
+  publicInputs: (value: unknown) =>
+    Array.isArray(value) &&
+    value.length === publicInputCount &&
+    Array.from(value).every(
+      (field) =>
+        typeof field === 'string' &&
+        field.length === FIELD_HEX_CHARS &&
+        FIELD_HEX_PATTERN.test(field),
+    ),
+  signingKeyModulus: (value: unknown) => isFixedBytes(value, RSA_MODULUS_BYTES),
+})
+
+/** A signed time the circuit binds. */
+export const isSignedTime = (value: unknown) => isUint(value, Number.MAX_SAFE_INTEGER)
 
 /** A signed `aud` the circuit binds: printable ASCII without quotes, so length is the byte length. */
 export const isAudience = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length <= max && /^[\x20-\x21\x23-\x7e]+$/.test(value)
 
 /** Identity and proof checks for one platform's OIDC circuit. */
-export function oidcValidation<P extends string, T extends string>(options: {
+export function oidcValidation<
+  P extends string,
+  Signed,
+  Proof extends OidcProofFields & Signed,
+>(options: {
   platform: P
   name: string
-  timeField: T
-  publicInputCount: number
+  proofShape: (value: unknown) => Proof
+  /** The signed time the proof's public inputs bind. */
+  signedTime: (proof: Signed) => number
   maxAudBytes: number
 }) {
-  const { platform, name, timeField, publicInputCount, maxAudBytes } = options
-  type Proof = OidcProof<T>
-  type Bound = Pick<Proof, T | 'signingKeyModulus'>
+  const { platform, name, proofShape, signedTime, maxAudBytes } = options
+  type Bound = Signed & Pick<OidcProofFields, 'signingKeyModulus'>
 
   /** Client identifier constraints: what a signed `aud` can hold. */
   const isClientId = (value: unknown): value is string => isAudience(value, maxAudBytes)
-
-  const proofShape = recordValidator<Proof>(`Invalid ${name} proof`, {
-    identityProof: isProofBytes,
-    publicInputs: (value: unknown) =>
-      Array.isArray(value) &&
-      value.length === publicInputCount &&
-      Array.from(value).every(
-        (field) =>
-          typeof field === 'string' &&
-          field.length === FIELD_HEX_CHARS &&
-          FIELD_HEX_PATTERN.test(field),
-      ),
-    [timeField]: (value: unknown) => isUint(value, Number.MAX_SAFE_INTEGER),
-    signingKeyModulus: (value: unknown) => isFixedBytes(value, RSA_MODULUS_BYTES),
-  } as unknown as Predicates<Proof>)
 
   /** Flatten the validated identity and proof values into the circuit's public fields. */
   const buildPublicInputs = (
@@ -56,7 +63,7 @@ export function oidcValidation<P extends string, T extends string>(options: {
       authorizationDigest,
       audience: identity.oauthClientId,
       ...identityNodes(identity),
-      signedTime: (proof as Record<T, number>)[timeField],
+      signedTime: signedTime(proof),
       modulus: proof.signingKeyModulus,
     })
 

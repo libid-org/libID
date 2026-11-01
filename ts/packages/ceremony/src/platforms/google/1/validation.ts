@@ -3,10 +3,18 @@ import {
   MAX_AUD_BYTES,
   PUBLIC_INPUT_COUNT,
 } from '../../../barretenberg/circuits/oidc_google/parameters.js'
-import { type OidcProof, oidcValidation } from '../../oidcValidation.js'
+import { recordValidator } from '../../../primitives.js'
+import {
+  isSignedTime,
+  type OidcProofFields,
+  oidcProofFields,
+  oidcValidation,
+} from '../../oidcValidation.js'
 import type { Identity } from '../../validation.js'
 
-export type GoogleProofV1 = OidcProof<'tokenExpiresAt'>
+export interface GoogleProofV1 extends OidcProofFields {
+  tokenExpiresAt: number
+}
 
 /** Google's signed JWT exp alone determines proof expiry. */
 export const proofExpiresAt = (proof: GoogleProofV1): number => proof.tokenExpiresAt
@@ -14,8 +22,11 @@ export const proofExpiresAt = (proof: GoogleProofV1): number => proof.tokenExpir
 const google = oidcValidation({
   platform: PLATFORM_GOOGLE_KEY,
   name: 'Google',
-  timeField: 'tokenExpiresAt',
-  publicInputCount: PUBLIC_INPUT_COUNT,
+  proofShape: recordValidator<GoogleProofV1>('Invalid Google proof', {
+    ...oidcProofFields(PUBLIC_INPUT_COUNT),
+    tokenExpiresAt: isSignedTime,
+  }),
+  signedTime: (proof: Pick<GoogleProofV1, 'tokenExpiresAt'>) => proof.tokenExpiresAt,
   maxAudBytes: MAX_AUD_BYTES,
 })
 

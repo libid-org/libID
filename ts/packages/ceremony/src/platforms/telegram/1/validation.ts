@@ -4,11 +4,19 @@ import {
   MAX_AUD_BYTES,
   PUBLIC_INPUT_COUNT,
 } from '../../../barretenberg/circuits/oidc_telegram/parameters.js'
-import { type OidcProof, oidcValidation } from '../../oidcValidation.js'
+import { recordValidator } from '../../../primitives.js'
+import {
+  isSignedTime,
+  type OidcProofFields,
+  oidcProofFields,
+  oidcValidation,
+} from '../../oidcValidation.js'
 import type { Identity } from '../../validation.js'
 
 /** oidc_google's layout, with the signed `iat` in the time field. */
-export type TelegramProofV1 = OidcProof<'tokenIssuedAt'>
+export interface TelegramProofV1 extends OidcProofFields {
+  tokenIssuedAt: number
+}
 
 /** The signed `iat` plus the profile's lifetime; `exp` is not used. */
 export function proofExpiresAt(proof: TelegramProofV1): number {
@@ -21,8 +29,11 @@ export function proofExpiresAt(proof: TelegramProofV1): number {
 const telegram = oidcValidation({
   platform: PLATFORM_TELEGRAM_KEY,
   name: 'Telegram',
-  timeField: 'tokenIssuedAt',
-  publicInputCount: PUBLIC_INPUT_COUNT,
+  proofShape: recordValidator<TelegramProofV1>('Invalid Telegram proof', {
+    ...oidcProofFields(PUBLIC_INPUT_COUNT),
+    tokenIssuedAt: isSignedTime,
+  }),
+  signedTime: (proof: Pick<TelegramProofV1, 'tokenIssuedAt'>) => proof.tokenIssuedAt,
   maxAudBytes: MAX_AUD_BYTES,
 })
 
