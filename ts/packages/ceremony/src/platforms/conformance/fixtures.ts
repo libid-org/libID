@@ -298,13 +298,17 @@ const segment = (index: number, value: string) =>
   rewrite((t) => Object.assign(t.split('.'), { [index]: value }).join('.'))
 
 /** A Bridge swap answered by `answer`. */
-const swapAnswer = (answer: () => Response | Promise<Response>): EvidenceChange => ({
+const swapAnswer = (
+  answer: () => Response | Promise<Response>,
+  message?: string,
+): EvidenceChange => ({
   swap: answer,
   rejectedAt: 'token-swap',
+  ...(message === undefined ? {} : { message }),
 })
 
 /** A Bridge swap answered with `body` as JSON. */
-const swapBody = (body: unknown) => swapAnswer(() => Response.json(body))
+const swapBody = (body: unknown, message?: string) => swapAnswer(() => Response.json(body), message)
 
 /** RS256 token and key rewrites every OIDC prover refuses. */
 const rs256Evidence: Record<string, EvidenceChange> = {
@@ -845,8 +849,18 @@ export const fixtures = {
     },
     engineBeforeToken: true,
     rejectedEvidence: {
-      'a Bridge error answered with 200': swapBody({ error: 'invalid_grant' }),
-      'a Bridge error beside a token': swapBody({ error: 'x', id_token: 'h.p.s' }),
+      'a Bridge error answered with 200': swapBody(
+        { error: 'invalid_grant' },
+        'Telegram refused the code: invalid_grant',
+      ),
+      'a Bridge error beside a token': swapBody(
+        { error: 'x', id_token: 'h.p.s' },
+        'Telegram refused the code: x',
+      ),
+      'a Bridge error that is not a code': swapBody(
+        { error: 'Bad <b>grant</b>' },
+        'Telegram refused the code',
+      ),
       'a Bridge answer without an ID token': swapBody({ access_token: 'a' }),
       'an empty ID token': swapBody({ id_token: '' }),
       'a non-string ID token': swapBody({ id_token: 1 }),

@@ -6,6 +6,8 @@ import { isPkceValue } from '../../authorization.js'
 import { provider } from './provider.js'
 
 const MAX_TOKEN_RESPONSE_BYTES = 64 * 1024
+/** An OAuth error code shown to the user, such as `invalid_grant`. */
+const OAUTH_ERROR = /^[a-z_]{1,64}$/
 
 /** Swap the code for an ID token through the Bridge, which adds Telegram's client secret. */
 export async function swapCode(
@@ -30,7 +32,14 @@ export async function swapCode(
   if (!response.ok) throw new CeremonyError('token-swap', 'Telegram token request failed')
   // Telegram answers token errors with HTTP 200 and an `error` field.
   const body = await readJson(response, MAX_TOKEN_RESPONSE_BYTES)
-  if (!isRecord(body) || 'error' in body || typeof body.id_token !== 'string' || !body.id_token)
+  if (isRecord(body) && 'error' in body)
+    throw new CeremonyError(
+      'token-swap',
+      typeof body.error === 'string' && OAUTH_ERROR.test(body.error)
+        ? `Telegram refused the code: ${body.error}`
+        : 'Telegram refused the code',
+    )
+  if (!isRecord(body) || typeof body.id_token !== 'string' || !body.id_token)
     throw new CeremonyError('token-swap', 'Telegram returned no ID token')
   return body.id_token
 }
