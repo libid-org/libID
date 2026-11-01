@@ -1,5 +1,3 @@
-import { OIDC_PUBLIC_INPUT_COUNT } from '../oidc.js'
-
 /** Fixed oidc_telegram ABI of libid-circuits' circuits/oidc-telegram/src/main.nr. */
 export const MAX_SIGNING_INPUT_BYTES = 2688
 export const MAX_AUD_BYTES = 20
@@ -17,5 +15,3 @@ export const WINDOWS = {
   username: 60,
   nonce: 57,
 } as const
-
-export const PUBLIC_INPUT_COUNT = OIDC_PUBLIC_INPUT_COUNT
