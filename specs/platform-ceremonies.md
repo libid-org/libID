@@ -1601,7 +1601,8 @@ protects the code at the swap; no verifier compares it.
 
 - REQ-PLAT-67 (upholds SP-DELIVERY-01):
   The Prover MUST accept the Telegram return only as a query carrying one
-  `code` of at most 512 bytes and one `state` matching its live ceremony. An
+  `code` and one `state` matching its live ceremony. The Bridge bounds the
+  swapped `code` ([OAuth Bridge](oauth-bridge.md#telegram-profile)). An
   `error` of `access_denied` is a denial and any other `error` a failure. A
   nonempty fragment, a duplicated field, both `code` and `error`, or an
   `id_token`, `access_token`, or `refresh_token` is refused before the swap.
@@ -1912,10 +1913,10 @@ Platform Verifier, Notary Service, Consumer.
   carries no framed commitment for it and is rejected.
 - TEST-PLAT-23 (exercises REQ-PLAT-67):
   A Telegram return in the fragment, with a duplicated `state` or `code`,
-  both `code` and `error`, a `code` over 512 bytes, another ceremony's
-  `state`, or an `id_token`, `access_token`, or `refresh_token` is refused
-  before any Bridge request; `access_denied` resolves as a denial; an added
-  `iss` leaves the outcome unchanged.
+  both `code` and `error`, another ceremony's `state`, or an `id_token`,
+  `access_token`, or `refresh_token` is refused before any Bridge request;
+  `access_denied` resolves as a denial; an added `iss` leaves the outcome
+  unchanged.
 
 
 ## 9. Security Considerations
