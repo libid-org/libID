@@ -316,8 +316,9 @@ notary-signature check before an authoritative effect.
   account identifier never. No chain artifact, whether calldata, proof
   bytes, attestation bytes, event, or storage, yields a handle or id that
   no transaction carried, except by hashing a candidate under the public
-  tag and comparing it with the identity's nodes. "Private" therefore means
-  not disclosed, not unguessable. Depends on ASM-HASH-01, ASM-PROOF-01,
+  tag and comparing it with the identity's nodes. A binding whose handle no
+  transaction carried is therefore unlisted: not disclosed, but guessable.
+  Depends on ASM-HASH-01, ASM-PROOF-01,
   ASM-ZK-01, ASM-BROWSER-01. Evidence: conformance tests
   (supporting, not proving) plus the preimage resistance of SHA-256.
 
@@ -1669,7 +1670,7 @@ and the handle appears in plaintext only once a transaction discloses it
   are public; only the values are not.
 - Any other transaction that names a handle as text, such as a payment
   addressed by handle rather than by node, discloses it as surely as a
-  disclosure call.
+  disclosure call, whoever sends it: the holder or a payer.
 - Off-chain readers see what they are asked: a resolver, an RPC provider,
   or an ENS gateway given a handle in plaintext learns it.
 
