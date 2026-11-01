@@ -3,8 +3,8 @@ import type { OidcGoogleToken } from '../../../barretenberg/circuits/oidc_google
 import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
 import { isAccountId, isHandle } from '../../../identity.js'
-import { b64urlDecode, isUint } from '../../../primitives.js'
-import { fetchSigningKey as fetchKey, jsonObject as json, rs256Kid } from '../../oidc.js'
+import { isUint } from '../../../primitives.js'
+import { fetchSigningKey as fetchKey, parseRs256Jwt } from '../../oidc.js'
 import { isAudience } from '../../oidcValidation.js'
 import { provider } from './provider.js'
 
@@ -39,14 +39,10 @@ const fitsCircuit = ({ aud, sub, email }: OidcGoogleToken['claims']) =>
 
 /** Parse the fixed RS256 token layout; any failure is an authorization error. */
 function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
-  const segments = idToken.split('.')
-  const [headerB64, payloadB64] = segments
-  const [header, payload, signature] =
-    segments.length === 3 && !segments.includes('') ? segments.map(b64urlDecode) : []
-  const claims = payload && googleClaims(json(payload))
-  if (!header || !payload || !signature || !claims)
-    throw new CeremonyError('authorization', 'invalid Google ID token')
-  const kid = rs256Kid(json(header))
+  const jwt = parseRs256Jwt(idToken)
+  const claims = jwt && googleClaims(jwt.claims)
+  if (!jwt || !claims) throw new CeremonyError('authorization', 'invalid Google ID token')
+  const { kid, headerB64, payload, payloadB64, signature } = jwt
   if (!kid) throw new CeremonyError('authorization', 'invalid Google ID token header')
   if (!fitsCircuit(claims))
     throw new CeremonyError(

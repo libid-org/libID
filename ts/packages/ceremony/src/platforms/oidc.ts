@@ -8,7 +8,7 @@ const MAX_JWKS_BYTES = 128 * 1024
 const text = new TextDecoder('utf-8', { fatal: true })
 
 /** Decode a JWT segment's JSON object, or null. */
-export function jsonObject(bytes: Uint8Array | null): Record<string, unknown> | null {
+function jsonObject(bytes: Uint8Array | null): Record<string, unknown> | null {
   try {
     const value: unknown = bytes && JSON.parse(text.decode(bytes))
     return isRecord(value) ? value : null
@@ -18,8 +18,22 @@ export function jsonObject(bytes: Uint8Array | null): Record<string, unknown> | 
 }
 
 /** The `kid` of an RS256 JWT header, or null. */
-export const rs256Kid = (header: Record<string, unknown> | null): string | null =>
+const rs256Kid = (header: Record<string, unknown> | null): string | null =>
   header?.alg === 'RS256' && typeof header.kid === 'string' && header.kid !== '' ? header.kid : null
+
+/** The segments, decoded bytes, payload claims and `kid` of a three-part RS256 JWT, or null. */
+export function parseRs256Jwt(idToken: string) {
+  const segments = idToken.split('.')
+  if (segments.length !== 3 || segments.includes('')) return null
+  const [headerB64, payloadB64, signatureB64] = segments
+  const payload = b64urlDecode(payloadB64)
+  const signature = b64urlDecode(signatureB64)
+  const header = jsonObject(b64urlDecode(headerB64))
+  const claims = jsonObject(payload)
+  return payload && signature && header && claims
+    ? { headerB64, payloadB64, payload, signature, claims, kid: rs256Kid(header) }
+    : null
+}
 
 /** Select the one key carrying `kid` from the key set at `url`, read under `cache`. */
 export async function fetchSigningKey(
