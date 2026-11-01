@@ -263,7 +263,7 @@ service fee:
 `bindPrivately(platformId, version, payload, feeAmount, feeReceiver)` is
 that call with an empty handle and no primary flag. The fee rules are in
 §2.1c. The Submission Payload has no field for a handle or an id. An empty
-handle discloses nothing and keeps the bind private. A nonempty handle is
+handle discloses nothing and keeps the bind unlisted. A nonempty handle is
 disclosed, and with the primary flag it also becomes the author's name.
 
 - REQ-PLAT-03A (upholds SP-PRIV-01):
