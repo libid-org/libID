@@ -520,6 +520,7 @@ Proof validity and mutable-metadata ordering use the authenticated times below.
 | Google | signed ID-Token `exp` | signed ID-Token `exp` |
 | X | the token attestation's signed creation time | `metadataObservedAt + proofLifetime` |
 | GitHub | the token-exchange attestation's signed creation time | `metadataObservedAt + proofLifetime` |
+| Telegram | signed ID-Token `iat − maxFutureAttestationSkew` (REQ-PLAT-65) | `iat + proofLifetime` |
 
 For X and GitHub, "timestamp" is the signed TLSNotary attestation creation
 time. The token attestation is the one-time PKCE and Authorization Digest

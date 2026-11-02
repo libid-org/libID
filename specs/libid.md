@@ -213,11 +213,12 @@ implementing that profile.
 | `("google", 1)` | not named | not named |
 | `("x", 1)` | 3600 | 300 |
 | `("github", 1)` | 3600 | 300 |
+| `("telegram", 1)` | 3600 | 300 |
 
-`proofLifetime` is the maximum age of the attestation that supplies evidence
-time: the X token attestation and the GitHub token-exchange attestation.
-`maxFutureAttestationSkew` is the maximum lead of an X/GitHub attestation
-timestamp over Block Time. Google's signed `exp` bounds its validity, so
+`proofLifetime` is the maximum age of the time that supplies evidence: the X
+token attestation, the GitHub token-exchange attestation, and Telegram's
+signed ID-Token `iat`. `maxFutureAttestationSkew` is the maximum lead of that
+time over Block Time. Google's signed `exp` bounds its validity, so
 `("google", 1)` names neither. Verifier governance controls the Supported
 Version Set and the trust roots, so a proof is accepted only while a Verifier
 Version implementing its profile is supported and the trust roots it relies
