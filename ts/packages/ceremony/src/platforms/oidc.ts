@@ -3,20 +3,13 @@ import { RSA_EXPONENT_BASE64URL, RSA_MODULUS_BYTES } from '../barretenberg/circu
 import { ProofEngine } from '../barretenberg/engine.js'
 import { operation } from '../events.js'
 import { b64urlDecode, isRecord } from '../primitives.js'
-import { fetchPublicJson } from '../response.js'
+import { fetchPublicJson, withDeadline } from '../response.js'
 import type { ProverContext } from './context.js'
 import type { PlatformId } from './index.js'
 import type { Identity } from './validation.js'
 
 /** Bound a public JWKS response independently of any circuit's token dimensions. */
 const MAX_JWKS_BYTES = 128 * 1024
-
-/** One OIDC request's budget, above the Bridge's own upstream timeout. */
-export const REQUEST_TIMEOUT_MS = 15000
-
-/** The run's signal, also aborted once one request outlasts its budget. */
-export const requestSignal = (signal: AbortSignal) =>
-  AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
 
 const text = new TextDecoder('utf-8', { fatal: true })
 
@@ -57,12 +50,10 @@ export async function fetchSigningKey(
 ): Promise<unknown> {
   // A run closed before this point starts no key request.
   signal.throwIfAborted()
-  const body = await fetchPublicJson(
-    url,
-    MAX_JWKS_BYTES,
-    'Signing key request failed',
-    requestSignal(signal),
-    cache,
+  const body = await withDeadline(
+    signal,
+    () => new Error('Signing key request timed out'),
+    (request) => fetchPublicJson(url, MAX_JWKS_BYTES, 'Signing key request failed', request, cache),
   )
   if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')
   const keys = body.keys.filter((k) => isRecord(k) && k.kid === kid)

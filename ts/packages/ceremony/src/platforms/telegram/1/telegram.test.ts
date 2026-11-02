@@ -51,9 +51,13 @@ it('refuses a key set without a key array', async () => {
 })
 
 it.each([
-  ['swap', () => swapCode({ code: 'abc', codeVerifier: 'A'.repeat(43), redirectUri }, live)],
-  ['key fetch', () => fetchSigningKey(redirectUri, 'b', live)],
-])('gives up on a silent Bridge %s after 15 s', async (_name, call) => {
+  [
+    'swap',
+    () => swapCode({ code: 'abc', codeVerifier: 'A'.repeat(43), redirectUri }, live),
+    'The Bridge did not answer the token request in time',
+  ],
+  ['key fetch', () => fetchSigningKey(redirectUri, 'b', live), 'Signing key request timed out'],
+])('gives up on a silent Bridge %s after 15 s', async (_name, call, message) => {
   vi.useFakeTimers()
   // Node's AbortSignal.timeout ignores fake timers; this one runs on them.
   vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
@@ -76,7 +80,7 @@ it.each([
   await vi.advanceTimersByTimeAsync(14999)
   expect(settled).toBe(false)
   await vi.advanceTimersByTimeAsync(1)
-  await expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
+  await expect(pending).rejects.toThrow(message)
 })
 
 it('refuses a proof expiry past the safe integer range', () => {

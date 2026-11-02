@@ -1,9 +1,8 @@
 import { isRedirectUri } from '../../../ccdp/index.js'
 import { CeremonyError } from '../../../errors.js'
 import { isRecord } from '../../../primitives.js'
-import { readJson } from '../../../response.js'
+import { readJson, withDeadline } from '../../../response.js'
 import { isPkceValue } from '../../authorization.js'
-import { requestSignal } from '../../oidc.js'
 import { provider } from './provider.js'
 
 const MAX_TOKEN_RESPONSE_BYTES = 64 * 1024
@@ -20,19 +19,25 @@ export async function swapCode(
     throw new Error('Invalid token request')
   // A run closed before this point starts no swap.
   signal.throwIfAborted()
-  const response = await fetch(new URL(provider.tokenPath, redirectUri), {
-    method: 'POST',
-    mode: 'cors',
-    credentials: 'omit',
-    cache: 'no-store',
-    redirect: 'error',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-    signal: requestSignal(signal),
-  })
-  if (!response.ok) throw new CeremonyError('token-swap', 'Telegram token request failed')
+  const body = await withDeadline(
+    signal,
+    () => new CeremonyError('token-swap', 'The Bridge did not answer the token request in time'),
+    async (request) => {
+      const response = await fetch(new URL(provider.tokenPath, redirectUri), {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: request,
+      })
+      if (!response.ok) throw new CeremonyError('token-swap', 'Telegram token request failed')
+      return readJson(response, MAX_TOKEN_RESPONSE_BYTES)
+    },
+  )
   // Telegram answers token errors with HTTP 200 and an `error` field.
-  const body = await readJson(response, MAX_TOKEN_RESPONSE_BYTES)
   if (isRecord(body) && 'error' in body)
     throw new CeremonyError(
       'token-swap',
