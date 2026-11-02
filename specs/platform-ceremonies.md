@@ -849,7 +849,9 @@ commitment = SHA-256(plaintext || blinder)
 `plaintext` is that direction's transcript bytes `[start, end)`, and
 `blinder` is the 16 bytes common REQ-COMMON-44 draws for the commitment. No
 length prefix, separator, or domain tag enters the hash. In the X and GitHub
-profiles the Proving Circuit opens only the bearer range.
+profiles the Proving Circuit opens four commitments: the bearer ranges of the
+token session and the identity request, and the id and handle ranges of the
+identity response (REQ-PLAT-32D, REQ-PLAT-52C).
 
 The Notary Service signs the record under [EIP-191] version `0x45`, with the
 32-byte digest as the message:
@@ -929,8 +931,9 @@ Platform Verifier's checks under common REQ-COMMON-18A and REQ-COMMON-35.
   ranges has two readings, or is both read and hidden; and a range past the
   signed length describes bytes the session never carried.
 
-Conformance vector, for an X identity-shaped record with placeholder
-commitment values: authority `api.x.com`, `createdAt` 1770000000, transcript
+Conformance vector, with placeholder commitment values and a sent direction
+laid out as an identity request (revealed, committed bearer, revealed):
+authority `api.x.com`, `createdAt` 1770000000, transcript
 lengths 60 and 40, sent ranges `[0, 20)` and `[40, 60)` revealed around a
 commitment over `[20, 40)`, and received range `[0, 10)` revealed before a
 commitment over `[10, 40)`. `attestedData` is the 246 bytes below with the
