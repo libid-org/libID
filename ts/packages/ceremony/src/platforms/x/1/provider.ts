@@ -5,6 +5,7 @@ const identity = X.identity!
 
 /** The released v1 request layout plus the browser-owned OAuth endpoint and scope. */
 export const provider = {
+  platform: X.platform,
   tokenUrl: `https://${token.session.authority}${token.session.path}`,
   tokenFields: token.tokenFields,
   identityUrl: `https://${identity.session.authority}${identity.session.path}`,

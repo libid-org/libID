@@ -11,12 +11,10 @@ export function view(title: string) {
   const root = document.getElementById('libid-root')
   if (!root) throw new Error(messages.missingRoot)
   root.replaceChildren()
-  root.style.cssText =
-    'max-width:26rem;margin:18vh auto;padding:2rem;font:16px system-ui;color:#242038;text-align:center'
   const logo = document.createElement('div')
   logo.textContent = messages.brand
   logo.setAttribute('aria-label', messages.brand)
-  logo.style.cssText = 'font-size:2rem;font-weight:750;letter-spacing:-.06em;margin-bottom:2rem'
+  logo.className = 'libid-logo'
   const label = document.createElement('p')
   label.textContent = title
   label.setAttribute('role', 'status')
@@ -41,19 +39,15 @@ export function eventView(feed: EventFeed) {
   const { root, label } = view(messages.preparation)
   const bar = document.createElement('progress')
   bar.setAttribute('aria-label', messages.progress)
-  bar.style.cssText = 'width:100%;accent-color:#6556d8'
   root.append(bar)
-  const style = document.createElement('style')
-  style.textContent =
-    'progress::-webkit-progress-value{transition:width .3s}progress::-moz-progress-bar{transition:width .3s}progress[value="1"]::-webkit-progress-value{transition:none}progress[value="1"]::-moz-progress-bar{transition:none}@media(prefers-reduced-motion:reduce){progress::-webkit-progress-value{transition:none}progress::-moz-progress-bar{transition:none}}'
   const hint = document.createElement('p')
+  hint.className = 'libid-hint'
   hint.setAttribute('role', 'status')
   let timer: ReturnType<typeof setTimeout> | undefined
   let offProgress = () => {}
   const teardown = () => {
     clearTimeout(timer)
     hint.remove()
-    style.remove()
   }
   const off = feed.onStage((event) => {
     // Documents project no authorization stage: past preparation is proving work.
@@ -74,7 +68,6 @@ export function eventView(feed: EventFeed) {
       offProgress()
       bar.max = 1
       bar.value = 0
-      root.append(style)
       const progress = proofProgress(weights)
       offProgress = feed.onEvent((event) => {
         const value = progress(event)

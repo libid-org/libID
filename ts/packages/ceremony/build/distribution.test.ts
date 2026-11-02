@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
-import { parseCsp } from './profiles.ts'
+import { cspHash, parseCsp } from './profiles.ts'
 import { hash } from './sources.ts'
 import { errorHeaders } from './sws.ts'
 import { builtArtifacts, nativeSkip } from './testing.ts'
@@ -77,6 +77,14 @@ test('static artifact has complete bodies, immutable policies, exact subsets and
       'content-range',
     ])
       assert.equal(new Headers(headers).has(name), false)
+    // A pinned stylesheet policy names exactly the document's own inline styles.
+    const styles = parseCsp(headers['content-security-policy'] ?? '').get('style-src')
+    if (styles && !styles.includes("'unsafe-inline'"))
+      assert.deepEqual(
+        [...body.toString().matchAll(/<style>([\s\S]*?)<\/style>/g)].map(([, css]) => cspHash(css)),
+        styles,
+        path,
+      )
     for (const [extension, decode] of [
       ['br', brotliDecompressSync],
       ['gz', gunzipSync],
@@ -286,6 +294,8 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
   const path = '/ccdp/callback.html'
   const html = readFileSync(join(out, 'public', path), 'utf8')
   const headers = metadata.headers[path]
+  // Bridges compose a policy that admits no font, so Callback embeds none.
+  assert.doesNotMatch(html, /@font-face/)
   const inputs = {
     allowedApplicationOrigins: ['https://app.test', 'https://ccdp.test'],
     ccdpOrigin: 'https://ccdp.test',
@@ -317,6 +327,22 @@ test('aggregate Callback insertion preserves executable hashes and rejects malfo
     prepareCallback(html, { ...headers, 'content-security-policy': "script-src 'self'" }, inputs),
   )
   assert.equal(Object.hasOwn(metadata.headers, '/ccdp/v1/callback.js'), false)
+})
+
+test('documents paint the logo, their first label and the bar before any script runs', () => {
+  const firstPaint =
+    /^<main id="libid-root"><div class="libid-logo"[^>]*>libID<\/div><p role="status">[^<]+<\/p><progress [^>]*><\/progress><\/main><script/
+  for (const path of [
+    '/ccdp/v1/prefetch',
+    '/ccdp/v1/prover',
+    '/ccdp/v1/prover/fallback',
+    '/ccdp/callback.html',
+  ]) {
+    const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
+    assert.match(html.slice(html.indexOf('<main')), firstPaint, path)
+    // Only Callback hides all but its bar while it passes through.
+    assert.equal(html.includes(':has(progress)'), path === '/ccdp/callback.html', path)
+  }
 })
 
 test('only worker entry scripts carry worker isolation policies, from immutable CCDP paths [LIBID-ASSET-001] [CSP-008]', () => {

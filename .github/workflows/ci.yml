@@ -31,6 +31,7 @@ jobs:
     outputs:
       workspaces: ${{ steps.paths.outputs.workspaces }}
       image: ${{ steps.paths.outputs.image }}
+      site: ${{ steps.paths.outputs.site }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,13 +49,14 @@ jobs:
           if [ "$EVENT_NAME" != "pull_request" ]; then
             echo 'workspaces=["popup","ceremony","dev"]' >> "$GITHUB_OUTPUT"
             echo "image=true" >> "$GITHUB_OUTPUT"
+            echo "site=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
           # What every job builds on: the TypeScript workspace setup and CI itself.
-          shared='^(ts/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|scripts/)|\.github/(workflows/(ci|ccdp-image)\.yml|actions/setup-ts/))'
+          shared='^(ts/(\.node-version|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|scripts/)|\.github/(workflows/(ci|ccdp-image)\.yml|actions/setup-ts/))'
           # The ceremony and the workspace packages it bundles.
-          ceremony='^ts/packages/(ceremony|popup|ledger)/'
+          ceremony='^(ts/packages/(ceremony|popup|ledger)/|brand/)'
           changed() { grep -qE "$shared|$1" <<<"$files"; }
           workspaces=()
           if changed '^ts/packages/popup/'; then workspaces+=(popup); fi
@@ -62,9 +64,12 @@ jobs:
           if changed "$ceremony|^ts/apps/dev/"; then workspaces+=(dev); fi
           image=false
           if changed "$ceremony"; then image=true; fi
+          # The site, the brand assets, the docs and specs it renders through symlinks, and CI itself.
+          site=false
+          if grep -qE '^(site/|brand/|docs/pages/|specs/|\.github/workflows/ci\.yml)' <<<"$files"; then site=true; fi
           json=$(jq -cn '$ARGS.positional' --args "${workspaces[@]}")
-          echo "Browser workspaces: $json; CCDP image: $image"
-          { echo "workspaces=$json"; echo "image=$image"; } >> "$GITHUB_OUTPUT"
+          echo "Browser workspaces: $json; CCDP image: $image; site: $site"
+          { echo "workspaces=$json"; echo "image=$image"; echo "site=$site"; } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # TypeScript: build, tests, complete source/test/build-script type checking,
@@ -89,18 +94,21 @@ jobs:
       - name: Type checking
         run: pnpm -C ts typecheck
 
-      # Ceremony runs under coverage, whose thresholds gate the job.
+      # Popup and ceremony produce badge coverage; ceremony thresholds gate the job.
       - name: Tests
         run: |
-          pnpm -C ts --filter '!@libid/ceremony' --filter '!{.}' test
+          pnpm -C ts --filter '!@libid/ceremony' --filter '!@libid/popup' --filter '!{.}' run --if-present test
+          pnpm -C ts/packages/popup test:coverage
           pnpm -C ts/packages/ceremony test:coverage
 
-      - name: Keep the ceremony coverage summary for the badge
+      - name: Keep coverage summaries for the badges
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ceremony-coverage
-          path: ts/packages/ceremony/coverage/coverage-summary.json
+          name: package-coverage
+          path: |
+            ts/packages/ceremony/coverage/coverage-summary.json
+            ts/packages/popup/coverage/coverage-summary.json
           retention-days: 1
           if-no-files-found: error
 
@@ -108,13 +116,13 @@ jobs:
         run: pnpm -C ts lint && pnpm -C ts fmt:check
 
   # ---------------------------------------------------------------------------
-  # Ceremony coverage badge: on pushes to main, publish the unit-test line
+  # Coverage badges: on pushes to main, publish the unit-test line
   # coverage the TypeScript job measured as a shields.io endpoint on the orphan
   # `badges` branch, replaced each run. Only this job holds `contents: write`,
   # pull requests never run it, and it runs no repository code.
   # ---------------------------------------------------------------------------
   coverage-badge:
-    name: Ceremony coverage badge
+    name: Coverage badges
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [ts]
     runs-on: ubuntu-latest
@@ -122,28 +130,30 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: ceremony-coverage
+          name: package-coverage
           path: coverage
 
-      - name: Publish the badge
+      - name: Publish the badges
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           badge=$(mktemp -d)
-          node -e '
-            const { pct } = JSON.parse(require("fs").readFileSync(process.argv[1])).total.lines
-            const color = pct >= 90 ? "brightgreen" : pct >= 80 ? "yellow" : "red"
-            console.log(JSON.stringify({ schemaVersion: 1, label: "coverage", message: `${pct.toFixed(1)}%`, color }))
-          ' coverage/coverage-summary.json > "$badge/ceremony-coverage.json"
+          for package in ceremony popup; do
+            node -e '
+              const { pct } = JSON.parse(require("fs").readFileSync(process.argv[1])).total.lines
+              const color = pct >= 90 ? "brightgreen" : pct >= 80 ? "yellow" : "red"
+              console.log(JSON.stringify({ schemaVersion: 1, label: "coverage", message: `${pct.toFixed(1)}%`, color }))
+            ' "coverage/$package/coverage/coverage-summary.json" > "$badge/$package-coverage.json"
+          done
           cd "$badge"
           git init -q -b badges
-          git add ceremony-coverage.json
+          git add *-coverage.json
           git -c user.name='github-actions[bot]' \
             -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit -qm "Ceremony coverage for $GITHUB_SHA"
+            commit -qm "Coverage for $GITHUB_SHA"
           git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
 
   # ---------------------------------------------------------------------------
@@ -191,6 +201,41 @@ jobs:
   # event's commit range — no marketplace action, so there is nothing to pin
   # and nothing to compromise.
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Site: Workers Builds only builds main, so build the site and run its checks
+  # on pull requests that can affect it, before a broken build reaches production.
+  # ---------------------------------------------------------------------------
+  site:
+    name: Site
+    needs: [changes]
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # pnpm before setup-node: `cache: pnpm` shells out to pnpm.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.25.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26 # Workers Builds' NODE_VERSION (site/README.md).
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm -C site install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -C site build
+
+      - name: Test
+        run: pnpm -C site test
+
   dco:
     name: DCO
     runs-on: ubuntu-latest
@@ -265,7 +310,7 @@ jobs:
         working-directory: ts/packages/ceremony
         run: node build/distribution.ts --out-dir .cache/qualification-assets
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ceremony-e2e-assets
           path: |
@@ -322,7 +367,7 @@ jobs:
 
       - name: Download the ceremony e2e assets
         if: matrix.workspace == 'ceremony'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ceremony-e2e-assets
           path: ts/packages/ceremony/.cache
@@ -357,7 +402,7 @@ jobs:
       # A failing test keeps its Playwright trace; replay it with `npx playwright show-trace <zip>`.
       - name: Upload failure traces
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: traces-${{ matrix.workspace }}-${{ matrix.engine }}
           path: ts/*/${{ matrix.workspace }}/test-results

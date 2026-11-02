@@ -6,6 +6,7 @@ import {
   type Carrier,
   type CarrierConstructor,
   CONNECTION_VERSION,
+  DEPARTED,
   type Message,
 } from './message.js'
 import { PortCarrier } from './port.js'
@@ -540,6 +541,30 @@ describe('controls [POPUP-CONTROL-001/002/003/004]', () => {
     expect(closeSpy).toHaveBeenCalledTimes(1)
     expect(codes(popup2Side.events)).toContain('connection-closed')
     expect(() => app2.connection.send(new Start())).toThrow('connection-closed')
+  })
+
+  it('keeps a port that carried a close open until the popup departs', async () => {
+    const pair = fakePair()
+    const [appCarrier, popupCarrier] = carrierPair()
+    const app = connectApp(pair, { fallback: appCarrier })
+    await app.connection.ready
+    // Severed, so the close travels over the port.
+    pair.popupProxy.closed = true
+    const received: string[] = []
+    popupCarrier.on((value) => void received.push((value as Message).type))
+    let closed = false
+    const port = (popupCarrier as unknown as { port: MessagePort }).port
+    port.addEventListener('close', () => {
+      closed = true
+    })
+    await app.connection.close()
+    await tick()
+    expect(received).toEqual(['close-popup'])
+    // The worker may be keeping this end; Firefox would drop the close if its peer closed now.
+    expect(closed).toBe(false)
+    popupCarrier.send(DEPARTED)
+    await tick()
+    expect(closed).toBe(true)
   })
 
   it('rejects wrong-direction, duplicate, and post-terminal controls', async () => {

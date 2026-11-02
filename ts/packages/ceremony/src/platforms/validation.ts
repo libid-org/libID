@@ -12,15 +12,6 @@ export interface Identity<P extends string = PlatformId> {
   userName: string
 }
 
-/** A nonzero decimal u64 user ID, as X and GitHub number their users. */
-const MAX_U64 = 0xffffffffffffffffn
-const MAX_U64_CHARS = MAX_U64.toString().length
-export const decimalUserId = {
-  maxBytes: MAX_U64_CHARS,
-  valid: (value: string): boolean =>
-    value.length <= MAX_U64_CHARS && /^[1-9][0-9]*$/.test(value) && BigInt(value) <= MAX_U64,
-}
-
 export const isProofBytes = (v: unknown): v is Uint8Array =>
   v instanceof Uint8Array && v.length > 0 && v.length <= MAX_PROOF_BYTES
 
