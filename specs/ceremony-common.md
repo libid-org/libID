@@ -445,7 +445,8 @@ binding method is what the Platform Verifier compares:
 The X and GitHub circuits expose no Authorization Digest public input, so a
 requirement to compare one is unsatisfiable on those paths; Google carries no
 `code_verifier`, and Telegram's is never revealed to a verifier, so the
-recomputation of REQ-COMMON-15A has nothing to compare there. Neither method is optional, and no profile uses both.
+recomputation of REQ-COMMON-15A has nothing to compare there. Neither method
+is optional, and no profile uses both.
 
 - REQ-COMMON-02 (upholds SP-BIND-01):
   The Platform Verifier MUST recompute the Authorization Digest from the
@@ -863,6 +864,7 @@ evidence differs.
 | Google | signed ID-Token `aud` | the Submission carries the bytes; the Platform Verifier hashes them and requires the digest to equal the proof's audience public input |
 | X | `client_id` in the notarized token request | the bytes are a revealed range of an attestation the Notary Service accepted |
 | GitHub | `client_id` in the notarized token exchange | the bytes are a revealed range of an attestation the Notary Service accepted |
+| Telegram | signed ID-Token `aud` (the bot id) | as Google |
 
 The client identifier is not secret: it appears in every authorization URL the
 user's browser follows. The protocol therefore spends nothing to conceal it,
