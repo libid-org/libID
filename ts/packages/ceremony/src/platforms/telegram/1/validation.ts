@@ -1,6 +1,5 @@
 import { PROOF_LIFETIME_SECONDS_TELEGRAM } from '@libid/contracts/ceremony'
 import { PLATFORM_TELEGRAM_KEY } from '@libid/contracts/platforms'
-import { OIDC_PUBLIC_INPUT_COUNT } from '../../../barretenberg/circuits/oidc.js'
 import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_telegram/parameters.js'
 import { recordValidator } from '../../../primitives.js'
 import {
@@ -28,7 +27,7 @@ const telegram = oidcValidation({
   platform: PLATFORM_TELEGRAM_KEY,
   name: 'Telegram',
   proofShape: recordValidator<TelegramProofV1>('Invalid Telegram proof', {
-    ...oidcProofFields(OIDC_PUBLIC_INPUT_COUNT),
+    ...oidcProofFields,
     tokenIssuedAt: isSignedTime,
   }),
   signedTime: (proof: Pick<TelegramProofV1, 'tokenIssuedAt'>) => proof.tokenIssuedAt,

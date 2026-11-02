@@ -1,4 +1,8 @@
-import { buildOidcPublicInputs, RSA_MODULUS_BYTES } from '../barretenberg/circuits/oidc.js'
+import {
+  buildOidcPublicInputs,
+  OIDC_PUBLIC_INPUT_COUNT,
+  RSA_MODULUS_BYTES,
+} from '../barretenberg/circuits/oidc.js'
 import { FIELD_HEX_CHARS, FIELD_HEX_PATTERN } from '../barretenberg/parameters.js'
 import { identityNodes, isAccountId, isHandle } from '../identity.js'
 import { isFixedBytes, isUint, type Predicates } from '../primitives.js'
@@ -12,12 +16,12 @@ export interface OidcProofFields {
   signingKeyModulus: Uint8Array
 }
 
-/** Shape checks of the shared proof fields, for `publicInputCount` circuit fields. */
-export const oidcProofFields = (publicInputCount: number): Predicates<OidcProofFields> => ({
+/** Shape checks of the shared proof fields. */
+export const oidcProofFields: Predicates<OidcProofFields> = {
   identityProof: isProofBytes,
   publicInputs: (value: unknown) =>
     Array.isArray(value) &&
-    value.length === publicInputCount &&
+    value.length === OIDC_PUBLIC_INPUT_COUNT &&
     Array.from(value).every(
       (field) =>
         typeof field === 'string' &&
@@ -25,7 +29,7 @@ export const oidcProofFields = (publicInputCount: number): Predicates<OidcProofF
         FIELD_HEX_PATTERN.test(field),
     ),
   signingKeyModulus: (value: unknown) => isFixedBytes(value, RSA_MODULUS_BYTES),
-})
+}
 
 /** A signed time the circuit binds. */
 export const isSignedTime = (value: unknown) => isUint(value, Number.MAX_SAFE_INTEGER)

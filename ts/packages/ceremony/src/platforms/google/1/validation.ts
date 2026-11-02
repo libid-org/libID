@@ -1,8 +1,5 @@
 import { PLATFORM_GOOGLE_KEY } from '@libid/contracts/platforms'
-import {
-  MAX_AUD_BYTES,
-  PUBLIC_INPUT_COUNT,
-} from '../../../barretenberg/circuits/oidc_google/parameters.js'
+import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { recordValidator } from '../../../primitives.js'
 import {
   isSignedTime,
@@ -23,7 +20,7 @@ const google = oidcValidation({
   platform: PLATFORM_GOOGLE_KEY,
   name: 'Google',
   proofShape: recordValidator<GoogleProofV1>('Invalid Google proof', {
-    ...oidcProofFields(PUBLIC_INPUT_COUNT),
+    ...oidcProofFields,
     tokenExpiresAt: isSignedTime,
   }),
   signedTime: (proof: Pick<GoogleProofV1, 'tokenExpiresAt'>) => proof.tokenExpiresAt,
