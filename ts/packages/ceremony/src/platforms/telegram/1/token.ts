@@ -60,6 +60,6 @@ export function acceptTelegramIdToken(idToken: string, clientId: string): Parsed
   }
 }
 
-/** Select the one key carrying `kid` from Telegram's key set, served uncached beside the Bridge callback. */
+/** Select the one key carrying `kid` from Telegram's key set, which the Bridge caches up to 1 h. */
 export const fetchSigningKey = (redirectUri: string, kid: string, signal: AbortSignal) =>
   fetchKey(new URL(provider.jwksPath, redirectUri).href, kid, signal, 'no-store')
