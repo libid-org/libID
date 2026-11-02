@@ -221,9 +221,10 @@ Attestation Count: The number of entries in the closed attestation list a
 - ASM-NOTARY-01:
   The configured notary key is unforgeable, signs only transcripts it
   observed, and stamps their creation time from a clock within ordinary skew
-  of real time. The enforced numeric bound on future skew is REQ-PLAT-09's
-  comparison against the Platform Profile's `maxFutureAttestationSkew`, not
-  part of this assumption.
+  of real time. The enforced numeric bounds on future skew are REQ-PLAT-09's
+  comparison against the Platform Profile's `maxFutureAttestationSkew` and,
+  for Google Key List readings, platform REQ-PLAT-71's maximum reading lead;
+  neither is part of this assumption.
 - ASM-PROOF-01:
   A proof accepted under the verifier artifact selected for its platform and
   version pair satisfies that Platform Profile's complete proof statement.
@@ -1672,8 +1673,8 @@ and the handle appears in plaintext only once a transaction discloses it
 - A duplicate identity field hidden behind a commitment cannot be detected,
   so which account a binding names rests on ASM-PROV-06. That is a limit
   on soundness, not on privacy.
-- A binding's existence, platform, Transaction Author, and observation time
-  are public; only the values are not.
+- A binding's existence, platform, Transaction Author, and
+  `metadataObservedAt` watermark are public; only the values are not.
 - Any other transaction that names a handle as text, such as a payment
   addressed by handle rather than by node, discloses it as surely as a
   disclosure call, whoever sends it: the holder or a payer.
