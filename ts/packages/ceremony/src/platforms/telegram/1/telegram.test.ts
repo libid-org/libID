@@ -5,9 +5,11 @@ import { acceptTelegramIdToken, fetchSigningKey } from './token.js'
 import { proofExpiresAt, type TelegramProofV1 } from './validation.js'
 
 const redirectUri = 'https://bridge.test/auth/callback'
+const live = new AbortController().signal
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 it.each([
@@ -40,6 +42,35 @@ it('refuses a key set without a key array, and fetches no key once aborted', asy
   await expect(fetchSigningKey(redirectUri, 'b', AbortSignal.abort())).rejects.toThrow()
   expect(fetch).not.toHaveBeenCalled()
   await expect(fetchSigningKey(redirectUri, 'b', new AbortController().signal)).rejects.toThrow()
+})
+
+it.each([
+  ['swap', () => swapCode({ code: 'abc', codeVerifier: 'A'.repeat(43), redirectUri }, live)],
+  ['key fetch', () => fetchSigningKey(redirectUri, 'b', live)],
+])('gives up on a silent Bridge %s after 15 s', async (_name, call) => {
+  vi.useFakeTimers()
+  // Node's AbortSignal.timeout ignores fake timers; this one runs on them.
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    const timeout = new AbortController()
+    setTimeout(() => timeout.abort(new DOMException('Timed out', 'TimeoutError')), ms)
+    return timeout.signal
+  })
+  vi.stubGlobal(
+    'fetch',
+    (_url: string, init: RequestInit) =>
+      new Promise((_, reject) =>
+        init.signal!.addEventListener('abort', () => reject(init.signal!.reason)),
+      ),
+  )
+  let settled = false
+  const pending = call().finally(() => {
+    settled = true
+  })
+  pending.catch(() => {})
+  await vi.advanceTimersByTimeAsync(14999)
+  expect(settled).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  await expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
 })
 
 it('refuses a proof expiry past the safe integer range', () => {

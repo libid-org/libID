@@ -5,6 +5,13 @@ import { fetchPublicJson } from '../response.js'
 /** Bound a public JWKS response independently of any circuit's token dimensions. */
 const MAX_JWKS_BYTES = 128 * 1024
 
+/** One OIDC request's budget, above the Bridge's own upstream timeout. */
+export const REQUEST_TIMEOUT_MS = 15000
+
+/** The run's signal, also aborted once one request outlasts its budget. */
+export const requestSignal = (signal: AbortSignal) =>
+  AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+
 const text = new TextDecoder('utf-8', { fatal: true })
 
 /** Decode a JWT segment's JSON object, or null. */
@@ -48,7 +55,7 @@ export async function fetchSigningKey(
     url,
     MAX_JWKS_BYTES,
     'Signing key request failed',
-    signal,
+    requestSignal(signal),
     cache,
   )
   if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error('Invalid key set')

@@ -3,6 +3,7 @@ import { CeremonyError } from '../../../errors.js'
 import { isRecord } from '../../../primitives.js'
 import { readJson } from '../../../response.js'
 import { isPkceValue } from '../../authorization.js'
+import { requestSignal } from '../../oidc.js'
 import { provider } from './provider.js'
 
 const MAX_TOKEN_RESPONSE_BYTES = 64 * 1024
@@ -27,7 +28,7 @@ export async function swapCode(
     redirect: 'error',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-    signal,
+    signal: requestSignal(signal),
   })
   if (!response.ok) throw new CeremonyError('token-swap', 'Telegram token request failed')
   // Telegram answers token errors with HTTP 200 and an `error` field.
