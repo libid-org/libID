@@ -1,6 +1,12 @@
+import { type Asset, assetUrl } from '../assets/index.js'
 import { RSA_EXPONENT_BASE64URL, RSA_MODULUS_BYTES } from '../barretenberg/circuits/oidc.js'
+import { ProofEngine } from '../barretenberg/engine.js'
+import { operation } from '../events.js'
 import { b64urlDecode, isRecord } from '../primitives.js'
 import { fetchPublicJson } from '../response.js'
+import type { ProverContext } from './context.js'
+import type { PlatformId } from './index.js'
+import type { Identity } from './validation.js'
 
 /** Bound a public JWKS response independently of any circuit's token dimensions. */
 const MAX_JWKS_BYTES = 128 * 1024
@@ -73,4 +79,62 @@ export function rs256Modulus(jwk: unknown, signature: Uint8Array | null): Uint8A
     throw new Error('Signing key must be RSA-2048')
   if (signature?.length !== RSA_MODULUS_BYTES) throw new Error('Signature must be 256 bytes')
   return modulus
+}
+
+/**
+ * Prove an OIDC identity: start the engine, take the accepted token, fetch its signing key, build
+ * the circuit inputs, prove, and check the public inputs against the delivered identity.
+ */
+export async function proveOidc<
+  P extends PlatformId,
+  T extends { kid: string },
+  F extends { signingKeyModulus: Uint8Array },
+>(
+  context: ProverContext<P>,
+  oidc: {
+    name: string
+    assets: { circuit: Asset; verificationKey: Asset }
+    token(): T | Promise<T>
+    fetchSigningKey(kid: string, signal: AbortSignal): Promise<unknown>
+    prepare(
+      token: T,
+      jwk: unknown,
+    ): {
+      inputs: Record<string, unknown>
+      authorizationDigest: Uint8Array
+      identity: Identity<P>
+      proofFields: F
+    }
+    isPublicInputs(
+      value: unknown,
+      authorizationDigest: Uint8Array,
+      identity: Identity<P>,
+      proof: F,
+    ): boolean
+  },
+) {
+  const { signal, emit } = context
+  const engine = new ProofEngine({
+    circuitUrl: assetUrl(oidc.assets.circuit),
+    verificationKeyUrl: assetUrl(oidc.assets.verificationKey),
+    emit,
+  })
+  try {
+    const token = await oidc.token()
+    const key = await operation(emit, 'signing-key-fetch', () =>
+      oidc.fetchSigningKey(token.kid, signal),
+    )
+    const { inputs, authorizationDigest, identity, proofFields } = await operation(
+      emit,
+      'circuit-inputs',
+      () => oidc.prepare(token, key),
+    )
+    const raw = await engine.prove(inputs, signal)
+    const proof = { identityProof: raw.proof, publicInputs: raw.publicInputs, ...proofFields }
+    if (!oidc.isPublicInputs(raw.publicInputs, authorizationDigest, identity, proof))
+      throw new Error(`${oidc.name} public input mismatch`)
+    return { identity, proof }
+  } finally {
+    engine.destroy()
+  }
 }

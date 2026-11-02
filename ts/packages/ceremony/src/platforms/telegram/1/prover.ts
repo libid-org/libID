@@ -1,58 +1,27 @@
-import { PLATFORM_TELEGRAM_KEY } from '@libid/contracts/platforms'
-import { assetUrl } from '../../../assets/index.js'
-import { buildOidcTelegramInputs } from '../../../barretenberg/circuits/oidc_telegram/inputs.js'
-import {
-  circuit,
-  verificationKey,
-} from '../../../barretenberg/circuits/oidc_telegram/oidc_telegram.assets.js'
-import { ProofEngine } from '../../../barretenberg/engine.js'
+import * as assets from '../../../barretenberg/circuits/oidc_telegram/oidc_telegram.assets.js'
 import { operation } from '../../../events.js'
-import { identityNodes } from '../../../identity.js'
 import type { ProverContext } from '../../context.js'
-import { rs256Modulus } from '../../oidc.js'
-import type { Identity } from '../../validation.js'
+import { proveOidc } from '../../oidc.js'
+import { prepareTelegramInputs } from './inputs.js'
 import { swapCode } from './swap.js'
 import { acceptTelegramIdToken, fetchSigningKey } from './token.js'
 import { isTelegramPublicInputs } from './validation.js'
 
 export async function prove(context: ProverContext<'telegram'>) {
-  const { signal, emit, request, codeVerifier } = context
+  const { emit, request, codeVerifier, signal } = context
   const { redirectUri } = request
-  const engine = new ProofEngine({
-    circuitUrl: assetUrl(circuit),
-    verificationKeyUrl: assetUrl(verificationKey),
-    emit,
+  return proveOidc(context, {
+    name: 'Telegram',
+    assets,
+    token: async () =>
+      acceptTelegramIdToken(
+        await operation(emit, 'token-swap', () =>
+          swapCode({ code: context.credential, codeVerifier, redirectUri }, signal),
+        ),
+        request.clientId,
+      ),
+    fetchSigningKey: (kid, keySignal) => fetchSigningKey(redirectUri, kid, keySignal),
+    prepare: prepareTelegramInputs,
+    isPublicInputs: isTelegramPublicInputs,
   })
-  try {
-    const idToken = await operation(emit, 'token-swap', () =>
-      swapCode({ code: context.credential, codeVerifier, redirectUri }, signal),
-    )
-    const token = acceptTelegramIdToken(idToken, request.clientId)
-    const { aud, iat, id, preferred_username } = token.claims
-    const identity: Identity<'telegram'> = {
-      platformId: PLATFORM_TELEGRAM_KEY,
-      oauthClientId: aud,
-      userId: id,
-      userName: preferred_username,
-    }
-    const key = await operation(emit, 'signing-key-fetch', () =>
-      fetchSigningKey(redirectUri, token.kid, signal),
-    )
-    const { inputs, modulus } = await operation(emit, 'circuit-inputs', () => {
-      const modulus = rs256Modulus(key, token.signature)
-      return { inputs: buildOidcTelegramInputs(token, modulus, identityNodes(identity)), modulus }
-    })
-    const raw = await engine.prove(inputs, signal)
-    const proof = {
-      identityProof: raw.proof,
-      publicInputs: raw.publicInputs,
-      tokenIssuedAt: iat,
-      signingKeyModulus: modulus,
-    }
-    if (!isTelegramPublicInputs(raw.publicInputs, token.authorizationDigest, identity, proof))
-      throw new Error('Telegram public input mismatch')
-    return { identity, proof }
-  } finally {
-    engine.destroy()
-  }
 }
