@@ -35,8 +35,6 @@ const resultAdapter = <I, P>(validation: {
 export interface PlatformCeremonyVersion {
   /** Whether the authorization request carries a PKCE challenge and the exchange its verifier. */
   pkce: boolean
-  /** What the Platform Verifier compares the digest by: the OIDC nonce or the revealed PKCE verifier. */
-  digestBinding: 'nonce' | 'verifier'
   returnRules: ReturnRules
   buildAuthorizationUrl(input: {
     clientId: string

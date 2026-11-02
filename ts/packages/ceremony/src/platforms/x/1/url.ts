@@ -4,7 +4,6 @@ import type { ReturnRules } from '../../oauthReturn.js'
 import { provider } from './provider.js'
 
 export const pkce = true
-export const digestBinding = 'verifier'
 
 /** Query code return; X defines no issuer field. */
 export const returnRules: ReturnRules = {

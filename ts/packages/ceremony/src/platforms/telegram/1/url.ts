@@ -5,7 +5,6 @@ import { provider } from './provider.js'
 
 /** The digest is bound by the OIDC nonce; PKCE only protects the code at the Bridge swap. */
 export const pkce = true
-export const digestBinding = 'nonce'
 
 /** Query code return; a token in the redirect breaks the rules. */
 export const returnRules: ReturnRules = {
@@ -19,5 +18,5 @@ export const returnRules: ReturnRules = {
 export const buildAuthorizationUrl = pkceAuthorizationUrlBuilder(
   provider.authorizationEndpoint,
   provider.authorizationScope,
-  { leading: [['response_type', 'code']], nonce: digestBinding === 'nonce' },
+  { leading: [['response_type', 'code']], nonce: true },
 )

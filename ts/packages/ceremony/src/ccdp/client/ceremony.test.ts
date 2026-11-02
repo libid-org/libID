@@ -366,7 +366,7 @@ it('rejects a duplicate live ID without coercing boxed strings [KIT-008]', async
 it.each(supportedPlatforms)(
   'snapshots ledger routing once for %s [LIBID-MOD-014/015] [LIBID-OAUTH-003] [LIBID-OAUTH-016]',
   async (platformId) => {
-    const { pkce, digestBinding } = platforms[platformId].versions[1]
+    const { pkce } = platforms[platformId].versions[1]
     const domain = new Uint8Array(32)
     const data = new Uint8Array([1, 2])
     const ledger = {
@@ -402,7 +402,7 @@ it.each(supportedPlatforms)(
     }
     for (const key of ['ledgerId', 'chainId', 'isTestnet']) expect(message).not.toHaveProperty(key)
     // Every platform delivers an accepted result bound to the retained client digest.
-    const { identity: claimed } = fixtures[platformId]
+    const { identity: claimed, proverKind } = fixtures[platformId]
     const attestation = {
       attestedData: LIBID_RS_ATTESTED_DATA.slice(),
       signature: new Uint8Array(65),
@@ -431,7 +431,7 @@ it.each(supportedPlatforms)(
     })
     expect(result.oauthProof.authorizationDigest).toEqual(expectedDigest)
     expect(authorization.searchParams.get('nonce')).toBe(
-      digestBinding === 'nonce' ? b64urlEncode(expectedDigest) : null,
+      proverKind === 'oidc' ? b64urlEncode(expectedDigest) : null,
     )
   },
 )
