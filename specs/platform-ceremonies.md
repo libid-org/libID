@@ -1122,7 +1122,7 @@ requires.
   | Index | Public input | Meaning |
   |---|---|---|
   | 0-1 | token bearer commitment | the commitment the Platform Verifier matches against the verified token attestation |
-  | 2-3 | identity bearer commitment | the bearer commitment the Platform Verifier matches against the verified `/users/me` attestation |
+  | 2-3 | identity bearer commitment | the bearer commitment the Platform Verifier matches against the verified `/2/users/me` attestation |
   | 4-5 | id commitment | the `id` commitment the Platform Verifier frames in that attestation's response |
   | 6-7 | handle commitment | the `username` commitment the Platform Verifier frames in that response |
   | 8-9 | id node | REQ-PLAT-05A over the opened `id` |
@@ -1546,7 +1546,7 @@ requires.
   The Proving Circuit MUST expose exactly the sixteen public inputs of
   REQ-PLAT-32B, in its order and encoding, with the token-exchange
   attestation in place of X's token attestation, the `/user` attestation in
-  place of `/users/me`, `login` in place of `username`, and GitHub's tags in
+  place of `/2/users/me`, `login` in place of `username`, and GitHub's tags in
   place of X's. The Proving
   Circuit MUST NOT add an Authorization Digest, client identifier,
   timestamp, or endpoint public input. Necessity: the digest is bound by the
@@ -1857,8 +1857,9 @@ TEST-PLAT-04 and TEST-PLAT-15 distinguish those later rejections from early
 browser rejection. No ledger verification guarantee is weakened.
 
 This document enforces SP-BIND-01, SP-CLIENT-01, SP-DELIVERY-01,
-SP-EXCHANGE-01, SP-FRESH-01, and SP-PRIV-01 for the launch platforms, under
-the assumptions of [common §3](ceremony-common.md#3-assumptions).
+SP-EXCHANGE-01, SP-FRESH-01, SP-REPLAY-01, and SP-PRIV-01 for the launch
+platforms, under the assumptions of
+[common §3](ceremony-common.md#3-assumptions).
 
 Google is the only platform whose evidence is a bearer artifact: an ID Token
 is complete evidence to whoever holds it. Its delivery is therefore
@@ -1953,7 +1954,7 @@ author's earlier name on any platform; no clearing event precedes it.
 ## 10. References
 
 Normative: [RFC6749], [RFC7636], [RFC7515], [RFC7517], [RFC7518], [RFC7519],
-[RFC8017], [OIDC], [RFC8446], [RFC9207], [libid-handle-vectors].
+[RFC8017], [OIDC], [RFC8446], [RFC9207].
 
 Informative: [RFC9700], [TLSNotary-Proxy], [GitHub-public-clients].
 
@@ -1961,4 +1962,3 @@ Informative: [RFC9700], [TLSNotary-Proxy], [GitHub-public-clients].
 
 [RFC9207]: https://www.rfc-editor.org/rfc/rfc9207.html
 
-[libid-handle-vectors]: https://github.com/libid-org/libid-contracts/blob/v0.17.0/solidity/contracts/identity/handles.json

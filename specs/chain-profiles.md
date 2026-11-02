@@ -1,6 +1,6 @@
 ---
 title: Chain profiles
-description: libID specification for how consumer chains authenticate transaction authors, supply block time, and encode authorized transaction data.
+description: libID specification for how consumer chains authenticate transaction authors, supply block time, encode authorized transaction data, and carry fees and roll back rejected calls.
 ---
 
 # Chain profiles
