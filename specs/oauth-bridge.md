@@ -272,8 +272,8 @@ route.
 `POST /api/v1/ceremony/telegram/token` takes a JSON body with exactly three
 strings: `code`, `codeVerifier`, and `redirectUri`. `code` and `redirectUri`
 are at most 512 bytes each. Any other body fails without contacting
-Telegram. The Bridge forwards them to Telegram's token endpoint as `grant_type=authorization_code` with HTTP Basic client
-authentication. It returns Telegram's status, body, and `Content-Encoding`
+Telegram. The Bridge forwards them to Telegram's token endpoint as
+`grant_type=authorization_code` with HTTP Basic client authentication. It returns Telegram's status, body, and `Content-Encoding`
 unchanged. Telegram reports token errors with HTTP 200 and an `error` field;
 the browser rejects them. A timeout, unreachable endpoint, redirect, or
 oversized response returns `502` with no Telegram body.

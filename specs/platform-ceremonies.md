@@ -1647,17 +1647,26 @@ A key may sign tokens before any reading lists it. The Bridge relays the
 keys to the Prover and could substitute them, so only the Platform
 Verifier's list decides which key is trusted.
 
+`TelegramJwtRoots` holds the latest notarized reading of the key set and the
+one before it. A reading's keys stay trusted for 30 days after the notary's
+time of that reading, and a later reading of the same set extends them. A
+reading of a different set moves the latest reading to the previous one and
+drops what the previous one held. Nothing else adds or removes a key.
+
 - REQ-PLAT-68 (upholds SP-CLIENT-01):
   The Platform Verifier MUST reject a proof whose RSA modulus
-  `TelegramJwtRoots` does not list.
+  `TelegramJwtRoots` does not list as trusted. `TelegramJwtRoots` MUST refuse a
+  reading that holds an RSA key whose exponent is not 65537, the exponent the
+  circuit verifies.
 - REQ-PLAT-69:
   The Verifier Governance Process MUST keep notarized readings of
   `https://oauth.telegram.org/.well-known/jwks.json` reaching
-  `TelegramJwtRoots`, so that a newly published signing key is listed within
-  one hour of its first use, the proof lifetime of REQ-PLAT-64
-  (`PROOF_LIFETIME_SECONDS_TELEGRAM`).
-  Necessity: a proof under an unlisted key fails; listing the key within one
-  lifetime limits the failures to tokens issued in that hour.
+  `TelegramJwtRoots`, so that a key published in that key set is listed
+  within one hour of its publication, the proof lifetime of REQ-PLAT-64
+  (`PROOF_LIFETIME_SECONDS_TELEGRAM`), and no listed key lapses while
+  Telegram still publishes it.
+  Necessity: a proof under an unlisted key fails; listing a published key
+  within one lifetime limits the failures to tokens issued in that hour.
 
 ## 7. Adding an identity platform
 
@@ -1943,8 +1952,9 @@ Platform Verifier, Notary Service, Consumer.
   A Telegram proof that satisfies the circuit under a modulus
   `TelegramJwtRoots` does not list is rejected by the Platform Verifier. The
   deployment names the keeper that submits notarized readings of Telegram's
-  key set. Once Telegram signs with a new key, that keeper's next reading
-  lists it within one hour, and every listed exponent is 65537.
+  key set. Once Telegram publishes a new key, that keeper's next reading
+  lists it within one hour. A reading holding an RSA key with an exponent
+  other than 65537 is refused.
 
 
 ## 9. Security Considerations
