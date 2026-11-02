@@ -758,8 +758,8 @@ The signing key is fetched from Google's JWKS endpoint as witness input.
   | signing input that REQ-PLAT-16 hashes | 1280 bytes |
   | decoded payload JSON | 768 bytes |
   | `aud` | 128 bytes |
-  | `sub` | 31 bytes, per [§2.1a](#21a-the-token-check-and-folding) |
-  | `email` | 62 bytes, per [§2.1a](#21a-the-token-check-and-folding) |
+  | `sub` | 31 bytes, per REQ-PLAT-06 |
+  | `email` | 62 bytes, per REQ-PLAT-16D |
   | `exp` | 12 decimal digits, per REQ-PLAT-21 |
 
   A Google client identifier is therefore at most 128 bytes, narrower than the

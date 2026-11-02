@@ -362,9 +362,10 @@ cryptographic soundness.
   when none is given, and enables nothing when the list fails to fetch or
   validate or omits its selected CCDP version. Application freezes the credential
   and forwards the same value to Prover despite later configuration changes.
-  A configured 512-byte client ID and credential start the Bridge, and one byte
-  more in either stops it at startup; the Application rejects a record carrying
-  a value past 512 bytes.
+  A configured GitHub client ID and credential of 512 bytes each start the
+  Bridge, and one byte more in either stops it at startup; the Application
+  rejects a record carrying a value past 512 bytes, and a Google client ID past
+  128 bytes under platform REQ-PLAT-76.
 - TEST-BRIDGE-04 (exercises REQ-BRIDGE-04):
   Callback queries/cookies/headers never reach the artifact request; failed refresh preserves the last valid HTML/policy pair, or serves inert unavailability.
 - TEST-BRIDGE-05: Withdrawn.
