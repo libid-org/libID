@@ -1,3 +1,7 @@
+import {
+  MAX_FUTURE_ATTESTATION_SKEW_SECONDS_TELEGRAM,
+  PROOF_LIFETIME_SECONDS_TELEGRAM,
+} from '@libid/contracts/ceremony'
 import { afterEach, expect, it, vi } from 'vitest'
 import { REQUEST_TIMEOUT_MS } from '../../../response.js'
 import { jwtPart, telegramV1 } from '../../conformance/fixtures.js'
@@ -13,11 +17,13 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+const SKEW = MAX_FUTURE_ATTESTATION_SKEW_SECONDS_TELEGRAM
+const LIFETIME = PROOF_LIFETIME_SECONDS_TELEGRAM
 it.each([
-  [300, true],
-  [301, false],
-  [-3599, true],
-  [-3600, false],
+  [SKEW, true],
+  [SKEW + 1, false],
+  [1 - LIFETIME, true],
+  [-LIFETIME, false],
 ])('takes a token issued %is from now: %s', (ahead, accepted) => {
   const { iat, aud } = jwtPart(telegramV1.idToken, 1) as { iat: number; aud: string }
   vi.useFakeTimers({ now: (iat - ahead) * 1000 })

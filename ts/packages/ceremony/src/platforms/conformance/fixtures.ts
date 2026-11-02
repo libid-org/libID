@@ -1,7 +1,12 @@
 // The platform conformance table: one typed entry per catalog platform. Adding a platform to
 // the catalog fails typecheck here until its entry exists; the conformance suites beside this
 // file then run the catalog, OAuth return, validator and prover checks over every entry.
+
 import { readFileSync } from 'node:fs'
+import {
+  MAX_FUTURE_ATTESTATION_SKEW_SECONDS_TELEGRAM,
+  PROOF_LIFETIME_SECONDS_TELEGRAM,
+} from '@libid/contracts/ceremony'
 import type { OAuthReturn } from '../../ccdp/navigation.js'
 import { LIBID_RS_ATTESTED_DATA } from '../../notary/fixtures/libid-rs.js'
 import type { IdentityRequest } from '../../notary/oauth/identity.js'
@@ -331,7 +336,7 @@ export const telegramPublicInputs = [
 
 export const telegramV1 = oidcFixture('../telegram/1/telegram-v1.fixture.json')
 
-const telegramIat = 1893452400
+const telegramIat = jwtPart(telegramV1.idToken, 1).iat as number
 
 const noUsername = 'Set a Telegram username, then try again'
 
@@ -875,8 +880,8 @@ export const fixtures = {
       publicInputs: telegramPublicInputs,
     },
     digest: telegramV1.authorizationDigest,
-    // iat + 1 h (REQ-PLAT-64); the 30 s exp is not used.
-    expiresAt: 1893456000,
+    // iat + the proof lifetime (REQ-PLAT-64); the 30 s exp is not used.
+    expiresAt: telegramIat + PROOF_LIFETIME_SECONDS_TELEGRAM,
     validation: telegramValidation,
     rejectedProof: {
       ...oidcRejectedProof(telegramModulus, telegramPublicInputs),
@@ -937,7 +942,9 @@ export const fixtures = {
       'another issuer [REQ-PLAT-64]': claiming({ iss: 'https://oauth.telegram.org/' }),
       'another audience [REQ-PLAT-64]': claiming({ aud: '7000000002' }),
       'an audience array': claiming({ aud: ['7000000001'] }),
-      'an iat over 5 minutes ahead [REQ-PLAT-64]': claiming({ iat: telegramIat + 301 }),
+      'an iat over 5 minutes ahead [REQ-PLAT-64]': claiming({
+        iat: telegramIat + MAX_FUTURE_ATTESTATION_SKEW_SECONDS_TELEGRAM + 1,
+      }),
       'no iat': claiming({ iat: undefined }),
       'no nonce': claiming({ nonce: undefined }),
       'a 31-byte nonce': claiming({ nonce: b64urlEncode(telegramV1.authorizationDigest.slice(1)) }),
