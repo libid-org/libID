@@ -22,7 +22,7 @@ specifications.
 - [Common ceremony rules](ceremony-common.md) define the constructions and
   invariants shared by every identity platform.
 - [Identity-platform ceremonies](platform-ceremonies.md) define the launch
-  profiles for Google, X, and GitHub.
+  profiles for Google, X, GitHub, and Telegram.
 - [Chain profiles](chain-profiles.md) define how one destination chain
   authenticates the Transaction Author, supplies Block Time, and encodes
   Authorized Transaction Data.
