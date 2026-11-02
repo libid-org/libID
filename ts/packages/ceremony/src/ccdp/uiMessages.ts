@@ -14,7 +14,6 @@ export const messages = {
   proofReceived: 'Proof received',
   proofDelivered: 'Proof delivered.',
   authorizationDeclined: 'Authorization declined.',
-  returning: 'Returning to your application',
   returnToApplication: (message: string) => `${message} Return to your application.`,
   unsupportedVersion:
     'This ceremony version is no longer supported. Update the application and try again.',

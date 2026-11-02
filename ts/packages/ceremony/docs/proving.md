@@ -44,7 +44,7 @@ against released keys and rejects altered public inputs.
 | Owner | Use |
 |---|---|
 | [oidc_google](../src/barretenberg/circuits/oidc_google/) | The released Google OIDC circuit's ABI encoding; the Google platform owns JWT extraction, identity and semantic public inputs. |
-| [bearer_link](../src/barretenberg/circuits/bearer-link/) | One private bearer opening token and identity commitments, shared by X/GitHub. |
+| [bearer_link](../src/barretenberg/circuits/bearer-link/) | One private bearer opening the token and identity commitments, and the committed id and handle hashed into their nodes under the platform's tags; shared by X/GitHub. |
 
 The circuit repository owns the relation and ABI. Owner asset declarations pin
 compiled circuits and their keys together. Each circuit’s `parameters.ts` owns

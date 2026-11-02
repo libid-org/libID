@@ -9,6 +9,7 @@ import {
 } from './keeper.js'
 import { CONNECTION_VERSION } from './message.js'
 import { APP_ORIGIN, fakeScope, ID, OTHER_ID, tick } from './testing/fakes.js'
+import { PRESENCE_CHECK_MS } from './worker.js'
 
 const nextMessage = (port: MessagePort): Promise<unknown> =>
   new Promise((resolve) => {
@@ -166,6 +167,39 @@ describe('expiry [POPUP-KEEPER-003]', () => {
     await vi.advanceTimersByTimeAsync(CARRIER_CLAIM_TIMEOUT_MS + 1)
     await expect(scope.pending[0]).resolves.toBeUndefined()
     channel.port2.close()
+    const claim = keeper.claim(ID)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await claim).toBeNull()
+  })
+
+  it('holds the port while the keeping document is present, then for the deadline', async () => {
+    const scope = fakeScope()
+    scope.present = true
+    const keeper = new PortKeeper(scope.worker)
+    const kept = keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN)
+    await vi.advanceTimersByTimeAsync(10)
+    await kept
+    // A stalled navigation: the document stays well past the deadline.
+    await vi.advanceTimersByTimeAsync(3 * CARRIER_CLAIM_TIMEOUT_MS)
+    scope.present = false
+    await vi.advanceTimersByTimeAsync(CARRIER_CLAIM_TIMEOUT_MS - PRESENCE_CHECK_MS - 10)
+    const claim = keeper.claim(ID)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await claim).not.toBeNull()
+    await expect(scope.pending[0]).resolves.toBeUndefined()
+  })
+
+  it('expires a deadline after the keeping document leaves', async () => {
+    const scope = fakeScope()
+    scope.present = true
+    const keeper = new PortKeeper(scope.worker)
+    const kept = keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN)
+    await vi.advanceTimersByTimeAsync(10)
+    await kept
+    await vi.advanceTimersByTimeAsync(2 * CARRIER_CLAIM_TIMEOUT_MS)
+    scope.present = false
+    await vi.advanceTimersByTimeAsync(CARRIER_CLAIM_TIMEOUT_MS + PRESENCE_CHECK_MS)
+    await expect(scope.pending[0]).resolves.toBeUndefined()
     const claim = keeper.claim(ID)
     await vi.advanceTimersByTimeAsync(10)
     expect(await claim).toBeNull()

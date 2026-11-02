@@ -332,3 +332,71 @@ it.each(['open', 'keys', 'delete'])(
     await loaded.complete
   },
 )
+
+it('names each load source and settles only network retrievals still running [LIBID-BROWSER-029]', async () => {
+  const stored = new Map<string, Response>()
+  const persisting = Promise.withResolvers<void>()
+  vi.stubGlobal('caches', {
+    open: async () => ({
+      match: async (k: string) => stored.get(k)?.clone(),
+      // Persistence outlives delivery, keeping a settled load pending.
+      put: async (k: string, r: Response) => {
+        await persisting.promise
+        stored.set(k, r)
+      },
+    }),
+  })
+  const network = Promise.withResolvers<Response>()
+  const fetching = vi.fn(() => network.promise)
+  vi.stubGlobal('fetch', fetching)
+  const cache = new AssetCache('https://ccdp.example')
+  const full = { url: 'https://assets.example/wasm', bytes: 1 }
+  const first = cache.load(full)
+  expect(await first.dispatched).toBe('network')
+  // A joiner shares the running retrieval and its source.
+  expect(await cache.load(full).dispatched).toBe('network')
+  expect(fetching).toHaveBeenCalledOnce()
+  const settled = vi.fn()
+  // `spec` is neither loading nor stored.
+  void cache.remaining([full, spec]).then(settled)
+  await new Promise((resolve) => setTimeout(resolve))
+  expect(settled).not.toHaveBeenCalled()
+  network.resolve(new Response(new Uint8Array([1])))
+  await first.response
+  await vi.waitFor(() =>
+    expect(settled).toHaveBeenCalledExactlyOnceWith({ pending: 1, missing: 1 }),
+  )
+  // Delivered but still persisting: neither running nor missing, and a joiner reads its bytes.
+  expect(await cache.remaining([full])).toEqual({ pending: 0, missing: 0 })
+  expect(await cache.load(full).dispatched).toBe('cache')
+  expect(fetching).toHaveBeenCalledOnce()
+  persisting.resolve()
+  await first.complete
+  // Stored: a later load is a cache hit, and its lookup is not a retrieval.
+  const hit = cache.load(full)
+  expect(await cache.remaining([full])).toEqual({ pending: 0, missing: 0 })
+  expect(await hit.dispatched).toBe('cache')
+  await hit.complete
+
+  // A failed retrieval is settled too, and is missing afterwards.
+  vi.stubGlobal('fetch', async () => new Response(null, { status: 404 }))
+  const failed = cache.load(spec)
+  await failed.dispatched
+  const report = cache.remaining([spec])
+  await expect(failed.response).rejects.toThrow('Invalid asset response')
+  expect(await report).toEqual({ pending: 1, missing: 0 })
+  await failed.complete
+  expect(await cache.remaining([spec])).toEqual({ pending: 0, missing: 1 })
+})
+
+it('counts every spec missing when Cache Storage is inaccessible [LIBID-BROWSER-029]', async () => {
+  vi.stubGlobal('caches', {
+    open: async () => {
+      throw new DOMException('denied', 'SecurityError')
+    },
+  })
+  expect(await new AssetCache('https://ccdp.example').remaining([spec])).toEqual({
+    pending: 0,
+    missing: 1,
+  })
+})

@@ -82,6 +82,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-BROWSER-022 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-BROWSER-024 | [e2e/popup.spec.ts](../e2e/popup.spec.ts), [src/ccdp/documents/progress.test.ts](../src/ccdp/documents/progress.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-BROWSER-025 | [e2e/popup.spec.ts](../e2e/popup.spec.ts) |
+| LIBID-BROWSER-029 | [e2e/platforms.spec.ts](../e2e/platforms.spec.ts), [src/assets/cache.test.ts](../src/assets/cache.test.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts), [src/assets/rootWorker.test.ts](../src/assets/rootWorker.test.ts), [src/ccdp/documents/prefetch.test.ts](../src/ccdp/documents/prefetch.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-BROWSER-030 | [apps/dev/src/app.spec.ts](../../../apps/dev/src/app.spec.ts), [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts) |
 | LIBID-MOD-002 | [e2e/assets.spec.ts](../e2e/assets.spec.ts) |
 | LIBID-MOD-003 | [build/distribution.test.ts](../build/distribution.test.ts) |
@@ -145,10 +146,13 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | LIBID-PROVER-019 | [e2e/runtime.spec.ts](../e2e/runtime.spec.ts) |
 | LIBID-PROVER-021 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/notary/decode.test.ts](../src/notary/decode.test.ts), [src/platforms/conformance/stages.ts](../src/platforms/conformance/stages.ts) |
 | REQ-COMMON-39B | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
+| REQ-PLAT-08A | [src/identity.test.ts](../src/identity.test.ts) |
 | REQ-PLAT-16C | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| REQ-PLAT-32B | [src/barretenberg/circuits/bearer-link/inputs.test.ts](../src/barretenberg/circuits/bearer-link/inputs.test.ts) |
 | REQ-PLAT-56A | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | REQ-PLAT-56B | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | REQ-PLAT-56C | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| REQ-PLAT-59 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | REQ-PLAT-60 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-BRIDGE-03 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts), [src/platforms/conformance/catalog.test.ts](../src/platforms/conformance/catalog.test.ts) |
 | TEST-BRIDGE-04 | [build/distribution.test.ts](../build/distribution.test.ts) |
@@ -183,7 +187,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-DIST-07 | [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/cache.test.ts](../src/assets/cache.test.ts), [src/assets/rootWorker.test.ts](../src/assets/rootWorker.test.ts) |
 | TEST-DIST-08 | [build/distribution.test.ts](../build/distribution.test.ts), [e2e/assets.spec.ts](../e2e/assets.spec.ts), [src/assets/registration.test.ts](../src/assets/registration.test.ts) |
 | TEST-PLAT-01 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
-| TEST-PLAT-02 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts) |
+| TEST-PLAT-02 | [src/identity.test.ts](../src/identity.test.ts), [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-03 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-05 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-06 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts) |
@@ -202,5 +206,6 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-PLAT-17 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |
 | TEST-PLAT-17A | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-18 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| TEST-PLAT-20 | [src/identity.test.ts](../src/identity.test.ts) |
 | TEST-PLAT-21 | [src/notary/notarize.test.ts](../src/notary/notarize.test.ts), [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-22 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |

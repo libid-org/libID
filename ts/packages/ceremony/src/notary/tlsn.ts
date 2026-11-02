@@ -15,6 +15,8 @@ export interface Io {
   read(): Promise<Uint8Array | null>
   write(data: Uint8Array): Promise<void>
   close(): Promise<void>
+  /** Returns bytes the SDK read past the end of its session; the next `read` yields them first. */
+  unread(data: Uint8Array): void
 }
 
 export interface NotaryHttpRequest {

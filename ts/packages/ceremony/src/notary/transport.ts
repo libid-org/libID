@@ -125,6 +125,11 @@ export function socketIo(socket: WebSocket): Io {
       }
       return Promise.resolve()
     },
+    unread(data) {
+      const reader = readers.shift()
+      if (reader) reader.resolve(data)
+      else chunks.unshift(data)
+    },
   }
 }
 

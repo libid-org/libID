@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { stringify } from 'smol-toml'
 import { safePath } from './archive.ts'
+import { documentStyleSources } from './profiles.ts'
 
 /** One published path: its bytes and the headers SWS serves with them. */
 export type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
@@ -16,7 +17,7 @@ export const errorHeaders = {
   'Cache-Control': 'no-store',
   'X-Content-Type-Options': 'nosniff',
   'Cross-Origin-Resource-Policy': 'same-origin',
-  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+  'Content-Security-Policy': `default-src 'none'; frame-ancestors 'none'; ${documentStyleSources}`,
 } as const
 
 const BROTLI_QUALITY = 6
