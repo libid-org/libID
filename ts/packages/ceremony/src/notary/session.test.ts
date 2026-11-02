@@ -333,7 +333,7 @@ it.each(['send', 'reveal', 'attestation'])(
     const sent = session.send(request)
     const sibling = notary.prepare(target)
     let pending: Promise<unknown> = sent
-    await vi.advanceTimersByTimeAsync(5000)
+    await vi.advanceTimersByTimeAsync(15000)
     if (stage !== 'send') {
       port.postMessage({ type: 'sent', transcript: empty })
       await sent
@@ -348,7 +348,7 @@ it.each(['send', 'reveal', 'attestation'])(
       expect(pending).rejects.toThrow('Notarization request timed out'),
       expect(sibling).rejects.toThrow('Notarization request timed out'),
     ])
-    await vi.advanceTimersByTimeAsync(4999)
+    await vi.advanceTimersByTimeAsync(14999)
     expect(notary.signal.aborted).toBe(false)
     await vi.advanceTimersByTimeAsync(1)
     await checks

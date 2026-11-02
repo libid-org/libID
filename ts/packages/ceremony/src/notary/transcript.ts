@@ -60,14 +60,14 @@ export function quotedRange(
 export function numericRange(
   transcript: Uint8Array,
   name: string,
-): { range: ByteRange; value: Uint8Array } {
+): { range: ByteRange; valueStart: number; value: Uint8Array } {
   const { start, valueStart } = jsonField(transcript, name)
   let end = valueStart
   while (transcript[end] >= 0x30 && transcript[end] <= 0x39) end++
   const value = transcript.subarray(valueStart, end)
   end = skipJsonWhitespace(transcript, end)
   if (!JSON_MEMBER_END.includes(transcript[end])) invalidTranscript(`${name} is not an integer`)
-  return { value, range: { start, end: end + 1 } }
+  return { value, valueStart, range: { start, end: end + 1 } }
 }
 
 /** Case-fold a request field name, treating `_` as `-` as servers may for forbidden names. */

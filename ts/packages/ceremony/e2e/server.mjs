@@ -5,6 +5,7 @@ import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { makeCertificate } from '../../popup/e2e/tls.mjs'
 import { packageDir } from '../build/sources.ts'
+import { documentStyles } from '../build/styles.ts'
 import { isolated } from '../src/assets/headers.ts'
 import { CALLBACK_PATH } from '../src/assets/keys.ts'
 import { prepareCallback } from './callback.ts'
@@ -71,7 +72,7 @@ for (const secure of [true, false]) {
     if (path === '/ui')
       return send(
         html(
-          '<main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {EventFeed} from "/events.js";import {progressWeights} from "/google-events.js";window.testFeed=new EventFeed();window.testView=eventView(window.testFeed);window.testView.trackProof(progressWeights);window.testFeed.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>',
+          `<style>${documentStyles}</style><main id="libid-root"></main><script type="module">import {eventView} from "/ui.js";import {EventFeed} from "/events.js";import {progressWeights} from "/google-events.js";window.testFeed=new EventFeed();window.testView=eventView(window.testFeed);window.testView.trackProof(progressWeights);window.testFeed.emit({event:"prover",phase:"started",timestamp:performance.timeOrigin+performance.now(),status:"active"})</script>`,
         ),
       )
     if (path === '/')

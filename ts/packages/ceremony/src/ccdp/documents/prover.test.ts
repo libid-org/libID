@@ -22,9 +22,10 @@ const proofOf = (platformId: PlatformId = 'google'): Omit<IdentityProof, 'type'>
   proof: {},
 })
 
-const { accept, claimRootWorker, prove } = vi.hoisted(() => ({
+const { accept, claimRootWorker, remainingDownloads, prove } = vi.hoisted(() => ({
   accept: vi.fn(),
   claimRootWorker: vi.fn(),
+  remainingDownloads: vi.fn(),
   prove: vi.fn(
     async (_context: ProverContext): Promise<Omit<IdentityProof, 'type'>> => ({
       identity: { platformId: 'google', oauthClientId: 'client', userId: '1', userName: 'a@b.c' },
@@ -39,7 +40,7 @@ vi.mock('@libid/popup', async (original) => ({
   PopupWindow: { current: vi.fn() },
 }))
 
-vi.mock('../../assets/registration.js', () => ({ claimRootWorker }))
+vi.mock('../../assets/registration.js', () => ({ claimRootWorker, remainingDownloads }))
 
 vi.mock('../../platforms/google/1/prover.js', () => ({ prove }))
 
@@ -86,6 +87,7 @@ beforeEach(() => {
   for (const method of ['stop', 'message', 'trackProof', 'finishProof', 'delivered'] as const)
     vi.spyOn(ui, method)
   accept.mockImplementation(() => connection)
+  remainingDownloads.mockReturnValue(new Promise(() => {}))
   vi.stubGlobal('location', { origin: 'https://ccdp.test' })
   vi.stubGlobal('crossOriginIsolated', true)
   vi.stubGlobal('Worker', vi.fn())
@@ -456,3 +458,56 @@ it.each([
   // A lost extension observation still reaches local observers; a core loss ends the run.
   expect(ui.events.some((e) => 'event' in e && e.event === event)).toBe(!core)
 })
+
+it.each([
+  [
+    { pending: 2, missing: 0 },
+    { pending: 2, missing: 0, 'remaining-ms': 3000 },
+  ],
+  [
+    { pending: 0, missing: 0 },
+    { pending: 0, missing: 0, 'remaining-ms': 0 },
+  ],
+  // A lost retrieval leaves the wait unknown, never zero.
+  [
+    { pending: 0, missing: 2 },
+    { pending: 0, missing: 2 },
+  ],
+  [new Error('Missing controlling Service Worker'), undefined],
+])(
+  'reports downloads still running after proving began (%j) without delaying the proof [LIBID-BROWSER-029]',
+  async (settled, attributes) => {
+    const report = Promise.withResolvers<{ pending: number; missing: number }>()
+    remainingDownloads.mockReturnValue(report.promise)
+    const proof = Promise.withResolvers<Omit<IdentityProof, 'type'>>()
+    prove.mockReturnValueOnce(proof.promise)
+    let elapsed = 1000
+    vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
+    await startProver(proverInput('github'))
+    const handler = connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')?.[1]
+    handler(proveIdentity('github'))
+    // Proving starts at once; the report only observes.
+    await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
+    expect(remainingDownloads).toHaveBeenCalledExactlyOnceWith('github/1')
+    elapsed = 4000
+    if (settled instanceof Error) report.reject(settled)
+    else report.resolve(settled)
+    proof.resolve(proofOf('github'))
+    await vi.waitFor(() => expect(sentTypes()).toContain('identity-proof'))
+    const download = connection.sent.filter(
+      (message) => 'event' in message && message.event === 'asset-download',
+    )
+    expect(download).toEqual(
+      attributes
+        ? [
+            {
+              type: 'event',
+              event: 'asset-download',
+              timestamp: performance.timeOrigin + 4000,
+              instrumentation: { attributes },
+            },
+          ]
+        : [],
+    )
+  },
+)

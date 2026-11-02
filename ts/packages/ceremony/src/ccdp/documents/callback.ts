@@ -84,7 +84,8 @@ class CallbackDocument extends CeremonyDocument {
   }
 
   async start(): Promise<void> {
-    this.ui.message(messages.returning)
+    // The label the Prover continues with: this hop takes milliseconds, too fast for its own.
+    this.ui.message(messages.proofPreparation)
     // Its own navigation ends the connection; only a failure ends it early then.
     this.failOnEnd(
       messages.callbackClosed,

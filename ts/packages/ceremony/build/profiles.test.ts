@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { executionWorker } from '../src/assets/headers.ts'
-import { parseCsp, responseHeaders } from './profiles.ts'
+import { cspHash, parseCsp, responseHeaders } from './profiles.ts'
+import { documentStyles } from './styles.ts'
 
 test('fixed response policies admit runtime notaries without remote code permission [LIBID-ASSET-003] [CSP-003/011]', () => {
   for (const profile of ['prover', 'proverFallback', 'notaryWorker'] as const) {
@@ -70,6 +71,12 @@ test('pins every response profile security policy [CSP-001/002/003/009/015]', ()
   for (const profile of ['prover', 'proverFallback', 'prefetch', 'callback'] as const) {
     assert.equal(headers(profile).get('referrer-policy'), 'no-referrer', profile)
     assert.equal(headers(profile).get('cache-control'), 'no-cache', profile)
+    // CCDP embeds the Libron face, so fonts make no requests; Bridges admit none on Callback.
+    const fonts = profile === 'callback' ? undefined : ['data:']
+    assert.deepEqual(csp(profile).get('font-src'), fonts, profile)
+    // CCDP pins its own documents' stylesheet; Bridges compose Callback's policy.
+    const styles = profile === 'callback' ? "'unsafe-inline'" : cspHash(documentStyles)
+    assert.deepEqual(csp(profile).get('style-src'), [styles], profile)
   }
   const isolation = (profile: Parameters<typeof responseHeaders>[0]) => {
     const h = headers(profile)
@@ -84,7 +91,7 @@ test('pins every response profile security policy [CSP-001/002/003/009/015]', ()
   // Prefetch and Callback keep the opener: they must not sever the application's handle.
   assert.deepEqual(isolation('prefetch'), [null, 'unsafe-none', null])
   assert.deepEqual(isolation('callback'), [null, 'unsafe-none', null])
-  // WASM only where it compiles; no spawning from leaves.
+  // WASM only where it compiles; no spawning from leaves or the root Service Worker.
   for (const profile of [
     'prover',
     'proverFallback',
@@ -95,7 +102,10 @@ test('pins every response profile security policy [CSP-001/002/003/009/015]', ()
     assert.ok(csp(profile).get('script-src')!.includes("'wasm-unsafe-eval'"), profile)
   for (const profile of ['prefetch', 'callback', 'worker'] as const)
     assert.ok(!csp(profile).get('script-src')!.includes("'wasm-unsafe-eval'"), profile)
-  assert.deepEqual(csp('leafWorker').get('worker-src'), ["'none'"])
+  for (const profile of ['worker', 'leafWorker'] as const)
+    assert.deepEqual(csp(profile).get('worker-src'), ["'none'"], profile)
+  // Prefetch registers the root Service Worker.
+  assert.deepEqual(csp('prefetch').get('worker-src'), ["'self'"])
   for (const profile of ['notaryWorker', 'proofWorker'] as const) {
     assert.deepEqual(csp(profile).get('worker-src'), ["'self'", 'blob:'], profile)
     assert.equal(headers(profile).get('cross-origin-embedder-policy'), 'require-corp', profile)

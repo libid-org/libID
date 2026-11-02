@@ -1,22 +1,6 @@
-const logo = '#b57614';
+import palette from '../../brand/palette.json' with { type: 'json' };
 
 export const palettes = {
-  dark: {
-    background: '#1c1714',
-    surface: '#231e1b',
-    text: '#e8ddc2',
-    muted: '#948b7f',
-    border: '#443b36',
-    accent: '#83a598',
-    logo,
-  },
-  light: {
-    background: '#fbf1c7',
-    surface: '#f2e5bc',
-    text: '#3c3836',
-    muted: '#665c54',
-    border: '#bdae93',
-    accent: '#076678',
-    logo,
-  },
+  dark: { ...palette.dark, logo: palette.logo },
+  light: { ...palette.light, logo: palette.logo },
 };

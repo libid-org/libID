@@ -1,5 +1,6 @@
 ---
 title: OAuth Bridge Server
+description: libID HTTP and deployment specification for the OAuth Bridge, including public platform configuration and ceremony callback ingress.
 ---
 
 # OAuth Bridge Server

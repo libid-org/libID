@@ -1,5 +1,6 @@
 import type { IdentityProof } from '../ccdp/index.js'
 import type { CoreEvent } from '../events.js'
+import { type IdentityNodes, identityNodes } from '../identity.js'
 import * as githubUrl from './github/1/url.js'
 import * as github from './github/1/validation.js'
 import * as googleEvents from './google/1/events.js'
@@ -11,6 +12,7 @@ import type { Identity } from './validation.js'
 import * as xUrl from './x/1/url.js'
 import * as x from './x/1/validation.js'
 
+export type { IdentityNodes } from '../identity.js'
 export type { Identity } from './validation.js'
 
 /** Validate each version's proof before deriving its retention metadata. */
@@ -121,7 +123,14 @@ export type OAuthProof<P extends PlatformId = PlatformId> = {
 }[P]
 
 export type IdentityResult<P extends PlatformId = PlatformId> =
-  | { [K in P]: { status: 'accepted'; identity: Identity<K>; oauthProof: OAuthProof<K> } }[P]
+  | {
+      [K in P]: {
+        status: 'accepted'
+        /** The delivered identity and the nodes of its id and handle: the keys its binding is stored under. */
+        identity: Identity<K> & IdentityNodes
+        oauthProof: OAuthProof<K>
+      }
+    }[P]
   | { status: 'denied' }
 
 export function assembleResult<P extends PlatformId>(
@@ -140,7 +149,7 @@ export function assembleResult<P extends PlatformId>(
   if (identity.oauthClientId !== clientId) throw new TypeError('OAuth client ID mismatch')
   return {
     status: 'accepted',
-    identity,
+    identity: { ...identity, ...identityNodes(identity) },
     oauthProof: {
       platformCeremonyVersion: version,
       authorizationNonce: authorizationNonce.slice(),

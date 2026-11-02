@@ -1,0 +1,7 @@
+# Content-Signal is an optional content-use policy, not an RFC 9309 directive.
+# search: indexing; ai-input: use at query time; ai-train: training/fine-tuning.
+User-agent: *
+Allow: /
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
+
+Sitemap: https://lib.id/sitemap-index.xml

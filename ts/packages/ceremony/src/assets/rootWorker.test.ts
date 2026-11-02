@@ -1,19 +1,27 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const { load, reconcile } = vi.hoisted(() => ({ load: vi.fn(), reconcile: vi.fn() }))
+const { load, reconcile, remaining } = vi.hoisted(() => ({
+  load: vi.fn(),
+  reconcile: vi.fn(),
+  remaining: vi.fn(),
+}))
 
 vi.mock('./cache.js', async (original) => ({
   ...(await original<typeof import('./cache.js')>()),
   AssetCache: class {
     load = load
     reconcile = reconcile
+    remaining = remaining
   },
 }))
 
 vi.mock('@libid/popup/worker', () => ({ installPortKeeper: vi.fn() }))
 
 vi.mock('virtual:ceremony-assets', () => ({
-  requestsByProfile: { 'google/1': [{ url: '/asset' }] },
+  requestsByProfile: {
+    'google/1': [{ url: '/asset' }],
+    'github/1': [{ url: '/a' }, { url: '/b' }],
+  },
   allowedRequests: [{ url: '/asset' }, { url: '/g1.dat', range: 'bytes=0-1' }],
 }))
 
@@ -22,6 +30,7 @@ import { startRootWorker } from './rootWorker.js'
 beforeEach(() => {
   load.mockReset()
   reconcile.mockReset()
+  remaining.mockReset()
 })
 
 const PREFETCH = 'https://ccdp.example/ccdp/v1/prefetch'
@@ -75,8 +84,8 @@ it.each(['fetch', 'message', 'failed-prefetch'])(
   },
 )
 
-it('acknowledges prefetch dispatch on its port once every profile request is dispatched', async () => {
-  const dispatched = Promise.withResolvers<void>()
+it('acknowledges prefetch dispatch on its port once every profile request is dispatched [LIBID-BROWSER-029]', async () => {
+  const dispatched = Promise.withResolvers<string>()
   load.mockReturnValue({
     dispatched: dispatched.promise,
     response: Promise.resolve(new Response()),
@@ -94,9 +103,61 @@ it('acknowledges prefetch dispatch on its port once every profile request is dis
   expect(load).toHaveBeenCalledExactlyOnceWith({ url: 'https://ccdp.example/asset' })
   await Promise.resolve()
   expect(reply.postMessage).not.toHaveBeenCalled()
-  dispatched.resolve()
+  dispatched.resolve('network')
   await waits[0]
-  expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ dispatched: true })
+  expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({
+    dispatched: true,
+    cached: 0,
+    fetched: 1,
+  })
+  expect(reply.close).toHaveBeenCalledOnce()
+})
+
+it('counts stored and fetched profile requests in the acknowledgement [LIBID-BROWSER-029]', async () => {
+  for (const source of ['cache', 'network'])
+    load.mockReturnValueOnce({
+      dispatched: Promise.resolve(source),
+      response: Promise.resolve(new Response()),
+      complete: Promise.resolve(),
+    })
+  const reply = port()
+  const waits: Promise<unknown>[] = []
+  start()('message', {
+    data: { type: 'ceremony-prefetch', profile: 'github/1' },
+    ports: [reply],
+    source: { url: PREFETCH },
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+  })
+  await waits[0]
+  expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({
+    dispatched: true,
+    cached: 1,
+    fetched: 1,
+  })
+})
+
+it('reports running and missing profile retrievals once the running ones settle [LIBID-BROWSER-029]', async () => {
+  const settled = Promise.withResolvers<{ pending: number; missing: number }>()
+  remaining.mockReturnValue(settled.promise)
+  const reply = port()
+  const waits: Promise<unknown>[] = []
+  start()('message', {
+    data: { type: 'ceremony-downloads', profile: 'github/1' },
+    ports: [reply],
+    source: { url: 'https://ccdp.example/ccdp/v1/prover' },
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+  })
+  // Only running retrievals are joined; the report starts none.
+  expect(remaining).toHaveBeenCalledExactlyOnceWith([
+    { url: 'https://ccdp.example/a' },
+    { url: 'https://ccdp.example/b' },
+  ])
+  expect(load).not.toHaveBeenCalled()
+  await Promise.resolve()
+  expect(reply.postMessage).not.toHaveBeenCalled()
+  settled.resolve({ pending: 2, missing: 1 })
+  await waits[0]
+  expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ pending: 2, missing: 1 })
   expect(reply.close).toHaveBeenCalledOnce()
 })
 
@@ -174,6 +235,9 @@ it.each([
   [{ type: 'ceremony-claim' }, 'https://evil.example/page'],
   [{ type: 'ceremony-claim', extra: true }, 'https://ccdp.example/ccdp/v1/prover'],
   [{ type: 'ceremony-prefetch', profile: 'google/1' }, 'https://evil.example/page'],
+  [{ type: 'ceremony-downloads', profile: 'google/1' }, 'https://evil.example/page'],
+  [{ type: 'ceremony-downloads', profile: 'other/1' }, 'https://ccdp.example/ccdp/v1/prover'],
+  [{ type: 'ceremony-downloads', profile: 'toString' }, 'https://ccdp.example/ccdp/v1/prover'],
 ])('closes the ports of an invalid ceremony request %j from %s without replying', (data, url) => {
   const claim = vi.fn(async () => {})
   const reply = port()
@@ -184,12 +248,19 @@ it.each([
   expect(waitUntil).not.toHaveBeenCalled()
   expect(claim).not.toHaveBeenCalled()
   expect(load).not.toHaveBeenCalled()
+  expect(remaining).not.toHaveBeenCalled()
 })
 
 it.each([
   ['a claim with two ports', { type: 'ceremony-claim' }, 2, PREFETCH],
   ['a prefetch without a port', { type: 'ceremony-prefetch', profile: 'google/1' }, 0, PREFETCH],
   ['a non-string profile', { type: 'ceremony-prefetch', profile: ['google/1'] }, 1, PREFETCH],
+  [
+    'a download report without a port',
+    { type: 'ceremony-downloads', profile: 'google/1' },
+    0,
+    PREFETCH,
+  ],
   ['a request without a client source', { type: 'ceremony-claim' }, 1, undefined],
 ])('closes every port of %s without replying', (_, data, count, url) => {
   const claim = vi.fn(async () => {})
@@ -230,6 +301,8 @@ it.each(['other/1', 'toString'])(
 
 it.each([
   ['popup port keeper traffic', { type: 'popup-port' }],
+  ['an inherited message type', { type: 'toString' }],
+  ['a constructor message type', { type: 'constructor' }],
   ['a non-record', 'ceremony-claim'],
   ['null', null],
 ])('passes %s through untouched', (_, data) => {

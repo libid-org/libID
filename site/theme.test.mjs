@@ -29,7 +29,7 @@ for (const { props } of icons) {
   assert(svg.includes(`stroke="${props.palette.logo}"`));
 }
 
-const script = readFileSync(new URL("public/theme.js", import.meta.url), "utf8");
+const script = readFileSync(new URL("src/theme.js", import.meta.url), "utf8");
 
 // Exercise saved preferences, both toggle directions, and blocked storage.
 for (const saved of [null, "dark", "light", "invalid", "blocked"]) {

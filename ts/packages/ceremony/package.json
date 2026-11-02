@@ -1,6 +1,6 @@
 {
   "name": "@libid/ceremony",
-  "version": "0.1.0",
+  "version": "0.4.1",
   "description": "Browser OAuth identity ceremonies over an application-owned popup connection.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
@@ -29,23 +29,23 @@
     "prepack": "pnpm build"
   },
   "devDependencies": {
-    "@aztec-foundation/bb.js": "6.0.0-rc.2",
+    "@aztec-foundation/bb.js": "6.0.0",
     "@libid/popup": "workspace:^",
-    "@noir-lang/acvm_js": "1.0.0-rc.3",
-    "@noir-lang/noir_js": "1.0.0-rc.3",
-    "@noir-lang/noirc_abi": "1.0.0-rc.3",
+    "@noir-lang/acvm_js": "1.0.0",
+    "@noir-lang/noir_js": "1.0.0",
+    "@noir-lang/noirc_abi": "1.0.0",
     "@playwright/test": "catalog:",
     "@types/estree": "^1.0.9",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "smol-toml": "^1.9.0",
+    "smol-toml": "^1.9.1",
     "tar": "^7.5.22",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@libid/contracts": "0.15.1",
+    "@libid/contracts": "0.19.0",
     "@libid/ledger": "workspace:^",
     "@noble/hashes": "^2.4.0"
   },

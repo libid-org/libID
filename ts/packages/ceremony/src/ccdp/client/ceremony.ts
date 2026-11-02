@@ -51,7 +51,6 @@ export interface Ceremony<P extends PlatformId = PlatformId> {
 /** Validated `new` arguments; byte inputs are read only while deriving the digest. */
 interface CeremonyInput<P extends PlatformId> {
   notaryAddress: string
-  chainId: Uint8Array
   platformId: P
   version: SupportedCeremonyVersion<P>
   operationDomain: Uint8Array
@@ -157,7 +156,6 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
     const digest = deriveAuthorizationDigest({
       operationDomain: input.operationDomain,
       transactionData: input.transactionData,
-      chainId: input.chainId,
       authorizationNonce: this.authorizationNonce,
       platformCeremonyVersion: this.version,
     })
