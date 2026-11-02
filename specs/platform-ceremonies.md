@@ -1633,9 +1633,30 @@ protects the code at the swap; no verifier compares it.
 | handle | signed `preferred_username` | the identity table's rule: not empty, at most 32 bytes, no quote or backslash, A–Z folded under REQ-PLAT-05B |
 
 `sub` is not the account id and is not used. The circuit and the Platform
-Verifier own their checks of these fields. Its tags, circuit buffers,
-trust-root lifecycle, and conformance vectors follow the circuit's Telegram
-entry under §7.
+Verifier own their checks of these fields. Its tags, circuit buffers, and
+conformance vectors follow the circuit's Telegram entry under §7.
+
+### 6a.3 Signing keys
+
+The bot signs its ID tokens with RS256. BotFather also offers ES256, EdDSA
+and ES256K; the Prover and the circuit refuse them, so a bot set to one of
+those cannot prove an identity.
+
+A key may sign tokens before any reading lists it. The Bridge relays the
+keys to the Prover and could substitute them, so only the Platform
+Verifier's list decides which key is trusted.
+
+- REQ-PLAT-68 (upholds SP-CLIENT-01):
+  The Platform Verifier MUST reject a proof whose RSA modulus
+  `TelegramJwtRoots` does not list.
+- REQ-PLAT-69:
+  The Verifier Governance Process MUST keep notarized readings of
+  `https://oauth.telegram.org/.well-known/jwks.json` reaching
+  `TelegramJwtRoots`, so that a newly published signing key is listed within
+  one hour of its first use, the proof lifetime of REQ-PLAT-64
+  (`PROOF_LIFETIME_SECONDS_TELEGRAM`).
+  Necessity: a proof under an unlisted key fails; listing the key within one
+  lifetime limits the failures to tokens issued in that hour.
 
 ## 7. Adding an identity platform
 
@@ -1917,6 +1938,12 @@ Platform Verifier, Notary Service, Consumer.
   `access_token`, or `refresh_token` is refused before any Bridge request;
   `access_denied` resolves as a denial; an added `iss` leaves the outcome
   unchanged.
+- TEST-PLAT-24 (exercises REQ-PLAT-68, REQ-PLAT-69):
+  A Telegram proof that satisfies the circuit under a modulus
+  `TelegramJwtRoots` does not list is rejected by the Platform Verifier. The
+  deployment names the keeper that submits notarized readings of Telegram's
+  key set. Once Telegram signs with a new key, that keeper's next reading
+  lists it within one hour, and every listed exponent is 65537.
 
 
 ## 9. Security Considerations
