@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import { REQUEST_TIMEOUT_MS } from '../../../response.js'
 import { jwtPart, telegramV1 } from '../../conformance/fixtures.js'
 import { swapCode } from './swap.js'
 import { acceptTelegramIdToken, fetchSigningKey } from './token.js'
@@ -77,7 +78,7 @@ it.each([
     settled = true
   })
   pending.catch(() => {})
-  await vi.advanceTimersByTimeAsync(14999)
+  await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1)
   expect(settled).toBe(false)
   await vi.advanceTimersByTimeAsync(1)
   await expect(pending).rejects.toThrow(message)
