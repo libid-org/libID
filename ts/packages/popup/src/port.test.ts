@@ -73,6 +73,31 @@ async function roundTrip(app: MessagePort, popup: MessagePort): Promise<unknown[
   return received
 }
 
+/**
+ * Runs `start`, then every microtask it queues, in order, and returns what each threw: the
+ * errors the event loop would otherwise report.
+ */
+function runMicrotasks(start: () => void): unknown[] {
+  const microtasks: Array<() => void> = []
+  const thrown: unknown[] = []
+  vi.stubGlobal('queueMicrotask', (task: () => void) => void microtasks.push(task))
+  try {
+    start()
+    for (let task = microtasks.shift(), runs = 1; task; task = microtasks.shift(), runs++) {
+      // A microtask that keeps queueing itself would otherwise hang the suite.
+      if (runs > 100) throw new Error('microtasks never settle')
+      try {
+        task()
+      } catch (error) {
+        thrown.push(error)
+      }
+    }
+  } finally {
+    vi.unstubAllGlobals()
+  }
+  return thrown
+}
+
 describe('MessagePort handshake [POPUP-PORT-001]', () => {
   it('authenticates both endpoints and resolves entangled ports after the echo', async () => {
     const h = listen()
@@ -354,6 +379,31 @@ describe('PortCarrier [POPUP-PORT-002]', () => {
     carrier.close()
   })
 
+  it('delivers the rest of its backlog in order when a handler throws [POPUP-API-003] [POPUP-KEEPER-001]', async () => {
+    const channel = new MessageChannel()
+    channel.port2.postMessage({ type: 'queued' })
+    const backlog = [{ type: 'fails' }, { type: 'held' }, { type: 'fails' }]
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN, backlog)
+    const failure = new Error('handler failure')
+    const received: unknown[] = []
+    const thrown = runMicrotasks(() =>
+      carrier.on((value) => {
+        received.push(value)
+        if ((value as { type: string }).type === 'fails') throw failure
+      }),
+    )
+    await tick()
+    expect(received).toEqual([
+      { type: 'fails' },
+      { type: 'held' },
+      { type: 'fails' },
+      { type: 'queued' },
+    ])
+    expect(thrown).toHaveLength(2)
+    for (const error of thrown) expect(error).toBe(failure)
+    carrier.close()
+  })
+
   it('hands the undelivered backlog on when a delivered value makes the document leave [POPUP-CONNECTION-003]', async () => {
     const channel = new MessageChannel()
     channel.port2.postMessage({ type: 'queued' })
@@ -369,6 +419,28 @@ describe('PortCarrier [POPUP-PORT-002]', () => {
     expect(received).toEqual([{ type: 'leave' }])
     // What the port still dispatches joins after the values the handler did not reach.
     expect(handedOn).toEqual([{ type: 'second' }, { type: 'third' }, { type: 'queued' }])
+  })
+
+  it('hands the rest on and stops when a handler detaches then throws [POPUP-API-003] [POPUP-CONNECTION-003]', async () => {
+    const channel = new MessageChannel()
+    channel.port2.postMessage({ type: 'queued' })
+    const backlog = [{ type: 'leave' }, { type: 'second' }]
+    const carrier = new PortCarrier(channel.port1, APP_ORIGIN, backlog)
+    const failure = new Error('handler failure')
+    const received: unknown[] = []
+    let handedOn: unknown[] = []
+    const thrown = runMicrotasks(() =>
+      carrier.on((value) => {
+        received.push(value)
+        handedOn = carrier.detach().backlog
+        throw failure
+      }),
+    )
+    await tick()
+    expect(thrown).toHaveLength(1)
+    expect(thrown[0]).toBe(failure)
+    expect(received).toEqual([{ type: 'leave' }])
+    expect(handedOn).toEqual([{ type: 'second' }, { type: 'queued' }])
   })
 
   it('surrenders an unstarted port untouched, with only the backlog it was given', () => {

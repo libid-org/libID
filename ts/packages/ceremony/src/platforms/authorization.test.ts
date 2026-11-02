@@ -13,8 +13,6 @@ const hex = (bytes: Uint8Array) =>
 // The ceremony-common §5 conformance vector (TEST-COMMON-01).
 const operationDomain = keccak_256(new TextEncoder().encode('libid.claim-identity'))
 
-const chainId = keccak_256(new TextEncoder().encode('example:1'))
-
 const authorizationNonce = new Uint8Array(32).fill(0x55)
 
 const transactionData = new Uint8Array([0x00, 0x01, 0x02, 0x03])
@@ -24,19 +22,17 @@ describe('[TEST-COMMON-01] authorization digest', () => {
     expect(hex(operationDomain)).toBe(
       'cb29bed0428519ef88a3d670e8203db76e06f41aca3e684e2c63b516c9b93e1b',
     )
-    expect(hex(chainId)).toBe('38064d82f31db40935cc75f2a0d07dcfb448d7c08e7484fc30f5de95484a4066')
     const digest = deriveAuthorizationDigest({
       operationDomain,
       platformCeremonyVersion: 1,
-      chainId,
       authorizationNonce,
       transactionData,
     })
-    expect(hex(digest)).toBe('b318fb559e16a179b853ed2853576cda16032d93b0839bb81a55135d334c0af5')
+    expect(hex(digest)).toBe('24083f6c849372d1fa0a95615a7b2b6a888edef92e9fa2bebd520b2f536e9350')
   })
 
   it('[TEST-COMMON-04] distinct nonces over identical transaction data yield distinct digests', () => {
-    const base = { operationDomain, platformCeremonyVersion: 1, chainId, transactionData }
+    const base = { operationDomain, platformCeremonyVersion: 1, transactionData }
     const a = deriveAuthorizationDigest({ ...base, authorizationNonce })
     const b = deriveAuthorizationDigest({
       ...base,
@@ -49,16 +45,12 @@ describe('[TEST-COMMON-01] authorization digest', () => {
     const base = {
       operationDomain,
       platformCeremonyVersion: 1,
-      chainId,
       authorizationNonce,
       transactionData,
     }
     expect(() =>
       deriveAuthorizationDigest({ ...base, operationDomain: operationDomain.slice(1) }),
     ).toThrow(/32 bytes/)
-    expect(() => deriveAuthorizationDigest({ ...base, chainId: new Uint8Array(33) })).toThrow(
-      /32 bytes/,
-    )
     expect(() =>
       deriveAuthorizationDigest({ ...base, authorizationNonce: new Uint8Array(31) }),
     ).toThrow(/32 bytes/)
@@ -73,7 +65,6 @@ describe('[TEST-COMMON-01] authorization digest', () => {
     const args = {
       operationDomain,
       platformCeremonyVersion: 1,
-      chainId,
       authorizationNonce,
       transactionData,
     }
@@ -85,15 +76,14 @@ describe('[TEST-COMMON-07] PKCE derivation', () => {
   const digest = deriveAuthorizationDigest({
     operationDomain,
     platformCeremonyVersion: 1,
-    chainId,
     authorizationNonce,
     transactionData,
   })
 
   it('reproduces the §7 conformance vector exactly [LIBID-OAUTH-016]', () => {
     const verifier = deriveCodeVerifier(digest, authorizationNonce)
-    expect(verifier).toBe('5teBDl6cz4U77aFweV5PbMhBJ_lEFv6LLNKzqnDI5lo')
-    expect(deriveCodeChallenge(verifier)).toBe('c8HLMaJOzc8OUoRYc7AocL5ioAkXVtAOmoGxoSY60IQ')
+    expect(verifier).toBe('rx2URZOjavkbyhw8BXSYLcJRjifbdVFcolqJK7HBVGQ')
+    expect(deriveCodeChallenge(verifier)).toBe('L6b8OlTpVUwPgkYcOYwl-iZdsMj1AN4bN_-DTAPNsX0')
   })
 
   it('always yields exactly 43 unpadded base64url characters', () => {
@@ -111,7 +101,7 @@ describe('[TEST-COMMON-07] PKCE derivation', () => {
 
   it('matches the §3.1 Google nonce encoding of the same digest [TEST-PLAT-01]', () => {
     // Google carries the digest itself, base64url-encoded, as the OIDC nonce.
-    expect(b64urlEncode(digest)).toBe('sxj7VZ4WoXm4U-0oU1ds2hYDLZOwg5u4GlUTXTNMCvU')
+    expect(b64urlEncode(digest)).toBe('JAg_bISTctH6CpVhWnsraoiO3vkun6K-vVILL1Nuk1A')
   })
 })
 

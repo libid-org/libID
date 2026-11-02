@@ -27,6 +27,28 @@ test('a build replaces only a dedicated output directory', () => {
   }
 })
 
+test('a release download retries transient failures and names the last one', async () => {
+  const source = 'https://release.test/flaky.tar.gz'
+  const body = Buffer.from('release bytes')
+  const pin = `sha256:${createHash('sha256').update(body).digest('hex')}`
+  const cached = join(cache, 'downloads', encodeURIComponent(source))
+  const replies = [new Response(null, { status: 503 }), new Response(body)]
+  const fetch = mock.method(globalThis, 'fetch', async () => replies.shift()!)
+  rmSync(cached, { force: true })
+  try {
+    assert.deepEqual(await readSource(source, pin), body)
+    assert.equal(fetch.mock.callCount(), 2)
+    rmSync(cached, { force: true })
+    // A client error other than rate limiting fails at once, with its status.
+    replies.push(new Response(null, { status: 404 }))
+    await assert.rejects(readSource(source, pin), /Release download failed: .* \(HTTP 404\)/)
+    assert.equal(fetch.mock.callCount(), 3)
+  } finally {
+    fetch.mock.restore()
+    rmSync(cached, { force: true })
+  }
+})
+
 test('an HTTPS source must match its sha256 pin, fresh or cached', async () => {
   const source = 'https://release.test/pinned.tar.gz'
   const body = Buffer.from('release bytes')

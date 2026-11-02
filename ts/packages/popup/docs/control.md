@@ -73,7 +73,11 @@ preserves a same-origin transferable carrier, releases it for cross-origin
 rebind including across sites, or prepares a nontransferable replacement as
 required, then calls `location.replace(url)`. Replacement avoids adding the
 current document to popup history and creates no browsing context. Failure to
-preserve or prepare a carrier rejects before navigation.
+preserve or prepare a carrier rejects before navigation. A popup document still
+present `RENAVIGATE_MS = 3_000` after replacing itself, on any path, replaces
+itself again, then at doubling intervals: WebKit can leave a navigation that
+switches browsing context group uncommitted for good, and a fresh one usually
+gets through ([bug 327297](https://bugs.webkit.org/show_bug.cgi?id=327297)).
 
 `navigateAway` never sends `Navigate`. On the application side it navigates
 the exact retained `WindowProxy` while that is non-null and not closed,
@@ -92,8 +96,11 @@ sensitive inputs before requesting navigation.
 When the exact retained `WindowProxy` is non-null and not closed, `close` calls
 it directly, regardless of carrier state. Otherwise it sends `ClosePopup` over
 an active carrier. It then closes the logical connection and releases its local
-resources. The receiving popup stops accepting controls and calls
-`window.close()` on itself. The composition MUST expose and invoke
+resources. A port that carried `ClosePopup` stays open until the popup's
+`DocumentDeparted`, or for `CARRIER_CLAIM_TIMEOUT_MS + KEEPER_REPLY_TIMEOUT_MS`:
+the worker may be keeping the other end, and Firefox drops a value waiting in a
+kept port whose peer closes. The receiving popup stops accepting controls and
+calls `window.close()` on itself. The composition MUST expose and invoke
 this operation only for a separate top-level traversable created by
 `window.open()` or an activated link. Both creation paths produce a
 script-closable traversable, including when the browser presents it as a tab,

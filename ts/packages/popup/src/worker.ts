@@ -2,11 +2,15 @@
 // The host serves and registers the worker and owns its update policy; this
 // handler only gives a port a temporary owner across one popup document
 // replacement. It touches nothing but its own keep and claim records, never
-// reads the port or its backlog, keeps no durable record, and holds nothing past the claim
-// deadline. A duplicate keep tells both applications their document departed;
+// reads the port or its backlog, keeps no durable record, and holds a port only
+// until the claim deadline, counted from when the keeping document was last
+// present. A duplicate keep tells both applications their document departed;
 // an expired port closes silently, so a later document can still re-establish.
 
 import { CARRIER_CLAIM_TIMEOUT_MS, decodeKeeperRequest, depart, KEEP } from './keeper.js'
+
+/** How often the worker checks that the document keeping a port is still present. */
+export const PRESENCE_CHECK_MS = 1_000
 
 interface Held {
   port: MessagePort
@@ -60,14 +64,27 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
       const done = new Promise<void>((resolve) => {
         release = resolve
       })
-      const timer = setTimeout(() => {
-        if (held.get(connectionId)?.port === port) {
-          held.delete(connectionId)
-          // No departure: the application keeps waiting for a later document.
-          port.close()
+      // A keeping document still present has not left (WebKit can stall its
+      // navigation while it retries), so the destination's deadline starts
+      // only once it is gone.
+      const keeping = (event.source as Client).id
+      let deadline = Date.now() + CARRIER_CLAIM_TIMEOUT_MS
+      let timer: ReturnType<typeof setTimeout>
+      const check = async (): Promise<void> => {
+        // ponytail: nothing announces a client leaving; poll.
+        const present = await scope.clients.get(keeping).catch(() => undefined)
+        if (present) deadline = Date.now() + CARRIER_CLAIM_TIMEOUT_MS
+        if (held.get(connectionId)?.port !== port) return // claimed or rejected meanwhile
+        if (Date.now() < deadline) {
+          timer = setTimeout(check, PRESENCE_CHECK_MS)
+          return
         }
+        held.delete(connectionId)
+        // No departure: the application keeps waiting for a later document.
+        port.close()
         release()
-      }, CARRIER_CLAIM_TIMEOUT_MS)
+      }
+      timer = setTimeout(check, PRESENCE_CHECK_MS)
       held.set(connectionId, {
         port,
         peerOrigin: request.peerOrigin,

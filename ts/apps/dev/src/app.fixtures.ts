@@ -37,7 +37,7 @@ export const config = {
 const googleIdentity = {
   platformId: 'google',
   oauthClientId: 'client',
-  userId: `0x${'1'.repeat(64)}`,
+  userId: '123456789012345678901',
   userName: 'a@b.c',
 } as const
 

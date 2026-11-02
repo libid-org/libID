@@ -1,7 +1,6 @@
 import type { LedgerId } from '@libid/ledger'
 import { type ConnectOptions, type Message, PopupConnection, type PopupWindow } from '@libid/popup'
 import {
-  CHAIN_ID_BYTES,
   MAX_TRANSACTION_DATA_BYTES,
   OPERATION_DOMAIN_BYTES,
 } from '../../platforms/authorization.js'
@@ -39,7 +38,8 @@ export interface CCDPClient {
    */
   enabledVersions<P extends PlatformId>(platformId: P): readonly SupportedCeremonyVersion<P>[]
   /**
-   * Snapshot ledger hash/address and input bytes before OAuth; invalid inputs throw synchronously.
+   * Snapshot the ledger's notary address and input bytes before OAuth; invalid inputs throw
+   * synchronously.
    * The connection's `connectionId` is the ceremony ID; use one connection per live run.
    * Omitted version selects the highest compatible version, not a disclosure preference.
    */
@@ -95,7 +95,7 @@ function ccdpClientFromConfig(config: CeremonyConfig, versions: PlatformVersions
       if (typeof id !== 'string' || !isCeremonyId(id) || !enabledPlatforms.includes(platformId))
         throw new TypeError('Invalid ceremony selection')
       const version = selectVersion(enabledVersions(platformId), ceremonyVersion)
-      const ledger = snapshotLedger(ledgerId)
+      const notaryAddress = snapshotNotaryAddress(ledgerId)
       if (!isFixedBytes(operationDomain, OPERATION_DOMAIN_BYTES))
         throw new TypeError('Operation domain must be 32 bytes')
       if (
@@ -104,7 +104,7 @@ function ccdpClientFromConfig(config: CeremonyConfig, versions: PlatformVersions
       )
         throw new TypeError('Invalid transaction bytes')
       if (liveIds.has(id)) throw new TypeError('Ceremony ID is already live')
-      const input = { ...ledger, platformId, version, operationDomain, transactionData }
+      const input = { notaryAddress, platformId, version, operationDomain, transactionData }
       const run = new ClientCeremony(id, conn, input, config, () => {
         liveIds.delete(id)
       })
@@ -122,14 +122,11 @@ function selectVersion<V>(available: readonly V[], requested: V | undefined): V 
   return version
 }
 
-/** Read each ledger method once; later replacement of either method cannot affect the run. */
-function snapshotLedger(ledgerId: LedgerId): { chainId: Uint8Array; notaryAddress: string } {
-  if (!ledgerId || typeof ledgerId.hash !== 'function')
-    throw new TypeError('Invalid ledger identity')
-  const chainId = ledgerId.hash()
-  if (!isFixedBytes(chainId, CHAIN_ID_BYTES)) throw new TypeError('Ledger hash must be 32 bytes')
-  if (typeof ledgerId.notaryAddress !== 'function') throw new TypeError('Missing notary address')
+/** Read the notary address once; later replacement of the method cannot affect the run. */
+function snapshotNotaryAddress(ledgerId: LedgerId): string {
+  if (!ledgerId || typeof ledgerId.notaryAddress !== 'function')
+    throw new TypeError('Missing notary address')
   const notaryAddress = ledgerId.notaryAddress()
   if (!isOrigin(notaryAddress)) throw new TypeError('Invalid notary origin')
-  return { chainId, notaryAddress }
+  return notaryAddress
 }

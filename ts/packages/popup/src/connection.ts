@@ -12,7 +12,13 @@ import {
   type Reporter,
   reportUndeliverable,
 } from './diagnostics.js'
-import { activeRegistration, depart, PortKeeper } from './keeper.js'
+import {
+  activeRegistration,
+  CARRIER_CLAIM_TIMEOUT_MS,
+  depart,
+  KEEPER_REPLY_TIMEOUT_MS,
+  PortKeeper,
+} from './keeper.js'
 import {
   type Carrier,
   type CarrierConstructor,
@@ -141,6 +147,23 @@ function resolveIsolationFallback(value: string, location: Location, fragment: s
   }
   url.hash = fragment
   return url
+}
+
+/**
+ * Closes a port that carried ClosePopup once the popup answers with its departure, or once a
+ * worker keeping it would have handed it on or let it expire: Firefox drops a value waiting in
+ * a kept port whose peer closes.
+ */
+function closeOnDeparture(port: MessagePort): void {
+  const close = (): void => {
+    clearTimeout(timer)
+    port.onmessage = null
+    port.close()
+  }
+  const timer = setTimeout(close, CARRIER_CLAIM_TIMEOUT_MS + KEEPER_REPLY_TIMEOUT_MS)
+  port.onmessage = (event: MessageEvent): void => {
+    if ((event.data as { type?: unknown } | null)?.type === DEPARTED.type) close()
+  }
 }
 
 /** A caller type the peer's routing accepts: bounded and not a reserved control. */
@@ -489,6 +512,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
     } else if (this.carrier) {
       try {
         this.carrier.send({ type: 'close-popup' })
+        if (this.carrier instanceof PortCarrier) closeOnDeparture(this.carrier.detach().port)
       } catch {
         // A dead carrier cannot carry the control; local release still runs.
       }
@@ -608,7 +632,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
         this.report('isolation-fallback')
         const { href } = this.isolationFallback
         this.release()
-        this.popup.view.location.replace(href)
+        this.popup.replace(href)
         return
       }
       const carrier = await fallback(this.controller.signal)
@@ -710,7 +734,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     if (this.leaving) throw new PopupError('popup-unavailable')
     this.leaving = true
     this.release()
-    this.popup.view.location.replace(target)
+    this.popup.replace(target)
   }
 
   async close(): Promise<void> {
@@ -726,12 +750,14 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
    * when there is one, otherwise as undeliverable.
    */
   private async replaceDocument(url: string, viaOperation: boolean): Promise<void> {
-    const { location } = this.popup.view
     const carrier = this.carrier
-    if (new URL(url).origin !== location.origin && !(carrier && isNavigationCarrier(carrier))) {
+    if (
+      new URL(url).origin !== this.popup.view.location.origin &&
+      !(carrier && isNavigationCarrier(carrier))
+    ) {
       // Nothing crosses an origin: the destination authenticates afresh.
       this.release()
-      location.replace(url)
+      this.popup.replace(url)
       return
     }
     await this.leaveFor(url, viaOperation)
@@ -744,7 +770,6 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
    * through the invoking operation when there is one and rethrown.
    */
   private async leaveFor(url: string, viaOperation: boolean): Promise<void> {
-    const { location } = this.popup.view
     const carrier = this.carrier
     if (carrier instanceof PortCarrier) {
       const peerOrigin = carrier.peerOrigin
@@ -752,7 +777,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
       this.dropCarrier()
       await this.keepThrough(port, backlog, peerOrigin, url, viaOperation)
       this.release() // the port is the worker's now; this endpoint is done
-      location.replace(url)
+      this.popup.replace(url)
       return
     }
     if (!carrier || !isNavigationCarrier(carrier)) {
@@ -770,7 +795,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     // Release before leaving; nothing the application sends from here on
     // reaches a document until the destination authenticates its successor.
     this.release()
-    location.replace(target)
+    this.popup.replace(target)
   }
 
   /**

@@ -31,11 +31,11 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
 })
-it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () => {
+it('permits OAuth only after authenticated worker dispatch, reporting cache counts [CSP-013] [LIBID-BROWSER-029]', async () => {
   let elapsed = 25
   vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
   let activated!: () => void
-  let dispatched!: () => void
+  let dispatched!: (counts: { cached: number; fetched: number }) => void
   connection = fakeConnection({ peerOrigin: 'https://app.test', ready: 'pending' })
   registerRootWorker.mockReturnValueOnce(
     new Promise<void>((resolve) => {
@@ -43,36 +43,40 @@ it('permits OAuth only after authenticated worker dispatch [CSP-013]', async () 
     }),
   )
   dispatchPrefetch.mockReturnValueOnce(
-    new Promise<void>((resolve) => {
+    new Promise((resolve) => {
       dispatched = resolve
     }),
   )
   const run = startPrefetch(fragment())
-  // The registration overlaps the handshake; the dispatch waits for authenticated readiness.
-  expect(registerRootWorker).toHaveBeenCalledOnce()
-  activated()
+  // The registration waits for authenticated readiness, after the connection's lookup.
   await new Promise((resolve) => setTimeout(resolve))
-  expect(dispatchPrefetch).not.toHaveBeenCalled()
+  expect(registerRootWorker).not.toHaveBeenCalled()
   expect(connection.sent).toEqual([])
   elapsed = 2025
   connection.settle()
+  await vi.waitFor(() => expect(registerRootWorker).toHaveBeenCalledOnce())
+  expect(dispatchPrefetch).not.toHaveBeenCalled()
+  elapsed = 2100
+  activated()
   await vi.waitFor(() => expect(dispatchPrefetch).toHaveBeenCalledOnce())
   expect(connection.sent).toEqual([])
-  elapsed = 2055
-  dispatched()
+  elapsed = 2130
+  dispatched({ cached: 3, fetched: 1 })
   await run
   expect(connection.sent).toEqual([
     {
       type: 'event',
       event: 'prefetch-dispatch',
       phase: 'finished',
-      timestamp: performance.timeOrigin + 2055,
+      timestamp: performance.timeOrigin + 2130,
       instrumentation: {
         attributes: {
           'document-startup-ms': 25,
           'connection-ms': 2000,
-          'worker-ready-ms': 0,
+          'worker-ready-ms': 75,
           'dispatch-ms': 30,
+          'assets-cached': 3,
+          'assets-fetched': 1,
         },
       },
     },
