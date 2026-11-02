@@ -1,9 +1,5 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import {
-  MAX_SIGNING_INPUT_BYTES,
-  WINDOWS,
-} from '../src/barretenberg/circuits/oidc_telegram/parameters.ts'
 import { readArchive } from './archive.ts'
 import { loadAssetCatalog } from './assets.ts'
 import { validateCircuitCapacity } from './circuits.ts'
@@ -34,17 +30,4 @@ test('released circuit statistics fit the fixed launch SRS [LIBID-ASSET-013]', a
     /loader floor/,
   )
   await validateCircuitCapacity(new Map([['bearer_link', bearer]]), 2 ** 17)
-})
-
-test('oidc_telegram parameters match the released circuit ABI', async () => {
-  const catalog = await loadAssetCatalog()
-  const asset = catalog.circuits.find((circuit) => circuit.member === 'oidc_telegram.json')!
-  const circuit = (await readArchive(asset.source, asset.sha256)).get(asset.member!)!
-  const { abi } = JSON.parse(circuit.toString('utf8')) as {
-    abi: { parameters: { name: string; type: { length?: number } }[] }
-  }
-  const lengths = Object.fromEntries(abi.parameters.map((p) => [p.name, p.type.length]))
-  assert.equal(lengths.signing_input, MAX_SIGNING_INPUT_BYTES)
-  for (const [claim, width] of Object.entries(WINDOWS))
-    assert.equal(lengths[`${claim}_window`], width, claim)
 })

@@ -36,12 +36,18 @@ it.each([
   expect(fetch).not.toHaveBeenCalled()
 })
 
-it('refuses a key set without a key array, and fetches no key once aborted', async () => {
-  const fetch = vi.fn(async () => Response.json({ keys: { kid: 'b' } }))
+it('fetches no key once aborted', async () => {
+  const fetch = vi.fn()
   vi.stubGlobal('fetch', fetch)
   await expect(fetchSigningKey(redirectUri, 'b', AbortSignal.abort())).rejects.toThrow()
   expect(fetch).not.toHaveBeenCalled()
-  await expect(fetchSigningKey(redirectUri, 'b', new AbortController().signal)).rejects.toThrow()
+})
+
+it('refuses a key set without a key array', async () => {
+  vi.stubGlobal('fetch', async () => Response.json({ keys: { kid: 'b' } }))
+  await expect(fetchSigningKey(redirectUri, 'b', new AbortController().signal)).rejects.toThrow(
+    'Invalid key set',
+  )
 })
 
 it.each([
