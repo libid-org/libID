@@ -1,6 +1,9 @@
 import { PLATFORM_GOOGLE_KEY } from '@libid/contracts/platforms'
 import type { OidcGoogleToken } from '../../../barretenberg/circuits/oidc_google/inputs.js'
-import { MAX_AUD_BYTES } from '../../../barretenberg/circuits/oidc_google/parameters.js'
+import {
+  MAX_AUD_BYTES,
+  MAX_EXP_DIGITS,
+} from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { CeremonyError } from '../../../errors.js'
 import { isAccountId, isHandle } from '../../../identity.js'
 import { isUint } from '../../../primitives.js'
@@ -22,7 +25,7 @@ function googleClaims(p: Record<string, unknown> | null): OidcGoogleToken['claim
   return isClaim(aud) &&
     isClaim(sub) &&
     isClaim(email) &&
-    isUint(exp, Number.MAX_SAFE_INTEGER) &&
+    isUint(exp, 10 ** MAX_EXP_DIGITS - 1) &&
     isClaim(nonce)
     ? { aud, sub, email, exp, nonce }
     : null

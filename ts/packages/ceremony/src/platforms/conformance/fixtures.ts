@@ -679,6 +679,7 @@ export const fixtures = {
       'a negative expiry [TEST-COMMON-12]': expiry(-1),
       'an unrepresentable expiry [TEST-COMMON-12]': expiry(2 ** 64),
       'a string expiry [TEST-COMMON-12]': expiry('1725001000'),
+      'an expiry over 12 digits [TEST-PLAT-06]': expiry(10 ** 12),
     },
     rejectedBinding: {
       ...oidcBinding('other', 'b@example.com'),

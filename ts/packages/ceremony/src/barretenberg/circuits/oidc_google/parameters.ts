@@ -6,5 +6,7 @@ export const ISSUER = 'https://accounts.google.com'
 export const MAX_EMAIL_BYTES = PLATFORM_GOOGLE.rules.maxLength
 export const MAX_SUB_BYTES = PLATFORM_GOOGLE.idRules.maxLength
 export const MAX_AUD_BYTES = 128
+/** The decimal digits the circuit reads from `exp`; seconds stay within 12 digits until year 33658. */
+export const MAX_EXP_DIGITS = 12
 export const MAX_SIGNING_INPUT_BYTES = 1280
 export const MAX_PAYLOAD_JSON_BYTES = 768

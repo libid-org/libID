@@ -192,7 +192,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-PLAT-02 | [src/identity.test.ts](../src/identity.test.ts), [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-03 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-05 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
-| TEST-PLAT-06 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts) |
+| TEST-PLAT-06 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts), [src/platforms/google/1/inputs.test.ts](../src/platforms/google/1/inputs.test.ts), [src/platforms/google/1/token.test.ts](../src/platforms/google/1/token.test.ts) |
 | TEST-PLAT-09 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | TEST-PLAT-09A | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-09B | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
