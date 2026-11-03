@@ -273,8 +273,8 @@ signed expiry. Its signing moduli enter by notarized reading, not by
 governance, and lapse at most 30 days after the latest reading that lists
 them. Two later readings that each change the set end their trust early.
 Short of upgrading the Google Key List or the Platform Verifier, governance
-can end their trust sooner only all at once, by selecting another Google Key
-List or retiring every Verifier Version of the profile. The linked
+can end their trust sooner only all at once, by clearing the Google Key List,
+selecting another, or retiring every Verifier Version of the profile. The linked
 chapters define the remaining assumptions, security
 properties, requirements, and platform-specific security considerations.
 

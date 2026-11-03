@@ -857,15 +857,15 @@ sooner once two readings that each change the set follow it.
   keeping only two generations.
 - REQ-PLAT-73 (upholds SP-BIND-01):
   The Google Key List MUST NOT expose an operation, other than admitting a
-  reading or an upgrade by the Verifier Governance Process, that adds,
-  removes, or re-dates a modulus. The Verifier Governance Process MUST own
-  the selection of the Google Key List each Platform Verifier of a Google
-  profile reads, the selection of the Notary Service that Google Key List
-  pins, and any upgrade of the Google Key List. Necessity: readings, not
-  governance, decide which Google keys are trusted. Short of upgrading the
-  Google Key List or the Platform Verifier, governance can end trust in a set
-  before the set lapses only by selecting another Google Key List or retiring
-  every Verifier Version of the profile.
+  reading, clearing, or an upgrade by the Verifier Governance Process, that
+  adds, removes, or re-dates a modulus. When cleared, the Google Key List MUST
+  empty both generations at once and then trust no modulus until it admits a
+  reading. The Verifier Governance Process MUST own the selection of the
+  Google Key List each Platform Verifier of a Google profile reads, the
+  selection of the Notary Service that Google Key List pins, clearing, and
+  any upgrade of the Google Key List. Necessity: readings, not governance,
+  decide which Google keys are trusted. Clearing ends trust in every modulus
+  at once and chooses none, and only an admitted reading trusts one again.
 
 Rotation is permissionless: any party can restore Google ceremonies with a
 reading that lists the key Google signs with, paying its Notary Fee. That
@@ -2002,11 +2002,13 @@ Platform Verifier, Google Key List, Notary Service, Consumer.
   after the latest reading listing a modulus ends its trust, even with fewer
   than 2592000 seconds elapsed.
 - TEST-PLAT-25 (exercises REQ-PLAT-73):
-  No Google Key List operation other than an admitted reading or an upgrade
-  adds, removes, or re-dates a modulus. A caller other than the Verifier
-  Governance Process cannot upgrade the Google Key List, change which Google
-  Key List a Platform Verifier reads, or change which Notary Service that
-  Google Key List pins. A Platform Verifier switched to a
+  No Google Key List operation other than an admitted reading, clearing, or
+  an upgrade adds, removes, or re-dates a modulus. A caller other than the
+  Verifier Governance Process cannot clear or upgrade the Google Key List,
+  change which Google Key List a Platform Verifier reads, or change which
+  Notary Service that Google Key List pins. After clearing, a Google proof
+  under a modulus either generation listed is rejected, and the next admitted
+  reading becomes the current generation. A Platform Verifier switched to a
   new Google Key List trusts no modulus until a reading lands there.
 
 ## 9. Security Considerations
@@ -2078,8 +2080,9 @@ The notary key is a trust root for X and GitHub evidence and for Google's
 signing moduli, which enter the Google Key List only through readings it
 authenticates (§3.4). Its compromise mints fresh X and GitHub evidence until
 the key is removed. It can also admit a forged Google modulus, trusted for up
-to 30 days after its forged reading unless governance selects another Google
-Key List or upgrades this one. Neither undoes authority already committed.
+to 30 days after its forged reading unless governance removes the key and
+then clears the Google Key List, selects another, or upgrades it. None of
+these undoes authority already committed.
 
 Google has no server-side token exchange. Its fragment is not visible at
 HTTP ingress, although the deployment controls Callback code. Its signed
