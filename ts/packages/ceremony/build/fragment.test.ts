@@ -37,6 +37,11 @@ test('clears the launch URL first and keeps only the fragment for the entry [CSP
   assert.equal(text, '')
 })
 
+test('keeps a fragment of exactly the bound, `#` included [CSP-006] [TEST-CCDP-03]', () => {
+  const hash = `#${'a'.repeat(MAX_NAVIGATION_FRAGMENT_CHARS - 1)}`
+  assert.equal(capture(`${PATH}${hash}`).window.__libidCeremonyFragment, hash)
+})
+
 test('refuses a query, another path or an oversized fragment, still clearing the URL [CSP-006] [CSP-014]', () => {
   const refusal = messages.returnToApplication(messages.unableToContinue)
   for (const url of [
