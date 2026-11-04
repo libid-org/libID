@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
 import { CEREMONY_ID } from '../testing/index.js'
+import { MAX_NAVIGATION_FRAGMENT_CHARS } from './limits.js'
 import {
   oauthState,
   prefetchFragment,
@@ -31,6 +32,19 @@ it('reads Prefetch input with or without its hash, bounded and exact [CSP-006]',
         String(new URLSearchParams({ ceremonyId, platformId, ceremonyVersion: version })),
       ),
     ).toThrow('Invalid Prefetch input')
+})
+
+it('reads a Prover fragment of 65536 characters, `#` included, and refuses one more [CSP-006] [TEST-CCDP-03]', () => {
+  const base = String(proverFragment(id, 'https://app.test', { query: '?code=', fragment: '' }))
+  const of = (length: number) =>
+    `#${proverFragment(id, 'https://app.test', { query: `?code=${'x'.repeat(length - 1 - base.length)}`, fragment: '' })}`
+  const at = of(MAX_NAVIGATION_FRAGMENT_CHARS)
+  expect(at).toHaveLength(MAX_NAVIGATION_FRAGMENT_CHARS)
+  expect(readProver(at).ceremonyId).toBe(id)
+  expect(readProver(at.slice(1)).ceremonyId).toBe(id)
+  const over = of(MAX_NAVIGATION_FRAGMENT_CHARS + 1)
+  expect(() => readProver(over)).toThrow('too large')
+  expect(() => readProver(over.slice(1))).toThrow('too large')
 })
 
 it('reads the OAuth state it writes and any later CCDP version [LIBID-ASSET-015]', () => {

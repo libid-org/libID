@@ -21,10 +21,9 @@ Bridge v0.5.0 supports exact and wildcard admission. Browser tests cover both
 wildcard forms in Popup and `*` through the emitted Callback handoff; Callback
 units cover pattern forwarding.
 
-The released `bearer_link` circuit accepts bearers of at most 128 bytes. The
-X and GitHub specifications allow up to 4096 bytes; both implementations enforce
-the circuit's narrower limit on the token response, where they also reject the
-whitespace an HTTP bearer cannot carry. The released `oidc_google` circuit
+The released `bearer_link` circuit accepts bearers of at most 128 bytes, the X
+and GitHub profiles' bound; both implementations enforce it on the token
+response, where they also reject the whitespace an HTTP bearer cannot carry. The released `oidc_google` circuit
 accepts a Google `sub` of at most 31 bytes and an email of at most 62 bytes,
 printable ASCII without `"` or `\`, and an audience of at most 128 bytes without `"`; Google's
 specification allows a `sub` of up to 255 bytes. A token outside those limits
