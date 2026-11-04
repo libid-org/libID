@@ -97,7 +97,8 @@ change the proof-bound operation, or widen proof validity. GitHub token exchange
 and identity notarization run in the browser; there is no confidential exchange
 service. The identity platform
 controls the authenticated account response. The notary authenticates X/GitHub
-transcripts and their creation times. Verifier governance selects the
+transcripts, the readings that admit Google's signing keys, and their
+creation times. Verifier governance selects the
 Supported Version Set, accepted verifier artifacts, and trust roots. Each
 Platform Profile fixes its protocol parameters. The Consumer Chain
 authenticates the Transaction Author and supplies Block Time.
@@ -109,14 +110,15 @@ authenticates the Transaction Author and supplies Block Time.
 | OAuth Bridge operator | holds OAuth registrations and public application credentials; configures and serves Callback | correct public configuration, Callback delivery, and availability | ledger identity, digest, notary-key, or validity decisions |
 | CCDP Distribution publisher | supplies browser code, proving assets, and response policies to multiple Bridges; its Prover holds the identity evidence | correct code and asset supply under ASM-CCDP-01; a Prover that proves in the zero-knowledge mode with fresh randomness, on which SP-PRIV-01 rests | authority to change ledger verification rules |
 | Identity-platform operator | authenticates accounts and issues signed or TLS-authenticated responses | the `ASM-PROV-*` behavior the selected profile cites | the proof-bound transaction or Transaction Author |
-| Notary operator | operates the X/GitHub attestation key and observes sessions | `ASM-NOTARY-01` | user intent or transaction authorization |
-| Verifier governance administrator | activates verifier artifacts, trust roots, and the Supported Version Set | correct authority lifecycle | user consent |
+| Notary operator | operates the attestation key and observes X/GitHub sessions and Google signing-key readings | `ASM-NOTARY-01` | user intent or transaction authorization |
+| Verifier governance administrator | activates verifier artifacts, trust roots other than Google's signing moduli, and the Supported Version Set | correct authority lifecycle | user consent |
 | ENS Gateway operator | holds the ENS Signer keys; reads the Indexed Store and signs ENS answers | answers that report the Indexed Store, and refusals where it cannot know | bindings, proofs, or anything a Consumer accepts |
 | Handle Resolver and Parent Name owner | sets the Parent Name's resolver, the Handle Resolver's URL list, and its Signers | pointing ENS names at honest Gateways and Signers | bindings or proofs |
 | DNS registrar account and DNSSEC key holder | controls `handles.link` in DNS and, through DNSSEC proofs, its owner in ENS | keeping the Parent Name with its owner | bindings or proofs |
 
-The principal trust roots are Google's active signing moduli, the active
-X/GitHub notary keys, the selected proof-verifier artifacts, the Proof Verifier
+The principal trust roots are Google's active signing moduli, the Google Key
+List that admits them, the active notary keys, the selected proof-verifier
+artifacts, the Proof Verifier
 that dispatches to them, the Platform Verifiers it selects, Verifier governance,
 and Consumer Chain consensus. For ENS names only, the ENS Signer keys, the
 Handle Resolver and Parent Name owner key, and the DNS registrar account and
@@ -131,9 +133,12 @@ stops future acceptance after the change takes effect; it does not undo bindings
 or sessions already committed. Loss of an application deployment is a liveness
 failure. Compromise of the Canonical Runtime build or its supply chain defeats
 local client and operation construction. Compromise of a platform signing root,
-notary key, or selected Platform Verifier can mint future evidence for the
-affected profiles. Compromise of Verifier governance can change every accepted
-root and verifier.
+notary key, Google Key List, or selected Platform Verifier can mint future
+evidence for the affected profiles. A notary key also authenticates the readings that admit
+Google's signing moduli
+([platform profiles §3.4](platform-ceremonies.md#34-signing-key-lifecycle)),
+so its compromise reaches Google as well as X and GitHub. Compromise of
+Verifier governance can change every accepted root and verifier.
 
 | Subject | Single normative owner |
 |---|---|
@@ -208,17 +213,24 @@ request lines, so one `(identityPlatform, platformCeremonyVersion)` pair
 selects one value on every Consumer Chain and at every Verifier Version
 implementing that profile.
 
-| Platform Profile | `proofLifetime` | `maxFutureAttestationSkew` |
-|---|---:|---:|
-| `("google", 1)` | not named | not named |
-| `("x", 1)` | 3600 | 300 |
-| `("github", 1)` | 3600 | 300 |
+| Platform Profile | `proofLifetime` | `maxFutureAttestationSkew` | `futureObservationAllowance` |
+|---|---:|---:|---:|
+| `("google", 1)` | not named | not named | 7200 |
+| `("x", 1)` | 3600 | 300 | 300 |
+| `("github", 1)` | 3600 | 300 | 300 |
 
 `proofLifetime` is the maximum age of the attestation that supplies evidence
 time: the X token attestation and the GitHub token-exchange attestation.
-`maxFutureAttestationSkew` is the maximum lead of an X/GitHub attestation
+`maxFutureAttestationSkew` is the maximum lead of that token attestation's
 timestamp over Block Time. Google's signed `exp` bounds its validity, so
-`("google", 1)` names neither. Verifier governance controls the Supported
+`("google", 1)` names neither of those two. `futureObservationAllowance` is
+the maximum lead of a profile's evidence time over Block Time, and the amount
+subtracted from that time to give `metadataObservedAt`, a watermark no later
+than Block Time
+([platform profiles §2.2](platform-ceremonies.md#22-metadata-ordering-and-validity-ceilings)).
+Google's `exp` runs about an hour ahead of the token's issue, and the
+Google allowance is two hours. A notary stamps its own clock, so the X and
+GitHub allowances cover clock skew alone. Verifier governance controls the Supported
 Version Set and the trust roots, so a proof is accepted only while a Verifier
 Version implementing its profile is supported and the trust roots it relies
 on are active.
@@ -237,8 +249,11 @@ on are active.
 - REQ-PARAM-02:
   The Platform Verifier MUST use the value its profile fixes, with checked
   arithmetic, whenever a ceremony rule names one of these parameters. The
-  Platform Verifier MUST NOT accept a caller-supplied substitute. Necessity:
-  callers must not widen proof freshness.
+  one exception to checked arithmetic is the subtraction that gives
+  `metadataObservedAt`, which saturates at zero under
+  [platform profiles §2.2](platform-ceremonies.md#22-metadata-ordering-and-validity-ceilings).
+  The Platform Verifier MUST NOT accept a caller-supplied substitute.
+  Necessity: callers must not widen proof freshness.
 - TEST-PARAM-01 (exercises REQ-PARAM-01, REQ-PARAM-02):
   The values above reproduce the platform validity vectors; a caller override
   and an overflowing calculation fail; a Platform Verifier exposes no
@@ -254,7 +269,13 @@ therefore the same on every Consumer Chain and at every Verifier Version
 implementing that profile. Verifier governance can end a proof's acceptance
 before the window closes by retiring a trust root it relies on or every
 Verifier Version implementing its profile. Google remains bounded by its
-signed expiry. The linked chapters define the remaining assumptions, security
+signed expiry. Its signing moduli enter by notarized reading, not by
+governance, and lapse at most 30 days after the latest reading that lists
+them. Two later readings that each change the set end their trust early.
+Short of upgrading the Google Key List or the Platform Verifier, governance
+can end their trust sooner only all at once, by selecting another Google Key
+List or retiring every Verifier Version of the profile. The linked
+chapters define the remaining assumptions, security
 properties, requirements, and platform-specific security considerations.
 
 ## References
