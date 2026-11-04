@@ -227,9 +227,10 @@ Attestation Count: The number of entries in the closed attestation list a
 - ASM-NOTARY-01:
   The configured notary key is unforgeable, signs only transcripts it
   observed, and stamps their creation time from a clock within ordinary skew
-  of real time. The enforced numeric bound on future skew is REQ-PLAT-09's
-  comparison against the Platform Profile's `maxFutureAttestationSkew`, not
-  part of this assumption.
+  of real time. The enforced numeric bounds on future skew are REQ-PLAT-09's
+  comparison against the Platform Profile's `maxFutureAttestationSkew` and,
+  for Google Key List readings, platform REQ-PLAT-71's maximum reading lead;
+  neither is part of this assumption.
 - ASM-PROOF-01:
   A proof accepted under the verifier artifact selected for its platform and
   version pair satisfies that Platform Profile's complete proof statement.
@@ -615,7 +616,7 @@ an identity session — so one Submission on either path pays two fees.
   REQ-PLAT-05B, and `metadataObservedAt`. It returns no handle; the
   Consumer checks a disclosed handle against the handle node under platform
   REQ-PLAT-08D. Necessity: an authenticated
-  identity and observation time are what the ceremony exists to produce; the digest is the
+  identity and metadata watermark are what the ceremony exists to produce; the digest is the
   Consumer's replay nullifier, which it cannot recompute without reading the
   payload. The Consumer trusts these fields as it trusts the Platform Verifier
   the Verifier Governance Process installed.
@@ -1357,9 +1358,9 @@ Service.
   The Implementation MUST reject a fractional, negative, overflowing, or
   textual timestamp.
 - REQ-COMMON-25 (upholds SP-FRESH-01):
-  The Implementation MUST take `metadataObservedAt` from the platform-profile
-  value. The Implementation MUST NOT infer it from an HTTP `Date` header or a
-  local clock.
+  The Implementation MUST take `metadataObservedAt` from the value the
+  Platform Profile derives from its signed evidence time. The Implementation
+  MUST NOT infer it from an HTTP `Date` header or a local clock.
 - REQ-COMMON-25A (upholds SP-FRESH-01):
   The Consumer MUST update mutable metadata and its watermark only when
   `metadataObservedAt` is strictly newer than the stored watermark. The
@@ -1646,11 +1647,17 @@ Proof Verifier's decision, operation domain, and Authorized Transaction Data
 without rechecking them, so a compromised Proof Verifier authorizes arbitrary
 transactions at every Consumer at once; a compromised Platform Verifier does
 the same for one platform and version; a compromised Notary Service accepts
-attestations no notary signed. Their selection is verifier governance, which
+attestations no notary signed, including readings that admit Google signing
+keys. Their selection is verifier governance, which
 is therefore a trust root rather than configuration. The Notary Fees are a
 liveness dependency only: they cannot forge evidence, but an unbounded fee
-stops every ceremony for the platforms whose profiles carry attestations, and
-leaves a profile with no attestation unaffected.
+stops every ceremony for the platforms whose profiles carry attestations.
+Google's profile carries none, yet each reading that renews its signing keys
+pays one Notary Fee
+([platform profiles §3.4](platform-ceremonies.md#34-signing-key-lifecycle)).
+An unpayable fee, like a gap with no reading, therefore stops every Google
+ceremony at most 30 days after the last reading, and sooner once Google signs
+with a key the Google Key List does not trust.
 
 The client identifier is published deliberately: a binding exists to be
 read, and the client is discoverable from the identity platform. The id and
@@ -1674,8 +1681,8 @@ and the handle appears in plaintext only once a transaction discloses it
 - A duplicate identity field hidden behind a commitment cannot be detected,
   so which account a binding names rests on ASM-PROV-06. That is a limit
   on soundness, not on privacy.
-- A binding's existence, platform, Transaction Author, and observation time
-  are public; only the values are not.
+- A binding's existence, platform, Transaction Author, and
+  `metadataObservedAt` watermark are public; only the values are not.
 - Any other transaction that names a handle as text, such as a payment
   addressed by handle rather than by node, discloses it as surely as a
   disclosure call, whoever sends it: the holder or a payer.
