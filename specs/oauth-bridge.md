@@ -209,6 +209,11 @@ The response rules are:
   owns any additional constraints.
 - The Telegram entry carries only `clientId`. Its client secret is
   confidential and never appears in the record.
+- `clientId` and `clientCredential` each fit the `ProveIdentity`
+  [wire limits](ccdp.md#wire-limits), at most 512 bytes, because the
+  Application forwards both unchanged. The Bridge refuses to start with a
+  configured value beyond them, and the Application rejects a record carrying
+  one.
 - Unknown fields and malformed URLs are invalid. A platform absent from the
   client's closed local catalog is ignored; known entries remain
   exact-validated before use.
@@ -403,6 +408,10 @@ cryptographic soundness.
   when none is given, and enables nothing when the list fails to fetch or
   validate or omits its selected CCDP version. Application freezes the credential
   and forwards the same value to Prover despite later configuration changes.
+  A configured GitHub client ID and credential of 512 bytes each start the
+  Bridge, and one byte more in either stops it at startup; the Application
+  rejects a record carrying a value past 512 bytes, and a Google client ID past
+  128 bytes under platform REQ-PLAT-76.
 - TEST-BRIDGE-04 (exercises REQ-BRIDGE-04):
   Callback queries/cookies/headers never reach the artifact request; failed refresh preserves the last valid HTML/policy pair, or serves inert unavailability.
 - TEST-BRIDGE-05: Withdrawn.
