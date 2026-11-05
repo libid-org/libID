@@ -19,18 +19,6 @@ minimumReleaseAgeExclude:
   # libID's own packages, published by the libid-org release workflows; the age gate
   # guards third-party releases.
   - "@libid/*"
-  # Third-party versions taken before they were 7 days old. Drop an entry once
-  # its version is older than 7 days.
-  - "@noir-lang/acvm_js@1.0.0"
-  - "@noir-lang/noir_js@1.0.0"
-  - "@noir-lang/noirc_abi@1.0.0"
-  - "@noir-lang/types@1.0.0"
-  - "@playwright/test@1.64.0"
-  - "@types/node@26.6.5"
-  - "playwright@1.64.0"
-  - "playwright-core@1.64.0"
-  - "smol-toml@1.9.1"
-  - "vite@8.3.4"
 minimumReleaseAgeIgnoreMissingTime: false
 trustLockfile: false
 strictDepBuilds: true
