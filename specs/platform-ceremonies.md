@@ -520,7 +520,7 @@ Proof validity and mutable-metadata ordering use the authenticated times below.
 | Google | signed ID-Token `exp` | signed ID-Token `exp` |
 | X | the token attestation's signed creation time | `metadataObservedAt + proofLifetime` |
 | GitHub | the token-exchange attestation's signed creation time | `metadataObservedAt + proofLifetime` |
-| Telegram | signed ID-Token `iat − maxFutureAttestationSkew` (REQ-PLAT-65) | `iat + proofLifetime` |
+| Telegram | signed ID-Token `iat − maxFutureAttestationSkew` (REQ-PLAT-78) | `iat + proofLifetime` |
 
 For X and GitHub, "timestamp" is the signed TLSNotary attestation creation
 time. The token attestation is the one-time PKCE and Authorization Digest
@@ -1600,7 +1600,7 @@ protects the code at the swap; no verifier compares it.
 | 7 | `code_challenge` | PKCE challenge per common §7 |
 | 8 | `code_challenge_method` | `S256` |
 
-- REQ-PLAT-67 (upholds SP-DELIVERY-01):
+- REQ-PLAT-80 (upholds SP-DELIVERY-01):
   The Prover MUST accept the Telegram return only as a query carrying one
   `code` and one `state` matching its live ceremony. The Bridge bounds the
   swapped `code` ([OAuth Bridge](oauth-bridge.md#telegram-profile)). An
@@ -1611,7 +1611,7 @@ protects the code at the swap; no verifier compares it.
 
 ### 6a.2 Token rules
 
-- REQ-PLAT-64 (upholds SP-BIND-01, SP-CLIENT-01):
+- REQ-PLAT-77 (upholds SP-BIND-01, SP-CLIENT-01):
   The Prover MUST accept only an RS256 ID token with a non-empty `kid`, where:
   - `iss` is exactly `https://oauth.telegram.org`;
   - `aud` is a string equal to the configured client id;
@@ -1619,12 +1619,12 @@ protects the code at the swap; no verifier compares it.
     holds the digest: the Platform Verifier and the Client compare the nonce
     with it;
   - `iat` is an integer with `iat ≤ now + 5 min` and `now < iat + 1 h`.
-- REQ-PLAT-65 (upholds SP-BIND-01):
+- REQ-PLAT-78 (upholds SP-BIND-01):
   `observedAt` MUST be `iat − 300`: the signed `iat` less the five-minute
   skew, on the scale X and GitHub report. `exp` is not used.
   Necessity: Telegram's tokens live 30 seconds, too short for proving, and an
   `iat` inside the skew must not outrank a later binding.
-- REQ-PLAT-66:
+- REQ-PLAT-79:
   The token MUST carry `preferred_username`. Version 1 refuses an account
   without one and tells the user to set a username.
 
@@ -1653,16 +1653,16 @@ time of that reading, and a later reading of the same set extends them. A
 reading of a different set moves the latest reading to the previous one and
 drops what the previous one held. Nothing else adds or removes a key.
 
-- REQ-PLAT-68 (upholds SP-CLIENT-01):
+- REQ-PLAT-81 (upholds SP-CLIENT-01):
   The Platform Verifier MUST reject a proof whose RSA modulus
   `TelegramJwtRoots` does not list as trusted. `TelegramJwtRoots` MUST refuse a
   reading that holds an RSA key whose exponent is not 65537, the exponent the
   circuit verifies.
-- REQ-PLAT-69:
+- REQ-PLAT-82:
   The Verifier Governance Process MUST keep notarized readings of
   `https://oauth.telegram.org/.well-known/jwks.json` reaching
   `TelegramJwtRoots`, so that a key published in that key set is listed
-  within one hour of its publication, the proof lifetime of REQ-PLAT-64
+  within one hour of its publication, the proof lifetime of REQ-PLAT-77
   (`PROOF_LIFETIME_SECONDS_TELEGRAM`), and no listed key lapses while
   Telegram still publishes it.
   Necessity: a proof under an unlisted key fails; listing a published key
@@ -1942,13 +1942,13 @@ Platform Verifier, Notary Service, Consumer.
   `,` or `}`; an anchor revealed with JSON whitespace around its colon still
   frames its commitment; and an attestation revealing the id or handle value
   carries no framed commitment for it and is rejected.
-- TEST-PLAT-23 (exercises REQ-PLAT-67):
+- TEST-PLAT-26 (exercises REQ-PLAT-80):
   A Telegram return in the fragment, with a duplicated `state` or `code`,
   both `code` and `error`, another ceremony's `state`, or an `id_token`,
   `access_token`, or `refresh_token` is refused before any Bridge request;
   `access_denied` resolves as a denial; an added `iss` leaves the outcome
   unchanged.
-- TEST-PLAT-24 (exercises REQ-PLAT-68, REQ-PLAT-69):
+- TEST-PLAT-27 (exercises REQ-PLAT-81, REQ-PLAT-82):
   A Telegram proof that satisfies the circuit under a modulus
   `TelegramJwtRoots` does not list is rejected by the Platform Verifier. The
   deployment names the keeper that submits notarized readings of Telegram's

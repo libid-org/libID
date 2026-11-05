@@ -881,7 +881,7 @@ export const fixtures = {
       publicInputs: telegramPublicInputs,
     },
     digest: telegramV1.authorizationDigest,
-    // iat + the proof lifetime (REQ-PLAT-64); the 30 s exp is not used.
+    // iat + the proof lifetime (REQ-PLAT-77); the 30 s exp is not used.
     expiresAt: telegramIat + PROOF_LIFETIME_SECONDS_TELEGRAM,
     validation: telegramValidation,
     rejectedProof: {
@@ -890,10 +890,10 @@ export const fixtures = {
     },
     operations: ['token-swap', 'signing-key-fetch'],
     specTests: {
-      identity: '[REQ-PLAT-66]',
-      returns: '[TEST-PLAT-23]',
-      issuer: '[TEST-PLAT-23]',
-      prover: '[REQ-PLAT-64]',
+      identity: '[REQ-PLAT-79]',
+      returns: '[TEST-PLAT-26]',
+      issuer: '[TEST-PLAT-26]',
+      prover: '[REQ-PLAT-77]',
     },
     authorizationRequest: codeRequest('https://oauth.telegram.org/auth', 'openid profile', true),
     returns: codeReturns(),
@@ -932,7 +932,7 @@ export const fixtures = {
         Promise.reject(new TypeError('Failed to fetch')),
       ),
       ...rs256Evidence,
-      'an empty key ID [REQ-PLAT-64]': rewrite((t) =>
+      'an empty key ID [REQ-PLAT-77]': rewrite((t) =>
         jwtWith(t, { header: { alg: 'RS256', kid: '' } }),
       ),
       'two segments': rewrite((t) => t.split('.').slice(0, 2).join('.')),
@@ -940,10 +940,10 @@ export const fixtures = {
       'a non-base64url signature': segment(2, 'a+b'),
       'a non-UTF-8 payload': segment(1, b64urlEncode(Uint8Array.of(0xff))),
       'a non-JSON payload': segment(1, 'bm90IGpzb24'),
-      'another issuer [REQ-PLAT-64]': claiming({ iss: 'https://oauth.telegram.org/' }),
-      'another audience [REQ-PLAT-64]': claiming({ aud: '7000000002' }),
+      'another issuer [REQ-PLAT-77]': claiming({ iss: 'https://oauth.telegram.org/' }),
+      'another audience [REQ-PLAT-77]': claiming({ aud: '7000000002' }),
       'an audience array': claiming({ aud: ['7000000001'] }),
-      'an iat over 5 minutes ahead [REQ-PLAT-64]': claiming({
+      'an iat over 5 minutes ahead [REQ-PLAT-77]': claiming({
         iat: telegramIat + MAX_FUTURE_ATTESTATION_SKEW_SECONDS_TELEGRAM + 1,
       }),
       'no iat': claiming({ iat: undefined }),
@@ -951,8 +951,8 @@ export const fixtures = {
       'a 31-byte nonce': claiming({ nonce: b64urlEncode(telegramV1.authorizationDigest.slice(1)) }),
       'a 33-byte nonce': claiming({ nonce: b64urlEncode(new Uint8Array(33)) }),
       'a padded nonce': claiming({ nonce: `${b64urlEncode(telegramV1.authorizationDigest)}=` }),
-      'no username [REQ-PLAT-66]': claiming({ preferred_username: undefined }, noUsername),
-      'an empty username [REQ-PLAT-66]': claiming({ preferred_username: '' }, noUsername),
+      'no username [REQ-PLAT-79]': claiming({ preferred_username: undefined }, noUsername),
+      'an empty username [REQ-PLAT-79]': claiming({ preferred_username: '' }, noUsername),
       // The identity table's rules, checked before the key fetch.
       'a 33-byte username': claiming({ preferred_username: 'a'.repeat(33) }),
       'a backslash in the username': claiming({ preferred_username: 'a\\b' }),
