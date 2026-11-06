@@ -14,18 +14,6 @@ import type {
   Transcript,
 } from './protocol.js'
 
-/**
- * One session's setup once the SDK runtime has loaded; downloading the runtime has no deadline.
- */
-const PREPARE_TIMEOUT_MS = 10000
-
-/**
- * One send-through-attestation budget; setup has its own and idle bearer waiting is excluded.
- * GitHub's identity request takes up to about 10.6 s on a CI runner, so this leaves room for
- * slower devices. X's 30-second code deadline, not this budget, bounds X's token request.
- */
-const REQUEST_TIMEOUT_MS = 30000
-
 /** Correlated provisional openings plus a separate promise for the final attestation. */
 export interface RevealResult {
   openings: readonly CommitmentOpening[]
@@ -33,7 +21,7 @@ export interface RevealResult {
 }
 
 export interface NotarySession {
-  /** Send once after setup; starts the 10-second deadline through final attestation. */
+  /** Send once after setup. */
   send(request: ExactHttpRequest): Promise<Transcript>
   /** Reveal once after send; proof preparation may use openings before attestation completes. */
   reveal(reveals: Reveals): Promise<RevealResult>
@@ -42,6 +30,8 @@ export interface NotarySession {
 /**
  * One ceremony-owned WASM runtime and thread pool, with a separate TLS session per prepare.
  * The supplied abort signal releases the worker; any session failure also aborts sibling work.
+ * Network work has no deadline of its own: a slow link is not a failure, and only the caller
+ * knows how long to wait, so its signal bounds every session.
  * Final outputs preserve signed bytes and correlate openings without verifying notary signatures.
  */
 export class NotaryRuntime {
@@ -100,14 +90,13 @@ interface Waiter {
   reject(error: unknown): void
 }
 
-/** One channel, its pending replies, and its preparation and send-through-attestation deadlines. */
+/** One channel and its pending replies. */
 class Session implements NotarySession {
   /** `busy` covers an in-flight prepare or send, failing as the fetch; `revealing` as the attestation. */
   private phase: 'busy' | 'prepared' | 'sent' | 'revealing' | 'ended' = 'busy'
   private readonly channel = new MessageChannel()
   /** Replies currently awaited, oldest first; any other reply fails the session. */
   private readonly pending: Waiter[] = []
-  private timer?: ReturnType<typeof setTimeout>
   private readonly abort = () => this.fail(this.signal.reason)
 
   constructor(
@@ -148,12 +137,7 @@ class Session implements NotarySession {
         [this.channel.port2],
       )
       await initialized
-      this.timer = setTimeout(
-        () => this.fail(new Error('Notary preparation timed out')),
-        PREPARE_TIMEOUT_MS,
-      )
       await prepared
-      clearTimeout(this.timer)
       this.signal.throwIfAborted()
       this.phase = 'prepared'
     } catch (error) {
@@ -168,10 +152,6 @@ class Session implements NotarySession {
     if (this.phase !== 'prepared' || request.url !== this.url)
       throw new Error('Invalid notarization send')
     this.phase = 'busy'
-    this.timer = setTimeout(
-      () => this.fail(new Error('Notarization request timed out')),
-      REQUEST_TIMEOUT_MS,
-    )
     const result = this.wait('sent')
     try {
       this.channel.port1.postMessage({ type: 'send', request } satisfies ToWorker)
@@ -255,7 +235,6 @@ class Session implements NotarySession {
 
   private cleanup(): void {
     this.phase = 'ended'
-    clearTimeout(this.timer)
     this.channel.port1.close()
     this.signal.removeEventListener('abort', this.abort)
   }
