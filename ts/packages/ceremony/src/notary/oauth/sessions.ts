@@ -44,11 +44,16 @@ export async function notarizeOAuth(options: {
   }
   const notary = new NotaryRuntime(options.notaryAddress, options.signal, emit)
   const tokenPrepared = branch(
-    notary.prepare(tokenRequest.url, { fetch: 'token-fetch', attestation: 'token-attestation' }),
+    notary.prepare(tokenRequest.url, {
+      setup: 'token-setup',
+      fetch: 'token-fetch',
+      attestation: 'token-attestation',
+    }),
     'token-fetch',
   )
   const identityPrepared = branch(
     notary.prepare(options.identity.url, {
+      setup: 'identity-setup',
       fetch: 'identity-fetch',
       attestation: 'identity-attestation',
     }),
