@@ -289,6 +289,48 @@ it.each([
   },
 )
 
+it('times setup from runtime load to prepared, with the connection time, and leaves a failed one unfinished [LIBID-PROVER-007]', async () => {
+  let clock = 0
+  vi.stubGlobal('performance', { timeOrigin: 10000, now: () => clock })
+  const events: OperationEvent[] = []
+  const abort = new AbortController()
+  const notary = new NotaryRuntime('https://notary.test', abort.signal, (event) =>
+    events.push(event),
+  )
+  const names = { setup: 'token-setup', fetch: 'token-fetch', attestation: 'token-attestation' }
+  try {
+    const ready = notary.prepare(target, names)
+    const port = ports().at(-1)!
+    clock = 5
+    port.postMessage({ type: 'initialized' })
+    await vi.waitFor(() => expect(events).toHaveLength(1))
+    clock = 2505
+    port.postMessage({ type: 'prepared', attributes: { 'connect-ms': 600 } })
+    await ready
+    expect(events).toEqual([
+      { event: 'token-setup', phase: 'started', timestamp: 10005 },
+      {
+        event: 'token-setup',
+        phase: 'finished',
+        timestamp: 12505,
+        instrumentation: { attributes: { 'connect-ms': 600 } },
+      },
+    ])
+    for (const emitted of events)
+      expect(() => EventMessage.decode({ type: 'event', ...emitted })).not.toThrow()
+    const failing = notary.prepare(target, { ...names, setup: 'identity-setup' })
+    const failed = ports().at(-1)!
+    failed.postMessage({ type: 'initialized' })
+    failed.postMessage({ type: 'error', message: 'Notary WebSocket closed' })
+    await expect(failing).rejects.toMatchObject({ event: 'token-fetch' })
+    expect(events.slice(2)).toEqual([
+      { event: 'identity-setup', phase: 'started', timestamp: 12505 },
+    ])
+  } finally {
+    abort.abort()
+  }
+})
+
 it("names the failed session's own operation in the siblings its failure aborts", async () => {
   const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
   const token = notary.prepare(target, { fetch: 'token-fetch', attestation: 'token-attestation' })

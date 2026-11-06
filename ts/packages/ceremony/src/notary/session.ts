@@ -52,11 +52,12 @@ export class NotaryRuntime {
 
   /**
    * Start target-specific setup without a bearer. `events` name the caller's fetch (setup and
-   * send) and attestation (reveal) operations, so a failure names the operation it interrupts.
+   * send) and attestation (reveal) operations, so a failure names the operation it interrupts;
+   * `setup`, when named, times the notary connection and TLS setup on their own.
    */
   async prepare(
     url: string,
-    events?: { fetch: string; attestation: string },
+    events?: { setup?: string; fetch: string; attestation: string },
   ): Promise<NotarySession> {
     const signal = this.signal
     signal.throwIfAborted()
@@ -103,8 +104,9 @@ class Session implements NotarySession {
     private readonly url: string,
     private readonly signal: AbortSignal,
     private readonly failRuntime: (error: unknown) => void,
-    /** The caller's fetch and attestation events; `emit` is set when they are observed. */
+    /** The caller's setup, fetch and attestation events; `emit` is set when they are observed. */
     private readonly events?: {
+      setup?: string
       fetch: string
       attestation: string
       emit?: (event: OperationEvent) => void
@@ -137,7 +139,11 @@ class Session implements NotarySession {
         [this.channel.port2],
       )
       await initialized
-      await prepared
+      const { setup: event, emit } = this.events ?? {}
+      if (event && emit) emit({ event, phase: 'started', timestamp: now() })
+      const { attributes } = await prepared
+      if (event && emit)
+        emit({ event, phase: 'finished', timestamp: now(), instrumentation: { attributes } })
       this.signal.throwIfAborted()
       this.phase = 'prepared'
     } catch (error) {

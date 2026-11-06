@@ -127,10 +127,12 @@ class WorkerSession {
     const current = this.#state
     this.#state = { phase: 'busy' }
     switch (data.type) {
-      case 'prepare':
+      case 'prepare': {
         if (current.phase !== 'new') break
-        this.#state = await this.#prepare(data)
-        return this.#reply({ type: 'prepared' })
+        const { attributes, ...prepared } = await this.#prepare(data)
+        this.#state = prepared
+        return this.#reply({ type: 'prepared', attributes })
+      }
       case 'send':
         if (current.phase !== 'prepared') break
         this.#state = await this.#send(current, data.request)
@@ -142,17 +144,19 @@ class WorkerSession {
     throw new Error('Invalid notarization sequence')
   }
 
-  async #prepare(data: Prepare): Promise<Prepared> {
+  async #prepare(data: Prepare): Promise<Prepared & { attributes: Record<string, number> }> {
     const url = new URL(data.url)
     // The notary limits idle sockets; finish cold WASM startup before connecting.
     const tlsn = await initialize(data)
     this.#reply({ type: 'initialized' })
+    const connecting = performance.now()
     const ws = new WebSocket(deriveNotaryWebSocketUrl(data.notaryAddress))
     const io = socketIo(ws)
     this.#io = io
     await waitForOpen(ws)
     // The peer may close between the open event and this continuation.
     if (ws.readyState !== WebSocket.OPEN) throw new Error('Notary WebSocket closed')
+    const attributes = { 'connect-ms': performance.now() - connecting }
     const prover = new tlsn.Prover({
       server_name: url.hostname,
       mode: 'Proxy',
@@ -161,7 +165,7 @@ class WorkerSession {
       network: 'Bandwidth',
     })
     await withHeartbeat(() => prover.setup(io))
-    return { phase: 'prepared', url, io, prover }
+    return { phase: 'prepared', url, io, prover, attributes }
   }
 
   async #send(prepared: Prepared, request: ExactHttpRequest): Promise<Sent> {

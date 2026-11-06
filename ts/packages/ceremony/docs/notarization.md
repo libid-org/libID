@@ -118,6 +118,16 @@ Use a matched service/TLSN/MPZ set. Mocked concurrency cannot detect WASM runtim
 deadlocks; [runtime browser tests](../e2e/runtime.spec.ts) use real sessions, while
 [qualification](qualification.md) retains the live authenticated/device gaps.
 
+## Setup measurements
+
+`token-setup` and `identity-setup` start once the SDK runtime has loaded and
+finish when the session is prepared: the notary WebSocket is open and TLSNotary
+setup with the notary is done. Their `finished` events carry `connect-ms`, the
+worker-measured time for the WebSocket to open; the rest of the interval is
+setup, which needs many round trips to the notary. Both sessions set up at
+once. A failed setup leaves its operation unfinished and fails as the session's
+fetch.
+
 ## Attestation measurements
 
 `token-attestation` and `identity-attestation` start after the response is fetched
