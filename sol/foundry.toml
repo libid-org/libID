@@ -1,0 +1,29 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["lib"]
+# The tests build the real libID contracts, which need the same compiler
+# settings libID-contracts uses. LibID.sol itself compiles with any 0.8.20+.
+solc = "0.8.33"
+evm_version = "cancun"
+via_ir = true
+optimizer = true
+optimizer_runs = 200
+
+[fmt]
+line_length = 120
+
+[lint]
+# As libID-contracts lints: the style lints on, gas and code-size off.
+severity = ["high", "med", "low", "info"]
+exclude_lints = [
+    # Fires on every comparison with block.timestamp. LibID's one such
+    # comparison is a proof's age against a limit measured in minutes or
+    # hours; a validator's latitude over the timestamp is seconds.
+    "block-timestamp",
+    # LibID ships as one file so integrators import one path; its interfaces
+    # live beside the library on purpose. The tests keep their mock tokens
+    # beside the tests that use them.
+    "multi-contract-file",
+]

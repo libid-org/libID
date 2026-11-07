@@ -1,0 +1,4 @@
+forge-std/=lib/forge-std/src/
+libid-contracts/=lib/libID-contracts/solidity/contracts/
+@openzeppelin/contracts/=lib/libID-contracts/solidity/lib/openzeppelin-contracts/contracts/
+@openzeppelin/contracts-upgradeable/=lib/libID-contracts/solidity/lib/openzeppelin-contracts-upgradeable/contracts/
