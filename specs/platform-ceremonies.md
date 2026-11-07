@@ -1,6 +1,6 @@
 ---
 title: Identity-platform ceremonies
-description: libID ceremony profiles for Google, X, and GitHub, defining authenticated identity fields, OAuth flows, evidence, proof validity, and failure behavior.
+description: libID ceremony profiles for Google, X, GitHub, and Telegram, defining authenticated identity fields, OAuth flows, evidence, proof validity, and failure behavior.
 sidebar:
   order: 3
 ---
@@ -520,6 +520,7 @@ Proof validity and mutable-metadata ordering use the authenticated times below.
 | Google | signed ID-Token `exp` | evidence time minus `futureObservationAllowance` | evidence time |
 | X | the token attestation's signed creation time | evidence time minus `futureObservationAllowance` | evidence time plus `proofLifetime` |
 | GitHub | the token-exchange attestation's signed creation time | evidence time minus `futureObservationAllowance` | evidence time plus `proofLifetime` |
+| Telegram | signed ID-Token `iat` (REQ-PLAT-78) | evidence time minus `futureObservationAllowance` | evidence time plus `proofLifetime` |
 
 The subtraction saturates at zero: an evidence time no greater than the
 allowance gives a `metadataObservedAt` of zero.
@@ -1885,6 +1886,104 @@ proof.
   code but usable evidence was lost. Necessity: browser token exchange remains
   a single-use, non-recoverable step; no Bridge result or replay exists.
 
+## 6a. Telegram ceremony
+
+```text
+identityPlatform = "telegram"
+platformCeremonyVersion = 1
+```
+
+Telegram uses OIDC with an authorization code. Its token endpoint needs a
+confidential client secret, so the [OAuth Bridge](oauth-bridge.md#telegram-profile)
+swaps the code. The evidence is the signed ID token. The Prover checks it
+with Telegram's keys, which the Bridge relays.
+
+The digest is bound by the OIDC `nonce` (common REQ-COMMON-02A). PKCE only
+protects the code at the swap; no verifier compares it.
+
+### 6a.1 Authorization request
+
+`GET https://oauth.telegram.org/auth`:
+
+| Order | Field | Exact value |
+|---|---|---|
+| 1 | `response_type` | `code` |
+| 2 | `client_id` | configured client identifier (the bot id) |
+| 3 | `redirect_uri` | immutable redirect URI |
+| 4 | `scope` | `openid profile` |
+| 5 | `state` | immutable one-use OAuth state |
+| 6 | `nonce` | `BASE64URL_NOPAD(authorizationDigest)` |
+| 7 | `code_challenge` | PKCE challenge per common §7 |
+| 8 | `code_challenge_method` | `S256` |
+
+- REQ-PLAT-80 (upholds SP-DELIVERY-01):
+  The Prover MUST accept the Telegram return only as a query carrying one
+  `code` and one `state` matching its live ceremony. The Bridge bounds the
+  swapped `code` ([OAuth Bridge](oauth-bridge.md#telegram-profile)). An
+  `error` of `access_denied` is a denial and any other `error` a failure. A
+  nonempty fragment, a duplicated field, both `code` and `error`, or an
+  `id_token`, `access_token`, or `refresh_token` is refused before the swap.
+  An `iss` field is provider metadata and changes nothing.
+
+### 6a.2 Token rules
+
+- REQ-PLAT-77 (upholds SP-BIND-01, SP-CLIENT-01):
+  The Prover MUST accept only an RS256 ID token with a non-empty `kid`, where:
+  - `iss` is exactly `https://oauth.telegram.org`;
+  - `aud` is a string equal to the configured client id;
+  - `nonce` is 43 base64url characters encoding 32 bytes. The Prover never
+    holds the digest: the Platform Verifier and the Client compare the nonce
+    with it;
+  - `iat` is an integer with `iat ≤ now + 5 min` and `now < iat + 1 h`.
+- REQ-PLAT-78 (upholds SP-BIND-01):
+  Telegram's evidence time MUST be the signed `iat`, so
+  `metadataObservedAt` is `iat − 300` under §2.2. `exp` is not used.
+  Necessity: Telegram's tokens live 30 seconds, too short for proving, and an
+  `iat` inside the skew must not outrank a later binding.
+- REQ-PLAT-79:
+  The token MUST carry `preferred_username`. Version 1 refuses an account
+  without one and tells the user to set a username.
+
+| Field | Source | Rule |
+|---|---|---|
+| id | signed `id` | decimal digits, at most 20 |
+| handle | signed `preferred_username` | the identity table's rule: not empty, at most 32 bytes, no quote or backslash, A–Z folded under REQ-PLAT-05B |
+
+`sub` is not the account id and is not used. The circuit and the Platform
+Verifier own their checks of these fields. Its tags, circuit buffers, and
+conformance vectors follow the circuit's Telegram entry under §7.
+
+### 6a.3 Signing keys
+
+The bot signs its ID tokens with RS256. BotFather also offers ES256, EdDSA
+and ES256K; the Prover and the circuit refuse them, so a bot set to one of
+those cannot prove an identity.
+
+A key may sign tokens before any reading lists it. The Bridge relays the
+keys to the Prover and could substitute them, so only the Platform
+Verifier's list decides which key is trusted.
+
+`TelegramJwtRoots` holds the latest notarized reading of the key set and the
+one before it. A reading's keys stay trusted for 30 days after the notary's
+time of that reading, and a later reading of the same set extends them. A
+reading of a different set moves the latest reading to the previous one and
+drops what the previous one held. Nothing else adds or removes a key.
+
+- REQ-PLAT-81 (upholds SP-CLIENT-01):
+  The Platform Verifier MUST reject a proof whose RSA modulus
+  `TelegramJwtRoots` does not list as trusted. `TelegramJwtRoots` MUST refuse a
+  reading that holds an RSA key whose exponent is not 65537, the exponent the
+  circuit verifies.
+- REQ-PLAT-82:
+  The Verifier Governance Process MUST keep notarized readings of
+  `https://oauth.telegram.org/.well-known/jwks.json` reaching
+  `TelegramJwtRoots`, so that a key published in that key set is listed
+  within one hour of its publication, the proof lifetime of REQ-PLAT-77
+  (`PROOF_LIFETIME_SECONDS_TELEGRAM`), and no listed key lapses while
+  Telegram still publishes it.
+  Necessity: a proof under an unlisted key fails; listing a published key
+  within one lifetime limits the failures to tokens issued in that hour.
+
 ## 7. Adding an identity platform
 
 The Platform Profile for a new platform MUST define a stable platform
@@ -2206,6 +2305,20 @@ Platform Verifier, Google Key List, Notary Service, Consumer.
   Key List a Platform Verifier reads, or change which Notary Service that
   Google Key List pins. A Platform Verifier switched to a
   new Google Key List trusts no modulus until a reading lands there.
+
+- TEST-PLAT-26 (exercises REQ-PLAT-80):
+  A Telegram return in the fragment, with a duplicated `state` or `code`,
+  both `code` and `error`, another ceremony's `state`, or an `id_token`,
+  `access_token`, or `refresh_token` is refused before any Bridge request;
+  `access_denied` resolves as a denial; an added `iss` leaves the outcome
+  unchanged.
+- TEST-PLAT-27 (exercises REQ-PLAT-81, REQ-PLAT-82):
+  A Telegram proof that satisfies the circuit under a modulus
+  `TelegramJwtRoots` does not list is rejected by the Platform Verifier. The
+  deployment names the keeper that submits notarized readings of Telegram's
+  key set. Once Telegram publishes a new key, that keeper's next reading
+  lists it within one hour. A reading holding an RSA key with an exponent
+  other than 65537 is refused.
 
 ## 9. Security Considerations
 

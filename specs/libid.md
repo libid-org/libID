@@ -22,7 +22,7 @@ specifications.
 - [Common ceremony rules](ceremony-common.md) define the constructions and
   invariants shared by every identity platform.
 - [Identity-platform ceremonies](platform-ceremonies.md) define the launch
-  profiles for Google, X, and GitHub.
+  profiles for Google, X, GitHub, and Telegram.
 - [Chain profiles](chain-profiles.md) define how one destination chain
   authenticates the Transaction Author, supplies Block Time, and encodes
   Authorized Transaction Data.
@@ -218,19 +218,21 @@ implementing that profile.
 | `("google", 1)` | not named | not named | 7200 |
 | `("x", 1)` | 3600 | 300 | 300 |
 | `("github", 1)` | 3600 | 300 | 300 |
+| `("telegram", 1)` | 3600 | 300 | 300 |
 
-`proofLifetime` is the maximum age of the attestation that supplies evidence
-time: the X token attestation and the GitHub token-exchange attestation.
-`maxFutureAttestationSkew` is the maximum lead of that token attestation's
-timestamp over Block Time. Google's signed `exp` bounds its validity, so
+`proofLifetime` is the maximum age of the time that supplies evidence: the X
+token attestation, the GitHub token-exchange attestation, and Telegram's
+signed ID-Token `iat`. `maxFutureAttestationSkew` is the maximum lead of that
+time over Block Time. Google's signed `exp` bounds its validity, so
 `("google", 1)` names neither of those two. `futureObservationAllowance` is
 the maximum lead of a profile's evidence time over Block Time, and the amount
 subtracted from that time to give `metadataObservedAt`, a watermark no later
 than Block Time
 ([platform profiles §2.2](platform-ceremonies.md#22-metadata-ordering-and-validity-ceilings)).
 Google's `exp` runs about an hour ahead of the token's issue, and the
-Google allowance is two hours. A notary stamps its own clock, so the X and
-GitHub allowances cover clock skew alone. Verifier governance controls the Supported
+Google allowance is two hours. A notary stamps its own clock and Telegram
+signs `iat` at issue, so the X, GitHub and Telegram allowances cover clock
+skew alone. Verifier governance controls the Supported
 Version Set and the trust roots, so a proof is accepted only while a Verifier
 Version implementing its profile is supported and the trust roots it relies
 on are active.
