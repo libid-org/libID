@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { NOTARY } from '../local.ts'
 import {
   ccdp,
   closeButton,
@@ -52,7 +53,7 @@ test('unavailable Bridge disables launch; reload loads compatible platforms', as
   available = true
   await page.reload()
   await expect(page.getByRole('status')).toContainText('Ready.')
-  await expect(page.locator('dl')).toContainText('http://localhost:4687')
+  await expect(page.locator('dl')).toContainText(NOTARY)
   await expect(page.locator('dl')).not.toContainText('Ledger')
   await expect(launchButtons(page)).toHaveText(['Google'])
   await expect(launchButton(page, 'Google')).toBeEnabled()
