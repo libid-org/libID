@@ -460,6 +460,9 @@ struct Operation { bytes32 domain; bytes data; }
 
 The digest layout is unchanged: the list is the Authorized Transaction Data,
 and the digest commits all of it.
+This specification sets no limit on the number of entries; the list is
+bounded by the length cap on `transactionData`, the four-byte length
+field of §5 that REQ-COMMON-01 enforces.
 
 - REQ-COMMON-01G (upholds SP-BIND-01):
   Where the returned operation domain is `libid.operations`, the domain of
@@ -502,14 +505,17 @@ lib.id, shows the user each entry before the ceremony.
 
 Conformance vector for an Operation List, with `platformCeremonyVersion =
 1`, `authorizationNonce = 0x5555…5555`, and two entries: a bind call
-(platform §2.1c) for target `0x1111…1111`, and `libid.claim-identity` with
-data `0x00010203`. `transactionData` is 384 bytes, shown one 32-byte word
-per line:
+(platform §2.1c) for target `0x1111…1111`, and a WalletRegistry
+`libid.webwallet.link-identity` entry whose data is `abi.encode(uint256
+chainId, address wallet, bytes sessionKey, bytes32 policyHash)` with chain
+8453, wallet `0x2222…2222`, the 20-byte session key `0x3333…3333`, and
+policy hash `0x4444…4444`. `transactionData` is 544 bytes, shown one 32-byte
+word per line:
 
 ```text
 operationDomain = 0x60b329d7366897b03545eb9f63f4a707253258ee2e1cd0ba3a8973aa4959e967
 entry 0 domain  = 0x4d59cd4487de0a5957f8c83addaac7a1238175aa5c29eeea2fbef57a8f5165ac  // libid.bind-identity
-entry 1 domain  = 0xcb29bed0428519ef88a3d670e8203db76e06f41aca3e684e2c63b516c9b93e1b  // libid.claim-identity
+entry 1 domain  = 0xb76778e70fe9491d05f3d66a477c7f1cb97c40b477b88d0c00442e80bcc4e15c  // libid.webwallet.link-identity
 
 transactionData =
   w0   0000000000000000000000000000000000000000000000000000000000000020  // offset of the array
@@ -520,13 +526,18 @@ transactionData =
   w5   0000000000000000000000000000000000000000000000000000000000000040  // entry 0 data offset
   w6   0000000000000000000000000000000000000000000000000000000000000020  // entry 0 data length
   w7   0000000000000000000000001111111111111111111111111111111111111111  // abi.encode(target)
-  w8   cb29bed0428519ef88a3d670e8203db76e06f41aca3e684e2c63b516c9b93e1b  // entry 1 domain
+  w8   b76778e70fe9491d05f3d66a477c7f1cb97c40b477b88d0c00442e80bcc4e15c  // entry 1 domain
   w9   0000000000000000000000000000000000000000000000000000000000000040  // entry 1 data offset
-  w10  0000000000000000000000000000000000000000000000000000000000000004  // entry 1 data length
-  w11  0001020300000000000000000000000000000000000000000000000000000000  // 0x00010203, padded
+  w10  00000000000000000000000000000000000000000000000000000000000000c0  // entry 1 data length
+  w11  0000000000000000000000000000000000000000000000000000000000002105  // chainId 8453
+  w12  0000000000000000000000002222222222222222222222222222222222222222  // wallet
+  w13  0000000000000000000000000000000000000000000000000000000000000080  // sessionKey offset
+  w14  4444444444444444444444444444444444444444444444444444444444444444  // policyHash
+  w15  0000000000000000000000000000000000000000000000000000000000000014  // sessionKey length
+  w16  3333333333333333333333333333333333333333000000000000000000000000  // sessionKey, padded
 
-authorizationPreimage = operationDomain || 0x0001 || authorizationNonce || 0x00000180 || transactionData
-authorizationDigest   = 0x1a47a16017dc7038947b8945aec7842ad564def5a1e6fe927627f909d7947591
+authorizationPreimage = operationDomain || 0x0001 || authorizationNonce || 0x00000220 || transactionData
+authorizationDigest   = 0x3241ec09170c0c9c20c5a4c4cd59aaca254bb153c2c342f5e5e434beb3200b9f
 ```
 
 Each of these lists, derived from the vector, is rejected:
@@ -538,6 +549,9 @@ aliased offsets   w3 = 0x40                                                 // R
 duplicate domain  w8 = entry 0 domain                                       // REQ-COMMON-01I
 nested list       w8 = operationDomain                                      // REQ-COMMON-01I
 empty list        w0 = 0x20, w1 = 0, nothing after                          // REQ-COMMON-01I
+two own domains   entry 0 = libid.webwallet.add-session                     // REQ-COMMON-01I
+                  (0xadc0929729a450db24efd5992bbc0f04693c7d8e9d706da31c8cca0a429d1d59)
+                  with entry 1's data; rejected by WalletRegistry
 ```
 
 The first three decode under a lenient ABI decoder and differ from their
@@ -1517,8 +1531,9 @@ the constructions that role implements.
   `authorizationDigest` exactly. A Consumer owning `libid.bind-identity`
   accepts the vector's Submission and applies only its entry, without
   decoding the other entry's data. Each derived list of §5 is rejected,
-  and so is a list holding entries under two different domains one
-  Consumer owns, and a list holding no entry under the Consumer's domains.
+  including the two-own-domains list at a Consumer owning both
+  `libid.webwallet.link-identity` and `libid.webwallet.add-session`, and so
+  is a list holding no entry under the Consumer's domains.
   An entry whose `data` has trailing bytes past its own encoding is
   rejected. A second Consumer owning another entry's domain accepts the
   same Submission once after the first did, and resubmitting it to either
