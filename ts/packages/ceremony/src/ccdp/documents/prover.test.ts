@@ -48,6 +48,8 @@ vi.mock('../../platforms/x/1/prover.js', () => ({ prove }))
 
 vi.mock('../../platforms/github/1/prover.js', () => ({ prove }))
 
+vi.mock('../../platforms/telegram/1/prover.js', () => ({ prove }))
+
 vi.mock('./ui.js', async () => (await import('../../testing/index.js')).documentUi(() => ui))
 
 type Spied<T, K extends keyof T> = T & Record<K, Mock>

@@ -89,18 +89,19 @@ export function deriveCodeChallenge(codeVerifier: string): string {
 
 /**
  * An S256 authorization-code request: the platform's leading fields, then `client_id`,
- * `redirect_uri`, `scope`, `state`, `code_challenge` and `code_challenge_method` in
- * exactly this order, serialized by the WHATWG form-urlencoded serializer.
+ * `redirect_uri`, `scope`, `state`, optionally the digest as `nonce`, `code_challenge` and
+ * `code_challenge_method` in exactly this order, serialized by the WHATWG form-urlencoded serializer.
  */
 export function pkceAuthorizationUrlBuilder(
   endpoint: string,
   scope: string,
-  leading: [string, string][] = [],
+  { leading = [], nonce = false }: { leading?: [string, string][]; nonce?: boolean } = {},
 ) {
   return (input: {
     clientId: string
     redirectUri: string
     state: string
+    authorizationDigest: Uint8Array
     codeChallenge: string | null
   }): string => {
     if (!isPkceValue(input.codeChallenge)) {
@@ -112,6 +113,16 @@ export function pkceAuthorizationUrlBuilder(
       ['redirect_uri', input.redirectUri],
       ['scope', scope],
       ['state', input.state],
+      ...(nonce
+        ? [
+            [
+              'nonce',
+              b64urlEncode(
+                exact(input.authorizationDigest, AUTHORIZATION_DIGEST_BYTES, 'authorizationDigest'),
+              ),
+            ],
+          ]
+        : []),
       ['code_challenge', input.codeChallenge],
       ['code_challenge_method', 'S256'],
     ])

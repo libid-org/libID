@@ -30,6 +30,7 @@ export const provers = {
   google: { 1: () => import('./google/1/prover.js') },
   x: { 1: () => import('./x/1/prover.js') },
   github: { 1: () => import('./github/1/prover.js') },
+  telegram: { 1: () => import('./telegram/1/prover.js') },
 } as const satisfies {
   [P in PlatformId]: { [V in SupportedCeremonyVersion<P>]: () => Promise<ProverModule<P>> }
 }

@@ -38,6 +38,23 @@ export async function readJson(response: Response, maximum: number): Promise<unk
   )
 }
 
+/** One request's budget, above the Bridge's own upstream timeout. */
+export const REQUEST_TIMEOUT_MS = 15000
+
+/** Run `request` under `signal` and a deadline; a missed deadline throws `late()`. */
+export async function withDeadline<T>(
+  signal: AbortSignal,
+  late: () => Error,
+  request: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const deadline = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  try {
+    return await request(AbortSignal.any([signal, deadline]))
+  } catch (error) {
+    throw deadline.aborted && !signal.aborted ? late() : error
+  }
+}
+
 /**
  * Public JSON fetched without cookies or redirects, read under `maximum`. It bypasses the
  * browser's HTTP cache unless `cache` says otherwise.

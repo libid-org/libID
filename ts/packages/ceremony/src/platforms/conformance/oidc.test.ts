@@ -38,16 +38,20 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       const staged = stageOidc(platformId, 'accepted', {
         idToken: change.idToken?.(fixture.evidence.idToken),
         jwk: change.jwk?.(fixture.evidence.jwk),
+        swap: change.swap,
       })
       await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject({
         event: change.rejectedAt,
         ...(change.message === undefined ? {} : { message: change.message }),
       })
-      if (change.rejectedAt === 'authorization') expectNoProvingWork(staged.keys)
+      if (change.rejectedAt === 'authorization' || change.rejectedAt === 'token-swap')
+        expectNoProvingWork(staged.keys, 'engineBeforeToken' in fixture)
       expect(generate).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
     },
   )
+
+  const { bridge } = fixture.evidence as { bridge?: { tokenUrl: string; keysUrl: string } }
 
   it(tagged('accepts its published signing key without optional members', tags), async () => {
     const staged = stageOidc(platformId, 'accepted', { jwk: fixture.evidence.minimalJwk })
@@ -59,7 +63,7 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
 
   it(
     tagged(
-      'fetches its published signing key once, without credentials or redirects, through the HTTP cache, and opens no notary connection',
+      'fetches its published signing key once, without credentials or redirects, cached unless Bridge-served, and opens no notary connection',
       tags,
     ),
     async () => {
@@ -70,11 +74,37 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       expect(staged.keys.mock.calls[0][1]).toMatchObject({
         credentials: 'omit',
         redirect: 'error',
-        // The key set honours Google's Cache-Control rather than refetching every run.
-        cache: 'default',
+        // Google's key set honours its Cache-Control; the Bridge's is read fresh every run.
+        cache: bridge ? 'no-store' : 'default',
       })
       // The supplied notary address never opens a notary connection for this prover.
       expect(notarization).not.toHaveBeenCalled()
+    },
+  )
+
+  it.runIf(bridge)(
+    tagged('swaps its code once through the Bridge, then reads its key set', tags),
+    async () => {
+      const staged = stageOidc(platformId, 'accepted')
+      const { request, codeVerifier, credential: code } = staged.context
+      await (await proverOf(platformId)).prove(staged.context)
+      const [[url, init]] = staged.swap.mock.calls
+      expect([String(url), String(staged.keys.mock.calls[0][0])]).toEqual([
+        bridge!.tokenUrl,
+        bridge!.keysUrl,
+      ])
+      expect(init).toMatchObject({
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+      })
+      expect(init!.headers).toEqual({ 'Content-Type': 'application/json' })
+      expect(JSON.parse(String(init!.body))).toEqual({
+        code,
+        codeVerifier,
+        redirectUri: request.redirectUri,
+      })
     },
   )
 
@@ -85,7 +115,8 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
       await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject(
         oidcFailures[outcome],
       )
-      if (beforeProving.includes(outcome)) expectNoProvingWork(staged.keys)
+      if (beforeProving.includes(outcome))
+        expectNoProvingWork(staged.keys, 'engineBeforeToken' in fixture)
       else expect(destroy).toHaveBeenCalledOnce()
       expect(generate).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()

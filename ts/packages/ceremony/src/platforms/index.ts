@@ -8,6 +8,9 @@ import * as googleUrl from './google/1/url.js'
 import * as google from './google/1/validation.js'
 import * as notarizedEvents from './notarized/events.js'
 import type { ReturnRules } from './oauthReturn.js'
+import * as telegramEvents from './telegram/1/events.js'
+import * as telegramUrl from './telegram/1/url.js'
+import * as telegram from './telegram/1/validation.js'
 import type { Identity } from './validation.js'
 import * as xUrl from './x/1/url.js'
 import * as x from './x/1/validation.js'
@@ -72,6 +75,11 @@ export const platforms = {
     requiresClientCredential: true,
     isClientId: github.isClientId,
     versions: { 1: { ...githubUrl, ...notarizedEvents, ...resultAdapter(github) } },
+  },
+  telegram: {
+    requiresClientCredential: false,
+    isClientId: telegram.isClientId,
+    versions: { 1: { ...telegramUrl, ...telegramEvents, ...resultAdapter(telegram) } },
   },
 } as const satisfies Record<string, PlatformEntry>
 

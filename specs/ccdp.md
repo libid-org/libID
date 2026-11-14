@@ -71,7 +71,7 @@ logic which uses CCDP alongside other flows.
 | Actor | Browser authority | Responsibility |
 |---|---|---|
 | Application | application origin | hosts the application document, owns the operation and ceremony state, and drives the protocol |
-| OAuth Bridge | OAuth bridge origin | publishes ceremony configuration, serves the complete Callback document obtained from the Distribution with bridge-owned inputs, and owns OAuth registrations |
+| OAuth Bridge | OAuth bridge origin | publishes ceremony configuration, serves the complete Callback document obtained from the Distribution with bridge-owned inputs, and owns OAuth registrations. For Telegram it also holds the confidential client secret and relays the token swap, so it sees the user's Telegram identity |
 | CCDP Distribution | CCDP origin | contains the versioned [resources](#documents-and-routes) and proving assets used by any number of OAuth Bridges; it may be the canonical libID distribution or an operator-selected replacement |
 | OAuth Platform | OAuth-platform origin set | hosts authorization/login documents and issues the OAuth return |
 
