@@ -27,7 +27,13 @@ Authorization Digest: The 32-byte value binding one authorization to the
 
 Authorized Transaction Data: Opaque canonical bytes carried in the
    Authorization Digest and decoded by the Consumer into one
-   transaction's expected arguments.
+   transaction's expected arguments, or into an Operation List whose entry
+   for that Consumer carries them.
+
+Operation List: Authorized Transaction Data under the operation domain
+   `keccak256(UTF8("libid.operations"))`: an ordered sequence of entries,
+   each a 32-byte operation domain and that domain's own Authorized
+   Transaction Data, encoded as the Chain Profile fixes (§5).
 
 Authorization Nonce: Fresh 32-byte randomness that makes each Authorization
    Digest unique.
@@ -372,7 +378,10 @@ bytes plus the Authorized Transaction Data.
   operation domain to transaction kinds that can produce different
   authoritative effects. A new operation or a change to one operation's
   transaction-data semantics uses a new domain string, not another digest
-  field.
+  field. Under an Operation List these rules apply to the domain of the
+  Consumer's own entry (REQ-COMMON-01G). `libid.operations` itself selects
+  no effect: a Consumer that accepts Operation Lists owns it and MUST NOT
+  assign it to any transaction kind but applying its own entry of a list.
 
 `platformCeremonyVersion` identifies the complete platform ceremony boundary:
 this Authorization Digest layout, the platform's OAuth construction, its
@@ -392,7 +401,11 @@ implementing it under the same canonical addresses.
   `platformCeremonyVersion`. A verifier implementation or deployment change
   which preserves the complete boundary does not bump it; which Verifier
   Version it is registered under is the Verifier Governance Process's
-  decision.
+  decision. A new operation domain or Authorized Transaction Data encoding,
+  the Operation List included, does not bump it either: the Platform
+  Verifier recomputes the digest over both as opaque bytes, so the layout,
+  the OAuth construction, the proof statement, and the parameters are
+  unchanged.
 
 - REQ-COMMON-01C (upholds SP-BIND-01, SP-REPLAY-01):
   The Canonical Runtime MUST NOT take a Consumer Chain identity as a ceremony
@@ -431,7 +444,109 @@ bytes.
   The Chain Profile and the Consumer's protocol MUST fix one exact Authorized
   Transaction Data encoding for each transaction kind. The Consumer MUST
   decode `transactionData` into that format and reject trailing bytes,
-  noncanonical encodings, and any other argument shape.
+  noncanonical encodings, and any other argument shape. Under
+  `libid.operations`, the Consumer applies this to the list under
+  REQ-COMMON-01H and to the `data` of its own entry under the encoding that
+  entry's domain fixes.
+
+One ceremony can authorize operations at several Consumers by committing an
+Operation List under `operationDomain =
+keccak256(UTF8("libid.operations"))`: an ordered sequence of entries, each a
+32-byte operation domain and that domain's Authorized Transaction Data,
+unchanged. The Chain Profile fixes the list's encoding; the EVM encoding is
+[chain profiles](chain-profiles.md) REQ-CHAIN-07B. The digest layout is
+unchanged: the list is the Authorized Transaction Data, and the digest
+commits all of it. This specification sets no limit on the number of
+entries; the Application bounds what it composes and shows.
+
+- REQ-COMMON-01G (upholds SP-BIND-01):
+  Where the returned operation domain is `libid.operations`, the domain of
+  the Consumer's own entry is the operation domain for every per-Consumer
+  rule of this specification and of the platform and chain profiles, and
+  that entry's `data` is the Authorized Transaction Data those rules name.
+  Necessity: each effect is still decided by its own domain, now carried in
+  its entry, and the digest commits that entry with the rest of the list.
+- REQ-COMMON-01H (upholds SP-BIND-01):
+  The Consumer MUST decode an Operation List under the Chain Profile's list
+  encoding and reject any bytes other than the one canonical encoding of
+  the entries they decode to (EVM: chain profiles REQ-CHAIN-07B).
+  Necessity: the Application and every Consumer must read the same entries
+  from the same bytes.
+- REQ-COMMON-01I (upholds SP-BIND-01, SP-REPLAY-01):
+  The Consumer MUST reject an Operation List unless it holds exactly one
+  entry under the domains the Consumer owns, `libid.operations` among them,
+  and that entry's domain is not `libid.operations`. Necessity: the
+  Consumer accepts a digest once (REQ-COMMON-03A), so a second entry of its
+  own would never be applied though the user approved it; with no entry of
+  its own the list authorizes nothing at that Consumer; and an entry under
+  `libid.operations` selects no effect (REQ-COMMON-01A).
+- REQ-COMMON-01J (upholds SP-BIND-01):
+  The Consumer MUST apply only its own entry. The Consumer reads the other
+  entries' domains for REQ-COMMON-01I and MUST NOT decode, interpret, or
+  act on their `data`. Necessity: the format of an entry's data belongs to
+  the Consumer that owns its domain.
+
+The entries are independent, not atomic. Whoever holds the Submission can
+present it to one Consumer and not another. Each Consumer spends the digest
+in its own set under REQ-COMMON-03 and REQ-COMMON-03A, and applies its entry
+under its own authorization predicate (REQ-COMMON-04). One transaction that
+calls several Consumers is all-or-none only among its own calls; it cannot
+stop a third party from spending an entry first. An Application that needs
+several entries applied checks each Consumer's spent state, such as
+`digestSpent`, and applies only the unspent entries. That gives eventual,
+not atomic, application. No Consumer may rely on another entry having been
+applied.
+
+The ceremony layer does not interpret the list; the Canonical Runtime
+carries it as opaque bytes. The Application that composes a list, such as
+lib.id, shows the user each entry before the ceremony.
+
+Conformance vector for an Operation List in the EVM encoding of chain
+profiles REQ-CHAIN-07B, with `platformCeremonyVersion = 1`,
+`authorizationNonce = 0x5555…5555`, and two entries: a bind call (platform
+§2.1c) for target `0x1111…1111`, and an entry under the test domain
+`libid.test.a` whose `data` is the single byte `0xff`. The second entry
+stands for another Consumer's entry; its `data` is not an encoded target.
+`transactionData` is 384 bytes, shown one 32-byte word per line:
+
+```text
+operationDomain = 0x60b329d7366897b03545eb9f63f4a707253258ee2e1cd0ba3a8973aa4959e967
+entry 0 domain  = 0x4d59cd4487de0a5957f8c83addaac7a1238175aa5c29eeea2fbef57a8f5165ac  // libid.bind-identity
+entry 1 domain  = 0x6b8fd3a153cb2bc403041d7ca7d029d031243d8143d49a248230df9dd07fb723  // libid.test.a
+
+transactionData =
+  w0   0000000000000000000000000000000000000000000000000000000000000020  // offset of the array
+  w1   0000000000000000000000000000000000000000000000000000000000000002  // entry count
+  w2   0000000000000000000000000000000000000000000000000000000000000040  // offset of entry 0
+  w3   00000000000000000000000000000000000000000000000000000000000000c0  // offset of entry 1
+  w4   4d59cd4487de0a5957f8c83addaac7a1238175aa5c29eeea2fbef57a8f5165ac  // entry 0 domain
+  w5   0000000000000000000000000000000000000000000000000000000000000040  // entry 0 data offset
+  w6   0000000000000000000000000000000000000000000000000000000000000020  // entry 0 data length
+  w7   0000000000000000000000001111111111111111111111111111111111111111  // abi.encode(target)
+  w8   6b8fd3a153cb2bc403041d7ca7d029d031243d8143d49a248230df9dd07fb723  // entry 1 domain
+  w9   0000000000000000000000000000000000000000000000000000000000000040  // entry 1 data offset
+  w10  0000000000000000000000000000000000000000000000000000000000000001  // entry 1 data length
+  w11  ff00000000000000000000000000000000000000000000000000000000000000  // 0xff, padded
+
+authorizationPreimage = operationDomain || 0x0001 || authorizationNonce || 0x00000180 || transactionData
+authorizationDigest   = 0x872d461409ba5b7731cc6aaf6abe7522b5f985d69ca66eb333e02e008e3ae496
+```
+
+A Consumer owning `libid.bind-identity` accepts this list and binds the
+target, though decoding entry 1's `data` as a target would fail
+(REQ-COMMON-01J). Each of these lists, derived from the vector, is
+canonical and is rejected under REQ-COMMON-01I by the Consumer named:
+
+```text
+duplicate entry  w8 = entry 0 domain                       // bind Consumer: more than one own entry
+nested entry     w4 = operationDomain                      // bind Consumer: own entry under libid.operations
+no entry         w0 = 0x20, w1 = 0, nothing after          // bind Consumer: no own entry
+two own domains  w4 = libid.test.b, w6 = 0x01, w7 = w11    // Consumer owning libid.test.a and libid.test.b:
+                 (0x80b4f95cb6d89708133947b68dcfcfb49b7e1e55f8b96984b151e9c446e91a1f)  // more than one own entry
+```
+
+Chain profiles §3.3 derives from the same vector the noncanonical lists that
+REQ-COMMON-01H rejects.
 
 Each Platform Profile binds that recomputed digest to its evidence by one of
 two methods, chosen by what the platform's authorization can carry:
@@ -480,8 +595,9 @@ compare there. Neither method is optional, and no profile uses both.
   Submission call the Proof Verifier first, consume the digest, and leave the
   Consumer nothing to apply — a denial of service costing the attacker only a
   fee. A digest is spendable once at each Consumer that accepts its operation
-  domain, and REQ-COMMON-01A leaves domain choice with the Consumer that
-  lives with that consequence.
+  domain, or under an Operation List the domain of its own entry
+  (REQ-COMMON-01G), and REQ-COMMON-01A leaves domain choice with the
+  Consumer that lives with that consequence.
 - REQ-COMMON-04 (upholds SP-BIND-01):
   The Consumer MUST authenticate the Transaction Author under its Chain Profile
   and enforce the invoked transaction kind's authorization predicate before
@@ -661,7 +777,11 @@ whether that domain is its own.
 - REQ-COMMON-06A (upholds SP-BIND-01):
   The Consumer MUST reject a returned operation domain it does not own. The
   Consumer MUST select its transaction handler by that domain before decoding
-  the Authorized Transaction Data under REQ-COMMON-01F.
+  the Authorized Transaction Data under REQ-COMMON-01F. Under
+  `libid.operations`, the Consumer MUST select it by the domain of its own
+  entry, after decoding the list under REQ-COMMON-01H (EVM: chain profiles
+  REQ-CHAIN-07B) and checking it under REQ-COMMON-01I, and before decoding
+  that entry's `data`.
 - REQ-COMMON-06B:
   The Proof Verifier MUST NOT decode, interpret, or apply the Authorized
   Transaction Data, nor any other part of the Submission Payload. Necessity:
@@ -1385,8 +1505,9 @@ the constructions that role implements.
 - TEST-COMMON-01 (exercises REQ-COMMON-01, REQ-COMMON-01A, REQ-COMMON-01B, REQ-COMMON-01C, REQ-COMMON-01D, REQ-COMMON-01E, REQ-COMMON-01F, REQ-COMMON-02, REQ-COMMON-02A):
   The §5 digest vector reproduces `authorizationDigest` exactly.
 - TEST-COMMON-02 (exercises REQ-COMMON-01A, REQ-COMMON-01F):
-  An Submission carrying a foreign operation domain, or Authorized Transaction
-  Data with trailing bytes, a noncanonical encoding, or an argument shape
+  A Submission carrying a foreign operation domain, including
+  `libid.operations` at a Consumer that accepts no Operation List, or
+  Authorized Transaction Data with trailing bytes, a noncanonical encoding, or an argument shape
   other than the transaction kind's exact format, is rejected.
 - TEST-COMMON-02A (exercises REQ-COMMON-01C, REQ-COMMON-01D, REQ-COMMON-04):
   The Canonical Runtime takes no Consumer Chain input, and one Submission
@@ -1398,6 +1519,20 @@ the constructions that role implements.
   the Consumer rejects a
   caller-substituted Block Time; and a Transaction Submitter that cannot satisfy
   the transaction kind's Transaction Author predicate.
+- TEST-COMMON-02B (exercises REQ-COMMON-01B, REQ-COMMON-01F, REQ-COMMON-01G, REQ-COMMON-01J, REQ-COMMON-06A):
+  The §5 Operation List vector reproduces `transactionData` and
+  `authorizationDigest` exactly. A Consumer owning `libid.bind-identity`
+  accepts the vector's Submission and binds the target, without decoding
+  the `libid.test.a` entry's `data`. A second Consumer owning
+  `libid.test.a` accepts the same Submission once after the first did, and
+  resubmitting it to either is rejected. The Submission verifies at the
+  Platform Verifier of an existing `platformCeremonyVersion`; that claim of
+  REQ-COMMON-01B is exercised only against a real Platform Verifier.
+- TEST-COMMON-02C (exercises REQ-COMMON-01A, REQ-COMMON-01F, REQ-COMMON-01H, REQ-COMMON-01I):
+  Each derived list of §5 is rejected by the Consumer named with it, and
+  each noncanonical list of the Chain Profile (EVM: chain profiles §3.3) is
+  rejected by a Consumer owning `libid.bind-identity`. An own entry whose
+  `data` has trailing bytes past its own encoding is rejected.
 - TEST-COMMON-03 (exercises REQ-COMMON-03, REQ-COMMON-03A):
   Resubmitting a recorded Authorization Digest is rejected.
 - TEST-COMMON-04 (exercises REQ-COMMON-01B, REQ-COMMON-01E):
@@ -1594,9 +1729,11 @@ SP-FRESH-01, SP-REPLAY-01, and SP-PRIV-01 under the assumptions of §3.
 
 Replay within one Consumer deployment is prevented by `authorizationNonce`
 and REQ-COMMON-03. The digest binds no Consumer Chain, so each Consumer that
-accepts its operation domain, on any Consumer Chain, spends it once. A
+accepts its operation domain, or under an Operation List the domain of its
+own entry (REQ-COMMON-01G), on any Consumer Chain, spends it once. A
 Consumer whose effect is chain-specific commits and checks its chain under
-REQ-COMMON-01C. Replay across Platform Ceremony Versions is prevented by
+REQ-COMMON-01C; under an Operation List, it commits the chain in its own
+entry, since the list carries none. Replay across Platform Ceremony Versions is prevented by
 `platformCeremonyVersion`. A version restated under new canonical Platform
 Verifier addresses (platform REQ-PLAT-01A) has the same number, and the
 digest binds no Platform Verifier address, so neither separates the two.
@@ -1614,6 +1751,23 @@ kind therefore defines an authorization predicate over the authenticated
 Transaction Author and the proof-bound Authorized Transaction Data. A copied
 proof creates no authority for a submitter that cannot satisfy that predicate.
 
+An Operation List keeps these properties. Consent is exact: the digest
+commits the whole list, so no entry can be added, dropped, or changed
+without breaking the proof. A list adds no replay beyond what each entry's
+own domain already allows: a Consumer with no entry of its own rejects the
+list (REQ-COMMON-01I), a Consumer with one spends the digest once in its own
+set, and a chain-free entry, such as the bind entry that platform
+TEST-PLAT-20E requires to carry no chain, is spendable on every Consumer
+Chain as it would be alone. One entry cannot be read as another:
+a Consumer takes exactly one entry, by its own domain, from bytes with one
+decoding, and lists do not nest (REQ-COMMON-01H, REQ-COMMON-01I,
+REQ-COMMON-01J). There is no downgrade: a list's digest commits
+`libid.operations`, so no single-operation digest equals it, and no Consumer
+assigns `libid.operations` to any transaction kind but applying its own
+entry of a list (REQ-COMMON-01A, REQ-COMMON-06A). The entries
+are not atomic, so each must stand on its own Consumer's authorization
+predicate.
+
 Client binding rejects evidence issued to a client other than the one whose
 ceremony the Canonical Runtime opened. The check is local: the Application
 freezes its selected Bridge's client configuration, which may be shared with
@@ -1630,11 +1784,13 @@ a shared deployment or `*` may deliberately admit an unrelated Application.
 Such an Application, or one using its own client and redirect, can obtain
 evidence from a ceremony the user approves; the proof-bound operation,
 Transaction Author authentication, and any composition-owned transaction authorization
-contain that case. The ceremony layer defines no extra confirmation page. The
+contain that case. The ceremony layer defines no extra confirmation page and
+does not describe an Operation List's entries; the Application that
+composes a list shows them. The
 registered redirect URI list and the origins on it are therefore trust-bearing
 configuration.
 
-The verification path of §5.1 concentrates authority. An Consumer accepts the
+The verification path of §5.1 concentrates authority. A Consumer accepts the
 Proof Verifier's decision, operation domain, and Authorized Transaction Data
 without rechecking them, so a compromised Proof Verifier authorizes arbitrary
 transactions at every Consumer at once; a compromised Platform Verifier does

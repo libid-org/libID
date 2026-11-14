@@ -476,8 +476,10 @@ amount and receiver of §2.1b, which no proof commits.
 
 - REQ-PLAT-08P (upholds SP-BIND-01, SP-REPLAY-01):
   The Consumer MUST accept a bind call only under the operation domain
-  `keccak256(UTF8("libid.bind-identity"))`. The Consumer MUST reject
-  Authorized Transaction Data that is not exactly one target in the Chain
+  `keccak256(UTF8("libid.bind-identity"))`, as the returned operation
+  domain or, in an Operation List, as the domain of its own entry (common
+  REQ-COMMON-01G). The Consumer MUST reject Authorized Transaction Data,
+  or that entry's `data`, that is not exactly one target in the Chain
   Profile's encoding. The Consumer MUST reject a bind call whose
   Transaction Author is not that target.
   Necessity: the target is the one value the user authorized, and requiring
@@ -499,9 +501,12 @@ amount and receiver of §2.1b, which no proof commits.
   receiver.
 
 - TEST-PLAT-20E (exercises REQ-PLAT-08P, REQ-PLAT-08Q):
-  A bind call under another operation domain is rejected. Authorized
-  Transaction Data that is not exactly one encoded target, including a
-  target followed by a chain identifier, is rejected, and so is a bind call
+  A bind call under another operation domain is rejected, and so is an
+  Operation List with no `libid.bind-identity` entry; a list whose
+  `libid.bind-identity` entry names the Transaction Author binds that
+  target. Authorized Transaction Data or entry `data` that is not exactly
+  one encoded target, including a target followed by a chain identifier,
+  is rejected, and so is a bind call
   whose Transaction Author is not the target. One Submission is accepted by
   the Consumers of two Consumer Chains, once at each, and a second bind call
   of it on either is rejected. A fee amount without a receiver, and a

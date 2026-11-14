@@ -27,7 +27,7 @@ Transaction Data a ceremony committed.
 |---|---|
 | how the chain authenticates the Transaction Author | REQ-COMMON-01D |
 | how the chain supplies Block Time | REQ-COMMON-01D |
-| how Authorized Transaction Data is encoded | REQ-COMMON-01F |
+| how Authorized Transaction Data is encoded | REQ-COMMON-01F, REQ-COMMON-01H |
 
 - REQ-CHAIN-01 (upholds SP-BIND-01):
   A Chain Profile MUST answer all three duties for exactly one family of
@@ -69,13 +69,46 @@ chain identifier, a block timestamp, and an immediate caller to the Consumer.
   Authorized Transaction Data is the EVM ABI encoding of the transaction
   kind's argument tuple. The Consumer's protocol fixes that tuple for each
   transaction kind it accepts, and the Consumer MUST decode with a strict
-  decoder that rejects trailing bytes and any other argument shape
-  (REQ-COMMON-01F).
+  decoder that accepts only the exact bytes `abi.encode` produces for the
+  decoded tuple, rejecting trailing bytes, nonzero padding, any other
+  noncanonical encoding, and any other argument shape (REQ-COMMON-01F).
 
 - REQ-CHAIN-07A (upholds SP-BIND-01):
   Where it commits a chain identifier under REQ-COMMON-01C, the Consumer
   MUST commit the EIP-155 chain identifier and compare it with the one its
   execution environment reports.
+
+An Operation List (common REQ-COMMON-01H) is:
+
+```text
+struct Operation { bytes32 domain; bytes data; }
+transactionData = abi.encode(Operation[] entries)
+```
+
+The entries are in list order, and each `data` is the Authorized
+Transaction Data its entry's domain fixes.
+
+- REQ-CHAIN-07B (upholds SP-BIND-01):
+  The Consumer MUST decode an Operation List as `Operation[]`, re-encode the
+  decoded entries with `abi.encode`, and reject the list unless the
+  re-encoding equals `transactionData` byte for byte. It MUST do so for the
+  whole list, not only its own entry. Necessity: Solidity's `abi.decode`
+  accepts trailing bytes, a gap before the array, entry offsets that
+  reorder or alias the entry bodies, and nonzero padding after a `bytes`
+  value; each of these decodes to entries whose re-encoding differs from
+  the input.
+
+Each of these lists, derived from the Operation List vector of common §5,
+decodes under Solidity's `abi.decode` to that vector's two entries and
+re-encodes to its `transactionData`. A Consumer owning
+`libid.bind-identity` rejects each under REQ-CHAIN-07B:
+
+```text
+trailing byte   transactionData || 0x00
+gap             w0 = 0x40, one zero word inserted after w0
+swapped bodies  w2 = 0xc0, w3 = 0x40, w4..w7 exchanged with w8..w11
+outer padding   w11 = 0xff00…0001                // only the libid.test.a entry's padding
+```
 
 ## 4. Conformance tests
 
@@ -86,9 +119,10 @@ chain identifier, a block timestamp, and an immediate caller to the Consumer.
   A Consumer reached through an intermediate account authorizes on that
   account and rejects a call that only the originating account's identity
   would satisfy.
-- TEST-CHAIN-05 (exercises REQ-CHAIN-07):
+- TEST-CHAIN-05 (exercises REQ-CHAIN-07, REQ-CHAIN-07B):
   Authorized Transaction Data carrying trailing bytes past its argument tuple
-  is rejected.
+  is rejected, and so is each noncanonical Operation List of §3.3, by a
+  Consumer owning `libid.bind-identity`.
 - TEST-CHAIN-06 (exercises REQ-CHAIN-07A):
   A Consumer that commits a chain identifier accepts Authorized Transaction
   Data naming the EIP-155 chain identifier its execution environment reports
