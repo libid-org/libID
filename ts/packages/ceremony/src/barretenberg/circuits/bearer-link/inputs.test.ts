@@ -33,7 +33,7 @@ it.each(['', 'a'.repeat(129), 'a'.repeat(4097), 'bad\n', 'a b', 'a\tb', 'é'])(
 )
 
 describe('bearer_link public inputs [REQ-PLAT-32B]', () => {
-  // libid-circuits v0.7.1 bearer-link's X case: its id and handle, nodes and packed tags.
+  // libid-circuits v0.8.0 bearer-link's X case: its id and handle, nodes and packed tags.
   it('places the commitments, nodes and tags in circuit order', () => {
     const inputs = buildBearerLinkInputs(PLATFORM_X, witness('tok-123'))
     const fields = bearerLinkPublicInputs(inputs)

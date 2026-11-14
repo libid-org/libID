@@ -181,31 +181,33 @@ it.each(['abort', 'session-error'])(
   },
 )
 
-it('fails a stuck preparation as the fetch it would start, within 10 seconds [LIBID-BROWSER-010]', async () => {
-  vi.useFakeTimers()
+it('lets a slow preparation finish, however long it takes, until the caller aborts [LIBID-BROWSER-010]', async () => {
+  // Real immediates let the channel deliver `initialized` before the clock advances.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+  const delivered = () => new Promise((resolve) => setImmediate(resolve))
   const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
-  const stuck = notary.prepare(target, { fetch: 'token-fetch', attestation: 'token-attestation' })
-  const rejection = expect(stuck).rejects.toMatchObject({
-    event: 'token-fetch',
-    message: 'Notary preparation timed out',
+  const slow = notary.prepare(target, { fetch: 'token-fetch', attestation: 'token-attestation' })
+  const port = ports().at(-1)!
+  port.postMessage({ type: 'initialized' })
+  await delivered()
+  await vi.advanceTimersByTimeAsync(600000)
+  expect(notary.signal.aborted).toBe(false)
+  expect(vi.getTimerCount()).toBe(0)
+  port.postMessage({ type: 'prepared' })
+  await expect(slow).resolves.toBeDefined()
+  // A stuck one fails only with the caller's reason.
+  const abort = new AbortController()
+  const stuck = new NotaryRuntime('https://notary.test', abort.signal).prepare(target, {
+    fetch: 'token-fetch',
+    attestation: 'token-attestation',
   })
-  // Loading the runtime, however slow the download, has no deadline.
-  await vi.advanceTimersByTimeAsync(60000)
-  expect(notary.signal.aborted).toBe(false)
   ports().at(-1)!.postMessage({ type: 'initialized' })
-  await vi.advanceTimersByTimeAsync(9999)
-  expect(notary.signal.aborted).toBe(false)
-  await vi.advanceTimersByTimeAsync(1)
-  await rejection
-  expect(notary.signal.aborted).toBe(true)
-  // A prepared session's deadline starts only when it sends.
-  const idle = new NotaryRuntime('https://notary.test', new AbortController().signal)
-  const ready = idle.prepare(target)
-  ports().at(-1)!.postMessage({ type: 'initialized' })
-  ports().at(-1)!.postMessage({ type: 'prepared' })
-  await ready
-  await vi.advanceTimersByTimeAsync(60000)
-  expect(idle.signal.aborted).toBe(false)
+  await delivered()
+  await vi.advanceTimersByTimeAsync(600000)
+  const reason = new Error('Caller deadline')
+  abort.abort(reason)
+  await expect(stuck).rejects.toBe(reason)
+  expect(workers.at(-1)!.terminate).toHaveBeenCalledOnce()
 })
 
 it('exposes late worker failure after preparation through the runtime signal [LIBID-PROVER-018]', async () => {
@@ -287,6 +289,48 @@ it.each([
   },
 )
 
+it('times setup from runtime load to prepared, with the connection time, and leaves a failed one unfinished [LIBID-PROVER-007]', async () => {
+  let clock = 0
+  vi.stubGlobal('performance', { timeOrigin: 10000, now: () => clock })
+  const events: OperationEvent[] = []
+  const abort = new AbortController()
+  const notary = new NotaryRuntime('https://notary.test', abort.signal, (event) =>
+    events.push(event),
+  )
+  const names = { setup: 'token-setup', fetch: 'token-fetch', attestation: 'token-attestation' }
+  try {
+    const ready = notary.prepare(target, names)
+    const port = ports().at(-1)!
+    clock = 5
+    port.postMessage({ type: 'initialized' })
+    await vi.waitFor(() => expect(events).toHaveLength(1))
+    clock = 2505
+    port.postMessage({ type: 'prepared', attributes: { 'connect-ms': 600 } })
+    await ready
+    expect(events).toEqual([
+      { event: 'token-setup', phase: 'started', timestamp: 10005 },
+      {
+        event: 'token-setup',
+        phase: 'finished',
+        timestamp: 12505,
+        instrumentation: { attributes: { 'connect-ms': 600 } },
+      },
+    ])
+    for (const emitted of events)
+      expect(() => EventMessage.decode({ type: 'event', ...emitted })).not.toThrow()
+    const failing = notary.prepare(target, { ...names, setup: 'identity-setup' })
+    const failed = ports().at(-1)!
+    failed.postMessage({ type: 'initialized' })
+    failed.postMessage({ type: 'error', message: 'Notary WebSocket closed' })
+    await expect(failing).rejects.toMatchObject({ event: 'token-fetch' })
+    expect(events.slice(2)).toEqual([
+      { event: 'identity-setup', phase: 'started', timestamp: 12505 },
+    ])
+  } finally {
+    abort.abort()
+  }
+})
+
 it("names the failed session's own operation in the siblings its failure aborts", async () => {
   const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
   const token = notary.prepare(target, { fetch: 'token-fetch', attestation: 'token-attestation' })
@@ -315,25 +359,19 @@ it('rejects reveal when its start event synchronously aborts the session', async
 })
 
 it.each(['send', 'reveal', 'attestation'])(
-  '%s stalls share one 10-second request deadline and abort sibling work [LIBID-BROWSER-010]',
+  '%s stalls wait for the caller, whose abort rejects pending and sibling work [LIBID-BROWSER-010]',
   async (stage) => {
     vi.useFakeTimers()
-    const notary = new NotaryRuntime('https://notary.test', new AbortController().signal)
+    const abort = new AbortController()
+    const notary = new NotaryRuntime('https://notary.test', abort.signal)
     const ready = notary.prepare(target)
-    // Neither cold preparation (bounded on its own) nor an idle session waiting for its bearer
-    // uses the budget.
-    await vi.advanceTimersByTimeAsync(9999)
-    expect(notary.signal.aborted).toBe(false)
     const port = ports()[0]
     port.postMessage({ type: 'initialized' })
     port.postMessage({ type: 'prepared' })
     const session = await ready
-    await vi.advanceTimersByTimeAsync(10000)
-    expect(notary.signal.aborted).toBe(false)
     const sent = session.send(request)
     const sibling = notary.prepare(target)
     let pending: Promise<unknown> = sent
-    await vi.advanceTimersByTimeAsync(15000)
     if (stage !== 'send') {
       port.postMessage({ type: 'sent', transcript: empty })
       await sent
@@ -344,18 +382,18 @@ it.each(['send', 'reveal', 'attestation'])(
         pending = (await revealing).attestation
       }
     }
-    const checks = Promise.all([
-      expect(pending).rejects.toThrow('Notarization request timed out'),
-      expect(sibling).rejects.toThrow('Notarization request timed out'),
-    ])
-    await vi.advanceTimersByTimeAsync(14999)
+    await vi.advanceTimersByTimeAsync(600000)
     expect(notary.signal.aborted).toBe(false)
-    await vi.advanceTimersByTimeAsync(1)
-    await checks
-    expect(notary.signal.aborted).toBe(true)
-    expect(workers[0].terminate).toHaveBeenCalledOnce()
     expect(vi.getTimerCount()).toBe(0)
-    await expect(session.send(request)).rejects.toThrow('Notarization request timed out')
+    const reason = new Error('Caller deadline')
+    const checks = Promise.all([
+      expect(pending).rejects.toBe(reason),
+      expect(sibling).rejects.toBe(reason),
+    ])
+    abort.abort(reason)
+    await checks
+    expect(workers[0].terminate).toHaveBeenCalledOnce()
+    await expect(session.send(request)).rejects.toBe(reason)
   },
 )
 

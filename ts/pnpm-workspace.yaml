@@ -21,15 +21,6 @@ minimumReleaseAgeExclude:
   # libID's own packages, published by the libid-org release workflows; the age gate
   # guards third-party releases.
   - "@libid/*"
-  # Third-party versions already locked when the age gate was added
-  # (2026-10-13). Drop an entry once its version is older than 7 days.
-  - "@aztec-foundation/bb.js@6.0.0-rc.6"
-  - "@playwright/test@1.64.0"
-  - "@types/node@26.6.5"
-  - "playwright@1.64.0"
-  - "playwright-core@1.64.0"
-  - "smol-toml@1.9.1"
-  - "vite@8.3.4"
 minimumReleaseAgeIgnoreMissingTime: false
 trustLockfile: false
 strictDepBuilds: true

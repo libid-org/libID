@@ -52,7 +52,7 @@ function packedTag(tag: string): bigint {
 const hex = (value: bigint) => `0x${value.toString(16)}`
 
 /**
- * The exact libid-circuits v0.7.1 `bearer_link` circuit inputs under `platform`'s tags. The nodes
+ * The exact libid-circuits v0.8.0 `bearer_link` circuit inputs under `platform`'s tags. The nodes
  * are REQ-PLAT-05A and REQ-PLAT-05B over the opened id and handle; a value no circuit admits throws.
  */
 export function buildBearerLinkInputs(platform: Platform, witness: BearerLinkWitness) {

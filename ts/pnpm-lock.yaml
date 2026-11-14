@@ -74,7 +74,7 @@ importers:
     dependencies:
       '@libid/contracts':
         specifier: 'catalog:'
-        version: 0.19.0(viem@2.57.7(typescript@7.0.2))
+        version: 0.19.0(viem@2.57.16(typescript@7.0.2))
       '@libid/ledger':
         specifier: workspace:^
         version: link:../ledger
@@ -83,20 +83,20 @@ importers:
         version: 2.4.0
     devDependencies:
       '@aztec-foundation/bb.js':
-        specifier: 6.0.0-rc.6
-        version: 6.0.0-rc.6
+        specifier: 6.0.0
+        version: 6.0.0
       '@libid/popup':
         specifier: workspace:^
         version: link:../popup
       '@noir-lang/acvm_js':
-        specifier: 1.0.0-rc.3
-        version: 1.0.0-rc.3
+        specifier: 1.0.0
+        version: 1.0.0
       '@noir-lang/noir_js':
-        specifier: 1.0.0-rc.3
-        version: 1.0.0-rc.3
+        specifier: 1.0.0
+        version: 1.0.0
       '@noir-lang/noirc_abi':
-        specifier: 1.0.0-rc.3
-        version: 1.0.0-rc.3
+        specifier: 1.0.0
+        version: 1.0.0
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.64.0
@@ -129,7 +129,7 @@ importers:
     dependencies:
       '@libid/contracts':
         specifier: 'catalog:'
-        version: 0.19.0(viem@2.57.7(typescript@7.0.2))
+        version: 0.19.0(viem@2.57.16(typescript@7.0.2))
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -139,7 +139,7 @@ importers:
         version: 7.0.2
       viem:
         specifier: ^2.48.11
-        version: 2.57.7(typescript@7.0.2)
+        version: 2.57.16(typescript@7.0.2)
       vitest:
         specifier: 'catalog:'
         version: 5.0.3(@types/node@26.6.5)(@vitest/coverage-v8@5.0.3)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2))
@@ -176,8 +176,8 @@ packages:
   '@adraffy/ens-normalize@1.11.1':
     resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
 
-  '@aztec-foundation/bb.js@6.0.0-rc.6':
-    resolution: {integrity: sha512-xDMJKYUKpYxHAtrC48m+wQKN3bWM7muX6et/OZUbQC5AzoezT5ePeTnYKYeOYQQvLgdNHv/nYJVLRvG/Bn63yg==}
+  '@aztec-foundation/bb.js@6.0.0':
+    resolution: {integrity: sha512-w+rlVHbSbb1neDeJGMDSbNZCxuD6TeSrN/1lbnVgqhKcVfqdDXdTt2b6RUToCsk7Q2Dmx4oqU5tfBcFY//LQtg==}
     hasBin: true
 
   '@babel/helper-string-parser@7.29.7':
@@ -482,17 +482,17 @@ packages:
     resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
     engines: {node: '>= 20.19.0'}
 
-  '@noir-lang/acvm_js@1.0.0-rc.3':
-    resolution: {integrity: sha512-bTTrcPphNHVrFkbJPVcFrrigwwU/N9+trgEa9PF2X/VWWAX0B1gOGSBwqziOKMwThpU7H2Jb3Z6OFMEhpMKaEQ==}
+  '@noir-lang/acvm_js@1.0.0':
+    resolution: {integrity: sha512-PmDnDgnq+oKWbUpDbLFXy+c+QRzznUH+mzoojZ4KKVgkQ/AmQZdE1d9JLgsmRnPQfvMifCIKvKpSkBXqO2b91A==}
 
-  '@noir-lang/noir_js@1.0.0-rc.3':
-    resolution: {integrity: sha512-NrJZPd7zpBWXzP240rP78fr6RE8vg3mFIMIsT5Xiqbh6zdBKfLI8Nb7Ea4UFwFWyRFDqZO3qGd3HbGyRWxxZ8Q==}
+  '@noir-lang/noir_js@1.0.0':
+    resolution: {integrity: sha512-LJKStl4X9MfPc0eAbGHV/AUy5zefil5n0+OVznpd4T9znwNbpAG6KsrcETyREzFEE5vehesCzR0IBOIAIngEaQ==}
 
-  '@noir-lang/noirc_abi@1.0.0-rc.3':
-    resolution: {integrity: sha512-jax7q2CAAG4jxCzr8MllH/LZxnxnS5PF1YyzmFJ7DTf97k3+LaHSnBPXE8TwQYDsWwyNxQTqDWw1QVEoO1ESaQ==}
+  '@noir-lang/noirc_abi@1.0.0':
+    resolution: {integrity: sha512-psK2i0oq1c1QhqgBIl77gJND0X8a5egj6Lloa85FhTt+R+M2QtiOle3jCwg64HSddCjKZe8OwlCDeqaa630RIg==}
 
-  '@noir-lang/types@1.0.0-rc.3':
-    resolution: {integrity: sha512-k1UHd67/OSPJb9E6WNKeMtuoDbflLpu803jtbaVqDlr2P/rH8+joDuIxK+nwBMVlnCO2LlcJaN4wpQ/TRHJ78w==}
+  '@noir-lang/types@1.0.0':
+    resolution: {integrity: sha512-+yq5igydWbkrprufpxjsdjFjrc7Led0lDshew2HcXW3NFtXmEhggtHNGOMh502iBFE1KOu6l+t91OG9FAMMWqA==}
 
   '@oxc-project/types@0.152.0':
     resolution: {integrity: sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw==}
@@ -1086,8 +1086,8 @@ packages:
     resolution: {integrity: sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==}
     engines: {node: '>=12.20.0'}
 
-  ox@0.14.56:
-    resolution: {integrity: sha512-Feinlj+deWEam6RIwurRE+eHZ2N3hoUb3AAjQ10BmxRCYIymfqNkv0eZ+4ln4GkgDmSGLD2rGtTMqsFYSVDC6w==}
+  ox@0.14.59:
+    resolution: {integrity: sha512-Y+DPEQScTEGKteQATjtytE1JRQ5cg1R2+DvYQ/lbhUCm/xS9n0Jnkkf2AqQyIntefQxs8xY6dZ+kyNZ7zf2FzA==}
     peerDependencies:
       typescript: '>=5.4.0'
     peerDependenciesMeta:
@@ -1196,11 +1196,14 @@ packages:
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
-  viem@2.57.7:
-    resolution: {integrity: sha512-x3UqqrcQuESaRVK6a0BvNmoNP0SVhu913uxEAxYLJx1lNYnj6ylTntfUdakCUKjk1+T+63gkdwFGJQ2O5C/nRw==}
+  viem@2.57.16:
+    resolution: {integrity: sha512-+4uaUw3NfkqjaqsZp8Zci94K33oc9rv7mIUgvPduJxsY/tI0ASi2YkaXoUVSBGfdIw/QPWuVnIf9LTFf35IoMg==}
     peerDependencies:
+      mppx: '>=0.17.0'
       typescript: '>=5.0.4'
     peerDependenciesMeta:
+      mppx:
+        optional: true
       typescript:
         optional: true
 
@@ -1313,7 +1316,7 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
 
-  '@aztec-foundation/bb.js@6.0.0-rc.6':
+  '@aztec-foundation/bb.js@6.0.0':
     dependencies:
       comlink: 4.4.2
       commander: 12.1.0
@@ -1464,11 +1467,11 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@libid/contracts@0.19.0(viem@2.57.7(typescript@7.0.2))':
+  '@libid/contracts@0.19.0(viem@2.57.16(typescript@7.0.2))':
     dependencies:
       '@noble/hashes': 2.4.0
     optionalDependencies:
-      viem: 2.57.7(typescript@7.0.2)
+      viem: 2.57.16(typescript@7.0.2)
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
     optional: true
@@ -1498,20 +1501,20 @@ snapshots:
 
   '@noble/hashes@2.4.0': {}
 
-  '@noir-lang/acvm_js@1.0.0-rc.3': {}
+  '@noir-lang/acvm_js@1.0.0': {}
 
-  '@noir-lang/noir_js@1.0.0-rc.3':
+  '@noir-lang/noir_js@1.0.0':
     dependencies:
-      '@noir-lang/acvm_js': 1.0.0-rc.3
-      '@noir-lang/noirc_abi': 1.0.0-rc.3
-      '@noir-lang/types': 1.0.0-rc.3
+      '@noir-lang/acvm_js': 1.0.0
+      '@noir-lang/noirc_abi': 1.0.0
+      '@noir-lang/types': 1.0.0
       pako: 3.0.2
 
-  '@noir-lang/noirc_abi@1.0.0-rc.3':
+  '@noir-lang/noirc_abi@1.0.0':
     dependencies:
-      '@noir-lang/types': 1.0.0-rc.3
+      '@noir-lang/types': 1.0.0
 
-  '@noir-lang/types@1.0.0-rc.3': {}
+  '@noir-lang/types@1.0.0': {}
 
   '@oxc-project/types@0.152.0': {}
 
@@ -1907,7 +1910,7 @@ snapshots:
 
   obug@2.2.1: {}
 
-  ox@0.14.56(typescript@7.0.2):
+  ox@0.14.59(typescript@7.0.2):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
       '@noble/ciphers': 1.3.0
@@ -2049,7 +2052,7 @@ snapshots:
 
   undici-types@8.9.0: {}
 
-  viem@2.57.7(typescript@7.0.2):
+  viem@2.57.16(typescript@7.0.2):
     dependencies:
       '@noble/curves': 1.9.1
       '@noble/hashes': 1.8.0
@@ -2057,7 +2060,7 @@ snapshots:
       '@scure/bip39': 1.6.0
       abitype: 1.2.3(typescript@7.0.2)
       isows: 1.0.7(ws@8.21.0)
-      ox: 0.14.56(typescript@7.0.2)
+      ox: 0.14.59(typescript@7.0.2)
       ws: 8.21.0
     optionalDependencies:
       typescript: 7.0.2

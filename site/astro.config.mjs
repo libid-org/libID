@@ -18,6 +18,7 @@ export default defineConfig({
         { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
         { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
         { tag: 'meta', attrs: { property: 'og:image:alt', content: 'The libID wordmark on a dark background.' } },
+        { tag: 'meta', attrs: { name: 'twitter:image:alt', content: 'The libID wordmark on a dark background.' } },
       ],
       customCss: ['./src/styles/custom.css'],
       routeMiddleware: './src/route-data.ts',
@@ -28,6 +29,7 @@ export default defineConfig({
       components: {
         Head: './src/components/Head.astro',
         Sidebar: './src/components/Sidebar.astro',
+        SkipLink: './src/components/SkipLink.astro',
         ThemeProvider: './src/components/ThemeProvider.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',
       },
