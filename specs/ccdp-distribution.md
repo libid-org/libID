@@ -1,5 +1,6 @@
 ---
 title: CCDP Distribution
+description: libID specification for CCDP browser resources and proving assets, callback configuration, isolation policies, and compatible publication.
 ---
 
 # CCDP Distribution

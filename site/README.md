@@ -1,7 +1,7 @@
 # libID website
 
 One static site and Cloudflare Worker: landing page at `/`, Starlight at `/docs/` and `/specs/`.
-Add Markdown/MDX with `title` frontmatter in [`docs/pages/`](../docs/pages/).
+Add Markdown/MDX with `title` and a page-specific `description` (required) frontmatter in [`docs/pages/`](../docs/pages/).
 Specs are published directly from [`specs/`](../specs/).
 Six UI colors per theme and one shared logo color live in [`../brand/palette.json`](../brand/palette.json), used by the website, favicons and CCDP screens, which also share the Libron font in [`../brand/libron/`](../brand/libron/).
 
@@ -43,7 +43,7 @@ preservation enabled. The custom-domain entry provisions the hostname; the
 redirect rule sends visitors to the apex domain.
 
 Branch previews use `<preview-name>.previews.lib.id`; the existing production
-and preview `workers.dev` URLs remain enabled.
+and preview `workers.dev` URLs remain enabled; `public/_headers` marks all of them `noindex`.
 
 Enable non-production branch builds and Worker Previews in Cloudflare's build
 settings, using the commands above. After switching to Worker Previews, set the
@@ -54,6 +54,9 @@ Preview command, and environment versions above to each existing preview too.
 `deploy:preview` uses the current Git branch
 as the Preview name and updates its isolated deployment. For a local preview
 deployment, build the site first, then run `pnpm -C site run deploy:preview`.
+
+`public/robots.txt` allows crawling and AI training; the zone's managed
+robots.txt and AI-crawler settings must not override it.
 
 All website text uses self-hosted
 [Libron v0.31](https://github.com/nicoverbruggen/libron/releases/tag/v0.31),

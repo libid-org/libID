@@ -11,9 +11,9 @@ Each pin lives in its declaration; change it there.
 
 | Input | Version | Declared in |
 |---|---|---|
-| Circuits | v0.7.1 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
-| Noir / bb.js | 1.0.0-rc.3 / 6.0.0-rc.2 | [package.json](../package.json); EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts) |
-| Notary browser/runtime | v0.5.0, with the TLSN revision of that release | [notary.assets.ts](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml) |
+| Circuits | v0.8.0 | [bearerLink.assets.ts](../src/barretenberg/circuits/bearer-link/bearerLink.assets.ts), [oidc_google.assets.ts](../src/barretenberg/circuits/oidc_google/oidc_google.assets.ts) |
+| Noir / bb.js | 1.0.0 / 6.0.0 | [package.json](../package.json); EVM proof settings in [parameters.ts](../src/barretenberg/parameters.ts) |
+| Notary browser/runtime | v0.6.0, with the TLSN revision of that release | [notary.assets.ts](../src/notary/notary.assets.ts), [test services](../e2e/compose.yaml) |
 | Development Bridge | v0.5.0, one OAuth client per platform and no version list | [compose.yaml](../../../apps/dev/compose.yaml) |
 | SWS | 3.0.0-beta.1 | [ccdp.Dockerfile](../ccdp.Dockerfile) |
 
@@ -21,10 +21,9 @@ Bridge v0.5.0 supports exact and wildcard admission. Browser tests cover both
 wildcard forms in Popup and `*` through the emitted Callback handoff; Callback
 units cover pattern forwarding.
 
-The released `bearer_link` circuit accepts bearers of at most 128 bytes. The
-X and GitHub specifications allow up to 4096 bytes; both implementations enforce
-the circuit's narrower limit on the token response, where they also reject the
-whitespace an HTTP bearer cannot carry. The released `oidc_google` circuit
+The released `bearer_link` circuit accepts bearers of at most 128 bytes, the X
+and GitHub profiles' bound; both implementations enforce it on the token
+response, where they also reject the whitespace an HTTP bearer cannot carry. The released `oidc_google` circuit
 accepts a Google `sub` of at most 31 bytes and an email of at most 62 bytes,
 printable ASCII without `"` or `\`, and an audience of at most 128 bytes without `"`; Google's
 specification allows a `sub` of up to 255 bytes. A token outside those limits

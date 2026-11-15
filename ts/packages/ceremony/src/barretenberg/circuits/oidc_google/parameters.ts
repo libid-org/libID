@@ -1,12 +1,14 @@
 import { PLATFORM_GOOGLE } from '@libid/contracts/platforms'
 import { AUTHORIZATION_DIGEST_BYTES } from '../../../ccdp/limits.js'
 
-/** Fixed oidc_google ABI in libid-circuits v0.7.1; changes require a matching circuit/key release. */
+/** Fixed oidc_google ABI in libid-circuits v0.8.0; changes require a matching circuit/key release. */
 export const ISSUER = 'https://accounts.google.com'
 /** The `email` and `sub` buffers: Google's platform table entry. */
 export const MAX_EMAIL_BYTES = PLATFORM_GOOGLE.rules.maxLength
 export const MAX_SUB_BYTES = PLATFORM_GOOGLE.idRules.maxLength
 export const MAX_AUD_BYTES = 128
+/** The decimal digits the circuit reads from `exp`; seconds stay within 12 digits until year 33658. */
+export const MAX_EXP_DIGITS = 12
 export const MAX_SIGNING_INPUT_BYTES = 1280
 export const MAX_PAYLOAD_JSON_BYTES = 768
 /** Base64url unsigned exponent 65537, required by the circuit. */

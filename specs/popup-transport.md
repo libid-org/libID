@@ -1,5 +1,6 @@
 ---
 title: Popup transport
+description: libID specification for application-to-popup connections, origin allowlists, message delivery, navigation, closure, continuity, and failure semantics.
 ---
 
 # Popup transport

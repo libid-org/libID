@@ -519,6 +519,7 @@ export const fixtures = {
       'a negative expiry [TEST-COMMON-12]': expiry(-1),
       'an unrepresentable expiry [TEST-COMMON-12]': expiry(2 ** 64),
       'a string expiry [TEST-COMMON-12]': expiry('1725001000'),
+      'an expiry over 12 digits [TEST-PLAT-06]': expiry(10 ** 12),
       'a non-65537 exponent': { jwk: (jwk) => ({ ...jwk, e: 'Aw' }), rejectedAt: 'circuit-inputs' },
       'a short modulus': {
         jwk: (jwk) => ({ ...jwk, n: b64urlEncode(new Uint8Array(255).fill(0xff)) }),

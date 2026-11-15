@@ -31,13 +31,11 @@ speculative result. See [X/GitHub scheduling](provers.md).
 The supplied abort signal releases the shared worker, including idle prepared
 sessions. Any session failure aborts sibling work. Successful sessions release
 their own prover/channel; the platform's `finally` abort releases the shared
-runtime. Each request has one 10-second timeout from `send()` until its final
-attestation arrives. The budget includes response receipt, disclosure selection,
-openings and finalization; it does not restart between these steps. Each session's
-setup has its own 10-second deadline, which fails as that session's fetch; together
-they keep X's token request inside X's 30-second code deadline. The deadline starts
-once the SDK runtime has loaded, so a slow download of the runtime never fails a
-ceremony. Idle bearer waiting and ZK proving are outside both. Timeout
+runtime. Notarization sets no deadline of its own: setup, send, reveal and
+finalization take as long as the network needs, because a slow link is not a
+failed one. The Application bounds the whole ceremony: closing its connection
+closes the popup, and Prover's cleanup aborts this signal. X enforces its own
+30-second code deadline by rejecting a token request that arrives late. Abort
 rejects pending calls and terminates the shared worker without waiting for SDK
 completion. The platform retires its proof engine, and Prover reports one failure
 and stops its UI. Types and exact method constraints stay beside the implementation.
@@ -59,8 +57,8 @@ and the SDK waits on such wakes during its PRF step, where no network traffic ar
 to wake it. The timer can go once that bug is fixed in the supported engines.
 After TLSNotary finishes, it reclaims the same channel for one length-prefixed
 JSON attestation frame and requires EOF. [transport.ts](../src/notary/transport.ts)
-owns frame bounds and exact decoding. The shared request timeout also covers an
-unfinished final frame or missing EOF.
+owns frame bounds and exact decoding. An unfinished final frame or missing EOF
+waits like any other stall, until the Application closes the connection.
 
 The adapter admits at most 4 KiB sent and 32 KiB received transcript bytes before
 exposing them to parsing/reveal. These are post-receive acceptance limits: the
@@ -119,6 +117,16 @@ The browser bundle release is pinned in [notary.assets.ts](../src/notary/notary.
 Use a matched service/TLSN/MPZ set. Mocked concurrency cannot detect WASM runtime
 deadlocks; [runtime browser tests](../e2e/runtime.spec.ts) use real sessions, while
 [qualification](qualification.md) retains the live authenticated/device gaps.
+
+## Setup measurements
+
+`token-setup` and `identity-setup` start once the SDK runtime has loaded and
+finish when the session is prepared: the notary WebSocket is open and TLSNotary
+setup with the notary is done. Their `finished` events carry `connect-ms`, the
+worker-measured time for the WebSocket to open; the rest of the interval is
+setup, which needs many round trips to the notary. Both sessions set up at
+once. A failed setup leaves its operation unfinished and fails as the session's
+fetch.
 
 ## Attestation measurements
 

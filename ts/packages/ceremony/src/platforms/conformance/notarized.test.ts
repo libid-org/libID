@@ -621,10 +621,17 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
         await vi.waitFor(() => expect(log).toEqual(['token send']))
         // Both sessions and the proof engine start before any HTTP; the engine first.
         expect(prepare.mock.calls).toEqual([
-          [fixture.tokenRequest.url, { fetch: 'token-fetch', attestation: 'token-attestation' }],
+          [
+            fixture.tokenRequest.url,
+            { setup: 'token-setup', fetch: 'token-fetch', attestation: 'token-attestation' },
+          ],
           [
             fixture.identityRequest.url,
-            { fetch: 'identity-fetch', attestation: 'identity-attestation' },
+            {
+              setup: 'identity-setup',
+              fetch: 'identity-fetch',
+              attestation: 'identity-attestation',
+            },
           ],
         ])
         expect(engine.mock.invocationCallOrder[0]).toBeLessThan(prepare.mock.invocationCallOrder[0])

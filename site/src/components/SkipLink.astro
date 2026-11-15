@@ -1,0 +1,16 @@
+---
+import DefaultSkipLink from '@astrojs/starlight/components/SkipLink.astro';
+---
+
+<DefaultSkipLink />
+<script>
+  // Fragment navigation scrolls to a heading, but does not reliably focus it.
+  // Keep Starlight's appearance and target, and make the destination focusable.
+  document.querySelector<HTMLAnchorElement>('.sl-skip-link')?.addEventListener('click', () => {
+    const target = document.getElementById('_top');
+    if (target) {
+      target.tabIndex = -1;
+      target.focus({ preventScroll: true });
+    }
+  });
+</script>

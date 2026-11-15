@@ -1,4 +1,4 @@
-/** Fixed bearer_link ABI in libid-circuits v0.7.1; changes require a matching circuit/key release. */
+/** Fixed bearer_link ABI in libid-circuits v0.8.0; changes require a matching circuit/key release. */
 export const MAX_BEARER_BYTES = 128
 /** The id buffer, shared by X and GitHub. */
 export const MAX_ID_BYTES = 20

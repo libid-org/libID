@@ -40,10 +40,8 @@ for (const { platform, sessions: count, alongsideProving } of notaryCases)
         { platform, count, alongsideProving },
       )
     // The sessions reach the live X and GitHub APIs: one retry absorbs a transient failure there.
-    // A missed deadline fails at once, so a timing regression cannot pass on the second attempt.
     const [proof, attestations] = await run()
       .catch((error: unknown) => {
-        if (/timed out/.test(String(error))) throw error
         console.error('Retrying after:', String(error), JSON.stringify(logs.splice(0)))
         return run()
       })
@@ -62,7 +60,7 @@ for (const { platform, sessions: count, alongsideProving } of notaryCases)
   })
 
 for (const stall of ['send', 'reveal'] as const)
-  test(`notary ${stall} timeout closes real sockets and workers [LIBID-BROWSER-010]`, async ({
+  test(`caller abort of a notary ${stall} stall closes real sockets and workers [LIBID-BROWSER-010]`, async ({
     page,
   }) => {
     // Pass through real setup, then withhold replies. Keep the page and relay alive
@@ -135,9 +133,8 @@ for (const stall of ['send', 'reveal'] as const)
               )
             })
           // These sends reach the live X API: one retry, on fresh sessions, absorbs a transient
-          // failure there. A missed deadline fails at once, and the stall below never retries.
+          // failure there. The stall below never retries.
           await sendAll(runtime).catch(async (error: unknown) => {
-            if (/timed out/.test(String(error))) throw error
             console.error('Retrying setup after:', String(error))
             await release(runtime)
             await expect.poll(() => sockets.size, { timeout: 5000 }).toBe(0)
@@ -148,7 +145,7 @@ for (const stall of ['send', 'reveal'] as const)
         }
         stalled = true
         const outcome = await runtime.evaluate(async (state, stall) => {
-          const results = await Promise.allSettled(
+          const settled = Promise.allSettled(
             state.sessions.map(async (session, i) => {
               if (stall === 'send') return session.send(state.request)
               const transcript = state.transcripts[i]
@@ -159,6 +156,10 @@ for (const stall of ['send', 'reveal'] as const)
               return revealed.attestation
             }),
           )
+          // Nothing inside the runtime gives up on a stall; the caller's deadline does.
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+          state.abort.abort(new Error('Caller deadline'))
+          const results = await settled
           return {
             aborted: state.notary.signal.aborted,
             results: results.map((r) =>
@@ -168,7 +169,7 @@ for (const stall of ['send', 'reveal'] as const)
         }, stall)
         expect(outcome).toEqual({
           aborted: true,
-          results: ['Notarization request timed out', 'Notarization request timed out'],
+          results: ['Caller deadline', 'Caller deadline'],
         })
         await expect.poll(() => sockets.size, { timeout: 5000 }).toBe(0)
         await expect.poll(() => page.workers().length, { timeout: 5000 }).toBe(0)

@@ -1,0 +1,37 @@
+---
+import { description } from '../tagline.mjs';
+
+const { title, summary, url } = Astro.props;
+const protocol = {
+  '@type': 'CreativeWork',
+  '@id': 'https://lib.id/#protocol',
+  name: 'libID',
+  description,
+  url: 'https://lib.id/specs/',
+};
+const data = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    protocol,
+    title ? {
+      '@type': 'TechArticle',
+      headline: title,
+      description: summary,
+      url,
+      inLanguage: 'en',
+      about: { '@id': protocol['@id'] },
+      isPartOf: { '@id': 'https://lib.id/#website' },
+    } : {
+      '@type': 'WebSite',
+      '@id': 'https://lib.id/#website',
+      name: 'libID',
+      url: 'https://lib.id/',
+      description,
+      inLanguage: 'en',
+      about: { '@id': protocol['@id'] },
+    },
+  ],
+};
+---
+
+<script type="application/ld+json" set:html={JSON.stringify(data).replace(/</g, '\\u003c')} />

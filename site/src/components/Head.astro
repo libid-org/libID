@@ -1,10 +1,14 @@
 ---
 import DefaultHead from '@astrojs/starlight/components/Head.astro';
+import StructuredData from './StructuredData.astro';
 
-const { id } = Astro.locals.starlightRoute.entry;
+const { id, data } = Astro.locals.starlightRoute.entry;
 const is404 = id === '404' || id.endsWith('/404');
 ---
 
 <DefaultHead />
-{is404 && <meta name="page-status" content="404" />}
+{is404 ? <>
+  <meta name="page-status" content="404" />
+  <meta name="robots" content="noindex" />
+</> : <StructuredData title={data.title} summary={data.description} url={new URL(Astro.url.pathname, Astro.site).href} />}
 <script src="../page.js"></script>
