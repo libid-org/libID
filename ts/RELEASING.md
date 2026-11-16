@@ -67,8 +67,7 @@ npm checks the repository, workflow file and environment, not the branch, so the
 environment and the tag ruleset are what keep an edited workflow from
 publishing. Then require trusted publishing/2FA according to the organization's
 policy and log the bootstrap session out of npm. Routine releases use OIDC and
-automatic npm provenance; they need no `NPM_TOKEN`. See
-[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
+automatic npm provenance. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
 ## Subsequent releases
 
