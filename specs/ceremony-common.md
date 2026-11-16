@@ -491,14 +491,14 @@ lists differently go in a separate ceremony.
 - REQ-COMMON-01I (upholds SP-BIND-01, SP-REPLAY-01):
   The Consumer's candidates are the list's entries under the domains it
   owns. The Consumer MUST reject the list if any entry's domain is
-  `libid.operations`, or unless exactly one candidate's `dataHash` equals
-  `keccak256(data)` of the `data` its call carries or it rebuilds. That
-  candidate is its own entry. The Consumer MUST reject the list if it holds
-  more than one candidate, unless every candidate's domain fixes data that
-  commits a chain identifier under REQ-COMMON-01C. Such candidates are for
-  deployments on different Consumer Chains: the Consumer applies the one
-  its `data` matches and rejects the list if that `data` names another
-  chain. Necessity: the Consumer accepts a digest once (REQ-COMMON-03A), so
+  `libid.operations`. The Consumer MUST reject the list unless exactly one
+  candidate's `dataHash` equals `keccak256(data)` of the `data` its call
+  carries or it rebuilds; that candidate is its own entry. The Consumer
+  MUST reject the list if it holds more than one candidate, unless every
+  candidate's domain fixes data that commits a chain identifier under
+  REQ-COMMON-01C. Such candidates are for deployments on different Consumer
+  Chains: the Consumer MUST reject the list if its own entry's `data` names
+  another chain. Necessity: the Consumer accepts a digest once (REQ-COMMON-03A), so
   a second entry it would apply would never be applied though the user
   approved it; with no entry of its own the list authorizes nothing at that
   Consumer; an entry under `libid.operations` selects no effect
@@ -520,9 +520,10 @@ lists differently go in a separate ceremony.
   decoder, and one that lacks it must not read a list as its own data.
 - REQ-COMMON-01L (upholds SP-BIND-01):
   The Application that composes an Operation List MUST place an entry in it
-  only for a Consumer that accepts Operation Lists. It MUST NOT place two
-  entries under one domain unless that domain's data commits a chain
-  identifier and the two entries name different chains. It MUST NOT place
+  only for a Consumer that accepts Operation Lists. It MUST place at most
+  one entry under the domains one Consumer deployment owns, except entries
+  under domains whose data commits a chain identifier, of which it MUST
+  place at most one per Consumer Chain. It MUST NOT place
   in an entry `data` it needs kept private, or `data` whose application by
   another party first would harm the user. The rule binds the Application
   operator, as platform REQ-PLAT-03A does. Necessity: an entry for a
@@ -1586,8 +1587,10 @@ the constructions that role implements.
   At Consumers that accept Operation Lists, each derived list of the Chain
   Profile's vector set (EVM: chain profiles §3.3) is rejected by the
   Consumer named with it. The `libid.test.a` Consumer rejects the vector's
-  Submission with `data` whose hash matches no entry, and with `data` that
-  matches its entry's hash but fails that domain's own encoding.
+  Submission with `data` whose hash matches no entry. A Consumer whose
+  domain fixes one encoded account rejects a list whose entry commits the
+  hash of that encoding followed by a trailing byte, called with that
+  `data`.
 - TEST-COMMON-02D (exercises REQ-COMMON-01C, REQ-COMMON-01I):
   A Consumer that accepts Operation Lists, owning a domain whose `data`
   commits a chain identifier, is deployed on two Consumer Chains A and B.
@@ -1599,8 +1602,7 @@ the constructions that role implements.
   An Application composing an Operation List shows every entry, with its
   Consumer and effect, before the ceremony starts, and starts no ceremony
   for a list it has not shown. It composes no entry for a Consumer that
-  rejects lists, and no two entries under one domain except chain-specific
-  entries naming different chains. No two Consumer protocols fix the same
+  rejects lists, and no two entries one Consumer deployment would apply. No two Consumer protocols fix the same
   domain string. Verification: Application tests and inspection.
 - TEST-COMMON-02F (exercises REQ-COMMON-01N):
   A Consumer that accepts Operation Lists reports a digest as not recorded
@@ -1817,7 +1819,7 @@ accepts its operation domain, or under an Operation List the domain of its
 own entry (REQ-COMMON-01G), on any Consumer Chain, spends it once. A
 Consumer whose effect is chain-specific commits and checks its chain under
 REQ-COMMON-01C; under an Operation List, it commits the chain in its own
-entry, since the list carries none. Replay across Platform Ceremony Versions is prevented by
+entry's `data`, since the list carries none. Replay across Platform Ceremony Versions is prevented by
 `platformCeremonyVersion`. A version restated under new canonical Platform
 Verifier addresses (platform REQ-PLAT-01A) has the same number, and the
 digest binds no Platform Verifier address, so neither separates the two.

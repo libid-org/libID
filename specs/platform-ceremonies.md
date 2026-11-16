@@ -517,7 +517,8 @@ amount and receiver of §2.1b, which no proof commits.
   by another Transaction Author is rejected. One Submission is accepted by
   the Consumers of two Consumer Chains, once at each, and a second bind call
   of it on either is rejected. A fee amount without a receiver, and a
-  receiver without an amount, are rejected. A native value one unit above or
+  receiver without an amount, are rejected, and so is a native value below
+  the fee amount. A native value one unit above or
   below the quotation plus the fee amount is rejected, outside the zero
   repeat of common REQ-COMMON-06F. An accepted bind call
   with a fee delivers exactly the amount to the receiver and emits the fee
