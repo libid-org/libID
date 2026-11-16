@@ -10,8 +10,8 @@ Part of the [libID protocol specification](libid.md).
 ## 1. Scope
 
 This document holds one profile per family of Consumer Chains. [Common](ceremony-common.md)
-§2 defines what a Chain Profile is, and REQ-COMMON-01D and REQ-COMMON-01F say
-what one owes. §2 below is what holds across every
+§2 defines what a Chain Profile is, and REQ-COMMON-01D, REQ-COMMON-01F, and
+REQ-COMMON-01H say what one owes. §2 below is what holds across every
 profile; each later section answers those duties for one family. EVM chains
 are §3; a family that authenticates, keeps time, or encodes differently —
 Solana, Move — takes a section of its own here rather than a document of its
@@ -81,33 +81,68 @@ chain identifier, a block timestamp, and an immediate caller to the Consumer.
 An Operation List (common REQ-COMMON-01H) is:
 
 ```text
-struct Operation { bytes32 domain; bytes data; }
+struct Operation { bytes32 domain; bytes32 dataHash; }
 transactionData = abi.encode(Operation[] entries)
 ```
 
-The entries are in list order, and each `data` is the Authorized
-Transaction Data its entry's domain fixes.
+The entries are in list order. Each `dataHash` is `keccak256(data)`, where
+`data` is the Authorized Transaction Data its entry's domain fixes under
+REQ-CHAIN-07. A list of `n` entries is exactly `64 + 64·n` bytes: the word
+`0x20`, the word `n`, then each entry's `domain` and `dataHash`.
 
 - REQ-CHAIN-07B (upholds SP-BIND-01):
-  The Consumer MUST decode an Operation List as `Operation[]`, re-encode the
-  decoded entries with `abi.encode`, and reject the list unless the
-  re-encoding equals `transactionData` byte for byte. It MUST do so for the
-  whole list, not only its own entry. Necessity: Solidity's `abi.decode`
-  accepts trailing bytes, a gap before the array, entry offsets that
-  reorder or alias the entry bodies, and nonzero padding after a `bytes`
-  value; each of these decodes to entries whose re-encoding differs from
-  the input.
+  The Consumer MUST reject an Operation List unless its first word is
+  `0x20`, its second word is the entry count `n`, and its length is exactly
+  `64 + 64·n` bytes. Necessity: Solidity's `abi.decode` follows the array
+  offset and ignores trailing bytes, so a list with a gap before the array
+  or bytes after it decodes to the same entries from other bytes.
 
-Each of these lists, derived from the Operation List vector of common §5,
-decodes under Solidity's `abi.decode` to that vector's two entries and
-re-encodes to its `transactionData`. A Consumer owning
-`libid.bind-identity` rejects each under REQ-CHAIN-07B:
+Conformance vector for an Operation List, with `platformCeremonyVersion =
+1`, `authorizationNonce = 0x5555…5555`, and two entries: a bind entry
+(platform §2.1c) for target `0x1111…1111`, and an entry under the test
+domain `libid.test.a` whose `data` is the single byte `0xff`. The second
+entry stands for another Consumer's entry. `transactionData` is 192 bytes,
+shown one 32-byte word per line:
+
+```text
+operationDomain = 0x60b329d7366897b03545eb9f63f4a707253258ee2e1cd0ba3a8973aa4959e967  // libid.operations
+entry 0 domain  = 0x4d59cd4487de0a5957f8c83addaac7a1238175aa5c29eeea2fbef57a8f5165ac  // libid.bind-identity
+entry 0 data    = 0x0000000000000000000000001111111111111111111111111111111111111111  // abi.encode(target)
+entry 1 domain  = 0x6b8fd3a153cb2bc403041d7ca7d029d031243d8143d49a248230df9dd07fb723  // libid.test.a
+entry 1 data    = 0xff
+
+transactionData =
+  w0  0000000000000000000000000000000000000000000000000000000000000020  // offset of the array
+  w1  0000000000000000000000000000000000000000000000000000000000000002  // entry count
+  w2  4d59cd4487de0a5957f8c83addaac7a1238175aa5c29eeea2fbef57a8f5165ac  // entry 0 domain
+  w3  aafae41182fdefb0af836c3b506e127c7f229f33360c66de1139f4b0316f09d8  // keccak256(entry 0 data)
+  w4  6b8fd3a153cb2bc403041d7ca7d029d031243d8143d49a248230df9dd07fb723  // entry 1 domain
+  w5  8b1a944cf13a9a1c08facb2c9e98623ef3254d2ddb48113885c3e8e97fec8db9  // keccak256(0xff)
+
+authorizationPreimage = operationDomain || 0x0001 || authorizationNonce || 0x000000c0 || transactionData
+authorizationDigest   = 0x8eb2153142c324145458f77cd7709e6375ae24b22fa59351549afc522d82c1fb
+```
+
+A Consumer owning `libid.bind-identity`, called by the target, rebuilds
+`data = abi.encode(target)`, finds its hash in `w3`, and binds the target.
+A Consumer owning `libid.test.a`, called with `data = 0xff`, finds its hash
+in `w5`. Each of these lists, derived from the vector, is canonical and is
+rejected under common REQ-COMMON-01I by the Consumer named:
+
+```text
+duplicate entry  w4 = entry 0 domain       // bind Consumer: two candidates under a chain-free domain
+nested entry     w4 = operationDomain      // bind Consumer: an entry under libid.operations
+no entry         w1 = 0, nothing after w1  // bind Consumer: no candidate
+two own domains  w2 = libid.test.b         // Consumer owning libid.test.a and libid.test.b:
+                 (0x80b4f95cb6d89708133947b68dcfcfb49b7e1e55f8b96984b151e9c446e91a1f)  // two chain-free candidates
+```
+
+Each of these lists decodes under Solidity's `abi.decode` to the vector's
+two entries, and the bind Consumer rejects each under REQ-CHAIN-07B:
 
 ```text
 trailing byte   transactionData || 0x00
 gap             w0 = 0x40, one zero word inserted after w0
-swapped bodies  w2 = 0xc0, w3 = 0x40, w4..w7 exchanged with w8..w11
-outer padding   w11 = 0xff00…0001                // only the libid.test.a entry's padding
 ```
 
 ## 4. Conformance tests
@@ -120,9 +155,10 @@ outer padding   w11 = 0xff00…0001                // only the libid.test.a entr
   account and rejects a call that only the originating account's identity
   would satisfy.
 - TEST-CHAIN-05 (exercises REQ-CHAIN-07, REQ-CHAIN-07B):
-  Authorized Transaction Data carrying trailing bytes past its argument tuple
-  is rejected, and so is each noncanonical Operation List of §3.3, by a
-  Consumer owning `libid.bind-identity`.
+  Authorized Transaction Data carrying trailing bytes past its argument
+  tuple is rejected, and so is a bind target word whose high 12 bytes are
+  not zero. At a Consumer owning `libid.bind-identity` that accepts
+  Operation Lists, each noncanonical list of §3.3 is rejected.
 - TEST-CHAIN-06 (exercises REQ-CHAIN-07A):
   A Consumer that commits a chain identifier accepts Authorized Transaction
   Data naming the EIP-155 chain identifier its execution environment reports
