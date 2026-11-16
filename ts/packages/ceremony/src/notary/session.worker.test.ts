@@ -296,7 +296,7 @@ it.each([
   await expect.poll(() => port.close.mock.calls.length).toBe(1)
   expect(port.postMessage.mock.calls.map(([m]) => m)).toEqual([
     { type: 'initialized' },
-    { type: 'prepared' },
+    { type: 'prepared', attributes: { 'connect-ms': expect.any(Number) } },
     { type: 'error', message: reason },
   ])
   expect(hooks.requests).toEqual([])
@@ -338,7 +338,7 @@ it.each([
     await expect.poll(() => port.close.mock.calls.length).toBe(1)
     expect(port.postMessage.mock.calls.map(([m]) => m)).toEqual([
       { type: 'initialized' },
-      { type: 'prepared' },
+      { type: 'prepared', attributes: { 'connect-ms': expect.any(Number) } },
       { type: 'sent', transcript: { sent: Uint8Array.of(1, 2), received: Uint8Array.of(3, 4) } },
       { type: 'revealed', openings: [] },
       { type: 'error', message: reason },
@@ -442,12 +442,15 @@ it('opens the socket only after runtime startup, then waits for connection [LIBI
   expect(w.hooks.setup).not.toHaveBeenCalled()
   await w.resolve()
   expect(w.hooks.setup).not.toHaveBeenCalled()
-  // The runtime is loaded; the parent starts its setup deadline only now.
+  // The runtime is loaded; the parent times setup only from now.
   await expect.poll(() => w.port.postMessage.mock.calls.length).toBe(1)
   expect(w.port.postMessage).toHaveBeenCalledWith({ type: 'initialized' })
   w.open()
   await expect.poll(() => w.port.postMessage.mock.calls.length).toBe(2)
-  expect(w.port.postMessage).toHaveBeenLastCalledWith({ type: 'prepared' })
+  expect(w.port.postMessage).toHaveBeenLastCalledWith({
+    type: 'prepared',
+    attributes: { 'connect-ms': expect.any(Number) },
+  })
   expect(w.hooks.setup).toHaveBeenCalledOnce()
 })
 
