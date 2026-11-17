@@ -44,8 +44,8 @@ phase-less core event.
 
 ### Prefetch breakdown
 
-`prefetch-dispatch.finished` carries four durations and two counts in
-`instrumentation.attributes`:
+`prefetch-dispatch.finished` carries four durations, two counts and, where the browser
+exposes the document's navigation timing, three offsets in `instrumentation.attributes`:
 
 - `document-startup-ms`: navigation start to Prefetch entry execution, including
   document/module loading and evaluation; not the browser's `load` event.
@@ -58,6 +58,10 @@ phase-less core event.
   and those fetched or joined to a running fetch. Any fetched request marks a cold or
   partly cold start. A fetch can still be answered by the HTTP cache, so this is not a
   download count.
+- `navigation-worker-ms`, `navigation-fetch-ms` and `navigation-response-ms`: the Prefetch
+  navigation's `workerStart` (0 when no Service Worker took part), `fetchStart` and
+  `responseStart`, on the same clock as `document-startup-ms`. They place a long startup
+  before the request, at the server, or after the response.
 
 These consecutive intervals use the Prefetch document's monotonic clock. They
 exclude Application work before navigation, and do not measure asset download
@@ -65,6 +69,22 @@ completion or proving initialization. The dev app displays them in the existing
 Prefetch operation's collapsed details. The durations identify the wait's location
 without claiming whether it came from disk, worker startup or network activity; the
 counts say only which requests Cache Storage served.
+
+### Root Worker journal
+
+The root Worker keeps its own lifecycle marks in Cache Storage, newest 64, and
+Prefetch forwards them as extension events before its `finished` event, removing them.
+A document whose load stalls never runs, and a browser restart drops the Worker's
+memory, so the next Prefetch reports what the Worker did meanwhile:
+
+- `root-worker-start`: the browser evaluated the Worker script, once per start.
+- `root-worker-install` and `root-worker-activate`, `started` and `finished`, paired by
+  `operationId`. A start without a finish never settled.
+- `root-worker-navigation`: a page load reached the fetch handler, which declines it.
+
+Timestamps are the Worker's, in epoch milliseconds. Marks carry no URL, client or
+ceremony; they are matched to a stalled run by time. Forwarding is bounded to one
+second and never fails a ceremony. A stall inside Cache Storage itself goes unrecorded.
 
 ## Resource accounting
 

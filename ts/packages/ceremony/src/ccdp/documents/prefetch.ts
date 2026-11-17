@@ -2,7 +2,7 @@ import { requestsByProfile } from 'virtual:ceremony-assets'
 import { rootWorkerUrl } from 'virtual:ceremony-worker'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { profileKey } from '../../assets/keys.js'
-import { dispatchPrefetch, registerRootWorker } from '../../assets/registration.js'
+import { dispatchPrefetch, drainJournal, registerRootWorker } from '../../assets/registration.js'
 import { now } from '../../events.js'
 import { readPrefetch } from '../navigation.js'
 import { messages } from '../uiMessages.js'
@@ -47,8 +47,20 @@ class PrefetchDocument extends CeremonyDocument {
       // that Worker's claim arrives first, the Worker stays redundant here though active.
       const worker = await registerRootWorker(rootWorkerUrl)
       const workerReady = performance.now()
-      const assets = await dispatchPrefetch(worker, profile)
+      const [assets, marks] = await Promise.all([
+        dispatchPrefetch(worker, profile),
+        drainJournal(worker),
+      ])
       const dispatched = performance.now()
+      // Before readiness: the Application may navigate away as soon as Prefetch finishes.
+      for (const { event, phase, timestamp, operationId } of marks) {
+        const kept = { event, ...(phase && { phase }), timestamp, instrumentation: { operationId } }
+        connection.send({ type: 'event', ...kept })
+        this.feed.emit({ ...kept, status: 'active' })
+      }
+      const [navigation] = performance.getEntriesByType(
+        'navigation',
+      ) as PerformanceNavigationTiming[]
       const event = {
         event: 'prefetch-dispatch',
         phase: 'finished',
@@ -57,6 +69,13 @@ class PrefetchDocument extends CeremonyDocument {
           attributes: {
             // Navigation to entry execution includes document and module loading.
             'document-startup-ms': started,
+            // Where that startup waited, on the same clock: a Service Worker (0 when none was
+            // involved), the request's start, and its first response byte.
+            ...(navigation && {
+              'navigation-worker-ms': navigation.workerStart,
+              'navigation-fetch-ms': navigation.fetchStart,
+              'navigation-response-ms': navigation.responseStart,
+            }),
             'connection-ms': connected - started,
             'worker-ready-ms': workerReady - connected,
             'dispatch-ms': dispatched - workerReady,

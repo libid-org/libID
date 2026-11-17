@@ -1,9 +1,18 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const { load, reconcile, remaining } = vi.hoisted(() => ({
+const { load, reconcile, remaining, record, drain } = vi.hoisted(() => ({
   load: vi.fn(),
   reconcile: vi.fn(),
   remaining: vi.fn(),
+  record: vi.fn(),
+  drain: vi.fn(),
+}))
+
+vi.mock('./journal.js', () => ({
+  Journal: class {
+    record = record
+    drain = drain
+  },
 }))
 
 vi.mock('./cache.js', async (original) => ({
@@ -31,7 +40,13 @@ beforeEach(() => {
   load.mockReset()
   reconcile.mockReset()
   remaining.mockReset()
+  record.mockReset()
+  drain.mockReset()
 })
+
+/** The events of the marks recorded so far, as `event/phase`. */
+const marks = () =>
+  record.mock.calls.map(([m]) => (m.phase ? `${m.event}/${m.phase}` : m.event) as string)
 
 const PREFETCH = 'https://ccdp.example/ccdp/v1/prefetch'
 
@@ -312,4 +327,66 @@ it.each([
   expect(reply.close).not.toHaveBeenCalled()
   expect(reply.postMessage).not.toHaveBeenCalled()
   expect(waitUntil).not.toHaveBeenCalled()
+})
+
+it('marks install and activation, pairing each finish with its start [LIBID-BROWSER-029]', async () => {
+  const waits: Promise<unknown>[] = []
+  const dispatch = start({ skipWaiting: async () => {}, clients: { claim: async () => {} } })
+  expect(marks()).toEqual(['root-worker-start'])
+  dispatch('install', { waitUntil: (p: Promise<unknown>) => waits.push(p) })
+  // A browser activates only once installation settles.
+  await Promise.all(waits)
+  dispatch('activate', { waitUntil: (p: Promise<unknown>) => waits.push(p) })
+  await Promise.all(waits)
+  expect(marks()).toEqual([
+    'root-worker-start',
+    'root-worker-install/started',
+    'root-worker-install/finished',
+    'root-worker-activate/started',
+    'root-worker-activate/finished',
+  ])
+  // Each finish pairs with its start by operation ID.
+  const ids = record.mock.calls.map(([m]) => m.operationId)
+  expect(ids[2]).toBe(ids[1])
+  expect(ids[4]).toBe(ids[3])
+  expect(new Set(ids).size).toBe(3)
+})
+
+it('marks page loads that reach the fetch handler, which still declines them', () => {
+  const respondWith = vi.fn()
+  start()('fetch', {
+    // Node cannot construct a navigation Request.
+    request: { method: 'GET', mode: 'navigate', url: PREFETCH, headers: new Headers() },
+    respondWith,
+  })
+  expect(marks()).toEqual(['root-worker-start', 'root-worker-navigation'])
+  expect(respondWith).not.toHaveBeenCalled()
+})
+
+it('hands kept marks to a same-origin client and removes them [LIBID-BROWSER-029]', async () => {
+  const kept = [{ event: 'root-worker-start', timestamp: 1, operationId: 'a' }]
+  drain.mockResolvedValue(kept)
+  const reply = port()
+  const waits: Promise<unknown>[] = []
+  start()('message', {
+    data: { type: 'ceremony-journal' },
+    ports: [reply],
+    source: { url: PREFETCH },
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+  })
+  await Promise.all(waits)
+  expect(reply.postMessage).toHaveBeenCalledWith({ marks: kept })
+  expect(reply.close).toHaveBeenCalledOnce()
+})
+
+it('answers no malformed journal request', () => {
+  const reply = port()
+  start()('message', {
+    data: { type: 'ceremony-journal', extra: 1 },
+    ports: [reply],
+    source: { url: PREFETCH },
+    waitUntil: vi.fn(),
+  })
+  expect(drain).not.toHaveBeenCalled()
+  expect(reply.close).toHaveBeenCalledOnce()
 })
