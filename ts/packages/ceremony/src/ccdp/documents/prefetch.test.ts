@@ -6,9 +6,10 @@ import { startPrefetch } from './prefetch.js'
 
 vi.hoisted(() => vi.stubGlobal('document', {}))
 afterAll(() => vi.unstubAllGlobals())
-const { registerRootWorker, dispatchPrefetch } = vi.hoisted(() => ({
+const { registerRootWorker, dispatchPrefetch, drainJournal } = vi.hoisted(() => ({
   registerRootWorker: vi.fn(),
   dispatchPrefetch: vi.fn(),
+  drainJournal: vi.fn(),
 }))
 vi.mock('virtual:ceremony-assets', () => ({ requestsByProfile: { 'google/1': [] } }))
 vi.mock('@libid/popup', async (original) => ({
@@ -16,7 +17,11 @@ vi.mock('@libid/popup', async (original) => ({
   PopupConnection: { accept: () => connection },
   PopupWindow: { current: vi.fn() },
 }))
-vi.mock('../../assets/registration.js', () => ({ registerRootWorker, dispatchPrefetch }))
+vi.mock('../../assets/registration.js', () => ({
+  registerRootWorker,
+  dispatchPrefetch,
+  drainJournal,
+}))
 vi.mock('./ui.js', async () => (await import('../../testing/index.js')).documentUi(() => ui))
 let connection: FakeConnection
 let ui: FakeDocumentUi
@@ -24,6 +29,7 @@ const fragment = (platformId = 'google') =>
   new URLSearchParams({ ceremonyId: CEREMONY_ID, platformId, ceremonyVersion: '1' }).toString()
 beforeEach(() => {
   registerRootWorker.mockResolvedValue(undefined)
+  drainJournal.mockResolvedValue([])
   connection = fakeConnection({ peerOrigin: 'https://app.test' })
   ui = fakeDocumentUi()
 })
@@ -103,4 +109,45 @@ it('tells the Application a profile without bundled requests is unsupported, sta
     expect.objectContaining({ status: 'failed', message: messages.unsupportedProfile }),
   )
   expect(stop).toHaveBeenCalledOnce()
+})
+
+it('forwards the Worker journal before readiness and locates the startup wait [LIBID-BROWSER-029]', async () => {
+  vi.spyOn(performance, 'now').mockReturnValue(40)
+  vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
+    { workerStart: 5, fetchStart: 30, responseStart: 35 } as PerformanceNavigationTiming,
+  ])
+  dispatchPrefetch.mockResolvedValue(undefined)
+  drainJournal.mockResolvedValue([
+    { event: 'root-worker-activate', phase: 'started', timestamp: 7, operationId: 'a' },
+    { event: 'root-worker-start', timestamp: 9, operationId: 'b' },
+  ])
+  await startPrefetch(fragment())
+  const sent = connection.sent
+  expect(sent.slice(0, 2)).toEqual([
+    {
+      type: 'event',
+      event: 'root-worker-activate',
+      phase: 'started',
+      timestamp: 7,
+      instrumentation: { operationId: 'a' },
+    },
+    {
+      type: 'event',
+      event: 'root-worker-start',
+      timestamp: 9,
+      instrumentation: { operationId: 'b' },
+    },
+  ])
+  expect(sent[2]).toMatchObject({
+    event: 'prefetch-dispatch',
+    phase: 'finished',
+    instrumentation: {
+      attributes: {
+        'document-startup-ms': 40,
+        'navigation-worker-ms': 5,
+        'navigation-fetch-ms': 30,
+        'navigation-response-ms': 35,
+      },
+    },
+  })
 })

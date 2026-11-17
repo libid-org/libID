@@ -1,5 +1,9 @@
+import { isMark, type Mark } from './journal.js'
+
 const SERVICE_WORKER_TIMEOUT_MS = 15000
 const ACTIVATION_POLL_INTERVAL_MS = 50
+/** Forwarding the journal is diagnostic; it never holds the ceremony longer than this. */
+const JOURNAL_TIMEOUT_MS = 1000
 
 /**
  * Settle through `done` within `ms` (15 seconds by default). Settling, including a synchronous
@@ -96,6 +100,28 @@ export async function dispatchPrefetch(
     }
   })
   return counts
+}
+
+/**
+ * The Worker's kept lifecycle marks, removed as they are read. None when the Worker does not
+ * answer in time, as an older build without a journal does not.
+ */
+export async function drainJournal(worker: ServiceWorker): Promise<Mark[]> {
+  let marks: Mark[] = []
+  await within(
+    'Journal timed out',
+    (done, signal) => {
+      const channel = new MessageChannel()
+      signal.addEventListener('abort', () => channel.port1.close())
+      channel.port1.onmessage = ({ data }) => {
+        if (Array.isArray(data?.marks)) marks = data.marks.filter(isMark)
+        done()
+      }
+      worker.postMessage({ type: 'ceremony-journal' }, [channel.port2])
+    },
+    JOURNAL_TIMEOUT_MS,
+  ).catch(() => {})
+  return marks
 }
 
 /**

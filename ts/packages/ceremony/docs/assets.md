@@ -23,8 +23,10 @@ The [Worker](../src/assets/rootWorker.ts) combines popup's port keeper with asse
 fetching. Activation reconciles only its managed asset cache against the union
 of every supported profile: exact URL/range entries still referenced stay intact;
 obsolete entries are deleted. Other origin storage is untouched. Storage denial
-or deletion failure never fails a ceremony. Install uses `skipWaiting`, activation
-also uses `clients.claim`, and Prover
+or deletion failure never fails a ceremony. Install uses `skipWaiting` and, where the
+browser supports static routing, routes page loads (`requestMode: 'navigate'`) to the
+network so no document load waits on this Worker to start or activate; it serves only
+allowlisted assets. Activation also uses `clients.claim`, and Prover
 explicitly joins root-worker control before readiness. Failure to establish the
 required registration or control is terminal.
 

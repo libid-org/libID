@@ -2,6 +2,7 @@ import { afterEach, expect, it, type Mock, vi } from 'vitest'
 import {
   claimRootWorker,
   dispatchPrefetch,
+  drainJournal,
   registerRootWorker,
   remainingDownloads,
 } from './registration.js'
@@ -329,4 +330,24 @@ it.each([
   const container = install(undefined)
   if (reply) container.controller = serviceWorker('activated', reply)
   await expect(remainingDownloads('google/1')).rejects.toThrow(error)
+})
+
+it('forwards only well-formed marks from the journal the Worker hands over', async () => {
+  const kept = { event: 'root-worker-start', timestamp: 1, operationId: 'a' }
+  const worker = serviceWorker('activated', { marks: [kept, { event: 'Bad Event' }] })
+  await expect(drainJournal(worker)).resolves.toEqual([kept])
+  expect(worker.postMessage).toHaveBeenCalledWith({ type: 'ceremony-journal' }, [
+    expect.any(MessagePort),
+  ])
+})
+
+it.each([
+  ['an older Worker never answers', undefined],
+  ['the answer is malformed', { marks: 'none' }],
+])('yields no marks within a second when %s', async (_, reply) => {
+  vi.useFakeTimers()
+  const drained = drainJournal(serviceWorker('activated', reply))
+  await vi.advanceTimersByTimeAsync(1000)
+  await expect(drained).resolves.toEqual([])
+  expect(vi.getTimerCount()).toBe(0)
 })

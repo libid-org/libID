@@ -1,13 +1,42 @@
 import { allowedRequests, requestsByProfile } from 'virtual:ceremony-assets'
 import { installPortKeeper } from '@libid/popup/worker'
+import { now } from '../events.js'
 import { hasExactKeys, isRecord } from '../primitives.js'
 import { AssetCache } from './cache.js'
+import { Journal } from './journal.js'
 import { requestKey } from './keys.js'
+
+/** Page loads bypass this Worker, which serves only allowlisted assets (Static Routing API). */
+function routeNavigations(event: ExtendableEvent): Promise<void> {
+  const install = event as ExtendableEvent & { addRoutes?: (rule: object) => Promise<void> }
+  try {
+    const routed = install.addRoutes?.({
+      condition: { requestMode: 'navigate' },
+      source: 'network',
+    })
+    return routed?.catch(() => {}) ?? Promise.resolve()
+  } catch {
+    // Without routes, page loads keep dispatching to the fetch handler, which declines them.
+    return Promise.resolve()
+  }
+}
 
 /** Install the emitted fetch allowlist, cache delivery and popup-owned port continuity. */
 export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
   installPortKeeper()
   const cache = new AssetCache(scope.location.origin)
+  const journal = new Journal(scope.location.origin)
+  /** Keep one lifecycle occurrence for the next document to forward; returns its operation ID. */
+  const mark = (
+    event: string,
+    phase?: 'started' | 'finished',
+    operationId = crypto.randomUUID(),
+  ) => {
+    void journal.record({ event, ...(phase && { phase }), timestamp: now(), operationId })
+    return operationId
+  }
+  // Each evaluation is one start of this Worker by the browser.
+  mark('root-worker-start')
   const absolute = (r: (typeof allowedRequests)[number]) => ({
     ...r,
     url: new URL(r.url, scope.location.origin).href,
@@ -76,17 +105,45 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
     return true
   }
 
+  /** Hand over the kept lifecycle marks, removing them; the asker forwards them. */
+  function onJournal(event: ExtendableMessageEvent, value: Record<string, unknown>): boolean {
+    if (!hasExactKeys(value, ['type']) || event.ports.length !== 1) return false
+    const [reply] = event.ports
+    event.waitUntil(
+      journal.drain().then((marks) => {
+        reply.postMessage({ marks })
+        reply.close()
+      }),
+    )
+    return true
+  }
+
   const handlers: Record<string, typeof onClaim> = {
     'ceremony-claim': onClaim,
     'ceremony-prefetch': onPrefetch,
     'ceremony-downloads': onDownloads,
+    'ceremony-journal': onJournal,
   }
 
-  scope.addEventListener('install', (event) => event.waitUntil(scope.skipWaiting()))
-  scope.addEventListener('activate', (event) =>
-    event.waitUntil(Promise.all([cache.reconcile(allowed.values()), scope.clients.claim()])),
-  )
+  scope.addEventListener('install', (event) => {
+    const id = mark('root-worker-install', 'started')
+    event.waitUntil(
+      Promise.all([scope.skipWaiting(), routeNavigations(event)]).then(() => {
+        mark('root-worker-install', 'finished', id)
+      }),
+    )
+  })
+  scope.addEventListener('activate', (event) => {
+    const id = mark('root-worker-activate', 'started')
+    event.waitUntil(
+      Promise.all([cache.reconcile(allowed.values()), scope.clients.claim()]).then(() => {
+        mark('root-worker-activate', 'finished', id)
+      }),
+    )
+  })
   scope.addEventListener('fetch', (event) => {
+    // Without static routes, a page load reaches this Worker before the network.
+    if (event.request.mode === 'navigate') mark('root-worker-navigation')
     if (event.request.method !== 'GET') return
     const spec = allowed.get(
       requestKey({
