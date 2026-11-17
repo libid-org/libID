@@ -329,11 +329,16 @@ it.each([
   expect(waitUntil).not.toHaveBeenCalled()
 })
 
-it('marks install and activation, pairing each finish with its start [LIBID-BROWSER-029]', async () => {
+it('routes page loads to the network at install, and marks install and activation [LIBID-BROWSER-029]', async () => {
   const waits: Promise<unknown>[] = []
+  const addRoutes = vi.fn(async () => {})
   const dispatch = start({ skipWaiting: async () => {}, clients: { claim: async () => {} } })
   expect(marks()).toEqual(['root-worker-start'])
-  dispatch('install', { waitUntil: (p: Promise<unknown>) => waits.push(p) })
+  dispatch('install', { waitUntil: (p: Promise<unknown>) => waits.push(p), addRoutes })
+  expect(addRoutes).toHaveBeenCalledWith({
+    condition: { requestMode: 'navigate' },
+    source: 'network',
+  })
   // A browser activates only once installation settles.
   await Promise.all(waits)
   dispatch('activate', { waitUntil: (p: Promise<unknown>) => waits.push(p) })
@@ -350,6 +355,25 @@ it('marks install and activation, pairing each finish with its start [LIBID-BROW
   expect(ids[2]).toBe(ids[1])
   expect(ids[4]).toBe(ids[3])
   expect(new Set(ids).size).toBe(3)
+})
+
+it.each([
+  ['lacks the API', undefined],
+  [
+    'rejects the rule',
+    () => {
+      throw new TypeError('invalid rule')
+    },
+  ],
+  ['refuses asynchronously', async () => Promise.reject(new TypeError('invalid rule'))],
+])('still installs when the browser %s', async (_, addRoutes) => {
+  const waits: Promise<unknown>[] = []
+  start({ skipWaiting: async () => {} })('install', {
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+    addRoutes,
+  })
+  await Promise.all(waits)
+  expect(marks()).toContain('root-worker-install/finished')
 })
 
 it('marks page loads that reach the fetch handler, which still declines them', () => {

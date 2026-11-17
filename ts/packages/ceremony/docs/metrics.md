@@ -80,7 +80,8 @@ memory, so the next Prefetch reports what the Worker did meanwhile:
 - `root-worker-start`: the browser evaluated the Worker script, once per start.
 - `root-worker-install` and `root-worker-activate`, `started` and `finished`, paired by
   `operationId`. A start without a finish never settled.
-- `root-worker-navigation`: a page load reached the fetch handler, which declines it.
+- `root-worker-navigation`: a page load reached the fetch handler, which declines it;
+  absent where static routing sends page loads to the network.
 
 Timestamps are the Worker's, in epoch milliseconds. Marks carry no URL, client or
 ceremony; they are matched to a stalled run by time. Forwarding is bounded to one

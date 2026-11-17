@@ -6,6 +6,21 @@ import { AssetCache } from './cache.js'
 import { Journal } from './journal.js'
 import { requestKey } from './keys.js'
 
+/** Page loads bypass this Worker, which serves only allowlisted assets (Static Routing API). */
+function routeNavigations(event: ExtendableEvent): Promise<void> {
+  const install = event as ExtendableEvent & { addRoutes?: (rule: object) => Promise<void> }
+  try {
+    const routed = install.addRoutes?.({
+      condition: { requestMode: 'navigate' },
+      source: 'network',
+    })
+    return routed?.catch(() => {}) ?? Promise.resolve()
+  } catch {
+    // Without routes, page loads keep dispatching to the fetch handler, which declines them.
+    return Promise.resolve()
+  }
+}
+
 /** Install the emitted fetch allowlist, cache delivery and popup-owned port continuity. */
 export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
   installPortKeeper()
@@ -113,7 +128,7 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
   scope.addEventListener('install', (event) => {
     const id = mark('root-worker-install', 'started')
     event.waitUntil(
-      scope.skipWaiting().then(() => {
+      Promise.all([scope.skipWaiting(), routeNavigations(event)]).then(() => {
         mark('root-worker-install', 'finished', id)
       }),
     )
@@ -127,7 +142,7 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
     )
   })
   scope.addEventListener('fetch', (event) => {
-    // A page load reaches this Worker before the network.
+    // Without static routes, a page load reaches this Worker before the network.
     if (event.request.mode === 'navigate') mark('root-worker-navigation')
     if (event.request.method !== 'GET') return
     const spec = allowed.get(
