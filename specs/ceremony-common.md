@@ -866,17 +866,21 @@ attestation to verify carries no value at all.
   returned earlier in the same transaction for the same Submission Payload
   from the same Platform Verifier, without calling the Platform Verifier.
   Such a return is not a verification: it reaches no Notary Service and
-  delivers no Notary Fee. The Proof Verifier MUST verify through the
-  Platform Verifier whenever the call carries the quoted value, whether or
-  not it verified that payload earlier. It MUST reject zero value where it
-  holds no such result, and any value other than the quoted value or zero.
-  It MUST NOT keep a result past the end of its transaction, nor a result
-  from a call that was rejected. The quotation stays the full price.
-  Necessity: the Consumers of one Operation List each verify the same proof,
-  and within one transaction a second verification proves nothing the first
-  did not; a result kept longer would outlive the trust roots it was
+  delivers no Notary Fee. Where the quoted value is not zero, the Proof
+  Verifier MUST verify through the Platform Verifier whenever the call
+  carries the quoted value, whether or not it verified that payload earlier,
+  and MUST reject zero value where it holds no such result. Where the quoted
+  value is zero, the Proof Verifier MUST return such a result where it holds
+  one and verify otherwise. It MUST reject any value other than the quoted
+  value or zero. It MUST NOT keep a result past the end of its transaction,
+  nor a result from a call that was rejected. The quotation stays the full
+  price. Necessity: the Consumers of one Operation List each verify the same
+  proof, and within one transaction a second verification proves nothing the
+  first did not; a result kept longer would outlive the trust roots it was
   checked against. Verifying at the quoted value whatever came before keeps
   a third party's earlier verification from making a full-priced call fail.
+  At a zero quotation the quoted value and zero are the same value, so the
+  call cannot say whether it pays for a fresh verification.
 
 ## 6. Canonical OAuth serialization
 
@@ -1725,11 +1729,13 @@ the constructions that role implements.
   A Consumer forwards the value its caller attached for verification,
   unchanged. Within one transaction, a second call for the same Submission
   Payload and Platform Verifier with zero value returns the first result
-  without reaching the Platform Verifier; a second call with the quoted
-  value verifies again; and a call with the quoted value succeeds after
-  another party verified the same payload earlier in the transaction. Zero
-  value with nothing verified, and any value other than the quoted value or
-  zero, are rejected. Another payload, or the same payload behind another
+  without reaching the Platform Verifier; a second call with a non-zero
+  quoted value verifies again; and a call with the quoted value succeeds after
+  another party verified the same payload earlier in the transaction. At a
+  non-zero quotation, zero value with nothing verified is rejected; at a zero
+  quotation it verifies, and a repeat returns the first result. Any value
+  other than the quoted value or zero is rejected. Another payload, or the
+  same payload behind another
   Platform Verifier, verifies again. A rejected verification is not kept,
   and a later transaction pays again.
 - TEST-COMMON-17 (exercises REQ-COMMON-33, REQ-COMMON-34B, REQ-COMMON-33A, REQ-COMMON-34, REQ-COMMON-34A, REQ-COMMON-34C, REQ-COMMON-34D, REQ-COMMON-34E):
