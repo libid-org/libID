@@ -128,7 +128,12 @@ test('[POPUP-WINDOW-001] [POPUP-WINDOW-004] [POPUP-PORT-001] scripted open conne
   await expectPong(page, 0)
   await ping(page, 1)
   expect(await expectPong(page, 1)).toMatchObject({ path: '/p', isolated: false })
-  expect(await diag(page)).toEqual(['window-opened', 'control-direct', 'carrier-message-port'])
+  expect(await diag(page)).toEqual([
+    'window-opened',
+    'control-direct',
+    'window-committed',
+    'carrier-message-port',
+  ])
   expect(await diag(popup)).toEqual(['carrier-message-port'])
   // A separate window, not a tab: the requested size took effect. (Chromium
   // drops the BarProp flags after a cross-origin navigation; size persists.)
@@ -239,7 +244,13 @@ test('[POPUP-CONNECTION-001] an unlisted application origin is rejected by the p
   // The popup answers the refused reply on its port, so the application fails at once.
   await expect
     .poll(() => diag(page))
-    .toEqual(['window-opened', 'control-direct', 'handshake-rejected', 'connection-failed'])
+    .toEqual([
+      'window-opened',
+      'control-direct',
+      'window-committed',
+      'handshake-rejected',
+      'connection-failed',
+    ])
 })
 
 test('[POPUP-CONTROL-002] [POPUP-CONNECTION-003] [POPUP-KEEPER-003] one port survives app-driven navigation into and out of isolation', async ({
