@@ -92,10 +92,11 @@ REQ-CHAIN-07. A list of `n` entries is exactly `64 + 64·n` bytes: the word
 
 - REQ-CHAIN-07B (upholds SP-BIND-01):
   The Consumer MUST reject an Operation List unless its first word is
-  `0x20`, its second word is the entry count `n`, and its length is exactly
-  `64 + 64·n` bytes. Necessity: Solidity's `abi.decode` follows the array
-  offset and ignores trailing bytes, so a list with a gap before the array
-  or bytes after it decodes to the same entries from other bytes.
+  `0x20`, its length is at least 64 bytes and exceeds 64 by a multiple of
+  64, and its second word, the entry count `n`, equals
+  `(length − 64) / 64`. Necessity: Solidity's `abi.decode` follows the
+  array offset and ignores trailing bytes, so a list with a gap before the
+  array or bytes after it decodes to the same entries from other bytes.
 
 Conformance vector for an Operation List, with `platformCeremonyVersion =
 1`, `authorizationNonce = 0x5555…5555`, and two entries: a bind entry

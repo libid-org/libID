@@ -517,14 +517,14 @@ lists differently go in a separate ceremony.
   MUST reject the list if it holds more than one candidate, unless every
   candidate's domain fixes data that commits a chain identifier under
   REQ-COMMON-01C. Such candidates are for deployments on different Consumer
-  Chains: the Consumer MUST reject the list if its own entry's `data` names
-  another chain. Necessity: the Consumer accepts a digest once (REQ-COMMON-03A), so
-  a second entry it would apply would never be applied though the user
-  approved it; with no entry of its own the list authorizes nothing at that
-  Consumer; an entry under `libid.operations` selects no effect
-  (REQ-COMMON-01A); and the Consumer sees no other entry's `data`, so it
-  tells chain-specific candidates apart only by the chain its own `data`
-  names.
+  Chains: the Consumer MUST reject the list if its own entry's `data`,
+  decoded under REQ-COMMON-01F, names another chain. Necessity: the
+  Consumer accepts a digest once (REQ-COMMON-03A), so a second entry it
+  would apply would never be applied though the user approved it; with no
+  entry of its own the list authorizes nothing at that Consumer; an entry
+  under `libid.operations` selects no effect (REQ-COMMON-01A); and the
+  Consumer sees no other entry's `data`, so it tells chain-specific
+  candidates apart only by the chain its own `data` names.
 - REQ-COMMON-01J (upholds SP-BIND-01):
   The Consumer MUST apply only its own entry. It decodes the whole list
   only to check its encoding under REQ-COMMON-01H and to read the domains
@@ -846,8 +846,9 @@ whether that domain is its own.
   the Authorized Transaction Data under REQ-COMMON-01F. Under
   `libid.operations`, the Consumer MUST select it by the domain of its own
   entry, after decoding the list under REQ-COMMON-01H (EVM: chain profiles
-  REQ-CHAIN-07B) and checking it under REQ-COMMON-01I, and before decoding
-  its own `data`.
+  REQ-CHAIN-07B) and selecting its own entry under REQ-COMMON-01I, and
+  before decoding its own `data`. The chain clause of REQ-COMMON-01I applies
+  where that `data` is decoded.
 - REQ-COMMON-06B:
   The Proof Verifier MUST NOT decode, interpret, or apply the Authorized
   Transaction Data, nor any other part of the Submission Payload. Necessity:
@@ -1621,10 +1622,9 @@ the constructions that role implements.
   At Consumers that accept Operation Lists, each derived list of the Chain
   Profile's vector set (EVM: chain profiles §3.3) is rejected by the
   Consumer named with it. The `libid.test.a` Consumer rejects the vector's
-  Submission with `data` whose hash matches no entry. A Consumer whose
-  domain fixes one encoded account rejects a list whose entry commits the
-  hash of that encoding followed by a trailing byte, called with that
-  `data`.
+  Submission with `data` whose hash matches no entry. A Consumer whose call
+  carries its entry's `data` rejects that `data` followed by a trailing
+  byte, whose hash the entry commits.
 - TEST-COMMON-02D (exercises REQ-COMMON-01C, REQ-COMMON-01I):
   A Consumer that accepts Operation Lists, owning a domain whose `data`
   commits a chain identifier, is deployed on two Consumer Chains A and B.
@@ -1760,7 +1760,7 @@ the constructions that role implements.
   whose Attestation Count is zero quotes zero, reaches no Notary Service, and
   moves no value; and a call whose native value differs from the quoted value
   is rejected at every hop, except a repeat under REQ-COMMON-06F.
-- TEST-COMMON-16A (exercises REQ-COMMON-05, REQ-COMMON-06D, REQ-COMMON-06F, REQ-COMMON-34A):
+- TEST-COMMON-16A (exercises REQ-COMMON-05, REQ-COMMON-06, REQ-COMMON-06D, REQ-COMMON-06F, REQ-COMMON-34A):
   A Consumer forwards the value its caller attached for verification,
   unchanged. Within one transaction, a second call for the same Submission
   Payload and Platform Verifier with zero value returns the first result
