@@ -564,6 +564,18 @@ lists differently go in a separate ceremony.
   has recorded a given Authorization Digest. Necessity: entries are applied
   independently, so the Application learns which remain only from each
   Consumer.
+- REQ-COMMON-01O:
+  The Application that applies several entries of one Operation List
+  SHOULD submit them so that an entry another party already spent counts
+  as done and does not stop the others. A read of REQ-COMMON-01N made
+  off-chain before the submission does not meet this rule (EVM: a batch
+  call that lets one call fail without reverting the rest, or a check of
+  REQ-COMMON-01N in the same transaction before each call). The rule binds
+  the Application operator, as platform REQ-PLAT-03A does. Necessity: an
+  entry whose `data` is public can be spent by anyone first, for example
+  from a copy of the Application's pending transaction, and a batch that
+  requires every call to succeed then fails on that entry's
+  already-spent digest.
 
 Each entry is applied on its own, not atomically with the others. Whoever
 holds the Submission and an entry's `data` can present them to that entry's
@@ -575,10 +587,8 @@ party from spending an entry first. An entry not yet applied stays bound by
 the proof's validity: once Block Time reaches `proofValidUntil`
 (REQ-COMMON-26) no Consumer accepts it, and its metadata write follows the
 watermark rule of REQ-COMMON-25A. So no list is guaranteed to be applied in
-full. An Application applying several entries SHOULD make each call treat an
-entry already spent as done, rather than read REQ-COMMON-01N and then apply:
-another party can spend the entry between the read and the call. No
-Consumer may rely on another entry having been applied.
+full, and an Application applying several entries submits them under
+REQ-COMMON-01O. No Consumer may rely on another entry having been applied.
 
 Every Consumer that receives the Submission receives the whole list, so
 every entry's domain and data hash is public wherever any entry is
@@ -1622,11 +1632,13 @@ the constructions that role implements.
   once at each chain with the `data` naming that chain. At A, the same list
   with the `data` naming B is rejected, and a list whose only entry under
   that domain names B is rejected.
-- TEST-COMMON-02E (exercises REQ-COMMON-01A, REQ-COMMON-01L, REQ-COMMON-01M):
+- TEST-COMMON-02E (exercises REQ-COMMON-01A, REQ-COMMON-01L, REQ-COMMON-01M, REQ-COMMON-01O):
   An Application composing an Operation List shows every entry, with its
   Consumer and effect, before the ceremony starts, and starts no ceremony
   for a list it has not shown. It composes no entry for a Consumer that
   rejects lists, and no two entries one Consumer deployment would apply.
+  An Application applying three entries, one of which another party spent
+  first, applies the other two.
   Every `libid.` operation-domain string a Consumer fixes is in the §5
   operation domain table under that Consumer's protocol, and no string is
   listed twice. Verification: Application tests and inspection of the
