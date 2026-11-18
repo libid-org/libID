@@ -526,26 +526,27 @@ lists differently go in a separate ceremony.
   Consumer sees no other entry's `data`, so it tells chain-specific
   candidates apart only by the chain its own `data` names.
 - REQ-COMMON-01J (upholds SP-BIND-01):
-  The Consumer MUST apply only its own entry. It decodes the whole list
-  only to check its encoding under REQ-COMMON-01H and to read the domains
-  and data hashes REQ-COMMON-01I needs, and MUST NOT act on any other
-  entry. Necessity: an entry's `data` and its meaning belong to the
+  The Consumer MUST apply only its own entry. The Consumer decodes the
+  whole list only to check its encoding under REQ-COMMON-01H and to read
+  the domains and data hashes REQ-COMMON-01I needs. The Consumer MUST NOT
+  act on any other entry. Necessity: an entry's `data` and its meaning belong to the
   Consumer that owns its domain.
 - REQ-COMMON-01K (upholds SP-BIND-01):
-  A Consumer MAY accept Operation Lists. A Consumer that accepts them owns
-  `libid.operations` and MUST apply REQ-COMMON-01G through REQ-COMMON-01J
-  and REQ-COMMON-01N. A Consumer that does not MUST reject
+  The Consumer MAY accept Operation Lists. The Consumer that accepts them
+  owns `libid.operations` and MUST apply REQ-COMMON-01G through
+  REQ-COMMON-01J and REQ-COMMON-01N. The Consumer that does not MUST reject
   `libid.operations` as a domain it does not own (REQ-COMMON-06A).
   Necessity: a Consumer that applies one operation per proof needs no list
   decoder, and one that lacks it must not read a list as its own data.
 - REQ-COMMON-01L (upholds SP-BIND-01):
   The Application that composes an Operation List MUST place an entry in it
-  only for a Consumer that accepts Operation Lists. It MUST place at most
-  one entry under the domains one Consumer deployment owns, except entries
-  under domains whose data commits a chain identifier, of which it MUST
-  place at most one per Consumer Chain. It MUST NOT place
-  in an entry `data` it needs kept private, or `data` whose application by
-  another party first would harm the user. The rule binds the Application
+  only for a Consumer that accepts Operation Lists. The Application MUST
+  place at most one entry under the domains one Consumer deployment owns,
+  apart from entries under domains whose data commits a chain identifier.
+  For those domains, the Application MUST place at most one entry per
+  Consumer Chain. The Application MUST NOT place in an entry `data` it
+  needs kept private, or `data` whose application by another party first
+  would harm the user. The rule binds the Application
   operator, as platform REQ-PLAT-03A does. Necessity: an entry for a
   Consumer that rejects lists is never applied; a Consumer sees only its
   own `data`, so it cannot detect a second chain-specific entry naming its
@@ -554,14 +555,14 @@ lists differently go in a separate ceremony.
 - REQ-COMMON-01M (upholds SP-BIND-01):
   The Application that composes an Operation List MUST show the user every
   entry, naming the Consumer it is for and the effect its `data`
-  authorizes, before the ceremony starts. It MUST NOT start a ceremony for
-  a list it has not shown in full. The rule binds the Application operator,
+  authorizes, before the ceremony starts. The Application MUST NOT start a
+  ceremony for a list it has not shown in full. The rule binds the Application operator,
   as platform REQ-PLAT-03A does. Necessity: the digest makes consent exact
   only over what the user saw, and no Consumer can tell an entry the user
   saw from one an operator added.
 - REQ-COMMON-01N (upholds SP-REPLAY-01):
-  A Consumer that accepts Operation Lists MUST let anyone read whether it
-  has recorded a given Authorization Digest. Necessity: entries are applied
+  The Consumer that accepts Operation Lists MUST let anyone read whether
+  it has recorded a given Authorization Digest. Necessity: entries are applied
   independently, so the Application learns which remain only from each
   Consumer.
 - REQ-COMMON-01O:
@@ -746,7 +747,8 @@ pays two fees.
   The Consumer MUST call the Proof Verifier with the identity platform, the
   Verifier Version, the Submission Payload, and, unchanged, the native value
   its caller attached for verification. The Consumer MUST NOT price the
-  verification itself, and MUST NOT decode the Submission Payload. The
+  verification itself. The Consumer MUST NOT decode the Submission
+  Payload. The
   Proof Verifier accepts the value the quotation of REQ-COMMON-06E returns,
   which covers one Notary Fee of §9.1 for each attestation the selected
   profile requires and is zero where its Attestation Count is zero, or zero
@@ -899,12 +901,13 @@ attestation to verify carries no value at all.
   Such a return is not a verification: it reaches no Notary Service and
   delivers no Notary Fee. Where the quoted value is not zero, the Proof
   Verifier MUST verify through the Platform Verifier whenever the call
-  carries the quoted value, whether or not it verified that payload earlier,
-  and MUST reject zero value where it holds no such result. Where the quoted
-  value is zero, the Proof Verifier MUST return such a result where it holds
-  one and verify otherwise. It MUST reject any value other than the quoted
-  value or zero. It MUST NOT keep a result past the end of its transaction,
-  nor a result from a call that was rejected. The quotation stays the full
+  carries the quoted value, whether or not it verified that payload
+  earlier. Where the quoted value is not zero, the Proof Verifier MUST
+  reject zero value where it holds no such result. Where the quoted value
+  is zero, the Proof Verifier MUST return such a result where it holds one
+  and verify otherwise. The Proof Verifier MUST reject any value other than
+  the quoted value or zero. The Proof Verifier MUST NOT keep a result past
+  the end of its transaction, nor a result from a call that was rejected. The quotation stays the full
   price. Necessity: the Consumers of one Operation List each verify the same
   proof, and within one transaction a second verification proves nothing the
   first did not; a result kept longer would outlive the trust roots it was

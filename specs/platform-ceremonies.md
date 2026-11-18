@@ -492,9 +492,9 @@ amount and receiver of §2.1b, which no proof commits.
   The Consumer MUST reject a bind call whose fee amount is zero while its fee
   receiver is nonzero, or whose fee amount is nonzero while its fee receiver is
   the zero address. The Consumer MUST reject a bind call whose native value
-  is less than the fee amount, and MUST forward the rest to the Proof
-  Verifier as the verification value of common REQ-COMMON-05, which accepts
-  only the quotation of common REQ-COMMON-06E, or zero under common
+  is less than the fee amount. The Consumer MUST forward the rest to the
+  Proof Verifier as the verification value of common REQ-COMMON-05, which
+  accepts only the quotation of common REQ-COMMON-06E, or zero under common
   REQ-COMMON-06F.
   On accepting a bind call with a nonzero fee amount, the Consumer MUST
   transfer exactly that amount to the fee receiver. The Consumer MUST reject
