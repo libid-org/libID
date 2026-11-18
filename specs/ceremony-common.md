@@ -406,10 +406,11 @@ is added here first.
 | `libid.webwallet.link-identity` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
 | `libid.webwallet.add-session` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
 | `libid.webwallet.remove-sessions` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
-| `libid.claim-identity` | none: the §5 conformance vector only | the §5 vector |
-| `libid.test.a`, `libid.test.b` | none: the Operation List vectors only | [chain profiles](chain-profiles.md) §3.3 |
+| `libid.claim-identity` | conformance tests: the §5 digest vector | the §5 vector |
+| `libid.test.a`, `libid.test.b` | conformance tests: the Operation List vectors | [chain profiles](chain-profiles.md) §3.3 |
 
-No Consumer deploys a domain whose owner is none.
+The conformance-test domains are owned by test Consumers only; no
+production Consumer deploys them.
 
 `platformCeremonyVersion` identifies the complete platform ceremony boundary:
 this Authorization Digest layout, the platform's OAuth construction, its
@@ -543,10 +544,10 @@ lists differently go in a separate ceremony.
   only for a Consumer that accepts Operation Lists. The Application MUST
   place at most one entry under the domains one Consumer deployment owns,
   apart from entries under domains whose data commits a chain identifier.
-  For those domains, the Application MUST place at most one entry per
-  Consumer Chain. The Application MUST NOT place in an entry `data` it
-  needs kept private, or `data` whose application by another party first
-  would harm the user. The rule binds the Application
+  Under those domains, the Application MUST place at most one entry per
+  Consumer Chain for one Consumer protocol. The Application MUST NOT place
+  in an entry `data` it needs kept private, or `data` whose application by
+  another party first would harm the user. The rule binds the Application
   operator, as platform REQ-PLAT-03A does. Necessity: an entry for a
   Consumer that rejects lists is never applied; a Consumer sees only its
   own `data`, so it cannot detect a second chain-specific entry naming its
@@ -556,22 +557,22 @@ lists differently go in a separate ceremony.
   The Application that composes an Operation List MUST show the user every
   entry, naming the Consumer it is for and the effect its `data`
   authorizes, before the ceremony starts. The Application MUST NOT start a
-  ceremony for a list it has not shown in full. The rule binds the Application operator,
-  as platform REQ-PLAT-03A does. Necessity: the digest makes consent exact
+  ceremony for a list it has not shown in full. The rule binds the
+  Application operator, as platform REQ-PLAT-03A does. Necessity: the digest makes consent exact
   only over what the user saw, and no Consumer can tell an entry the user
   saw from one an operator added.
 - REQ-COMMON-01N (upholds SP-REPLAY-01):
   The Consumer that accepts Operation Lists MUST let anyone read whether
-  it has recorded a given Authorization Digest. Necessity: entries are applied
-  independently, so the Application learns which remain only from each
-  Consumer.
+  it has recorded a given Authorization Digest. Necessity: entries are
+  applied independently, so the Application learns which remain only from
+  each Consumer.
 - REQ-COMMON-01O:
   The Application that applies several entries of one Operation List
   SHOULD submit them so that an entry another party already spent counts
-  as done and does not stop the others. A read of REQ-COMMON-01N made
-  off-chain before the submission does not meet this rule (EVM: a batch
-  call that lets one call fail without reverting the rest, or a check of
-  REQ-COMMON-01N in the same transaction before each call). The rule binds
+  as done and does not stop the others (EVM: a batch call that lets one
+  call fail without reverting the rest, or a check of REQ-COMMON-01N in
+  the same transaction before each call). A read of REQ-COMMON-01N made
+  off-chain before the submission does not meet this rule. The rule binds
   the Application operator, as platform REQ-PLAT-03A does. Necessity: an
   entry whose `data` is public can be spent by anyone first, for example
   from a copy of the Application's pending transaction, and a batch that
