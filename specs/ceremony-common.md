@@ -381,15 +381,35 @@ bytes plus the Authorized Transaction Data.
   each transaction kind and derive
   `operationDomain = keccak256(UTF8(domainString))`. The Consumer MUST NOT assign the same
   operation domain to transaction kinds that can produce different
-  authoritative effects. A domain string names one Consumer protocol:
-  Consumers of different protocols MUST NOT fix the same domain string, and
-  deployments of one protocol on several Consumer Chains share it. A new
-  operation or a change to one operation's transaction-data semantics uses
-  a new domain string, not another digest field. Under an Operation List
-  these rules apply to the domain of the Consumer's own entry
-  (REQ-COMMON-01G). `libid.operations` itself selects no effect: every
-  Consumer that accepts Operation Lists owns it, and MUST NOT assign it to
-  any transaction kind but applying its own entry of a list.
+  authoritative effects. A domain string names one Consumer protocol. The
+  Consumers of two different protocols MUST NOT fix the same domain string;
+  deployments of one protocol on several Consumer Chains share it. The
+  Consumer MUST NOT fix an operation-domain string starting with `libid.`
+  unless the operation domain table below lists it for the Consumer's
+  protocol. A new operation or a change to one operation's
+  transaction-data semantics uses a new domain string, not another digest
+  field. Under an Operation List these rules apply to the domain of the
+  Consumer's own entry (REQ-COMMON-01G). `libid.operations` itself selects
+  no effect. The Consumer that accepts Operation Lists owns it, and MUST
+  NOT assign it to any transaction kind but applying its own entry of a
+  list.
+
+The operation domain table lists every operation-domain string starting
+with `libid.`. Each row names the protocol that owns the domain and where
+its Authorized Transaction Data encoding is fixed. A new `libid.` domain
+is added here first.
+
+| Domain string | Owner protocol | Data encoding |
+|---|---|---|
+| `libid.operations` | Operation List; every Consumer that accepts lists (REQ-COMMON-01K) | [chain profiles](chain-profiles.md) §3.3 |
+| `libid.bind-identity` | libID identity binding | [platform ceremonies](platform-ceremonies.md) §2.1c; EVM: [chain profiles](chain-profiles.md) §3.3 |
+| `libid.webwallet.link-identity` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
+| `libid.webwallet.add-session` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
+| `libid.webwallet.remove-sessions` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
+| `libid.claim-identity` | none: the §5 conformance vector only | the §5 vector |
+| `libid.test.a`, `libid.test.b` | none: the Operation List vectors only | [chain profiles](chain-profiles.md) §3.3 |
+
+No Consumer deploys a domain whose owner is none.
 
 `platformCeremonyVersion` identifies the complete platform ceremony boundary:
 this Authorization Digest layout, the platform's OAuth construction, its
@@ -1606,8 +1626,11 @@ the constructions that role implements.
   An Application composing an Operation List shows every entry, with its
   Consumer and effect, before the ceremony starts, and starts no ceremony
   for a list it has not shown. It composes no entry for a Consumer that
-  rejects lists, and no two entries one Consumer deployment would apply. No two Consumer protocols fix the same
-  domain string. Verification: Application tests and inspection.
+  rejects lists, and no two entries one Consumer deployment would apply.
+  Every `libid.` operation-domain string a Consumer fixes is in the §5
+  operation domain table under that Consumer's protocol, and no string is
+  listed twice. Verification: Application tests and inspection of the
+  table.
 - TEST-COMMON-02F (exercises REQ-COMMON-01N):
   A Consumer that accepts Operation Lists reports a digest as not recorded
   before it accepts the digest's Submission and as recorded after, to any
