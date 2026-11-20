@@ -146,6 +146,64 @@ trailing byte   transactionData || 0x00
 gap             w0 = 0x40, one zero word inserted after w0
 ```
 
+### 3.4 WebWallet login and link data
+
+The three `libid.webwallet.*` domains ([common](ceremony-common.md) §5,
+operation domain table) share one Authorized Transaction Data tuple:
+
+```text
+data = abi.encode(uint256 chainId, address wallet, address submitter, bytes key, bytes32 policyHash)
+```
+
+`wallet` is the WebWallet the entry acts on, and its Transaction Author at
+`WalletRegistry` (REQ-CHAIN-05). `key` is the session key to add, empty for
+a link or a removal that adds none. `policyHash` is the hash of the session
+policy the wallet applies to `key`, and zero when `key` is empty.
+
+- REQ-CHAIN-07C (upholds SP-BIND-01, SP-REPLAY-01):
+  The WebWallet MUST pass its own immediate caller to `WalletRegistry` as
+  the submitter, and `WalletRegistry` MUST reject the entry unless
+  `submitter` is not zero and equals the submitter the wallet passed. Neither
+  may read the submitter from a forwarded-sender convention such as
+  ERC-2771. Necessity: an entry's `data` is public once submitted (common
+  §5), so without the submitter anyone could copy a login out of a signed
+  batch and apply it alone, or choose which of two entries is applied first.
+- REQ-CHAIN-07D (upholds SP-BIND-01):
+  The Application MUST name as `submitter` only an address that only its
+  holder can call through: the wallet itself, an externally owned account,
+  or a contract that checks its own caller. It MUST NOT name a public
+  multicall or any contract that relays calls from any caller. The rule
+  binds the Application operator, as platform REQ-PLAT-03A does. Necessity:
+  a contract that relays any caller makes every caller the submitter.
+
+Conformance vector, on chain 8453, wallet `0x…1234`, submitter `0x…5678`:
+
+```text
+libid.webwallet.link-identity   = 0xb76778e70fe9491d05f3d66a477c7f1cb97c40b477b88d0c00442e80bcc4e15c
+libid.webwallet.add-session     = 0xadc0929729a450db24efd5992bbc0f04693c7d8e9d706da31c8cca0a429d1d59
+libid.webwallet.remove-sessions = 0x7cabdd831000d819c7b2ae4f79b4d6b566aa21992764e735f944b1459cb43c1b
+
+keyed: key = 0x1234, policyHash = 0xc51a04460ba256d1efcef52fde677904487eed95b705a198c65d40178196f7e8
+  w0  0000000000000000000000000000000000000000000000000000000000002105  // chainId
+  w1  0000000000000000000000000000000000000000000000000000000000001234  // wallet
+  w2  0000000000000000000000000000000000000000000000000000000000005678  // submitter
+  w3  00000000000000000000000000000000000000000000000000000000000000a0  // offset of key
+  w4  c51a04460ba256d1efcef52fde677904487eed95b705a198c65d40178196f7e8  // policyHash
+  w5  0000000000000000000000000000000000000000000000000000000000000002  // key length
+  w6  1234000000000000000000000000000000000000000000000000000000000000  // key
+
+keyless: key empty, policyHash = 0
+  w0  0000000000000000000000000000000000000000000000000000000000002105
+  w1  0000000000000000000000000000000000000000000000000000000000001234
+  w2  0000000000000000000000000000000000000000000000000000000000005678
+  w3  00000000000000000000000000000000000000000000000000000000000000a0
+  w4  0000000000000000000000000000000000000000000000000000000000000000
+  w5  0000000000000000000000000000000000000000000000000000000000000000
+```
+
+The policy behind `policyHash` and the same vector are in libID-contracts
+`solidity/contracts/wallet/test/fixtures/direct-execute-vector.json`.
+
 ## 4. Conformance tests
 
 - TEST-CHAIN-01 (exercises REQ-CHAIN-01):
@@ -164,3 +222,9 @@ gap             w0 = 0x40, one zero word inserted after w0
   A Consumer that commits a chain identifier accepts Authorized Transaction
   Data naming the EIP-155 chain identifier its execution environment reports
   and rejects data naming another.
+- TEST-CHAIN-07 (exercises REQ-CHAIN-07C):
+  At `WalletRegistry`, an entry under a `libid.webwallet.*` domain whose
+  `submitter` is zero, or differs from the caller the wallet passed, is
+  rejected and its digest stays unspent. The same entry submitted through
+  the wallet by the named submitter is applied. The §3.4 vector's
+  transaction data reproduces.

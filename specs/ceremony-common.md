@@ -403,9 +403,9 @@ is added here first.
 |---|---|---|
 | `libid.operations` | Operation List; every Consumer that accepts lists (REQ-COMMON-01K) | [chain profiles](chain-profiles.md) §3.3 |
 | `libid.bind-identity` | libID identity binding | [platform ceremonies](platform-ceremonies.md) §2.1c; EVM: [chain profiles](chain-profiles.md) §3.3 |
-| `libid.webwallet.link-identity` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
-| `libid.webwallet.add-session` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
-| `libid.webwallet.remove-sessions` | libID WebWallet (`WalletRegistry`) | libID-contracts `solidity/contracts/wallet/README.md` |
+| `libid.webwallet.link-identity` | libID WebWallet (`WalletRegistry`) | [chain profiles](chain-profiles.md) §3.4 |
+| `libid.webwallet.add-session` | libID WebWallet (`WalletRegistry`) | [chain profiles](chain-profiles.md) §3.4 |
+| `libid.webwallet.remove-sessions` | libID WebWallet (`WalletRegistry`) | [chain profiles](chain-profiles.md) §3.4 |
 | `libid.claim-identity` | conformance tests: the §5 digest vector | the §5 vector |
 | `libid.test.a`, `libid.test.b` | conformance tests: the Operation List vectors | [chain profiles](chain-profiles.md) §3.3 |
 
