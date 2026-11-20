@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["apps/dev/e2e/stealth.js"],
   "plugins": ["typescript"],
   "categories": {
     "correctness": "off"

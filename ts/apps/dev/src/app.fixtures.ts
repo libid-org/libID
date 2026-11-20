@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { type BrowserContext, expect, type Locator, type Page } from '@playwright/test'
 import { buildGooglePublicInputs } from '../../../packages/ceremony/src/platforms/google/1/validation.js'
+import { BRIDGE_CONFIG } from '../local.ts'
 
 // Helpers for app.spec.ts: the Bridge and app, the run history, and the popup-side fixtures.
 
@@ -22,7 +23,7 @@ declare global {
   }
 }
 
-export const configUrl = 'http://localhost:4682/api/v1/ceremony/config'
+export const configUrl = BRIDGE_CONFIG
 // The Bridge selects CCDP, so tests use their own origin, apart from the development one.
 export const ccdp = 'http://localhost:4684'
 export const config = {
@@ -76,8 +77,12 @@ export async function openApp(
   await serveBridge(page, platforms)
   await serveVersions(page, versions)
   await page.goto('/')
-  await expect(page.locator('#status')).toContainText('Ready.')
+  await expectReady(page)
 }
+
+/** Waits for the app to report itself ready to launch, up to `timeout` ms. */
+export const expectReady = (page: Page, timeout?: number) =>
+  expect(page.locator('#status')).toContainText('Ready.', { timeout })
 
 export const launchButton = (page: Page, name: string) =>
   page.getByRole('button', { name, exact: true })

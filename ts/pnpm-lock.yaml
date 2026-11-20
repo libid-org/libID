@@ -63,6 +63,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+      otpauth:
+        specifier: ^9.4.0
+        version: 9.5.2
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -1086,6 +1089,9 @@ packages:
     resolution: {integrity: sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==}
     engines: {node: '>=12.20.0'}
 
+  otpauth@9.5.2:
+    resolution: {integrity: sha512-GQ5emWR/x1tcExT62IBT0UfO95wZzJZyxYOJOGVeQF47SYEN9vmh0vISvDZaNMuFJRG+IaWCKtfm+t9Bfoal6w==}
+
   ox@0.14.59:
     resolution: {integrity: sha512-Y+DPEQScTEGKteQATjtytE1JRQ5cg1R2+DvYQ/lbhUCm/xS9n0Jnkkf2AqQyIntefQxs8xY6dZ+kyNZ7zf2FzA==}
     peerDependencies:
@@ -1909,6 +1915,10 @@ snapshots:
     optional: true
 
   obug@2.2.1: {}
+
+  otpauth@9.5.2:
+    dependencies:
+      '@noble/hashes': 2.4.0
 
   ox@0.14.59(typescript@7.0.2):
     dependencies:

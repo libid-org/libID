@@ -10,21 +10,21 @@ import {
 import type { LedgerId } from '@libid/ledger'
 import { PopupWindow } from '@libid/popup'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { BRIDGE, NOTARY } from '../local.ts'
 
 declare global {
   interface Window {
     results: Map<string, IdentityResult | { status: 'failed' | 'closed' }>
   }
 }
-const oauthBridge = 'http://localhost:4682'
 /** A synthetic ledger routed to the local notary. */
 const ledger: LedgerId = {
-  notaryAddress: () => 'http://localhost:4687',
+  notaryAddress: () => NOTARY,
 }
 const platforms = document.querySelector<HTMLElement>('#platforms')!
 const status = document.querySelector<HTMLElement>('#status')!
 window.results = new Map()
-document.querySelector('#bridge')!.textContent = oauthBridge
+document.querySelector('#bridge')!.textContent = BRIDGE
 document.querySelector('#notary')!.textContent = ledger.notaryAddress()
 const names: Record<PlatformId, string> = { google: 'Google', x: 'X', github: 'GitHub' }
 /** A new `tag` element with `properties` assigned. */
@@ -35,7 +35,7 @@ const element = <K extends keyof HTMLElementTagNameMap>(
 let client: CCDPClient | undefined
 async function initialize() {
   try {
-    client = await createCCDPClient({ oauthBridge })
+    client = await createCCDPClient({ oauthBridge: BRIDGE })
     platforms.replaceChildren(
       ...client.enabledPlatforms.map((platform) => {
         const launch = document.createElement('a')
