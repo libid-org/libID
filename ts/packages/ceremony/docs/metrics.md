@@ -87,6 +87,22 @@ Timestamps are the Worker's, in epoch milliseconds. Marks carry no URL, client o
 ceremony; they are matched to a stalled run by time. Forwarding is bounded to one
 second and never fails a ceremony. A stall inside Cache Storage itself goes unrecorded.
 
+### Platform refusals
+
+When a platform answers a notarized token or identity request with anything but a
+200, or with an OAuth `error` beside no bearer (GitHub answers 200), the Prover emits
+`platform-refusal` before failing that fetch:
+
+- `operation`: `token-fetch` or `identity-fetch`.
+- `status`: the HTTP status the platform sent.
+- `error`: its OAuth `error` code, when it sent one.
+- `prover-ms`: how long the Prover document had run, a lower bound on how long the
+  authorization code waited.
+
+The failure text keeps the platform's status line and body, with the code, code
+verifier, client credential and bearer the request carried removed. It is display
+text and stays out of telemetry; the event's attributes are what to export.
+
 ## Resource accounting
 
 Distinguish a resource request, an actual network download and a single-flight
