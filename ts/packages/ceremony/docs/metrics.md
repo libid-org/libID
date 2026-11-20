@@ -98,6 +98,12 @@ When a platform answers a notarized token or identity request with anything but 
 - `error`: its OAuth `error` code, when it sent one.
 - `prover-ms`: how long the Prover document had run, a lower bound on how long the
   authorization code waited.
+- `reason`: `authorization-expired` when the token request's refusal is the platform's own
+  answer to an expired code (its status, `error` and, where declared, description, as
+  measured and declared in its `provider.ts`) and `prover-ms` is at least the code's
+  measured lifetime. Never from timing alone. Its failure text then says the sign-in
+  expired while the connection set up the proof, and the Client's `CeremonyError` carries
+  `reason: 'authorization-expired'`.
 
 The failure text keeps the platform's status line and body, with the code, code
 verifier, client credential and bearer the request carried removed. It is display
