@@ -11,7 +11,7 @@ An identity ceremony lets a user authorize an application operation through
 an account they already have. It is the proving step behind using social
 identities in payments, wallets, and other applications.
 
-**Supported platforms:** Google, X, and GitHub. Extend to more
+**Supported platforms:** Google, X, GitHub, and Telegram. Extend to more
 OAuth/OIDC platforms with a few prompts; see [Adding a platform](docs/provers.md#adding-a-platform).
 
 Browser proof generation has been measured at ~10s, excluding OAuth sign-in
@@ -36,9 +36,13 @@ runs interactively; libID combines zero-knowledge proofs with platform-signed
 identity tokens or notarized TLS transcripts to make the result verifiable
 without another interaction with the platform.
 
-Google, X, and GitHub cover different OAuth/OIDC models: Google's ceremony
-uses a signed identity token, while X and GitHub use notarized token and
-account responses. Their respective
+Google, X, GitHub, and Telegram cover different OAuth/OIDC models: Google's
+ceremony uses a signed identity token, while X and GitHub use notarized token
+and account responses. Telegram's also uses a signed identity token, but its
+token endpoint needs a confidential client secret, so the OAuth Bridge swaps
+the code. That Bridge holds the secret and sees the user's Telegram identity
+in the token response. The browser still checks the token's claims, and the
+proof binds Telegram's signature. Their respective
 [ceremony profiles](../../../specs/platform-ceremonies.md) describe the
 evidence and trust assumptions. Further platforms need their own profiles
 and proving artifacts.

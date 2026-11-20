@@ -7,8 +7,8 @@ settings:
 catalogs:
   default:
     '@libid/contracts':
-      specifier: 0.19.0
-      version: 0.19.0
+      specifier: 0.23.0
+      version: 0.23.0
     '@playwright/test':
       specifier: 1.64.0
       version: 1.64.0
@@ -74,7 +74,7 @@ importers:
     dependencies:
       '@libid/contracts':
         specifier: 'catalog:'
-        version: 0.19.0(viem@2.57.16(typescript@7.0.2))
+        version: 0.23.0(viem@2.57.16(typescript@7.0.2))
       '@libid/ledger':
         specifier: workspace:^
         version: link:../ledger
@@ -129,7 +129,7 @@ importers:
     dependencies:
       '@libid/contracts':
         specifier: 'catalog:'
-        version: 0.19.0(viem@2.57.16(typescript@7.0.2))
+        version: 0.23.0(viem@2.57.16(typescript@7.0.2))
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -428,8 +428,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@libid/contracts@0.19.0':
-    resolution: {integrity: sha512-kl2X8QOMjohHJbCAdfIgrRMTQm27HGKs/kEgQIUv0Kd0mVbehlFZ9a2ovaD3qzrTk+KlwM1UKI3TJ5J2JxDWAw==}
+  '@libid/contracts@0.23.0':
+    resolution: {integrity: sha512-Plxj92QVcrWvvv69c0huaI4msQObk/elBjVoef5EIwgxpbET4jRy4zoLztqZw5Ra9uzZonj50u5KYRUeGq+z7Q==}
     peerDependencies:
       viem: ^2.48.11
     peerDependenciesMeta:
@@ -1467,7 +1467,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@libid/contracts@0.19.0(viem@2.57.16(typescript@7.0.2))':
+  '@libid/contracts@0.23.0(viem@2.57.16(typescript@7.0.2))':
     dependencies:
       '@noble/hashes': 2.4.0
     optionalDependencies:

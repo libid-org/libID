@@ -15,8 +15,11 @@ export interface BrowserPlatform {
   authorizationIssuer?: string
   /** Whether the authorization request carries an S256 PKCE challenge. */
   pkce: boolean
-  /** `jwt`: the signed Google v1 fixture token; `tlsn`: the notarized flow with a fixture TLSN SDK/peer. */
-  evidence: 'jwt' | 'tlsn'
+  /**
+   * `jwt`: the signed Google v1 fixture token; `tlsn`: the notarized flow with a fixture TLSN
+   * SDK/peer; `live`: only the real platform and a Bridge holding its client secret prove.
+   */
+  evidence: 'jwt' | 'tlsn' | 'live'
   /** One real-notary runtime test per entry; `alongsideProving` also proves in that runtime. */
   notary: readonly { sessions: number; alongsideProving?: true }[]
 }
@@ -48,6 +51,14 @@ const table = {
     pkce: true,
     evidence: 'tlsn',
     notary: [{ sessions: 2, alongsideProving: true }],
+  },
+  telegram: {
+    clientId: '7000000001',
+    authorization: 'https://oauth.telegram.org/auth',
+    returns: 'query',
+    pkce: true,
+    evidence: 'live',
+    notary: [],
   },
 } as const satisfies { [P in PlatformId]: BrowserPlatform }
 

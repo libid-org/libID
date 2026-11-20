@@ -37,6 +37,19 @@ it('covers exactly the catalog platforms', () => {
   expect([...notarizedPlatforms, ...oidcPlatforms].sort()).toEqual([...supportedPlatforms].sort())
 })
 
+it('ships telegram/1 the libid-circuits v0.9.0 oidc_telegram circuit and key, pinned by sha256', () => {
+  const release =
+    'https://github.com/libid-org/libid-circuits/releases/download/v0.9.0/libid-circuits-0.9.0-oidc-telegram.tar.gz'
+  const pinned = (assetsByPlatform.telegram[1] as readonly Asset[]).flatMap((asset) =>
+    asset.source === release &&
+    !asset.isExternal &&
+    /^sha256:[0-9a-f]{64}$/.test(String(asset.sha256))
+      ? [asset.member]
+      : [],
+  )
+  expect(pinned.sort()).toEqual(['oidc_telegram.json', 'vk'])
+})
+
 describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
   const fixture = fixtures[platformId]
   const platform = platforms[platformId]
@@ -61,8 +74,6 @@ describe.each(supportedPlatforms)('%s catalog contract', (platformId) => {
       'progressWeights',
       'returnRules',
     ])
-    // Code exchange binds the digest through PKCE; an implicit ID token carries it as the nonce.
-    expect(ceremony.pkce).toBe(fixture.proverKind === 'notarized')
   })
 
   it('requests exactly its authorization endpoint and fields, in order, with the digest binding [TEST-PLAT-12]', () => {

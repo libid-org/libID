@@ -1,0 +1,13 @@
+{
+  "source": "Built from libid-circuits a8347e4 circuits/oidc-telegram/Prover.toml (src/barretenberg/circuits/oidc_telegram/vectors): a synthetic token and key, no real account.",
+  "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6Im9pZGMtMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ6cS1maXh0dXJlLXN1YiIsImF1ZCI6IjcwMDAwMDAwMDEiLCJleHAiOjE4OTM0NTI0MzAsImlhdCI6MTg5MzQ1MjQwMCwiaXNzIjoiaHR0cHM6XC9cL29hdXRoLnRlbGVncmFtLm9yZyIsIm5hbWUiOiJCcnlubiBMb3d0aGVyIiwiZ2l2ZW5fbmFtZSI6IkJyeW5uIiwiZmFtaWx5X25hbWUiOiJMb3d0aGVyIiwicGljdHVyZSI6Imh0dHBzOlwvXC90Lm1lXC9pXC91c2VycGljXC8zMjBcL2ZpeHR1cmUuanBnIiwicHJlZmVycmVkX3VzZXJuYW1lIjoiQnJ5bm5fUVgiLCJpZCI6IjcwNTE4MzYyOTQiLCJub25jZSI6IjJzcl8xc2VfNHdIblBmT3BVbU8wQXNsUFZocFhTUkNXZ0pEV1g1cXdhZU0ifQ.bGvel0M1R-GH1CsTlRuvMpi5eo9au3j64-ztSQMD7M_8a6y8NDhEjMAFP9jMiwJPZTog9y1HxHrkzvSotdAKicnji_McDLkcMqclxDbrmYOdAge4fqPDDwJPobZEN06JvzS3xW6ABsVs8r5WOsM8KSe241mAeOeZBAjF8wv2CnAU0jPpJirUXOOzhd5eHm_RTN8toZzzdS-oTJTEdGqSiXCucPtPyZPxoETPavcbEpzYKI3E5YfAIudvcn3NBH8jYNmSUCBE5M3j9K44u6thRrim5eZMgt0dEH0bulS5vdkf0KV8zop2xACC7FHc0f5Hv-wRAoxqk9qsEnqDla5Rnw",
+  "jwk": {
+    "kid": "oidc-1",
+    "kty": "RSA",
+    "alg": "RS256",
+    "use": "sig",
+    "e": "AQAB",
+    "n": "rG4jbjlpf1rFkueOowSmLkQ-gGQ49pr4Js_Swbi-qt-vH-SYhCJEU_u746-c2QuAZjxj7nCFEiEtzrGgBF3rwFGK0zv4fHuVlHaYBfssqVXTE3Lv96FrC_3XeFttHC07V5hRSctbDfsvzaOiXgy757w50YL2-hH9j-9fkRsQknmVo8FsLtJcw0dtWDC08Uhup9__vnpMF0K5uf8wH3nLu07oD4Cqthgm402fYYfGOAf-gGM50VLQBgr2-LAmOTl0jZ-mbS3zvDYeEPbKEkU73RdQZ0hI3N9HYOhlQKLNS7RL7gc4iW-FPjIeWXe_t8I7ieFRT6PEl00aBjf-zhClPw"
+  },
+  "authorizationDigest": "dacaffd6c7bfe301e73df3a95263b402c94f561a574910968090d65f9ab069e3"
+}

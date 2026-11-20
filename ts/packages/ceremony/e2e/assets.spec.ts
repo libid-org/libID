@@ -35,7 +35,7 @@ test('activation reconciles the full managed graph without touching other storag
   ccdp,
 }) => {
   await page.goto(`${ccdp}/ccdp/v1/seed`)
-  const required = ['google/1', 'x/1', 'github/1'].flatMap(artifactRequests)
+  const required = ['google/1', 'x/1', 'github/1', 'telegram/1'].flatMap(artifactRequests)
   const expected = await page.evaluate(
     async ({ required, script }) => {
       const cache = await caches.open('libid-ceremony-assets-v1')
