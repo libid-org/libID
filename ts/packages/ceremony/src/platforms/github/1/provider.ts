@@ -4,8 +4,8 @@ const token = GITHUB.token!
 const identity = GITHUB.identity!
 
 /**
- * GitHub's authorization code lifetime as GitHub documents it, 10 minutes; not yet measured with
- * real codes.
+ * GitHub's authorization code lifetime, the 10 minutes GitHub documents, measured 2026-11-20 by
+ * redeeming real codes at fixed ages from GitHub's redirect: accepted at 540 s, refused at 660 s.
  */
 const CODE_LIFETIME_SECONDS = 600
 
@@ -28,7 +28,8 @@ export const provider = {
   },
   /**
    * GitHub's answer to an incorrect or expired code, sent with a 200, measured 2026-11-20 with a
-   * never-valid code ("The code passed is incorrect or expired.").
+   * never-valid code and with a real code refused at 660 s ("The code passed is incorrect or
+   * expired.").
    */
   expiredCode: {
     name: 'GitHub',
