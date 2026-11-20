@@ -160,13 +160,15 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
   const invalid = { event: 'authorization', message: 'Invalid OAuth return' }
   /** A return must parse and be admitted exactly like `outcome`'s sample. */
   function expectOutcome(oauthReturn: OAuthReturn, outcome: (typeof outcomes)[number]) {
-    expect(parseOAuthReturn(oauthReturn, production)).toEqual(expected[outcome])
+    const parsed = parseOAuthReturn(oauthReturn, production)
+    // Provider metadata may add the error's description; the outcome is unchanged.
+    expect(parsed && { ...parsed, description: undefined }).toEqual(expected[outcome])
     if (outcome === 'accepted') expect(accept(oauthReturn)).toBe(samples.accepted.credential)
     else if (outcome === 'denied') expect(accept(oauthReturn)).toBeNull()
     else
       expect(thrown(() => accept(oauthReturn))).toMatchObject({
         event: 'authorization',
-        message: 'Authorization failed',
+        message: expect.stringMatching(`^Authorization failed: ${samples.error.error}`),
       })
   }
 
@@ -185,6 +187,15 @@ describe.each(supportedPlatforms)('%s OAuth return', (platformId) => {
       }
     },
   )
+
+  it("keeps the provider's error code and description in the failure", () => {
+    const fields = fieldsOf(samples.error.oauthReturn, rules)
+    const described = returnOf(`${fields}&error_description=Try+again+later`, rules)
+    expect(thrown(() => accept(described))).toMatchObject({
+      event: 'authorization',
+      message: `Authorization failed: ${samples.error.error} (Try again later)`,
+    })
+  })
 
   it.each(outcomes)('binds the %s return to this ceremony state [LIBID-OAUTH-006]', (outcome) => {
     const fields = fieldsOf(samples[outcome].oauthReturn, rules)

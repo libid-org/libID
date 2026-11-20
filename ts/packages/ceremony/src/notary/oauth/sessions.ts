@@ -1,11 +1,40 @@
 import { toCeremonyError } from '../../errors.js'
-import { type OperationEvent, operation } from '../../events.js'
+import { now, type OperationEvent, operation } from '../../events.js'
 import { isRecord } from '../../primitives.js'
-import { responseJson } from '../http.js'
+import { PlatformRefusal, responseJson } from '../http.js'
 import type { ExactHttpRequest, Reveals } from '../protocol.js'
 import { NotaryRuntime, type NotarySession } from '../session.js'
 import type { IdentityRequest } from './identity.js'
 import type { TokenRequest, TokenRequestInput } from './token.js'
+
+/** OAuth's `error` vocabulary, within an event attribute's bound. */
+const ERROR_CODE = /^[\x20-\x7e]{1,128}$/
+
+/**
+ * A platform's refusal, also as an event: unlike the failure text it is structured, so its
+ * status and code reach telemetry. `prover-ms` is how long this Prover document had run, a lower
+ * bound on how long the authorization code waited.
+ */
+function reportRefusal<T>(emit: (event: OperationEvent) => void, operation: string, read: () => T) {
+  try {
+    return read()
+  } catch (error) {
+    if (error instanceof PlatformRefusal)
+      emit({
+        event: 'platform-refusal',
+        timestamp: now(),
+        instrumentation: {
+          attributes: {
+            operation,
+            status: error.status,
+            ...(error.code !== undefined && ERROR_CODE.test(error.code) && { error: error.code }),
+            'prover-ms': Math.round(performance.now()),
+          },
+        },
+      })
+    throw error
+  }
+}
 
 /** Attribute a failure to the operation it interrupted. */
 const failsAs = <T>(p: Promise<T>, event: string) =>
@@ -62,7 +91,8 @@ export async function notarizeOAuth(options: {
   const token = await operation(emit, 'token-fetch', async () => {
     const session = await tokenPrepared
     const transcript = await session.send(tokenRequest)
-    const body = responseJson(transcript)
+    const secrets = [input.code, input.codeVerifier, input.clientCredential ?? '']
+    const body = reportRefusal(emit, 'token-fetch', () => responseJson(transcript, secrets))
     const selected = options.token.select(transcript, input)
     if (!isRecord(body) || body.access_token !== selected.bearer)
       throw new Error('Invalid token response')
@@ -73,7 +103,7 @@ export async function notarizeOAuth(options: {
   const identity = await operation(emit, 'identity-fetch', async () => {
     const session = await identityPrepared
     const transcript = await session.send(options.identity.build(bearer))
-    const body = responseJson(transcript)
+    const body = reportRefusal(emit, 'identity-fetch', () => responseJson(transcript, [bearer]))
     const selected = options.identity.select(transcript, bearer)
     if (!isRecord(body) || !options.identity.isResponse(body, selected))
       throw new Error('Invalid identity response')

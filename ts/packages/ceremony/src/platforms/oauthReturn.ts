@@ -18,7 +18,7 @@ export interface ReturnRules {
 export type OAuthOutcome =
   | { outcome: 'accepted'; state: string; credential: string }
   | { outcome: 'denied'; state: string }
-  | { outcome: 'error'; state: string; error: string }
+  | { outcome: 'error'; state: string; error: string; description?: string }
 
 const MAX_FIELD_NAME_CHARS = 64
 export const MAX_FIELD_VALUE_CHARS = 8192
@@ -88,9 +88,9 @@ export function parseOAuthReturn(
       ? { outcome: 'accepted', state, credential }
       : null
   if (!isValue(error)) return null
-  return error === 'access_denied'
-    ? { outcome: 'denied', state }
-    : { outcome: 'error', state, error }
+  if (error === 'access_denied') return { outcome: 'denied', state }
+  const description = fields.get('error_description')
+  return { outcome: 'error', state, error, ...(isValue(description) && { description }) }
 }
 
 /** An admitted return's credential, with the request's verifier where the version declares PKCE. */
@@ -118,7 +118,11 @@ export function acceptReturn<P extends PlatformId>(
   if (returned?.state !== oauthState(capture.ceremonyId))
     throw new CeremonyError('authorization', 'Invalid OAuth return')
   if (returned.outcome === 'denied') return null
-  if (returned.outcome === 'error') throw new CeremonyError('authorization', 'Authorization failed')
+  if (returned.outcome === 'error') {
+    const { error, description } = returned
+    const said = description === undefined ? error : `${error} (${description})`
+    throw new CeremonyError('authorization', `Authorization failed: ${said}`)
+  }
   if (platform.requiresClientCredential && !isClientCredential(request.clientCredential))
     throw new CeremonyError('token-fetch', 'Missing public token-exchange credential')
   return { credential: returned.credential, codeVerifier: request.codeVerifier }

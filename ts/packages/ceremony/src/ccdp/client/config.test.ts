@@ -75,5 +75,7 @@ it('fetches configuration once without credentials and bounds its body [LIBID-MO
   await expect(fetchCeremonyConfig('https://bridge.test/')).rejects.toThrow('oauthBridge')
   expect(fetch).toHaveBeenCalledTimes(2)
   fetch.mockResolvedValueOnce(new Response(null, { status: 503 }))
-  await expect(fetchCeremonyConfig('https://bridge.test')).rejects.toThrow('request failed')
+  await expect(fetchCeremonyConfig('https://bridge.test')).rejects.toThrow(
+    'request failed: HTTP 503',
+  )
 })

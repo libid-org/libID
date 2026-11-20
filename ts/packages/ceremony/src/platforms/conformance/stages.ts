@@ -228,6 +228,7 @@ export const notarizedFailures = {
   'opening-range': 'Plaintext opening is not unique',
   'shifted-range': 'Plaintext opening does not match its commitment',
   'attestation-mismatch': 'attested authority changed',
+  'token-refused': 'Platform request failed: HTTP/1.1 400 Bad Request {"error":"invalid_request"}',
 }
 
 export type NotarizedOutcome = SharedOutcome | keyof typeof notarizedFailures
@@ -286,10 +287,12 @@ export function fakeNotarization(
             : outcome === 'identity-shape'
               ? evidence.misshapenIdentityBody
               : evidence.identityBody
+        const refused = outcome === 'token-refused' && index === 0
+        const answer = refused ? '{"error":"invalid_request"}' : body
         transcript = {
           sent: concat(requestHead(request), request.body),
           received: utf8(
-            `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\n\r\n${body}`,
+            `HTTP/1.1 ${refused ? '400 Bad Request' : '200 OK'}\r\nContent-Type: application/json\r\nContent-Length: ${answer.length}\r\n\r\n${answer}`,
           ),
         }
         transcripts[index] = transcript
@@ -448,8 +451,11 @@ export const oidcFailures = {
   'wrong-kid': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
   'duplicate-key': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
   'empty-key-set': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
-  expired: { event: 'authorization', message: expect.stringMatching(/token/i) },
-  'audience-mismatch': { event: 'authorization', message: expect.stringMatching(/token/i) },
+  expired: { event: 'authorization', message: 'Google token expired' },
+  'audience-mismatch': {
+    event: 'authorization',
+    message: 'Google token was issued for another client',
+  },
 }
 
 export type OidcOutcome = SharedOutcome | keyof typeof oidcFailures

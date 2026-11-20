@@ -727,6 +727,29 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
       },
     )
 
+    it(
+      tagged('reports a refusing platform as an event before failing its fetch', tags),
+      async () => {
+        const staged = stageNotarized(platformId, 'token-refused')
+        await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject({
+          event: 'token-fetch',
+          message: notarizedFailures['token-refused'],
+        })
+        expect(staged.events).toContainEqual({
+          event: 'platform-refusal',
+          timestamp: expect.any(Number),
+          instrumentation: {
+            attributes: {
+              operation: 'token-fetch',
+              status: 400,
+              error: 'invalid_request',
+              'prover-ms': expect.any(Number),
+            },
+          },
+        })
+      },
+    )
+
     it.each(Object.keys(notarizedFailures) as (keyof typeof notarizedFailures)[])(
       tagged('rejects %s and destroys its engine', tags),
       async (outcome) => {
