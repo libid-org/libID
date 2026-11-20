@@ -476,10 +476,15 @@ amount and receiver of §2.1b, which no proof commits.
 
 - REQ-PLAT-08P (upholds SP-BIND-01, SP-REPLAY-01):
   The Consumer MUST accept a bind call only under the operation domain
-  `keccak256(UTF8("libid.bind-identity"))`. The Consumer MUST reject
-  Authorized Transaction Data that is not exactly one target in the Chain
-  Profile's encoding. The Consumer MUST reject a bind call whose
-  Transaction Author is not that target.
+  `keccak256(UTF8("libid.bind-identity"))`, as the returned operation
+  domain or, at a Consumer that accepts Operation Lists, as the domain of
+  its own entry (common REQ-COMMON-01G). The Consumer MUST reject Authorized
+  Transaction Data that is not exactly one target in the Chain Profile's
+  encoding. The Consumer MUST reject a bind call whose Transaction Author
+  is not that target. In an Operation List, the Consumer MUST rebuild its
+  entry's `data` as the Chain Profile's encoding of the Transaction Author
+  and select its entry by that `data` (common REQ-COMMON-01I), so the bind
+  call carries no `data`.
   Necessity: the target is the one value the user authorized, and requiring
   the Transaction Author to be the target leaves a proof usable only by the
   wallet it names.
@@ -487,7 +492,10 @@ amount and receiver of §2.1b, which no proof commits.
   The Consumer MUST reject a bind call whose fee amount is zero while its fee
   receiver is nonzero, or whose fee amount is nonzero while its fee receiver is
   the zero address. The Consumer MUST reject a bind call whose native value
-  differs from the quotation of common REQ-COMMON-06E plus the fee amount.
+  is less than the fee amount. The Consumer MUST forward the rest to the
+  Proof Verifier as the verification value of common REQ-COMMON-05, which
+  accepts only the quotation of common REQ-COMMON-06E, or zero under common
+  REQ-COMMON-06F.
   On accepting a bind call with a nonzero fee amount, the Consumer MUST
   transfer exactly that amount to the fee receiver. The Consumer MUST reject
   the bind call when that transfer fails. The Consumer MUST emit an event
@@ -502,11 +510,17 @@ amount and receiver of §2.1b, which no proof commits.
   A bind call under another operation domain is rejected. Authorized
   Transaction Data that is not exactly one encoded target, including a
   target followed by a chain identifier, is rejected, and so is a bind call
-  whose Transaction Author is not the target. One Submission is accepted by
+  whose Transaction Author is not the target. At a Consumer that accepts
+  Operation Lists, a list with no `libid.bind-identity` entry is rejected;
+  a list whose `libid.bind-identity` entry commits the hash of the encoded
+  Transaction Author binds that target; and the same list in a bind call
+  by another Transaction Author is rejected. One Submission is accepted by
   the Consumers of two Consumer Chains, once at each, and a second bind call
   of it on either is rejected. A fee amount without a receiver, and a
-  receiver without an amount, are rejected. A native value one unit above or
-  below the quotation plus the fee amount is rejected. An accepted bind call
+  receiver without an amount, are rejected, and so is a native value below
+  the fee amount. A native value one unit above or
+  below the quotation plus the fee amount is rejected, outside the zero
+  repeat of common REQ-COMMON-06F. An accepted bind call
   with a fee delivers exactly the amount to the receiver and emits the fee
   event; a receiver that refuses the value rejects the bind call; and a bind
   call without a fee moves exactly the quotation.
