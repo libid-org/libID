@@ -55,13 +55,14 @@ export function responseSizes(received: Uint8Array): Record<string, number> {
 }
 
 /**
- * A platform's refusal as it answered: its status, its OAuth `error` code when it sent one, and,
- * in the message, its status line and body.
+ * A platform's refusal as it answered: its status, its OAuth `error` code and `error_description`
+ * when it sent them, and, in the message, its status line and body.
  */
 export class PlatformRefusal extends Error {
   constructor(
     readonly status: number,
     readonly code: string | undefined,
+    readonly description: string | undefined,
     said: string,
   ) {
     super(`Platform request failed: ${said}`)
@@ -108,12 +109,13 @@ function refusal(status: number, startLine: string, text: string, secrets: reado
   } catch {
     // Not JSON: the text is still what the platform said.
   }
-  const code = isRecord(json) && typeof json.error === 'string' ? json.error : undefined
+  const field = (name: string) =>
+    isRecord(json) && typeof json[name] === 'string' ? json[name] : undefined
   // ponytail: exact matches only; a platform re-encoding a secret before echoing it is not caught.
   const said = secrets
     .filter((secret) => secret !== '')
     .reduce((said, secret) => said.replaceAll(secret, '<redacted>'), `${startLine} ${text}`.trim())
-  return new PlatformRefusal(status, code, said)
+  return new PlatformRefusal(status, field('error'), field('error_description'), said)
 }
 
 /** The de-framed body as UTF-8 text. */

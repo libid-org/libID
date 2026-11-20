@@ -228,8 +228,22 @@ export const notarizedFailures = {
   'opening-range': 'Plaintext opening is not unique',
   'shifted-range': 'Plaintext opening does not match its commitment',
   'attestation-mismatch': 'attested authority changed',
-  'token-refused': 'Platform request failed: HTTP/1.1 400 Bad Request {"error":"invalid_request"}',
+  'token-refused': 'Platform request failed: HTTP/1.1',
+  'token-refused-other':
+    'Platform request failed: HTTP/1.1 400 Bad Request {"error":"invalid_grant","error_description":"Bad Request"}',
 }
+
+/** Each platform's real answer to a token request with an expired code, measured 2026-11-20. */
+export const expiredCodeAnswers = {
+  x: {
+    statusLine: '400 Bad Request',
+    body: '{"error":"invalid_request","error_description":"Value passed for the authorization code was invalid."}',
+  },
+  github: {
+    statusLine: '200 OK',
+    body: '{"error":"bad_verification_code","error_description":"The code passed is incorrect or expired.","error_uri":"https://docs.github.com/apps/managing-oauth-apps/troubleshooting-oauth-app-access-token-request-errors/#bad-verification-code"}',
+  },
+} as const
 
 export type NotarizedOutcome = SharedOutcome | keyof typeof notarizedFailures
 
@@ -287,12 +301,22 @@ export function fakeNotarization(
             : outcome === 'identity-shape'
               ? evidence.misshapenIdentityBody
               : evidence.identityBody
-        const refused = outcome === 'token-refused' && index === 0
-        const answer = refused ? '{"error":"invalid_request"}' : body
+        const refusal =
+          index !== 0
+            ? undefined
+            : outcome === 'token-refused'
+              ? expiredCodeAnswers[platformId]
+              : outcome === 'token-refused-other'
+                ? {
+                    statusLine: '400 Bad Request',
+                    body: '{"error":"invalid_grant","error_description":"Bad Request"}',
+                  }
+                : undefined
+        const answer = refusal?.body ?? body
         transcript = {
           sent: concat(requestHead(request), request.body),
           received: utf8(
-            `HTTP/1.1 ${refused ? '400 Bad Request' : '200 OK'}\r\nContent-Type: application/json\r\nContent-Length: ${answer.length}\r\n\r\n${answer}`,
+            `HTTP/1.1 ${refusal?.statusLine ?? '200 OK'}\r\nContent-Type: application/json\r\nContent-Length: ${answer.length}\r\n\r\n${answer}`,
           ),
         }
         transcripts[index] = transcript

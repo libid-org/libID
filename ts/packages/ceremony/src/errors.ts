@@ -20,21 +20,27 @@ function displayText(message: string): string {
   return isText(bounded, MAX_FAILURE_TEXT_BYTES) ? bounded : FAILED_TEXT
 }
 
-/** A failed operation and its displayable explanation; no stable error-code catalog. */
+/** A failed operation and its displayable explanation; no error-code catalog beyond `reason`. */
 export class CeremonyError extends Error {
   readonly event: string
   /** Local connection closure is an interruption, distinct from a technical failure. */
   readonly status: 'failed' | 'closed'
+  /**
+   * The one stable reason: the platform refused the authorization code as expired, after the
+   * code's lifetime, so the person's connection set up the proof too slowly.
+   */
+  readonly reason?: 'authorization-expired'
 
   constructor(
     event: string,
     message: string,
-    options?: ErrorOptions & { status?: 'failed' | 'closed' },
+    options?: ErrorOptions & { status?: 'failed' | 'closed'; reason?: 'authorization-expired' },
   ) {
     super(displayText(message), options)
     this.name = 'CeremonyError'
     this.event = event
     this.status = options?.status ?? 'failed'
+    if (options?.reason) this.reason = options.reason
   }
 }
 

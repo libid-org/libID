@@ -22,6 +22,21 @@ const encoder = new TextEncoder()
 // REQ-COMMON-39B, Authorization included: the token request authenticates in its form.
 const FORBIDDEN_HEADERS = new Set(FORBIDDEN_REQUEST_HEADERS)
 
+/**
+ * How a platform answers a token request whose authorization code expired, and the code's
+ * lifetime: both measured with real codes (see docs/provers.md, Adding a platform).
+ */
+export interface ExpiredCode {
+  /** The platform's name as people know it. */
+  name: string
+  status: number
+  /** The OAuth `error` code. */
+  error: string
+  /** The exact `error_description`, when `error` alone also names other failures. */
+  description?: string
+  lifetimeSeconds: number
+}
+
 /** A platform's fixed token request and the rules it adds: which inputs, and which bearer. */
 export interface TokenLayout {
   url: string
@@ -29,6 +44,7 @@ export interface TokenLayout {
   /** Admission of the inputs beyond the form's own rules, checked before any request is built. */
   acceptsInput(input: TokenRequestInput): boolean
   bearer: Bounded
+  expiredCode?: ExpiredCode
 }
 
 export function tokenRequest(layout: TokenLayout) {
@@ -80,7 +96,7 @@ export function tokenRequest(layout: TokenLayout) {
     }
   }
 
-  return { url: layout.url, build, select }
+  return { url: layout.url, build, select, expiredCode: layout.expiredCode }
 }
 
 export type TokenRequest = ReturnType<typeof tokenRequest>

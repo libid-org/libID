@@ -3,6 +3,7 @@ import { provider } from './provider.js'
 
 export const token = notarizedToken({
   url: provider.tokenUrl,
+  expiredCode: provider.expiredCode,
   fields(input) {
     const values: Record<string, string> = {
       client_id: input.clientId,

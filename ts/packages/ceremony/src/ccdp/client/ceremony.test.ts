@@ -238,6 +238,48 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     await expect(result).rejects.toBeInstanceOf(CeremonyError)
     expect(events.at(-1)).toMatchObject({ status: 'failed', event: 'authorization' })
   })
+  it.each([
+    {
+      name: 'an expired authorization',
+      reason: 'authorization-expired',
+      expected: 'authorization-expired',
+    },
+    { name: 'another refusal', reason: undefined, expected: undefined },
+  ])('exposes the reason a platform-refusal reported for $name', async ({ reason, expected }) => {
+    const { connection, ceremony } = await setup()
+    const result = ceremony.proveUserIdentity()
+    connection.receive({
+      type: 'event',
+      event: 'platform-refusal',
+      timestamp: 1,
+      instrumentation: {
+        attributes: { operation: 'token-fetch', status: 400, ...(reason && { reason }) },
+      },
+    })
+    connection.receive({
+      type: 'ceremony-failed',
+      event: 'token-fetch',
+      message: 'X did not accept the sign-in',
+    })
+    const failure = await result.catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(CeremonyError)
+    expect((failure as CeremonyError).reason).toBe(expected)
+  })
+  it('keeps the reason off a failure of another operation', async () => {
+    const { connection, ceremony } = await setup()
+    const result = ceremony.proveUserIdentity()
+    connection.receive({
+      type: 'event',
+      event: 'platform-refusal',
+      timestamp: 1,
+      instrumentation: {
+        attributes: { operation: 'token-fetch', reason: 'authorization-expired' },
+      },
+    })
+    connection.receive({ type: 'ceremony-failed', event: 'identity-fetch', message: 'Failed' })
+    const failure = await result.catch((error: unknown) => error)
+    expect((failure as CeremonyError).reason).toBeUndefined()
+  })
   const prefetchReady = event('prefetch-dispatch', 'finished')
   const ready = [prefetchReady, event('prover', 'started', 3)]
   const preparing = event('zk-proof-preparation', 'started', 4)

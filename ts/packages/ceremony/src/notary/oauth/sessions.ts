@@ -5,34 +5,61 @@ import { PlatformRefusal, responseJson } from '../http.js'
 import type { ExactHttpRequest, Reveals } from '../protocol.js'
 import { NotaryRuntime, type NotarySession } from '../session.js'
 import type { IdentityRequest } from './identity.js'
-import type { TokenRequest, TokenRequestInput } from './token.js'
+import type { ExpiredCode, TokenRequest, TokenRequestInput } from './token.js'
 
 /** OAuth's `error` vocabulary, within an event attribute's bound. */
 const ERROR_CODE = /^[\x20-\x7e]{1,128}$/
 
 /**
+ * Whether `refusal` is the platform's own answer to an expired code, given after the code's
+ * lifetime: both the measured answer and the lifetime must hold, never the timing alone.
+ */
+function expired(refusal: PlatformRefusal, proverMs: number, code: ExpiredCode | undefined) {
+  return (
+    code !== undefined &&
+    refusal.status === code.status &&
+    refusal.code === code.error &&
+    (code.description === undefined || refusal.description === code.description) &&
+    proverMs >= code.lifetimeSeconds * 1000
+  )
+}
+
+/**
  * A platform's refusal, also as an event: unlike the failure text it is structured, so its
  * status and code reach telemetry. `prover-ms` is how long this Prover document had run, a lower
- * bound on how long the authorization code waited.
+ * bound on how long the authorization code waited. A refusal of an expired code also carries
+ * `reason: 'authorization-expired'`, and its failure text says what to do.
  */
-function reportRefusal<T>(emit: (event: OperationEvent) => void, operation: string, read: () => T) {
+function reportRefusal<T>(
+  emit: (event: OperationEvent) => void,
+  operation: string,
+  read: () => T,
+  expiredCode?: ExpiredCode,
+) {
   try {
     return read()
   } catch (error) {
-    if (error instanceof PlatformRefusal)
-      emit({
-        event: 'platform-refusal',
-        timestamp: now(),
-        instrumentation: {
-          attributes: {
-            operation,
-            status: error.status,
-            ...(error.code !== undefined && ERROR_CODE.test(error.code) && { error: error.code }),
-            'prover-ms': Math.round(performance.now()),
-          },
+    if (!(error instanceof PlatformRefusal)) throw error
+    const proverMs = Math.round(performance.now())
+    const isExpired = expired(error, proverMs, expiredCode)
+    emit({
+      event: 'platform-refusal',
+      timestamp: now(),
+      instrumentation: {
+        attributes: {
+          operation,
+          status: error.status,
+          ...(error.code !== undefined && ERROR_CODE.test(error.code) && { error: error.code }),
+          'prover-ms': proverMs,
+          ...(isExpired && { reason: 'authorization-expired' }),
         },
-      })
-    throw error
+      },
+    })
+    if (!isExpired || !expiredCode) throw error
+    throw new Error(
+      `${expiredCode.name} did not accept the sign-in: it expired after ${Math.floor(proverMs / 1000)} s, while this connection set up the proof. Check your connection and try again. ${error.message}`,
+      { cause: error },
+    )
   }
 }
 
@@ -92,7 +119,12 @@ export async function notarizeOAuth(options: {
     const session = await tokenPrepared
     const transcript = await session.send(tokenRequest)
     const secrets = [input.code, input.codeVerifier, input.clientCredential ?? '']
-    const body = reportRefusal(emit, 'token-fetch', () => responseJson(transcript, secrets))
+    const body = reportRefusal(
+      emit,
+      'token-fetch',
+      () => responseJson(transcript, secrets),
+      options.token.expiredCode,
+    )
     const selected = options.token.select(transcript, input)
     if (!isRecord(body) || body.access_token !== selected.bearer)
       throw new Error('Invalid token response')

@@ -123,6 +123,8 @@ class CeremonyChannel {
 export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   readonly launchUrl: string
   private state: 'new' | 'prefetch' | 'oauth' | 'proving' | 'done' = 'new'
+  /** The operation whose platform refusal the CCDP reported as an expired authorization. */
+  private expiredIn: string | undefined
   private readonly feed = new EventFeed()
   private readonly observations = new Set<string>()
   private proofWorkStarted = false
@@ -216,6 +218,9 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   }
 
   private receiveEvent({ type: _type, ...event }: EventMessage): void {
+    const attributes = event.instrumentation?.attributes
+    if (event.event === 'platform-refusal' && attributes?.reason === 'authorization-expired')
+      this.expiredIn = typeof attributes.operation === 'string' ? attributes.operation : undefined
     if (event.event === 'prefetch-dispatch') this.prefetched(event)
     else if (event.event === 'prover') this.proverReady(event)
     else {
@@ -292,7 +297,12 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       if (message.type === 'event') this.receiveEvent(message)
       else if (message.type === 'identity-proof') this.receiveProof(message)
       else if (message.type === 'user-denied') this.receiveDenial()
-      else this.fail(new CeremonyError(message.event, message.message))
+      else
+        this.fail(
+          new CeremonyError(message.event, message.message, {
+            ...(this.expiredIn === message.event && { reason: 'authorization-expired' }),
+          }),
+        )
     } catch (error) {
       this.fail(error)
     }
