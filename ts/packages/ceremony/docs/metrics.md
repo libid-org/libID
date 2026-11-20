@@ -103,6 +103,11 @@ The failure text keeps the platform's status line and body, with the code, code
 verifier, client credential and bearer the request carried removed. It is display
 text and stays out of telemetry; the event's attributes are what to export.
 
+The failure text also keeps what the other platform answers say: an authorization
+return's `error` and `error_description`, the HTTP status of a public fetch (Google's
+signing keys, the Bridge's configuration), and which Google ID token check failed,
+its audience or its expiry.
+
 ## Resource accounting
 
 Distinguish a resource request, an actual network download and a single-flight

@@ -451,8 +451,11 @@ export const oidcFailures = {
   'wrong-kid': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
   'duplicate-key': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
   'empty-key-set': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
-  expired: { event: 'authorization', message: expect.stringMatching(/token/i) },
-  'audience-mismatch': { event: 'authorization', message: expect.stringMatching(/token/i) },
+  expired: { event: 'authorization', message: 'Google token expired' },
+  'audience-mismatch': {
+    event: 'authorization',
+    message: 'Google token was issued for another client',
+  },
 }
 
 export type OidcOutcome = SharedOutcome | keyof typeof oidcFailures

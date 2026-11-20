@@ -56,6 +56,6 @@ export async function fetchPublicJson(
     redirect: 'error',
     ...(signal && { signal }),
   })
-  if (!response.ok) throw new Error(failure)
+  if (!response.ok) throw new Error(`${failure}: HTTP ${response.status}`)
   return readJson(response, maximum)
 }
