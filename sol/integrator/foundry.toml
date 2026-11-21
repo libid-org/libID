@@ -1,0 +1,10 @@
+# A project that uses LibID as the README says to, built by
+# script/integrator.sh with this repository at lib/libid.
+[profile.default]
+src = "src"
+test = "test"
+libs = ["lib"]
+# The oldest compiler LibIDTestBase supports.
+solc = "0.8.24"
+additional_compiler_profiles = [{ name = "libid", via_ir = true }]
+compilation_restrictions = [{ paths = "lib/libid/sol/lib/libID-contracts/**", via_ir = true }]
