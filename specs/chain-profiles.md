@@ -1,6 +1,6 @@
 ---
 title: Chain profiles
-description: libID specification for how consumer chains authenticate transaction authors, supply block time, and encode authorized transaction data.
+description: libID specification for how consumer chains authenticate transaction authors, supply block time, encode authorized transaction data, and carry fees and roll back rejected calls.
 ---
 
 # Chain profiles
@@ -10,16 +10,18 @@ Part of the [libID protocol specification](libid.md).
 ## 1. Scope
 
 This document holds one profile per family of Consumer Chains. [Common](ceremony-common.md)
-§2 defines what a Chain Profile is, and REQ-COMMON-01D and REQ-COMMON-01F say
-what one owes. §2 below is what holds across every
-profile; each later section answers those duties for one family. EVM chains
-are §3; a family that authenticates, keeps time, or encodes differently —
-Solana, Move — takes a section of its own here rather than a document of its
-own.
+§2 defines what a Chain Profile is, and REQ-COMMON-01D, REQ-COMMON-01F,
+REQ-COMMON-34B and REQ-COMMON-42 say what one owes. §2 below is what holds
+across every profile; each later section answers those duties for one family.
+EVM chains are §3; a family that authenticates, keeps time, or encodes
+differently — Solana, Move — takes a section of its own here rather than a
+document of its own.
 
 A profile defines no ceremony construction. It says how a Consumer on one chain
 authenticates its caller, reads its clock, and decodes the Authorized
-Transaction Data a ceremony committed.
+Transaction Data a ceremony committed. It also says how a fee travels on that
+chain and how a rejected call undoes it, so that every hop of the verification
+path pays and rolls back alike.
 
 ## 2. What every profile fixes
 
@@ -28,13 +30,19 @@ Transaction Data a ceremony committed.
 | how the chain authenticates the Transaction Author | REQ-COMMON-01D |
 | how the chain supplies Block Time | REQ-COMMON-01D |
 | how Authorized Transaction Data is encoded | REQ-COMMON-01F |
+| the native value-transfer path a fee travels over | REQ-COMMON-34B |
+| the unit a fee is denominated in | REQ-COMMON-34B |
+| how a rejected call leaves no value transferred and no state changed | REQ-COMMON-42 |
 
 - REQ-CHAIN-01 (upholds SP-BIND-01):
-  A Chain Profile MUST answer all three duties for exactly one family of
-  Consumer Chains, and MUST leave none of them to an implementation.
-  Necessity: the Application and the Consumer apply these answers
-  independently, so an answer left open is two answers that disagree only
-  as a transaction the Consumer rejects.
+  A Chain Profile MUST answer every duty of the table above for exactly one
+  family of Consumer Chains, and MUST leave none of them to an implementation.
+  Necessity: the Application and the Consumer apply the first three
+  independently, so an answer left open is two answers that disagree only as
+  a transaction the Consumer rejects. The Consumer, the Proof Verifier, and
+  the Platform Verifier pass the fee under the last three and the Notary
+  Service receives it, so an answer left open there is a fee one hop cannot
+  pay or a rejection that keeps it.
 
 ## 3. The EVM Chain Profile
 
@@ -77,10 +85,30 @@ chain identifier, a block timestamp, and an immediate caller to the Consumer.
   MUST commit the EIP-155 chain identifier and compare it with the one its
   execution environment reports.
 
+### 3.4 Fees and rejection
+
+The native value-transfer path is the call value: the native value a call
+carries, which the callee reads as `msg.value`. The Consumer attaches the
+quoted value to its call to the Proof Verifier, the Proof Verifier attaches
+exactly that value to its call to the Platform Verifier, and the Platform
+Verifier attaches one Notary Fee to each Notary Service call. The unit is
+wei, the smallest unit of the chain's native asset, and every quotation,
+Notary Fee, and call value is a count of wei. The Proof Verifier, the
+Platform Verifier, and the Notary Service each compare the call value they
+receive with the value they require for exact equality (REQ-COMMON-06D,
+REQ-COMMON-34E).
+
+Rejection is a revert. A revert undoes every state change and value transfer
+of the reverting call, including those of the calls it made. The Proof
+Verifier and the Platform Verifier let the revert of the role they call
+propagate, so a Submission rejected at any hop reverts the Consumer's call to
+the Proof Verifier. A Consumer that lets that revert propagate leaves no fee
+delivered and no state changed (REQ-COMMON-42).
+
 ## 4. Conformance tests
 
 - TEST-CHAIN-01 (exercises REQ-CHAIN-01):
-  Every profile in this document answers all three duties of §2.
+  Every profile in this document answers every duty of §2.
   Verification: inspection.
 - TEST-CHAIN-04 (exercises REQ-CHAIN-05, REQ-CHAIN-05A):
   A Consumer reached through an intermediate account authorizes on that
