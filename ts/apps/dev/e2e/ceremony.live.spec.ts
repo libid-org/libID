@@ -3,7 +3,6 @@ import { type BrowserContext, expect, type Page, test } from '@playwright/test'
 import { expectReady, launch, newestRun } from '../src/app.fixtures.ts'
 import { authorizeOnGitHub } from './github.ts'
 import { authorizeOnGoogle } from './google.ts'
-import { presentAsPerson } from './person.ts'
 import { watchAppFailure, watchReturn } from './popup.ts'
 import { googleSession, restoreSession, saveGoogleSession, xSession } from './session.ts'
 import { env, missing, runnablePlatforms } from './settings.ts'
@@ -76,7 +75,6 @@ test('a GitHub identity is proved in the browser', async ({ page, context }) => 
 
 test('an X identity is proved in the browser', async ({ page, context }) => {
   skipUnlessLive('x')
-  await presentAsPerson(context)
   await restoreSession(context, xSession()!)
   await proveThroughTheUi(page, context, 'X', 'x', env('X_TEST_ALICE_USERNAME')!, authorizeOnX)
 })
@@ -84,7 +82,6 @@ test('an X identity is proved in the browser', async ({ page, context }) => {
 test('a Google identity is proved in the browser', async ({ page, context }) => {
   skipUnlessLive('google')
   const email = env('GOOGLE_TEST_ALICE_EMAIL')!
-  await presentAsPerson(context)
   await restoreSession(context, googleSession()!)
   await proveThroughTheUi(page, context, 'Google', 'google', email, (popup) =>
     authorizeOnGoogle(popup, email),

@@ -49,8 +49,6 @@ export default defineConfig({
     // A hang ends on the action that hangs, not on the test's timeout.
     actionTimeout: 30_000,
     navigationTimeout: 60_000,
-    // Automation X and Google can see makes them challenge; see e2e/person.ts.
-    launchOptions: { args: ['--disable-blink-features=AutomationControlled'] },
     // LIBID_TEST_PROXY routes the browser's traffic, loopback aside, through a
     // proxy: the platforms then see the proxy's address instead of this host's.
     ...(proxy && { proxy: { server: proxy, bypass: 'localhost,127.0.0.1,[::1]' } }),
