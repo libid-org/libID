@@ -81,28 +81,33 @@ chain identifier, a block timestamp, and an immediate caller to the Consumer.
 An Operation List (common REQ-COMMON-01H) is:
 
 ```text
-struct Operation { bytes32 domain; bytes32 dataHash; }
+struct Operation { bytes32 domain; bytes data; }
 transactionData = abi.encode(Operation[] entries)
 ```
 
-The entries are in list order. Each `dataHash` is `keccak256(data)`, where
-`data` is the Authorized Transaction Data its entry's domain fixes under
-REQ-CHAIN-07. A list of `n` entries is exactly `64 + 64·n` bytes: the word
-`0x20`, the word `n`, then each entry's `domain` and `dataHash`.
+The entries are in list order. Each `data` is the Authorized Transaction
+Data its entry's domain fixes under REQ-CHAIN-07. After the word `0x20` and
+the entry count `n` come `n` offsets, one per entry, counted from the word
+after `n`. Each entry is then its `domain`, the word `0x40`, the length of
+its `data`, and its `data` padded with zero bytes to a whole word.
 
 - REQ-CHAIN-07B (upholds SP-BIND-01):
-  The Consumer MUST reject an Operation List unless its first word is
-  `0x20`, its length is at least 64 bytes and exceeds 64 by a multiple of
-  64, and its second word, the entry count `n`, equals
-  `(length − 64) / 64`. Necessity: Solidity's `abi.decode` follows the
-  array offset and ignores trailing bytes, so a list with a gap before the
-  array or bytes after it decodes to the same entries from other bytes.
+  The Consumer MUST reject an Operation List unless it is exactly the
+  `abi.encode` of the entries it decodes to: the first word is `0x20`; the
+  count `n` fits the bytes; each entry's offset is the position where the
+  previous entry ends, the first one right after the `n` offsets; each
+  entry's inner offset is `0x40`; each `data` length fits the bytes; the
+  padding after each `data` is zero; and no byte follows the last entry.
+  Necessity: Solidity's `abi.decode` follows offsets and ignores trailing
+  bytes, so a list with aliased or gapped offsets, dirty padding, or bytes
+  after it decodes to entries from other bytes, and the Application and
+  every Consumer must read the same entries (common REQ-COMMON-01H).
 
 Conformance vector for an Operation List, with `platformCeremonyVersion =
 1`, `authorizationNonce = 0x5555…5555`, and two entries: a bind entry
 (platform §2.1c) for target `0x1111…1111`, and an entry under the test
 domain `libid.test.a` whose `data` is the single byte `0xff`. The second
-entry stands for another Consumer's entry. `transactionData` is 192 bytes,
+entry stands for another Consumer's entry. `transactionData` is 384 bytes,
 shown one 32-byte word per line:
 
 ```text
@@ -113,37 +118,48 @@ entry 1 domain  = 0x6b8fd3a153cb2bc403041d7ca7d029d031243d8143d49a248230df9dd07f
 entry 1 data    = 0xff
 
 transactionData =
-  w0  0000000000000000000000000000000000000000000000000000000000000020  // offset of the array
-  w1  0000000000000000000000000000000000000000000000000000000000000002  // entry count
-  w2  4d59cd4487de0a5957f8c83addaac7a1238175aa5c29eeea2fbef57a8f5165ac  // entry 0 domain
-  w3  aafae41182fdefb0af836c3b506e127c7f229f33360c66de1139f4b0316f09d8  // keccak256(entry 0 data)
-  w4  6b8fd3a153cb2bc403041d7ca7d029d031243d8143d49a248230df9dd07fb723  // entry 1 domain
-  w5  8b1a944cf13a9a1c08facb2c9e98623ef3254d2ddb48113885c3e8e97fec8db9  // keccak256(0xff)
+  w0   0000000000000000000000000000000000000000000000000000000000000020  // offset of the array
+  w1   0000000000000000000000000000000000000000000000000000000000000002  // entry count
+  w2   0000000000000000000000000000000000000000000000000000000000000040  // offset of entry 0
+  w3   00000000000000000000000000000000000000000000000000000000000000c0  // offset of entry 1
+  w4   4d59cd4487de0a5957f8c83addaac7a1238175aa5c29eeea2fbef57a8f5165ac  // entry 0 domain
+  w5   0000000000000000000000000000000000000000000000000000000000000040  // entry 0 offset of data
+  w6   0000000000000000000000000000000000000000000000000000000000000020  // entry 0 data length
+  w7   0000000000000000000000001111111111111111111111111111111111111111  // entry 0 data
+  w8   6b8fd3a153cb2bc403041d7ca7d029d031243d8143d49a248230df9dd07fb723  // entry 1 domain
+  w9   0000000000000000000000000000000000000000000000000000000000000040  // entry 1 offset of data
+  w10  0000000000000000000000000000000000000000000000000000000000000001  // entry 1 data length
+  w11  ff00000000000000000000000000000000000000000000000000000000000000  // entry 1 data, padded
 
-authorizationPreimage = operationDomain || 0x0001 || authorizationNonce || 0x000000c0 || transactionData
-authorizationDigest   = 0x8eb2153142c324145458f77cd7709e6375ae24b22fa59351549afc522d82c1fb
+authorizationPreimage = operationDomain || 0x0001 || authorizationNonce || 0x00000180 || transactionData
+authorizationDigest   = 0x872d461409ba5b7731cc6aaf6abe7522b5f985d69ca66eb333e02e008e3ae496
 ```
 
-A Consumer owning `libid.bind-identity`, called by the target, rebuilds
-`data = abi.encode(target)`, finds its hash in `w3`, and binds the target.
-A Consumer owning `libid.test.a`, called with `data = 0xff`, finds its hash
-in `w5`. Each of these lists, derived from the vector, is canonical and is
-rejected under common REQ-COMMON-01I by the Consumer named:
+A Consumer owning `libid.bind-identity`, called by the target, reads
+`abi.encode(target)` from entry 0 and binds the target. A Consumer owning
+`libid.test.a` reads `0xff` from entry 1. The list of entry 0 alone, under
+the same version and nonce, has the digest
+`0x36de6c95183d8017fd4cd613a64c0862ebf9272ff69c4d5261492d6905305fad`.
+
+Each of these lists, derived from the vector, is canonical and is rejected
+under common REQ-COMMON-01I by the Consumer named:
 
 ```text
-duplicate entry  w4 = entry 0 domain       // bind Consumer: two candidates under a chain-free domain
-nested entry     w4 = operationDomain      // bind Consumer: an entry under libid.operations
-no entry         w1 = 0, nothing after w1  // bind Consumer: no candidate
-two own domains  w2 = libid.test.b         // Consumer owning libid.test.a and libid.test.b:
-                 (0x80b4f95cb6d89708133947b68dcfcfb49b7e1e55f8b96984b151e9c446e91a1f)  // two chain-free candidates
+two entries   w8 = entry 0 domain  // bind Consumer: two candidates under a chain-free domain
+no entry      the vector itself    // Consumer owning libid.test.b
+                (0x80b4f95cb6d89708133947b68dcfcfb49b7e1e55f8b96984b151e9c446e91a1f)
 ```
 
-Each of these lists decodes under Solidity's `abi.decode` to the vector's
-two entries, and the bind Consumer rejects each under REQ-CHAIN-07B:
+Each of these lists is rejected under REQ-CHAIN-07B by the bind Consumer:
 
 ```text
-trailing byte   transactionData || 0x00
-gap             w0 = 0x40, one zero word inserted after w0
+offset off by a word    w2 = 0x20, or w3 = 0xe0
+aliased entry           w3 = 0x40              // abi.decode reads entry 0 twice
+inner offset            w5 = 0x20
+length past the end     w10 = 0x21
+dirty padding           w11 = 0xff00…0001
+count too large         w1 = 3
+trailing byte           transactionData || 0x00
 ```
 
 ### 3.4 WebWallet login and link data
