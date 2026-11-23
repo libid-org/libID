@@ -11,7 +11,7 @@ const { registerRootWorker, dispatchPrefetch, drainJournal } = vi.hoisted(() => 
   dispatchPrefetch: vi.fn(),
   drainJournal: vi.fn(),
 }))
-vi.mock('virtual:ceremony-assets', () => ({ requestsByProfile: { 'google/1': [] } }))
+vi.mock('virtual:ceremony-assets', () => ({ supportedProfiles: ['google/1'] }))
 vi.mock('@libid/popup', async (original) => ({
   ...(await original<typeof import('@libid/popup')>()),
   PopupConnection: { accept: () => connection },

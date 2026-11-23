@@ -1,4 +1,4 @@
-import { requestsByProfile } from 'virtual:ceremony-assets'
+import { supportedProfiles } from 'virtual:ceremony-assets'
 import { rootWorkerUrl } from 'virtual:ceremony-worker'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { profileKey } from '../../assets/keys.js'
@@ -40,7 +40,7 @@ class PrefetchDocument extends CeremonyDocument {
       this.connection = connection
       await connection.ready
       // Reported once connected, so the Application learns why instead of waiting.
-      if (!Object.hasOwn(requestsByProfile, profile)) throw new Error(messages.unsupportedProfile)
+      if (!supportedProfiles.includes(profile)) throw new Error(messages.unsupportedProfile)
       const connected = performance.now()
       // Registered only now, after the connection's registration lookup: Firefox can build this
       // document's registration from a lookup answered before the new Worker installs, and if

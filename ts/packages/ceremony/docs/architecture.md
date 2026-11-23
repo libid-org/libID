@@ -77,7 +77,9 @@ the lightweight catalog through shared return validation; it does not import the
 registry that selects it.
 
 Shared integrations declare resources once in `*.assets.ts`; platform/version
-leaves compose those handles. Prefetch imports only the request lists the build derives from them.
+leaves compose those handles. The root Worker imports the request lists the build
+derives from them, while Prefetch keeps only the supported profile keys and its
+pinned Worker URL.
 The compiler adds actual chunks and nested-worker edges to each selected set.
 Execution resolves the same handles. Fetching scripts as bytes before OAuth
 never initializes WASM, proof backends or TLSNotary sessions.

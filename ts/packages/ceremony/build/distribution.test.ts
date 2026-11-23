@@ -20,22 +20,23 @@ const workerPath = Object.keys(metadata.headers).find((path) =>
   /^\/ccdp\/worker\.[a-f0-9]{64}\.js$/.test(path),
 )!
 
-test('Prefetch pins the exact immutable Worker body [TEST-DIST-08]', () => {
+test('Prefetch is self-contained, pins the exact immutable Worker body, and omits the full asset manifest [TEST-DIST-08]', () => {
   assert.ok(workerPath)
   const code = readFileSync(join(out, 'public', workerPath))
   assert.equal(workerPath, `/ccdp/worker.${hash(code)}.js`)
   assert.equal(metadata.headers[workerPath]['cache-control'], 'public, max-age=31536000, immutable')
   assert.equal(metadata.headers[workerPath]['service-worker-allowed'], '/')
   const prefetch = readFileSync(join(out, 'public', metadata.files['/ccdp/v1/prefetch']), 'utf8')
-  // Prefetch's entry may import an immutable chunk instead of inlining the whole bundle.
-  const modules = Object.keys(metadata.files).filter(
-    (path) => path.endsWith('.js') && prefetch.includes(path),
+  const externalScripts = Object.keys(metadata.files).filter(
+    (path) => path.endsWith('.js') && path !== workerPath && prefetch.includes(path),
   )
-  assert.ok(
-    [prefetch, ...modules.map((path) => readFileSync(join(out, 'public', path), 'utf8'))].some(
-      (code) => code.includes(workerPath),
-    ),
-  )
+  assert.deepEqual(externalScripts, [])
+  assert.doesNotMatch(prefetch, /\bimport\s*[\s({'"]*["']\/ccdp\/assets\//)
+  assert.ok(prefetch.includes(workerPath))
+  for (const profile of Object.keys(metadata.requestsByProfile))
+    assert.ok(prefetch.includes(profile), profile)
+  for (const asset of ['barretenberg-threads.wasm', 'oidc_google.json', 'bearer_link.json'])
+    assert.ok(!prefetch.includes(asset), asset)
   assert.equal(Object.hasOwn(metadata.files, '/ccdp/v1/worker.js'), false)
 })
 

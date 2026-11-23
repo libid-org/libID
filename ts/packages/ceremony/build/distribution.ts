@@ -130,6 +130,15 @@ class PublicTree {
   }
 }
 
+/** Return the single entry chunk of a self-contained bundle, rejecting emitted assets or imports. */
+function singleEntry(output: readonly (Rollup.OutputChunk | Rollup.OutputAsset)[], name: string) {
+  if (output.length !== 1 || output[0].type !== 'chunk' || !output[0].isEntry)
+    throw new Error(`${name} must be self-contained`)
+  if (output[0].imports.length || output[0].dynamicImports.length)
+    throw new Error(`${name} must have no external dependencies`)
+  return output[0].code
+}
+
 /** Resolve assets, bundle the documents and record every public resource with its policy. */
 async function buildDistribution() {
   const data = await resolveAssets()
@@ -182,42 +191,32 @@ async function buildDistribution() {
     selfContained: true,
     invoke: 'startCallback',
   })
-  for (const item of callback.output) {
-    if (item.type !== 'chunk' || !item.isEntry) throw new Error('Callback must be self-contained')
-    if (item.imports.length || item.dynamicImports.length)
-      throw new Error('Callback must have no external dependencies')
-    const code = inlineScript(item.code)
-    tree.put(
-      CALLBACK_PATH,
-      page(
-        messages.brand,
-        `${shell(messages.proofPreparation)}<script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script>`,
-        callbackStyles,
-      ),
-      responseHeaders('callback', { ...options, inline: [code] }),
-    )
-  }
+  const callbackCode = inlineScript(singleEntry(callback.output, 'Callback'))
+  tree.put(
+    CALLBACK_PATH,
+    page(
+      messages.brand,
+      `${shell(messages.proofPreparation)}<script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${callbackCode}</script>`,
+      callbackStyles,
+    ),
+    responseHeaders('callback', { ...options, inline: [callbackCode] }),
+  )
   // Hash the final, self-contained bytes before building the Prefetch that pins them.
   const worker = await bundle('src/assets/worker.entry.ts', data, {
     selfContained: true,
     manifest,
   })
-  if (worker.output.length !== 1 || worker.output[0].type !== 'chunk' || !worker.output[0].isEntry)
-    throw new Error('The root worker must be one script')
-  const code = worker.output[0].code
+  const code = singleEntry(worker.output, 'The root worker')
   const rootWorkerUrl = `/ccdp/worker.${hash(code)}.js`
   tree.put(rootWorkerUrl, code, 'worker')
   const prefetch = await bundle('src/ccdp/documents/prefetch.ts', data, {
+    selfContained: true,
     invoke: 'startPrefetch',
     fragment: true,
-    manifest,
+    manifest: { supportedProfiles: Object.keys(manifest.requestsByProfile) },
     rootWorkerUrl,
   })
-  for (const item of prefetch.output) {
-    if (item.type === 'chunk' && item.isEntry)
-      tree.document(route('prefetch'), item.code, 'prefetch')
-    else tree.put(`/${item.fileName}`, body(item), 'asset')
-  }
+  tree.document(route('prefetch'), singleEntry(prefetch.output, 'Prefetch'), 'prefetch')
   // The page every 404 serves; requested directly it declares the same error policy.
   tree.put(
     '/404.html',
