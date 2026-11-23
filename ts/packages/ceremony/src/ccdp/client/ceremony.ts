@@ -80,12 +80,6 @@ class CeremonyChannel {
 
   private constructor(private readonly connection: PopupConnection<Message>) {}
 
-  /** Whether a run is attached to `connection`. */
-  static active(connection: PopupConnection<Message>): boolean {
-    const channel = CeremonyChannel.#channels.get(connection)
-    return channel !== undefined && channel.#run !== null
-  }
-
   /** The connection's channel; a registration failure leaves no handler and no channel. */
   static of(connection: PopupConnection<Message>): CeremonyChannel {
     const existing = CeremonyChannel.#channels.get(connection)
@@ -339,8 +333,6 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   }
 
   proveUserIdentity(): Promise<IdentityResult<P>> {
-    if (this.state === 'new' && CeremonyChannel.active(this.connection))
-      this.fail(new CeremonyError('prefetch-dispatch', 'Connection already has an active ceremony'))
     if (this.startFailure) {
       const failure = this.startFailure
       this.startFailure = undefined
