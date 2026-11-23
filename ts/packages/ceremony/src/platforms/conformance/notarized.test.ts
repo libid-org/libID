@@ -97,7 +97,7 @@ const proofLifetime = { x: PROOF_LIFETIME_SECONDS_X, github: PROOF_LIFETIME_SECO
 describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
   const fixture = fixtures[platformId]
   const { requests, config, evidence, identity, longest, rejectedIdentity } = fixture
-  const tags = `${proverKinds['notarized'].tags} ${fixture.specTests.prover}`
+  const tags = `${proverKinds.notarized.tags} ${fixture.specTests.prover}`
 
   it.each([
     ['a space', 'a+b'],
