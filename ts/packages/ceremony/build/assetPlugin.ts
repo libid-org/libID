@@ -12,15 +12,10 @@ export type AssetManifest = {
   allowedRequests: AssetRequest[]
 }
 
-/** Supported profile keys alone, for documents that validate a profile without embedding requests. */
-export type ProfileManifest = {
-  supportedProfiles: readonly string[]
-}
-
 /** Without `manifest`, a bundle importing it fails to build instead of reading an empty one. */
 export function assetPlugin(
   data?: Pick<ResolvedAssets, 'urls' | 'moduleUrls'>,
-  manifest?: AssetManifest | ProfileManifest,
+  manifest?: AssetManifest,
 ): Plugin {
   return {
     name: 'ceremony-assets',

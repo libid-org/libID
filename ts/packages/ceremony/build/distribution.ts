@@ -225,7 +225,6 @@ async function buildDistribution() {
     selfContained: true,
     invoke: 'startPrefetch',
     fragment: true,
-    manifest: { supportedProfiles: Object.keys(manifest.requestsByProfile) },
     rootWorkerUrl,
   })
   tree.document(route('prefetch'), singleEntry(prefetch.output, 'Prefetch'), 'prefetch')

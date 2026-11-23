@@ -1,7 +1,6 @@
 import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CEREMONY_ID, type FakeDocumentUi, fakeDocumentUi } from '../../testing/index.js'
-import { messages } from '../uiMessages.js'
 import { startPrefetch } from './prefetch.js'
 
 vi.hoisted(() => vi.stubGlobal('document', {}))
@@ -11,7 +10,6 @@ const { registerRootWorker, dispatchPrefetch, drainJournal } = vi.hoisted(() => 
   dispatchPrefetch: vi.fn(),
   drainJournal: vi.fn(),
 }))
-vi.mock('virtual:ceremony-assets', () => ({ supportedProfiles: ['google/1'] }))
 vi.mock('@libid/popup', async (original) => ({
   ...(await original<typeof import('@libid/popup')>()),
   PopupConnection: { accept: () => connection },
@@ -98,15 +96,15 @@ it('a failed mandatory readiness send reports failure instead of silently contin
     { type: 'ceremony-failed', event: 'prefetch-dispatch', message: 'send failed' },
   ])
 })
-it('tells the Application a profile without bundled requests is unsupported, starting no worker', async () => {
+it('tells the Application when the Worker serves no requests for the profile', async () => {
   const stop = vi.spyOn(ui, 'stop')
+  dispatchPrefetch.mockRejectedValue(new Error('Asset profile not served'))
   await startPrefetch(fragment('x'))
-  expect(registerRootWorker).not.toHaveBeenCalled()
   expect(connection.sent).toEqual([
-    { type: 'ceremony-failed', event: 'prefetch-dispatch', message: messages.unsupportedProfile },
+    { type: 'ceremony-failed', event: 'prefetch-dispatch', message: 'Asset profile not served' },
   ])
   expect(ui.events).toContainEqual(
-    expect.objectContaining({ status: 'failed', message: messages.unsupportedProfile }),
+    expect.objectContaining({ status: 'failed', message: 'Asset profile not served' }),
   )
   expect(stop).toHaveBeenCalledOnce()
 })

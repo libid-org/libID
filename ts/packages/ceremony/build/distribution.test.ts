@@ -39,8 +39,6 @@ test('Prefetch is self-contained, pins the exact immutable Worker body, and omit
   assert.deepEqual(externalScripts, [])
   assert.doesNotMatch(prefetch, /\bimport\s*[\s({'"]*["']\/ccdp\/assets\//)
   assert.ok(prefetch.includes(workerPath))
-  for (const profile of Object.keys(metadata.requestsByProfile))
-    assert.ok(prefetch.includes(profile), profile)
   for (const asset of ['barretenberg-threads.wasm', 'oidc_google.json', 'bearer_link.json'])
     assert.ok(!prefetch.includes(asset), asset)
   assert.equal(Object.hasOwn(metadata.files, '/ccdp/v1/worker.js'), false)
