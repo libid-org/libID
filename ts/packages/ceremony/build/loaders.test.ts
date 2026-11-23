@@ -98,10 +98,11 @@ test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASS
       String(Barretenberg.prototype.initSRSChonk).replace(/\s+/g, ' '),
       /const crs = await Crs\.new\(srsSize, this\.options\.crsPath, this\.options\.logger\);.*await this\.srsInitSrs\(\{ pointsBuf: crs\.getG1Data\(\), numPoints: crs\.numPoints, g2Point: crs\.getG2Data\(\), \}\); if \(response\.pointsBuf\.length > 0\) \{ await crs\.cacheUncompressed\(response\.pointsBuf\); \}/,
     )
+    const [, lastByte] = select('g1_compressed.dat').range!.split('-')
     for (const fallback of [false, true]) {
       failPrimary = fallback
       const start = observations.length
-      await new NetCrs(2 ** 18).init()
+      await new NetCrs((Number(lastByte) + 1) / 32).init()
       const actual = observations.slice(start)
       for (const spec of external) {
         assert.ok(actual.some((r) => r.url === spec.url && r.range === spec.range))

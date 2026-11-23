@@ -11,7 +11,7 @@ vi.mock('./barretenberg.assets.js', () => ({
   abi: { path: 'noir/abi.wasm' },
   acvm: { path: 'noir/acvm.wasm' },
   bbWasmPath: () => 'https://ccdp.test/assets/bb/barretenberg.wasm',
-  crs: [{ path: 'crs/g1.dat' }],
+  srs: () => [{ path: 'crs/g1.dat' }],
 }))
 
 let workers: FakeWorker[]
@@ -30,6 +30,7 @@ afterEach(() => {
 const options = {
   circuitUrl: 'https://ccdp.test/circuit',
   verificationKeyUrl: 'https://ccdp.test/vk',
+  srsPoints: 2 ** 17,
 }
 
 /** An engine whose worker has booted and received its preload. */
@@ -59,6 +60,7 @@ it('posts one preload after boot with resolved resource URLs and the requested t
     acvmUrl: 'https://ccdp.test/assets/noir/acvm.wasm',
     abiUrl: 'https://ccdp.test/assets/noir/abi.wasm',
     wasmPath: 'https://ccdp.test/assets/bb/barretenberg.wasm',
+    srsPoints: 2 ** 17,
     // The CRS base is the declared CRS directory.
     crsPath: 'https://ccdp.test/assets/crs/',
   })

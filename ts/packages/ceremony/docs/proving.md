@@ -79,7 +79,8 @@ when bb.js changes it.
 
 Exact URL/range/fallback declarations live beside the dependency pin, the one
 request table. [parameters.ts](../src/barretenberg/parameters.ts)
-owns the shared proving settings, `SRS_POINTS` and browser-loader dimensions.
+owns the shared proving settings and browser-loader dimensions; each circuit's
+`parameters.ts` declares the `SRS_POINTS` its profiles fetch and prove under.
 [Capacity checks](../build/circuits.ts) inspect the released circuits without
 downloading CRS; negative real-proof capacity qualification remains a separate gate.
 

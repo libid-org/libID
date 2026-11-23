@@ -1,7 +1,7 @@
 import { assetUrl } from '../assets/index.js'
 import { toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, safeEmit } from '../events.js'
-import { abi, acvm, bbWasmPath, crs } from './barretenberg.assets.js'
+import { abi, acvm, bbWasmPath, srs } from './barretenberg.assets.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
 export type { RawProof } from './protocol.js'
@@ -10,6 +10,8 @@ export interface ProofEngineOptions {
   /** Compiled Noir circuit and matching released verification key, resolved by the asset graph. */
   circuitUrl: string
   verificationKeyUrl: string
+  /** The BN254 points the circuit proves with, as its profile fetches them. */
+  srsPoints: number
   emit?: (event: OperationEvent) => void
   /** Requested proof threads; the proof worker caps them. */
   threads?: number
@@ -34,7 +36,7 @@ export class ProofEngine {
   /** Rejects with the engine's failure as soon as it happens, so callers can retire sibling work. */
   readonly outcome: Promise<void> = this.#result.promise.then(() => {})
 
-  constructor({ circuitUrl, verificationKeyUrl, emit, threads }: ProofEngineOptions) {
+  constructor({ circuitUrl, verificationKeyUrl, srsPoints, emit, threads }: ProofEngineOptions) {
     const [url, keyUrl] = [circuitUrl, verificationKeyUrl].map((value) => {
       const url = new URL(value, location.href)
       if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.hash)
@@ -56,9 +58,10 @@ export class ProofEngine {
         acvmUrl: assetUrl(acvm),
         abiUrl: assetUrl(abi),
         wasmPath: bbWasmPath(),
+        srsPoints,
         // Pinned bb.js ignores this until its pending CRS-base patch lands upstream;
         // build/loaders.test.ts fails once the loaders honor a base.
-        crsPath: new URL('.', assetUrl(crs[0])).href,
+        crsPath: new URL('.', assetUrl(srs(srsPoints)[0])).href,
       }
       this.#worker = this.#spawn()
     } catch (error) {

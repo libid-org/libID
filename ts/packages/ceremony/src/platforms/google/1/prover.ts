@@ -3,6 +3,7 @@ import {
   circuit,
   verificationKey,
 } from '../../../barretenberg/circuits/oidc_google/oidc_google.assets.js'
+import { SRS_POINTS } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import { ProofEngine } from '../../../barretenberg/engine.js'
 import { operation } from '../../../events.js'
 import type { ProverContext } from '../../context.js'
@@ -16,6 +17,7 @@ export async function prove(context: ProverContext<'google'>) {
   const engine = new ProofEngine({
     circuitUrl: assetUrl(circuit),
     verificationKeyUrl: assetUrl(verificationKey),
+    srsPoints: SRS_POINTS,
     emit,
   })
   try {

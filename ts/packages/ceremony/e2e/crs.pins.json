@@ -1,4 +1,5 @@
 {
+  "https://crs.aztec-cdn.foundation/g1_compressed.dat bytes=0-4194303": "fad8203ae1fd103658d4bb33b2b4cf126a28352b5de4684737cff23cc15fb94b",
   "https://crs.aztec-cdn.foundation/g1_compressed.dat bytes=0-8388607": "5107a7926d504236331b4872b7218a1ca18921b5358d894822576e1aeb684934",
   "https://crs.aztec-cdn.foundation/g2.dat": "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f"
 }
