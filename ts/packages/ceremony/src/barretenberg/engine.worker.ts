@@ -1,4 +1,4 @@
-import { BackendType, Barretenberg } from '@aztec-foundation/bb.js'
+import { BackendType, Barretenberg, Crs } from '@aztec-foundation/bb.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import initACVM from '@noir-lang/acvm_js'
 import { Noir } from '@noir-lang/noir_js'
@@ -23,6 +23,34 @@ const send = (message: FromWorker): void => self.postMessage(message)
 const emit = (event: OperationEvent) => send({ type: 'event', event })
 
 const span = <T>(event: string, work: () => Promise<T>) => operation(emit, event, work)
+
+/**
+ * A backend holding only the BN254 SRS. bb.js's own setup also fetches 4 MiB of Grumpkin points,
+ * which ZK-Honk/Keccak proofs never read; this mirrors the rest of that setup, including keeping
+ * the decompressed points in bb.js's cache. A failed setup releases the backend.
+ */
+async function bn254Backend(threads: number, wasmPath: string, crsPath: string): Promise<Api> {
+  const api = await Barretenberg.new({
+    backend: BackendType.Wasm,
+    threads,
+    wasmPath,
+    crsPath,
+    skipSrsInit: true,
+  })
+  try {
+    const crs = await Crs.new(SRS_POINTS, crsPath)
+    const { pointsBuf } = await api.srsInitSrs({
+      pointsBuf: crs.getG1Data(),
+      numPoints: crs.numPoints,
+      g2Point: crs.getG2Data(),
+    })
+    if (pointsBuf.length > 0) await crs.cacheUncompressed(pointsBuf)
+    return api
+  } catch (error) {
+    await api.destroy().catch(() => {})
+    throw error
+  }
+}
 
 async function inflate(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   const stream = new Response(Uint8Array.from(bytes)).body!.pipeThrough(
@@ -71,13 +99,7 @@ class EngineWorker {
     if (!Number.isInteger(threads) || threads < MIN_PROOF_THREADS)
       throw new Error('Multithreaded backend unavailable')
     const backend = span('proof-backend-initialization', () =>
-      Barretenberg.new({
-        backend: BackendType.Wasm,
-        threads,
-        srsSize: SRS_POINTS,
-        wasmPath: message.wasmPath,
-        crsPath: message.crsPath,
-      }),
+      bn254Backend(threads, message.wasmPath, message.crsPath),
     )
     this.#backend = backend
     void backend.catch((error) => this.#fail(error))
