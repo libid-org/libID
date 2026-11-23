@@ -7,7 +7,7 @@ const property = '__libidCeremonyFragment'
 
 /** Clear the document URL, refuse any query, other path or oversized fragment, keep the fragment. */
 export const captureFragment = (path: string) =>
-  `(()=>{const query=location.search,fragment=location.hash,path=location.pathname;history.replaceState(null,'',path);if(query||path!==${JSON.stringify(path)}||fragment.length>${MAX_NAVIGATION_FRAGMENT_CHARS}){document.getElementById('libid-root').textContent=${JSON.stringify(messages.returnToApplication(messages.unableToContinue))};return}Object.defineProperty(window,'${property}',{value:fragment,configurable:true})})()`
+  `(()=>{const query=location.search,fragment=location.hash,path=location.pathname;history.replaceState(null,'',path);if(query||path!==${JSON.stringify(path)}||fragment.length>${MAX_NAVIGATION_FRAGMENT_CHARS}){const root=document.getElementById('libid-root');if(root){(root.querySelector?.('p')??root).textContent=${JSON.stringify(messages.returnToApplication(messages.unableToContinue))};root.querySelector?.('progress')?.remove()}return}Object.defineProperty(window,'${property}',{value:fragment,configurable:true})})()`
 
 /** Pass the captured fragment to `invoke` once; a Worker realm has no window and no fragment. */
 export const consumeFragment = (invoke: string) =>

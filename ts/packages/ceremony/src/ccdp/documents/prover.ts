@@ -130,7 +130,7 @@ class ProverDocument extends CeremonyDocument {
   private async observeDownloads(profile: string): Promise<void> {
     const started = performance.now()
     try {
-      const { pending, missing } = await remainingDownloads(profile)
+      const { pending, missing } = await remainingDownloads(profile, this.controller.signal)
       const remaining = pending ? performance.now() - started : 0
       this.emit({
         event: 'asset-download',

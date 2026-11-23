@@ -339,6 +339,7 @@ it('names each load source and settles only network retrievals still running [LI
   vi.stubGlobal('caches', {
     open: async () => ({
       match: async (k: string) => stored.get(k)?.clone(),
+      keys: async () => [...stored.keys()].map((k) => new Request(k)),
       // Persistence outlives delivery, keeping a settled load pending.
       put: async (k: string, r: Response) => {
         await persisting.promise
@@ -535,4 +536,68 @@ it('joins single-flight fetches between prefetch and load and cleans up failed p
   await failed.complete
   await expect(cache.load(other).response).rejects.toThrow('Invalid asset response')
   expect(failing).toHaveBeenCalledTimes(2)
+})
+
+it('awaits in-flight cache lookups before classifying remaining loads and checks idle specs via keys [LIBID-BROWSER-029]', async () => {
+  const origin = 'https://ccdp.example'
+  const cachedSpec = { url: 'https://assets.example/cached', bytes: 1 }
+  const missedSpec = { url: 'https://assets.example/missed', bytes: 1 }
+  const idleStored = { url: 'https://assets.example/idle-stored', bytes: 1 }
+  const idleMissing = { url: 'https://assets.example/idle-missing', bytes: 1 }
+  const stored = new Map<string, Response>()
+  const lookupGate = Promise.withResolvers<void>()
+  let gateActive = false
+  const match = vi.fn(async (k: string) => {
+    if (gateActive) await lookupGate.promise
+    return stored.get(k)?.clone()
+  })
+  const keys = vi.fn(async () => [...stored.keys()].map((k) => new Request(k)))
+  vi.stubGlobal('caches', {
+    open: async () => ({
+      match,
+      keys,
+      put: async (k: string, r: Response) => {
+        stored.set(k, r)
+      },
+    }),
+  })
+  const network = Promise.withResolvers<Response>()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(new Uint8Array([1]))),
+  )
+  const cache = new AssetCache(origin)
+  await cache.load(cachedSpec).complete
+  await cache.load(idleStored).complete
+  match.mockClear()
+  keys.mockClear()
+
+  // Hold cache lookups open so both loads are in the 'lookup' stage when remaining() starts.
+  gateActive = true
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => network.promise),
+  )
+  const hitLoad = cache.load(cachedSpec)
+  const missLoad = cache.load(missedSpec)
+  const settled = vi.fn()
+  const report = cache.remaining([cachedSpec, missedSpec, idleStored, idleMissing]).then((r) => {
+    settled(r)
+    return r
+  })
+  await vi.waitFor(() => expect(keys).toHaveBeenCalledOnce())
+  // Idle specs were checked through a single keys() call, never cache.match().
+  expect(match).toHaveBeenCalledTimes(2)
+  expect(settled).not.toHaveBeenCalled()
+
+  lookupGate.resolve()
+  expect(await hitLoad.dispatched).toBe('cache')
+  expect(await missLoad.dispatched).toBe('network')
+  await new Promise((resolve) => setTimeout(resolve))
+  // The missed lookup became a running retrieval, so remaining() still waits for it.
+  expect(settled).not.toHaveBeenCalled()
+
+  network.resolve(new Response(new Uint8Array([2])))
+  expect(await report).toEqual({ pending: 1, missing: 1 })
+  await Promise.all([hitLoad.complete, missLoad.complete])
 })

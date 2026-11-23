@@ -71,12 +71,24 @@ function install(
 }
 
 it.each(['activating', 'activated'] as const)(
-  'reuses a matching %s worker without an update check [TEST-DIST-08]',
+  'reuses a matching %s worker without an update check or wait timers [TEST-DIST-08]',
   async (state) => {
     const active = serviceWorker(state, { dispatched: true })
     const root = registration(`${ORIGIN}/`, { active })
     const container = install(root)
-    await dispatchPrefetch(await registerRootWorker(SCRIPT), 'google/1')
+    const rootListen = vi.spyOn(root, 'addEventListener')
+    const workerListen = vi.spyOn(active, 'addEventListener')
+    const setTimer = vi.spyOn(globalThis, 'setTimeout')
+    const setPoll = vi.spyOn(globalThis, 'setInterval')
+    const selected = await registerRootWorker(SCRIPT)
+    expect(selected).toBe(active)
+    expect(rootListen).not.toHaveBeenCalled()
+    expect(workerListen).not.toHaveBeenCalled()
+    expect(setTimer).not.toHaveBeenCalled()
+    expect(setPoll).not.toHaveBeenCalled()
+    setTimer.mockRestore()
+    setPoll.mockRestore()
+    await dispatchPrefetch(selected, 'google/1')
     expect(active.postMessage).toHaveBeenCalledExactlyOnceWith(
       { type: 'ceremony-prefetch', profile: 'google/1' },
       expect.any(Array),
@@ -350,4 +362,40 @@ it.each([
   await vi.advanceTimersByTimeAsync(1000)
   await expect(drained).resolves.toEqual([])
   expect(vi.getTimerCount()).toBe(0)
+})
+
+it('closes the reply port and rejects when remainingDownloads aborts', async () => {
+  const container = install(undefined)
+  const worker = serviceWorker('activated')
+  container.controller = worker
+
+  // Already aborted: rejects without posting to the worker.
+  const preAborted = new AbortController()
+  const preReason = new DOMException('Already aborted', 'AbortError')
+  preAborted.abort(preReason)
+  await expect(remainingDownloads('google/1', preAborted.signal)).rejects.toBe(preReason)
+  expect(worker.postMessage).not.toHaveBeenCalled()
+
+  // Aborted while pending: closes port1, detaches onmessage, and rejects with the abort reason.
+  let port1Close!: ReturnType<typeof vi.spyOn>
+  const OriginalChannel = globalThis.MessageChannel
+  let createdPort1!: MessagePort
+  vi.stubGlobal(
+    'MessageChannel',
+    class extends OriginalChannel {
+      constructor() {
+        super()
+        createdPort1 = this.port1
+        port1Close = vi.spyOn(this.port1, 'close')
+      }
+    },
+  )
+  const controller = new AbortController()
+  const pending = remainingDownloads('google/1', controller.signal)
+  expect(worker.postMessage).toHaveBeenCalledOnce()
+  const reason = new DOMException('Cancelled', 'AbortError')
+  controller.abort(reason)
+  await expect(pending).rejects.toBe(reason)
+  expect(port1Close).toHaveBeenCalledOnce()
+  expect(createdPort1.onmessage).toBeNull()
 })
