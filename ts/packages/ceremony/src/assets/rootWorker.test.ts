@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const { load, reconcile, remaining, record, drain } = vi.hoisted(() => ({
+const { load, prefetch, reconcile, remaining, record, drain } = vi.hoisted(() => ({
   load: vi.fn(),
+  prefetch: vi.fn(),
   reconcile: vi.fn(),
   remaining: vi.fn(),
   record: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('./cache.js', async (original) => ({
   ...(await original<typeof import('./cache.js')>()),
   AssetCache: class {
     load = load
+    prefetch = prefetch
     reconcile = reconcile
     remaining = remaining
   },
@@ -30,6 +32,7 @@ vi.mock('virtual:ceremony-assets', () => ({
   requestsByProfile: {
     'google/1': [{ url: '/asset' }],
     'github/1': [{ url: '/a' }, { url: '/b' }],
+    'x/1': [{ url: '/g1.dat', range: 'bytes=0-1', bytes: 2 }],
   },
   allowedRequests: [{ url: '/asset' }, { url: '/g1.dat', range: 'bytes=0-1' }],
 }))
@@ -38,6 +41,7 @@ import { startRootWorker } from './rootWorker.js'
 
 beforeEach(() => {
   load.mockReset()
+  prefetch.mockReset()
   reconcile.mockReset()
   remaining.mockReset()
   record.mockReset()
@@ -64,15 +68,17 @@ function start(scope: Record<string, unknown> = {}) {
 
 const port = () => ({ postMessage: vi.fn(), close: vi.fn() })
 
-it.each(['fetch', 'message', 'failed-prefetch'])(
+it.each(['fetch', 'message'])(
   'keeps %s lifetime tied to persistence after response delivery [CSP-017]',
   async (type) => {
     const complete = Promise.withResolvers<void>()
-    const response =
-      type === 'failed-prefetch'
-        ? Promise.reject(new Error('asset unavailable'))
-        : Promise.resolve(new Response(new Uint8Array([1])))
-    load.mockReturnValue({ dispatched: Promise.resolve(), response, complete: complete.promise })
+    const response = Promise.resolve(new Response(new Uint8Array([1])))
+    load.mockReturnValue({
+      dispatched: Promise.resolve('network'),
+      response,
+      complete: complete.promise,
+    })
+    prefetch.mockReturnValue({ dispatched: Promise.resolve('network'), complete: complete.promise })
     const dispatch = start()
     const waits: Promise<unknown>[] = []
     const respondWith = vi.fn()
@@ -92,7 +98,12 @@ it.each(['fetch', 'message', 'failed-prefetch'])(
     await Promise.resolve()
     await Promise.resolve()
     expect(settled).toBe(false)
-    if (type === 'fetch') expect(respondWith).toHaveBeenCalledWith(response)
+    if (type === 'fetch') {
+      expect(respondWith).toHaveBeenCalledWith(response)
+      expect(prefetch).not.toHaveBeenCalled()
+    } else {
+      expect(load).not.toHaveBeenCalled()
+    }
     complete.resolve()
     await waits[0]
     expect(settled).toBe(true)
@@ -101,9 +112,8 @@ it.each(['fetch', 'message', 'failed-prefetch'])(
 
 it('acknowledges prefetch dispatch on its port once every profile request is dispatched [LIBID-BROWSER-029]', async () => {
   const dispatched = Promise.withResolvers<string>()
-  load.mockReturnValue({
+  prefetch.mockReturnValue({
     dispatched: dispatched.promise,
-    response: Promise.resolve(new Response()),
     complete: Promise.resolve(),
   })
   const reply = port()
@@ -114,8 +124,9 @@ it('acknowledges prefetch dispatch on its port once every profile request is dis
     source: { url: PREFETCH },
     waitUntil: (p: Promise<unknown>) => waits.push(p),
   })
-  // Profile paths are fetched at the worker's origin.
-  expect(load).toHaveBeenCalledExactlyOnceWith({ url: 'https://ccdp.example/asset' })
+  // Profile paths are prefetched at the worker's origin without reading cached bodies.
+  expect(prefetch).toHaveBeenCalledExactlyOnceWith({ url: 'https://ccdp.example/asset' })
+  expect(load).not.toHaveBeenCalled()
   await Promise.resolve()
   expect(reply.postMessage).not.toHaveBeenCalled()
   dispatched.resolve('network')
@@ -130,9 +141,8 @@ it('acknowledges prefetch dispatch on its port once every profile request is dis
 
 it('counts stored and fetched profile requests in the acknowledgement [LIBID-BROWSER-029]', async () => {
   for (const source of ['cache', 'network'])
-    load.mockReturnValueOnce({
+    prefetch.mockReturnValueOnce({
       dispatched: Promise.resolve(source),
-      response: Promise.resolve(new Response()),
       complete: Promise.resolve(),
     })
   const reply = port()
@@ -148,6 +158,34 @@ it('counts stored and fetched profile requests in the acknowledgement [LIBID-BRO
     dispatched: true,
     cached: 1,
     fetched: 1,
+  })
+  expect(load).not.toHaveBeenCalled()
+})
+
+it('dispatches ranged CRS prefetch through cache.prefetch without calling load', async () => {
+  prefetch.mockReturnValueOnce({
+    dispatched: Promise.resolve('cache'),
+    complete: Promise.resolve(),
+  })
+  const reply = port()
+  const waits: Promise<unknown>[] = []
+  start()('message', {
+    data: { type: 'ceremony-prefetch', profile: 'x/1' },
+    ports: [reply],
+    source: { url: PREFETCH },
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+  })
+  await waits[0]
+  expect(prefetch).toHaveBeenCalledExactlyOnceWith({
+    url: 'https://ccdp.example/g1.dat',
+    range: 'bytes=0-1',
+    bytes: 2,
+  })
+  expect(load).not.toHaveBeenCalled()
+  expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({
+    dispatched: true,
+    cached: 1,
+    fetched: 0,
   })
 })
 
@@ -263,6 +301,7 @@ it.each([
   expect(waitUntil).not.toHaveBeenCalled()
   expect(claim).not.toHaveBeenCalled()
   expect(load).not.toHaveBeenCalled()
+  expect(prefetch).not.toHaveBeenCalled()
   expect(remaining).not.toHaveBeenCalled()
 })
 
@@ -294,6 +333,7 @@ it.each([
   expect(waitUntil).not.toHaveBeenCalled()
   expect(claim).not.toHaveBeenCalled()
   expect(load).not.toHaveBeenCalled()
+  expect(prefetch).not.toHaveBeenCalled()
 })
 
 it.each(['other/1', 'toString'])(
@@ -311,6 +351,7 @@ it.each(['other/1', 'toString'])(
     expect(reply.close).toHaveBeenCalledOnce()
     expect(waitUntil).not.toHaveBeenCalled()
     expect(load).not.toHaveBeenCalled()
+    expect(prefetch).not.toHaveBeenCalled()
   },
 )
 

@@ -511,3 +511,45 @@ it.each([
     )
   },
 )
+
+it('claims the root worker concurrently with readiness when isolated and reports early claim failure once connected', async () => {
+  connection = spiedConnection('pending')
+  const claim = Promise.withResolvers<void>()
+  claimRootWorker.mockReturnValueOnce(claim.promise)
+  const run = startProver(proverInput())
+  expect(claimRootWorker).toHaveBeenCalledOnce()
+  claim.reject(new Error('Missing controlling Service Worker'))
+  await Promise.resolve()
+  await Promise.resolve()
+  expect(connection.sent).toEqual([])
+  expect(ui.stop).not.toHaveBeenCalled()
+  connection.settle()
+  await run
+  expect(connection.sent).toEqual([
+    {
+      type: 'ceremony-failed',
+      event: 'prover',
+      message: 'Missing controlling Service Worker',
+    },
+  ])
+  expect(ui.stop).toHaveBeenCalledOnce()
+})
+
+it('does not claim the root worker before readiness when not isolated', async () => {
+  vi.stubGlobal('crossOriginIsolated', false)
+  connection = spiedConnection('pending')
+  const run = startProver(proverInput())
+  await Promise.resolve()
+  expect(claimRootWorker).not.toHaveBeenCalled()
+  connection.settle()
+  await run
+  expect(claimRootWorker).not.toHaveBeenCalled()
+  expect(connection.sent).toEqual([
+    {
+      type: 'ceremony-failed',
+      event: 'prover',
+      message: popupErrorMessages['isolation-unavailable'],
+    },
+  ])
+  expect(ui.stop).toHaveBeenCalledOnce()
+})

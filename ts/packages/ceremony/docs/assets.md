@@ -38,17 +38,21 @@ that acknowledgement and popup authentication may Prefetch emit
 
 ## Delivery and lifetime
 
-[AssetCache.load](../src/assets/cache.ts) keeps one pending fetch per exact URL
-and Range. Each caller gets an independently readable response. Its three promises
-separate dispatch, validated response delivery and best-effort persistence;
-Worker `waitUntil` and the pending entry remain alive through persistence.
-A failed Cache Storage write cannot delay or invalidate a valid response.
+[AssetCache](../src/assets/cache.ts) keeps one pending fetch per exact URL and
+Range. `load` gives each caller an independently readable response, while
+`prefetch` joins or starts the same single-flight entry without cloning or
+reading a cached body. Its promises separate dispatch, validated response
+delivery and best-effort persistence; Worker `waitUntil` and the pending entry
+remain alive through persistence. A failed Cache Storage write cannot delay or
+invalidate a valid response.
 
-Ordinary cache hits validate headers and return the cached Response without
-rereading or copying the body. Bodies were checked before insertion. Ranged CRS
-hits reconstruct a 206 from stored prefix bytes because Cache Storage cannot
-store 206 responses directly. Range and byte-count checks prevent a full-file
-response or another prefix from masquerading as the requested resource.
+Bodies are validated and length-tagged (with `Content-Encoding` stripped) before
+insertion, so both ordinary and ranged CRS cache hits validate stored metadata
+and stream directly without rereading or copying the body. Ranged CRS hits wrap
+the stored body stream as a `206` because Cache Storage cannot store `206`
+responses directly; invalid cached metadata is evicted and refetched. Range and
+byte-count checks prevent a full-file response or another prefix from
+masquerading as the requested resource.
 
 Fetches use `force-cache`, so Cache Storage misses or denial can still reuse the
 browser HTTP cache. The Worker fetches without credentials and only intercepts

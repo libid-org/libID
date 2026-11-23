@@ -39,7 +39,7 @@ function validateContentRange(range: string, spec: AssetRequest): void {
     throw new Error('Invalid asset total')
 }
 
-/** A validated stored copy, or undefined after removing a truncated range. */
+/** A validated stored copy, or undefined after evicting an invalid entry. */
 async function cachedResponse(
   cache: Cache,
   key: string,
@@ -47,19 +47,31 @@ async function cachedResponse(
 ): Promise<Response | undefined> {
   const hit = await cache.match(key)
   if (!hit) return
-  // Complete bodies were checked before cache.put; ordinary hits need no copy.
-  if (!spec.range) {
-    validateResponse(hit, spec)
-    return hit
-  }
-  const bytes = await readBody(hit, spec.bytes ?? Number.MAX_SAFE_INTEGER)
-  if (spec.bytes !== undefined && bytes.length !== spec.bytes) {
-    await cache.delete(key)
+  // Complete bodies were checked and length-tagged before cache.put; both ordinary and ranged
+  // hits stream directly without rereading or copying the body.
+  try {
+    if (
+      hit.redirected ||
+      hit.type === 'opaque' ||
+      hit.type === 'opaqueredirect' ||
+      hit.status !== 200 ||
+      hit.headers.has('content-encoding') ||
+      (spec.bytes !== undefined && hit.headers.get('content-length') !== String(spec.bytes))
+    )
+      throw new Error('Invalid cached asset')
+    const response = spec.range
+      ? new Response(hit.body, { status: 206, headers: hit.headers })
+      : hit
+    validateResponse(response, spec)
+    return response
+  } catch {
+    try {
+      await cache.delete(key)
+    } catch {
+      /* Deletion failure does not disable fetching. */
+    }
     return
   }
-  const response = new Response(bytes, { status: 206, headers: hit.headers })
-  validateResponse(response, spec)
-  return response
 }
 
 /** Validate and bound a fetched body; stored headers describe the decoded bytes. */
@@ -141,6 +153,20 @@ export class AssetCache {
   }
 
   /**
+   * Ensure one URL/range entry is stored or fetching, without cloning or reading a cached body.
+   * Joins any running flight for the same URL/range; a miss starts the same single-flight fetch
+   * that `load` can join.
+   */
+  prefetch(spec: AssetRequest): { dispatched: Promise<AssetSource>; complete: Promise<void> } {
+    const load = this.flight(spec)
+    return {
+      dispatched:
+        load.stage() === 'settled' ? Promise.resolve<AssetSource>('cache') : load.dispatched,
+      complete: load.complete,
+    }
+  }
+
+  /**
    * Join one URL/range fetch, with an independently consumable response for each caller.
    * `dispatched` acknowledges a cache hit or fetch invocation, allowing OAuth navigation, and
    * names the source; a joiner shares the first caller's, or `cache` once its bytes arrived.
@@ -148,9 +174,14 @@ export class AssetCache {
    * entry alive through best-effort cache persistence, without delaying delivery.
    */
   load(spec: AssetRequest) {
+    return this.share(this.flight(spec))
+  }
+
+  /** Return the existing flight for `spec` or start one backed by Cache Storage then `fetch`. */
+  private flight(spec: AssetRequest): PendingLoad {
     const key = requestKey(spec)
     const existing = this.pending.get(key)
-    if (existing) return this.share(existing)
+    if (existing) return existing
     const dispatched = Promise.withResolvers<AssetSource>()
     let stage: ReturnType<PendingLoad['stage']> = 'lookup'
     let writing = Promise.resolve()
@@ -198,7 +229,7 @@ export class AssetCache {
       stage: () => stage,
     }
     this.pending.set(key, load)
-    return this.share(load)
+    return load
   }
 
   private share({ dispatched, response, complete, stage }: PendingLoad) {

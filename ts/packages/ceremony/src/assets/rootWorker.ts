@@ -80,8 +80,7 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
       reply.close()
       return true
     }
-    const jobs = requestsByProfile[profile].map((r) => cache.load(absolute(r)))
-    for (const job of jobs) void job.response.catch(() => {})
+    const jobs = requestsByProfile[profile].map((r) => cache.prefetch(absolute(r)))
     const dispatch = Promise.all(jobs.map((j) => j.dispatched)).then((sources) => {
       const cached = sources.filter((source) => source === 'cache').length
       reply.postMessage({ dispatched: true, cached, fetched: sources.length - cached })
