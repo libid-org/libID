@@ -26,9 +26,13 @@ export const callbackStyles = `${theme}
 export const documentFontBytes = read(`${brand}libron/Libron-Regular.woff2`)
 export const documentFontPath = `${ASSETS_PREFIX}fonts/libron-${hash(documentFontBytes)}.woff2`
 
-// Documents CCDP serves reference the immutable same-origin font and keep its license inline.
+/** The font's license, published once beside it instead of inside every document. */
+export const documentFontLicense = read(`${brand}libron/LICENSE`)
+export const documentFontLicensePath = `${ASSETS_PREFIX}fonts/libron-LICENSE-${hash(documentFontLicense)}.txt`
+
+// Documents CCDP serves reference the immutable same-origin font and name its license file.
 export const documentStyles = `
-/* ${read(`${brand}libron/LICENSE`)} */
+/* Libron: SIL Open Font License 1.1, ${documentFontLicensePath} */
 @font-face {
   font-family: 'Libron';
   src: url(${documentFontPath}) format('woff2');

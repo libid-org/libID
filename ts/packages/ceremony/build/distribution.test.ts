@@ -7,7 +7,12 @@ import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { cspHash, parseCsp } from './profiles.ts'
 import { hash } from './sources.ts'
-import { documentFontBytes, documentFontPath } from './styles.ts'
+import {
+  documentFontBytes,
+  documentFontLicense,
+  documentFontLicensePath,
+  documentFontPath,
+} from './styles.ts'
 import { errorHeaders } from './sws.ts'
 import { builtArtifacts, nativeSkip } from './testing.ts'
 import { catalogVersions, proverPair, versionPairs } from './versions.ts'
@@ -45,6 +50,12 @@ test('Libron font is emitted as an immutable same-origin asset rather than inlin
   assert.match(documentFontPath, /^\/ccdp\/assets\/fonts\/libron-[a-f0-9]{64}\.woff2$/)
   assert.equal(metadata.files[documentFontPath], documentFontPath)
   assert.deepEqual(readFileSync(join(out, 'public', documentFontPath)), documentFontBytes)
+  // The license travels with the font as one file; documents only name it.
+  assert.deepEqual(readFileSync(join(out, 'public', documentFontLicensePath)), documentFontLicense)
+  assert.equal(
+    metadata.headers[documentFontLicensePath]['content-type'],
+    'text/plain; charset=utf-8',
+  )
   assert.deepEqual(metadata.headers[documentFontPath], {
     'content-type': 'font/woff2',
     'cache-control': 'public, max-age=31536000, immutable',
@@ -60,6 +71,8 @@ test('Libron font is emitted as an immutable same-origin asset rather than inlin
     const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
     assert.ok(html.includes(`url(${documentFontPath}) format('woff2')`), path)
     assert.ok(!html.includes('data:font/woff2;base64,'), path)
+    assert.ok(html.includes(documentFontLicensePath), path)
+    assert.ok(!html.includes('SIL OPEN FONT LICENSE'), path)
     assert.ok(html.includes(`<link rel="preload" href="${documentFontPath}" as="font"`), path)
     assert.deepEqual(
       parseCsp(metadata.headers[path]['content-security-policy']).get('font-src'),

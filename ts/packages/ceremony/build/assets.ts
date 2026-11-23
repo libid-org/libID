@@ -28,6 +28,7 @@ const mediaTypes: Readonly<Record<string, string>> = {
   '.json': headers.json['Content-Type'],
   '.html': headers.documentHeaders['Content-Type'],
   '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
 }
 
 export const mediaType = (path: string): string =>
