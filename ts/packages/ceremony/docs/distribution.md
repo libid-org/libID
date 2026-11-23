@@ -163,7 +163,9 @@ representation metadata and policies weakening required resource headers are
 rejected. A declared CSP value replaces the whole default one.
 
 The build normalizes gzip-packed WASM to decoded `.wasm` bodies. It emits Brotli
-and gzip sidecars only when smaller. SWS uses native precompressed serving;
+and gzip sidecars only when smaller. Brotli runs at maximum quality and a 24-bit
+window, and `.cache/` reuses each sidecar by content hash, so only changed files
+pay that cost again. SWS uses native precompressed serving;
 request-time compression is disabled. Browsers fetch the unencoded resource URL,
 and Cache Storage retains decoded bodies. Gzip also serves browsers that do not
 advertise Brotli, including WebKit on local HTTP.
