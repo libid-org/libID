@@ -69,9 +69,9 @@ test('runtime lowering preserves named/chained calls and external request option
   }
 })
 
-test('profile manifest exposes supportedProfiles without full request lists', async () => {
+test('a bundle built without the manifest cannot import its request lists', async () => {
   const id = join(packageDir, 'src/profile-manifest-fixture.ts')
-  const buildWith = (source: string) =>
+  await assert.rejects(() =>
     build({
       configFile: false,
       logLevel: 'silent',
@@ -79,26 +79,14 @@ test('profile manifest exposes supportedProfiles without full request lists', as
         {
           name: 'profile-fixture',
           resolveId: (file) => (file === id ? id : undefined),
-          load: (file) => (file === id ? source : undefined),
+          load: (file) =>
+            file === id
+              ? `import { requestsByProfile } from 'virtual:ceremony-assets'; export { requestsByProfile }`
+              : undefined,
         },
-        assetPlugin({ urls: {}, moduleUrls: {} }, { supportedProfiles: ['google/1', 'x/1'] }),
+        assetPlugin({ urls: {}, moduleUrls: {} }),
       ],
       build: { write: false, minify: false, lib: { entry: id, formats: ['es'] } },
-    })
-  const result = await buildWith(
-    `import { supportedProfiles } from 'virtual:ceremony-assets'; export { supportedProfiles }`,
-  )
-  const code = ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output.find(
-    (o) => o.type === 'chunk',
-  )!.code
-  const runtime = await import(
-    `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
-  )
-  assert.deepEqual(runtime.supportedProfiles, ['google/1', 'x/1'])
-  assert.doesNotMatch(code, /requestsByProfile|allowedRequests/)
-  await assert.rejects(() =>
-    buildWith(
-      `import { requestsByProfile } from 'virtual:ceremony-assets'; export { requestsByProfile }`,
-    ),
+    }),
   )
 })

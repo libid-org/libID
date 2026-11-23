@@ -3,7 +3,7 @@ import type { NewExpression } from 'estree'
 import type { Plugin, Rollup } from 'vite'
 import { build } from 'vite'
 import { ASSETS_PREFIX } from '../src/assets/keys.ts'
-import { type AssetManifest, assetPlugin, type ProfileManifest } from './assetPlugin.ts'
+import { type AssetManifest, assetPlugin } from './assetPlugin.ts'
 import type { ResolvedAssets } from './assets.ts'
 import { applyEdits, type Edit, parseModule, replacement, walk } from './ast.ts'
 import { consumeFragment } from './fragment.ts'
@@ -159,7 +159,7 @@ export async function bundle(
     invoke?: string
     fragment?: boolean
     groupModules?: boolean
-    manifest?: AssetManifest | ProfileManifest
+    manifest?: AssetManifest
     /** Content-addressed Worker URL, supplied only when bundling Prefetch. */
     rootWorkerUrl?: string
   } = {},
