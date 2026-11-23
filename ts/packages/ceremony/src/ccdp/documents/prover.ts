@@ -41,7 +41,6 @@ export async function startProver(fragment: string): Promise<void> {
 /** Owns readiness, the one-shot OAuth capture and its admission, and proof delivery. */
 class ProverDocument extends CeremonyDocument {
   private state: ProverState
-  private readonly controller = new AbortController()
 
   constructor(
     protected readonly connection: PopupConnection<Message>,
@@ -70,22 +69,13 @@ class ProverDocument extends CeremonyDocument {
         typeof Worker !== 'undefined'
       // When already isolated this document will not hop to fallback; claim root control while
       // connecting, deferring any rejection until the connection is ready to report it.
-      const claiming = isolated
-        ? (async (): Promise<{ error: unknown } | undefined> => {
-            try {
-              await claimRootWorker()
-              return undefined
-            } catch (error) {
-              return { error }
-            }
-          })()
-        : undefined
+      const claiming = isolated ? claimRootWorker() : undefined
+      claiming?.catch(() => {})
       await this.connection.ready
-      if (this.controller.signal.aborted) return
+      if (this.ended) return
       if (!isolated) throw new Error(popupErrorMessages['isolation-unavailable'])
-      const claimed = await claiming
-      if (this.controller.signal.aborted) return
-      if (claimed) throw claimed.error
+      await claiming
+      if (this.ended) return
       if (this.state.phase !== 'connecting') throw new Error(messages.invalidProvingRequest)
       this.state.phase = 'ready'
       if (location.pathname === route('prover/fallback'))
@@ -112,11 +102,11 @@ class ProverDocument extends CeremonyDocument {
       /* Presentation cannot prevent proof execution. */
     }
     const module = await prover.load()
-    this.controller.signal.throwIfAborted()
+    this.signal.throwIfAborted()
     const result = await module.prove({
       request,
       ...accepted,
-      signal: this.controller.signal,
+      signal: this.signal,
       emit: (event) => this.emit(event),
     })
     await this.deliver(result)
@@ -130,7 +120,7 @@ class ProverDocument extends CeremonyDocument {
   private async observeDownloads(profile: string): Promise<void> {
     const started = performance.now()
     try {
-      const { pending, missing } = await remainingDownloads(profile, this.controller.signal)
+      const { pending, missing } = await remainingDownloads(profile, this.signal)
       const remaining = pending ? performance.now() - started : 0
       this.emit({
         event: 'asset-download',
@@ -152,14 +142,14 @@ class ProverDocument extends CeremonyDocument {
   }
 
   private async deliver(result: ProverResult): Promise<void> {
-    if (this.controller.signal.aborted) return
+    if (this.ended) return
     const message = IdentityProof.decode({ type: 'identity-proof', ...result })
     try {
       await this.ui.finishProof()
     } catch {
       /* Presentation cannot prevent proof delivery. */
     }
-    if (this.controller.signal.aborted) return
+    if (this.ended) return
     this.connection.send(message)
     this.cleanup()
     this.ui.delivered()
@@ -185,6 +175,5 @@ class ProverDocument extends CeremonyDocument {
     // Failure or leaving before ProveIdentity must release the OAuth capture just as execution does.
     this.state = { phase: 'ended' }
     super.cleanup()
-    this.controller.abort()
   }
 }
