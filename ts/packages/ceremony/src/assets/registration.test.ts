@@ -354,7 +354,7 @@ it('forwards only well-formed marks from the journal the Worker hands over', asy
 })
 
 it.each([
-  ['an older Worker never answers', undefined],
+  ['the Worker never answers', undefined],
   ['the answer is malformed', { marks: 'none' }],
 ])('yields no marks within a second when %s', async (_, reply) => {
   vi.useFakeTimers()
