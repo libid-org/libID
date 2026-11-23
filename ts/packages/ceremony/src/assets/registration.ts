@@ -6,17 +6,19 @@ const ACTIVATION_POLL_INTERVAL_MS = 50
 const JOURNAL_TIMEOUT_MS = 1000
 
 /**
- * Settle through `done` within `ms` (15 seconds by default). Settling, including a synchronous
- * throw from `start`, clears the timer and aborts `signal`, removing listeners registered with it.
+ * Settle through `done` within `ms` (15 seconds by default), rejecting with `timeout` past it;
+ * a null `timeout` sets no deadline. Aborting `abort` rejects with its reason. Settling, including
+ * a synchronous throw from `start`, clears the timer and aborts `signal`, removing listeners
+ * registered with it.
  */
 function within(
-  timeout: string,
+  timeout: string | null,
   start: (done: (error?: unknown) => void, signal: AbortSignal) => void,
-  ms = SERVICE_WORKER_TIMEOUT_MS,
+  { ms = SERVICE_WORKER_TIMEOUT_MS, abort }: { ms?: number; abort?: AbortSignal } = {},
 ): Promise<void> {
   const { promise, resolve, reject } = Promise.withResolvers<void>()
   const settled = new AbortController()
-  const timer = setTimeout(() => done(new Error(timeout)), ms)
+  const timer = timeout === null ? undefined : setTimeout(() => done(new Error(timeout)), ms)
   const done = (error?: unknown) => {
     clearTimeout(timer)
     settled.abort()
@@ -24,6 +26,8 @@ function within(
     else reject(error)
   }
   try {
+    abort?.throwIfAborted()
+    abort?.addEventListener('abort', () => done(abort.reason), { signal: settled.signal })
     start(done, settled.signal)
   } catch (error) {
     done(error)
@@ -106,7 +110,7 @@ export async function dispatchPrefetch(
 
 /**
  * The Worker's kept lifecycle marks, removed as they are read. None when the Worker does not
- * answer in time, as an older build without a journal does not.
+ * answer within a second, as when its Cache Storage stalls.
  */
 export async function drainJournal(worker: ServiceWorker): Promise<Mark[]> {
   let marks: Mark[] = []
@@ -121,7 +125,7 @@ export async function drainJournal(worker: ServiceWorker): Promise<Mark[]> {
       }
       worker.postMessage({ type: 'ceremony-journal' }, [channel.port2])
     },
-    JOURNAL_TIMEOUT_MS,
+    { ms: JOURNAL_TIMEOUT_MS },
   ).catch(() => {})
   return marks
 }
@@ -131,43 +135,31 @@ export async function drainJournal(worker: ServiceWorker): Promise<Mark[]> {
  * stored. No deadline: downloads take what they take. Aborting `signal` closes the reply port
  * and rejects; without an abort, a Worker that never answers leaves this pending.
  */
-export function remainingDownloads(
+export async function remainingDownloads(
   profile: string,
   signal?: AbortSignal,
 ): Promise<{ pending: number; missing: number }> {
-  if (signal?.aborted)
-    return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
-  const { promise, resolve, reject } = Promise.withResolvers<{ pending: number; missing: number }>()
-  const worker = navigator.serviceWorker.controller
-  if (!worker) {
-    reject(new Error('Missing controlling Service Worker'))
-    return promise
-  }
-  const channel = new MessageChannel()
-  const onAbort = () => {
-    channel.port1.onmessage = null
-    channel.port1.close()
-    reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'))
-  }
-  signal?.addEventListener('abort', onAbort, { once: true })
-  channel.port1.onmessage = ({ data }) => {
-    signal?.removeEventListener('abort', onAbort)
-    channel.port1.onmessage = null
-    channel.port1.close()
-    if (isCount(data?.pending) && isCount(data?.missing))
-      resolve({ pending: data.pending, missing: data.missing })
-    else reject(new Error('Invalid download report'))
-  }
-  try {
-    worker.postMessage({ type: 'ceremony-downloads', profile }, [channel.port2])
-  } catch (error) {
-    signal?.removeEventListener('abort', onAbort)
-    channel.port1.onmessage = null
-    channel.port1.close()
-    channel.port2.close()
-    reject(error)
-  }
-  return promise
+  let report: { pending: number; missing: number } | undefined
+  await within(
+    null,
+    (done, settled) => {
+      const worker = navigator.serviceWorker.controller
+      if (!worker) throw new Error('Missing controlling Service Worker')
+      const { port1, port2 } = new MessageChannel()
+      settled.addEventListener('abort', () => {
+        port1.onmessage = null
+        port1.close()
+      })
+      port1.onmessage = ({ data }) => {
+        if (isCount(data?.pending) && isCount(data?.missing))
+          report = { pending: data.pending, missing: data.missing }
+        done(report ? undefined : new Error('Invalid download report'))
+      }
+      worker.postMessage({ type: 'ceremony-downloads', profile }, [port2])
+    },
+    { abort: signal },
+  )
+  return report!
 }
 
 /** Newly isolated documents can initially be uncontrolled; claim before execution fetches. */
