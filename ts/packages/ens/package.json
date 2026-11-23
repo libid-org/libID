@@ -28,7 +28,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "viem": "^2.48.11",
+    "viem": "^2.57.20",
     "vitest": "catalog:"
   },
   "files": [
