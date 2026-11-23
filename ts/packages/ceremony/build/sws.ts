@@ -1,9 +1,10 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 import { stringify } from 'smol-toml'
 import { safePath } from './archive.ts'
 import { documentStyleSources } from './profiles.ts'
+import { cache, hash } from './sources.ts'
 
 /** One published path: its bytes and the headers SWS serves with them. */
 export type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
@@ -20,15 +21,31 @@ export const errorHeaders = {
   'Content-Security-Policy': `default-src 'none'; frame-ancestors 'none'; ${documentStyleSources}`,
 } as const
 
-const BROTLI_QUALITY = 6
+/** Maximum quality and standard window: the large WASM shrinks 13–23% more than at quality 6. */
+const BROTLI_QUALITY = 11
+const BROTLI_WINDOW_BITS = 24
 const GZIP_LEVEL = 6
 
+/** Brotli takes seconds per multi-MB asset at this quality, so builds reuse it by content hash. */
+function brotli(bytes: Buffer): Buffer {
+  const path = join(cache, `brotli-q${BROTLI_QUALITY}-w${BROTLI_WINDOW_BITS}`, `${hash(bytes)}.br`)
+  if (existsSync(path)) return readFileSync(path)
+  const encoded = brotliCompressSync(bytes, {
+    params: {
+      [constants.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY,
+      [constants.BROTLI_PARAM_LGWIN]: BROTLI_WINDOW_BITS,
+      [constants.BROTLI_PARAM_SIZE_HINT]: bytes.length,
+    },
+  })
+  mkdirSync(dirname(path), { recursive: true })
+  // An interrupted build leaves no truncated entry behind.
+  writeFileSync(`${path}.partial`, encoded)
+  renameSync(`${path}.partial`, path)
+  return encoded
+}
+
 const sidecars = [
-  [
-    '.br',
-    (bytes: Buffer) =>
-      brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY } }),
-  ],
+  ['.br', brotli],
   ['.gz', (bytes: Buffer) => gzipSync(bytes, { level: GZIP_LEVEL })],
 ] as const
 
