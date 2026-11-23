@@ -60,6 +60,7 @@ test('Libron font is emitted as an immutable same-origin asset rather than inlin
     const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
     assert.ok(html.includes(`url(${documentFontPath}) format('woff2')`), path)
     assert.ok(!html.includes('data:font/woff2;base64,'), path)
+    assert.ok(html.includes(`<link rel="preload" href="${documentFontPath}" as="font"`), path)
     assert.deepEqual(
       parseCsp(metadata.headers[path]['content-security-policy']).get('font-src'),
       ["'self'"],
