@@ -1,7 +1,7 @@
 import type { LedgerId } from '@libid/ledger'
 import { type Message, type MessageType, PopupError } from '@libid/popup'
 import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
-import { describe, expect, it, type Mock, vi } from 'vitest'
+import { afterEach, describe, expect, it, type Mock, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
 import type { CeremonyEvent } from '../../events.js'
 import { identityNodes } from '../../identity.js'
@@ -35,8 +35,16 @@ function spiedConnection(): Spied {
   const connection = fakeConnection({ connectionId: CEREMONY_ID, peerOrigin: 'https://ccdp.test' })
   for (const method of ['send', 'navigate', 'navigateAway', 'close'] as const)
     vi.spyOn(connection, method)
+  opened.push(connection as Spied)
   return connection as Spied
 }
+
+const opened: Spied[] = []
+
+// A run holds its ID, for every client, until its connection ends; none outlives its test.
+afterEach(async () => {
+  for (const connection of opened.splice(0)) await connection.close()
+})
 
 const id = CEREMONY_ID
 
@@ -1039,21 +1047,12 @@ it.each([
 it('binds one active ceremony per connection and rebinds it once that run finishes', async () => {
   const client = await ccdpClient(wireConfig)
   const { connection, ceremony: first } = await setup({ client })
-  // One client refuses the live ID at once; another client sharing the connection is refused here.
-  const second = (await ccdpClient(wireConfig)).new(
-    connection,
-    'google',
-    testnet,
-    new Uint8Array(32),
-    new Uint8Array(),
-  )
+  // The ID is live for every client: one sharing the connection is refused where it creates the run.
+  const other = await ccdpClient(wireConfig)
+  expect(() =>
+    other.new(connection, 'google', testnet, new Uint8Array(32), new Uint8Array()),
+  ).toThrow('already live')
   const pending = first.proveUserIdentity()
-  await expect(second.proveUserIdentity()).rejects.toMatchObject({
-    event: 'prefetch-dispatch',
-    message: 'Connection already has an active ceremony',
-  })
-  // That rejection was the refused run's one start.
-  await expect(second.proveUserIdentity()).rejects.toThrow('one-shot')
   expect(connection.navigations).toHaveLength(1)
   reachProving(connection)
   connection.receive({ type: 'user-denied' })
