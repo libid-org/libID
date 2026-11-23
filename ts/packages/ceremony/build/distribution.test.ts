@@ -7,6 +7,7 @@ import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
 import { cspHash, parseCsp } from './profiles.ts'
 import { hash } from './sources.ts'
+import { documentFontBytes, documentFontPath } from './styles.ts'
 import { errorHeaders } from './sws.ts'
 import { builtArtifacts, nativeSkip } from './testing.ts'
 import { catalogVersions, proverPair, versionPairs } from './versions.ts'
@@ -37,6 +38,37 @@ test('Prefetch pins the exact immutable Worker body [TEST-DIST-08]', () => {
     ),
   )
   assert.equal(Object.hasOwn(metadata.files, '/ccdp/v1/worker.js'), false)
+})
+
+test('Libron font is emitted as an immutable same-origin asset rather than inlined into documents', () => {
+  assert.match(documentFontPath, /^\/ccdp\/assets\/fonts\/libron-[a-f0-9]{64}\.woff2$/)
+  assert.equal(metadata.files[documentFontPath], documentFontPath)
+  assert.deepEqual(readFileSync(join(out, 'public', documentFontPath)), documentFontBytes)
+  assert.deepEqual(metadata.headers[documentFontPath], {
+    'content-type': 'font/woff2',
+    'cache-control': 'public, max-age=31536000, immutable',
+    'x-content-type-options': 'nosniff',
+    'cross-origin-resource-policy': 'same-origin',
+  })
+  for (const [path, maxBytes] of [
+    ['/ccdp/v1/prefetch', 55_000],
+    ['/ccdp/v1/prover', 15_000],
+    ['/ccdp/v1/prover/fallback', 15_000],
+    ['/404.html', 15_000],
+  ] as const) {
+    const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
+    assert.ok(html.includes(`url(${documentFontPath}) format('woff2')`), path)
+    assert.ok(!html.includes('data:font/woff2;base64,'), path)
+    assert.deepEqual(
+      parseCsp(metadata.headers[path]['content-security-policy']).get('font-src'),
+      ["'self'"],
+      path,
+    )
+    assert.ok(
+      Buffer.byteLength(html) < maxBytes,
+      `${path} unexpectedly large: ${Buffer.byteLength(html)}`,
+    )
+  }
 })
 
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-ASSET-012] [LIBID-PROVER-005]', () => {
