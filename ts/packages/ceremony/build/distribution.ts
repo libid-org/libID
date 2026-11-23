@@ -42,8 +42,11 @@ const inlineScript = (code: string) => code.replace(/<\/script/gi, '<\\/script')
 const shell = (label: string) =>
   `<main id="libid-root"><div class="libid-logo" aria-label="${messages.brand}">${messages.brand}</div><p role="status">${label}</p><progress aria-label="${messages.progress}"></progress></main>`
 
+// Fetch the font alongside the document, before the stylesheet's first use asks for it.
+const fontPreload = `<link rel="preload" href="${documentFontPath}" as="font" type="font/woff2" crossorigin>`
+
 const page = (title: string, content: string, styles = documentStyles) =>
-  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${styles}</style><body>${content}</body></html>`
+  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>${styles === documentStyles ? fontPreload : ''}<style>${styles}</style><body>${content}</body></html>`
 
 /**
  * Each profile's declared assets and its platform entry's emitted closure, then the allowlist.
