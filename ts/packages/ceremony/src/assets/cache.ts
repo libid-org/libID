@@ -131,22 +131,32 @@ export class AssetCache {
    * specs neither loading nor stored, such as a retrieval lost with a stopped worker.
    */
   async remaining(specs: Iterable<AssetRequest>): Promise<{ pending: number; missing: number }> {
-    const all = Array.from(specs)
-    const retrieving = all
-      .map((spec) => this.pending.get(requestKey(spec)))
-      .filter((load) => load?.stage() === 'retrieving')
-    const idle = all.filter((spec) => !this.pending.has(requestKey(spec)))
-    const missing = await this.unstored(idle)
-    await Promise.all(retrieving.map((load) => load!.response.catch(() => {})))
+    const retrieving: PendingLoad[] = []
+    const lookups: PendingLoad[] = []
+    const idle: AssetRequest[] = []
+    for (const spec of specs) {
+      const load = this.pending.get(requestKey(spec))
+      if (!load) idle.push(spec)
+      else if (load.stage() === 'retrieving') retrieving.push(load)
+      else if (load.stage() === 'lookup') lookups.push(load)
+    }
+    const [missing, sources] = await Promise.all([
+      this.unstored(idle),
+      Promise.all(lookups.map((load) => load.dispatched)),
+    ])
+    for (let i = 0; i < lookups.length; i++)
+      if (sources[i] === 'network') retrieving.push(lookups[i])
+    await Promise.all(retrieving.map((load) => load.response.catch(() => {})))
     return { pending: retrieving.length, missing }
   }
 
   /** How many `specs` Cache Storage lacks; inaccessible storage lacks all of them. */
   private async unstored(specs: AssetRequest[]): Promise<number> {
+    if (!specs.length) return 0
     try {
       const cache = await caches.open(CACHE)
-      const hits = await Promise.all(specs.map((spec) => cache.match(this.storageKey(spec))))
-      return hits.filter((hit) => !hit).length
+      const stored = new Set((await cache.keys()).map((key) => key.url))
+      return specs.filter((spec) => !stored.has(this.storageKey(spec))).length
     } catch {
       return specs.length
     }

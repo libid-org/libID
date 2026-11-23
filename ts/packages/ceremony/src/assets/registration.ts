@@ -41,6 +41,8 @@ export async function registerRootWorker(url: string): Promise<ServiceWorker> {
   })
   if (registration.scope !== `${location.origin}/`)
     throw new Error('Incorrect Service Worker scope')
+  if (registration.active?.scriptURL === script && registration.active.state !== 'redundant')
+    return registration.active
   // WebKit can resolve register() before the registration shows the Worker it installs.
   let pinned: ServiceWorker | null | undefined
   await within('Missing build-pinned Service Worker', (done, signal) => {
@@ -126,10 +128,15 @@ export async function drainJournal(worker: ServiceWorker): Promise<Mark[]> {
 
 /**
  * The profile's retrievals still running, once they settle, and those neither running nor
- * stored. No deadline: downloads take what they take. A Worker that never answers leaves this
- * pending.
+ * stored. No deadline: downloads take what they take. Aborting `signal` closes the reply port
+ * and rejects; without an abort, a Worker that never answers leaves this pending.
  */
-export function remainingDownloads(profile: string): Promise<{ pending: number; missing: number }> {
+export function remainingDownloads(
+  profile: string,
+  signal?: AbortSignal,
+): Promise<{ pending: number; missing: number }> {
+  if (signal?.aborted)
+    return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
   const { promise, resolve, reject } = Promise.withResolvers<{ pending: number; missing: number }>()
   const worker = navigator.serviceWorker.controller
   if (!worker) {
@@ -137,13 +144,29 @@ export function remainingDownloads(profile: string): Promise<{ pending: number; 
     return promise
   }
   const channel = new MessageChannel()
+  const onAbort = () => {
+    channel.port1.onmessage = null
+    channel.port1.close()
+    reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'))
+  }
+  signal?.addEventListener('abort', onAbort, { once: true })
   channel.port1.onmessage = ({ data }) => {
+    signal?.removeEventListener('abort', onAbort)
+    channel.port1.onmessage = null
     channel.port1.close()
     if (isCount(data?.pending) && isCount(data?.missing))
       resolve({ pending: data.pending, missing: data.missing })
     else reject(new Error('Invalid download report'))
   }
-  worker.postMessage({ type: 'ceremony-downloads', profile }, [channel.port2])
+  try {
+    worker.postMessage({ type: 'ceremony-downloads', profile }, [channel.port2])
+  } catch (error) {
+    signal?.removeEventListener('abort', onAbort)
+    channel.port1.onmessage = null
+    channel.port1.close()
+    channel.port2.close()
+    reject(error)
+  }
   return promise
 }
 

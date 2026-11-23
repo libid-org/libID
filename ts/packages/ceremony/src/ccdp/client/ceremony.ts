@@ -139,6 +139,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   private authorizationUrl: string
   private readonly prefetchUrl: string
   private readonly ccdpOrigin: string
+  private readonly bridgeOrigin: string
   private readonly fragment: URLSearchParams
   private result: PromiseWithResolvers<IdentityResult<P>> | undefined
   private channel: CeremonyChannel | undefined
@@ -187,6 +188,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
         : { clientCredential: platformConfig.clientCredential }),
     }
     this.ccdpOrigin = config.ccdpOrigin
+    this.bridgeOrigin = new URL(config.redirectUri).origin
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
@@ -266,7 +268,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   /** Core observations must fit the run's state and platform, once each, started before finished. */
   private observe(event: CoreEvent, phase: OperationEvent['phase']): void {
     if (event === 'authorization') {
-      if (this.connection.peerOrigin !== new URL(this.request.redirectUri).origin)
+      if (this.connection.peerOrigin !== this.bridgeOrigin)
         throw sequenceError('Authorization observation from outside the Bridge')
     } else this.expectCcdp()
     if (event === 'authorization' || event === 'prover-fallback') {

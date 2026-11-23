@@ -488,12 +488,15 @@ it.each([
     handler(proveIdentity('github'))
     // Proving starts at once; the report only observes.
     await vi.waitFor(() => expect(prove).toHaveBeenCalledOnce())
-    expect(remainingDownloads).toHaveBeenCalledExactlyOnceWith('github/1')
+    expect(remainingDownloads).toHaveBeenCalledExactlyOnceWith('github/1', expect.any(AbortSignal))
+    const signal = remainingDownloads.mock.calls[0][1] as AbortSignal
+    expect(signal.aborted).toBe(false)
     elapsed = 4000
     if (settled instanceof Error) report.reject(settled)
     else report.resolve(settled)
     proof.resolve(proofOf('github'))
     await vi.waitFor(() => expect(sentTypes()).toContain('identity-proof'))
+    expect(signal.aborted).toBe(true)
     const download = connection.sent.filter(
       (message) => 'event' in message && message.event === 'asset-download',
     )
