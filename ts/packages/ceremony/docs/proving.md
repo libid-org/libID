@@ -72,6 +72,11 @@ is declared external at exactly those URLs and ranges, and Prefetch and executio
 request the same bytes. Distributing the CRS needs that patched release, proven
 by the loader probe before the declarations change.
 
+**Only the BN254 SRS loads.** bb.js's own setup also fetches 4 MiB of Grumpkin
+points, which these ZK-Honk/Keccak proofs never read. The engine starts bb.js
+without its SRS and repeats the BN254 half of that setup; the loader probe fails
+when bb.js changes it.
+
 Exact URL/range/fallback declarations live beside the dependency pin, the one
 request table. [parameters.ts](../src/barretenberg/parameters.ts)
 owns the shared proving settings, `SRS_POINTS` and browser-loader dimensions.

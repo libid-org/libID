@@ -1,11 +1,5 @@
 import * as assets from '../assets/index.js'
-import {
-  G1_POINT_BYTES,
-  G2_BYTES,
-  GRUMPKIN_POINT_BYTES,
-  GRUMPKIN_SRS_POINTS,
-  SRS_POINTS,
-} from './parameters.js'
+import { G1_POINT_BYTES, G2_BYTES, SRS_POINTS } from './parameters.js'
 
 const noirWasm = (pkg: string, name: string) =>
   assets.file(`npm:@noir-lang/${pkg}/web/${name}`, `noir/{version}/${name}`, {
@@ -43,9 +37,6 @@ const crsFile = (name: string, request: { range: string } | { bytes: number }) =
 export const crs = [
   crsFile('g1_compressed.dat', { range: `bytes=0-${SRS_POINTS * G1_POINT_BYTES - 1}` }),
   crsFile('g2.dat', { bytes: G2_BYTES }),
-  crsFile('grumpkin_g1_v2.dat', {
-    range: `bytes=0-${GRUMPKIN_SRS_POINTS * GRUMPKIN_POINT_BYTES - 1}`,
-  }),
 ] as const
 
 export const proofAssets = [acvm, abi, bbWasm, ...crs] as const
