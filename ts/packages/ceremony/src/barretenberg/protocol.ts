@@ -26,6 +26,8 @@ export interface Preload {
   acvmUrl: string
   abiUrl: string
   wasmPath: string
+  /** The BN254 points to load, matching the circuit's profile. */
+  srsPoints: number
   crsPath: string
 }
 

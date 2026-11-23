@@ -1,5 +1,5 @@
 import * as assets from '../assets/index.js'
-import { G1_POINT_BYTES, G2_BYTES, SRS_POINTS } from './parameters.js'
+import { G1_POINT_BYTES, G2_BYTES } from './parameters.js'
 
 const noirWasm = (pkg: string, name: string) =>
   assets.file(`npm:@noir-lang/${pkg}/web/${name}`, `noir/{version}/${name}`, {
@@ -34,9 +34,12 @@ const crsFile = (name: string, request: { range: string } | { bytes: number }) =
     ...request,
   })
 
-export const crs = [
-  crsFile('g1_compressed.dat', { range: `bytes=0-${SRS_POINTS * G1_POINT_BYTES - 1}` }),
-  crsFile('g2.dat', { bytes: G2_BYTES }),
-] as const
+/** The BN254 SRS of a circuit sized `points`: that many compressed G1 points, and G2. */
+export const srs = (points: number) =>
+  [
+    crsFile('g1_compressed.dat', { range: `bytes=0-${points * G1_POINT_BYTES - 1}` }),
+    crsFile('g2.dat', { bytes: G2_BYTES }),
+  ] as const
 
-export const proofAssets = [acvm, abi, bbWasm, ...crs] as const
+/** The proving code every circuit shares; each circuit declares its own SRS. */
+export const proofAssets = [acvm, abi, bbWasm] as const

@@ -84,7 +84,10 @@ export function serveCrs(port, certificate) {
   const cached = entries()
   const keyOf = (entry) => `${entry.urls[0]} ${entry.range ?? ''}`.trim()
   const served = new Map()
-  const byUrl = new Map(cached.flatMap((entry) => entry.urls.map((url) => [url, entry])))
+  // One URL can carry several declared ranges, such as each circuit's G1 prefix.
+  const byRequest = new Map(
+    cached.flatMap((entry) => entry.urls.map((url) => [`${url} ${entry.range ?? ''}`, entry])),
+  )
   const hosts = new Set(crsHosts())
   // Headers as the CDN sends them for a CORS range request.
   const cdn = {
@@ -96,9 +99,9 @@ export function serveCrs(port, certificate) {
     'Content-Type': 'application/octet-stream',
   }
   const local = createServer((req, res) => {
-    const entry = byUrl.get(`https://${req.headers.host}${req.url}`)
+    const entry = byRequest.get(`https://${req.headers.host}${req.url} ${req.headers.range ?? ''}`)
     // Only the declared request is served; anything else is a harness fault, never a fallback.
-    if (!entry || req.method !== 'GET' || (req.headers.range ?? undefined) !== entry.range) {
+    if (!entry || req.method !== 'GET') {
       res.writeHead(502).end('Undeclared CRS request')
       return
     }

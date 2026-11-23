@@ -6,7 +6,7 @@ import initAbi from '@noir-lang/noirc_abi'
 import { errorMessage, toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
 import { workerThreads } from '../threads.js'
-import { FIELD_BYTES, PROVING_SETTINGS, SRS_POINTS } from './parameters.js'
+import { FIELD_BYTES, PROVING_SETTINGS } from './parameters.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
 /** Refuse single-threaded proving after applying the worker CPU cap. */
@@ -29,7 +29,10 @@ const span = <T>(event: string, work: () => Promise<T>) => operation(emit, event
  * which ZK-Honk/Keccak proofs never read; this mirrors the rest of that setup, including keeping
  * the decompressed points in bb.js's cache. A failed setup releases the backend.
  */
-async function bn254Backend(threads: number, wasmPath: string, crsPath: string): Promise<Api> {
+async function bn254Backend(
+  threads: number,
+  { wasmPath, crsPath, srsPoints }: Preload,
+): Promise<Api> {
   const api = await Barretenberg.new({
     backend: BackendType.Wasm,
     threads,
@@ -38,7 +41,7 @@ async function bn254Backend(threads: number, wasmPath: string, crsPath: string):
     skipSrsInit: true,
   })
   try {
-    const crs = await Crs.new(SRS_POINTS, crsPath)
+    const crs = await Crs.new(srsPoints, crsPath)
     const { pointsBuf } = await api.srsInitSrs({
       pointsBuf: crs.getG1Data(),
       numPoints: crs.numPoints,
@@ -98,9 +101,7 @@ class EngineWorker {
     const threads = workerThreads(message.threads)
     if (!Number.isInteger(threads) || threads < MIN_PROOF_THREADS)
       throw new Error('Multithreaded backend unavailable')
-    const backend = span('proof-backend-initialization', () =>
-      bn254Backend(threads, message.wasmPath, message.crsPath),
-    )
+    const backend = span('proof-backend-initialization', () => bn254Backend(threads, message))
     this.#backend = backend
     void backend.catch((error) => this.#fail(error))
     const [{ compiled, circuit }] = await Promise.all([

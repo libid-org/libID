@@ -52,6 +52,7 @@ const preload = {
   acvmUrl: '/acvm.wasm',
   abiUrl: '/abi.wasm',
   wasmPath: '/bb.wasm',
+  srsPoints: 2 ** 17,
   crsPath: 'https://crs.test/',
 }
 
@@ -82,12 +83,12 @@ async function worker(
     await mocks.initialize()
     return { circuitProve: mocks.prove, destroy: mocks.destroy, srsInitSrs: mocks.srsInit }
   })
-  mocks.crs.mockResolvedValue({
-    numPoints: 2 ** 18,
+  mocks.crs.mockImplementation(async (numPoints: number) => ({
+    numPoints,
     getG1Data: () => g1,
     getG2Data: () => g2,
     cacheUncompressed: mocks.cacheUncompressed,
-  })
+  }))
   mocks.srsInit.mockResolvedValue({ pointsBuf: new Uint8Array() })
   mocks.execute.mockResolvedValue(witness())
   mocks.destroy.mockResolvedValue(undefined)
@@ -330,15 +331,15 @@ it.each([
   ['compressed', new Uint8Array(), false],
   ['decompressed', Uint8Array.of(9, 9), true],
 ])(
-  'loads only the BN254 SRS from %s points, keeping any it decompresses',
+  'loads only the BN254 SRS the preload sizes, from %s points, keeping any it decompresses',
   async (_, pointsBuf, cached) => {
     mocks.srsInit.mockResolvedValueOnce({ pointsBuf })
     const w = await worker()
     await expect.poll(() => w.has('backend-ready')).toBe(true)
-    expect(mocks.crs).toHaveBeenCalledExactlyOnceWith(2 ** 18, 'https://crs.test/')
+    expect(mocks.crs).toHaveBeenCalledExactlyOnceWith(2 ** 17, 'https://crs.test/')
     expect(mocks.srsInit).toHaveBeenCalledExactlyOnceWith({
       pointsBuf: g1,
-      numPoints: 2 ** 18,
+      numPoints: 2 ** 17,
       g2Point: g2,
     })
     if (cached) expect(mocks.cacheUncompressed).toHaveBeenCalledExactlyOnceWith(pointsBuf)
