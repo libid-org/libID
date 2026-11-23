@@ -15,7 +15,7 @@ import { sameRecord, swapInto } from './output.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { emittedProfile, responseHeaders } from './profiles.ts'
 import { artifactsDir, hash, outputDirectory } from './sources.ts'
-import { callbackStyles, documentStyles } from './styles.ts'
+import { callbackStyles, documentFontBytes, documentFontPath, documentStyles } from './styles.ts'
 import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
@@ -142,6 +142,7 @@ async function buildDistribution() {
     ),
   ])
   const { records, options } = tree
+  tree.put(documentFontPath, documentFontBytes, 'asset')
   for (const [path, record] of data.local) tree.put(path, record.bytes, record.headers)
   const prover = await bundle('src/ccdp/documents/prover.ts', data, {
     invoke: 'startProver',

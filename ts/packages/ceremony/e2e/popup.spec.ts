@@ -116,7 +116,9 @@ test('popup branding stays readable in both system themes and a narrow window', 
       overflow: document.documentElement.scrollWidth > innerWidth,
       externalFonts: performance
         .getEntriesByType('resource')
-        .some((entry) => /\.woff2?/.test(entry.name)),
+        .some(
+          (entry) => /\.woff2?/.test(entry.name) && new URL(entry.name).origin !== location.origin,
+        ),
     }))
     expect(appearance.fontLoaded).toBe(true)
     expect(appearance.font).toContain('Libron')

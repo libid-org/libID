@@ -21,7 +21,7 @@ export const cspHash = (code: string) =>
   `'sha256-${createHash('sha256').update(code).digest('base64')}'`
 
 /** CCDP serves its own documents with their artifact, so their stylesheet is pinned by hash. */
-export const documentStyleSources = `style-src ${cspHash(documentStyles)}; font-src data:`
+export const documentStyleSources = `style-src ${cspHash(documentStyles)}; font-src 'self'`
 
 /** Directive name (lowercase) to its sources; a repeated directive is rejected, not ignored. */
 export function parseCsp(policy: string): Map<string, string[]> {

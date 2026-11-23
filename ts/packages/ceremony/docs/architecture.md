@@ -1,9 +1,10 @@
 # Architecture
 
 CCDP screens use the website's `brand/palette.json` and Libron Regular font, and
-follow the system color preference. The build embeds the font and its license in
-the documents CCDP serves, so they fetch no font. Callback carries only the
-palette and layout: the policy its Bridge composes admits no fonts.
+follow the system color preference. The build emits the font as an immutable
+same-origin asset under `/ccdp/assets/` and keeps its license inline in the
+documents CCDP serves (`font-src 'self'`). Callback carries only the palette and
+layout: the policy its Bridge composes admits no fonts.
 
 Ceremony obtains identity evidence for an application-owned operation. The caller
 supplies a popup connection and keeps control of its lifetime. Client can configure

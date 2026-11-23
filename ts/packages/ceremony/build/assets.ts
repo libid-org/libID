@@ -27,6 +27,7 @@ const mediaTypes: Readonly<Record<string, string>> = {
   '.wasm': headers.wasm['Content-Type'],
   '.json': headers.json['Content-Type'],
   '.html': headers.documentHeaders['Content-Type'],
+  '.woff2': 'font/woff2',
 }
 
 export const mediaType = (path: string): string =>
