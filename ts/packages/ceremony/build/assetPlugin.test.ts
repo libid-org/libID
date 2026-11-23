@@ -68,3 +68,37 @@ test('runtime lowering preserves named/chained calls and external request option
     else Reflect.deleteProperty(globalThis, 'location')
   }
 })
+
+test('profile manifest exposes supportedProfiles without full request lists', async () => {
+  const id = join(packageDir, 'src/profile-manifest-fixture.ts')
+  const buildWith = (source: string) =>
+    build({
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [
+        {
+          name: 'profile-fixture',
+          resolveId: (file) => (file === id ? id : undefined),
+          load: (file) => (file === id ? source : undefined),
+        },
+        assetPlugin({ urls: {}, moduleUrls: {} }, { supportedProfiles: ['google/1', 'x/1'] }),
+      ],
+      build: { write: false, minify: false, lib: { entry: id, formats: ['es'] } },
+    })
+  const result = await buildWith(
+    `import { supportedProfiles } from 'virtual:ceremony-assets'; export { supportedProfiles }`,
+  )
+  const code = ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output.find(
+    (o) => o.type === 'chunk',
+  )!.code
+  const runtime = await import(
+    `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
+  )
+  assert.deepEqual(runtime.supportedProfiles, ['google/1', 'x/1'])
+  assert.doesNotMatch(code, /requestsByProfile|allowedRequests/)
+  await assert.rejects(() =>
+    buildWith(
+      `import { requestsByProfile } from 'virtual:ceremony-assets'; export { requestsByProfile }`,
+    ),
+  )
+})
