@@ -400,3 +400,139 @@ it('counts every spec missing when Cache Storage is inaccessible [LIBID-BROWSER-
     missing: 1,
   })
 })
+
+it('streams ranged cached bodies as 206 without eagerly consuming them', async () => {
+  const hit = new Response(new Uint8Array([4, 5]), {
+    headers: {
+      'Content-Length': '2',
+      'Content-Range': 'bytes 0-1/100',
+    },
+  })
+  vi.stubGlobal('caches', { open: async () => ({ match: async () => hit }) })
+  const fetching = vi.fn()
+  vi.stubGlobal('fetch', fetching)
+  const loaded = new AssetCache('https://ccdp.example').load(spec)
+  const result = await loaded.response
+  expect(await loaded.dispatched).toBe('cache')
+  expect(hit.bodyUsed).toBe(false)
+  expect(fetching).not.toHaveBeenCalled()
+  expect(result.status).toBe(206)
+  expect(result.headers.get('content-range')).toBe('bytes 0-1/100')
+  expect(new Uint8Array(await result.arrayBuffer())).toEqual(new Uint8Array([4, 5]))
+  await loaded.complete
+})
+
+it('warm prefetch validates ranged cached metadata without consuming or locking the body', async () => {
+  const hit = new Response(new Uint8Array([4, 5]), {
+    headers: {
+      'Content-Length': '2',
+      'Content-Range': 'bytes 0-1/100',
+    },
+  })
+  vi.stubGlobal('caches', { open: async () => ({ match: async () => hit }) })
+  const fetching = vi.fn()
+  vi.stubGlobal('fetch', fetching)
+  const job = new AssetCache('https://ccdp.example').prefetch(spec)
+  expect(await job.dispatched).toBe('cache')
+  await job.complete
+  expect(hit.bodyUsed).toBe(false)
+  expect(hit.body?.locked).toBe(false)
+  expect(fetching).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['wrong status', { status: 206, headers: { 'Content-Length': '2' } }],
+  ['missing Content-Length', { headers: {} }],
+  ['wrong Content-Length', { headers: { 'Content-Length': '1' } }],
+  ['Content-Encoding present', { headers: { 'Content-Length': '2', 'Content-Encoding': 'gzip' } }],
+  [
+    'mismatched Content-Range',
+    { headers: { 'Content-Length': '2', 'Content-Range': 'bytes 2-3/100' } },
+  ],
+])('evicts and refetches cached ranged entries with %s on prefetch and load', async (_, init) => {
+  for (const mode of ['prefetch', 'load'] as const) {
+    const stored = new Map<string, Response>()
+    const del = vi.fn(async () => true)
+    const put = vi.fn(async (k: string, r: Response) => {
+      stored.set(k, r)
+    })
+    vi.stubGlobal('caches', {
+      open: async () => ({
+        match: async () => new Response(new Uint8Array([4, 5]), init),
+        delete: del,
+        put,
+      }),
+    })
+    const fetching = vi.fn(
+      async () =>
+        new Response(new Uint8Array([6, 7]), {
+          status: 206,
+          headers: { 'Content-Range': 'bytes 0-1/100' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetching)
+    const cache = new AssetCache('https://ccdp.example')
+    if (mode === 'prefetch') {
+      const job = cache.prefetch(spec)
+      expect(await job.dispatched).toBe('network')
+      await job.complete
+    } else {
+      const job = cache.load(spec)
+      expect(await job.dispatched).toBe('network')
+      const response = await job.response
+      expect(response.status).toBe(206)
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([6, 7]))
+      await job.complete
+    }
+    expect(del).toHaveBeenCalledOnce()
+    expect(fetching).toHaveBeenCalledOnce()
+    expect(put).toHaveBeenCalledOnce()
+    expect(stored.size).toBe(1)
+  }
+})
+
+it('joins single-flight fetches between prefetch and load and cleans up failed prefetches', async () => {
+  const stored = new Map<string, Response>()
+  vi.stubGlobal('caches', {
+    open: async () => ({
+      match: async (k: string) => stored.get(k)?.clone(),
+      put: async (k: string, r: Response) => {
+        stored.set(k, r)
+      },
+      delete: async (k: string) => stored.delete(k),
+    }),
+  })
+  const network = Promise.withResolvers<Response>()
+  const fetching = vi.fn(() => network.promise)
+  vi.stubGlobal('fetch', fetching)
+  const cache = new AssetCache('https://ccdp.example')
+  const first = cache.prefetch(spec)
+  expect(await first.dispatched).toBe('network')
+  const second = cache.prefetch(spec)
+  const loaded = cache.load(spec)
+  expect(await second.dispatched).toBe('network')
+  expect(await loaded.dispatched).toBe('network')
+  expect(second.complete).toBe(first.complete)
+  expect(loaded.complete).toBe(first.complete)
+  expect(fetching).toHaveBeenCalledOnce()
+  network.resolve(
+    new Response(new Uint8Array([8, 9]), {
+      status: 206,
+      headers: { 'Content-Range': 'bytes 0-1/100' },
+    }),
+  )
+  const response = await loaded.response
+  expect(response.status).toBe(206)
+  expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([8, 9]))
+  await first.complete
+
+  // A failed prefetch settles without unhandled rejection and releases its pending flight.
+  const other = { url: 'https://assets.example/missing', range: 'bytes=0-1', bytes: 2 }
+  const failing = vi.fn(async () => new Response(null, { status: 404 }))
+  vi.stubGlobal('fetch', failing)
+  const failed = cache.prefetch(other)
+  expect(await failed.dispatched).toBe('network')
+  await failed.complete
+  await expect(cache.load(other).response).rejects.toThrow('Invalid asset response')
+  expect(failing).toHaveBeenCalledTimes(2)
+})

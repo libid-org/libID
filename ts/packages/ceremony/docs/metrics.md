@@ -53,7 +53,7 @@ exposes the document's navigation timing, three offsets in `instrumentation.attr
 - `worker-ready-ms`: readiness until the pinned Worker can accept dispatch, including its
   registration, which starts at readiness.
 - `dispatch-ms`: request to Worker dispatch acknowledgement, including cache lookups
-  and any cached CRS body reads currently needed before acknowledgement.
+  and cached metadata validation without reading cached bodies.
 - `assets-cached` and `assets-fetched`: the profile's requests served from Cache Storage,
   and those fetched or joined to a running fetch. Any fetched request marks a cold or
   partly cold start. A fetch can still be answered by the HTTP cache, so this is not a

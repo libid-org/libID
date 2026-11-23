@@ -64,16 +64,28 @@ class ProverDocument extends CeremonyDocument {
       void this.connection.closed.then(() => {
         if (!this.ended) this.cleanup()
       })
+      const isolated =
+        crossOriginIsolated &&
+        typeof SharedArrayBuffer !== 'undefined' &&
+        typeof Worker !== 'undefined'
+      // When already isolated this document will not hop to fallback; claim root control while
+      // connecting, deferring any rejection until the connection is ready to report it.
+      const claiming = isolated
+        ? (async (): Promise<{ error: unknown } | undefined> => {
+            try {
+              await claimRootWorker()
+              return undefined
+            } catch (error) {
+              return { error }
+            }
+          })()
+        : undefined
       await this.connection.ready
       if (this.controller.signal.aborted) return
-      if (
-        !crossOriginIsolated ||
-        typeof SharedArrayBuffer === 'undefined' ||
-        typeof Worker === 'undefined'
-      )
-        throw new Error(popupErrorMessages['isolation-unavailable'])
-      await claimRootWorker()
+      if (!isolated) throw new Error(popupErrorMessages['isolation-unavailable'])
+      const claimed = await claiming
       if (this.controller.signal.aborted) return
+      if (claimed) throw claimed.error
       if (this.state.phase !== 'connecting') throw new Error(messages.invalidProvingRequest)
       this.state.phase = 'ready'
       if (location.pathname === route('prover/fallback'))
