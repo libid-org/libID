@@ -49,10 +49,15 @@ function engine(extra: Partial<ProofEngineOptions> = {}) {
   }
 }
 
-it('posts one preload after boot with resolved resource URLs and the requested threads', () => {
-  const e = engine({ circuitUrl: 'circuits/bearer_link.json', threads: 8 })
-  e.send({ type: 'booted', timestamp: 2 })
-  expect(e.postMessage).toHaveBeenCalledExactlyOnceWith({
+it('posts one preload immediately on spawn with resolved resource URLs and the requested threads', () => {
+  const instance = new ProofEngine({
+    ...options,
+    circuitUrl: 'circuits/bearer_link.json',
+    threads: 8,
+  })
+  const worker = workers.at(-1)!
+  // Preload is queued before the worker reports booted.
+  expect(worker.postMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'preload',
     circuitUrl: 'https://ccdp.test/circuits/bearer_link.json',
     verificationKeyUrl: 'https://ccdp.test/vk',
@@ -64,6 +69,10 @@ it('posts one preload after boot with resolved resource URLs and the requested t
     // The CRS base is the declared CRS directory.
     crsPath: 'https://ccdp.test/assets/crs/',
   })
+  worker.reply({ type: 'booted', timestamp: 1 })
+  worker.reply({ type: 'booted', timestamp: 2 })
+  expect(worker.postMessage).toHaveBeenCalledOnce()
+  instance.destroy()
   // Without a request, the worker applies its default and cap.
   engine()
   expect(workers.at(-1)!.postMessage.mock.calls[0][0]).toMatchObject({

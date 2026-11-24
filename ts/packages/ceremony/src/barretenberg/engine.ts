@@ -21,8 +21,6 @@ export interface ProofEngineOptions {
 export class ProofEngine {
   #worker?: Worker
   readonly #emit: (event: OperationEvent) => void
-  /** Sent once the worker boots. */
-  #preload?: Preload
   /** Set by the single `prove` call; preparation finishes once inputs and backend are ready. */
   #inputsAt?: number
   /** Set by the worker's `backend-ready` message. */
@@ -50,7 +48,7 @@ export class ProofEngine {
     this.#emit({ event: 'zk-proof-preparation', phase: 'started', timestamp: now() })
     this.#emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: now() })
     try {
-      this.#preload = {
+      const preload: Preload = {
         type: 'preload',
         circuitUrl: url,
         verificationKeyUrl: keyUrl,
@@ -64,6 +62,8 @@ export class ProofEngine {
         crsPath: new URL('.', assetUrl(srs(srsPoints)[0])).href,
       }
       this.#worker = this.#spawn()
+      // Queued natively until the worker finishes booting, avoiding a main-thread round trip.
+      this.#worker.postMessage(preload)
     } catch (error) {
       this.#fail(error)
     }
@@ -122,8 +122,6 @@ export class ProofEngine {
           phase: 'finished',
           timestamp: message.timestamp,
         })
-        if (this.#preload) this.#worker?.postMessage(this.#preload)
-        this.#preload = undefined
         break
       case 'event':
         this.#emit(message.event)

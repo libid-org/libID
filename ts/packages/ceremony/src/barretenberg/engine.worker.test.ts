@@ -348,11 +348,42 @@ it.each([
 )
 
 it('releases the backend when its SRS cannot be loaded [LIBID-PROVER-014]', async () => {
+  const backend = Promise.withResolvers<void>()
+  mocks.initialize.mockReturnValueOnce(backend.promise)
   mocks.crs.mockRejectedValueOnce(new Error('CRS unavailable'))
   const w = await worker()
+  // CRS loading starts concurrently with Barretenberg.new, not after it.
+  expect(mocks.create).toHaveBeenCalledOnce()
+  expect(mocks.crs).toHaveBeenCalledOnce()
   await expect.poll(() => w.has('error')).toBe(true)
-  expect(mocks.destroy).toHaveBeenCalledOnce()
+  expect(mocks.destroy).not.toHaveBeenCalled()
+  backend.resolve()
+  await expect.poll(() => mocks.destroy.mock.calls.length).toBe(1)
   expect(w.has('backend-ready')).toBe(false)
+})
+
+it('starts CRS loading alongside Barretenberg initialization and keeps uncompressed caching off the proving path', async () => {
+  const backend = Promise.withResolvers<void>()
+  const cached = Promise.withResolvers<void>()
+  mocks.initialize.mockReturnValueOnce(backend.promise)
+  mocks.srsInit.mockResolvedValueOnce({ pointsBuf: Uint8Array.of(9, 9) })
+  mocks.cacheUncompressed.mockReturnValueOnce(cached.promise)
+  const w = await worker()
+  expect(mocks.create).toHaveBeenCalledOnce()
+  expect(mocks.crs).toHaveBeenCalledOnce()
+  backend.resolve()
+  await expect.poll(() => w.has('backend-ready')).toBe(true)
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  // Proving runs while uncompressed CRS caching is still in flight.
+  w.prove({ fixture: 1 })
+  await expect.poll(() => mocks.prove.mock.calls.length).toBe(1)
+  await expect.poll(() => w.finished('zk-proof-generation')).toBe(true)
+  // Worker waits for the background cache write before posting result (and being terminated).
+  expect(w.has('result')).toBe(false)
+  cached.reject(new Error('QuotaExceededError'))
+  await expect.poll(() => w.has('result')).toBe(true)
+  expect(w.errors()).toEqual([])
+  expect(mocks.destroy).toHaveBeenCalledOnce()
 })
 
 it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]', async () => {
