@@ -36,11 +36,11 @@ export function acceptTelegramIdToken(idToken: string, clientId: string): Parsed
   const { kid, headerB64, payloadB64, payload, signature, claims: p } = jwt
   const nonce = typeof p.nonce === 'string' ? p.nonce : ''
   const digest = b64urlDecode(nonce)
+  if (p.iss !== provider.issuer) throw invalid()
+  if (p.aud !== clientId) throw invalid('Telegram token was issued for another client')
+  if (!isFresh(p.iat)) throw invalid('Telegram token is outside its time window')
   if (
-    p.iss !== provider.issuer ||
-    p.aud !== clientId ||
     digest?.length !== AUTHORIZATION_DIGEST_BYTES ||
-    !isFresh(p.iat) ||
     typeof p.id !== 'string' ||
     !isAccountId(PLATFORM_TELEGRAM_KEY, p.id)
   )

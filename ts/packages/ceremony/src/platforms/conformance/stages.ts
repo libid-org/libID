@@ -482,8 +482,8 @@ const tokenRefusals: Record<OidcPlatform, { expired: string; 'audience-mismatch'
     'audience-mismatch': 'Google token was issued for another client',
   },
   telegram: {
-    expired: 'Invalid Telegram ID token',
-    'audience-mismatch': 'Invalid Telegram ID token',
+    expired: 'Telegram token is outside its time window',
+    'audience-mismatch': 'Telegram token was issued for another client',
   },
 }
 
