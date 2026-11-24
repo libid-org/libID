@@ -182,7 +182,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
         : { clientCredential: platformConfig.clientCredential }),
     }
     this.ccdpOrigin = config.ccdpOrigin
-    this.bridgeOrigin = new URL(config.redirectUri).origin
+    this.bridgeOrigin = config.bridgeOrigin
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
@@ -215,7 +215,12 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
 
   private receiveEvent({ type: _type, ...event }: EventMessage): void {
     const attributes = event.instrumentation?.attributes
-    if (event.event === 'platform-refusal' && attributes?.reason === 'authorization-expired')
+    if (
+      this.state === 'proving' &&
+      this.connection.peerOrigin === this.ccdpOrigin &&
+      event.event === 'platform-refusal' &&
+      attributes?.reason === 'authorization-expired'
+    )
       this.expiredIn = typeof attributes.operation === 'string' ? attributes.operation : undefined
     if (event.event === 'prefetch-dispatch') this.prefetched(event)
     else if (event.event === 'prover') this.proverReady(event)

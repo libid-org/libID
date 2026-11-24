@@ -30,6 +30,8 @@ import {
 const copy = (openings: readonly TlsnOpening[]): HashOpening[] =>
   openings.map((o) => ({ hash: Uint8Array.from(o.hash), blinder: Uint8Array.from(o.blinder) }))
 
+const utf8Fatal = new TextDecoder('utf-8', { fatal: true })
+
 /** How often a no-op timer turns this worker's event loop while the SDK computes. */
 const HEARTBEAT_MS = 10
 
@@ -178,9 +180,7 @@ class WorkerSession {
         headers: Object.fromEntries(
           Object.entries(request.headers).map(([k, v]) => [k, Array.from(v)]),
         ),
-        body: request.body.length
-          ? new TextDecoder('utf-8', { fatal: true }).decode(request.body)
-          : null,
+        body: request.body.length ? utf8Fatal.decode(request.body) : null,
       }),
     )
     const raw = prover.transcript()

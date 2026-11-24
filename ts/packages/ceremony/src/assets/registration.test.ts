@@ -281,13 +281,55 @@ it.each([
     'a nested registration',
     registration(`${ORIGIN}/ccdp/v1/`, { active: serviceWorker('activated') }),
   ],
+  ['an empty root registration', registration(`${ORIGIN}/`)],
   [
-    'an inactive root registration',
-    registration(`${ORIGIN}/`, { installing: serviceWorker('installing') }),
+    'a redundant installing root registration',
+    registration(`${ORIGIN}/`, { installing: serviceWorker('redundant') }),
   ],
 ])('refuses to claim through %s', async (_, current) => {
   install(current)
   await expect(claimRootWorker()).rejects.toThrow('Missing root Service Worker')
+})
+
+it.each(['statechange', 'poll'] as const)(
+  'waits for an activating root worker via %s before claiming control',
+  async (signal) => {
+    vi.useFakeTimers()
+    const pending = serviceWorker('installed')
+    const current = registration(`${ORIGIN}/`, { waiting: pending })
+    const container = install(current)
+    const claiming = claimRootWorker()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pending.postMessage).not.toHaveBeenCalled()
+    Object.assign(current, { waiting: null, active: pending })
+    pending.state = 'activated'
+    if (signal === 'statechange') pending.dispatchEvent(new Event('statechange'))
+    else await vi.advanceTimersByTimeAsync(50)
+    await vi.waitFor(() => expect(pending.postMessage).toHaveBeenCalledOnce())
+    container.controller = pending
+    container.dispatchEvent(new Event('controllerchange'))
+    await claiming
+    expect(vi.getTimerCount()).toBe(0)
+  },
+)
+
+it('fails claimRootWorker when a pending worker becomes redundant or stalls during activation', async () => {
+  vi.useFakeTimers()
+  const failing = serviceWorker('installing')
+  install(registration(`${ORIGIN}/`, { installing: failing }))
+  const redundant = expect(claimRootWorker()).rejects.toThrow('Missing root Service Worker')
+  await vi.advanceTimersByTimeAsync(0)
+  failing.state = 'redundant'
+  failing.dispatchEvent(new Event('statechange'))
+  await redundant
+  expect(vi.getTimerCount()).toBe(0)
+
+  const stalled = serviceWorker('installing')
+  install(registration(`${ORIGIN}/`, { installing: stalled }))
+  const timedOut = expect(claimRootWorker()).rejects.toThrow('Service Worker activation timed out')
+  await vi.advanceTimersByTimeAsync(15000)
+  await timedOut
+  expect(vi.getTimerCount()).toBe(0)
 })
 
 it('bounds control and releases timers when the claim never takes effect', async () => {

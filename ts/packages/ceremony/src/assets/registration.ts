@@ -173,15 +173,34 @@ export async function remainingDownloads(
 /** Newly isolated documents can initially be uncontrolled; claim before execution fetches. */
 export async function claimRootWorker(): Promise<void> {
   const registration = await navigator.serviceWorker.getRegistration('/')
-  if (registration?.scope !== `${location.origin}/` || !registration.active)
-    throw new Error('Missing root Service Worker')
-  if (navigator.serviceWorker.controller === registration.active) return
+  if (registration?.scope !== `${location.origin}/`) throw new Error('Missing root Service Worker')
+  let active = registration.active
+  if (!active) {
+    const pending = registration.waiting ?? registration.installing
+    if (!pending || pending.state === 'redundant') throw new Error('Missing root Service Worker')
+    // A fast OAuth return can land while the freshly installed root Worker is still activating.
+    await within('Service Worker activation timed out', (done, signal) => {
+      const check = () => {
+        if (registration.active && registration.active.state !== 'redundant') {
+          active = registration.active
+          done()
+        } else if (pending.state === 'redundant') {
+          done(new Error('Missing root Service Worker'))
+        }
+      }
+      const poll = setInterval(check, ACTIVATION_POLL_INTERVAL_MS)
+      signal.addEventListener('abort', () => clearInterval(poll))
+      pending.addEventListener('statechange', check, { signal })
+      check()
+    })
+  }
+  if (navigator.serviceWorker.controller === active) return
   await within('Service Worker control timed out', (done, signal) => {
     const changed = () => {
-      if (navigator.serviceWorker.controller === registration.active) done()
+      if (navigator.serviceWorker.controller === active) done()
     }
     navigator.serviceWorker.addEventListener('controllerchange', changed, { signal })
-    postPort(registration.active!, { type: 'ceremony-claim' }, signal, changed)
+    postPort(active!, { type: 'ceremony-claim' }, signal, changed)
     changed()
   })
 }

@@ -60,6 +60,7 @@ it('fetches configuration once without credentials and bounds its body [LIBID-MO
   const fetch = vi.fn(async () => Response.json(wireConfig))
   vi.stubGlobal('fetch', fetch)
   await expect(fetchCeremonyConfig('https://bridge.test')).resolves.toEqual({
+    bridgeOrigin: 'https://bridge.test',
     redirectUri: 'https://bridge.test/auth/callback',
     ccdpOrigin: 'https://ccdp.test',
     platforms: { google: { clientId: 'client' } },

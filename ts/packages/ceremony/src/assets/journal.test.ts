@@ -110,7 +110,18 @@ it('recovers after a transient caches.open failure', async () => {
   expect(await journal.drain()).toEqual([mark(2)])
 })
 
+it('returns in-memory buffered marks when drain overtakes a failing Cache Storage', async () => {
+  vi.stubGlobal('caches', { open: async () => Promise.reject(new Error('storage unavailable')) })
+  const journal = new Journal('https://ccdp.example')
+  void journal.record(mark(1, 'started'))
+  void journal.record(mark(2, 'finished'))
+  await expect(journal.drain()).resolves.toEqual([mark(1, 'started'), mark(2, 'finished')])
+  await expect(journal.drain()).resolves.toEqual([])
+})
+
 it.each([
+  [{ ...mark(1), event: 'prover' }],
+  [{ ...mark(1), event: 'authorization' }],
   [{ ...mark(1), phase: 'paused' }],
   [{ ...mark(1), timestamp: -1 }],
   [{ ...mark(1), timestamp: Number.NaN }],

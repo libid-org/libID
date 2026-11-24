@@ -256,6 +256,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
   ])('exposes the reason a platform-refusal reported for $name', async ({ reason, expected }) => {
     const { connection, ceremony } = await setup()
     const result = ceremony.proveUserIdentity()
+    reachProving(connection)
     connection.receive({
       type: 'event',
       event: 'platform-refusal',
@@ -276,6 +277,7 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
   it('keeps the reason off a failure of another operation', async () => {
     const { connection, ceremony } = await setup()
     const result = ceremony.proveUserIdentity()
+    reachProving(connection)
     connection.receive({
       type: 'event',
       event: 'platform-refusal',
@@ -288,6 +290,32 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     const failure = await result.catch((error: unknown) => error)
     expect((failure as CeremonyError).reason).toBeUndefined()
   })
+  it.each(['before proving', 'from the Bridge'] as const)(
+    'ignores platform-refusal authorization-expired %s',
+    async (when) => {
+      const { connection, ceremony } = await setup()
+      const result = ceremony.proveUserIdentity()
+      if (when === 'from the Bridge') {
+        reachProving(connection)
+        connection.peerOrigin = BRIDGE
+      }
+      connection.receive({
+        type: 'event',
+        event: 'platform-refusal',
+        timestamp: 1,
+        instrumentation: {
+          attributes: { operation: 'token-fetch', reason: 'authorization-expired' },
+        },
+      })
+      connection.receive({
+        type: 'ceremony-failed',
+        event: 'token-fetch',
+        message: 'Failed',
+      })
+      const failure = await result.catch((error: unknown) => error)
+      expect((failure as CeremonyError).reason).toBeUndefined()
+    },
+  )
   const prefetchReady = event('prefetch-dispatch', 'finished')
   const ready = [prefetchReady, event('prover', 'started', 3)]
   const preparing = event('zk-proof-preparation', 'started', 4)

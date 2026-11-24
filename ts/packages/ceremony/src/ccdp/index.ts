@@ -10,8 +10,8 @@ import {
   isSlug,
   isText,
   isUint,
-  isWebUrl,
   type Predicates,
+  parseWebUrl,
   recordValidator,
 } from '../primitives.js'
 import {
@@ -35,9 +35,8 @@ export const isClientCredential = (value: unknown): value is string =>
 export function isRedirectUri(value: unknown): value is string {
   return (
     isText(value, MAX_REDIRECT_URI_BYTES) &&
-    isWebUrl(value) &&
     !/[?#]/.test(value) &&
-    new URL(value).pathname === '/auth/callback'
+    parseWebUrl(value)?.pathname === '/auth/callback'
   )
 }
 

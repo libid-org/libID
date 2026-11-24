@@ -196,6 +196,8 @@ export function correlateReveal(
   return { sent: correlate('sent'), received: correlate('received') }
 }
 
+const utf8 = new TextEncoder()
+
 /** Require the signed record to match the transcript, planned reveals and correlated openings. */
 export function matchAttestedData(
   authority: string,
@@ -205,7 +207,7 @@ export function matchAttestedData(
   attestedData: Uint8Array,
 ): DecodedAttestedData {
   const decoded = decodeAttestedData(attestedData)
-  if (!bytesEqual(decoded.authorityId, keccak_256(new TextEncoder().encode(authority))))
+  if (!bytesEqual(decoded.authorityId, keccak_256(utf8.encode(authority))))
     invalid('attested authority changed')
   if (
     decoded.sentTranscriptLength !== transcript.sent.length ||
