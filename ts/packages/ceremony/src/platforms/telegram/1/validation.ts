@@ -10,7 +10,7 @@ import {
 } from '../../oidcValidation.js'
 import type { Identity } from '../../validation.js'
 
-/** oidc_google's layout, with the signed `iat` in the time field. */
+/** The OIDC circuits' layout, with the signed `iat` in the time field. */
 export interface TelegramProofV1 extends OidcProofFields {
   tokenIssuedAt: number
 }
