@@ -241,6 +241,8 @@ class Session implements NotarySession {
 
   private cleanup(): void {
     this.phase = 'ended'
+    this.channel.port1.onmessage = null
+    this.channel.port1.onmessageerror = null
     this.channel.port1.close()
     this.signal.removeEventListener('abort', this.abort)
   }
