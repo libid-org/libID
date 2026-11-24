@@ -19,6 +19,8 @@ export type LocalAsset = {
   member?: string
   headers: Readonly<Record<string, string>>
   bundledUrlModules?: readonly string[]
+  /** Resolved built path injected per module by `assetPlugin`; undefined in tests. */
+  url?: string
   isExternal?: false
 }
 
@@ -72,7 +74,7 @@ export function external(
 /** Resolve synchronously at the CCDP origin, or retain an external URL. Never fetches. */
 export function assetUrl(asset: Asset): string {
   if (asset.isExternal) return asset.source
-  const path = urls[assetKey(asset)]
+  const path = asset.url ?? urls[assetKey(asset)]
   if (!path) throw new Error('Missing built asset')
   return new URL(path, location.origin).href
 }

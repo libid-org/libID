@@ -213,10 +213,18 @@ export async function bundle(
   const assetName = (asset: Rollup.PreRenderedAsset) => {
     const digest = hash(asset.source)
     const owned = Object.entries(data.bodyHashes).find(([, bodyHash]) => bodyHash === digest)
-    return owned ? owned[0].slice(1) : `${ASSETS_PREFIX.slice(1)}${policyId}/[name]-[hash][extname]`
+    return owned ? owned[0].slice(1) : `${ASSETS_PREFIX.slice(1)}chunks/[name]-[hash][extname]`
   }
-  const chunkName = `${ASSETS_PREFIX.slice(1)}${policyId}/[name]-[hash].js`
+  // Only worker entry scripts carry worker CSP/COEP headers and live under the policy hash;
+  // ordinary module chunks keep stable content-hashed URLs across worker policy changes.
+  const chunkName = `${ASSETS_PREFIX.slice(1)}chunks/[name]-[hash].js`
+  const workerEntryName = `${ASSETS_PREFIX.slice(1)}w-${policyId}/[name]-[hash].js`
   const output = { entryFileNames: chunkName, chunkFileNames: chunkName, assetFileNames: assetName }
+  const workerOutput = {
+    entryFileNames: workerEntryName,
+    chunkFileNames: chunkName,
+    assetFileNames: assetName,
+  }
   const result = await build({
     configFile: false,
     root: packageDir,
@@ -226,7 +234,7 @@ export async function bundle(
     worker: {
       format: 'es',
       plugins: () => plugins(true),
-      rolldownOptions: { output },
+      rolldownOptions: { output: workerOutput },
     },
     build: {
       write: false,

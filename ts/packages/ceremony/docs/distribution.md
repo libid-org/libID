@@ -22,7 +22,9 @@ docker run --rm -p 127.0.0.1:8080:8787 libid-ccdp
 The build scripts run directly with Node's TypeScript stripping;
 `typecheck:build` checks them separately. The default output is
 `packages/ceremony/dist-artifacts` within `ts`. An optional `--out-dir` selects
-another dedicated directory inside the checkout. Release downloads are cached
+another dedicated directory inside the checkout. `--circuit-debug-symbols` keeps
+the circuits' Noir debug tables, so witness failures log a source call stack;
+the dev app builds with it, releases strip them. Release downloads are cached
 under the ceremony package's `.cache/downloads/`.
 
 ```text

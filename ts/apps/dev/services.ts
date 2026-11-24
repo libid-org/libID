@@ -10,10 +10,18 @@ const root = fileURLToPath(new URL('.', import.meta.url))
 // Distinct Compose ownership for each checkout. No shared container names.
 const project = `libid-dev-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`
 const composeArgs = ['compose', '-p', project, '-f', join(root, 'compose.yaml')]
-// Rebuild the shared distribution; immutable assets reuse the build cache.
+// Rebuild the shared distribution; immutable assets reuse the build cache. Circuits keep their
+// debug symbols, so witness failures log a Noir call stack.
 execFileSync(
   'pnpm',
-  ['--filter', '@libid/ceremony', 'build:ccdp-artifacts', '--out-dir', join(root, '.cache/ccdp')],
+  [
+    '--filter',
+    '@libid/ceremony',
+    'build:ccdp-artifacts',
+    '--out-dir',
+    join(root, '.cache/ccdp'),
+    '--circuit-debug-symbols',
+  ],
   {
     cwd: root,
     stdio: 'inherit',

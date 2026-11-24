@@ -1,10 +1,15 @@
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
+import { dirname, extname, join } from 'node:path'
+import { promisify } from 'node:util'
+import { brotliCompress, constants, gzip } from 'node:zlib'
 import { stringify } from 'smol-toml'
 import { safePath } from './archive.ts'
 import { documentStyleSources } from './profiles.ts'
 import { cache, hash } from './sources.ts'
+
+const compressBrotli = promisify(brotliCompress)
+const compressGzip = promisify(gzip)
 
 /** One published path: its bytes and the headers SWS serves with them. */
 export type PublicRecord = { bytes: Buffer; headers: Record<string, string> }
@@ -26,31 +31,47 @@ const BROTLI_QUALITY = 11
 const BROTLI_WINDOW_BITS = 24
 const GZIP_LEVEL = 6
 
+/** Formats already compressed natively (WOFF2 uses Brotli); sidecars add disk cost for <1% gain. */
+const precompressed = new Set(['.woff2'])
+
+const brotliInFlight = new Map<string, Promise<Buffer>>()
+
 /** Brotli takes seconds per multi-MB asset at this quality, so builds reuse it by content hash. */
-function brotli(bytes: Buffer): Buffer {
-  const path = join(cache, `brotli-q${BROTLI_QUALITY}-w${BROTLI_WINDOW_BITS}`, `${hash(bytes)}.br`)
-  if (existsSync(path)) return readFileSync(path)
-  const encoded = brotliCompressSync(bytes, {
+function brotli(bytes: Buffer): Promise<Buffer> {
+  const key = hash(bytes)
+  const pending = brotliInFlight.get(key)
+  if (pending) return pending
+  const path = join(cache, `brotli-q${BROTLI_QUALITY}-w${BROTLI_WINDOW_BITS}`, `${key}.br`)
+  if (existsSync(path)) return Promise.resolve(readFileSync(path))
+  const task = compressBrotli(bytes, {
     params: {
       [constants.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY,
       [constants.BROTLI_PARAM_LGWIN]: BROTLI_WINDOW_BITS,
       [constants.BROTLI_PARAM_SIZE_HINT]: bytes.length,
     },
   })
-  mkdirSync(dirname(path), { recursive: true })
-  // An interrupted build leaves no truncated entry behind.
-  writeFileSync(`${path}.partial`, encoded)
-  renameSync(`${path}.partial`, path)
-  return encoded
+    .then((encoded) => {
+      mkdirSync(dirname(path), { recursive: true })
+      // Unique partial path prevents races across parallel builds and leaves no truncated entry.
+      const partial = `${path}.${process.pid}.${randomUUID()}.partial`
+      writeFileSync(partial, encoded)
+      renameSync(partial, path)
+      return encoded
+    })
+    .finally(() => {
+      brotliInFlight.delete(key)
+    })
+  brotliInFlight.set(key, task)
+  return task
 }
 
 const sidecars = [
   ['.br', brotli],
-  ['.gz', (bytes: Buffer) => gzipSync(bytes, { level: GZIP_LEVEL })],
+  ['.gz', (bytes: Buffer) => compressGzip(bytes, { level: GZIP_LEVEL })],
 ] as const
 
 /** Emit the static files, their precompressed sidecars and the native SWS configuration. */
-export function writeDistribution(out: string, records: ReadonlyMap<string, PublicRecord>) {
+export async function writeDistribution(out: string, records: ReadonlyMap<string, PublicRecord>) {
   const files: Record<string, string> = {}
   for (const path of records.keys()) {
     if (!path.startsWith('/')) throw new Error('Invalid public path')
@@ -62,6 +83,7 @@ export function writeDistribution(out: string, records: ReadonlyMap<string, Publ
   const rules: { source: string; headers: Record<string, string> }[] = [
     { source: '/**', headers: { ...errorHeaders } },
   ]
+  const tasks: Promise<void>[] = []
   for (const [path, { bytes, headers }] of records) {
     const physical = /^\/ccdp\/v[1-9][0-9]*\/(prefetch|prover|prover\/fallback)$/.test(path)
       ? `${path.replace(/\/fallback$/, '-fallback')}.html`
@@ -71,14 +93,21 @@ export function writeDistribution(out: string, records: ReadonlyMap<string, Publ
     const target = join(out, 'public', physical)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, bytes)
-    for (const [extension, encode] of sidecars) {
-      const encoded = encode(bytes)
-      // Rebuilds must not leave a previous body available through content negotiation.
-      if (encoded.length < bytes.length) writeFileSync(target + extension, encoded)
-      else rmSync(target + extension, { force: true })
+    if (precompressed.has(extname(physical))) {
+      for (const [extension] of sidecars) rmSync(target + extension, { force: true })
+    } else {
+      for (const [extension, encode] of sidecars)
+        tasks.push(
+          encode(bytes).then((encoded) => {
+            // Rebuilds must not leave a previous body available through content negotiation.
+            if (encoded.length < bytes.length) writeFileSync(target + extension, encoded)
+            else rmSync(target + extension, { force: true })
+          }),
+        )
     }
     rules.push({ source: physical, headers })
   }
+  await Promise.all(tasks)
   const config = {
     general: {
       host: '::',

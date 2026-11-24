@@ -125,8 +125,28 @@ function installedFile(source: string): { bytes: Buffer; version: string } {
   }
 }
 
-export async function resolveAssets() {
+/** Strip compiler debug tables unused during witness/proof generation from a circuit artifact. */
+function stripCircuitDebugInfo(bytes: Buffer): Buffer {
+  const parsed = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>
+  delete parsed.debug_symbols
+  delete parsed.file_map
+  return Buffer.from(JSON.stringify(parsed))
+}
+
+/** Insert a short content-hash directory segment before the filename for transformed immutable bodies. */
+function contentHashedPath(path: string, bytes: Buffer): string {
+  const slash = path.lastIndexOf('/')
+  return `${path.slice(0, slash)}/${hash(bytes).slice(0, 12)}${path.slice(slash)}`
+}
+
+export async function resolveAssets({
+  keepCircuitDebugSymbols = false,
+}: {
+  /** Retain Noir `debug_symbols` and `file_map` for local DevTools debugging (off by default). */
+  keepCircuitDebugSymbols?: boolean
+} = {}) {
   const catalog = await loadAssetCatalog()
+  const circuitAssets = new Set(catalog.circuits)
   const profiles = Object.fromEntries(
     Object.entries(catalog.assetsByPlatform).flatMap(([p, vs]) =>
       Object.entries(vs).map(([v, as]) => [profileKey(p, v), as]),
@@ -182,6 +202,11 @@ export async function resolveAssets() {
     } else {
       path = `${ASSETS_PREFIX}${safePath(asset.mount)}`
       bytes = await readSource(asset.source, asset.sha256)
+    }
+    if (circuitAssets.has(asset) && !keepCircuitDebugSymbols) {
+      bytes = stripCircuitDebugInfo(bytes)
+      // Transformed circuit bytes publish at a fresh immutable URL while keeping their filename.
+      path = contentHashedPath(path, bytes)
     }
     register(path, bytes, assetHeaders(path, asset.headers))
     urls[assetKey(asset)] = path

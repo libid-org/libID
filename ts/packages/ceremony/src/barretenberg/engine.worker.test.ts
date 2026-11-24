@@ -440,6 +440,18 @@ it('reports witness failure promptly and destroys a late backend once [LIBID-PRO
   expect(w.has('result')).toBe(false)
 })
 
+it('logs the Noir call stack of a witness failure from a debug-symbol circuit', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const w = await worker()
+  const noirCallStack = ['main.nr:12:5']
+  mocks.execute.mockRejectedValueOnce(Object.assign(new Error('Witness failed'), { noirCallStack }))
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  w.prove({})
+  await expect.poll(() => w.has('error')).toBe(true)
+  expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] Noir call stack', noirCallStack)
+  log.mockRestore()
+})
+
 it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-014]', async () => {
   const backend = Promise.withResolvers<void>()
   const pending = Promise.withResolvers<{ witness: Uint8Array }>()
