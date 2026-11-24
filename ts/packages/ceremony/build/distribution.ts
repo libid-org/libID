@@ -184,8 +184,12 @@ function singleEntry(output: readonly (Rollup.OutputChunk | Rollup.OutputAsset)[
 }
 
 /** Resolve assets, bundle the documents and record every public resource with its policy. */
-async function buildDistribution() {
-  const data = await resolveAssets()
+async function buildDistribution({
+  keepCircuitDebugSymbols = false,
+}: {
+  keepCircuitDebugSymbols?: boolean
+} = {}) {
+  const data = await resolveAssets({ keepCircuitDebugSymbols })
   const external = Object.values(data.profiles)
     .flat()
     .filter((a) => a.isExternal === true)
@@ -293,12 +297,20 @@ async function buildDistribution() {
 
 /** Build into a staging tree beside `--out-dir` and swap it in whole once it is complete. */
 async function main() {
-  const { values } = parseArgs({ options: { 'out-dir': { type: 'string' } }, strict: true })
+  const { values } = parseArgs({
+    options: {
+      'out-dir': { type: 'string' },
+      'circuit-debug-symbols': { type: 'boolean', default: false },
+    },
+    strict: true,
+  })
+  const keepCircuitDebugSymbols =
+    values['circuit-debug-symbols'] || process.env.CEREMONY_CIRCUIT_DEBUG_SYMBOLS === '1'
   const out = outputDirectory(values['out-dir'] ?? artifactsDir)
   const staging = `${out}.building`
   mkdirSync(join(staging, 'public'), { recursive: true })
   try {
-    const { records, manifest, graph } = await buildDistribution()
+    const { records, manifest, graph } = await buildDistribution({ keepCircuitDebugSymbols })
     const files = await writeDistribution(staging, records)
     // Graph metadata stays outside public/: tests and e2e read it; it is never served.
     writeFileSync(

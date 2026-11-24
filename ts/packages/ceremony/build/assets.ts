@@ -139,7 +139,12 @@ function contentHashedPath(path: string, bytes: Buffer): string {
   return `${path.slice(0, slash)}/${hash(bytes).slice(0, 12)}${path.slice(slash)}`
 }
 
-export async function resolveAssets() {
+export async function resolveAssets({
+  keepCircuitDebugSymbols = false,
+}: {
+  /** Retain Noir `debug_symbols` and `file_map` for local DevTools debugging (off by default). */
+  keepCircuitDebugSymbols?: boolean
+} = {}) {
   const catalog = await loadAssetCatalog()
   const circuitAssets = new Set(catalog.circuits)
   const profiles = Object.fromEntries(
@@ -198,7 +203,7 @@ export async function resolveAssets() {
       path = `${ASSETS_PREFIX}${safePath(asset.mount)}`
       bytes = await readSource(asset.source, asset.sha256)
     }
-    if (circuitAssets.has(asset)) {
+    if (circuitAssets.has(asset) && !keepCircuitDebugSymbols) {
       bytes = stripCircuitDebugInfo(bytes)
       // Transformed circuit bytes publish at a fresh immutable URL while keeping their filename.
       path = contentHashedPath(path, bytes)
