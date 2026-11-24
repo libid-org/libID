@@ -50,7 +50,7 @@ import {LibIDTestnet as LibID} from "libid/LibIDTestnet.sol";
 
 | Library | Chains | IdentityRegistry | HandleEscrow |
 |---|---|---|---|
-| `LibID` | Ethereum mainnet | `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` | `0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5` |
+| `LibID` | Ethereum, Arbitrum One, Base, BNB Smart Chain, Eden | `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` | `0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5` |
 | `LibIDTestnet` | Sepolia, Arbitrum Sepolia, Eden testnet | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` | `0xE7eb0c675B757C12B1312dF652242b863624Bfab` |
 
 They are chain-configurations' addresses: libID-contracts v0.19's
@@ -253,9 +253,8 @@ both libraries' addresses against their environment's factory and the CREATE3
 derivation of the canonical names. The fork tests run `LibID` against
 Ethereum mainnet and `LibIDTestnet` against Sepolia and Eden testnet, on
 local forks: they read, and pay a handle nobody holds and refund it after its
-refund date. Where a chain has no code at the addresses, as mainnet has none
-yet, they check only that the library reports it unavailable, and skip the
-rest. Where it has the registry but not the escrow, they skip the payments. Each is
+refund date. Where a chain has no code at the addresses, they check only
+that the library reports it unavailable, and skip the rest. Where it has the registry but not the escrow, they skip the payments. Each is
 skipped without its RPC URL (`ETH_RPC_URL`, `SEPOLIA_RPC_URL`,
 `EDEN_RPC_URL`), unless `LIBID_REQUIRE_FORK=true`, which CI sets: then a
 missing URL fails.
