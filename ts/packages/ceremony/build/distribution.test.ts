@@ -88,19 +88,18 @@ test('Prover documents modulepreload their static chunks without preloading lazy
   const entry = Object.keys(metadata.graph).find((file) => /\/document-[^/]+\.js$/.test(file))!
   const shared = Object.keys(metadata.graph).find((file) => /\/shared-[^/]+\.js$/.test(file))!
   assert.ok(entry && shared)
+  const expected = [`/${entry}`, `/${shared}`]
   for (const path of ['/ccdp/v1/prover', '/ccdp/v1/prover/fallback']) {
     const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
     const preloads = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)">/g)].map(
       ([, href]) => href,
     )
-    assert.ok(preloads.includes(`/${entry}`), path)
-    assert.ok(preloads.includes(`/${shared}`), path)
-    assert.equal(new Set(preloads).size, preloads.length, path)
-    // Lazy platform provers, notary, token and workers stay out of document preloads.
+    assert.deepEqual(preloads, expected, path)
+    // Lazy platform provers, proof engine, notary, token and workers stay out of document preloads.
     for (const href of preloads) {
       assert.ok(Object.hasOwn(metadata.files, href), href)
       assert.equal(proverPair(metadata.graph[href.slice(1)]?.entry ?? null), undefined, href)
-      assert.doesNotMatch(href, /notary|token|worker/, href)
+      assert.doesNotMatch(href, /notary|proof-engine|token|worker/, href)
     }
   }
   for (const path of ['/ccdp/v1/prefetch', '/ccdp/callback.html', '/404.html']) {
