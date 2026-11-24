@@ -52,8 +52,36 @@ const shell = (label: string) =>
 // Fetch the font alongside the document, before the stylesheet's first use asks for it.
 const fontPreload = `<link rel="preload" href="${documentFontPath}" as="font" type="font/woff2" crossorigin>`
 
-const page = (title: string, content: string, styles = documentStyles) =>
-  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>${styles === documentStyles ? fontPreload : ''}<style>${styles}</style><body>${content}</body></html>`
+const modulePreloads = (paths: readonly string[]) =>
+  paths.map((path) => `<link rel="modulepreload" href="${path}">`).join('')
+
+const page = (
+  title: string,
+  content: string,
+  styles = documentStyles,
+  preloads: readonly string[] = [],
+) =>
+  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>${styles === documentStyles ? fontPreload : ''}${modulePreloads(preloads)}<style>${styles}</style><body>${content}</body></html>`
+
+/** Static module imports reachable from `entry` (excluding lazy/dynamic platform provers). */
+function staticImports(
+  output: readonly (Rollup.OutputChunk | Rollup.OutputAsset)[],
+  entry: Rollup.OutputChunk,
+): string[] {
+  const chunks = new Map(
+    output
+      .filter((item): item is Rollup.OutputChunk => item.type === 'chunk')
+      .map((chunk) => [chunk.fileName, chunk]),
+  )
+  const seen = new Set<string>()
+  const visit = (file: string) => {
+    if (seen.has(file)) return
+    seen.add(file)
+    for (const next of chunks.get(file)?.imports ?? []) visit(next)
+  }
+  for (const file of entry.imports) visit(file)
+  return [...seen].map((file) => `/${file}`)
+}
 
 /**
  * Each profile's declared assets and its platform entry's emitted closure, then the allowlist.
@@ -126,7 +154,7 @@ class PublicTree {
   }
 
   /** A document inlining the fragment capture and its module entry. */
-  document(path: string, code: string, profile: ResponseProfile) {
+  document(path: string, code: string, profile: ResponseProfile, preloads: readonly string[] = []) {
     const scripts = [captureFragment(path), code].map(inlineScript)
     const label = profile === 'prefetch' ? messages.preparation : messages.proofPreparation
     this.put(
@@ -134,6 +162,8 @@ class PublicTree {
       page(
         messages.brand,
         `${shell(label)}<script>${scripts[0]}</script><script type="module">${scripts[1]}</script>`,
+        documentStyles,
+        preloads,
       ),
       responseHeaders(profile, { ...this.options, inline: scripts }),
     )
@@ -196,9 +226,10 @@ async function buildDistribution() {
     external,
   )
   // Every published pair has an emitted prover and asset profile.
+  const proverPreloads = staticImports(prover.output, primary)
   tree.put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
-  tree.document(route('prover'), primary.code, 'prover')
-  tree.document(route('prover/fallback'), primary.code, 'proverFallback')
+  tree.document(route('prover'), primary.code, 'prover', proverPreloads)
+  tree.document(route('prover/fallback'), primary.code, 'proverFallback', proverPreloads)
   const callback = await bundle('src/ccdp/documents/callback.ts', data, {
     selfContained: true,
     invoke: 'startCallback',
