@@ -98,7 +98,11 @@ export async function notarizeOAuth(options: {
     const result = await failsAs(session.reveal(ranges), event)
     return { ...result, attestation: branch(result.attestation, event) }
   }
-  const notary = new NotaryRuntime(options.notaryAddress, options.signal, emit)
+  // Terminate the shared TLSN worker as soon as both final attestations land, freeing its
+  // WASM heap and thread pool before peak ZK proving memory usage.
+  const notaryAbort = new AbortController()
+  const notarySignal = AbortSignal.any([options.signal, notaryAbort.signal])
+  const notary = new NotaryRuntime(options.notaryAddress, notarySignal, emit)
   const tokenPrepared = branch(
     notary.prepare(tokenRequest.url, {
       setup: 'token-setup',
@@ -145,6 +149,10 @@ export async function notarizeOAuth(options: {
     reveal(identity.session, identity.selected.ranges, 'identity-attestation'),
   )
   const [tokenRevealed, identityRevealed] = await Promise.all([tokenOpened, identityOpened])
+  void Promise.all([tokenRevealed.attestation, identityRevealed.attestation]).then(
+    () => notaryAbort.abort(),
+    () => {},
+  )
   const { userId, userName, bearerRange, idRange, handleRange } = identity.selected
   return {
     bearer,

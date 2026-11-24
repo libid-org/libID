@@ -657,6 +657,36 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
       },
     )
 
+    it(
+      tagged(
+        'terminates the notary runtime as soon as final attestations land while proving continues',
+        tags,
+      ),
+      async () => {
+        const staged = stageNotarized(platformId, 'accepted', { held: true })
+        const { gates } = staged.notarized
+        const proof = Promise.withResolvers<Awaited<ReturnType<typeof generate>>>()
+        const resolved = generate.getMockImplementation()!
+        let callArgs: Parameters<typeof resolved> | undefined
+        generate.mockImplementationOnce((...args) => {
+          callArgs = args
+          return proof.promise
+        })
+        const pending = (await proverOf(platformId)).prove(staged.context)
+        gates.tokenResponse.resolve()
+        gates.tokenOpenings.resolve()
+        await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce())
+        expect(notarization.mock.calls[0][1].aborted).toBe(false)
+        gates.tokenAttestation.resolve()
+        await vi.waitFor(() => expect(notarization.mock.calls[0][1].aborted).toBe(true))
+        // The proof engine is still running while the TLSN worker is already freed.
+        expect(destroy).not.toHaveBeenCalled()
+        proof.resolve(await resolved(...callArgs!))
+        await expect(pending).resolves.toMatchObject({ identity })
+        expect(destroy).toHaveBeenCalledOnce()
+      },
+    )
+
     it.each(['closed', 'identity setup failed'])(
       tagged('retires both sessions and proving when %s during setup', tags),
       async (failure) => {

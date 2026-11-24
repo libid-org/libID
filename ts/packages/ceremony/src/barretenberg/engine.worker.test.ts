@@ -457,6 +457,20 @@ it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-01
   expect(w.has('result')).toBe(false)
 })
 
+it('inflates a SharedArrayBuffer-backed witness without failing Response construction', async () => {
+  const w = await worker()
+  const gz = gzipSync(Uint8Array.of(4, 5, 6))
+  const shared = new Uint8Array(new SharedArrayBuffer(gz.length))
+  shared.set(gz)
+  mocks.execute.mockResolvedValueOnce({ witness: shared })
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  w.prove({ fixture: 1 })
+  await expect.poll(() => w.has('result')).toBe(true)
+  expect(mocks.prove).toHaveBeenCalledWith(
+    expect.objectContaining({ witness: Uint8Array.of(4, 5, 6) }),
+  )
+})
+
 it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER-014]', async () => {
   const proof = Promise.withResolvers<unknown>()
   const w = await worker()

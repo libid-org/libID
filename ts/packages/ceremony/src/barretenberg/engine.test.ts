@@ -276,3 +276,20 @@ it('reports a generic failure for an uncaught worker error without a message', a
     message: 'Proof worker failed',
   })
 })
+
+it.each([
+  { threads: 1, hardwareConcurrency: 4 },
+  { threads: undefined, hardwareConcurrency: 1 },
+  { threads: Number.NaN, hardwareConcurrency: 4 },
+])(
+  'fails before spawning a worker when $threads threads / $hardwareConcurrency cores cannot run multithreaded proving',
+  async ({ threads, hardwareConcurrency }) => {
+    vi.stubGlobal('navigator', { hardwareConcurrency })
+    const instance = new ProofEngine({ ...options, threads })
+    expect(workers).toHaveLength(0)
+    await expect(instance.outcome).rejects.toMatchObject({
+      event: 'zk-proof-preparation',
+      message: 'Multithreaded backend unavailable',
+    })
+  },
+)
