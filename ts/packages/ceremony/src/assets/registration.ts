@@ -79,6 +79,27 @@ export async function registerRootWorker(url: string): Promise<ServiceWorker> {
 const isCount = (value: unknown): value is number =>
   Number.isSafeInteger(value) && Number(value) >= 0
 
+/** Send `message` with a reply port, detaching and closing both ends on settle or throw. */
+function postPort(
+  worker: ServiceWorker,
+  message: unknown,
+  signal: AbortSignal,
+  onMessage: (event: MessageEvent) => void,
+): void {
+  const { port1, port2 } = new MessageChannel()
+  signal.addEventListener('abort', () => {
+    port1.onmessage = null
+    port1.close()
+  })
+  port1.onmessage = onMessage
+  try {
+    worker.postMessage(message, [port2])
+  } catch (error) {
+    port2.close()
+    throw error
+  }
+}
+
 /**
  * Dispatch directly to the selected Worker, including while it waits behind an older active one.
  * Resolves with how many requests were stored and fetched, when the Worker reports both.
@@ -89,19 +110,15 @@ export async function dispatchPrefetch(
 ): Promise<{ cached: number; fetched: number } | undefined> {
   let counts: { cached: number; fetched: number } | undefined
   await within('Asset dispatch timed out', (done, signal) => {
-    const channel = new MessageChannel()
-    signal.addEventListener('abort', () => channel.port1.close())
-    channel.port1.onmessage = (event) => {
-      const { dispatched, cached, fetched } = event.data ?? {}
-      if (isCount(cached) && isCount(fetched)) counts = { cached, fetched }
-      if (dispatched === true) done()
-      else if (dispatched === false) done(new Error('Asset profile not served'))
-      else done(new Error('Invalid dispatch acknowledgement'))
-    }
     try {
-      worker.postMessage({ type: 'ceremony-prefetch', profile }, [channel.port2])
+      postPort(worker, { type: 'ceremony-prefetch', profile }, signal, ({ data }) => {
+        const { dispatched, cached, fetched } = data ?? {}
+        if (isCount(cached) && isCount(fetched)) counts = { cached, fetched }
+        if (dispatched === true) done()
+        else if (dispatched === false) done(new Error('Asset profile not served'))
+        else done(new Error('Invalid dispatch acknowledgement'))
+      })
     } catch {
-      channel.port2.close()
       done(new Error('Asset dispatch failed'))
     }
   })
@@ -117,13 +134,10 @@ export async function drainJournal(worker: ServiceWorker): Promise<Mark[]> {
   await within(
     'Journal timed out',
     (done, signal) => {
-      const channel = new MessageChannel()
-      signal.addEventListener('abort', () => channel.port1.close())
-      channel.port1.onmessage = ({ data }) => {
+      postPort(worker, { type: 'ceremony-journal' }, signal, ({ data }) => {
         if (Array.isArray(data?.marks)) marks = data.marks.filter(isMark)
         done()
-      }
-      worker.postMessage({ type: 'ceremony-journal' }, [channel.port2])
+      })
     },
     { ms: JOURNAL_TIMEOUT_MS },
   ).catch(() => {})
@@ -145,17 +159,11 @@ export async function remainingDownloads(
     (done, settled) => {
       const worker = navigator.serviceWorker.controller
       if (!worker) throw new Error('Missing controlling Service Worker')
-      const { port1, port2 } = new MessageChannel()
-      settled.addEventListener('abort', () => {
-        port1.onmessage = null
-        port1.close()
-      })
-      port1.onmessage = ({ data }) => {
+      postPort(worker, { type: 'ceremony-downloads', profile }, settled, ({ data }) => {
         if (isCount(data?.pending) && isCount(data?.missing))
           report = { pending: data.pending, missing: data.missing }
         done(report ? undefined : new Error('Invalid download report'))
-      }
-      worker.postMessage({ type: 'ceremony-downloads', profile }, [port2])
+      })
     },
     { abort: signal },
   )
@@ -169,14 +177,11 @@ export async function claimRootWorker(): Promise<void> {
     throw new Error('Missing root Service Worker')
   if (navigator.serviceWorker.controller === registration.active) return
   await within('Service Worker control timed out', (done, signal) => {
-    const channel = new MessageChannel()
-    signal.addEventListener('abort', () => channel.port1.close())
     const changed = () => {
       if (navigator.serviceWorker.controller === registration.active) done()
     }
     navigator.serviceWorker.addEventListener('controllerchange', changed, { signal })
-    channel.port1.onmessage = changed
-    registration.active!.postMessage({ type: 'ceremony-claim' }, [channel.port2])
+    postPort(registration.active!, { type: 'ceremony-claim' }, signal, changed)
     changed()
   })
 }
