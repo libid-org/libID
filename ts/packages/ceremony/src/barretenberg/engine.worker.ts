@@ -184,7 +184,13 @@ class EngineWorker {
     const { noir, circuit } = ready
     const [{ api }, { witness }] = await Promise.all([
       backend,
-      span('witness', () => noir.execute(message.inputs as Parameters<typeof noir.execute>[0])),
+      span('witness', () =>
+        noir.execute(message.inputs as Parameters<typeof noir.execute>[0]).catch((error) => {
+          // Only circuits built with --circuit-debug-symbols carry a source call stack.
+          if (error?.noirCallStack) console.error('[ceremony] Noir call stack', error.noirCallStack)
+          throw error
+        }),
+      ),
     ])
     if (this.#state !== 'proving') return
     const generated = await span('proof', async () =>
