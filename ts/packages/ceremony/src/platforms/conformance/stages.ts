@@ -232,7 +232,22 @@ export const notarizedFailures = {
   'opening-range': 'Plaintext opening is not unique',
   'shifted-range': 'Plaintext opening does not match its commitment',
   'attestation-mismatch': 'attested authority changed',
+  'token-refused': 'Platform request failed: HTTP/1.1',
+  'token-refused-other':
+    'Platform request failed: HTTP/1.1 400 Bad Request {"error":"invalid_grant","error_description":"Bad Request"}',
 }
+
+/** Each platform's real answer to a token request with an expired code, measured 2026-11-20. */
+export const expiredCodeAnswers = {
+  x: {
+    statusLine: '400 Bad Request',
+    body: '{"error":"invalid_request","error_description":"Value passed for the authorization code was invalid."}',
+  },
+  github: {
+    statusLine: '200 OK',
+    body: '{"error":"bad_verification_code","error_description":"The code passed is incorrect or expired.","error_uri":"https://docs.github.com/apps/managing-oauth-apps/troubleshooting-oauth-app-access-token-request-errors/#bad-verification-code"}',
+  },
+} as const
 
 export type NotarizedOutcome = SharedOutcome | keyof typeof notarizedFailures
 
@@ -290,10 +305,22 @@ export function fakeNotarization(
             : outcome === 'identity-shape'
               ? evidence.misshapenIdentityBody
               : evidence.identityBody
+        const refusal =
+          index !== 0
+            ? undefined
+            : outcome === 'token-refused'
+              ? expiredCodeAnswers[platformId]
+              : outcome === 'token-refused-other'
+                ? {
+                    statusLine: '400 Bad Request',
+                    body: '{"error":"invalid_grant","error_description":"Bad Request"}',
+                  }
+                : undefined
+        const answer = refusal?.body ?? body
         transcript = {
           sent: concat(requestHead(request), request.body),
           received: utf8(
-            `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\n\r\n${body}`,
+            `HTTP/1.1 ${refusal?.statusLine ?? '200 OK'}\r\nContent-Type: application/json\r\nContent-Length: ${answer.length}\r\n\r\n${answer}`,
           ),
         }
         transcripts[index] = transcript
@@ -448,15 +475,30 @@ export function stageNotarized(
   }
 }
 
-export const oidcFailures = {
+/** What each OIDC prover says when it refuses an expired token or one for another client. */
+const tokenRefusals: Record<OidcPlatform, { expired: string; 'audience-mismatch': string }> = {
+  google: {
+    expired: 'Google token expired',
+    'audience-mismatch': 'Google token was issued for another client',
+  },
+  telegram: {
+    expired: 'Invalid Telegram ID token',
+    'audience-mismatch': 'Invalid Telegram ID token',
+  },
+}
+
+export const oidcFailures = (platformId: OidcPlatform) => ({
   'wrong-kid': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
   'duplicate-key': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
   'empty-key-set': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
-  expired: { event: 'authorization', message: expect.stringMatching(/token/i) },
-  'audience-mismatch': { event: 'authorization', message: expect.stringMatching(/token/i) },
-}
+  expired: { event: 'authorization', message: tokenRefusals[platformId].expired },
+  'audience-mismatch': {
+    event: 'authorization',
+    message: tokenRefusals[platformId]['audience-mismatch'],
+  },
+})
 
-export type OidcOutcome = SharedOutcome | keyof typeof oidcFailures
+export type OidcOutcome = SharedOutcome | keyof ReturnType<typeof oidcFailures>
 
 /** Token rejections that must happen before any key fetch or proof engine startup. */
 export const beforeProving: OidcOutcome[] = ['expired', 'audience-mismatch']

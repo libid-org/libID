@@ -368,6 +368,8 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
   private stopReplacement: (() => void) | null = null
   private fallbackPending: boolean
   private handshakePending = false
+  /** When a direct navigation left the initial `about:blank`, until its destination commits. */
+  private navigatedAt: number | undefined
 
   constructor(
     private readonly popup: OpenedWindow,
@@ -426,6 +428,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
   }
 
   private checkWindow(): void {
+    if (!this.ended && this.committed) this.settleCommit('window-committed')
     if (this.ended || this.carrier || this.fallbackPending || this.handshakePending) return
     // Native-anchor creation has no handle until the first authenticated binding.
     if (this.popup.opened && !this.popup.direct) this.fail('popup-unavailable')
@@ -442,6 +445,8 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
    * installs the authenticated result under the same logical connection.
    */
   protected override install(carrier: Carrier, code?: DiagnosticCode): void {
+    // A carrier comes from a document that committed and ran.
+    if (!this.ended) this.settleCommit('window-committed')
     super.install(carrier, code)
     if (this.ended || !isNavigationCarrier(carrier)) return
     this.stopReplacement = carrier[onReplacement]((pending) => {
@@ -474,6 +479,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
       return
     }
     if (this.popup.direct) {
+      if (this.popup.blank) this.navigatedAt = performance.now()
       this.popup.replace(target)
       this.report('control-direct')
       return
@@ -522,14 +528,32 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
 
   protected override release(): void {
     if (this.ended) return
+    this.settleCommit(this.committed ? 'window-committed' : 'window-uncommitted')
     this.stopListening()
     super.release()
   }
 
   protected override fail(code: PopupErrorCode, viaOperation = false): void {
     if (this.ended) return
+    this.settleCommit(this.committed ? 'window-committed' : 'window-uncommitted')
     this.stopListening()
     super.fail(code, viaOperation)
+  }
+
+  /** The popup left its initial `about:blank` and still answers to the handle. */
+  private get committed(): boolean {
+    return this.popup.direct && !this.popup.blank
+  }
+
+  /**
+   * Reports, once, how long the first destination took to commit, or that the connection ended
+   * before any commit was seen. A destination that severs the handle as it commits (COOP) is
+   * never seen committing.
+   */
+  private settleCommit(code: 'window-committed' | 'window-uncommitted'): void {
+    if (this.navigatedAt === undefined) return
+    this.report(code, performance.now() - this.navigatedAt)
+    this.navigatedAt = undefined
   }
 }
 

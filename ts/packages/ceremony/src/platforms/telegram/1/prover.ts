@@ -1,4 +1,5 @@
 import * as assets from '../../../barretenberg/circuits/oidc_telegram/oidc_telegram.assets.js'
+import { SRS_POINTS } from '../../../barretenberg/circuits/oidc_telegram/parameters.js'
 import { operation } from '../../../events.js'
 import type { ProverContext } from '../../context.js'
 import { proveOidc } from '../../oidc.js'
@@ -13,6 +14,7 @@ export async function prove(context: ProverContext<'telegram'>) {
   return proveOidc(context, {
     name: 'Telegram',
     assets,
+    srsPoints: SRS_POINTS,
     token: async () =>
       acceptTelegramIdToken(
         await operation(emit, 'token-swap', () =>

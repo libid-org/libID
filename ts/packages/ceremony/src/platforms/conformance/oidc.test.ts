@@ -20,6 +20,7 @@ vi.mock('../../notary/session.js', async () => (await import('./mocks.js')).sess
 
 describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
   const fixture = fixtures[platformId]
+  const failures = oidcFailures(platformId)
   const tags = `${proverKinds.oidc.tags} [LIBID-OAUTH-007] [LIBID-OAUTH-021] ${fixture.specTests.prover}`
 
   it.each(Object.entries(fixture.rejectedBinding))(
@@ -108,12 +109,12 @@ describe.each(oidcPlatforms)('%s OIDC prover', (platformId) => {
     },
   )
 
-  it.each(Object.keys(oidcFailures) as (keyof typeof oidcFailures)[])(
+  it.each(Object.keys(failures) as (keyof typeof failures)[])(
     tagged('rejects %s before generating a proof', tags),
     async (outcome) => {
       const staged = stageOidc(platformId, outcome)
       await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject(
-        oidcFailures[outcome],
+        failures[outcome],
       )
       if (beforeProving.includes(outcome))
         expectNoProvingWork(staged.keys, 'engineBeforeToken' in fixture)

@@ -1,4 +1,6 @@
 import * as assets from '../../../assets/index.js'
+import { srs } from '../../barretenberg.assets.js'
+import { SRS_POINTS } from './parameters.js'
 
 const release = assets.archive(
   'https://github.com/libid-org/libid-circuits/releases/download/v0.9.0/libid-circuits-0.9.0-oidc-telegram.tar.gz',
@@ -12,3 +14,5 @@ export const circuit = release.member('oidc_telegram.json', {
 })
 
 export const verificationKey = release.member('vk', assets.headers.immutable)
+
+export const crs = srs(SRS_POINTS)

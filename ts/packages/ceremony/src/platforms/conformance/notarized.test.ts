@@ -21,6 +21,7 @@ import { ceremonyFor, platforms } from '../index.js'
 import { parseOAuthReturn } from '../oauthReturn.js'
 import { destroy, engine, engineOutcome, generate, notarization, prepare } from './mocks.js'
 import {
+  expiredCodeAnswers,
   fieldsOf,
   notarizedFailures,
   overLength,
@@ -96,7 +97,7 @@ const proofLifetime = { x: PROOF_LIFETIME_SECONDS_X, github: PROOF_LIFETIME_SECO
 describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
   const fixture = fixtures[platformId]
   const { requests, config, evidence, identity, longest, rejectedIdentity } = fixture
-  const tags = `${proverKinds['notarized'].tags} ${fixture.specTests.prover}`
+  const tags = `${proverKinds.notarized.tags} ${fixture.specTests.prover}`
 
   it.each([
     ['a space', 'a+b'],
@@ -726,6 +727,80 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
         expect(generate).not.toHaveBeenCalled()
       },
     )
+
+    describe('a refused token request', () => {
+      const answer = expiredCodeAnswers[platformId]
+      const expiredCode = fixture.requests.token.expiredCode!
+      const platformSaid = `Platform request failed: HTTP/1.1 ${answer.statusLine} ${answer.body}`
+      /** Prove with the Prover document `proverMs` old; restore the clock afterwards. */
+      async function refusedAt(
+        outcome: 'token-refused' | 'token-refused-other',
+        proverMs?: number,
+      ) {
+        const clock =
+          proverMs === undefined
+            ? undefined
+            : vi.spyOn(performance, 'now').mockReturnValue(proverMs)
+        try {
+          const staged = stageNotarized(platformId, outcome)
+          const failure = await (await proverOf(platformId)).prove(staged.context).catch((e) => e)
+          return { failure, events: staged.events }
+        } finally {
+          clock?.mockRestore()
+        }
+      }
+      const refusalEvent = (attributes: Record<string, unknown>) => ({
+        event: 'platform-refusal',
+        timestamp: expect.any(Number),
+        instrumentation: { attributes: { operation: 'token-fetch', ...attributes } },
+      })
+
+      it(
+        tagged("reports the platform's expired-code answer within the lifetime as a refusal", tags),
+        async () => {
+          const { failure, events } = await refusedAt('token-refused')
+          expect(failure).toMatchObject({ event: 'token-fetch', message: platformSaid })
+          expect(failure.reason).toBeUndefined()
+          const status = Number(answer.statusLine.slice(0, 3))
+          const error = JSON.parse(answer.body).error
+          expect(events).toContainEqual(
+            refusalEvent({ status, error, 'prover-ms': expect.any(Number) }),
+          )
+        },
+      )
+
+      it(
+        tagged('reports that answer past the lifetime as an expired authorization', tags),
+        async () => {
+          const proverMs = expiredCode.lifetimeSeconds * 1000 + 1500
+          const { failure, events } = await refusedAt('token-refused', proverMs)
+          expect(failure).toMatchObject({
+            event: 'token-fetch',
+            message: `${expiredCode.name} did not accept the sign-in: it expired after ${expiredCode.lifetimeSeconds + 1} s, while this connection set up the proof. Check your connection and try again. ${platformSaid}`,
+          })
+          expect(events).toContainEqual(
+            refusalEvent({
+              status: Number(answer.statusLine.slice(0, 3)),
+              error: JSON.parse(answer.body).error,
+              'prover-ms': proverMs,
+              reason: 'authorization-expired',
+            }),
+          )
+        },
+      )
+
+      it(tagged('never calls another answer expired, however late', tags), async () => {
+        const proverMs = expiredCode.lifetimeSeconds * 1000 + 1500
+        const { failure, events } = await refusedAt('token-refused-other', proverMs)
+        expect(failure).toMatchObject({
+          event: 'token-fetch',
+          message: notarizedFailures['token-refused-other'],
+        })
+        expect(events).toContainEqual(
+          refusalEvent({ status: 400, error: 'invalid_grant', 'prover-ms': proverMs }),
+        )
+      })
+    })
 
     it.each(Object.keys(notarizedFailures) as (keyof typeof notarizedFailures)[])(
       tagged('rejects %s and destroys its engine', tags),

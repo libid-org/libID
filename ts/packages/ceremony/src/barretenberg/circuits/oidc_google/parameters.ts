@@ -10,3 +10,5 @@ export const MAX_AUD_BYTES = 128
 export const MAX_EXP_DIGITS = 12
 export const MAX_SIGNING_INPUT_BYTES = 1280
 export const MAX_PAYLOAD_JSON_BYTES = 768
+/** BN254 points the circuit proves with: its 197,462 gates fill 2^18; build/circuits.ts checks it. */
+export const SRS_POINTS = 2 ** 18

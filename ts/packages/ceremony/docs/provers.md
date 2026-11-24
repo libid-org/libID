@@ -126,7 +126,16 @@ For another version-one platform:
    Configure the platform's OAuth registration in the Bridge and its presentation
    in the [dev app](../../../apps/dev/README.md). The Distribution publishes
    versions; Bridge configuration names the client used by every version.
-5. Add canonical vectors, malformed-return/input cases, selected-asset/native-loader
+5. For a notarized token and identity platform, measure its authorization codes
+   before release: redeem real codes at increasing ages, from the moment the platform
+   redirects back, to bracket how long a code stays redeemable, and record the
+   platform's exact answer to an expired code (HTTP status, OAuth `error` and
+   `error_description`). Declare both in `provider.ts` as `expiredCode`, with the
+   measurement date, and match the description too where `error` alone also names other
+   failures. Without them a slow connection's expired code fails as an unexplained
+   refusal instead of `authorization-expired`. A documented lifetime stands in only until
+   measured, and says so.
+6. Add canonical vectors, malformed-return/input cases, selected-asset/native-loader
    checks, actual-popup browser flows and released-key-verified real proofs.
    Map applicable [stable test IDs](test-plan.md) in [traceability](traceability.md).
    Complete authenticated-service/device qualification before claiming support.

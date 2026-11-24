@@ -1,18 +1,24 @@
+import { isMark, type Mark } from './journal.js'
+
 const SERVICE_WORKER_TIMEOUT_MS = 15000
 const ACTIVATION_POLL_INTERVAL_MS = 50
+/** Forwarding the journal is diagnostic; it never holds the ceremony longer than this. */
+const JOURNAL_TIMEOUT_MS = 1000
 
 /**
- * Settle through `done` within `ms` (15 seconds by default). Settling, including a synchronous
- * throw from `start`, clears the timer and aborts `signal`, removing listeners registered with it.
+ * Settle through `done` within `ms` (15 seconds by default), rejecting with `timeout` past it;
+ * a null `timeout` sets no deadline. Aborting `abort` rejects with its reason. Settling, including
+ * a synchronous throw from `start`, clears the timer and aborts `signal`, removing listeners
+ * registered with it.
  */
 function within(
-  timeout: string,
+  timeout: string | null,
   start: (done: (error?: unknown) => void, signal: AbortSignal) => void,
-  ms = SERVICE_WORKER_TIMEOUT_MS,
+  { ms = SERVICE_WORKER_TIMEOUT_MS, abort }: { ms?: number; abort?: AbortSignal } = {},
 ): Promise<void> {
   const { promise, resolve, reject } = Promise.withResolvers<void>()
   const settled = new AbortController()
-  const timer = setTimeout(() => done(new Error(timeout)), ms)
+  const timer = timeout === null ? undefined : setTimeout(() => done(new Error(timeout)), ms)
   const done = (error?: unknown) => {
     clearTimeout(timer)
     settled.abort()
@@ -20,6 +26,8 @@ function within(
     else reject(error)
   }
   try {
+    abort?.throwIfAborted()
+    abort?.addEventListener('abort', () => done(abort.reason), { signal: settled.signal })
     start(done, settled.signal)
   } catch (error) {
     done(error)
@@ -37,6 +45,8 @@ export async function registerRootWorker(url: string): Promise<ServiceWorker> {
   })
   if (registration.scope !== `${location.origin}/`)
     throw new Error('Incorrect Service Worker scope')
+  if (registration.active?.scriptURL === script && registration.active.state !== 'redundant')
+    return registration.active
   // WebKit can resolve register() before the registration shows the Worker it installs.
   let pinned: ServiceWorker | null | undefined
   await within('Missing build-pinned Service Worker', (done, signal) => {
@@ -69,6 +79,27 @@ export async function registerRootWorker(url: string): Promise<ServiceWorker> {
 const isCount = (value: unknown): value is number =>
   Number.isSafeInteger(value) && Number(value) >= 0
 
+/** Send `message` with a reply port, detaching and closing both ends on settle or throw. */
+function postPort(
+  worker: ServiceWorker,
+  message: unknown,
+  signal: AbortSignal,
+  onMessage: (event: MessageEvent) => void,
+): void {
+  const { port1, port2 } = new MessageChannel()
+  signal.addEventListener('abort', () => {
+    port1.onmessage = null
+    port1.close()
+  })
+  port1.onmessage = onMessage
+  try {
+    worker.postMessage(message, [port2])
+  } catch (error) {
+    port2.close()
+    throw error
+  }
+}
+
 /**
  * Dispatch directly to the selected Worker, including while it waits behind an older active one.
  * Resolves with how many requests were stored and fetched, when the Worker reports both.
@@ -79,19 +110,15 @@ export async function dispatchPrefetch(
 ): Promise<{ cached: number; fetched: number } | undefined> {
   let counts: { cached: number; fetched: number } | undefined
   await within('Asset dispatch timed out', (done, signal) => {
-    const channel = new MessageChannel()
-    signal.addEventListener('abort', () => channel.port1.close())
-    channel.port1.onmessage = (event) => {
-      const { dispatched, cached, fetched } = event.data ?? {}
-      if (isCount(cached) && isCount(fetched)) counts = { cached, fetched }
-      if (dispatched === true) done()
-      else if (dispatched === false) done(new Error('Asset profile not served'))
-      else done(new Error('Invalid dispatch acknowledgement'))
-    }
     try {
-      worker.postMessage({ type: 'ceremony-prefetch', profile }, [channel.port2])
+      postPort(worker, { type: 'ceremony-prefetch', profile }, signal, ({ data }) => {
+        const { dispatched, cached, fetched } = data ?? {}
+        if (isCount(cached) && isCount(fetched)) counts = { cached, fetched }
+        if (dispatched === true) done()
+        else if (dispatched === false) done(new Error('Asset profile not served'))
+        else done(new Error('Invalid dispatch acknowledgement'))
+      })
     } catch {
-      channel.port2.close()
       done(new Error('Asset dispatch failed'))
     }
   })
@@ -99,26 +126,48 @@ export async function dispatchPrefetch(
 }
 
 /**
- * The profile's retrievals still running, once they settle, and those neither running nor
- * stored. No deadline: downloads take what they take. A Worker that never answers leaves this
- * pending.
+ * The Worker's kept lifecycle marks, removed as they are read. None when the Worker does not
+ * answer within a second, as when its Cache Storage stalls.
  */
-export function remainingDownloads(profile: string): Promise<{ pending: number; missing: number }> {
-  const { promise, resolve, reject } = Promise.withResolvers<{ pending: number; missing: number }>()
-  const worker = navigator.serviceWorker.controller
-  if (!worker) {
-    reject(new Error('Missing controlling Service Worker'))
-    return promise
-  }
-  const channel = new MessageChannel()
-  channel.port1.onmessage = ({ data }) => {
-    channel.port1.close()
-    if (isCount(data?.pending) && isCount(data?.missing))
-      resolve({ pending: data.pending, missing: data.missing })
-    else reject(new Error('Invalid download report'))
-  }
-  worker.postMessage({ type: 'ceremony-downloads', profile }, [channel.port2])
-  return promise
+export async function drainJournal(worker: ServiceWorker): Promise<Mark[]> {
+  let marks: Mark[] = []
+  await within(
+    'Journal timed out',
+    (done, signal) => {
+      postPort(worker, { type: 'ceremony-journal' }, signal, ({ data }) => {
+        if (Array.isArray(data?.marks)) marks = data.marks.filter(isMark)
+        done()
+      })
+    },
+    { ms: JOURNAL_TIMEOUT_MS },
+  ).catch(() => {})
+  return marks
+}
+
+/**
+ * The profile's retrievals still running, once they settle, and those neither running nor
+ * stored. No deadline: downloads take what they take. Aborting `signal` closes the reply port
+ * and rejects; without an abort, a Worker that never answers leaves this pending.
+ */
+export async function remainingDownloads(
+  profile: string,
+  signal?: AbortSignal,
+): Promise<{ pending: number; missing: number }> {
+  let report: { pending: number; missing: number } | undefined
+  await within(
+    null,
+    (done, settled) => {
+      const worker = navigator.serviceWorker.controller
+      if (!worker) throw new Error('Missing controlling Service Worker')
+      postPort(worker, { type: 'ceremony-downloads', profile }, settled, ({ data }) => {
+        if (isCount(data?.pending) && isCount(data?.missing))
+          report = { pending: data.pending, missing: data.missing }
+        done(report ? undefined : new Error('Invalid download report'))
+      })
+    },
+    { abort: signal },
+  )
+  return report!
 }
 
 /** Newly isolated documents can initially be uncontrolled; claim before execution fetches. */
@@ -128,14 +177,11 @@ export async function claimRootWorker(): Promise<void> {
     throw new Error('Missing root Service Worker')
   if (navigator.serviceWorker.controller === registration.active) return
   await within('Service Worker control timed out', (done, signal) => {
-    const channel = new MessageChannel()
-    signal.addEventListener('abort', () => channel.port1.close())
     const changed = () => {
       if (navigator.serviceWorker.controller === registration.active) done()
     }
     navigator.serviceWorker.addEventListener('controllerchange', changed, { signal })
-    channel.port1.onmessage = changed
-    registration.active!.postMessage({ type: 'ceremony-claim' }, [channel.port2])
+    postPort(registration.active!, { type: 'ceremony-claim' }, signal, changed)
     changed()
   })
 }

@@ -1,13 +1,17 @@
 import type { Asset, LocalAsset } from '../assets/index.js'
 import { proofAssets } from '../barretenberg/barretenberg.assets.js'
-import { circuit, verificationKey } from '../barretenberg/circuits/bearer-link/bearerLink.assets.js'
+import {
+  circuit,
+  crs,
+  verificationKey,
+} from '../barretenberg/circuits/bearer-link/bearerLink.assets.js'
 import { notaryAssets } from '../notary/notary.assets.js'
 import { googleAssets } from './google/1/google.assets.js'
 import type { PlatformId, SupportedCeremonyVersion } from './index.js'
 import { telegramAssets } from './telegram/1/telegram.assets.js'
 
-/** Every X/GitHub v1 resource: the proof engine, the notary client and the bearer-link circuit. */
-const notarizedAssets = [...proofAssets, ...notaryAssets, circuit, verificationKey] as const
+/** Every X/GitHub v1 resource: the proof engine, the notary client and the bearer-link circuit with its SRS. */
+const notarizedAssets = [...proofAssets, ...crs, ...notaryAssets, circuit, verificationKey] as const
 
 export const assetsByPlatform = {
   google: { 1: googleAssets },

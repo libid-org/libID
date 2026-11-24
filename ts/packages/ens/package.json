@@ -1,6 +1,6 @@
 {
   "name": "@libid/ens",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The ENS name of a libID handle under handles.link.",
   "license": "(MIT OR Apache-2.0)",
   "repository": {
@@ -28,7 +28,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "viem": "^2.48.11",
+    "viem": "^2.57.20",
     "vitest": "catalog:"
   },
   "files": [

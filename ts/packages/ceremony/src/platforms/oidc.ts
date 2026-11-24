@@ -85,6 +85,7 @@ export async function proveOidc<
   oidc: {
     name: string
     assets: { circuit: Asset; verificationKey: Asset }
+    srsPoints: number
     token(): T | Promise<T>
     fetchSigningKey(kid: string, signal: AbortSignal): Promise<unknown>
     prepare(
@@ -108,6 +109,7 @@ export async function proveOidc<
   const engine = new ProofEngine({
     circuitUrl: assetUrl(oidc.assets.circuit),
     verificationKeyUrl: assetUrl(oidc.assets.verificationKey),
+    srsPoints: oidc.srsPoints,
     emit,
   })
   try {

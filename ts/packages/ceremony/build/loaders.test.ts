@@ -85,18 +85,24 @@ test('real dependency loaders obey emitted URLs and native CRS ranges [LIBID-ASS
       WebAssembly.validate(await fetchCode(true, wasm.replace('-threads.wasm', '.wasm'))),
       true,
     )
-    const { NetCrs, NetGrumpkinCrs } = await import(pathToFileURL(join(bb, 'crs/net_crs.js')).href)
+    const { NetCrs } = await import(pathToFileURL(join(bb, 'crs/net_crs.js')).href)
     // The engine already passes crsPath (LIBID-ASSET-022); pinned bb.js browser loaders take only
     // a point count. When this fails, bb.js honors a CRS base: observe the engine's base here and
     // revisit distributed CRS.
-    const { Crs, GrumpkinCrs } = await import(pathToFileURL(join(bb, 'crs/browser/index.js')).href)
-    for (const loader of [Crs, GrumpkinCrs])
-      assert.match(String(loader.new), /^async new\(numPoints\)/)
+    const { Crs } = await import(pathToFileURL(join(bb, 'crs/browser/index.js')).href)
+    assert.match(String(Crs.new), /^async new\(numPoints\)/)
+    // The engine repeats bb.js's BN254 SRS setup without its Grumpkin half; when this fails,
+    // bb.js changed that setup: carry the change into the engine's bn254Backend.
+    const { Barretenberg } = await import(pathToFileURL(join(bb, 'barretenberg/index.js')).href)
+    assert.match(
+      String(Barretenberg.prototype.initSRSChonk).replace(/\s+/g, ' '),
+      /const crs = await Crs\.new\(srsSize, this\.options\.crsPath, this\.options\.logger\);.*await this\.srsInitSrs\(\{ pointsBuf: crs\.getG1Data\(\), numPoints: crs\.numPoints, g2Point: crs\.getG2Data\(\), \}\); if \(response\.pointsBuf\.length > 0\) \{ await crs\.cacheUncompressed\(response\.pointsBuf\); \}/,
+    )
+    const [, lastByte] = select('g1_compressed.dat').range!.split('-')
     for (const fallback of [false, true]) {
       failPrimary = fallback
       const start = observations.length
-      await new NetCrs(2 ** 18).init()
-      await new NetGrumpkinCrs(2 ** 16).init()
+      await new NetCrs((Number(lastByte) + 1) / 32).init()
       const actual = observations.slice(start)
       for (const spec of external) {
         assert.ok(actual.some((r) => r.url === spec.url && r.range === spec.range))

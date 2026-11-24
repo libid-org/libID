@@ -91,8 +91,8 @@ is synchronous and snapshots its inputs before OAuth. It reads
 byte inputs before returning, without retaining those buffers. The digest commits
 no chain, so one ceremony's proof serves every ledger whose Consumer accepts its
 operation domain.
-Invalid selection, ledger values or inputs fail before OAuth. A client cannot reuse a live connection ID; a connection cannot run two
-ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
+Invalid selection, ledger values or inputs fail before OAuth. A live connection ID cannot be reused, by this client or another: creating a
+second run for it throws, so a connection never runs two ceremonies simultaneously. Full signatures and lifecycle JSDoc live in
 [client.ts](../src/ccdp/client/client.ts) and [ceremony.ts](../src/ccdp/client/ceremony.ts).
 
 `proveUserIdentity()` starts the run once and owns its protocol navigation. Called

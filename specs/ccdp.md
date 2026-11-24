@@ -536,6 +536,14 @@ or automatic credential-redaction guarantee: dependency error text may contain
 sensitive details. Recipients render it as text, never markup or control data,
 and exclude it from telemetry exports. The Application rejects the live ceremony.
 
+`CeremonyFailed` itself never carries a reason. The one reason a Client may
+expose is `authorization-expired`: the Prover reports it in the `platform-refusal`
+extension event's `reason` attribute before failing the same operation, when the
+platform refused the token request with its measured answer to an expired
+authorization code after that code's measured lifetime. A Client that understands
+it sets it on the failure it raises for that operation; one that does not ignores
+the event as any unknown extension.
+
 Failure before connection acceptance has no CCDP path. Its display text may be
 rendered locally; an undeliverable report records a fixed local diagnostic,
 not the opaque error text. Reporting failure changes neither cleanup nor the

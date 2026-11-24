@@ -58,8 +58,10 @@ function parseGoogleIdToken(idToken: string): ParsedGoogleIdToken {
 /** Accept a token only for this ceremony's client and before its signed expiry. */
 export function acceptGoogleIdToken(idToken: string, clientId: string): ParsedGoogleIdToken {
   const token = parseGoogleIdToken(idToken)
-  if (token.claims.aud !== clientId || token.claims.exp <= Date.now() / 1000)
-    throw new CeremonyError('authorization', 'Invalid Google token')
+  if (token.claims.aud !== clientId)
+    throw new CeremonyError('authorization', 'Google token was issued for another client')
+  if (token.claims.exp <= Date.now() / 1000)
+    throw new CeremonyError('authorization', 'Google token expired')
   return token
 }
 

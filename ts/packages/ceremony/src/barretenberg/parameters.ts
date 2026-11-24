@@ -36,8 +36,4 @@ export const halves = (value: Uint8Array): bigint[] => [
 export const G1_POINT_BYTES = 32
 export const CRS_CHUNK_BYTES = 4 * 1024 * 1024
 export const MIN_SRS_POINTS = CRS_CHUNK_BYTES / G1_POINT_BYTES
-// One shared SRS covers both released circuits; build/circuits.ts checks their capacity.
-export const SRS_POINTS = 2 ** 18
 export const G2_BYTES = 128
-export const GRUMPKIN_POINT_BYTES = 64
-export const GRUMPKIN_SRS_POINTS = 2 ** 16

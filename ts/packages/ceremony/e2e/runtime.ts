@@ -6,6 +6,7 @@ import {
   verificationKey,
 } from '../src/barretenberg/circuits/bearer-link/bearerLink.assets.js'
 import { buildBearerLinkInputs } from '../src/barretenberg/circuits/bearer-link/inputs.js'
+import { SRS_POINTS } from '../src/barretenberg/circuits/bearer-link/parameters.js'
 import { ProofEngine } from '../src/barretenberg/engine.js'
 import type { ExactHttpRequest } from '../src/notary/protocol.js'
 import { NotaryRuntime } from '../src/notary/session.js'
@@ -60,6 +61,7 @@ Object.assign(window, {
     const engine = new ProofEngine({
       circuitUrl: assetUrl(circuit),
       verificationKeyUrl: assetUrl(verificationKey),
+      srsPoints: SRS_POINTS,
       threads: 2,
     })
     try {

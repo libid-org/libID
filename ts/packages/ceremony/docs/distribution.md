@@ -83,9 +83,9 @@ Declare a dependency once in its owner's `*.assets.ts`. The internal
 import * as assets from '../assets/index.js'
 
 const release = assets.archive(
-  'https://github.com/libid-org/notary/releases/download/v0.6.0/tlsn-wasm-0.6.0.tar.gz',
-  'tlsn/v0.6.0',
-  'sha256:43efade011298d99d4852c8f74673586b59f0f3dd45f38bf1fb9fa19b55429e0',
+  'https://github.com/libid-org/notary/releases/download/v0.7.0/tlsn-wasm-0.7.0.tar.gz',
+  'tlsn/v0.7.0',
+  'sha256:4fd772f68b8648855d8c361f836300f9a8f35aac081027d2e04f38e20b74e473',
 )
 const module = release.member('tlsn_wasm.js', {
   ...assets.headers.immutable,
@@ -163,7 +163,9 @@ representation metadata and policies weakening required resource headers are
 rejected. A declared CSP value replaces the whole default one.
 
 The build normalizes gzip-packed WASM to decoded `.wasm` bodies. It emits Brotli
-and gzip sidecars only when smaller. SWS uses native precompressed serving;
+and gzip sidecars only when smaller. Brotli runs at maximum quality and a 24-bit
+window, and `.cache/` reuses each sidecar by content hash, so only changed files
+pay that cost again. SWS uses native precompressed serving;
 request-time compression is disabled. Browsers fetch the unencoded resource URL,
 and Cache Storage retains decoded bodies. Gzip also serves browsers that do not
 advertise Brotli, including WebKit on local HTTP.

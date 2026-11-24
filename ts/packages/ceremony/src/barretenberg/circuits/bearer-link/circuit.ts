@@ -6,6 +6,7 @@ import type { ByteRange, CommitmentOpening } from '../../../notary/protocol.js'
 import { ProofEngine } from '../../engine.js'
 import { circuit, verificationKey } from './bearerLink.assets.js'
 import { buildBearerLinkInputs, isBearerLinkPublicInputs } from './inputs.js'
+import { SRS_POINTS } from './parameters.js'
 
 const encoder = new TextEncoder()
 
@@ -28,6 +29,7 @@ export class BearerLinkCircuit {
     this.engine = new ProofEngine({
       circuitUrl: assetUrl(circuit),
       verificationKeyUrl: assetUrl(verificationKey),
+      srsPoints: SRS_POINTS,
       emit,
     })
     this.outcome = this.engine.outcome

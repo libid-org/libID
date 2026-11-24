@@ -4,7 +4,7 @@ import { readArchive } from './archive.ts'
 import { loadAssetCatalog } from './assets.ts'
 import { validateCircuitCapacity } from './circuits.ts'
 
-test('released circuit statistics fit the fixed launch SRS [LIBID-ASSET-013]', async () => {
+test('released circuit statistics fit the SRS each circuit declares [LIBID-ASSET-013]', async () => {
   const catalog = await loadAssetCatalog()
   const releases = new Map(
     await Promise.all(
@@ -17,17 +17,20 @@ test('released circuit statistics fit the fixed launch SRS [LIBID-ASSET-013]', a
       ),
     ),
   )
-  const bearer = releases.get('bearer_link')!
-  const stats = await validateCircuitCapacity(releases, 2 ** 18)
+  const sized = (name: string, srsPoints: number) =>
+    new Map([[name, { bytes: releases.get(name)!, srsPoints }]])
+  const stats = await validateCircuitCapacity(
+    new Map([
+      ...sized('bearer_link', 2 ** 17),
+      ...sized('oidc_google', 2 ** 18),
+      ...sized('oidc_telegram', 2 ** 18),
+    ]),
+  )
   assert.deepEqual(stats, {
     bearer_link: { gates: 83671, dyadic: 2 ** 17 },
     oidc_google: { gates: 197462, dyadic: 2 ** 18 },
     oidc_telegram: { gates: 248207, dyadic: 2 ** 18 },
   })
-  await assert.rejects(validateCircuitCapacity(releases, 2 ** 17), /exceeds/)
-  await assert.rejects(
-    validateCircuitCapacity(new Map([['bearer_link', bearer]]), 2 ** 16),
-    /loader floor/,
-  )
-  await validateCircuitCapacity(new Map([['bearer_link', bearer]]), 2 ** 17)
+  await assert.rejects(validateCircuitCapacity(sized('oidc_google', 2 ** 17)), /exceeds/)
+  await assert.rejects(validateCircuitCapacity(sized('bearer_link', 2 ** 16)), /loader floor/)
 })

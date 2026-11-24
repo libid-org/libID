@@ -53,6 +53,9 @@ export interface CCDPClient {
   ) => Ceremony<P>
 }
 
+/** Ceremony IDs with a live run, across every client: a run is refused where it is created. */
+const liveIds = new Set<string>()
+
 /**
  * Fetch and validate the Bridge configuration, then the configured Distribution's version
  * list, once each. Rejects when either is unavailable or malformed, since every ceremony
@@ -67,7 +70,6 @@ export async function createCCDPClient(options: { oauthBridge: string }): Promis
 /** Construction from an already validated, frozen Bridge configuration and Distribution list. */
 function ccdpClientFromConfig(config: CeremonyConfig, versions: PlatformVersions): CCDPClient {
   const popupOrigins = [...new Set([new URL(config.redirectUri).origin, config.ccdpOrigin])]
-  const liveIds = new Set<string>()
   // A platform the Bridge does not configure has no client, whatever the Distribution bundles.
   const enabledVersions = <P extends PlatformId>(platform: P) =>
     commonVersions(

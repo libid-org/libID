@@ -2,6 +2,7 @@ import { afterEach, expect, it, type Mock, vi } from 'vitest'
 import {
   claimRootWorker,
   dispatchPrefetch,
+  drainJournal,
   registerRootWorker,
   remainingDownloads,
 } from './registration.js'
@@ -70,12 +71,24 @@ function install(
 }
 
 it.each(['activating', 'activated'] as const)(
-  'reuses a matching %s worker without an update check [TEST-DIST-08]',
+  'reuses a matching %s worker without an update check or wait timers [TEST-DIST-08]',
   async (state) => {
     const active = serviceWorker(state, { dispatched: true })
     const root = registration(`${ORIGIN}/`, { active })
     const container = install(root)
-    await dispatchPrefetch(await registerRootWorker(SCRIPT), 'google/1')
+    const rootListen = vi.spyOn(root, 'addEventListener')
+    const workerListen = vi.spyOn(active, 'addEventListener')
+    const setTimer = vi.spyOn(globalThis, 'setTimeout')
+    const setPoll = vi.spyOn(globalThis, 'setInterval')
+    const selected = await registerRootWorker(SCRIPT)
+    expect(selected).toBe(active)
+    expect(rootListen).not.toHaveBeenCalled()
+    expect(workerListen).not.toHaveBeenCalled()
+    expect(setTimer).not.toHaveBeenCalled()
+    expect(setPoll).not.toHaveBeenCalled()
+    setTimer.mockRestore()
+    setPoll.mockRestore()
+    await dispatchPrefetch(selected, 'google/1')
     expect(active.postMessage).toHaveBeenCalledExactlyOnceWith(
       { type: 'ceremony-prefetch', profile: 'google/1' },
       expect.any(Array),
@@ -329,4 +342,98 @@ it.each([
   const container = install(undefined)
   if (reply) container.controller = serviceWorker('activated', reply)
   await expect(remainingDownloads('google/1')).rejects.toThrow(error)
+})
+
+it('forwards only well-formed marks from the journal the Worker hands over', async () => {
+  const kept = { event: 'root-worker-start', timestamp: 1, operationId: 'a' }
+  const worker = serviceWorker('activated', { marks: [kept, { event: 'Bad Event' }] })
+  await expect(drainJournal(worker)).resolves.toEqual([kept])
+  expect(worker.postMessage).toHaveBeenCalledWith({ type: 'ceremony-journal' }, [
+    expect.any(MessagePort),
+  ])
+})
+
+it.each([
+  ['the Worker never answers', undefined],
+  ['the answer is malformed', { marks: 'none' }],
+])('yields no marks within a second when %s', async (_, reply) => {
+  vi.useFakeTimers()
+  const drained = drainJournal(serviceWorker('activated', reply))
+  await vi.advanceTimersByTimeAsync(1000)
+  await expect(drained).resolves.toEqual([])
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('closes the reply port and rejects when remainingDownloads aborts', async () => {
+  const container = install(undefined)
+  const worker = serviceWorker('activated')
+  container.controller = worker
+
+  // Already aborted: rejects without posting to the worker.
+  const preAborted = new AbortController()
+  const preReason = new DOMException('Already aborted', 'AbortError')
+  preAborted.abort(preReason)
+  await expect(remainingDownloads('google/1', preAborted.signal)).rejects.toBe(preReason)
+  expect(worker.postMessage).not.toHaveBeenCalled()
+
+  // Aborted while pending: closes port1, detaches onmessage, and rejects with the abort reason.
+  let port1Close!: ReturnType<typeof vi.spyOn>
+  const OriginalChannel = globalThis.MessageChannel
+  let createdPort1!: MessagePort
+  vi.stubGlobal(
+    'MessageChannel',
+    class extends OriginalChannel {
+      constructor() {
+        super()
+        createdPort1 = this.port1
+        port1Close = vi.spyOn(this.port1, 'close')
+      }
+    },
+  )
+  const controller = new AbortController()
+  const pending = remainingDownloads('google/1', controller.signal)
+  expect(worker.postMessage).toHaveBeenCalledOnce()
+  const reason = new DOMException('Cancelled', 'AbortError')
+  controller.abort(reason)
+  await expect(pending).rejects.toBe(reason)
+  expect(port1Close).toHaveBeenCalledOnce()
+  expect(createdPort1.onmessage).toBeNull()
+})
+
+it('closes both MessageChannel ports and detaches onmessage when postMessage throws', async () => {
+  const OriginalChannel = globalThis.MessageChannel
+  const channels: { port1: MessagePort; port1Close: Mock; port2Close: Mock }[] = []
+  vi.stubGlobal(
+    'MessageChannel',
+    class extends OriginalChannel {
+      constructor() {
+        super()
+        channels.push({
+          port1: this.port1,
+          port1Close: vi.spyOn(this.port1, 'close'),
+          port2Close: vi.spyOn(this.port2, 'close'),
+        })
+      }
+    },
+  )
+  const reason = new DOMException('Worker is gone', 'InvalidStateError')
+  const worker = serviceWorker('activated')
+  worker.postMessage.mockImplementation(() => {
+    throw reason
+  })
+  const container = install(registration(`${ORIGIN}/`, { active: worker }))
+  container.controller = worker
+
+  await expect(dispatchPrefetch(worker, 'google/1')).rejects.toThrow('Asset dispatch failed')
+  await expect(drainJournal(worker)).resolves.toEqual([])
+  await expect(remainingDownloads('google/1')).rejects.toBe(reason)
+  container.controller = null
+  await expect(claimRootWorker()).rejects.toBe(reason)
+
+  expect(channels).toHaveLength(4)
+  for (const { port1, port1Close, port2Close } of channels) {
+    expect(port1Close).toHaveBeenCalledOnce()
+    expect(port2Close).toHaveBeenCalledOnce()
+    expect(port1.onmessage).toBeNull()
+  }
 })

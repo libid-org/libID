@@ -2,6 +2,8 @@
 export const MAX_SIGNING_INPUT_BYTES = 2688
 export const MAX_AUD_BYTES = 20
 export const MAX_IAT_DIGITS = 12
+/** BN254 points the circuit proves with: its 248,207 gates fill 2^18; build/circuits.ts checks it. */
+export const SRS_POINTS = 2 ** 18
 export const ISSUER = 'https://oauth.telegram.org'
 /** The issuer claim as Telegram signs it, `/` escaped. */
 export const ISSUER_CLAIM = `"iss":"${ISSUER.replaceAll('/', '\\/')}"`

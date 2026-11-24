@@ -7,21 +7,24 @@ import {
   PROVING_SETTINGS,
 } from '../src/barretenberg/parameters.ts'
 
-/** Build-time circuit statistics use the pinned EVM proof settings, without SRS downloads. */
+/**
+ * Each circuit fits the SRS it proves with. Build-time circuit statistics use the pinned EVM
+ * proof settings, without SRS downloads.
+ */
 export async function validateCircuitCapacity(
-  circuits: ReadonlyMap<string, Buffer>,
-  srsPoints: number,
+  circuits: ReadonlyMap<string, { bytes: Buffer; srsPoints: number }>,
 ) {
-  if (
-    !Number.isSafeInteger(srsPoints) ||
-    srsPoints < MIN_SRS_POINTS ||
-    (srsPoints * G1_POINT_BYTES) % CRS_CHUNK_BYTES !== 0
-  )
-    throw new Error('SRS does not satisfy the pinned browser loader floor')
+  for (const { srsPoints } of circuits.values())
+    if (
+      !Number.isSafeInteger(srsPoints) ||
+      srsPoints < MIN_SRS_POINTS ||
+      (srsPoints * G1_POINT_BYTES) % CRS_CHUNK_BYTES !== 0
+    )
+      throw new Error('SRS does not satisfy the pinned browser loader floor')
   const api = await Barretenberg.new({ backend: BackendType.Wasm, threads: 1, skipSrsInit: true })
   const stats: Record<string, { gates: number; dyadic: number }> = {}
   try {
-    for (const [name, bytes] of circuits) {
+    for (const [name, { bytes, srsPoints }] of circuits) {
       const circuit = JSON.parse(bytes.toString('utf8')) as { bytecode: string }
       const result = await api.circuitStats({
         circuit: {
@@ -32,8 +35,7 @@ export async function validateCircuitCapacity(
         includeGatesPerOpcode: false,
         settings: PROVING_SETTINGS,
       })
-      if (result.numGatesDyadic > srsPoints)
-        throw new Error(`Circuit exceeds the launch SRS: ${name}`)
+      if (result.numGatesDyadic > srsPoints) throw new Error(`Circuit exceeds its SRS: ${name}`)
       stats[name] = { gates: result.numGates, dyadic: result.numGatesDyadic }
     }
     return stats

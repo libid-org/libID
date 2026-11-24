@@ -6,3 +6,5 @@ export const MAX_ID_BYTES = 20
 export const MAX_HANDLE_BYTES = 39
 /** A tag is one public field: its bytes from the top of 31 bytes, zero after. */
 export const MAX_TAG_BYTES = 31
+/** BN254 points the circuit proves with: its 83,671 gates fill 2^17; build/circuits.ts checks it. */
+export const SRS_POINTS = 2 ** 17

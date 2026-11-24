@@ -1,15 +1,26 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const { load, reconcile, remaining } = vi.hoisted(() => ({
+const { load, prefetch, reconcile, remaining, record, drain } = vi.hoisted(() => ({
   load: vi.fn(),
+  prefetch: vi.fn(),
   reconcile: vi.fn(),
   remaining: vi.fn(),
+  record: vi.fn(),
+  drain: vi.fn(),
+}))
+
+vi.mock('./journal.js', () => ({
+  Journal: class {
+    record = record
+    drain = drain
+  },
 }))
 
 vi.mock('./cache.js', async (original) => ({
   ...(await original<typeof import('./cache.js')>()),
   AssetCache: class {
     load = load
+    prefetch = prefetch
     reconcile = reconcile
     remaining = remaining
   },
@@ -21,6 +32,7 @@ vi.mock('virtual:ceremony-assets', () => ({
   requestsByProfile: {
     'google/1': [{ url: '/asset' }],
     'github/1': [{ url: '/a' }, { url: '/b' }],
+    'x/1': [{ url: '/g1.dat', range: 'bytes=0-1', bytes: 2 }],
   },
   allowedRequests: [{ url: '/asset' }, { url: '/g1.dat', range: 'bytes=0-1' }],
 }))
@@ -29,9 +41,16 @@ import { startRootWorker } from './rootWorker.js'
 
 beforeEach(() => {
   load.mockReset()
+  prefetch.mockReset()
   reconcile.mockReset()
   remaining.mockReset()
+  record.mockReset()
+  drain.mockReset()
 })
+
+/** The events of the marks recorded so far, as `event/phase`. */
+const marks = () =>
+  record.mock.calls.map(([m]) => (m.phase ? `${m.event}/${m.phase}` : m.event) as string)
 
 const PREFETCH = 'https://ccdp.example/ccdp/v1/prefetch'
 
@@ -49,15 +68,17 @@ function start(scope: Record<string, unknown> = {}) {
 
 const port = () => ({ postMessage: vi.fn(), close: vi.fn() })
 
-it.each(['fetch', 'message', 'failed-prefetch'])(
+it.each(['fetch', 'message'])(
   'keeps %s lifetime tied to persistence after response delivery [CSP-017]',
   async (type) => {
     const complete = Promise.withResolvers<void>()
-    const response =
-      type === 'failed-prefetch'
-        ? Promise.reject(new Error('asset unavailable'))
-        : Promise.resolve(new Response(new Uint8Array([1])))
-    load.mockReturnValue({ dispatched: Promise.resolve(), response, complete: complete.promise })
+    const response = Promise.resolve(new Response(new Uint8Array([1])))
+    load.mockReturnValue({
+      dispatched: Promise.resolve('network'),
+      response,
+      complete: complete.promise,
+    })
+    prefetch.mockReturnValue({ dispatched: Promise.resolve('network'), complete: complete.promise })
     const dispatch = start()
     const waits: Promise<unknown>[] = []
     const respondWith = vi.fn()
@@ -77,7 +98,12 @@ it.each(['fetch', 'message', 'failed-prefetch'])(
     await Promise.resolve()
     await Promise.resolve()
     expect(settled).toBe(false)
-    if (type === 'fetch') expect(respondWith).toHaveBeenCalledWith(response)
+    if (type === 'fetch') {
+      expect(respondWith).toHaveBeenCalledWith(response)
+      expect(prefetch).not.toHaveBeenCalled()
+    } else {
+      expect(load).not.toHaveBeenCalled()
+    }
     complete.resolve()
     await waits[0]
     expect(settled).toBe(true)
@@ -86,9 +112,8 @@ it.each(['fetch', 'message', 'failed-prefetch'])(
 
 it('acknowledges prefetch dispatch on its port once every profile request is dispatched [LIBID-BROWSER-029]', async () => {
   const dispatched = Promise.withResolvers<string>()
-  load.mockReturnValue({
+  prefetch.mockReturnValue({
     dispatched: dispatched.promise,
-    response: Promise.resolve(new Response()),
     complete: Promise.resolve(),
   })
   const reply = port()
@@ -99,8 +124,9 @@ it('acknowledges prefetch dispatch on its port once every profile request is dis
     source: { url: PREFETCH },
     waitUntil: (p: Promise<unknown>) => waits.push(p),
   })
-  // Profile paths are fetched at the worker's origin.
-  expect(load).toHaveBeenCalledExactlyOnceWith({ url: 'https://ccdp.example/asset' })
+  // Profile paths are prefetched at the worker's origin without reading cached bodies.
+  expect(prefetch).toHaveBeenCalledExactlyOnceWith({ url: 'https://ccdp.example/asset' })
+  expect(load).not.toHaveBeenCalled()
   await Promise.resolve()
   expect(reply.postMessage).not.toHaveBeenCalled()
   dispatched.resolve('network')
@@ -115,9 +141,8 @@ it('acknowledges prefetch dispatch on its port once every profile request is dis
 
 it('counts stored and fetched profile requests in the acknowledgement [LIBID-BROWSER-029]', async () => {
   for (const source of ['cache', 'network'])
-    load.mockReturnValueOnce({
+    prefetch.mockReturnValueOnce({
       dispatched: Promise.resolve(source),
-      response: Promise.resolve(new Response()),
       complete: Promise.resolve(),
     })
   const reply = port()
@@ -133,6 +158,34 @@ it('counts stored and fetched profile requests in the acknowledgement [LIBID-BRO
     dispatched: true,
     cached: 1,
     fetched: 1,
+  })
+  expect(load).not.toHaveBeenCalled()
+})
+
+it('dispatches ranged CRS prefetch through cache.prefetch without calling load', async () => {
+  prefetch.mockReturnValueOnce({
+    dispatched: Promise.resolve('cache'),
+    complete: Promise.resolve(),
+  })
+  const reply = port()
+  const waits: Promise<unknown>[] = []
+  start()('message', {
+    data: { type: 'ceremony-prefetch', profile: 'x/1' },
+    ports: [reply],
+    source: { url: PREFETCH },
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+  })
+  await waits[0]
+  expect(prefetch).toHaveBeenCalledExactlyOnceWith({
+    url: 'https://ccdp.example/g1.dat',
+    range: 'bytes=0-1',
+    bytes: 2,
+  })
+  expect(load).not.toHaveBeenCalled()
+  expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({
+    dispatched: true,
+    cached: 1,
+    fetched: 0,
   })
 })
 
@@ -248,6 +301,7 @@ it.each([
   expect(waitUntil).not.toHaveBeenCalled()
   expect(claim).not.toHaveBeenCalled()
   expect(load).not.toHaveBeenCalled()
+  expect(prefetch).not.toHaveBeenCalled()
   expect(remaining).not.toHaveBeenCalled()
 })
 
@@ -279,6 +333,7 @@ it.each([
   expect(waitUntil).not.toHaveBeenCalled()
   expect(claim).not.toHaveBeenCalled()
   expect(load).not.toHaveBeenCalled()
+  expect(prefetch).not.toHaveBeenCalled()
 })
 
 it.each(['other/1', 'toString'])(
@@ -296,6 +351,7 @@ it.each(['other/1', 'toString'])(
     expect(reply.close).toHaveBeenCalledOnce()
     expect(waitUntil).not.toHaveBeenCalled()
     expect(load).not.toHaveBeenCalled()
+    expect(prefetch).not.toHaveBeenCalled()
   },
 )
 
@@ -312,4 +368,125 @@ it.each([
   expect(reply.close).not.toHaveBeenCalled()
   expect(reply.postMessage).not.toHaveBeenCalled()
   expect(waitUntil).not.toHaveBeenCalled()
+})
+
+it('routes page loads to the network at install, and marks install and activation [LIBID-BROWSER-029]', async () => {
+  const waits: Promise<unknown>[] = []
+  const addRoutes = vi.fn(async () => {})
+  const dispatch = start({ skipWaiting: async () => {}, clients: { claim: async () => {} } })
+  expect(marks()).toEqual(['root-worker-start'])
+  dispatch('install', { waitUntil: (p: Promise<unknown>) => waits.push(p), addRoutes })
+  expect(addRoutes).toHaveBeenCalledWith({
+    condition: { requestMode: 'navigate' },
+    source: 'network',
+  })
+  // A browser activates only once installation settles.
+  await Promise.all(waits)
+  dispatch('activate', { waitUntil: (p: Promise<unknown>) => waits.push(p) })
+  await Promise.all(waits)
+  expect(marks()).toEqual([
+    'root-worker-start',
+    'root-worker-install/started',
+    'root-worker-install/finished',
+    'root-worker-activate/started',
+    'root-worker-activate/finished',
+  ])
+  // Each finish pairs with its start by operation ID.
+  const ids = record.mock.calls.map(([m]) => m.operationId)
+  expect(ids[2]).toBe(ids[1])
+  expect(ids[4]).toBe(ids[3])
+  expect(new Set(ids).size).toBe(3)
+})
+
+it.each([
+  ['lacks the API', undefined],
+  [
+    'rejects the rule',
+    () => {
+      throw new TypeError('invalid rule')
+    },
+  ],
+  ['refuses asynchronously', async () => Promise.reject(new TypeError('invalid rule'))],
+])('still installs when the browser %s', async (_, addRoutes) => {
+  const waits: Promise<unknown>[] = []
+  start({ skipWaiting: async () => {} })('install', {
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+    addRoutes,
+  })
+  await Promise.all(waits)
+  expect(marks()).toContain('root-worker-install/finished')
+})
+
+it('marks page loads that reach the fetch handler, which still declines them', () => {
+  const respondWith = vi.fn()
+  start()('fetch', {
+    // Node cannot construct a navigation Request.
+    request: { method: 'GET', mode: 'navigate', url: PREFETCH, headers: new Headers() },
+    respondWith,
+    waitUntil: vi.fn(),
+  })
+  expect(marks()).toEqual(['root-worker-start', 'root-worker-navigation'])
+  expect(respondWith).not.toHaveBeenCalled()
+})
+
+it('holds activation and page loads until their marks are written, never installation [LIBID-BROWSER-029]', async () => {
+  // A stalled Cache Storage: no journal write settles until released.
+  const stored = Promise.withResolvers<void>()
+  record.mockReturnValue(stored.promise)
+  const waits: Promise<unknown>[] = []
+  let dispatching = false
+  // A browser accepts waitUntil only while the event is active; these holds are all synchronous.
+  const waitUntil = (p: Promise<unknown>) => {
+    if (!dispatching) throw new DOMException('Event is not active', 'InvalidStateError')
+    waits.push(p)
+  }
+  const handle = start({ skipWaiting: async () => {}, clients: { claim: async () => {} } })
+  const dispatch = (type: string, event: object) => {
+    dispatching = true
+    handle(type, { waitUntil, ...event })
+    dispatching = false
+  }
+  dispatch('install', { addRoutes: async () => {} })
+  // Prefetch waits for installation, which settles despite the stall.
+  await Promise.all(waits)
+  dispatch('activate', {})
+  const activated = vi.fn()
+  void waits.at(-1)!.then(activated)
+  await vi.waitFor(() => expect(marks()).toContain('root-worker-activate/finished'))
+  expect(activated).not.toHaveBeenCalled()
+  dispatch('fetch', {
+    request: { method: 'GET', mode: 'navigate', url: PREFETCH, headers: new Headers() },
+    respondWith: vi.fn(),
+  })
+  expect(waits.at(-1)).toBe(stored.promise)
+  stored.resolve()
+  await vi.waitFor(() => expect(activated).toHaveBeenCalledOnce())
+})
+
+it('hands kept marks to a same-origin client and removes them [LIBID-BROWSER-029]', async () => {
+  const kept = [{ event: 'root-worker-start', timestamp: 1, operationId: 'a' }]
+  drain.mockResolvedValue(kept)
+  const reply = port()
+  const waits: Promise<unknown>[] = []
+  start()('message', {
+    data: { type: 'ceremony-journal' },
+    ports: [reply],
+    source: { url: PREFETCH },
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+  })
+  await Promise.all(waits)
+  expect(reply.postMessage).toHaveBeenCalledWith({ marks: kept })
+  expect(reply.close).toHaveBeenCalledOnce()
+})
+
+it('answers no malformed journal request', () => {
+  const reply = port()
+  start()('message', {
+    data: { type: 'ceremony-journal', extra: 1 },
+    ports: [reply],
+    source: { url: PREFETCH },
+    waitUntil: vi.fn(),
+  })
+  expect(drain).not.toHaveBeenCalled()
+  expect(reply.close).toHaveBeenCalledOnce()
 })

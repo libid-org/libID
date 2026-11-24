@@ -68,3 +68,25 @@ test('runtime lowering preserves named/chained calls and external request option
     else Reflect.deleteProperty(globalThis, 'location')
   }
 })
+
+test('a bundle built without the manifest cannot import its request lists', async () => {
+  const id = join(packageDir, 'src/profile-manifest-fixture.ts')
+  await assert.rejects(() =>
+    build({
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [
+        {
+          name: 'profile-fixture',
+          resolveId: (file) => (file === id ? id : undefined),
+          load: (file) =>
+            file === id
+              ? `import { requestsByProfile } from 'virtual:ceremony-assets'; export { requestsByProfile }`
+              : undefined,
+        },
+        assetPlugin({ urls: {}, moduleUrls: {} }),
+      ],
+      build: { write: false, minify: false, lib: { entry: id, formats: ['es'] } },
+    }),
+  )
+})

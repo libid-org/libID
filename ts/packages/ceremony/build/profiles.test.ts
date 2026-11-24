@@ -71,8 +71,8 @@ test('pins every response profile security policy [CSP-001/002/003/009/015]', ()
   for (const profile of ['prover', 'proverFallback', 'prefetch', 'callback'] as const) {
     assert.equal(headers(profile).get('referrer-policy'), 'no-referrer', profile)
     assert.equal(headers(profile).get('cache-control'), 'no-cache', profile)
-    // CCDP embeds the Libron face, so fonts make no requests; Bridges admit none on Callback.
-    const fonts = profile === 'callback' ? undefined : ['data:']
+    // CCDP serves the Libron face from its own origin; Bridges admit no fonts on Callback.
+    const fonts = profile === 'callback' ? undefined : ["'self'"]
     assert.deepEqual(csp(profile).get('font-src'), fonts, profile)
     // CCDP pins its own documents' stylesheet; Bridges compose Callback's policy.
     const styles = profile === 'callback' ? "'unsafe-inline'" : cspHash(documentStyles)
