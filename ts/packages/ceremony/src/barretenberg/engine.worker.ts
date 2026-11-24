@@ -26,29 +26,47 @@ const span = <T>(event: string, work: () => Promise<T>) => operation(emit, event
 
 /**
  * A backend holding only the BN254 SRS. bb.js's own setup also fetches 4 MiB of Grumpkin points,
- * which ZK-Honk/Keccak proofs never read; this mirrors the rest of that setup, including keeping
- * the decompressed points in bb.js's cache. A failed setup releases the backend.
+ * which ZK-Honk/Keccak proofs never read; this mirrors the rest of that setup, overlapping WASM
+ * thread-pool startup with CRS loading and keeping decompressed-point caching off the proving
+ * critical path. A failed setup releases the backend, including one that resolves afterwards.
  */
 async function bn254Backend(
   threads: number,
   { wasmPath, crsPath, srsPoints }: Preload,
-): Promise<Api> {
-  const api = await Barretenberg.new({
+): Promise<{ api: Api; caching: Promise<void> }> {
+  const creating = Barretenberg.new({
     backend: BackendType.Wasm,
     threads,
     wasmPath,
     crsPath,
     skipSrsInit: true,
   })
+  const loading = Crs.new(srsPoints, crsPath)
+  let api: Api
+  let crs: Crs
   try {
-    const crs = await Crs.new(srsPoints, crsPath)
+    ;[api, crs] = await Promise.all([creating, loading])
+  } catch (error) {
+    void creating.then(
+      (late) => late.destroy().catch(() => {}),
+      () => {},
+    )
+    throw error
+  }
+  try {
     const { pointsBuf } = await api.srsInitSrs({
       pointsBuf: crs.getG1Data(),
       numPoints: crs.numPoints,
       g2Point: crs.getG2Data(),
     })
-    if (pointsBuf.length > 0) await crs.cacheUncompressed(pointsBuf)
-    return api
+    // Writing decompressed points to IndexedDB only warms future ceremonies; do not hold proving.
+    const caching =
+      pointsBuf.length > 0
+        ? Promise.resolve()
+            .then(() => crs.cacheUncompressed(pointsBuf))
+            .catch(() => {})
+        : Promise.resolve()
+    return { api, caching }
   } catch (error) {
     await api.destroy().catch(() => {})
     throw error
@@ -66,7 +84,7 @@ async function inflate(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
 class EngineWorker {
   #state: 'new' | 'loading' | 'ready' | 'proving' | 'done' = 'new'
   #ready: { noir: Noir; circuit: ProvingCircuit } | null = null
-  #backend: Promise<Api> | null = null
+  #backend: Promise<{ api: Api; caching: Promise<void> }> | null = null
 
   receive(message: ToWorker): void {
     const work = message.type === 'preload' ? this.#preload(message) : this.#prove(message)
@@ -76,7 +94,15 @@ class EngineWorker {
   #destroyBackend(): Promise<void> {
     const pending = this.#backend
     this.#backend = null
-    return pending ? pending.then((api) => api.destroy()) : Promise.resolve()
+    return pending
+      ? pending.then(async ({ api, caching }) => {
+          try {
+            await api.destroy()
+          } finally {
+            await caching
+          }
+        })
+      : Promise.resolve()
   }
 
   #fail(error: unknown): void {
@@ -156,7 +182,7 @@ class EngineWorker {
     this.#state = 'proving'
     emit({ event: 'zk-proof-generation', phase: 'started', timestamp: now() })
     const { noir, circuit } = ready
-    const [api, { witness }] = await Promise.all([
+    const [{ api }, { witness }] = await Promise.all([
       backend,
       span('witness', () => noir.execute(message.inputs as Parameters<typeof noir.execute>[0])),
     ])
