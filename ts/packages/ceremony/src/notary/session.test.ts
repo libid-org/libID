@@ -408,3 +408,36 @@ it('rejects a final attestation before openings instead of leaving reveal pendin
   expect(workers[0].terminate).toHaveBeenCalledOnce()
   expect(vi.getTimerCount()).toBe(0)
 })
+
+it('detaches port1 handlers and closes the port on session completion and abort', async () => {
+  const OriginalChannel = globalThis.MessageChannel
+  const channels: { port1: MessagePort; close: ReturnType<typeof vi.spyOn> }[] = []
+  vi.stubGlobal(
+    'MessageChannel',
+    class extends OriginalChannel {
+      constructor() {
+        super()
+        channels.push({ port1: this.port1, close: vi.spyOn(this.port1, 'close') })
+      }
+    },
+  )
+  const abort = new AbortController()
+  const notary = new NotaryRuntime('https://notary.test', abort.signal)
+
+  // Normal completion detaches handlers and closes port1.
+  const { session, port } = await sentSession(notary)
+  const { attestation } = await revealNothing(session, port)
+  port.postMessage({ type: 'attestation', attestation: { fixture: 'ok' } })
+  await expect(attestation).resolves.toEqual({ fixture: 'ok' })
+  expect(channels[0].close).toHaveBeenCalledOnce()
+  expect(channels[0].port1.onmessage).toBeNull()
+  expect(channels[0].port1.onmessageerror).toBeNull()
+
+  // Abort while pending also detaches handlers and closes port1.
+  const pending = notary.prepare(target)
+  abort.abort(new Error('Cancelled'))
+  await expect(pending).rejects.toThrow('Cancelled')
+  expect(channels[1].close).toHaveBeenCalledOnce()
+  expect(channels[1].port1.onmessage).toBeNull()
+  expect(channels[1].port1.onmessageerror).toBeNull()
+})
