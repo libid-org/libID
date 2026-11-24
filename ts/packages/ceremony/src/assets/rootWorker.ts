@@ -90,13 +90,13 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
       reply.close()
       return true
     }
-    const { dispatched, complete } = cache.prefetchAll(requests)
-    const ack = dispatched.then((sources) => {
+    const jobs = requests.map((r) => cache.prefetch(r))
+    const dispatch = Promise.all(jobs.map((j) => j.dispatched)).then((sources) => {
       const cached = sources.filter((source) => source === 'cache').length
       reply.postMessage({ dispatched: true, cached, fetched: sources.length - cached })
       reply.close()
     })
-    event.waitUntil(Promise.all([ack, complete]).then(() => {}))
+    event.waitUntil(Promise.all([dispatch, ...jobs.map((j) => j.complete)]).then(() => {}))
     return true
   }
 

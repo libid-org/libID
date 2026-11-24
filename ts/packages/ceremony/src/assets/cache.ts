@@ -96,18 +96,9 @@ async function fetchedBody(
 /** Where a load's bytes come from: stored bytes, or a network retrieval (possibly joined). */
 export type AssetSource = 'cache' | 'network'
 
-type FlightResult =
-  | { kind: 'cached'; response: Response }
-  | { kind: 'fetched'; bytes: Uint8Array<ArrayBuffer>; headers: Headers; status: 200 | 206 }
-
-interface CacheProbe {
-  cache?: Cache
-  keys?: ReadonlySet<string>
-}
-
 interface PendingLoad {
   dispatched: Promise<AssetSource>
-  result: Promise<FlightResult>
+  response: Promise<Response>
   complete: Promise<void>
   /** A cache lookup, a network retrieval, then a settled response while persistence finishes. */
   stage: () => 'lookup' | 'retrieving' | 'settled'
@@ -169,7 +160,7 @@ export class AssetCache {
     ])
     for (let i = 0; i < lookups.length; i++)
       if (sources[i] === 'network') retrieving.push(lookups[i])
-    await Promise.all(retrieving.map((load) => load.result.catch(() => {})))
+    await Promise.all(retrieving.map((load) => load.response.catch(() => {})))
     return { pending: retrieving.length, missing }
   }
 
@@ -185,52 +176,13 @@ export class AssetCache {
     }
   }
 
-  /** Open Cache Storage and list stored keys once for a batch prefetch. */
-  private async probeCache(): Promise<CacheProbe> {
-    let cache: Cache
-    try {
-      cache = await this.openCache()
-    } catch {
-      return {}
-    }
-    try {
-      const keys = new Set((await cache.keys()).map((key) => key.url))
-      return { cache, keys }
-    } catch {
-      return { cache }
-    }
-  }
-
   /**
    * Ensure one URL/range entry is stored or fetching, without cloning or reading a cached body.
    * Joins any running flight for the same URL/range; a miss starts the same single-flight fetch
    * that `load` can join.
    */
   prefetch(spec: AssetRequest): { dispatched: Promise<AssetSource>; complete: Promise<void> } {
-    return this.prefetchWith(spec)
-  }
-
-  /**
-   * Prefetch a batch of profile assets using one shared `cache.keys()` probe so a cold or
-   * partially warm cache skips per-entry `cache.match()` misses while warm entries still run full
-   * metadata validation. Every spec joins `pending` synchronously so concurrent loads and
-   * download reports observe the same flights.
-   */
-  prefetchAll(specs: readonly AssetRequest[]): {
-    dispatched: Promise<AssetSource[]>
-    complete: Promise<void>
-  } {
-    const needsProbe = specs.some((spec) => !this.pending.has(requestKey(spec)))
-    const probe = needsProbe ? this.probeCache() : undefined
-    const jobs = specs.map((spec) => this.prefetchWith(spec, probe))
-    return {
-      dispatched: Promise.all(jobs.map((job) => job.dispatched)),
-      complete: Promise.all(jobs.map((job) => job.complete)).then(() => {}),
-    }
-  }
-
-  private prefetchWith(spec: AssetRequest, probe?: Promise<CacheProbe>) {
-    const load = this.flight(spec, probe)
+    const load = this.flight(spec)
     return {
       dispatched:
         load.stage() === 'settled' ? Promise.resolve<AssetSource>('cache') : load.dispatched,
@@ -250,31 +202,22 @@ export class AssetCache {
   }
 
   /** Return the existing flight for `spec` or start one backed by Cache Storage then `fetch`. */
-  private flight(spec: AssetRequest, probe?: Promise<CacheProbe>): PendingLoad {
+  private flight(spec: AssetRequest): PendingLoad {
     const key = requestKey(spec)
     const existing = this.pending.get(key)
     if (existing) return existing
     const dispatched = Promise.withResolvers<AssetSource>()
     let stage: ReturnType<PendingLoad['stage']> = 'lookup'
     let writing = Promise.resolve()
-    const result = (async (): Promise<FlightResult> => {
+    const response = (async () => {
       const cacheKey = this.storageKey(spec)
       let cache: Cache | undefined
       try {
-        let shouldMatch = true
-        if (probe) {
-          const probed = await probe
-          cache = probed.cache
-          shouldMatch = cache !== undefined && (!probed.keys || probed.keys.has(cacheKey))
-        } else {
-          cache = await this.openCache()
-        }
-        if (cache && shouldMatch) {
-          const hit = await cachedResponse(cache, cacheKey, spec)
-          if (hit) {
-            dispatched.resolve('cache')
-            return { kind: 'cached', response: hit }
-          }
+        cache = await this.openCache()
+        const hit = await cachedResponse(cache, cacheKey, spec)
+        if (hit) {
+          dispatched.resolve('cache')
+          return hit
         }
       } catch {
         /* Storage denial does not disable fetching. */
@@ -289,15 +232,15 @@ export class AssetCache {
       stage = 'retrieving'
       dispatched.resolve('network')
       const { bytes, headers } = await fetchedBody(await fetching, spec)
-      // A valid response remains usable when storage is full; construct independent Response views
-      // over `bytes` rather than teeing a ReadableStream via `Response.clone()`.
-      if (cache) writing = cache.put(cacheKey, new Response(bytes, { headers })).catch(() => {})
-      return { kind: 'fetched', bytes, headers, status: spec.range ? 206 : 200 }
+      const stored = new Response(bytes, { headers })
+      // A valid response remains usable when storage is full.
+      if (cache) writing = cache.put(cacheKey, stored.clone()).catch(() => {})
+      return spec.range ? new Response(bytes, { status: 206, headers }) : stored
     })().finally(() => {
       stage = 'settled'
       dispatched.resolve('network')
     })
-    const complete = result
+    const complete = response
       .catch(() => {})
       .then(() => writing)
       .finally(() => {
@@ -305,7 +248,7 @@ export class AssetCache {
       })
     const load: PendingLoad = {
       dispatched: dispatched.promise,
-      result,
+      response,
       complete,
       stage: () => stage,
     }
@@ -313,14 +256,10 @@ export class AssetCache {
     return load
   }
 
-  private share({ dispatched, result, complete, stage }: PendingLoad) {
+  private share({ dispatched, response, complete, stage }: PendingLoad) {
     return {
       dispatched: stage() === 'settled' ? Promise.resolve<AssetSource>('cache') : dispatched,
-      response: result.then((entry) =>
-        entry.kind === 'fetched'
-          ? new Response(entry.bytes, { status: entry.status, headers: entry.headers })
-          : entry.response.clone(),
-      ),
+      response: response.then((r) => r.clone()),
       complete,
     }
   }

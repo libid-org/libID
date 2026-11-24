@@ -1,5 +1,3 @@
-const utf8Fatal = new TextDecoder('utf-8', { fatal: true })
-
 /**
  * Bound bytes while reading, not after allocating an attacker-sized response. When `exact` is
  * true, `maximum` is a trusted declared length, so chunks write straight into one buffer instead
@@ -44,7 +42,9 @@ export async function readBody(
 
 /** Strict UTF-8 JSON under the same read bound; native parsing keeps a duplicate key's last value. */
 export async function readJson(response: Response, maximum: number): Promise<unknown> {
-  return JSON.parse(utf8Fatal.decode(await readBody(response, maximum)))
+  return JSON.parse(
+    new TextDecoder('utf-8', { fatal: true }).decode(await readBody(response, maximum)),
+  )
 }
 
 /**

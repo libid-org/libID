@@ -1,9 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const { load, prefetch, prefetchAll, reconcile, remaining, record, drain } = vi.hoisted(() => ({
+const { load, prefetch, reconcile, remaining, record, drain } = vi.hoisted(() => ({
   load: vi.fn(),
   prefetch: vi.fn(),
-  prefetchAll: vi.fn(),
   reconcile: vi.fn(),
   remaining: vi.fn(),
   record: vi.fn(),
@@ -22,7 +21,6 @@ vi.mock('./cache.js', async (original) => ({
   AssetCache: class {
     load = load
     prefetch = prefetch
-    prefetchAll = prefetchAll
     reconcile = reconcile
     remaining = remaining
   },
@@ -44,7 +42,6 @@ import { startRootWorker } from './rootWorker.js'
 beforeEach(() => {
   load.mockReset()
   prefetch.mockReset()
-  prefetchAll.mockReset()
   reconcile.mockReset()
   remaining.mockReset()
   record.mockReset()
@@ -81,10 +78,7 @@ it.each(['fetch', 'message'])(
       response,
       complete: complete.promise,
     })
-    prefetchAll.mockReturnValue({
-      dispatched: Promise.resolve(['network']),
-      complete: complete.promise,
-    })
+    prefetch.mockReturnValue({ dispatched: Promise.resolve('network'), complete: complete.promise })
     const dispatch = start()
     const waits: Promise<unknown>[] = []
     const respondWith = vi.fn()
@@ -106,7 +100,7 @@ it.each(['fetch', 'message'])(
     expect(settled).toBe(false)
     if (type === 'fetch') {
       expect(respondWith).toHaveBeenCalledWith(response)
-      expect(prefetchAll).not.toHaveBeenCalled()
+      expect(prefetch).not.toHaveBeenCalled()
     } else {
       expect(load).not.toHaveBeenCalled()
     }
@@ -117,8 +111,8 @@ it.each(['fetch', 'message'])(
 )
 
 it('acknowledges prefetch dispatch on its port once every profile request is dispatched [LIBID-BROWSER-029]', async () => {
-  const dispatched = Promise.withResolvers<string[]>()
-  prefetchAll.mockReturnValue({
+  const dispatched = Promise.withResolvers<string>()
+  prefetch.mockReturnValue({
     dispatched: dispatched.promise,
     complete: Promise.resolve(),
   })
@@ -131,11 +125,11 @@ it('acknowledges prefetch dispatch on its port once every profile request is dis
     waitUntil: (p: Promise<unknown>) => waits.push(p),
   })
   // Profile paths are prefetched at the worker's origin without reading cached bodies.
-  expect(prefetchAll).toHaveBeenCalledExactlyOnceWith([{ url: 'https://ccdp.example/asset' }])
+  expect(prefetch).toHaveBeenCalledExactlyOnceWith({ url: 'https://ccdp.example/asset' })
   expect(load).not.toHaveBeenCalled()
   await Promise.resolve()
   expect(reply.postMessage).not.toHaveBeenCalled()
-  dispatched.resolve(['network'])
+  dispatched.resolve('network')
   await waits[0]
   expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({
     dispatched: true,
@@ -146,10 +140,11 @@ it('acknowledges prefetch dispatch on its port once every profile request is dis
 })
 
 it('counts stored and fetched profile requests in the acknowledgement [LIBID-BROWSER-029]', async () => {
-  prefetchAll.mockReturnValueOnce({
-    dispatched: Promise.resolve(['cache', 'network']),
-    complete: Promise.resolve(),
-  })
+  for (const source of ['cache', 'network'])
+    prefetch.mockReturnValueOnce({
+      dispatched: Promise.resolve(source),
+      complete: Promise.resolve(),
+    })
   const reply = port()
   const waits: Promise<unknown>[] = []
   start()('message', {
@@ -167,9 +162,9 @@ it('counts stored and fetched profile requests in the acknowledgement [LIBID-BRO
   expect(load).not.toHaveBeenCalled()
 })
 
-it('dispatches ranged CRS prefetch through cache.prefetchAll without calling load', async () => {
-  prefetchAll.mockReturnValueOnce({
-    dispatched: Promise.resolve(['cache']),
+it('dispatches ranged CRS prefetch through cache.prefetch without calling load', async () => {
+  prefetch.mockReturnValueOnce({
+    dispatched: Promise.resolve('cache'),
     complete: Promise.resolve(),
   })
   const reply = port()
@@ -181,13 +176,11 @@ it('dispatches ranged CRS prefetch through cache.prefetchAll without calling loa
     waitUntil: (p: Promise<unknown>) => waits.push(p),
   })
   await waits[0]
-  expect(prefetchAll).toHaveBeenCalledExactlyOnceWith([
-    {
-      url: 'https://ccdp.example/g1.dat',
-      range: 'bytes=0-1',
-      bytes: 2,
-    },
-  ])
+  expect(prefetch).toHaveBeenCalledExactlyOnceWith({
+    url: 'https://ccdp.example/g1.dat',
+    range: 'bytes=0-1',
+    bytes: 2,
+  })
   expect(load).not.toHaveBeenCalled()
   expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({
     dispatched: true,
@@ -308,7 +301,7 @@ it.each([
   expect(waitUntil).not.toHaveBeenCalled()
   expect(claim).not.toHaveBeenCalled()
   expect(load).not.toHaveBeenCalled()
-  expect(prefetchAll).not.toHaveBeenCalled()
+  expect(prefetch).not.toHaveBeenCalled()
   expect(remaining).not.toHaveBeenCalled()
 })
 
@@ -340,7 +333,7 @@ it.each([
   expect(waitUntil).not.toHaveBeenCalled()
   expect(claim).not.toHaveBeenCalled()
   expect(load).not.toHaveBeenCalled()
-  expect(prefetchAll).not.toHaveBeenCalled()
+  expect(prefetch).not.toHaveBeenCalled()
 })
 
 it.each(['other/1', 'toString'])(
@@ -358,7 +351,7 @@ it.each(['other/1', 'toString'])(
     expect(reply.close).toHaveBeenCalledOnce()
     expect(waitUntil).not.toHaveBeenCalled()
     expect(load).not.toHaveBeenCalled()
-    expect(prefetchAll).not.toHaveBeenCalled()
+    expect(prefetch).not.toHaveBeenCalled()
   },
 )
 
