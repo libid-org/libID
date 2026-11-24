@@ -280,25 +280,6 @@ export function fakeNotarization(
     return gate
   }
   const gates = { tokenResponse: gate(), tokenOpenings: gate(), tokenAttestation: gate() }
-  const wait = <T>(promise: Promise<T>): Promise<T> => {
-    const signal: AbortSignal | undefined = notarization.mock.calls[0]?.[1]
-    if (!signal) return promise
-    if (signal.aborted) return Promise.reject(signal.reason)
-    return new Promise<T>((resolve, reject) => {
-      const onAbort = () => reject(signal.reason)
-      signal.addEventListener('abort', onAbort, { once: true })
-      promise.then(
-        (value) => {
-          signal.removeEventListener('abort', onAbort)
-          resolve(value)
-        },
-        (error) => {
-          signal.removeEventListener('abort', onAbort)
-          reject(error)
-        },
-      )
-    })
-  }
   const log: string[] = []
   const session = (index: number) => (index === 0 ? 'token' : 'identity')
   const attestations: NotaryAttestation[] = []
@@ -312,7 +293,7 @@ export function fakeNotarization(
     return {
       async send(request: ExactHttpRequest) {
         log.push(`${session(index)} send`)
-        if (index === 0) await wait(gates.tokenResponse.promise)
+        if (index === 0) await gates.tokenResponse.promise
         expect(request.url).toBe(url)
         const body =
           index === 0
@@ -343,7 +324,7 @@ export function fakeNotarization(
       },
       async reveal(ranges: Reveals) {
         log.push(`${session(index)} reveal`)
-        if (index === 0) await wait(gates.tokenOpenings.promise)
+        if (index === 0) await gates.tokenOpenings.promise
         selected[index] = ranges
         const plan = planNotarization(transcript, ranges)
         const raw = {

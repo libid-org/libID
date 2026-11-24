@@ -85,8 +85,6 @@ export async function notarizeOAuth(options: {
   signal: AbortSignal
   emit: (event: OperationEvent) => void
   observe: <T>(p: Promise<T>) => Promise<T>
-  /** Runs once the authorization code is exchanged for a bearer, before identity/attestation work finishes. */
-  onTokenFetched?: () => void
 }) {
   const { input, tokenRequest, emit, observe } = options
   // A provisional branch whose failure names its operation.
@@ -104,25 +102,24 @@ export async function notarizeOAuth(options: {
   // WASM heap and thread pool before peak ZK proving memory usage.
   const notaryAbort = new AbortController()
   const notarySignal = AbortSignal.any([options.signal, notaryAbort.signal])
-  let identityPrepared!: Promise<NotarySession>
+  const notary = new NotaryRuntime(options.notaryAddress, notarySignal, emit)
+  const tokenPrepared = branch(
+    notary.prepare(tokenRequest.url, {
+      setup: 'token-setup',
+      fetch: 'token-fetch',
+      attestation: 'token-attestation',
+    }),
+    'token-fetch',
+  )
+  const identityPrepared = branch(
+    notary.prepare(options.identity.url, {
+      setup: 'identity-setup',
+      fetch: 'identity-fetch',
+      attestation: 'identity-attestation',
+    }),
+    'identity-fetch',
+  )
   const token = await operation(emit, 'token-fetch', async () => {
-    const notary = new NotaryRuntime(options.notaryAddress, notarySignal, emit)
-    const tokenPrepared = branch(
-      notary.prepare(tokenRequest.url, {
-        setup: 'token-setup',
-        fetch: 'token-fetch',
-        attestation: 'token-attestation',
-      }),
-      'token-fetch',
-    )
-    identityPrepared = branch(
-      notary.prepare(options.identity.url, {
-        setup: 'identity-setup',
-        fetch: 'identity-fetch',
-        attestation: 'identity-attestation',
-      }),
-      'identity-fetch',
-    )
     const session = await tokenPrepared
     const transcript = await session.send(tokenRequest)
     const secrets = [input.code, input.codeVerifier, input.clientCredential ?? '']
@@ -137,7 +134,6 @@ export async function notarizeOAuth(options: {
       throw new Error('Invalid token response')
     return { session, selected }
   })
-  options.onTokenFetched?.()
   const bearer = token.selected.bearer
   const tokenOpened = observe(reveal(token.session, token.selected.ranges, 'token-attestation'))
   const identity = await operation(emit, 'identity-fetch', async () => {
