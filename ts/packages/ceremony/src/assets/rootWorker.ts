@@ -45,6 +45,12 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
     url: new URL(r.url, scope.location.origin).href,
   })
   const allowed = new Map(allowedRequests.map(absolute).map((spec) => [requestKey(spec), spec]))
+  const profiles = new Map(
+    Object.entries(requestsByProfile).map(([profile, requests]) => [
+      profile,
+      requests.map(absolute),
+    ]),
+  )
   const sameOriginClient = (source: ExtendableMessageEvent['source']) =>
     !!source && 'url' in source && new URL(source.url).origin === scope.location.origin
 
@@ -77,29 +83,31 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
     const profile = profileOf(event, value)
     if (profile === undefined) return false
     const [reply] = event.ports
+    const requests = profiles.get(profile)
     // A build without this asset list (an older worker, or a retired version) says so at once.
-    if (!Object.hasOwn(requestsByProfile, profile)) {
+    if (!requests) {
       reply.postMessage({ dispatched: false })
       reply.close()
       return true
     }
-    const jobs = requestsByProfile[profile].map((r) => cache.prefetch(absolute(r)))
-    const dispatch = Promise.all(jobs.map((j) => j.dispatched)).then((sources) => {
+    const { dispatched, complete } = cache.prefetchAll(requests)
+    const ack = dispatched.then((sources) => {
       const cached = sources.filter((source) => source === 'cache').length
       reply.postMessage({ dispatched: true, cached, fetched: sources.length - cached })
       reply.close()
     })
-    event.waitUntil(Promise.all([dispatch, ...jobs.map((j) => j.complete)]).then(() => {}))
+    event.waitUntil(Promise.all([ack, complete]).then(() => {}))
     return true
   }
 
   /** Report the profile's still-running and missing retrievals, once the running ones settle. */
   function onDownloads(event: ExtendableMessageEvent, value: Record<string, unknown>): boolean {
     const profile = profileOf(event, value)
-    if (profile === undefined || !Object.hasOwn(requestsByProfile, profile)) return false
+    const requests = profile === undefined ? undefined : profiles.get(profile)
+    if (!requests) return false
     const [reply] = event.ports
     event.waitUntil(
-      cache.remaining(requestsByProfile[profile].map(absolute)).then((report) => {
+      cache.remaining(requests).then((report) => {
         reply.postMessage(report)
         reply.close()
       }),
