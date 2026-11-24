@@ -1,6 +1,7 @@
 import { assetUrl } from '../assets/index.js'
 import { toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, safeEmit } from '../events.js'
+import { MIN_PROOF_THREADS, workerThreads } from '../threads.js'
 import { abi, acvm, bbWasmPath, srs } from './barretenberg.assets.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
@@ -48,6 +49,9 @@ export class ProofEngine {
     this.#emit({ event: 'zk-proof-preparation', phase: 'started', timestamp: now() })
     this.#emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: now() })
     try {
+      const resolvedThreads = workerThreads(threads)
+      if (!Number.isInteger(resolvedThreads) || resolvedThreads < MIN_PROOF_THREADS)
+        throw new Error('Multithreaded backend unavailable')
       const preload: Preload = {
         type: 'preload',
         circuitUrl: url,

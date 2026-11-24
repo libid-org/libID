@@ -620,7 +620,8 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
                 message: 'Final attestation failed',
               })
         await vi.waitFor(() => expect(log).toEqual(['token send']))
-        // Both sessions and the proof engine start before any HTTP; the engine first.
+        // Both sessions start before any HTTP; the proof engine waits until token-fetch succeeds
+        // so Barretenberg startup does not compete with short-lived code exchange.
         expect(prepare.mock.calls).toEqual([
           [
             fixture.tokenRequest.url,
@@ -635,15 +636,16 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
             },
           ],
         ])
-        expect(engine.mock.invocationCallOrder[0]).toBeLessThan(prepare.mock.invocationCallOrder[0])
+        expect(engine).not.toHaveBeenCalled()
         expect(notarization).toHaveBeenCalledWith(
           staged.context.request.notaryAddress,
           expect.any(AbortSignal),
           staged.context.emit,
         )
-        // The identity request waits for the bearer, then overlaps the token openings.
+        // The identity request and proof engine startup wait for the bearer, then overlap token openings.
         gates.tokenResponse.resolve()
         await vi.waitFor(() => expect(log).toContain('identity reveal'))
+        expect(engine).toHaveBeenCalledOnce()
         expect(generate).not.toHaveBeenCalled()
         gates.tokenOpenings.resolve()
         await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce())
@@ -657,8 +659,38 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
       },
     )
 
+    it(
+      tagged(
+        'terminates the notary runtime as soon as final attestations land while proving continues',
+        tags,
+      ),
+      async () => {
+        const staged = stageNotarized(platformId, 'accepted', { held: true })
+        const { gates } = staged.notarized
+        const proof = Promise.withResolvers<Awaited<ReturnType<typeof generate>>>()
+        const resolved = generate.getMockImplementation()!
+        let callArgs: Parameters<typeof resolved> | undefined
+        generate.mockImplementationOnce((...args) => {
+          callArgs = args
+          return proof.promise
+        })
+        const pending = (await proverOf(platformId)).prove(staged.context)
+        gates.tokenResponse.resolve()
+        gates.tokenOpenings.resolve()
+        await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce())
+        expect(notarization.mock.calls[0][1].aborted).toBe(false)
+        gates.tokenAttestation.resolve()
+        await vi.waitFor(() => expect(notarization.mock.calls[0][1].aborted).toBe(true))
+        // The proof engine is still running while the TLSN worker is already freed.
+        expect(destroy).not.toHaveBeenCalled()
+        proof.resolve(await resolved(...callArgs!))
+        await expect(pending).resolves.toMatchObject({ identity })
+        expect(destroy).toHaveBeenCalledOnce()
+      },
+    )
+
     it.each(['closed', 'identity setup failed'])(
-      tagged('retires both sessions and proving when %s during setup', tags),
+      tagged('retires both sessions without starting proving when %s during setup', tags),
       async (failure) => {
         const staged = stageNotarized(platformId, 'accepted')
         // Sessions stay in setup until the notary signal aborts; identity setup may fail first.
@@ -679,37 +711,50 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
         identitySetup.reject(new Error(failure))
         await checked
         expect(notarization.mock.calls[0][1].aborted).toBe(true)
+        expect(engine).not.toHaveBeenCalled()
         expect(generate).not.toHaveBeenCalled()
-        expect(destroy).toHaveBeenCalledOnce()
+        expect(destroy).not.toHaveBeenCalled()
       },
     )
 
     it(
-      tagged('retires both sessions as soon as the proof backend fails [LIBID-PROVER-014]', tags),
+      tagged(
+        'retires remaining notary work as soon as the proof backend fails after token fetch [LIBID-PROVER-014]',
+        tags,
+      ),
       async () => {
-        const staged = stageNotarized(platformId, 'accepted')
+        const staged = stageNotarized(platformId, 'accepted', { held: true })
+        const { gates } = staged.notarized
         const backend = Promise.withResolvers<void>()
         engineOutcome.mockReturnValueOnce(backend.promise)
-        // Both sessions stay in setup until the notary signal aborts.
-        prepare.mockImplementation(
-          () =>
-            new Promise<never>((_, reject) => {
-              const signal: AbortSignal = notarization.mock.calls[0][1]
-              signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-            }),
-        )
         const result = (await proverOf(platformId)).prove(staged.context)
         const failure = new CeremonyError(
           'zk-proof-preparation',
           'Multithreaded backend unavailable',
         )
         const checked = expect(result).rejects.toBe(failure)
-        await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2))
+        gates.tokenResponse.resolve()
+        await vi.waitFor(() => expect(engine).toHaveBeenCalledOnce())
         backend.reject(failure)
         await checked
         expect(notarization.mock.calls[0][1].aborted).toBe(true)
         expect(generate).not.toHaveBeenCalled()
         expect(destroy).toHaveBeenCalledOnce()
+      },
+    )
+
+    it(
+      tagged('fails before starting notarization when multithreaded proving is unavailable', tags),
+      async () => {
+        vi.stubGlobal('navigator', { hardwareConcurrency: 1 })
+        const staged = stageNotarized(platformId, 'accepted')
+        await expect((await proverOf(platformId)).prove(staged.context)).rejects.toMatchObject({
+          event: 'zk-proof-preparation',
+          message: 'Multithreaded backend unavailable',
+        })
+        expect(notarization).not.toHaveBeenCalled()
+        expect(prepare).not.toHaveBeenCalled()
+        expect(engine).not.toHaveBeenCalled()
       },
     )
 
@@ -803,7 +848,7 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
     })
 
     it.each(Object.keys(notarizedFailures) as (keyof typeof notarizedFailures)[])(
-      tagged('rejects %s and destroys its engine', tags),
+      tagged('rejects %s and cleans up any started engine', tags),
       async (outcome) => {
         const staged = stageNotarized(platformId, outcome)
         const pending = (await proverOf(platformId)).prove(staged.context)
@@ -811,7 +856,10 @@ describe.each(notarizedPlatforms)('%s notarized prover', (platformId) => {
         // Circuit-input construction attributes its own failures.
         if (outcome === 'opening-range')
           await expect(pending).rejects.toMatchObject({ event: 'circuit-inputs' })
-        expect(destroy).toHaveBeenCalledOnce()
+        // Token refusals fail before the proof engine is constructed.
+        const preToken = outcome === 'token-refused' || outcome === 'token-refused-other'
+        expect(engine).toHaveBeenCalledTimes(preToken ? 0 : 1)
+        expect(destroy).toHaveBeenCalledTimes(preToken ? 0 : 1)
       },
     )
   })

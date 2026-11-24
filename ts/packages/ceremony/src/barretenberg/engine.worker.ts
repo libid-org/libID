@@ -5,12 +5,9 @@ import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
 import { errorMessage, toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
-import { workerThreads } from '../threads.js'
+import { MIN_PROOF_THREADS, workerThreads } from '../threads.js'
 import { FIELD_BYTES, PROVING_SETTINGS } from './parameters.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
-
-/** Refuse single-threaded proving after applying the worker CPU cap. */
-const MIN_PROOF_THREADS = 2
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
 
@@ -74,9 +71,12 @@ async function bn254Backend(
 }
 
 async function inflate(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
-  const stream = new Response(Uint8Array.from(bytes)).body!.pipeThrough(
-    new DecompressionStream('gzip'),
-  )
+  // Response rejects SharedArrayBuffer views; copy only when backed by shared memory.
+  const input =
+    bytes.buffer instanceof ArrayBuffer
+      ? (bytes as Uint8Array<ArrayBuffer>)
+      : Uint8Array.from(bytes)
+  const stream = new Response(input).body!.pipeThrough(new DecompressionStream('gzip'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
