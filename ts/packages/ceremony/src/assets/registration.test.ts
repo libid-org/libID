@@ -399,3 +399,41 @@ it('closes the reply port and rejects when remainingDownloads aborts', async () 
   expect(port1Close).toHaveBeenCalledOnce()
   expect(createdPort1.onmessage).toBeNull()
 })
+
+it('closes both MessageChannel ports and detaches onmessage when postMessage throws', async () => {
+  const OriginalChannel = globalThis.MessageChannel
+  const channels: { port1: MessagePort; port1Close: Mock; port2Close: Mock }[] = []
+  vi.stubGlobal(
+    'MessageChannel',
+    class extends OriginalChannel {
+      constructor() {
+        super()
+        channels.push({
+          port1: this.port1,
+          port1Close: vi.spyOn(this.port1, 'close'),
+          port2Close: vi.spyOn(this.port2, 'close'),
+        })
+      }
+    },
+  )
+  const reason = new DOMException('Worker is gone', 'InvalidStateError')
+  const worker = serviceWorker('activated')
+  worker.postMessage.mockImplementation(() => {
+    throw reason
+  })
+  const container = install(registration(`${ORIGIN}/`, { active: worker }))
+  container.controller = worker
+
+  await expect(dispatchPrefetch(worker, 'google/1')).rejects.toThrow('Asset dispatch failed')
+  await expect(drainJournal(worker)).resolves.toEqual([])
+  await expect(remainingDownloads('google/1')).rejects.toBe(reason)
+  container.controller = null
+  await expect(claimRootWorker()).rejects.toBe(reason)
+
+  expect(channels).toHaveLength(4)
+  for (const { port1, port1Close, port2Close } of channels) {
+    expect(port1Close).toHaveBeenCalledOnce()
+    expect(port2Close).toHaveBeenCalledOnce()
+    expect(port1.onmessage).toBeNull()
+  }
+})
