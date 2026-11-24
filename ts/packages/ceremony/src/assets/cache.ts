@@ -80,7 +80,11 @@ async function fetchedBody(
   spec: AssetRequest,
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; headers: Headers }> {
   validateResponse(received, spec)
-  const bytes = await readBody(received, spec.bytes ?? Number.MAX_SAFE_INTEGER)
+  const bytes = await readBody(
+    received,
+    spec.bytes ?? Number.MAX_SAFE_INTEGER,
+    spec.bytes !== undefined,
+  )
   if (spec.bytes !== undefined && bytes.length !== spec.bytes)
     throw new Error('Incomplete asset body')
   const headers = new Headers(received.headers)
