@@ -63,10 +63,11 @@ const page = (
 ) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>${styles === documentStyles ? fontPreload : ''}${modulePreloads(preloads)}<style>${styles}</style><body>${content}</body></html>`
 
-/** Static module imports reachable from `entry` (excluding lazy/dynamic platform provers). */
+/** Static module imports reachable from `roots` (excluding lazy/dynamic platform provers). */
 function staticImports(
   output: readonly (Rollup.OutputChunk | Rollup.OutputAsset)[],
-  entry: Rollup.OutputChunk,
+  roots: readonly Rollup.OutputChunk[],
+  includeRoots = false,
 ): string[] {
   const chunks = new Map(
     output
@@ -79,7 +80,10 @@ function staticImports(
     seen.add(file)
     for (const next of chunks.get(file)?.imports ?? []) visit(next)
   }
-  for (const file of entry.imports) visit(file)
+  for (const root of roots) {
+    if (includeRoots) visit(root.fileName)
+    else for (const file of root.imports) visit(file)
+  }
   return [...seen].map((file) => `/${file}`)
 }
 
@@ -232,10 +236,21 @@ async function buildDistribution() {
     external,
   )
   // Every published pair has an emitted prover and asset profile.
-  const proverPreloads = staticImports(prover.output, primary)
+  const proverPreloads = staticImports(prover.output, [primary])
+  const runtimeChunk = prover.output.find(
+    (o): o is Rollup.OutputChunk =>
+      o.type === 'chunk' &&
+      (o.facadeModuleId?.endsWith('/src/ccdp/documents/proverRuntime.ts') ?? false),
+  )
+  if (!runtimeChunk) throw new Error('Missing Prover runtime chunk')
+  // /prover preloads only the minimal isolation gate so non-DIP browsers bounce cheaply;
+  // /prover/fallback is always isolated and preloads the proving runtime too.
+  const fallbackPreloads = [
+    ...new Set([...proverPreloads, ...staticImports(prover.output, [runtimeChunk], true)]),
+  ]
   tree.put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
   tree.document(route('prover'), primary.code, 'prover', proverPreloads)
-  tree.document(route('prover/fallback'), primary.code, 'proverFallback', proverPreloads)
+  tree.document(route('prover/fallback'), primary.code, 'proverFallback', fallbackPreloads)
   const callbackCode = inlineScript(singleEntry(callback.output, 'Callback'))
   tree.put(
     CALLBACK_PATH,
@@ -284,7 +299,7 @@ async function main() {
   mkdirSync(join(staging, 'public'), { recursive: true })
   try {
     const { records, manifest, graph } = await buildDistribution()
-    const files = writeDistribution(staging, records)
+    const files = await writeDistribution(staging, records)
     // Graph metadata stays outside public/: tests and e2e read it; it is never served.
     writeFileSync(
       join(staging, 'distribution-graph.json'),

@@ -1,15 +1,19 @@
 import * as assets from '../assets/index.js'
 import { G1_POINT_BYTES, G2_BYTES } from './parameters.js'
 
-const noirWasm = (pkg: string, name: string) =>
-  assets.file(`npm:@noir-lang/${pkg}/web/${name}`, `noir/{version}/${name}`, {
-    ...assets.headers.immutable,
-    ...assets.headers.wasm,
-  })
+const wasmHeaders = { ...assets.headers.immutable, ...assets.headers.wasm }
 
-export const acvm = noirWasm('acvm_js', 'acvm_js_bg.wasm')
+export const acvm = assets.file(
+  'npm:@noir-lang/acvm_js/web/acvm_js_bg.wasm',
+  'noir/{version}/acvm_js_bg.wasm',
+  wasmHeaders,
+)
 
-export const abi = noirWasm('noirc_abi', 'noirc_abi_wasm_bg.wasm')
+export const abi = assets.file(
+  'npm:@noir-lang/noirc_abi/web/noirc_abi_wasm_bg.wasm',
+  'noir/{version}/noirc_abi_wasm_bg.wasm',
+  wasmHeaders,
+)
 
 export const bbWasm = {
   ...assets.file(

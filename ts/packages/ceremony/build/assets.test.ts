@@ -11,9 +11,18 @@ import {
   resolveAssets,
 } from './assets.ts'
 
-test('asset resolution publishes only declared files and archive members [LIBID-ASSET-024]', async () => {
+test('asset resolution publishes only declared files and archive members and strips circuit debug tables [LIBID-ASSET-024]', async () => {
   const { local, urls } = await resolveAssets()
   assert.deepEqual(new Set(local.keys()), new Set(Object.values(urls)))
+  for (const [key, url] of Object.entries(urls)) {
+    if (!key.endsWith('.json')) continue
+    assert.match(url, /\/[0-9a-f]{12}\/[^/]+\.json$/, url)
+    const parsed = JSON.parse(local.get(url)!.bytes.toString('utf8')) as Record<string, unknown>
+    assert.equal(Object.hasOwn(parsed, 'debug_symbols'), false, url)
+    assert.equal(Object.hasOwn(parsed, 'file_map'), false, url)
+    assert.equal(typeof parsed.bytecode, 'string', url)
+    assert.ok(parsed.abi && typeof parsed.abi === 'object', url)
+  }
 })
 
 test('an installed file lives under its installed package version', async () => {

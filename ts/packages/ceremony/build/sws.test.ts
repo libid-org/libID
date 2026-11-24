@@ -68,9 +68,9 @@ async function serve(dir: string, port: number) {
   throw new Error(`SWS did not answer ${url}/health`)
 }
 
-test('sidecars cannot overwrite archive members or executable resources [LIBID-ASSET-024]', () => {
+test('sidecars cannot overwrite archive members or executable resources [LIBID-ASSET-024]', async () => {
   for (const extension of ['br', 'gz', 'zst'])
-    assert.throws(
+    await assert.rejects(
       () =>
         writeDistribution(
           '/unused',
@@ -83,19 +83,24 @@ test('sidecars cannot overwrite archive members or executable resources [LIBID-A
     )
 })
 
-test('rebuild removes obsolete compression sidecars', () => {
+test('rebuild removes obsolete compression sidecars and skips already-compressed woff2 fonts', async () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-sidecars-'))
   const publish = (body: string) =>
     writeDistribution(
       dir,
-      new Map([['/index.html', { bytes: Buffer.from(body), headers: { ...documentHeaders } }]]),
+      new Map([
+        ['/index.html', { bytes: Buffer.from(body), headers: { ...documentHeaders } }],
+        ['/ccdp/assets/font.woff2', { bytes: Buffer.from('font'.repeat(100)), headers: {} }],
+      ]),
     )
   try {
-    publish('<p>compressible</p>'.repeat(100))
-    for (const extension of ['br', 'gz'])
+    await publish('<p>compressible</p>'.repeat(100))
+    for (const extension of ['br', 'gz']) {
       assert.ok(existsSync(join(dir, `public/index.html.${extension}`)))
-    publish('short')
+      assert.ok(!existsSync(join(dir, `public/ccdp/assets/font.woff2.${extension}`)))
+    }
+    await publish('short')
     assert.equal(readFileSync(join(dir, 'public/index.html'), 'utf8'), 'short')
     for (const extension of ['br', 'gz'])
       assert.ok(!existsSync(join(dir, `public/index.html.${extension}`)))
@@ -104,12 +109,12 @@ test('rebuild removes obsolete compression sidecars', () => {
   }
 })
 
-test('emitted header rules: the error policy catch-all, then one exact rule per file; health probe on', () => {
+test('emitted header rules: the error policy catch-all, then one exact rule per file; health probe on', async () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-rules-'))
   try {
     const headers = { 'Cache-Control': 'public, max-age=31536000, immutable' }
-    writeDistribution(
+    await writeDistribution(
       dir,
       new Map([
         ['/ccdp/assets/a.js', { bytes: Buffer.from('a'), headers }],
@@ -142,8 +147,8 @@ test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-02
 }, async () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-test-'))
-  const publish = (body: string) => {
-    writeDistribution(
+  const publish = async (body: string) => {
+    await writeDistribution(
       dir,
       new Map([
         ['/ccdp/v1/prefetch', { bytes: Buffer.from(body), headers: { ...documentHeaders } }],
@@ -152,7 +157,7 @@ test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-02
     )
     localize(dir, testPort)
   }
-  publish('<p>first</p>')
+  await publish('<p>first</p>')
   const server = await serve(dir, testPort)
   try {
     const url = `${server.url}/ccdp/v1/prefetch`
@@ -161,7 +166,7 @@ test('native SWS invalidates same-length rebuilt protocol bodies [LIBID-ASSET-02
     const etag = response.headers.get('etag')!
     assert.ok(etag.startsWith('W/'))
     assert.equal(await response.text(), '<p>first</p>')
-    publish('<p>other</p>')
+    await publish('<p>other</p>')
     const changed = await fetch(url, { headers: { 'If-None-Match': etag } })
     assert.equal(changed.status, 200)
     assert.notEqual(changed.headers.get('etag'), etag)
@@ -179,8 +184,8 @@ test('native SWS serves a rolled-back document to a browser holding the newer on
 }, async () => {
   mkdirSync(cache, { recursive: true })
   const dir = mkdtempSync(join(cache, 'sws-rollback-'))
-  const publish = (body: string, mtime?: Date) => {
-    const files = writeDistribution(
+  const publish = async (body: string, mtime?: Date) => {
+    const files = await writeDistribution(
       dir,
       new Map([
         ['/ccdp/v1/prefetch', { bytes: Buffer.from(body), headers: { ...documentHeaders } }],
@@ -192,7 +197,7 @@ test('native SWS serves a rolled-back document to a browser holding the newer on
       for (const file of Object.values(files)) utimesSync(join(dir, 'public', file), mtime, mtime)
     localize(dir, testPort)
   }
-  publish('<p>newer</p>')
+  await publish('<p>newer</p>')
   const server = await serve(dir, testPort)
   try {
     const url = `${server.url}/ccdp/v1/prefetch`
@@ -203,7 +208,7 @@ test('native SWS serves a rolled-back document to a browser holding the newer on
       'If-Modified-Since': newer.headers.get('last-modified')!,
     }
     assert.ok(validators['If-None-Match'] && validators['If-Modified-Since'])
-    publish('<p>older</p>', new Date(Date.now() - 3_600_000))
+    await publish('<p>older</p>', new Date(Date.now() - 3_600_000))
     // Both validators, as browsers send them: the changed ETag must win over the older time.
     const rolledBack = await fetch(url, { headers: validators })
     assert.equal(rolledBack.status, 200)
@@ -224,7 +229,7 @@ test('native SWS header-rule matching canary: plain path after rewrites, raw pat
   const dir = mkdtempSync(join(cache, 'sws-canary-'))
   const port = testPort + 1
   const asset = { 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Served': 'applied' }
-  writeDistribution(
+  await writeDistribution(
     dir,
     new Map([
       ['/ccdp/assets/served.js', { bytes: Buffer.from('export {}'), headers: asset }],

@@ -33,6 +33,7 @@ test('runtime lowering preserves named/chained calls and external request option
           'a/v1/snippets/x-*/worker.js': '/ccdp/assets/a/v1/snippets/x-123/worker.js',
           'b/v1/data.json': '/ccdp/assets/b/v1/data.json',
           'file/v1.wasm/': '/ccdp/assets/file/v1.wasm',
+          'unused/other/unused.json': '/ccdp/assets/unused/other/unused.json',
         },
         moduleUrls: {},
       }),
@@ -42,7 +43,10 @@ test('runtime lowering preserves named/chained calls and external request option
   const code = ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output.find(
     (o) => o.type === 'chunk',
   )!.code
-  assert.doesNotMatch(code, /secret-build-source|secret-pin|npm:build-only|Content-Security-Policy/)
+  assert.doesNotMatch(
+    code,
+    /secret-build-source|secret-pin|npm:build-only|Content-Security-Policy|unused\.json/,
+  )
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'location')
   Object.defineProperty(globalThis, 'location', {
     value: { origin: 'https://ccdp.test' },

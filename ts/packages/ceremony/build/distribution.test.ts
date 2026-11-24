@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { parse, type TomlTable } from 'smol-toml'
 import type { DistributionMetadata } from './distribution.ts'
-import { cspHash, parseCsp } from './profiles.ts'
+import { cspHash, parseCsp, policyId } from './profiles.ts'
 import { hash } from './sources.ts'
 import {
   documentFontBytes,
@@ -60,6 +60,9 @@ test('Libron font is emitted as an immutable same-origin asset rather than inlin
     'x-content-type-options': 'nosniff',
     'cross-origin-resource-policy': 'same-origin',
   })
+  // WOFF2 is already Brotli-compressed; no redundant sidecars are emitted for it.
+  for (const extension of ['br', 'gz'])
+    assert.equal(existsSync(join(out, 'public', `${documentFontPath}.${extension}`)), false)
   for (const [path, maxBytes] of [
     ['/ccdp/v1/prefetch', 55_000],
     ['/ccdp/v1/prover', 15_000],
@@ -86,10 +89,18 @@ test('Libron font is emitted as an immutable same-origin asset rather than inlin
 
 test('Prover documents modulepreload their static chunks without preloading lazy platform provers', () => {
   const entry = Object.keys(metadata.graph).find((file) => /\/document-[^/]+\.js$/.test(file))!
+  const runtime = Object.keys(metadata.graph).find((file) =>
+    /\/proverRuntime-[^/]+\.js$/.test(file),
+  )!
   const shared = Object.keys(metadata.graph).find((file) => /\/shared-[^/]+\.js$/.test(file))!
-  assert.ok(entry && shared)
-  const expected = [`/${entry}`, `/${shared}`]
-  for (const path of ['/ccdp/v1/prover', '/ccdp/v1/prover/fallback']) {
+  assert.ok(entry && runtime && shared)
+  // /prover preloads only the thin isolation gate so non-DIP browsers bounce cheaply;
+  // /prover/fallback is always isolated and preloads the proving runtime and shared chunk too.
+  const expectedByPath = {
+    '/ccdp/v1/prover': [`/${entry}`],
+    '/ccdp/v1/prover/fallback': [`/${entry}`, `/${runtime}`, `/${shared}`],
+  } as const
+  for (const [path, expected] of Object.entries(expectedByPath)) {
     const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
     const preloads = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)">/g)].map(
       ([, href]) => href,
@@ -106,6 +117,9 @@ test('Prover documents modulepreload their static chunks without preloading lazy
     const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
     assert.ok(!html.includes('rel="modulepreload"'), path)
   }
+  // Per-module asset lowering keeps cross-platform URLs out of shared and Google's chunks.
+  const sharedCode = readFileSync(join(out, 'public', shared), 'utf8')
+  assert.doesNotMatch(sharedCode, /bearer_link\.json|oidc_google\.json|tlsn_wasm/)
 })
 
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-ASSET-012] [LIBID-PROVER-005]', () => {
@@ -420,7 +434,7 @@ test('only worker entry scripts carry worker isolation policies, from immutable 
   )
   assert.ok(workers.length > 0)
   for (const [file] of workers) {
-    assert.ok(file.startsWith('ccdp/assets/'), file)
+    assert.ok(file.startsWith(`ccdp/assets/w-${policyId}/`), file)
     assert.match(metadata.headers[`/${file}`]['cache-control'], /immutable/, file)
   }
   for (const [path, headers] of Object.entries(metadata.headers)) {
@@ -429,6 +443,7 @@ test('only worker entry scripts carry worker isolation policies, from immutable 
     if (!path.startsWith('/ccdp/assets/') || !node) continue
     const worker = /\.worker\.[jt]s$/.test(node.entry ?? '')
     assert.equal(Object.hasOwn(headers, 'cross-origin-embedder-policy'), worker, path)
+    if (!worker) assert.ok(path.startsWith('/ccdp/assets/chunks/'), path)
   }
 })
 
