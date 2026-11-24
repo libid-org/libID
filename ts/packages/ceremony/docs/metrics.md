@@ -85,7 +85,9 @@ memory, so the next Prefetch reports what the Worker did meanwhile:
 
 Timestamps are the Worker's, in epoch milliseconds. Marks carry no URL, client or
 ceremony; they are matched to a stalled run by time. Forwarding is bounded to one
-second and never fails a ceremony. A stall inside Cache Storage itself goes unrecorded.
+second and never fails a ceremony. Activation and page loads keep the Worker alive until
+their marks are written; installation, which Prefetch waits for, never waits on the
+journal. A stall inside Cache Storage itself goes unrecorded.
 
 ### Platform refusals
 

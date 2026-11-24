@@ -26,15 +26,18 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
   installPortKeeper()
   const cache = new AssetCache(scope.location.origin)
   const journal = new Journal(scope.location.origin)
-  /** Keep one lifecycle occurrence for the next document to forward; returns its operation ID. */
+  /**
+   * Keep one lifecycle occurrence for the next document to forward. `written` settles once it,
+   * and every mark before it on the journal's queue, is stored.
+   */
   const mark = (
     event: string,
     phase?: 'started' | 'finished',
     operationId = crypto.randomUUID(),
-  ) => {
-    void journal.record({ event, ...(phase && { phase }), timestamp: now(), operationId })
-    return operationId
-  }
+  ) => ({
+    id: operationId,
+    written: journal.record({ event, ...(phase && { phase }), timestamp: now(), operationId }),
+  })
   // Each evaluation is one start of this Worker by the browser.
   mark('root-worker-start')
   const absolute = (r: (typeof allowedRequests)[number]) => ({
@@ -125,7 +128,9 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
   }
 
   scope.addEventListener('install', (event) => {
-    const id = mark('root-worker-install', 'started')
+    // Prefetch waits for installation, so it never waits on Cache Storage: activation holds
+    // these marks, which its own write follows on the journal's queue.
+    const { id } = mark('root-worker-install', 'started')
     event.waitUntil(
       Promise.all([scope.skipWaiting(), routeNavigations(event)]).then(() => {
         mark('root-worker-install', 'finished', id)
@@ -133,16 +138,18 @@ export function startRootWorker(scope: ServiceWorkerGlobalScope): void {
     )
   })
   scope.addEventListener('activate', (event) => {
-    const id = mark('root-worker-activate', 'started')
+    const { id } = mark('root-worker-activate', 'started')
+    // Kept alive until every mark so far is written; activation already waits on Cache Storage.
     event.waitUntil(
-      Promise.all([cache.reconcile(allowed.values()), scope.clients.claim()]).then(() => {
-        mark('root-worker-activate', 'finished', id)
-      }),
+      Promise.all([cache.reconcile(allowed.values()), scope.clients.claim()]).then(
+        () => mark('root-worker-activate', 'finished', id).written,
+      ),
     )
   })
   scope.addEventListener('fetch', (event) => {
     // Without static routes, a page load reaches this Worker before the network.
-    if (event.request.mode === 'navigate') mark('root-worker-navigation')
+    // The page load goes on to the network; the hold only keeps this Worker until it is marked.
+    if (event.request.mode === 'navigate') event.waitUntil(mark('root-worker-navigation').written)
     if (event.request.method !== 'GET') return
     const spec = allowed.get(
       requestKey({
