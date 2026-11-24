@@ -40,9 +40,11 @@ link. `LibID.sol` imports nothing.
 
 Your contract compiles in the selectors of five IdentityRegistry functions
 and four HandleEscrow functions, `ILibIDRegistry` and `ILibIDEscrow` in
-`LibID.sol`. Both contracts are upgradeable proxies. A deployed contract
-depends on those nine functions staying as they are: rebuilding helps only a
-contract not yet deployed.
+`LibID.sol`. Both contracts are upgradeable proxies, and these nine functions
+never change: libID-contracts declares them as interfaces of the same names,
+which IdentityRegistry and HandleEscrow inherit, so changing one fails its
+build ([libID-contracts#148](https://github.com/libid-org/libID-contracts/pull/148)).
+A deployment whose functions differ would ship as a new library.
 
 ## Testnets
 
