@@ -38,6 +38,12 @@ the LibID that names the deployment you use. Every function is
 `internal`: it compiles into your contract, and there is nothing to deploy or
 link. `LibID.sol` imports nothing.
 
+Your contract compiles in the selectors of five IdentityRegistry functions
+and four HandleEscrow functions, `ILibIDRegistry` and `ILibIDEscrow` in
+`LibID.sol`. Both contracts are upgradeable proxies. A deployed contract
+depends on those nine functions staying as they are: rebuilding helps only a
+contract not yet deployed.
+
 ## Testnets
 
 `LibID` has the production addresses. `LibIDTestnet` has the same functions
