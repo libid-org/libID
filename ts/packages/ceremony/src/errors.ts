@@ -12,12 +12,10 @@ function describe(error: unknown): string {
   return typeof error === 'string' ? error : FAILED_TEXT
 }
 
-const utf8 = new TextEncoder()
-
 /** Controls become spaces; the byte bound cuts at a character boundary, never inside a pair. */
 function displayText(message: string): string {
   const clean = message.replace(/\p{Cc}/gu, ' ').trim()
-  const { read } = utf8.encodeInto(clean, new Uint8Array(MAX_FAILURE_TEXT_BYTES))
+  const { read } = new TextEncoder().encodeInto(clean, new Uint8Array(MAX_FAILURE_TEXT_BYTES))
   const bounded = clean.slice(0, read)
   return isText(bounded, MAX_FAILURE_TEXT_BYTES) ? bounded : FAILED_TEXT
 }

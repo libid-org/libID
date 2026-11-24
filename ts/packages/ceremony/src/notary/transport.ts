@@ -6,7 +6,6 @@ import type { Io } from './tlsn.js'
 
 const FRAME_LENGTH_BYTES = Uint32Array.BYTES_PER_ELEMENT
 const MAX_FRAME_PAYLOAD_BYTES = MAX_FRAME_BYTES - FRAME_LENGTH_BYTES
-const utf8Fatal = new TextDecoder('utf-8', { fatal: true })
 
 function invalid(reason: string): never {
   throw new Error(`Invalid notary transport: ${reason}`)
@@ -38,7 +37,9 @@ export function decodeAttestationFrame(frame: Uint8Array): NotaryAttestation {
 
   let value: unknown
   try {
-    value = JSON.parse(utf8Fatal.decode(frame.subarray(FRAME_LENGTH_BYTES)))
+    value = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true }).decode(frame.subarray(FRAME_LENGTH_BYTES)),
+    )
   } catch {
     return invalid('malformed JSON payload')
   }

@@ -69,7 +69,7 @@ export async function createCCDPClient(options: { oauthBridge: string }): Promis
 
 /** Construction from an already validated, frozen Bridge configuration and Distribution list. */
 function ccdpClientFromConfig(config: CeremonyConfig, versions: PlatformVersions): CCDPClient {
-  const popupOrigins = [...new Set([config.bridgeOrigin, config.ccdpOrigin])]
+  const popupOrigins = [...new Set([new URL(config.redirectUri).origin, config.ccdpOrigin])]
   // A platform the Bridge does not configure has no client, whatever the Distribution bundles.
   const enabledVersions = <P extends PlatformId>(platform: P) =>
     commonVersions(

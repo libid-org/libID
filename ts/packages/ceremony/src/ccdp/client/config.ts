@@ -9,9 +9,8 @@ export interface PlatformConfig {
   clientCredential?: string
 }
 
-/** Validated Bridge configuration with its origin and fixed redirect URI resolved once. */
+/** Validated Bridge configuration with its registered redirect URI resolved once. */
 export interface CeremonyConfig {
-  bridgeOrigin: string
   redirectUri: string
   ccdpOrigin: string
   platforms: Readonly<Record<string, PlatformConfig>>
@@ -48,8 +47,7 @@ function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
   for (const [id, p] of Object.entries(v.platforms))
     if (isPlatformId(id)) platforms[id] = validatePlatform(id, p)
   return Object.freeze({
-    bridgeOrigin: bridge,
-    redirectUri: `${bridge}/auth/callback`,
+    redirectUri: new URL('/auth/callback', bridge).href,
     ccdpOrigin: v.ccdpOrigin,
     platforms: Object.freeze(platforms),
   })

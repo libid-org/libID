@@ -4,7 +4,6 @@ import type { Transcript } from './protocol.js'
 
 // Latin-1 keeps one code unit per wire byte, so string offsets are transcript offsets.
 export const latin1 = new TextDecoder('latin1')
-const utf8Fatal = new TextDecoder('utf-8', { fatal: true })
 
 /** RFC 9110 field-name token. */
 export const FIELD_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/i
@@ -134,7 +133,7 @@ function bodyText(head: NonNullable<ReturnType<typeof parseHead>>, received: Uin
   } else if (length !== undefined && (!/^[0-9]+$/.test(length) || Number(length) !== body.length))
     throw new Error('HTTP length mismatch')
   // Only the de-framed body is UTF-8; chunk boundaries may split a character.
-  return utf8Fatal.decode(body)
+  return new TextDecoder('utf-8', { fatal: true }).decode(body)
 }
 
 /** Case-folded response fields; framing headers must not repeat. */

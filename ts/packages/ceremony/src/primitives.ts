@@ -84,39 +84,32 @@ export function isUint(value: unknown, max: number): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max
 }
 
-const utf8 = new TextEncoder()
-
 export function isText(value: unknown, max: number): value is string {
   return (
     typeof value === 'string' &&
     value.length > 0 &&
     !/\p{Cc}/u.test(value) &&
-    utf8.encode(value).length <= max
+    new TextEncoder().encode(value).length <= max
   )
 }
 
-/** Parse a canonical HTTPS or localhost HTTP web URL without credentials or wildcards. */
-export function parseWebUrl(value: unknown): URL | undefined {
-  if (typeof value !== 'string') return undefined
+export function isWebUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false
   try {
     const u = new URL(value)
-    return (u.protocol === 'https:' ||
-      (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) &&
+    return (
+      (u.protocol === 'https:' ||
+        (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) &&
       !u.hostname.includes('*') &&
       !u.username &&
       !u.password &&
       u.href === value
-      ? u
-      : undefined
+    )
   } catch {
-    return undefined
+    return false
   }
 }
 
-export function isWebUrl(value: unknown): value is string {
-  return parseWebUrl(value) !== undefined
-}
-
 export function isOrigin(value: unknown): value is string {
-  return typeof value === 'string' && parseWebUrl(`${value}/`)?.origin === value
+  return typeof value === 'string' && isWebUrl(`${value}/`) && new URL(value).origin === value
 }

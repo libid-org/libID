@@ -182,7 +182,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
         : { clientCredential: platformConfig.clientCredential }),
     }
     this.ccdpOrigin = config.ccdpOrigin
-    this.bridgeOrigin = config.bridgeOrigin
+    this.bridgeOrigin = new URL(config.redirectUri).origin
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`

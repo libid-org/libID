@@ -1,7 +1,7 @@
 import { assetUrl } from '../assets/index.js'
 import { toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, safeEmit } from '../events.js'
-import { isOrigin, parseWebUrl } from '../primitives.js'
+import { isOrigin, isWebUrl } from '../primitives.js'
 import { tlsnModule, tlsnWasm } from './notary.assets.js'
 import type {
   CommitmentOpening,
@@ -61,7 +61,7 @@ export class NotaryRuntime {
   ): Promise<NotarySession> {
     const signal = this.signal
     signal.throwIfAborted()
-    const target = parseWebUrl(url)
+    const target = isWebUrl(url) ? new URL(url) : undefined
     if (target?.protocol !== 'https:' || target.hash || target.port)
       throw new TypeError('Invalid notarization target')
     if (!this.#worker) {
