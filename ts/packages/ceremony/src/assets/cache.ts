@@ -103,8 +103,18 @@ interface PendingLoad {
 /** Single-flight delivery of immutable bytes. Storage failure falls back to the same fetch. */
 export class AssetCache {
   private readonly pending = new Map<string, PendingLoad>()
+  private opening?: Promise<Cache>
 
   constructor(private readonly origin: string) {}
+
+  /** Coalesce concurrent `caches.open` calls without retaining a handle across cache deletion. */
+  private openCache(): Promise<Cache> {
+    if (!this.opening)
+      this.opening = caches.open(CACHE).finally(() => {
+        this.opening = undefined
+      })
+    return this.opening
+  }
 
   /** The stored key includes both the exact URL and Range, as a same-origin synthetic URL. */
   private storageKey(spec: AssetRequest): string {
@@ -115,7 +125,7 @@ export class AssetCache {
   async reconcile(required: Iterable<AssetRequest>): Promise<void> {
     try {
       const keep = new Set(Array.from(required, (spec) => this.storageKey(spec)))
-      const cache = await caches.open(CACHE)
+      const cache = await this.openCache()
       await Promise.all(
         (await cache.keys())
           .filter((key) => key.url.startsWith(this.origin + PREFIX) && !keep.has(key.url))
@@ -154,7 +164,7 @@ export class AssetCache {
   private async unstored(specs: AssetRequest[]): Promise<number> {
     if (!specs.length) return 0
     try {
-      const cache = await caches.open(CACHE)
+      const cache = await this.openCache()
       const stored = new Set((await cache.keys()).map((key) => key.url))
       return specs.filter((spec) => !stored.has(this.storageKey(spec))).length
     } catch {
@@ -199,7 +209,7 @@ export class AssetCache {
       const cacheKey = this.storageKey(spec)
       let cache: Cache | undefined
       try {
-        cache = await caches.open(CACHE)
+        cache = await this.openCache()
         const hit = await cachedResponse(cache, cacheKey, spec)
         if (hit) {
           dispatched.resolve('cache')

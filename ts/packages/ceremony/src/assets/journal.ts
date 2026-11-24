@@ -31,32 +31,50 @@ export const isMark = (value: unknown): value is Mark =>
  */
 export class Journal {
   private queue = Promise.resolve()
+  private pending: Mark[] = []
+  private flushing = false
   private readonly key: string
 
   constructor(origin: string) {
     this.key = `${origin}/ccdp/journal`
   }
 
-  /** Appends in order, best effort: a mark that cannot be kept is dropped. */
+  /** Appends in order, coalescing marks queued before the write runs; drops on storage failure. */
   record(mark: Mark): Promise<void> {
-    this.queue = this.queue
-      .then(async () => {
-        const cache = await caches.open(CACHE)
-        const marks = await this.read(cache)
-        await cache.put(this.key, Response.json([...marks, mark].slice(-JOURNAL_LIMIT)))
-      })
-      .catch(() => {})
+    this.pending.push(mark)
+    if (this.pending.length > JOURNAL_LIMIT)
+      this.pending.splice(0, this.pending.length - JOURNAL_LIMIT)
+    if (!this.flushing) {
+      this.flushing = true
+      const batch = this.pending
+      this.queue = this.queue
+        .then(async () => {
+          if (this.pending === batch) {
+            this.pending = []
+            this.flushing = false
+          }
+          if (!batch.length) return
+          const cache = await caches.open(CACHE)
+          const marks = await this.read(cache)
+          await cache.put(this.key, Response.json([...marks, ...batch].slice(-JOURNAL_LIMIT)))
+        })
+        .catch(() => {})
+    }
     return this.queue
   }
 
   /** Every kept mark, oldest first, removing them; none when storage fails. */
   drain(): Promise<Mark[]> {
+    const buffered = this.pending.splice(0)
+    this.pending = []
+    this.flushing = false
     const drained = this.queue.then(async () => {
       try {
         const cache = await caches.open(CACHE)
-        const marks = await this.read(cache)
-        await cache.delete(this.key)
-        return marks
+        const stored = await cache.match(this.key)
+        const marks = stored ? await this.parse(stored) : []
+        if (stored) await cache.delete(this.key)
+        return [...marks, ...buffered].slice(-JOURNAL_LIMIT)
       } catch {
         return []
       }
@@ -67,7 +85,11 @@ export class Journal {
 
   private async read(cache: Cache): Promise<Mark[]> {
     const stored = await cache.match(this.key)
-    const marks: unknown = await stored?.json().catch(() => [])
+    return stored ? this.parse(stored) : []
+  }
+
+  private async parse(stored: Response): Promise<Mark[]> {
+    const marks: unknown = await stored.json().catch(() => [])
     return Array.isArray(marks) ? marks.filter(isMark) : []
   }
 }
