@@ -84,6 +84,31 @@ test('Libron font is emitted as an immutable same-origin asset rather than inlin
   }
 })
 
+test('Prover documents modulepreload their static chunks without preloading lazy platform provers', () => {
+  const entry = Object.keys(metadata.graph).find((file) => /\/document-[^/]+\.js$/.test(file))!
+  const shared = Object.keys(metadata.graph).find((file) => /\/shared-[^/]+\.js$/.test(file))!
+  assert.ok(entry && shared)
+  for (const path of ['/ccdp/v1/prover', '/ccdp/v1/prover/fallback']) {
+    const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
+    const preloads = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)">/g)].map(
+      ([, href]) => href,
+    )
+    assert.ok(preloads.includes(`/${entry}`), path)
+    assert.ok(preloads.includes(`/${shared}`), path)
+    assert.equal(new Set(preloads).size, preloads.length, path)
+    // Lazy platform provers, notary, token and workers stay out of document preloads.
+    for (const href of preloads) {
+      assert.ok(Object.hasOwn(metadata.files, href), href)
+      assert.equal(proverPair(metadata.graph[href.slice(1)]?.entry ?? null), undefined, href)
+      assert.doesNotMatch(href, /notary|token|worker/, href)
+    }
+  }
+  for (const path of ['/ccdp/v1/prefetch', '/ccdp/callback.html', '/404.html']) {
+    const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
+    assert.ok(!html.includes('rel="modulepreload"'), path)
+  }
+})
+
 test('static artifact has complete bodies, immutable policies, exact subsets and valid sidecars [LIBID-ASSET-001] [LIBID-ASSET-023] [LIBID-ASSET-008] [LIBID-ASSET-011] [LIBID-ASSET-012] [LIBID-PROVER-005]', () => {
   // smol-toml returns null-prototype tables; deep equality compares prototypes too.
   const config = structuredClone(parse(readFileSync(join(out, 'sws.toml'), 'utf8')))
