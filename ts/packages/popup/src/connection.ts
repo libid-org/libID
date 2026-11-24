@@ -100,6 +100,13 @@ export interface AcceptOptions {
    * spell a fragment itself.
    */
   isolationFallbackUrl?: string
+  /**
+   * Whether to query active Service Workers on arrival for a preserved carrier.
+   * Defaults to `true`. Set `false` on a document that always arrives from a
+   * cross-origin navigation where no worker on this origin can hold a kept port;
+   * departure continuity is unaffected.
+   */
+  claim?: boolean
   fallback?: CarrierConstructor
   onDiagnostic?: (event: PopupDiagnostic) => void
 }
@@ -609,27 +616,29 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     const beforeUnload = () => {}
     popup.view.addEventListener('beforeunload', beforeUnload, { signal: this.controller.signal })
     popup.view.addEventListener('pagehide', onPageHide, { signal: this.controller.signal })
-    void this.select(allowedOrigins, options.fallback)
+    void this.select(allowedOrigins, options.fallback, options.claim !== false)
   }
 
   /**
-   * Selects this document's one carrier: a preserved port, then the opener
-   * handshake, then the fallback constructor. Runs after construction
-   * returns, so handlers the caller registers synchronously precede the
-   * first delivery.
+   * Selects this document's one carrier: a preserved port (unless `claim` is false), then the
+   * opener handshake, then the fallback constructor. Runs after construction returns, so handlers
+   * the caller registers synchronously precede the first delivery.
    */
   private async select(
     allowedOrigins: OriginAllowlist,
     fallback: CarrierConstructor | undefined,
+    claim: boolean,
   ): Promise<void> {
     try {
       // A preserved port can only be held by an already active worker.
-      const workers = (await this.popup.registrations()).flatMap((r) => r.active ?? [])
-      if (workers.length > 0) {
-        const port = await this.claimFrom(workers)
-        if (this.ended) return port ? this.discard(port) : undefined
-        if (port) return this.admit(port, 'carrier-restored')
-        this.report('claim-empty')
+      if (claim) {
+        const workers = (await this.popup.registrations()).flatMap((r) => r.active ?? [])
+        if (workers.length > 0) {
+          const port = await this.claimFrom(workers)
+          if (this.ended) return port ? this.discard(port) : undefined
+          if (port) return this.admit(port, 'carrier-restored')
+          this.report('claim-empty')
+        }
       }
       const opener = this.popup.opener
       if (opener) {

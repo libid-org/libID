@@ -1558,6 +1558,28 @@ describe('lifecycle outcome [POPUP-CONNECTION-006] [POPUP-DIAGNOSTIC-002]', () =
 })
 
 describe('selection order at accept level [POPUP-CONNECTION-002]', () => {
+  it('skips Service Worker registration lookup and claim when claim is false', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const silent = { postMessage: vi.fn() }
+    const registrations = vi.fn(registrationWith(silent))
+    const events: PopupDiagnostic[] = []
+    const endpoint = PopupConnection.accept<Messages>(
+      new CurrentWindow(pair.popupWindow, registrations),
+      {
+        connectionId: ID,
+        allowedApplicationOrigins: [APP_ORIGIN],
+        claim: false,
+        onDiagnostic: (e) => void events.push(e),
+      },
+    )
+    await Promise.all([endpoint.ready, app.connection.ready])
+    expect(registrations).not.toHaveBeenCalled()
+    expect(silent.postMessage).not.toHaveBeenCalled()
+    expect(codes(events)).toEqual(['carrier-message-port'])
+    expect(codes(app.events)).toContain('carrier-message-port')
+  })
+
   it('treats a silent worker as holding nothing and continues over the opener', async () => {
     vi.useFakeTimers()
     try {

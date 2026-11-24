@@ -58,6 +58,7 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
         depart(existing.port)
         depart(port)
         reply.postMessage({ ok: false })
+        reply.close()
         return
       }
       let release!: () => void
@@ -96,6 +97,7 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
       })
       event.waitUntil(done)
       reply.postMessage({ ok: true })
+      reply.close()
       return
     }
 
@@ -106,12 +108,14 @@ export function installPortKeeperOn(scope: ServiceWorkerGlobalScope): void {
     const [reply] = event.ports
     if (!existing) {
       reply.postMessage({ port: false })
+      reply.close()
       return
     }
     held.delete(connectionId)
     existing.release()
     const { peerOrigin, backlog } = existing
     reply.postMessage({ port: true, peerOrigin, ...(backlog && { backlog }) }, [existing.port])
+    reply.close()
   })
 }
 

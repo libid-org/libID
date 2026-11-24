@@ -1,6 +1,7 @@
 import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CEREMONY_ID, type FakeDocumentUi, fakeDocumentUi } from '../../testing/index.js'
+import { messages } from '../uiMessages.js'
 import { startPrefetch } from './prefetch.js'
 
 vi.hoisted(() => vi.stubGlobal('document', {}))
@@ -97,16 +98,12 @@ it('a failed mandatory readiness send reports failure instead of silently contin
   ])
 })
 it('tells the Application when the Worker serves no requests for the profile', async () => {
-  const stop = vi.spyOn(ui, 'stop')
   dispatchPrefetch.mockRejectedValue(new Error('Asset profile not served'))
   await startPrefetch(fragment('x'))
   expect(connection.sent).toEqual([
     { type: 'ceremony-failed', event: 'prefetch-dispatch', message: 'Asset profile not served' },
   ])
-  expect(ui.events).toContainEqual(
-    expect.objectContaining({ status: 'failed', message: 'Asset profile not served' }),
-  )
-  expect(stop).toHaveBeenCalledOnce()
+  expect(ui.failures).toEqual([messages.returnToApplication('Asset profile not served')])
 })
 
 it('forwards the Worker journal before readiness and locates the startup wait [LIBID-BROWSER-029]', async () => {
