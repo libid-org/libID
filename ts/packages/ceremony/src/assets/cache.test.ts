@@ -601,3 +601,48 @@ it('awaits in-flight cache lookups before classifying remaining loads and checks
   expect(await report).toEqual({ pending: 1, missing: 1 })
   await Promise.all([hitLoad.complete, missLoad.complete])
 })
+
+it('coalesces concurrent caches.open calls without retaining a handle across cache deletion', async () => {
+  let stored = new Map<string, Response>()
+  let failOpen = false
+  const open = vi.fn(async () => {
+    if (failOpen) throw new Error('storage unavailable')
+    const backing = stored
+    return {
+      match: async (k: string) => backing.get(k)?.clone(),
+      keys: async () => [...backing.keys()].map((k) => new Request(k)),
+      put: async (k: string, r: Response) => {
+        backing.set(k, r)
+      },
+      delete: async (k: string) => backing.delete(k),
+    }
+  })
+  vi.stubGlobal('caches', { open })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(new Uint8Array([1, 2]))),
+  )
+
+  const a = { url: 'https://assets.example/a', bytes: 2 }
+  const b = { url: 'https://assets.example/b', bytes: 2 }
+  const cache = new AssetCache('https://ccdp.example')
+  // Concurrent prefetches share one in-flight caches.open() call.
+  await Promise.all([cache.prefetch(a).complete, cache.prefetch(b).complete])
+  expect(open).toHaveBeenCalledTimes(1)
+  expect(stored.size).toBe(2)
+
+  // External cache deletion replaces the backing store; the next load opens the fresh handle.
+  stored = new Map<string, Response>()
+  await cache.load(a).complete
+  expect(open).toHaveBeenCalledTimes(2)
+  expect(stored.size).toBe(1)
+
+  // A failed open clears the in-flight slot so a later call recovers once storage is available.
+  failOpen = true
+  await cache.load(b).complete
+  expect(open).toHaveBeenCalledTimes(3)
+  failOpen = false
+  await cache.load(b).complete
+  expect(open).toHaveBeenCalledTimes(4)
+  expect(stored.size).toBe(2)
+})
