@@ -1,4 +1,5 @@
 import { MAX_OPERATION_ID_BYTES } from '../ccdp/limits.js'
+import { isCoreEvent } from '../events.js'
 import { hasExactKeys, isSlug, isText } from '../primitives.js'
 
 /** One root Worker lifecycle occurrence, forwarded later as an extension operation event. */
@@ -13,10 +14,11 @@ const CACHE = 'ceremony-journal'
 /** The newest marks kept between forwards. */
 export const JOURNAL_LIMIT = 64
 
-/** Well-formed marks only: a stored entry from another build never reaches the connection. */
+/** Well-formed extension marks only: stored entries can never collide with core protocol events. */
 export const isMark = (value: unknown): value is Mark =>
   hasExactKeys(value, ['event', 'timestamp', 'operationId'], ['phase']) &&
   isSlug(value.event) &&
+  !isCoreEvent(value.event) &&
   typeof value.timestamp === 'number' &&
   Number.isFinite(value.timestamp) &&
   value.timestamp >= 0 &&
@@ -63,7 +65,7 @@ export class Journal {
     return this.queue
   }
 
-  /** Every kept mark, oldest first, removing them; none when storage fails. */
+  /** Every kept mark, oldest first, removing them; returns buffered marks even when storage fails. */
   drain(): Promise<Mark[]> {
     const buffered = this.pending.splice(0)
     this.pending = []
@@ -76,7 +78,7 @@ export class Journal {
         if (stored) await cache.delete(this.key)
         return [...marks, ...buffered].slice(-JOURNAL_LIMIT)
       } catch {
-        return []
+        return buffered.slice(-JOURNAL_LIMIT)
       }
     })
     this.queue = drained.then(() => {})
