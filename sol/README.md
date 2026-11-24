@@ -238,7 +238,6 @@ cd sol
 forge test
 ETH_RPC_URL=https://ethereum-rpc.publicnode.com \
 SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
-EDEN_RPC_URL=https://ev-reth-eden-testnet.binarybuilders.services:8545 \
   forge test --match-contract 'ForkTest$'
 ```
 
@@ -257,4 +256,6 @@ refund date. Where a chain has no code at the addresses, they check only
 that the library reports it unavailable, and skip the rest. Where it has the registry but not the escrow, they skip the payments. Each is
 skipped without its RPC URL (`ETH_RPC_URL`, `SEPOLIA_RPC_URL`,
 `EDEN_RPC_URL`), unless `LIBID_REQUIRE_FORK=true`, which CI sets: then a
-missing URL fails.
+missing URL fails. CI reads Eden testnet's URL from the `EDEN_RPC_URL`
+secret, as chain-configurations keeps it, and without the secret skips the
+Eden fork tests and says so in the job summary.

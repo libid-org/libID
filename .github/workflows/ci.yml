@@ -130,8 +130,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Solidity: LibID, tested against the real libID contracts placed at their
-  # canonical addresses. The fork tests run against Ethereum mainnet, Sepolia
-  # and Eden testnet through public RPCs, on local forks.
+  # canonical addresses. The fork tests run against Ethereum mainnet and
+  # Sepolia through public RPCs, and Eden testnet through the EDEN_RPC_URL
+  # secret, on local forks.
   # ---------------------------------------------------------------------------
   sol:
     name: Solidity
@@ -173,13 +174,27 @@ jobs:
         run: forge test -vv
 
       # LIBID_REQUIRE_FORK turns a missing RPC into a failure, not a skip.
-      - name: Mainnet, Sepolia and Eden fork tests
+      - name: Mainnet and Sepolia fork tests
         env:
           ETH_RPC_URL: https://ethereum-rpc.publicnode.com
           SEPOLIA_RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
-          EDEN_RPC_URL: https://ev-reth-eden-testnet.binarybuilders.services:8545
           LIBID_REQUIRE_FORK: "true"
-        run: forge test -vv --match-contract 'ForkTest$'
+        run: forge test -vv --match-contract 'ForkTest$' --no-match-contract 'EdenForkTest$'
+
+      # Eden testnet's RPC is a secret, as in chain-configurations. Without it,
+      # as on pull requests from forks, the step skips and says so in the
+      # job summary.
+      - name: Eden fork tests
+        env:
+          EDEN_RPC_URL: ${{ secrets.EDEN_RPC_URL }}
+          LIBID_REQUIRE_FORK: "true"
+        run: |
+          if [ -z "$EDEN_RPC_URL" ]; then
+            echo "::warning::Eden fork tests skipped: the EDEN_RPC_URL secret is not set"
+            echo "**Eden fork tests skipped:** the \`EDEN_RPC_URL\` secret is not set." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          forge test -vv --match-contract 'EdenForkTest$'
 
       # The README's setup for LibIDTestBase, in a project of its own on the
       # oldest compiler the base supports.
