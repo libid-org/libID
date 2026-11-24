@@ -2,7 +2,7 @@ import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CEREMONY_ID, type FakeDocumentUi, fakeDocumentUi } from '../../testing/index.js'
 import { messages } from '../uiMessages.js'
-import { JOURNAL_GRACE_MS, startPrefetch } from './prefetch.js'
+import { startPrefetch } from './prefetch.js'
 
 vi.hoisted(() => vi.stubGlobal('document', {}))
 afterAll(() => vi.unstubAllGlobals())
@@ -104,27 +104,6 @@ it('tells the Application when the Worker serves no requests for the profile', a
     { type: 'ceremony-failed', event: 'prefetch-dispatch', message: 'Asset profile not served' },
   ])
   expect(ui.failures).toEqual([messages.returnToApplication('Asset profile not served')])
-})
-
-it('does not block OAuth readiness past the journal grace window when the journal stalls', async () => {
-  vi.useFakeTimers()
-  try {
-    drainJournal.mockReturnValueOnce(new Promise(() => {}))
-    dispatchPrefetch.mockResolvedValueOnce({ cached: 2, fetched: 0 })
-    const run = startPrefetch(fragment())
-    await vi.advanceTimersByTimeAsync(JOURNAL_GRACE_MS)
-    await run
-    expect(connection.sent).toEqual([
-      expect.objectContaining({
-        type: 'event',
-        event: 'prefetch-dispatch',
-        phase: 'finished',
-      }),
-    ])
-    expect(vi.getTimerCount()).toBe(0)
-  } finally {
-    vi.useRealTimers()
-  }
 })
 
 it('forwards the Worker journal before readiness and locates the startup wait [LIBID-BROWSER-029]', async () => {

@@ -73,8 +73,6 @@ function openWindow(name: string, features: string): OpenedWindow {
 
 /** Until a replaced document first navigates again; WebKit fails a stalled load at about 2.7 s. */
 export const RENAVIGATE_MS = 3_000
-/** Maximum follow-up retries after the initial replacement (~3 minutes total at doubling delays). */
-export const MAX_RENAVIGATE_ATTEMPTS = 6
 
 /** A fresh window name: random, so a page reload never reuses an earlier popup by name. */
 const windowName = () => `popup-${crypto.randomUUID()}`
@@ -247,9 +245,9 @@ export class CurrentWindow extends PopupWindow {
    * only slow restarts a few times at most and keeps its port: the worker holds
    * it while this document is present.
    */
-  replace(url: string, delay = RENAVIGATE_MS, remaining = MAX_RENAVIGATE_ATTEMPTS): void {
+  replace(url: string, delay = RENAVIGATE_MS): void {
     this.view.location.replace(url)
-    if (remaining > 0) setTimeout(() => this.replace(url, delay * 2, remaining - 1), delay)
+    setTimeout(() => this.replace(url, delay * 2), delay)
   }
 
   /** Whether this document is cross-origin isolated, by any policy. */

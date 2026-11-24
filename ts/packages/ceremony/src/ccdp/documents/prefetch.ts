@@ -8,25 +8,6 @@ import { readPrefetch } from '../navigation.js'
 import { messages } from '../uiMessages.js'
 import { adoptShell } from './ui.js'
 
-/** Maximum grace window after asset dispatch to wait for diagnostic journal marks before OAuth. */
-export const JOURNAL_GRACE_MS = 50
-
-function settleWithin<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return new Promise<T>((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), ms)
-    void promise.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      () => {
-        clearTimeout(timer)
-        resolve(fallback)
-      },
-    )
-  })
-}
-
 /** Authenticate the Prefetch page and acknowledge selected fetch dispatch before OAuth navigation. */
 export async function startPrefetch(fragment: string): Promise<void> {
   const started = performance.now()
@@ -46,9 +27,10 @@ export async function startPrefetch(fragment: string): Promise<void> {
     // that Worker's claim arrives first, the Worker stays redundant here though active.
     const worker = await registerRootWorker(rootWorkerUrl)
     const workerReady = performance.now()
-    const journal = drainJournal(worker)
-    const assets = await dispatchPrefetch(worker, profile)
-    const marks = await settleWithin(journal, JOURNAL_GRACE_MS, [])
+    const [assets, marks] = await Promise.all([
+      dispatchPrefetch(worker, profile),
+      drainJournal(worker),
+    ])
     const dispatched = performance.now()
     // Before readiness: the Application may navigate away as soon as Prefetch finishes.
     for (const { event, phase, timestamp, operationId } of marks) {
