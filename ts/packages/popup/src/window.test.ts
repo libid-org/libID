@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { activeRegistration } from './keeper.js'
 import { fakePair, noRegistration } from './testing/fakes.js'
-import { CurrentWindow, OpenedWindow, PopupWindow, RENAVIGATE_MS } from './window.js'
+import {
+  CurrentWindow,
+  MAX_RENAVIGATE_ATTEMPTS,
+  OpenedWindow,
+  PopupWindow,
+  RENAVIGATE_MS,
+} from './window.js'
 
 const ORIGIN = 'https://popup.example'
 const DOCUMENT = `${ORIGIN}/prover/x`
@@ -332,7 +338,7 @@ describe('PopupWindow', () => {
     }
   })
 
-  it('navigates again at doubling intervals while the document stays [POPUP-KEEPER-003]', async () => {
+  it('navigates again at doubling intervals while the document stays and stops at the retry cap [POPUP-KEEPER-003]', async () => {
     vi.useFakeTimers()
     try {
       const replaced: string[] = []
@@ -345,6 +351,10 @@ describe('PopupWindow', () => {
       expect(replaced).toHaveLength(2)
       await vi.advanceTimersByTimeAsync(2 * RENAVIGATE_MS)
       expect(replaced).toEqual(['/next', '/next', '/next'])
+      // Remaining retries run to completion, then stop without scheduling another timer.
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000)
+      expect(replaced).toHaveLength(MAX_RENAVIGATE_ATTEMPTS + 1)
+      expect(vi.getTimerCount()).toBe(0)
     } finally {
       vi.useRealTimers()
     }

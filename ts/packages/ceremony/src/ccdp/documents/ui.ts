@@ -22,6 +22,39 @@ export function view(title: string) {
   return { root, label }
 }
 
+/**
+ * Adopt the pre-rendered `#libid-root` shell in place when present so first-paint layout and the
+ * indeterminate progress animation continue uninterrupted; build it when `#libid-root` is empty.
+ */
+export function adoptShell(fallbackTitle: string) {
+  const root = document.getElementById('libid-root')
+  if (!root) throw new Error(messages.missingRoot)
+  let label = root.querySelector<HTMLParagraphElement>('p[role="status"]')
+  let bar = root.querySelector<HTMLProgressElement>('progress')
+  if (!label || !bar) {
+    const created = view(fallbackTitle)
+    label = created.label
+    bar = document.createElement('progress')
+    bar.setAttribute('aria-label', messages.progress)
+    root.append(bar)
+  }
+  return {
+    root,
+    label,
+    bar,
+    message(text: string) {
+      label.textContent = text
+    },
+    fail(text: string) {
+      bar.remove()
+      label.textContent = text
+    },
+  }
+}
+
+/** The lightweight shell handle used by documents without an EventFeed or progress tracker. */
+export type ShellView = ReturnType<typeof adoptShell>
+
 /** Documents never project the authorization stage, so no platform name is needed. */
 function stageLabel(event: StageEvent): string {
   if (event.status === 'active') return CeremonyStage.message(event.stage, '')
@@ -36,10 +69,7 @@ export type DocumentView = ReturnType<typeof eventView>
 
 /** The same local projection as the Application; subscriptions never mediate wire delivery. */
 export function eventView(feed: EventFeed) {
-  const { root, label } = view(messages.preparation)
-  const bar = document.createElement('progress')
-  bar.setAttribute('aria-label', messages.progress)
-  root.append(bar)
+  const { root, label, bar } = adoptShell(messages.preparation)
   const hint = document.createElement('p')
   hint.className = 'libid-hint'
   hint.setAttribute('role', 'status')

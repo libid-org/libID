@@ -76,6 +76,7 @@ it('clears before acceptance and preserves exact private return with shared depl
   expect(accept).toHaveBeenCalledWith(undefined, {
     connectionId: id,
     allowedApplicationOrigins: ['https://other-app.test', 'https://other-ccdp.test'],
+    claim: false,
   })
   expect(connection.navigations).toEqual([
     {
@@ -224,11 +225,13 @@ it('reports a return whose Prover fragment would exceed its bound instead of nav
   locationInput.hash = `#state=v1.${id}&code=${'/'.repeat(22000)}`
   startCallback()
   await vi.waitFor(() =>
-    expect(connection.sent).toContainEqual({
-      type: 'ceremony-failed',
-      event: 'authorization',
-      message: messages.oauthReturnTooLarge,
-    }),
+    expect(connection.sent).toEqual([
+      {
+        type: 'ceremony-failed',
+        event: 'authorization',
+        message: messages.oauthReturnTooLarge,
+      },
+    ]),
   )
   expect(connection.navigations).toEqual([])
 })
@@ -254,12 +257,7 @@ it.each(['ready-first', 'closed-first'])(
     connection.end({ outcome: 'failed', code: error.code })
     if (order === 'closed-first') connection.settle(error)
     await vi.waitFor(() =>
-      expect(ui.events).toContainEqual({
-        status: 'failed',
-        event: 'authorization',
-        message: popupErrorMessages[error.code],
-        timestamp: expect.any(Number),
-      }),
+      expect(ui.failures).toEqual([messages.returnToApplication(popupErrorMessages[error.code])]),
     )
     expect(connection.navigations).toEqual([])
     expect(connection.sent).toEqual([])
@@ -273,9 +271,7 @@ it('ignores readiness that arrives after the connection closed [LIBID-BROWSER-02
   connection.end()
   connection.settle()
   await connection.ready
-  expect(ui.events).toEqual([
-    expect.objectContaining({ status: 'failed', message: messages.callbackClosed }),
-  ])
+  expect(ui.failures).toEqual([messages.returnToApplication(messages.callbackClosed)])
   // The ended connection cannot carry the report; its loss is logged locally.
   expect(connection.sent).toEqual([])
   expect(console.error).toHaveBeenCalledExactlyOnceWith('[ceremony] failure report unavailable')
@@ -313,8 +309,7 @@ it.each(['success', 'rejected', 'failed'] as const)(
     })
     startCallback()
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledOnce())
-    const failures = ui.events.filter((event) => event.status === 'failed')
-    expect(failures).toHaveLength(outcome === 'success' ? 0 : 1)
+    expect(ui.failures).toHaveLength(outcome === 'success' ? 0 : 1)
     if (outcome === 'success') expect(console.error).not.toHaveBeenCalled()
   },
 )

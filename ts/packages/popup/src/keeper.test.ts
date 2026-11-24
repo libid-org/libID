@@ -144,6 +144,54 @@ describe('worker validation [POPUP-KEEPER-002]', () => {
     )
   })
 
+  it('closes the reply port after every keep and claim answer', async () => {
+    const scope = fakeScope()
+    const replyPort = () => {
+      const channel = new MessageChannel()
+      const close = vi.spyOn(channel.port1, 'close')
+      return { channel, close }
+    }
+    const base = { connectionVersion: CONNECTION_VERSION, connectionId: ID }
+
+    // Claim miss
+    const miss = replyPort()
+    scope.postRaw({ ...base, type: CLAIM }, [miss.channel.port1])
+    await tick()
+    expect(miss.close).toHaveBeenCalledOnce()
+
+    // Keep ok
+    const keep1 = replyPort()
+    scope.postRaw({ ...base, type: KEEP, peerOrigin: APP_ORIGIN }, [
+      new MessageChannel().port1,
+      keep1.channel.port1,
+    ])
+    await tick()
+    expect(keep1.close).toHaveBeenCalledOnce()
+
+    // Duplicate keep rejection
+    const keep2 = replyPort()
+    scope.postRaw({ ...base, type: KEEP, peerOrigin: APP_ORIGIN }, [
+      new MessageChannel().port1,
+      keep2.channel.port1,
+    ])
+    await tick()
+    expect(keep2.close).toHaveBeenCalledOnce()
+
+    // Keep + claim hit
+    const keep3 = replyPort()
+    scope.postRaw({ ...base, type: KEEP, peerOrigin: APP_ORIGIN }, [
+      new MessageChannel().port1,
+      keep3.channel.port1,
+    ])
+    await tick()
+    const hit = replyPort()
+    scope.postRaw({ ...base, type: CLAIM }, [hit.channel.port1])
+    await tick()
+    expect(hit.close).toHaveBeenCalledOnce()
+
+    for (const { channel } of [miss, keep1, keep2, keep3, hit]) channel.port2.close()
+  })
+
   it('keeps ids isolated', async () => {
     const scope = fakeScope()
     const keeper = new PortKeeper(scope.worker)

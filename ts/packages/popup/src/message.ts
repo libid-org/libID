@@ -97,22 +97,27 @@ export function routingType(value: unknown): string | null {
   return typeof type === 'string' && type.length > 0 && type.length <= MAX_TYPE_LENGTH ? type : null
 }
 
-/** An absolute HTTPS (or localhost HTTP) URL in its own serialization, without credentials. */
-export function isCanonicalWebUrl(url: string): boolean {
+/** Parse an absolute HTTPS (or localhost HTTP) URL in its own serialization, without credentials. */
+function parseCanonicalWebUrl(url: string): URL | null {
   let parsed: URL
   try {
     parsed = new URL(url)
   } catch {
-    return false
+    return null
   }
-  return (
-    (parsed.protocol === 'https:' ||
-      (parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname))) &&
+  return (parsed.protocol === 'https:' ||
+    (parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname))) &&
     parsed.href === url &&
     !parsed.hostname.includes('*') &&
     parsed.username === '' &&
     parsed.password === ''
-  )
+    ? parsed
+    : null
+}
+
+/** An absolute HTTPS (or localhost HTTP) URL in its own serialization, without credentials. */
+export function isCanonicalWebUrl(url: string): boolean {
+  return parseCanonicalWebUrl(url) !== null
 }
 
 export function decodeControl(value: Record<string, unknown>): PopupControl | null {
@@ -152,8 +157,12 @@ export type OriginAllowlist = readonly string[] | '*'
 // DNS labels only; no scheme, port, path, partial-label glob, or IP suffix.
 const SUBDOMAIN_PATTERN = /^\*\.(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z](?:[a-z0-9-]*[a-z0-9])?$/
 
+/** Whether `value` is a canonical HTTPS or localhost HTTP origin, parsed once. */
+const isCanonicalWebOrigin = (value: string): boolean =>
+  parseCanonicalWebUrl(`${value}/`)?.origin === value
+
 export function isAllowedOrigin(origin: string, allowlist: OriginAllowlist): boolean {
-  if (canonicalOrigin(origin) !== origin || !isCanonicalWebUrl(`${origin}/`)) return false
+  if (!isCanonicalWebOrigin(origin)) return false
   if (allowlist === '*') return true
   return allowlist.some(
     (pattern) =>
@@ -176,9 +185,7 @@ export function requireOrigins(value: unknown, option: string): readonly string[
     origins.some(
       (origin) =>
         typeof origin !== 'string' ||
-        (origin !== '*' &&
-          !SUBDOMAIN_PATTERN.test(origin) &&
-          (canonicalOrigin(origin) !== origin || !isCanonicalWebUrl(`${origin}/`))),
+        (origin !== '*' && !SUBDOMAIN_PATTERN.test(origin) && !isCanonicalWebOrigin(origin)),
     )
   ) {
     throw new TypeError(`${option} must contain canonical web origins, *.domain patterns, or *`)
