@@ -153,11 +153,13 @@ library LibID {
     /// @dev If someone holds the handle, the escrow sends them the ETH in the
     ///      same call: their code runs, and if it reverts so does this call.
     ///      Otherwise the escrow holds the funds until the handle is proved and
-    ///      claimed. The deposit is this contract's: only this contract can
-    ///      `refund` it, from the escrow's `REFUND_GRACE` (30 days) after its
-    ///      last payment to that handle in that token. Each payment moves the
-    ///      date for the whole amount. A contract paying for its users must
-    ///      track their shares itself.
+    ///      claimed. It books one contribution per sender, handle and token, so
+    ///      every payment this contract escrows for a handle, whoever it pays
+    ///      for, adds to the same one. Only this contract can `refund` it, from
+    ///      the escrow's `REFUND_GRACE` (30 days) after its last escrowed
+    ///      payment: each new one moves the date 30 days out for the whole
+    ///      amount. A contract paying for its users must track their shares
+    ///      itself.
     ///
     ///      Nothing checks that the platform could issue the text. Text it
     ///      never issues, such as a GitHub handle with a leading at-sign,
@@ -177,11 +179,13 @@ library LibID {
 
     /// @notice Send `amount` of an ERC-20 token held by this contract to a
     ///         handle, as `pay` does for ETH.
-    /// @dev The escrow books what arrives, so a token that takes a fee from
-    ///      the amount received works. These do not: a token that charges the
-    ///      sender on top of the amount (its claims and refunds revert), a
-    ///      rebasing token, and a token that can block the escrow. Reverts as
-    ///      `pay` does, and `ApproveFailed` when the token refuses the approval.
+    /// @dev This contract's escrowed payments to a handle in one token share
+    ///      one contribution and refund date, as with `pay`. The escrow books
+    ///      what arrives, so a token that takes a fee from the amount received
+    ///      works. These do not: a token that charges the sender on top of the
+    ///      amount (its claims and refunds revert), a rebasing token, and a
+    ///      token that can block the escrow. Reverts as `pay` does, and
+    ///      `ApproveFailed` when the token refuses the approval.
     function payToken(bytes32 platformId, string memory handle, address token, uint256 amount)
         internal
         returns (bytes32 handleNode)

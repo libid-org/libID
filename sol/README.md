@@ -209,10 +209,11 @@ the escrow holds the funds until someone proves the handle and claims them.
   deposit by its sender, and the sender is your contract. Only your contract
   can call `LibID.refund`, and only from the refund date until the holder
   claims.
-- The refund date is 30 days (the escrow's `REFUND_GRACE`) after your
-  contract's last payment to that handle in that token. Each payment moves it
-  for the whole amount your contract has there, including other users'
-  shares. `contribution` returns the amount and the date.
+- Every payment your contract escrows for one handle, in one token, adds to
+  one contribution, whichever user it pays for. Its refund date is 30 days
+  (the escrow's `REFUND_GRACE`) after the last of them: each new payment moves
+  it 30 days out for the whole amount, including other users' shares.
+  `contribution` returns the amount and the date.
 - If your contract pays for its users, record each user's share and the node
   `pay` returns, and offer a way to refund it. Without that, a payment to a
   wrong or never-claimed handle stays locked in your contract's name. Do not
