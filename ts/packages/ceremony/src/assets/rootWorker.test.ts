@@ -423,9 +423,44 @@ it('marks page loads that reach the fetch handler, which still declines them', (
     // Node cannot construct a navigation Request.
     request: { method: 'GET', mode: 'navigate', url: PREFETCH, headers: new Headers() },
     respondWith,
+    waitUntil: vi.fn(),
   })
   expect(marks()).toEqual(['root-worker-start', 'root-worker-navigation'])
   expect(respondWith).not.toHaveBeenCalled()
+})
+
+it('holds activation and page loads until their marks are written, never installation [LIBID-BROWSER-029]', async () => {
+  // A stalled Cache Storage: no journal write settles until released.
+  const stored = Promise.withResolvers<void>()
+  record.mockReturnValue(stored.promise)
+  const waits: Promise<unknown>[] = []
+  let dispatching = false
+  // A browser accepts waitUntil only while the event is active; these holds are all synchronous.
+  const waitUntil = (p: Promise<unknown>) => {
+    if (!dispatching) throw new DOMException('Event is not active', 'InvalidStateError')
+    waits.push(p)
+  }
+  const handle = start({ skipWaiting: async () => {}, clients: { claim: async () => {} } })
+  const dispatch = (type: string, event: object) => {
+    dispatching = true
+    handle(type, { waitUntil, ...event })
+    dispatching = false
+  }
+  dispatch('install', { addRoutes: async () => {} })
+  // Prefetch waits for installation, which settles despite the stall.
+  await Promise.all(waits)
+  dispatch('activate', {})
+  const activated = vi.fn()
+  void waits.at(-1)!.then(activated)
+  await vi.waitFor(() => expect(marks()).toContain('root-worker-activate/finished'))
+  expect(activated).not.toHaveBeenCalled()
+  dispatch('fetch', {
+    request: { method: 'GET', mode: 'navigate', url: PREFETCH, headers: new Headers() },
+    respondWith: vi.fn(),
+  })
+  expect(waits.at(-1)).toBe(stored.promise)
+  stored.resolve()
+  await vi.waitFor(() => expect(activated).toHaveBeenCalledOnce())
 })
 
 it('hands kept marks to a same-origin client and removes them [LIBID-BROWSER-029]', async () => {
