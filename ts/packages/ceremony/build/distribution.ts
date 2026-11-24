@@ -194,10 +194,16 @@ async function buildDistribution() {
   tree.put(documentFontPath, documentFontBytes, 'asset')
   tree.put(documentFontLicensePath, documentFontLicense, 'asset')
   for (const [path, record] of data.local) tree.put(path, record.bytes, record.headers)
-  const prover = await bundle('src/ccdp/documents/prover.ts', data, {
-    invoke: 'startProver',
-    fragment: true,
-  })
+  const [prover, callback] = await Promise.all([
+    bundle('src/ccdp/documents/prover.ts', data, {
+      invoke: 'startProver',
+      fragment: true,
+    }),
+    bundle('src/ccdp/documents/callback.ts', data, {
+      selfContained: true,
+      invoke: 'startCallback',
+    }),
+  ])
   // Every prover the Prover can load is its own emitted chunk; the published set comes from them.
   const proverEntries = new Map<string, string>()
   for (const [file, node] of prover.graph) {
@@ -230,10 +236,6 @@ async function buildDistribution() {
   tree.put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
   tree.document(route('prover'), primary.code, 'prover', proverPreloads)
   tree.document(route('prover/fallback'), primary.code, 'proverFallback', proverPreloads)
-  const callback = await bundle('src/ccdp/documents/callback.ts', data, {
-    selfContained: true,
-    invoke: 'startCallback',
-  })
   const callbackCode = inlineScript(singleEntry(callback.output, 'Callback'))
   tree.put(
     CALLBACK_PATH,

@@ -123,7 +123,13 @@ function chunkGroup(id: string): 'shared' | 'proof-engine' | 'notary' | undefine
   if (id.includes('/node_modules/@libid/contracts/')) return 'shared'
   // Circuits follow the platforms that import them, as platform modules do.
   if (path.startsWith('src/barretenberg/circuits/')) return
-  if (path.startsWith('src/barretenberg/')) return 'proof-engine'
+  // The catalog validates proof inputs and progress weights with these data-only modules;
+  // only the worker engine stays in the lazy proof-engine chunk.
+  if (
+    path.startsWith('src/barretenberg/') &&
+    !/^src\/barretenberg\/(events|parameters)\.ts$/.test(path)
+  )
+    return 'proof-engine'
   // The catalog validates attestations and token inputs with these data-only
   // modules; only the notary runtime stays in a chunk that a profile without it skips.
   if (
