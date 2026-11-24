@@ -1,4 +1,7 @@
-import * as assets from '../../../barretenberg/circuits/oidc_google/oidc_google.assets.js'
+import {
+  circuit,
+  verificationKey,
+} from '../../../barretenberg/circuits/oidc_google/oidc_google.assets.js'
 import { SRS_POINTS } from '../../../barretenberg/circuits/oidc_google/parameters.js'
 import type { ProverContext } from '../../context.js'
 import { proveOidc } from '../../oidc.js'
@@ -10,7 +13,7 @@ export async function prove(context: ProverContext<'google'>) {
   const token = acceptGoogleIdToken(context.credential, context.request.clientId)
   return proveOidc(context, {
     name: 'Google',
-    assets,
+    assets: { circuit, verificationKey },
     srsPoints: SRS_POINTS,
     token: () => token,
     fetchSigningKey,
