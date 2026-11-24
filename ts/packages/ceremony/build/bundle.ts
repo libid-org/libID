@@ -114,32 +114,10 @@ function workerImports(): Plugin {
   }
 }
 
-/** Small leaf modules imported by the Prover isolation gate; stay in `document` so non-DIP bounces skip `shared`. */
-const proverBootstrapModules = new Set([
-  'src/assets/keys.ts',
-  'src/ccdp/limits.ts',
-  'src/primitives.ts',
-  'src/errors.ts',
-  'src/ccdp/navigation.ts',
-  'src/ccdp/uiMessages.ts',
-  'src/ccdp/failure.ts',
-  'src/ccdp/documents/ui.ts',
-  'src/ccdp/documents/progress.ts',
-])
-
 /** The module group a module belongs to; unassigned modules follow the platforms importing them. */
-function chunkGroup(id: string): 'document' | 'shared' | 'proof-engine' | 'notary' | undefined {
+function chunkGroup(id: string): 'shared' | 'proof-engine' | 'notary' | undefined {
   // Classify by package path: the checkout's own path may contain `/src/`.
   const path = relative(packageDir, id)
-  // The Prover isolation gate, @libid/popup, and its tiny leaf helpers stay in `document`
-  // at highest priority so non-DIP bounces never statically import `shared`.
-  if (
-    path === 'src/ccdp/documents/prover.ts' ||
-    proverBootstrapModules.has(path) ||
-    id.includes('/packages/popup/dist/') ||
-    id.includes('/node_modules/@libid/popup/')
-  )
-    return 'document'
   // The catalog reads these data-only constants in every profile; left unassigned,
   // they would follow the first group importing them, such as the notary's.
   if (id.includes('/node_modules/@libid/contracts/')) return 'shared'
@@ -159,11 +137,13 @@ function chunkGroup(id: string): 'document' | 'shared' | 'proof-engine' | 'notar
     !/^src\/notary\/(decode|limits|protocol|oauth\/(events|validation))\.ts$/.test(path)
   )
     return 'notary'
-  // Platform modules, the prover table, and the lazy Prover runtime stay out of `shared`.
+  // Platform modules, the prover table among them, stay out of the shared
+  // chunk: on a chunk every prover imports, the table would put every
+  // prover in every profile's set.
   if (
     path.startsWith('src/') &&
     !path.startsWith('src/platforms/') &&
-    path !== 'src/ccdp/documents/proverRuntime.ts'
+    path !== 'src/ccdp/documents/prover.ts'
   )
     return 'shared'
 }
@@ -274,11 +254,6 @@ export async function bundle(
                   // Explicit groups win over capture as dependencies, as Rollup's manualChunks
                   // did: a higher priority captures first, and each takes its own module set.
                   groups: [
-                    {
-                      name: 'document',
-                      test: (id: string) => chunkGroup(id) === 'document',
-                      priority: 4,
-                    },
                     {
                       name: 'shared',
                       test: (id: string) => chunkGroup(id) === 'shared',

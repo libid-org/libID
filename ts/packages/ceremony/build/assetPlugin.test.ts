@@ -94,3 +94,36 @@ test('a bundle built without the manifest cannot import its request lists', asyn
     }),
   )
 })
+
+test('fails at build time if any local file() or archive() call survives unlowered', async () => {
+  const helperId = join(packageDir, 'src/asset-reexport-helper.ts')
+  const entryId = join(packageDir, 'src/asset-unlowered-fixture.ts')
+  await assert.rejects(
+    () =>
+      build({
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [
+          {
+            name: 'unlowered-fixture',
+            resolveId: (file) => (file === entryId || file === helperId ? file : undefined),
+            load: (file) => {
+              if (file === helperId) return `export { file } from './assets/index.js';`
+              if (file === entryId)
+                return `
+                  import { file } from ${JSON.stringify(helperId)};
+                  import { assetUrl, headers } from './assets/index.js';
+                  export const url = assetUrl(file('npm:pkg/a.wasm', 'pkg/a.wasm', headers.wasm));
+                `
+            },
+          },
+          assetPlugin({
+            urls: { 'pkg/a.wasm/': '/ccdp/assets/pkg/a.wasm' },
+            moduleUrls: {},
+          }),
+        ],
+        build: { write: false, minify: false, lib: { entry: entryId, formats: ['es'] } },
+      }),
+    /Unlowered local asset declaration\(s\) \(file\)/,
+  )
+})

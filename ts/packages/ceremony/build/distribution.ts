@@ -63,11 +63,10 @@ const page = (
 ) =>
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>${styles === documentStyles ? fontPreload : ''}${modulePreloads(preloads)}<style>${styles}</style><body>${content}</body></html>`
 
-/** Static module imports reachable from `roots` (excluding lazy/dynamic platform provers). */
+/** Static module imports reachable from `entry` (excluding lazy/dynamic platform provers). */
 function staticImports(
   output: readonly (Rollup.OutputChunk | Rollup.OutputAsset)[],
-  roots: readonly Rollup.OutputChunk[],
-  includeRoots = false,
+  entry: Rollup.OutputChunk,
 ): string[] {
   const chunks = new Map(
     output
@@ -80,10 +79,7 @@ function staticImports(
     seen.add(file)
     for (const next of chunks.get(file)?.imports ?? []) visit(next)
   }
-  for (const root of roots) {
-    if (includeRoots) visit(root.fileName)
-    else for (const file of root.imports) visit(file)
-  }
+  for (const file of entry.imports) visit(file)
   return [...seen].map((file) => `/${file}`)
 }
 
@@ -240,21 +236,10 @@ async function buildDistribution({
     external,
   )
   // Every published pair has an emitted prover and asset profile.
-  const proverPreloads = staticImports(prover.output, [primary])
-  const runtimeChunk = prover.output.find(
-    (o): o is Rollup.OutputChunk =>
-      o.type === 'chunk' &&
-      (o.facadeModuleId?.endsWith('/src/ccdp/documents/proverRuntime.ts') ?? false),
-  )
-  if (!runtimeChunk) throw new Error('Missing Prover runtime chunk')
-  // /prover preloads only the minimal isolation gate so non-DIP browsers bounce cheaply;
-  // /prover/fallback is always isolated and preloads the proving runtime too.
-  const fallbackPreloads = [
-    ...new Set([...proverPreloads, ...staticImports(prover.output, [runtimeChunk], true)]),
-  ]
+  const proverPreloads = staticImports(prover.output, primary)
   tree.put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
   tree.document(route('prover'), primary.code, 'prover', proverPreloads)
-  tree.document(route('prover/fallback'), primary.code, 'proverFallback', fallbackPreloads)
+  tree.document(route('prover/fallback'), primary.code, 'proverFallback', proverPreloads)
   const callbackCode = inlineScript(singleEntry(callback.output, 'Callback'))
   tree.put(
     CALLBACK_PATH,

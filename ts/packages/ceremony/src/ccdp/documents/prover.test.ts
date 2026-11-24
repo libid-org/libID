@@ -314,7 +314,6 @@ it.each(['before-ready', 'duplicate', 'after-denial'])(
     const run = startProver(proverInput('google', when === 'after-denial' ? 'denied' : 'accepted'))
     const request = proveIdentity()
     if (when === 'before-ready') {
-      await vi.waitFor(() => expect(connection.on).toHaveBeenCalledOnce())
       connection.receive(request)
       connection.settle()
       await run
@@ -373,16 +372,12 @@ it.each([
       },
     ])
     expect(claimRootWorker).not.toHaveBeenCalled()
-    expect(connection.on).not.toHaveBeenCalled()
-    expect(ui.views).toEqual([
-      messages.returnToApplication(popupErrorMessages['isolation-unavailable']),
-    ])
+    expect(ui.stop).toHaveBeenCalledOnce()
   },
 )
 
 it('leaves quietly when popup moves the run to the isolated fallback, releasing its capture [LIBID-BROWSER-022] [LIBID-OAUTH-023]', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-  vi.stubGlobal('crossOriginIsolated', false)
   connection = spiedConnection('pending')
   void startProver(proverInput())
   // Popup reports the hop, releases this page and replaces it; its `ready` stays pending.
@@ -390,12 +385,12 @@ it('leaves quietly when popup moves the run to the isolated fallback, releasing 
   connection.end()
   await connection.closed
   await new Promise((resolve) => setTimeout(resolve))
-  // The non-isolated bounce never loads the proving runtime or registers ProveIdentity.
-  expect(connection.on).not.toHaveBeenCalled()
-  expect(claimRootWorker).not.toHaveBeenCalled()
+  // Leaving ends this run: a request reaching it later admits nothing from the dropped return.
+  expect(ui.stop).toHaveBeenCalledOnce()
+  connection.on.mock.calls.find(([codec]) => codec.type === 'prove-identity')![1](proveIdentity())
+  await new Promise((resolve) => setTimeout(resolve))
   expect(prove).not.toHaveBeenCalled()
-  expect(ui.views).toEqual([])
-  expect(ui.events).toEqual([])
+  expect(ui.events.filter((event) => event.status !== 'active')).toEqual([])
   expect(connection.sent).toEqual([])
   expect(log).not.toHaveBeenCalled()
 })
@@ -525,7 +520,7 @@ it('claims the root worker concurrently with readiness when isolated and reports
   const claim = Promise.withResolvers<void>()
   claimRootWorker.mockReturnValueOnce(claim.promise)
   const run = startProver(proverInput())
-  await vi.waitFor(() => expect(claimRootWorker).toHaveBeenCalledOnce())
+  expect(claimRootWorker).toHaveBeenCalledOnce()
   claim.reject(new Error('Missing controlling Service Worker'))
   await Promise.resolve()
   await Promise.resolve()
@@ -559,7 +554,5 @@ it('does not claim the root worker before readiness when not isolated', async ()
       message: popupErrorMessages['isolation-unavailable'],
     },
   ])
-  expect(ui.views).toEqual([
-    messages.returnToApplication(popupErrorMessages['isolation-unavailable']),
-  ])
+  expect(ui.stop).toHaveBeenCalledOnce()
 })

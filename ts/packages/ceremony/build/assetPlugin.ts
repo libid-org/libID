@@ -165,5 +165,18 @@ export function assetPlugin(
           .map(([k, v]) => `export const ${k}=${JSON.stringify(v)};`)
           .join('\n')
     },
+    generateBundle(_, output) {
+      if (!data) return
+      const assetsIndex = join(packageDir, 'src/assets/index.ts')
+      for (const item of Object.values(output)) {
+        if (item.type !== 'chunk') continue
+        const rendered = item.modules[assetsIndex]?.renderedExports ?? []
+        const unlowered = rendered.filter((name) => name === 'file' || name === 'archive')
+        if (unlowered.length)
+          throw new Error(
+            `Unlowered local asset declaration(s) (${unlowered.join(', ')}) survived in ${item.fileName}`,
+          )
+      }
+    },
   }
 }

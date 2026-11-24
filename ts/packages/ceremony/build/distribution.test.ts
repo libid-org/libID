@@ -89,18 +89,10 @@ test('Libron font is emitted as an immutable same-origin asset rather than inlin
 
 test('Prover documents modulepreload their static chunks without preloading lazy platform provers', () => {
   const entry = Object.keys(metadata.graph).find((file) => /\/document-[^/]+\.js$/.test(file))!
-  const runtime = Object.keys(metadata.graph).find((file) =>
-    /\/proverRuntime-[^/]+\.js$/.test(file),
-  )!
   const shared = Object.keys(metadata.graph).find((file) => /\/shared-[^/]+\.js$/.test(file))!
-  assert.ok(entry && runtime && shared)
-  // /prover preloads only the thin isolation gate so non-DIP browsers bounce cheaply;
-  // /prover/fallback is always isolated and preloads the proving runtime and shared chunk too.
-  const expectedByPath = {
-    '/ccdp/v1/prover': [`/${entry}`],
-    '/ccdp/v1/prover/fallback': [`/${entry}`, `/${runtime}`, `/${shared}`],
-  } as const
-  for (const [path, expected] of Object.entries(expectedByPath)) {
+  assert.ok(entry && shared)
+  const expected = [`/${entry}`, `/${shared}`]
+  for (const path of ['/ccdp/v1/prover', '/ccdp/v1/prover/fallback']) {
     const html = readFileSync(join(out, 'public', metadata.files[path]), 'utf8')
     const preloads = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)">/g)].map(
       ([, href]) => href,
