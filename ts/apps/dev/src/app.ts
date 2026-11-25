@@ -35,7 +35,7 @@ const element = <K extends keyof HTMLElementTagNameMap>(
 let client: CCDPClient | undefined
 async function initialize() {
   try {
-    client = await createCCDPClient({ oauthBridge })
+    client = await createCCDPClient({ oauthBridge, signal: AbortSignal.timeout(20_000) })
     platforms.replaceChildren(
       ...client.enabledPlatforms.map((platform) => {
         const launch = document.createElement('a')
