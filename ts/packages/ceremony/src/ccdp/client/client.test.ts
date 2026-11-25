@@ -72,22 +72,18 @@ it('forwards an optional AbortSignal to both discovery fetches and stops on abor
       // @ts-expect-error Non-AbortSignal values are rejected at runtime too.
       createCCDPClient({ oauthBridge: 'https://bridge.test', signal: {} }),
     ).rejects.toThrow('Invalid client options')
-    const preAborted = new AbortController()
-    preAborted.abort(new Error('Already timed out'))
-    await expect(
-      createCCDPClient({ oauthBridge: 'https://bridge.test', signal: preAborted.signal }),
-    ).rejects.toThrow('Already timed out')
     expect(unfetched).not.toHaveBeenCalled()
   } finally {
     vi.unstubAllGlobals()
   }
 
   const controller = new AbortController()
-  const fetch = vi.fn(async (url: string) =>
-    url === `https://bridge.test/api/v1/ceremony/config`
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    init?.signal?.throwIfAborted()
+    return url === `https://bridge.test/api/v1/ceremony/config`
       ? Response.json(wireConfig)
-      : Response.json({ ccdpVersions: [1], platforms: { google: [1] } }),
-  )
+      : Response.json({ ccdpVersions: [1], platforms: { google: [1] } })
+  })
   vi.stubGlobal('fetch', fetch)
   try {
     const client = await createCCDPClient({
@@ -106,13 +102,24 @@ it('forwards an optional AbortSignal to both discovery fetches and stops on abor
       ['https://bridge.test/api/v1/ceremony/config', init],
       [`https://ccdp.test${VERSIONS_PATH}`, init],
     ])
+
+    await createCCDPClient({ oauthBridge: 'https://bridge.test', signal: undefined })
+    expect(fetch.mock.calls[2][1]).not.toHaveProperty('signal')
+
+    const preAborted = new AbortController()
+    preAborted.abort(new Error('Already timed out'))
+    await expect(
+      createCCDPClient({ oauthBridge: 'https://bridge.test', signal: preAborted.signal }),
+    ).rejects.toThrow('Already timed out')
+    expect(fetch).toHaveBeenCalledTimes(5)
   } finally {
     vi.unstubAllGlobals()
   }
 
-  // Aborting while Bridge config settles prevents starting the Distribution version fetch.
+  // Aborting while Bridge config settles rejects the Distribution version fetch immediately.
   const midAbort = new AbortController()
-  const midFetch = vi.fn(async () => {
+  const midFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+    init?.signal?.throwIfAborted()
     midAbort.abort(new Error('Setup timed out'))
     return Response.json(wireConfig)
   })
@@ -121,7 +128,8 @@ it('forwards an optional AbortSignal to both discovery fetches and stops on abor
     await expect(
       createCCDPClient({ oauthBridge: 'https://bridge.test', signal: midAbort.signal }),
     ).rejects.toThrow('Setup timed out')
-    expect(midFetch).toHaveBeenCalledOnce()
+    expect(midFetch).toHaveBeenCalledTimes(2)
+    expect(midFetch.mock.calls[1][1]?.signal).toBe(midAbort.signal)
   } finally {
     vi.unstubAllGlobals()
   }

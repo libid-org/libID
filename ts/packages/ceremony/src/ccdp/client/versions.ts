@@ -61,7 +61,6 @@ export async function fetchPlatformVersions(
   ccdpOrigin: string,
   signal?: AbortSignal,
 ): Promise<PlatformVersions> {
-  signal?.throwIfAborted()
   const versions = validateDistributionVersions(
     await fetchPublicJson(
       `${ccdpOrigin}${VERSIONS_PATH}`,

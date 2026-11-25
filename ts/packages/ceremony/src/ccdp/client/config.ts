@@ -60,7 +60,6 @@ export async function fetchCeremonyConfig(
 ): Promise<CeremonyConfig> {
   if (!isOrigin(bridge))
     throw new TypeError('oauthBridge must be a canonical HTTPS or localhost HTTP origin')
-  signal?.throwIfAborted()
   return validateCeremonyConfig(
     await fetchPublicJson(
       `${bridge}${CONFIG_PATH}`,
