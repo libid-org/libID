@@ -45,7 +45,7 @@ phase-less core event.
 ### Prefetch breakdown
 
 `prefetch-dispatch.finished` carries four durations, two counts and, where the browser
-exposes the document's navigation timing, three offsets in `instrumentation.attributes`:
+exposes the document's navigation timing, five offsets in `instrumentation.attributes`:
 
 - `document-startup-ms`: navigation start to Prefetch entry execution, including
   document/module loading and evaluation; not the browser's `load` event.
@@ -58,10 +58,12 @@ exposes the document's navigation timing, three offsets in `instrumentation.attr
   and those fetched or joined to a running fetch. Any fetched request marks a cold or
   partly cold start. A fetch can still be answered by the HTTP cache, so this is not a
   download count.
-- `navigation-worker-ms`, `navigation-fetch-ms` and `navigation-response-ms`: the Prefetch
-  navigation's `workerStart` (0 when no Service Worker took part), `fetchStart` and
-  `responseStart`, on the same clock as `document-startup-ms`. They place a long startup
-  before the request, at the server, or after the response.
+- `navigation-worker-ms`, `navigation-fetch-ms`, `navigation-response-ms`,
+  `navigation-response-end-ms` and `navigation-dom-interactive-ms`: the Prefetch
+  navigation's `workerStart` (0 when no Service Worker took part), `fetchStart`,
+  `responseStart`, `responseEnd` and `domInteractive`, on the same clock as
+  `document-startup-ms`. They separate pre-request, server TTFB, response transfer,
+  HTML parse, and module evaluation waits.
 
 These consecutive intervals use the Prefetch document's monotonic clock. They
 exclude Application work before navigation, and do not measure asset download

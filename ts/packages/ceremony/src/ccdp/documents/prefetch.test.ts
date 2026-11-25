@@ -109,7 +109,13 @@ it('tells the Application when the Worker serves no requests for the profile', a
 it('forwards the Worker journal before readiness and locates the startup wait [LIBID-BROWSER-029]', async () => {
   vi.spyOn(performance, 'now').mockReturnValue(40)
   vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
-    { workerStart: 5, fetchStart: 30, responseStart: 35 } as PerformanceNavigationTiming,
+    {
+      workerStart: 5,
+      fetchStart: 30,
+      responseStart: 35,
+      responseEnd: 37,
+      domInteractive: 39,
+    } as PerformanceNavigationTiming,
   ])
   dispatchPrefetch.mockResolvedValue(undefined)
   drainJournal.mockResolvedValue([
@@ -142,6 +148,8 @@ it('forwards the Worker journal before readiness and locates the startup wait [L
         'navigation-worker-ms': 5,
         'navigation-fetch-ms': 30,
         'navigation-response-ms': 35,
+        'navigation-response-end-ms': 37,
+        'navigation-dom-interactive-ms': 39,
       },
     },
   })

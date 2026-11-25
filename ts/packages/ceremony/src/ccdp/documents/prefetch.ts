@@ -54,11 +54,17 @@ export async function startPrefetch(fragment: string): Promise<void> {
           // Navigation to entry execution includes document and module loading.
           'document-startup-ms': started,
           // Where that startup waited, on the same clock: a Service Worker (0 when none was
-          // involved), the request's start, and its first response byte.
+          // involved), request start, first and last response bytes, and DOM interactive.
           ...(navigation && {
             'navigation-worker-ms': navigation.workerStart,
             'navigation-fetch-ms': navigation.fetchStart,
             'navigation-response-ms': navigation.responseStart,
+            ...(Number.isFinite(navigation.responseEnd) && {
+              'navigation-response-end-ms': navigation.responseEnd,
+            }),
+            ...(Number.isFinite(navigation.domInteractive) && {
+              'navigation-dom-interactive-ms': navigation.domInteractive,
+            }),
           }),
           'connection-ms': connected - started,
           'worker-ready-ms': workerReady - connected,
