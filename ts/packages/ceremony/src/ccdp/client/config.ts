@@ -54,14 +54,19 @@ function validateCeremonyConfig(v: unknown, bridge: string): CeremonyConfig {
 }
 
 /** Fetch current configuration without cookies, redirects or persistent browser caching. */
-export async function fetchCeremonyConfig(bridge: string): Promise<CeremonyConfig> {
+export async function fetchCeremonyConfig(
+  bridge: string,
+  signal?: AbortSignal,
+): Promise<CeremonyConfig> {
   if (!isOrigin(bridge))
     throw new TypeError('oauthBridge must be a canonical HTTPS or localhost HTTP origin')
+  signal?.throwIfAborted()
   return validateCeremonyConfig(
     await fetchPublicJson(
       `${bridge}${CONFIG_PATH}`,
       MAX_CONFIG_BYTES,
       'Configuration request failed',
+      signal,
     ),
     bridge,
   )

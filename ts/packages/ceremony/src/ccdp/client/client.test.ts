@@ -63,3 +63,66 @@ it('creates a client from the Bridge record, then the Distribution list, refusin
     expect(failed.fetch).toHaveBeenCalledTimes(listRead ? 2 : 1)
   }
 })
+
+it('forwards an optional AbortSignal to both discovery fetches and stops on abort', async () => {
+  const unfetched = vi.fn()
+  vi.stubGlobal('fetch', unfetched)
+  try {
+    await expect(
+      // @ts-expect-error Non-AbortSignal values are rejected at runtime too.
+      createCCDPClient({ oauthBridge: 'https://bridge.test', signal: {} }),
+    ).rejects.toThrow('Invalid client options')
+    const preAborted = new AbortController()
+    preAborted.abort(new Error('Already timed out'))
+    await expect(
+      createCCDPClient({ oauthBridge: 'https://bridge.test', signal: preAborted.signal }),
+    ).rejects.toThrow('Already timed out')
+    expect(unfetched).not.toHaveBeenCalled()
+  } finally {
+    vi.unstubAllGlobals()
+  }
+
+  const controller = new AbortController()
+  const fetch = vi.fn(async (url: string) =>
+    url === `https://bridge.test/api/v1/ceremony/config`
+      ? Response.json(wireConfig)
+      : Response.json({ ccdpVersions: [1], platforms: { google: [1] } }),
+  )
+  vi.stubGlobal('fetch', fetch)
+  try {
+    const client = await createCCDPClient({
+      oauthBridge: 'https://bridge.test',
+      signal: controller.signal,
+    })
+    expect(client.enabledPlatforms).toEqual(['google'])
+    const init = {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-store',
+      redirect: 'error',
+      signal: controller.signal,
+    }
+    expect(fetch.mock.calls).toEqual([
+      ['https://bridge.test/api/v1/ceremony/config', init],
+      [`https://ccdp.test${VERSIONS_PATH}`, init],
+    ])
+  } finally {
+    vi.unstubAllGlobals()
+  }
+
+  // Aborting while Bridge config settles prevents starting the Distribution version fetch.
+  const midAbort = new AbortController()
+  const midFetch = vi.fn(async () => {
+    midAbort.abort(new Error('Setup timed out'))
+    return Response.json(wireConfig)
+  })
+  vi.stubGlobal('fetch', midFetch)
+  try {
+    await expect(
+      createCCDPClient({ oauthBridge: 'https://bridge.test', signal: midAbort.signal }),
+    ).rejects.toThrow('Setup timed out')
+    expect(midFetch).toHaveBeenCalledOnce()
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})

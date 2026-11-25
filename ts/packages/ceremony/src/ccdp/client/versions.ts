@@ -57,12 +57,17 @@ export function validateDistributionVersions(value: unknown): DistributionVersio
 }
 
 /** Fetch and validate the list, refusing an unavailable CCDP version before any ceremony can launch. */
-export async function fetchPlatformVersions(ccdpOrigin: string): Promise<PlatformVersions> {
+export async function fetchPlatformVersions(
+  ccdpOrigin: string,
+  signal?: AbortSignal,
+): Promise<PlatformVersions> {
+  signal?.throwIfAborted()
   const versions = validateDistributionVersions(
     await fetchPublicJson(
       `${ccdpOrigin}${VERSIONS_PATH}`,
       MAX_VERSIONS_BYTES,
       'Version list request failed',
+      signal,
     ),
   )
   if (!versions.ccdpVersions.includes(CCDP_VERSION))
