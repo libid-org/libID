@@ -897,16 +897,33 @@ contract LibIDTestBaseTest is LibIDTestBase {
         assertEq(name, "alice@gmail.com");
     }
 
-    /// On a testnet's chain id, libID goes to the testnet addresses.
+    /// On a testnet's chain id, libID goes to the testnet addresses, and a
+    /// contract reads, pays and refunds there.
     function test_deployLibIDOnATestnetUsesTheTestnetAddresses() public {
         vm.chainId(11155111);
         deployLibID();
         assertEq(address(libidRegistry), LibID.TESTNET_REGISTRY);
+        assertEq(address(libidEscrow), LibID.TESTNET_ESCROW);
         assertEq(LibID.PRODUCTION_REGISTRY.code.length, 0);
+        assertEq(LibID.PRODUCTION_ESCROW.code.length, 0);
         Consumer consumer = new Consumer();
+        assertEq(consumer.escrow(), LibID.TESTNET_ESCROW);
+        assertTrue(consumer.isAvailable());
         assertTrue(consumer.isEscrowAvailable());
         bindHandle(alice, LibID.GITHUB, "1001", "octocat");
         assertEq(consumer.resolve(LibID.GITHUB, "octocat"), alice);
+
+        vm.deal(address(consumer), 1 ether);
+        TestERC20 token = new TestERC20();
+        token.mint(address(consumer), 40);
+        bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether);
+        assertEq(consumer.payToken(LibID.GITHUB, "carol", address(token), 40), node);
+        (, uint64 refundableAt) = consumer.contribution(node, LibID.NATIVE);
+        vm.warp(refundableAt);
+        consumer.refund(node, LibID.NATIVE, bob);
+        consumer.refund(node, address(token), bob);
+        assertEq(bob.balance, 1 ether);
+        assertEq(token.balanceOf(bob), 40);
     }
 
     /// On a local chain, libID goes to the production addresses.

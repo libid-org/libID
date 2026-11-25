@@ -57,23 +57,16 @@ library LibID {
     /// The token refused to approve the escrow.
     error ApproveFailed(address token);
 
-    /// @notice Whether this chain is one of the testnets: Sepolia, Arbitrum
-    ///         Sepolia or Eden testnet.
-    function isTestnet() internal view returns (bool) {
-        uint256 id = block.chainid;
-        return id == 11155111 || id == 421614 || id == 3735928814;
-    }
-
     /// @notice The IdentityRegistry's address on this chain: which address
     ///         holds which identity.
     function registry() internal view returns (address) {
-        return isTestnet() ? TESTNET_REGISTRY : PRODUCTION_REGISTRY;
+        return _isTestnet() ? TESTNET_REGISTRY : PRODUCTION_REGISTRY;
     }
 
     /// @notice The HandleEscrow's address on this chain: value sent to a
     ///         handle before anyone holds it.
     function escrow() internal view returns (address) {
-        return isTestnet() ? TESTNET_ESCROW : PRODUCTION_ESCROW;
+        return _isTestnet() ? TESTNET_ESCROW : PRODUCTION_ESCROW;
     }
 
     /// @notice Whether this chain has the IdentityRegistry, so reads and gates
@@ -239,6 +232,12 @@ library LibID {
     }
 
     // ─── Internals ──────────────────────────────────────────────────
+
+    /// @dev Sepolia, Arbitrum Sepolia or Eden testnet.
+    function _isTestnet() private view returns (bool) {
+        uint256 id = block.chainid;
+        return id == 11155111 || id == 421614 || id == 3735928814;
+    }
 
     function _registry() private view returns (ILibIDRegistry) {
         address registry_ = registry();

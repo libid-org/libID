@@ -69,7 +69,10 @@ abstract contract LibIDTestBase is Test {
 
     /// @notice libID at the addresses `LibID` picks for this chain, with
     ///         GitHub, X and Google set up. Set the chain id first with
-    ///         `vm.chainId` to test against a testnet's addresses.
+    ///         `vm.chainId` to test against a testnet's addresses. With
+    ///         `via_ir` the optimizer treats the chain id as constant within a
+    ///         call: use one chain per test function, or read `LibID` only
+    ///         through an external call after `vm.chainId`.
     function deployLibID() internal {
         deployLibIDAt(LibID.registry(), LibID.escrow());
         _libidAddEveryPlatform();

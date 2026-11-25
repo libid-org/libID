@@ -120,6 +120,9 @@ contract GuestbookTest is LibIDTestBase {
 - Where libID is already deployed, as on a fork, `deployLibID` uses that
   deployment and adds the stand-in verifiers to it. Code there that is not
   libID makes it revert.
+- With `via_ir` the optimizer treats the chain id as constant within a call:
+  use one chain per test function, or read `LibID` only through an external
+  call after `vm.chainId`.
 - The functions work inside your `vm.prank` or `vm.startPrank`, and leave it
   in place.
 - The platform verifiers are stand-ins, libID-contracts' test
@@ -172,7 +175,6 @@ builds and tests it.
 | `contribution(handleNode, token)` | what your contract has escrowed at that node, and its refund date |
 | `isAvailable()` | whether this chain has the IdentityRegistry, for reads and gates |
 | `isEscrowAvailable()` | whether it also has the HandleEscrow, bound to that registry, for payments |
-| `isTestnet()` | whether this chain gets the testnet pair |
 | `registry()`, `escrow()` | this chain's IdentityRegistry and HandleEscrow addresses |
 
 Platform ids are `LibID.GITHUB`, `LibID.X` and `LibID.GOOGLE`. A handle is
