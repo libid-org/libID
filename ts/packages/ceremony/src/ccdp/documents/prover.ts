@@ -1,16 +1,15 @@
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { profileKey, route } from '../../assets/keys.js'
 import { claimRootWorker, remainingDownloads } from '../../assets/registration.js'
-import { isCoreEvent, now, type OperationEvent } from '../../events.js'
+import { EventFeed, failureEvent, isCoreEvent, now, type OperationEvent } from '../../events.js'
 import { ceremonyFor } from '../../platforms/index.js'
 import { acceptReturn } from '../../platforms/oauthReturn.js'
 import { type ProverResult, proverFor } from '../../platforms/provers.js'
-import { ccdpError, reportFailure } from '../failure.js'
+import { ccdpError, endError, reportFailure } from '../failure.js'
 import { EventMessage, IdentityProof, ProveIdentity } from '../index.js'
 import { readProver } from '../navigation.js'
 import { messages, popupErrorMessages } from '../uiMessages.js'
-import { CeremonyDocument } from './document.js'
-import { view } from './ui.js'
+import { eventView, view } from './ui.js'
 
 type ProverState =
   | { phase: 'connecting' | 'ready'; input: ReturnType<typeof readProver> }
@@ -38,17 +37,28 @@ export async function startProver(fragment: string): Promise<void> {
   }
 }
 
-/** Owns readiness, the one-shot OAuth capture and its admission, and proof delivery. */
-class ProverDocument extends CeremonyDocument {
+/** Owns readiness, the one-shot OAuth capture and its admission, local UI/feed, and proof delivery. */
+class ProverDocument {
+  private readonly feed = new EventFeed()
+  private readonly ui = eventView(this.feed)
+  private readonly controller = new AbortController()
   private state: ProverState
 
   constructor(
-    protected readonly connection: PopupConnection<Message>,
+    private readonly connection: PopupConnection<Message>,
     input: ReturnType<typeof readProver>,
     private readonly hop: { readonly leaving: boolean },
   ) {
-    super('prover')
     this.state = { phase: 'connecting', input }
+  }
+
+  /** Aborted once the run ends, retiring the work it started. */
+  private get signal(): AbortSignal {
+    return this.controller.signal
+  }
+
+  private get ended(): boolean {
+    return this.signal.aborted
   }
 
   async start(): Promise<void> {
@@ -57,11 +67,13 @@ class ProverDocument extends CeremonyDocument {
       this.connection.on(ProveIdentity, (request) => {
         void this.prove(request).catch((error) => this.fail(error))
       })
-      // The fallback document continues this ceremony; this page is only leaving.
-      this.failOnEnd(messages.proverClosed, (end) => end.outcome === 'closed' && this.hop.leaving)
-      // Leaving still ends this run, releasing its capture.
-      void this.connection.closed.then(() => {
-        if (!this.ended) this.cleanup()
+      // The fallback document continues this ceremony; leaving still ends this run, releasing its capture.
+      void this.connection.closed.then((end) => {
+        if (end.outcome === 'closed' && this.hop.leaving) {
+          if (!this.ended) this.cleanup()
+        } else {
+          this.fail(endError(end, messages.proverClosed))
+        }
       })
       const isolated =
         crossOriginIsolated &&
@@ -170,10 +182,19 @@ class ProverDocument extends CeremonyDocument {
     this.feed.emit({ ...event, status: 'active' })
   }
 
-  /** Ending also aborts the prover; its later observations are dropped. */
-  protected override cleanup(): void {
+  private fail(error: unknown): void {
+    if (this.ended) return
+    const failure = ccdpError(error, 'prover')
+    this.feed.emit(failureEvent(failure))
+    this.cleanup()
+    reportFailure(this.connection, failure)
+  }
+
+  /** Ending also aborts the prover and stops its UI; later observations are dropped. */
+  private cleanup(): void {
     // Failure or leaving before ProveIdentity must release the OAuth capture just as execution does.
     this.state = { phase: 'ended' }
-    super.cleanup()
+    this.ui.stop()
+    this.controller.abort()
   }
 }
