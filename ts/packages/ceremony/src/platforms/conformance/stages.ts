@@ -38,8 +38,8 @@ import type { PlatformId } from '../index.js'
 import type { ReturnRules } from '../oauthReturn.js'
 import { assetsByPlatform, circuits } from '../platforms.assets.js'
 import type { ProverModule } from '../provers.js'
-import type { PlatformFixture } from './fixtures.js'
-import { engine, generate, notarization, prepare } from './mocks.js'
+import type { EvidenceChange, PlatformFixture } from './fixtures.js'
+import { destroy, engine, generate, notarization, prepare } from './mocks.js'
 
 /** A PKCE value of the specification's exact 43 base64url characters (REQ-COMMON-12). */
 export const PKCE_VALUE = 'A'.repeat(43)
@@ -70,12 +70,16 @@ export function thrown(run: () => unknown): unknown {
   throw new Error('Expected a failure')
 }
 
-/** Nothing past return admission ran: no network, notary session or proof engine. */
-export function expectNoProvingWork(fetch: unknown = globalThis.fetch) {
+/**
+ * Nothing past evidence acceptance ran: no `fetch`, notary session or proof. An engine started
+ * before the evidence arrived is destroyed; otherwise none started.
+ */
+export function expectNoProvingWork(fetch: unknown = globalThis.fetch, engineStarted = false) {
   expect(fetch).not.toHaveBeenCalled()
   expect(notarization).not.toHaveBeenCalled()
   expect(prepare).not.toHaveBeenCalled()
-  expect(engine).not.toHaveBeenCalled()
+  expect(engine).toHaveBeenCalledTimes(engineStarted ? 1 : 0)
+  expect(destroy).toHaveBeenCalledTimes(engineStarted ? 1 : 0)
   expect(generate).not.toHaveBeenCalled()
 }
 
@@ -471,18 +475,30 @@ export function stageNotarized(
   }
 }
 
-export const oidcFailures = {
-  'wrong-kid': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
-  'duplicate-key': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
-  'empty-key-set': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
-  expired: { event: 'authorization', message: 'Google token expired' },
-  'audience-mismatch': {
-    event: 'authorization',
-    message: 'Google token was issued for another client',
+/** What each OIDC prover says when it refuses an expired token or one for another client. */
+const tokenRefusals: Record<OidcPlatform, { expired: string; 'audience-mismatch': string }> = {
+  google: {
+    expired: 'Google token expired',
+    'audience-mismatch': 'Google token was issued for another client',
+  },
+  telegram: {
+    expired: 'Telegram token is outside its time window',
+    'audience-mismatch': 'Telegram token was issued for another client',
   },
 }
 
-export type OidcOutcome = SharedOutcome | keyof typeof oidcFailures
+export const oidcFailures = (platformId: OidcPlatform) => ({
+  'wrong-kid': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
+  'duplicate-key': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
+  'empty-key-set': { event: 'signing-key-fetch', message: expect.stringMatching(/signing key/i) },
+  expired: { event: 'authorization', message: tokenRefusals[platformId].expired },
+  'audience-mismatch': {
+    event: 'authorization',
+    message: tokenRefusals[platformId]['audience-mismatch'],
+  },
+})
+
+export type OidcOutcome = SharedOutcome | keyof ReturnType<typeof oidcFailures>
 
 /** Token rejections that must happen before any key fetch or proof engine startup. */
 export const beforeProving: OidcOutcome[] = ['expired', 'audience-mismatch']
@@ -511,18 +527,22 @@ export function publishKeys(published: object[]) {
   return keys
 }
 
-/** Stage `outcome`; `change` replaces the signed token or the published fixture key. */
+/**
+ * Stage `outcome`; `change` replaces the signed token, the published fixture key or the Bridge's
+ * swap answer. A code flow's token arrives from the Bridge swap (POST), its keys by GET.
+ */
 export function stageOidc(
   platformId: OidcPlatform,
   outcome: OidcOutcome,
-  change: { idToken?: string; jwk?: Record<string, string> } = {},
+  change: { idToken?: string; jwk?: Record<string, string>; swap?: EvidenceChange['swap'] } = {},
 ) {
   const fixture = fixtures[platformId]
   const { authorizationDigest, publicInputs } = fixture.evidence
+  const bridge = 'bridge' in fixture.evidence ? fixture.evidence.bridge : undefined
   const { idToken = fixture.evidence.idToken, jwk = fixture.evidence.jwk } = change
-  const { iat, exp } = jwtPart(fixture.evidence.idToken, 1) as { iat: number; exp: number }
+  const { iat } = jwtPart(fixture.evidence.idToken, 1) as { iat: number }
   vi.useFakeTimers({ toFake: ['Date'] })
-  vi.setSystemTime((outcome === 'expired' ? exp : iat) * 1000)
+  vi.setSystemTime((outcome === 'expired' ? fixture.expiresAt : iat) * 1000)
   const keys = publishKeys(
     outcome === 'duplicate-key'
       ? [jwk, jwk]
@@ -530,9 +550,17 @@ export function stageOidc(
         ? []
         : [previousKey, jwk],
   )
+  const swap = vi.fn(async (_url: string, init?: RequestInit) => {
+    init?.signal?.throwIfAborted()
+    return change.swap?.() ?? Response.json({ id_token: oidcToken(idToken, outcome) })
+  })
+  if (bridge)
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) =>
+      (init?.method === 'POST' ? swap : keys)(url, init),
+    )
   const { config } = fixture
   const run = runContext(platformId, outcome, {
-    credential: oidcToken(idToken, outcome),
+    ...(bridge ? {} : { credential: oidcToken(idToken, outcome) }),
     request: outcome === 'audience-mismatch' ? { clientId: `other-${config.clientId}` } : {},
   })
   generate.mockImplementation(async (inputs): Promise<RawProof> => {
@@ -549,9 +577,11 @@ export function stageOidc(
   return {
     ...run,
     keys,
+    swap,
     proof: () => fixture.proof,
     untouched: () => {
       expect(keys).not.toHaveBeenCalled()
+      expect(swap).not.toHaveBeenCalled()
       expect(notarization).not.toHaveBeenCalled()
     },
   }

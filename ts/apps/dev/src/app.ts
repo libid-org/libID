@@ -26,7 +26,12 @@ const status = document.querySelector<HTMLElement>('#status')!
 window.results = new Map()
 document.querySelector('#bridge')!.textContent = oauthBridge
 document.querySelector('#notary')!.textContent = ledger.notaryAddress()
-const names: Record<PlatformId, string> = { google: 'Google', x: 'X', github: 'GitHub' }
+const names: Record<PlatformId, string> = {
+  google: 'Google',
+  x: 'X',
+  github: 'GitHub',
+  telegram: 'Telegram',
+}
 /** A new `tag` element with `properties` assigned. */
 const element = <K extends keyof HTMLElementTagNameMap>(
   tag: K,

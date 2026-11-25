@@ -20,11 +20,16 @@ test('released circuit statistics fit the SRS each circuit declares [LIBID-ASSET
   const sized = (name: string, srsPoints: number) =>
     new Map([[name, { bytes: releases.get(name)!, srsPoints }]])
   const stats = await validateCircuitCapacity(
-    new Map([...sized('bearer_link', 2 ** 17), ...sized('oidc_google', 2 ** 18)]),
+    new Map([
+      ...sized('bearer_link', 2 ** 17),
+      ...sized('oidc_google', 2 ** 18),
+      ...sized('oidc_telegram', 2 ** 18),
+    ]),
   )
   assert.deepEqual(stats, {
     bearer_link: { gates: 83671, dyadic: 2 ** 17 },
     oidc_google: { gates: 197462, dyadic: 2 ** 18 },
+    oidc_telegram: { gates: 248207, dyadic: 2 ** 18 },
   })
   await assert.rejects(validateCircuitCapacity(sized('oidc_google', 2 ** 17)), /exceeds/)
   await assert.rejects(validateCircuitCapacity(sized('bearer_link', 2 ** 16)), /loader floor/)

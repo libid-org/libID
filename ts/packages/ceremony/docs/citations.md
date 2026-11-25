@@ -154,6 +154,8 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | REQ-PLAT-56C | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | REQ-PLAT-59 | [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | REQ-PLAT-60 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| REQ-PLAT-77 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| REQ-PLAT-79 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-BRIDGE-03 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/client/config.test.ts](../src/ccdp/client/config.test.ts), [src/platforms/conformance/catalog.test.ts](../src/platforms/conformance/catalog.test.ts) |
 | TEST-BRIDGE-04 | [build/distribution.test.ts](../build/distribution.test.ts) |
 | TEST-CCDP-01 | [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |
@@ -209,3 +211,4 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-PLAT-20 | [src/identity.test.ts](../src/identity.test.ts) |
 | TEST-PLAT-21 | [src/notary/notarize.test.ts](../src/notary/notarize.test.ts), [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
 | TEST-PLAT-22 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
+| TEST-PLAT-26 | [src/platforms/conformance/fixtures.ts](../src/platforms/conformance/fixtures.ts) |
