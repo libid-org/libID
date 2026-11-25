@@ -154,3 +154,41 @@ it('forwards the Worker journal before readiness and locates the startup wait [L
     },
   })
 })
+
+it('aborts worker registration, prefetch dispatch and journal drain when the connection ends', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  let regSignal!: AbortSignal
+  registerRootWorker.mockImplementationOnce(
+    (_url: string, signal: AbortSignal) =>
+      new Promise<void>((_resolve, reject) => {
+        regSignal = signal
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      }),
+  )
+  const run = startPrefetch(fragment())
+  await vi.waitFor(() => expect(registerRootWorker).toHaveBeenCalledOnce())
+  expect(regSignal.aborted).toBe(false)
+  connection.end()
+  await run
+  expect(regSignal.aborted).toBe(true)
+  expect(dispatchPrefetch).not.toHaveBeenCalled()
+  expect(connection.sent).toEqual([])
+  expect(ui.failures).toEqual([messages.returnToApplication(messages.connectionEnded)])
+  expect(log).toHaveBeenCalledOnce()
+
+  // Failing dispatchPrefetch also aborts the sibling drainJournal wait immediately.
+  vi.clearAllMocks()
+  connection = fakeConnection({ peerOrigin: 'https://app.test' })
+  ui = fakeDocumentUi()
+  let journalSignal!: AbortSignal
+  dispatchPrefetch.mockRejectedValueOnce(new Error('Asset profile not served'))
+  drainJournal.mockImplementationOnce(
+    (_worker: unknown, signal: AbortSignal) =>
+      new Promise<never[]>((resolve) => {
+        journalSignal = signal
+        signal.addEventListener('abort', () => resolve([]), { once: true })
+      }),
+  )
+  await startPrefetch(fragment('x'))
+  expect(journalSignal.aborted).toBe(true)
+})

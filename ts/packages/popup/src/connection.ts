@@ -857,6 +857,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     // may still be registering it here, so wait briefly for it to activate.
     const registration = await activeRegistration(
       async () => (await this.popup.registrations(url))[0],
+      this.controller.signal,
     )
     const worker = registration?.active ?? null
     if (this.ended) failed('connection-closed')
@@ -864,10 +865,17 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     const startedAt = performance.now()
     try {
       // The transfer happens in this call, taking the backlog as it stands.
-      const kept = new PortKeeper(worker).keep(this.connectionId, port, peerOrigin, backlog)
+      const kept = new PortKeeper(worker).keep(
+        this.connectionId,
+        port,
+        peerOrigin,
+        backlog,
+        this.controller.signal,
+      )
       this.handoff = null
       await kept
     } catch {
+      if (this.ended) throw new PopupError('connection-closed')
       failed('keep-failed')
     }
     if (this.ended) throw new PopupError('connection-closed')

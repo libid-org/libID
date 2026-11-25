@@ -2,7 +2,7 @@ import { rootWorkerUrl } from 'virtual:ceremony-worker'
 import { type Message, PopupConnection, PopupWindow } from '@libid/popup'
 import { profileKey } from '../../assets/keys.js'
 import { dispatchPrefetch, drainJournal, registerRootWorker } from '../../assets/registration.js'
-import { ccdpError, reportFailure } from '../failure.js'
+import { ccdpError, endError, reportFailure } from '../failure.js'
 import type { EventMessage } from '../index.js'
 import { readPrefetch } from '../navigation.js'
 import { messages } from '../uiMessages.js'
@@ -12,6 +12,7 @@ import { adoptShell } from './ui.js'
 export async function startPrefetch(fragment: string): Promise<void> {
   const started = performance.now()
   const shell = adoptShell(messages.preparation)
+  const controller = new AbortController()
   let connection: PopupConnection<Message> | undefined
   try {
     const input = readPrefetch(fragment)
@@ -20,17 +21,20 @@ export async function startPrefetch(fragment: string): Promise<void> {
       connectionId: input.ceremonyId,
       allowedApplicationOrigins: '*',
     })
+    void connection.closed.then((end) => controller.abort(endError(end, messages.connectionEnded)))
     await connection.ready
+    controller.signal.throwIfAborted()
     const connected = performance.now()
     // Registered only now, after the connection's registration lookup: Firefox can build this
     // document's registration from a lookup answered before the new Worker installs, and if
     // that Worker's claim arrives first, the Worker stays redundant here though active.
-    const worker = await registerRootWorker(rootWorkerUrl)
+    const worker = await registerRootWorker(rootWorkerUrl, controller.signal)
     const workerReady = performance.now()
     const [assets, marks] = await Promise.all([
-      dispatchPrefetch(worker, profile),
-      drainJournal(worker),
+      dispatchPrefetch(worker, profile, controller.signal),
+      drainJournal(worker, controller.signal),
     ])
+    controller.signal.throwIfAborted()
     const dispatched = performance.now()
     // Before readiness: the Application may navigate away as soon as Prefetch finishes.
     for (const { event, phase, timestamp, operationId } of marks) {
@@ -79,5 +83,7 @@ export async function startPrefetch(fragment: string): Promise<void> {
     const failure = ccdpError(error, 'prefetch-dispatch')
     shell.fail(messages.returnToApplication(failure.message))
     reportFailure(connection, failure)
+  } finally {
+    controller.abort()
   }
 }

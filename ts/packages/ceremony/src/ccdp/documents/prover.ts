@@ -81,7 +81,7 @@ class ProverDocument {
         typeof Worker !== 'undefined'
       // When already isolated this document will not hop to fallback; claim root control while
       // connecting, deferring any rejection until the connection is ready to report it.
-      const claiming = isolated ? claimRootWorker() : undefined
+      const claiming = isolated ? claimRootWorker(this.signal) : undefined
       claiming?.catch(() => {})
       await this.connection.ready
       if (this.ended) return

@@ -437,3 +437,58 @@ it('closes both MessageChannel ports and detaches onmessage when postMessage thr
     expect(port1.onmessage).toBeNull()
   }
 })
+
+it('cancels registerRootWorker, dispatchPrefetch, drainJournal and claimRootWorker on abort and releases timers', async () => {
+  vi.useFakeTimers()
+  const reason = new DOMException('Cancelled', 'AbortError')
+
+  // Pre-aborted signal skips browser and worker calls.
+  const preAborted = new AbortController()
+  preAborted.abort(reason)
+  const worker = serviceWorker('activated')
+  const container = install(registration(`${ORIGIN}/`, { active: worker }))
+  await expect(registerRootWorker(SCRIPT, preAborted.signal)).rejects.toBe(reason)
+  await expect(dispatchPrefetch(worker, 'google/1', preAborted.signal)).rejects.toBe(reason)
+  await expect(drainJournal(worker, preAborted.signal)).resolves.toEqual([])
+  await expect(claimRootWorker(preAborted.signal)).rejects.toBe(reason)
+  expect(container.register).not.toHaveBeenCalled()
+  expect(container.getRegistration).not.toHaveBeenCalled()
+  expect(worker.postMessage).not.toHaveBeenCalled()
+
+  // Abort while register() itself is still pending (late rejection stays handled).
+  const regPending = Promise.withResolvers<ServiceWorkerRegistration>()
+  container.register.mockReturnValueOnce(regPending.promise)
+  const regAbort = new AbortController()
+  const regCall = registerRootWorker(SCRIPT, regAbort.signal)
+  regAbort.abort(reason)
+  await expect(regCall).rejects.toBe(reason)
+  regPending.reject(new Error('late register failure'))
+
+  // Abort while waiting for the installing worker to settle clears wait timers.
+  const installing = serviceWorker('installing')
+  container.register.mockResolvedValueOnce(registration(`${ORIGIN}/`, { installing }))
+  const installAbort = new AbortController()
+  const installCall = registerRootWorker(SCRIPT, installAbort.signal)
+  await vi.advanceTimersByTimeAsync(0)
+  installAbort.abort(reason)
+  await expect(installCall).rejects.toBe(reason)
+  expect(vi.getTimerCount()).toBe(0)
+
+  // Abort while dispatchPrefetch, drainJournal, or claimRootWorker await replies releases timers.
+  const dispatchAbort = new AbortController()
+  const dispatchCall = dispatchPrefetch(worker, 'google/1', dispatchAbort.signal)
+  dispatchAbort.abort(reason)
+  await expect(dispatchCall).rejects.toBe(reason)
+
+  const journalAbort = new AbortController()
+  const journalCall = drainJournal(worker, journalAbort.signal)
+  journalAbort.abort(reason)
+  await expect(journalCall).resolves.toEqual([])
+
+  const claimAbort = new AbortController()
+  const claimCall = claimRootWorker(claimAbort.signal)
+  await vi.advanceTimersByTimeAsync(0)
+  claimAbort.abort(reason)
+  await expect(claimCall).rejects.toBe(reason)
+  expect(vi.getTimerCount()).toBe(0)
+})

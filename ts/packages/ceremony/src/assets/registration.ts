@@ -35,44 +35,82 @@ function within(
   return promise
 }
 
-/** Register the build-pinned root script and return that Worker, never an older active one. */
-export async function registerRootWorker(url: string): Promise<ServiceWorker> {
-  const script = new URL(url, location.origin).href
-  const registration = await navigator.serviceWorker.register(script, {
-    scope: '/',
-    type: 'module',
-    updateViaCache: 'all',
+/** Settle with `pending`, or reject at once with `signal.reason` if `signal` aborts first. */
+function raceAbort<T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return pending
+  if (signal.aborted) {
+    void pending.catch(() => {})
+    return Promise.reject(signal.reason)
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    pending.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      },
+    )
   })
+}
+
+/** Register the build-pinned root script and return that Worker, never an older active one. */
+export async function registerRootWorker(
+  url: string,
+  signal?: AbortSignal,
+): Promise<ServiceWorker> {
+  signal?.throwIfAborted()
+  const script = new URL(url, location.origin).href
+  const registration = await raceAbort(
+    navigator.serviceWorker.register(script, {
+      scope: '/',
+      type: 'module',
+      updateViaCache: 'all',
+    }),
+    signal,
+  )
   if (registration.scope !== `${location.origin}/`)
     throw new Error('Incorrect Service Worker scope')
   if (registration.active?.scriptURL === script && registration.active.state !== 'redundant')
     return registration.active
   // WebKit can resolve register() before the registration shows the Worker it installs.
   let pinned: ServiceWorker | null | undefined
-  await within('Missing build-pinned Service Worker', (done, signal) => {
-    const find = () => {
-      pinned = [registration.installing, registration.waiting, registration.active].find(
-        (worker) => worker?.scriptURL === script,
-      )
-      if (pinned) done()
-    }
-    const poll = setInterval(find, ACTIVATION_POLL_INTERVAL_MS)
-    signal.addEventListener('abort', () => clearInterval(poll))
-    registration.addEventListener('updatefound', find, { signal })
-    find()
-  })
+  await within(
+    'Missing build-pinned Service Worker',
+    (done, settled) => {
+      const find = () => {
+        pinned = [registration.installing, registration.waiting, registration.active].find(
+          (worker) => worker?.scriptURL === script,
+        )
+        if (pinned) done()
+      }
+      const poll = setInterval(find, ACTIVATION_POLL_INTERVAL_MS)
+      settled.addEventListener('abort', () => clearInterval(poll))
+      registration.addEventListener('updatefound', find, { signal: settled })
+      find()
+    },
+    { abort: signal },
+  )
   const worker = pinned!
-  await within('Service Worker installation timed out', (done, signal) => {
-    const changed = () => {
-      if (worker.state === 'redundant') done(new Error('Service Worker failed'))
-      else if (worker.state !== 'installing' && worker.state !== 'parsed') done()
-    }
-    // Concurrent Chromium popups can lose statechange notifications; sample the same state too.
-    const poll = setInterval(changed, ACTIVATION_POLL_INTERVAL_MS)
-    signal.addEventListener('abort', () => clearInterval(poll))
-    worker.addEventListener('statechange', changed, { signal })
-    changed()
-  })
+  await within(
+    'Service Worker installation timed out',
+    (done, settled) => {
+      const changed = () => {
+        if (worker.state === 'redundant') done(new Error('Service Worker failed'))
+        else if (worker.state !== 'installing' && worker.state !== 'parsed') done()
+      }
+      // Concurrent Chromium popups can lose statechange notifications; sample the same state too.
+      const poll = setInterval(changed, ACTIVATION_POLL_INTERVAL_MS)
+      settled.addEventListener('abort', () => clearInterval(poll))
+      worker.addEventListener('statechange', changed, { signal: settled })
+      changed()
+    },
+    { abort: signal },
+  )
   return worker
 }
 
@@ -107,21 +145,26 @@ function postPort(
 export async function dispatchPrefetch(
   worker: ServiceWorker,
   profile: string,
+  signal?: AbortSignal,
 ): Promise<{ cached: number; fetched: number } | undefined> {
   let counts: { cached: number; fetched: number } | undefined
-  await within('Asset dispatch timed out', (done, signal) => {
-    try {
-      postPort(worker, { type: 'ceremony-prefetch', profile }, signal, ({ data }) => {
-        const { dispatched, cached, fetched } = data ?? {}
-        if (isCount(cached) && isCount(fetched)) counts = { cached, fetched }
-        if (dispatched === true) done()
-        else if (dispatched === false) done(new Error('Asset profile not served'))
-        else done(new Error('Invalid dispatch acknowledgement'))
-      })
-    } catch {
-      done(new Error('Asset dispatch failed'))
-    }
-  })
+  await within(
+    'Asset dispatch timed out',
+    (done, settled) => {
+      try {
+        postPort(worker, { type: 'ceremony-prefetch', profile }, settled, ({ data }) => {
+          const { dispatched, cached, fetched } = data ?? {}
+          if (isCount(cached) && isCount(fetched)) counts = { cached, fetched }
+          if (dispatched === true) done()
+          else if (dispatched === false) done(new Error('Asset profile not served'))
+          else done(new Error('Invalid dispatch acknowledgement'))
+        })
+      } catch {
+        done(new Error('Asset dispatch failed'))
+      }
+    },
+    { abort: signal },
+  )
   return counts
 }
 
@@ -129,17 +172,17 @@ export async function dispatchPrefetch(
  * The Worker's kept lifecycle marks, removed as they are read. None when the Worker does not
  * answer within a second, as when its Cache Storage stalls.
  */
-export async function drainJournal(worker: ServiceWorker): Promise<Mark[]> {
+export async function drainJournal(worker: ServiceWorker, signal?: AbortSignal): Promise<Mark[]> {
   let marks: Mark[] = []
   await within(
     'Journal timed out',
-    (done, signal) => {
-      postPort(worker, { type: 'ceremony-journal' }, signal, ({ data }) => {
+    (done, settled) => {
+      postPort(worker, { type: 'ceremony-journal' }, settled, ({ data }) => {
         if (Array.isArray(data?.marks)) marks = data.marks.filter(isMark)
         done()
       })
     },
-    { ms: JOURNAL_TIMEOUT_MS },
+    { ms: JOURNAL_TIMEOUT_MS, abort: signal },
   ).catch(() => {})
   return marks
 }
@@ -171,17 +214,22 @@ export async function remainingDownloads(
 }
 
 /** Newly isolated documents can initially be uncontrolled; claim before execution fetches. */
-export async function claimRootWorker(): Promise<void> {
-  const registration = await navigator.serviceWorker.getRegistration('/')
+export async function claimRootWorker(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  const registration = await raceAbort(navigator.serviceWorker.getRegistration('/'), signal)
   if (registration?.scope !== `${location.origin}/` || !registration.active)
     throw new Error('Missing root Service Worker')
   if (navigator.serviceWorker.controller === registration.active) return
-  await within('Service Worker control timed out', (done, signal) => {
-    const changed = () => {
-      if (navigator.serviceWorker.controller === registration.active) done()
-    }
-    navigator.serviceWorker.addEventListener('controllerchange', changed, { signal })
-    postPort(registration.active!, { type: 'ceremony-claim' }, signal, changed)
-    changed()
-  })
+  await within(
+    'Service Worker control timed out',
+    (done, settled) => {
+      const changed = () => {
+        if (navigator.serviceWorker.controller === registration.active) done()
+      }
+      navigator.serviceWorker.addEventListener('controllerchange', changed, { signal: settled })
+      postPort(registration.active!, { type: 'ceremony-claim' }, settled, changed)
+      changed()
+    },
+    { abort: signal },
+  )
 }
