@@ -30,7 +30,6 @@ export const messages = {
   connectionEnded: 'Popup connection ended',
   connectionInitializationFailed: 'Unable to initialize ceremony connection',
   invalidProvingRequest: 'Invalid proving request',
-  unsupportedProfile: 'Unsupported profile',
 } as const
 
 /** Translate transport codes here; popup owns codes, CCDP owns their presentation. */

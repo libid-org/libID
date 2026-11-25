@@ -5,7 +5,7 @@ import { createServer } from 'node:https'
 import { join } from 'node:path'
 import { makeCertificate } from '../../popup/e2e/tls.mjs'
 import { packageDir } from '../build/sources.ts'
-import { documentStyles } from '../build/styles.ts'
+import { documentFontBytes, documentFontPath, documentStyles } from '../build/styles.ts'
 import { isolated } from '../src/assets/headers.ts'
 import { CALLBACK_PATH } from '../src/assets/keys.ts'
 import { prepareCallback } from './callback.ts'
@@ -69,6 +69,11 @@ for (const secure of [true, false]) {
   // Each route returns true once it has answered; unmatched paths fall through to 404.
   const appRoute = (path, send) => {
     if (staticModule(send, path)) return true
+    if (path === documentFontPath)
+      return send(documentFontBytes, {
+        'Content-Type': 'font/woff2',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      })
     if (path === '/ui')
       return send(
         html(

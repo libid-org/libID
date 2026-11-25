@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   prove: vi.fn(),
   destroy: vi.fn(),
+  crs: vi.fn(),
+  srsInit: vi.fn(),
+  cacheUncompressed: vi.fn(),
 }))
 
 vi.mock('@noir-lang/acvm_js', () => ({ default: mocks.acvm }))
@@ -25,7 +28,11 @@ vi.mock('@noir-lang/noir_js', () => ({
 vi.mock('@aztec-foundation/bb.js', () => ({
   BackendType: { Wasm: 'Wasm' },
   Barretenberg: { new: mocks.create },
+  Crs: { new: mocks.crs },
 }))
+
+const g1 = Uint8Array.of(1)
+const g2 = Uint8Array.of(2)
 
 beforeEach(() => {
   vi.stubGlobal('navigator', { hardwareConcurrency: 4 })
@@ -45,6 +52,7 @@ const preload = {
   acvmUrl: '/acvm.wasm',
   abiUrl: '/abi.wasm',
   wasmPath: '/bb.wasm',
+  srsPoints: 2 ** 17,
   crsPath: 'https://crs.test/',
 }
 
@@ -73,8 +81,15 @@ async function worker(
   vi.stubGlobal('fetch', request)
   mocks.create.mockImplementation(async () => {
     await mocks.initialize()
-    return { circuitProve: mocks.prove, destroy: mocks.destroy }
+    return { circuitProve: mocks.prove, destroy: mocks.destroy, srsInitSrs: mocks.srsInit }
   })
+  mocks.crs.mockImplementation(async (numPoints: number) => ({
+    numPoints,
+    getG1Data: () => g1,
+    getG2Data: () => g2,
+    cacheUncompressed: mocks.cacheUncompressed,
+  }))
+  mocks.srsInit.mockResolvedValue({ pointsBuf: new Uint8Array() })
   mocks.execute.mockResolvedValue(witness())
   mocks.destroy.mockResolvedValue(undefined)
   mocks.prove.mockResolvedValue({
@@ -172,15 +187,13 @@ it.each(['backend', 'resources'])(
     mocks.abi.mockReturnValueOnce(abi.promise)
     const w = await worker(key.promise)
     // Each branch starts with its explicit emitted location.
-    expect(mocks.create).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        backend: 'Wasm',
-        threads: 4,
-        srsSize: 2 ** 18,
-        wasmPath: '/bb.wasm',
-        crsPath: 'https://crs.test/',
-      }),
-    )
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith({
+      backend: 'Wasm',
+      threads: 4,
+      wasmPath: '/bb.wasm',
+      crsPath: 'https://crs.test/',
+      skipSrsInit: true,
+    })
     expect(mocks.acvm).toHaveBeenCalledExactlyOnceWith({ module_or_path: '/acvm.wasm' })
     expect(mocks.abi).toHaveBeenCalledExactlyOnceWith({ module_or_path: '/abi.wasm' })
     expect(w.request).toHaveBeenCalledTimes(2)
@@ -314,6 +327,65 @@ it('releases an initialized backend when Noir loading fails [LIBID-PROVER-014]',
   expect(w.has('witness-ready')).toBe(false)
 })
 
+it.each([
+  ['compressed', new Uint8Array(), false],
+  ['decompressed', Uint8Array.of(9, 9), true],
+])(
+  'loads only the BN254 SRS the preload sizes, from %s points, keeping any it decompresses',
+  async (_, pointsBuf, cached) => {
+    mocks.srsInit.mockResolvedValueOnce({ pointsBuf })
+    const w = await worker()
+    await expect.poll(() => w.has('backend-ready')).toBe(true)
+    expect(mocks.crs).toHaveBeenCalledExactlyOnceWith(2 ** 17, 'https://crs.test/')
+    expect(mocks.srsInit).toHaveBeenCalledExactlyOnceWith({
+      pointsBuf: g1,
+      numPoints: 2 ** 17,
+      g2Point: g2,
+    })
+    if (cached) expect(mocks.cacheUncompressed).toHaveBeenCalledExactlyOnceWith(pointsBuf)
+    else expect(mocks.cacheUncompressed).not.toHaveBeenCalled()
+  },
+)
+
+it('releases the backend when its SRS cannot be loaded [LIBID-PROVER-014]', async () => {
+  const backend = Promise.withResolvers<void>()
+  mocks.initialize.mockReturnValueOnce(backend.promise)
+  mocks.crs.mockRejectedValueOnce(new Error('CRS unavailable'))
+  const w = await worker()
+  // CRS loading starts concurrently with Barretenberg.new, not after it.
+  expect(mocks.create).toHaveBeenCalledOnce()
+  expect(mocks.crs).toHaveBeenCalledOnce()
+  await expect.poll(() => w.has('error')).toBe(true)
+  expect(mocks.destroy).not.toHaveBeenCalled()
+  backend.resolve()
+  await expect.poll(() => mocks.destroy.mock.calls.length).toBe(1)
+  expect(w.has('backend-ready')).toBe(false)
+})
+
+it('starts CRS loading alongside Barretenberg initialization and keeps uncompressed caching off the proving path', async () => {
+  const backend = Promise.withResolvers<void>()
+  const cached = Promise.withResolvers<void>()
+  mocks.initialize.mockReturnValueOnce(backend.promise)
+  mocks.srsInit.mockResolvedValueOnce({ pointsBuf: Uint8Array.of(9, 9) })
+  mocks.cacheUncompressed.mockReturnValueOnce(cached.promise)
+  const w = await worker()
+  expect(mocks.create).toHaveBeenCalledOnce()
+  expect(mocks.crs).toHaveBeenCalledOnce()
+  backend.resolve()
+  await expect.poll(() => w.has('backend-ready')).toBe(true)
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  // Proving runs while uncompressed CRS caching is still in flight.
+  w.prove({ fixture: 1 })
+  await expect.poll(() => mocks.prove.mock.calls.length).toBe(1)
+  await expect.poll(() => w.finished('zk-proof-generation')).toBe(true)
+  // Worker waits for the background cache write before posting result (and being terminated).
+  expect(w.has('result')).toBe(false)
+  cached.reject(new Error('QuotaExceededError'))
+  await expect.poll(() => w.has('result')).toBe(true)
+  expect(w.errors()).toEqual([])
+  expect(mocks.destroy).toHaveBeenCalledOnce()
+})
+
 it('backend failure does not wait for pending resource loads [LIBID-PROVER-014]', async () => {
   const key = Promise.withResolvers<Response>()
   mocks.initialize.mockRejectedValueOnce(new Error('Backend unavailable'))
@@ -368,6 +440,18 @@ it('reports witness failure promptly and destroys a late backend once [LIBID-PRO
   expect(w.has('result')).toBe(false)
 })
 
+it('logs the Noir call stack of a witness failure from a debug-symbol circuit', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const w = await worker()
+  const noirCallStack = ['main.nr:12:5']
+  mocks.execute.mockRejectedValueOnce(Object.assign(new Error('Witness failed'), { noirCallStack }))
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  w.prove({})
+  await expect.poll(() => w.has('error')).toBe(true)
+  expect(log).toHaveBeenCalledExactlyOnceWith('[ceremony] Noir call stack', noirCallStack)
+  log.mockRestore()
+})
+
 it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-014]', async () => {
   const backend = Promise.withResolvers<void>()
   const pending = Promise.withResolvers<{ witness: Uint8Array }>()
@@ -383,6 +467,20 @@ it('backend failure cannot wait for or revive a pending witness [LIBID-PROVER-01
   expect(w.errors()).toHaveLength(1)
   expect(mocks.prove).not.toHaveBeenCalled()
   expect(w.has('result')).toBe(false)
+})
+
+it('inflates a SharedArrayBuffer-backed witness without failing Response construction', async () => {
+  const w = await worker()
+  const gz = gzipSync(Uint8Array.of(4, 5, 6))
+  const shared = new Uint8Array(new SharedArrayBuffer(gz.length))
+  shared.set(gz)
+  mocks.execute.mockResolvedValueOnce({ witness: shared })
+  await expect.poll(() => w.has('witness-ready')).toBe(true)
+  w.prove({ fixture: 1 })
+  await expect.poll(() => w.has('result')).toBe(true)
+  expect(mocks.prove).toHaveBeenCalledWith(
+    expect.objectContaining({ witness: Uint8Array.of(4, 5, 6) }),
+  )
 })
 
 it('a duplicate request fails once and cannot deliver a late proof [LIBID-PROVER-014]', async () => {

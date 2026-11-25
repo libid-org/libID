@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { chunked, httpResponse, receivedOnly, utf8 } from '../testing/index.js'
-import { responseJson, responseSizes } from './http.js'
+import { PlatformRefusal, responseJson, responseSizes } from './http.js'
 
 const response = (head: string, body: string | Uint8Array) => receivedOnly(httpResponse(body, head))
 
@@ -100,3 +100,55 @@ it.each([
     )
   },
 )
+
+const refusal = (transcript: ReturnType<typeof response>, secrets?: string[]) => {
+  try {
+    responseJson(transcript, secrets)
+  } catch (error) {
+    if (error instanceof PlatformRefusal) return error
+    throw error
+  }
+  throw new Error('no refusal')
+}
+
+it('keeps what a refusing platform said: status, OAuth code, status line and body', () => {
+  const body =
+    '{"error":"invalid_request","error_description":"Value passed for the authorization code was invalid."}'
+  const refused = refusal(
+    receivedOnly(httpResponse(body, `Content-Length: ${body.length}\r\n`, '400 Bad Request')),
+  )
+  expect(refused).toMatchObject({ status: 400, code: 'invalid_request' })
+  expect(refused.message).toBe(`Platform request failed: HTTP/1.1 400 Bad Request ${body}`)
+})
+
+it('keeps a refusal without JSON, and its status line when the framing is unreadable', () => {
+  const text = refusal(receivedOnly(httpResponse('Too Many Requests', '', '429 Too Many Requests')))
+  expect(text).toMatchObject({ status: 429, code: undefined })
+  expect(text.message).toBe(
+    'Platform request failed: HTTP/1.1 429 Too Many Requests Too Many Requests',
+  )
+  const unreadable = refusal(
+    receivedOnly(httpResponse('{}', 'Content-Encoding: gzip\r\n', '503 Service Unavailable')),
+  )
+  expect(unreadable.message).toBe('Platform request failed: HTTP/1.1 503 Service Unavailable')
+})
+
+it('reads an OAuth error sent with a 200 as a refusal, never one beside a bearer', () => {
+  const body =
+    '{"error":"bad_verification_code","error_description":"The code passed is incorrect or expired."}'
+  expect(refusal(response('', body))).toMatchObject({ status: 200, code: 'bad_verification_code' })
+  expect(responseJson(response('', '{"access_token":"gho_SECRET","error":"x"}'))).toEqual({
+    access_token: 'gho_SECRET',
+    error: 'x',
+  })
+})
+
+it('removes the secrets the request carried from what a refusal quotes', () => {
+  const refused = refusal(
+    receivedOnly(httpResponse('{"error":"invalid_grant","code":"c0de"}', '', '400 Bad Request')),
+    ['c0de', ''],
+  )
+  expect(refused.message).toBe(
+    'Platform request failed: HTTP/1.1 400 Bad Request {"error":"invalid_grant","code":"<redacted>"}',
+  )
+})

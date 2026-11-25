@@ -39,7 +39,7 @@ function validateContentRange(range: string, spec: AssetRequest): void {
     throw new Error('Invalid asset total')
 }
 
-/** A validated stored copy, or undefined after removing a truncated range. */
+/** A validated stored copy, or undefined after evicting an invalid entry. */
 async function cachedResponse(
   cache: Cache,
   key: string,
@@ -47,19 +47,31 @@ async function cachedResponse(
 ): Promise<Response | undefined> {
   const hit = await cache.match(key)
   if (!hit) return
-  // Complete bodies were checked before cache.put; ordinary hits need no copy.
-  if (!spec.range) {
-    validateResponse(hit, spec)
-    return hit
-  }
-  const bytes = await readBody(hit, spec.bytes ?? Number.MAX_SAFE_INTEGER)
-  if (spec.bytes !== undefined && bytes.length !== spec.bytes) {
-    await cache.delete(key)
+  // Complete bodies were checked and length-tagged before cache.put; both ordinary and ranged
+  // hits stream directly without rereading or copying the body.
+  try {
+    if (
+      hit.redirected ||
+      hit.type === 'opaque' ||
+      hit.type === 'opaqueredirect' ||
+      hit.status !== 200 ||
+      hit.headers.has('content-encoding') ||
+      (spec.bytes !== undefined && hit.headers.get('content-length') !== String(spec.bytes))
+    )
+      throw new Error('Invalid cached asset')
+    const response = spec.range
+      ? new Response(hit.body, { status: 206, headers: hit.headers })
+      : hit
+    validateResponse(response, spec)
+    return response
+  } catch {
+    try {
+      await cache.delete(key)
+    } catch {
+      /* Deletion failure does not disable fetching. */
+    }
     return
   }
-  const response = new Response(bytes, { status: 206, headers: hit.headers })
-  validateResponse(response, spec)
-  return response
 }
 
 /** Validate and bound a fetched body; stored headers describe the decoded bytes. */
@@ -68,7 +80,11 @@ async function fetchedBody(
   spec: AssetRequest,
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; headers: Headers }> {
   validateResponse(received, spec)
-  const bytes = await readBody(received, spec.bytes ?? Number.MAX_SAFE_INTEGER)
+  const bytes = await readBody(
+    received,
+    spec.bytes ?? Number.MAX_SAFE_INTEGER,
+    spec.bytes !== undefined,
+  )
   if (spec.bytes !== undefined && bytes.length !== spec.bytes)
     throw new Error('Incomplete asset body')
   const headers = new Headers(received.headers)
@@ -91,8 +107,18 @@ interface PendingLoad {
 /** Single-flight delivery of immutable bytes. Storage failure falls back to the same fetch. */
 export class AssetCache {
   private readonly pending = new Map<string, PendingLoad>()
+  private opening?: Promise<Cache>
 
   constructor(private readonly origin: string) {}
+
+  /** Coalesce concurrent `caches.open` calls without retaining a handle across cache deletion. */
+  private openCache(): Promise<Cache> {
+    if (!this.opening)
+      this.opening = caches.open(CACHE).finally(() => {
+        this.opening = undefined
+      })
+    return this.opening
+  }
 
   /** The stored key includes both the exact URL and Range, as a same-origin synthetic URL. */
   private storageKey(spec: AssetRequest): string {
@@ -103,7 +129,7 @@ export class AssetCache {
   async reconcile(required: Iterable<AssetRequest>): Promise<void> {
     try {
       const keep = new Set(Array.from(required, (spec) => this.storageKey(spec)))
-      const cache = await caches.open(CACHE)
+      const cache = await this.openCache()
       await Promise.all(
         (await cache.keys())
           .filter((key) => key.url.startsWith(this.origin + PREFIX) && !keep.has(key.url))
@@ -119,24 +145,48 @@ export class AssetCache {
    * specs neither loading nor stored, such as a retrieval lost with a stopped worker.
    */
   async remaining(specs: Iterable<AssetRequest>): Promise<{ pending: number; missing: number }> {
-    const all = Array.from(specs)
-    const retrieving = all
-      .map((spec) => this.pending.get(requestKey(spec)))
-      .filter((load) => load?.stage() === 'retrieving')
-    const idle = all.filter((spec) => !this.pending.has(requestKey(spec)))
-    const missing = await this.unstored(idle)
-    await Promise.all(retrieving.map((load) => load!.response.catch(() => {})))
+    const retrieving: PendingLoad[] = []
+    const lookups: PendingLoad[] = []
+    const idle: AssetRequest[] = []
+    for (const spec of specs) {
+      const load = this.pending.get(requestKey(spec))
+      if (!load) idle.push(spec)
+      else if (load.stage() === 'retrieving') retrieving.push(load)
+      else if (load.stage() === 'lookup') lookups.push(load)
+    }
+    const [missing, sources] = await Promise.all([
+      this.unstored(idle),
+      Promise.all(lookups.map((load) => load.dispatched)),
+    ])
+    for (let i = 0; i < lookups.length; i++)
+      if (sources[i] === 'network') retrieving.push(lookups[i])
+    await Promise.all(retrieving.map((load) => load.response.catch(() => {})))
     return { pending: retrieving.length, missing }
   }
 
   /** How many `specs` Cache Storage lacks; inaccessible storage lacks all of them. */
   private async unstored(specs: AssetRequest[]): Promise<number> {
+    if (!specs.length) return 0
     try {
-      const cache = await caches.open(CACHE)
-      const hits = await Promise.all(specs.map((spec) => cache.match(this.storageKey(spec))))
-      return hits.filter((hit) => !hit).length
+      const cache = await this.openCache()
+      const stored = new Set((await cache.keys()).map((key) => key.url))
+      return specs.filter((spec) => !stored.has(this.storageKey(spec))).length
     } catch {
       return specs.length
+    }
+  }
+
+  /**
+   * Ensure one URL/range entry is stored or fetching, without cloning or reading a cached body.
+   * Joins any running flight for the same URL/range; a miss starts the same single-flight fetch
+   * that `load` can join.
+   */
+  prefetch(spec: AssetRequest): { dispatched: Promise<AssetSource>; complete: Promise<void> } {
+    const load = this.flight(spec)
+    return {
+      dispatched:
+        load.stage() === 'settled' ? Promise.resolve<AssetSource>('cache') : load.dispatched,
+      complete: load.complete,
     }
   }
 
@@ -148,9 +198,14 @@ export class AssetCache {
    * entry alive through best-effort cache persistence, without delaying delivery.
    */
   load(spec: AssetRequest) {
+    return this.share(this.flight(spec))
+  }
+
+  /** Return the existing flight for `spec` or start one backed by Cache Storage then `fetch`. */
+  private flight(spec: AssetRequest): PendingLoad {
     const key = requestKey(spec)
     const existing = this.pending.get(key)
-    if (existing) return this.share(existing)
+    if (existing) return existing
     const dispatched = Promise.withResolvers<AssetSource>()
     let stage: ReturnType<PendingLoad['stage']> = 'lookup'
     let writing = Promise.resolve()
@@ -158,7 +213,7 @@ export class AssetCache {
       const cacheKey = this.storageKey(spec)
       let cache: Cache | undefined
       try {
-        cache = await caches.open(CACHE)
+        cache = await this.openCache()
         const hit = await cachedResponse(cache, cacheKey, spec)
         if (hit) {
           dispatched.resolve('cache')
@@ -198,7 +253,7 @@ export class AssetCache {
       stage: () => stage,
     }
     this.pending.set(key, load)
-    return this.share(load)
+    return load
   }
 
   private share({ dispatched, response, complete, stage }: PendingLoad) {

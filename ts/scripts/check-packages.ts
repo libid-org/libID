@@ -88,12 +88,24 @@ execFileSync(
     ),
   },
 )
+// No package needs viem: each loads without it.
+assert(!existsSync(join(consumer, 'node_modules/viem')), 'a package installs viem')
+execFileSync(
+  'node',
+  [
+    '--input-type=module',
+    '-e',
+    "for (const entry of ['@libid/ceremony', '@libid/popup', '@libid/popup/worker', '@libid/popup/testing', '@libid/ens']) await import(entry)",
+  ],
+  { cwd: consumer, stdio: 'inherit' },
+)
 writeFileSync(
   join(consumer, 'client.ts'),
   `export * from '@libid/ceremony'
 export * from '@libid/popup'
 export { fakeConnection } from '@libid/popup/testing'
 export type { LedgerId } from '@libid/ledger'
+export { ensName, HandleError, type NameOptions, type Platform } from '@libid/ens'
 `,
 )
 writeFileSync(

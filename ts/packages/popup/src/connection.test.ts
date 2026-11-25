@@ -1558,6 +1558,28 @@ describe('lifecycle outcome [POPUP-CONNECTION-006] [POPUP-DIAGNOSTIC-002]', () =
 })
 
 describe('selection order at accept level [POPUP-CONNECTION-002]', () => {
+  it('skips Service Worker registration lookup and claim when claim is false', async () => {
+    const pair = fakePair()
+    const app = connectApp(pair)
+    const silent = { postMessage: vi.fn() }
+    const registrations = vi.fn(registrationWith(silent))
+    const events: PopupDiagnostic[] = []
+    const endpoint = PopupConnection.accept<Messages>(
+      new CurrentWindow(pair.popupWindow, registrations),
+      {
+        connectionId: ID,
+        allowedApplicationOrigins: [APP_ORIGIN],
+        claim: false,
+        onDiagnostic: (e) => void events.push(e),
+      },
+    )
+    await Promise.all([endpoint.ready, app.connection.ready])
+    expect(registrations).not.toHaveBeenCalled()
+    expect(silent.postMessage).not.toHaveBeenCalled()
+    expect(codes(events)).toEqual(['carrier-message-port'])
+    expect(codes(app.events)).toContain('carrier-message-port')
+  })
+
   it('treats a silent worker as holding nothing and continues over the opener', async () => {
     vi.useFakeTimers()
     try {
@@ -1949,4 +1971,98 @@ describe('unreachable window [POPUP-CONNECTION-006]', () => {
         log.mockRestore()
       }
     })
+})
+
+describe('first destination commit [POPUP-CONTROL-001]', () => {
+  /** A handle on the opener-origin `about:blank` until `commit()`, then cross-origin. */
+  function blankHandle() {
+    let committed = false
+    const handle = {
+      closed: false,
+      postMessage() {},
+      location: {
+        get href() {
+          if (committed) throw new DOMException('Blocked a frame', 'SecurityError')
+          return 'about:blank'
+        },
+        replace() {},
+      },
+    }
+    return {
+      handle,
+      commit: () => {
+        committed = true
+      },
+    }
+  }
+
+  function connectBlank() {
+    const { handle, commit } = blankHandle()
+    const events: PopupDiagnostic[] = []
+    const connection = PopupConnection.connect<Messages>(
+      new OpenedWindow(handle as unknown as WindowProxy, fakePair().appView),
+      {
+        connectionId: ID,
+        allowedPopupOrigins: [POPUP_ORIGIN],
+        onDiagnostic: (e) => void events.push(e),
+      },
+    )
+    return { connection, handle, commit, events }
+  }
+
+  it('times the commit once, from the direct navigation that left about:blank', async () => {
+    vi.useFakeTimers()
+    let elapsed = 100
+    vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
+    try {
+      const app = connectBlank()
+      await app.connection.navigate('https://popup.example/p')
+      elapsed = 1100
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(codes(app.events)).not.toContain('window-committed')
+      app.commit()
+      elapsed = 1350
+      await vi.advanceTimersByTimeAsync(1000)
+      const committed = app.events.filter((e) => e.code === 'window-committed')
+      expect(committed).toEqual([expect.objectContaining({ durationMs: 1250 })])
+      await app.connection.close()
+      expect(codes(app.events)).not.toContain('window-uncommitted')
+    } finally {
+      vi.useRealTimers()
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('counts a commit first seen as the connection ends', async () => {
+    const app = connectBlank()
+    await app.connection.navigate('https://popup.example/p')
+    app.commit()
+    await app.connection.close()
+    expect(codes(app.events)).toContain('window-committed')
+    expect(codes(app.events)).not.toContain('window-uncommitted')
+  })
+
+  it.each([
+    ['the popup is lost', 'popup-unavailable'],
+    ['the application closes it', 'connection-closed'],
+  ])('reports no commit when %s while still blank', async (_, ending) => {
+    vi.useFakeTimers()
+    try {
+      const app = connectBlank()
+      await app.connection.navigate('https://popup.example/p')
+      if (ending === 'popup-unavailable') {
+        app.handle.closed = true
+        await vi.advanceTimersByTimeAsync(250)
+      } else {
+        await app.connection.close()
+      }
+      const found = codes(app.events)
+      expect(found).toContain('window-uncommitted')
+      expect(found).not.toContain('window-committed')
+      // Reported before the connection's own ending.
+      expect(found.indexOf('window-uncommitted')).toBeLessThan(found.length - 1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

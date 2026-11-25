@@ -18,6 +18,8 @@ export const RSA_MODULUS_BITS = RSA_MODULUS_BYTES * 8
 export const LIMB_BITS = 120n
 export const NUM_LIMBS = Math.ceil(RSA_MODULUS_BITS / Number(LIMB_BITS))
 export const BARRETT_OVERFLOW_BITS = 6n
+/** BN254 points the circuit proves with: its 197,462 gates fill 2^18; build/circuits.ts checks it. */
+export const SRS_POINTS = 2 ** 18
 
 /** The audience hash, id node and handle node each take two 128-bit public fields. */
 const HASH_FIELDS = 2

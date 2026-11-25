@@ -4,6 +4,7 @@ import { provider } from './provider.js'
 
 export const token = notarizedToken({
   url: provider.tokenUrl,
+  expiredCode: provider.expiredCode,
   fields(input) {
     if (!isClientCredential(input.clientCredential)) throw new Error('Invalid token request')
     const values: Record<string, string> = {

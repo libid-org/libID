@@ -5,7 +5,7 @@ import { gunzipSync } from 'node:zlib'
 import * as headers from '../src/assets/headers.ts'
 import type { Asset, AssetRequest, ExternalAsset, LocalAsset } from '../src/assets/index.ts'
 import { ASSETS_PREFIX, assetKey, profileKey } from '../src/assets/keys.ts'
-import { SRS_POINTS } from '../src/barretenberg/parameters.ts'
+import { G1_POINT_BYTES } from '../src/barretenberg/parameters.ts'
 import { readArchive, safePath, selectMember } from './archive.ts'
 import { assetPlugin } from './assetPlugin.ts'
 import { importSource } from './bundle.ts'
@@ -27,6 +27,8 @@ const mediaTypes: Readonly<Record<string, string>> = {
   '.wasm': headers.wasm['Content-Type'],
   '.json': headers.json['Content-Type'],
   '.html': headers.documentHeaders['Content-Type'],
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
 }
 
 export const mediaType = (path: string): string =>
@@ -123,8 +125,28 @@ function installedFile(source: string): { bytes: Buffer; version: string } {
   }
 }
 
-export async function resolveAssets() {
+/** Strip compiler debug tables unused during witness/proof generation from a circuit artifact. */
+function stripCircuitDebugInfo(bytes: Buffer): Buffer {
+  const parsed = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>
+  delete parsed.debug_symbols
+  delete parsed.file_map
+  return Buffer.from(JSON.stringify(parsed))
+}
+
+/** Insert a short content-hash directory segment before the filename for transformed immutable bodies. */
+function contentHashedPath(path: string, bytes: Buffer): string {
+  const slash = path.lastIndexOf('/')
+  return `${path.slice(0, slash)}/${hash(bytes).slice(0, 12)}${path.slice(slash)}`
+}
+
+export async function resolveAssets({
+  keepCircuitDebugSymbols = false,
+}: {
+  /** Retain Noir `debug_symbols` and `file_map` for local DevTools debugging (off by default). */
+  keepCircuitDebugSymbols?: boolean
+} = {}) {
   const catalog = await loadAssetCatalog()
+  const circuitAssets = new Set(catalog.circuits)
   const profiles = Object.fromEntries(
     Object.entries(catalog.assetsByPlatform).flatMap(([p, vs]) =>
       Object.entries(vs).map(([v, as]) => [profileKey(p, v), as]),
@@ -181,16 +203,30 @@ export async function resolveAssets() {
       path = `${ASSETS_PREFIX}${safePath(asset.mount)}`
       bytes = await readSource(asset.source, asset.sha256)
     }
+    if (circuitAssets.has(asset) && !keepCircuitDebugSymbols) {
+      bytes = stripCircuitDebugInfo(bytes)
+      // Transformed circuit bytes publish at a fresh immutable URL while keeping their filename.
+      path = contentHashedPath(path, bytes)
+    }
     register(path, bytes, assetHeaders(path, asset.headers))
     urls[assetKey(asset)] = path
     for (const module of asset.bundledUrlModules ?? []) moduleUrls[module] = path
   }
-  const circuits = new Map(
-    catalog.circuits.map((asset) => {
-      return [asset.member!.replace(/\.json$/, ''), local.get(urls[assetKey(asset)])!.bytes]
-    }),
-  )
-  await validateCircuitCapacity(circuits, SRS_POINTS)
+  // Each profile proves one circuit under the one G1 range it fetches.
+  const circuits = new Map<string, { bytes: Buffer; srsPoints: number }>()
+  for (const [profile, assets] of Object.entries(profiles)) {
+    const circuit = assets.filter((a): a is LocalAsset =>
+      catalog.circuits.includes(a as LocalAsset),
+    )
+    const g1 = assets.filter(
+      (a): a is ExternalAsset => a.isExternal === true && a.source.endsWith('/g1_compressed.dat'),
+    )
+    if (circuit.length !== 1 || g1.length !== 1)
+      throw new Error(`Profile needs one circuit and one G1 range: ${profile}`)
+    const srsPoints = externalRequest(g1[0]).bytes! / G1_POINT_BYTES
+    circuits.set(profile, { bytes: local.get(urls[assetKey(circuit[0])])!.bytes, srsPoints })
+  }
+  await validateCircuitCapacity(circuits)
   for (const [path, { bytes }] of local) bodyHashes[path] = hash(bytes)
   return {
     urls,

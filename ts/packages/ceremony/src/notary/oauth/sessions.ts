@@ -1,11 +1,67 @@
 import { toCeremonyError } from '../../errors.js'
-import { type OperationEvent, operation } from '../../events.js'
+import { now, type OperationEvent, operation } from '../../events.js'
 import { isRecord } from '../../primitives.js'
-import { responseJson } from '../http.js'
+import { PlatformRefusal, responseJson } from '../http.js'
 import type { ExactHttpRequest, Reveals } from '../protocol.js'
 import { NotaryRuntime, type NotarySession } from '../session.js'
 import type { IdentityRequest } from './identity.js'
-import type { TokenRequest, TokenRequestInput } from './token.js'
+import type { ExpiredCode, TokenRequest, TokenRequestInput } from './token.js'
+
+/** OAuth's `error` vocabulary, within an event attribute's bound. */
+const ERROR_CODE = /^[\x20-\x7e]{1,128}$/
+
+/**
+ * Whether `refusal` is the platform's own answer to an expired code, given after the code's
+ * lifetime: both the measured answer and the lifetime must hold, never the timing alone.
+ */
+function expired(refusal: PlatformRefusal, proverMs: number, code: ExpiredCode | undefined) {
+  return (
+    code !== undefined &&
+    refusal.status === code.status &&
+    refusal.code === code.error &&
+    (code.description === undefined || refusal.description === code.description) &&
+    proverMs >= code.lifetimeSeconds * 1000
+  )
+}
+
+/**
+ * A platform's refusal, also as an event: unlike the failure text it is structured, so its
+ * status and code reach telemetry. `prover-ms` is how long this Prover document had run, a lower
+ * bound on how long the authorization code waited. A refusal of an expired code also carries
+ * `reason: 'authorization-expired'`, and its failure text says what to do.
+ */
+function reportRefusal<T>(
+  emit: (event: OperationEvent) => void,
+  operation: string,
+  read: () => T,
+  expiredCode?: ExpiredCode,
+) {
+  try {
+    return read()
+  } catch (error) {
+    if (!(error instanceof PlatformRefusal)) throw error
+    const proverMs = Math.round(performance.now())
+    const isExpired = expired(error, proverMs, expiredCode)
+    emit({
+      event: 'platform-refusal',
+      timestamp: now(),
+      instrumentation: {
+        attributes: {
+          operation,
+          status: error.status,
+          ...(error.code !== undefined && ERROR_CODE.test(error.code) && { error: error.code }),
+          'prover-ms': proverMs,
+          ...(isExpired && { reason: 'authorization-expired' }),
+        },
+      },
+    })
+    if (!isExpired || !expiredCode) throw error
+    throw new Error(
+      `${expiredCode.name} did not accept the sign-in: it expired after ${Math.floor(proverMs / 1000)} s, while this connection set up the proof. Check your connection and try again. ${error.message}`,
+      { cause: error },
+    )
+  }
+}
 
 /** Attribute a failure to the operation it interrupted. */
 const failsAs = <T>(p: Promise<T>, event: string) =>
@@ -42,13 +98,22 @@ export async function notarizeOAuth(options: {
     const result = await failsAs(session.reveal(ranges), event)
     return { ...result, attestation: branch(result.attestation, event) }
   }
-  const notary = new NotaryRuntime(options.notaryAddress, options.signal, emit)
+  // Terminate the shared TLSN worker as soon as both final attestations land, freeing its
+  // WASM heap and thread pool before peak ZK proving memory usage.
+  const notaryAbort = new AbortController()
+  const notarySignal = AbortSignal.any([options.signal, notaryAbort.signal])
+  const notary = new NotaryRuntime(options.notaryAddress, notarySignal, emit)
   const tokenPrepared = branch(
-    notary.prepare(tokenRequest.url, { fetch: 'token-fetch', attestation: 'token-attestation' }),
+    notary.prepare(tokenRequest.url, {
+      setup: 'token-setup',
+      fetch: 'token-fetch',
+      attestation: 'token-attestation',
+    }),
     'token-fetch',
   )
   const identityPrepared = branch(
     notary.prepare(options.identity.url, {
+      setup: 'identity-setup',
       fetch: 'identity-fetch',
       attestation: 'identity-attestation',
     }),
@@ -57,7 +122,13 @@ export async function notarizeOAuth(options: {
   const token = await operation(emit, 'token-fetch', async () => {
     const session = await tokenPrepared
     const transcript = await session.send(tokenRequest)
-    const body = responseJson(transcript)
+    const secrets = [input.code, input.codeVerifier, input.clientCredential ?? '']
+    const body = reportRefusal(
+      emit,
+      'token-fetch',
+      () => responseJson(transcript, secrets),
+      options.token.expiredCode,
+    )
     const selected = options.token.select(transcript, input)
     if (!isRecord(body) || body.access_token !== selected.bearer)
       throw new Error('Invalid token response')
@@ -68,7 +139,7 @@ export async function notarizeOAuth(options: {
   const identity = await operation(emit, 'identity-fetch', async () => {
     const session = await identityPrepared
     const transcript = await session.send(options.identity.build(bearer))
-    const body = responseJson(transcript)
+    const body = reportRefusal(emit, 'identity-fetch', () => responseJson(transcript, [bearer]))
     const selected = options.identity.select(transcript, bearer)
     if (!isRecord(body) || !options.identity.isResponse(body, selected))
       throw new Error('Invalid identity response')
@@ -78,6 +149,10 @@ export async function notarizeOAuth(options: {
     reveal(identity.session, identity.selected.ranges, 'identity-attestation'),
   )
   const [tokenRevealed, identityRevealed] = await Promise.all([tokenOpened, identityOpened])
+  void Promise.all([tokenRevealed.attestation, identityRevealed.attestation]).then(
+    () => notaryAbort.abort(),
+    () => {},
+  )
   const { userId, userName, bearerRange, idRange, handleRange } = identity.selected
   return {
     bearer,

@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs'
+import { ASSETS_PREFIX } from '../src/assets/keys.ts'
+import { hash } from './sources.ts'
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url))
 const brand = '../../../../brand/'
@@ -20,12 +22,20 @@ ${read('../src/ccdp/documents/ui.css')}`
 export const callbackStyles = `${theme}
 #libid-root:has(progress) > :not(progress) { visibility: hidden; }`
 
-// Documents CCDP serves embed the shared unmodified font and its license, never fetching it.
+/** The shared unmodified Libron Regular font emitted as an immutable same-origin asset. */
+export const documentFontBytes = read(`${brand}libron/Libron-Regular.woff2`)
+export const documentFontPath = `${ASSETS_PREFIX}fonts/libron-${hash(documentFontBytes)}.woff2`
+
+/** The font's license, published once beside it instead of inside every document. */
+export const documentFontLicense = read(`${brand}libron/LICENSE`)
+export const documentFontLicensePath = `${ASSETS_PREFIX}fonts/libron-LICENSE-${hash(documentFontLicense)}.txt`
+
+// Documents CCDP serves reference the immutable same-origin font and name its license file.
 export const documentStyles = `
-/* ${read(`${brand}libron/LICENSE`)} */
+/* Libron: SIL Open Font License 1.1, ${documentFontLicensePath} */
 @font-face {
   font-family: 'Libron';
-  src: url(data:font/woff2;base64,${read(`${brand}libron/Libron-Regular.woff2`).toString('base64')}) format('woff2');
+  src: url(${documentFontPath}) format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;

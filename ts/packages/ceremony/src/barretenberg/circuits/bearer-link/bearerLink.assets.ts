@@ -1,4 +1,6 @@
 import { archive, headers } from '../../../assets/index.js'
+import { srs } from '../../barretenberg.assets.js'
+import { SRS_POINTS } from './parameters.js'
 
 const release = archive(
   'https://github.com/libid-org/libid-circuits/releases/download/v0.8.0/libid-circuits-0.8.0-bearer-link.tar.gz',
@@ -12,3 +14,5 @@ export const circuit = release.member('bearer_link.json', {
 })
 
 export const verificationKey = release.member('vk', headers.immutable)
+
+export const crs = srs(SRS_POINTS)

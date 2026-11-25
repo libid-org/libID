@@ -271,7 +271,7 @@ test('released TLSNotary initializes concurrently from mounted assets [CSP-010] 
   expect(await assetCount(snippet)).toBeGreaterThan(before)
 })
 
-test('Prefetch loads every declared CRS request through the Service Worker [LIBID-ASSET-021]', async ({
+test('Prefetch loads every CRS request its profile declares through the Service Worker [LIBID-ASSET-021]', async ({
   bridge,
   ccdp,
   context,
@@ -286,7 +286,11 @@ test('Prefetch loads every declared CRS request through the Service Worker [LIBI
       counts: Record<string, number>
     }
   const before = await crs()
-  expect(before.expected.length).toBeGreaterThan(0)
+  const declared = artifactRequests('google/1')
+    .filter(({ url }) => url.startsWith('https:'))
+    .map(({ url, range }) => `${url} ${range ?? ''}`.trim())
+  expect(declared.length).toBeGreaterThan(0)
+  expect(before.expected).toEqual(expect.arrayContaining(declared))
   // Consent stays pending, and a CCDP document stays open: WebKit stops a Service Worker's
   // in-flight fetches once no document of its origin remains.
   const keepalive = await context.newPage()
@@ -300,9 +304,9 @@ test('Prefetch loads every declared CRS request through the Service Worker [LIBI
     .poll(
       async () => {
         const { counts } = await crs()
-        return before.expected.filter((key) => (counts[key] ?? 0) > (before.counts[key] ?? 0))
+        return declared.filter((key) => (counts[key] ?? 0) > (before.counts[key] ?? 0))
       },
       { timeout: 30_000 },
     )
-    .toEqual(before.expected)
+    .toEqual(declared)
 })

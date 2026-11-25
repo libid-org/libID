@@ -32,6 +32,8 @@ export type DiagnosticCode =
   | 'carrier-restored'
   | 'carrier-fallback'
   | 'control-direct'
+  | 'window-committed'
+  | 'window-uncommitted'
   | 'control-connected'
   | 'keep-acknowledged'
   | 'claim-empty'

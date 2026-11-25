@@ -1,7 +1,7 @@
 import type { LedgerId } from '@libid/ledger'
 import { type Message, type MessageType, PopupError } from '@libid/popup'
 import { type FakeConnection, fakeConnection } from '@libid/popup/testing'
-import { describe, expect, it, type Mock, vi } from 'vitest'
+import { afterEach, describe, expect, it, type Mock, vi } from 'vitest'
 import { CeremonyError } from '../../errors.js'
 import type { CeremonyEvent } from '../../events.js'
 import { identityNodes } from '../../identity.js'
@@ -35,8 +35,16 @@ function spiedConnection(): Spied {
   const connection = fakeConnection({ connectionId: CEREMONY_ID, peerOrigin: 'https://ccdp.test' })
   for (const method of ['send', 'navigate', 'navigateAway', 'close'] as const)
     vi.spyOn(connection, method)
+  opened.push(connection as Spied)
   return connection as Spied
 }
+
+const opened: Spied[] = []
+
+// A run holds its ID, for every client, until its connection ends; none outlives its test.
+afterEach(async () => {
+  for (const connection of opened.splice(0)) await connection.close()
+})
 
 const id = CEREMONY_ID
 
@@ -238,6 +246,76 @@ describe('Client [LIBID-MOD-014] [LIBID-OAUTH-021] [LIBID-PROVER-021]', () => {
     await expect(result).rejects.toBeInstanceOf(CeremonyError)
     expect(events.at(-1)).toMatchObject({ status: 'failed', event: 'authorization' })
   })
+  it.each([
+    {
+      name: 'an expired authorization',
+      reason: 'authorization-expired',
+      expected: 'authorization-expired',
+    },
+    { name: 'another refusal', reason: undefined, expected: undefined },
+  ])('exposes the reason a platform-refusal reported for $name', async ({ reason, expected }) => {
+    const { connection, ceremony } = await setup()
+    const result = ceremony.proveUserIdentity()
+    reachProving(connection)
+    connection.receive({
+      type: 'event',
+      event: 'platform-refusal',
+      timestamp: 1,
+      instrumentation: {
+        attributes: { operation: 'token-fetch', status: 400, ...(reason && { reason }) },
+      },
+    })
+    connection.receive({
+      type: 'ceremony-failed',
+      event: 'token-fetch',
+      message: 'X did not accept the sign-in',
+    })
+    const failure = await result.catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(CeremonyError)
+    expect((failure as CeremonyError).reason).toBe(expected)
+  })
+  it('keeps the reason off a failure of another operation', async () => {
+    const { connection, ceremony } = await setup()
+    const result = ceremony.proveUserIdentity()
+    reachProving(connection)
+    connection.receive({
+      type: 'event',
+      event: 'platform-refusal',
+      timestamp: 1,
+      instrumentation: {
+        attributes: { operation: 'token-fetch', reason: 'authorization-expired' },
+      },
+    })
+    connection.receive({ type: 'ceremony-failed', event: 'identity-fetch', message: 'Failed' })
+    const failure = await result.catch((error: unknown) => error)
+    expect((failure as CeremonyError).reason).toBeUndefined()
+  })
+  it.each(['before proving', 'from the Bridge'] as const)(
+    'ignores platform-refusal authorization-expired %s',
+    async (when) => {
+      const { connection, ceremony } = await setup()
+      const result = ceremony.proveUserIdentity()
+      if (when === 'from the Bridge') {
+        reachProving(connection)
+        connection.peerOrigin = BRIDGE
+      }
+      connection.receive({
+        type: 'event',
+        event: 'platform-refusal',
+        timestamp: 1,
+        instrumentation: {
+          attributes: { operation: 'token-fetch', reason: 'authorization-expired' },
+        },
+      })
+      connection.receive({
+        type: 'ceremony-failed',
+        event: 'token-fetch',
+        message: 'Failed',
+      })
+      const failure = await result.catch((error: unknown) => error)
+      expect((failure as CeremonyError).reason).toBeUndefined()
+    },
+  )
   const prefetchReady = event('prefetch-dispatch', 'finished')
   const ready = [prefetchReady, event('prover', 'started', 3)]
   const preparing = event('zk-proof-preparation', 'started', 4)
@@ -997,21 +1075,12 @@ it.each([
 it('binds one active ceremony per connection and rebinds it once that run finishes', async () => {
   const client = await ccdpClient(wireConfig)
   const { connection, ceremony: first } = await setup({ client })
-  // One client refuses the live ID at once; another client sharing the connection is refused here.
-  const second = (await ccdpClient(wireConfig)).new(
-    connection,
-    'google',
-    testnet,
-    new Uint8Array(32),
-    new Uint8Array(),
-  )
+  // The ID is live for every client: one sharing the connection is refused where it creates the run.
+  const other = await ccdpClient(wireConfig)
+  expect(() =>
+    other.new(connection, 'google', testnet, new Uint8Array(32), new Uint8Array()),
+  ).toThrow('already live')
   const pending = first.proveUserIdentity()
-  await expect(second.proveUserIdentity()).rejects.toMatchObject({
-    event: 'prefetch-dispatch',
-    message: 'Connection already has an active ceremony',
-  })
-  // That rejection was the refused run's one start.
-  await expect(second.proveUserIdentity()).rejects.toThrow('one-shot')
   expect(connection.navigations).toHaveLength(1)
   reachProving(connection)
   connection.receive({ type: 'user-denied' })

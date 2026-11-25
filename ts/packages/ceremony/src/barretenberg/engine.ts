@@ -1,7 +1,8 @@
 import { assetUrl } from '../assets/index.js'
 import { toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, safeEmit } from '../events.js'
-import { abi, acvm, bbWasmPath, crs } from './barretenberg.assets.js'
+import { MIN_PROOF_THREADS, workerThreads } from '../threads.js'
+import { abi, acvm, bbWasmPath, srs } from './barretenberg.assets.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
 
 export type { RawProof } from './protocol.js'
@@ -10,6 +11,8 @@ export interface ProofEngineOptions {
   /** Compiled Noir circuit and matching released verification key, resolved by the asset graph. */
   circuitUrl: string
   verificationKeyUrl: string
+  /** The BN254 points the circuit proves with, as its profile fetches them. */
+  srsPoints: number
   emit?: (event: OperationEvent) => void
   /** Requested proof threads; the proof worker caps them. */
   threads?: number
@@ -19,8 +22,6 @@ export interface ProofEngineOptions {
 export class ProofEngine {
   #worker?: Worker
   readonly #emit: (event: OperationEvent) => void
-  /** Sent once the worker boots. */
-  #preload?: Preload
   /** Set by the single `prove` call; preparation finishes once inputs and backend are ready. */
   #inputsAt?: number
   /** Set by the worker's `backend-ready` message. */
@@ -34,7 +35,7 @@ export class ProofEngine {
   /** Rejects with the engine's failure as soon as it happens, so callers can retire sibling work. */
   readonly outcome: Promise<void> = this.#result.promise.then(() => {})
 
-  constructor({ circuitUrl, verificationKeyUrl, emit, threads }: ProofEngineOptions) {
+  constructor({ circuitUrl, verificationKeyUrl, srsPoints, emit, threads }: ProofEngineOptions) {
     const [url, keyUrl] = [circuitUrl, verificationKeyUrl].map((value) => {
       const url = new URL(value, location.href)
       if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.hash)
@@ -48,7 +49,10 @@ export class ProofEngine {
     this.#emit({ event: 'zk-proof-preparation', phase: 'started', timestamp: now() })
     this.#emit({ event: 'proof-worker-bootstrap', phase: 'started', timestamp: now() })
     try {
-      this.#preload = {
+      const resolvedThreads = workerThreads(threads)
+      if (!Number.isInteger(resolvedThreads) || resolvedThreads < MIN_PROOF_THREADS)
+        throw new Error('Multithreaded backend unavailable')
+      const preload: Preload = {
         type: 'preload',
         circuitUrl: url,
         verificationKeyUrl: keyUrl,
@@ -56,11 +60,14 @@ export class ProofEngine {
         acvmUrl: assetUrl(acvm),
         abiUrl: assetUrl(abi),
         wasmPath: bbWasmPath(),
+        srsPoints,
         // Pinned bb.js ignores this until its pending CRS-base patch lands upstream;
         // build/loaders.test.ts fails once the loaders honor a base.
-        crsPath: new URL('.', assetUrl(crs[0])).href,
+        crsPath: new URL('.', assetUrl(srs(srsPoints)[0])).href,
       }
       this.#worker = this.#spawn()
+      // Queued natively until the worker finishes booting, avoiding a main-thread round trip.
+      this.#worker.postMessage(preload)
     } catch (error) {
       this.#fail(error)
     }
@@ -119,8 +126,6 @@ export class ProofEngine {
           phase: 'finished',
           timestamp: message.timestamp,
         })
-        if (this.#preload) this.#worker?.postMessage(this.#preload)
-        this.#preload = undefined
         break
       case 'event':
         this.#emit(message.event)

@@ -14,14 +14,14 @@ import { createHash } from 'node:crypto'
 import * as shared from '../src/assets/headers.ts'
 import { documentStyles } from './styles.ts'
 
-/** Hex characters of the policy directory under `/ccdp/assets/` that bundled code lives in. */
+/** Hex characters of the policy directory under `/ccdp/assets/` that worker entries live in. */
 const POLICY_HASH_HEX_CHARS = 12
 
 export const cspHash = (code: string) =>
   `'sha256-${createHash('sha256').update(code).digest('base64')}'`
 
 /** CCDP serves its own documents with their artifact, so their stylesheet is pinned by hash. */
-export const documentStyleSources = `style-src ${cspHash(documentStyles)}; font-src data:`
+export const documentStyleSources = `style-src ${cspHash(documentStyles)}; font-src 'self'`
 
 /** Directive name (lowercase) to its sources; a repeated directive is rejected, not ignored. */
 export function parseCsp(policy: string): Map<string, string[]> {
@@ -112,7 +112,7 @@ function executableCsp(
   return `${base}; script-src ${scripts}; worker-src ${workers}; connect-src ${connects}${connectBlob}${styles}`
 }
 
-/** Bundled code changes URL when its execution policy changes, even if its code does not. */
+/** Worker entry scripts change URL when any worker execution policy changes, even if code does not. */
 export const policyId = createHash('sha256')
   .update(JSON.stringify(isolatedWorkers.map((profile) => responseHeaders(profile))))
   .digest('hex')

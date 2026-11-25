@@ -22,7 +22,9 @@ docker run --rm -p 127.0.0.1:8080:8787 libid-ccdp
 The build scripts run directly with Node's TypeScript stripping;
 `typecheck:build` checks them separately. The default output is
 `packages/ceremony/dist-artifacts` within `ts`. An optional `--out-dir` selects
-another dedicated directory inside the checkout. Release downloads are cached
+another dedicated directory inside the checkout. `--circuit-debug-symbols` keeps
+the circuits' Noir debug tables, so witness failures log a source call stack;
+the dev app builds with it, releases strip them. Release downloads are cached
 under the ceremony package's `.cache/downloads/`.
 
 ```text
@@ -83,9 +85,9 @@ Declare a dependency once in its owner's `*.assets.ts`. The internal
 import * as assets from '../assets/index.js'
 
 const release = assets.archive(
-  'https://github.com/libid-org/notary/releases/download/v0.5.0/tlsn-wasm-0.5.0.tar.gz',
-  'tlsn/v0.5.0',
-  'sha256:bcbd175ca14165d3cc5ad0400b93c814e3e31eaec60e0a0d5db2a990a17869c0',
+  'https://github.com/libid-org/notary/releases/download/v0.7.0/tlsn-wasm-0.7.0.tar.gz',
+  'tlsn/v0.7.0',
+  'sha256:4fd772f68b8648855d8c361f836300f9a8f35aac081027d2e04f38e20b74e473',
 )
 const module = release.member('tlsn_wasm.js', {
   ...assets.headers.immutable,
@@ -163,7 +165,9 @@ representation metadata and policies weakening required resource headers are
 rejected. A declared CSP value replaces the whole default one.
 
 The build normalizes gzip-packed WASM to decoded `.wasm` bodies. It emits Brotli
-and gzip sidecars only when smaller. SWS uses native precompressed serving;
+and gzip sidecars only when smaller. Brotli runs at maximum quality and a 24-bit
+window, and `.cache/` reuses each sidecar by content hash, so only changed files
+pay that cost again. SWS uses native precompressed serving;
 request-time compression is disabled. Browsers fetch the unencoded resource URL,
 and Cache Storage retains decoded bodies. Gzip also serves browsers that do not
 advertise Brotli, including WebKit on local HTTP.

@@ -100,6 +100,13 @@ export interface AcceptOptions {
    * spell a fragment itself.
    */
   isolationFallbackUrl?: string
+  /**
+   * Whether to query active Service Workers on arrival for a preserved carrier.
+   * Defaults to `true`. Set `false` on a document that always arrives from a
+   * cross-origin navigation where no worker on this origin can hold a kept port;
+   * departure continuity is unaffected.
+   */
+  claim?: boolean
   fallback?: CarrierConstructor
   onDiagnostic?: (event: PopupDiagnostic) => void
 }
@@ -368,6 +375,8 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
   private stopReplacement: (() => void) | null = null
   private fallbackPending: boolean
   private handshakePending = false
+  /** When a direct navigation left the initial `about:blank`, until its destination commits. */
+  private navigatedAt: number | undefined
 
   constructor(
     private readonly popup: OpenedWindow,
@@ -426,6 +435,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
   }
 
   private checkWindow(): void {
+    if (!this.ended && this.committed) this.settleCommit('window-committed')
     if (this.ended || this.carrier || this.fallbackPending || this.handshakePending) return
     // Native-anchor creation has no handle until the first authenticated binding.
     if (this.popup.opened && !this.popup.direct) this.fail('popup-unavailable')
@@ -442,6 +452,8 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
    * installs the authenticated result under the same logical connection.
    */
   protected override install(carrier: Carrier, code?: DiagnosticCode): void {
+    // A carrier comes from a document that committed and ran.
+    if (!this.ended) this.settleCommit('window-committed')
     super.install(carrier, code)
     if (this.ended || !isNavigationCarrier(carrier)) return
     this.stopReplacement = carrier[onReplacement]((pending) => {
@@ -474,6 +486,7 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
       return
     }
     if (this.popup.direct) {
+      if (this.popup.blank) this.navigatedAt = performance.now()
       this.popup.replace(target)
       this.report('control-direct')
       return
@@ -522,14 +535,32 @@ class ApplicationEndpoint<Out extends Message, In extends Message> extends Endpo
 
   protected override release(): void {
     if (this.ended) return
+    this.settleCommit(this.committed ? 'window-committed' : 'window-uncommitted')
     this.stopListening()
     super.release()
   }
 
   protected override fail(code: PopupErrorCode, viaOperation = false): void {
     if (this.ended) return
+    this.settleCommit(this.committed ? 'window-committed' : 'window-uncommitted')
     this.stopListening()
     super.fail(code, viaOperation)
+  }
+
+  /** The popup left its initial `about:blank` and still answers to the handle. */
+  private get committed(): boolean {
+    return this.popup.direct && !this.popup.blank
+  }
+
+  /**
+   * Reports, once, how long the first destination took to commit, or that the connection ended
+   * before any commit was seen. A destination that severs the handle as it commits (COOP) is
+   * never seen committing.
+   */
+  private settleCommit(code: 'window-committed' | 'window-uncommitted'): void {
+    if (this.navigatedAt === undefined) return
+    this.report(code, performance.now() - this.navigatedAt)
+    this.navigatedAt = undefined
   }
 }
 
@@ -585,27 +616,29 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
     const beforeUnload = () => {}
     popup.view.addEventListener('beforeunload', beforeUnload, { signal: this.controller.signal })
     popup.view.addEventListener('pagehide', onPageHide, { signal: this.controller.signal })
-    void this.select(allowedOrigins, options.fallback)
+    void this.select(allowedOrigins, options.fallback, options.claim !== false)
   }
 
   /**
-   * Selects this document's one carrier: a preserved port, then the opener
-   * handshake, then the fallback constructor. Runs after construction
-   * returns, so handlers the caller registers synchronously precede the
-   * first delivery.
+   * Selects this document's one carrier: a preserved port (unless `claim` is false), then the
+   * opener handshake, then the fallback constructor. Runs after construction returns, so handlers
+   * the caller registers synchronously precede the first delivery.
    */
   private async select(
     allowedOrigins: OriginAllowlist,
     fallback: CarrierConstructor | undefined,
+    claim: boolean,
   ): Promise<void> {
     try {
       // A preserved port can only be held by an already active worker.
-      const workers = (await this.popup.registrations()).flatMap((r) => r.active ?? [])
-      if (workers.length > 0) {
-        const port = await this.claimFrom(workers)
-        if (this.ended) return port ? this.discard(port) : undefined
-        if (port) return this.admit(port, 'carrier-restored')
-        this.report('claim-empty')
+      if (claim) {
+        const workers = (await this.popup.registrations()).flatMap((r) => r.active ?? [])
+        if (workers.length > 0) {
+          const port = await this.claimFrom(workers)
+          if (this.ended) return port ? this.discard(port) : undefined
+          if (port) return this.admit(port, 'carrier-restored')
+          this.report('claim-empty')
+        }
       }
       const opener = this.popup.opener
       if (opener) {

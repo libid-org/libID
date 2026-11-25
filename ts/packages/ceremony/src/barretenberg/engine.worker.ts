@@ -1,16 +1,13 @@
-import { BackendType, Barretenberg } from '@aztec-foundation/bb.js'
+import { BackendType, Barretenberg, Crs } from '@aztec-foundation/bb.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import initACVM from '@noir-lang/acvm_js'
 import { Noir } from '@noir-lang/noir_js'
 import initAbi from '@noir-lang/noirc_abi'
 import { errorMessage, toCeremonyError } from '../errors.js'
 import { now, type OperationEvent, operation } from '../events.js'
-import { workerThreads } from '../threads.js'
-import { FIELD_BYTES, PROVING_SETTINGS, SRS_POINTS } from './parameters.js'
+import { MIN_PROOF_THREADS, workerThreads } from '../threads.js'
+import { FIELD_BYTES, PROVING_SETTINGS } from './parameters.js'
 import type { FromWorker, Preload, RawProof, ToWorker } from './protocol.js'
-
-/** Refuse single-threaded proving after applying the worker CPU cap. */
-const MIN_PROOF_THREADS = 2
 
 type Circuit = ConstructorParameters<typeof Noir>[0]
 
@@ -24,10 +21,62 @@ const emit = (event: OperationEvent) => send({ type: 'event', event })
 
 const span = <T>(event: string, work: () => Promise<T>) => operation(emit, event, work)
 
+/**
+ * A backend holding only the BN254 SRS. bb.js's own setup also fetches 4 MiB of Grumpkin points,
+ * which ZK-Honk/Keccak proofs never read; this mirrors the rest of that setup, overlapping WASM
+ * thread-pool startup with CRS loading and keeping decompressed-point caching off the proving
+ * critical path. A failed setup releases the backend, including one that resolves afterwards.
+ */
+async function bn254Backend(
+  threads: number,
+  { wasmPath, crsPath, srsPoints }: Preload,
+): Promise<{ api: Api; caching: Promise<void> }> {
+  const creating = Barretenberg.new({
+    backend: BackendType.Wasm,
+    threads,
+    wasmPath,
+    crsPath,
+    skipSrsInit: true,
+  })
+  const loading = Crs.new(srsPoints, crsPath)
+  let api: Api
+  let crs: Crs
+  try {
+    ;[api, crs] = await Promise.all([creating, loading])
+  } catch (error) {
+    void creating.then(
+      (late) => late.destroy().catch(() => {}),
+      () => {},
+    )
+    throw error
+  }
+  try {
+    const { pointsBuf } = await api.srsInitSrs({
+      pointsBuf: crs.getG1Data(),
+      numPoints: crs.numPoints,
+      g2Point: crs.getG2Data(),
+    })
+    // Writing decompressed points to IndexedDB only warms future ceremonies; do not hold proving.
+    const caching =
+      pointsBuf.length > 0
+        ? Promise.resolve()
+            .then(() => crs.cacheUncompressed(pointsBuf))
+            .catch(() => {})
+        : Promise.resolve()
+    return { api, caching }
+  } catch (error) {
+    await api.destroy().catch(() => {})
+    throw error
+  }
+}
+
 async function inflate(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
-  const stream = new Response(Uint8Array.from(bytes)).body!.pipeThrough(
-    new DecompressionStream('gzip'),
-  )
+  // Response rejects SharedArrayBuffer views; copy only when backed by shared memory.
+  const input =
+    bytes.buffer instanceof ArrayBuffer
+      ? (bytes as Uint8Array<ArrayBuffer>)
+      : Uint8Array.from(bytes)
+  const stream = new Response(input).body!.pipeThrough(new DecompressionStream('gzip'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
@@ -35,7 +84,7 @@ async function inflate(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
 class EngineWorker {
   #state: 'new' | 'loading' | 'ready' | 'proving' | 'done' = 'new'
   #ready: { noir: Noir; circuit: ProvingCircuit } | null = null
-  #backend: Promise<Api> | null = null
+  #backend: Promise<{ api: Api; caching: Promise<void> }> | null = null
 
   receive(message: ToWorker): void {
     const work = message.type === 'preload' ? this.#preload(message) : this.#prove(message)
@@ -45,7 +94,15 @@ class EngineWorker {
   #destroyBackend(): Promise<void> {
     const pending = this.#backend
     this.#backend = null
-    return pending ? pending.then((api) => api.destroy()) : Promise.resolve()
+    return pending
+      ? pending.then(async ({ api, caching }) => {
+          try {
+            await api.destroy()
+          } finally {
+            await caching
+          }
+        })
+      : Promise.resolve()
   }
 
   #fail(error: unknown): void {
@@ -70,15 +127,7 @@ class EngineWorker {
     const threads = workerThreads(message.threads)
     if (!Number.isInteger(threads) || threads < MIN_PROOF_THREADS)
       throw new Error('Multithreaded backend unavailable')
-    const backend = span('proof-backend-initialization', () =>
-      Barretenberg.new({
-        backend: BackendType.Wasm,
-        threads,
-        srsSize: SRS_POINTS,
-        wasmPath: message.wasmPath,
-        crsPath: message.crsPath,
-      }),
-    )
+    const backend = span('proof-backend-initialization', () => bn254Backend(threads, message))
     this.#backend = backend
     void backend.catch((error) => this.#fail(error))
     const [{ compiled, circuit }] = await Promise.all([
@@ -133,9 +182,15 @@ class EngineWorker {
     this.#state = 'proving'
     emit({ event: 'zk-proof-generation', phase: 'started', timestamp: now() })
     const { noir, circuit } = ready
-    const [api, { witness }] = await Promise.all([
+    const [{ api }, { witness }] = await Promise.all([
       backend,
-      span('witness', () => noir.execute(message.inputs as Parameters<typeof noir.execute>[0])),
+      span('witness', () =>
+        noir.execute(message.inputs as Parameters<typeof noir.execute>[0]).catch((error) => {
+          // Only circuits built with --circuit-debug-symbols carry a source call stack.
+          if (error?.noirCallStack) console.error('[ceremony] Noir call stack', error.noirCallStack)
+          throw error
+        }),
+      ),
     ])
     if (this.#state !== 'proving') return
     const generated = await span('proof', async () =>

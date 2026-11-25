@@ -180,6 +180,18 @@ export class OpenedWindow extends PopupWindow {
     return usable(this.handle)
   }
 
+  /**
+   * Still on the opener-origin `about:blank` it opened with: no destination has committed. A
+   * committed cross-origin document makes the location unreadable.
+   */
+  get blank(): boolean {
+    try {
+      return this.direct && this.handle!.location.href === 'about:blank'
+    } catch {
+      return false
+    }
+  }
+
   bind(source: WindowProxy): void {
     if (this.handle !== null) throw new Error('popup already bound')
     this.handle = source

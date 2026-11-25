@@ -1,4 +1,5 @@
 import { concatBytes } from '@noble/hashes/utils.js'
+import { isRecord } from '../primitives.js'
 import type { Transcript } from './protocol.js'
 
 // Latin-1 keeps one code unit per wire byte, so string offsets are transcript offsets.
@@ -53,17 +54,78 @@ export function responseSizes(received: Uint8Array): Record<string, number> {
     : { 'response-header-bytes': end + 4, 'response-body-bytes': received.length - end - 4 }
 }
 
-/** Decode a successful HTTP response without altering the transcript used for commitments. */
-export function responseJson(transcript: Transcript): unknown {
+/**
+ * A platform's refusal as it answered: its status, its OAuth `error` code and `error_description`
+ * when it sent them, and, in the message, its status line and body.
+ */
+export class PlatformRefusal extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string | undefined,
+    readonly description: string | undefined,
+    said: string,
+  ) {
+    super(`Platform request failed: ${said}`)
+    this.name = 'PlatformRefusal'
+  }
+}
+
+/**
+ * Decode a successful HTTP response without altering the transcript used for commitments. Any
+ * other answer, including an OAuth `error` sent with a 200 (GitHub does), is a refusal that keeps
+ * what the platform said, with each of `secrets` the request carried removed.
+ */
+export function responseJson(transcript: Transcript, secrets: readonly string[] = []): unknown {
   const head = parseHead(transcript.received)
   if (!head) throw new Error('Invalid HTTP response')
-  if (!/^HTTP\/1\.[01] 200(?: |$)/.test(head.startLine)) throw new Error('Platform request failed')
+  const status = Number(/^HTTP\/1\.[01] (\d{3})(?: |$)/.exec(head.startLine)?.[1] ?? 0)
+  if (status !== 200) {
+    let text = ''
+    try {
+      text = bodyText(head, transcript.received)
+    } catch {
+      // Unreadable framing: the status line still says what happened.
+    }
+    throw refusal(status, head.startLine, text, secrets)
+  }
+  const text = bodyText(head, transcript.received)
+  let json: unknown
+  try {
+    json = JSON.parse(text)
+  } catch {
+    // The parser's message quotes the body, which may hold the bearer.
+    throw new Error('Invalid JSON response')
+  }
+  // A body that holds a bearer is never quoted.
+  if (isRecord(json) && typeof json.error === 'string' && !Object.hasOwn(json, 'access_token'))
+    throw refusal(status, head.startLine, text, secrets)
+  return json
+}
+
+function refusal(status: number, startLine: string, text: string, secrets: readonly string[]) {
+  let json: unknown
+  try {
+    json = JSON.parse(text)
+  } catch {
+    // Not JSON: the text is still what the platform said.
+  }
+  const field = (name: string) =>
+    isRecord(json) && typeof json[name] === 'string' ? json[name] : undefined
+  // ponytail: exact matches only; a platform re-encoding a secret before echoing it is not caught.
+  const said = secrets
+    .filter((secret) => secret !== '')
+    .reduce((said, secret) => said.replaceAll(secret, '<redacted>'), `${startLine} ${text}`.trim())
+  return new PlatformRefusal(status, field('error'), field('error_description'), said)
+}
+
+/** The de-framed body as UTF-8 text. */
+function bodyText(head: NonNullable<ReturnType<typeof parseHead>>, received: Uint8Array): string {
   const headers = framingHeaders(head.fields)
   const encoding = headers.get('content-encoding')
   if (encoding && encoding !== 'identity') throw new Error('Unsupported response encoding')
   const length = headers.get('content-length')
   const transfer = headers.get('transfer-encoding')
-  let body = transcript.received.subarray(head.bodyStart)
+  let body = received.subarray(head.bodyStart)
   if (transfer !== undefined) {
     if (transfer.toLowerCase() !== 'chunked' || length !== undefined)
       throw new Error('Ambiguous HTTP framing')
@@ -71,13 +133,7 @@ export function responseJson(transcript: Transcript): unknown {
   } else if (length !== undefined && (!/^[0-9]+$/.test(length) || Number(length) !== body.length))
     throw new Error('HTTP length mismatch')
   // Only the de-framed body is UTF-8; chunk boundaries may split a character.
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(body)
-  try {
-    return JSON.parse(text)
-  } catch {
-    // The parser's message quotes the body, which may hold the bearer.
-    throw new Error('Invalid JSON response')
-  }
+  return new TextDecoder('utf-8', { fatal: true }).decode(body)
 }
 
 /** Case-folded response fields; framing headers must not repeat. */

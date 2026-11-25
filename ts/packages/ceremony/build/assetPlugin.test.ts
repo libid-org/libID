@@ -33,6 +33,7 @@ test('runtime lowering preserves named/chained calls and external request option
           'a/v1/snippets/x-*/worker.js': '/ccdp/assets/a/v1/snippets/x-123/worker.js',
           'b/v1/data.json': '/ccdp/assets/b/v1/data.json',
           'file/v1.wasm/': '/ccdp/assets/file/v1.wasm',
+          'unused/other/unused.json': '/ccdp/assets/unused/other/unused.json',
         },
         moduleUrls: {},
       }),
@@ -42,7 +43,10 @@ test('runtime lowering preserves named/chained calls and external request option
   const code = ((Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput).output.find(
     (o) => o.type === 'chunk',
   )!.code
-  assert.doesNotMatch(code, /secret-build-source|secret-pin|npm:build-only|Content-Security-Policy/)
+  assert.doesNotMatch(
+    code,
+    /secret-build-source|secret-pin|npm:build-only|Content-Security-Policy|unused\.json/,
+  )
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'location')
   Object.defineProperty(globalThis, 'location', {
     value: { origin: 'https://ccdp.test' },
@@ -67,4 +71,59 @@ test('runtime lowering preserves named/chained calls and external request option
     if (descriptor) Object.defineProperty(globalThis, 'location', descriptor)
     else Reflect.deleteProperty(globalThis, 'location')
   }
+})
+
+test('a bundle built without the manifest cannot import its request lists', async () => {
+  const id = join(packageDir, 'src/profile-manifest-fixture.ts')
+  await assert.rejects(() =>
+    build({
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [
+        {
+          name: 'profile-fixture',
+          resolveId: (file) => (file === id ? id : undefined),
+          load: (file) =>
+            file === id
+              ? `import { requestsByProfile } from 'virtual:ceremony-assets'; export { requestsByProfile }`
+              : undefined,
+        },
+        assetPlugin({ urls: {}, moduleUrls: {} }),
+      ],
+      build: { write: false, minify: false, lib: { entry: id, formats: ['es'] } },
+    }),
+  )
+})
+
+test('fails at build time if any local file() or archive() call survives unlowered', async () => {
+  const helperId = join(packageDir, 'src/asset-reexport-helper.ts')
+  const entryId = join(packageDir, 'src/asset-unlowered-fixture.ts')
+  await assert.rejects(
+    () =>
+      build({
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [
+          {
+            name: 'unlowered-fixture',
+            resolveId: (file) => (file === entryId || file === helperId ? file : undefined),
+            load: (file) => {
+              if (file === helperId) return `export { file } from './assets/index.js';`
+              if (file === entryId)
+                return `
+                  import { file } from ${JSON.stringify(helperId)};
+                  import { assetUrl, headers } from './assets/index.js';
+                  export const url = assetUrl(file('npm:pkg/a.wasm', 'pkg/a.wasm', headers.wasm));
+                `
+            },
+          },
+          assetPlugin({
+            urls: { 'pkg/a.wasm/': '/ccdp/assets/pkg/a.wasm' },
+            moduleUrls: {},
+          }),
+        ],
+        build: { write: false, minify: false, lib: { entry: entryId, formats: ['es'] } },
+      }),
+    /Unlowered local asset declaration\(s\) \(file\)/,
+  )
 })

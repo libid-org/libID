@@ -1,21 +1,19 @@
 import * as assets from '../assets/index.js'
-import {
-  G1_POINT_BYTES,
-  G2_BYTES,
-  GRUMPKIN_POINT_BYTES,
-  GRUMPKIN_SRS_POINTS,
-  SRS_POINTS,
-} from './parameters.js'
+import { G1_POINT_BYTES, G2_BYTES } from './parameters.js'
 
-const noirWasm = (pkg: string, name: string) =>
-  assets.file(`npm:@noir-lang/${pkg}/web/${name}`, `noir/{version}/${name}`, {
-    ...assets.headers.immutable,
-    ...assets.headers.wasm,
-  })
+const wasmHeaders = { ...assets.headers.immutable, ...assets.headers.wasm }
 
-export const acvm = noirWasm('acvm_js', 'acvm_js_bg.wasm')
+export const acvm = assets.file(
+  'npm:@noir-lang/acvm_js/web/acvm_js_bg.wasm',
+  'noir/{version}/acvm_js_bg.wasm',
+  wasmHeaders,
+)
 
-export const abi = noirWasm('noirc_abi', 'noirc_abi_wasm_bg.wasm')
+export const abi = assets.file(
+  'npm:@noir-lang/noirc_abi/web/noirc_abi_wasm_bg.wasm',
+  'noir/{version}/noirc_abi_wasm_bg.wasm',
+  wasmHeaders,
+)
 
 export const bbWasm = {
   ...assets.file(
@@ -40,12 +38,12 @@ const crsFile = (name: string, request: { range: string } | { bytes: number }) =
     ...request,
   })
 
-export const crs = [
-  crsFile('g1_compressed.dat', { range: `bytes=0-${SRS_POINTS * G1_POINT_BYTES - 1}` }),
-  crsFile('g2.dat', { bytes: G2_BYTES }),
-  crsFile('grumpkin_g1_v2.dat', {
-    range: `bytes=0-${GRUMPKIN_SRS_POINTS * GRUMPKIN_POINT_BYTES - 1}`,
-  }),
-] as const
+/** The BN254 SRS of a circuit sized `points`: that many compressed G1 points, and G2. */
+export const srs = (points: number) =>
+  [
+    crsFile('g1_compressed.dat', { range: `bytes=0-${points * G1_POINT_BYTES - 1}` }),
+    crsFile('g2.dat', { bytes: G2_BYTES }),
+  ] as const
 
-export const proofAssets = [acvm, abi, bbWasm, ...crs] as const
+/** The proving code every circuit shares; each circuit declares its own SRS. */
+export const proofAssets = [acvm, abi, bbWasm] as const

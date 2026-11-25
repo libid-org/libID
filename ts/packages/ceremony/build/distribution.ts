@@ -15,7 +15,14 @@ import { sameRecord, swapInto } from './output.ts'
 import type { ResponseProfile } from './profiles.ts'
 import { emittedProfile, responseHeaders } from './profiles.ts'
 import { artifactsDir, hash, outputDirectory } from './sources.ts'
-import { callbackStyles, documentStyles } from './styles.ts'
+import {
+  callbackStyles,
+  documentFontBytes,
+  documentFontLicense,
+  documentFontLicensePath,
+  documentFontPath,
+  documentStyles,
+} from './styles.ts'
 import { errorHeaders, type PublicRecord, writeDistribution } from './sws.ts'
 import { catalogVersions, proverPair, publishableVersions } from './versions.ts'
 
@@ -42,8 +49,39 @@ const inlineScript = (code: string) => code.replace(/<\/script/gi, '<\\/script')
 const shell = (label: string) =>
   `<main id="libid-root"><div class="libid-logo" aria-label="${messages.brand}">${messages.brand}</div><p role="status">${label}</p><progress aria-label="${messages.progress}"></progress></main>`
 
-const page = (title: string, content: string, styles = documentStyles) =>
-  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${styles}</style><body>${content}</body></html>`
+// Fetch the font alongside the document, before the stylesheet's first use asks for it.
+const fontPreload = `<link rel="preload" href="${documentFontPath}" as="font" type="font/woff2" crossorigin>`
+
+const modulePreloads = (paths: readonly string[]) =>
+  paths.map((path) => `<link rel="modulepreload" href="${path}">`).join('')
+
+const page = (
+  title: string,
+  content: string,
+  styles = documentStyles,
+  preloads: readonly string[] = [],
+) =>
+  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>${styles === documentStyles ? fontPreload : ''}${modulePreloads(preloads)}<style>${styles}</style><body>${content}</body></html>`
+
+/** Static module imports reachable from `entry` (excluding lazy/dynamic platform provers). */
+function staticImports(
+  output: readonly (Rollup.OutputChunk | Rollup.OutputAsset)[],
+  entry: Rollup.OutputChunk,
+): string[] {
+  const chunks = new Map(
+    output
+      .filter((item): item is Rollup.OutputChunk => item.type === 'chunk')
+      .map((chunk) => [chunk.fileName, chunk]),
+  )
+  const seen = new Set<string>()
+  const visit = (file: string) => {
+    if (seen.has(file)) return
+    seen.add(file)
+    for (const next of chunks.get(file)?.imports ?? []) visit(next)
+  }
+  for (const file of entry.imports) visit(file)
+  return [...seen].map((file) => `/${file}`)
+}
 
 /**
  * Each profile's declared assets and its platform entry's emitted closure, then the allowlist.
@@ -116,7 +154,7 @@ class PublicTree {
   }
 
   /** A document inlining the fragment capture and its module entry. */
-  document(path: string, code: string, profile: ResponseProfile) {
+  document(path: string, code: string, profile: ResponseProfile, preloads: readonly string[] = []) {
     const scripts = [captureFragment(path), code].map(inlineScript)
     const label = profile === 'prefetch' ? messages.preparation : messages.proofPreparation
     this.put(
@@ -124,15 +162,30 @@ class PublicTree {
       page(
         messages.brand,
         `${shell(label)}<script>${scripts[0]}</script><script type="module">${scripts[1]}</script>`,
+        documentStyles,
+        preloads,
       ),
       responseHeaders(profile, { ...this.options, inline: scripts }),
     )
   }
 }
 
+/** Return the single entry chunk of a self-contained bundle, rejecting emitted assets or imports. */
+function singleEntry(output: readonly (Rollup.OutputChunk | Rollup.OutputAsset)[], name: string) {
+  if (output.length !== 1 || output[0].type !== 'chunk' || !output[0].isEntry)
+    throw new Error(`${name} must be self-contained`)
+  if (output[0].imports.length || output[0].dynamicImports.length)
+    throw new Error(`${name} must have no external dependencies`)
+  return output[0].code
+}
+
 /** Resolve assets, bundle the documents and record every public resource with its policy. */
-async function buildDistribution() {
-  const data = await resolveAssets()
+async function buildDistribution({
+  keepCircuitDebugSymbols = false,
+}: {
+  keepCircuitDebugSymbols?: boolean
+} = {}) {
+  const data = await resolveAssets({ keepCircuitDebugSymbols })
   const external = Object.values(data.profiles)
     .flat()
     .filter((a) => a.isExternal === true)
@@ -142,11 +195,19 @@ async function buildDistribution() {
     ),
   ])
   const { records, options } = tree
+  tree.put(documentFontPath, documentFontBytes, 'asset')
+  tree.put(documentFontLicensePath, documentFontLicense, 'asset')
   for (const [path, record] of data.local) tree.put(path, record.bytes, record.headers)
-  const prover = await bundle('src/ccdp/documents/prover.ts', data, {
-    invoke: 'startProver',
-    fragment: true,
-  })
+  const [prover, callback] = await Promise.all([
+    bundle('src/ccdp/documents/prover.ts', data, {
+      invoke: 'startProver',
+      fragment: true,
+    }),
+    bundle('src/ccdp/documents/callback.ts', data, {
+      selfContained: true,
+      invoke: 'startCallback',
+    }),
+  ])
   // Every prover the Prover can load is its own emitted chunk; the published set comes from them.
   const proverEntries = new Map<string, string>()
   for (const [file, node] of prover.graph) {
@@ -175,49 +236,35 @@ async function buildDistribution() {
     external,
   )
   // Every published pair has an emitted prover and asset profile.
+  const proverPreloads = staticImports(prover.output, primary)
   tree.put(VERSIONS_PATH, JSON.stringify(versions), 'versions')
-  tree.document(route('prover'), primary.code, 'prover')
-  tree.document(route('prover/fallback'), primary.code, 'proverFallback')
-  const callback = await bundle('src/ccdp/documents/callback.ts', data, {
-    selfContained: true,
-    invoke: 'startCallback',
-  })
-  for (const item of callback.output) {
-    if (item.type !== 'chunk' || !item.isEntry) throw new Error('Callback must be self-contained')
-    if (item.imports.length || item.dynamicImports.length)
-      throw new Error('Callback must have no external dependencies')
-    const code = inlineScript(item.code)
-    tree.put(
-      CALLBACK_PATH,
-      page(
-        messages.brand,
-        `${shell(messages.proofPreparation)}<script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${code}</script>`,
-        callbackStyles,
-      ),
-      responseHeaders('callback', { ...options, inline: [code] }),
-    )
-  }
+  tree.document(route('prover'), primary.code, 'prover', proverPreloads)
+  tree.document(route('prover/fallback'), primary.code, 'proverFallback', proverPreloads)
+  const callbackCode = inlineScript(singleEntry(callback.output, 'Callback'))
+  tree.put(
+    CALLBACK_PATH,
+    page(
+      messages.brand,
+      `${shell(messages.proofPreparation)}<script id="libid-callback-config" type="application/json">__LIBID_CALLBACK_CONFIG__</script><script type="module">${callbackCode}</script>`,
+      callbackStyles,
+    ),
+    responseHeaders('callback', { ...options, inline: [callbackCode] }),
+  )
   // Hash the final, self-contained bytes before building the Prefetch that pins them.
   const worker = await bundle('src/assets/worker.entry.ts', data, {
     selfContained: true,
     manifest,
   })
-  if (worker.output.length !== 1 || worker.output[0].type !== 'chunk' || !worker.output[0].isEntry)
-    throw new Error('The root worker must be one script')
-  const code = worker.output[0].code
+  const code = singleEntry(worker.output, 'The root worker')
   const rootWorkerUrl = `/ccdp/worker.${hash(code)}.js`
   tree.put(rootWorkerUrl, code, 'worker')
   const prefetch = await bundle('src/ccdp/documents/prefetch.ts', data, {
+    selfContained: true,
     invoke: 'startPrefetch',
     fragment: true,
-    manifest,
     rootWorkerUrl,
   })
-  for (const item of prefetch.output) {
-    if (item.type === 'chunk' && item.isEntry)
-      tree.document(route('prefetch'), item.code, 'prefetch')
-    else tree.put(`/${item.fileName}`, body(item), 'asset')
-  }
+  tree.document(route('prefetch'), singleEntry(prefetch.output, 'Prefetch'), 'prefetch')
   // The page every 404 serves; requested directly it declares the same error policy.
   tree.put(
     '/404.html',
@@ -235,13 +282,21 @@ async function buildDistribution() {
 
 /** Build into a staging tree beside `--out-dir` and swap it in whole once it is complete. */
 async function main() {
-  const { values } = parseArgs({ options: { 'out-dir': { type: 'string' } }, strict: true })
+  const { values } = parseArgs({
+    options: {
+      'out-dir': { type: 'string' },
+      'circuit-debug-symbols': { type: 'boolean', default: false },
+    },
+    strict: true,
+  })
+  const keepCircuitDebugSymbols =
+    values['circuit-debug-symbols'] || process.env.CEREMONY_CIRCUIT_DEBUG_SYMBOLS === '1'
   const out = outputDirectory(values['out-dir'] ?? artifactsDir)
   const staging = `${out}.building`
   mkdirSync(join(staging, 'public'), { recursive: true })
   try {
-    const { records, manifest, graph } = await buildDistribution()
-    const files = writeDistribution(staging, records)
+    const { records, manifest, graph } = await buildDistribution({ keepCircuitDebugSymbols })
+    const files = await writeDistribution(staging, records)
     // Graph metadata stays outside public/: tests and e2e read it; it is never served.
     writeFileSync(
       join(staging, 'distribution-graph.json'),

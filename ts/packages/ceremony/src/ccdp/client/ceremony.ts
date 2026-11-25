@@ -80,12 +80,6 @@ class CeremonyChannel {
 
   private constructor(private readonly connection: PopupConnection<Message>) {}
 
-  /** Whether a run is attached to `connection`. */
-  static active(connection: PopupConnection<Message>): boolean {
-    const channel = CeremonyChannel.#channels.get(connection)
-    return channel !== undefined && channel.#run !== null
-  }
-
   /** The connection's channel; a registration failure leaves no handler and no channel. */
   static of(connection: PopupConnection<Message>): CeremonyChannel {
     const existing = CeremonyChannel.#channels.get(connection)
@@ -123,6 +117,8 @@ class CeremonyChannel {
 export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   readonly launchUrl: string
   private state: 'new' | 'prefetch' | 'oauth' | 'proving' | 'done' = 'new'
+  /** The operation whose platform refusal the CCDP reported as an expired authorization. */
+  private expiredIn: string | undefined
   private readonly feed = new EventFeed()
   private readonly observations = new Set<string>()
   private proofWorkStarted = false
@@ -137,6 +133,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   private authorizationUrl: string
   private readonly prefetchUrl: string
   private readonly ccdpOrigin: string
+  private readonly bridgeOrigin: string
   private readonly fragment: URLSearchParams
   private result: PromiseWithResolvers<IdentityResult<P>> | undefined
   private channel: CeremonyChannel | undefined
@@ -185,6 +182,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
         : { clientCredential: platformConfig.clientCredential }),
     }
     this.ccdpOrigin = config.ccdpOrigin
+    this.bridgeOrigin = new URL(config.redirectUri).origin
     this.prefetchUrl = config.ccdpOrigin + route('prefetch')
     this.fragment = prefetchFragment(id, this.platform, this.version)
     this.launchUrl = `${this.prefetchUrl}#${this.fragment}`
@@ -216,6 +214,14 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   }
 
   private receiveEvent({ type: _type, ...event }: EventMessage): void {
+    const attributes = event.instrumentation?.attributes
+    if (
+      this.state === 'proving' &&
+      this.connection.peerOrigin === this.ccdpOrigin &&
+      event.event === 'platform-refusal' &&
+      attributes?.reason === 'authorization-expired'
+    )
+      this.expiredIn = typeof attributes.operation === 'string' ? attributes.operation : undefined
     if (event.event === 'prefetch-dispatch') this.prefetched(event)
     else if (event.event === 'prover') this.proverReady(event)
     else {
@@ -261,7 +267,7 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   /** Core observations must fit the run's state and platform, once each, started before finished. */
   private observe(event: CoreEvent, phase: OperationEvent['phase']): void {
     if (event === 'authorization') {
-      if (this.connection.peerOrigin !== new URL(this.request.redirectUri).origin)
+      if (this.connection.peerOrigin !== this.bridgeOrigin)
         throw sequenceError('Authorization observation from outside the Bridge')
     } else this.expectCcdp()
     if (event === 'authorization' || event === 'prover-fallback') {
@@ -292,7 +298,12 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
       if (message.type === 'event') this.receiveEvent(message)
       else if (message.type === 'identity-proof') this.receiveProof(message)
       else if (message.type === 'user-denied') this.receiveDenial()
-      else this.fail(new CeremonyError(message.event, message.message))
+      else
+        this.fail(
+          new CeremonyError(message.event, message.message, {
+            ...(this.expiredIn === message.event && { reason: 'authorization-expired' }),
+          }),
+        )
     } catch (error) {
       this.fail(error)
     }
@@ -327,8 +338,6 @@ export class ClientCeremony<P extends PlatformId> implements Ceremony<P> {
   }
 
   proveUserIdentity(): Promise<IdentityResult<P>> {
-    if (this.state === 'new' && CeremonyChannel.active(this.connection))
-      this.fail(new CeremonyError('prefetch-dispatch', 'Connection already has an active ceremony'))
     if (this.startFailure) {
       const failure = this.startFailure
       this.startFailure = undefined

@@ -11,23 +11,28 @@ export abstract class CeremonyDocument {
   protected readonly feed = new EventFeed()
   protected readonly ui = eventView(this.feed)
   protected abstract readonly connection: PopupConnection<Message> | undefined
-  #ended = false
+  readonly #controller = new AbortController()
 
   /** `event` is the operation a failure of this document interrupts. */
   protected constructor(private readonly event: string) {}
 
+  /** Aborted once the run ends, retiring the work it started. */
+  protected get signal(): AbortSignal {
+    return this.#controller.signal
+  }
+
   protected get ended(): boolean {
-    return this.#ended
+    return this.signal.aborted
   }
 
   /** End the run and stop its UI; later failures and observations are dropped. */
   protected cleanup(): void {
-    this.#ended = true
     this.ui.stop()
+    this.#controller.abort()
   }
 
   protected fail(error: unknown): void {
-    if (this.#ended) return
+    if (this.ended) return
     const failure = ccdpError(error, this.event)
     this.feed.emit(failureEvent(failure))
     this.cleanup()

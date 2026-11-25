@@ -18,6 +18,16 @@ it('joins chunks into one exact buffer and rejects bodies over the bound', async
   await expect(readBody(chunked('ab', 'cd', 'ef'), 5)).rejects.toThrow('limit')
 })
 
+it('streams declared-size bodies straight into one pre-allocated buffer', async () => {
+  const exact = await readBody(chunked('ab', 'cd', 'e'), 5, true)
+  expect(new TextDecoder().decode(exact)).toBe('abcde')
+  expect(exact.buffer.byteLength).toBe(5)
+  const short = await readBody(chunked('ab', 'c'), 5, true)
+  expect(new TextDecoder().decode(short)).toBe('abc')
+  expect(short.buffer.byteLength).toBe(3)
+  await expect(readBody(chunked('ab', 'cd', 'ef'), 5, true)).rejects.toThrow('limit')
+})
+
 it('parses bounded strict UTF-8 JSON', async () => {
   expect(await readJson(chunked('{"a":', '[1]}'), 16)).toEqual({ a: [1] })
   await expect(readJson(chunked('{"a":"', 'x'.repeat(16), '"}'), 16)).rejects.toThrow('limit')
