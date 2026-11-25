@@ -171,13 +171,11 @@ export class PortKeeper {
    */
   async claim(
     connectionId: string,
-    signal?: AbortSignal,
   ): Promise<{ port: MessagePort; peerOrigin: string; backlog: unknown[] } | null> {
     const reply = await this.exchange(
       { type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId },
       [],
       'claim-failed',
-      signal,
     )
     if (!reply) return null
     const { data, ports } = reply

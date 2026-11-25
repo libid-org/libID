@@ -254,13 +254,12 @@ describe('expiry [POPUP-KEEPER-003]', () => {
     expect(await claim).toBeNull()
   })
 
-  it('cancels claim, keep and activeRegistration waits immediately on abort and releases timers', async () => {
+  it('cancels keep and activeRegistration waits immediately on abort and releases timers', async () => {
     const silent = { postMessage: vi.fn() }
     const keeper = new PortKeeper(silent)
 
     const preAborted = new AbortController()
     preAborted.abort()
-    expect(await keeper.claim(ID, preAborted.signal)).toBeNull()
     await expect(
       keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN, [], preAborted.signal),
     ).rejects.toThrow('keep-failed')
@@ -268,11 +267,6 @@ describe('expiry [POPUP-KEEPER-003]', () => {
     expect(await activeRegistration(lookup, preAborted.signal)).toBeUndefined()
     expect(silent.postMessage).not.toHaveBeenCalled()
     expect(lookup).not.toHaveBeenCalled()
-
-    const claimAbort = new AbortController()
-    const claiming = keeper.claim(ID, claimAbort.signal)
-    claimAbort.abort()
-    expect(await claiming).toBeNull()
 
     const keepAbort = new AbortController()
     const keeping = keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN, [], keepAbort.signal)

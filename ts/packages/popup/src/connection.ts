@@ -684,7 +684,7 @@ class PopupEndpoint<Out extends Message, In extends Message> extends Endpoint<Ou
    */
   private async claimFrom(workers: ServiceWorker[]): Promise<PortCarrier | null> {
     const answers = await Promise.allSettled(
-      workers.map((w) => new PortKeeper(w).claim(this.connectionId, this.controller.signal)),
+      workers.map((w) => new PortKeeper(w).claim(this.connectionId)),
     )
     const claimed = answers.flatMap((a) => (a.status === 'fulfilled' && a.value ? [a.value] : []))
     if (answers.some((a) => a.status === 'rejected')) {
