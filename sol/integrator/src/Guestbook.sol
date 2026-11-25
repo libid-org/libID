@@ -22,6 +22,7 @@ contract Guestbook {
     }
 
     // Only the depositor, this contract, can refund a mistyped or unclaimed tip.
+    // It sends every tipper's share to `recipient`; record shares for per-tipper refunds.
     function refund(bytes32 handleNode, address recipient) external {
         if (msg.sender != owner) revert NotOwner();
         LibID.refund(handleNode, LibID.NATIVE, recipient);
