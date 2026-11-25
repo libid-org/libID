@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  activeRegistration,
   CARRIER_CLAIM_TIMEOUT_MS,
   CLAIM,
   decodeKeeperRequest,
@@ -251,5 +252,50 @@ describe('expiry [POPUP-KEEPER-003]', () => {
     const claim = keeper.claim(ID)
     await vi.advanceTimersByTimeAsync(10)
     expect(await claim).toBeNull()
+  })
+
+  it('cancels claim, keep and activeRegistration waits immediately on abort and releases timers', async () => {
+    const silent = { postMessage: vi.fn() }
+    const keeper = new PortKeeper(silent)
+
+    const preAborted = new AbortController()
+    preAborted.abort()
+    expect(await keeper.claim(ID, preAborted.signal)).toBeNull()
+    await expect(
+      keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN, [], preAborted.signal),
+    ).rejects.toThrow('keep-failed')
+    const lookup = vi.fn(async () => undefined)
+    expect(await activeRegistration(lookup, preAborted.signal)).toBeUndefined()
+    expect(silent.postMessage).not.toHaveBeenCalled()
+    expect(lookup).not.toHaveBeenCalled()
+
+    const claimAbort = new AbortController()
+    const claiming = keeper.claim(ID, claimAbort.signal)
+    claimAbort.abort()
+    expect(await claiming).toBeNull()
+
+    const keepAbort = new AbortController()
+    const keeping = keeper.keep(ID, new MessageChannel().port1, APP_ORIGIN, [], keepAbort.signal)
+    keepAbort.abort()
+    await expect(keeping).rejects.toThrow('keep-failed')
+
+    const pollAbort = new AbortController()
+    const polling = activeRegistration(async () => undefined, pollAbort.signal)
+    await vi.advanceTimersByTimeAsync(0)
+    pollAbort.abort()
+    expect(await polling).toBeUndefined()
+
+    const installing = Object.assign(new EventTarget(), {
+      state: 'installing',
+    }) as unknown as ServiceWorker
+    const activatingAbort = new AbortController()
+    const activating = activeRegistration(
+      async () => ({ active: null, waiting: null, installing }) as ServiceWorkerRegistration,
+      activatingAbort.signal,
+    )
+    await vi.advanceTimersByTimeAsync(0)
+    activatingAbort.abort()
+    expect(await activating).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

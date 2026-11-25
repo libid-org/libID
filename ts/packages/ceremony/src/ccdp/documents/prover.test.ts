@@ -401,7 +401,12 @@ it('announces no readiness when the connection ends while the root worker is cla
   claimRootWorker.mockReturnValueOnce(claim.promise)
   const run = startProver(proverInput())
   await vi.waitFor(() => expect(claimRootWorker).toHaveBeenCalledOnce())
+  const claimSignal = claimRootWorker.mock.calls[0][0] as AbortSignal
+  expect(claimSignal).toBeInstanceOf(AbortSignal)
+  expect(claimSignal.aborted).toBe(false)
   connection.end()
+  await connection.closed
+  expect(claimSignal.aborted).toBe(true)
   claim.resolve()
   await run
   expect(ui.events).toContainEqual(

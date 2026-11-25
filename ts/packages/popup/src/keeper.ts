@@ -77,7 +77,9 @@ export interface KeeperWorker {
 function activeWorker(
   registration: ServiceWorkerRegistration,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<ServiceWorker | null> {
+  if (signal?.aborted) return Promise.resolve(null)
   if (registration.active) return Promise.resolve(registration.active)
   const worker = registration.installing ?? registration.waiting
   if (!worker) return Promise.resolve(null)
@@ -85,14 +87,17 @@ function activeWorker(
     const finish = (value: ServiceWorker | null): void => {
       clearTimeout(timer)
       worker.removeEventListener('statechange', onChange)
+      signal?.removeEventListener('abort', onAbort)
       resolve(value)
     }
     const onChange = (): void => {
       if (worker.state === 'activated') finish(worker)
       else if (worker.state === 'redundant') finish(null)
     }
+    const onAbort = (): void => finish(null)
     const timer = setTimeout(() => finish(null), timeoutMs)
     worker.addEventListener('statechange', onChange)
+    signal?.addEventListener('abort', onAbort, { once: true })
   })
 }
 
@@ -104,19 +109,30 @@ function activeWorker(
  */
 export async function activeRegistration(
   lookup: () => Promise<ServiceWorkerRegistration | undefined>,
+  signal?: AbortSignal,
 ): Promise<ServiceWorkerRegistration | undefined> {
+  if (signal?.aborted) return undefined
   const deadline = Date.now() + KEEPER_REPLY_TIMEOUT_MS
   const remaining = (): number => Math.max(0, deadline - Date.now())
   const attached = (r?: ServiceWorkerRegistration): boolean =>
     !!r && (r.active ?? r.installing ?? r.waiting) !== null
   let registration = await lookup()
-  while (!attached(registration) && remaining() > 0) {
+  while (!signal?.aborted && !attached(registration) && remaining() > 0) {
     // ponytail: nothing announces a new registration; poll until the deadline.
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await new Promise<void>((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', done)
+        resolve()
+      }
+      const timer = setTimeout(done, 50)
+      signal?.addEventListener('abort', done, { once: true })
+    })
+    if (signal?.aborted) return undefined
     registration = await lookup()
   }
-  if (!registration) return undefined
-  return (await activeWorker(registration, remaining())) ? registration : undefined
+  if (signal?.aborted || !registration) return undefined
+  return (await activeWorker(registration, remaining(), signal)) ? registration : undefined
 }
 
 export class PortKeeper {
@@ -128,6 +144,7 @@ export class PortKeeper {
     port: MessagePort,
     peerOrigin: string,
     backlog: unknown[] = [],
+    signal?: AbortSignal,
   ): Promise<void> {
     const reply = await this.exchange(
       {
@@ -139,6 +156,7 @@ export class PortKeeper {
       },
       [port],
       'keep-failed',
+      signal,
     )
     if (!reply || !isRecord(reply.data) || reply.data.ok !== true || reply.ports.length !== 0) {
       throw new PopupError('keep-failed')
@@ -153,11 +171,13 @@ export class PortKeeper {
    */
   async claim(
     connectionId: string,
+    signal?: AbortSignal,
   ): Promise<{ port: MessagePort; peerOrigin: string; backlog: unknown[] } | null> {
     const reply = await this.exchange(
       { type: CLAIM, connectionVersion: CONNECTION_VERSION, connectionId },
       [],
       'claim-failed',
+      signal,
     )
     if (!reply) return null
     const { data, ports } = reply
@@ -182,22 +202,27 @@ export class PortKeeper {
     throw new PopupError('claim-failed')
   }
 
-  /** One request with its own reply port; null when the worker stays silent. */
+  /** One request with its own reply port; null when the worker stays silent or `signal` aborts. */
   private exchange(
     message: KeeperRequest,
     transfer: MessagePort[],
     code: 'keep-failed' | 'claim-failed',
+    signal?: AbortSignal,
   ): Promise<MessageEvent | null> {
+    if (signal?.aborted) return Promise.resolve(null)
     return new Promise((resolve, reject) => {
       const reply = new MessageChannel()
       const finish = (error: Error | null, event: MessageEvent | null = null): void => {
         clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
         reply.port1.onmessage = null
         reply.port1.close()
         if (error) reject(error)
         else resolve(event)
       }
+      const onAbort = (): void => finish(null)
       const timer = setTimeout(() => finish(null), KEEPER_REPLY_TIMEOUT_MS)
+      signal?.addEventListener('abort', onAbort, { once: true })
       reply.port1.onmessage = (event: MessageEvent): void => finish(null, event)
       try {
         this.worker.postMessage(message, [...transfer, reply.port2])
