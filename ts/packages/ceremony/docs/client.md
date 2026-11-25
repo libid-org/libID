@@ -2,7 +2,9 @@
 
 Create one client per Bridge configuration lifetime. It fetches the Bridge's
 public configuration once, then the version list of the CCDP Distribution that
-configuration names, once; create a new client to pick up a changed deployment.
+configuration names, once; pass an optional `signal` to cancel either fetch
+(for example with `AbortSignal.timeout(...)`), and create a new client to pick
+up a changed deployment.
 Bridge selects the CCDP origin. Both reads are cross-origin `fetch` calls, so an
 application whose Content-Security-Policy has `connect-src` lists the Bridge and
 CCDP origins there. `client.connect(popup, options)` configures
